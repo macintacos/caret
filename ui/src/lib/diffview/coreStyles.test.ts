@@ -179,13 +179,98 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
     );
     // The annotation/composer row the library also marks selected has its fill
     // cleared in both columns, so the surface shows through beside the composer
-    // card rather than reading as more band (EXC-664).
+    // card rather than reading as more band (EXC-664). Descendant since EXC-865 — a
+    // comment on a table line puts that row inside the table's card, and its buffer
+    // inside the gutter mirror.
     expect(overrideDecls).toMatch(
-      /\[data-gutter\]\s*>\s*\[data-gutter-buffer\]\[data-selected-line\][^{]*\{[^}]*background-color:\s*transparent/,
+      /\[data-gutter\]\s+\[data-gutter-buffer\]\[data-selected-line\][^{]*\{[^}]*background-color:\s*transparent/,
     );
     expect(overrideDecls).toMatch(
-      /\[data-content\]\s*>\s*\[data-line-annotation\]\[data-selected-line\][^{]*\{[^}]*background-color:\s*transparent/,
+      /\[data-content\]\s+\[data-line-annotation\]\[data-selected-line\][^{]*\{[^}]*background-color:\s*transparent/,
     );
+  });
+
+  // EXC-865: a carded row reads as a banded row. The library will not mark one at all
+  // (cardSelection.ts owns that), and two of the three things that then paint the band
+  // had to change shape to reach it — which is what these pin.
+  test("carries the band across the seam from the gutter side for a carded row", () => {
+    // A carded row cannot pull left across the seam: its card is an overflow-x: auto
+    // scroll container, so anything painted outside that box is clipped. The strip is
+    // painted from the gutter cell instead, which nothing clips.
+    const extension = overrideDecls.match(
+      /\[data-gutter\]\s+:is\(\[data-table-card-gutter\], \[data-code-card-gutter\]\)\s*>\s*\[data-column-number\]:is\([^)]*\)::before\s*\{([^}]*)\}/,
+    );
+    expect(extension).not.toBeNull();
+    // Its width is exactly the two insets it has to cover, both named rather than
+    // written as literals that could drift from the card's own margin.
+    expect(extension?.[1]).toMatch(
+      /width:\s*calc\(var\(--caret-seam\)\s*\+\s*var\(--caret-card-inset\)\)/,
+    );
+    // inherit rather than a named fill, so one rule covers selection, hover and cursor.
+    expect(extension?.[1]).toMatch(/background-color:\s*inherit/);
+    // Offset from the cell's BORDER box. 100% alone resolves against the padding box,
+    // which on a gutter cell is two pixels short of the card — the strip would leave a
+    // hairline in the very seam it exists to fill.
+    expect(extension?.[1]).toMatch(
+      /inset-inline-start:\s*calc\(100%\s*\+\s*var\(--caret-gutter-divider\)\)/,
+    );
+    // And the card's own inset reads the same token, so the two cannot drift.
+    expect(overrideDecls).toMatch(
+      /\[data-content\]\s*>\s*\[data-table-card\]\s*\{[^}]*margin-inline:\s*var\(--caret-card-inset\)/,
+    );
+  });
+
+  test("takes a rounded end back off where the band continues past a card", () => {
+    // Widened to descendant, the sibling logic rounds a card's first and last selected
+    // rows — right for a selection wholly inside one, wrong for one that runs past it.
+    for (const corner of ["top-left", "top-right", "bottom-left", "bottom-right"]) {
+      const column = corner.endsWith("left") ? "gutter" : "content";
+      const card = corner.endsWith("left")
+        ? String.raw`\[data-table-card-gutter\], \[data-code-card-gutter\]`
+        : String.raw`\[data-table-card\], \[data-code-card\]`;
+      const override = new RegExp(
+        String.raw`\[data-${column}\][^{}]*:is\(${card}\)[^{}]*\{[^}]*border-${corner}-radius:\s*0`,
+      );
+      expect(overrideDecls).toMatch(override);
+      // The override ties with the widened rule on specificity and wins on source order
+      // alone, so the order is the contract: reversed, the square-ends bug comes back
+      // with every assertion above still green.
+      const widened = new RegExp(
+        String.raw`\[data-${column}\]\s*\n?\s*\[data-(?:column-number|line)\]\[data-selected-line\][^{}]*\{[^}]*border-${corner}-radius:\s*var\(--radius\)`,
+      );
+      expect(overrideDecls.search(widened)).toBeGreaterThan(-1);
+      expect(overrideDecls.search(override)).toBeGreaterThan(overrideDecls.search(widened));
+    }
+  });
+
+  test("places a carded comment's row across the table's columns", () => {
+    const row = overrideDecls.match(
+      /\[data-content\]\s*>\s*\[data-table-card\]\s*>\s*\[data-line-annotation\]\s*\{([^}]*)\}/,
+    );
+    expect(row).not.toBeNull();
+    expect(row?.[1]).toMatch(/grid-column:\s*1\s*\/\s*-1/);
+    // Out of the track sizing: a spanning grid item contributes its own max-content to
+    // every track it covers, and a composer's would push a narrow table into scroll.
+    expect(row?.[1]).toMatch(/contain:\s*inline-size/);
+    // The drawn width and the sticky position both belong on the library's wrapper, not
+    // on the row: the row is stretched to its whole grid area, so it has no slack to
+    // stick within, and a definite width on it is distributed back into the tracks.
+    expect(row?.[1]).not.toMatch(/position:\s*sticky/);
+    const content = overrideDecls.match(
+      /\[data-table-card\]\s*>\s*\[data-line-annotation\]\s*>\s*\[data-annotation-content\]\s*\{([^}]*)\}/,
+    );
+    // Capped by BOTH the reading measure and the card's own visible width. The reading
+    // measure alone is right only while the pane is wide enough for the card to reach
+    // it; below that the comment overhangs the card and the Comment button lands beyond
+    // its scroll edge.
+    expect(content?.[1]).toMatch(/max-width:\s*min\(/);
+    expect(content?.[1]).toMatch(/var\(--caret-read-max\)/);
+    expect(content?.[1]).toMatch(/var\(--diffs-column-content-width/);
+    expect(content?.[1]).toMatch(/var\(--caret-seam\)/);
+    expect(content?.[1]).toMatch(/var\(--caret-card-inset\)/);
+    // And the library's own sticky offset, meant for the whole view's sideways scroll,
+    // is reset — inside a card it measures against the wrong scroll box.
+    expect(content?.[1]).toMatch(/inset-inline-start:\s*0/);
   });
 });
 
@@ -570,7 +655,7 @@ describe("the inline image (EXC-870)", () => {
     // fenced panel's own reading measure rather than inventing a second one, with min()
     // leaving a narrow viewport in charge. Both dimensions stay auto so whichever cap
     // bites first scales the other — which is also why no object-fit is needed.
-    expect(imageRule).toMatch(/max-width:\s*min\(100%,\s*720px\)/);
+    expect(imageRule).toMatch(/max-width:\s*min\(100%,\s*var\(--caret-read-max\)\)/);
     expect(imageRule).toMatch(/max-height:/);
     expect(imageRule).toMatch(/width:\s*auto/);
     expect(imageRule).toMatch(/height:\s*auto/);
@@ -580,9 +665,12 @@ describe("the inline image (EXC-870)", () => {
     // Same VALUE, deliberately, so the two things a plan embeds are indented alike
     // rather than by two arbitrary numbers — not the same pixel rail, since the
     // panel's margin moves the row box while this one sits inside that box's own
-    // text padding. Pinned as a pair so one cannot drift without the other.
-    expect(imageRule).toMatch(/margin-inline-start:\s*0\.75rem/);
-    expect(overrideDecls).toMatch(/\[data-code-line\][^{}]*\{[^}]*margin-inline-start:\s*0\.75rem/);
+    // text padding. Both read --caret-card-inset (EXC-865), so the pairing this used to
+    // assert by comparing two literals is now carried by the value itself.
+    expect(imageRule).toMatch(/margin-inline-start:\s*var\(--caret-card-inset\)/);
+    expect(overrideDecls).toMatch(
+      /\[data-code-line\][^{}]*\{[^}]*margin-inline-start:\s*var\(--caret-card-inset\)/,
+    );
   });
 
   test("wears the chip family's radius and a scheme-correct hairline edge", () => {
@@ -907,7 +995,10 @@ describe("the markdown table (EXC-864)", () => {
 
   test("scrolls as one unit once even wrapping cannot fit the columns", () => {
     expect(cardBody).toMatch(/overflow-x:\s*auto/);
-    expect(cardBody).toMatch(/max-width:\s*720px/);
+    // The reading cap, named since EXC-865 so the fenced row, the code card, the table
+    // card and a comment anchored inside one cannot drift apart.
+    expect(cardBody).toMatch(/max-width:\s*var\(--caret-read-max\)/);
+    expect(overrideDecls).toMatch(/--caret-read-max:\s*720px/);
     // The code card's bar, shared rather than duplicated — one scrollbar idiom.
     expect(overrideDecls).toMatch(/\[data-table-card\]::-webkit-scrollbar\s*\{/);
     expect(overrideDecls).toMatch(/\[data-table-card\]::-webkit-scrollbar-thumb\s*\{/);

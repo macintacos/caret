@@ -210,7 +210,32 @@ function cellTexts(root: HTMLElement, line: number): string[] {
   );
 }
 
+/** The library's annotation row for `line` plus its gutter buffer, placed where
+ * FileRenderer places them: immediately after that line's own cell in each column.
+ * A comment on a mid-table line therefore lands INSIDE the run of rows the card
+ * takes, which is the case EXC-865 exists for. */
+function openComment(root: HTMLElement, line: number): void {
+  const row = root.querySelector(`[data-content] [data-line="${line}"]`);
+  const annotation = document.createElement("div");
+  annotation.setAttribute("data-line-annotation", `0,${line}`);
+  row?.parentElement?.insertBefore(annotation, row.nextSibling);
+  const number = root.querySelector(`[data-gutter] [data-column-number="${line}"]`);
+  const buffer = document.createElement("div");
+  buffer.setAttribute("data-gutter-buffer", "annotation");
+  number?.parentElement?.insertBefore(buffer, number.nextSibling);
+}
+
+/** A column's children as their keying attribute, or `annotation` for the rows the
+ * library interleaves — the shape both columns must agree on. */
+function slotOrder(parent: Element | null | undefined, attr: string): string[] {
+  return [...(parent?.children ?? [])].map((el) => el.getAttribute(attr) ?? "annotation");
+}
+
 const SIMPLE = ["prose", "| a | b |", "| - | - |", "| 1 | 2 |"].join("\n");
+
+/** Two body rows, so a comment can sit in the MIDDLE of the table rather than
+ * only after its last row (where the card's own boundary would hide the bug). */
+const TWO_BODY = ["prose", "| a | b |", "| - | - |", "| 1 | 2 |", "| 3 | 4 |"].join("\n");
 
 test("wraps a table's rows in one card keyed by its first line", () => {
   const { root, ranges } = build(SIMPLE);
@@ -271,6 +296,82 @@ test("mirrors the card in the gutter so the two columns keep matching counts", (
   const content = root.querySelector("[data-content]");
   expect(gutter?.children).toHaveLength(content?.children.length ?? -1);
   expect(gutter?.querySelector(`[${TABLE_GUTTER_CARD_ATTR}="2"]`)?.children).toHaveLength(3);
+});
+
+test("carries a mid-table comment's row into the card, in place", () => {
+  const { root, ranges } = build(TWO_BODY);
+  // A repaint rebuilds the column flat and re-emits the annotation row, so the pass
+  // always meets this case unwrapped — which is why the card takes the whole run of
+  // children between its first and last row rather than the rows alone.
+  openComment(root, 4);
+  syncTableCards(root, ranges);
+  const card = root.querySelector(`[data-content] > [${TABLE_CARD_ATTR}="2"]`);
+  expect(slotOrder(card, "data-line")).toEqual(["2", "3", "4", "annotation", "5"]);
+  expect(root.querySelector(`[data-content] > [data-line-annotation]`)).toBeNull();
+});
+
+test("carries the comment's gutter buffer into the mirror at the same index", () => {
+  const { root, ranges } = build(TWO_BODY);
+  openComment(root, 4);
+  syncTableCards(root, ranges);
+  const mirror = root.querySelector(`[${TABLE_GUTTER_CARD_ATTR}="2"]`);
+  expect(slotOrder(mirror, "data-column-number")).toEqual(["2", "3", "4", "annotation", "5"]);
+});
+
+test("carries a comment on the table's LAST row into the card too", () => {
+  // Left outside, it would still land in the right place — but it would be drawn at the
+  // uncarded width, so two comments on one table would not match.
+  const { root, ranges } = build(TWO_BODY);
+  openComment(root, 5);
+  syncTableCards(root, ranges);
+  const card = root.querySelector(`[data-content] > [${TABLE_CARD_ATTR}="2"]`);
+  expect(slotOrder(card, "data-line")).toEqual(["2", "3", "4", "5", "annotation"]);
+  const mirror = root.querySelector(`[${TABLE_GUTTER_CARD_ATTR}="2"]`);
+  expect(slotOrder(mirror, "data-column-number")).toEqual(["2", "3", "4", "5", "annotation"]);
+});
+
+test("re-cards a table whose card no longer spans what it holds", () => {
+  // grid-row is what maps the card's children onto the parent's row tracks, so a card
+  // holding the right rows at the wrong span draws the table a track short.
+  const { root, ranges } = build(TWO_BODY);
+  syncTableCards(root, ranges);
+  const card = root.querySelector<HTMLElement>(`[${TABLE_CARD_ATTR}="2"]`);
+  card?.appendChild(document.createElement("div"));
+  syncTableCards(root, ranges);
+  expect(root.querySelector<HTMLElement>(`[${TABLE_CARD_ATTR}="2"]`)?.style.gridRow).toBe("span 4");
+});
+
+test("keeps the two columns matching with a mid-table comment open", () => {
+  const { root, ranges } = build(TWO_BODY);
+  openComment(root, 4);
+  syncTableCards(root, ranges);
+  const gutter = root.querySelector("[data-gutter]");
+  const content = root.querySelector("[data-content]");
+  expect(gutter?.children).toHaveLength(content?.children.length ?? -1);
+});
+
+test("returns a carded comment's row to its column when the table is retired", () => {
+  const { root, ranges } = build(TWO_BODY);
+  openComment(root, 4);
+  syncTableCards(root, ranges);
+  syncTableCards(root, []);
+  expect(slotOrder(root.querySelector("[data-content]"), "data-line")).toEqual([
+    "1",
+    "2",
+    "3",
+    "4",
+    "annotation",
+    "5",
+  ]);
+});
+
+test("mutates nothing on a settled pass with a comment open", () => {
+  const { root, ranges } = build(TWO_BODY);
+  openComment(root, 4);
+  syncTableCards(root, ranges);
+  const settled = root.innerHTML;
+  syncTableCards(root, ranges);
+  expect(root.innerHTML).toBe(settled);
 });
 
 test("mutates nothing on a settled pass", () => {

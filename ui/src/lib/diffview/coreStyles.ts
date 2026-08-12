@@ -61,6 +61,27 @@ const CARET_OVERRIDES = `
      together, so they share one named value rather than coupled literals. */
   :host { --caret-seam: 20px; }
   [data-content] { padding-inline-start: var(--caret-seam); }
+  /* Three more of the same kind, one level down (EXC-865).
+
+     --caret-card-inset is how far the content column's own indented surfaces sit in
+     from it — the fenced-code row, the code card and the table card all spend it — and
+     the band extension that reaches across it must be the same number or the band
+     stops short. --caret-read-max is the reading cap those same three share; a comment
+     anchored inside a card is capped by it too, so the composer cannot outgrow the card
+     that scrolls it. EXC-870's inline image spends both as well — its own comments
+     already said it borrowed them, and a test pinned the two indents as a pair by
+     comparing literals; the token is what that pairing wanted to be.
+
+     --caret-gutter-divider is NOT caret's: it restates the library's own
+     border-right on a gutter cell (2px, its --diffs-gap-style default, which caret
+     never overrides). The band extension is positioned from the cell's PADDING box, so
+     without adding the border back it lands 2px short of the card and leaves a
+     surface-coloured hairline in the seam it exists to fill. */
+  :host {
+    --caret-card-inset: 0.75rem;
+    --caret-read-max: 720px;
+    --caret-gutter-divider: 2px;
+  }
   [data-utility-button] {
     margin-right: calc(1ch - 1lh - 0.5rem);
     background-color: var(--accent);
@@ -163,9 +184,9 @@ const CARET_OVERRIDES = `
      via :not(~) since a plan may hold several blocks. */
   [data-content] > [data-line][data-code-line]:not([data-selected-line]) {
     background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
-    margin-inline-start: 0.75rem;
-    margin-inline-end: 0.75rem;
-    max-width: 720px;
+    margin-inline-start: var(--caret-card-inset);
+    margin-inline-end: var(--caret-card-inset);
+    max-width: var(--caret-read-max);
     padding-inline-start: 2ch;
     padding-inline-end: 0.75rem;
     /* EXC-729: the library renders source lines white-space: pre (never wrapping), so a line
@@ -484,8 +505,8 @@ const CARET_OVERRIDES = `
      a caret rule to a library metric is the fragility the utility-button note above
      already warns about.
 
-     The size caps are the design decision. max-width borrows the panel's own 720px reading
-     measure rather than inventing a number, and min() keeps a narrow viewport in charge;
+     The size caps are the design decision. max-width borrows the panel's own --caret-read-max
+     reading measure rather than inventing a number, and min() keeps a narrow viewport in charge;
      max-height caps the image at roughly fourteen of the library's 20px line boxes, which
      is enough for a diagram to be read and not enough for one asset to own the plan. Width
      and height stay auto so the aspect ratio survives whichever cap bites first, which is
@@ -517,12 +538,12 @@ const CARET_OVERRIDES = `
   [data-content] [data-line] [data-md-image] {
     display: block;
     user-select: none;
-    max-width: min(100%, 720px);
+    max-width: min(100%, var(--caret-read-max));
     max-height: 18rem;
     width: auto;
     height: auto;
     margin-block: 0.35rem;
-    margin-inline-start: 0.75rem;
+    margin-inline-start: var(--caret-card-inset);
     border: 1px solid color-mix(in lab, var(--paper-sunk), var(--ink) 14%);
     border-radius: var(--radius);
   }
@@ -637,8 +658,8 @@ const CARET_OVERRIDES = `
     grid-auto-columns: max-content;
     overflow-x: auto;
     overflow-y: hidden;
-    max-width: 720px;
-    margin-inline: 0.75rem;
+    max-width: var(--caret-read-max);
+    margin-inline: var(--caret-card-inset);
     background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
     border-radius: var(--radius);
   }
@@ -711,16 +732,16 @@ const CARET_OVERRIDES = `
      the parent's row tracks, and display: contents rows would drop the box the library's
      selection and hover fills, the cursor band and the annotation anchors all need.
 
-     What a carded row does NOT get is the band's ROUNDED ENDS and the seam-fill pull, both
-     of which select direct children of their column. The seam pull is refused on purpose —
-     it drags a banded row left across the gutter seam, which inside a card with its own
-     inline margin would pull the row out of the card's box. The rounding is a real
-     remainder: a selection wholly inside a table draws square ends. Widening those rules
-     would need them to reason about both card kinds at once (their sibling combinators
-     stop meaning "the next row" once a card is in the way), which is a pass over the whole
-     band rather than a table-shaped patch. The bands themselves, the caret bar and the
-     gutter divider DO reach a carded row — the four gutter rules above are descendant
-     selectors for exactly that reason.
+     A carded row reads as a banded row everywhere a prose one does, and the band gets
+     there by three different routes because the card blocks two of them. The bands, the
+     caret bar and the gutter divider ride descendant selectors (the four gutter rules
+     above). The band's rounded ends ride descendant selectors too, plus four overrides
+     that take a corner back off where the band continues past the card. And the seam
+     fill is painted from the GUTTER cell rather than pulled from the content one: the
+     card is an overflow-x: auto scroll container, so a carded row cannot paint outside
+     it at all, which is why the seam-fill pull below stays a direct-child rule and
+     EXC-865's ::before covers the carded case. What the library will not do is band a
+     carded row in the first place — cardSelection.ts owns that.
 
      The sizing policy is max-content tracks plus a max-width on the CELL, and the split
      between the two is what separates the issue's two behaviours. A max-content track never
@@ -738,7 +759,7 @@ const CARET_OVERRIDES = `
      44ch is the one tuned number here, and it means "a cell wider than this is prose". It
      was measured against the showcase: every data column of both wide tables sits under it
      and stays on one line, and the 90-character link cell in the reflow-exemptions table
-     sits well over it and wraps. Same kind of knob as the 720px reading cap above.
+     sits well over it and wraps. Same knob as --caret-read-max above.
 
      No fill and no padding. The table sits on the bare diff surface rather than in a panel:
      a fenced block is a different MODE of reading and earns its own surface, where a table
@@ -753,8 +774,8 @@ const CARET_OVERRIDES = `
     justify-content: start;
     overflow-x: auto;
     overflow-y: hidden;
-    max-width: 720px;
-    margin-inline: 0.75rem;
+    max-width: var(--caret-read-max);
+    margin-inline: var(--caret-card-inset);
   }
   [data-content] > [data-table-card] > [data-line] {
     grid-column: 1 / -1;
@@ -829,10 +850,10 @@ const CARET_OVERRIDES = `
   /* Fill the gutter→content seam on a banded code row so the band reads continuous
      across it, like a non-code row does. A non-code banded row pulls its content
      cell left across --caret-seam (the seam-fill group below) to cover the seam;
-     a code row can't — its panel inset (margin-inline-start: 0.75rem, on top of the
-     content column's --caret-seam) overrides that pull, so the strip between the
-     banded gutter cell and the inset band stays unpainted. A left box-shadow paints
-     exactly that strip (width = the two insets, --caret-seam + 0.75rem) WITHOUT
+     a code row can't — its panel inset (margin-inline-start, on top of the content
+     column's --caret-seam) overrides that pull, so the strip between the banded
+     gutter cell and the inset band stays unpainted. A left box-shadow paints exactly
+     that strip (width = the two insets, --caret-seam + --caret-card-inset) WITHOUT
      moving the cell or its code text, and without fighting the panel's
      overflow-x: clip / max-width the way a negative margin would. Same band color as
      the fill; the gutter's own divider is already cleared to transparent for banded
@@ -840,7 +861,7 @@ const CARET_OVERRIDES = `
      Fitting-block rows only ([data-content] > …); an overflowing block's card owns
      its own inset. Yields to the amber selection via the shared :not guard. */
   [data-content] > [data-line][data-code-line]:is([data-hovered], [data-caret-cursor]):not([data-selected-line]) {
-    box-shadow: calc(-1 * (var(--caret-seam) + 0.75rem)) 0 0 0
+    box-shadow: calc(-1 * (var(--caret-seam) + var(--caret-card-inset))) 0 0 0
       color-mix(in lab, var(--paper-sunk), var(--ink) 9%);
   }
 
@@ -920,6 +941,50 @@ const CARET_OVERRIDES = `
     border-right-color: transparent;
   }
 
+  /* EXC-865: the same seam fill, for a row that lives inside a card. The pull above
+     is a direct-child rule and deliberately stays one — a carded row cannot pull left
+     at all, because its card is an overflow-x: auto scroll container and anything
+     painted outside that padding box is clipped. So the strip is painted from the
+     GUTTER side instead, which nothing clips: a ::before hung off the banded gutter
+     cell's inline-end edge, spanning the content column's seam plus the card's own
+     inset — exactly the gap between the two halves. background-color: inherit takes
+     the cell's own band, so one rule covers selection amber, hover grey and the
+     cursor tint without naming any of them, and follows the library if it recolors.
+     ::before rather than ::after: the multi-line selection tick above owns ::after on
+     these same cells. Reached through the gutter card, which is display: contents and
+     so does not disturb matching; both card kinds have the gap, so both are listed.
+
+     The offset starts at the cell's BORDER box, not its padding box. An absolutely
+     positioned pseudo resolves 100% against the padding box, and a gutter cell carries
+     the library's 2px border-right, so 100% alone lands the strip two pixels early —
+     re-painting two pixels the cell's own background already covers (its border is
+     transparent on a banded row) and leaving two unpainted in the seam.
+
+     position: relative is set unconditionally rather than on the same state list: it
+     costs nothing on an unbanded cell, and two copies of a six-state list is a rule
+     that silently mispositions the strip the day someone extends one of them. */
+  [data-gutter] :is([data-table-card-gutter], [data-code-card-gutter]) > [data-column-number] {
+    position: relative;
+  }
+  [data-gutter]
+    :is([data-table-card-gutter], [data-code-card-gutter])
+    > [data-column-number]:is(
+      [data-selected-line],
+      [data-hovered],
+      [data-line-type="change-addition"],
+      [data-line-type="change-deletion"],
+      [data-caret-cursor]
+    )::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    inset-inline-start: calc(100% + var(--caret-gutter-divider));
+    width: calc(var(--caret-seam) + var(--caret-card-inset));
+    background-color: inherit;
+    pointer-events: none;
+  }
+
   /* Combined markers — caret's "both" indicators (the library has no such mode).
      The library is driven at "bars", so the gutter bars already render; here caret
      overlays the classic +/- glyphs in the content column so both cues show at
@@ -960,31 +1025,67 @@ const CARET_OVERRIDES = `
     content: "-";
     color: var(--diffs-deletion-base);
   }
+  /* The band's outer corners. Descendant rather than child (EXC-865): a carded row is
+     no longer a child of its column, and left on a child combinator a selection inside
+     a table drew square ends while every other selection rounded. Widening works
+     because the sibling logic is column-relative — inside a card the row's siblings ARE
+     the table's other rows, so :not(~) still finds that card's first selected row and
+     :not(:has(~)) its last. What widening cannot see is the band continuing PAST the
+     card, so the two overrides below take those corners back off: a card preceded by a
+     selected line is not where the band starts, and one followed by a selected line is
+     not where it ends. Both are scoped to line cells, so an open composer's row — which
+     the library also flags selected — never counts as the continuation. */
   [data-gutter]
-    > [data-column-number][data-selected-line]:not(
+    [data-column-number][data-selected-line]:not(
       [data-selected-line] ~ [data-column-number][data-selected-line]
     ) {
     border-top-left-radius: var(--radius);
   }
   [data-content]
-    > [data-line][data-selected-line]:not(
+    [data-line][data-selected-line]:not(
       [data-selected-line] ~ [data-line][data-selected-line]
     ) {
     border-top-right-radius: var(--radius);
   }
   [data-gutter]
-    > [data-column-number][data-selected-line]:not(:has(~ [data-column-number][data-selected-line])) {
+    [data-column-number][data-selected-line]:not(:has(~ [data-column-number][data-selected-line])) {
     border-bottom-left-radius: var(--radius);
   }
   [data-content]
-    > [data-line][data-selected-line]:not(:has(~ [data-line][data-selected-line])) {
+    [data-line][data-selected-line]:not(:has(~ [data-line][data-selected-line])) {
     border-bottom-right-radius: var(--radius);
+  }
+  [data-gutter]
+    > [data-column-number][data-selected-line]
+    ~ :is([data-table-card-gutter], [data-code-card-gutter])
+    > [data-column-number][data-selected-line] {
+    border-top-left-radius: 0;
+  }
+  [data-content]
+    > [data-line][data-selected-line]
+    ~ :is([data-table-card], [data-code-card])
+    > [data-line][data-selected-line] {
+    border-top-right-radius: 0;
+  }
+  [data-gutter]
+    > :is([data-table-card-gutter], [data-code-card-gutter]):has(
+      ~ [data-column-number][data-selected-line]
+    )
+    > [data-column-number][data-selected-line] {
+    border-bottom-left-radius: 0;
+  }
+  [data-content]
+    > :is([data-table-card], [data-code-card]):has(~ [data-line][data-selected-line])
+    > [data-line][data-selected-line] {
+    border-bottom-right-radius: 0;
   }
   /* The composer/annotation row the library also flags selected is NOT part of the
      band: clear its selection fill (both columns) so the surface background shows
-     through to the left of the composer card. */
-  [data-gutter] > [data-gutter-buffer][data-selected-line],
-  [data-content] > [data-line-annotation][data-selected-line] {
+     through to the left of the composer card. Descendant since EXC-865 — a comment on
+     a table line puts that row inside the table's card, with its buffer inside the
+     gutter mirror. */
+  [data-gutter] [data-gutter-buffer][data-selected-line],
+  [data-content] [data-line-annotation][data-selected-line] {
     background-color: transparent;
   }
 
@@ -998,9 +1099,66 @@ const CARET_OVERRIDES = `
      card/composer still paints its own paper-raised over the content cell, so only
      the bare gutter buffer changes. Higher specificity than the library's
      [data-line-annotation] base rule, and adopted after it, so it wins. */
-  [data-gutter] > [data-gutter-buffer="annotation"],
-  [data-content] > [data-line-annotation] {
+  [data-gutter] [data-gutter-buffer="annotation"],
+  [data-content] [data-line-annotation] {
     --diffs-annotation-bg: var(--diffs-bg);
+  }
+
+  /* A comment anchored to a table line (EXC-865). Its row rides inside the table's
+     card so it lands under the row it belongs to and pushes the rest of the table
+     down, rather than after the whole table — but the card is a grid of max-content
+     columns, so the row needs placing in it, and placing it there must not change the
+     table.
+
+     contain: inline-size is what keeps the table's columns exactly where they were:
+     a spanning grid item otherwise contributes its own max-content to every track it
+     covers, and a composer's is large enough to push a narrow table into horizontal
+     scroll the moment someone comments on it. Containment takes the row's width from
+     the grid instead of from its contents, so opening a comment moves nothing.
+
+     The row's own width then stays the table's, and both the width the comment is DRAWN
+     at and where it sits while the table scrolls are set one level down (below) —
+     because the table's width is the wrong answer twice over: a narrow table gives a
+     cramped thread, and a wide one overhangs the card's scroll box and clips the Comment
+     button.
+
+     container-type on the card would express the visible width directly, and is not
+     usable: it brings layout containment, which stops the card's subgrid contributing
+     the comment's height to the parent's row track, and the whole thread collapses to
+     one line. */
+  [data-content] > [data-table-card] > [data-line-annotation] {
+    grid-column: 1 / -1;
+    contain: inline-size;
+  }
+  /* The width the comment is actually drawn at, and where it sits while the table
+     scrolls under it. Neither can be set on the row above: a grid item with a definite
+     width distributes it back across the tracks it spans (the inflation containment was
+     for), and the row is stretched to its whole grid area, so a sticky row has no slack
+     to move within. Both belong on the library's own wrapper, which carries an explicit
+     width (--diffs-column-content-width, the full content column) and is already
+     position: sticky.
+
+     So the cap is a MINIMUM of two things, and both are load-bearing: the reading cap,
+     and the card's own visible width, which is the content column less the seam and the
+     card's two insets. Capping at the reading measure alone is right only while the pane
+     is wide enough for the card to reach it — below that the wrapper is wider than the
+     card, and the card being overflow-x: auto turns the overhang into a scrollbar with
+     the Comment button beyond its right edge.
+
+     The library's inline start is reset for a related reason: it pins the wrapper at the
+     gutter's width so a comment stays put while the WHOLE view scrolls sideways, and
+     inside a card that offset is measured against the wrong scroll box — the card is its
+     own. Left as the library sets it, the comment starts a gutter's width into the card
+     and overhangs by the same amount. */
+  [data-content] > [data-table-card] > [data-line-annotation] > [data-annotation-content] {
+    max-width: min(
+      var(--caret-read-max),
+      calc(
+        var(--diffs-column-content-width, 100%) - var(--caret-seam) - 2 *
+          var(--caret-card-inset)
+      )
+    );
+    inset-inline-start: 0;
   }
 
   /* EXC-687: a resolved filename reference in the plan carries a small file icon

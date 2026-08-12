@@ -21,6 +21,7 @@
   import { decorateInlineRuns } from "$lib/diffview/inlineDecorate.ts";
   import type { InlineSpanMap } from "$lib/diffview/inlineSpans.ts";
   import { syncCodeBlockCards } from "$lib/diffview/codeBlockScroll.ts";
+  import { paintCardSelection, type SelectedLines } from "$lib/diffview/cardSelection.ts";
   import {
     TABLE_CARD_ATTR,
     type TableRange,
@@ -207,7 +208,49 @@
   };
   const lineClick = $derived(onLineComment == null ? undefined : handleLineClick);
 
-  const libOptions = $derived(toFileOptions(options, token, gutter, lineClick));
+  // The range the band currently covers, mirrored non-reactively so the observer and
+  // the repaint pass below can re-apply the cards' share of it without re-arming on
+  // every row a drag crosses — the same shape cursorMirror and searchMirror use.
+  let selectionMirror: SelectedLines | null = null;
+
+  /** Take a range the library or the composer reports, and repaint the cards' share
+   * of the band from it. Ascending: the library reports a gutter drag in gesture
+   * order, so an upward drag arrives end-first. */
+  function trackSelection(range: { start: number; end: number } | null): void {
+    selectionMirror =
+      range == null
+        ? null
+        : { start: Math.min(range.start, range.end), end: Math.max(range.start, range.end) };
+    paintCardSelection(container?.shadowRoot ?? null, selectionMirror);
+  }
+
+  // The library's own drag callbacks, wrapped so the cards keep up with it. On its
+  // FIRST frame a drag that stays inside a card mutates no attribute at all — the
+  // library skips every row it crosses — so the observer below has nothing to fire on
+  // and these are the only signal that the range moved. (From the second frame the
+  // library's clear removes what this pass wrote, so the observer does fire.) The
+  // host's own callbacks still run, unchanged.
+  const trackedGutter = $derived.by(() => {
+    if (gutter == null) return undefined;
+    const host = gutter;
+    return {
+      ...host,
+      onLineSelectionStart: (range: { start: number; end: number } | null) => {
+        trackSelection(range);
+        host.onLineSelectionStart?.(range);
+      },
+      onLineSelectionChange: (range: { start: number; end: number } | null) => {
+        trackSelection(range);
+        host.onLineSelectionChange?.(range);
+      },
+      onLineSelectionEnd: (range: { start: number; end: number } | null) => {
+        trackSelection(range);
+        host.onLineSelectionEnd?.(range);
+      },
+    };
+  });
+
+  const libOptions = $derived(toFileOptions(options, token, trackedGutter, lineClick));
 
   // Mount-once effect: reads no reactive state, returns the teardown.
   $effect(() => () => lifecycle.destroy());
@@ -274,7 +317,13 @@
     const drag = createLineDrag({
       lineFromPoint: lineAtPoint,
       onPreview: (range) => {
-        lifecycle.select(range == null ? null : { start: range.startLine, end: range.endLine });
+        const lines = range == null ? null : { start: range.startLine, end: range.endLine };
+        lifecycle.select(lines);
+        // The cards' share of that band, from the same range. setSelectedLines renders
+        // synchronously and fires none of the library's selection callbacks, so this is
+        // the body drag's only route into the mirror — and the body drag is caret's own
+        // range gesture, not the library's.
+        trackSelection(lines);
         onLineRangePreview?.(range);
       },
       onCommit: (range) => {
@@ -341,9 +390,35 @@
   // drag, so it never clobbers the library's own in-drag highlight — it acts only as
   // a composer opens or closes.
   $effect(() => {
-    lifecycle.select(
-      selectedRange == null ? null : { start: selectedRange.startLine, end: selectedRange.endLine },
-    );
+    const range =
+      selectedRange == null
+        ? null
+        : { start: selectedRange.startLine, end: selectedRange.endLine };
+    lifecycle.select(range);
+    trackSelection(range);
+  });
+
+  // The cards' half of the band, kept in step with the library's. renderSelection
+  // reaches only [data-content]'s direct children, so a carded row goes unbanded
+  // however the selection arrived; this observer is the trigger, rather than a call
+  // beside each source, because the library queues that render in a rAF it registers
+  // BEFORE reporting the change — painting from the callback alone would be wiped by
+  // the frame that follows. Its clear is a subtree query and does reach into a card,
+  // so every library write shows up here and is answered. paintCardSelection writes
+  // only where the value differs, so its own writes settle in one further callback
+  // instead of looping. Deliberately NOT folded into the repaint observer below: that
+  // one would re-run the table, inline-decoration and file-reference passes on every
+  // frame of a drag.
+  $effect(() => {
+    const root = container?.shadowRoot;
+    if (root == null) return;
+    const observer = new MutationObserver(() => paintCardSelection(root, selectionMirror));
+    observer.observe(root, {
+      attributes: true,
+      subtree: true,
+      attributeFilter: ["data-selected-line"],
+    });
+    return () => observer.disconnect();
   });
 
   // Fenced-code-block panel decoration (EXC-692). The library paints no per-line
@@ -509,6 +584,10 @@
       // Re-paint the search highlights too: the CSS Custom Highlight ranges point at
       // the old rows the repaint just replaced, so rebuild them against the fresh DOM.
       paintSearchHighlights(root, searchMirror, searchIndexMirror);
+      // And the cards' share of the selection band, last: the rows only just moved
+      // into their cards above, and the library marked them while they were still
+      // flat, so this is what re-states the marks a re-card could not carry.
+      paintCardSelection(root, selectionMirror);
     };
     const schedule = () => {
       cancelAnimationFrame(raf);
