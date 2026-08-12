@@ -348,6 +348,7 @@ describe("blockquote depth and markers", () => {
   test("a tab after a single marker leaves the content start past it", () => {
     expect(runs(">\t- [x] task")).toEqual([
       { startCol: 0, endCol: 1, quoteMarker: 1 },
+      { startCol: 2, endCol: 3, listMarker: "task" },
       { startCol: 4, endCol: 7, checkbox: "checked" },
     ]);
   });
@@ -391,19 +392,28 @@ describe("blockquote depth and markers", () => {
   // `>` actually follows, which is what keeps `- [x] done` untouched.
   test("a quote inside a list item marks the marker the list indented", () => {
     expect(depth("- > quoted")).toBe(1);
-    expect(runs("- > quoted")).toEqual([{ startCol: 2, endCol: 3, quoteMarker: 1 }]);
+    // The list marker the quote scan stepped over is still a marker (EXC-861), so
+    // it is scanned at the line's own start rather than only past the prefix.
+    expect(runs("- > quoted")).toEqual([
+      { startCol: 0, endCol: 1, listMarker: "bullet" },
+      { startCol: 2, endCol: 3, quoteMarker: 1 },
+    ]);
   });
 
   test("a nested quote inside an ordered list item counts both levels", () => {
     expect(depth("1. > > deep")).toBe(2);
     expect(runs("1. > > deep")).toEqual([
+      { startCol: 0, endCol: 2, listMarker: "ordered" },
       { startCol: 3, endCol: 4, quoteMarker: 1 },
       { startCol: 5, endCol: 6, quoteMarker: 2 },
     ]);
   });
 
   test("a list marker with no quote after it leaves the task scan alone", () => {
-    expect(runs("- [x] done")).toEqual([{ startCol: 2, endCol: 5, checkbox: "checked" }]);
+    expect(runs("- [x] done")).toEqual([
+      { startCol: 0, endCol: 1, listMarker: "task" },
+      { startCol: 2, endCol: 5, checkbox: "checked" },
+    ]);
   });
 });
 
@@ -411,8 +421,21 @@ describe("blockquote depth and markers", () => {
 // column, so what matters for each is that the markers still land where the
 // source put them and the construct inside keeps its own columns.
 describe("blockquote mixing cases", () => {
-  test("a quote containing a list marks the marker and leaves the bullet", () => {
-    expect(runs("> - item")).toEqual([{ startCol: 0, endCol: 1, quoteMarker: 1 }]);
+  test("a quote containing a list marks the quote marker and the bullet", () => {
+    expect(runs("> - item")).toEqual([
+      { startCol: 0, endCol: 1, quoteMarker: 1 },
+      { startCol: 2, endCol: 3, listMarker: "bullet" },
+    ]);
+  });
+
+  test("a list inside a quote inside a list marks both markers", () => {
+    // Either nesting order puts a marker somewhere the other scan cannot see, so
+    // both ends of the prefix are scanned and each keeps its own columns.
+    expect(runs("- > - item")).toEqual([
+      { startCol: 0, endCol: 1, listMarker: "bullet" },
+      { startCol: 2, endCol: 3, quoteMarker: 1 },
+      { startCol: 4, endCol: 5, listMarker: "bullet" },
+    ]);
   });
 
   test("a quote containing a table row keeps the marker at column zero", () => {

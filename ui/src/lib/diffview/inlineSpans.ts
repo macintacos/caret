@@ -229,6 +229,26 @@ function flatten(intervals: Interval[]): InlineSpan[] {
   return spans;
 }
 
+/** Pushes the list-marker interval opening at `offset`, if one does. A thematic
+ * break is refused first, and the kind is decided from the SAME slice the marker
+ * came from: a marker is `task` only when the brackets belong to its own item, so
+ * a bullet outside a quote does not inherit the taskness of a bullet inside it. */
+function listMarkerAt(display: string, offset: number, into: Interval[]): void {
+  const slice = display.slice(offset);
+  if (THEMATIC_BREAK.test(slice)) return;
+  const list = LIST_MARKER.exec(slice);
+  if (list === null) return;
+  const marker = list[2] ?? "";
+  const startCol = offset + (list[1] ?? "").length;
+  into.push({
+    startCol,
+    endCol: startCol + marker.length,
+    attributes: {
+      listMarker: TASK_MARKER.test(slice) ? "task" : /\d/.test(marker) ? "ordered" : "bullet",
+    },
+  });
+}
+
 /** The flat atomic runs covering one display line, plus its blockquote depth.
  * `linkRanges` are display columns the caller already resolved — every clickable
  * link span plus every collapsed label that carries no file reference — and become
@@ -256,17 +276,15 @@ export function buildInlineSpans(
     });
   }
 
-  const list = THEMATIC_BREAK.test(content) ? null : LIST_MARKER.exec(content);
-  if (list !== null) {
-    const marker = list[2] ?? "";
-    const startCol = quote.contentStart + (list[1] ?? "").length;
-    intervals.push({
-      startCol,
-      endCol: startCol + marker.length,
-      attributes: {
-        listMarker: task !== null ? "task" : /\d/.test(marker) ? "ordered" : "bullet",
-      },
-    });
+  // BOTH ends of the quote prefix are scanned, because the two constructs nest
+  // either way round and each order hides a marker from the other scan. In
+  // `> - item` the marker sits past the prefix; in `- > quoted` it sits before it,
+  // where the quote scan counted it as the indentation CommonMark says it is. The
+  // two offsets can never name the same marker — a prefix that moved the content
+  // start consumed a `>`, which is not a marker character — so `- > - item` marks
+  // both of its bullets and an unquoted line scans once.
+  for (const offset of quote.contentStart === 0 ? [0] : [0, quote.contentStart]) {
+    listMarkerAt(display, offset, intervals);
   }
 
   collectTokenIntervals(Lexer.lexInline(display, { gfm: true }), 0, intervals);
