@@ -462,6 +462,10 @@ describe("the filename-reference chip (EXC-840, tinted EXC-880)", () => {
     // resting rule too, so the chip is one shape the hover only re-fills.
     expect(tokenRule).toMatch(/background-color:\s*var\(--chip-ref\)/);
     expect(tokenRule).toMatch(/border-radius:\s*var\(--radius\)/);
+    // The positive pin alone would still pass with a literal declared after it, which
+    // would win the cascade — so hold the whole rule clear of both escape hatches.
+    expect(tokenRule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(tokenRule).not.toMatch(/color-mix/);
   });
 
   test("hover swaps the fill to the accent wash, so it stays a visible step up", () => {

@@ -411,6 +411,28 @@ describe("every theme", () => {
     }
   });
 
+  // The reference chip's OTHER load-bearing pair, and the one EXC-880 created. A resolved
+  // reference rests in --chip-ref and takes --accent-wash on hover, so "hover is a visible
+  // step up" now depends on those two being told apart — where before EXC-880 the resting
+  // state was transparent and any wash read against it by construction. The step is
+  // carried almost entirely by hue: the alphas are two percentage points apart
+  // (ALPHA.chip vs ALPHA.wash in recipe.ts), so a palette whose accent drifted toward
+  // --chip-ref's green would quietly reduce hover to that alpha nudge. Only the e2e's two
+  // palettes are ever rendered in a browser; the other seven are held here or nowhere.
+  // Same 60-degree floor and same reasoning as the pin above; github-light is tightest at
+  // roughly 75 degrees, so this fires on a palette mistake rather than on a palette's taste.
+  test("keeps the resting reference chip at least 60 degrees from its hover wash", () => {
+    for (const [id, theme] of themeEntries()) {
+      const separation = Math.abs(
+        hue(theme.tokens["--accent-wash"]) - hue(theme.tokens["--chip-ref"]),
+      );
+      expect(
+        Math.min(separation, 360 - separation),
+        `${id} --accent-wash vs --chip-ref`,
+      ).toBeGreaterThanOrEqual(60);
+    }
+  });
+
   // --accent is the scarce mark caret spends on the current selection; --attention is
   // the separate "look here" hue (the notification dot, the version-count badge).
   // Collapsing them into one color erases that distinction.
@@ -543,8 +565,10 @@ describe("every ColorToken is read somewhere in ui/src", () => {
   // that unlikely (the shiki-read pin above demands alpha-free hex), but it is the hole
   // to re-check as each remaining consumer lands.
   //
-  // --chip-code is spent: the fence-marker chip reads it in diffview/coreStyles.ts.
-  // --chip-ref is spent too: the resting file-reference chip reads it in the same file.
+  // Two are already spent, both in diffview/coreStyles.ts: --chip-code fills the
+  // fence-marker chip and --chip-ref the resting file-reference chip. Of the three left,
+  // bold and italic are EXC-867's to spend; link awaits its own ticket. The test name
+  // carries no issue id because one id never covered the whole list.
   const PENDING_CONSUMERS: ColorToken[] = ["--chip-bold", "--chip-italic", "--chip-link"];
 
   for (const token of Object.keys(THEMES["caret-dark"].tokens) as ColorToken[]) {
