@@ -42,6 +42,23 @@ test("the override sheet closes where it should, with no stray backtick inside i
   expect(overrides.length).toBe(closed - (opened + "const CARET_OVERRIDES = `".length) + 1);
 });
 
+// The sibling of the backtick trap above, and a quieter one. A comment that carries a
+// SECOND `*/` — the usual way is editing a long block and terminating the paragraph you
+// rewrote rather than the block — closes early, and the prose after it is then read as a
+// selector prelude. CSS error recovery consumes that prelude together with the next `{…}`
+// block, so exactly ONE rule vanishes from the parsed sheet while the source still reads
+// perfectly and every text-scanning assertion in this file still passes. EXC-871 lost
+// `[data-md-quote] { color: transparent }` that way and only caught it in a browser, from
+// a `>` that should have been invisible.
+//
+// Counting terminators catches both directions: an extra `*/` and a missing one. Nothing
+// legitimate unbalances them, because CSS comments do not nest.
+test("every comment in the override sheet closes exactly once", () => {
+  const opens = overrides.match(/\/\*/g)?.length ?? 0;
+  const closes = overrides.match(/\*\//g)?.length ?? 0;
+  expect(closes, `${opens} comment openers, ${closes} terminators`).toBe(opens);
+});
+
 // The override body with /* … */ comments stripped. The comments legitimately name
 // [data-gutter]/[data-content] and corner properties in prose, which would let a
 // selector regex span from a comment into an unrelated rule — so structural
@@ -723,10 +740,10 @@ describe("the list markers (EXC-861)", () => {
   const bulletRule = rulesFor(String.raw`\[data-md-list="bullet"\]`)[0] ?? "";
   const glyphRule = rulesFor(String.raw`\[data-md-list="bullet"\]::before`)[0] ?? "";
 
-  test("marks every kind with the ink the other structural markers wear", () => {
-    // A marker is ink, not a chip: --ink-faint is what caret-theme.ts already gives the
-    // fence markers and the ** / _ emphasis markers, so a list marker joins that family
-    // rather than spending a sixth --chip-* token on a single dash.
+  test("marks a SURVIVING marker with the ink the supplementary markers wear", () => {
+    // An ordered item's `1.` keeps its glyph and is only tinted, so it is supplementary
+    // and stays on --ink-faint — the ink caret-theme.ts already gives the fence markers
+    // and the ** / _ emphasis markers. No sixth --chip-* token for a single dash.
     expect(anyMarker).toMatch(/color:\s*var\(--ink-faint\)/);
     expect(anyMarker).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(anyMarker).not.toMatch(/--chip-/);
@@ -737,6 +754,19 @@ describe("the list markers (EXC-861)", () => {
     // is only made invisible so the bullet can occupy the column it already had.
     expect(bulletRule).toMatch(/color:\s*transparent/);
     expect(glyphRule).toMatch(/content:\s*"•"/);
+  });
+
+  test("steps the REPLACEMENT glyph up to the ink that clears the non-text floor", () => {
+    // This test and the ink one above are the two halves of EXC-871's epic-wide rule, and
+    // the bullet is the construct that shows both at once. The dash it draws over is
+    // transparent, so the dot is the only thing left saying "list item here" — WCAG
+    // 1.4.11's 3:1 floor binds it, on the surface it really renders on. --ink-faint
+    // measures 2.90 on catppuccin-latte and 2.97 on github-light against the banded diff
+    // body; theme.test.ts owns those numbers and reds naming the palette. This pins only
+    // that the sheet spends what they chose, and that the drawn glyph and the surviving
+    // marker genuinely differ — one shared ink here would mean the rule had been dropped.
+    expect(glyphRule).toMatch(/color:\s*var\(--ink-soft\)/);
+    expect(glyphRule).not.toMatch(/--ink-faint/);
   });
 
   test("draws the glyph out of flow so no column moves", () => {
@@ -1168,8 +1198,16 @@ describe("the markdown table (EXC-864)", () => {
   });
 
   test("subdues the delimiter row's dashes and draws the header's rule under it", () => {
+    // One ink for both halves of the row, which is EXC-871 correcting EXC-864's token
+    // rather than restating its intent. --rule is 10% ink; composited over --paper-sunk
+    // and the row bands it measures 1.15-1.37 across the nine palettes, against the 1.05
+    // this epic calls indistinguishable — on the committed showcase there was no line on
+    // the screen, only one in the DOM. The dashes' own ink is what the drawn separator
+    // continues to full width. It stays FAINT rather than climbing to the --ink-soft the
+    // thematic break takes: the dashes here survive, the bold header and the stacked pipes
+    // already mark the boundary, so this line reinforces rather than carries.
     expect(overrideDecls).toMatch(
-      /\[data-line\]\[data-table-rule\]\s*\{\s*border-block-end:\s*1px solid var\(--rule\)/,
+      /\[data-line\]\[data-table-rule\]\s*\{\s*border-block-end:\s*1px solid var\(--ink-faint\)/,
     );
     // Subdued, not hidden: the alignment markers stay legible and stay copyable.
     expect(overrideDecls).toMatch(
@@ -1179,11 +1217,23 @@ describe("the markdown table (EXC-864)", () => {
   });
 });
 
+test("spends no --rule token anywhere on the diff body", () => {
+  // The sheet-wide half of the same finding, and the reason it is one assertion rather
+  // than a note: --rule and --rule-strong draw hairlines on the CHROME surfaces, where
+  // they are 10% and 16% ink over --paper / --paper-raised and read correctly. The diff
+  // body is --paper-sunk plus 2-8% ink row bands, and over that ground they measure
+  // 1.15-1.37 and 1.24-1.64 across the nine — a line that is in the DOM and not on the
+  // screen. Every mark this epic draws there spends the ink ramp instead. Scanned over
+  // the declarations, so the prose above (and this comment) can keep naming the tokens.
+  expect(overrideDecls).not.toContain("--rule");
+});
+
 // EXC-863: blockquote level bars. The bar belongs to the epic's transform-in-place
-// category rather than to the chip family: it overdraws the marker it replaces
-// instead of tinting a run, so it spends the marker ink EXC-855 already fixed and
-// mints nothing new. The subdue is the whole-line half, and where it is anchored is
-// the load-bearing part — see the rule's own note in coreStyles.ts.
+// category rather than to the chip family: it overdraws the marker it replaces instead of
+// tinting a run, so it spends ink from the ramp and mints nothing new. WHICH ink is
+// EXC-871's replacement/supplementary split — the `>` under it is transparent, so the bar
+// is the only carrier and takes --ink-soft. The subdue is the whole-line half, and where it
+// is anchored is the load-bearing part — see the rule's own note in coreStyles.ts.
 describe("blockquote level bars (EXC-863)", () => {
   const markerRule = rulesFor(String.raw`\[data-md-quote\]`).find((r) => r.includes("color:"));
   const barRule = rulesFor(String.raw`\[data-md-quote\]::before`)[0] ?? "";
@@ -1205,11 +1255,16 @@ describe("blockquote level bars (EXC-863)", () => {
     expect(barRule).toMatch(/position:\s*absolute/);
   });
 
-  test("spends the family's marker ink, not a chip tint", () => {
-    // EXC-855 fixes the marker ink at --ink-faint and refuses a sixth token for it. The
-    // bar IS the marker redrawn, so it takes that ink rather than minting one or
-    // borrowing a chip's.
-    expect(barRule).toMatch(/background-color:\s*var\(--ink-faint\)/);
+  test("spends the replacement family's ink, not a chip tint and not the faint marker ink", () => {
+    // EXC-855 refuses a sixth token for marker ink, so the bar takes one of the two the
+    // ink ramp already offers rather than minting one or borrowing a chip's. WHICH one is
+    // EXC-871's epic-wide rule: the `>` above it is transparent, so the bars are the only
+    // thing carrying "quoted, and this deep", which puts them under WCAG 1.4.11's 3:1
+    // floor on the banded diff body. theme.test.ts measures that floor across the nine and
+    // reds on --ink-faint (2.90 catppuccin-latte, 2.97 github-light); this pins the
+    // declaration, including that it did not stay on the faint ink EXC-863 shipped.
+    expect(barRule).toMatch(/background-color:\s*var\(--ink-soft\)/);
+    expect(barRule).not.toContain("--ink-faint");
     expect(barRule).not.toContain("--chip-");
   });
 
@@ -1279,7 +1334,7 @@ describe("thematic breaks (EXC-862)", () => {
 
   test("spends the ink that clears the non-text floor, not a rule token or a chip tint", () => {
     // The rule tokens are 10% and 16% ink and effectively vanish on the sunk diff surface
-    // (--rule 1.15-1.34, --rule-strong 1.24-1.62 across the nine palettes); --ink-faint is
+    // (--rule 1.15-1.37, --rule-strong 1.24-1.64 across the nine palettes); --ink-faint is
     // under 3:1 on two of them. theme.test.ts owns those measurements — this pins only that
     // the sheet spends what they chose.
     expect(ruleRule).toMatch(/var\(--ink-soft\)/);

@@ -156,7 +156,9 @@ test("the bullet is painted over the dash, which is still in the row", async ({ 
         content: glyph.content,
         position: glyph.position,
         // Resolved across the shadow boundary: a token that failed to resolve would
-        // come back as the initial color rather than the palette's faint ink.
+        // come back as the initial color rather than the palette's soft ink. The bullet
+        // REPLACES the dash it draws over, so it spends --ink-soft rather than the
+        // --ink-faint the markers that survive take (EXC-871).
         glyphColor: glyph.color,
         width: Math.round(el.getBoundingClientRect().width * 100) / 100,
       };

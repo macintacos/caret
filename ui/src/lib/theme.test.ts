@@ -430,31 +430,44 @@ describe("every theme", () => {
     }
   });
 
-  // EXC-860 draws the task-list checkbox, which is the one member of the plan view's
-  // marker family that reports STATE rather than marking structure — so WCAG 1.4.11's
-  // 3:1 floor for a non-text indicator binds it, and the ramp test above cannot speak to
-  // it: that one measures --paper and --paper-raised, the two CHROME surfaces, while a
-  // marker renders on the diff surface (--diffs-bg is --paper-sunk, styles/diffview.css)
-  // and on the 2-8% ink mixes the row bands lay over it.
+  // The plan view's REPLACEMENT markers: every decoration that takes its source character
+  // to transparent and draws in the column it vacated. Nothing legible survives beside one,
+  // so each is the only thing carrying what its marker used to say — which is precisely
+  // WCAG 1.4.11's test for a graphical object required to understand the content, and puts
+  // all three under its 3:1 floor. The ink-ramp case above cannot speak to them: it measures
+  // --paper and --paper-raised, the two CHROME surfaces, while a marker renders on the diff
+  // surface (--diffs-bg is --paper-sunk, styles/diffview.css) and on the 2-8% ink mixes the
+  // row bands lay over it.
   //
-  // That gap is why the checkbox spends --ink-soft and not the --ink-faint every other
-  // marker spends. Falsifiable, and it really does bite: swap CHECKBOX_INK to
-  // "--ink-faint" and catppuccin-latte drops to 2.90 and github-light to 2.97 against the
-  // banded row, both under the floor. --ink-soft bottoms at 4.21 across the nine.
+  // That gap is why every member spends --ink-soft and not the --ink-faint the epic
+  // prescribed for markers generally. Falsifiable, and it really does bite: swap MARKER_INK
+  // to "--ink-faint" and this reds on the FIRST band it reaches, catppuccin-latte at 2.99,
+  // with github-light behind it at 2.97; the ink bottoms at 2.63 across the nine and
+  // --ink-soft at 4.21. doc/agents/svelte-rules.md § chips carries the full ranges.
   //
-  // Only the checkbox is pinned here. The faint structural markers — the fence markers,
-  // the emphasis markers, EXC-861's list bullets — sit below 3:1 on the same surface in
-  // those two palettes, which is a real gap but an epic-wide one about decoration rather
-  // than about this indicator, and re-tinting a shared token is not EXC-860's to do.
-  test("keeps the task checkbox above the non-text floor on every palette", () => {
-    const CHECKBOX_INK = "--ink-soft" as const;
+  // EXC-860 opened this case for the checkbox alone and left the rest of the family faint,
+  // correctly — re-tinting a shared token is not one ticket's call. EXC-871 made it across
+  // the whole epic and the list is now closed by a rule rather than by inspection: a marker
+  // whose glyph SURVIVES is supplementary and stays on --ink-faint (the fence markers, the
+  // ** / _ emphasis markers, an ordered item's number, the table pipes and the delimiter
+  // row's dashes), and only a marker that has been replaced appears below. The thematic
+  // break is the fourth member and is measured separately, one test down, because its paint
+  // can carry an alpha suffix that has to composite before it is measured.
+  //
+  // One assertion rather than one per member: all three draw in the same token, so a
+  // per-marker loop would run the identical arithmetic three times for a longer message.
+  // Which SELECTORS spend it is coreStyles.test.ts's job — it pins the four this epic drew
+  // by name. Neither file can catch a FIFTH replacement marker shipped on --ink-faint; that
+  // gap is real and named here rather than papered over.
+  test("keeps every replacement marker above the non-text floor on every palette", () => {
+    const MARKER_INK = "--ink-soft" as const;
     for (const [id, theme] of themeEntries()) {
       const sunk = theme.tokens["--paper-sunk"];
       for (const pct of ROW_BANDS) {
         const ground = banded(sunk, theme.tokens["--ink"], pct);
         expect(
-          contrast(theme.tokens[CHECKBOX_INK], ground),
-          `${id} checkbox ${CHECKBOX_INK} on --paper-sunk banded ${pct * 100}%`,
+          contrast(theme.tokens[MARKER_INK], ground),
+          `${id} replacement marker ${MARKER_INK} on --paper-sunk banded ${pct * 100}%`,
         ).toBeGreaterThanOrEqual(3);
       }
     }
@@ -463,13 +476,13 @@ describe("every theme", () => {
   // EXC-862 draws a thematic break as a full-width hairline and takes the source glyphs
   // to transparent, so the LINE is the only thing carrying "a section break sits here" —
   // no legible marker survives beside it to argue the decoration is ornamental. That is
-  // what puts it under the same 3:1 non-text floor as the checkbox above rather than
-  // among the faint structural markers, and on the same surface: the diff body is
+  // what puts it under the same 3:1 non-text floor as the replacement family above rather
+  // than among the faint supplementary markers, and on the same surface: the diff body is
   // --paper-sunk (styles/diffview.css) plus the row bands.
   //
   // Both tokens a divider suggests first fail there, which is the whole reason this case
   // exists. --rule and --rule-strong are 10% and 16% ink; composited over these grounds
-  // they measure 1.15-1.34 and 1.24-1.62 across the nine — barely above the 1.05 this
+  // they measure 1.15-1.37 and 1.24-1.64 across the nine — barely above the 1.05 this
   // epic treats as indistinguishable, so the line renders as nothing at all. --ink-faint,
   // the marker ink, lands at 2.63-4.79 and misses the floor on catppuccin-latte and
   // github-light, the same two EXC-860 found. Swap RULE_INK to any of the three and this
