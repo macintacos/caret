@@ -173,7 +173,12 @@ stays green under any invocation.
   the marker redrawn, so it carries that ink; `--rule-strong` was measured first and left
   the bars legible but not countable, which is the job. The quoted line's ink is subdued
   with opacity rather than a tint, which is what lets the chips inside a quote keep their
-  treatment instead of being overpainted by it.
+  treatment instead of being overpainted by it — and because opacity composites at paint
+  time, no token assertion can see it. `QUOTE_SUBDUE` in `diffview/coreStyles.ts` is
+  therefore exported and pinned by `theme.test.ts` against every palette: `--ink` on
+  `--paper-sunk` ranges from 6:1 to 19:1 across the nine, so the flattest ink ramp sets
+  how far any of them may fade. Any future paint-time effect on body copy owes the same
+  pin.
 - **The diff-view bridge is amber-selection-only.** The single `.diffview` rule in
   `app.css` maps caret's tokens onto `@pierre/diffs`'s `--diffs-*` properties. caret
   adopts the library's surface STRUCTURE — the layered buffer/context/separator depth

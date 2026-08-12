@@ -15,6 +15,18 @@ const FILE_ICON_MASK = `url("data:image/svg+xml,${encodeURIComponent(fileIconRaw
 // Its counterpart for a reference the daemon resolved to a directory (EXC-918).
 const FOLDER_ICON_MASK = `url("data:image/svg+xml,${encodeURIComponent(folderIconRaw)}")`;
 
+/**
+ * How far a blockquote's ink fades (EXC-863). Quoted prose is still body copy a
+ * reviewer has to read, so this is bounded by contrast rather than by taste: it is
+ * the deepest fade that keeps `--ink` over `--paper-sunk` at WCAG AA on EVERY
+ * palette, and the palettes differ enormously in how much room they have to give
+ * (`--ink` on sunk runs from 6.0:1 to 18.9:1), so the tightest one sets it for all
+ * nine. Exported because a bare number in the sheet is invisible to the palette
+ * suite — `theme.test.ts` composites against this and fails if a new palette, or a
+ * deeper fade, drops quoted text below the floor.
+ */
+export const QUOTE_SUBDUE = 0.88;
+
 // caret's adjustments layered over the vendored core stylesheet. The gutter and
 // content sit in adjacent grid columns with no gap, which reads cramped — line
 // numbers crowd the code, most visibly under a line's hover highlight. Inline-start
@@ -476,9 +488,15 @@ const CARET_OVERRIDES = `
 
      The radius clamps to a pill at this width, which is what makes it a round-rect rather
      than a hairline: one bar per ROW, ends visible, so a quote reads as a stack of marks
-     the way the level bar in a rendered blockquote does. The small block bleed leaves the
-     bar covering ~91% of the row, so consecutive rows read as one column of marks without
-     any bar escaping its line box. */
+     the way the level bar in a rendered blockquote does. The block bleed is what closes
+     most of the gap between one row's bar and the next — it is stated as a bleed rather
+     than as a height because the height it produces is a function of the font's content
+     box and --diffs-line-height, and would drift silently with either.
+
+     No selection guard, and deliberately: the emphasis chips drop their tint on a
+     drag-selected row because a tint is decoration, but this bar is what the marker IS —
+     the same footing bold's weight sits on a few rules above. A quoted row that lost its
+     bars inside a selection would lose its depth, not just its polish. */
   [data-content] [data-line] [data-md-quote] {
     position: relative;
     color: transparent;
@@ -503,20 +521,32 @@ const CARET_OVERRIDES = `
 
      It cannot ride [data-line] itself. The amber drag-selection band and the hover band
      are background-colors on that element, so a row-level opacity would fade them too and
-     a selected quoted row would read differently from a selected unquoted one. Anchored on
-     the row and its children rather than reaching further down, so the depth is read once
-     where it is written. The marker child is exempt: it carries the bar, and dimming the
-     bar with the ink it replaced would cost exactly the legibility the bar exists for.
+     a selected quoted row would read differently from a selected unquoted one. The marker
+     child is exempt: it carries the bar, and dimming the bar with the ink it replaced
+     would cost exactly the legibility the bar exists for.
 
-     Descendant rather than child at the [data-content] end, so a row that a scroll or
-     table card has re-parented still matches (EXC-864).
+     The two combinators are chosen separately and neither is free. DESCENDANT at the
+     [data-content] end, so a row a scroll or table card has re-parented still matches
+     (EXC-864, where four gutter rules using direct children silently stopped matching
+     carded rows). CHILD at the row end, and that one is load-bearing: opacity is not
+     idempotent, so a descendant selector would apply again to any nested element and
+     compound to 0.88^2, and inside a table cell it would reach the bar as well. The bar
+     survives here only because it hangs off the marker child this excludes.
 
-     0.62 was chosen on the showcase rather than picked: at 0.72 the difference against the
-     unquoted paragraph below is real but marginal, and a subdue nobody can see is not one.
-     It composites to roughly a mid-grey on paper — a little darker than --ink-faint, so
-     quoted prose still clears the body-text contrast floor while reading a step back. */
+     How deep the fade goes is not a taste call and is not declared here — see
+     QUOTE_SUBDUE above, which is bounded by the worst palette's contrast headroom.
+     A gentler fade than the eye would choose is the price of quoted prose staying
+     readable in all nine.
+
+     A search highlight inside a quote fades with the line, since ::highlight() paints
+     over these same tokens and no selector can lift a highlight out of an ancestor's
+     opacity group. That is accepted rather than compensated: the fade is the LINE
+     reading quieter, and a mark on a quieter line being quieter with it is the same
+     statement, where the selection band above is row chrome about the reviewer's own
+     action and has to stay constant. Both marks keep their full alpha relative to the
+     ink they sit on either way. */
   [data-content] [data-line][data-quote-depth] > :not([data-md-quote]) {
-    opacity: 0.62;
+    opacity: ${QUOTE_SUBDUE};
   }
 
   /* EXC-729: an overflowing fenced block is wrapped in one scroll card (codeBlockScroll.ts)

@@ -2915,16 +2915,20 @@ test("a malformed table stays raw source", async ({ daemon, page }) => {
 });
 
 // EXC-863: blockquote level bars. The pure halves are already pinned as units — the depth
-// scan in ui/src/lib/diffview/inlineSpans.test.ts, the row tag in inlineDecorate.test.ts,
-// the selectors in coreStyles.test.ts. What only a browser can answer is whether the bar
-// PAINTS: it is a pseudo-element whose fill and radius are custom properties, so a
-// --rule-strong that failed to derive leaves a box with no background rather than a
-// missing rule, and no unit could tell the difference. The grid check is real font
-// metrics, and the gutter count is the reflow guard a leading decoration most threatens.
+// scan in ui/src/lib/diffview/inlineSpans.test.ts, the row tag and the per-level marker
+// elements in inlineDecorate.test.ts, the selectors in coreStyles.test.ts, and the subdue's
+// contrast floor across all nine palettes in ui/src/lib/theme.test.ts. What only a browser
+// can answer is whether any of it PAINTS: the bar is a pseudo-element whose fill and radius
+// are custom properties, so a token that failed to derive leaves a box with no background
+// rather than a missing rule; the subdue is a computed opacity that no stylesheet regex can
+// prove reaches a real row. The grid check is real font metrics, and the gutter count is the
+// reflow guard a leading decoration most threatens.
 //
-// Both schemes, unlike the inline-code chip above: --rule-strong is derived per scheme and
-// this is the first surface to spend it on a pseudo-element, so a bar that resolves in one
-// and vanishes in the other is exactly the failure the issue's ladder is about.
+// Both schemes, unlike the inline-code chip above. Not for the bar's fill — --ink-faint is a
+// ramp token the emphasis loop above already proves resolves in both — but for the subdue,
+// whose whole constraint is contrast against the surface, and the surface is what a scheme
+// changes. A fade that reads as a step in one and as nothing (or as unreadable) in the other
+// is exactly the failure the issue's ladder is about.
 const QUOTE_PLAN = `# Quote plan
 
 Plain prose sits on this line here.
@@ -2935,11 +2939,14 @@ Plain prose sits on this line here.
 
 > > > Three levels open on this row.
 
-x One level with xxboldxx and xcodex in it.
+> Plain quoted words with no markup.
+
+x Plain quoted words with no markup.
 `;
 
-/** Every quote marker on row `n`: its level, whether the glyph was overdrawn, and the
- * bar's own painted box read off the ::before. */
+/** Every quote marker on row `n`: its level, whether the glyph was overdrawn, the bar's
+ * own painted box read off the ::before, and the computed opacity of each token so the
+ * subdue can be read where it actually lands. */
 function readQuoteRow(page: Page, n: number) {
   return page.evaluate((line) => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
@@ -2948,6 +2955,13 @@ function readQuoteRow(page: Page, n: number) {
     return {
       depth: row?.getAttribute("data-quote-depth") ?? null,
       text: [...(row?.children ?? [])].map((t) => t.textContent ?? "").join(""),
+      rowOpacity: row === null ? null : getComputedStyle(row).opacity,
+      tokens: [...(row?.children ?? [])].map((t) => ({
+        text: t.textContent ?? "",
+        quote: t.getAttribute("data-md-quote"),
+        md: t.getAttribute("data-md"),
+        opacity: getComputedStyle(t as HTMLElement).opacity,
+      })),
       bars: markers.map((m) => {
         const bar = getComputedStyle(m, "::before");
         return {
@@ -2985,11 +2999,12 @@ for (const colorScheme of ["light", "dark"] as const) {
     expect(rows[2]?.bars.map((b) => b.level)).toEqual(["1", "2", "3"]);
 
     for (const bar of rows.flatMap((r) => r.bars)) {
-      // The token resolved through the live cascade. An underived --rule-strong leaves
-      // the declaration invalid and the box transparent, which is a bar that is not there.
+      // The token resolved through the live cascade. An underived --ink-faint leaves the
+      // declaration invalid and the box transparent, which is a bar that is not there.
       expect(bar.background).not.toBe("rgba(0, 0, 0, 0)");
       expect(bar.width).toBeGreaterThan(0);
-      // Round-rect, not a hairline: --radius clamps to a pill at this width.
+      // --radius resolved. This is the computed value, so it cannot see the clamp to a
+      // pill that the used value applies at this width — only that the token is there.
       expect(bar.radius).toBeGreaterThan(0);
       // Overdrawn, not doubled — the glyph is gone but the character is not.
       expect(bar.glyph).toBe("rgba(0, 0, 0, 0)");
@@ -3004,13 +3019,44 @@ for (const colorScheme of ["light", "dark"] as const) {
     // The characters are still there for copy, selection and the comment anchors.
     expect(rows[0]?.text).toBe("> One level with **bold** and `code` in it.");
 
-    // The monospace grid. Line 11 is line 5's twin — the same 43 characters, none of them
-    // markup, the leading marker mirrored by a plain glyph — so any difference in painted
-    // width is the decoration's. A bar that took room in the line box, or a marker whose
-    // advance changed, would drag every column after it off the source grid, and the
-    // search highlights, vim motions and drag-ranges all resolve against those columns.
-    const quoted = await rowTextWidth(page, 5);
-    const plain = await rowTextWidth(page, 11);
+    // The subdue, read where it lands rather than off the stylesheet. Three things have
+    // to hold at once and only a live cascade shows them: the ROW is not faded (its
+    // background is where the amber selection band and the hover band paint, so fading it
+    // would tint those too), the marker is not faded (it carries the bar), and every other
+    // token is. The child combinator is what keeps the fade from compounding on nested
+    // elements — a descendant selector would square it.
+    // The depth of the fade is not asserted here — ui/src/lib/theme.test.ts owns that,
+    // where it can composite QUOTE_SUBDUE against all nine palettes rather than the one
+    // this browser happens to be showing. What is asserted is its SHAPE, which only the
+    // live cascade has: one value, on the right elements.
+    const quotedRow = await readQuoteRow(page, 5);
+    expect(quotedRow.rowOpacity).toBe("1");
+    const faded = quotedRow.tokens.filter((t) => t.quote === null).map((t) => t.opacity);
+    expect(faded.length).toBeGreaterThan(0);
+    // One value across every faded token — a compounding descendant selector would
+    // show up here as two.
+    expect([...new Set(faded)]).toHaveLength(1);
+    expect(Number(faded[0])).toBeGreaterThan(0);
+    expect(Number(faded[0])).toBeLessThan(1);
+    expect(quotedRow.tokens.filter((t) => t.quote !== null).map((t) => t.opacity)).toEqual(["1"]);
+    // And the chips inside the quote keep their own treatment rather than losing it —
+    // the fade is on top of the chip, not instead of it.
+    expect(quotedRow.tokens.some((t) => (t.md ?? "").includes("bold"))).toBe(true);
+    expect(quotedRow.tokens.some((t) => (t.md ?? "").includes("code"))).toBe(true);
+
+    // An unquoted row is untouched, so the fade is the quote's and not the sheet's.
+    const plainRow = await readQuoteRow(page, 3);
+    expect(plainRow.depth).toBeNull();
+    expect([...new Set(plainRow.tokens.map((t) => t.opacity))]).toEqual(["1"]);
+
+    // The monospace grid. Line 13 is line 11's twin — the same characters with the leading
+    // marker mirrored by a plain glyph, and no inline markup on either, so the ONLY thing
+    // that can separate their painted widths is the bar. (Line 5 would have re-proven
+    // EXC-867's emphasis-advance check instead.) A bar that took room in the line box, or a
+    // marker whose advance changed, would drag every column after it off the source grid,
+    // and the search highlights, vim motions and drag-ranges all resolve against those.
+    const quoted = await rowTextWidth(page, 11);
+    const plain = await rowTextWidth(page, 13);
     expect(quoted).not.toBeNull();
     expect(Math.abs((quoted as number) - (plain as number))).toBeLessThan(1);
 

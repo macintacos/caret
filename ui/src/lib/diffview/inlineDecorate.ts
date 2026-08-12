@@ -198,7 +198,12 @@ export function decorateInlineRuns(
     const line = Number(row.getAttribute("data-line"));
     if (Number.isFinite(line)) rows.set(line, row);
   }
-  for (const line of new Set([...spans.keys(), ...refs.keys(), ...quoteDepth.keys()])) {
+  // spans and refs only: a quoted line is always in spans, because its depth is
+  // counted from marker intervals that each become a run (inlineSpans.ts pins that
+  // implication). Unioning quoteDepth in as well would add a key set that is
+  // provably a subset — and a branch no repaint can reach is a branch nobody can
+  // test honestly.
+  for (const line of new Set([...spans.keys(), ...refs.keys()])) {
     const row = rows.get(line);
     if (row === undefined) continue;
     setAttr(row, "data-quote-depth", quoteDepth.get(line)?.toString());

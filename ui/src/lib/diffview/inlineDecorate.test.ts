@@ -422,18 +422,106 @@ test("tags each quoted row with its own depth", () => {
   expect(depths(host)).toEqual(["1", "2", null]);
 });
 
-test("tags a quoted row the run map does not otherwise name", () => {
-  // The depth map is the authority on which rows are quoted, so a row reachable
-  // only through it still gets its tag.
-  host = root(row(1, ["> ", "quoted"]));
-  decorateInlineRuns(host, new Map(), new Map(), new Map([[1, 1]]));
-  expect(depths(host)).toEqual(["1"]);
-});
-
 test("drops the depth when a repaint no longer quotes the line", () => {
+  const quoted = spanMap([[1, [{ startCol: 0, endCol: 1, quoteMarker: 1 }]]]);
   host = root(row(1, ["> ", "quoted"]));
-  decorateInlineRuns(host, new Map(), new Map(), new Map([[1, 1]]));
+  decorateInlineRuns(host, quoted, new Map(), new Map([[1, 1]]));
   expect(depths(host)).toEqual(["1"]);
   decorateInlineRuns(host, new Map(), new Map(), new Map());
+  expect(depths(host)).toEqual([null]);
+});
+
+// The mixing cases EXC-863 names, carried through to the DOM rather than stopping
+// at the span layer: what has to hold for each is that every marker gets its own
+// element (one bar per level), the row carries the depth (the subdue), and the
+// construct inside keeps its own tags. Columns come from inlineSpans.test.ts; this
+// is the half that says the decoration actually lands.
+test.each([
+  ["a list inside a quote", ["> ", "- ", "item"], [{ startCol: 0, endCol: 1, quoteMarker: 1 }], 1],
+  [
+    "a table row inside a quote",
+    ["> ", "| a | ", "b", " |"],
+    [{ startCol: 0, endCol: 1, quoteMarker: 1 }],
+    1,
+  ],
+  [
+    "a fence row inside a quote",
+    ["> ", "```", "ts"],
+    [{ startCol: 0, endCol: 1, quoteMarker: 1 }],
+    1,
+  ],
+  [
+    "a quote inside a list item",
+    ["- ", "> ", "quoted"],
+    [{ startCol: 2, endCol: 3, quoteMarker: 1 }],
+    1,
+  ],
+  [
+    "three levels inside a list item",
+    ["- ", "> ", "> ", "> ", "deep"],
+    [
+      { startCol: 2, endCol: 3, quoteMarker: 1 },
+      { startCol: 4, endCol: 5, quoteMarker: 2 },
+      { startCol: 6, endCol: 7, quoteMarker: 3 },
+    ],
+    3,
+  ],
+])("draws one marker element per level for %s", (_name, tokens, runs, depth) => {
+  host = root(row(1, tokens as string[]));
+  decorateInlineRuns(
+    host,
+    spanMap([[1, runs as InlineSpan[]]]),
+    new Map(),
+    new Map([[1, depth as number]]),
+  );
+  const rowEl = host.querySelector('[data-line="1"]') as Element;
+  expect(rowEl.getAttribute("data-quote-depth")).toBe(String(depth));
+  expect(
+    [...rowEl.querySelectorAll("[data-md-quote]")].map((m) => m.getAttribute("data-md-quote")),
+  ).toEqual((runs as InlineSpan[]).map((r) => String(r.quoteMarker)));
+  // Each marker element holds exactly the one character the bar is drawn over, so
+  // the bar cannot span more than its own column.
+  for (const m of rowEl.querySelectorAll("[data-md-quote]")) expect(m.textContent).toBe(">");
+});
+
+test("keeps a chip's own tags on a quoted row", () => {
+  // "inline affordances inside the quote keep their styling in subdued form": the
+  // subdue is a row-level fade, so what has to be true here is that the chip's
+  // members survive the quote entirely — nothing strips them.
+  host = root(row(1, ["> ", "**", "bold", "**", " and ", "`c`"]));
+  decorateInlineRuns(
+    host,
+    spanMap([
+      [
+        1,
+        [
+          { startCol: 0, endCol: 1, quoteMarker: 1 },
+          { startCol: 2, endCol: 10, bold: true },
+          { startCol: 15, endCol: 18, code: true },
+        ],
+      ],
+    ]),
+    new Map(),
+    new Map([[1, 1]]),
+  );
+  // Seven children, not six: the leading "> " token straddles the marker run and is
+  // split, which is what gives the bar an element holding exactly the marker.
+  expect(pieces(host).map((p) => p.text)).toEqual([">", " ", "**", "bold", "**", " and ", "`c`"]);
+  expect(pieces(host).map((p) => p.md)).toEqual([null, null, "bold", "bold", "bold", null, "code"]);
+  expect(pieces(host).map((p) => p.start)).toEqual([null, null, "bold", null, null, null, "code"]);
+  expect(pieces(host).map((p) => p.end)).toEqual([null, null, null, null, "bold", null, "code"]);
+});
+
+test("leaves a row named only by the reference map unquoted", () => {
+  // The loop visits refs-only rows for their cut; the depth lookup simply misses,
+  // so nothing is tagged. Pins that the row tag reads the depth map rather than
+  // the fact that the row was visited.
+  host = root(row(1, ["src/a.ts", " here"]));
+  decorateInlineRuns(
+    host,
+    new Map(),
+    refMap([[1, [{ startCol: 0, endCol: 8, path: "src/a.ts" }]]]),
+    new Map(),
+  );
   expect(depths(host)).toEqual([null]);
 });

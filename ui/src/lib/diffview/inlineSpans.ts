@@ -110,12 +110,14 @@ const LIST_PREFIX = /^ {0,3}(?:[-*+]|\d+[.)])\s+(?=>)/;
 const TASK_MARKER = /^(\s*(?:[-*+]|\d+[.)])\s+)\[([ xX])\](?=\s|$)/;
 
 /** The blockquote prefix: one interval per `>` and the column its content starts
- * at, which is where the task-marker scan begins. `linkRanges` are the caller's
- * already-resolved link columns; a `>` inside one belongs to a collapsed label
- * rather than to a quote (`[> x](url)` displays as `> x`) and ends the scan. */
+ * at, which is where the task-marker scan begins. `labelRanges` are the display
+ * columns the caller rewrote — every link and reference label. A `>` inside one is
+ * label text rather than a marker (`[> x](url)` displays as `> x`) and ends the
+ * scan; it must be the FULL set, since a label that resolved to a file reference
+ * never reaches the link half. */
 function scanQuotePrefix(
   line: string,
-  linkRanges: readonly ColumnRange[],
+  labelRanges: readonly ColumnRange[],
 ): { intervals: Interval[]; contentStart: number } {
   const intervals: Interval[] = [];
   let pos = LIST_PREFIX.exec(line)?.[0].length ?? 0;
@@ -123,7 +125,7 @@ function scanQuotePrefix(
     const match = QUOTE_MARKER.exec(line.slice(pos));
     if (match === null) break;
     const at = pos + match[0].length - 1;
-    if (linkRanges.some((r) => r.startCol <= at && at < r.endCol)) break;
+    if (labelRanges.some((r) => r.startCol <= at && at < r.endCol)) break;
     intervals.push({
       startCol: at,
       endCol: at + 1,
@@ -190,13 +192,17 @@ function flatten(intervals: Interval[]): InlineSpan[] {
 
 /** The flat atomic runs covering one display line, plus its blockquote depth.
  * `linkRanges` are display columns the caller already resolved — every clickable
- * link span plus every collapsed label that carries no file reference. Fenced-code
- * lines never reach here; the caller passes them through untouched. */
+ * link span plus every collapsed label that carries no file reference — and become
+ * `link: true` runs. `labelRanges` is the superset the caller rewrote at all,
+ * references included; only the blockquote scan reads it, to tell a marker from a
+ * label that merely starts with one. Fenced-code lines never reach here; the
+ * caller passes them through untouched. */
 export function buildInlineSpans(
   display: string,
   linkRanges: readonly ColumnRange[],
+  labelRanges: readonly ColumnRange[],
 ): { spans: InlineSpan[]; quoteDepth: number } {
-  const quote = scanQuotePrefix(display, linkRanges);
+  const quote = scanQuotePrefix(display, labelRanges);
   const intervals: Interval[] = [...quote.intervals];
 
   const task = TASK_MARKER.exec(display.slice(quote.contentStart));

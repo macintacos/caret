@@ -8,12 +8,19 @@ import { buildInlineSpans, type InlineSpan } from "$lib/diffview/inlineSpans.ts"
 // [startCol, endCol) into the DISPLAY line. Nothing is stripped or rewritten
 // here — the markers are part of the runs they mark.
 
-function runs(line: string, links: { startCol: number; endCol: number }[] = []): InlineSpan[] {
-  return buildInlineSpans(line, links).spans;
+/** Runs for a line. `links` are the ranges marked `link: true`; `labels` is the
+ * superset the caller rewrote (references included) that the quote scan reads, and
+ * defaults to `links` because every link range is also a label range. */
+function runs(
+  line: string,
+  links: { startCol: number; endCol: number }[] = [],
+  labels: { startCol: number; endCol: number }[] = links,
+): InlineSpan[] {
+  return buildInlineSpans(line, links, labels).spans;
 }
 
 function depth(line: string): number {
-  return buildInlineSpans(line, []).quoteDepth;
+  return buildInlineSpans(line, [], []).quoteDepth;
 }
 
 describe("emphasis and code runs", () => {
@@ -275,15 +282,28 @@ describe("blockquote depth and markers", () => {
   // and likewise only visible once depth is drawn: unguarded it paints a bar
   // over a link and subdues the whole row.
   test("a `>` inside a collapsed link label is not a quote marker", () => {
-    const { spans, quoteDepth } = buildInlineSpans("> x", [{ startCol: 0, endCol: 3 }]);
+    const label = [{ startCol: 0, endCol: 3 }];
+    const { spans, quoteDepth } = buildInlineSpans("> x", label, label);
     expect(quoteDepth).toBe(0);
     expect(spans).toEqual([{ startCol: 0, endCol: 3, link: true }]);
+  });
+
+  // The same collapse, but the label resolved to a file reference — which is the
+  // commoner shape in a plan, and the one that never reaches linkRanges (links.ts
+  // marks a resolved reference as a reference, not a link). Counted as a marker it
+  // would put data-md-quote and data-file-ref on ONE element, landing the bar's
+  // ::before and the glyph's ::before on the same box.
+  test("a `>` inside a collapsed reference label is not a quote marker either", () => {
+    const { spans, quoteDepth } = buildInlineSpans("> a.ts", [], [{ startCol: 0, endCol: 6 }]);
+    expect(quoteDepth).toBe(0);
+    expect(spans).toEqual([]);
   });
 
   test("a real marker before a collapsed label still counts", () => {
     // `> [> x](url)` displays as `> > x`: the first marker is the line's, the
     // second is the label's and stops the scan.
-    const { spans, quoteDepth } = buildInlineSpans("> > x", [{ startCol: 2, endCol: 5 }]);
+    const label = [{ startCol: 2, endCol: 5 }];
+    const { spans, quoteDepth } = buildInlineSpans("> > x", label, label);
     expect(quoteDepth).toBe(1);
     expect(spans).toEqual([
       { startCol: 0, endCol: 1, quoteMarker: 1 },
@@ -335,6 +355,22 @@ describe("blockquote mixing cases", () => {
   test("a quote containing a fence row still marks its level", () => {
     expect(depth("> ```ts")).toBe(1);
     expect(runs("> ```ts")).toEqual([{ startCol: 0, endCol: 1, quoteMarker: 1 }]);
+  });
+
+  // The implication the decoration pass relies on to visit quoted rows without
+  // unioning the depth map into its key set: depth is counted from marker
+  // intervals, and each of those becomes a run, so a line with depth is never
+  // absent from the run map. If this ever fails, inlineDecorate.ts stops tagging
+  // some quoted rows — so it is pinned here, where the two are produced.
+  test("a line with depth always emits at least one marker run", () => {
+    for (const line of ["> a", "> > a", ">", "> >", "   > a", "- > a", ">\t> a", "> - [ ] t"]) {
+      const { spans, quoteDepth } = buildInlineSpans(line, [], []);
+      expect(quoteDepth, line).toBeGreaterThan(0);
+      expect(
+        spans.filter((s) => s.quoteMarker !== undefined),
+        line,
+      ).toHaveLength(quoteDepth);
+    }
   });
 
   // A lazy continuation carries no marker column, so it carries no depth. The
