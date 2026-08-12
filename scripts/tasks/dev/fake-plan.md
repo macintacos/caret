@@ -604,7 +604,7 @@ A plain span: `renderPlan(markdown)`. A span holding a path: `ui/src/lib/diffvie
 
 - `package.json` — a file that resolves: the file glyph, a resting tint, and an excerpt on click.
 - `doc/agents` — a directory that resolves: the folder glyph, the same tint, and a tree on click.
-- `src/no-such-module.ts` — a path that does not resolve: no glyph, no tint, no preview. This is the row that regresses silently, so read it every time.
+- `src/no-such-module.ts` — a path that does not resolve: no glyph, no preview, and no reference tint. It still wears the neutral inline-code chip every span carries, so what separates it from the two rows above is hue rather than the presence of a chip. This is the row that regresses silently, so read it every time.
 - `doc/no-such-folder/` — the directory half of that negative case.
 
 ### Fenced blocks
