@@ -335,6 +335,8 @@ test("an image in a table cell draws nothing, and the repaint settles", async ({
   // because it places tokens by column and an image sits past the last cell's end.
   // Measured before the fix: ~10,800 childList mutations in two seconds, climbing;
   // the same window with a plain table, or with the image outside one, was zero.
+  // The mutation count is read twice below rather than once because a settled view
+  // must hold still, and only a second equal reading can say that it does.
   await open(page, daemon, TABLE_PLAN);
   await page.evaluate(() => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
@@ -344,7 +346,21 @@ test("an image in a table cell draws nothing, and the repaint settles", async ({
       w.__mutations += records.length;
     }).observe(sh as unknown as Node, { childList: true, subtree: true });
   });
-  await page.waitForTimeout(750);
+  // Settling is asserted by polling for the counter to STOP moving rather than by
+  // sampling a fixed window: auto-retrying is the suite's timing discipline, and it
+  // is the stronger claim of the two — a loop never yields two equal readings, so
+  // this fails on churn of any rate rather than only on churn above some threshold.
+  let previous = -1;
+  await expect
+    .poll(async () => {
+      const now = await page.evaluate(
+        () => (window as unknown as { __mutations: number }).__mutations,
+      );
+      const unchanged = now === previous;
+      previous = now;
+      return unchanged;
+    })
+    .toBe(true);
   const settled = await page.evaluate((ln) => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
     const row = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])].find(
