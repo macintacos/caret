@@ -18,14 +18,15 @@ import { UPSTREAM_SHIKI_THEMES } from "$lib/upstream-shiki.ts";
 // included: an upstream theme's code background is inert on every caret surface,
 // so overwriting it with --paper-sunk would be a deviation that buys nothing.
 //
-// What the resolver adds is caret's three structural marker rules, appended last —
-// last-match-wins is what makes them beat whatever the theme underneath says. They
-// are painted from the palette's own tokens in theme.ts, the single source of truth
-// for every color the UI paints (EXC-730; supersedes the hand-copied duplication of
-// EXC-370). shiki resolves token colors at highlight time and can't read CSS custom
-// properties, so the values are read out of THEMES here rather than re-typed.
+// What the resolver adds is caret's own markdown rules — three structural markers and
+// three for emphasis — appended last, because last-match-wins is what makes them beat
+// whatever the theme underneath says. They are painted from the palette's own tokens in
+// theme.ts, the single source of truth for every color the UI paints (EXC-730;
+// supersedes the hand-copied duplication of EXC-370). shiki resolves token colors at
+// highlight time and can't read CSS custom properties, so the values are read out of
+// THEMES here rather than re-typed.
 interface Palette {
-  comment: string; // --ink-faint: the fence markers
+  comment: string; // --ink-faint: the fence markers and the ** / _ emphasis markers
   punctuation: string; // --ink-soft: the inline-code backtick
   keyword: string; // --accent: the fence's language tag
 }
@@ -41,21 +42,40 @@ function paletteFromTheme(t: Theme): Palette {
   };
 }
 
-/** The markdown structural markers caret styles itself, whatever theme colors the
+/** The markdown markers and emphasis caret styles itself, whatever theme colors the
  * code underneath. Every theme takes them appended last, which is how they beat
  * whatever the theme underneath says about those scopes.
  *
- * The first two are EXC-692 — subdue the ``` / ~~~ fence markers and make the language
+ * The fence pair is EXC-692 — subdue the ``` / ~~~ fence markers and make the language
  * info-string prominent, so a code block reads as its own element in the plan view.
  *
- * The third is load-bearing beyond its color. fileRefTag.ts tags the token that BEGINS
- * at a file reference (the column past the opening backtick), and shiki merges adjacent
- * tokens that style identically. Every upstream theme colors the backtick exactly like
- * the code between them, which collapses `` `path` `` into a single token and silently
- * drops the file icon, pointer cursor, and hover chip while leaving the click target
- * alive (EXC-687, EXC-840). Coloring the backtick separately keeps the boundary. Under
- * caret's own themes it also lifts the backtick off the generic `punctuation` hue, so
- * the boundary holds by color rather than by rule order alone. */
+ * The backtick rule is load-bearing beyond its color. fileRefTag.ts tags the token that
+ * BEGINS at a file reference (the column past the opening backtick), and shiki merges
+ * adjacent tokens that style identically. Every upstream theme colors the backtick
+ * exactly like the code between them, which collapses `` `path` `` into a single token
+ * and silently drops the file icon, pointer cursor, and hover chip while leaving the
+ * click target alive (EXC-687, EXC-840). Coloring the backtick separately keeps the
+ * boundary. Under caret's own themes it also lifts the backtick off the generic
+ * `punctuation` hue, so the boundary holds by color rather than by rule order alone.
+ *
+ * The last four are EXC-867 — bold reads bold and italic reads italic in the plan view
+ * under every palette. The emphasis rules carry `fontStyle` and NOTHING else, so each
+ * theme's own ink survives; the point is the weight and slant, which a vendor theme is
+ * free never to set (caret's own pair does, at `markup.bold` / `markup.italic`).
+ *
+ * The nested rule is not redundant with the two above it. textmate resolves `fontStyle`
+ * from the single most-specific matching rule rather than OR-ing what the ancestor scopes
+ * say, so `***both***` — whose content carries `markup.bold.markdown` AND
+ * `markup.italic.markdown` — otherwise resolves against `markup.italic.markdown` alone and
+ * renders italic with no weight. The descendant scope is more specific than either, so it
+ * is what makes bold-inside-italic actually read as both.
+ *
+ * The marker rule plays the same boundary trick as the backtick above, and is load-bearing
+ * for the same reason. The grammar scopes the `**` / `_` markers apart from the content,
+ * but shiki merges the three back into ONE token while they style identically — so giving
+ * the markers their own ink is what splits `**bold**` into `**` / `bold` / `**`. The
+ * decoration pass reads that boundary; subduing the markers is what a reader wants of
+ * them anyway. */
 function structuralMarkerRules(p: Palette): NonNullable<ThemeRegistrationRaw["settings"]> {
   return [
     {
@@ -69,6 +89,22 @@ function structuralMarkerRules(p: Palette): NonNullable<ThemeRegistrationRaw["se
     {
       scope: ["punctuation.definition.raw.markdown"],
       settings: { foreground: p.punctuation },
+    },
+    {
+      scope: ["markup.bold.markdown"],
+      settings: { fontStyle: "bold" },
+    },
+    {
+      scope: ["markup.italic.markdown"],
+      settings: { fontStyle: "italic" },
+    },
+    {
+      scope: ["markup.bold.markdown markup.italic.markdown"],
+      settings: { fontStyle: "bold italic" },
+    },
+    {
+      scope: ["punctuation.definition.bold.markdown", "punctuation.definition.italic.markdown"],
+      settings: { foreground: p.comment },
     },
   ];
 }
