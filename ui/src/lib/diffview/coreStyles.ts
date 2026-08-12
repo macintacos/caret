@@ -743,12 +743,23 @@ const CARET_OVERRIDES = `
      so the loop is impossible by construction rather than by measurement, and unlike a
      pseudo-element it needs no positioning context, so no stacking order moves.
 
-     It takes --rule-strong, not the --ink-faint the chip family prescribes for markers, and
-     the level bars above are why. That note rejects the rule tokens for a 2px mark on the
-     grounds that they are "sized for hairlines that span a whole edge, where length carries
-     the signal" — this is that hairline, so the same reasoning points the other way here.
-     No new constant either: unlike QUOTE_SUBDUE this spends a token every border in the app
-     already wears, so all nine palettes derive it by construction.
+     It takes --ink-soft, and neither token a divider suggests first survived measurement on
+     the surface this actually renders on. --rule-strong was the obvious pick — the level
+     bars above reject the rule tokens only for a 2px mark, on the grounds that they are
+     "sized for hairlines that span a whole edge", and this IS that hairline — but those
+     tokens are 10% and 16% ink, and composited over --paper-sunk and the row's own 2-8%
+     bands they measure 1.21 to 1.62 across the nine palettes. That is barely above the 1.05
+     this epic treats as indistinguishable: the line is in the DOM and not on the screen.
+     --ink-faint, the marker ink the chip family prescribes, is the other candidate and lands
+     at 2.63 to 4.79 — under WCAG 1.4.11's 3:1 floor on catppuccin-latte and github-light,
+     the gap EXC-860 measured for the checkbox.
+
+     That floor binds here, which is the part worth being explicit about rather than
+     inheriting. The glyphs above are transparent, so this line is the ONLY thing carrying
+     "a section break sits here". A decoration beside a legible marker could argue it is
+     ornamental; one that has replaced its marker cannot. --ink-soft bottoms at 4.21 across
+     the nine and is pinned in theme.test.ts against the banded diff surface, the same shape
+     and for the same reason as the checkbox's pin.
 
      No inset and no margin: the row must keep its height to the character, since the gutter
      numbers are one per row and a rule that changed the vertical rhythm would be visible as
@@ -758,7 +769,7 @@ const CARET_OVERRIDES = `
      rule survives a selected or hovered row deliberately: the band is a background-color and
      this is a background-image over it, the same standing the bars take. */
   [data-content] [data-line][data-md-rule] {
-    background-image: linear-gradient(var(--rule-strong), var(--rule-strong));
+    background-image: linear-gradient(var(--ink-soft), var(--ink-soft));
     background-repeat: no-repeat;
     background-position: center;
     background-size: 100% 1px;

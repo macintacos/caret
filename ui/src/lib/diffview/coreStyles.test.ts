@@ -1255,11 +1255,13 @@ describe("thematic breaks (EXC-862)", () => {
     expect(ruleRule).toMatch(/background-repeat:\s*no-repeat/);
   });
 
-  test("spends a rule token, not a chip tint or a new constant", () => {
-    // A hairline spanning a whole edge is what the rule tokens are for — the level
-    // bars' own note says so while rejecting them for a 2px mark.
-    expect(ruleRule).toMatch(/var\(--rule-strong\)/);
+  test("spends the ink that clears the non-text floor, not a rule token or a chip tint", () => {
+    // The rule tokens are 10% and 16% ink and effectively vanish on the sunk diff surface
+    // (1.21-1.62 across the nine palettes); --ink-faint is under 3:1 on two of them.
+    // theme.test.ts owns that measurement — this pins that the sheet spends what it chose.
+    expect(ruleRule).toMatch(/var\(--ink-soft\)/);
     expect(ruleRule).not.toContain("--chip-");
+    expect(ruleRule).not.toContain("--rule");
   });
 
   test("overdraws the characters rather than deleting them", () => {
