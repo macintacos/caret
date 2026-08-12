@@ -5,14 +5,13 @@
 // it. Everything downstream — the emphasis ink, the pills, the checkbox and
 // blockquote decorations — is then one CSS rule against an attribute.
 //
-// It SPLITS ONLY, and never merges. Merging would be the obvious way to make one
-// element out of one run, and it is wrong twice over: shiki colours `**`, `bold`
-// and `**` as three different tokens, so fusing them throws away the marker ink
-// the theme deliberately dims; and tagTokenAt (fileRefTag.ts), tagLanguageToken
-// and tagFenceToken (codeBlocks.ts) all locate a token by walking direct
-// children and accumulating text length, so a coarser partition can hide the
-// boundary they need. Splitting only ever refines, so every boundary shiki drew
-// survives and every column those walkers look for is still a child boundary.
+// The refining itself is rowTokens.ts's splitTokens, which is shared with the
+// table pass and carries the split-only rule and its reasoning. What matters here
+// is that it only ever refines, so every boundary shiki drew survives and every
+// column tagTokenAt (fileRefTag.ts), tagLanguageToken and tagFenceToken
+// (codeBlocks.ts) look for is still a token boundary. The same module's
+// tokenChildren is how a row's tokens are reached, which is one level down for a
+// table row (EXC-864) and the row's own children for every other.
 //
 // Pill grouping follows inlineSpans.ts's abutting-elements contract. A pill is
 // drawn per ELEMENT, not per run, so consecutive runs are grouped — but the
@@ -49,13 +48,15 @@
 //
 // Idempotency is a hard requirement, not a nicety: SourceView.svelte runs this
 // from a MutationObserver watching childList over the whole subtree, so a pass
-// that re-splits a settled row would loop forever. An already-correct child has
-// no cut strictly inside it and is left completely untouched, the same way
-// syncCodeBlockCards leaves a settled block alone. Attribute writes are free —
-// the observer does not watch attributes — so only node splitting is conditional.
+// that re-splits a settled row would loop forever. splitTokens owns that half — an
+// already-correct token has no cut strictly inside it and is left completely
+// untouched, the same way syncCodeBlockCards leaves a settled block alone.
+// Attribute writes are free — the observer does not watch attributes — so only node
+// splitting is conditional.
 
 import type { FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 import type { ColumnRange, InlineSpan, InlineSpanMap } from "$lib/diffview/inlineSpans.ts";
+import { splitTokens, tokenChildren } from "$lib/diffview/rowTokens.ts";
 
 // The inline-markup attributes that ride in the `data-md` token list, which is
 // emitted in this array's order. A token list rather than an attribute per member so CSS
@@ -102,37 +103,6 @@ function pillGroups(runs: readonly InlineSpan[], member: Member): ColumnRange[] 
   return groups;
 }
 
-/** Replaces every direct child a cut falls strictly inside with one clone per
- * piece, so no child straddles a boundary. A child with no interior cut is left
- * as-is — the idempotency guarantee.
- *
- * A child holding elements of its own is skipped defensively; a shiki token holds
- * a single text node, so there is no known trigger. The landing if one ever
- * appears is silence rather than breakage: the child keeps straddling a boundary,
- * tagRow's covering-run lookup finds none, and the element goes untagged — no
- * chip and no glyph on that stretch, with every other row unaffected. */
-function splitRow(row: Element, cuts: number[]): void {
-  let col = 0;
-  for (const child of [...row.children]) {
-    const text = child.textContent ?? "";
-    const end = col + text.length;
-    const inside = cuts.filter((cut) => cut > col && cut < end);
-    if (inside.length > 0 && child.childElementCount === 0) {
-      const bounds = [col, ...inside, end];
-      child.replaceWith(
-        ...bounds.slice(0, -1).map((from, i) => {
-          // cloneNode(false) carries the token's inline style and attributes, so
-          // the pieces are indistinguishable from the token they replace.
-          const piece = child.cloneNode(false) as Element;
-          piece.textContent = text.slice(from - col, (bounds[i + 1] ?? end) - col);
-          return piece;
-        }),
-      );
-    }
-    col = end;
-  }
-}
-
 /** A member list as its attribute value, or undefined when nothing applies. */
 function list(members: readonly Member[]): string | undefined {
   return members.length > 0 ? members.join(" ") : undefined;
@@ -143,11 +113,11 @@ function setAttr(child: Element, attr: string, value: string | undefined): void 
   if (value !== undefined) child.setAttribute(attr, value);
 }
 
-/** Tags each direct child with the run covering it. After splitRow every child
- * lies wholly inside one run or inside none, so the covering run is a lookup. */
+/** Tags each of the row's tokens with the run covering it. After splitTokens every
+ * token lies wholly inside one run or inside none, so the covering run is a lookup. */
 function tagRow(row: Element, runs: readonly InlineSpan[], groups: Map<Member, ColumnRange[]>) {
   let col = 0;
-  for (const child of row.children) {
+  for (const child of tokenChildren(row)) {
     const start = col;
     col += child.textContent?.length ?? 0;
     if (col === start) continue;
@@ -222,7 +192,7 @@ export function decorateInlineRuns(
       cuts.add(ref.startCol);
       cuts.add(ref.endCol);
     }
-    splitRow(
+    splitTokens(
       row,
       [...cuts].sort((a, b) => a - b),
     );
