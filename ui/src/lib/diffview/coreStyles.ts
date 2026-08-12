@@ -485,6 +485,59 @@ const CARET_OVERRIDES = `
     user-select: none;
   }
 
+  /* EXC-860: the task-list checkbox. Structurally this IS the list marker above — the same
+     transform-in-place stance, the same overdraw, the same ink — scaled from the one cell a
+     bullet covers to the three the brackets cover. inlineSpans.ts has tagged the run since
+     EXC-866, so what the sheet receives is a child exactly three character cells wide sitting
+     at the column the source puts it at. Everything the bullet's comment says about why the
+     glyph is a pseudo-element rather than an appended node, why absolute positioning with no
+     insets is what holds the advance at zero, and why user-select: none is the copy contract
+     rather than tidiness applies here unchanged and is not repeated.
+
+     TWO things are genuinely new, and both are worth reading.
+
+     The CENTRING. A bullet needs no offset because it overdraws the single cell it was
+     already sitting on; a one-cell glyph over a three-cell run would sit on the opening
+     bracket instead of over the run. translateX(1ch) moves it by exactly one cell, which
+     centres it in three. It is spelled as a transform rather than as an inset on purpose:
+     transform is not a layout property, so the offset is free, while an inset would abandon
+     the static position and resolve against whatever ancestor happens to be positioned. 1ch
+     is the width of the zero glyph, which on this monospace surface is the cell width — the
+     same unit the grid is built from, so the centring cannot drift from the columns.
+
+     The STATE, which is told by SHAPE and not by colour. Both states spend one --ink-faint,
+     and what differs is an empty ballot box versus a ticked one. A checkbox is a state
+     indicator, so this is an accessibility decision rather than an aesthetic one: separating
+     checked from unchecked by hue or by an opacity step fails outright for a colour-blind
+     reader, whatever a contrast ratio says about it — the failure mode EXC-863's reviewer
+     caught one rule family over. Shape has no palette dependency, which is also why this
+     block introduces no subdue constant and no nine-palette test: --ink-faint is already
+     held above 3:1 on every palette and every surface it renders on by theme.test.ts, and
+     3:1 is precisely what WCAG 1.4.11 asks of a non-text state indicator.
+
+     The trailing escape is VARIATION SELECTOR-15, which pins U+2611 to its TEXT
+     presentation. Without it a platform carrying a colour emoji font is free to substitute
+     one, and an emoji ignores color — the box would stop taking the theme's ink and start
+     being a picture. It is written with two backslashes because this sheet is a template
+     literal, where a lone backslash-F is not a recognised escape and collapses to F.
+
+     No transition — the diff surface swaps state instantly (svelte-rules § Motion). */
+  [data-content] [data-line] [data-md-checkbox] {
+    color: transparent;
+  }
+  [data-content] [data-line] [data-md-checkbox]::before {
+    position: absolute;
+    color: var(--ink-faint);
+    transform: translateX(1ch);
+    user-select: none;
+  }
+  [data-content] [data-line] [data-md-checkbox="unchecked"]::before {
+    content: "☐";
+  }
+  [data-content] [data-line] [data-md-checkbox="checked"]::before {
+    content: "☑\\FE0E";
+  }
+
   /* EXC-870: a markdown image, drawn onto the row its image markup sits on
      (inlineImages.ts). This is the epic's transform-in-place stance applied to the one
      construct that has something to render: the markup is NOT replaced — it keeps its link

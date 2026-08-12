@@ -760,6 +760,102 @@ describe("the list markers (EXC-861)", () => {
     // svelte-rules § Motion: the diff surface swaps state instantly.
     expect(`${anyMarker}${bulletRule}${glyphRule}`).not.toMatch(/transition/);
   });
+
+  test("leaves the checkbox to draw the task row's one glyph", () => {
+    // The other half of the "not double-styled" criterion, now that EXC-860 has drawn
+    // the checkbox: a task marker still takes ink and no bullet, so the row carries the
+    // checkbox alone. Pinned from this side too, so restoring the bullet on a task row
+    // has to be a deliberate edit to both suites rather than a selector widening.
+    expect(rulesFor(String.raw`\[data-md-list="task"\]`)).toEqual([]);
+    expect(glyphRule).not.toContain("data-md-checkbox");
+  });
+});
+
+// EXC-860: the task-list checkbox, drawn over the `[ ]` / `[x]` run inlineSpans.ts already
+// tags. Structurally this is the list marker one block up scaled from one character cell to
+// three, so the assertions are deliberately its assertions — what differs is the centring
+// offset the extra two cells need, and that state is told by SHAPE rather than by colour.
+// That the run really measures three cells and that the glyph really paints is tasks.e2e.ts's
+// job; this suite pins the declarations.
+describe("the task-list checkbox (EXC-860)", () => {
+  const runRule = rulesFor(String.raw`\[data-md-checkbox\]`)[0] ?? "";
+  const glyphRule = rulesFor(String.raw`\[data-md-checkbox\]::before`)[0] ?? "";
+  const uncheckedRule = rulesFor(String.raw`\[data-md-checkbox="unchecked"\]::before`)[0] ?? "";
+  const checkedRule = rulesFor(String.raw`\[data-md-checkbox="checked"\]::before`)[0] ?? "";
+
+  test("hands the bracket run's own cells to the glyph drawn over them", () => {
+    // Transform-in-place (EXC-855): the brackets are still in the DOM and still copied —
+    // they are only made invisible so the checkbox can occupy the columns they already had.
+    expect(runRule).toMatch(/color:\s*transparent/);
+  });
+
+  test("tells the two states apart by shape, not by colour", () => {
+    // A state indicator separated only by a colour or an opacity step fails for a
+    // colour-blind reader whatever the contrast maths says, and it is the trap EXC-863's
+    // reviewer caught. An empty box versus a ticked box has no palette dependency at all,
+    // so both states spend the SAME ink and differ only in the glyph.
+    expect(uncheckedRule).toMatch(/content:/);
+    expect(checkedRule).toMatch(/content:/);
+    expect(uncheckedRule.match(/content:[^;]*/)?.[0]).not.toBe(
+      checkedRule.match(/content:[^;]*/)?.[0],
+    );
+    expect(`${uncheckedRule}${checkedRule}`).not.toMatch(/color|opacity/);
+  });
+
+  test("wears the ink the other structural markers wear", () => {
+    // Same family as the list markers and the fence markers rather than a sixth --chip-*
+    // token (EXC-855). --ink-faint is already held above 3:1 on every palette and surface
+    // by theme.test.ts, which is the floor WCAG 1.4.11 asks of a non-text state indicator,
+    // so this rule needs no subdue constant and no nine-palette test of its own.
+    expect(glyphRule).toMatch(/color:\s*var\(--ink-faint\)/);
+    expect(glyphRule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(glyphRule).not.toMatch(/--chip-/);
+    expect(glyphRule).not.toMatch(/opacity/);
+  });
+
+  test("draws the glyph out of flow so no column moves", () => {
+    // Identical reasoning to the bullet: rows render white-space: pre, so a pseudo-element
+    // in flow would push every glyph after it. Absolute with NO inset lands the box at its
+    // static position; an inset would resolve it against some ancestor instead, and padding
+    // or margin would cost width.
+    expect(glyphRule).toMatch(/position:\s*absolute/);
+    expect(glyphRule).not.toMatch(/\b(top|left|right|bottom|inset[a-z-]*)\s*:/);
+    expect(glyphRule).not.toMatch(/\b(padding|margin)[a-z-]*\s*:/);
+  });
+
+  test("centres over three cells with transform, which costs no advance", () => {
+    // The one place this cannot copy the bullet. A bullet overdraws ONE cell and needs no
+    // offset; the brackets are THREE, so a one-cell glyph left at its static position would
+    // sit over the opening bracket rather than over the run. translateX moves the box from
+    // its own static position and is not a layout property, so the centring is free — which
+    // is exactly why it is spelled this way rather than with an inset.
+    expect(glyphRule).toMatch(/transform:\s*translateX\(1ch\)/);
+  });
+
+  test("keeps the glyph out of the clipboard", () => {
+    // The epic's copy contract. Blink emits generated content into the plain-text flavour
+    // of a copied selection, invisible to Selection.toString() and visible only in the real
+    // clipboard, which tasks.e2e.ts reads. A leaked box would make a copied plan read
+    // `☐- [ ] item` and corrupt the markdown the epic exists to keep honest.
+    expect(glyphRule).toMatch(/user-select:\s*none/);
+  });
+
+  test("inherits the row's type metrics so the glyph keeps the baseline", () => {
+    // The glyph shares the row's baseline because it inherits the token's font and
+    // line-height and so builds an identical line box. Giving this pseudo-element a
+    // font-size or line-height of its own is the one edit that would silently break the
+    // alignment, which is why it is pinned rather than merely commented.
+    expect(glyphRule).not.toBe("");
+    expect(glyphRule).not.toMatch(/font-size|line-height|font-family/);
+  });
+
+  test("carries no transition", () => {
+    // svelte-rules § Motion: the diff surface swaps state instantly. The non-empty guard is
+    // what keeps this from passing on four selectors that resolved to nothing.
+    const all = [runRule, glyphRule, uncheckedRule, checkedRule];
+    expect(all.filter((rule) => rule !== "")).toHaveLength(4);
+    expect(all.join("")).not.toMatch(/transition/);
+  });
 });
 
 // EXC-729: a fenced-code line wider than the panel must stay INSIDE the card and scroll
