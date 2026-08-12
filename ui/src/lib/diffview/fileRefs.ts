@@ -141,12 +141,11 @@ function scanLine(source: string): FileRefSpan[] {
   const spans: FileRefSpan[] = [];
   for (const code of source.matchAll(INLINE_CODE)) {
     const interior = code[2] ?? "";
-    // A span holding more than one word is prose or a command, not a path:
-    // CANDIDATE_RE cannot match across whitespace, so a multi-word interior
-    // would offer every word separately and any of them that happens to name a
-    // real directory would draw a folder glyph over the whole span (EXC-1065).
-    // Trimmed first — CommonMark strips a code span's one padding space either
-    // side, so ` foo.ts ` is still a single token.
+    // Whitespace is a property of the SPAN and never of a candidate, since
+    // CANDIDATE_RE cannot match across one — so this aborts the whole interior
+    // rather than masking a range out of it the way the URL exclusion below
+    // does. Trimmed first: CommonMark strips a code span's one padding space
+    // either side, so ` foo.ts ` is a single token (EXC-1065).
     if (/\s/.test(interior.trim())) continue;
     // Column of the interior's first character in the display line (past the
     // opening backticks), so span columns are absolute.

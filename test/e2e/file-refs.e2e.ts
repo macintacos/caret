@@ -266,7 +266,7 @@ test("marks only references that resolve to a real file", async ({ daemon, page 
     expect(hovered?.background).not.toBe(resting?.background);
 
     // And the wash covers the WHOLE pill, backticks included. Lighting the path alone
-    // read as a lit core inside an unlit chip rather than as one pressed object, and
+    // reads as a lit core inside an unlit chip rather than as one pressed object, and
     // the backticks are their own tokens with no element around the group — so this is
     // the sheet's adjacent-sibling spread resolving in the live cascade, which is the
     // only place its `:has()` and `+` can be said to work at all.
