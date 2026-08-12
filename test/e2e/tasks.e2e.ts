@@ -7,12 +7,12 @@
 //
 // Three of these cases are load-bearing rather than routine.
 //
-// The ONE-BOX-PER-RUN case is a regression test for a defect this ticket hit and fixed.
-// A bullet is one character and its run can never be cut; a three-character run can be,
-// and shiki really does cut it — an uppercase bracket run arrives as three tokens, as
-// does a lowercase one on a row carrying other inline markup. inlineDecorate tags every
-// token a run covers, so the sheet drew three boxes side by side until the suppression
-// rule landed. Only a browser can say how shiki tokenized a row.
+// The ONE-BOX-PER-RUN case is a regression test for a defect this ticket hit and fixed:
+// shiki does not always hand a three-character run over as one token, and every token a
+// run covers gets tagged. Only a browser can say how shiki tokenized a row, which is what
+// puts the case here rather than in coreStyles.test.ts — that suite can see the
+// suppression rule exists, not that it was needed. The rule's own block in coreStyles.ts
+// carries the reasoning.
 //
 // The WIDTH case is this ticket's own. A bullet overdraws one cell and a checkbox
 // overdraws three, so the run is the first place a glyph that took inline advance
@@ -29,12 +29,10 @@
 // Selection.toString() takes a different path through Blink and cannot show it, so
 // only navigator.clipboard can say which way it goes.
 //
-// The settle case asserts that the repaint STOPS, which needs the real
-// MutationObserver loop SourceView runs the decoration passes from. It is cheap
-// insurance rather than a known bug: EXC-865 established that caret's annotation
-// machinery adds a SIBLING row rather than a child of a row, so tables.ts's
-// child-count settle check is not tripped by it — and generated content is invisible
-// to a child count anyway. The expectation here is zero, not a hunt for a workaround.
+// The settle case is cheap insurance rather than a known bug: EXC-865 established that
+// caret's annotation machinery adds a SIBLING row rather than a child of a row, so
+// tables.ts's child-count settle check is not tripped by it, and generated content is
+// invisible to a child count anyway. Zero is the expectation, not a hunt for a workaround.
 //
 // The pure halves stay units. Which characters are a task marker, and which merely
 // look like one, is inlineSpans.test.ts; the attribute landing on the right token is
@@ -50,6 +48,7 @@ import {
   lineOf,
   planSurface,
   revealGutterPlus,
+  settledMutations,
   taggedRuns,
 } from "@test/e2e/support/source-view.ts";
 
@@ -143,9 +142,9 @@ function drawnRun(page: import("@playwright/test").Page, line: number) {
 /** Every checkbox run on the page, one entry per ROW rather than one per tagged token.
  * Built on the shared `taggedRuns` helper and folded here, for the reason `drawnRun`
  * gives: what the emitter promises is a run over the bracket characters, and how many
- * tokens shiki happened to cut that run into is not part of the promise. A row whose
- * pieces disagreed about their state would surface as `MIXED` rather than quietly
- * reporting the first piece's. */
+ * tokens shiki happened to cut that run into is not part of the promise. Every piece of
+ * one run carries the same state — tagRow writes the single covering run's value to each
+ * — so the first piece's value is the run's. */
 async function checkboxRuns(
   page: import("@playwright/test").Page,
 ): Promise<{ row: string; value: string; text: string }[]> {
@@ -153,10 +152,7 @@ async function checkboxRuns(
   for (const run of await taggedRuns(page, "data-md-checkbox")) {
     const open = byRow.get(run.row);
     if (open === undefined) byRow.set(run.row, { ...run });
-    else {
-      open.text += run.text;
-      if (open.value !== run.value) open.value = "MIXED";
-    }
+    else open.text += run.text;
   }
   return [...byRow.values()];
 }
@@ -243,9 +239,7 @@ test("one box is drawn per run, however many tokens shiki cut the run into", asy
   for (const text of [CHECKED, UPPER, UNCHECKED, NESTED, CHIPPED, QUOTED]) {
     const run = await drawnRun(page, await lineOf(page, text));
     const boxes = (run?.glyphs ?? []).filter((content) => content !== "none");
-    expect(`${text} draws ${boxes.length} box(es) across ${run?.tokens} token(s)`).toBe(
-      `${text} draws 1 box(es) across ${run?.tokens} token(s)`,
-    );
+    expect(boxes.length, `${text} — ${run?.tokens} tagged token(s)`).toBe(1);
     // And the run still covers exactly its three characters however it was cut.
     expect(run?.width).toBeCloseTo(3 * (await cellWidth(page, PROSE_ABOVE)), 0);
   }
@@ -288,6 +282,10 @@ test("the checkbox is not interactive", async ({ page, daemon }) => {
   // own comment affordance, so asserting `not pointer` here would be asserting that the
   // checkbox breaks the row rather than that it joins it.
   expect(before?.cursor).toBe(before?.proseCursor);
+  // Dispatched from inside the page rather than through Playwright's own click, which
+  // would hit-test to the row and open the comment composer over the assertion — the
+  // row's drag-to-comment affordance owns that gesture. What is under test here is
+  // narrower: that the element carries no handler that would toggle the state.
   await page.evaluate((ln: number) => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
     (
@@ -443,34 +441,11 @@ test("the repaint settles over a quoted task list and a table", async ({ page, d
 Trailing prose.
 `,
   );
-  await page.evaluate(() => {
-    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-    const w = window as unknown as { __mutations: number };
-    w.__mutations = 0;
-    new MutationObserver((records) => {
-      w.__mutations += records.length;
-    }).observe(sh as unknown as Node, { childList: true, subtree: true });
-  });
-  // Polled for the counter to STOP moving rather than sampled over a fixed window:
-  // auto-retrying is the suite's timing discipline, and it is the stronger claim of the
-  // two — a loop never yields two equal readings, so this fails on churn of any rate
-  // rather than only on churn above some threshold.
-  let previous = -1;
-  await expect
-    .poll(async () => {
-      const now = await page.evaluate(
-        () => (window as unknown as { __mutations: number }).__mutations,
-      );
-      const unchanged = now === previous;
-      previous = now;
-      return unchanged;
-    })
-    .toBe(true);
+  const mutations = await settledMutations(page);
   const settled = await page.evaluate(() => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
     const rows = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])];
     return {
-      mutations: (window as unknown as { __mutations: number }).__mutations,
       tagged: rows
         .filter((r) => r.querySelector("[data-md-checkbox]"))
         .map((r) => r.textContent ?? ""),
@@ -482,7 +457,7 @@ Trailing prose.
       ),
     };
   });
-  expect(settled.mutations).toBe(0);
+  expect(mutations).toBe(0);
   // The quoted task and the plain task are tagged; the bracket run inside the table
   // cell is not, because a task marker is only a task marker at the start of a line and
   // a table row starts with its pipe. So the celled row this could have looped on never

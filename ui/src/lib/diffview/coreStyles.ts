@@ -486,27 +486,31 @@ const CARET_OVERRIDES = `
   }
 
   /* EXC-860: the task-list checkbox. Structurally this IS the list marker above — the same
-     transform-in-place stance, the same overdraw, the same ink — scaled from the one cell a
-     bullet covers to the three the brackets cover. inlineSpans.ts has tagged the run since
-     EXC-866, so what the sheet receives is a child exactly three character cells wide sitting
-     at the column the source puts it at. Everything the bullet's comment says about why the
-     glyph is a pseudo-element rather than an appended node, why absolute positioning with no
+     transform-in-place stance, the same overdraw — scaled from the one cell a bullet covers
+     to the three the brackets cover. inlineSpans.ts has tagged the run since EXC-866, so
+     what the sheet receives is a child exactly three character cells wide sitting at the
+     column the source puts it at. Everything the bullet's comment says about why the glyph
+     is a pseudo-element rather than an appended node, why absolute positioning with no
      insets is what holds the advance at zero, and why user-select: none is the copy contract
      rather than tidiness applies here unchanged and is not repeated.
 
      THREE things are genuinely new, and all three are worth reading.
 
-     ONE BOX PER RUN. A bullet is a single character, so its run can never be cut in two;
-     a three-character run can, and shiki really does cut it — an uppercase bracket run
-     comes back as three tokens, as does a lowercase one on a row carrying other inline
-     markup. inlineDecorate's tagRow
-     tags EVERY token a run covers, so without the suppression rule below the sheet drew
-     three boxes side by side rather than one. The rule leaves the glyph on the run's first
-     token, which is the token the run starts at and therefore the one the centring offset
-     is measured from. It wins on selector weight rather than on source order — four
-     attribute selectors against the state rules' three — so it cannot be undone by
-     someone reordering this block. The data-md members solve the same problem with
-     pillGroups and the data-md-start / data-md-end caps; a pseudo-element needs only this.
+     ONE BOX PER RUN. A bullet is a single character, so its run can never be cut in two; a
+     three-character run can, and shiki really does cut it — an uppercase bracket run comes
+     back as three tokens, as does a lowercase one on a row carrying other inline markup.
+     inlineDecorate's tagRow tags EVERY token a run covers, so without the suppression rule
+     below the sheet draws three boxes side by side rather than one. The rule leaves the
+     glyph on the run's FIRST tagged token, which is the token the run starts at and
+     therefore the one the centring offset is measured from. Two properties make it hold:
+     it wins on selector weight rather than on source order — four attribute selectors
+     against the state rules' three — so reordering this block cannot undo it; and it is
+     spelled with the GENERAL sibling combinator, not the adjacent one, because tagRow skips
+     a zero-length token without tagging it, which would leave an untagged element between
+     two tagged ones and break an adjacent-only chain. A second run on one row cannot occur
+     to be wrongly suppressed: a task marker is line-start-only. The data-md members solve
+     the same problem with pillGroups and the data-md-start / data-md-end caps; a
+     pseudo-element needs only this.
 
      The CENTRING. A bullet needs no offset because it overdraws the single cell it was
      already sitting on; a one-cell glyph over a three-cell run would sit on the opening
@@ -517,21 +521,30 @@ const CARET_OVERRIDES = `
      is the width of the zero glyph, which on this monospace surface is the cell width — the
      same unit the grid is built from, so the centring cannot drift from the columns.
 
-     The STATE, which is told by SHAPE and not by colour. Both states spend one --ink-faint,
-     and what differs is an empty ballot box versus a ticked one. A checkbox is a state
-     indicator, so this is an accessibility decision rather than an aesthetic one: separating
-     checked from unchecked by hue or by an opacity step fails outright for a colour-blind
-     reader, whatever a contrast ratio says about it — the failure mode EXC-863's reviewer
-     caught one rule family over. Shape has no palette dependency, which is also why this
-     block introduces no subdue constant and no nine-palette test: --ink-faint is already
-     held above 3:1 on every palette and every surface it renders on by theme.test.ts, and
-     3:1 is precisely what WCAG 1.4.11 asks of a non-text state indicator.
+     The INK AND THE STATE. This is the one member of the marker family that WCAG 1.4.11
+     binds, because it reports STATE rather than merely marking structure, and that is why
+     it spends --ink-soft where every other marker here spends --ink-faint. The faint ink is
+     pinned above 3:1 only on --paper and --paper-raised (theme.test.ts); the diff surface is
+     --paper-sunk and its 2-8% ink mixes, where --ink-faint measures 2.90 on catppuccin-latte
+     and 2.97 on github-light — under the floor 1.4.11 sets for a non-text indicator. One
+     step up the ramp clears it everywhere, bottoming at 4.21, and theme.test.ts pins exactly
+     that on the surface the checkbox actually renders on. The faint markers around it are
+     structure rather than state and are left as they are; that gap is real but it is the
+     epic's, not this rule's.
+
+     The two states are then told apart by SHAPE — an empty ballot box against a ticked one,
+     on one ink. Separating them by hue or by an opacity step instead would fail outright for
+     a colour-blind reader whatever a contrast ratio said about it (the failure mode EXC-863
+     records one rule family over), so shape is what makes the distinction palette-independent
+     and is why this block still needs no subdue constant.
 
      The trailing escape is VARIATION SELECTOR-15, which pins U+2611 to its TEXT
      presentation. Without it a platform carrying a colour emoji font is free to substitute
      one, and an emoji ignores color — the box would stop taking the theme's ink and start
-     being a picture. It is written with two backslashes because this sheet is a template
-     literal, where a lone backslash-F is not a recognised escape and collapses to F.
+     being a picture. U+2610 above needs no such pin: it carries no Emoji property at all, so
+     no font may substitute for it. The escape is written with two backslashes because this
+     sheet is a template literal, where a lone backslash-F is not a recognised escape and
+     collapses to F.
 
      No transition — the diff surface swaps state instantly (svelte-rules § Motion). */
   [data-content] [data-line] [data-md-checkbox] {
@@ -539,7 +552,7 @@ const CARET_OVERRIDES = `
   }
   [data-content] [data-line] [data-md-checkbox]::before {
     position: absolute;
-    color: var(--ink-faint);
+    color: var(--ink-soft);
     transform: translateX(1ch);
     user-select: none;
   }
@@ -549,7 +562,7 @@ const CARET_OVERRIDES = `
   [data-content] [data-line] [data-md-checkbox="checked"]::before {
     content: "☑\\FE0E";
   }
-  [data-content] [data-line] [data-md-checkbox] + [data-md-checkbox]::before {
+  [data-content] [data-line] [data-md-checkbox] ~ [data-md-checkbox]::before {
     content: none;
   }
 

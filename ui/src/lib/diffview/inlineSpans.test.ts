@@ -220,6 +220,19 @@ describe("task-list checkboxes", () => {
   test("a ten-digit ordered run is no list item, so it is no task item either", () => {
     expect(runs("1234567890. [x] task")).toEqual([]);
   });
+
+  test("a ten-digit ordered run is no indent either, so it opens no quote", () => {
+    // The third scan that reads an ordered marker. LIST_PREFIX steps over a marker
+    // standing in front of a `>` as the indentation CommonMark says it is — but only
+    // for a run that really opens a list item. Past the cap the line is a paragraph
+    // whose text happens to contain a `>`, so no quote marker is emitted and the row
+    // keeps its ordinary ink.
+    expect(runs("1234567890. > quoted")).toEqual([]);
+    expect(runs("123456789. > quoted")).toEqual([
+      { startCol: 0, endCol: 10, listMarker: "ordered" },
+      { startCol: 11, endCol: 12, quoteMarker: 1 },
+    ]);
+  });
 });
 
 describe("list markers", () => {

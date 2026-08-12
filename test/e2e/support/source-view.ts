@@ -188,6 +188,48 @@ export function taggedRuns(
   }, attribute);
 }
 
+/** Watch the source view's shadow root for childList mutations, then resolve with the
+ * count once it has stopped moving.
+ *
+ * The claim every decoration pass owes: that the repaint SETTLES. `tables.ts` decides a
+ * row is settled by comparing its child count to its cell count, so a pass that adds a
+ * child to a celled row makes every repaint rebuild it — the runaway EXC-870 measured at
+ * ~10,800 mutations in two seconds with an image. Every pass since has had to show its
+ * own zero.
+ *
+ * Settling is asserted by polling for the counter to STOP moving rather than by sampling
+ * a fixed window: auto-retrying is the suite's timing discipline (`waitForTimeout` is
+ * banned outright by `test/structure/e2e-conventions.test.ts`), and it is the stronger
+ * claim of the two — a loop never yields two equal readings, so this fails on churn of
+ * any rate rather than only on churn above some threshold.
+ *
+ * Call it directly after the plan opens: the count runs from the moment the observer is
+ * installed, so anything the passes did before that is invisible to it. That is the one
+ * limitation to know — this proves the view reaches rest and stays there, not that the
+ * first paint was free. */
+export async function settledMutations(page: Page): Promise<number> {
+  await page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const w = window as unknown as { __mutations: number };
+    w.__mutations = 0;
+    new MutationObserver((records) => {
+      w.__mutations += records.length;
+    }).observe(sh as unknown as Node, { childList: true, subtree: true });
+  });
+  const read = () =>
+    page.evaluate(() => (window as unknown as { __mutations: number }).__mutations);
+  let previous = -1;
+  await expect
+    .poll(async () => {
+      const now = await read();
+      const unchanged = now === previous;
+      previous = now;
+      return unchanged;
+    })
+    .toBe(true);
+  return read();
+}
+
 /** Reveal the gutter `+` on `line` by moving the mouse over its left edge. The
  * source view's gutter sits at the left of the plan surface — so
  * anchor the hover to that container's left edge rather than the viewport's,

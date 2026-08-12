@@ -37,6 +37,7 @@ import {
   lineOf,
   planSurface,
   revealGutterPlus,
+  settledMutations,
   taggedRuns,
 } from "@test/e2e/support/source-view.ts";
 
@@ -354,34 +355,11 @@ test("the repaint settles over a quoted list and a table", async ({ page, daemon
 Trailing prose.
 `,
   );
-  await page.evaluate(() => {
-    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-    const w = window as unknown as { __mutations: number };
-    w.__mutations = 0;
-    new MutationObserver((records) => {
-      w.__mutations += records.length;
-    }).observe(sh as unknown as Node, { childList: true, subtree: true });
-  });
-  // Polled for the counter to STOP moving rather than sampled over a fixed window:
-  // auto-retrying is the suite's timing discipline, and it is the stronger claim of
-  // the two — a loop never yields two equal readings, so this fails on churn of any
-  // rate rather than only on churn above some threshold.
-  let previous = -1;
-  await expect
-    .poll(async () => {
-      const now = await page.evaluate(
-        () => (window as unknown as { __mutations: number }).__mutations,
-      );
-      const unchanged = now === previous;
-      previous = now;
-      return unchanged;
-    })
-    .toBe(true);
+  const mutations = await settledMutations(page);
   const settled = await page.evaluate(() => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
     const rows = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])];
     return {
-      mutations: (window as unknown as { __mutations: number }).__mutations,
       marked: rows.filter((r) => r.querySelector("[data-md-list]")).map((r) => r.textContent ?? ""),
       celled: rows.filter((r) => r.querySelector(":scope > [data-table-cell]") !== null).length,
       celledMarked: rows.some(
@@ -391,7 +369,7 @@ Trailing prose.
       ),
     };
   });
-  expect(settled.mutations).toBe(0);
+  expect(mutations).toBe(0);
   // The quoted pair and the plain bullet are marked; the dash inside the table cell
   // is not, because a marker is only a marker at the start of a line and a table
   // row starts with its pipe. So the celled row this could have looped on never

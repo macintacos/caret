@@ -750,8 +750,8 @@ describe("the list markers (EXC-861)", () => {
     // One treatment per row: a checkbox IS a task item's marker, so a bullet beside it
     // would be two markers arguing. The kind is settled in the emission (inlineSpans.ts
     // tags it "task"), which is why the glyph selector can name "bullet" exactly rather
-    // than carving the task case back out here — and why the sheet needs no task rule of
-    // its own until EXC-860 draws the checkbox.
+    // than carving the task case back out here. EXC-860's checkbox hangs off a different
+    // attribute (data-md-checkbox), so the sheet needs no data-md-list="task" rule at all.
     expect(glyphRule).toContain('[data-md-list="bullet"]');
     expect(rulesFor(String.raw`\[data-md-list="task"\]`)).toEqual([]);
   });
@@ -759,15 +759,6 @@ describe("the list markers (EXC-861)", () => {
   test("carries no transition", () => {
     // svelte-rules § Motion: the diff surface swaps state instantly.
     expect(`${anyMarker}${bulletRule}${glyphRule}`).not.toMatch(/transition/);
-  });
-
-  test("leaves the checkbox to draw the task row's one glyph", () => {
-    // The other half of the "not double-styled" criterion, now that EXC-860 has drawn
-    // the checkbox: a task marker still takes ink and no bullet, so the row carries the
-    // checkbox alone. Pinned from this side too, so restoring the bullet on a task row
-    // has to be a deliberate edit to both suites rather than a selector widening.
-    expect(rulesFor(String.raw`\[data-md-list="task"\]`)).toEqual([]);
-    expect(glyphRule).not.toContain("data-md-checkbox");
   });
 });
 
@@ -783,7 +774,7 @@ describe("the task-list checkbox (EXC-860)", () => {
   const uncheckedRule = rulesFor(String.raw`\[data-md-checkbox="unchecked"\]::before`)[0] ?? "";
   const checkedRule = rulesFor(String.raw`\[data-md-checkbox="checked"\]::before`)[0] ?? "";
   const suppressRule =
-    rulesFor(String.raw`\[data-md-checkbox\] \+ \[data-md-checkbox\]::before`)[0] ?? "";
+    rulesFor(String.raw`\[data-md-checkbox\] ~ \[data-md-checkbox\]::before`)[0] ?? "";
 
   test("hands the bracket run's own cells to the glyph drawn over them", () => {
     // Transform-in-place (EXC-855): the brackets are still in the DOM and still copied —
@@ -792,10 +783,9 @@ describe("the task-list checkbox (EXC-860)", () => {
   });
 
   test("tells the two states apart by shape, not by colour", () => {
-    // A state indicator separated only by a colour or an opacity step fails for a
-    // colour-blind reader whatever the contrast maths says, and it is the trap EXC-863's
-    // reviewer caught. An empty box versus a ticked box has no palette dependency at all,
-    // so both states spend the SAME ink and differ only in the glyph.
+    // Both states spend the SAME ink and differ only in the glyph, so the distinction
+    // survives a reader who cannot separate the two by hue (EXC-863 records the same
+    // failure one rule family over). The sheet's own block carries the full argument.
     expect(uncheckedRule).toMatch(/content:/);
     expect(checkedRule).toMatch(/content:/);
     expect(uncheckedRule.match(/content:[^;]*/)?.[0]).not.toBe(
@@ -804,12 +794,23 @@ describe("the task-list checkbox (EXC-860)", () => {
     expect(`${uncheckedRule}${checkedRule}`).not.toMatch(/color|opacity/);
   });
 
-  test("wears the ink the other structural markers wear", () => {
-    // Same family as the list markers and the fence markers rather than a sixth --chip-*
-    // token (EXC-855). --ink-faint is already held above 3:1 on every palette and surface
-    // by theme.test.ts, which is the floor WCAG 1.4.11 asks of a non-text state indicator,
-    // so this rule needs no subdue constant and no nine-palette test of its own.
-    expect(glyphRule).toMatch(/color:\s*var\(--ink-faint\)/);
+  test("pins the checked box to its text presentation", () => {
+    // VARIATION SELECTOR-15. Without it a platform carrying a colour emoji font may
+    // substitute a picture for U+2611, and an emoji ignores `color` — the box would stop
+    // taking the theme's ink, which is precisely the failure the ink test below cannot
+    // see. U+2610 needs no pin: it carries no Emoji property, so nothing may substitute.
+    expect(checkedRule).toContain(String.raw`\\FE0E`);
+    expect(uncheckedRule).not.toContain(String.raw`\\FE0E`);
+  });
+
+  test("spends one step above the faint marker ink, which the floor requires", () => {
+    // Not the --ink-faint the structural markers spend. A checkbox reports STATE, so WCAG
+    // 1.4.11's 3:1 floor for a non-text indicator binds it — and on the surface it renders
+    // on (--paper-sunk and the row's ink bands, not the --paper / --paper-raised the ramp
+    // test measures) --ink-faint falls under that floor on two of the nine palettes.
+    // theme.test.ts pins the ink chosen here against all nine on that surface; this only
+    // holds the sheet to the same token, so the two cannot drift apart.
+    expect(glyphRule).toMatch(/color:\s*var\(--ink-soft\)/);
     expect(glyphRule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(glyphRule).not.toMatch(/--chip-/);
     expect(glyphRule).not.toMatch(/opacity/);
@@ -843,18 +844,19 @@ describe("the task-list checkbox (EXC-860)", () => {
   });
 
   test("draws one box per run, however many tokens shiki cut the run into", () => {
-    // The one structural difference from the bullet, and it is a real defect rather than
-    // a hypothetical: a bullet is a single character and can never be split, but shiki
-    // tokenizes `[X]` — and `[x]` on some rows — into three tokens, and inlineDecorate's
-    // tagRow tags EVERY token a run covers. Three tagged tokens meant three boxes drawn
-    // side by side. Suppressing the glyph on a tagged token that directly follows another
-    // leaves it on the run's first token only, which is where the run starts and so where
-    // the centring offset is measured from. This is the same problem `data-md` solves with
-    // pillGroups and data-md-start/end caps; a pseudo-element needs only the one rule.
+    // A real defect rather than a hypothetical: shiki cuts a three-character run into
+    // three tokens on some rows, inlineDecorate tags every one, and the sheet drew three
+    // boxes. The sheet's block carries the reasoning; what is pinned here is the rule's
+    // two load-bearing properties.
     expect(suppressRule).toMatch(/content:\s*none/);
-    // It has to out-specify the two state rules that supply the content, and it does so on
-    // selector weight rather than on source order: four attribute selectors against three.
-    expect(suppressRule).toContain("[data-md-checkbox] + [data-md-checkbox]");
+    // GENERAL sibling, not adjacent: tagRow leaves a zero-length token untagged, which
+    // would sit between two tagged ones and break an adjacent-only chain into two boxes.
+    expect(suppressRule).toContain("[data-md-checkbox] ~ [data-md-checkbox]");
+    // And it out-specifies the state rules that supply the content on WEIGHT rather than
+    // on source order, so reordering this block cannot undo it. Counted rather than
+    // asserted by spelling: one more attribute selector than the rule it has to beat.
+    const attrs = (rule: string) => (rule.match(/\[/g) ?? []).length;
+    expect(attrs(suppressRule)).toBeGreaterThan(attrs(checkedRule));
   });
 
   test("inherits the row's type metrics so the glyph keeps the baseline", () => {
