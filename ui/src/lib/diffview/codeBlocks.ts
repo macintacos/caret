@@ -76,11 +76,22 @@ function tagLanguageToken(row: Element): void {
   }
 }
 
-/** Tags the fence-marker token on a fence line's row (the first span holding a
- * backtick or tilde) so the panel CSS can nudge those glyphs down to center. */
+/** Tags the fence-marker token on a fence line's row (the first span that is
+ * markers alone) so the panel CSS can draw the marker chip on it, and nudge the
+ * closing glyphs down to center.
+ *
+ * Two conditions, each ruling out a different mis-tag. The row's own text must be a
+ * fence line: an unclosed block ends at the last line of the document rather than at
+ * a fence (codeBlockRanges), so its `data-code-end` row is ordinary prose, and
+ * scanning that for a marker glyph would dress an inline backtick as a delimiter.
+ * The span must then be markers and whitespace ALONE — the same FENCE_ONLY test
+ * tagLanguageToken inverts — so that if shiki ever merges ``` and its language into
+ * one token, the chip is skipped rather than painted under the language tag. */
 function tagFenceToken(row: Element): void {
+  if (!FENCE.test(row.textContent ?? "")) return;
   for (const span of row.children) {
-    if (/[`~]/.test(span.textContent ?? "")) {
+    const text = span.textContent ?? "";
+    if (/[`~]/.test(text) && FENCE_ONLY.test(text)) {
       span.setAttribute("data-code-fence", "");
       return;
     }
@@ -91,10 +102,11 @@ function tagFenceToken(row: Element): void {
  * Tags the source view's content-column rows so the code-block panel CSS
  * (CARET_OVERRIDES in coreStyles.ts) can style them: `data-code-line` on every
  * `[data-content] > [data-line]` cell inside a block, plus `data-code-start` /
- * `data-code-end` on each block's first / last line. Also tags two fence-line
- * tokens the panel CSS shifts to the row's vertical center: `data-code-lang` on
- * the opening line's language tag and `data-code-fence` on the closing line's
- * markers. The library owns these rows and repaints them, so this is re-run after
+ * `data-code-end` on each block's first / last line. Also tags the two fence-line
+ * token kinds the panel CSS styles: `data-code-lang` on the opening line's language
+ * tag, and `data-code-fence` on each fence line's markers. The panel CSS shifts
+ * the language tag and the closing markers to their row's vertical center
+ * (EXC-692). The library owns these rows and repaints them, so this is re-run after
  * every repaint (see SourceView.svelte); it is idempotent and clears rows and
  * tokens no longer in a block. Content rows carry the panel tags (`data-code-line`
  * + start/end); the gutter number cells get only `data-code-line`, so the cursor
@@ -122,7 +134,7 @@ export function tagCodeBlockRows(root: ParentNode, ranges: CodeBlockRange[]): vo
     row.toggleAttribute("data-code-start", code && startLines.has(n));
     row.toggleAttribute("data-code-end", code && endLines.has(n));
     if (code && startLines.has(n)) tagLanguageToken(row);
-    if (code && endLines.has(n)) tagFenceToken(row);
+    if (code && (startLines.has(n) || endLines.has(n))) tagFenceToken(row);
   }
   // Also tag each code line's gutter number cell (line numbers only, no
   // start/end): the panel stays content-only, but the tag lets the focused-line

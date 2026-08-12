@@ -260,6 +260,53 @@ describe("the fenced code-block panel (EXC-692)", () => {
   });
 });
 
+// EXC-869: the ``` / ~~~ delimiters stay visible and take the EXC-855 chip family's
+// round-rect treatment, so a fenced block reads as a deliberate element. Nothing is
+// hidden, so this suite pins the chip's shape rather than any row's absence.
+describe("the fence-marker chip (EXC-869)", () => {
+  // Matched from [data-content] so the assertions below can read the COMBINATOR, not
+  // just the body. [^{}] can cross neither brace, so the match stays inside one rule's
+  // selector; [data-code-line] is what separates the chip from the EXC-692 centering
+  // rules, which name [data-code-fence] under [data-code-end] instead.
+  const chipRule =
+    overrideDecls.match(
+      /\[data-content\][^{}]*\[data-code-line\][^{}]*\[data-code-fence\]\s*\{[^}]*\}/,
+    )?.[0] ?? "";
+
+  test("fills the fence markers with the family's inline-code chip token", () => {
+    // The tint is CONSUMED, never redefined here: --chip-code is the chip family's shared
+    // token, derived for all nine palettes by the recipe (EXC-858), so the fence chip and
+    // the inline-code chip are one tint by construction rather than by a matched value.
+    // A bare var() with no fallback is the point — a fallback would silently paint a
+    // second, unreviewed tint if the token ever stopped resolving.
+    expect(chipRule).toMatch(/background-color:\s*var\(--chip-code\)/);
+    expect(chipRule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(chipRule).not.toMatch(/color-mix/);
+  });
+
+  test("wears the family's shared radius", () => {
+    expect(chipRule).toMatch(new RegExp(String.raw`border-radius:\s*${RADIUS}`));
+  });
+
+  test("shifts no column: any inline padding is cancelled by an equal negative margin", () => {
+    // Rows render white-space: pre, so UNCANCELLED inline padding on a token moves every
+    // glyph after it. Inline padding is allowed only paired with an equal negative margin —
+    // the escape hatch [data-file-ref] already uses in this sheet — so this pins the
+    // column-parity invariant rather than banning the technique.
+    expect(chipRule).not.toMatch(/padding-left|padding-right|margin-left|margin-right/);
+    const pad = chipRule.match(/padding-inline:\s*([\d.]+)em/)?.[1];
+    const margin = chipRule.match(/margin-inline:\s*-([\d.]+)em/)?.[1];
+    expect(pad).toBe(margin); // both absent, or equal and opposite
+  });
+
+  test("reaches the scroll card's rows as well as the direct-child rows", () => {
+    // An overflowing block's rows are re-parented into [data-code-card], so a child
+    // combinator would chip only the fitting blocks. The selector is a descendant one.
+    expect(chipRule).not.toMatch(/\[data-content\]\s*>\s*\[data-line\]\[data-code-line\]/);
+    expect(chipRule).toMatch(/\[data-content\]\s+\[data-line\]\[data-code-line\]/);
+  });
+});
+
 // EXC-729: a fenced-code line wider than the panel must stay INSIDE the card and scroll
 // horizontally, not break out of the background. The EXC-692 panel caps rows at max-width, but
 // the library renders source lines white-space: pre, so an over-wide line overflowed the

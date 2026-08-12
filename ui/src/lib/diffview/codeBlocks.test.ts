@@ -198,16 +198,16 @@ function setRowTokens(root: HTMLElement, line: number, tokens: string[]): void {
 // The fence line carries two distinct tokens once the theme splits their colors:
 // the backtick/tilde markers and, on the opening line, the language tag. shiki
 // attaches no classes, so tagCodeBlockRows marks the language token (data-code-lang)
-// and the closing fence's markers (data-code-fence) imperatively, and the panel CSS
-// shifts each to the row's vertical center (EXC-692). The opening markers are left
-// untouched — they already sit right once the row is top-padded.
+// and BOTH fences' markers (data-code-fence) imperatively. The panel CSS draws the
+// marker chip off data-code-fence (EXC-869) and nudges the closing markers and the
+// language tag to their row's vertical center (EXC-692).
 describe("tagCodeBlockRows token tagging", () => {
   const langOf = (root: HTMLElement, line: number) =>
     root.querySelector(`[data-content] > [data-line="${line}"] [data-code-lang]`);
   const fenceOf = (root: HTMLElement, line: number) =>
     root.querySelector(`[data-content] > [data-line="${line}"] [data-code-fence]`);
 
-  test("tags the opening language token and the closing fence markers", () => {
+  test("tags the opening language token and both fences' markers", () => {
     const root = buildContent(3);
     setRowTokens(root, 1, ["```", "ts"]);
     setRowTokens(root, 2, ["const x = 1;"]);
@@ -215,22 +215,58 @@ describe("tagCodeBlockRows token tagging", () => {
     tagCodeBlockRows(root, [{ start: 1, end: 3 }]);
 
     expect(langOf(root, 1)?.textContent).toBe("ts");
-    // The opening markers stay put; only the closing markers are tagged.
-    expect(fenceOf(root, 1)).toBeNull();
+    // Both delimiters carry the chip hook; the language token is not the fence.
+    expect(fenceOf(root, 1)?.textContent).toBe("```");
     expect(fenceOf(root, 3)?.textContent).toBe("```");
     // The code line's own token is never mistaken for a language or fence.
     expect(langOf(root, 2)).toBeNull();
     expect(fenceOf(root, 2)).toBeNull();
   });
 
-  test("tags a tilde-fence language the same way", () => {
+  test("tags a tilde fence's language and markers the same way", () => {
     const root = buildContent(3);
     setRowTokens(root, 1, ["~~~", "python"]);
     setRowTokens(root, 2, ["x = 1"]);
     setRowTokens(root, 3, ["~~~"]);
     tagCodeBlockRows(root, [{ start: 1, end: 3 }]);
     expect(langOf(root, 1)?.textContent).toBe("python");
+    expect(fenceOf(root, 1)?.textContent).toBe("~~~");
     expect(fenceOf(root, 3)?.textContent).toBe("~~~");
+  });
+
+  test("tags a longer fence's delimiters, and leaves an interior fence alone", () => {
+    // Only a block's own start/end rows are scanned, so the ``` shown INSIDE a ````
+    // block is content and never takes the chip.
+    const root = buildContent(3);
+    setRowTokens(root, 1, ["````", "md"]);
+    setRowTokens(root, 2, ["```"]);
+    setRowTokens(root, 3, ["````"]);
+    tagCodeBlockRows(root, [{ start: 1, end: 3 }]);
+    expect(fenceOf(root, 1)?.textContent).toBe("````");
+    expect(fenceOf(root, 2)).toBeNull();
+    expect(fenceOf(root, 3)?.textContent).toBe("````");
+  });
+
+  test("tags an indented fence's markers", () => {
+    const root = buildContent(2);
+    setRowTokens(root, 1, ["   ```", "ts"]);
+    setRowTokens(root, 2, ["   ```"]);
+    tagCodeBlockRows(root, [{ start: 1, end: 2 }]);
+    expect(fenceOf(root, 1)?.textContent).toBe("   ```");
+    expect(fenceOf(root, 2)?.textContent).toBe("   ```");
+  });
+
+  test("tags no markers when shiki merges the fence and its language into one token", () => {
+    // The marker span must be markers alone. Were the two ever to tokenize as one
+    // (they do not today — caret-theme.ts colors them apart), skipping the chip beats
+    // painting it under the language tag, which keeps its own prominent treatment.
+    const root = buildContent(2);
+    setRowTokens(root, 1, ["```ts"]);
+    setRowTokens(root, 2, ["```"]);
+    tagCodeBlockRows(root, [{ start: 1, end: 2 }]);
+    expect(fenceOf(root, 1)).toBeNull();
+    expect(langOf(root, 1)?.textContent).toBe("```ts");
+    expect(fenceOf(root, 2)?.textContent).toBe("```");
   });
 
   test("tags no language when the opening fence has none", () => {
@@ -239,8 +275,20 @@ describe("tagCodeBlockRows token tagging", () => {
     setRowTokens(root, 2, ["```"]);
     tagCodeBlockRows(root, [{ start: 1, end: 2 }]);
     expect(root.querySelector("[data-code-lang]")).toBeNull();
-    // The closing markers are still tagged.
+    // A bare opening fence still carries the marker tag, as does the close.
+    expect(fenceOf(root, 1)?.textContent).toBe("```");
     expect(fenceOf(root, 2)?.textContent).toBe("```");
+  });
+
+  // An unclosed block runs to the last line of the document (codeBlockRanges), so its
+  // data-code-end row is prose rather than a fence.
+  test("tags no fence markers on an unclosed block's non-fence last row", () => {
+    const root = buildContent(2);
+    setRowTokens(root, 1, ["```", "ts"]);
+    setRowTokens(root, 2, ["const a = ", "`x`", ";"]);
+    tagCodeBlockRows(root, [{ start: 1, end: 2 }]);
+    expect(fenceOf(root, 1)?.textContent).toBe("```");
+    expect(fenceOf(root, 2)).toBeNull();
   });
 
   test("clears stale token tags when the block goes away", () => {
