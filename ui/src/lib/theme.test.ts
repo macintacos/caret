@@ -565,11 +565,12 @@ describe("every ColorToken is read somewhere in ui/src", () => {
   // that unlikely (the shiki-read pin above demands alpha-free hex), but it is the hole
   // to re-check as each remaining consumer lands.
   //
-  // Two are already spent, both in diffview/coreStyles.ts: --chip-code fills the
-  // fence-marker chip and --chip-ref the resting file-reference chip. Of the three left,
-  // bold and italic are EXC-867's to spend; link awaits its own ticket. The test name
-  // carries no issue id because one id never covered the whole list.
-  const PENDING_CONSUMERS: ColorToken[] = ["--chip-bold", "--chip-italic", "--chip-link"];
+  // Four are already spent, all in diffview/coreStyles.ts: --chip-code fills the
+  // fence-marker chip, --chip-ref the resting file-reference chip, and --chip-bold /
+  // --chip-italic the two inline emphasis chips (EXC-867), each through its own
+  // --md-* layer variable. Only link is left, and it awaits its own ticket. The test
+  // name carries no issue id because one id never covered the whole list.
+  const PENDING_CONSUMERS: ColorToken[] = ["--chip-link"];
 
   for (const token of Object.keys(THEMES["caret-dark"].tokens) as ColorToken[]) {
     const pending = PENDING_CONSUMERS.includes(token);
