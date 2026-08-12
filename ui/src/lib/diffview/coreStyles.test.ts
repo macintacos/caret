@@ -319,6 +319,22 @@ describe("the inline emphasis chips (EXC-867)", () => {
   const endRule =
     overrideDecls.match(/\[data-content\][^{}]*\[data-md-end\]\s*\{[^}]*\}/)?.[0] ?? "";
 
+  test("declares the weight and slant itself, ungated by selection", () => {
+    // @pierre/diffs carries shiki's font style into the DOM as a custom property and then
+    // consumes it with font-weight: light-dark(…), which is invalid — light-dark() is
+    // defined over <color> only — so the library renders every token at one weight. caret
+    // declares both off the decoration pass's own attributes instead.
+    const weight =
+      overrideDecls.match(/\[data-content\][^{}]*\[data-md~="bold"\]\s*\{[^}]*\}/)?.[0] ?? "";
+    const slant =
+      overrideDecls.match(/\[data-content\][^{}]*\[data-md~="italic"\]\s*\{[^}]*\}/)?.[0] ?? "";
+    expect(weight).toMatch(/font-weight:\s*bold/);
+    expect(slant).toMatch(/font-style:\s*italic/);
+    // Weight and slant are what the text IS, so unlike the tint they survive selection.
+    expect(weight).not.toMatch(/:not\(\[data-selected-line\]\)/);
+    expect(slant).not.toMatch(/:not\(\[data-selected-line\]\)/);
+  });
+
   test("spends the family's own bold and italic tints, and declares neither", () => {
     // Consumed, never redefined: the recipe (EXC-858) derives all five tints for all nine
     // palettes, so a literal here would be a tenth, unreviewed palette.

@@ -252,6 +252,32 @@ const CARET_OVERRIDES = `
      longhands so the ends follow the writing direction. The :not() guard drops the chip on
      a selected row, so a drag-selection reads as one flat band — exactly as the fence chip
      above does. */
+  /* The weight and slant themselves, which have to be declared HERE rather than coming
+     from shiki, and this is the one surprise in the whole ticket. shiki does resolve the
+     emphasis font style (caret-theme.ts appends the rules, and they win), and @pierre/diffs
+     does carry it into the DOM — but as a custom property, consumed by its own core sheet as
+     font-weight: light-dark(var(--diffs-token-light-font-weight, inherit), …). light-dark()
+     is defined over <color> only, so that declaration is invalid and dropped: in a real
+     Chromium, CSS.supports("font-weight", "light-dark(bold, bold)") is false while the color
+     form is true. The property lands on the element carrying "bold" and the computed weight
+     stays 400. Every token in the library renders at one weight and one slant, whatever the
+     theme says — a standing upstream finding, not something caret can fix in the theme.
+
+     So the decoration pass's own attributes carry it. That is also why the emphasis rules in
+     caret-theme.ts are still worth having: their MARKER half is a color, so it does survive,
+     and it is what splits a bold span into three tokens for this pass to tag.
+
+     Deliberately NOT guarded by :not([data-selected-line]). Weight and slant are what the
+     text IS, not decoration on top of it — a selected row still contains bold text — so only
+     the chip tint below drops on selection. Same distinction EXC-880 draws for the reference
+     chip, arrived at from the other side. */
+  [data-content] [data-line] [data-md~="bold"] {
+    font-weight: bold;
+  }
+  [data-content] [data-line] [data-md~="italic"] {
+    font-style: italic;
+  }
+
   [data-md~="bold"] {
     --md-bold: var(--chip-bold);
   }
