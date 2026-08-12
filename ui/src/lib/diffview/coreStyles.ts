@@ -24,6 +24,13 @@ const FOLDER_ICON_MASK = `url("data:image/svg+xml,${encodeURIComponent(folderIco
  * nine. Exported because a bare number in the sheet is invisible to the palette
  * suite — `theme.test.ts` composites against this and fails if a new palette, or a
  * deeper fade, drops quoted text below the floor.
+ *
+ * The result is a QUIET fade by necessity: measured against unquoted prose it is a
+ * ~1.3:1 step, where a fade deep enough to read at a glance (~2.2–3.4:1) puts three
+ * of the nine palettes under AA. The bars are what make a quote unmistakable; this
+ * is the second, softer signal. Going deeper means deciding that quoted plan text
+ * may sit at the tertiary tier `--ink-faint` occupies (>3:1, where the gutter's line
+ * numbers live) rather than with body copy — a call for a human, not a tuning knob.
  */
 export const QUOTE_SUBDUE = 0.88;
 
