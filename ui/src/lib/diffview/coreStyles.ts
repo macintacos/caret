@@ -427,11 +427,20 @@ const CARET_OVERRIDES = `
      at. Every column downstream — the comment anchors, vim motions, drag-range selection,
      the search highlights — therefore never learns that anything was drawn.
 
-     A marker is INK rather than a chip, and it spends --ink-faint: the token caret-theme.ts
-     already gives the fence markers and the ** / _ emphasis markers, because a list marker
-     is the same class of thing. No --chip-* token is added here, and the sheet grows no new
-     background layer — a pill around a single dash would read as confetti, which is the
-     failure mode EXC-855 names.
+     A marker is INK rather than a chip. No --chip-* token is added here, and the sheet grows
+     no new background layer — a pill around a single dash would read as confetti, which is
+     the failure mode EXC-855 names.
+
+     WHICH ink depends on whether the character survives, and the two halves of this rule
+     land on opposite sides of that line (EXC-871 settled it epic-wide; svelte-rules.md
+     § chips carries the rule). An ordered item's 1. keeps its glyph and is merely tinted,
+     so it is SUPPLEMENTARY and takes --ink-faint, the ink the fence markers and the ** / _
+     emphasis markers already take. A bullet's dash goes transparent and the drawn dot
+     REPLACES it, so the dot is the only thing left saying "list item here" — that is 1.4.11's
+     test for a graphical object required to understand the content, and --ink-faint fails its
+     3:1 floor on the surface this actually renders on (2.90 on catppuccin-latte, 2.97 on
+     github-light, against --paper-sunk and the row's 2-8% ink bands). --ink-soft bottoms at
+     4.21 across the nine and theme.test.ts pins the whole replacement family there.
 
      THE GLYPH IS A PSEUDO-ELEMENT, not an appended node, and that is a correctness
      requirement rather than a preference. tables.ts settles a row by comparing its child
@@ -481,7 +490,7 @@ const CARET_OVERRIDES = `
   [data-content] [data-line] [data-md-list="bullet"]::before {
     content: "•";
     position: absolute;
-    color: var(--ink-faint);
+    color: var(--ink-soft);
     user-select: none;
   }
 
@@ -643,14 +652,23 @@ const CARET_OVERRIDES = `
      the character would have been the other way to get one bar per level, and it would
      have broken every one of those in the same stroke.
 
-     It therefore takes --ink-faint, the epic's prescribed MARKER ink (EXC-855: no sixth
-     token for marker ink, markers reuse the token the fence markers already take). That
-     follows from what the bar IS rather than what it looks like: not a decoration beside
-     the marker, but the marker redrawn. --rule-strong was tried first, on the reading that
-     a bar is a rule; measured on the showcase in both schemes it is legible but not
-     COUNTABLE, and counting is the entire job here. The rule tokens are sized for
-     hairlines that span a whole edge, where length carries the signal — this mark is 2px
-     wide and one row tall, so it has no length to spend and needs its ink instead.
+     The rule tokens were tried first, on the reading that a bar is a rule; measured on the
+     showcase in both schemes --rule-strong is legible but not COUNTABLE, and counting is the
+     entire job here. They are sized for hairlines that span a whole edge, where length
+     carries the signal — this mark is 2px wide and one row tall, so it has no length to
+     spend and needs its ink instead.
+
+     What it takes is --ink-soft, and for the reason the marker being GONE supplies rather
+     than for a reason about how a bar looks. EXC-863 shipped it on --ink-faint, the marker
+     ink EXC-855 prescribes; EXC-871 swept the epic's markers together and split them on
+     whether the source character survives (svelte-rules.md § chips carries the rule). This
+     one does not — the glyph is transparent two declarations up, so the bars are the only
+     thing carrying "this is quoted, and this deep", which is exactly WCAG 1.4.11's test for
+     a graphical object required to understand the content. --ink-faint measures 2.90 on
+     catppuccin-latte and 2.97 on github-light against --paper-sunk and the row's 2-8% ink
+     bands, under the 3:1 floor; --ink-soft bottoms at 4.21 across the nine. theme.test.ts
+     pins the whole replacement family — this bar, the list bullet, the task checkbox — on
+     that surface, and it reds naming the palette if any of them is stepped back down. */
 
      Depth reads off the BAR COUNT, and that comes free: the decoration pass gives every
      marker its own child at its own source column (data-md-quote carries the level), so a
@@ -683,7 +701,7 @@ const CARET_OVERRIDES = `
     inset-inline-start: 0.375ch;
     width: 0.25ch;
     border-radius: var(--radius);
-    background-color: var(--ink-faint);
+    background-color: var(--ink-soft);
   }
 
   /* The subdue, and it rides the row's TOKENS rather than the row. Opacity is the
@@ -972,9 +990,27 @@ const CARET_OVERRIDES = `
      SUBDUED, not hidden, exactly as the emphasis markers and the fence backticks are, so
      the alignment markers stay legible and stay copyable; and the row draws the header's
      separator as a real full-width rule, which the dashes cannot do because they are only
-     as long as someone wrote them. Source and render, on the same row. */
+     as long as someone wrote them. Source and render, on the same row.
+
+     The separator spends the SAME ink as the dashes it stands in for, and that is EXC-871
+     correcting a token rather than restating a preference. EXC-864 drew it in --rule; that
+     token is 10% ink, and composited over --paper-sunk and the row's bands it measures 1.15
+     to 1.34 across the nine — against the 1.05 this epic calls indistinguishable, so on the
+     showcase there was no line on the screen at all, only one in the DOM. --ink-faint is
+     what the row's own dashes take one rule below, which makes the drawn separator read as
+     the same mark continued to full width rather than as a second, competing one.
+
+     It stays FAINT rather than climbing to the --ink-soft the thematic break takes, and the
+     difference is the epic's replacement/supplementary line (svelte-rules.md § chips): the
+     break's own dashes go transparent, so its line is the only carrier and WCAG 1.4.11's
+     3:1 floor binds it. Here the dashes stay legible, the header above is bold and the pipes
+     stack into column dividers — three things already saying where the header ends — so this
+     line reinforces rather than carries, and only has to be visible. --rule was not.
+
+     Nothing else on the diff body spends --rule or --rule-strong after this change; both are
+     chrome-surface tokens. */
   [data-content] [data-line][data-table-rule] {
-    border-block-end: 1px solid var(--rule);
+    border-block-end: 1px solid var(--ink-faint);
   }
   [data-content] [data-line][data-table-rule] [data-table-cell] > * {
     color: var(--ink-faint);
