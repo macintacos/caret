@@ -658,6 +658,19 @@ describe("buildLinkLayer images", () => {
     ]);
   });
 
+  test("markup inside an alt is marked, nested inside the image's one link run", () => {
+    // marked descends into an image's alt, so a codespan there emits its own run —
+    // and every run on the shape also carries `link`. That is what the decoration
+    // pass needs to draw ONE link pill across the whole image (consecutive link
+    // runs, abutting, differing attribute sets) with the code chip (EXC-868) square
+    // inside it, since a member nested in another never takes the rounded cap.
+    expect(buildLinkLayer("![a `id` chart](https://cdn.test/c.png)").inline.get(1)).toEqual([
+      { startCol: 0, endCol: 4, link: true },
+      { startCol: 4, endCol: 8, code: true, link: true },
+      { startCol: 8, endCol: 39, link: true },
+    ]);
+  });
+
   test("two images on one line are emitted in source order", () => {
     const images = buildLinkLayer("![a](https://c.test/a.png)![b](https://c.test/b.png)").images;
     expect((images.get(1) ?? []).map((i) => i.alt)).toEqual(["a", "b"]);

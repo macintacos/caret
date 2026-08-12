@@ -698,7 +698,7 @@ Text below it, so the rule has a paragraph on each side to be measured against.
 
 ### Images
 
-Neither URL loads — no image is ever fetched here. What separates the two rows is the title, and it changes the outcome completely.
+Neither URL points at a real asset, so no picture is ever drawn here. What separates the two rows is the title, and it changes the outcome completely.
 
 With a title:
 
@@ -710,7 +710,7 @@ Without a title:
 
 ![a showcase asset that is not there](https://example.com/img/absent.png)
 
-This one collapses, and lands on the known gap: the exclamation mark sits outside the clickable span, so the label reads as `!a showcase asset that is not there`. The shared decoration pass owns that, and the row is here so it stays visible rather than remembered.
+This one is read as an image, and an image is the one construct here that keeps every character of its markup: the row shows the source, wearing a single link chip, and what you copy is the real markdown. The picture would be drawn under it inside the same row, growing the row and its line number together — but this asset does not exist, so what the row demonstrates is the rung below that, where a load that fails leaves the chip and the text and no broken-image icon.
 
 ---
 
