@@ -52,19 +52,21 @@ function openCalls(page: import("@playwright/test").Page): Promise<unknown[][]> 
  * so the label and the prose after it are separate token elements. Both still route
  * through the library's one per-token pointer pipeline, so what separates them is
  * still the pointer position rather than two different handlers — which is what
- * these points exist to drive. The label's box comes from the caret-link highlight,
- * whose range covers exactly the link's columns; the off-label point sits just
- * inside the end of the row's rendered text. */
+ * these points exist to drive. The label's box comes from that element itself — the
+ * one the chip paints (EXC-859) — so the point is measured off the thing being
+ * clicked; the off-label point sits just inside the end of the row's rendered text. */
 async function rowPoints(
   page: import("@playwright/test").Page,
 ): Promise<{ onLabel: { x: number; y: number }; offLabel: { x: number; y: number } }> {
-  // The mark is painted a frame after the rows render; wait for it rather than
-  // measure an empty highlight.
-  await page.waitForFunction(() => (CSS.highlights.get("caret-link")?.size ?? 0) > 0);
+  // The row is tagged a frame after it renders; wait for the element rather than
+  // measure before the decoration pass has run.
+  await page.waitForFunction(() => {
+    const root = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    return (root?.querySelectorAll('[data-md~="link"]').length ?? 0) > 0;
+  });
   return page.evaluate(() => {
-    const [range] = [...(CSS.highlights.get("caret-link") ?? [])] as Range[];
-    const label = range!.getBoundingClientRect();
     const sh = (document.querySelector(".diffview") as HTMLElement).shadowRoot!;
+    const label = sh.querySelector('[data-md~="link"]')!.getBoundingClientRect();
     const token = [...sh.querySelectorAll("[data-char]")].find((el) =>
       el.textContent?.includes("warm-restart"),
     )!;
@@ -219,32 +221,42 @@ test("hovering a link token reveals a caret tooltip with the full href, not a na
   await expect.poll(() => tooltipHref(page)).toBeNull();
 });
 
-test("a link is marked before any hover, over its label only", async ({ daemon, page }) => {
+test("a link wears its chip before any hover, over its label only", async ({ daemon, page }) => {
   await daemon.seed({ plan: LINK_PLAN });
   await page.goto("/");
   await planSurface(page);
   await expect(page.getByText("the cache docs")).toBeVisible();
 
-  // The display collapse leaves a link tokenized as ordinary prose, so
-  // its resting appearance comes from the caret-link CSS Custom Highlight — the
-  // only marker there is with the pointer elsewhere. Assert the painted ranges,
-  // not a computed style: ::highlight() styling is unreachable from
-  // getComputedStyle, and it is the RANGES that carry the fix (coreStyles.test.ts
-  // pins the tint + dotted underline the rule paints them with).
-  const marked = () =>
-    page.evaluate(() => [...(CSS.highlights.get("caret-link") ?? [])].map((r) => r.toString()));
-  await expect.poll(marked).toContain("the cache docs");
+  // The collapse leaves the bare label as the only thing on the row saying a link is
+  // there, so the chip is its whole resting appearance. Tagged over the label ONLY:
+  // the decoration pass cuts the row at the link's own columns, so a tag that leaked
+  // past them would chip the sentence around it. The javascript:-scheme link is
+  // refused before the chip is ever consulted and so carries no tag either — a chip
+  // there would imply a target the reader can follow.
+  const tagged = () =>
+    page.evaluate(() => {
+      const root = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+      return [...(root?.querySelectorAll('[data-md~="link"]') ?? [])].map((el) => el.textContent);
+    });
+  await expect.poll(tagged).toEqual(["the cache docs"]);
 
-  // Over the label ONLY: the highlight's range is the link's columns, so a mark
-  // that leaked past them would underline the sentence too. The row now carries a
-  // data-md~="link" run on the same columns, but the resting mark stays a CSS
-  // Custom Highlight — it paints without mutating the DOM, so it never fights the
-  // library's row repaints. --chip-link is the attribute's own ticket, not this.
-  expect(await marked()).not.toContain("See the cache docs for the warm-restart design.");
-
-  // The javascript:-scheme link is not clickable, so it is not marked either —
-  // the mark tracks the same spans the click handler does.
-  expect((await marked()).join("\n")).not.toContain("this control");
+  // And it really paints in the real browser. The chip rides an element rather than a
+  // ::highlight() pseudo, whose styling getComputedStyle cannot see at all, so this can
+  // assert the resolved paint rather than only the region it was aimed at: at least one
+  // background layer serializes as something other than a fully transparent gradient,
+  // the pill closes with a real radius, and the label carries its dotted underline.
+  const painted = await page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement).shadowRoot!;
+    const style = getComputedStyle(sh.querySelector('[data-md~="link"]') as HTMLElement);
+    return {
+      layers: style.backgroundImage.split(/,\s*(?=linear-gradient)/),
+      radius: style.borderStartStartRadius,
+      decoration: style.textDecorationLine,
+    };
+  });
+  expect(painted.layers.some((layer) => !layer.includes("rgba(0, 0, 0, 0)"))).toBe(true);
+  expect(painted.radius).not.toBe("0px");
+  expect(painted.decoration).toContain("underline");
 });
 
 test("hovering an ordinary code token reveals no tooltip", async ({ daemon, page }) => {

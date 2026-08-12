@@ -431,13 +431,14 @@ describe("the link chip (EXC-859)", () => {
     expect(linkTint).not.toBe("");
   });
 
-  test("keeps the ink and dotted underline the retired highlight painted", () => {
-    // These two declarations moved verbatim off ::highlight(caret-link), which the
-    // decoration pass made redundant. A link is a control the reader can act on, so it
-    // marks itself the way body text does — the glyphs take the color and the underline
-    // sits under them — and the chip is what the collapse added on top. The tint is a
-    // minority mix of the accent into --ink, never the accent itself: amber stays scarce
-    // and brand-reserved, so a paragraph of links never reads as a page of selections.
+  test("tints the glyphs and dots the underline", () => {
+    // A link is a control the reader can act on, so it marks itself the way body text
+    // does — the glyphs take the color and the underline sits under them — and the chip
+    // is what the collapse adds on top. Without the underline a link reads as tinted
+    // prose; without the tint it reads as underlined prose. Both, or the affordance is
+    // half-drawn. The tint is a minority mix of the accent into --ink, never the accent
+    // itself: amber stays scarce and brand-reserved, so a paragraph of links never reads
+    // as a page of selections.
     expect(inkRule).toMatch(/color:\s*color-mix\([^)]*var\(--ink\)[^)]*var\(--accent\)/);
     expect(inkRule).toMatch(/text-decoration:\s*underline dotted/);
     expect(inkRule).not.toMatch(/color:\s*var\(--accent[^)]*\)\s*;/);
@@ -674,29 +675,5 @@ describe("the plan-search highlights (EXC-832, rehued EXC-905)", () => {
   test("neither spends the selection hue", () => {
     expect(allMatches).not.toContain("--accent");
     expect(currentMatch).not.toContain("--accent");
-  });
-});
-
-describe("the resting-state link mark", () => {
-  const linkRule = overrideDecls.match(/::highlight\(caret-link\)\s*\{[^}]*\}/)?.[0] ?? "";
-
-  // The extraction falls back to "" on a regex miss, and the assertions below
-  // would pass vacuously over one — pin non-emptiness first.
-  test("the rule is present to assert against", () => {
-    expect(linkRule).not.toBe("");
-  });
-
-  // The two properties a highlight pseudo supports that a link needs. Without
-  // the decoration a link reads as tinted prose; without the tint it reads as
-  // underlined prose. Both, or the affordance is half-drawn.
-  test("it tints the glyphs and dots the underline", () => {
-    expect(linkRule).toMatch(/color:\s*color-mix\([^)]*var\(--ink\)[^)]*var\(--accent\)/);
-    expect(linkRule).toMatch(/text-decoration:\s*underline dotted/);
-  });
-
-  // Amber stays scarce: a link takes a minority mix into the ink, not the accent
-  // itself, so a paragraph of links never reads as a page of selections.
-  test("the accent is mixed in, not spent whole", () => {
-    expect(linkRule).not.toMatch(/color:\s*var\(--accent[^)]*\)\s*;/);
   });
 });
