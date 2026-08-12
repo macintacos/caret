@@ -17,15 +17,18 @@
 // should — the showcase's own contract is that it grows a sub-heading per decorated
 // construct and never folds one away.
 //
-// Four questions live here and nowhere else, and each is one of this issue's acceptance
-// criteria:
+// Every question below lives here and nowhere else, and each is one of this issue's
+// acceptance criteria:
 //
-//   1. every construct the epic draws still draws, together, on one document;
+//   1. every construct the epic draws still draws, together, on one document, and the
+//      combined repaint settles instead of looping;
 //   2. compare mode offers none of them — asserted for the WHOLE attribute set rather
 //      than for the `data-md` subset EXC-867 could see at the time;
 //   3. copy carries the real plan text with its markers, across a span that crosses four
 //      marker families at once;
-//   4. commenting still reaches a row that carries decorations.
+//   4. commenting and the drag range still reach a row that carries decorations, and a
+//      row carrying THREE of them still costs the monospace grid nothing;
+//   5. a vendor palette resolves every decoration's paint.
 //
 // Everything narrower stays where it already is: which characters are a marker is
 // inlineSpans.test.ts, which token gets the attribute is inlineDecorate.test.ts, the
@@ -37,6 +40,8 @@ import { fileURLToPath } from "node:url";
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import {
+  firstGlyphX,
+  lineCenterY,
   planSurface,
   revealGutterPlus,
   settledMutations,
@@ -251,6 +256,82 @@ test("a decorated row still opens a comment composer", async ({ daemon, page }) 
   const composer = page.getByRole("dialog", { name: "Add a comment" });
   await expect(composer).toBeVisible();
   await expect(composer.getByRole("textbox", { name: "Comment" })).toBeVisible();
+});
+
+test("a drag range crosses the decorated rows and bands each one", async ({ daemon, page }) => {
+  await openShowcase(page, daemon);
+  // The task-list block, which the fixture writes as four consecutive checkbox rows. A
+  // drag is the gesture most exposed to a decoration that took room in the line box: the
+  // band is painted per row, and a row whose height or column origin had moved would
+  // band short or band the wrong span.
+  const lines = await page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    return [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])]
+      .filter((r) => r.querySelector("[data-md-checkbox]") !== null)
+      .map((r) => Number(r.getAttribute("data-line")))
+      .slice(0, 4);
+  });
+  expect(lines).toHaveLength(4);
+
+  await scrollToLine(page, lines[1] as number);
+  const gutterX = await page
+    .locator(".diff-plan")
+    .evaluate((el) => el.getBoundingClientRect().x + 6);
+  await page.mouse.move(gutterX, await lineCenterY(page, lines[0] as number));
+  await page.mouse.down();
+  await page.mouse.move(gutterX, await lineCenterY(page, lines[3] as number), { steps: 12 });
+  await page.mouse.up();
+
+  const banded = await page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    return [...(sh?.querySelectorAll("[data-content] [data-line][data-selected-line]") ?? [])].map(
+      (r) => Number(r.getAttribute("data-line")),
+    );
+  });
+  expect(banded).toEqual(lines);
+});
+
+test("a decorated row keeps the monospace grid the source columns are read from", async ({
+  daemon,
+  page,
+}) => {
+  await openShowcase(page, daemon);
+  // The columns every other affordance resolves against: vim motions, the search
+  // highlights, the drag range and the comment anchors all count characters. Each
+  // construct proved its own zero in isolation; what has never been asked is whether
+  // THREE decorations on one row still cost nothing, which is the quoted task — a level
+  // bar, a suppressed list marker and a checkbox, all drawn over transparent characters
+  // in the same line box.
+  const rows = await page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const all = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])];
+    const num = (r: Element | undefined) => Number(r?.getAttribute("data-line") ?? -1);
+    return {
+      dense: num(
+        all.find(
+          (r) =>
+            r.querySelector("[data-md-quote]") !== null &&
+            r.querySelector("[data-md-checkbox]") !== null,
+        ),
+      ),
+      // A plain prose row from the same section, to measure the dense one against.
+      plain: num(
+        all.find(
+          (r) =>
+            r.querySelectorAll("[data-md], [data-md-list], [data-md-quote], [data-md-checkbox]")
+              .length === 0 && (r.textContent ?? "").startsWith("Quoted, so the checkbox"),
+        ),
+      ),
+    };
+  });
+  expect(rows.dense).toBeGreaterThan(0);
+  expect(rows.plain).toBeGreaterThan(0);
+
+  const [dense, plain] = await Promise.all([
+    firstGlyphX(page, rows.dense),
+    firstGlyphX(page, rows.plain),
+  ]);
+  expect(dense).toBe(plain);
 });
 
 test("a vendor palette resolves every decoration's paint", async ({ daemon, page }) => {

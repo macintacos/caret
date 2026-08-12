@@ -18,7 +18,8 @@ testing anything.
 The plan view shows stored plan text as markdown SOURCE, so this comment is visible in
 the UI. That is fine — it belongs to the fixture.
 
-Two invariants bind edits to this file, both enforced by test/scripts/dev-driver.test.ts:
+Three invariants bind edits to this file. The first two are enforced by
+test/scripts/dev-driver.test.ts:
 
 1. The COUNT OF FENCE LINES must stay even. codeBlockRanges (ui/src/lib/diffview/
 codeBlocks.ts) toggles in and out of code on every line matching /^\s*(`{3,}|~{3,})/,
@@ -28,6 +29,13 @@ last fence to the end of this file rendering inside a code panel.
 2. Some spans of this file are reproduced VERBATIM in DEMO_EDITS (scripts/tasks/dev/
 protocol.ts), which rewrites them to build the earlier draft versions. Editing one means
 editing that copy in the same change; the drift guard fails loudly if you don't.
+
+3. This file is SEEDED BY AN E2E SPEC (test/e2e/showcase.e2e.ts), which drives it in a real
+browser and asserts that every construct the plan view decorates still draws. It reads rows
+by the decoration they carry rather than by their prose, so rewording anything here is
+free — but deleting a construct from the Rendering showcase reds it. Note that the
+preflight gate does NOT run `test e2e` for a Markdown-only diff, so that red arrives on the
+full gate rather than on the narrowed one.
 -->
 
 
