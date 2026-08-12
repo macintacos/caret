@@ -35,7 +35,7 @@ function map(entries: [number, ImageSpan[]][]): ImageSpanMap {
 }
 
 function span(url: string, alt = "a chart"): ImageSpan {
-  return { startCol: 0, endCol: 10, url, alt };
+  return { url, alt };
 }
 
 function images(host: HTMLElement): HTMLImageElement[] {
@@ -86,6 +86,16 @@ test("a changed url replaces the element", () => {
   syncInlineImages(host, map([[1, [span("https://cdn.test/old.png")]]]));
   syncInlineImages(host, map([[1, [span("https://cdn.test/new.png")]]]));
   expect(images(host).map((i) => i.getAttribute("src"))).toEqual(["https://cdn.test/new.png"]);
+});
+
+test("a changed alt replaces the element too", () => {
+  // The accessible name is half of what the span carries, so the settle check
+  // reads both. Comparing only the src would leave the old name in place on a
+  // plan edit that reworded an alt without moving its asset.
+  const host = root(row(1, "x"));
+  syncInlineImages(host, map([[1, [span("https://cdn.test/c.png", "old name")]]]));
+  syncInlineImages(host, map([[1, [span("https://cdn.test/c.png", "new name")]]]));
+  expect(images(host).map((i) => i.getAttribute("alt"))).toEqual(["new name"]);
 });
 
 test("an emptied map clears a row's images", () => {

@@ -479,7 +479,7 @@ Read each link case as a whole sentence: the prose around the link should stay w
 
 **7. Image with a long URL.**
 
-![reflow probe image](https://example.com/img/reflow/probe.png?cols=90&mode=normalize&cache=0)
+![reflow probe image](https://assets.invalid/img/reflow/probe.png?cols=90&mode=normalize&cache=0)
 
 **8. Short link, long line.** A link comfortably under ninety characters [such as this one](https://example.com/reflow/short) that still carries its line past the budget on the strength of the prose around it.
 
@@ -698,19 +698,27 @@ Text below it, so the rule has a paragraph on each side to be measured against.
 
 ### Images
 
-Neither URL points at a real asset, so no picture is ever drawn here. What separates the two rows is the title, and it changes the outcome completely.
+Every host below is on the reserved `.invalid` domain, which never resolves, so this fixture stays offline and no picture is ever drawn in it. That is a real limit rather than an oversight: the top rung — a picture under its own row, growing the row and its line number together — needs an asset that loads, and the four rows here show the three rungs below it.
 
 With a title:
 
-![the showcase placeholder](https://example.com/img/showcase.png "Hover title")
+![the showcase placeholder](https://assets.invalid/img/showcase.png "Hover title")
 
 The link grammar allows no space inside a target, so this one never matches: the whole `![…](…)` stays literal source, and the only clickable thing on the line is the bare URL inside it.
 
 Without a title:
 
-![a showcase asset that is not there](https://example.com/img/absent.png)
+![a showcase asset that is not there](https://assets.invalid/img/absent.png)
 
-This one is read as an image, and an image is the one construct here that keeps every character of its markup: the row shows the source, wearing a single link chip, and what you copy is the real markdown. The picture would be drawn under it inside the same row, growing the row and its line number together — but this asset does not exist, so what the row demonstrates is the rung below that, where a load that fails leaves the chip and the text and no broken-image icon.
+This one is read as an image, and an image is the one construct here that keeps every character of its markup: the row shows the source under a single link chip, and what you copy is the real markdown, with no accessible name stapled onto it. The fetch is attempted and cannot succeed, so what the row demonstrates is the rung below the picture — a failed load leaving the chip and the text, and no broken-image icon.
+
+A target caret will not fetch:
+
+![an inline payload](data:image/png;base64,iVBORw0KGgo=)
+
+Only `http` and `https` draw. Any other scheme is refused before a request exists, so this row is the bottom rung: the same chip and the same literal text, reached without the network being touched at all.
+
+And the syntax is the whole trigger — a filename named in prose, like diagram.png or `doc/arch.svg`, is never turned into a picture. It stays what it is: prose, or a file reference when the path resolves.
 
 ---
 

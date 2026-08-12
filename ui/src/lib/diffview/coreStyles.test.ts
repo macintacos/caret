@@ -576,9 +576,11 @@ describe("the inline image (EXC-870)", () => {
     expect(imageRule).toMatch(/height:\s*auto/);
   });
 
-  test("sits on the fenced panel's left rail", () => {
-    // 0.75rem is the panel's margin-inline-start above, so a figure and a code block
-    // read as two kinds of the same embedded block rather than two arbitrary insets.
+  test("spends the same indent the fenced panel spends", () => {
+    // Same VALUE, deliberately, so the two things a plan embeds are indented alike
+    // rather than by two arbitrary numbers — not the same pixel rail, since the
+    // panel's margin moves the row box while this one sits inside that box's own
+    // text padding. Pinned as a pair so one cannot drift without the other.
     expect(imageRule).toMatch(/margin-inline-start:\s*0\.75rem/);
     expect(overrideDecls).toMatch(/\[data-code-line\][^{}]*\{[^}]*margin-inline-start:\s*0\.75rem/);
   });
@@ -590,6 +592,15 @@ describe("the inline image (EXC-870)", () => {
     expect(imageRule).toMatch(new RegExp(String.raw`border-radius:\s*${RADIUS}`));
     expect(imageRule).toMatch(/border:\s*1px solid color-mix\(in lab,/);
     expect(imageRule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
+
+  test("is excluded from the selection, so copy carries only the row's text", () => {
+    // Not styling. Blink emits an image's alt text into the plain-text flavour of a
+    // copied selection, so without this the row copies as the source markdown with
+    // the accessible name stapled on — breaking the epic's copy contract, and doing
+    // it invisibly, since Selection.toString() takes a path that never shows it.
+    // images.e2e.ts reads the real clipboard; this pins the declaration.
+    expect(imageRule).toMatch(/user-select:\s*none/);
   });
 
   test("carries no transition", () => {

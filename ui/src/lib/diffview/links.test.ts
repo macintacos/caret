@@ -581,9 +581,7 @@ describe("buildLinkLayer images", () => {
     const input = "before ![a chart](https://cdn.test/chart.png) after";
     const { text, images, spans } = buildLinkLayer(input);
     expect(text).toBe(input);
-    expect(images.get(1)).toEqual([
-      { startCol: 7, endCol: 45, url: "https://cdn.test/chart.png", alt: "a chart" },
-    ]);
+    expect(images.get(1)).toEqual([{ url: "https://cdn.test/chart.png", alt: "a chart" }]);
     // Nothing on an image row is clickable: the picture is the affordance, and
     // the URL inside the parens must not become a bare-URL span of its own.
     expect(spans.get(1) ?? []).toHaveLength(0);
@@ -607,8 +605,11 @@ describe("buildLinkLayer images", () => {
   });
 
   test("a path-target image emits no image and no file reference", () => {
-    // A reference over the alt text would cite a path the row no longer hides —
-    // the target is right there in the display text, so the glyph adds nothing.
+    // A real behaviour change, and a deliberate one: this shape used to collapse
+    // to `!the diagram` and take the reference glyph, so a click opened the
+    // excerpt preview — a surface that renders text, and so could only ever show
+    // an image file as bytes. What replaces the glyph is the path itself, now
+    // visible in the row instead of hidden behind a label.
     const input = "![the diagram](doc/diagram.png)";
     const { text, images, fileRefs } = buildLinkLayer(input);
     expect(text).toBe(input);
@@ -618,8 +619,28 @@ describe("buildLinkLayer images", () => {
 
   test("an empty alt is carried through as an empty accessible name", () => {
     expect(buildLinkLayer("![](https://cdn.test/x.png)").images.get(1)).toEqual([
-      { startCol: 0, endCol: 27, url: "https://cdn.test/x.png", alt: "" },
+      { url: "https://cdn.test/x.png", alt: "" },
     ]);
+  });
+
+  test("a bare image filename in prose is never an image", () => {
+    // The `![]()` syntax is the whole trigger. A filename mentioned in a sentence
+    // stays prose — or a file reference when it resolves, which is fileRefs.ts's
+    // call and not this layer's — because drawing a picture where the author only
+    // named one would be a rewrite rather than a decoration.
+    const input = "see diagram.png and doc/arch.svg for the shape";
+    const { text, images } = buildLinkLayer(input);
+    expect(text).toBe(input);
+    expect(images.size).toBe(0);
+  });
+
+  test("an escaped exclamation mark still draws an image", () => {
+    // Pinned as current behaviour rather than endorsed. CommonMark reads
+    // `\![a](url)` as an escaped bang followed by a link; INLINE_LINK is blind to
+    // backslash escapes throughout (it honours `\[` no better), so the lookbehind
+    // inherits that blindness rather than introducing it. Recorded here so the
+    // next reader knows the case was considered, not missed.
+    expect(buildLinkLayer("\\![alt](https://cdn.test/x.png)").images.size).toBe(1);
   });
 
   test("a titled image matches nothing and stays wholly literal", () => {

@@ -40,14 +40,21 @@
 //
 // IMAGES are the exception to the collapse (EXC-870). `![alt](url)` keeps every
 // character of its markup, so the row's display text is its source text and copy
-// carries the real markdown; the picture is drawn ON TOP of that row by
-// inlineImages.ts rather than substituted for it, which is the epic's
-// transform-in-place stance (EXC-855) applied to the one construct that has
-// something to render. Only an `http`/`https` target draws — the same isSafeUrl
-// gate the links above use — and every image, drawable or not, takes a `link` run
-// over its whole shape, so an image that cannot be fetched degrades to exactly
-// the chip it already wore. The titled form `![alt](url "title")` matches nothing
-// here at all, because the target grammar allows no space.
+// carries the real markdown; the picture is ADDED to that row by inlineImages.ts
+// rather than substituted for it, which is the epic's transform-in-place stance
+// (EXC-855) applied to the one construct that has something to render. Only an
+// `http`/`https` target draws — the same isSafeUrl gate the links above use — and
+// every image, drawable or not, takes a `link` run over its whole shape, so an
+// image that cannot be fetched degrades to exactly the chip it already wore. The
+// titled form `![alt](url "title")` matches nothing here at all, because the
+// target grammar allows no space.
+//
+// An image emits NO FileRefSpan, even when its target is a citable path. That is
+// a deliberate loss: before EXC-870 `![d](doc/arch.svg)` collapsed to `!d` and
+// took the reference glyph, so a click opened the excerpt preview — a surface
+// that renders TEXT, and therefore could only ever show an image file as bytes.
+// What replaces it is strictly more information: the path is now visible in the
+// row rather than hidden behind a label.
 
 import { hasKnownFileExtension } from "@core/config/constants";
 import { classify, type FileRefSpan, type FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
@@ -73,12 +80,11 @@ export interface LinkSpan {
  * links are absent from the map. */
 export type LinkSpanMap = Map<number, LinkSpan[]>;
 
-/** A markdown image on a single display line (EXC-870). The columns cover the
- * WHOLE `![alt](url)` shape — an image never collapses, so they index the source
- * line just as well as the display one. */
+/** A drawable markdown image on a display line (EXC-870). Deliberately carries no
+ * columns, unlike every other span here: the picture is added to the ROW rather
+ * than painted over a range, so where on the line the markup sits is not
+ * something any consumer needs to know. */
 export interface ImageSpan {
-  startCol: number;
-  endCol: number;
   /** The http/https source to fetch. No other scheme ever reaches here. */
   url: string;
   /** The alt text, used verbatim as the image's accessible name. */
@@ -380,7 +386,7 @@ function transformLine(
     } else {
       linkRanges.push({ startCol, endCol });
     }
-    if (rw.image != null) images.push({ startCol, endCol, ...rw.image });
+    if (rw.image != null) images.push(rw.image);
   }
   display += source.slice(cursor);
   const { spans: inline, quoteDepth } = buildInlineSpans(display, linkRanges);

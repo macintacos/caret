@@ -383,8 +383,6 @@ const CARET_OVERRIDES = `
      (inlineImages.ts). This is the epic's transform-in-place stance applied to the one
      construct that has something to render: the markup is NOT replaced — it keeps its link
      chip and stays copyable — and the picture is added below it inside the same row.
-     (No backtick appears in this comment, for the reason the emphasis-chip note above
-     gives: the sheet is a template literal, so one would close it early.)
 
      display: block is what makes that work, and it is the whole reason this element needs
      no geometry negotiation with its neighbours. Every other decoration in this sheet is an
@@ -392,9 +390,14 @@ const CARET_OVERRIDES = `
      padding/margin overhang double-coating the wash beside it. A block-level replaced
      element leaves the inline flow entirely: the row's text keeps its own line, the image
      takes the next one, and the rows render white-space: pre either way. So the inline
-     margin here can be positive without shifting a single glyph, and it deliberately
-     matches the fenced panel's 0.75rem inset above — a figure and a code block sit on the
-     same left rail, reading as two kinds of the same embedded block.
+     margin here can be positive without shifting a single glyph, and it spends the same
+     0.75rem the fenced panel above spends — the same indent for the same reason, a block
+     the plan embedded rather than prose it wrote. Same VALUE, not the same pixel rail:
+     the panel's margin moves the whole row box, while this one sits inside that box's own
+     1ch text padding, so the image's edge lands about a character to the panel's right.
+     Aligning them exactly would mean subtracting the library's padding here, and coupling
+     a caret rule to a library metric is the fragility the utility-button note above
+     already warns about.
 
      The size caps are the design decision. max-width borrows the panel's own 720px reading
      measure rather than inventing a number, and min() keeps a narrow viewport in charge;
@@ -410,12 +413,25 @@ const CARET_OVERRIDES = `
      radius is the chip family's, so the figure reads as part of the same vocabulary. No
      transition — the diff surface swaps state instantly (svelte-rules § Motion).
 
+     user-select: none is the one declaration here that is not about looks, and it is
+     load-bearing: without it the epic's copy contract breaks. Blink emits an image's alt
+     text into the plain-text flavour of a copied selection, so selecting the image's row
+     and copying yielded the source markdown with the accessible name stapled to its end —
+     while Selection.toString(), which takes a different path, showed nothing wrong. The
+     row's text is what the reader is copying; the picture is a rendering of markup that
+     row already spells out, so excluding it from the selection is what the element IS
+     rather than a workaround. Doing it here also keeps the alt attribute, which stays the
+     accessible name; moving the name to aria-label with an empty alt cleans the clipboard
+     the same way but leans on the presentational-role conflict rule to do it.
+     images.e2e.ts reads the real clipboard, which is the only place this is visible.
+
      The [hidden] rule is not boilerplate. A failed load hides the element rather than
      removing it, so the observer pass stays idempotent (inlineImages.ts), and the UA
-     stylesheet's own [hidden] { display: none } is out-specified by the display: block
+     stylesheet's own [hidden] { display: none } is overridden by the display: block
      above — without this line a broken image would still occupy the row. */
   [data-content] [data-line] [data-md-image] {
     display: block;
+    user-select: none;
     max-width: min(100%, 720px);
     max-height: 18rem;
     width: auto;

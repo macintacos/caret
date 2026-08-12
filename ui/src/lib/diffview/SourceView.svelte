@@ -427,8 +427,8 @@
     clearSearchHighlights();
   });
 
-  // Stable empty maps for the "no file references" / "no inline runs" cases, so the
-  // tagging pass still clears any prior icons or chips without allocating each
+  // Stable empty maps for every layer's "none of these on this plan" case, so each
+  // pass still clears any prior icons, chips or pictures without allocating each
   // repaint.
   const EMPTY_FILE_REFS: FileRefSpanMap = new Map();
   const EMPTY_INLINE: InlineSpanMap = new Map();
@@ -478,13 +478,14 @@
       // Always run — the clear-stale pass lives inside tagFileRefTokens, so a
       // populated→empty transition still drops the prior icons.
       tagFileRefTokens(root, refs ?? EMPTY_FILE_REFS);
-      // Draw the plan's images onto their rows (EXC-870). Runs AFTER the two
-      // token passes above: both walk a row's direct children accumulating text
-      // length, and both must see the row as shiki painted it — an appended
-      // <img> contributes no characters, but adding it first would put a
-      // non-token child in front of splitRow's clone-and-replace. Idempotent, so
-      // a settled row costs one comparison rather than an observer loop, and
-      // always run so a populated→empty transition clears the prior images.
+      // Draw the plan's images onto their rows (EXC-870). Ordered last because
+      // it is the only pass here that ADDS a node rather than tagging or
+      // splitting one — not because the token passes above would break on it.
+      // They walk a row's direct children accumulating text length, and an
+      // appended <img> holds no characters at the end of the line, so either
+      // order is safe. Idempotent, so a settled row costs one comparison rather
+      // than an observer loop, and always run so a populated→empty transition
+      // clears the prior images.
       syncInlineImages(root, imageSpans ?? EMPTY_IMAGES);
       // Re-apply the cursor tag after a repaint from the non-reactive mirror
       // (the reactive effect above owns applying a move).

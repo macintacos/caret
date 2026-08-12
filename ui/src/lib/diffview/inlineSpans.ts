@@ -50,8 +50,11 @@ export interface InlineSpan {
   italic?: true;
   /** An inline-code span, backticks included. */
   code?: true;
-  /** A link's clickable or collapsed label. Never set on a link the layer refused
-   * to collapse, so an unsafe-scheme target draws nothing. */
+  /** A link's clickable or collapsed label, or the whole never-collapsing shape of
+   * an image (EXC-870). The two differ on target safety: a link the layer refused
+   * to collapse takes no run at all, so an unsafe-scheme target draws nothing,
+   * while an image takes one whether or not its target can be fetched — the chip
+   * with no picture under it is exactly what a failed image is meant to read as. */
   link?: true;
   /** The `[ ]` / `[x]` bracket run of a task-list item, and only that run. */
   checkbox?: "checked" | "unchecked";

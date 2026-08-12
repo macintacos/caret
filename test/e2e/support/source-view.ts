@@ -53,6 +53,31 @@ export async function lineCenterY(page: Page, line: number): Promise<number> {
   return y;
 }
 
+/** A 1-based source line's content row and its gutter number cell, as heights
+ * (viewport px). Zero for either when the line is not rendered.
+ *
+ * The two share a grid row track, so their heights are equal by construction —
+ * which is what keeps a line number pointing at its own text however tall the row
+ * grows. Asserting that means resolving the gutter cell through the library's own
+ * `data-line-index` / `data-line-number-content` pairing, the same contract
+ * `lineCenterY` above resolves; naming it once means a library rename is one edit
+ * rather than every spec (typescript-rules.md § Shared-helper policy). */
+export function rowHeights(page: Page, line: number): Promise<{ row: number; number: number }> {
+  return page.evaluate((ln) => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const row = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])].find(
+      (r) => r.getAttribute("data-line") === String(ln),
+    );
+    const cell = [...(sh?.querySelectorAll("[data-line-number-content]") ?? [])].find(
+      (n) => (n.parentElement as HTMLElement)?.dataset.lineIndex === String(ln - 1),
+    )?.parentElement;
+    return {
+      row: Math.round(row?.getBoundingClientRect().height ?? 0),
+      number: Math.round(cell?.getBoundingClientRect().height ?? 0),
+    };
+  }, line);
+}
+
 /** Reveal the gutter `+` on `line` by moving the mouse over its left edge. The
  * source view's gutter sits at the left of the plan surface — so
  * anchor the hover to that container's left edge rather than the viewport's,
