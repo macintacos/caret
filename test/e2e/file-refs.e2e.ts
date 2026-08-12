@@ -369,9 +369,17 @@ test("marks a markdown link whose target is a file, exactly once", async ({ daem
   // could draw two glyphs.
   //
   // A bare-path label collapses into ordinary prose, which shiki emits as one
-  // coarse token running to the end of the line. tagFileRefTokens refuses it —
-  // the glyph and its hover chip would wrap the whole sentence — so that shape
-  // is clickable without being marked. Both halves are asserted below.
+  // coarse token running to the end of the line. That token used to cost the label
+  // its glyph — tagFileRefTokens refuses a token wider than the path, since the
+  // glyph and its hover chip would wrap the whole sentence — so the shape was
+  // clickable without being marked. EXC-867's decoration pass cuts every row at
+  // its file-reference columns, so the label is now its own element and takes the
+  // glyph like any other reference. Both labels are asserted below.
+  //
+  // "Exactly once" is the invariant that outlives that change: each reference marks
+  // ONE element, so the backticked shape — where both decoration paths fire, the
+  // link layer emitting over the whole label and the inline-code scan finding the
+  // path inside it — still draws a single glyph rather than two.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS, "src/other.ts": CACHE_TS });
   try {
     await daemon.seed({
@@ -390,31 +398,31 @@ test("marks a markdown link whose target is a file, exactly once", async ({ daem
     await page.goto("/");
     await planSurface(page);
 
-    // One glyph: the backticked label's. Not 2 — the bare-path label has no token
-    // to take it. Not 0 — the backticked label must still decorate. Not 3 — the
-    // link to a missing file never does.
-    await expect.poll(() => fileRefCount(page)).toBe(1);
+    // Two glyphs, one per resolving label. Not 1 — the bare-path label now has an
+    // element of its own to take it. Not 4 — neither label draws two. Not 3 — the
+    // link to a missing file never decorates.
+    await expect.poll(() => fileRefCount(page)).toBe(2);
 
-    // And it sits on the path alone. This is the assertion the count cannot make:
-    // a glyph drawn around the entire sentence would still count as one.
+    // And each sits on its path ALONE. This is the assertion the count cannot make:
+    // a glyph drawn around the entire sentence would still count as one, and it is
+    // exactly what the decoration pass's cut has to prevent for the bare-path label.
     const tagged = await page.evaluate(() => {
       const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
-      return sh?.querySelector("[data-file-ref]")?.textContent ?? null;
+      return [...(sh?.querySelectorAll("[data-file-ref]") ?? [])].map((el) => el.textContent);
     });
-    expect(tagged).toBe("src/other.ts");
+    expect(tagged).toEqual(["src/cache.ts", "src/other.ts"]);
 
     // The collision-merged span is clickable, not merely visible — and the two
     // links point at different files, so the preview's content is what proves
     // which span was clicked.
-    await page.locator("[data-file-ref]").click();
+    await page.locator("[data-file-ref]").nth(1).click();
     const preview = page.locator("[data-file-preview]");
     await expect(preview).toBeVisible();
     await expect(preview).toContainText("src/other.ts");
 
-    // The unmarked bare-path label still opens its own file on click: it lost the
-    // glyph, not the affordance. Its coarse token is the whole sentence, so the
-    // two ends of that one token are two different things: the label opens the
-    // file, the prose after it does not.
+    // The bare-path label opens its own file too. The glyph moved onto it, and the
+    // affordance it always had is unchanged — the prose AFTER it is now a separate
+    // element, which is what keeps the reference's box off the rest of the sentence.
     await page.keyboard.press("Escape");
     await expect(preview).toHaveCount(0);
     const sentence = await page
@@ -424,14 +432,16 @@ test("marks a markdown link whose target is a file, exactly once", async ({ daem
     const midY = sentence!.y + sentence!.height / 2;
 
     // Past the label, over "holds the key." — no preview, and the row's own
-    // click affordance runs instead.
+    // click affordance runs instead. The box measured here is the prose ALONE:
+    // before the decoration pass this text and the path shared one token, and the
+    // split is what narrows it to the half that must stay inert.
     await page.mouse.click(sentence!.x + sentence!.width - 4, midY);
     await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
     expect(await preview.count()).toBe(0);
     await page.keyboard.press("Escape");
 
-    // On the label itself — the reference opens.
-    await page.mouse.click(sentence!.x + 4, midY);
+    // On the label itself — the reference opens, and it is the label's own file.
+    await page.locator("[data-file-ref]").nth(0).click();
     await expect(preview).toBeVisible();
     await expect(preview).toContainText("src/cache.ts");
   } finally {
