@@ -4,7 +4,14 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { type CodeBlockRange, codeBlockRanges } from "$lib/diffview/codeBlocks.ts";
-import { tableRanges } from "$lib/diffview/tables.ts";
+import { CELL_ATTR } from "$lib/diffview/rowTokens.ts";
+import {
+  syncTableCards,
+  TABLE_CARD_ATTR,
+  TABLE_GUTTER_CARD_ATTR,
+  type TableRange,
+  tableRanges,
+} from "$lib/diffview/tables.ts";
 
 // tableRanges classifies which lines of a rendered plan form a GFM table, and
 // where each row's cells sit on its line, so the source view can restructure
@@ -151,4 +158,146 @@ describe("the seed plan's tables", () => {
   test("respects the alignment markers the showcase writes", () => {
     expect(found.map((t) => t.align)).toContainEqual(["left", "center", "right"]);
   });
+});
+
+// ---- syncTableCards ----
+
+// The DOM half. A table's rows are moved into one card that spans their row
+// tracks and declares the table's column tracks; each row inside it becomes a
+// subgrid of those columns, and its tokens are grouped into the cells that land in
+// them. The layout itself only exists in a real browser (happy-dom computes none
+// of it), so what is asserted here is the STRUCTURE the sheet then styles — which
+// rows are carded, which tokens are celled, and that a settled pass mutates
+// nothing. The rendered result is covered by test/e2e/diff-surface.e2e.ts.
+
+/** A stand-in for the library's rendered grid: a gutter cell and a one-token
+ * content row per line, the shape @pierre/diffs paints before any pass runs. */
+function build(text: string): { root: HTMLElement; ranges: TableRange[] } {
+  const root = document.createElement("div");
+  const gutter = document.createElement("div");
+  gutter.setAttribute("data-gutter", "");
+  const content = document.createElement("div");
+  content.setAttribute("data-content", "");
+  text.split("\n").forEach((line, i) => {
+    const cell = document.createElement("div");
+    cell.setAttribute("data-column-number", String(i + 1));
+    cell.textContent = String(i + 1);
+    gutter.appendChild(cell);
+    const row = document.createElement("div");
+    row.setAttribute("data-line", String(i + 1));
+    const token = document.createElement("span");
+    token.textContent = line;
+    row.appendChild(token);
+    content.appendChild(row);
+  });
+  root.append(gutter, content);
+  return { root, ranges: tableRanges(text, NO_CODE) };
+}
+
+/** Every cell of a row, as its text. */
+function cellTexts(root: HTMLElement, line: number): string[] {
+  const row = root.querySelector(`[data-line="${line}"]`);
+  return [...(row?.querySelectorAll(`:scope > [${CELL_ATTR}]`) ?? [])].map(
+    (c) => c.textContent ?? "",
+  );
+}
+
+const SIMPLE = ["prose", "| a | b |", "| - | - |", "| 1 | 2 |"].join("\n");
+
+test("wraps a table's rows in one card keyed by its first line", () => {
+  const { root, ranges } = build(SIMPLE);
+  syncTableCards(root, ranges);
+  const card = root.querySelector(`[data-content] > [${TABLE_CARD_ATTR}="2"]`);
+  expect(card?.querySelectorAll(":scope > [data-line]")).toHaveLength(3);
+  // The prose line is untouched and stays a direct child.
+  expect(root.querySelector('[data-content] > [data-line="1"]')).not.toBeNull();
+});
+
+test("spans the card across its rows' tracks and names its column count", () => {
+  const { root, ranges } = build(SIMPLE);
+  syncTableCards(root, ranges);
+  const card = root.querySelector<HTMLElement>(`[${TABLE_CARD_ATTR}="2"]`);
+  expect(card?.style.gridRow).toBe("span 3");
+  expect(card?.style.getPropertyValue("--table-columns")).toBe("2");
+});
+
+test("groups each row's tokens into cells that tile the line", () => {
+  const { root, ranges } = build(SIMPLE);
+  syncTableCards(root, ranges);
+  expect(cellTexts(root, 2)).toEqual(["| a ", "| b |"]);
+  expect(cellTexts(root, 4)).toEqual(["| 1 ", "| 2 |"]);
+});
+
+test("gives each cell's opening pipe its own element to draw as a border", () => {
+  const { root, ranges } = build(SIMPLE);
+  syncTableCards(root, ranges);
+  const row = root.querySelector('[data-line="2"]');
+  expect([...(row?.querySelectorAll("[data-table-pipe]") ?? [])].map((p) => p.textContent)).toEqual(
+    ["|", "|", "|"],
+  );
+});
+
+test("tags the header row and the delimiter row", () => {
+  const { root, ranges } = build(SIMPLE);
+  syncTableCards(root, ranges);
+  expect(root.querySelector('[data-line="2"]')?.hasAttribute("data-table-head")).toBe(true);
+  expect(root.querySelector('[data-line="3"]')?.hasAttribute("data-table-rule")).toBe(true);
+  expect(root.querySelector('[data-line="4"]')?.hasAttribute("data-table-head")).toBe(false);
+});
+
+test("puts each column's alignment on every row's cell", () => {
+  const { root, ranges } = build(["| a | b | c |", "| :- | :-: | -: |"].join("\n"));
+  syncTableCards(root, ranges);
+  const row = root.querySelector('[data-line="1"]');
+  expect(
+    [...(row?.querySelectorAll(`[${CELL_ATTR}]`) ?? [])].map((c) =>
+      c.getAttribute("data-table-align"),
+    ),
+  ).toEqual(["left", "center", "right"]);
+});
+
+test("mirrors the card in the gutter so the two columns keep matching counts", () => {
+  const { root, ranges } = build(SIMPLE);
+  syncTableCards(root, ranges);
+  const gutter = root.querySelector("[data-gutter]");
+  const content = root.querySelector("[data-content]");
+  expect(gutter?.children).toHaveLength(content?.children.length ?? -1);
+  expect(gutter?.querySelector(`[${TABLE_GUTTER_CARD_ATTR}="2"]`)?.children).toHaveLength(3);
+});
+
+test("mutates nothing on a settled pass", () => {
+  const { root, ranges } = build(SIMPLE);
+  syncTableCards(root, ranges);
+  const settled = root.innerHTML;
+  syncTableCards(root, ranges);
+  expect(root.innerHTML).toBe(settled);
+});
+
+test("unwraps and un-cells a table that is no longer one", () => {
+  const { root, ranges } = build(SIMPLE);
+  syncTableCards(root, ranges);
+  syncTableCards(root, []);
+  expect(root.querySelector(`[${TABLE_CARD_ATTR}]`)).toBeNull();
+  expect(root.querySelector(`[${TABLE_GUTTER_CARD_ATTR}]`)).toBeNull();
+  expect(root.querySelector(`[${CELL_ATTR}]`)).toBeNull();
+  expect(root.querySelectorAll("[data-content] > [data-line]")).toHaveLength(4);
+  expect(root.querySelector('[data-line="2"]')?.textContent).toBe("| a | b |");
+});
+
+test("leaves a row alone when the painted text is not the line it parsed", () => {
+  const { root, ranges } = build(SIMPLE);
+  // A repaint mid-flight: the library has replaced the row with different content.
+  const row = root.querySelector('[data-line="4"]');
+  if (row !== null) row.textContent = "still painting";
+  syncTableCards(root, ranges);
+  expect(row?.querySelector(`[${CELL_ATTR}]`)).toBeNull();
+  // Its siblings are celled regardless, so one unpainted row cannot stall the table.
+  expect(cellTexts(root, 2)).toEqual(["| a ", "| b |"]);
+});
+
+test("is a no-op for a plan with no tables", () => {
+  const { root, ranges } = build("just prose\nmore prose");
+  const before = root.innerHTML;
+  syncTableCards(root, ranges);
+  expect(root.innerHTML).toBe(before);
 });

@@ -20,6 +20,7 @@
   import { decorateInlineRuns } from "$lib/diffview/inlineDecorate.ts";
   import type { InlineSpanMap } from "$lib/diffview/inlineSpans.ts";
   import { syncCodeBlockCards } from "$lib/diffview/codeBlockScroll.ts";
+  import { type TableRange, syncTableCards, tableRanges } from "$lib/diffview/tables.ts";
   import { preloadFenceLanguages, scanFenceLanguages } from "$lib/diffview/languages.ts";
   import { registerCaretDiffThemes } from "$lib/diffview/theme.ts";
   import type {
@@ -343,6 +344,17 @@
     return rangesMemo.ranges;
   });
 
+  // The GFM tables (EXC-864), memoized on the same rendered text and for the same
+  // reason: a fresh array each poll tick would re-arm the observer effect below.
+  // Derived from codeRanges so a table written inside a fence stays code.
+  let tablesMemo: { text: string; tables: TableRange[] } | undefined;
+  const tables = $derived.by(() => {
+    if (tablesMemo?.text !== doc.text) {
+      tablesMemo = { text: doc.text, tables: tableRanges(doc.text, codeRanges) };
+    }
+    return tablesMemo.tables;
+  });
+
   // The keyboard cursor's line (EXC-788). Mirrored into a plain (non-reactive)
   // let so the repaint observer's tag() below re-applies the cursor tag after a
   // library row rewrite WITHOUT re-arming the observer on every cursor move —
@@ -394,6 +406,8 @@
     // parent alongside the link layer they come from, so this stays a stable
     // reference and doesn't re-arm the observer each render.
     const inlineSpans = inline;
+    // And the tables, memoized above alongside the code ranges they derive from.
+    const tableSpans = tables;
     let raf = 0;
     // Tag the rows, then wrap each overflowing block in its scroll card (EXC-729). Both re-run
     // after every library repaint via the observer below; syncCodeBlockCards is idempotent (an
@@ -403,6 +417,13 @@
     const tag = () => {
       tagCodeBlockRows(root, ranges);
       syncCodeBlockCards(root, ranges);
+      // Restructure each table's rows into a real column-aligned table (EXC-864).
+      // Before the inline pass, not after: it is what puts a row's tokens inside
+      // cells, and every pass below reaches them through rowTokens.ts's
+      // tokenChildren either way. Idempotent for the same reason the card pass is —
+      // a settled table mutates nothing, so it costs one extra frame rather than
+      // looping the observer.
+      syncTableCards(root, tableSpans);
       // Split each row's tokens on the inline-run and file-reference boundaries and
       // tag them (EXC-867). This MUST precede tagFileRefTokens: it produces the
       // partition that pass walks, and the cut at a reference's own columns is what
