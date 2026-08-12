@@ -227,6 +227,33 @@ test("cuts a codespan at its file reference without splitting the code pill", ()
   expect(fileRefs(host)).toEqual(["foo/bar.ts"]);
 });
 
+test("a link label wrapping a codespan still draws one continuous link pill", () => {
+  // `` [`foo` bar](https://x.test) `` collapses to the display text `` `foo` bar ``, which
+  // is two runs: the codespan carries `code link` and the tail carries `link` alone. The
+  // link chip (EXC-859) must close ONCE across both — the same property the file-reference
+  // cut preserves for the code pill above, seen from the other member's side. So the cap
+  // lands only where every member on the child opens or closes: `code` ending at column 5
+  // does not close the link running through it.
+  host = root(row(1, ["`foo` bar"]));
+  decorateInlineRuns(
+    host,
+    spanMap([
+      [
+        1,
+        [
+          { startCol: 0, endCol: 5, code: true, link: true },
+          { startCol: 5, endCol: 9, link: true },
+        ],
+      ],
+    ]),
+    new Map(),
+  );
+  expect(pieces(host)).toEqual([
+    { text: "`foo`", md: "code link", start: "code link", end: null },
+    { text: " bar", md: "link", start: null, end: "link" },
+  ]);
+});
+
 test("splits a prose-labelled reference out of its coarse token", () => {
   // A collapsed `[the config](config/app.ts)` label is plain prose, so shiki
   // emits the whole line as one token and tagFileRefTokens refuses it (it would

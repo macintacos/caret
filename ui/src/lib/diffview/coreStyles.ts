@@ -229,8 +229,8 @@ const CARET_OVERRIDES = `
      single background-color the more specific rule would win and punch a visible gap
      through the middle of the bold pill. Each layer resolves to transparent through the
      var() fallback when its member is absent, so no default declaration is needed and
-     nothing has to out-specify anything. A later member (EXC-868, EXC-859, EXC-880) adds
-     one line here and one layer above.
+     nothing has to out-specify anything. The link chip (EXC-859) is the third layer; a
+     later member (EXC-868) adds one line here and one layer above.
 
      No backtick appears in this comment, or anywhere else in CARET_OVERRIDES: the sheet is
      a template literal, so one would close it early.
@@ -254,9 +254,10 @@ const CARET_OVERRIDES = `
      notch through its middle. The outermost pill wins. That is why the start/end attributes
      exist rather than a blanket border-radius, and it is the same
      shape data-code-start / data-code-end already draw for fenced blocks. Logical
-     longhands so the ends follow the writing direction. The :not() guard drops the chip on
-     a selected row, so a drag-selection reads as one flat band — exactly as the fence chip
-     above does. */
+     longhands so the ends follow the writing direction. The selection guard that drops
+     these chips on a drag-selected row — exactly as the fence chip above does — sits on
+     the per-member tint variables below rather than on the shared fill, so the link chip
+     can keep the opposite policy; see the note there. */
   /* The weight and slant themselves, which have to be declared HERE rather than coming
      from shiki, and this is the one surprise in the whole ticket. shiki does resolve the
      emphasis font style (caret-theme.ts appends the rules, and they win), and @pierre/diffs
@@ -282,23 +283,65 @@ const CARET_OVERRIDES = `
   [data-content] [data-line] [data-md~="italic"] {
     font-style: italic;
   }
+  /* EXC-859: a link's own ink, declared here for the same reason the weight and slant are
+     — it is what the text IS. A link is a control the reader can act on, so it marks
+     itself the way body text does: the glyphs take the color, the underline sits under
+     them, and the chip below is what the collapse adds on top. All three reach the label
+     through one attribute selector because the decoration pass gives the label an element
+     of its own, so nothing here needs the exact-column painting of the CSS Custom
+     Highlight API the search marks below use. The tint is a minority mix of the
+     accent into --ink rather than the accent itself: amber stays scarce and
+     brand-reserved (the amber-selection-only strategy in styles/diffview.css), and prose
+     littered with full-strength accent would spend it everywhere. Both operands carry
+     light/dark variants, so the mix resolves warm-on-dark and warm-on-paper without a
+     second rule. The underline is offset clear of the descenders — present at a glance,
+     quiet enough to read a paragraph through. CARET_OVERRIDES is unlayered while the
+     library's own [data-line] span color rule sits in @layer base, so this wins on layer
+     order rather than on specificity. */
+  [data-content] [data-line] [data-md~="link"] {
+    color: color-mix(in lab, var(--ink), var(--accent) 45%);
+    text-decoration: underline dotted;
+    text-underline-offset: 0.22em;
+  }
 
-  [data-content] [data-line] [data-md~="bold"] {
+  /* The guard rides each member's own tint VARIABLE rather than the shared fill rule
+     below, because the members disagree about it. Bold and italic are decoration, so they
+     drop on a row the reviewer has drag-selected and the band reads as one flat shape.
+     The link chip does not, and the reason is consistency across the family rather than
+     necessity: EXC-880 keeps the file-reference chip lit under a selection because an
+     affordance's chip is not decoration to be tidied away, and a link chip vanishing
+     beside a reference chip on the SAME selected row reads as a glitch rather than as a
+     policy. (Not because the tint is the only mark a link has — the ink and dotted
+     underline above are ungated too, for the separate reason that they are what the text
+     IS, the same footing bold's weight sits on.) background-image is ONE property, so a
+     second unguarded rule would replace the whole stack rather than add a layer to it; an
+     unset variable falling back to transparent is what lets one stack carry two
+     policies. */
+  [data-content] [data-line]:not([data-selected-line]) [data-md~="bold"] {
     --md-bold: var(--chip-bold);
   }
-  [data-content] [data-line] [data-md~="italic"] {
+  [data-content] [data-line]:not([data-selected-line]) [data-md~="italic"] {
     --md-italic: var(--chip-italic);
   }
-  [data-content] [data-line]:not([data-selected-line]) [data-md] {
+  [data-content] [data-line] [data-md~="link"] {
+    --md-link: var(--chip-link);
+  }
+  [data-content] [data-line] [data-md] {
     background-image:
       linear-gradient(var(--md-bold, transparent), var(--md-bold, transparent)),
-      linear-gradient(var(--md-italic, transparent), var(--md-italic, transparent));
+      linear-gradient(var(--md-italic, transparent), var(--md-italic, transparent)),
+      linear-gradient(var(--md-link, transparent), var(--md-link, transparent));
   }
-  [data-content] [data-line]:not([data-selected-line]) [data-md-start] {
+  /* No selection guard, matching the link tint above: the link chip has to keep its
+     round-rect inside a drag-selection. Ungated costs the other members nothing — a bold
+     or italic token on a selected row has no tint at all (the rule above withholds it) and
+     the amber band is painted on the ROW rather than the token, so there is no background
+     for a radius to clip. */
+  [data-content] [data-line] [data-md-start] {
     border-start-start-radius: var(--radius);
     border-end-start-radius: var(--radius);
   }
-  [data-content] [data-line]:not([data-selected-line]) [data-md-end] {
+  [data-content] [data-line] [data-md-end] {
     border-start-end-radius: var(--radius);
     border-end-end-radius: var(--radius);
   }
@@ -656,31 +699,6 @@ const CARET_OVERRIDES = `
   }
   ::highlight(caret-search-current) {
     background-color: var(--mark-active);
-  }
-
-  /* The resting-state link mark. The link layer collapses [label](url)
-     to its label, so shiki paints a link as ordinary prose and it read as body
-     copy until hovered. linkHighlight.ts registers the exact link columns as the
-     "caret-link" highlight and this styles them — the only two properties a
-     highlight pseudo needs here, both of which it supports.
-
-     A LINK, not a marked region: the search pair above washes a background,
-     because a hit is a region of the document caret painted onto. A link is a
-     control the reader can act on, so it marks itself the way body text does —
-     the glyphs take the color and the underline sits under them. The tint is a
-     minority mix of the accent into --ink rather than the accent itself: amber
-     stays scarce and brand-reserved (the amber-selection-only strategy in
-     styles/diffview.css), and prose littered with full-strength accent would
-     spend it everywhere. Both operands carry light/dark variants, so the mix
-     resolves warm-on-dark and warm-on-paper without a second rule. The underline
-     is dotted and offset clear of the descenders — present at a glance, quiet
-     enough to read a paragraph through. Hover still adds the pointer cursor and
-     the href tooltip (linkInteractions.ts); this is what the link looks like
-     before the pointer arrives. */
-  ::highlight(caret-link) {
-    color: color-mix(in lab, var(--ink), var(--accent) 45%);
-    text-decoration: underline dotted;
-    text-underline-offset: 0.22em;
   }
 `;
 

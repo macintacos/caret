@@ -14,7 +14,7 @@
 // navigation: the test owns the seam the daemon serves, not the wider web.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
-import { planSurface } from "@test/e2e/support/source-view.ts";
+import { planSurface, revealGutterPlus } from "@test/e2e/support/source-view.ts";
 
 const SAFE_URL = "https://docs.example.test/widget-cache";
 // An http link (display collapses to its label), a plain-prose row with no link
@@ -45,6 +45,35 @@ function openCalls(page: import("@playwright/test").Page): Promise<unknown[][]> 
   return page.evaluate(() => (window as unknown as { __open: unknown[][] }).__open);
 }
 
+/** Every collapsed link label on the plan surface — the elements the decoration pass
+ * tags and the chip paints. The plan surface publishes no roles (it is
+ * `role="presentation"`), so a `data-*` selector is the sanctioned form here. */
+function linkLabels(page: import("@playwright/test").Page) {
+  return page.locator('.diffview [data-md~="link"]');
+}
+
+/** The label's resolved background layers, split one per `linear-gradient`. A layer for
+ * an absent member serializes as a fully transparent gradient, so "some layer is not
+ * transparent" is the readable spelling of "a chip is painted here". */
+function labelLayers(page: import("@playwright/test").Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement).shadowRoot!;
+    const el = sh.querySelector('[data-md~="link"]') as HTMLElement;
+    return getComputedStyle(el).backgroundImage.split(/,\s*(?=linear-gradient)/);
+  });
+}
+
+/** The 1-based display line the link label landed on, read from the row rather than
+ * counted off LINK_PLAN — the daemon reflows a plan on ingest, so the source line
+ * number is not the display one. */
+function linkLine(page: import("@playwright/test").Page): Promise<number> {
+  return page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement).shadowRoot!;
+    const row = (sh.querySelector('[data-md~="link"]') as HTMLElement).closest("[data-line]");
+    return Number(row?.getAttribute("data-line"));
+  });
+}
+
 /** Viewport points on the link's row: the centre of the link label itself, and a
  * spot on the same row well past the label but still over its rendered text.
  *
@@ -52,29 +81,29 @@ function openCalls(page: import("@playwright/test").Page): Promise<unknown[][]> 
  * so the label and the prose after it are separate token elements. Both still route
  * through the library's one per-token pointer pipeline, so what separates them is
  * still the pointer position rather than two different handlers — which is what
- * these points exist to drive. The label's box comes from the caret-link highlight,
- * whose range covers exactly the link's columns; the off-label point sits just
- * inside the end of the row's rendered text. */
+ * these points exist to drive. The label's box comes from that element itself — the
+ * one the chip paints (EXC-859) — so the point is measured off the thing being
+ * clicked; the off-label point sits just inside the end of the row's rendered text. */
 async function rowPoints(
   page: import("@playwright/test").Page,
 ): Promise<{ onLabel: { x: number; y: number }; offLabel: { x: number; y: number } }> {
-  // The mark is painted a frame after the rows render; wait for it rather than
-  // measure an empty highlight.
-  await page.waitForFunction(() => (CSS.highlights.get("caret-link")?.size ?? 0) > 0);
-  return page.evaluate(() => {
-    const [range] = [...(CSS.highlights.get("caret-link") ?? [])] as Range[];
-    const label = range!.getBoundingClientRect();
+  // Playwright's CSS engine pierces the open shadow root, so the label is an ordinary
+  // web-first locator: the visibility assertion absorbs the frame the decoration pass
+  // takes, with no hand-rolled poll.
+  const label = linkLabels(page).first();
+  await expect(label).toBeVisible();
+  const box = (await label.boundingBox())!;
+  // The off-label point needs the row's rendered end rather than an element's box, and
+  // shiki's tokens carry no locator-friendly name — hence the reach into the row.
+  const lineRight = await page.evaluate(() => {
     const sh = (document.querySelector(".diffview") as HTMLElement).shadowRoot!;
     const token = [...sh.querySelectorAll("[data-char]")].find((el) =>
       el.textContent?.includes("warm-restart"),
     )!;
-    const line = token.getBoundingClientRect();
-    const y = label.top + label.height / 2;
-    return {
-      onLabel: { x: label.left + label.width / 2, y },
-      offLabel: { x: line.right - 4, y },
-    };
+    return token.getBoundingClientRect().right;
   });
+  const y = box.y + box.height / 2;
+  return { onLabel: { x: box.x + box.width / 2, y }, offLabel: { x: lineRight - 4, y } };
 }
 
 test("clicking a link token opens its http URL in a new tab", async ({ daemon, page }) => {
@@ -219,32 +248,77 @@ test("hovering a link token reveals a caret tooltip with the full href, not a na
   await expect.poll(() => tooltipHref(page)).toBeNull();
 });
 
-test("a link is marked before any hover, over its label only", async ({ daemon, page }) => {
+test("a link wears its chip before any hover, over its label only", async ({ daemon, page }) => {
   await daemon.seed({ plan: LINK_PLAN });
   await page.goto("/");
   await planSurface(page);
   await expect(page.getByText("the cache docs")).toBeVisible();
 
-  // The display collapse leaves a link tokenized as ordinary prose, so
-  // its resting appearance comes from the caret-link CSS Custom Highlight — the
-  // only marker there is with the pointer elsewhere. Assert the painted ranges,
-  // not a computed style: ::highlight() styling is unreachable from
-  // getComputedStyle, and it is the RANGES that carry the fix (coreStyles.test.ts
-  // pins the tint + dotted underline the rule paints them with).
-  const marked = () =>
-    page.evaluate(() => [...(CSS.highlights.get("caret-link") ?? [])].map((r) => r.toString()));
-  await expect.poll(marked).toContain("the cache docs");
+  // Tagged over the label ONLY: the decoration pass cuts the row at the link's own
+  // columns, so a tag that leaked past them would chip the sentence around it. The
+  // javascript:-scheme link is refused before the chip is ever consulted and so carries
+  // no tag either — a chip there would imply a target the reader can follow.
+  await expect(linkLabels(page)).toHaveText(["the cache docs"]);
 
-  // Over the label ONLY: the highlight's range is the link's columns, so a mark
-  // that leaked past them would underline the sentence too. The row now carries a
-  // data-md~="link" run on the same columns, but the resting mark stays a CSS
-  // Custom Highlight — it paints without mutating the DOM, so it never fights the
-  // library's row repaints. --chip-link is the attribute's own ticket, not this.
-  expect(await marked()).not.toContain("See the cache docs for the warm-restart design.");
+  // And it really paints. coreStyles.test.ts pins which tokens the rules spend; what
+  // needs a browser is that they RESOLVE — the diff-surface half of the split. Three
+  // resolutions, each of which the unit suite is structurally blind to: a
+  // background-image whose layers each fall back through var(…, transparent), a radius
+  // that closes the pill, and the dotted underline as its own computed property. The
+  // ink is compared against a prose sibling rather than a literal, so it stays
+  // palette-agnostic — and it is the declaration whose survival rests on
+  // CARET_OVERRIDES being unlayered while the library's own token color sits in
+  // @layer base, which no amount of source text can prove.
+  const painted = await page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement).shadowRoot!;
+    const style = getComputedStyle(sh.querySelector('[data-md~="link"]') as HTMLElement);
+    const prose = [...sh.querySelectorAll("[data-char]")].find((el) =>
+      el.textContent?.includes("warm-restart"),
+    ) as HTMLElement;
+    return {
+      layers: style.backgroundImage.split(/,\s*(?=linear-gradient)/),
+      radius: style.borderStartStartRadius,
+      decoration: style.textDecorationLine,
+      decorationStyle: style.textDecorationStyle,
+      color: style.color,
+      proseColor: getComputedStyle(prose).color,
+    };
+  });
+  expect(painted.layers.some((layer) => !layer.includes("rgba(0, 0, 0, 0)"))).toBe(true);
+  expect(painted.radius).not.toBe("0px");
+  expect(painted.decoration).toContain("underline");
+  expect(painted.decorationStyle).toBe("dotted");
+  expect(painted.color).not.toBe(painted.proseColor);
+});
 
-  // The javascript:-scheme link is not clickable, so it is not marked either —
-  // the mark tracks the same spans the click handler does.
-  expect((await marked()).join("\n")).not.toContain("this control");
+test("the link chip survives a drag-selected row, unlike the emphasis chips", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: LINK_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect(linkLabels(page)).toHaveCount(1);
+
+  // The whole reason the selection guard sits on each member's tint VARIABLE rather than
+  // on the shared fill rule. Only a live cascade can say it worked: the unit suite reads
+  // selector text, and the same blindness let @pierre/diffs ship a font-weight the
+  // browser drops (coreStyles.ts's standing upstream finding). Select the link's row
+  // through the gutter "+", the same gesture diff-surface.e2e.ts uses.
+  const before = await labelLayers(page);
+  expect(before.some((layer) => !layer.includes("rgba(0, 0, 0, 0)"))).toBe(true);
+
+  const plus = await revealGutterPlus(page, await linkLine(page));
+  await plus.click();
+  await expect(
+    page.locator(".diffview [data-content] [data-line][data-selected-line]").first(),
+  ).toBeVisible();
+
+  // Still lit, and still round: a chip that vanished beside a file reference's on the
+  // same selected row would read as a glitch rather than as a policy.
+  const after = await labelLayers(page);
+  expect(after.some((layer) => !layer.includes("rgba(0, 0, 0, 0)"))).toBe(true);
+  expect(after).toEqual(before);
 });
 
 test("hovering an ordinary code token reveals no tooltip", async ({ daemon, page }) => {

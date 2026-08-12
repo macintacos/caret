@@ -170,9 +170,8 @@ function overlapsToken(span: ColumnSpan, charStart: number, charEnd: number): bo
  * token, so a token's [lineCharStart, lineCharEnd) range routinely spans the
  * whole line and overlaps a span the pointer is nowhere near — which is what made
  * the entire row behave as the link. The span's own columns do have
- * geometry: the same Range the link highlight paints from (rangeForSpan, over the
- * token's `data-line` row) yields the boxes the label actually occupies, so the
- * pointer is tested against those.
+ * geometry: rangeForSpan resolves them over the token's `data-line` row into the
+ * boxes the label actually occupies, so the pointer is tested against those.
  *
  * Returns true when that geometry cannot be measured — no row, unresolvable
  * columns, or an environment without layout (happy-dom units) — leaving the
