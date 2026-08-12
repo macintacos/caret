@@ -1,9 +1,9 @@
 // The source view's one per-line pass over plan text. It returns display text
-// plus four layers keyed by display line: clickable link spans, file references,
-// flat inline-markdown runs, and blockquote depth. The transform is strictly
-// per-line — each line is processed independently and rejoined with "\n" — so the
-// output always has the same line count as the input (the line-parity guarantee
-// the annotation/feedback line numbers depend on).
+// plus five layers keyed by display line: clickable link spans, file references,
+// flat inline-markdown runs, blockquote depth, and images. The transform is
+// strictly per-line — each line is processed independently and rejoined with "\n"
+// — so the output always has the same line count as the input (the line-parity
+// guarantee the annotation/feedback line numbers depend on).
 //
 // The LINK COLLAPSE is the only display rewrite, and the only reason a display
 // column ever differs from its source column:
@@ -37,6 +37,17 @@
 // A FileRefSpan says only where a path was cited, never what it is. A file and a
 // directory emit the identical shape, and the daemon's resolve (EXC-916) is what
 // later decides which glyph the token draws and which surface a click opens.
+//
+// IMAGES are the exception to the collapse (EXC-870). `![alt](url)` keeps every
+// character of its markup, so the row's display text is its source text and copy
+// carries the real markdown; the picture is drawn ON TOP of that row by
+// inlineImages.ts rather than substituted for it, which is the epic's
+// transform-in-place stance (EXC-855) applied to the one construct that has
+// something to render. Only an `http`/`https` target draws — the same isSafeUrl
+// gate the links above use — and every image, drawable or not, takes a `link` run
+// over its whole shape, so an image that cannot be fetched degrades to exactly
+// the chip it already wore. The titled form `![alt](url "title")` matches nothing
+// here at all, because the target grammar allows no space.
 
 import { hasKnownFileExtension } from "@core/config/constants";
 import { classify, type FileRefSpan, type FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
@@ -62,6 +73,23 @@ export interface LinkSpan {
  * links are absent from the map. */
 export type LinkSpanMap = Map<number, LinkSpan[]>;
 
+/** A markdown image on a single display line (EXC-870). The columns cover the
+ * WHOLE `![alt](url)` shape — an image never collapses, so they index the source
+ * line just as well as the display one. */
+export interface ImageSpan {
+  startCol: number;
+  endCol: number;
+  /** The http/https source to fetch. No other scheme ever reaches here. */
+  url: string;
+  /** The alt text, used verbatim as the image's accessible name. */
+  alt: string;
+}
+
+/** Per-line image spans, keyed by 1-based display line number. Lines carrying no
+ * drawable image — including one whose target the safety gate refused — are
+ * absent from the map. */
+export type ImageSpanMap = Map<number, ImageSpan[]>;
+
 export interface LinkLayer {
   /** Display text — same line count as the input. */
   text: string;
@@ -79,6 +107,9 @@ export interface LinkLayer {
    * absent; this rides the ROW rather than the runs, since subduing a quote is a
    * whole-line property (EXC-863). */
   quoteDepth: Map<number, number>;
+  /** Drawable images per 1-based display line (EXC-870). The picture is added to
+   * the row by inlineImages.ts; the markup that names it stays in the text. */
+  images: ImageSpanMap;
 }
 
 const SAFE_SCHEME = /^https?:\/\//i;
@@ -196,8 +227,10 @@ function transformLine(
   fileRefs: FileRefSpan[];
   inline: InlineSpan[];
   quoteDepth: number;
+  images: ImageSpan[];
 } {
-  if (inCode) return { display: source, spans: [], fileRefs: [], inline: [], quoteDepth: 0 };
+  if (inCode)
+    return { display: source, spans: [], fileRefs: [], inline: [], quoteDepth: 0, images: [] };
 
   // Mask inline-code regions so their contents are never rewritten or linked.
   const codeRanges: Range[] = [];
@@ -221,6 +254,7 @@ function transformLine(
     display: string;
     href: string | null;
     file?: { path: string; line?: number; endLine?: number; target: string };
+    image?: { url: string; alt: string };
   };
   const rewrites: Rewrite[] = [];
   const consumed: Range[] = [];
@@ -231,6 +265,30 @@ function transformLine(
     if (inMaskedCode(start, end)) continue;
     const label = m[1] ?? "";
     const url = m[2] ?? "";
+    // An `!` in front makes this an IMAGE, and an image is the one shape here
+    // that keeps its markup: nothing collapses, so display columns stay source
+    // columns and what the reader copies is the real `![alt](url)`. Not
+    // collapsing is also what stops the `!` from being stranded outside a
+    // rewritten label. The rewrite is recorded anyway, with its display text
+    // equal to its source text, because that is what marks the shape consumed —
+    // without it the bare-URL pass would make the target inside the parens
+    // separately clickable — and because a rewrite carrying neither an href nor
+    // a file reference is exactly what the emission loop turns into a `link` run.
+    // A safe target additionally draws the picture (inlineImages.ts); an unsafe
+    // one draws nothing and keeps only the chip, which is the same rung a load
+    // failure lands on.
+    if (source[start - 1] === "!") {
+      const imageStart = start - 1;
+      rewrites.push({
+        start: imageStart,
+        end,
+        display: source.slice(imageStart, end),
+        href: null,
+        image: isSafeUrl(url) ? { url, alt: label } : undefined,
+      });
+      consumed.push({ start: imageStart, end });
+      continue;
+    }
     if (!isSafeUrl(url)) {
       // Not a URL caret will open — but a target carrying any scheme, or the
       // protocol-relative `//host/…` form, is still a URL slot rather than a
@@ -287,6 +345,7 @@ function transformLine(
   // that DID emit one is a reference rather than a link (EXC-859), and a link
   // left literal is marked by nothing at all.
   const linkRanges: ColumnRange[] = [];
+  const images: ImageSpan[] = [];
   for (const rw of rewrites) {
     display += source.slice(cursor, rw.start);
     const startCol = display.length;
@@ -321,10 +380,11 @@ function transformLine(
     } else {
       linkRanges.push({ startCol, endCol });
     }
+    if (rw.image != null) images.push({ startCol, endCol, ...rw.image });
   }
   display += source.slice(cursor);
   const { spans: inline, quoteDepth } = buildInlineSpans(display, linkRanges);
-  return { display, spans, fileRefs, inline, quoteDepth };
+  return { display, spans, fileRefs, inline, quoteDepth, images };
 }
 
 /** Production link opener: a new tab with noopener,noreferrer so the opened
@@ -341,6 +401,7 @@ export function buildLinkLayer(text: string): LinkLayer {
   const fileRefs: FileRefSpanMap = new Map();
   const inline: InlineSpanMap = new Map();
   const quoteDepth = new Map<number, number>();
+  const images: ImageSpanMap = new Map();
   let inCode = false;
   const out: string[] = [];
 
@@ -356,8 +417,9 @@ export function buildLinkLayer(text: string): LinkLayer {
     if (line.fileRefs.length > 0) fileRefs.set(i + 1, line.fileRefs);
     if (line.inline.length > 0) inline.set(i + 1, line.inline);
     if (line.quoteDepth > 0) quoteDepth.set(i + 1, line.quoteDepth);
+    if (line.images.length > 0) images.set(i + 1, line.images);
     if (isFence) inCode = !inCode;
   }
 
-  return { text: out.join("\n"), spans, fileRefs, inline, quoteDepth };
+  return { text: out.join("\n"), spans, fileRefs, inline, quoteDepth, images };
 }
