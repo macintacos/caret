@@ -100,6 +100,94 @@ export function firstGlyphX(page: Page, line: number): Promise<number | null> {
   }, line);
 }
 
+/** The 1-based display line of the row whose text is exactly `text`. Throws when no
+ * row matches, so a stale fixture string fails here rather than as a puzzling miss on
+ * whatever line the number happened to name.
+ *
+ * Rows are addressed by their TEXT rather than by a line number counted off the seeded
+ * plan, because the daemon reflows a plan through rumdl on ingest — the stored text is
+ * not the seeded text line-for-line, so a constant counted by hand goes stale the next
+ * time a reflow rule changes. Shared rather than copied per spec (typescript-rules.md
+ * § Shared-helper policy). */
+export async function lineOf(page: Page, text: string): Promise<number> {
+  const line = await page.evaluate((want) => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const row = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])].find(
+      (r) => (r.textContent ?? "") === want,
+    );
+    return row ? Number(row.getAttribute("data-line")) : null;
+  }, text);
+  if (line === null) throw new Error(`no rendered row reads exactly ${JSON.stringify(text)}`);
+  return line;
+}
+
+/** One character cell's advance, in viewport px, measured off the row whose text is
+ * exactly `text`. A Range over the row's text rather than the row's own box, because
+ * the row is a grid cell that stretches past its content — the Range measures the
+ * glyphs, and the rows render `white-space: pre` in a monospace face, so the text width
+ * divided by its length is exactly one cell.
+ *
+ * This is what makes an overdrawn decoration's width a falsifiable claim rather than a
+ * tautology: a glyph that took inline advance would make its element a cell wider than
+ * the characters it covers, which no left-edge probe can see. */
+export async function cellWidth(page: Page, text: string): Promise<number> {
+  const width = await page.evaluate((want) => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const row = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])].find(
+      (r) => (r.textContent ?? "") === want,
+    );
+    if (row == null) return null;
+    const range = document.createRange();
+    range.selectNodeContents(row);
+    return range.getBoundingClientRect().width / want.length;
+  }, text);
+  if (width === null) throw new Error(`no rendered row reads exactly ${JSON.stringify(text)}`);
+  return width;
+}
+
+/** The rendered row and gutter-number counts, plus the highest line the rows claim.
+ * One number per row and a contiguous 1..N of lines is the epic's standing reflow
+ * guard, and the thing a decoration that changed a column width would break first.
+ *
+ * The high-water line is reported instead of the seeded string's line count because
+ * ingest reflows the plan (see `lineOf` above), so the invariant to hold is that the
+ * rendered rows tile their own range with no gaps. */
+export function gridCounts(
+  page: Page,
+): Promise<{ rows: number; numbers: number; highestLine: number }> {
+  return page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const rows = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])];
+    return {
+      rows: rows.length,
+      numbers: (sh?.querySelectorAll("[data-line-number-content]") ?? []).length,
+      highestLine: Math.max(...rows.map((r) => Number(r.getAttribute("data-line")))),
+    };
+  });
+}
+
+/** Every run the decoration pass tagged with `attribute`, as the text of the row it
+ * sits on, the attribute's value, and the run's own characters.
+ *
+ * Keyed by row text for the reason `lineOf` gives; reading the run's text back is what
+ * makes "the marker columns and nothing else" a claim about the DOM rather than about
+ * the emitter's unit test. Takes the attribute so one helper serves every member of the
+ * decoration pass — `data-md-list` for the list markers, `data-md-checkbox` for the
+ * task checkboxes — rather than each spec growing its own copy. */
+export function taggedRuns(
+  page: Page,
+  attribute: string,
+): Promise<{ row: string; value: string; text: string }[]> {
+  return page.evaluate((attr) => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    return [...(sh?.querySelectorAll(`[data-content] [data-line] [${attr}]`) ?? [])].map((el) => ({
+      row: el.closest("[data-line]")?.textContent ?? "",
+      value: el.getAttribute(attr) ?? "",
+      text: el.textContent ?? "",
+    }));
+  }, attribute);
+}
+
 /** Reveal the gutter `+` on `line` by moving the mouse over its left edge. The
  * source view's gutter sits at the left of the plan surface — so
  * anchor the hover to that container's left edge rather than the viewport's,

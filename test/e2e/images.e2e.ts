@@ -32,6 +32,7 @@
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import {
   firstGlyphX,
+  gridCounts,
   planSurface,
   revealGutterPlus,
   rowHeights,
@@ -132,18 +133,6 @@ async function imageDecoded(page: import("@playwright/test").Page): Promise<void
   await expect
     .poll(async () => (await shadowImages(page)).find((i) => i.src === GOOD)?.naturalHeight)
     .toBeGreaterThan(0);
-}
-
-/** The rendered row and gutter-number counts. One number per row, always, however
- * tall a row grows — the epic's standing reflow guard. */
-function gridCounts(page: import("@playwright/test").Page) {
-  return page.evaluate(() => {
-    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-    return {
-      rows: (sh?.querySelectorAll("[data-content] [data-line]") ?? []).length,
-      numbers: (sh?.querySelectorAll("[data-line-number-content]") ?? []).length,
-    };
-  });
 }
 
 /** Route the assets, seed `plan`, and open it. Every test opens exactly one plan;
