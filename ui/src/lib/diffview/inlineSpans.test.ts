@@ -8,12 +8,19 @@ import { buildInlineSpans, type InlineSpan } from "$lib/diffview/inlineSpans.ts"
 // [startCol, endCol) into the DISPLAY line. Nothing is stripped or rewritten
 // here — the markers are part of the runs they mark.
 
-function runs(line: string, links: { startCol: number; endCol: number }[] = []): InlineSpan[] {
-  return buildInlineSpans(line, links).spans;
+/** Runs for a line. `links` are the ranges marked `link: true`; `labels` is the
+ * superset the caller rewrote (references included) that the quote scan reads, and
+ * defaults to `links` because every link range is also a label range. */
+function runs(
+  line: string,
+  links: { startCol: number; endCol: number }[] = [],
+  labels: { startCol: number; endCol: number }[] = links,
+): InlineSpan[] {
+  return buildInlineSpans(line, links, labels).spans;
 }
 
 function depth(line: string): number {
-  return buildInlineSpans(line, []).quoteDepth;
+  return buildInlineSpans(line, [], []).quoteDepth;
 }
 
 describe("emphasis and code runs", () => {
@@ -240,6 +247,139 @@ describe("blockquote depth and markers", () => {
       { startCol: 0, endCol: 1, quoteMarker: 1 },
       { startCol: 4, endCol: 7, checkbox: "unchecked" },
     ]);
+  });
+
+  test("three levels report depth 3 and one run per marker", () => {
+    expect(depth("> > > deepest")).toBe(3);
+    expect(runs("> > > deepest")).toEqual([
+      { startCol: 0, endCol: 1, quoteMarker: 1 },
+      { startCol: 2, endCol: 3, quoteMarker: 2 },
+      { startCol: 4, endCol: 5, quoteMarker: 3 },
+    ]);
+  });
+
+  // EXC-863: a tab is the marker's optional separator exactly as a space is, so
+  // the scan has to step over it to find the next level. Deferred by EXC-866;
+  // it matters here because the depth is now drawn as one bar per level, so a
+  // miscount is a visibly missing bar rather than an unused number.
+  test("a tab after the marker separates it from the next level", () => {
+    expect(depth(">\t> deep")).toBe(2);
+    expect(runs(">\t> deep")).toEqual([
+      { startCol: 0, endCol: 1, quoteMarker: 1 },
+      { startCol: 2, endCol: 3, quoteMarker: 2 },
+    ]);
+  });
+
+  test("a tab after a single marker leaves the content start past it", () => {
+    expect(runs(">\t- [x] task")).toEqual([
+      { startCol: 0, endCol: 1, quoteMarker: 1 },
+      { startCol: 4, endCol: 7, checkbox: "checked" },
+    ]);
+  });
+
+  // EXC-863: `[> x](url)` collapses to the display text `> x`, whose leading `>`
+  // belongs to the label rather than to a blockquote. Also deferred by EXC-866,
+  // and likewise only visible once depth is drawn: unguarded it paints a bar
+  // over a link and subdues the whole row.
+  test("a `>` inside a collapsed link label is not a quote marker", () => {
+    const label = [{ startCol: 0, endCol: 3 }];
+    const { spans, quoteDepth } = buildInlineSpans("> x", label, label);
+    expect(quoteDepth).toBe(0);
+    expect(spans).toEqual([{ startCol: 0, endCol: 3, link: true }]);
+  });
+
+  // The same collapse, but the label resolved to a file reference — which is the
+  // commoner shape in a plan, and the one that never reaches linkRanges (links.ts
+  // marks a resolved reference as a reference, not a link). Counted as a marker it
+  // would put data-md-quote and data-file-ref on ONE element, landing the bar's
+  // ::before and the glyph's ::before on the same box.
+  test("a `>` inside a collapsed reference label is not a quote marker either", () => {
+    const { spans, quoteDepth } = buildInlineSpans("> a.ts", [], [{ startCol: 0, endCol: 6 }]);
+    expect(quoteDepth).toBe(0);
+    expect(spans).toEqual([]);
+  });
+
+  test("a real marker before a collapsed label still counts", () => {
+    // `> [> x](url)` displays as `> > x`: the first marker is the line's, the
+    // second is the label's and stops the scan.
+    const label = [{ startCol: 2, endCol: 5 }];
+    const { spans, quoteDepth } = buildInlineSpans("> > x", label, label);
+    expect(quoteDepth).toBe(1);
+    expect(spans).toEqual([
+      { startCol: 0, endCol: 1, quoteMarker: 1 },
+      { startCol: 2, endCol: 5, link: true },
+    ]);
+  });
+
+  // EXC-863: `- > quoted` is a blockquote inside a list item. CommonMark counts
+  // the list marker as indentation, so the scan steps over one — but only when a
+  // `>` actually follows, which is what keeps `- [x] done` untouched.
+  test("a quote inside a list item marks the marker the list indented", () => {
+    expect(depth("- > quoted")).toBe(1);
+    expect(runs("- > quoted")).toEqual([{ startCol: 2, endCol: 3, quoteMarker: 1 }]);
+  });
+
+  test("a nested quote inside an ordered list item counts both levels", () => {
+    expect(depth("1. > > deep")).toBe(2);
+    expect(runs("1. > > deep")).toEqual([
+      { startCol: 3, endCol: 4, quoteMarker: 1 },
+      { startCol: 5, endCol: 6, quoteMarker: 2 },
+    ]);
+  });
+
+  test("a list marker with no quote after it leaves the task scan alone", () => {
+    expect(runs("- [x] done")).toEqual([{ startCol: 2, endCol: 5, checkbox: "checked" }]);
+  });
+});
+
+// The mixing cases the issue calls out. A quote's own bar is drawn per marker
+// column, so what matters for each is that the markers still land where the
+// source put them and the construct inside keeps its own columns.
+describe("blockquote mixing cases", () => {
+  test("a quote containing a list marks the marker and leaves the bullet", () => {
+    expect(runs("> - item")).toEqual([{ startCol: 0, endCol: 1, quoteMarker: 1 }]);
+  });
+
+  test("a quote containing a table row keeps the marker at column zero", () => {
+    expect(runs("> | a | **b** |")).toEqual([
+      { startCol: 0, endCol: 1, quoteMarker: 1 },
+      { startCol: 8, endCol: 13, bold: true },
+    ]);
+  });
+
+  // A fence inside a quote is NOT detected as a fence by links.ts (its FENCE
+  // regex is anchored past leading whitespace only, never past a marker), so the
+  // row reaches this pass as ordinary prose. That is inherited from the same
+  // stateless detection codeBlocks.ts uses and is out of scope here; what this
+  // pins is that the quote half stays right regardless.
+  test("a quote containing a fence row still marks its level", () => {
+    expect(depth("> ```ts")).toBe(1);
+    expect(runs("> ```ts")).toEqual([{ startCol: 0, endCol: 1, quoteMarker: 1 }]);
+  });
+
+  // The implication the decoration pass relies on to visit quoted rows without
+  // unioning the depth map into its key set: depth is counted from marker
+  // intervals, and each of those becomes a run, so a line with depth is never
+  // absent from the run map. If this ever fails, inlineDecorate.ts stops tagging
+  // some quoted rows — so it is pinned here, where the two are produced.
+  test("a line with depth always emits at least one marker run", () => {
+    for (const line of ["> a", "> > a", ">", "> >", "   > a", "- > a", ">\t> a", "> - [ ] t"]) {
+      const { spans, quoteDepth } = buildInlineSpans(line, [], []);
+      expect(quoteDepth, line).toBeGreaterThan(0);
+      expect(
+        spans.filter((s) => s.quoteMarker !== undefined),
+        line,
+      ).toHaveLength(quoteDepth);
+    }
+  });
+
+  // A lazy continuation carries no marker column, so it carries no depth. The
+  // bars are drawn over the source's own markers, and inferring a bar for a line
+  // that has none would need block-level quote state this per-line pass does not
+  // carry. Pinned so the boundary is recorded rather than assumed.
+  test("a lazy continuation line carries no depth of its own", () => {
+    expect(depth("continued from the quote above")).toBe(0);
+    expect(runs("continued from the quote above")).toEqual([]);
   });
 });
 

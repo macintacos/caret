@@ -67,7 +67,21 @@ const MEMBERS = ["bold", "italic", "code", "link"] as const;
 
 type Member = (typeof MEMBERS)[number];
 
-const ATTRS = ["data-md", "data-md-start", "data-md-end", "data-md-checkbox", "data-md-quote"];
+// data-quote-depth is the odd one out and deliberately so: every other entry tags
+// a TOKEN with the markup covering it, while the depth tags the ROW, because
+// subduing a quote is a whole-line property (EXC-863) and a per-token copy of it
+// would be the same number written once per child. It keeps the row-level naming
+// the sheet already uses for row state (data-code-line, data-caret-cursor) rather
+// than joining the token-level data-md- family. It rides this list all the same,
+// so the stale sweep below drops it on a populated -> empty repaint.
+const ATTRS = [
+  "data-md",
+  "data-md-start",
+  "data-md-end",
+  "data-md-checkbox",
+  "data-md-quote",
+  "data-quote-depth",
+];
 
 const STALE = ATTRS.map((attr) => `[${attr}]`).join(",");
 
@@ -156,11 +170,16 @@ function tagRow(row: Element, runs: readonly InlineSpan[], groups: Map<Member, C
  * produces a file-reference span but no inline run at all (links.ts emits no
  * link range for a label that already resolved to a reference), and that line
  * still needs its cut.
+ *
+ * `quoteDepth` is the per-line blockquote nesting depth (links.ts), written to
+ * the ROW as data-quote-depth. It defaults to empty so the pass still runs for a
+ * view with no quote layer; the one production caller always supplies it.
  */
 export function decorateInlineRuns(
   root: ParentNode,
   spans: InlineSpanMap,
   refs: FileRefSpanMap,
+  quoteDepth: ReadonlyMap<number, number> = new Map(),
 ): void {
   for (const stale of root.querySelectorAll(STALE)) {
     for (const attr of ATTRS) stale.removeAttribute(attr);
@@ -179,9 +198,15 @@ export function decorateInlineRuns(
     const line = Number(row.getAttribute("data-line"));
     if (Number.isFinite(line)) rows.set(line, row);
   }
+  // spans and refs only: a quoted line is always in spans, because its depth is
+  // counted from marker intervals that each become a run (inlineSpans.ts pins that
+  // implication). Unioning quoteDepth in as well would add a key set that is
+  // provably a subset — and a branch no repaint can reach is a branch nobody can
+  // test honestly.
   for (const line of new Set([...spans.keys(), ...refs.keys()])) {
     const row = rows.get(line);
     if (row === undefined) continue;
+    setAttr(row, "data-quote-depth", quoteDepth.get(line)?.toString());
     const runs = spans.get(line) ?? [];
     const cuts = new Set<number>();
     for (const run of runs) {

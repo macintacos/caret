@@ -1419,6 +1419,7 @@
           links={linkLayer.spans}
           inline={linkLayer.inline}
           images={linkLayer.images}
+          quoteDepth={linkLayer.quoteDepth}
           {fileRefs}
           onFileRefClick={openFileRef}
           annotations={sourceAnnotations}

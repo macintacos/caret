@@ -81,6 +81,12 @@
      * element so the row falls back to the literal markdown and its link chip.
      * Omit it to render no images at all. */
     images?: ImageSpanMap;
+    /** Opt-in blockquote layer (EXC-863): the nesting depth per display line.
+     * Each quoted row is tagged data-quote-depth so the override sheet subdues
+     * the whole line's ink — a row property, not a run one — while the level bars
+     * themselves ride the marker runs `inline` already carries. Omit it to leave
+     * quoted rows undistinguished. */
+    quoteDepth?: ReadonlyMap<number, number>;
     /** Fires once the view's container is bound, handing the parent an
      * imperative API (currently scroll-to-line) that closes over the container.
      * Lets callers jump the view without reaching into the library's DOM. */
@@ -133,6 +139,7 @@
     onFileRefClick,
     inline,
     images,
+    quoteDepth,
     onReady,
     gutter,
     onLineComment,
@@ -433,6 +440,7 @@
   const EMPTY_FILE_REFS: FileRefSpanMap = new Map();
   const EMPTY_INLINE: InlineSpanMap = new Map();
   const EMPTY_IMAGES: ImageSpanMap = new Map();
+  const EMPTY_QUOTES: Map<number, number> = new Map();
   $effect(() => {
     const root = container?.shadowRoot;
     if (root == null) return;
@@ -452,6 +460,9 @@
     // And the images (EXC-870), snapshotted the same way. Memoized by the parent
     // alongside the link layer, so this too stays a stable reference.
     const imageSpans = images;
+    // And the per-line blockquote depths (EXC-863), which ride the row rather
+    // than the runs. Memoized by the parent alongside the same link layer.
+    const quotes = quoteDepth;
     let raf = 0;
     // Tag the rows, then wrap each overflowing block in its scroll card (EXC-729). Both re-run
     // after every library repaint via the observer below; syncCodeBlockCards is idempotent (an
@@ -474,7 +485,12 @@
       // lets the glyph land on a token bounded by the reference rather than on a
       // coarse prose run tagTokenAt would refuse. Idempotent — a settled row mutates
       // nothing — so it costs one extra frame rather than looping the observer.
-      decorateInlineRuns(root, inlineSpans ?? EMPTY_INLINE, refs ?? EMPTY_FILE_REFS);
+      decorateInlineRuns(
+        root,
+        inlineSpans ?? EMPTY_INLINE,
+        refs ?? EMPTY_FILE_REFS,
+        quotes ?? EMPTY_QUOTES,
+      );
       // Always run — the clear-stale pass lives inside tagFileRefTokens, so a
       // populated→empty transition still drops the prior icons.
       tagFileRefTokens(root, refs ?? EMPTY_FILE_REFS);

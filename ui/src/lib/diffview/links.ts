@@ -352,12 +352,20 @@ function transformLine(
   // left literal is marked by nothing at all.
   const linkRanges: ColumnRange[] = [];
   const images: ImageSpan[] = [];
+  // Every display range a rewrite produced, whichever layer went on to claim it.
+  // The blockquote scan needs the whole set where the link layer needs only its
+  // own share, and the difference is not academic: `[> a.ts](a.ts)` collapses to
+  // `> a.ts` exactly as `[> x](url)` collapses to `> x`, but only the second ever
+  // reaches linkRanges. Read as a quote marker, the first would put data-md-quote
+  // and data-file-ref on one element and land two ::before rules on one box.
+  const labelRanges: ColumnRange[] = [];
   for (const rw of rewrites) {
     display += source.slice(cursor, rw.start);
     const startCol = display.length;
     display += rw.display;
     const endCol = display.length;
     cursor = rw.end;
+    labelRanges.push({ startCol, endCol });
     if (rw.href != null) {
       spans.push({ startCol, endCol, href: rw.href, label: rw.display });
     }
@@ -389,7 +397,7 @@ function transformLine(
     if (rw.image != null) images.push(rw.image);
   }
   display += source.slice(cursor);
-  const { spans: inline, quoteDepth } = buildInlineSpans(display, linkRanges);
+  const { spans: inline, quoteDepth } = buildInlineSpans(display, linkRanges, labelRanges);
   return { display, spans, fileRefs, inline, quoteDepth, images };
 }
 

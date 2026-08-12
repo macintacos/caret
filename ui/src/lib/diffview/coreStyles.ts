@@ -15,6 +15,25 @@ const FILE_ICON_MASK = `url("data:image/svg+xml,${encodeURIComponent(fileIconRaw
 // Its counterpart for a reference the daemon resolved to a directory (EXC-918).
 const FOLDER_ICON_MASK = `url("data:image/svg+xml,${encodeURIComponent(folderIconRaw)}")`;
 
+/**
+ * How far a blockquote's ink fades (EXC-863). Quoted prose is still body copy a
+ * reviewer has to read, so this is bounded by contrast rather than by taste: it is
+ * the deepest fade that keeps `--ink` over `--paper-sunk` at WCAG AA on EVERY
+ * palette, and the palettes differ enormously in how much room they have to give
+ * (`--ink` on sunk runs from 6.0:1 to 18.9:1), so the tightest one sets it for all
+ * nine. Exported because a bare number in the sheet is invisible to the palette
+ * suite — `theme.test.ts` composites against this and fails if a new palette, or a
+ * deeper fade, drops quoted text below the floor.
+ *
+ * The result is a QUIET fade by necessity: measured against unquoted prose it is a
+ * ~1.3:1 step, where a fade deep enough to read at a glance (~2.2–3.4:1) puts three
+ * of the nine palettes under AA. The bars are what make a quote unmistakable; this
+ * is the second, softer signal. Going deeper means deciding that quoted plan text
+ * may sit at the tertiary tier `--ink-faint` occupies (>3:1, where the gutter's line
+ * numbers live) rather than with body copy — a call for a human, not a tuning knob.
+ */
+export const QUOTE_SUBDUE = 0.88;
+
 // caret's adjustments layered over the vendored core stylesheet. The gutter and
 // content sit in adjacent grid columns with no gap, which reads cramped — line
 // numbers crowd the code, most visibly under a line's hover highlight. Inline-start
@@ -443,6 +462,98 @@ const CARET_OVERRIDES = `
   }
   [data-content] [data-line] [data-md-image][hidden] {
     display: none;
+  }
+
+  /* EXC-863: blockquote level bars. This is EXC-855's OTHER category — transform-in-place
+     rather than keep-and-chip — so nothing here is a chip and nothing here spends a
+     --chip-* token; the chip family stays five members and closed.
+
+     The bar overdraws the marker instead of sitting beside it. The marker glyph is still
+     in the text — copy, drag-selection, vim motions, search columns and the comment
+     anchors all read the real source, which is the whole point of keeping the characters —
+     so the glyph goes transparent and the bar is drawn in the column it vacated. Deleting
+     the character would have been the other way to get one bar per level, and it would
+     have broken every one of those in the same stroke.
+
+     It therefore takes --ink-faint, the epic's prescribed MARKER ink (EXC-855: no sixth
+     token for marker ink, markers reuse the token the fence markers already take). That
+     follows from what the bar IS rather than what it looks like: not a decoration beside
+     the marker, but the marker redrawn. --rule-strong was tried first, on the reading that
+     a bar is a rule; measured on the showcase in both schemes it is legible but not
+     COUNTABLE, and counting is the entire job here. The rule tokens are sized for
+     hairlines that span a whole edge, where length carries the signal — this mark is 2px
+     wide and one row tall, so it has no length to spend and needs its ink instead.
+
+     Depth reads off the BAR COUNT, and that comes free: the decoration pass gives every
+     marker its own child at its own source column (data-md-quote carries the level), so a
+     two-level quote draws two bars 2ch apart with no nesting logic here and no per-level
+     rule — the source's own indentation is the spacing. Nothing participates in flow — the
+     bar is absolutely positioned and sized in ch — so the monospace grid is untouched by
+     construction rather than by cancellation. That matters more here than for the emphasis
+     chips: a leading decoration is exactly the shape that shifts every glyph on the line,
+     and the gutter's line numbers would drift with it.
+
+     The radius clamps to a pill at this width, which is what makes it a round-rect rather
+     than a hairline: one bar per ROW, ends visible, so a quote reads as a stack of marks
+     the way the level bar in a rendered blockquote does. The block bleed is what closes
+     most of the gap between one row's bar and the next — it is stated as a bleed rather
+     than as a height because the height it produces is a function of the font's content
+     box and --diffs-line-height, and would drift silently with either.
+
+     No selection guard, and deliberately: the emphasis chips drop their tint on a
+     drag-selected row because a tint is decoration, but this bar is what the marker IS —
+     the same footing bold's weight sits on a few rules above. A quoted row that lost its
+     bars inside a selection would lose its depth, not just its polish. */
+  [data-content] [data-line] [data-md-quote] {
+    position: relative;
+    color: transparent;
+  }
+  [data-content] [data-line] [data-md-quote]::before {
+    content: "";
+    position: absolute;
+    inset-block: -0.1em;
+    inset-inline-start: 0.375ch;
+    width: 0.25ch;
+    border-radius: var(--radius);
+    background-color: var(--ink-faint);
+  }
+
+  /* The subdue, and it rides the row's TOKENS rather than the row. Opacity is the
+     mechanism because the alternative is not available: token colour arrives from the
+     library's own [data-line] span rule, so an unlayered colour here would win — and win
+     too hard, flattening every syntax hue on the line to one value. Fading instead keeps
+     each token's own colour and carries the inline chips down with it, which is what the
+     issue asks for: a link, a codespan or a bold pill inside a quote keeps its treatment,
+     quieter, rather than losing it.
+
+     It cannot ride [data-line] itself. The amber drag-selection band and the hover band
+     are background-colors on that element, so a row-level opacity would fade them too and
+     a selected quoted row would read differently from a selected unquoted one. The marker
+     child is exempt: it carries the bar, and dimming the bar with the ink it replaced
+     would cost exactly the legibility the bar exists for.
+
+     The two combinators are chosen separately and neither is free. DESCENDANT at the
+     [data-content] end, so a row a scroll or table card has re-parented still matches
+     (EXC-864, where four gutter rules using direct children silently stopped matching
+     carded rows). CHILD at the row end, and that one is load-bearing: opacity is not
+     idempotent, so a descendant selector would apply again to any nested element and
+     compound to 0.88^2, and inside a table cell it would reach the bar as well. The bar
+     survives here only because it hangs off the marker child this excludes.
+
+     How deep the fade goes is not a taste call and is not declared here — see
+     QUOTE_SUBDUE above, which is bounded by the worst palette's contrast headroom.
+     A gentler fade than the eye would choose is the price of quoted prose staying
+     readable in all nine.
+
+     A search highlight inside a quote fades with the line, since ::highlight() paints
+     over these same tokens and no selector can lift a highlight out of an ancestor's
+     opacity group. That is accepted rather than compensated: the fade is the LINE
+     reading quieter, and a mark on a quieter line being quieter with it is the same
+     statement, where the selection band above is row chrome about the reviewer's own
+     action and has to stay constant. Both marks keep their full alpha relative to the
+     ink they sit on either way. */
+  [data-content] [data-line][data-quote-depth] > :not([data-md-quote]) {
+    opacity: ${QUOTE_SUBDUE};
   }
 
   /* EXC-729: an overflowing fenced block is wrapped in one scroll card (codeBlockScroll.ts)

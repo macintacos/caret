@@ -658,6 +658,10 @@ Ordered, with a nested ordered level:
 > Two levels, opening here.
 >
 > > And continuing one level deeper, where the marker column doubles and the ink subdues again.
+> >
+> > > Three levels, the deepest the bars are drawn against, shallowing back out below.
+>
+> Back to one level, where the bar count is the only thing that says so.
 
 ### Tabular data
 

@@ -91,7 +91,16 @@ const TOKEN_ATTRIBUTES: Record<string, Attributes> = {
 
 // A blockquote marker: `>` preceded by up to three spaces, per CommonMark's
 // indentation allowance. A fourth space makes the line indented content instead.
+// Deliberately NOT widened to accept a leading tab: a tab expands to the next
+// tab stop, which is four columns of indent and therefore indented content.
 const QUOTE_MARKER = /^ {0,3}>/;
+
+// A list marker standing in front of the first `>`: `- > quoted` is a blockquote
+// inside a list item, and CommonMark counts the marker as that item's indentation.
+// The lookahead is what makes this safe to consume unconditionally — with no `>`
+// behind it nothing matches, so `contentStart` on an ordinary list line (and with
+// it the TASK_MARKER scan below) is exactly where it was.
+const LIST_PREFIX = /^ {0,3}(?:[-*+]|\d+[.)])\s+(?=>)/;
 
 // A task-list item's bracket run, anchored at the start of the line's content
 // (past any quote prefix): a bullet or an ordered marker, then `[ ]`, `[x]` or
@@ -101,21 +110,30 @@ const QUOTE_MARKER = /^ {0,3}>/;
 const TASK_MARKER = /^(\s*(?:[-*+]|\d+[.)])\s+)\[([ xX])\](?=\s|$)/;
 
 /** The blockquote prefix: one interval per `>` and the column its content starts
- * at, which is where the task-marker scan begins. */
-function scanQuotePrefix(line: string): { intervals: Interval[]; contentStart: number } {
+ * at, which is where the task-marker scan begins. `labelRanges` are the display
+ * columns the caller rewrote — every link and reference label. A `>` inside one is
+ * label text rather than a marker (`[> x](url)` displays as `> x`) and ends the
+ * scan; it must be the FULL set, since a label that resolved to a file reference
+ * never reaches the link half. */
+function scanQuotePrefix(
+  line: string,
+  labelRanges: readonly ColumnRange[],
+): { intervals: Interval[]; contentStart: number } {
   const intervals: Interval[] = [];
-  let pos = 0;
+  let pos = LIST_PREFIX.exec(line)?.[0].length ?? 0;
   for (;;) {
     const match = QUOTE_MARKER.exec(line.slice(pos));
     if (match === null) break;
     const at = pos + match[0].length - 1;
+    if (labelRanges.some((r) => r.startCol <= at && at < r.endCol)) break;
     intervals.push({
       startCol: at,
       endCol: at + 1,
       attributes: { quoteMarker: intervals.length + 1 },
     });
-    // One optional space after the marker is part of the prefix, not the content.
-    pos = line[at + 1] === " " ? at + 2 : at + 1;
+    // One optional space OR TAB after the marker is part of the prefix, not the
+    // content — a tab separates two levels exactly as a space does.
+    pos = line[at + 1] === " " || line[at + 1] === "\t" ? at + 2 : at + 1;
   }
   return { intervals, contentStart: pos };
 }
@@ -174,13 +192,17 @@ function flatten(intervals: Interval[]): InlineSpan[] {
 
 /** The flat atomic runs covering one display line, plus its blockquote depth.
  * `linkRanges` are display columns the caller already resolved — every clickable
- * link span plus every collapsed label that carries no file reference. Fenced-code
- * lines never reach here; the caller passes them through untouched. */
+ * link span plus every collapsed label that carries no file reference — and become
+ * `link: true` runs. `labelRanges` is the superset the caller rewrote at all,
+ * references included; only the blockquote scan reads it, to tell a marker from a
+ * label that merely starts with one. Fenced-code lines never reach here; the
+ * caller passes them through untouched. */
 export function buildInlineSpans(
   display: string,
   linkRanges: readonly ColumnRange[],
+  labelRanges: readonly ColumnRange[],
 ): { spans: InlineSpan[]; quoteDepth: number } {
-  const quote = scanQuotePrefix(display);
+  const quote = scanQuotePrefix(display, labelRanges);
   const intervals: Interval[] = [...quote.intervals];
 
   const task = TASK_MARKER.exec(display.slice(quote.contentStart));

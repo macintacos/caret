@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { QUOTE_SUBDUE } from "$lib/diffview/coreStyles.ts";
 import {
   type ColorToken,
   paintTheme,
@@ -365,6 +366,42 @@ describe("every theme", () => {
           `${id} --ink-faint on ${surface}`,
         ).toBeGreaterThan(3);
       }
+    }
+  });
+
+  // EXC-863 subdues a quoted line by fading its tokens with `opacity`, which no other
+  // assertion in this file can see: opacity composites at paint time, so the ramp above
+  // still measures the same solid tokens while what the reader gets is lighter. Quoted
+  // prose is body copy — it is the plan text a reviewer is reading — so it is held to the
+  // same AA floor as `--ink` itself, on the surface it actually renders on (the diff
+  // surface binds --diffs-bg to --paper-sunk, styles/diffview.css).
+  //
+  // This is the constraint that sets QUOTE_SUBDUE, and it binds unevenly: `--ink` on sunk
+  // runs from 6.0:1 (catppuccin-latte) to 18.9:1 (github-dark), so the fade a roomy
+  // palette could easily carry is the one that would push latte under. Adding a palette
+  // with a compressed ink ramp fails HERE, which is the point — the alternative is
+  // discovering it as unreadable quoted text in that flavor.
+  test("keeps a subdued blockquote's ink at AA on every palette", () => {
+    // What `opacity: QUOTE_SUBDUE` on a token composites to: the ink mixed toward the
+    // surface behind it, in sRGB, which is how the browser composites an opacity group.
+    const faded = (fg: string, bg: string): string => {
+      const [fr, fg_, fb] = channels(fg);
+      const [br, bg_, bb] = channels(bg);
+      const mix = (f: number, b: number) => f * QUOTE_SUBDUE + b * (1 - QUOTE_SUBDUE);
+      return `#${[mix(fr, br), mix(fg_, bg_), mix(fb, bb)]
+        .map((c) =>
+          Math.round(c * 255)
+            .toString(16)
+            .padStart(2, "0"),
+        )
+        .join("")}`;
+    };
+    for (const [id, theme] of themeEntries()) {
+      const sunk = theme.tokens["--paper-sunk"];
+      expect(
+        contrast(faded(theme.tokens["--ink"], sunk), sunk),
+        `${id} quoted --ink on --paper-sunk`,
+      ).toBeGreaterThanOrEqual(4.5);
     }
   });
 
