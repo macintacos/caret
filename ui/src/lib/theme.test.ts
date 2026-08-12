@@ -52,6 +52,18 @@ function hue(hex: string): number {
   return (((sextant * 60) % 360) + 360) % 360;
 }
 
+/** A color's HSL saturation, 0–1. What tells a HUED token from a NEUTRAL one, which the
+ * angle above cannot: a NEAR-neutral's angle is whatever faint cast its gray happens to
+ * carry, so two grays can read as identical while measuring 200 degrees apart. (A truly
+ * achromatic color has no angle at all and answers 0, as hue() documents.) */
+function saturation(hex: string): number {
+  const [r, g, b] = channels(hex);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  if (max === min) return 0;
+  return (max - min) / (1 - Math.abs(max + min - 1));
+}
+
 /** The WCAG contrast ratio between two solid colors, lighter over darker. */
 function contrast(a: string, b: string): number {
   const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
@@ -430,6 +442,36 @@ describe("every theme", () => {
         Math.min(separation, 360 - separation),
         `${id} --accent-wash vs --chip-ref`,
       ).toBeGreaterThanOrEqual(60);
+    }
+  });
+
+  // The reference chip's THIRD pair, deferred by EXC-880 to the ticket that made it
+  // renderable: until EXC-868 painted inline code, --chip-ref and --chip-code could not
+  // appear side by side, so "a resolved path is distinct from ordinary inline code" was
+  // true by construction with nothing holding it. They now sit in the same paragraph —
+  // `package.json` draws both at once — so it is held here.
+  //
+  // Measured as SATURATION rather than as the hue distance the two pins above use, because
+  // --chip-code rides `neutral` and a neutral's hue angle is noise: caret's sits at 30
+  // degrees and Catppuccin's at 228, with no design intent in the gap. A hue floor would
+  // pass on a desaturated `ok` that had genuinely collapsed into the neutral, and fail on a
+  // green-cast gray that still read fine. What actually separates the two roles is chroma —
+  // one is a wash of the palette's gray, the other of its green. The floor sits between the
+  // measured extremes with headroom on both sides: --chip-ref bottoms at 0.44
+  // (catppuccin-frappe) and --chip-code tops out at 0.27 (dracula), so this fires on a
+  // palette naming a hued token for `chipCodeHue` (or a flat one for `chipRefHue`) rather
+  // than on a palette's taste. One named floor rather than the number twice: the two
+  // assertions separate the chips only because they share it, and relaxing one alone
+  // would sever that silently.
+  const CHROMA_FLOOR = 0.35;
+  test("keeps the reference chip hued and the inline-code chip neutral", () => {
+    for (const [id, theme] of themeEntries()) {
+      expect(saturation(theme.tokens["--chip-ref"]), `${id} --chip-ref`).toBeGreaterThan(
+        CHROMA_FLOOR,
+      );
+      expect(saturation(theme.tokens["--chip-code"]), `${id} --chip-code`).toBeLessThan(
+        CHROMA_FLOOR,
+      );
     }
   });
 

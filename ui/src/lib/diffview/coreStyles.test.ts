@@ -72,11 +72,15 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
   test("rounds with the tighter --radius token, never --radius-lg or a hardcoded px", () => {
     // Every corner-rounding declaration in the override uses var(--radius) — the
     // reduction from the previous --radius-lg is the whole point, so a drift back
-    // (or to a raw px) fails here.
+    // (or to a raw px) fails here. A literal 0 is the one other admissible value: it
+    // is the ABSENCE of a corner rather than a second opinion about how round one
+    // should be, and squaring a nested member is how a pill stays one shape (EXC-868
+    // squares a file reference sitting inside a codespan). Any other literal still
+    // fails, so the token discipline this test exists for is intact.
     const radiusRules = overrideDecls.match(/border-[a-z-]*radius:\s*[^;]+;/g) ?? [];
     expect(radiusRules.length).toBeGreaterThan(0);
     for (const rule of radiusRules) {
-      expect(rule).toContain("var(--radius)");
+      expect(rule).toMatch(/:\s*(var\(--radius\)|0);/);
       expect(rule).not.toContain("--radius-lg");
     }
   });
@@ -302,9 +306,10 @@ describe("the fence-marker chip (EXC-869)", () => {
   test("fills the fence markers with the family's inline-code chip token", () => {
     // The tint is CONSUMED, never redefined here: --chip-code is the chip family's shared
     // token, derived for all nine palettes by the recipe (EXC-858), so the fence chip and
-    // the inline-code chip are one tint by construction rather than by a matched value.
-    // A bare var() with no fallback is the point — a fallback would silently paint a
-    // second, unreviewed tint if the token ever stopped resolving.
+    // the inline-code chip (EXC-868) spend one token rather than a matched value — one
+    // token, not one rendered colour, for the reasons the rule itself carries. A bare
+    // var() with no fallback is the point here: a fallback would silently paint a second,
+    // unreviewed tint if the token ever stopped resolving.
     expect(chipRule).toMatch(/background-color:\s*var\(--chip-code\)/);
     expect(chipRule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(chipRule).not.toMatch(/color-mix/);
@@ -403,7 +408,7 @@ describe("the inline emphasis chips (EXC-867)", () => {
     }
   });
 
-  test("drops the bold and italic tints on a selected row so a drag reads as one flat band", () => {
+  test("drops the decoration tints on a selected row so a drag reads as one flat band", () => {
     // The guard rides each member's own tint VARIABLE rather than the shared fill rule,
     // because the members disagree about it: the link chip (EXC-859) keeps its tint through
     // a selection. background-image is one property, so a second unguarded rule would
@@ -411,6 +416,9 @@ describe("the inline emphasis chips (EXC-867)", () => {
     // back to transparent is what lets one stack carry two policies.
     expect(tintRule("bold")).toMatch(/:not\(\[data-selected-line\]\)/);
     expect(tintRule("italic")).toMatch(/:not\(\[data-selected-line\]\)/);
+    // Code sides with them (EXC-868): it marks a span rather than offering an action, the
+    // same call the fence chip makes with the same token.
+    expect(tintRule("code")).toMatch(/:not\(\[data-selected-line\]\)/);
     expect(fillRule).not.toMatch(/:not\(\[data-selected-line\]\)/);
   });
 });
@@ -483,6 +491,58 @@ describe("the link chip (EXC-859)", () => {
       expect(rule).not.toMatch(/padding/);
       expect(rule).not.toMatch(/margin/);
     }
+  });
+});
+
+// EXC-868: the inline-code chip, the third prose member of the EXC-855 chip family. The
+// decoration pass already tags a codespan data-md~="code" and already closes its pill once
+// per ELEMENT (EXC-867), so the whole render is one layer variable and one gradient — which
+// is all this suite has to pin, plus the one call the ticket had to make: that the tint is
+// the same token the fence chip spends rather than a second value corrected for the surface.
+// The geometry the code member rides is shared with bold and italic, so the "shifts no
+// column" and "drops the chip on a selected row" pins above already cover it and are not
+// repeated here.
+describe("the inline-code chip (EXC-868)", () => {
+  const fillRule = rulesFor(String.raw`\[data-md\]`)[0] ?? "";
+  const fenceRule = rulesFor(String.raw`\[data-code-fence\]`).find((r) =>
+    r.includes("background-color:"),
+  );
+  const nestedRef = rulesFor(String.raw`\[data-file-ref\]\[data-md~="code"\]`)[0] ?? "";
+
+  test("spends the family's inline-code tint through a layer of its own", () => {
+    // A layer rather than a background-color, for the reason bold and italic are layers:
+    // the middle run of a bold element wrapping inline code carries bold AND code, and a
+    // single background-color would let one rule win and punch a gap through the bold pill.
+    expect(tintRule("code")).toMatch(/--md-code:\s*var\(--chip-code\)/);
+    expect(fillRule).toMatch(/var\(--md-code,\s*transparent\)/);
+    // The transparent fallback is what paints nothing when the member is absent, so no
+    // default declaration is needed and nothing has to out-specify the member rule.
+    expect(fillRule).not.toMatch(/--md-code:\s/);
+  });
+
+  test("spends whatever token the fence chip spends, rather than a second value", () => {
+    // The account of WHY one token serves two surfaces lives on the rule itself in
+    // coreStyles.ts; what is pinned here is only that the two never drift apart. Read
+    // the token out of each rule and compare, so this fails on a second value being
+    // introduced anywhere rather than on --chip-code specifically being named.
+    const token = (rule: string) => rule.match(/var\((--chip-[a-z]+)\)/)?.[1];
+    expect(token(fenceRule ?? "")).toBe("--chip-code");
+    expect(token(tintRule("code"))).toBe(token(fenceRule ?? ""));
+  });
+
+  test("squares and unpads a file reference sitting inside a codespan", () => {
+    // [data-file-ref] is shaped as a STANDALONE pill: 0.3em of inline breathing room
+    // cancelled by a negative margin, 0.1em of block padding, and its own radius. Inside
+    // a codespan it is a stretch of hue in someone else's pill, and each of those three
+    // draws a seam — the overhang double-coats the translucent chip under each backtick,
+    // the block padding leaves the tint proud, and the radius notches the fill once the
+    // box no longer overlaps its neighbours. All three go, together.
+    expect(nestedRef).toMatch(/padding:\s*0;/);
+    expect(nestedRef).toMatch(/margin-inline:\s*0;/);
+    expect(nestedRef).toMatch(/border-radius:\s*0;/);
+    // Scoped to a reference the pass tagged as code: a prose-labelled reference carries
+    // no member, so it must keep the standalone chip this rule is carved out of.
+    expect(nestedRef).toContain('[data-md~="code"]');
   });
 });
 
