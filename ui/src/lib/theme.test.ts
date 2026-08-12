@@ -544,17 +544,13 @@ describe("every ColorToken is read somewhere in ui/src", () => {
   // to re-check as each remaining consumer lands.
   //
   // --chip-code is spent: the fence-marker chip reads it in diffview/coreStyles.ts.
-  const PENDING_CONSUMERS: ColorToken[] = [
-    "--chip-bold",
-    "--chip-italic",
-    "--chip-link",
-    "--chip-ref",
-  ];
+  // --chip-ref is spent too: the resting file-reference chip reads it in the same file.
+  const PENDING_CONSUMERS: ColorToken[] = ["--chip-bold", "--chip-italic", "--chip-link"];
 
   for (const token of Object.keys(THEMES["caret-dark"].tokens) as ColorToken[]) {
     const pending = PENDING_CONSUMERS.includes(token);
     const name = pending
-      ? `${token} is still awaiting its consumer (EXC-867)`
+      ? `${token} is still awaiting its consumer`
       : `${token} is read by at least one var()`;
     test(name, () => {
       // The negative lookahead keeps --mark from matching --mark-active and --ink

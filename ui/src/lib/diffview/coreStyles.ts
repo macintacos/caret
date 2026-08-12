@@ -510,23 +510,33 @@ const CARET_OVERRIDES = `
     mask: ${FOLDER_ICON_MASK} no-repeat center / contain;
   }
 
-  /* EXC-840: the reference opens its preview on click, so the token reads as a
-     pressable chip — always the pointer cursor, and on hover a faint amber wash
-     (--accent-wash, the same warm hue as its inline-code text) rounded with the
-     interactive-control radius. Padding gives the wash breathing room so it reads
-     as a chip around the whole reference rather than crowding the glyphs; a
-     matching negative inline margin offsets it so the backticks bracketing the
-     token never shift. The swap is instant: the diff surface is motionless by
-     design, so no transition here. The icon sharpens from faint to full ink
-     alongside it. */
+  /* The reference opens its preview on click, so the token reads as a pressable
+     chip — always the pointer cursor, and always a filled round-rect. It RESTS in
+     --chip-ref (EXC-880), the reference member of the chip family: a resolved path
+     is tinted where it sits, so which spans of a plan can be opened is a glance
+     rather than a pointer sweep. The tint is the derived token, never a literal,
+     which is what makes all nine palettes supply it; it rides a different source
+     hue from --chip-code, so a reference is distinct from ordinary inline code by
+     construction. A file and a directory share the one tint — they are the same
+     class of thing, and the glyph above is what tells them apart.
+
+     Hover then swaps the fill to the warm accent wash (EXC-840), a step up in both
+     hue and weight, so pressing one still reads as a change of state. Padding gives
+     the fill breathing room so it reads as a chip around the whole reference rather
+     than crowding the glyphs; a matching negative inline margin offsets it so the
+     backticks bracketing the token never shift. The radius sits on the resting rule
+     because the shape is constant — only the fill moves. The swap is instant: the
+     diff surface is motionless by design, so no transition here. The icon sharpens
+     from faint to full ink alongside it. */
   [data-content] [data-file-ref] {
     cursor: pointer;
     padding: 0.1em 0.3em;
     margin-inline: -0.3em;
+    background-color: var(--chip-ref);
+    border-radius: var(--radius);
   }
   [data-content] [data-file-ref]:hover {
     background-color: var(--accent-wash);
-    border-radius: var(--radius);
   }
   [data-content] [data-file-ref]:hover::before {
     background-color: var(--ink);

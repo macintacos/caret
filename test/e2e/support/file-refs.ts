@@ -32,6 +32,21 @@ export function fileRefCount(page: Page): Promise<number> {
   });
 }
 
+/** The first tagged reference's computed chip fill and cursor, read from inside
+ * the shadow root. Both live in an adopted stylesheet against tokens that resolve
+ * on the host document, so only a real browser can say what they composite to —
+ * which is why the resting-vs-hover pair is asserted here rather than as a unit
+ * (the CSS declarations themselves are pinned in diffview/coreStyles.test.ts). */
+export function refChipStyle(page: Page): Promise<{ background: string; cursor: string } | null> {
+  return page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const tok = sh?.querySelector("[data-file-ref]");
+    if (!tok) return null;
+    const cs = getComputedStyle(tok);
+    return { background: cs.backgroundColor, cursor: cs.cursor };
+  });
+}
+
 /**
  * Resolve once the preview drawer's opening wipe has finished. The lane animates
  * its docking dimension from 0, so every rect inside it — and the coordinates a
