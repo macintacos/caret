@@ -2581,6 +2581,14 @@ test("compare mode never reaches the decoration pass (EXC-867)", async ({ daemon
 // that shiki only produces in a real highlight. The second row is the shape the epic cares
 // about most: a backticked citation whose file reference cuts the row underneath the pill,
 // which must still draw ONE chip rather than three.
+//
+// One scheme rather than the two the emphasis test above loops, and the asymmetry is
+// deliberate: that loop exists because --chip-bold and --chip-italic composite within a
+// 1.05 contrast ratio in five of nine palettes, so its tint had to be seen resolving in
+// both. --chip-code rides the same recipe path that loop already proves resolves, and
+// what is new here is shape, not colour — so a second scheme would re-prove the cascade
+// and nothing else. The per-scheme look is checked by hand against the committed
+// showcase instead.
 const INLINE_CODE_PLAN = `# Inline code plan
 
 A bare span: \`render()\` here.
@@ -2635,20 +2643,26 @@ test("the inline-code chip draws one pill per span (EXC-868)", async ({ daemon, 
       .poll(() =>
         page.evaluate(() => {
           const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
-          const el = sh?.querySelector("[data-content] [data-file-ref]") as HTMLElement | null;
-          return el === null || el === undefined
+          const el = sh?.querySelector("[data-content] [data-file-ref]");
+          const box = el === null || el === undefined ? null : getComputedStyle(el);
+          return box === null
             ? null
-            : `${el.textContent} ${el.getAttribute("data-md")}`;
+            : `${el?.textContent} ${el?.getAttribute("data-md")} ${box.paddingLeft} ${box.borderStartStartRadius}`;
         }),
       )
-      // The reference's own child is INSIDE the code pill rather than beside it: it carries
-      // the member but neither cap, so the chip runs continuously through it.
-      .toBe("src/cache.ts code");
+      // The reference's child is INSIDE the code pill rather than beside it, and its box
+      // is made to match: the member without a cap, and none of the padding or rounding
+      // that shapes a standalone reference chip into a pill of its own. Left unzeroed,
+      // each drew a seam through the middle of the code pill.
+      .toBe("src/cache.ts code 0px 0px");
 
     const cited = await readEmphasis(page, 5);
     expect(cited.tagged.map((t) => t.text)).toEqual(["`", "src/cache.ts", "`"]);
-    expect(codeCaps(cited.tagged, "start")).toBe(1);
-    expect(codeCaps(cited.tagged, "end")).toBe(1);
+    // Stronger than counting caps: WHICH child carries them is the whole invariant. A
+    // start on the middle child would also count one, and is exactly the notched pill
+    // the cap rule exists to prevent.
+    expect(cited.tagged.map((t) => t.start)).toEqual(["code", null, null]);
+    expect(cited.tagged.map((t) => t.end)).toEqual([null, null, "code"]);
   } finally {
     await proj.cleanup();
   }

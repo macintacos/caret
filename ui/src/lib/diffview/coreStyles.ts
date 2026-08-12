@@ -245,7 +245,9 @@ const CARET_OVERRIDES = `
      though the two surfaces do not composite to one colour. And on a backticked citation
      the reference's own child carries the code member AND [data-file-ref]'s --chip-ref fill
      below: the two compose, the reference's colour under the code layer, rather than either
-     replacing the other. That is the second reason these are layers.
+     replacing the other. That is the second reason these are layers. The two boxes are made
+     coincident for it — the reference gives up its padding and its radius inside a codespan,
+     at the bottom of this sheet — so what composes is one shape wearing two washes.
 
      No backtick appears in this comment, or anywhere else in CARET_OVERRIDES: the sheet is
      a template literal, so one would close it early.
@@ -704,6 +706,37 @@ const CARET_OVERRIDES = `
   }
   [data-content] [data-file-ref]:hover::before {
     background-color: var(--ink);
+  }
+
+  /* A reference INSIDE a codespan — a backticked path behind a link target, the repo's
+     commonest citation — is not a chip beside the code chip but a stretch of hue within one
+     pill. (No backtick is written anywhere in this sheet; see the note above.)
+     Its own box has to give up the three properties that make it a standalone pill, and each
+     would otherwise show as a seam in the middle of that pill (EXC-868).
+
+     The breathing room above is measured for a reference sitting on bare surface; here the
+     code chip is already the band around it, so the padding buys nothing and the negative
+     margin that cancels it spends the fill 0.3em UNDER each bracketing backtick — which now
+     carries the same translucent --chip-code. Two coats of one wash composite to roughly
+     double strength, so the overhang draws a darker bar at each backtick-to-path junction:
+     the very seam the showcase row names as the regression to watch. The block padding is
+     the same story on the other axis, leaving the tint a tenth of an em proud of its
+     neighbours top and bottom.
+
+     The radius has to go with them, and in that order: once the box is exactly the text
+     advance it abuts the backticks rather than overlapping them, so a rounded corner would
+     cut the fill with nothing underneath to show through — a real notch where the overlap
+     had been hiding one. Square is also simply the rule the decoration pass already follows
+     (see the data-md-start note above): a member nested inside another does not cap, and the
+     outermost pill wins. Here that pill is the code chip, and its ends are already drawn on
+     the backticks.
+
+     Scoped to a reference the pass tagged as code, so a prose-labelled reference — which
+     carries no member at all — keeps the standalone chip this rule is carved out of. */
+  [data-content] [data-line] [data-file-ref][data-md~="code"] {
+    padding: 0;
+    margin-inline: 0;
+    border-radius: 0;
   }
 
   /* EXC-832: the vim / search highlights. searchHighlight.ts registers two named

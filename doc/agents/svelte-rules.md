@@ -156,12 +156,17 @@ stays green under any invocation.
   its container's — which is why a key on the amber Approve button reads light and a key
   on a neutral chip reads grey. `theme.test.ts` asserts every `ColorToken` has at least
   one `var()` reader under `ui/src`, so a token can't stay declared for nobody — and every
-  content chip clears that floor, all in `diffview/coreStyles.ts`: `--chip-code` fills the
-  fence-marker chip, `--chip-ref` the resting file-reference chip, and `--chip-bold` /
-  `--chip-italic` / `--chip-link` the three inline chips, each through its own `--md-*`
-  layer variable. That suite also holds `--chip-link` and `--chip-ref` at least 60 degrees
-  of hue apart in every palette; check that pin rather than your eye when adding one, and
-  read the comment above it for why that pair and not another.
+  content chip clears that floor, all in `diffview/coreStyles.ts`: `--chip-ref` fills the
+  resting file-reference chip, `--chip-code` the fence-marker chip, and `--chip-bold` /
+  `--chip-italic` / `--chip-code` / `--chip-link` the four inline chips, each through its
+  own `--md-*` layer variable — so `--chip-code` is the one tint spent on two surfaces.
+  That suite also holds `--chip-link` and `--chip-ref` at least 60 degrees of hue apart in
+  every palette; check that pin rather than your eye when adding one, and read the comment
+  above it for why that pair and not another. A third pin measures something else for a
+  different pair: `--chip-ref` sits above a shared saturation floor and `--chip-code` below
+  it, since those two render side by side and a near-neutral's hue angle carries no design
+  intent to compare against. Read that test's comment before choosing `chipCodeHue` or
+  `chipRefHue`.
 - **The diff-view bridge is amber-selection-only.** The single `.diffview` rule in
   `app.css` maps caret's tokens onto `@pierre/diffs`'s `--diffs-*` properties. caret
   adopts the library's surface STRUCTURE — the layered buffer/context/separator depth

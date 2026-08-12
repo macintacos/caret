@@ -53,8 +53,9 @@ function hue(hex: string): number {
 }
 
 /** A color's HSL saturation, 0–1. What tells a HUED token from a NEUTRAL one, which the
- * angle above cannot: an achromatic color's angle is whatever cast its gray happens to
- * carry, so two neutrals can read as identical while measuring 200 degrees apart. */
+ * angle above cannot: a NEAR-neutral's angle is whatever faint cast its gray happens to
+ * carry, so two grays can read as identical while measuring 200 degrees apart. (A truly
+ * achromatic color has no angle at all and answers 0, as hue() documents.) */
 function saturation(hex: string): number {
   const [r, g, b] = channels(hex);
   const max = Math.max(r, g, b);
@@ -459,11 +460,18 @@ describe("every theme", () => {
   // measured extremes with headroom on both sides: --chip-ref bottoms at 0.44
   // (catppuccin-frappe) and --chip-code tops out at 0.27 (dracula), so this fires on a
   // palette naming a hued token for `chipCodeHue` (or a flat one for `chipRefHue`) rather
-  // than on a palette's taste.
+  // than on a palette's taste. One named floor rather than the number twice: the two
+  // assertions separate the chips only because they share it, and relaxing one alone
+  // would sever that silently.
+  const CHROMA_FLOOR = 0.35;
   test("keeps the reference chip hued and the inline-code chip neutral", () => {
     for (const [id, theme] of themeEntries()) {
-      expect(saturation(theme.tokens["--chip-ref"]), `${id} --chip-ref`).toBeGreaterThan(0.35);
-      expect(saturation(theme.tokens["--chip-code"]), `${id} --chip-code`).toBeLessThan(0.35);
+      expect(saturation(theme.tokens["--chip-ref"]), `${id} --chip-ref`).toBeGreaterThan(
+        CHROMA_FLOOR,
+      );
+      expect(saturation(theme.tokens["--chip-code"]), `${id} --chip-code`).toBeLessThan(
+        CHROMA_FLOOR,
+      );
     }
   });
 
