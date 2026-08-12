@@ -903,9 +903,9 @@ describe("the markdown table (EXC-864)", () => {
 
 // EXC-863: blockquote level bars. The bar belongs to the epic's transform-in-place
 // category rather than to the chip family: it overdraws the marker it replaces
-// instead of tinting a run, so it spends the hairline-rule token and mints nothing
-// new. The subdue is the whole-line half, and where it is anchored is the
-// load-bearing part — see the rule's own note in coreStyles.ts.
+// instead of tinting a run, so it spends the marker ink EXC-855 already fixed and
+// mints nothing new. The subdue is the whole-line half, and where it is anchored is
+// the load-bearing part — see the rule's own note in coreStyles.ts.
 describe("blockquote level bars (EXC-863)", () => {
   const markerRule = rulesFor(String.raw`\[data-md-quote\]`).find((r) => r.includes("color:"));
   const barRule = rulesFor(String.raw`\[data-md-quote\]::before`)[0] ?? "";
@@ -927,8 +927,11 @@ describe("blockquote level bars (EXC-863)", () => {
     expect(barRule).toMatch(/position:\s*absolute/);
   });
 
-  test("spends the rule token, not a chip tint", () => {
-    expect(barRule).toMatch(/background-color:\s*var\(--rule-strong\)/);
+  test("spends the family's marker ink, not a chip tint", () => {
+    // EXC-855 fixes the marker ink at --ink-faint and refuses a sixth token for it. The
+    // bar IS the marker redrawn, so it takes that ink rather than minting one or
+    // borrowing a chip's.
+    expect(barRule).toMatch(/background-color:\s*var\(--ink-faint\)/);
     expect(barRule).not.toContain("--chip-");
   });
 

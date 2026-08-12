@@ -447,29 +447,38 @@ const CARET_OVERRIDES = `
 
   /* EXC-863: blockquote level bars. This is EXC-855's OTHER category — transform-in-place
      rather than keep-and-chip — so nothing here is a chip and nothing here spends a
-     --chip-* token. A level bar is a rule, so it takes --rule-strong, the same hairline
-     token the surface's own rules ride; the chip family stays five members.
+     --chip-* token; the chip family stays five members and closed.
 
      The bar overdraws the marker instead of sitting beside it. The marker glyph is still
-     in the text — copy, drag-selection, vim motions, search columns and the comment anchors all
-     read the real source, which is the whole point of keeping the characters — so the
-     glyph goes transparent and the bar is drawn in the column it vacated. Deleting the
-     character would have been the other way to get one bar per level, and it would have
-     broken every one of those in the same stroke.
+     in the text — copy, drag-selection, vim motions, search columns and the comment
+     anchors all read the real source, which is the whole point of keeping the characters —
+     so the glyph goes transparent and the bar is drawn in the column it vacated. Deleting
+     the character would have been the other way to get one bar per level, and it would
+     have broken every one of those in the same stroke.
+
+     It therefore takes --ink-faint, the epic's prescribed MARKER ink (EXC-855: no sixth
+     token for marker ink, markers reuse the token the fence markers already take). That
+     follows from what the bar IS rather than what it looks like: not a decoration beside
+     the marker, but the marker redrawn. --rule-strong was tried first, on the reading that
+     a bar is a rule; measured on the showcase in both schemes it is legible but not
+     COUNTABLE, and counting is the entire job here. The rule tokens are sized for
+     hairlines that span a whole edge, where length carries the signal — this mark is 2px
+     wide and one row tall, so it has no length to spend and needs its ink instead.
 
      Depth reads off the BAR COUNT, and that comes free: the decoration pass gives every
      marker its own child at its own source column (data-md-quote carries the level), so a
      two-level quote draws two bars 2ch apart with no nesting logic here and no per-level
-     rule — the source's own indentation is the spacing. Nothing
-     participates in flow — the bar is absolutely positioned and sized in ch — so the
-     monospace grid is untouched by construction, not by cancellation. That matters more
-     here than for the emphasis chips: a leading decoration is exactly the shape that
-     shifts every glyph on the line, and the gutter's line numbers would drift with it.
+     rule — the source's own indentation is the spacing. Nothing participates in flow — the
+     bar is absolutely positioned and sized in ch — so the monospace grid is untouched by
+     construction rather than by cancellation. That matters more here than for the emphasis
+     chips: a leading decoration is exactly the shape that shifts every glyph on the line,
+     and the gutter's line numbers would drift with it.
 
      The radius clamps to a pill at this width, which is what makes it a round-rect rather
      than a hairline: one bar per ROW, ends visible, so a quote reads as a stack of marks
-     the way the level bar in a rendered blockquote does. The small block bleed closes most
-     of the gap between consecutive rows without letting a bar escape its line box. */
+     the way the level bar in a rendered blockquote does. The small block bleed leaves the
+     bar covering ~91% of the row, so consecutive rows read as one column of marks without
+     any bar escaping its line box. */
   [data-content] [data-line] [data-md-quote] {
     position: relative;
     color: transparent;
@@ -481,7 +490,7 @@ const CARET_OVERRIDES = `
     inset-inline-start: 0.375ch;
     width: 0.25ch;
     border-radius: var(--radius);
-    background-color: var(--rule-strong);
+    background-color: var(--ink-faint);
   }
 
   /* The subdue, and it rides the row's TOKENS rather than the row. Opacity is the
@@ -500,9 +509,14 @@ const CARET_OVERRIDES = `
      bar with the ink it replaced would cost exactly the legibility the bar exists for.
 
      Descendant rather than child at the [data-content] end, so a row that a scroll or
-     table card has re-parented still matches (EXC-864). */
+     table card has re-parented still matches (EXC-864).
+
+     0.62 was chosen on the showcase rather than picked: at 0.72 the difference against the
+     unquoted paragraph below is real but marginal, and a subdue nobody can see is not one.
+     It composites to roughly a mid-grey on paper — a little darker than --ink-faint, so
+     quoted prose still clears the body-text contrast floor while reading a step back. */
   [data-content] [data-line][data-quote-depth] > :not([data-md-quote]) {
-    opacity: 0.72;
+    opacity: 0.62;
   }
 
   /* EXC-729: an overflowing fenced block is wrapped in one scroll card (codeBlockScroll.ts)

@@ -167,11 +167,13 @@ stays green under any invocation.
   below it, since those two render side by side and a near-neutral's hue angle carries no
   design intent to compare against. Read that test's comment before choosing `chipCodeHue`
   or `chipRefHue`. The chip family is **five members and closed**: a markdown decoration
-  that draws a shape rather than tinting a span takes the token for the shape it is, not a
-  sixth chip. The blockquote level bar is the worked example — it is a rule, so it spends
-  `--rule-strong` (EXC-863, `diffview/coreStyles.ts`), and the quoted line's own ink is
-  subdued with opacity rather than a tint — which is what lets the chips inside a quote
-  keep their treatment instead of being overpainted by it.
+  that overdraws a marker rather than tinting a span takes the marker ink this epic has
+  already fixed, `--ink-faint`, not a sixth chip. The blockquote level bar is the worked
+  example (EXC-863, `diffview/coreStyles.ts`) — it does not sit beside the marker, it *is*
+  the marker redrawn, so it carries that ink; `--rule-strong` was measured first and left
+  the bars legible but not countable, which is the job. The quoted line's ink is subdued
+  with opacity rather than a tint, which is what lets the chips inside a quote keep their
+  treatment instead of being overpainted by it.
 - **The diff-view bridge is amber-selection-only.** The single `.diffview` rule in
   `app.css` maps caret's tokens onto `@pierre/diffs`'s `--diffs-*` properties. caret
   adopts the library's surface STRUCTURE — the layered buffer/context/separator depth
