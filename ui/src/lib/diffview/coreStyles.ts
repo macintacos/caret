@@ -61,6 +61,10 @@ const CARET_OVERRIDES = `
      together, so they share one named value rather than coupled literals. */
   :host { --caret-seam: 20px; }
   [data-content] { padding-inline-start: var(--caret-seam); }
+  /* And for how far a card sits in from the content column's own inset. Same
+     reasoning one level down: a card's inline margin and the band extension that
+     reaches across it (EXC-865) have to be the same number or the band stops short. */
+  :host { --caret-card-inset: 0.75rem; }
   [data-utility-button] {
     margin-right: calc(1ch - 1lh - 0.5rem);
     background-color: var(--accent);
@@ -638,7 +642,7 @@ const CARET_OVERRIDES = `
     overflow-x: auto;
     overflow-y: hidden;
     max-width: 720px;
-    margin-inline: 0.75rem;
+    margin-inline: var(--caret-card-inset);
     background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
     border-radius: var(--radius);
   }
@@ -711,16 +715,16 @@ const CARET_OVERRIDES = `
      the parent's row tracks, and display: contents rows would drop the box the library's
      selection and hover fills, the cursor band and the annotation anchors all need.
 
-     What a carded row does NOT get is the band's ROUNDED ENDS and the seam-fill pull, both
-     of which select direct children of their column. The seam pull is refused on purpose —
-     it drags a banded row left across the gutter seam, which inside a card with its own
-     inline margin would pull the row out of the card's box. The rounding is a real
-     remainder: a selection wholly inside a table draws square ends. Widening those rules
-     would need them to reason about both card kinds at once (their sibling combinators
-     stop meaning "the next row" once a card is in the way), which is a pass over the whole
-     band rather than a table-shaped patch. The bands themselves, the caret bar and the
-     gutter divider DO reach a carded row — the four gutter rules above are descendant
-     selectors for exactly that reason.
+     A carded row reads as a banded row everywhere a prose one does, and the band gets
+     there by three different routes because the card blocks two of them. The bands, the
+     caret bar and the gutter divider ride descendant selectors (the four gutter rules
+     above). The band's rounded ends ride descendant selectors too, plus four overrides
+     that take a corner back off where the band continues past the card. And the seam
+     fill is painted from the GUTTER cell rather than pulled from the content one: the
+     card is an overflow-x: auto scroll container, so a carded row cannot paint outside
+     it at all, which is why the seam-fill pull below stays a direct-child rule and
+     EXC-865's ::before covers the carded case. What the library will not do is band a
+     carded row in the first place — cardSelection.ts owns that.
 
      The sizing policy is max-content tracks plus a max-width on the CELL, and the split
      between the two is what separates the issue's two behaviours. A max-content track never
@@ -754,7 +758,7 @@ const CARET_OVERRIDES = `
     overflow-x: auto;
     overflow-y: hidden;
     max-width: 720px;
-    margin-inline: 0.75rem;
+    margin-inline: var(--caret-card-inset);
   }
   [data-content] > [data-table-card] > [data-line] {
     grid-column: 1 / -1;
@@ -829,10 +833,10 @@ const CARET_OVERRIDES = `
   /* Fill the gutter→content seam on a banded code row so the band reads continuous
      across it, like a non-code row does. A non-code banded row pulls its content
      cell left across --caret-seam (the seam-fill group below) to cover the seam;
-     a code row can't — its panel inset (margin-inline-start: 0.75rem, on top of the
-     content column's --caret-seam) overrides that pull, so the strip between the
-     banded gutter cell and the inset band stays unpainted. A left box-shadow paints
-     exactly that strip (width = the two insets, --caret-seam + 0.75rem) WITHOUT
+     a code row can't — its panel inset (margin-inline-start, on top of the content
+     column's --caret-seam) overrides that pull, so the strip between the banded
+     gutter cell and the inset band stays unpainted. A left box-shadow paints exactly
+     that strip (width = the two insets, --caret-seam + --caret-card-inset) WITHOUT
      moving the cell or its code text, and without fighting the panel's
      overflow-x: clip / max-width the way a negative margin would. Same band color as
      the fill; the gutter's own divider is already cleared to transparent for banded
@@ -840,7 +844,7 @@ const CARET_OVERRIDES = `
      Fitting-block rows only ([data-content] > …); an overflowing block's card owns
      its own inset. Yields to the amber selection via the shared :not guard. */
   [data-content] > [data-line][data-code-line]:is([data-hovered], [data-caret-cursor]):not([data-selected-line]) {
-    box-shadow: calc(-1 * (var(--caret-seam) + 0.75rem)) 0 0 0
+    box-shadow: calc(-1 * (var(--caret-seam) + var(--caret-card-inset))) 0 0 0
       color-mix(in lab, var(--paper-sunk), var(--ink) 9%);
   }
 
@@ -920,6 +924,48 @@ const CARET_OVERRIDES = `
     border-right-color: transparent;
   }
 
+  /* EXC-865: the same seam fill, for a row that lives inside a card. The pull above
+     is a direct-child rule and deliberately stays one — a carded row cannot pull left
+     at all, because its card is an overflow-x: auto scroll container and anything
+     painted outside that padding box is clipped. So the strip is painted from the
+     GUTTER side instead, which nothing clips: a ::before hung off the banded gutter
+     cell's inline-end edge, spanning the content column's seam plus the card's own
+     inset — exactly the gap between the two halves. background-color: inherit takes
+     the cell's own band, so one rule covers selection amber, hover grey and the
+     cursor tint without naming any of them, and follows the library if it recolors.
+     ::before rather than ::after: the multi-line selection tick above owns ::after on
+     these same cells. Reached through the gutter card, which is display: contents and
+     so does not disturb matching; both card kinds have the gap, so both are listed. */
+  [data-gutter]
+    :is([data-table-card-gutter], [data-code-card-gutter])
+    > [data-column-number]:is(
+      [data-selected-line],
+      [data-hovered],
+      [data-line-type="change-addition"],
+      [data-line-type="change-deletion"],
+      [data-caret-cursor]
+    ) {
+    position: relative;
+  }
+  [data-gutter]
+    :is([data-table-card-gutter], [data-code-card-gutter])
+    > [data-column-number]:is(
+      [data-selected-line],
+      [data-hovered],
+      [data-line-type="change-addition"],
+      [data-line-type="change-deletion"],
+      [data-caret-cursor]
+    )::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    inset-inline-start: 100%;
+    width: calc(var(--caret-seam) + var(--caret-card-inset));
+    background-color: inherit;
+    pointer-events: none;
+  }
+
   /* Combined markers — caret's "both" indicators (the library has no such mode).
      The library is driven at "bars", so the gutter bars already render; here caret
      overlays the classic +/- glyphs in the content column so both cues show at
@@ -960,31 +1006,67 @@ const CARET_OVERRIDES = `
     content: "-";
     color: var(--diffs-deletion-base);
   }
+  /* The band's outer corners. Descendant rather than child (EXC-865): a carded row is
+     no longer a child of its column, and left on a child combinator a selection inside
+     a table drew square ends while every other selection rounded. Widening works
+     because the sibling logic is column-relative — inside a card the row's siblings ARE
+     the table's other rows, so :not(~) still finds that card's first selected row and
+     :not(:has(~)) its last. What widening cannot see is the band continuing PAST the
+     card, so the two overrides below take those corners back off: a card preceded by a
+     selected line is not where the band starts, and one followed by a selected line is
+     not where it ends. Both are scoped to line cells, so an open composer's row — which
+     the library also flags selected — never counts as the continuation. */
   [data-gutter]
-    > [data-column-number][data-selected-line]:not(
+    [data-column-number][data-selected-line]:not(
       [data-selected-line] ~ [data-column-number][data-selected-line]
     ) {
     border-top-left-radius: var(--radius);
   }
   [data-content]
-    > [data-line][data-selected-line]:not(
+    [data-line][data-selected-line]:not(
       [data-selected-line] ~ [data-line][data-selected-line]
     ) {
     border-top-right-radius: var(--radius);
   }
   [data-gutter]
-    > [data-column-number][data-selected-line]:not(:has(~ [data-column-number][data-selected-line])) {
+    [data-column-number][data-selected-line]:not(:has(~ [data-column-number][data-selected-line])) {
     border-bottom-left-radius: var(--radius);
   }
   [data-content]
-    > [data-line][data-selected-line]:not(:has(~ [data-line][data-selected-line])) {
+    [data-line][data-selected-line]:not(:has(~ [data-line][data-selected-line])) {
     border-bottom-right-radius: var(--radius);
+  }
+  [data-gutter]
+    > [data-column-number][data-selected-line]
+    ~ :is([data-table-card-gutter], [data-code-card-gutter])
+    > [data-column-number][data-selected-line] {
+    border-top-left-radius: 0;
+  }
+  [data-content]
+    > [data-line][data-selected-line]
+    ~ :is([data-table-card], [data-code-card])
+    > [data-line][data-selected-line] {
+    border-top-right-radius: 0;
+  }
+  [data-gutter]
+    > :is([data-table-card-gutter], [data-code-card-gutter]):has(
+      ~ [data-column-number][data-selected-line]
+    )
+    > [data-column-number][data-selected-line] {
+    border-bottom-left-radius: 0;
+  }
+  [data-content]
+    > :is([data-table-card], [data-code-card]):has(~ [data-line][data-selected-line])
+    > [data-line][data-selected-line] {
+    border-bottom-right-radius: 0;
   }
   /* The composer/annotation row the library also flags selected is NOT part of the
      band: clear its selection fill (both columns) so the surface background shows
-     through to the left of the composer card. */
-  [data-gutter] > [data-gutter-buffer][data-selected-line],
-  [data-content] > [data-line-annotation][data-selected-line] {
+     through to the left of the composer card. Descendant since EXC-865 — a comment on
+     a table line puts that row inside the table's card, with its buffer inside the
+     gutter mirror. */
+  [data-gutter] [data-gutter-buffer][data-selected-line],
+  [data-content] [data-line-annotation][data-selected-line] {
     background-color: transparent;
   }
 
@@ -998,9 +1080,26 @@ const CARET_OVERRIDES = `
      card/composer still paints its own paper-raised over the content cell, so only
      the bare gutter buffer changes. Higher specificity than the library's
      [data-line-annotation] base rule, and adopted after it, so it wins. */
-  [data-gutter] > [data-gutter-buffer="annotation"],
-  [data-content] > [data-line-annotation] {
+  [data-gutter] [data-gutter-buffer="annotation"],
+  [data-content] [data-line-annotation] {
     --diffs-annotation-bg: var(--diffs-bg);
+  }
+
+  /* A comment anchored to a table line (EXC-865). Its row rides inside the table's
+     card so it lands under the row it belongs to and pushes the rest of the table
+     down, rather than after the whole table — but the card is a grid of max-content
+     columns, so the row needs placing in it. Spanning every column keeps the thread
+     the table's width; min-width: 0 keeps it out of the track sizing, since the
+     composer's own min-content would otherwise widen the table's columns to fit a
+     comment. The thread and composer cap themselves at min(46rem, 100%) already, so
+     the span sets the available width rather than the drawn one. Sticky at the card's
+     inline start so a wide table scrolls under the comment instead of carrying it out
+     of view. */
+  [data-content] > [data-table-card] > [data-line-annotation] {
+    grid-column: 1 / -1;
+    min-width: 0;
+    position: sticky;
+    inset-inline-start: 0;
   }
 
   /* EXC-687: a resolved filename reference in the plan carries a small file icon

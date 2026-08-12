@@ -179,13 +179,68 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
     );
     // The annotation/composer row the library also marks selected has its fill
     // cleared in both columns, so the surface shows through beside the composer
-    // card rather than reading as more band (EXC-664).
+    // card rather than reading as more band (EXC-664). Descendant since EXC-865 — a
+    // comment on a table line puts that row inside the table's card, and its buffer
+    // inside the gutter mirror.
     expect(overrideDecls).toMatch(
-      /\[data-gutter\]\s*>\s*\[data-gutter-buffer\]\[data-selected-line\][^{]*\{[^}]*background-color:\s*transparent/,
+      /\[data-gutter\]\s+\[data-gutter-buffer\]\[data-selected-line\][^{]*\{[^}]*background-color:\s*transparent/,
     );
     expect(overrideDecls).toMatch(
-      /\[data-content\]\s*>\s*\[data-line-annotation\]\[data-selected-line\][^{]*\{[^}]*background-color:\s*transparent/,
+      /\[data-content\]\s+\[data-line-annotation\]\[data-selected-line\][^{]*\{[^}]*background-color:\s*transparent/,
     );
+  });
+
+  // EXC-865: a carded row reads as a banded row. The library will not mark one at all
+  // (cardSelection.ts owns that), and two of the three things that then paint the band
+  // had to change shape to reach it — which is what these pin.
+  test("carries the band across the seam from the gutter side for a carded row", () => {
+    // A carded row cannot pull left across the seam: its card is an overflow-x: auto
+    // scroll container, so anything painted outside that box is clipped. The strip is
+    // painted from the gutter cell instead, which nothing clips.
+    const extension = overrideDecls.match(
+      /\[data-gutter\]\s+:is\(\[data-table-card-gutter\], \[data-code-card-gutter\]\)\s*>\s*\[data-column-number\]:is\([^)]*\)::before\s*\{([^}]*)\}/,
+    );
+    expect(extension).not.toBeNull();
+    // Its width is exactly the two insets it has to cover, both named rather than
+    // written as literals that could drift from the card's own margin.
+    expect(extension?.[1]).toMatch(
+      /width:\s*calc\(var\(--caret-seam\)\s*\+\s*var\(--caret-card-inset\)\)/,
+    );
+    // inherit rather than a named fill, so one rule covers selection, hover and cursor.
+    expect(extension?.[1]).toMatch(/background-color:\s*inherit/);
+    // And the card's own inset reads the same token, so the two cannot drift.
+    expect(overrideDecls).toMatch(
+      /\[data-content\]\s*>\s*\[data-table-card\]\s*\{[^}]*margin-inline:\s*var\(--caret-card-inset\)/,
+    );
+  });
+
+  test("takes a rounded end back off where the band continues past a card", () => {
+    // Widened to descendant, the sibling logic rounds a card's first and last selected
+    // rows — right for a selection wholly inside one, wrong for one that runs past it.
+    for (const corner of ["top-left", "top-right", "bottom-left", "bottom-right"]) {
+      const column = corner.endsWith("left") ? "gutter" : "content";
+      const card = corner.endsWith("left")
+        ? String.raw`\[data-table-card-gutter\], \[data-code-card-gutter\]`
+        : String.raw`\[data-table-card\], \[data-code-card\]`;
+      expect(overrideDecls).toMatch(
+        new RegExp(
+          String.raw`\[data-${column}\][^{}]*:is\(${card}\)[^{}]*\{[^}]*border-${corner}-radius:\s*0`,
+        ),
+      );
+    }
+  });
+
+  test("places a carded comment's row across the table's columns", () => {
+    const row = overrideDecls.match(
+      /\[data-content\]\s*>\s*\[data-table-card\]\s*>\s*\[data-line-annotation\]\s*\{([^}]*)\}/,
+    );
+    expect(row).not.toBeNull();
+    expect(row?.[1]).toMatch(/grid-column:\s*1\s*\/\s*-1/);
+    // Out of the track sizing: the composer's min-content would otherwise widen the
+    // table's max-content columns to fit a comment.
+    expect(row?.[1]).toMatch(/min-width:\s*0/);
+    // And pinned to the card's inline start, so a wide table scrolls under it.
+    expect(row?.[1]).toMatch(/position:\s*sticky/);
   });
 });
 
