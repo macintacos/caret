@@ -17,9 +17,9 @@
 //   - AbortController/AbortSignal — `node:events` rejects a happy-dom signal
 //     outright (ERR_INVALID_ARG_TYPE), and listr2 hands its own controller's
 //     signal to setMaxListeners from the Listr constructor, so scripts/preflight.ts
-//     could not build a task list at all. Restored as a pair: a native controller
-//     under a happy-dom `AbortSignal` global would leave `signal instanceof
-//     AbortSignal` false, which is a worse trap than the one being fixed.
+//     cannot build a task list without this. Restored as a pair: a native
+//     controller under a happy-dom `AbortSignal` global leaves `signal instanceof
+//     AbortSignal` false, which is a subtler trap than the one this closes.
 //     EXC-1080.
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 
