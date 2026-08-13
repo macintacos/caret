@@ -50,3 +50,10 @@ playwright/.cache/
 
 # Ad-hoc playwright-cli exploration output (browser-testing.md: never committed)
 .playwright-cli/
+
+# The README's demo recording (`mise run assets video`). Uploaded to GitHub and
+# linked from the README by its attachment URL rather than committed, so a
+# regeneration doesn't add a multi-megabyte blob to history every time. See
+# doc/DEVELOPMENT.md § Regenerating the README assets. The stitch beside it IS
+# committed.
+/doc/assets/caret-review-demo.mp4
