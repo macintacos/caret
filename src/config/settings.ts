@@ -22,7 +22,14 @@ import { z } from "zod";
 // Re-exported so existing `from "@/config/settings.ts"` import sites keep working; the
 // literal lives in the node-free constants module so ui/vite.config.ts can read
 // it without pulling in this module's node-only dependency chain (EXC-504).
-import { DEFAULT_PORT, HOOK_TIMEOUT_S, MAX_HEARTBEAT_MS } from "@/config/constants.ts";
+import {
+  DEFAULT_LOG_KEEP,
+  DEFAULT_LOG_MAX_SIZE,
+  DEFAULT_PORT,
+  HOOK_TIMEOUT_S,
+  MAX_HEARTBEAT_MS,
+  MIN_LOG_MAX_SIZE,
+} from "@/config/constants.ts";
 import { configFile } from "@/config/paths.ts";
 // EXC-558: the one dev-vs-compiled signal, reused to gate the [dev] table inert
 // in a prod build. Cycle-free: build-id imports only ui-assets/crypto/pkg, and
@@ -48,6 +55,11 @@ const IdleMs = z.number().int().nonnegative();
 // CARET_HEARTBEAT_MS / [daemon].heartbeat_ms falls back like any other invalid
 // value (classifyEnv → null → file/default; safeParse → whole-file revert).
 const HeartbeatMs = z.number().int().positive().lt(MAX_HEARTBEAT_MS);
+// EXC-1068: rotation knobs. Floored (not merely positive) so a near-zero
+// max_size can't turn every emit into a read-truncate-gzip cycle; keep is
+// nonnegative because 0 legitimately means "rotate, archive nothing".
+const LogMaxSize = z.number().int().min(MIN_LOG_MAX_SIZE);
+const LogKeep = z.number().int().nonnegative();
 
 // EXC-558: dev-only settings ([dev]). Consumed ONLY by dev tooling
 // (scripts/tasks/dev/*, .mise/tasks/dev), which runs from source under bun;
@@ -77,6 +89,8 @@ const SettingsSchema = z.object({
     .object({
       level: z.enum(["debug", "info", "warn", "error"]).default("info"), // EXC-398
       redact: z.boolean().default(false), // EXC-399: raw by default; `caret redact` covers after-the-fact
+      max_size: LogMaxSize.default(DEFAULT_LOG_MAX_SIZE), // EXC-1068: bytes; over this a live log is archived
+      keep: LogKeep.default(DEFAULT_LOG_KEEP), // EXC-1068: gzipped archives retained per log
     })
     // zod 4: .default() does NOT parse its value, .prefault({}) runs {} through
     // the inner schema so a missing [logging] table picks up every key default.
@@ -271,6 +285,8 @@ const ENV_VARS: ReadonlyArray<[name: string, schema: z.ZodType<number>]> = [
   ["CARET_TIMEOUT", TimeoutS],
   ["CARET_IDLE_MS", IdleMs],
   ["CARET_HEARTBEAT_MS", HeartbeatMs],
+  ["CARET_LOG_MAX_SIZE", LogMaxSize],
+  ["CARET_LOG_KEEP", LogKeep],
 ];
 
 /** Classify a CARET_* raw string through its sub-schema: a number when set and
@@ -366,6 +382,18 @@ export function reviewTimeoutMs(s: Settings = settings().current()): number {
  * .lt(MAX_HEARTBEAT_MS) so the derived idleTimeout stays under Bun's 255s cap. */
 export function heartbeatMs(s: Settings = settings().current()): number {
   return envValue("CARET_HEARTBEAT_MS", HeartbeatMs) ?? s.daemon.heartbeat_ms;
+}
+
+/** Size (bytes) past which a live log is archived: CARET_LOG_MAX_SIZE >
+ * [logging].max_size > 5 MiB. Read live by both loggers, so a config edit
+ * hot-reloads like level and redact. */
+export function logMaxSize(s: Settings = settings().current()): number {
+  return envValue("CARET_LOG_MAX_SIZE", LogMaxSize) ?? s.logging.max_size;
+}
+
+/** Gzipped archives retained per log: CARET_LOG_KEEP > [logging].keep > 10. */
+export function logKeep(s: Settings = settings().current()): number {
+  return envValue("CARET_LOG_KEEP", LogKeep) ?? s.logging.keep;
 }
 
 // --- EXC-558: dev-only accessors ([dev]). Resolve CARET_DEV_* > [dev] key >

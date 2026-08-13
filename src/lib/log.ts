@@ -14,7 +14,7 @@
 
 import pino from "pino";
 
-import { ensureStateDir, logFile } from "@/config/paths.ts";
+import { ensureLogsDir, logFile } from "@/config/paths.ts";
 import { callerLocation } from "@/lib/caller-location.ts";
 import { errorMessage } from "@/lib/types.ts";
 import { shortId } from "@/redact/core.ts";
@@ -144,7 +144,7 @@ export const noopLogger: CaretLogger = {
 /** Build a hook-side CaretLogger over a fresh caret.log destination, mirroring
  * createDaemonLogger's injected-thunk shape so both sinks share one
  * construction path. Opens caret.log at the current logFile() path (creating
- * the 0700 state dir and 0600 file), and returns the logger paired with the
+ * the 0700 logs dir and 0600 file), and returns the logger paired with the
  * destination and the path it was opened for, so the caller can release the fd
  * and detect a path change. Degrades to noopLogger with a null dest if the
  * dir/file can't be opened — never throws. */
@@ -154,7 +154,7 @@ function createHookLogger(
 ): { log: CaretLogger; dest: ReturnType<typeof pino.destination> | null; path: string } {
   const path = logFile();
   try {
-    ensureStateDir();
+    ensureLogsDir();
     const dest = pino.destination({ dest: path, sync: true, mode: 0o600 });
     return { log: wrap(pino(pinoOpts, dest), level, redact, "hook"), dest, path };
   } catch {

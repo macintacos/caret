@@ -5,6 +5,26 @@
 /** Default daemon port — the [daemon].port schema default (EXC-430). */
 export const DEFAULT_PORT = 42718;
 
+// --- Log rotation (EXC-1068) ---
+//
+// The defaults live here rather than in log.ts because settings.ts imports
+// logError from log.ts, so log.ts importing the resolved settings back would
+// close a cycle. Both the schema defaults and the hook logger's pre-settings
+// seed read them from here.
+
+/** Size (bytes) a live log must exceed before it is archived — the
+ * [logging].max_size schema default. */
+export const DEFAULT_LOG_MAX_SIZE = 5 * 1024 * 1024;
+
+/** Gzipped archives retained per log — the [logging].keep schema default.
+ * Older ones are pruned oldest-first after each rotation. */
+export const DEFAULT_LOG_KEEP = 10;
+
+/** Floor on max_size / CARET_LOG_MAX_SIZE. A near-zero threshold would rotate
+ * on essentially every record, burning the archive budget on fragments and
+ * turning each emit into a read-truncate-gzip cycle. */
+export const MIN_LOG_MAX_SIZE = 64 * 1024;
+
 /** The vanity host the hook opens the review UI under (EXC-426). Resolves to
  * loopback per RFC 6761 (mDNSResponder system-wide; Chrome/Firefox special-case
  * it internally), so the 127.0.0.1 bind needs no change. Shared here because
