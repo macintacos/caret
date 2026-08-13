@@ -378,17 +378,17 @@ config-array editor (add/remove, comment-preserving); `--target` parsing + dispa
 `claude` target's CLI command sequence; the runtime bin/version resolvers; and the update
 check (toasts when behind, silent on error / opt-out).
 
-**Confirmed against a live OpenCode (1.18.x) — EXC-1085, the array install's LOCAL form:**
-`caret install --target opencode --from-local` writes the `file:` entry; OpenCode symlinks
-the checkout and loads the plugin with no `failed to load plugin` line; the `config`
-hook's mutation reaches the running config (`experimental.primary_tools` carries
-`caret_review_plan`, and the `plan` agent's `permission` carries its `allow`); the
-planning steer routes the Plan agent to the tool; the envelope reaches `caret review`,
-which serves the plan in caret's UI under the adapter's single `default` approve variant;
-and approving there returns `approvedMessage` to the agent, which proceeds. This
-supersedes the pre-EXC-794 file-deploy finding that used to sit here — that a local plugin
-FILE resolves `@opencode-ai/plugin` only with a config-dir `package.json` manifest — which
-no longer describes anything caret writes.
+**Confirmed against a live OpenCode 1.18.11 with `@opencode-ai/plugin` 1.18.17 — EXC-1085,
+the array install's LOCAL form, which is what ties the run to that plugin version: a
+`file:` entry loads the checkout's own module, so the dependency under test is the one
+this repo's lockfile resolves.** `caret install --target opencode --from-local` writes
+that entry; OpenCode symlinks the checkout and loads the plugin with no
+`failed to load plugin` line; the `config` hook's mutation reaches the running config
+(`experimental.primary_tools` carries `caret_review_plan`, and the `plan` agent's
+`permission` carries its `allow`); the planning steer routes the Plan agent to the tool;
+the envelope reaches `caret review`, which serves the plan in caret's UI under the
+adapter's single `default` approve variant; and approving there returns `approvedMessage`
+to the agent, which proceeds.
 
 **Documented manual follow-up (needs a live OpenCode + a model provider):** what that
 round-trip did not reach — the PUBLISHED entry (`@macintacos/caret`) resolving out of npm
