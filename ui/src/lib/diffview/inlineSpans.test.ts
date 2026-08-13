@@ -170,10 +170,14 @@ describe("link runs", () => {
 });
 
 // EXC-1066: a path is the markup. A reference range claims its own interior, so
-// the emphasis CommonMark reads out of a filename cannot cut the chip into
-// pieces. The test is containment WITHOUT coextension, and that carve-out is the
-// half worth pinning: the citation shape emits its reference over the whole
-// backticked label, so that codespan IS the chip rather than a rival to it.
+// the emphasis CommonMark reads out of a filename cannot cut the chip into pieces.
+// Inline code is the exception, and it is the half most worth pinning: a codespan's
+// interior is literal, so it is never the collision — and it is the very thing the
+// reference is drawn as.
+//
+// The ranges here are the EMITTED ones links.ts passes, which always cover a whole
+// collapsed label. That is why no case below puts a reference range outside the
+// markup: production cannot produce one.
 describe("markup inside a file-reference range", () => {
   const ref = (line: string) => [{ startCol: 0, endCol: line.length }];
 
@@ -194,12 +198,29 @@ describe("markup inside a file-reference range", () => {
     expect(runs(line, [], [], ref(line))).toEqual([{ startCol: 0, endCol: 12, code: true }]);
   });
 
-  test("a code span wrapping the reference survives", () => {
-    // Outside the range rather than inside it — the backticks are the reader's,
-    // not the path's.
-    expect(runs("`foo/bar.ts`", [], [], [{ startCol: 1, endCol: 11 }])).toEqual([
-      { startCol: 0, endCol: 12, code: true },
-    ]);
+  test("a code span inside a prose label survives", () => {
+    // [the `resolve` handler](src/daemon/resolve.ts): the reference covers the whole
+    // prose label, so the code span sits strictly inside it. Dropped, the backticks
+    // would render bare and inlineDecorate's data-md-cite would have no group to
+    // draw the one continuous citation pill over.
+    const line = "the `resolve` handler";
+    expect(runs(line, [], [], ref(line))).toEqual([{ startCol: 4, endCol: 13, code: true }]);
+  });
+
+  test("emphasis coextensive with the reference is dropped like any other", () => {
+    // [**a/b.ts**](a/b.ts). Coextension is not a carve-out for emphasis — only
+    // inline code is exempt — so this matches the prose-label case below rather
+    // than splitting the rule on where the markers landed.
+    const line = "**a/b.ts**";
+    expect(runs(line, [], [], ref(line))).toEqual([]);
+  });
+
+  test("emphasis an author wrote into a prose label is dropped too", () => {
+    // [a **bold** label](x/y.ts). The accepted consequence of "the reference wins":
+    // the rule is decided from the target, before resolution, so a label that means
+    // its emphasis loses it exactly as a path that merely spells one does.
+    const line = "a **bold** label";
+    expect(runs(line, [], [], ref(line))).toEqual([]);
   });
 
   test("emphasis inside a plain link label is untouched", () => {
@@ -213,9 +234,20 @@ describe("markup inside a file-reference range", () => {
   test("a reference nested inside real emphasis yields one bold run", () => {
     // `**[a/__init__.py](a/__init__.py)**` displays as `**a/__init__.py**`. The
     // inner strong would split the outer bold into three runs carrying identical
-    // attributes, which the decoration pass draws as three abutting pills.
+    // attributes, which the decoration pass draws as three abutting pills. The
+    // outer strong extends past the reference, so it is kept.
     expect(runs("**a/__init__.py**", [], [], [{ startCol: 2, endCol: 15 }])).toEqual([
       { startCol: 0, endCol: 17, bold: true },
+    ]);
+  });
+
+  test("emphasis only partly overlapping a reference is kept", () => {
+    // `[a/_b.ts](a/_b.ts) c_ d` displays as `a/_b.ts c_ d`, whose two lone `_`
+    // pair across the reference's right edge. The em is not the path's own
+    // spelling, so the suppression leaves it — pinned as the boundary of the rule
+    // rather than as a shape worth drawing this way.
+    expect(runs("a/_b.ts c_ d", [], [], [{ startCol: 0, endCol: 7 }])).toEqual([
+      { startCol: 2, endCol: 10, italic: true },
     ]);
   });
 });

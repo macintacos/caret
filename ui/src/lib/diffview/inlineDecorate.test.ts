@@ -5,6 +5,7 @@ import type { FileRefSpan, FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 import { tagFileRefTokens } from "$lib/diffview/fileRefTag.ts";
 import { decorateInlineRuns } from "$lib/diffview/inlineDecorate.ts";
 import type { InlineSpan, InlineSpanMap } from "$lib/diffview/inlineSpans.ts";
+import { buildLinkLayer } from "$lib/diffview/links.ts";
 
 // decorateInlineRuns splits a row's shiki tokens at every inline-run boundary
 // and tags each resulting child with the run covering it, so the override sheet
@@ -462,20 +463,40 @@ test("splits a prose-labelled reference out of its coarse token", () => {
 });
 
 test("draws a path spelling emphasis as one reference token", () => {
-  // EXC-1066, the user-visible half: `[jobs/shared/zeus/__init__.py](…)` collapses
-  // to the bare path, and `__init__` is a valid CommonMark strong run. The
-  // emission layer suppresses it, so the maps that arrive here carry NO inline run
-  // — the row is cut at the reference's own columns and nowhere else. Cut by a
-  // bold run as well, this would be three children with the middle one wearing
-  // data-md="bold", which draws as a bold pill between two plain halves.
+  // EXC-1066, the user-visible half. Driven from buildLinkLayer's real maps rather
+  // than hand-built ones, because the claim is about what the emission layer hands
+  // this pass: `__init__` is a valid CommonMark strong run, and if it reached here
+  // the row would be three children with the middle one wearing data-md="bold" —
+  // a bold pill between two plain halves instead of one reference.
   const path = "jobs/shared/zeus/__init__.py";
-  const refs = refMap([[1, [{ startCol: 0, endCol: path.length, path }]]]);
-  host = root(row(1, [path]));
-  decorateInlineRuns(host, new Map(), refs);
+  const layer = buildLinkLayer(`[${path}](${path})`);
+  host = root(row(1, [layer.text]));
+  decorateInlineRuns(host, layer.inline, layer.fileRefs);
   expect(pieces(host).map((p) => p.text)).toEqual([path]);
   expect(host.querySelectorAll("[data-md]").length).toBe(0);
-  tagFileRefTokens(host, refs);
+  tagFileRefTokens(host, layer.fileRefs);
   expect(fileRefs(host)).toEqual([path]);
+});
+
+test("keeps the code pill on a prose label that cites a path", () => {
+  // The other side of the same rule, likewise end to end: [the `resolve` handler]
+  // (src/daemon/resolve.ts) collapses to a prose label whose backticked span sits
+  // inside the reference. Inline code is exempt from the suppression, so the
+  // codespan run survives and the label still draws its chip. Suppressed, the
+  // row would be one bare child and the backticks would render as loose text.
+  //
+  // The emitted map alone is fed here, so no data-md-cite is expected — that
+  // treatment keys off a codespan CONTAINING a reference, which is the merged
+  // map's doing (mergeFileRefSpans lets the scanned columns win) and belongs to
+  // the citation test above.
+  const layer = buildLinkLayer("[the `resolve` handler](src/daemon/resolve.ts)");
+  host = root(row(1, [layer.text]));
+  decorateInlineRuns(host, layer.inline, layer.fileRefs);
+  expect(pieces(host)).toEqual([
+    { text: "the ", md: null, start: null, end: null },
+    { text: "`resolve`", md: "code", start: "code", end: "code" },
+    { text: " handler", md: null, start: null, end: null },
+  ]);
 });
 
 test("decorates a row that a scroll card re-parented", () => {

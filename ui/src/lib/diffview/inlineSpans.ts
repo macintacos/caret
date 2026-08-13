@@ -31,15 +31,15 @@
 // so emphasis inside a collapsed label lands on the columns the reader sees. That
 // is why this layer needs no column remapping of its own.
 //
-// Where the reference layer (EXC-859) and that grammar disagree, the reference
-// wins (EXC-1066): markup strictly inside a reference range is dropped before the
-// runs are cut, because a filename like `foo/__init__.py` spells CommonMark
-// emphasis it does not mean. Suppressing at emission rather than at decoration is
-// what keeps a reference nested inside real emphasis to ONE bold run — a
-// post-hoc filter would already have three identical-attribute runs to fuse, and
-// abutting runs are deliberately never fused (above). Only the LINK-TARGET
-// references need passing in; a scanned reference lives inside inline code by
-// construction, which is one codespan token with no interior interval to drop.
+// Where the reference layer (EXC-687) and that grammar disagree, the reference
+// wins (EXC-1066): emphasis inside a reference range is dropped before the runs
+// are cut, because a filename like `foo/__init__.py` spells CommonMark emphasis it
+// does not mean. Suppressing at emission rather than at decoration is what keeps a
+// reference nested inside real emphasis to ONE bold run — a post-hoc filter would
+// already have three identical-attribute runs to fuse, and abutting runs are
+// deliberately never fused (above). Only the LINK-TARGET references need passing
+// in; a scanned reference lives inside inline code by construction, and inline
+// code is exempt from the suppression anyway.
 //
 // Blockquote depth is reported twice over, because its consumers want different
 // things: the whole-line depth rides the row (EXC-863 subdues a quoted line's ink
@@ -246,21 +246,17 @@ function flatten(intervals: Interval[]): InlineSpan[] {
   return spans;
 }
 
-/** Whether a token interval is markup the reference layer has already claimed
+/** Whether a token interval falls inside a range the reference layer claimed
  * (EXC-1066). A path IS the markup, so the emphasis CommonMark reads out of
  * `foo/__init__.py` must not cut the reference into three tokens.
  *
- * Strictly inside, never coextensive: the citation shape emits its reference over
- * the WHOLE backticked label, so that codespan is the chip rather than a rival to
- * it, and a codespan that merely wraps a reference sits outside the range
- * entirely. Only genuinely interior markup is dropped. */
+ * Containment is the whole test, coextension included: `[**a/b.ts**](a/b.ts)` and
+ * `[a **bold** label](a/b.ts)` make the same claim over the same columns, and which
+ * one keeps its emphasis must not turn on where the markers happen to sit. An
+ * interval that only PARTLY overlaps a range is kept — that markup extends past the
+ * reference, so it was never the reference's own spelling. */
 function insideReference(interval: ColumnRange, refs: readonly ColumnRange[]): boolean {
-  return refs.some(
-    (r) =>
-      r.startCol <= interval.startCol &&
-      interval.endCol <= r.endCol &&
-      (r.startCol < interval.startCol || interval.endCol < r.endCol),
-  );
+  return refs.some((r) => r.startCol <= interval.startCol && interval.endCol <= r.endCol);
 }
 
 /** Pushes the list-marker interval opening at `offset`, if one does. A thematic
@@ -322,13 +318,21 @@ export function buildInlineSpans(
   listMarkerAt(display, 0, intervals);
   if (quote.contentStart > 0) listMarkerAt(display, quote.contentStart, intervals);
 
-  // Collected apart from the structural intervals above so only the token ones
-  // are filtered: a quote marker, checkbox or list marker is a fact about the
-  // line, not markup a reference could claim.
+  // Collected apart from the structural intervals above so only the token ones are
+  // filtered. A checkbox or list marker is not markup a reference range can be read
+  // against, and a `>` inside a label is already refused by the quote scan.
+  //
+  // A CODESPAN is exempt whatever it contains: its interior is literal, so it can
+  // never be the collision this drops, and taking it away costs the reference the
+  // chip it is drawn as. Both shapes that carry one are real — the citation
+  // `[`a/b.ts`](a/b.ts)` emits its range over the whole backticked label, while a
+  // prose label like `[the `resolve` handler](src/x.ts)` carries the span inside it.
   const tokens: Interval[] = [];
   collectTokenIntervals(Lexer.lexInline(display, { gfm: true }), 0, tokens);
   for (const token of tokens) {
-    if (!insideReference(token, refRanges)) intervals.push(token);
+    if (token.attributes.code !== undefined || !insideReference(token, refRanges)) {
+      intervals.push(token);
+    }
   }
 
   for (const range of linkRanges) {

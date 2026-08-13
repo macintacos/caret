@@ -623,7 +623,7 @@ EXC-1066: a path **is** the markup. When a collapsed link's label carries charac
 
 - [jobs/shared/zeus/__init__.py](jobs/shared/zeus/__init__.py) — `__init__` is a valid CommonMark `strong` run, and none of it may draw bold. The regression is the reference cut into three tokens: `jobs/shared/zeus/`, a bold `__init__` pill, and `.py`.
 - [src/_a_/b.ts](src/_a_/b.ts) — the same collision through `em` rather than `strong`: `_a_` stays literal, and a slanted middle segment is the regression.
-- [src/_private.py](src/_private.py) — the negative control: a single intraword `_` opens nothing, so this row is not at risk from either side, and it must read identically to the two above.
+- [src/_private.py](src/_private.py) — the negative control: the lone `_` can open a run, but nothing on the line ever closes it, so no element is formed and this row was never at risk from either side. It must read identically to the two above.
 - [doc/~snapshot~.md](doc/~snapshot~.md) — GFM reads `~snapshot~` as `del`, which carries no attribute, so it draws nothing here for the same reason `~~…~~` draws nothing under **Emphasis**. It sits under `doc/` deliberately: a target that starts with `~` is unresolvable in principle, so the same filename written alone would not be a citation at all.
 - `a*b.ts` — written as inline code rather than as a link, because `*` is not one of the characters a citable target may hold: a link pointing here could never be a reference, so a code span is the only spelling of this path the pass ever sees, and its interior stays literal like every other span's.
 
