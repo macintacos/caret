@@ -22,6 +22,7 @@ Find the row that matches what you came here to do, then follow the link.
 | Run a dev instance, or look up any task in the full `mise` catalog | [`DEVELOPMENT.md` § Development](DEVELOPMENT.md#development) |
 | Add or change a `mise` task | [`DEVELOPMENT.md` § The tasks CLI](DEVELOPMENT.md#the-tasks-cli) |
 | Refresh the README's screenshot and demo recording | [`DEVELOPMENT.md` § Regenerating the README assets](DEVELOPMENT.md#regenerating-the-readme-assets) |
+| Work out which of caret's three rumdl setups you're touching, or bump its version | [`agents/rumdl-rules.md`](agents/rumdl-rules.md) |
 | Follow the conventions for the area of code you're changing | [`agents/`](agents/), routed by [`CLAUDE.md`](../CLAUDE.md) |
 
 ## `agents/`

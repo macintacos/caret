@@ -3,8 +3,8 @@
 *Audience: coding agents and contributors adding or editing a rule-of-the-road.*
 
 `doc/agents/*.md` holds caret's rules-of-the-road — one file per code area (architecture,
-logging, TypeScript, Svelte, shadcn, testing, icons, settings, OpenCode). They are the
-substance behind `CLAUDE.md`'s routing digraph; each is concise and scoped to its own
+logging, TypeScript, Svelte, shadcn, testing, icons, settings, OpenCode, rumdl). They are
+the substance behind `CLAUDE.md`'s routing digraph; each is concise and scoped to its own
 area.
 
 Adding a new rule file:
