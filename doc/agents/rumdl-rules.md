@@ -19,7 +19,7 @@ for.
 | **Who sees it** | contributors, CI, the pre-commit hook | **end users** — every plan caret renders for review | readers of a GitHub Release |
 | **Binary** | mise-provisioned, on `PATH` | downloaded at runtime into `$XDG_STATE_HOME/caret/rumdl/`, sha256-verified, deliberately **off** `PATH` | mise-provisioned, reached via `mise x rumdl` so it resolves the same binary the format task uses |
 | **Config** | `.rumdl.toml` — lint **and** format | `RUMDL_CONFIG`, a string constant in `src/plan/rumdl.ts`, rewritten into caret's state dir on every `ensureRumdl()` | inline `--config` flags only, no file |
-| **Invocation** | `rumdl fmt {{ files }}` (format) and `rumdl check` (lint), both driven by `hk.pkl` over `**/*.md` | `rumdl fmt - --config <config>` over stdin | `mise x rumdl -- rumdl fmt - --config MD013.reflow=true --config MD013.line_length=9999999` over stdin |
+| **Invocation** | `rumdl fmt {{ files }}` (format) and `rumdl check {{ files }}` (lint), both driven by `hk.pkl` over `**/*.md` and `**/*.markdown` | `rumdl fmt - --config <config>` over stdin | `mise x rumdl -- rumdl fmt - --config MD013.reflow=true --config MD013.line_length=9999999` over stdin |
 | **Owns the detail** | `.rumdl.toml`, `hk.pkl` | `src/plan/rumdl.ts`, [`../CONFIGURING.md`](../CONFIGURING.md#plan-formatting-rumdl) | `scripts/tasks/release/rumdl.ts` |
 
 Each of those files explains its own half well; this one exists for the *relationship*
@@ -34,9 +34,10 @@ between them, so read the owner for detail rather than expecting it restated her
 
 They must agree because plan formatting is *tested* against one binary and *ships* with
 another: the plan-formatter suite runs the **mise** one (`test/support/rumdl-preload.ts`
-points `CARET_RUMDL_BIN` at whatever `rumdl` is on `PATH`, so unit tests never download),
-while production runs the **downloaded** one. A divergence lets a plan-formatting change
-pass its tests against a version end users never receive.
+points `CARET_RUMDL_BIN` at whatever `rumdl` is on `PATH`, so unit tests skip the download
+whenever that binary is the pinned one), while production runs the **downloaded** one. A
+divergence lets a plan-formatting change pass its tests against a version end users never
+receive.
 
 `test/structure/rumdl-pin.test.ts` is the standing gate that makes the lockstep
 falsifiable: a `mise up rumdl` that moves the lock without moving `RUMDL_VERSION` and the
@@ -66,19 +67,23 @@ Do not reconcile these. Each answers a different reader:
 
 ## `scripts/tasks/dev/fake-plan.md` must stay un-rumdl'd
 
-It is excluded twice — in `.rumdl.toml`'s `exclude`, and on **both** rumdl steps in
-`hk.pkl` — so it never reaches rumdl at all. It stands in for a plan as an agent actually
-writes one, paragraphs and list items on single long lines, and `mise run dev` feeds it
-through the plan-formatting role above — caret's own reflow, not rumdl's repo config.
-Formatting it here would pre-wrap it at 90 columns under a config with no reflow
-exemptions, and caret's reflow never rejoins a line something else already broke, so the
-fixture would silently stop testing the thing it exists to test.
+`mise run dev` feeds this fixture through the plan-formatting role above, so it has to
+keep the shape an agent actually writes: paragraphs and list items on single long lines.
+Three `exclude` entries keep the repo-hygiene role away from it — one in `.rumdl.toml`,
+one on each of the two rumdl steps in `hk.pkl` — so it never reaches that config at all.
+`.rumdl.toml`'s own comment carries the rationale where a reader of that file needs it.
 
-The exclusion holds even when you name the file directly:
-`rumdl check scripts/tasks/dev/fake-plan.md` reports `1 file found was filtered out` and
-does nothing. `--no-exclude` is the one way past it — don't. If a format run ever rewraps
-the fixture anyway, one of the two exclusions has been dropped: revert the hunk and
-restore it.
+What belongs here is why the exclusion cannot be relaxed: the two configs do not
+round-trip. `.rumdl.toml` measures link URLs, so it isolates a link-carrying line onto its
+own line; the plan config exempts URLs from measurement and so never has cause to rejoin
+it. Format the fixture under the repo config once and the plan config's output stops
+matching what it produces from the agent's original — the fixture still looks fine and
+silently stops exercising the divergence it exists to catch.
+
+The exclusion holds even when the file is named directly: `rumdl check` on that path
+reports it filtered out by exclude patterns and does nothing. `--no-exclude` is the one
+way past — don't. If a format run ever rewraps the fixture, one of the three entries has
+been dropped: revert the hunk and restore it.
 
 ## Bumping the version
 
@@ -86,7 +91,7 @@ One version moves; the three configs do not move with it.
 
 ```bash
 mise up rumdl                                  # moves mise.lock's [[tools.rumdl]]
-mise run test test/structure/rumdl-pin.test.ts # now red — that is the point
+mise run test test/structure/rumdl-pin.test.ts # red once the lock actually moved
 ```
 
 Then, in `src/plan/rumdl.ts`, set `RUMDL_VERSION` to the resolved version and replace all
@@ -98,10 +103,11 @@ formatting (rumdl).
 
 Re-run the pin suite until green, then `mise run preflight --json --full`. A rumdl bump
 can reformat markdown across the whole tree, and the whole-tree lint is what surfaces
-that; the same run also proves the new binary still produces the plan shape
-`test/core/plan/` pins.
+that; when it does, `mise run format` applies the new binary's output and that reformat is
+committed **with** the bump rather than left for the next change to trip over. The same
+run also proves the new binary still produces the plan shape `test/core/plan/` pins.
 
-## Where rumdl state lives
+## The file map
 
 | File | What it carries |
 | --- | --- |
@@ -111,8 +117,10 @@ that; the same run also proves the new binary still produces the plan shape
 | `hk.pkl` | the repo-hygiene invocations, and the fake-plan exclusion |
 | `src/plan/rumdl.ts` | `RUMDL_VERSION`, the `ASSETS` checksums, `RUMDL_CONFIG`, the download |
 | `src/config/paths.ts` | where the downloaded binary and its config live |
+| `src/commands/install/index.ts` | warms the download at install time, off the first plan's critical path |
 | `scripts/tasks/release/rumdl.ts` | the release-notes invocation and its inline config |
 | `doc/CONFIGURING.md` | the user-facing story, including hard-coded version mentions |
 | `test/structure/rumdl-pin.test.ts` | the standing gate on the shared version |
 | `test/support/rumdl-preload.ts` | points unit tests at the mise binary so they run offline |
+| `bunfig.toml` | the `[test] preload` entry that actually runs that preload |
 | `test/e2e/support/fixtures.ts` | hands e2e daemons a pinned binary; hard-fails on a mismatch |
