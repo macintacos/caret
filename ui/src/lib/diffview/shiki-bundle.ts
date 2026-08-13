@@ -54,11 +54,18 @@ export { createOnigurumaEngine, loadWasm } from "shiki/engine/oniguruma";
  * bare `createJavaScriptRegexEngine()` is a different engine and pins nothing.
  *
  * The engine runs STRICT. `forgiving: true` was carried here from EXC-665 on the
- * theory that some grammar needed it, but all 332 bundled grammars load and all
- * 14,234 of their patterns translate without it, so it rescued nothing. What it
- * did do was let a pattern the engine cannot compile be dropped silently — and
- * silent degradation is precisely what hid EXC-911's mis-scoped comments for so
- * long. Strict trades that for a throw, which surfaces rather than festers.
+ * theory that some grammar needed it, but all 346 bundled grammars load and all
+ * but one of their 15,027 patterns translate without it, so it rescued almost
+ * nothing. What it did do was let a pattern the engine cannot compile be dropped
+ * silently — and silent degradation is precisely what hid EXC-911's mis-scoped
+ * comments for so long. Strict trades that for a throw, which surfaces rather
+ * than festers.
+ *
+ * The one exception is upstream's, not caret's: the AutoHotkey v2 grammar shiki
+ * 4.4 added matches a raw byte range that oniguruma-to-es cannot express, so an
+ * `ahk2` fence renders plain — the same thing it did before that grammar existed.
+ * shiki-bundle.test.ts records it exactly, and reds if a second one appears or if
+ * this one is ever fixed (EXC-1079).
  *
  * Patterns compile lazily, at first tokenize rather than at load, so the strict
  * throw would land when a fence is rendered. shiki-bundle.test.ts guards both

@@ -167,10 +167,29 @@ function collectPatterns(node: unknown, out: Set<string>) {
   }
 }
 
+/**
+ * The one pattern in the bundle that does not translate, recorded rather than worked
+ * around (EXC-1079). shiki 4.4 added the AutoHotkey v2 grammar, whose hotkey rule
+ * matches a raw byte range — `[^\x00-\xff]` — and oniguruma-to-es refuses `\xff` as an
+ * incomplete multibyte code. The throw is upstream and reaches caret unmodified: shiki's
+ * own strict engine and `defaultJavaScriptRegexConstructor` raise the identical error,
+ * so jsc-regex.ts is not involved and there is nothing on caret's side to repair.
+ *
+ * It is carved out rather than answered with `forgiving: true`, which would trade one
+ * plain-rendered AutoHotkey fence for silent degradation across all 15,027 patterns —
+ * exactly the failure mode EXC-911 removed. The cost is bounded: both highlight.ts entry
+ * points catch and return no rows, so an `ahk2` fence renders as plain text, which is
+ * what it did before shiki shipped the grammar at all.
+ *
+ * Keyed on the message rather than the 1.3 KB pattern, and paired with an exact failure
+ * count below so a SECOND failure still reds the sweep.
+ */
+const UNTRANSLATABLE = 'Multibyte code "\\xff" incomplete or invalid in Oniguruma';
+
 // The expensive half — the claim that actually justifies strict mode, and the only
 // thing a shiki bump can invalidate. The ~9s is paid on every run deliberately:
 // behind an opt-in flag it would never actually run, and an unverified claim about
-// these 14,234 patterns is what let EXC-911 hide for as long as it did.
+// these 15,027 patterns is what let EXC-911 hide for as long as it did.
 describe("every bundled pattern translates strictly", () => {
   test("no pattern fails to compile through caret's regexConstructor", async () => {
     const patterns = new Set<string>();
@@ -190,8 +209,14 @@ describe("every bundled pattern translates strictly", () => {
       }
     }
 
-    expect(failures).toEqual([]);
-    // Non-vacuity again: an empty pattern set would pass the check above.
+    // Asserted in both directions, the way exact-pin.test.ts keeps its own record
+    // honest. Any failure that is not the carve-out reds, and names itself.
+    expect(failures.filter((f) => !f.includes(UNTRANSLATABLE))).toEqual([]);
+    // And the carve-out may not outlive its cause: a second `\xff` pattern, or an
+    // oniguruma-to-es that learns to translate this one, both red here.
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toContain("[^\\x00-\\xff]");
+    // Non-vacuity again: an empty pattern set would pass the checks above.
     expect(patterns.size).toBeGreaterThan(10_000);
   }, 60_000);
 });
