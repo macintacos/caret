@@ -528,6 +528,17 @@ describe("buildLinkLayer inline runs", () => {
     expect(inline.get(1) ?? []).toEqual([]);
   });
 
+  test("a reference whose path spells emphasis is not cut by it", () => {
+    // EXC-1066: `__init__` is a valid CommonMark strong run, so the inline pass
+    // used to split the reference into three tokens and draw the middle one bold.
+    // A path IS the markup — the reference wins over the emphasis it spells.
+    const path = "jobs/shared/zeus/__init__.py";
+    const { text, fileRefs, inline } = buildLinkLayer(`[${path}](${path})`);
+    expect(text).toBe(path);
+    expect(fileRefs.get(1) ?? []).toMatchObject([{ startCol: 0, endCol: path.length }]);
+    expect(inline.get(1) ?? []).toEqual([]);
+  });
+
   test("emphasis and inline code are marked in ordinary prose", () => {
     expect(runsOnLine("a **bold** and `code`", 1)).toEqual([
       { startCol: 2, endCol: 10, bold: true },

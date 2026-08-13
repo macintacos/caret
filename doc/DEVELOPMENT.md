@@ -185,11 +185,11 @@ persisted key isn't registered.
 
 The seed plan (`scripts/tasks/dev/fake-plan.md`) carries a `## Rendering showcase` section
 near its end: one sub-heading per markdown construct — `Emphasis`, `Inline code`, `Links`,
-`File and folder references`, `Fenced blocks`, `Task lists`, `Bullet and ordered lists`,
-`Quoted text`, `Tabular data`, `Rules and separators`, `Images` — each short enough to
-screenshot whole. It is the fixed surface plan-view rendering is compared against, so a
-change to how a plan is drawn has a shared baseline instead of each change growing a
-throwaway fixture and reverting it.
+`File and folder references`, `Paths that look like markup`, `Fenced blocks`,
+`Task lists`, `Bullet and ordered lists`, `Quoted text`, `Tabular data`,
+`Rules and separators`, `Images` — each short enough to screenshot whole. It is the fixed
+surface plan-view rendering is compared against, so a change to how a plan is drawn has a
+shared baseline instead of each change growing a throwaway fixture and reverting it.
 
 Two of those sub-sections do double duty: `DEMO_EDITS` in `scripts/tasks/dev/protocol.ts`
 reproduces the bodies of `Task lists` and `Rules and separators` verbatim so it can stub

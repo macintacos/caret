@@ -10,17 +10,19 @@ import { buildInlineSpans, type InlineSpan } from "$lib/diffview/inlineSpans.ts"
 
 /** Runs for a line. `links` are the ranges marked `link: true`; `labels` is the
  * superset the caller rewrote (references included) that the quote scan reads, and
- * defaults to `links` because every link range is also a label range. */
+ * defaults to `links` because every link range is also a label range. `refs` are
+ * the file-reference ranges whose interior markup is suppressed. */
 function runs(
   line: string,
   links: { startCol: number; endCol: number }[] = [],
   labels: { startCol: number; endCol: number }[] = links,
+  refs: { startCol: number; endCol: number }[] = [],
 ): InlineSpan[] {
-  return buildInlineSpans(line, links, labels).spans;
+  return buildInlineSpans(line, links, labels, refs).spans;
 }
 
 function depth(line: string): number {
-  return buildInlineSpans(line, [], []).quoteDepth;
+  return buildInlineSpans(line, [], [], []).quoteDepth;
 }
 
 describe("emphasis and code runs", () => {
@@ -164,6 +166,89 @@ describe("link runs", () => {
 
   test("a zero-width link range yields no run", () => {
     expect(runs("nothing", [{ startCol: 3, endCol: 3 }])).toEqual([]);
+  });
+});
+
+// EXC-1066: a path is the markup. A reference range claims its own interior, so
+// the emphasis CommonMark reads out of a filename cannot cut the chip into pieces.
+// Inline code is the exception, and it is the half most worth pinning: a codespan's
+// interior is literal, so it is never the collision — and it is the very thing the
+// reference is drawn as.
+//
+// The ranges here are the EMITTED ones links.ts passes, which always cover a whole
+// collapsed label. That is why no case below puts a reference range outside the
+// markup: production cannot produce one.
+describe("markup inside a file-reference range", () => {
+  const ref = (line: string) => [{ startCol: 0, endCol: line.length }];
+
+  test("a strong element spelled by the path is dropped", () => {
+    const line = "jobs/shared/zeus/__init__.py";
+    expect(runs(line, [], [], ref(line))).toEqual([]);
+  });
+
+  test("an italic element spelled by the path is dropped too", () => {
+    const line = "src/_a_/b.ts";
+    expect(runs(line, [], [], ref(line))).toEqual([]);
+  });
+
+  test("a code span coextensive with the reference survives", () => {
+    // The repo's commonest citation, [`foo/bar.ts`](foo/bar.ts): the reference
+    // covers the whole backticked label, so its chip must stay one chip.
+    const line = "`foo/bar.ts`";
+    expect(runs(line, [], [], ref(line))).toEqual([{ startCol: 0, endCol: 12, code: true }]);
+  });
+
+  test("a code span inside a prose label survives", () => {
+    // [the `resolve` handler](src/daemon/resolve.ts): the reference covers the whole
+    // prose label, so the code span sits strictly inside it. Dropped, the backticks
+    // would render bare and inlineDecorate's data-md-cite would have no group to
+    // draw the one continuous citation pill over.
+    const line = "the `resolve` handler";
+    expect(runs(line, [], [], ref(line))).toEqual([{ startCol: 4, endCol: 13, code: true }]);
+  });
+
+  test("emphasis coextensive with the reference is dropped like any other", () => {
+    // [**a/b.ts**](a/b.ts). Coextension is not a carve-out for emphasis — only
+    // inline code is exempt — so this matches the prose-label case below rather
+    // than splitting the rule on where the markers landed.
+    const line = "**a/b.ts**";
+    expect(runs(line, [], [], ref(line))).toEqual([]);
+  });
+
+  test("emphasis an author wrote into a prose label is dropped too", () => {
+    // [a **bold** label](x/y.ts). The accepted consequence of "the reference wins":
+    // the rule is decided from the target, before resolution, so a label that means
+    // its emphasis loses it exactly as a path that merely spells one does.
+    const line = "a **bold** label";
+    expect(runs(line, [], [], ref(line))).toEqual([]);
+  });
+
+  test("emphasis inside a plain link label is untouched", () => {
+    // No reference claimed these columns, so [**bold**](https://x.test) keeps the
+    // bold its author wrote.
+    expect(runs("**bold**", [{ startCol: 0, endCol: 8 }], undefined, [])).toEqual([
+      { startCol: 0, endCol: 8, bold: true, link: true },
+    ]);
+  });
+
+  test("a reference nested inside real emphasis yields one bold run", () => {
+    // `**[a/__init__.py](a/__init__.py)**` displays as `**a/__init__.py**`. The
+    // inner strong would split the outer bold into three runs carrying identical
+    // attributes, which the decoration pass draws as three abutting pills. The
+    // outer strong extends past the reference, so it is kept.
+    expect(runs("**a/__init__.py**", [], [], [{ startCol: 2, endCol: 15 }])).toEqual([
+      { startCol: 0, endCol: 17, bold: true },
+    ]);
+  });
+
+  test("emphasis only partly overlapping a reference is kept", () => {
+    // `[a/_b.ts](a/_b.ts) c_ d` displays as `a/_b.ts c_ d`, whose two lone `_`
+    // pair across the reference's right edge. The em is not the path's own
+    // spelling, so the suppression leaves it — pinned as the boundary of the rule
+    // rather than as a shape worth drawing this way.
+    expect(runs("a/_b.ts c_ d", [], [], [{ startCol: 0, endCol: 7 }])).toEqual([
+      { startCol: 2, endCol: 10, italic: true },
+    ]);
   });
 });
 
@@ -388,7 +473,7 @@ describe("blockquote depth and markers", () => {
   // over a link and subdues the whole row.
   test("a `>` inside a collapsed link label is not a quote marker", () => {
     const label = [{ startCol: 0, endCol: 3 }];
-    const { spans, quoteDepth } = buildInlineSpans("> x", label, label);
+    const { spans, quoteDepth } = buildInlineSpans("> x", label, label, []);
     expect(quoteDepth).toBe(0);
     expect(spans).toEqual([{ startCol: 0, endCol: 3, link: true }]);
   });
@@ -399,7 +484,7 @@ describe("blockquote depth and markers", () => {
   // would put data-md-quote and data-file-ref on ONE element, landing the bar's
   // ::before and the glyph's ::before on the same box.
   test("a `>` inside a collapsed reference label is not a quote marker either", () => {
-    const { spans, quoteDepth } = buildInlineSpans("> a.ts", [], [{ startCol: 0, endCol: 6 }]);
+    const { spans, quoteDepth } = buildInlineSpans("> a.ts", [], [{ startCol: 0, endCol: 6 }], []);
     expect(quoteDepth).toBe(0);
     expect(spans).toEqual([]);
   });
@@ -408,7 +493,7 @@ describe("blockquote depth and markers", () => {
     // `> [> x](url)` displays as `> > x`: the first marker is the line's, the
     // second is the label's and stops the scan.
     const label = [{ startCol: 2, endCol: 5 }];
-    const { spans, quoteDepth } = buildInlineSpans("> > x", label, label);
+    const { spans, quoteDepth } = buildInlineSpans("> > x", label, label, []);
     expect(quoteDepth).toBe(1);
     expect(spans).toEqual([
       { startCol: 0, endCol: 1, quoteMarker: 1 },
@@ -491,7 +576,7 @@ describe("blockquote mixing cases", () => {
   // some quoted rows — so it is pinned here, where the two are produced.
   test("a line with depth always emits at least one marker run", () => {
     for (const line of ["> a", "> > a", ">", "> >", "   > a", "- > a", ">\t> a", "> - [ ] t"]) {
-      const { spans, quoteDepth } = buildInlineSpans(line, [], []);
+      const { spans, quoteDepth } = buildInlineSpans(line, [], [], []);
       expect(quoteDepth, line).toBeGreaterThan(0);
       expect(
         spans.filter((s) => s.quoteMarker !== undefined),

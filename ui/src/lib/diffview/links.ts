@@ -397,7 +397,12 @@ function transformLine(
     if (rw.image != null) images.push(rw.image);
   }
   display += source.slice(cursor);
-  const { spans: inline, quoteDepth } = buildInlineSpans(display, linkRanges, labelRanges);
+  const { spans: inline, quoteDepth } = buildInlineSpans(
+    display,
+    linkRanges,
+    labelRanges,
+    fileRefs,
+  );
   return { display, spans, fileRefs, inline, quoteDepth, images };
 }
 
