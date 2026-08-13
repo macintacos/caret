@@ -126,7 +126,7 @@ reviews or config: it reads `config.dev.toml`, not your production `config.toml`
 The daemon is seeded with one fake pending plan, and a driver plays the agent's side
 through the real review hook path — **Request changes** appends a revision section quoting
 your feedback and resubmits, **Approve** re-seeds a fresh plan, and real hook records land
-in the dev state dir's `caret.log`.
+in the dev state dir's `logs/caret.log`.
 
 #### Knobs
 
@@ -142,7 +142,7 @@ it off. The config keys are documented in full under
 | ------------------- | ----------------------- | ------------------------ | --------- | ----------------------------------------------------------------------------------------- |
 | `--port <n>`        | `CARET_DEV_PORT`        | `[dev].port`             | ephemeral | Bind a fixed daemon port instead of `--ephemeral`. Any free port but `42718` (the production default); one session at a time. |
 | `--state-dir <dir>` | `CARET_DEV_STATE_DIR`   | `[dev].state_dir`        | ephemeral | Keep dev state across restarts.                                                           |
-| `--persist`         | —                       | —                        | off       | Keep even the ephemeral state dir on exit, so you can read its `caret.log`.               |
+| `--persist`         | —                       | —                        | off       | Keep even the ephemeral state dir on exit, so you can read its `logs/caret.log`.          |
 | `--notify`          | `CARET_DEV_NEW_REVIEW_MS` † | `[dev.notify].enabled` | off      | Arm the recurring extra-review seeder.                                                    |
 | —                   | `CARET_DEV_NEW_REVIEW_MS` | `[dev.notify].interval_ms` | `15000` | Seeder cadence, in milliseconds.                                                          |
 | —                   | —                       | `[dev.notify].max_pending` | `3`     | Cap on unresolved extra reviews.                                                          |

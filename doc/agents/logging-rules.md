@@ -7,8 +7,10 @@ writes through the second — sharing one record shape
 - **Hook processes** (the short-lived `caret review` hook) call
   `logDebug/logInfo/logWarn/logError(step, msg, extra?)` from `src/lib/log.ts`, which
   append to `caret.log`.
-- **The daemon** holds a `CaretLogger` built by `createDaemonLogger` (`src/lib/log.ts`)
-  and writes NDJSON to stderr, which `spawnDaemon` redirects into `daemon.log`.
+- **The daemon** holds a `CaretLogger` built by `createDaemonLogger` (`src/lib/log.ts`),
+  which writes NDJSON to `daemon.log` — a path the logger owns, so it can stat and rotate
+  its own sink. The process's raw stderr is a separate file: `spawnDaemon` redirects it to
+  `daemon-stderr.log`, which is what keeps `daemon.log` parseable end to end.
 - **The browser UI** has no sink of its own: `uiLog` (`ui/src/lib/log.ts`) batches events
   to the daemon's `POST /api/logs` (EXC-445), which writes them through the daemon's
   `CaretLogger` — they land in `daemon.log` tagged `source: "ui"`, with leveling and
@@ -125,15 +127,23 @@ Concretely:
 
 ## Where logs live
 
-Logs live under `$XDG_STATE_HOME/caret` (default `~/.local/state/caret`):
+Logs live under `$XDG_STATE_HOME/caret/logs` (default `~/.local/state/caret/logs`):
 
 - `caret.log` — records from the short-lived hook processes.
-- `daemon.log` — the daemon's stdout/stderr: the same NDJSON shape (tagged with `pid`),
-  possibly interleaved with raw non-JSON crash output.
+- `daemon.log` — the daemon's records, the same NDJSON shape tagged with `pid`.
+- `daemon-stderr.log` — whatever the detached daemon writes outside the logger: raw
+  non-JSON crash output.
+- `archive/<name>-<stamp>.log.gz` — the gzipped rotations of the three above.
 
-`caret.log` is created `0600`, inside a `0700` state dir; `daemon.log` is a plain
-append-mode redirect. The `0700` state dir is enforced by `ensureStateDir()`
-(`src/config/paths.ts`), which every mkdir-of-stateDir site routes through (log, store,
-prefs, lock, spawn) — it chmods an already existing dir, so the mode holds regardless of
-which caller creates the dir first (EXC-539). Writes are synchronous, so a record logged
-just before `process.exit` (fail-safe and signal paths) is durable.
+Every log file is created `0600`, inside `0700` directories. The mode is enforced by
+`ensureStateDir()` (`src/config/paths.ts`), which every mkdir-of-stateDir site routes
+through (log, store, prefs, lock, spawn) — it chmods an already existing dir, so the mode
+holds regardless of which caller creates the dir first (EXC-539); log writers reach it
+through `ensureLogsDir()`. Writes are synchronous, so a record logged just before
+`process.exit` (fail-safe and signal paths) is durable.
+
+Both logger sinks check their size before each record they write and, past
+`[logging].max_size`, rotate through `rotateIfOversized` (`src/lib/log-rotate.ts`):
+copy-truncate, so the live file keeps its inode and every open fd goes on appending.
+`daemon-stderr.log`, which no logger holds, gets that check once, at spawn.
+`[logging].keep` caps the archives retained per log.
