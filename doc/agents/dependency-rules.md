@@ -3,21 +3,26 @@
 *Audience: coding agents and contributors adding, moving, or removing a package in
 `package.json`.*
 
-Almost nothing caret ships resolves an npm specifier. Both shipped programs are bundles,
-so a package's section in [`../../package.json`](../../package.json) is decided by what
-the **published artifact** loads — not by whether production source imports it.
+Almost nothing caret ships resolves an npm specifier. The CLI and the UI both ship as
+bundles, so a package's section in [`../../package.json`](../../package.json) is decided
+by what the **published artifact** loads — not by whether production source imports it.
+(`ui/package.json` is a stub for shadcn-svelte's CLI and holds no dependencies; the root
+manifest is the only one.)
 
 ## What actually ships
 
 `package.json`'s `files` array publishes `dist/`, `ui/dist/`, `bin/caret`, `hooks/`,
-`commands/`, `opencode/`, and `.claude-plugin/plugin.json`.
+`commands/`, `opencode/`, and `.claude-plugin/plugin.json`. The last three are JSON and
+Markdown data — they load nothing.
 
 - **`dist/cli.js`** is a `bun build --target=bun` bundle
   ([`../../scripts/tasks/build.ts`](../../scripts/tasks/build.ts)) that inlines every npm
-  package. The only bare specifiers left in it are node builtins.
+  package: no package name survives in it, only node builtins and caret's own `@/` alias
+  for the generated UI manifest — a dynamic import the bundle tolerates missing.
 - **`ui/dist`** is a Vite bundle — static assets, no module resolution at runtime.
 - **`bin/caret`** is a bash shim over `bin/caret-native`, `dist/cli.js`, or `src/cli.ts`.
-  `src/` is not in `files`, so the last target exists only in a dev checkout.
+  Neither `bin/caret-native` nor `src/` is in `files`, so an npm install always lands on
+  `dist/cli.js`; the other two branches exist for a build-from-source or dev checkout.
 - **`opencode/`** is the one directory shipped as unbundled TypeScript, so its imports are
   the only ones a consumer's package manager has to resolve.
 
@@ -32,40 +37,47 @@ none.
 ```graphviz
 digraph caret_dependency_placement {
     "Adding a package" [shape=doublecircle];
-    "Reachable from opencode/ — imported there, or the peer of something that is?" [shape=diamond];
+    "Reachable from opencode/?" [shape=diamond];
     "dependencies" [shape=box];
     "devDependencies" [shape=box];
 
-    "Adding a package" -> "Reachable from opencode/ — imported there, or the peer of something that is?";
-    "Reachable from opencode/ — imported there, or the peer of something that is?" -> "dependencies" [label="yes — opencode/ ships as source, so a consumer's install must resolve it"];
-    "Reachable from opencode/ — imported there, or the peer of something that is?" -> "devDependencies" [label="no — src/ and ui/src/ are bundled; scripts/ and test/ never ship"];
+    "Adding a package" -> "Reachable from opencode/?";
+    "Reachable from opencode/?" -> "dependencies" [label="yes — opencode/ ships as source, so a consumer's install must resolve it"];
+    "Reachable from opencode/?" -> "devDependencies" [label="no — src/ and ui/src/ are bundled; scripts/ and test/ never ship"];
 }
 ```
 
-The diamond asks about reachability rather than imports because a peer obligation has no
-import site of its own: it belongs wherever the package that declares the peer belongs.
+*Reachable* means imported from `opencode/`, or a **non-optional** peer of something that
+is — a peer obligation has no import site of its own, so it belongs wherever the package
+declaring it belongs. Optional peers are not reachable: `@opencode-ai/plugin` declares
+three `@opentui/*` peers as optional, which is why caret declares none of them.
 
-**The manifest does not match this yet.** Most of `dependencies` is build-time input that
-belongs in `devDependencies`; only `@opencode-ai/plugin` is correctly placed.
+**The manifest does not match this yet.** Every entry in `dependencies` but
+`@opencode-ai/plugin` is build-time input that belongs in `devDependencies`.
 [EXC-1086](https://linear.app/macintacos/issue/EXC-1086/reclassify-build-time-only-dependencies-to-devdependencies)
-carries the move. Until it lands, place new packages by the rule above rather than by
-copying a neighbour.
+carries the move; delete this paragraph when it lands. Until then, place new packages by
+the rule above rather than by copying a neighbour.
 
-## Three reasons a package with no imports is still live
+## Four shapes a package with no imports still takes
 
 `grep` for the specifier is necessary and not sufficient. Each of these is a real entry
-caret depends on today, and each has zero import sites:
+caret depends on today, and none has a TypeScript import site:
 
 - **A peer obligation.** `@internationalized/date` exists only to satisfy `bits-ui`'s
   non-optional peer range; `commander` only to satisfy `@commander-js/extra-typings`'.
-- **A program run by name rather than imported.**
-  `@laststance/tailwind-suggest-canonical-classes` and `svelte-check` are invoked through
-  `bunx` from [`../../hk.pkl`](../../hk.pkl); `pino-pretty` is spawned as a child process
-  by `scripts/tasks/dev/run.ts` to render the dev log tail.
+- **A program run by name rather than imported.** `svelte-check` and
+  `@laststance/tailwind-suggest-canonical-classes` are invoked from
+  [`../../hk.pkl`](../../hk.pkl) — the latter as the bare binary
+  `tailwind-suggest-canonical-classes`, so the package name appears nowhere in that file.
+  `pino-pretty` is spawned as a child process by `scripts/tasks/dev/run.ts` to render the
+  dev log tail.
+- **A stylesheet imported from CSS.** `tw-animate-css` and `tailwindcss` reach the build
+  through `@import` in `ui/src/app.css`, which no TypeScript search covers.
 - **Types for a library that ships none.** `@types/semver` — `semver` itself declares no
   `types` field.
 
-Before calling anything unused, check all three.
+These are the shapes caret has today, not a closed set. Before calling anything unused,
+rule out every one of them and then look for a fifth.
 
 ## Replacing a dependency with our own code
 
@@ -79,12 +91,21 @@ dependency count: `xss` (sanitising agent-authored markdown), `zod` and `smol-to
 (validating `config.toml`), and `jsonc-parser` (editing the user's OpenCode config without
 destroying their comments) all stay.
 
-## Pinning
+## Pinning and holding
 
-Version ranges are the upgrade policy; `bun.lock` is what pins. An exact version therefore
-means "never move this on a sweep", takes a `bun install` afterwards so the lockfile
-records it, and **must** carry its reason in `package.json`'s `pinned` block —
-[`../../test/structure/exact-pin.test.ts`](../../test/structure/exact-pin.test.ts) fails
-by name on an undocumented pin, an empty reason, or an entry left behind after its package
-was removed or de-pinned. That block's own `//` note is the policy; don't restate it
-elsewhere.
+Version ranges are the upgrade policy; `bun.lock` is what pins. Two blocks in
+`package.json` annotate a range that is doing something deliberate, each with its own
+gate, and each failing **by name** on an entry that outlived what it described:
+
+- **`pinned`** — an exact version, meaning "never move this on a sweep". Takes a
+  `bun install` afterwards so the lockfile records it, and must carry its reason.
+  [`../../test/structure/exact-pin.test.ts`](../../test/structure/exact-pin.test.ts) fails
+  on an undocumented pin, an empty reason, or an entry left behind after its package was
+  removed or de-pinned.
+- **`held`** — a range deliberately stopping below the current major, with the evidence
+  and the condition that lifts it.
+  [`../../test/structure/typescript-hold.test.ts`](../../test/structure/typescript-hold.test.ts)
+  is its falsifier.
+
+Removing or moving a dependency means checking **both** blocks for an entry that no longer
+names anything. Each block's own `//` note is its policy; don't restate them elsewhere.
