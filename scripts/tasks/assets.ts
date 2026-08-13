@@ -61,10 +61,12 @@ const STITCH_SCALE = 2;
 
 const STITCH_PATH = "doc/assets/caret-review-ui.png";
 
-/** The recording, committed beside the stitch. H.264 in an mp4 rather than
- * Playwright's native webm: mp4 is the container GitHub's file viewer and every
- * desktop player open without a plugin, which is what makes the artifact
- * inspectable where it lives. */
+/** The recording. Gitignored, unlike the stitch: it is uploaded to GitHub and
+ * linked from the README by its attachment URL, which is the form a reader can
+ * actually watch — a repo path only offers a download, and a file this size is
+ * past what GitHub's own file viewer will preview. H.264 in an mp4 rather than
+ * Playwright's native webm, so it opens in any player without a plugin.
+ * doc/DEVELOPMENT.md carries the upload step. */
 const VIDEO_PATH = "doc/assets/caret-review-demo.mp4";
 
 /**

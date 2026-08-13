@@ -18,8 +18,9 @@ Want to develop caret rather than use it? Start with [CONTRIBUTING.md](CONTRIBUT
 
 ![caret review UI with an inline annotation, stitched across four themes](doc/assets/caret-review-ui.png)
 
-[Watch a short review](https://github.com/user-attachments/assets/992b63b6-ed73-409a-a12a-bc14fd4c7d53) — comment on a line, send the
-plan back, approve the revision, and the agent picks up where you left it.
+[Watch a short review](https://github.com/user-attachments/assets/992b63b6-ed73-409a-a12a-bc14fd4c7d53)
+— comment on a line, send the plan back, approve the revision, and the agent picks up
+where you left it.
 
 ## Install
 

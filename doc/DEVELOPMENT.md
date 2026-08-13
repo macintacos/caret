@@ -442,13 +442,27 @@ and **ffmpeg** for the recording (`brew install ffmpeg`). Neither is pinned in
 multi-minute build in front of every fresh clone. Each target names its own missing tool
 and the formula that installs it.
 
-Both artifacts are committed, and the README links the recording rather than embedding it:
-GitHub's markdown sanitizer strips `<video>` outright — relative `src`, absolute `src`,
-and an attachment URL alike — so a link to the file is the only form that survives. A
-reader who follows it lands on the file's page in the GitHub UI.
+#### Publishing the recording
 
-That makes a regeneration a binary commit, so run it when the UI has actually changed
-rather than as a matter of course.
+Only the stitch is committed. The recording is uploaded to GitHub and linked from the
+README by its **attachment URL**, which keeps a multi-megabyte blob out of history on
+every regeneration — and is the only form a reader can watch, since a repo path offers a
+download and a file this size is past what GitHub's own file viewer will preview.
+`caret-review-demo.mp4` is gitignored for that reason. To publish a new one:
+
+1. Run `mise run assets video`.
+2. Open any pull request or issue on the repo, and drag `doc/assets/caret-review-demo.mp4`
+   into the comment box. GitHub uploads it and writes a
+   `https://github.com/user-attachments/assets/…` URL into the box.
+3. Put that URL in the README's link and **do not post the comment** — the upload has
+   already happened, and the URL is permanent whether or not the comment is.
+
+A **link**, not an embed: GitHub's markdown sanitizer strips `<video>` outright — relative
+`src`, absolute `src`, and an attachment URL alike all render as an empty paragraph.
+
+The old attachment stays live when a new one is uploaded, so a stale README shows the
+previous recording rather than a broken link. Run the regeneration when the UI has
+actually changed, not as a matter of course.
 
 ### Icons
 

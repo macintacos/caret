@@ -131,3 +131,17 @@ result small. The flags below turn that up; they compose and only apply with `--
 An invalid `--grep` pattern emits an `{"event":"error"}` document and exits `2` without
 running. Plain `mise run preflight`, the human-readable form, is the one documented in the
 README.
+
+### Running a suite on its own
+
+`mise run test` (unit) and `mise run test e2e` (Playwright) are the entry points, and both
+forward their arguments, so `mise run test <path>` scopes the run to one file.
+
+**Never bare `bun test`.** Those entry points carry `--conditions browser`, which bun
+accepts only on the CLI; without it svelte resolves its server runtime and every UI
+component file aborts at import, while the backend suite still passes — so a bare run
+reports dozens of failures that have nothing to do with your change. `bun run test` (the
+`package.json` script) carries the flag and is fine;
+`bun test --conditions browser <path>` is the direct form. Why the flag cannot move into
+`bunfig.toml`, and the guard that raises the actionable error:
+`doc/agents/svelte-rules.md` § One runner.
