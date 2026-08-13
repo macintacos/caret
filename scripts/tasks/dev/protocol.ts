@@ -16,9 +16,11 @@ export const DEV_SESSION = `caret-dev-${process.pid}`;
 
 /** The hook stdin a real PermissionRequest session would pipe to `caret
  * review` — the fixed dev session by default, or an explicit session id for
- * the extra-review seeder. */
-export function hookStdin(plan: string, sessionId = DEV_SESSION): string {
-  return JSON.stringify({ session_id: sessionId, cwd: process.cwd(), tool_input: { plan } });
+ * the extra-review seeder. `cwd` rides the UI's top bar, so the `assets` task
+ * (EXC-805) passes a fabricated path rather than recording the generator's real
+ * checkout into a committed video; the default keeps the dev driver unchanged. */
+export function hookStdin(plan: string, sessionId = DEV_SESSION, cwd = process.cwd()): string {
+  return JSON.stringify({ session_id: sessionId, cwd, tool_input: { plan } });
 }
 
 /** Append a "Revision N" section quoting the reviewer's feedback. The feedback
