@@ -1675,8 +1675,7 @@ test("a client-forged extra.source is overwritten with 'ui'", async () => {
   const { recs, log } = recordingLog();
   await boot({ log });
   await postLogs([{ level: "info", step: "ui", msg: "x", extra: { source: "hook" } }]);
-  const rec = recs.find((r) => r.msg === "x");
-  expect((rec?.extra as { source?: string }).source).toBe("ui");
+  expect(recs.find((r) => r.msg === "x")).toMatchObject({ extra: { source: "ui" } });
 });
 
 test("POST /api/logs rejects structurally invalid batches with 400", async () => {
@@ -1784,10 +1783,11 @@ test("POST /api/logs forwards an error-level event at level 'error'", async () =
   // CaretLogger.error takes err: unknown; passing the sanitized string makes the
   // record's msg the string (a non-Error is stringified).
   await postLogs([{ level: "error", step: "ui", msg: "render failed" }]);
-  const rec = recs.find((r) => r.msg === "render failed");
-  expect(rec?.level).toBe("error");
-  expect(rec?.step).toBe("ui");
-  expect((rec?.extra as { source?: string }).source).toBe("ui");
+  expect(recs.find((r) => r.msg === "render failed")).toMatchObject({
+    level: "error",
+    step: "ui",
+    extra: { source: "ui" },
+  });
 });
 
 test("POST /api/logs from a foreign origin is blocked (403, nothing recorded)", async () => {

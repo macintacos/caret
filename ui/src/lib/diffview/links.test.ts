@@ -300,21 +300,24 @@ describe("buildLinkLayer file-path targets", () => {
       "see [the shared lib](../shared/src) for more",
       "the shared lib",
     ],
-  ])("a path target that is not a citable reference still collapses, under a link run (%s)", (_name, input, label) => {
-    // Collapsing is universal for a path-shaped target; the specificity,
-    // fragment/query and unresolvable narrowings decide only whether a
-    // reference is emitted. What keeps a non-citation from silently losing its
-    // markup is the link run, which marks the label either way.
-    const { text, spans, fileRefs, inline } = buildLinkLayer(input);
-    expect(text).toBe(`see ${label} for more`);
-    // No clickable span: there is no http target to open.
-    expect(spans.get(1) ?? []).toHaveLength(0);
-    expect(fileRefs.size).toBe(0);
-    const runs = inline.get(1) ?? [];
-    expect(runs).toHaveLength(1);
-    expect(runs[0]?.link).toBe(true);
-    expect(text.slice(runs[0]?.startCol, runs[0]?.endCol)).toBe(label);
-  });
+  ])(
+    "a path target that is not a citable reference still collapses, under a link run (%s)",
+    (_name, input, label) => {
+      // Collapsing is universal for a path-shaped target; the specificity,
+      // fragment/query and unresolvable narrowings decide only whether a
+      // reference is emitted. What keeps a non-citation from silently losing its
+      // markup is the link run, which marks the label either way.
+      const { text, spans, fileRefs, inline } = buildLinkLayer(input);
+      expect(text).toBe(`see ${label} for more`);
+      // No clickable span: there is no http target to open.
+      expect(spans.get(1) ?? []).toHaveLength(0);
+      expect(fileRefs.size).toBe(0);
+      const runs = inline.get(1) ?? [];
+      expect(runs).toHaveLength(1);
+      expect(runs[0]?.link).toBe(true);
+      expect(text.slice(runs[0]?.startCol, runs[0]?.endCol)).toBe(label);
+    },
+  );
 
   test("a scheme-less URL target stays literal — it is a host, not a path", () => {
     // The one narrowing that still gates collapsing: `github.com/…` names a host,
@@ -464,16 +467,19 @@ describe("buildLinkLayer backticked-path labels", () => {
   test.each([
     ["[`foo/bar.ts`](foo/bar.ts)", "foo/bar.ts", "foo/bar.ts"],
     ["[`a.ts`](b/c.ts)", "b/c.ts", "a.ts"],
-  ])("merging %j yields exactly one span, on the path inside the backticks", (input, path, covered) => {
-    const layer = buildLinkLayer(input);
-    const merged = mergeFileRefSpans(buildFileRefLayer(layer.text), layer.fileRefs);
-    const refs = merged.get(1) ?? [];
-    expect(refs).toHaveLength(1);
-    expect(refs[0]?.path).toBe(path);
-    // Positioned on the label's path itself, inside the backticks — not over
-    // them — while the span's own path stays the link's target.
-    expect(layer.text.slice(refs[0]?.startCol, refs[0]?.endCol)).toBe(covered);
-  });
+  ])(
+    "merging %j yields exactly one span, on the path inside the backticks",
+    (input, path, covered) => {
+      const layer = buildLinkLayer(input);
+      const merged = mergeFileRefSpans(buildFileRefLayer(layer.text), layer.fileRefs);
+      const refs = merged.get(1) ?? [];
+      expect(refs).toHaveLength(1);
+      expect(refs[0]?.path).toBe(path);
+      // Positioned on the label's path itself, inside the backticks — not over
+      // them — while the span's own path stays the link's target.
+      expect(layer.text.slice(refs[0]?.startCol, refs[0]?.endCol)).toBe(covered);
+    },
+  );
 });
 
 // The inline-markdown layer (EXC-866): the flat atomic runs the decoration pass

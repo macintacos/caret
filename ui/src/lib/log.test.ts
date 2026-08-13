@@ -29,7 +29,7 @@ describe("uiLog buffering and flush", () => {
 
     expect(cap.calls).toHaveLength(1);
     expect(cap.calls[0]!.url).toBe("/api/logs");
-    expect((cap.calls[0]!.options?.headers as Record<string, string>)["Content-Type"]).toBe(
+    expect(new Headers(cap.calls[0]!.options?.headers).get("Content-Type")).toBe(
       "application/json",
     );
     const events = batchEvents(cap.calls[0]!);
