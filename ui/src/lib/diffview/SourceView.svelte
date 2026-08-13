@@ -255,7 +255,7 @@
     lifecycle.sync({
       contentKey,
       container,
-      content: { file: { name: doc.name, contents: doc.text } },
+      content: { file: { name: doc.name, contents: doc.text.replace(/\n$/, "") } },
       options: libOptions,
       annotations,
     });

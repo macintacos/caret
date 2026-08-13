@@ -9,8 +9,8 @@ import { selectionIn, selectionText } from "$lib/diffview/selectionCopy.ts";
 // text from the selection's own rows instead, breaking where the row changes.
 
 /** A rendered row: tokens directly under [data-line]. The text node is appended
- * rather than assigned, because a blank line's token holds an EMPTY one — which is
- * what the walk below breaks on, and which `textContent = ""` would not create. */
+ * rather than assigned, so a token carrying the empty string still contributes a text
+ * node to the walk, which `textContent = ""` would not create. */
 function row(line: number, ...tokens: string[]): HTMLElement {
   const el = document.createElement("div");
   el.setAttribute("data-line", String(line));
@@ -19,6 +19,15 @@ function row(line: number, ...tokens: string[]): HTMLElement {
     span.appendChild(document.createTextNode(t));
     el.appendChild(span);
   }
+  return el;
+}
+
+/** A blank source line as @pierre/diffs renders one: a row whose only child is a
+ * `<br>`, with no text node anywhere inside it. */
+function blankRow(line: number): HTMLElement {
+  const el = document.createElement("div");
+  el.setAttribute("data-line", String(line));
+  el.appendChild(document.createElement("br"));
   return el;
 }
 
@@ -53,12 +62,29 @@ describe("selectionText", () => {
     expect(selectionText(selectionOver(host, one, two))).toBe("first\nsecond");
   });
 
-  // The whole reason this module outlived the tables it was written for: the blank
-  // row carries an empty token, which the serializer skips and this walk does not.
+  // The whole reason this module outlived the tables it was written for. The row holds
+  // only a `<br>`, so nothing in it is reachable by a text walk — it is the ROW that has
+  // to register, which is why the walk visits elements as well.
   test("keeps the blank line between two paragraphs", () => {
-    const [one, blank, two] = [row(1, "first"), row(2, ""), row(3, "second")];
+    const [one, blank, two] = [row(1, "first"), blankRow(2), row(3, "second")];
     const host = content(one, blank, two);
     expect(selectionText(selectionOver(host, one, two))).toBe("first\n\nsecond");
+  });
+
+  // A drag that stops at the very start of a row still encloses it, so the clone brings
+  // it back with no children — where a real blank line would have brought its `<br>`.
+  // Counting it would put a phantom newline on the end of every such copy.
+  test("ignores a trailing row the range only touched the start of", () => {
+    const [one, two, next] = [row(1, "first"), row(2, "second"), row(3, "third")];
+    const host = content(one, two, next);
+    document.body.replaceChildren(host);
+    const range = document.createRange();
+    range.setStartBefore(one);
+    range.setEnd(next, 0);
+    const selection = document.getSelection() as Selection;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    expect(selectionText(selection)).toBe("first\nsecond");
   });
 
   test("breaks between gutter numbers, which are not [data-line] rows", () => {

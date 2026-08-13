@@ -84,14 +84,21 @@ export default defineConfig({
         find: /^shiki$/,
         replacement: fileURLToPath(new URL("./src/lib/diffview/shiki-bundle.ts", import.meta.url)),
       },
-      // The library statically references shiki/wasm (Oniguruma engine) and both
-      // bundled theme collections — its own @pierre/theme/* palettes and shiki's
-      // @shikijs/themes/*, the two halves of @pierre/theming's collection — but
-      // caret uses the JS regex engine and registers its own themes, so all three
-      // are dead at runtime. Aliasing them to a throwing stub keeps ~600 KB of
-      // WASM and ~1.8 MB of theme payload out of the build. The theme loaders are
-      // lazy, so an unaliased collection costs one emitted chunk per theme rather
-      // than entry weight — which is why only the build's total size shows it.
+      // The library statically references shiki/wasm (Oniguruma engine) and the
+      // @pierre/theme/* bundles, but caret uses the JS regex engine and its own
+      // themes, so both are dead at runtime. Aliasing them to a throwing stub
+      // keeps ~600 KB of WASM and the pierre theme payloads out of the build.
+      //
+      // @shikijs/themes/* is the OTHER half of the theme collection @pierre/theming
+      // assembles, and it is deliberately NOT stubbed alongside them, however
+      // symmetrical that looks. caret's vendor palettes (EXC-896) are named after
+      // the upstream themes they came from — dracula, github-dark, catppuccin-* —
+      // so every one of them collides with a name in that collection, and the
+      // library resolves the collection's entry before caret's registered theme.
+      // Stubbing it therefore throws on exactly the palettes a reviewer can pick,
+      // and the diff falls back to an unthemed default; settings.e2e.ts is what
+      // says so. The pierre-* names collide with nothing caret ships, which is the
+      // whole reason the entry below is still safe.
       {
         find: /^shiki\/wasm$/,
         replacement: fileURLToPath(
@@ -100,12 +107,6 @@ export default defineConfig({
       },
       {
         find: /^@pierre\/theme\/.*/,
-        replacement: fileURLToPath(
-          new URL("./src/lib/diffview/unused-shiki-extras.ts", import.meta.url),
-        ),
-      },
-      {
-        find: /^@shikijs\/themes\/.*/,
         replacement: fileURLToPath(
           new URL("./src/lib/diffview/unused-shiki-extras.ts", import.meta.url),
         ),
