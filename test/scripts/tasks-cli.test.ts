@@ -382,6 +382,41 @@ describe("tasks CLI: smoke commands", () => {
   });
 });
 
+// `assets` (EXC-805) regenerates the README's hero image and demo recording. Bare
+// runs both; the two targets exist because iterating on the stitch's seam geometry
+// must not re-record a minute of video.
+describe("tasks CLI: assets commands", () => {
+  test("bare assets invokes the umbrella action", async () => {
+    let called = false;
+    await buildProgram({
+      assets: async () => {
+        called = true;
+      },
+    }).parseAsync(["assets"], { from: "user" });
+    expect(called).toBe(true);
+  });
+
+  test("assets stitch subcommand invokes its action", async () => {
+    let called = false;
+    await buildProgram({
+      assetsStitch: async () => {
+        called = true;
+      },
+    }).parseAsync(["assets", "stitch"], { from: "user" });
+    expect(called).toBe(true);
+  });
+
+  test("assets video subcommand invokes its action", async () => {
+    let called = false;
+    await buildProgram({
+      assetsVideo: async () => {
+        called = true;
+      },
+    }).parseAsync(["assets", "video"], { from: "user" });
+    expect(called).toBe(true);
+  });
+});
+
 // The release pipeline is mounted as a nested subcommand group (EXC-736), so
 // `mise run release <sub>` forwards to `caret-tasks release <sub>`. Its parsing
 // and stdout-JSON error discipline are exercised as a subprocess in

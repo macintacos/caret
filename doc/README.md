@@ -21,6 +21,7 @@ Find the row that matches what you came here to do, then follow the link.
 | Build caret from source | [`DEVELOPMENT.md` § Build from source](DEVELOPMENT.md#build-from-source) |
 | Run a dev instance, or look up any task in the full `mise` catalog | [`DEVELOPMENT.md` § Development](DEVELOPMENT.md#development) |
 | Add or change a `mise` task | [`DEVELOPMENT.md` § The tasks CLI](DEVELOPMENT.md#the-tasks-cli) |
+| Refresh the README's screenshot and demo recording | [`DEVELOPMENT.md` § Regenerating the README assets](DEVELOPMENT.md#regenerating-the-readme-assets) |
 | Follow the conventions for the area of code you're changing | [`agents/`](agents/), routed by [`CLAUDE.md`](../CLAUDE.md) |
 
 ## `agents/`

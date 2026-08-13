@@ -111,6 +111,14 @@ test("hookStdin takes an explicit session id for extra reviews", () => {
   expect(parsed.session_id).toBe("caret-dev-extra-1");
 });
 
+test("hookStdin takes an explicit cwd, so a recording never shows a real path", () => {
+  // The cwd rides the top bar. The `assets` task (EXC-805) records the UI into a
+  // committed .webm, so it hands a fabricated path here rather than leaking
+  // whichever checkout the generator happened to run from.
+  const parsed = JSON.parse(hookStdin("# P", "s", "~/acme-web")) as { cwd: string };
+  expect(parsed.cwd).toBe("~/acme-web");
+});
+
 // ---- seed fixture invariant (EXC-556) ----
 
 test("the seeded fixture has no untagged code blocks", () => {
