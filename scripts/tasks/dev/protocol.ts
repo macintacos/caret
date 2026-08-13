@@ -18,7 +18,8 @@ export const DEV_SESSION = `caret-dev-${process.pid}`;
  * review` — the fixed dev session by default, or an explicit session id for
  * the extra-review seeder. `cwd` rides the UI's top bar, so the `assets` task
  * (EXC-805) passes a fabricated path rather than recording the generator's real
- * checkout into a committed video; the default keeps the dev driver unchanged. */
+ * checkout into a committed video; the default is this process's cwd, which is
+ * what the dev driver wants. */
 export function hookStdin(plan: string, sessionId = DEV_SESSION, cwd = process.cwd()): string {
   return JSON.stringify({ session_id: sessionId, cwd, tool_input: { plan } });
 }

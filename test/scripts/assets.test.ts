@@ -8,9 +8,13 @@
 
 import { expect, test } from "bun:test";
 
+import { MARKDOWN_READ_BY_TESTS } from "@scripts/preflight.ts";
 import {
+  ANNOTATION_ANCHOR,
+  assetsPlan,
   bandCommand,
   FRAME,
+  PLAN_TITLE_FRAGMENT,
   resolveMagick,
   seamLines,
   seamPolygons,
@@ -55,9 +59,13 @@ test("seamLines cuts a four-band frame with three evenly spaced anti-diagonals",
 });
 
 test("the middle seam of an even band count runs corner to corner", () => {
-  // The composition today's two-theme shot already uses, so the four-band image
-  // reads as the same picture rather than a new one.
+  // The frame's own diagonal, which is what makes the stitch read as one picture
+  // cut apart rather than as four images tiled.
   expect(seamLines(FRAME.width, FRAME.height, 4)[1]).toBe(`${FRAME.width},0 0,${FRAME.height}`);
+  // The geometry is derived from the band count, so two bands is one corner-to-
+  // corner cut — the degenerate case the four-band form generalizes.
+  expect(seamLines(FRAME.width, FRAME.height, 2)).toEqual([`${FRAME.width},0 0,${FRAME.height}`]);
+  expect(seamPolygons(FRAME.width, FRAME.height, 2)).toHaveLength(1);
 });
 
 test("seamPolygons yields one half-plane mask per seam, cut along that seam", () => {
@@ -99,12 +107,12 @@ test("each mask keeps the bottom-right corner and drops the top-left one", () =>
 // ---- magick argv ----
 
 test("bandCommand masks a capture with its seam polygon in one magick call", () => {
-  expect(bandCommand("magick", "cap.png", "1,2 3,4", "band.png")).toEqual([
+  expect(bandCommand("magick", 1440, 900, "cap.png", "1,2 3,4", "band.png")).toEqual([
     "magick",
     "cap.png",
     "(",
     "-size",
-    `${FRAME.width}x${FRAME.height}`,
+    "1440x900",
     "xc:black",
     "-fill",
     "white",
@@ -134,4 +142,57 @@ test("stitchCommand flattens the bands then strokes the seams in the accent", ()
     "line 1,2 3,4",
     "out.png",
   ]);
+});
+
+// ---- the umbrella's sequence ----
+
+/** Capture what assetsPlan would spawn, without spawning it. */
+function fakeRunner(codes: number[] = []) {
+  const calls: { cmd: string[]; env?: Record<string, string> }[] = [];
+  const run = async (cmd: string[], opts: { env?: Record<string, string> } = {}) => {
+    calls.push({ cmd, env: opts.env });
+    return codes[calls.length - 1] ?? 0;
+  };
+  return { calls, run };
+}
+
+test("bare assets builds the UI once, then runs stitch before video with the skip set", async () => {
+  // Both targets call ensureUi through their own prerequisites, so without the
+  // skip a bare run pays the full Vite build twice. Stitch leads because it is
+  // the target that needs ImageMagick — a missing host tool has to fail before
+  // the recording, not after it.
+  const { calls, run } = fakeRunner();
+  expect(await assetsPlan(run)).toBe(0);
+  expect(calls.map((c) => c.cmd.slice(2).join(" "))).toEqual([
+    "build ui",
+    "assets stitch",
+    "assets video",
+  ]);
+  expect(calls[1]?.env?.CARET_SKIP_BUILD_UI).toBe("1");
+  expect(calls[2]?.env?.CARET_SKIP_BUILD_UI).toBe("1");
+});
+
+test("a failed stitch stops the umbrella before it records anything", async () => {
+  const { calls, run } = fakeRunner([0, 1]);
+  expect(await assetsPlan(run)).toBe(1);
+  expect(calls.map((c) => c.cmd.slice(2).join(" "))).toEqual(["build ui", "assets stitch"]);
+});
+
+// ---- fixture drift ----
+
+// The task resolves both of these against scripts/tasks/dev/demo-plan.md at run
+// time, in a browser, outside every gate — so an edit that strands one is only
+// caught here. preflight's MARKDOWN_READ_BY_TESTS is what makes that true for a
+// Markdown-only change, which would otherwise narrow the gate to `lint` alone.
+const DEMO_PLAN = await Bun.file(`${import.meta.dir}/../../scripts/tasks/dev/demo-plan.md`).text();
+
+test("the demo plan carries the anchors the assets task resolves against it", () => {
+  expect(DEMO_PLAN.split(ANNOTATION_ANCHOR)).toHaveLength(2);
+  expect(DEMO_PLAN).toContain(PLAN_TITLE_FRAGMENT);
+  // The recording retitles the plan's h1 for the agent's follow-up.
+  expect(DEMO_PLAN).toMatch(/^# .+$/m);
+});
+
+test("preflight runs this suite when only the demo plan changed", () => {
+  expect(MARKDOWN_READ_BY_TESTS).toContain("scripts/tasks/dev/demo-plan.md");
 });

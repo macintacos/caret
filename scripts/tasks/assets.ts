@@ -32,7 +32,7 @@ import type { Browser, BrowserContext, Locator, Page } from "@playwright/test";
 import { isPidAlive } from "@/daemon/lifecycle.ts";
 import type { ClientReview, RouteResult } from "@/lib/types.ts";
 import { runReview } from "@/review/orchestrate.ts";
-import { ensureUi } from "@/tasks/build.ts";
+import { ensureUi, shouldBuildUi } from "@/tasks/build.ts";
 import { discoverPort, readDevLockPort } from "@/tasks/dev/dev-env.ts";
 import { devReviewDeps } from "@/tasks/dev/driver.ts";
 import { type DriverState, hookStdin, nextPlan } from "@/tasks/dev/protocol.ts";
@@ -43,8 +43,9 @@ import { chromiumInstalled } from "@/tasks/test.ts";
 
 // --- shared shape ------------------------------------------------------------
 
-/** The captured frame. Today's committed asset's exact dimensions, pinned so the
- * four captures' seams line up and so a regeneration is a drop-in replacement. */
+/** The captured frame, pinned: identical dimensions are what let the four
+ * captures' seams line up, and what makes a regeneration a drop-in replacement
+ * for the committed asset. */
 export const FRAME = { width: 1440, height: 900 } as const;
 
 /** The recording's frame: a modest 16:10 downscale of FRAME. Every regeneration
@@ -60,10 +61,15 @@ const VIDEO_PATH = "doc/assets/caret-review-demo.webm";
  * and no contributor path, hostname, or project name can reach a committed asset. */
 const DEMO_CWD = "~/acme-web";
 
-/** The line of the demo plan the still's inline comment anchors to. Matched
+/** The line of the demo plan the still's inline comment anchors to, and the plan
+ * title the recording waits on before it touches anything. Both are matched
  * against the STORED plan (the daemon reflows every plan at ingest), and a miss
- * is fatal so a fixture edit can't silently drop the comment card from the hero. */
-const ANNOTATION_ANCHOR = '3. Keep the closing "published vX.Y.Z" line unconditional.';
+ * is fatal so a fixture edit can't silently drop the comment card from the hero.
+ * Exported because `test/scripts/assets.test.ts` pins them against
+ * `scripts/tasks/dev/demo-plan.md` — that file is listed in preflight's
+ * MARKDOWN_READ_BY_TESTS, so editing it alone still runs the guard. */
+export const ANNOTATION_ANCHOR = '3. Keep the closing "published vX.Y.Z" line unconditional.';
+export const PLAN_TITLE_FRAGMENT = "Add a `--quiet` flag";
 
 const ANNOTATION_BODY = "say what `--quiet` does to this line when the publish step fails.";
 
@@ -95,8 +101,8 @@ export function resolveMagick(which: (cmd: string) => string | null): string {
 }
 
 /** Where seam k cuts, as the constant of the anti-diagonal `x/width + y/height`.
- * Evenly spaced across the frame's mid-height, so an even band count puts one
- * seam corner to corner — the line today's two-theme shot already uses. */
+ * Evenly spaced across the frame's mid-height, so an even band count puts its
+ * middle seam corner to corner, along the frame's own diagonal. */
 function seamConstants(bands: number): number[] {
   return Array.from({ length: bands - 1 }, (_, k) => 0.5 + (k + 1) / bands);
 }
@@ -141,6 +147,8 @@ export function seamPolygons(width: number, height: number, bands: number): stri
  * intermediate mask file is written. */
 export function bandCommand(
   magick: string,
+  width: number,
+  height: number,
   capture: string,
   polygon: string,
   out: string,
@@ -150,7 +158,7 @@ export function bandCommand(
     capture,
     "(",
     "-size",
-    `${FRAME.width}x${FRAME.height}`,
+    `${width}x${height}`,
     "xc:black",
     "-fill",
     "white",
@@ -281,11 +289,19 @@ async function planSurface(page: Page): Promise<Locator> {
   return plan;
 }
 
-/** The status strip's comment tally — the proof a comment reached the review.
- * Waiting on the tally rather than on the comment's own text is what makes it
- * hold in both card states: a committed card renders its body as markdown, so a
- * body carrying a code span is not one text node to match against. */
-const commentTally = (page: Page): Locator => page.getByRole("button", { name: "1 comment" });
+/** The status strip's tally, once it reads exactly one comment — the proof a
+ * comment reached the review. Waiting on the tally rather than on the comment's
+ * own text is what makes it hold in both card states: a committed card renders
+ * its body as markdown, so a body carrying a code span is not one text node to
+ * match against.
+ *
+ * Deliberately re-derived rather than imported from `test/e2e/support/chrome.ts`,
+ * which names the same control: that file is the Playwright suite's harness, and
+ * a task module reaching into `test/` inverts the dependency the whole tree
+ * assumes. The regex is anchored for the reason chrome.ts's is — `getByRole`'s
+ * string form matches the accessible name as a substring, so "1 comment" would
+ * also collect "11 comments". */
+const oneComment = (page: Page): Locator => page.getByRole("button", { name: /^1 comment$/ });
 
 // --- assets stitch -----------------------------------------------------------
 
@@ -312,15 +328,24 @@ async function seedStill(base: string): Promise<void> {
   if (!res.ok) throw new Error(`caret assets: PUT /draft → ${res.status}`);
 }
 
-/** Capture one band's frame, and (for the first) the live accent the seams are
- * stroked in — read off the document root rather than copied as a hex, so it
- * follows the palette if ui/src/lib/themes/caret.ts changes. */
+/**
+ * Capture one band's frame, and the palette it resolved to.
+ *
+ * Both tokens are read off the live document root rather than copied as hexes,
+ * so they follow `ui/src/lib/themes/` if a palette changes. `accent` is what the
+ * seams are stroked in; `paper` is what proves the theme took — an id this
+ * module got wrong is not an error anywhere in the UI, because `definePref`
+ * (ui/src/lib/definePref.ts) validates the slot against its allow-list and
+ * degrades to the scheme's default, and `paintTheme` stamps `data-theme` with
+ * the scheme rather than the id. So the resolved background is the only handle,
+ * and the caller compares them.
+ */
 async function captureBand(
   browser: Browser,
   base: string,
   band: (typeof BANDS)[number],
   path: string,
-): Promise<string> {
+): Promise<{ accent: string; paper: string }> {
   const context = await browser.newContext({
     viewport: { width: FRAME.width, height: FRAME.height },
     deviceScaleFactor: 1,
@@ -332,19 +357,23 @@ async function captureBand(
     await page.goto(base);
     await planSurface(page);
     // The comment card is the point of the shot; a capture without it is a bug.
-    await commentTally(page).waitFor({ state: "visible" });
-    const accent = await page.evaluate(() =>
-      getComputedStyle(document.documentElement).getPropertyValue("--accent").trim(),
-    );
+    await oneComment(page).waitFor({ state: "visible" });
+    const tokens = await page.evaluate(() => {
+      const root = getComputedStyle(document.documentElement);
+      return {
+        accent: root.getPropertyValue("--accent").trim(),
+        paper: root.getPropertyValue("--paper").trim(),
+      };
+    });
     await page.screenshot({ path });
-    return accent;
+    return tokens;
   } finally {
     await context.close();
   }
 }
 
 export async function runAssetsStitch(): Promise<never> {
-  const magick = resolveMagick((cmd) => Bun.which(cmd));
+  const magick = resolveMagick(Bun.which);
   await ensurePrereqs();
   const { chromium } = await import("@playwright/test");
   const work = mkdtempSync(join(tmpdir(), "caret-assets-stitch."));
@@ -353,16 +382,29 @@ export async function runAssetsStitch(): Promise<never> {
       await seedStill(base);
       const browser = await chromium.launch();
       let accent = "";
+      const papers = new Map<string, string>();
       try {
         for (const [i, band] of BANDS.entries()) {
           const shot = join(work, `capture-${i}.png`);
-          const read = await captureBand(browser, base, band, shot);
-          if (i === 0) accent = read;
+          const tokens = await captureBand(browser, base, band, shot);
+          if (i === 0) accent = tokens.accent;
+          // A band that painted a palette another band already painted means an
+          // id in BANDS no longer resolves, which the UI answers by silently
+          // falling back — so it is caught here or not at all.
+          const twin = papers.get(tokens.paper);
+          if (twin !== undefined) {
+            throw new Error(
+              `caret assets: ${band.theme} resolved to the same palette as ${twin} — ` +
+                "is that still a theme id in ui/src/lib/theme.ts?",
+            );
+          }
+          papers.set(tokens.paper, band.theme);
           console.log(`assets stitch: captured ${band.theme}`);
         }
       } finally {
         await browser.close();
       }
+      if (!accent) throw new Error("caret assets: the UI resolved no --accent to seam with");
 
       // Band 0 is the whole frame; each later band is masked to the far side of
       // its seam and flattened over what is already there.
@@ -370,11 +412,12 @@ export async function runAssetsStitch(): Promise<never> {
       const layers = [join(work, "capture-0.png")];
       for (const [i, polygon] of polygons.entries()) {
         const out = join(work, `band-${i + 1}.png`);
-        await run(bandCommand(magick, join(work, `capture-${i + 1}.png`), polygon, out));
+        const capture = join(work, `capture-${i + 1}.png`);
+        await run(bandCommand(magick, FRAME.width, FRAME.height, capture, polygon, out));
         layers.push(out);
       }
       const lines = seamLines(FRAME.width, FRAME.height, BANDS.length);
-      await run(stitchCommand(magick, layers, accent || "#ff8f3d", lines, STITCH_PATH));
+      await run(stitchCommand(magick, layers, accent, lines, STITCH_PATH));
       console.log(`assets stitch: wrote ${STITCH_PATH} (${FRAME.width}x${FRAME.height})`);
     });
   } finally {
@@ -400,7 +443,21 @@ const DEMO_SESSION = "caret-assets-demo";
  * fixture under a follow-up title, so the closing frame reads as the agent
  * picking up rather than as the same plan re-appearing. */
 const FOLLOW_UP_TITLE = "Wire the `--quiet` flag into the CI release job";
-const followUpPlan = (plan: string): string => plan.replace(/^# .*$/m, `# ${FOLLOW_UP_TITLE}`);
+// A function replacement, not a template string: `$&` and friends in a title
+// would otherwise be expanded as replacement patterns (the same reason
+// `extraPlan` in scripts/tasks/dev/protocol.ts takes one).
+const followUpPlan = (plan: string): string =>
+  plan.replace(/^# .*$/m, () => `# ${FOLLOW_UP_TITLE}`);
+
+/** A one-shot latch: a promise plus the call that resolves it. The recording uses
+ * one to hold a frame the agent would otherwise race past. */
+function latch(): { held: Promise<void>; release: () => void } {
+  let release = (): void => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { held, release };
+}
 
 /**
  * Play the agent's side of the recording through the real hook path, forever.
@@ -410,8 +467,15 @@ const followUpPlan = (plan: string): string => plan.replace(/^# .*$/m, `# ${FOLL
  * the reviewer and reposts as v2, and Approve really unblocks and lets the agent
  * send its next plan. Never resolves under normal operation — it dies with the
  * process at teardown, like the dev driver it mirrors.
+ *
+ * `emptyStateSeen` is the one departure, and it buys determinism rather than
+ * cosmetics: a real agent reposts the instant its plan is approved, but the UI
+ * only learns the queue emptied on its next 2s poll tick, so the empty state can
+ * be skipped entirely — and a beat that sometimes does not render is a beat the
+ * recording cannot wait on. Holding the follow-up until the recording has the
+ * frame makes it evidence again.
  */
-async function playAgent(base: string, plan: string): Promise<void> {
+async function playAgent(base: string, plan: string, emptyStateSeen: Promise<void>): Promise<void> {
   const deps = devReviewDeps(base);
   const followUp = followUpPlan(plan);
   let state: DriverState = { plan, revision: 0 };
@@ -419,6 +483,7 @@ async function playAgent(base: string, plan: string): Promise<void> {
     const out = await runReview(hookStdin(state.plan, DEMO_SESSION, DEMO_CWD), deps);
     const next = nextPlan(state, out, followUp);
     if (next.action === "wait") return;
+    if (next.action === "reseed") await emptyStateSeen;
     state = next;
   }
 }
@@ -452,14 +517,18 @@ const POINTER_OVERLAY = () => {
 };
 
 /** How long the recording rests on a beat that just landed, so a viewer can read
- * the state change before the next gesture starts. Deliberate pacing, not a wait
- * for a condition — every beat below already waits on its own evidence. */
-const dwell = (): Promise<void> => Bun.sleep(1_200);
+ * the state change before the next gesture starts; `beats` lengthens the hold for
+ * the ones worth reading. Deliberate pacing, not a wait for a condition — every
+ * beat below already waits on its own evidence. */
+const dwell = (beats = 1): Promise<void> => Bun.sleep(1_200 * beats);
 
 /** Move to a target and click it at human speed, so the recording shows the
  * pointer travel rather than teleporting between gestures. */
 async function glideClick(page: Page, target: Locator): Promise<void> {
   await target.waitFor({ state: "visible" });
+  // `visible` is a DOM predicate, not a viewport one, so an off-screen target
+  // would hand back coordinates the mouse then clicks something else at.
+  await target.scrollIntoViewIfNeeded();
   const box = await target.boundingBox();
   if (!box) throw new Error("caret assets: the click target has no box on screen");
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 26 });
@@ -499,15 +568,19 @@ async function waitForVersion(base: string, version: number): Promise<void> {
 /**
  * Drive the review arc, one beat at a time.
  *
- * Every beat waits on its own on-screen evidence rather than a sleep, so each
- * leaves proof it happened: a beat that silently did nothing fails here instead
- * of producing a recording of an idle window. Settings, theme switching and the
- * compare view stay out of shot.
+ * Every beat waits on the DOM evidence that it landed rather than on a sleep, so
+ * each leaves proof it happened: a beat that silently did nothing fails here
+ * instead of producing a recording of an idle window. Where a beat's evidence is
+ * inside the plan's own scroll container, the wheel gesture that puts it on
+ * screen is followed by `scrollIntoViewIfNeeded` — a Playwright locator counts as
+ * visible off-viewport, so the wheel amount alone would be a silent bet on the
+ * fixture's current length. Settings, theme switching and the compare view stay
+ * out of shot.
  */
-async function playReview(page: Page, base: string): Promise<void> {
+async function playReview(page: Page, base: string, releaseFollowUp: () => void): Promise<void> {
   await page.goto(base);
   const surface = await planSurface(page);
-  await page.getByText("Add a `--quiet` flag").first().waitFor({ state: "visible" });
+  await page.getByText(PLAN_TITLE_FRAGMENT).first().waitFor({ state: "visible" });
 
   // A short read before touching anything — the reviewer skimming the plan.
   await dwell();
@@ -527,7 +600,7 @@ async function playReview(page: Page, base: string): Promise<void> {
   await composer.getByRole("textbox", { name: "Comment" }).click();
   await page.keyboard.type(ANNOTATION_BODY, { delay: 45 });
   await glideClick(page, composer.getByRole("button", { name: "Comment", exact: true }));
-  await commentTally(page).waitFor({ state: "visible" });
+  await oneComment(page).waitFor({ state: "visible" });
   await dwell();
 
   // Send it back: the inline comment rides the request-changes dialog to the agent.
@@ -542,9 +615,11 @@ async function playReview(page: Page, base: string): Promise<void> {
   // The agent revises and reposts: v2 arrives in the still-open window, carrying
   // a Revision section that quotes the feedback back.
   await waitForVersion(base, 2);
+  const revision = page.getByText("Revision 1").first();
+  await revision.waitFor({ state: "visible" });
   await surface.hover();
   await page.mouse.wheel(0, 3000);
-  await page.getByText("Revision 1").first().waitFor({ state: "visible" });
+  await revision.scrollIntoViewIfNeeded();
   await dwell();
 
   // Approve, through the confirmation every approve routes through.
@@ -557,10 +632,14 @@ async function playReview(page: Page, base: string): Promise<void> {
     .getByRole("heading", { name: "No plans awaiting review" })
     .waitFor({ state: "visible" });
   await dwell();
+  releaseFollowUp();
 
-  // ...and the agent picks back up: its next plan lands in the same window.
+  // ...and the agent picks back up: its next plan lands in the same window. The
+  // plan opens where the previous one was left, so send it back to its heading —
+  // the closing frame is the payoff, not a half-empty page.
   await page.getByText(FOLLOW_UP_TITLE).first().waitFor({ state: "visible" });
-  await dwell();
+  await surface.evaluate((el) => el.scrollTo({ top: 0 }));
+  await dwell(2);
 }
 
 export async function runAssetsVideo(): Promise<never> {
@@ -575,7 +654,8 @@ export async function runAssetsVideo(): Promise<never> {
       // lazily off process.env) would otherwise write to the real
       // ~/.local/state/caret. Same reason scripts/tasks/dev/run.ts does it.
       process.env.XDG_STATE_HOME = stateDir;
-      void playAgent(base, await demoPlan()).catch((err) => {
+      const followUp = latch();
+      void playAgent(base, await demoPlan(), followUp.held).catch((err) => {
         process.stderr.write(`assets video: agent side stopped: ${err}\n`);
       });
 
@@ -591,8 +671,10 @@ export async function runAssetsVideo(): Promise<never> {
       const page = await context.newPage();
       const started = Bun.nanoseconds();
       try {
-        await playReview(page, base);
+        await playReview(page, base, followUp.release);
       } finally {
+        // A failed beat must not leave the agent parked on the latch forever.
+        followUp.release();
         // The video is only finalized once the context closes.
         seconds = (Number(Bun.nanoseconds() - started) / 1e9).toFixed(1);
         await context.close();
@@ -628,10 +710,24 @@ async function ensurePrereqs(): Promise<void> {
 
 // --- assets (umbrella) -------------------------------------------------------
 
+/** Bare `mise run assets`: build the UI once up front, then run both targets as
+ * fresh subprocesses with CARET_SKIP_BUILD_UI=1 so neither rebuilds it — each
+ * target's own ensurePrereqs would otherwise pay the full Vite build a second
+ * time. Stitch runs first because it is the target that needs ImageMagick, so a
+ * missing host tool fails in the first seconds rather than after the recording.
+ * The runner is injectable so tests pin that sequence and the skip env without
+ * spawning; the shape is smokePlan's (scripts/tasks/smoke.ts). */
+export async function assetsPlan(run: typeof runForward = runForward): Promise<number> {
+  if (shouldBuildUi(process.env)) {
+    const ui = await run(["bun", "scripts/tasks/cli.ts", "build", "ui"]);
+    if (ui !== 0) return ui;
+  }
+  const env = { ...(process.env as Record<string, string>), CARET_SKIP_BUILD_UI: "1" };
+  const stitch = await run(["bun", "scripts/tasks/cli.ts", "assets", "stitch"], { env });
+  if (stitch !== 0) return stitch;
+  return await run(["bun", "scripts/tasks/cli.ts", "assets", "video"], { env });
+}
+
 export async function runAssets(): Promise<never> {
-  // Stitch first: it is the target that needs ImageMagick, so a missing host tool
-  // fails in the first seconds rather than after the recording.
-  const stitch = await runForward(["bun", "scripts/tasks/cli.ts", "assets", "stitch"]);
-  if (stitch !== 0) process.exit(stitch);
-  process.exit(await runForward(["bun", "scripts/tasks/cli.ts", "assets", "video"]));
+  process.exit(await assetsPlan());
 }
