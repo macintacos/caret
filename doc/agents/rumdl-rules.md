@@ -6,18 +6,20 @@ its configs, or one of its invocations.*
 caret runs `rumdl` in **three roles**, under **three separate configs**. Only the
 *version* is shared between them. The two most confusable are the rumdl that lints
 **this repo's** markdown and the rumdl caret **downloads and ships to users** to format
-their plans: same version, different binary, different config, different invocation. Work
-out which role you are in before you change anything — a divergence between these configs
-is almost always deliberate, and "fixing" one breaks the reader it was tuned for.
+their plans: same version, different binary, different config, different invocation — and
+near-identical 90-column MD013 shapes, which is what makes them easy to mistake for one
+setup. Work out which role you are in before you change anything — a divergence between
+these configs is almost always deliberate, and "fixing" one breaks the reader it was tuned
+for.
 
 ## The three roles
 
 |  | Repo hygiene | Plan formatting | Release notes |
 | --- | --- | --- | --- |
 | **Who sees it** | contributors, CI, the pre-commit hook | **end users** — every plan caret renders for review | readers of a GitHub Release |
-| **Binary** | mise-provisioned, on `PATH` | downloaded at runtime into `$XDG_STATE_HOME/caret/rumdl/`, sha256-verified, deliberately **off** `PATH` | mise-provisioned, via `mise x rumdl` |
+| **Binary** | mise-provisioned, on `PATH` | downloaded at runtime into `$XDG_STATE_HOME/caret/rumdl/`, sha256-verified, deliberately **off** `PATH` | mise-provisioned, reached via `mise x rumdl` so it resolves the same binary the format task uses |
 | **Config** | `.rumdl.toml` — lint **and** format | `RUMDL_CONFIG`, a string constant in `src/plan/rumdl.ts`, rewritten into caret's state dir on every `ensureRumdl()` | inline `--config` flags only, no file |
-| **Invocation** | `rumdl fmt {{ files }}` (format) and `rumdl check` (lint), both driven by `hk.pkl` over `**/*.md` | `rumdl fmt - --config <config>` over stdin | `mise x rumdl -- rumdl fmt -` over stdin |
+| **Invocation** | `rumdl fmt {{ files }}` (format) and `rumdl check` (lint), both driven by `hk.pkl` over `**/*.md` | `rumdl fmt - --config <config>` over stdin | `mise x rumdl -- rumdl fmt - --config MD013.reflow=true --config MD013.line_length=9999999` over stdin |
 | **Owns the detail** | `.rumdl.toml`, `hk.pkl` | `src/plan/rumdl.ts`, [`../CONFIGURING.md`](../CONFIGURING.md#plan-formatting-rumdl) | `scripts/tasks/release/rumdl.ts` |
 
 Each of those files explains its own half well; this one exists for the *relationship*
@@ -30,11 +32,11 @@ between them, so read the owner for detail rather than expecting it restated her
 `mise.lock`'s. Note that `mise.toml` only asks for `rumdl = "latest"` — `mise.lock`, not
 `mise.toml`, is what actually pins the repo-side binary.
 
-They must agree because the two halves are tested against different binaries: the
-plan-formatter suite runs the **mise** one (`test/support/rumdl-preload.ts` points
-`CARET_RUMDL_BIN` at whatever `rumdl` is on `PATH`, so unit tests never download), while
-production runs the **downloaded** one. A divergence lets a plan-formatting change pass
-its tests against a version end users never receive.
+They must agree because plan formatting is *tested* against one binary and *ships* with
+another: the plan-formatter suite runs the **mise** one (`test/support/rumdl-preload.ts`
+points `CARET_RUMDL_BIN` at whatever `rumdl` is on `PATH`, so unit tests never download),
+while production runs the **downloaded** one. A divergence lets a plan-formatting change
+pass its tests against a version end users never receive.
 
 `test/structure/rumdl-pin.test.ts` is the standing gate that makes the lockstep
 falsifiable: a `mise up rumdl` that moves the lock without moving `RUMDL_VERSION` and the
