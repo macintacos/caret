@@ -247,7 +247,7 @@ export function openDaemonStderr(s: Settings): number | "ignore" {
   } catch {
     // Best-effort warn (the same unwritable state dir usually silences
     // caret.log too).
-    logWarn("spawn", "daemon log unopenable; discarding daemon output");
+    logWarn("spawn", "daemon stderr log unopenable; discarding output");
     return "ignore";
   }
 }

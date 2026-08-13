@@ -28,6 +28,7 @@ import {
   DEFAULT_PORT,
   HOOK_TIMEOUT_S,
   MAX_HEARTBEAT_MS,
+  MAX_LOG_MAX_SIZE,
   MIN_LOG_MAX_SIZE,
 } from "@/config/constants.ts";
 import { configFile } from "@/config/paths.ts";
@@ -58,7 +59,7 @@ const HeartbeatMs = z.number().int().positive().lt(MAX_HEARTBEAT_MS);
 // EXC-1068: rotation knobs. Floored (not merely positive) so a near-zero
 // max_size can't turn every emit into a read-truncate-gzip cycle; keep is
 // nonnegative because 0 legitimately means "rotate, archive nothing".
-const LogMaxSize = z.number().int().min(MIN_LOG_MAX_SIZE);
+const LogMaxSize = z.number().int().min(MIN_LOG_MAX_SIZE).max(MAX_LOG_MAX_SIZE);
 const LogKeep = z.number().int().nonnegative();
 
 // EXC-558: dev-only settings ([dev]). Consumed ONLY by dev tooling

@@ -128,7 +128,11 @@ interface FakeChild extends SpawnedChild {
  * `vite` resolves `exited` (so runDev proceeds to teardown), the rest stay
  * pending like real long-running processes. */
 function capturingSpawn(viteCode = 0) {
-  const calls: Array<{ cmd: string[]; env: Record<string, string> | undefined }> = [];
+  const calls: Array<{
+    cmd: string[];
+    env: Record<string, string> | undefined;
+    stderr: unknown;
+  }> = [];
   const children: FakeChild[] = [];
   const spawn: DevDeps["spawn"] = (cmd, opts) => {
     const child: FakeChild = {
@@ -142,7 +146,7 @@ function capturingSpawn(viteCode = 0) {
     };
     // Snapshot env at spawn time: real Bun.spawn snapshots it, and runDev mutates
     // the shared childEnv (CARET_PORT) afterward for Vite.
-    calls.push({ cmd, env: opts.env ? { ...opts.env } : undefined });
+    calls.push({ cmd, env: opts.env ? { ...opts.env } : undefined, stderr: opts.stderr });
     children.push(child);
     return child;
   };
@@ -211,11 +215,20 @@ describe("runDev supervision", () => {
         runDev({ numVersions: 4, notify: true, persist: false }, deps),
       ).rejects.toBeInstanceOf(ExitSignal);
 
-      // daemon (ephemeral), pino-pretty, then vite.
+      // daemon (ephemeral), the log tail, pino-pretty, then vite.
       expect(calls[0]?.cmd).toEqual(["bun", "src/cli.ts", "daemon", "--ephemeral"]);
-      expect(calls[1]?.cmd[0]).toBe("bunx");
-      expect(calls[1]?.cmd).toContain("pino-pretty");
-      expect(calls[2]?.cmd).toEqual(["bunx", "vite"]);
+      expect(calls[1]?.cmd[0]).toBe("tail");
+      expect(calls[2]?.cmd[0]).toBe("bunx");
+      expect(calls[2]?.cmd).toContain("pino-pretty");
+      expect(calls[3]?.cmd).toEqual(["bunx", "vite"]);
+
+      // The daemon owns logs/daemon.log (EXC-1068), so pino-pretty is fed by
+      // tailing that file — not by the daemon's stderr, which now carries only
+      // raw crash output and inherits the terminal.
+      expect(calls[1]?.cmd.at(-1)).toBe(
+        join(calls[0]?.env?.XDG_STATE_HOME as string, "caret", "logs", "daemon.log"),
+      );
+      expect(calls[0]?.stderr).toBe("inherit");
 
       // The driver ran in-process with the discovered base and the parsed opts —
       // no argv round-trip, no re-parse (candidate 1).
@@ -258,9 +271,9 @@ describe("runDev supervision", () => {
         DAEMON_DIED,
       );
 
-      // Only daemon + pretty were spawned (vite never reached), and both were
-      // killed by the mid-boot cleanup rather than leaked.
-      expect(children.length).toBe(2);
+      // Only daemon + tail + pretty were spawned (vite never reached), and all
+      // were killed by the mid-boot cleanup rather than leaked.
+      expect(children.length).toBe(3);
       expect(children.every((c) => c.killed >= 1)).toBe(true);
     });
   });

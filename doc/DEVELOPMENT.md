@@ -308,14 +308,17 @@ handling. And `preflight` forwards through `.mise/tasks/preflight` (`raw_args=tr
 report builders.
 
 `mise run dev`'s own orchestration lives in `scripts/tasks/dev/run.ts` — resolve the port
-mode and state dir (`scripts/tasks/dev/dev-env.ts`), spawn the daemon, pino-pretty and
-Vite, run the protocol driver in-process (so commander parses `--num-versions` once, with
-no re-spawned child to reap), discover the daemon's bound port from its lock, and reap
-every child on exit. Note that `Bun.spawn` snapshots `process.env` at startup and ignores
-later mutations, so env overrides (`XDG_STATE_HOME`, `CARET_IDLE_MS`, `CARET_PORT`) are
-passed explicitly to each child rather than set on `process.env`. The smoke targets
-(`scripts/tasks/smoke.ts`) follow the same daemon-supervision pattern, and their shared
-over-the-wire probe is unit-tested in `test/scripts/smoke-probe.test.ts`.
+mode and state dir (`scripts/tasks/dev/dev-env.ts`), spawn the daemon, the tail that feeds
+pino-pretty, and Vite, run the protocol driver in-process (so commander parses
+`--num-versions` once, with no re-spawned child to reap), discover the daemon's bound port
+from its lock, and reap every child on exit. The daemon writes its records to
+`logs/daemon.log`, so the human-readable render tails that file rather than the daemon's
+stderr, which inherits the terminal and carries only crash output. Note that `Bun.spawn`
+snapshots `process.env` at startup and ignores later mutations, so env overrides
+(`XDG_STATE_HOME`, `CARET_IDLE_MS`, `CARET_PORT`) are passed explicitly to each child
+rather than set on `process.env`. The smoke targets (`scripts/tasks/smoke.ts`) follow the
+same daemon-supervision pattern, and their shared over-the-wire probe is unit-tested in
+`test/scripts/smoke-probe.test.ts`.
 
 #### Task ordering
 

@@ -56,19 +56,21 @@ function sizeOf(path: string): number {
   }
 }
 
-/** Claim the rotation lock: an atomic exclusive create, so of two hook
- * processes crossing the threshold at once exactly one proceeds. Returns false
- * when another rotation holds it — unless that lock is stale, in which case it
- * is removed and the claim retried once. */
+/** Claim the rotation lock: an atomic exclusive create, so of two processes
+ * crossing the threshold at once exactly one proceeds. A stale lock is only
+ * *cleared* here, never re-claimed in the same call — clearing and re-creating
+ * is not atomic, so two takeovers racing could both come away holding it, and
+ * both would then rotate. The next check claims it through the create above,
+ * which is mutually exclusive by construction. Any other open failure (EACCES,
+ * EMFILE) is not ours to resolve: give up and leave the lock alone. */
 function claimLock(lock: string): boolean {
   try {
     closeSync(openSync(lock, "wx", 0o600));
     return true;
-  } catch {
-    if (Date.now() - statSync(lock).mtimeMs < STALE_LOCK_MS) return false;
-    unlinkSync(lock);
-    closeSync(openSync(lock, "wx", 0o600));
-    return true;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "EEXIST") return false;
+    if (Date.now() - statSync(lock).mtimeMs >= STALE_LOCK_MS) unlinkSync(lock);
+    return false;
   }
 }
 
@@ -76,13 +78,14 @@ function claimLock(lock: string): boolean {
  * the exact stamp shape rather than a `<name>-*` glob, so daemon's sweep cannot
  * reach daemon-stderr's archives. */
 function prune(name: string, keep: number): void {
+  const dir = logArchiveDir();
   const pattern = new RegExp(`^${name}-\\d{8}T\\d{9}Z\\.log\\.gz$`);
-  const found = readdirSync(logArchiveDir())
+  const found = readdirSync(dir)
     .filter((f) => pattern.test(f))
     .sort();
   for (const old of found.slice(0, Math.max(0, found.length - keep))) {
     try {
-      unlinkSync(`${logArchiveDir()}/${old}`);
+      unlinkSync(`${dir}/${old}`);
     } catch {
       // Another rotation got there first, or the file is unremovable.
     }
@@ -94,6 +97,10 @@ function prune(name: string, keep: number): void {
  * retaining the newest `keep` gzipped archives of that log. A file at or under
  * the threshold costs one statSync and nothing else.
  *
+ * `path` must be a `.log` file inside `logsDir()`: the lock and the archive
+ * destination are resolved from the state dir, not from `path`, so a file
+ * elsewhere would be archived into a directory unrelated to it.
+ *
  * Best-effort throughout: an absent file, a lock held by a concurrent
  * rotation, and an unusable archive dir all return quietly, and no failure
  * propagates to the caller — a logging failure must never destabilize the
@@ -102,7 +109,10 @@ function prune(name: string, keep: number): void {
 export function rotateIfOversized(path: string, maxSize: number, keep: number): void {
   try {
     if (sizeOf(path) <= maxSize) return;
-    const lock = `${logsDir()}/.rotate.lock`;
+    const name = basename(path, ".log");
+    // Per-log, so the daemon gzipping its own log never makes a hook skip
+    // rotating caret.log — and a stale lock strands one log, not all three.
+    const lock = `${logsDir()}/.rotate-${name}.lock`;
     if (!claimLock(lock)) return;
     try {
       // Re-check under the lock: a rotation that completed while we waited
@@ -111,7 +121,6 @@ export function rotateIfOversized(path: string, maxSize: number, keep: number): 
       // Before the read, so a broken archive dir is a clean no-op rather than
       // a log emptied with nowhere to put its contents.
       ensureStateDir(logArchiveDir());
-      const name = basename(path, ".log");
       const raw = readFileSync(path);
       truncateSync(path, 0); // one syscall after the read: the whole loss window
       if (keep > 0) {

@@ -73,9 +73,9 @@ export function prefsFile(): string {
   return `${stateDir()}/prefs.json`;
 }
 
-/** Directory holding the three live logs. Separate from stateDir's root so a
- * rotation sweep can list one directory without stepping over reviews, prefs,
- * or the lock file (EXC-1068). */
+/** Directory holding the live logs, their archive/, the rotation locks, and
+ * `caret redact`'s *.redacted.log siblings — so the state dir's root stays
+ * reviews, prefs, and the daemon lock (EXC-1068). */
 export function logsDir(): string {
   return `${stateDir()}/logs`;
 }

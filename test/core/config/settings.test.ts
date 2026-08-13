@@ -9,6 +9,7 @@ import {
   DEFAULT_LOG_KEEP,
   DEFAULT_LOG_MAX_SIZE,
   MAX_HEARTBEAT_MS,
+  MAX_LOG_MAX_SIZE,
   MIN_LOG_MAX_SIZE,
 } from "@/config/constants.ts";
 import {
@@ -379,6 +380,20 @@ test("an unusable rotation env var falls through to the file value, then the def
 test("a file max_size below the floor reverts the whole file", async () => {
   await Bun.write(file, `[logging]\nlevel = "warn"\nmax_size = ${MIN_LOG_MAX_SIZE - 1}\n`);
   expect(loadSettings(file)).toEqual(DEFAULTS);
+});
+
+// Unbounded above, a threshold past Buffer's max length would make the archive
+// read throw on every emit — rotation silently dead, which is the failure this
+// feature exists to prevent.
+test("a max_size above the ceiling is rejected, in the file and the env", async () => {
+  await Bun.write(file, `[logging]\nmax_size = ${MAX_LOG_MAX_SIZE + 1}\n`);
+  expect(loadSettings(file)).toEqual(DEFAULTS);
+  withEnv({ ...NO_CARET, CARET_LOG_MAX_SIZE: String(MAX_LOG_MAX_SIZE + 1) }, () => {
+    expect(invalidEnvVars()).toEqual(["CARET_LOG_MAX_SIZE"]);
+    expect(logMaxSize(DEFAULTS)).toBe(DEFAULT_LOG_MAX_SIZE);
+  });
+  await Bun.write(file, `[logging]\nmax_size = ${MAX_LOG_MAX_SIZE}\n`);
+  expect(loadSettings(file).logging.max_size).toBe(MAX_LOG_MAX_SIZE);
 });
 
 test("a hot-reload of the rotation knobs is reported by watchSettings", async () => {

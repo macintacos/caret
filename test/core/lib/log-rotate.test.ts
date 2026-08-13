@@ -32,7 +32,8 @@ function perms(path: string): number {
   return statSync(path).mode & 0o777;
 }
 
-const LOCK = () => `${logsDir()}/.rotate.lock`;
+/** The rotation lock is per-log, so one log's stale lock can't strand another. */
+const LOCK = (name = "caret") => `${logsDir()}/.rotate-${name}.lock`;
 
 describe("rotateIfOversized", () => {
   setupTempStateDir("caret-rotate-");
@@ -136,14 +137,36 @@ describe("rotateIfOversized", () => {
     expect(archives()).toEqual([]);
   });
 
-  test("a stale lock is taken over rather than disabling rotation forever", () => {
+  // A rotation SIGKILLed mid-flight leaves its lock behind. Without the
+  // takeover that would disable rotation permanently — the unbounded growth
+  // this module exists to prevent. The takeover only CLEARS the stale lock;
+  // the next call claims it through the atomic create, so two racing takeovers
+  // can never both come away holding it.
+  test("a stale lock is cleared, and the next call rotates", () => {
     writeLog(logFile(), 500);
     writeFileSync(LOCK(), "");
     const ancient = new Date(Date.now() - 120_000);
     utimesSync(LOCK(), ancient, ancient);
+
+    rotateIfOversized(logFile(), 100, 10);
+    expect(statSync(logFile()).size).toBe(500); // cleared, not claimed
+    expect(existsSync(LOCK())).toBe(false);
+
     rotateIfOversized(logFile(), 100, 10);
     expect(statSync(logFile()).size).toBe(0);
     expect(archives().length).toBe(1);
+  });
+
+  test("one log's held lock does not block another log's rotation", () => {
+    const daemonLog = `${logsDir()}/daemon.log`;
+    writeLog(logFile(), 500);
+    writeFileSync(daemonLog, "x".repeat(500));
+    writeFileSync(LOCK("caret"), ""); // fresh: caret.log is mid-rotation elsewhere
+
+    rotateIfOversized(daemonLog, 100, 10);
+
+    expect(statSync(daemonLog).size).toBe(0);
+    expect(statSync(logFile()).size).toBe(500);
   });
 
   test("releases the lock so the next rotation can proceed", () => {

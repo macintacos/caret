@@ -25,6 +25,14 @@ export const DEFAULT_LOG_KEEP = 10;
  * turning each emit into a read-truncate-gzip cycle. */
 export const MIN_LOG_MAX_SIZE = 64 * 1024;
 
+/** Ceiling on max_size / CARET_LOG_MAX_SIZE. Rotation reads the whole file into
+ * a Buffer and gzips it synchronously on the emit path, so an unbounded
+ * threshold fails in the one direction that matters: past Buffer's max length
+ * the read throws, the swallow catches it, and the log never rotates again —
+ * the unbounded growth this exists to prevent, wearing a config knob that looks
+ * like it is working. Bounded for the same reason MAX_HEARTBEAT_MS is. */
+export const MAX_LOG_MAX_SIZE = 256 * 1024 * 1024;
+
 /** The vanity host the hook opens the review UI under (EXC-426). Resolves to
  * loopback per RFC 6761 (mDNSResponder system-wide; Chrome/Firefox special-case
  * it internally), so the 127.0.0.1 bind needs no change. Shared here because
