@@ -12,6 +12,11 @@ indent_size = 2
 indent_style = space
 indent_size = 2
 
+# So is the extensionless plugin entrypoint shim.
+[bin/caret]
+indent_style = space
+indent_size = 2
+
 # Biome formats the JS/TS/JSON family to 2-space (indentStyle "space" in
 # biome.jsonc); .svelte rides the same convention. Mirror it here so editors
 # default to spaces and don't reintroduce tab indentation (EXC-553).

@@ -1,6 +1,6 @@
-amends "package://github.com/jdx/hk/releases/download/v1.50.0/hk@1.50.0#/Config.pkl"
+amends "package://github.com/jdx/hk/releases/download/v1.55.0/hk@1.55.0#/Config.pkl"
 
-import "package://github.com/jdx/hk/releases/download/v1.50.0/hk@1.50.0#/Builtins.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.55.0/hk@1.55.0#/Builtins.pkl"
 
 // Keep the amends/import version in lockstep with the `hk` version in mise.toml.
 //
@@ -73,12 +73,12 @@ local formatters = new Mapping<String, Step> {
 
   ["TOML(Format)     [[builtins.taplo_format]]"] = Builtins.taplo_format
 
-  // Keep the builtin's default extensions and add the extensionless .mise/tasks/*
-  // scripts. The builtin runs `shfmt --apply-ignore` (no -i), so 2-space indent
-  // comes from .editorconfig rather than a flag override.
-  ["Shell(Format)    [[builtins.shfmt]]"] = (Builtins.shfmt) {
-    glob = List("**/*.sh", "**/*.bash", "**/*.mksh", "**/*.bats", "**/*.zsh", ".mise/tasks/*")
-  }
+  // Inherited whole: the builtin's match_any pairs the shell extensions with a
+  // `types` clause, and hk resolves those types by shebang — so the extensionless
+  // .mise/tasks/* forwarders and bin/caret are covered without a glob override.
+  // The builtin runs `shfmt --apply-ignore` (no -i), so 2-space indent comes from
+  // .editorconfig rather than a flag override.
+  ["Shell(Format)    [[builtins.shfmt]]"] = Builtins.shfmt
 
   ["Pkl(Format)      [[builtins.pkl_format]]"] = Builtins.pkl_format
 }
@@ -107,10 +107,10 @@ local linters = new Mapping<String, Step> {
     check = "bash -c 'cd ui && bunx svelte-check --tsconfig ./tsconfig.json'"
   }
 
-  // Shell lint covers the extensionless .mise/tasks/* scripts as well as *.sh.
-  ["Shell(Lint)       [[builtins.shellcheck]]"] = (Builtins.shellcheck) {
-    glob = List("**/*.sh", "**/*.bash", ".mise/tasks/*")
-  }
+  // Inherited whole, same as Shell(Format) above: the builtin's shebang-driven
+  // `types` clause is what reaches the extensionless .mise/tasks/* forwarders and
+  // bin/caret, so no glob override is needed to cover them.
+  ["Shell(Lint)       [[builtins.shellcheck]]"] = Builtins.shellcheck
 
   // Same rumdl binary, read-only: `rumdl check` reports violations (exit 1). In
   // pre-commit (fix=true) the inherited fix = "rumdl check --fix" auto-resolves
