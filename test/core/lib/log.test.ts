@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { setupTempStateDir } from "@test/support/env.ts";
 import { ndjsonRecords } from "@test/support/ndjson.ts";
-import { daemonLogFile, logFile } from "@/config/paths.ts";
+import { daemonLogFile, logArchiveDir, logFile } from "@/config/paths.ts";
 import { callerLocation, parseCaller } from "@/lib/caller-location.ts";
 import {
   createDaemonLogger,
@@ -17,6 +17,7 @@ import {
   logWarn,
   resetHookLogger,
   setLogLevel,
+  setLogRotation,
   setRedact,
 } from "@/lib/log.ts";
 
@@ -38,9 +39,9 @@ function records(path = logFile()): Record<string, unknown>[] {
   return ndjsonRecords(readFileSync(path, "utf-8"));
 }
 
-test("logFile and daemonLogFile resolve under the caret state dir", () => {
-  expect(logFile()).toBe(join(home, "caret", "caret.log"));
-  expect(daemonLogFile()).toBe(join(home, "caret", "daemon.log"));
+test("logFile and daemonLogFile resolve under the caret state dir's logs/", () => {
+  expect(logFile()).toBe(join(home, "caret", "logs", "caret.log"));
+  expect(daemonLogFile()).toBe(join(home, "caret", "logs", "daemon.log"));
 });
 
 test("logError writes a single-line JSON error record with step, msg, and a real stack", () => {
@@ -159,10 +160,60 @@ test("records append across calls rather than truncating", () => {
   expect(recs[1]!.step).toBe("second");
 });
 
-test("logging creates the state dir 0700 and the log file 0600", () => {
+test("logging creates the state and logs dirs 0700 and the log file 0600", () => {
   logError("perm", new Error("p"));
   expect(statSync(join(home, "caret")).mode & 0o777).toBe(0o700);
+  expect(statSync(join(home, "caret", "logs")).mode & 0o777).toBe(0o700);
   expect(statSync(logFile()).mode & 0o777).toBe(0o600);
+});
+
+// --- EXC-1068: rotation on the emit path ---
+
+test("an oversized caret.log rotates on the next record, which lands in the fresh file", () => {
+  logInfo("first", "seed"); // creates logs/ and the file
+  writeFileSync(logFile(), "x".repeat(5000));
+  setLogRotation(1000, 5);
+
+  logInfo("second", "after rotation");
+
+  const recs = records();
+  expect(recs.length).toBe(1);
+  expect(recs[0]!.step).toBe("second");
+  expect(readdirSync(logArchiveDir())).toEqual([expect.stringMatching(/^caret-.*\.log\.gz$/)]);
+});
+
+test("a gated-out record does not rotate", () => {
+  logInfo("first", "seed");
+  writeFileSync(logFile(), "x".repeat(5000));
+  setLogRotation(1000, 5);
+  setLogLevel("warn"); // gates logInfo out before the rotation check
+
+  logInfo("gated", "never written");
+
+  expect(statSync(logFile()).size).toBe(5000);
+  expect(existsSync(logArchiveDir())).toBe(false);
+});
+
+test("createDaemonLogger defaults to daemonLogFile and rotates it when oversized", () => {
+  createDaemonLogger(() => "info").info("listen", "seed");
+  expect(statSync(daemonLogFile()).mode & 0o777).toBe(0o600);
+  writeFileSync(daemonLogFile(), "x".repeat(5000));
+
+  const log = createDaemonLogger(
+    () => "info",
+    undefined,
+    () => false,
+    {
+      maxSize: () => 1000,
+      keep: () => 5,
+    },
+  );
+  log.info("listen", "after rotation");
+
+  const recs = records(daemonLogFile());
+  expect(recs.length).toBe(1);
+  expect(recs[0]!.step).toBe("listen");
+  expect(readdirSync(logArchiveDir())).toEqual([expect.stringMatching(/^daemon-.*\.log\.gz$/)]);
 });
 
 test("logging swallows write failures instead of throwing", async () => {

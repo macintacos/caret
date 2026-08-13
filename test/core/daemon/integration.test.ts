@@ -35,6 +35,13 @@ import { createStore } from "@/review/store.ts";
 // setDefaultTimeout is the single, generous backstop for a genuinely hung subprocess.
 setDefaultTimeout(90_000);
 
+/** The daemon's NDJSON log inside a spawned subprocess's XDG_STATE_HOME — the
+ * path createDaemonLogger owns, which these tests read instead of the raw
+ * stderr the daemon no longer writes records to (EXC-1068). */
+function daemonLog(stateHome: string): string {
+  return join(stateHome, "caret", "logs", "daemon.log");
+}
+
 /**
  * Wait for the daemon to write `lockPath`, polling only while the process is alive:
  * tolerant of an arbitrarily slow boot under a loaded box, but failing fast — with the
@@ -272,7 +279,7 @@ test("the daemon removes the lock on SIGINT", async () => {
 // sibling files — the real subprocess, like the daemon signal tests above.
 test("caret redact scrubs state-dir logs into shareable siblings", async () => {
   const stateHome = await mkdtemp(join(tmpdir(), "caret-redact-cli-"));
-  const logPath = join(stateHome, "caret", "caret.log");
+  const logPath = join(stateHome, "caret", "logs", "caret.log");
   const home = homedir();
   await Bun.write(logPath, `${JSON.stringify({ step: "x", msg: `boom at ${home}/src` })}\n`);
   const proc = Bun.spawn([process.execPath, "src/cli.ts", "redact"], {
@@ -283,7 +290,7 @@ test("caret redact scrubs state-dir logs into shareable siblings", async () => {
   try {
     const exit = await proc.exited;
     const out = await new Response(proc.stdout).text();
-    const sibling = join(stateHome, "caret", "caret.redacted.log");
+    const sibling = join(stateHome, "caret", "logs", "caret.redacted.log");
     expect(exit).toBe(0);
     expect(out).toContain(sibling);
     const scrubbed = await Bun.file(sibling).text();
@@ -458,7 +465,8 @@ test("the daemon logs env warns, ui fallback, and the sigterm shutdown", async (
     await untilLockWritten(proc, lockPath);
     proc.kill("SIGTERM");
     await proc.exited;
-    const recs = ndjsonRecords(await new Response(proc.stderr).text());
+    // The daemon's NDJSON goes to the log path it owns, not stderr (EXC-1068).
+    const recs = ndjsonRecords(await Bun.file(daemonLog(stateHome)).text());
     // Stable contract: the invalid env var surfaces as a warn-level "env" record
     // naming the offending var — assert step/level/var, not the exact tail.
     expect(
@@ -500,7 +508,9 @@ test("the review hook warns about invalid CARET_* env vars in caret.log", async 
     const out = await new Response(proc.stdout).text();
     expect(exit).toBe(0);
     expect(out).toContain('"deny"');
-    const recs = ndjsonRecords(await Bun.file(join(stateHome, "caret", "caret.log")).text());
+    const recs = ndjsonRecords(
+      await Bun.file(join(stateHome, "caret", "logs", "caret.log")).text(),
+    );
     // Stable contract: a warn-level "env" record naming the offending var —
     // assert step/level/var prefix, not the exact descriptive tail (F1 style).
     expect(
@@ -565,8 +575,9 @@ test("the daemon logs the parsed settings at startup", async () => {
     await untilLockWritten(proc, lockPath);
     proc.kill("SIGTERM");
     await proc.exited;
-    const stderr = await new Response(proc.stderr).text();
-    const rec = ndjsonRecords(stderr).find((r) => r.step === "settings");
+    const rec = ndjsonRecords(await Bun.file(daemonLog(stateHome)).text()).find(
+      (r) => r.step === "settings",
+    );
     expect(rec).toBeDefined();
     // Effective (validated) values, never raw config text. `debug` is no longer
     // a known key (EXC-400): zod strips it, so it never reaches the boot line.
@@ -574,7 +585,7 @@ test("the daemon logs the parsed settings at startup", async () => {
     // CARET_IDLE_MS env overrides above resolve in the accessors (EXC-430) and
     // never appear in the parsed settings.
     expect(rec?.settings).toEqual({
-      logging: { level: "info", redact: true },
+      logging: { level: "info", redact: true, max_size: 5_242_880, keep: 10 },
       daemon: { port: 42718, idle_ms: 60_000, heartbeat_ms: 8_000 },
       review: { timeout_s: 3600 },
       // EXC-558: the [dev] table rides the boot record too; here it is the

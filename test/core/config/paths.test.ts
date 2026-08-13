@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, statSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 
 import { setupTempStateDir, withEnv } from "@test/support/env.ts";
@@ -7,8 +7,14 @@ import {
   configDir,
   configFile,
   daemonLock,
+  daemonLogFile,
+  daemonStderrLogFile,
   devConfigFile,
+  ensureLogsDir,
   ensureStateDir,
+  logArchiveDir,
+  logFile,
+  logsDir,
   reviewsDir,
   stateDir,
 } from "@/config/paths.ts";
@@ -30,6 +36,16 @@ test("daemonLock resolves under stateDir and honors XDG_STATE_HOME", () => {
   withEnv({ XDG_STATE_HOME: "/tmp/caret-xdg-paths-test" }, () => {
     expect(daemonLock()).toBe(`${stateDir()}/daemon.lock`);
     expect(daemonLock()).toBe("/tmp/caret-xdg-paths-test/caret/daemon.lock");
+  });
+});
+
+test("the live logs resolve under a logs/ dir inside stateDir (EXC-1068)", () => {
+  withEnv({ XDG_STATE_HOME: "/tmp/caret-xdg-paths-test" }, () => {
+    expect(logsDir()).toBe(`${stateDir()}/logs`);
+    expect(logArchiveDir()).toBe(`${stateDir()}/logs/archive`);
+    expect(logFile()).toBe(`${stateDir()}/logs/caret.log`);
+    expect(daemonLogFile()).toBe(`${stateDir()}/logs/daemon.log`);
+    expect(daemonStderrLogFile()).toBe(`${stateDir()}/logs/daemon-stderr.log`);
   });
 });
 
@@ -104,5 +120,49 @@ describe("ensureStateDir", () => {
     // would leave it 0755. This assertion FAILS if the helper omits the chmod.
     ensureStateDir(reviewsDir());
     expect(perms(stateDir())).toBe(0o700);
+  });
+});
+
+// --- logs/ dir + the one-time move off the legacy top-level paths (EXC-1068) ---
+
+describe("ensureLogsDir", () => {
+  setupTempStateDir("caret-logsdir-");
+
+  test("creates logs/ at 0700 and tightens the state dir", () => {
+    ensureLogsDir();
+    expect(perms(logsDir())).toBe(0o700);
+    expect(perms(stateDir())).toBe(0o700);
+  });
+
+  test("moves a legacy top-level caret.log/daemon.log into logs/ at 0600", () => {
+    mkdirSync(stateDir(), { recursive: true });
+    writeFileSync(`${stateDir()}/caret.log`, "hook records\n", { mode: 0o644 });
+    writeFileSync(`${stateDir()}/daemon.log`, "daemon records\n", { mode: 0o644 });
+
+    ensureLogsDir();
+
+    expect(existsSync(`${stateDir()}/caret.log`)).toBe(false);
+    expect(existsSync(`${stateDir()}/daemon.log`)).toBe(false);
+    expect(Bun.file(logFile()).text()).resolves.toBe("hook records\n");
+    expect(Bun.file(daemonLogFile()).text()).resolves.toBe("daemon records\n");
+    expect(perms(logFile())).toBe(0o600);
+    expect(perms(daemonLogFile())).toBe(0o600);
+  });
+
+  test("leaves an already-migrated log alone when both copies exist", async () => {
+    mkdirSync(logsDir(), { recursive: true });
+    writeFileSync(`${stateDir()}/caret.log`, "stale legacy\n");
+    writeFileSync(logFile(), "live records\n");
+
+    ensureLogsDir();
+
+    expect(await Bun.file(logFile()).text()).toBe("live records\n");
+  });
+
+  test("is a no-op when there is nothing to migrate", () => {
+    ensureLogsDir();
+    ensureLogsDir();
+    expect(existsSync(logFile())).toBe(false);
+    expect(perms(logsDir())).toBe(0o700);
   });
 });

@@ -16,9 +16,14 @@ dir="${XDG_STATE_HOME:-$HOME/.local/state}/caret"
 - `reviews/<id>.json` — one JSON review record per file: `id`, `sessionId`, `cwd`,
   `title`, `status` (`pending`/`rejected`/`approved`/`expired`), a `versions` array, and
   (once resolved) a `decision`.
-- `caret.log` / `daemon.log` — NDJSON, one object per line: `level` (pino numeric: 20
-  debug, 30 info, 40 warn, 50 error), `time`, `step`, `msg`, and on errors an `err` chain.
-  Feedback and plan bodies are never logged.
+- `logs/caret.log` / `logs/daemon.log` — NDJSON, one object per line: `level` (pino
+  numeric: 20 debug, 30 info, 40 warn, 50 error), `time`, `step`, `msg`, and on errors an
+  `err` chain. Feedback and plan bodies are never logged.
+- `logs/daemon-stderr.log` — the daemon's raw stderr: crash traces and other non-JSON
+  output written outside the logger.
+
+Live logs rotate into `logs/archive/<name>-<stamp>.log.gz`; those archives are out of
+scope below — `gunzip -c` one and rerun the recipe against the result.
 
 ## 2. Session review
 
@@ -37,14 +42,15 @@ recorded", not a failure.
 ## 3. Recent errors
 
 ```bash
-grep '^{' "$dir/caret.log"  | jq -s '[.[] | select(.level >= 50)] | .[-5:]'
-grep '^{' "$dir/daemon.log" | jq -s '[.[] | select(.level >= 50)] | .[-5:]'
-tail -n 40 "$dir/daemon.log"
+grep '^{' "$dir/logs/caret.log"  | jq -s '[.[] | select(.level >= 50)] | .[-5:]'
+grep '^{' "$dir/logs/daemon.log" | jq -s '[.[] | select(.level >= 50)] | .[-5:]'
+tail -n 40 "$dir/logs/daemon-stderr.log"
 ```
 
 A "socket connection closed" on the hook side often has its real cause on the daemon side
-— check both. If neither log has a record with `level >= 50`, report "caret has no errors
-recorded".
+— check both, and the stderr tail for a crash that never reached `daemon.log`. If neither
+NDJSON log has a record with `level >= 50` and the stderr log holds no crash output,
+report "caret has no errors recorded".
 
 ## 4. Debug
 

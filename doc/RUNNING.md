@@ -96,12 +96,15 @@ Three details worth knowing:
 
 ### Where the logs live
 
-Logs live under `$XDG_STATE_HOME/caret` when set, otherwise `~/.local/state/caret`:
+Logs live under `$XDG_STATE_HOME/caret/logs` when set, otherwise
+`~/.local/state/caret/logs`:
 
-| File         | What's in it                                                                                                                        |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `caret.log`  | NDJSON records from the short-lived `caret review` hook process.                                                                    |
-| `daemon.log` | The detached daemon's stdout/stderr: the same NDJSON shape (tagged with `pid`), possibly interleaved with raw non-JSON crash output. |
+| File                | What's in it                                                                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `caret.log`         | NDJSON records from the short-lived `caret review` hook process.                                                                    |
+| `daemon.log`        | The detached daemon's records: the same NDJSON shape, tagged with `pid`.                                                            |
+| `daemon-stderr.log` | Whatever the detached daemon writes outside its logger — raw non-JSON crash output.                                                 |
+| `archive/`          | Gzipped rotations, named `<log>-<stamp>.log.gz`. A log past `[logging].max_size` is archived here and emptied; the newest `[logging].keep` per log are kept. |
 
 Browser-UI events ship to the daemon in batches (`POST /api/logs`) and land in
 `daemon.log` tagged `source: "ui"`, subject to the same `[logging]` level and redact
@@ -130,11 +133,12 @@ only genuine failures sit at error.
 
 - `/caret:debug` — the slash command that reviews the current session —
   pending/approved/rejected/expired plans (from the on-disk review records) plus recent
-  errors from both logs — and helps debug failures.
-- `caret redact` — scrubs the two state-dir logs into shareable `*.redacted.log` siblings
-  (home paths become `~`, usernames in foreign home paths are censored). For always-on
-  scrubbing at write time, set `redact = true` in `[logging]`. Plan, prompt, and
-  review-feedback bodies are never written to logs regardless of the toggle.
+  errors from the live logs — and helps debug failures.
+- `caret redact` — scrubs the three live logs, not the archives, into shareable
+  `*.redacted.log` siblings (home paths become `~`, usernames in foreign home paths are
+  censored). For always-on scrubbing at write time, set `redact = true` in `[logging]`.
+  Plan, prompt, and review-feedback bodies are never written to logs regardless of the
+  toggle.
 - `caret discovery` — a one-shot, read-only diagnostics snapshot of the local install —
   running caret processes, daemon identity (version, build, startup commit), lock/port
   state, effective settings, review counts, the agent adapter's install-state probe, log

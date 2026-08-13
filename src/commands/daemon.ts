@@ -14,6 +14,8 @@ import {
   getPort,
   heartbeatMs,
   idleMs,
+  logKeep,
+  logMaxSize,
   settings,
   watchSettings,
 } from "@/config/settings.ts";
@@ -28,8 +30,8 @@ import { loadUiAssets } from "@/ui/assets.ts";
 export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   // The daemon's boot time, captured once for the /api/diagnostics uptime (EXC-842).
   const startedAt = Date.now();
-  // Leveled NDJSON to stderr (spawnDaemon redirects it into daemon.log). The
-  // level and redact thunks re-read svc.current() per emit, so config.toml
+  // Leveled NDJSON to logs/daemon.log, the path the logger owns and rotates.
+  // The level, redact, and rotation thunks re-read svc.current() per emit, so config.toml
   // edits hot-reload without a restart — and the boot line below doubles as
   // the EXC-429 settings warm: an invalid config is detected and logged here,
   // not on first use. The watcher records which keys changed when a reload is
@@ -45,6 +47,7 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
     () => svc.current().logging.level,
     undefined,
     () => svc.current().logging.redact,
+    { maxSize: () => logMaxSize(svc.current()), keep: () => logKeep(svc.current()) },
   );
   const cfg = configFile();
   // The boot snapshot: logged below and reused for the startup-captured

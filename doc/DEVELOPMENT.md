@@ -126,7 +126,7 @@ reviews or config: it reads `config.dev.toml`, not your production `config.toml`
 The daemon is seeded with one fake pending plan, and a driver plays the agent's side
 through the real review hook path — **Request changes** appends a revision section quoting
 your feedback and resubmits, **Approve** re-seeds a fresh plan, and real hook records land
-in the dev state dir's `caret.log`.
+in the dev state dir's `logs/caret.log`.
 
 #### Knobs
 
@@ -142,7 +142,7 @@ it off. The config keys are documented in full under
 | ------------------- | ----------------------- | ------------------------ | --------- | ----------------------------------------------------------------------------------------- |
 | `--port <n>`        | `CARET_DEV_PORT`        | `[dev].port`             | ephemeral | Bind a fixed daemon port instead of `--ephemeral`. Any free port but `42718` (the production default); one session at a time. |
 | `--state-dir <dir>` | `CARET_DEV_STATE_DIR`   | `[dev].state_dir`        | ephemeral | Keep dev state across restarts.                                                           |
-| `--persist`         | —                       | —                        | off       | Keep even the ephemeral state dir on exit, so you can read its `caret.log`.               |
+| `--persist`         | —                       | —                        | off       | Keep even the ephemeral state dir on exit, so you can read its `logs/caret.log`.          |
 | `--notify`          | `CARET_DEV_NEW_REVIEW_MS` † | `[dev.notify].enabled` | off      | Arm the recurring extra-review seeder.                                                    |
 | —                   | `CARET_DEV_NEW_REVIEW_MS` | `[dev.notify].interval_ms` | `15000` | Seeder cadence, in milliseconds.                                                          |
 | —                   | —                       | `[dev.notify].max_pending` | `3`     | Cap on unresolved extra reviews.                                                          |
@@ -308,14 +308,17 @@ handling. And `preflight` forwards through `.mise/tasks/preflight` (`raw_args=tr
 report builders.
 
 `mise run dev`'s own orchestration lives in `scripts/tasks/dev/run.ts` — resolve the port
-mode and state dir (`scripts/tasks/dev/dev-env.ts`), spawn the daemon, pino-pretty and
-Vite, run the protocol driver in-process (so commander parses `--num-versions` once, with
-no re-spawned child to reap), discover the daemon's bound port from its lock, and reap
-every child on exit. Note that `Bun.spawn` snapshots `process.env` at startup and ignores
-later mutations, so env overrides (`XDG_STATE_HOME`, `CARET_IDLE_MS`, `CARET_PORT`) are
-passed explicitly to each child rather than set on `process.env`. The smoke targets
-(`scripts/tasks/smoke.ts`) follow the same daemon-supervision pattern, and their shared
-over-the-wire probe is unit-tested in `test/scripts/smoke-probe.test.ts`.
+mode and state dir (`scripts/tasks/dev/dev-env.ts`), spawn the daemon, the tail that feeds
+pino-pretty, and Vite, run the protocol driver in-process (so commander parses
+`--num-versions` once, with no re-spawned child to reap), discover the daemon's bound port
+from its lock, and reap every child on exit. The daemon writes its records to
+`logs/daemon.log`, so the human-readable render tails that file rather than the daemon's
+stderr, which inherits the terminal and carries only crash output. Note that `Bun.spawn`
+snapshots `process.env` at startup and ignores later mutations, so env overrides
+(`XDG_STATE_HOME`, `CARET_IDLE_MS`, `CARET_PORT`) are passed explicitly to each child
+rather than set on `process.env`. The smoke targets (`scripts/tasks/smoke.ts`) follow the
+same daemon-supervision pattern, and their shared over-the-wire probe is unit-tested in
+`test/scripts/smoke-probe.test.ts`.
 
 #### Task ordering
 

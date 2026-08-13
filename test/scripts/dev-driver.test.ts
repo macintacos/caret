@@ -493,7 +493,7 @@ test("a revision round-trips through the real runReview hook path and logs to ca
   const out2 = await second;
   expect(out2.behavior).toBe("allow");
   // Real hook records landed in the dev state dir's caret.log.
-  const log = await Bun.file(join(dir, "caret", "caret.log")).text();
+  const log = await Bun.file(join(dir, "caret", "logs", "caret.log")).text();
   expect(log).toContain('"step":"decision"');
   // EXC-444: reviewer feedback bodies are never logged — the rejected-plan
   // record carries only the feedback's length.

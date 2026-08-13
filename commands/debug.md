@@ -16,21 +16,28 @@ otherwise `~/.local/state/caret`:
   resolves. Each record carries `id`, `sessionId`, `cwd`, `title`, `status`
   (`pending`/`rejected`/`approved`/`expired`), a `versions` array (plan revisions), and —
   once resolved — a `decision` (`behavior`/`feedback`/`acceptMode`/`decidedAt`).
-- `caret.log` — NDJSON records from the short-lived `caret review` hook process, one JSON
-  object per line: `level` (pino numeric: 20 debug, 30 info, 40 warn, 50 error), `time`
-  (ISO 8601 UTC), `step`, `source` (the emitting process), `caller` (the emitting
+- `logs/caret.log` — NDJSON records from the short-lived `caret review` hook process, one
+  JSON object per line: `level` (pino numeric: 20 debug, 30 info, 40 warn, 50 error),
+  `time` (ISO 8601 UTC), `step`, `source` (the emitting process), `caller` (the emitting
   `file:line`, when resolvable), `msg`, review-scoped extras
   (`sessionId`/`cwd`/`reviewId`, plus `feedbackChars`/`acceptMode` on a decision record),
   and — on errors — `err` with `message`, `stack`, and a nested `cause` chain. Feedback
   and plan bodies are never logged — only counts like `feedbackChars` (EXC-444). Normal
   operation (a review decision, a format reject) logs at info; only genuine failures sit
   at level ≥ 50.
-- `daemon.log` — the detached daemon's stdout/stderr: the same NDJSON shape (tagged with
-  `pid`) for lifecycle and request errors, possibly interleaved with raw non-JSON lines
-  (crash traces, port messages).
+- `logs/daemon.log` — the detached daemon's leveled records: the same NDJSON shape (tagged
+  with `pid`) for lifecycle and request errors.
+- `logs/daemon-stderr.log` — the daemon's raw stderr, everything it writes outside the
+  logger: crash traces, port messages, and other non-JSON output. This is where a crash
+  that never reached `daemon.log` lands.
 
 Lines that don't start with `{` (including pre-NDJSON sentinel records from older caret
 versions) are skipped by the `grep '^{'` filters below.
+
+Each live log rotates once it grows past its size cap; the gzipped older segments sit in
+`logs/archive/<name>-<stamp>.log.gz` and are out of scope for the recipes below. If a
+failure predates the current live file, `gunzip -c` the archive segment you need and rerun
+the recipe against the result.
 
 Resolve the directory once:
 
@@ -76,19 +83,19 @@ sid=$(jq -rs 'sort_by(.updatedAt) | last | .sessionId // empty' "$dir"/reviews/*
 
 ## 3. Recent errors
 
-- **caret.log** — extract the **last 5 error records** (level ≥ 50), then report each
+- **logs/caret.log** — extract the **last 5 error records** (level ≥ 50), then report each
   one's step, msg, and `err` message/cause/stack:
 
   ```bash
-  grep '^{' "$dir/caret.log" | jq -s '[.[] | select(.level >= 50)] | .[-5:]'
+  grep '^{' "$dir/logs/caret.log" | jq -s '[.[] | select(.level >= 50)] | .[-5:]'
   ```
 
-- **daemon.log** — same extraction for the daemon side, plus a raw tail for non-JSON crash
-  output near the time of the hook failure:
+- **logs/daemon.log** — same extraction for the daemon side, plus a raw tail of
+  `logs/daemon-stderr.log` for crash output near the time of the hook failure:
 
   ```bash
-  grep '^{' "$dir/daemon.log" | jq -s '[.[] | select(.level >= 50)] | .[-5:]'
-  tail -n 40 "$dir/daemon.log"
+  grep '^{' "$dir/logs/daemon.log" | jq -s '[.[] | select(.level >= 50)] | .[-5:]'
+  tail -n 40 "$dir/logs/daemon-stderr.log"
   ```
 
   For a human-readable rendering of either log: `grep '^{' <log> | bunx pino-pretty`.
@@ -101,7 +108,7 @@ so check both. The surrounding info records (review created/resolved, plan rejec
 its `feedbackChars`) give the timeline leading up to a failure:
 
 ```bash
-grep '^{' "$dir/caret.log" | tail -n 10 | jq -c '{time, level, step, msg}'
+grep '^{' "$dir/logs/caret.log" | tail -n 10 | jq -c '{time, level, step, msg}'
 ```
 
 ## 4. Handle the empty case
@@ -111,7 +118,8 @@ Two independent axes — report each on its own:
 - **No reviews for this project** — if the cwd matches no review and the fallback finds
   nothing, state that plainly. Don't imply a failure occurred; an absence of reviews just
   means none have been sent from here yet.
-- **No error records** — if neither log contains a record with `level >= 50`, report
+- **No error records** — if neither NDJSON log contains a record with `level >= 50` and
+  `logs/daemon-stderr.log` holds no crash output, report
   **"caret has no errors recorded"**. Info records alone (rejected plans, routine
   lifecycle) are normal operation, not errors. The session review still renders if reviews
   exist.

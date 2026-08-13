@@ -53,7 +53,10 @@ if (!assets) {
   process.exit(1);
 }
 
-const log = createDaemonLogger(() => "info"); // NDJSON to stderr
+// Explicit fd 2: the harness folds this daemon's stderr into its boot-failure
+// message (test/e2e/support/fixtures.ts), so the NDJSON must stay on stderr
+// rather than going to the daemon log the default now owns.
+const log = createDaemonLogger(() => "info", 2);
 const store = createStore(reviewsDir(), log);
 await store.rehydrate();
 

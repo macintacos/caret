@@ -213,9 +213,10 @@ function freePort(): number {
  * prewarm that failed to spawn a daemon leaves a diagnostic. */
 function dumpDaemonLogs(worldDir: string): void {
   try {
+    const logDir = join(worldDir, "logs");
     const lines: string[] = [];
-    for (const f of readdirSync(worldDir).filter((n) => n.endsWith(".log"))) {
-      lines.push(...readFileSync(join(worldDir, f), "utf8").split("\n"));
+    for (const f of readdirSync(logDir).filter((n) => n.endsWith(".log"))) {
+      lines.push(...readFileSync(join(logDir, f), "utf8").split("\n"));
     }
     const tail = lines.slice(-20).join("\n");
     if (tail) process.stderr.write(`${tail}\n`);

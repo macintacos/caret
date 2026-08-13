@@ -12,9 +12,9 @@
 import type { AgentAdapter } from "@/adapters/adapter.ts";
 import { selectAdapter } from "@/adapters/index.ts";
 import { warnInvalidEnvVars } from "@/commands/boot.ts";
-import { getPort, loadSettings } from "@/config/settings.ts";
+import { getPort, loadSettings, logKeep, logMaxSize } from "@/config/settings.ts";
 import { listReviews, resolveReview } from "@/daemon/client.ts";
-import { logDebug, logWarn, setLogLevel, setRedact } from "@/lib/log.ts";
+import { logDebug, logWarn, setLogLevel, setLogRotation, setRedact } from "@/lib/log.ts";
 import { type ReconcileDeps, runReconcile } from "@/review/reconcile.ts";
 
 export function prodReconcileDeps(baseUrl: string, adapter: AgentAdapter): ReconcileDeps {
@@ -32,6 +32,7 @@ export async function runReconcileSubcommand(): Promise<void> {
     const loaded = loadSettings();
     setLogLevel(loaded.logging.level);
     setRedact(loaded.logging.redact);
+    setLogRotation(logMaxSize(loaded), logKeep(loaded));
     warnInvalidEnvVars((msg) => logWarn("env", msg));
     const adapter = selectAdapter();
     const baseUrl = `http://localhost:${getPort(loaded)}`;

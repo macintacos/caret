@@ -5,7 +5,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { withEnv } from "@test/support/env.ts";
-import { MAX_HEARTBEAT_MS } from "@/config/constants.ts";
+import {
+  DEFAULT_LOG_KEEP,
+  DEFAULT_LOG_MAX_SIZE,
+  MAX_HEARTBEAT_MS,
+  MAX_LOG_MAX_SIZE,
+  MIN_LOG_MAX_SIZE,
+} from "@/config/constants.ts";
 import {
   createSettings,
   DEFAULT_PORT,
@@ -19,6 +25,8 @@ import {
   idleMs,
   invalidEnvVars,
   loadSettings,
+  logKeep,
+  logMaxSize,
   reviewTimeoutMs,
   type Settings,
   settings,
@@ -45,13 +53,21 @@ afterEach(async () => {
 test("a valid config.toml is parsed and validated", async () => {
   // `debug` is no longer a known key (EXC-400): zod strips it, proving unknown-key handling.
   await Bun.write(file, '[logging]\nlevel = "warn"\ndebug = true\nredact = true\n');
-  expect(loadSettings(file)).toEqual({ ...DEFAULTS, logging: { level: "warn", redact: true } });
+  expect(loadSettings(file)).toEqual({
+    ...DEFAULTS,
+    logging: { ...DEFAULTS.logging, level: "warn", redact: true },
+  });
 });
 
 test("an absent file yields all defaults with no error", () => {
   expect(loadSettings(file)).toEqual(DEFAULTS);
   expect(DEFAULTS).toEqual({
-    logging: { level: "info", redact: false },
+    logging: {
+      level: "info",
+      redact: false,
+      max_size: DEFAULT_LOG_MAX_SIZE,
+      keep: DEFAULT_LOG_KEEP,
+    },
     daemon: { port: 42718, idle_ms: 60_000, heartbeat_ms: 8_000 },
     review: { timeout_s: 3600 },
     dev: { notify: { enabled: false, interval_ms: 15_000, max_pending: 3 } },
@@ -71,7 +87,7 @@ test("a partial mid-write file falls back to defaults without throwing", async (
 test("an invalid value falls back to defaults and logs the key path, never the value", async () => {
   await Bun.write(file, '[logging]\nlevel = "SENTINEL_NOT_A_LEVEL"\n');
   expect(loadSettings(file)).toEqual(DEFAULTS);
-  const log = await readFile(join(dir, "state", "caret", "caret.log"), "utf-8");
+  const log = await readFile(join(dir, "state", "caret", "logs", "caret.log"), "utf-8");
   expect(log).toContain("logging.level");
   expect(log).not.toContain("SENTINEL_NOT_A_LEVEL");
 });
@@ -81,7 +97,10 @@ test("unknown keys are ignored at the top level and inside tables", async () => 
     file,
     '[telemetry]\nenabled = true\n\n[logging]\nlevel = "debug"\nfuture_flag = 3\n',
   );
-  expect(loadSettings(file)).toEqual({ ...DEFAULTS, logging: { level: "debug", redact: false } });
+  expect(loadSettings(file)).toEqual({
+    ...DEFAULTS,
+    logging: { ...DEFAULTS.logging, level: "debug" },
+  });
 });
 
 test("current() yields all defaults when the file never existed", () => {
@@ -209,6 +228,8 @@ const NO_CARET: Record<string, string | undefined> = {
   CARET_TIMEOUT: undefined,
   CARET_IDLE_MS: undefined,
   CARET_HEARTBEAT_MS: undefined,
+  CARET_LOG_MAX_SIZE: undefined,
+  CARET_LOG_KEEP: undefined,
 };
 
 test("a config file sets all four tunables (file > default)", async () => {
@@ -315,6 +336,74 @@ test("invalidEnvVars flags an out-of-budget CARET_TIMEOUT (in-schema 3900s bound
   withEnv({ ...NO_CARET, CARET_TIMEOUT: "3899" }, () => {
     expect(invalidEnvVars()).toEqual([]);
   });
+});
+
+// --- EXC-1068: log-rotation knobs ([logging].max_size / .keep) ---
+
+test("the rotation knobs resolve to their schema defaults with no env and no file", () => {
+  withEnv(NO_CARET, () => {
+    expect(logMaxSize(DEFAULTS)).toBe(DEFAULT_LOG_MAX_SIZE);
+    expect(logKeep(DEFAULTS)).toBe(DEFAULT_LOG_KEEP);
+  });
+});
+
+test("a config file sets the rotation knobs (file > default)", async () => {
+  await Bun.write(file, `[logging]\nmax_size = ${MIN_LOG_MAX_SIZE}\nkeep = 0\n`);
+  const s = loadSettings(file);
+  withEnv(NO_CARET, () => {
+    expect(logMaxSize(s)).toBe(MIN_LOG_MAX_SIZE);
+    expect(logKeep(s)).toBe(0); // keep = 0 legitimately means "archive nothing"
+  });
+});
+
+test("CARET_LOG_MAX_SIZE / CARET_LOG_KEEP shadow the file values (env > file)", async () => {
+  await Bun.write(file, "[logging]\nmax_size = 1048576\nkeep = 3\n");
+  const s = loadSettings(file);
+  withEnv({ CARET_LOG_MAX_SIZE: "2097152", CARET_LOG_KEEP: "7" }, () => {
+    expect(logMaxSize(s)).toBe(2_097_152);
+    expect(logKeep(s)).toBe(7);
+  });
+});
+
+test("an unusable rotation env var falls through to the file value, then the default", async () => {
+  await Bun.write(file, "[logging]\nmax_size = 1048576\nkeep = 3\n");
+  const s = loadSettings(file);
+  withEnv({ CARET_LOG_MAX_SIZE: "1024", CARET_LOG_KEEP: "-1" }, () => {
+    expect(logMaxSize(s)).toBe(1_048_576); // → file
+    expect(logKeep(s)).toBe(3);
+    expect(logMaxSize(DEFAULTS)).toBe(DEFAULT_LOG_MAX_SIZE); // → default
+    expect(logKeep(DEFAULTS)).toBe(DEFAULT_LOG_KEEP);
+    expect(invalidEnvVars()).toEqual(["CARET_LOG_MAX_SIZE", "CARET_LOG_KEEP"]);
+  });
+});
+
+test("a file max_size below the floor reverts the whole file", async () => {
+  await Bun.write(file, `[logging]\nlevel = "warn"\nmax_size = ${MIN_LOG_MAX_SIZE - 1}\n`);
+  expect(loadSettings(file)).toEqual(DEFAULTS);
+});
+
+// Unbounded above, a threshold past Buffer's max length would make the archive
+// read throw on every emit — rotation silently dead, which is the failure this
+// feature exists to prevent.
+test("a max_size above the ceiling is rejected, in the file and the env", async () => {
+  await Bun.write(file, `[logging]\nmax_size = ${MAX_LOG_MAX_SIZE + 1}\n`);
+  expect(loadSettings(file)).toEqual(DEFAULTS);
+  withEnv({ ...NO_CARET, CARET_LOG_MAX_SIZE: String(MAX_LOG_MAX_SIZE + 1) }, () => {
+    expect(invalidEnvVars()).toEqual(["CARET_LOG_MAX_SIZE"]);
+    expect(logMaxSize(DEFAULTS)).toBe(DEFAULT_LOG_MAX_SIZE);
+  });
+  await Bun.write(file, `[logging]\nmax_size = ${MAX_LOG_MAX_SIZE}\n`);
+  expect(loadSettings(file).logging.max_size).toBe(MAX_LOG_MAX_SIZE);
+});
+
+test("a hot-reload of the rotation knobs is reported by watchSettings", async () => {
+  await Bun.write(file, "[logging]\nmax_size = 5242880\n");
+  const fired: string[][] = [];
+  const svc = watchSettings(createSettings(file), (changes) => fired.push(changes));
+  svc.current();
+  await Bun.write(file, "[logging]\nmax_size = 1048576\n");
+  svc.current();
+  expect(fired).toEqual([["logging.max_size: 5242880 → 1048576"]]);
 });
 
 // --- EXC-533: HeartbeatMs upper bound (keeps the derived idleTimeout valid) ---

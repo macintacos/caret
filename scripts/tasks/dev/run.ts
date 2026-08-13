@@ -12,7 +12,7 @@
 // pure boot decisions (planStateDir, daemonCommand, childEnvFor, makeCleanup)
 // are plain functions tested directly.
 
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -95,8 +95,9 @@ export function planStateDir(configured: string | undefined, persist: boolean): 
  * implementation wraps Bun.spawn, tests supply a fake. */
 export interface SpawnedChild {
   readonly pid: number;
-  /** The daemon's piped stderr, forwarded into pino-pretty's stdin. */
   readonly stderr: ReadableStream<Uint8Array> | number | undefined;
+  /** The log tail's piped stdout, forwarded into pino-pretty's stdin. */
+  readonly stdout?: ReadableStream<Uint8Array> | number | undefined;
   readonly exited: Promise<number>;
   kill(signal?: number): void;
 }
@@ -107,7 +108,7 @@ export type SpawnFn = (
     cwd?: string;
     env?: Record<string, string>;
     stdout?: "inherit" | "pipe" | number;
-    stderr?: "inherit" | "pipe" | number;
+    stderr?: "inherit" | "pipe" | "ignore" | number;
     stdin?: ReadableStream<Uint8Array> | number | "inherit" | null;
   },
 ) => SpawnedChild;
@@ -224,6 +225,8 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
   // A persistent dir may hold a stale lock from a crashed run; the boot writes
   // its own, so clear it first or port discovery would read the stale port.
   const worldDir = join(stateDirPath, "caret");
+  const daemonLogDir = join(worldDir, "logs");
+  const daemonLogPath = join(daemonLogDir, "daemon.log");
   const lockFile = join(worldDir, "daemon.lock");
   rmSync(lockFile, { force: true });
 
@@ -239,18 +242,33 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
 
   try {
     // Daemon: stock daemon from source (so edits are live without a rebuild). It
-    // emits NDJSON on stderr (EXC-398); render it human-readable through
-    // pino-pretty (a devDependency, never bundled). pino-pretty's own stdout goes
-    // to our stderr (fd 2) so it never pollutes the task's stdout.
+    // writes its NDJSON to logs/daemon.log, a path it owns so it can rotate it
+    // (EXC-1068), so the human-readable render tails that file into pino-pretty
+    // (a devDependency, never bundled) rather than reading a stderr pipe. Its
+    // raw stderr inherits the terminal instead: dev has no spawnDaemon to
+    // redirect it into daemon-stderr.log, so an un-inherited crash trace would
+    // vanish. pino-pretty's own stdout goes to our stderr (fd 2) so it never
+    // pollutes the task's stdout.
+    //
+    // The file is created before the tail because BSD `tail -F` exits on a
+    // missing path, and the daemon may not have logged yet. `-F` follows a
+    // truncation, so the render survives a rotation.
+    mkdirSync(daemonLogDir, { recursive: true, mode: 0o700 });
+    closeSync(openSync(daemonLogPath, "a", 0o600));
     const daemon = deps.spawn(daemonCommand(portMode), {
       stdout: "inherit",
-      stderr: "pipe",
+      stderr: "inherit",
       env: childEnv,
     });
     children.push(daemon);
+    const tail = deps.spawn(["tail", "-n", "+1", "-F", daemonLogPath], {
+      stdout: "pipe",
+      stderr: "ignore",
+    });
+    children.push(tail);
     const pretty = deps.spawn(
       ["bunx", "pino-pretty", "--colorize", "--translateTime", "UTC:yyyy-mm-dd'T'HH:MM:ss.l'Z'"],
-      { stdin: daemon.stderr, stdout: 2, stderr: "inherit" },
+      { stdin: tail.stdout, stdout: 2, stderr: "inherit" },
     );
     children.push(pretty);
 

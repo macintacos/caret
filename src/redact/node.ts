@@ -15,7 +15,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 
-import { daemonLogFile, logFile } from "@/config/paths.ts";
+import { daemonLogFile, daemonStderrLogFile, logFile } from "@/config/paths.ts";
 import { CENSOR, scrubGraph } from "@/redact/core.ts";
 
 /** Foreign home paths (another user's, or Linux logs read on macOS): drop only
@@ -61,10 +61,15 @@ export function redactLogText(text: string): string {
 
 /** Scrub each existing log into a shareable sibling (caret.log →
  * caret.redacted.log, 0600 like the originals) and return the written paths.
- * Absent files are skipped; write failures propagate to the caller (the
- * `caret redact` subcommand reports them — silently skipping a failed write
- * would look like success). */
-export function redactLogFiles(files: string[] = [logFile(), daemonLogFile()]): string[] {
+ * Defaults to the three live logs, the daemon's raw stderr included — it holds
+ * the crash traces daemon.log no longer carries (EXC-1068); rotated archives
+ * are out of scope, gunzip one and pass it explicitly. Absent files are
+ * skipped; write failures propagate to the caller (the `caret redact`
+ * subcommand reports them — silently skipping a failed write would look like
+ * success). */
+export function redactLogFiles(
+  files: string[] = [logFile(), daemonLogFile(), daemonStderrLogFile()],
+): string[] {
   const written: string[] = [];
   for (const file of files) {
     let text: string;
