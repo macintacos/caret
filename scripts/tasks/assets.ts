@@ -61,10 +61,10 @@ const STITCH_SCALE = 2;
 
 const STITCH_PATH = "doc/assets/caret-review-ui.png";
 
-/** The recording. Gitignored, unlike the stitch: GitHub plays a video from an
- * attachment URL but not from a repo path, so the README embeds the URL that
- * uploading this file returns — which also keeps a multi-megabyte blob out of
- * history on every regeneration. doc/DEVELOPMENT.md carries the upload step. */
+/** The recording, committed beside the stitch. H.264 in an mp4 rather than
+ * Playwright's native webm: mp4 is the container GitHub's file viewer and every
+ * desktop player open without a plugin, which is what makes the artifact
+ * inspectable where it lives. */
 const VIDEO_PATH = "doc/assets/caret-review-demo.mp4";
 
 /**

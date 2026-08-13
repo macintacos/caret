@@ -50,10 +50,3 @@ playwright/.cache/
 
 # Ad-hoc playwright-cli exploration output (browser-testing.md: never committed)
 .playwright-cli/
-
-# The README's demo recording (`mise run assets video`). GitHub plays a video
-# from an attachment URL but not from a repo path, so the README embeds the URL
-# the upload returns rather than this file — which also keeps a multi-megabyte
-# blob out of history on every regeneration. See doc/DEVELOPMENT.md
-# § Regenerating the README assets. The stitch beside it IS committed.
-/doc/assets/caret-review-demo.mp4

@@ -18,6 +18,9 @@ Want to develop caret rather than use it? Start with [CONTRIBUTING.md](CONTRIBUT
 
 ![caret review UI with an inline annotation, stitched across four themes](doc/assets/caret-review-ui.png)
 
+[Watch a short review](doc/assets/caret-review-demo.mp4) — comment on a line, send the
+plan back, approve the revision, and the agent picks up where you left it.
+
 ## Install
 
 caret needs [`bun`](https://bun.sh) on your `PATH` — it runs from a `bun` bundle.

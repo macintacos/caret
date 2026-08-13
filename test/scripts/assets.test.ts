@@ -193,12 +193,14 @@ test("encodeCommand builds a browser-playable H.264 mp4 at the measured rate", (
   expect(cmd.at(-1)).toBe("out.mp4");
 });
 
-test("the demo recording stays out of the repository", async () => {
-  // GitHub plays a video from an attachment URL, not from a repo path, so the
-  // README embeds the upload's URL — and a committed recording would add a
-  // multi-megabyte blob to history on every regeneration for nothing.
-  const ignored = await Bun.file(`${import.meta.dir}/../../.gitignore`).text();
-  expect(ignored).toContain("/doc/assets/caret-review-demo.mp4");
+test("the README links both committed artifacts by their real paths", async () => {
+  // The README is the only reason either artifact exists, and a rename that
+  // misses it ships a broken front page. A link, not an embed, for the recording:
+  // GitHub's markdown sanitizer strips `<video>` however its src is written.
+  const readme = await Bun.file(`${import.meta.dir}/../../README.md`).text();
+  expect(readme).toContain("doc/assets/caret-review-ui.png");
+  expect(readme).toContain("doc/assets/caret-review-demo.mp4");
+  expect(readme).not.toContain("<video");
 });
 
 // ---- the umbrella's sequence ----
