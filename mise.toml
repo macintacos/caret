@@ -8,16 +8,19 @@ lockfile = true
 HK_MISE = 1
 
 [tools]
-# Keep hk in lockstep with hk.pkl's amends/import version.
+# Keep hk in lockstep with hk.pkl's amends/import version; the two are compared exactly,
+# so even a patch bump landing here needs the hk.pkl edit. test/structure/hk-pin.test.ts
+# fails if they diverge.
 hk  = "1.55"
 pkl = "0"
 bun = "1.3"
-# Held one minor back: 2.5 moves lint rules, which EXC-1074 works through on its own.
+# Held at 2.4 until EXC-1074 works through 2.5's lint-rule moves.
 biome = "2.4"
 # Non-web formatters/linters (declared so hk runs these pinned versions, not global ones).
-# rumdl is held at the release mise.lock resolved (0.2.47): caret also ships that exact
-# release to end users from src/plan/rumdl.ts, and test/structure/rumdl-pin.test.ts fails
-# if the two diverge — so the bump is EXC-1075's, not a `mise up`.
+
+# rumdl is held at the release mise.lock resolved, because caret ships that same release
+# to end users — so the bump is EXC-1075's, not a `mise up`. Why the two must agree, and
+# what else moves with them: doc/agents/rumdl-rules.md.
 rumdl      = "latest" # aqua:rvben/rumdl (Markdown format + lint; mise.lock pins the version)
 yamlfmt    = "0"      # aqua:google/yamlfmt
 taplo      = "0"      # aqua:tamasfe/taplo
