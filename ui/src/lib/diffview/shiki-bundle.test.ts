@@ -114,8 +114,8 @@ describe("caret's tokenize options", () => {
 //     an engine whose regexConstructor always throws still loads every grammar,
 //     and only throws once something is tokenized. So the cheap test below is a
 //     real guard on the bundle, but it is NOT evidence that patterns compile.
-//   - Translating all 14,234 patterns is the claim that actually justifies strict
-//     mode, and costs ~9s.
+//   - Translating every pattern in the bundle is the claim that actually justifies
+//     strict mode, and costs ~9s.
 //
 // Saying which is which matters: the load test alone reads like proof that strict
 // is safe, and it is not.
@@ -176,15 +176,18 @@ function collectPatterns(node: unknown, out: Set<string>) {
  * so jsc-regex.ts is not involved and there is nothing on caret's side to repair.
  *
  * It is carved out rather than answered with `forgiving: true`, which would trade one
- * plain-rendered AutoHotkey fence for silent degradation across all 15,027 patterns —
- * exactly the failure mode EXC-911 removed. The cost is bounded: both highlight.ts entry
- * points catch and return no rows, so an `ahk2` fence renders as plain text, which is
- * what it did before shiki shipped the grammar at all.
+ * unhighlighted grammar for silent degradation across all 15,027 patterns — exactly the
+ * failure mode EXC-911 removed. The cost is bounded, and by two different things on the
+ * two surfaces that tokenize: a fenced `ahk2` block inside a plan never reaches the
+ * grammar at all, because shiki's markdown grammar does not list ahk2 among the
+ * languages it embeds; and the file-preview excerpt, which CAN be asked for `ahk2` by
+ * filename, catches through both highlight.ts entry points and renders the chunk plain.
  *
- * Keyed on the message rather than the 1.3 KB pattern, and paired with an exact failure
- * count below so a SECOND failure still reds the sweep.
+ * Keyed on the offending construct rather than on oniguruma-to-es's wording, which is
+ * third-party prose free to change, and paired with an exact failure count below so a
+ * SECOND failure still reds the sweep.
  */
-const UNTRANSLATABLE = 'Multibyte code "\\xff" incomplete or invalid in Oniguruma';
+const UNTRANSLATABLE = "[^\\x00-\\xff]";
 
 // The expensive half — the claim that actually justifies strict mode, and the only
 // thing a shiki bump can invalidate. The ~9s is paid on every run deliberately:
@@ -212,10 +215,9 @@ describe("every bundled pattern translates strictly", () => {
     // Asserted in both directions, the way exact-pin.test.ts keeps its own record
     // honest. Any failure that is not the carve-out reds, and names itself.
     expect(failures.filter((f) => !f.includes(UNTRANSLATABLE))).toEqual([]);
-    // And the carve-out may not outlive its cause: a second `\xff` pattern, or an
-    // oniguruma-to-es that learns to translate this one, both red here.
+    // And the carve-out may not outlive its cause: a second untranslatable pattern, or
+    // an oniguruma-to-es that learns to translate this one, both red here.
     expect(failures).toHaveLength(1);
-    expect(failures[0]).toContain("[^\\x00-\\xff]");
     // Non-vacuity again: an empty pattern set would pass the checks above.
     expect(patterns.size).toBeGreaterThan(10_000);
   }, 60_000);

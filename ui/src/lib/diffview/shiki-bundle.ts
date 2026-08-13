@@ -62,10 +62,12 @@ export { createOnigurumaEngine, loadWasm } from "shiki/engine/oniguruma";
  * than festers.
  *
  * The one exception is upstream's, not caret's: the AutoHotkey v2 grammar shiki
- * 4.4 added matches a raw byte range that oniguruma-to-es cannot express, so an
- * `ahk2` fence renders plain — the same thing it did before that grammar existed.
- * shiki-bundle.test.ts records it exactly, and reds if a second one appears or if
- * this one is ever fixed (EXC-1079).
+ * 4.4 added matches a raw byte range that oniguruma-to-es cannot express. Nothing
+ * a reviewer sees changes — shiki's markdown grammar does not embed ahk2, so a
+ * fence never reaches it, and the file-preview excerpt catches and renders plain —
+ * but the throw is real if that grammar is ever tokenized directly.
+ * shiki-bundle.test.ts records the exception exactly, and reds if a second one
+ * appears or if this one is ever fixed (EXC-1079).
  *
  * Patterns compile lazily, at first tokenize rather than at load, so the strict
  * throw would land when a fence is rendered. shiki-bundle.test.ts guards both
@@ -85,8 +87,8 @@ export const createCaretRegexEngine = () =>
       // exactly as produced: unrepaired beats subtly wrong.
       if (Object.getPrototypeOf(re) !== RegExp.prototype) return re;
       const safe = jscSafeSource(re.source);
-      // Rebuild only when the transform fired, so the 14,192 untouched patterns
-      // keep the exact RegExp the default constructor produced.
+      // Rebuild only when the transform fired, so every pattern it does not touch —
+      // all but a few dozen — keeps the exact RegExp the default constructor produced.
       return safe === re.source ? re : new RegExp(safe, re.flags);
     },
   });

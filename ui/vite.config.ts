@@ -84,21 +84,24 @@ export default defineConfig({
         find: /^shiki$/,
         replacement: fileURLToPath(new URL("./src/lib/diffview/shiki-bundle.ts", import.meta.url)),
       },
-      // The library statically references shiki/wasm (Oniguruma engine) and the
-      // @pierre/theme/* bundles, but caret uses the JS regex engine and its own
-      // themes, so both are dead at runtime. Aliasing them to a throwing stub
-      // keeps ~600 KB of WASM and the pierre theme payloads out of the build.
+      // shiki/wasm (the Oniguruma engine) and the ten @pierre/theme/* palettes are
+      // both reachable only through lazy `import(...)` the library never takes:
+      // caret runs the JS regex engine, and it registers its own themes, so the
+      // theme collection @pierre/theming assembles is never consulted for a name
+      // caret can name. Aliasing both to a throwing stub keeps ~600 KB of WASM and
+      // the pierre theme payloads out of the build.
       //
-      // @shikijs/themes/* is the OTHER half of the theme collection @pierre/theming
-      // assembles, and it is deliberately NOT stubbed alongside them, however
-      // symmetrical that looks. caret's vendor palettes (EXC-896) are named after
-      // the upstream themes they came from — dracula, github-dark, catppuccin-* —
-      // so every one of them collides with a name in that collection, and the
-      // library resolves the collection's entry before caret's registered theme.
-      // Stubbing it therefore throws on exactly the palettes a reviewer can pick,
-      // and the diff falls back to an unthemed default; settings.e2e.ts is what
-      // says so. The pierre-* names collide with nothing caret ships, which is the
-      // whole reason the entry below is still safe.
+      // @shikijs/themes/* is the other half of that same collection and looks like
+      // it belongs here, but stubbing it breaks the app — this cost a release-blocking
+      // regression to learn, so it is written down. The collection is not the only
+      // route to those modules: upstream-shiki.ts imports seven of them ITSELF, as
+      // `shiki/themes/<name>.mjs`, and in shiki 4.x each of those files is a one-line
+      // re-export of `@shikijs/themes/<name>`. The alias therefore does not stub a
+      // payload the library declines to load — it replaces caret's own vendor palette
+      // data (EXC-896: dracula, github-*, catppuccin-*) with a throwing function, and
+      // every vendor palette a reviewer picks renders unthemed. settings.e2e.ts is
+      // what catches it. Nothing caret ships is named pierre-*, which is the whole
+      // reason the entry below is safe where this one is not.
       {
         find: /^shiki\/wasm$/,
         replacement: fileURLToPath(

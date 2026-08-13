@@ -27,6 +27,17 @@ describe("SourceView rendering", () => {
     expect(painted).toBe(true);
   });
 
+  test("renders one row per source line, and none for the terminating newline", async () => {
+    // `doc` is three lines plus a terminating newline. The library splits on "\n" and
+    // would render the empty tail as a fourth row — unreachable by the keyboard cursor
+    // and one more than the gutter should number — so libraryContents strips it. Pinned
+    // against the real library because the row model is the library's, not caret's, and
+    // that is exactly the shape a version bump changes without failing anything.
+    const { target } = render(SourceView, { doc, contentKey: "rows:v1" });
+    await until(() => shadow(target)?.textContent?.includes("hello world") ?? false);
+    expect(shadow(target)?.querySelectorAll("[data-line]").length).toBe(3);
+  });
+
   test("highlights with caret's registered Shiki theme", async () => {
     // The theme/font bridge registers caret's own palettes as Shiki themes and
     // selects them through the view options, so the library highlights with

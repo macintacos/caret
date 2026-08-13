@@ -26,11 +26,12 @@
   import { tagThematicBreakRows, thematicBreakLines } from "$lib/diffview/thematicBreaks.ts";
   import { preloadFenceLanguages, scanFenceLanguages } from "$lib/diffview/languages.ts";
   import { registerCaretDiffThemes } from "$lib/diffview/theme.ts";
-  import type {
-    SourceDocument,
-    SourceLineAnnotation,
-    SourceViewApi,
-    SourceViewOptions,
+  import {
+    libraryContents,
+    type SourceDocument,
+    type SourceLineAnnotation,
+    type SourceViewApi,
+    type SourceViewOptions,
   } from "$lib/diffview/types.ts";
 
   // Teach the library's highlighter caret's themes before the first render
@@ -255,7 +256,7 @@
     lifecycle.sync({
       contentKey,
       container,
-      content: { file: { name: doc.name, contents: doc.text.replace(/\n$/, "") } },
+      content: { file: libraryContents(doc) },
       options: libOptions,
       annotations,
     });

@@ -49,19 +49,20 @@ export function selectionIn(root: ShadowRoot | null | undefined): Selection | nu
  * to the range's endpoints and a partially-selected row keeps the ancestors the row
  * lookup needs.
  *
- * The walk visits ROWS as well as text, because a blank source line is rendered as a
- * row holding a single `<br>` and NO text node at all. Walking text alone would never
- * reach it, so it could neither contribute characters nor register as a row change —
- * and the blank line it stands for would drop out of the copy, which is the exact
- * fusing this module exists to prevent. A row that does carry text is unaffected: its
- * element is visited first and sets the boundary, and its text nodes then resolve to
- * that same row and add none.
+ * A blank source line carries no text at all — the library renders it as a row whose
+ * only child is a `<br>` — so a walk over text alone would never reach it, and the
+ * blank line would drop out of the copy: the exact fusing this module exists to
+ * prevent. The `<br>` is what the walk therefore also visits, and it is a sound proxy
+ * for "blank line" rather than a convenient one: the library emits a `<br>` only for a
+ * token whose text is empty, or for a line node with no children at all, and never
+ * anywhere else inside a row.
  *
- * A row the clone brought back EMPTY is skipped, and the distinction is the whole
- * reason the check is on child nodes rather than on text. A range ending at the very
- * start of a row still encloses that row, so `cloneContents()` returns it with no
- * children at all — an artifact of where the drag stopped, not a line anyone selected.
- * A blank source line always brings its `<br>` along, so the two never look alike.
+ * Nothing else in the fragment may open a row. A range that stops at the very start of
+ * a row still encloses it, so `cloneContents()` brings that row back carrying only
+ * whatever ancestor chain the endpoint sat in — an empty row, an empty token span, or
+ * an empty text node, depending on where the drag landed. None of those stands for a
+ * line anyone selected, and all three fall out for free: a span is not a `<br>`, and an
+ * empty text node is skipped explicitly.
  */
 export function selectionText(selection: Selection | null): string | null {
   if (selection === null || selection.rangeCount === 0 || selection.isCollapsed) return null;
@@ -74,16 +75,14 @@ export function selectionText(selection: Selection | null): string | null {
   let previous: Element | null | undefined;
   for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
     if (node.nodeType === Node.ELEMENT_NODE) {
-      const element = node as Element;
-      if (!element.matches(ROW) || element.childNodes.length === 0) continue;
-      if (previous !== undefined && element !== previous) text += "\n";
-      previous = element;
+      if ((node as Element).tagName !== "BR") continue;
+    } else if (node.nodeValue === "") {
       continue;
     }
     const row = node.parentElement?.closest(ROW) ?? null;
     if (previous !== undefined && row !== previous) text += "\n";
     previous = row;
-    text += node.textContent ?? "";
+    text += node.nodeValue ?? "";
   }
   return text;
 }

@@ -8,9 +8,10 @@ import { selectionIn, selectionText } from "$lib/diffview/selectionCopy.ts";
 // selection, fusing the paragraphs on either side of it. This module rebuilds the
 // text from the selection's own rows instead, breaking where the row changes.
 
-/** A rendered row: tokens directly under [data-line]. The text node is appended
- * rather than assigned, so a token carrying the empty string still contributes a text
- * node to the walk, which `textContent = ""` would not create. */
+/** A rendered row: tokens directly under [data-line]. The text node is appended rather
+ * than assigned so that a token carrying the empty string still produces one, which
+ * `textContent = ""` would not — that is the shape the walk has to ignore, since an
+ * empty text node marks where a range stopped rather than a line. */
 function row(line: number, ...tokens: string[]): HTMLElement {
   const el = document.createElement("div");
   el.setAttribute("data-line", String(line));
@@ -72,15 +73,22 @@ describe("selectionText", () => {
   });
 
   // A drag that stops at the very start of a row still encloses it, so the clone brings
-  // it back with no children — where a real blank line would have brought its `<br>`.
-  // Counting it would put a phantom newline on the end of every such copy.
-  test("ignores a trailing row the range only touched the start of", () => {
+  // that row back — carrying whichever ancestors the endpoint sat in, and no `<br>`.
+  // Counting any of them would put a phantom newline on the end of every such copy, so
+  // all three spellings of the endpoint are pinned: Chromium anchors inside a descendant
+  // far more often than on the row itself, and a guard that only recognised the row
+  // shape would look right here while regressing the two the browser actually produces.
+  test.each([
+    ["the row itself", (r: HTMLElement) => [r, 0] as const],
+    ["a token span inside it", (r: HTMLElement) => [r.firstChild as Node, 0] as const],
+    ["a text node inside that", (r: HTMLElement) => [r.firstChild?.firstChild as Node, 0] as const],
+  ])("ignores a trailing row the range only touched the start of, anchored on %s", (_, endAt) => {
     const [one, two, next] = [row(1, "first"), row(2, "second"), row(3, "third")];
-    const host = content(one, two, next);
-    document.body.replaceChildren(host);
+    document.body.replaceChildren(content(one, two, next));
     const range = document.createRange();
     range.setStartBefore(one);
-    range.setEnd(next, 0);
+    const [node, offset] = endAt(next);
+    range.setEnd(node, offset);
     const selection = document.getSelection() as Selection;
     selection.removeAllRanges();
     selection.addRange(range);
