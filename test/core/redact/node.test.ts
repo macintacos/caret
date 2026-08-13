@@ -1,12 +1,17 @@
 import { expect, test } from "bun:test";
 import { readFileSync, statSync } from "node:fs";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { setupTempStateDir } from "@test/support/env.ts";
+import { daemonLogFile, daemonStderrLogFile, logFile, logsDir } from "@/config/paths.ts";
 import { redactLogFiles, redactLogText, scrubString, scrubValue } from "@/redact/node.ts";
 
 const home = homedir();
+
+// Keep the default-argument test off the real ~/.local/state/caret.
+setupTempStateDir("caret-redact-state-");
 
 // --- scrubString ---
 
@@ -153,4 +158,16 @@ test("redactLogFiles writes scrubbed 0600 .redacted.log siblings, returns their 
 test("redactLogFiles skips absent files", async () => {
   const dir = await mkdtemp(join(tmpdir(), "caret-redact-"));
   expect(redactLogFiles([join(dir, "missing.log")])).toEqual([]);
+});
+
+test("redactLogFiles defaults to all three live logs, daemon stderr included", async () => {
+  await mkdir(logsDir(), { recursive: true });
+  for (const file of [logFile(), daemonLogFile(), daemonStderrLogFile()]) {
+    await writeFile(file, `raw ${home}/x\n`);
+  }
+  expect(redactLogFiles()).toEqual([
+    join(logsDir(), "caret.redacted.log"),
+    join(logsDir(), "daemon.redacted.log"),
+    join(logsDir(), "daemon-stderr.redacted.log"),
+  ]);
 });

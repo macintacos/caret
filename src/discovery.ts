@@ -90,7 +90,9 @@ export interface DiscoveryDeps {
    * Claude adapter supplies the implementation in prod. */
   readAgentInstallState: () => InstallProbe;
   logStats: (path: string) => Promise<LogStats>;
-  logPaths: { caret: string; daemon: string };
+  /** The live logs to summarize: the hook log, the daemon's NDJSON, and the
+   * daemon's raw stderr. Rotated archives are out of scope. */
+  logPaths: { caret: string; daemon: string; daemonStderr: string };
 }
 
 // ---------------------------------------------------------------------------
@@ -116,7 +118,7 @@ export interface Report {
   processes: { count: number; items: ProcessItem[] } | SectionError;
   reviews: ReviewsSection | SectionError;
   installState: InstallProbe | SectionError;
-  logs: { caret: LogStats; daemon: LogStats } | SectionError;
+  logs: { caret: LogStats; daemon: LogStats; daemonStderr: LogStats } | SectionError;
 }
 
 /** A merged process entry: the listed caret processes plus (when alive and not
@@ -269,13 +271,16 @@ function buildProcesses(deps: DiscoveryDeps): { count: number; items: ProcessIte
   return { count: items.length, items };
 }
 
-async function buildLogs(deps: DiscoveryDeps): Promise<{ caret: LogStats; daemon: LogStats }> {
-  // The two files are independent — stat/read them concurrently.
-  const [caret, daemon] = await Promise.all([
+async function buildLogs(
+  deps: DiscoveryDeps,
+): Promise<{ caret: LogStats; daemon: LogStats; daemonStderr: LogStats }> {
+  // The files are independent — stat/read them concurrently.
+  const [caret, daemon, daemonStderr] = await Promise.all([
     deps.logStats(deps.logPaths.caret),
     deps.logStats(deps.logPaths.daemon),
+    deps.logStats(deps.logPaths.daemonStderr),
   ]);
-  return { caret, daemon };
+  return { caret, daemon, daemonStderr };
 }
 
 // ---------------------------------------------------------------------------

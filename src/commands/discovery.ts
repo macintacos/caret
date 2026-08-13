@@ -9,7 +9,7 @@ import { existsSync } from "node:fs";
 import { release } from "node:os";
 
 import { selectAdapter } from "@/adapters/index.ts";
-import { configFile, daemonLogFile, logFile } from "@/config/paths.ts";
+import { configFile, daemonLogFile, daemonStderrLogFile, logFile } from "@/config/paths.ts";
 import {
   getPort,
   heartbeatMs,
@@ -65,7 +65,11 @@ function prodDiscoveryDeps(s: Settings): DiscoveryDeps {
     listReviewFiles,
     readAgentInstallState: () => selectAdapter().readInstallState(),
     logStats,
-    logPaths: { caret: logFile(), daemon: daemonLogFile() },
+    logPaths: {
+      caret: logFile(),
+      daemon: daemonLogFile(),
+      daemonStderr: daemonStderrLogFile(),
+    },
   };
 }
 

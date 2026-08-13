@@ -54,7 +54,11 @@ function discoveryDeps(over: Partial<DiscoveryDeps> = {}): DiscoveryDeps {
       hookInUserSettings: false,
     }),
     logStats: async (path: string) => ({ path, exists: true, size: 10, errors: 0, warns: 0 }),
-    logPaths: { caret: "/state/caret.log", daemon: "/state/daemon.log" },
+    logPaths: {
+      caret: "/state/logs/caret.log",
+      daemon: "/state/logs/daemon.log",
+      daemonStderr: "/state/logs/daemon-stderr.log",
+    },
     ...over,
   };
 }
@@ -97,6 +101,21 @@ test("happy path populates the section scalars from the deps", async () => {
     "daemon.port": 42718,
     effectivePort: 42718,
     effectiveTimeoutMs: 3600000,
+  });
+});
+
+test("the logs section carries one LogStats per live log path", async () => {
+  const report = await collectReport(discoveryDeps());
+  expect(report.logs).toEqual({
+    caret: { path: "/state/logs/caret.log", exists: true, size: 10, errors: 0, warns: 0 },
+    daemon: { path: "/state/logs/daemon.log", exists: true, size: 10, errors: 0, warns: 0 },
+    daemonStderr: {
+      path: "/state/logs/daemon-stderr.log",
+      exists: true,
+      size: 10,
+      errors: 0,
+      warns: 0,
+    },
   });
 });
 
@@ -356,6 +375,9 @@ test("renderReport renders the header and every section title for a happy report
   ]) {
     expect(text).toContain(title);
   }
+  // renderSection walks whatever keys a section carries, so a third log needs
+  // no rendering change to show up.
+  expect(text).toContain("daemonStderr");
 });
 
 test("renderReport renders a degraded section as an error line and never throws", async () => {
