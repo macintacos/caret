@@ -10,18 +10,24 @@
 // the Playwright LIBRARY (chromium.launch) instead of the test runner, which
 // would need a second config to collect it.
 //
-// Nothing here is a new subsystem. The isolated daemon boot is scripts/tasks/dev/
-// run.ts's (planStateDir's ephemeral half, childEnvFor, daemonCommand, makeCleanup,
+// Both artifacts are assembled from still captures rather than from Playwright's
+// own video recorder, which captures the screencast at CSS-pixel resolution and
+// ignores deviceScaleFactor — asking it for a bigger frame pads and upscales
+// instead of rendering more detail. page.screenshot honours the scale factor, so
+// it is the only path to a recording whose text is legible.
+//
+// Nothing else here is a new subsystem. The isolated daemon boot is
+// scripts/tasks/dev/run.ts's (childEnvFor, daemonCommand, makeCleanup,
 // discoverPort); the agent's side of the recording is the dev driver's real hook
 // path (devReviewDeps + runReview + nextPlan), so Request changes really appends a
 // revision and Approve really unblocks; the gestures are the ones test/e2e's
 // keyboard-commenting / diff-surface / request-changes / approve specs already
-// drive. The pure halves — the magick lookup, the seam geometry, the argv — are
+// drive. The pure halves — the tool lookup, the seam geometry, the argv — are
 // unit-tested in test/scripts/assets.test.ts.
 //
-// ImageMagick is a host tool, not a pinned mise dependency: it has no `aqua:`
-// entry, and the registry alternatives would put a multi-minute build in front of
-// every fresh clone.
+// ImageMagick and ffmpeg are host tools, not pinned mise dependencies: neither has
+// an `aqua:` entry, and the registry alternatives would put a multi-minute build in
+// front of every fresh clone.
 
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -43,18 +49,46 @@ import { chromiumInstalled } from "@/tasks/test.ts";
 
 // --- shared shape ------------------------------------------------------------
 
-/** The captured frame, pinned: identical dimensions are what let the four
- * captures' seams line up, and what makes a regeneration a drop-in replacement
- * for the committed asset. */
+/** The stitch's frame in CSS pixels, pinned: identical dimensions are what let
+ * the four captures' seams line up. */
 export const FRAME = { width: 1440, height: 900 } as const;
 
-/** The recording's frame: a modest 16:10 downscale of FRAME. Every regeneration
- * appends a blob to history forever, so the committed video is smaller than what
- * the browser was driven at. */
-const VIDEO_FRAME = { width: 1280, height: 800 } as const;
+/** Device pixels per CSS pixel for the stitch, so the committed hero is crisp on
+ * a high-DPI display rather than upscaled by the browser showing it. The
+ * composite therefore runs at FRAME × this, which is why the geometry helpers
+ * take explicit dimensions instead of reading FRAME. */
+const STITCH_SCALE = 2;
 
 const STITCH_PATH = "doc/assets/caret-review-ui.png";
-const VIDEO_PATH = "doc/assets/caret-review-demo.webm";
+
+/** The recording. Gitignored, unlike the stitch: GitHub plays a video from an
+ * attachment URL but not from a repo path, so the README embeds the URL that
+ * uploading this file returns — which also keeps a multi-megabyte blob out of
+ * history on every regeneration. doc/DEVELOPMENT.md carries the upload step. */
+const VIDEO_PATH = "doc/assets/caret-review-demo.mp4";
+
+/**
+ * The recording's viewport, in CSS pixels, and its device-pixel multiplier.
+ *
+ * Narrower than the stitch's frame on purpose. The UI lays out in CSS pixels, so
+ * fewer of them across the window makes every glyph a larger fraction of the
+ * frame — which is what "bigger" means to someone reading the recording, and no
+ * amount of resolution substitutes for it. The multiplier is the separate axis:
+ * it decides how many real pixels each of those glyphs is drawn with. Together
+ * they give text that is both larger in frame and rendered at 3×.
+ */
+const VIDEO_VIEWPORT = { width: 1280, height: 800 } as const;
+
+/**
+ * Two, not three, and the constraint is frame rate rather than storage.
+ *
+ * A screenshot's cost tracks its pixel count, and it contends with the gestures
+ * for the same CDP session — at 3× the loop settles around 6fps, which is too
+ * choppy to watch a pointer move through. 2× lands near 15fps and still renders
+ * every glyph with four device pixels per CSS pixel, which is past the point
+ * where more resolution is visible on any display that will play this.
+ */
+const VIDEO_SCALE = 2;
 
 /** The cwd the reviewed plan claims to come from. Two segments, so `shortCwd`
  * (ui/src/lib/cwd.ts) renders it whole rather than eliding to `…/parent/leaf` —
@@ -73,71 +107,123 @@ export const PLAN_TITLE_FRAGMENT = "Add a `--quiet` flag";
 
 const ANNOTATION_BODY = "say what `--quiet` does to this line when the publish step fails.";
 
-/** The four palettes, top-left band first: caret's own dark and light lead, then
- * the two community palettes. Each carries the scheme whose slot key holds it
- * (ui/src/lib/appearance.ts), which is what pins the resolved theme without
- * clicking through Settings. */
+/**
+ * The four palettes, top-left band first: caret's own dark and light lead, then
+ * one community palette of each scheme.
+ *
+ * The order alternates dark and light on purpose, and that is what makes the
+ * stitch legible rather than a preference. Four palettes of one scheme are all
+ * within a few RGB points of each other at a glance, so adjacent bands read as
+ * one region and the seams between them disappear — the picture then says
+ * "two themes, unevenly cut" no matter how evenly the geometry spaces them.
+ * Alternating puts maximum contrast across every seam.
+ *
+ * Each entry carries the scheme whose slot key holds it (ui/src/lib/appearance.ts),
+ * which is what pins the resolved theme without clicking through Settings.
+ */
 const BANDS = [
   { theme: "caret-dark", scheme: "dark" },
   { theme: "caret-light", scheme: "light" },
   { theme: "dracula", scheme: "dark" },
-  { theme: "catppuccin-mocha", scheme: "dark" },
+  { theme: "catppuccin-latte", scheme: "light" },
 ] as const;
 
 // --- pure helpers ------------------------------------------------------------
 
-/** Resolve the `magick` binary, naming the install when it is absent. Without
- * this the failure surfaces as an ENOENT from a spawn deep inside the composite,
- * which says nothing about what to install. */
-export function resolveMagick(which: (cmd: string) => string | null): string {
-  const bin = which("magick");
+/** Resolve a host tool, naming the install when it is absent. Without this the
+ * failure surfaces as an ENOENT from a spawn deep inside the pipeline, which says
+ * nothing about what to install. Neither tool is pinned in `mise.toml`: both have
+ * no `aqua:` entry, and the registry alternatives would put a multi-minute build
+ * in front of every fresh clone. */
+export function resolveTool(
+  which: (cmd: string) => string | null,
+  tool: string,
+  formula: string,
+): string {
+  const bin = which(tool);
   if (!bin) {
     throw new Error(
-      "caret assets: ImageMagick is not on PATH. Install it with `brew install imagemagick` " +
+      `caret assets: ${tool} is not on PATH. Install it with \`brew install ${formula}\` ` +
         "(it is a host tool, deliberately not pinned in mise.toml).",
     );
   }
   return bin;
 }
 
-/** Where seam k cuts, as the constant of the anti-diagonal `x/width + y/height`.
- * Evenly spaced across the frame's mid-height, so an even band count puts its
- * middle seam corner to corner, along the frame's own diagonal. */
-function seamConstants(bands: number): number[] {
-  return Array.from({ length: bands - 1 }, (_, k) => 0.5 + (k + 1) / bands);
+/**
+ * How steep the seams run, in degrees above horizontal.
+ *
+ * Load-bearing, not decoration. A seam shallower than
+ * `atan(height / (2 · width / bands))` — about 51° on a 1440×900 frame cut four
+ * ways — leaves through the frame's left or right edge instead of its bottom,
+ * which turns the outer bands into corner triangles while the inner ones stay
+ * parallelograms. Evenly spaced seams then produce visibly *un*even bands, and
+ * the picture reads as two themes badly cut rather than four evenly sampled.
+ * 60° clears that floor with room to spare and still reads as a diagonal.
+ */
+const SEAM_ANGLE_DEG = 60;
+
+/** How far a seam travels horizontally over the frame's full height. */
+const seamRun = (height: number): number => height / Math.tan((SEAM_ANGLE_DEG * Math.PI) / 180);
+
+/**
+ * Where seam k enters the top edge and leaves the bottom edge.
+ *
+ * Positioned so that its MEAN x across the height is exactly `k · width / bands`.
+ * For a straight line the mean is the mid-height value, and the area to a
+ * full-height seam's left is that mean times the height — so evenly spaced
+ * mid-heights is precisely the condition that every band has area
+ * `width · height / bands`. That equivalence only holds while the seam stays
+ * inside the frame, which is what SEAM_ANGLE_DEG guarantees.
+ */
+function seamEdges(
+  width: number,
+  height: number,
+  bands: number,
+  k: number,
+): { top: number; bottom: number } {
+  const run = seamRun(height);
+  const bottom = (width * k) / bands - run / 2;
+  return { top: bottom + run, bottom };
 }
 
 const point = (x: number, y: number): string => `${Math.round(x)},${Math.round(y)}`;
 
+const seamIndices = (bands: number): number[] => Array.from({ length: bands - 1 }, (_, i) => i + 1);
+
 /** The seams themselves, as magick `x1,y1 x2,y2` draw points — one per cut,
- * spanning the frame's full height. */
+ * each spanning the frame from its top edge to its bottom edge. */
 export function seamLines(width: number, height: number, bands: number): string[] {
-  return seamConstants(bands).map(
-    (t) => `${point(width * t, 0)} ${point(width * (t - 1), height)}`,
-  );
+  return seamIndices(bands).map((k) => {
+    const { top, bottom } = seamEdges(width, height, bands, k);
+    return `${point(top, 0)} ${point(bottom, height)}`;
+  });
 }
 
 /**
  * The half-plane mask polygon for each band past the first, cut along its seam.
  *
- * Derived from the band count rather than written out as four fixed polygons: the
+ * Derived from the band count rather than written out as fixed polygons: the
  * geometry is the same half-plane every time, so taking the form that is less code
- * is also the form that generalizes. Each polygon is the seam segment — extended a
- * frame past both horizontal edges so the mask reaches the corners — swept far in
- * `+x`, which is the side the later band paints on. That keeps it a simple convex
+ * is also the form that generalizes. Each polygon is the seam — extended a frame
+ * past both horizontal edges so the mask reaches the corners — swept far in `+x`,
+ * which is the side the later band paints on. That keeps it a simple convex
  * quadrilateral, where clipping the half-plane to the frame's own corners would
- * fold into a self-intersecting bowtie for the seams that leave through the side.
+ * fold into a self-intersecting bowtie.
  */
 export function seamPolygons(width: number, height: number, bands: number): string[] {
   const sweep = 4 * width;
-  return seamConstants(bands).map((t) => {
-    const top = { x: width * (t + 1), y: -height };
-    const bottom = { x: width * (t - 2), y: 2 * height };
+  const run = seamRun(height);
+  return seamIndices(bands).map((k) => {
+    const { top, bottom } = seamEdges(width, height, bands, k);
+    // One frame-height beyond each edge, along the seam's own slope.
+    const above = { x: top + run, y: -height };
+    const below = { x: bottom - run, y: 2 * height };
     return [
-      point(top.x, top.y),
-      point(bottom.x, bottom.y),
-      point(bottom.x + sweep, bottom.y),
-      point(top.x + sweep, top.y),
+      point(above.x, above.y),
+      point(below.x, below.y),
+      point(below.x + sweep, below.y),
+      point(above.x + sweep, above.y),
     ].join(" ");
   });
 }
@@ -175,12 +261,15 @@ export function bandCommand(
 }
 
 /** Flatten the bands in order, then stroke the seams over the joins in the live
- * accent — the divider is caret's own accent rather than a neutral hairline. */
+ * accent — the divider is caret's own accent rather than a neutral hairline. The
+ * stroke is given in device pixels, so it scales with the capture rather than
+ * thinning out as the frame grows. */
 export function stitchCommand(
   magick: string,
   layers: string[],
   accent: string,
   lines: string[],
+  strokeWidth: number,
   out: string,
 ): string[] {
   return [
@@ -190,8 +279,41 @@ export function stitchCommand(
     "-stroke",
     accent,
     "-strokewidth",
-    "4",
+    String(strokeWidth),
     ...lines.flatMap((line) => ["-draw", `line ${line}`]),
+    out,
+  ];
+}
+
+/** Encode the captured frames into an H.264 mp4. `fps` is measured from the run
+ * rather than assumed, so the result plays back at real time however the capture
+ * loop actually paced. `yuv420p` plus `+faststart` is what makes it playable in a
+ * browser and in QuickTime rather than only in a developer's media player. */
+export function encodeCommand(
+  ffmpeg: string,
+  fps: number,
+  framePattern: string,
+  out: string,
+): string[] {
+  return [
+    ffmpeg,
+    "-y",
+    "-loglevel",
+    "error",
+    "-framerate",
+    fps.toFixed(3),
+    "-i",
+    framePattern,
+    "-c:v",
+    "libx264",
+    "-preset",
+    "slow",
+    "-crf",
+    "20",
+    "-pix_fmt",
+    "yuv420p",
+    "-movflags",
+    "+faststart",
     out,
   ];
 }
@@ -348,7 +470,7 @@ async function captureBand(
 ): Promise<{ accent: string; paper: string }> {
   const context = await browser.newContext({
     viewport: { width: FRAME.width, height: FRAME.height },
-    deviceScaleFactor: 1,
+    deviceScaleFactor: STITCH_SCALE,
     colorScheme: band.scheme,
   });
   try {
@@ -373,7 +495,7 @@ async function captureBand(
 }
 
 export async function runAssetsStitch(): Promise<never> {
-  const magick = resolveMagick(Bun.which);
+  const magick = resolveTool(Bun.which, "magick", "imagemagick");
   await ensurePrereqs();
   const { chromium } = await import("@playwright/test");
   const work = mkdtempSync(join(tmpdir(), "caret-assets-stitch."));
@@ -406,19 +528,24 @@ export async function runAssetsStitch(): Promise<never> {
       }
       if (!accent) throw new Error("caret assets: the UI resolved no --accent to seam with");
 
+      // The captures are device pixels, so the composite works at the scaled
+      // frame — CSS pixels never reach magick.
+      const width = FRAME.width * STITCH_SCALE;
+      const height = FRAME.height * STITCH_SCALE;
+
       // Band 0 is the whole frame; each later band is masked to the far side of
       // its seam and flattened over what is already there.
-      const polygons = seamPolygons(FRAME.width, FRAME.height, BANDS.length);
+      const polygons = seamPolygons(width, height, BANDS.length);
       const layers = [join(work, "capture-0.png")];
       for (const [i, polygon] of polygons.entries()) {
         const out = join(work, `band-${i + 1}.png`);
         const capture = join(work, `capture-${i + 1}.png`);
-        await run(bandCommand(magick, FRAME.width, FRAME.height, capture, polygon, out));
+        await run(bandCommand(magick, width, height, capture, polygon, out));
         layers.push(out);
       }
-      const lines = seamLines(FRAME.width, FRAME.height, BANDS.length);
-      await run(stitchCommand(magick, layers, accent, lines, STITCH_PATH));
-      console.log(`assets stitch: wrote ${STITCH_PATH} (${FRAME.width}x${FRAME.height})`);
+      const lines = seamLines(width, height, BANDS.length);
+      await run(stitchCommand(magick, layers, accent, lines, 3 * STITCH_SCALE, STITCH_PATH));
+      console.log(`assets stitch: wrote ${STITCH_PATH} (${width}x${height})`);
     });
   } finally {
     rmSync(work, { recursive: true, force: true });
@@ -642,7 +769,57 @@ async function playReview(page: Page, base: string, releaseFollowUp: () => void)
   await dwell(2);
 }
 
+/**
+ * Capture frames for as long as `body` runs, and report the rate they landed at.
+ *
+ * A screenshot loop rather than Playwright's own `recordVideo`, because the
+ * recorder captures the screencast at CSS-pixel resolution and ignores
+ * `deviceScaleFactor` — asking it for a larger frame pads and upscales rather
+ * than rendering more detail, so 13px monospace can never come out sharp.
+ * `page.screenshot` does honour the scale factor, so this is the only path to a
+ * genuinely high-resolution recording.
+ *
+ * The rate is measured rather than assumed: a screenshot at this size costs
+ * ~50ms and the gestures contend for the same CDP session, so the real interval
+ * drifts. Handing the measured rate to the encoder is what keeps playback at
+ * real time instead of subtly fast or slow.
+ */
+async function captureFrames(
+  page: Page,
+  dir: string,
+  body: () => Promise<void>,
+): Promise<{ frames: number; fps: number }> {
+  let capturing = true;
+  let frames = 0;
+  const started = Bun.nanoseconds();
+  const loop = (async () => {
+    while (capturing) {
+      try {
+        const shot = await page.screenshot({ type: "jpeg", quality: 90 });
+        await Bun.write(join(dir, `f-${String(frames++).padStart(5, "0")}.jpg`), shot);
+      } catch {
+        // The page is closing, or a gesture holds the session — drop the frame
+        // rather than failing a recording over one.
+      }
+      // No pacing sleep: a screenshot at this size already costs more than a
+      // frame's worth of wall clock, so the loop's own latency IS the interval.
+      // Yielding keeps it from starving the gestures it is recording.
+      await Bun.sleep(0);
+    }
+  })();
+  try {
+    await body();
+  } finally {
+    capturing = false;
+    await loop;
+  }
+  const seconds = Number(Bun.nanoseconds() - started) / 1e9;
+  if (frames < 2) throw new Error("caret assets: the capture loop produced no frames");
+  return { frames, fps: frames / seconds };
+}
+
 export async function runAssetsVideo(): Promise<never> {
+  const ffmpeg = resolveTool(Bun.which, "ffmpeg", "ffmpeg");
   await ensurePrereqs();
   const { chromium } = await import("@playwright/test");
   const work = mkdtempSync(join(tmpdir(), "caret-assets-video."));
@@ -661,28 +838,28 @@ export async function runAssetsVideo(): Promise<never> {
 
       const browser = await chromium.launch({ slowMo: 260 });
       const context = await browser.newContext({
-        viewport: { width: FRAME.width, height: FRAME.height },
-        deviceScaleFactor: 1,
+        viewport: { ...VIDEO_VIEWPORT },
+        deviceScaleFactor: VIDEO_SCALE,
         colorScheme: BANDS[0].scheme,
-        recordVideo: { dir: work, size: { ...VIDEO_FRAME } },
       });
       await pinAppearance(context, BANDS[0]);
       await context.addInitScript(POINTER_OVERLAY);
       const page = await context.newPage();
-      const started = Bun.nanoseconds();
+      let captured: { frames: number; fps: number };
       try {
-        await playReview(page, base, followUp.release);
+        captured = await captureFrames(page, work, () => playReview(page, base, followUp.release));
       } finally {
         // A failed beat must not leave the agent parked on the latch forever.
         followUp.release();
-        // The video is only finalized once the context closes.
-        seconds = (Number(Bun.nanoseconds() - started) / 1e9).toFixed(1);
         await context.close();
         await browser.close();
       }
-      const recorded = await page.video()?.path();
-      if (!recorded) throw new Error("caret assets: Chromium recorded no video");
-      await Bun.write(VIDEO_PATH, Bun.file(recorded));
+      seconds = (captured.frames / captured.fps).toFixed(1);
+      await run(encodeCommand(ffmpeg, captured.fps, join(work, "f-%05d.jpg"), VIDEO_PATH));
+      console.log(
+        `assets video: ${captured.frames} frames at ${captured.fps.toFixed(1)}fps, ` +
+          `${VIDEO_VIEWPORT.width * VIDEO_SCALE}x${VIDEO_VIEWPORT.height * VIDEO_SCALE}`,
+      );
     });
   } finally {
     rmSync(work, { recursive: true, force: true });
@@ -713,9 +890,9 @@ async function ensurePrereqs(): Promise<void> {
 /** Bare `mise run assets`: build the UI once up front, then run both targets as
  * fresh subprocesses with CARET_SKIP_BUILD_UI=1 so neither rebuilds it — each
  * target's own ensurePrereqs would otherwise pay the full Vite build a second
- * time. Stitch runs first because it is the target that needs ImageMagick, so a
- * missing host tool fails in the first seconds rather than after the recording.
- * The runner is injectable so tests pin that sequence and the skip env without
+ * time. Stitch runs first because it is the cheap one: a failure there costs
+ * seconds, where the same failure after the recording costs the recording. The
+ * runner is injectable so tests pin that sequence and the skip env without
  * spawning; the shape is smokePlan's (scripts/tasks/smoke.ts). */
 export async function assetsPlan(run: typeof runForward = runForward): Promise<number> {
   if (shouldBuildUi(process.env)) {
