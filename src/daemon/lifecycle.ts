@@ -8,13 +8,7 @@
 import { chmodSync, openSync, unlinkSync } from "node:fs";
 import { normalize } from "node:path";
 
-import {
-  daemonLock,
-  daemonStderrLogFile,
-  ensureLogsDir,
-  ensureStateDir,
-  stateDir,
-} from "@/config/paths.ts";
+import { daemonLock, daemonStderrLogFile, ensureLogsDir, stateDir } from "@/config/paths.ts";
 import { getPort, logKeep, logMaxSize, type Settings } from "@/config/settings.ts";
 import { type HealthBody, httpHealth } from "@/daemon/client.ts";
 import { buildKind, currentBuildId, type DaemonLock, VERSION } from "@/lib/build-id.ts";
