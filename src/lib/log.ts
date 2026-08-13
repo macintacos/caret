@@ -1,8 +1,12 @@
 // Leveled NDJSON logging via pino. Two sinks share one record shape
 // ({"level":30,"time":...,"step":"x","msg":"...",...}): the short-lived
-// `caret review` hook appends to caret.log (see paths.logFile); the daemon
-// logs to stderr, which spawnDaemon redirects into daemon.log. /caret:debug
-// reads both.
+// `caret review` hook appends to logs/caret.log (see paths.logFile); the daemon
+// appends to logs/daemon.log, a path it owns so it can stat and rotate its own
+// sink (its raw stderr goes to logs/daemon-stderr.log instead, redirected by
+// spawnDaemon). /caret:debug reads both.
+//
+// Both sinks check their size before each record they actually write and rotate
+// past the threshold (EXC-1068, src/lib/log-rotate.ts).
 //
 // Two hard rules carried over from the old sentinel logger: writes are
 // SYNCHRONOUS (pino.destination({ sync: true }), so a deny logged just before
@@ -14,8 +18,10 @@
 
 import pino from "pino";
 
-import { ensureLogsDir, logFile } from "@/config/paths.ts";
+import { DEFAULT_LOG_KEEP, DEFAULT_LOG_MAX_SIZE } from "@/config/constants.ts";
+import { daemonLogFile, ensureLogsDir, logFile } from "@/config/paths.ts";
 import { callerLocation } from "@/lib/caller-location.ts";
+import { rotateIfOversized } from "@/lib/log-rotate.ts";
 import { errorMessage } from "@/lib/types.ts";
 import { shortId } from "@/redact/core.ts";
 import { scrubString, scrubValue } from "@/redact/node.ts";
@@ -46,6 +52,15 @@ export interface CaretLogger {
   info(step: string, msg: string, extra?: object): void;
   warn(step: string, msg: string, extra?: object): void;
   error(step: string, err: unknown, extra?: object): void;
+}
+
+/** The rotation thresholds a logger checks its sink against, as thunks so a
+ * config edit hot-reloads exactly like level and redact (EXC-1068). The daemon
+ * injects logMaxSize()/logKeep() over its settings service; the hook side reads
+ * hookState, which setLogRotation seeds. */
+export interface LogLimits {
+  maxSize: () => number;
+  keep: () => number;
 }
 
 const pinoOpts = {
@@ -80,6 +95,7 @@ function wrap(
   liveLevel: () => LogLevel,
   liveRedact: () => boolean,
   source: "hook" | "daemon",
+  rotate?: () => void,
 ): CaretLogger {
   function fields(extra: object | undefined, step: string, redact: boolean) {
     const out = scrubValue({ ...extra }, redact) as Record<string, unknown>;
@@ -106,6 +122,9 @@ function wrap(
       // a debug record at info level never pays for a stack capture (EXC-451).
       // error (50) needs no such gate — it clears every threshold in the set.
       if (!logger.isLevelEnabled(method)) return;
+      // After the gate, so a gated-out debug record pays for no statSync
+      // either (EXC-1068) — the same reasoning that keeps stack capture below it.
+      rotate?.();
       const r = liveRedact();
       logger[method](fields(extra, step, r), r ? scrubString(msg) : msg);
     } catch {
@@ -118,7 +137,9 @@ function wrap(
     warn: (step, msg, extra) => emit("warn", step, msg, extra),
     error(step, err, extra) {
       try {
-        // No level update here: error (50) passes every threshold in the set.
+        // No level update here: error (50) passes every threshold in the set —
+        // and with no gate to sit behind, the rotation check leads.
+        rotate?.();
         const r = liveRedact();
         const f = fields(extra, step, r);
         if (err instanceof Error) f.err = scrubValue(pino.stdSerializers.errWithCause(err), r);
@@ -151,12 +172,14 @@ export const noopLogger: CaretLogger = {
 function createHookLogger(
   level: () => LogLevel,
   redact: () => boolean,
+  limits: LogLimits,
 ): { log: CaretLogger; dest: ReturnType<typeof pino.destination> | null; path: string } {
   const path = logFile();
   try {
     ensureLogsDir();
     const dest = pino.destination({ dest: path, sync: true, mode: 0o600 });
-    return { log: wrap(pino(pinoOpts, dest), level, redact, "hook"), dest, path };
+    const rotate = () => rotateIfOversized(path, limits.maxSize(), limits.keep());
+    return { log: wrap(pino(pinoOpts, dest), level, redact, "hook", rotate), dest, path };
   } catch {
     return { log: noopLogger, dest: null, path };
   }
@@ -172,8 +195,16 @@ function createHookLogger(
 const hookState: {
   level: LogLevel;
   redact: boolean;
+  maxSize: number;
+  keep: number;
   instance: ReturnType<typeof createHookLogger> | null;
-} = { level: "info", redact: false, instance: null };
+} = {
+  level: "info",
+  redact: false,
+  maxSize: DEFAULT_LOG_MAX_SIZE,
+  keep: DEFAULT_LOG_KEEP,
+  instance: null,
+};
 
 /** The current hook logger, built on first use and rebuilt when its resolved
  * path changes (closing the previous destination so its fd doesn't leak). A
@@ -193,6 +224,7 @@ function hook(): CaretLogger {
   const next = createHookLogger(
     () => hookState.level,
     () => hookState.redact,
+    { maxSize: () => hookState.maxSize, keep: () => hookState.keep },
   );
   // Only latch a successfully-opened instance; a degraded build leaves the
   // cache null so the next emit retries.
@@ -214,6 +246,8 @@ export function resetHookLogger(): void {
   hookState.instance = null;
   hookState.level = "info";
   hookState.redact = false;
+  hookState.maxSize = DEFAULT_LOG_MAX_SIZE;
+  hookState.keep = DEFAULT_LOG_KEEP;
 }
 
 /** Set the hook logger's level (the hook injects loadSettings().logging.level).
@@ -226,6 +260,15 @@ export function setLogLevel(level: LogLevel): void {
  * loadSettings().logging.redact). Takes effect on the next emit. */
 export function setRedact(on: boolean): void {
   hookState.redact = on;
+}
+
+/** Set the hook logger's rotation thresholds (the hook injects
+ * logMaxSize()/logKeep()). Takes effect on the next emit. Seeded from the
+ * constants so a process that never calls this — or logs before it does — still
+ * rotates at the schema defaults rather than growing unbounded (EXC-1068). */
+export function setLogRotation(maxSize: number, keep: number): void {
+  hookState.maxSize = maxSize;
+  hookState.keep = keep;
 }
 
 export function logDebug(step: string, msg: string, extra?: object): void {
@@ -248,25 +291,31 @@ export function logError(step: string, err: unknown, ctx?: ErrorContext): void {
   hook().error(step, err, ctx);
 }
 
-/** A leveled logger for the long-running daemon. Writes NDJSON to stderr (fd 2,
- * which spawnDaemon redirects into daemon.log) by default; `dest` overrides the
- * sink (a file path) so tests don't spew to the real stderr. `base.pid` tags
- * every record; the `level()` and `redact()` thunks are re-read before each
- * emit so config.toml edits hot-reload. Never throws. NB: tests always pass
- * `dest`; the fd-2 default is covered by the post-build daemon smoke, not
- * unit tests. */
+/** A leveled logger for the long-running daemon. Writes NDJSON to the path it
+ * owns — daemonLogFile() by default, so the daemon can stat and rotate its own
+ * sink; `dest` overrides it with another path (tests) or a raw fd (the e2e
+ * harness passes 2, keeping the boot diagnostics its fixtures read off stderr).
+ * `base.pid` tags every record; the `level()` and `redact()` thunks are re-read
+ * before each emit so config.toml edits hot-reload, as are `limits` when given —
+ * omit it (tests) and the logger never rotates. Never throws. */
 export function createDaemonLogger(
   level: () => LogLevel,
-  dest?: string | number,
+  dest: string | number = daemonLogFile(),
   redact: () => boolean = () => false,
+  limits?: LogLimits,
 ): CaretLogger {
   try {
+    if (typeof dest === "string") ensureLogsDir();
     const target = pino.destination({
-      ...(dest === undefined ? { fd: 2 } : { dest }),
+      ...(typeof dest === "number" ? { fd: dest } : { dest, mode: 0o600 }),
       sync: true,
     });
     const logger = pino({ ...pinoOpts, base: { pid: process.pid } }, target);
-    return wrap(logger, level, redact, "daemon");
+    const rotate =
+      limits && typeof dest === "string"
+        ? () => rotateIfOversized(dest, limits.maxSize(), limits.keep())
+        : undefined;
+    return wrap(logger, level, redact, "daemon", rotate);
   } catch {
     return noopLogger;
   }

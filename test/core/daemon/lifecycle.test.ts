@@ -1,10 +1,11 @@
 import { afterEach, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { closeSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 
 import { setupTempStateDir } from "@test/support/env.ts";
 import { ndjsonRecords } from "@test/support/ndjson.ts";
-import { logFile } from "@/config/paths.ts";
-import { ensureDaemon, retireDaemon } from "@/daemon/lifecycle.ts";
+import { daemonStderrLogFile, ensureLogsDir, logArchiveDir, logFile } from "@/config/paths.ts";
+import { DEFAULTS } from "@/config/settings.ts";
+import { ensureDaemon, openDaemonStderr, retireDaemon } from "@/daemon/lifecycle.ts";
 import { setLogLevel } from "@/lib/log.ts";
 
 // Point the state dir at a throwaway temp dir so the debug-level instrumentation
@@ -424,4 +425,33 @@ test("retireDaemon treats a legacy lock (no stateDir) as same-world", async () =
   );
   expect(ok).toBe(true);
   expect(kills).toBe(1);
+});
+
+// ---- openDaemonStderr (EXC-1068) ----
+
+test("openDaemonStderr creates daemon-stderr.log at 0600 inside logs/", () => {
+  const fd = openDaemonStderr(DEFAULTS);
+  expect(fd).not.toBe("ignore");
+  closeSync(fd as number);
+  expect(statSync(daemonStderrLogFile()).mode & 0o777).toBe(0o600);
+});
+
+test("openDaemonStderr tightens an upgraded install's world-readable stderr log", () => {
+  ensureLogsDir();
+  writeFileSync(daemonStderrLogFile(), "old crash output\n", { mode: 0o644 });
+  // openSync's mode argument only applies on create, so an existing file needs
+  // the explicit chmod — without it an upgrade keeps the umask-derived mode.
+  closeSync(openDaemonStderr(DEFAULTS) as number);
+  expect(statSync(daemonStderrLogFile()).mode & 0o777).toBe(0o600);
+});
+
+test("openDaemonStderr rotates an oversized stderr log before reopening it", () => {
+  ensureLogsDir();
+  writeFileSync(daemonStderrLogFile(), "x".repeat(200_000));
+  const s = { ...DEFAULTS, logging: { ...DEFAULTS.logging, max_size: 65_536 } };
+  closeSync(openDaemonStderr(s) as number);
+  expect(statSync(daemonStderrLogFile()).size).toBe(0);
+  expect(readdirSync(logArchiveDir())).toEqual([
+    expect.stringMatching(/^daemon-stderr-.*\.log\.gz$/),
+  ]);
 });

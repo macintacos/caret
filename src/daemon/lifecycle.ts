@@ -5,15 +5,22 @@
 // read/write/liveness primitives the takeover loop and the discovery command
 // share.
 
-import { openSync, unlinkSync } from "node:fs";
+import { chmodSync, openSync, unlinkSync } from "node:fs";
 import { normalize } from "node:path";
 
-import { daemonLock, daemonLogFile, ensureStateDir, stateDir } from "@/config/paths.ts";
-import { getPort, type Settings } from "@/config/settings.ts";
+import {
+  daemonLock,
+  daemonStderrLogFile,
+  ensureLogsDir,
+  ensureStateDir,
+  stateDir,
+} from "@/config/paths.ts";
+import { getPort, logKeep, logMaxSize, type Settings } from "@/config/settings.ts";
 import { type HealthBody, httpHealth } from "@/daemon/client.ts";
 import { buildKind, currentBuildId, type DaemonLock, VERSION } from "@/lib/build-id.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
 import { logDebug, logWarn } from "@/lib/log.ts";
+import { rotateIfOversized } from "@/lib/log-rotate.ts";
 
 export interface EnsureDeps {
   baseUrl: string;
@@ -228,18 +235,31 @@ function daemonCommand(): string[] {
   return [process.execPath, process.argv[1] as string, "daemon"];
 }
 
-export function spawnDaemon(): void {
-  // Route the detached daemon's stdout/stderr to a log file so failures are
-  // diagnosable after the fact. Best-effort: fall back to discarding output.
-  let out: number | "ignore" = "ignore";
+/** Open the append-mode fd the detached daemon's stdout/stderr is redirected
+ * to, rotating it first if it is already oversized — the one rotation check
+ * daemon-stderr.log gets, since nothing holds a path to it afterwards
+ * (EXC-1068). The explicit chmod covers an upgraded install, whose existing
+ * file predates the mode argument (which only applies on create). "ignore"
+ * means the log is unopenable and the output is discarded; the daemon still
+ * spawns. */
+export function openDaemonStderr(s: Settings): number | "ignore" {
+  const path = daemonStderrLogFile();
   try {
-    ensureStateDir();
-    out = openSync(daemonLogFile(), "a");
+    ensureLogsDir();
+    rotateIfOversized(path, logMaxSize(s), logKeep(s));
+    const fd = openSync(path, "a", 0o600);
+    chmodSync(path, 0o600);
+    return fd;
   } catch {
-    // The daemon still spawns; only its crash output is lost. Best-effort warn
-    // (the same unwritable state dir usually silences caret.log too).
+    // Best-effort warn (the same unwritable state dir usually silences
+    // caret.log too).
     logWarn("spawn", "daemon log unopenable; discarding daemon output");
+    return "ignore";
   }
+}
+
+export function spawnDaemon(s: Settings): void {
+  const out = openDaemonStderr(s);
   Bun.spawn(daemonCommand(), {
     stdio: ["ignore", out, out],
     detached: true,
@@ -268,7 +288,7 @@ export async function prodEnsureDeps(s: Settings): Promise<EnsureDeps> {
     isAlive: isPidAlive,
     retire: (baseUrl, lock) => retireDaemon(baseUrl, lock, world),
     removeLock: removeDaemonLock,
-    spawn: spawnDaemon,
+    spawn: () => spawnDaemon(s),
     backoff,
     maxAttempts: 12,
   };
