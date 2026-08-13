@@ -385,7 +385,9 @@
   // EXC-687/EXC-840), plus the token itself, which the reveal effect below
   // measures so the clicked filename stays visible beside the drawer. The
   // preview stays put once open; it closes on Escape (the dismissal effect
-  // below) or on the pane's own close button, and on nothing else.
+  // below), on the pane's own close button, and when a directory reference takes
+  // its place. Compare mode hides the lane without clearing this — the dismissal
+  // effect carries the matching guard.
   let filePreview = $state<
     { path: string; line?: number; endLine?: number; token: HTMLElement } | undefined
   >();
@@ -437,9 +439,9 @@
   // One reference click, two surfaces. The daemon said which this is (EXC-916),
   // so the branch is on the kind the span carries rather than on the path's shape
   // — the whole point of resolving server-side. Opening either dismisses the
-  // other: one click answers with one surface, and the card is viewport-fixed
-  // over a plan the lane has already narrowed, so both at once would land it on
-  // top of the excerpt it was opened instead of.
+  // other: the card's own effect below still swallows the clicks it dismisses on,
+  // so a card left open beside a preview would put that swallow back over a lane
+  // whose whole point is that clicks in the plan reach the plan.
   function openFileRef(ref: FileRefSpan, tokenElement: HTMLElement): void {
     if (ref.kind === "directory") {
       dismissFilePreview();
@@ -494,19 +496,24 @@
     };
   });
 
-  // Escape dismissal (EXC-840, superseding EXC-799's hover-intent tracker), in the
-  // CAPTURE phase so it runs before the plan's own handlers. It is the keyboard
-  // half of a pair: the pane's close circle is the pointer half, and there is no
-  // third route in. A click OUTSIDE the lane deliberately does nothing here
-  // (EXC-1067) — the preview is a docked lane rather than a popover, so it takes
-  // layout space beside the plan instead of covering it and there is no "outside"
-  // in the modal sense to click away from. The reader works in the plan with the
-  // excerpt beside them, and every click they spend there does its own job on the
-  // first press. The folder card's effect above keeps its outside-click dismissal:
-  // that surface IS viewport-fixed over the plan, so the divergence tracks the two
-  // surfaces' shapes rather than being drift.
+  // Escape dismissal (EXC-840), in the CAPTURE phase so it runs before the plan's
+  // own handlers. It is the keyboard half of a pair with the pane's close circle;
+  // `openFileRef` dismisses too when the reader opens a directory instead. A click
+  // OUTSIDE the lane deliberately does nothing here (EXC-1067) — the preview is a
+  // docked lane rather than a popover, so it takes layout space beside the plan
+  // instead of covering it and there is no "outside" in the modal sense to click
+  // away from. The reader works in the plan with the excerpt beside them, and every
+  // click they spend there does its own job on the first press. The folder card's
+  // effect above keeps its outside-click dismissal: that surface IS viewport-fixed
+  // over the plan, so the divergence tracks the two surfaces' shapes rather than
+  // being drift.
+  //
+  // Gated on `showDiff` to match the pane's own render condition below, not just on
+  // the state: compare mode hides the lane while leaving `filePreview` set, and an
+  // unrendered pane's handler would swallow Escape from whatever the reader is
+  // actually looking at.
   $effect(() => {
-    if (filePreview === undefined) return;
+    if (showDiff || filePreview === undefined) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || drawerClosing) return;
       dismissFilePreview();

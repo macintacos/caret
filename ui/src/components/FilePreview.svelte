@@ -23,9 +23,7 @@
   // rather than as rows that may not even be mounted. It carries the "esc to
   // close" hint too, and the close circle at its left. The panel stays put until
   // dismissed — Escape, which DiffPlanView owns, or that button, which reports
-  // through `onClose` to the same dismissal there. A click outside the lane
-  // dismisses nothing (EXC-1067): the lane sits beside the plan rather than over
-  // it, so the reader is meant to keep working with the excerpt open.
+  // through `onClose` to the same dismissal there.
   import { tick, untrack } from "svelte";
 
   import { EXCERPT_RADIUS, MAX_CITED_SPAN_LINES } from "@core/config/constants";
@@ -689,19 +687,16 @@
   /* The close circle: the macOS traffic light, at the pane's top-left where that
      idiom lives. Shape carries it — a filled disc the reader decodes before
      reading anything — with the glyph held back until hover or focus, as the
-     platform control does.
-
-     The RED is a deliberate third carve-out from the every-hue-has-a-job rule
-     (doc/agents/svelte-rules.md § CSS-token discipline, which names it): --danger
-     is declared for semantics, and this spends it on chrome. A neutral disc would
-     read as a generic dot rather than as a close control, and the token is spent
-     nowhere else in this pane. Its non-text contrast on --paper is pinned in
-     theme.test.ts against 1.4.11's 3:1 floor, which is the clause that binds for a
-     control carried by shape alone.
+     platform control does. The RED is a deliberate carve-out from the
+     every-hue-has-a-job rule; doc/agents/svelte-rules.md § CSS-token discipline
+     records it and why, and theme.test.ts pins its 3:1 non-text contrast on
+     --paper (WCAG 1.4.11, the clause that binds for a control carried by shape
+     alone).
 
      align-self because the header is baseline-aligned and a disc has no baseline
      worth sharing — the same opt-out .fp-badge takes. */
   .fp-close {
+    position: relative;
     flex: 0 0 auto;
     align-self: center;
     display: inline-flex;
@@ -713,19 +708,36 @@
     border: none;
     border-radius: 50%;
     background: var(--danger);
-    /* Paper on the fill, the same pairing .fp-badge uses. */
     color: var(--paper);
-    cursor: pointer;
+  }
+  /* The disc reads at 11px because the idiom is small; the POINTER gets the 24px
+     WCAG 2.2 SC 2.5.8 asks for, as an invisible inset rather than a bigger circle. */
+  .fp-close::after {
+    content: "";
+    position: absolute;
+    inset: -7px;
   }
   /* Icon.svelte wraps its SVG in a .icon span, so the fade hangs on that rather
-     than on the svg itself. */
+     than on the svg itself. The stroke is thickened to hold at this size: the
+     vendored 24px glyph carries stroke-width 2, which at 8px renders under one
+     device pixel and smudges rather than reading as an x. */
   .fp-close :global(.icon) {
     opacity: 0;
     transition: opacity var(--dur-fast) var(--ease-out);
   }
+  .fp-close :global(svg) {
+    stroke-width: 3;
+  }
   .fp-close:hover :global(.icon),
   .fp-close:focus-visible :global(.icon) {
     opacity: 1;
+  }
+  /* Nothing hovers on a touch screen, so the glyph would never arrive and the
+     control would stay an unexplained dot. */
+  @media (hover: none) {
+    .fp-close :global(.icon) {
+      opacity: 1;
+    }
   }
   /* The explicit "Preview" label — a filled chip so the panel is unmistakably a
      snippet, not the file itself. Neutral ink fill (amber stays brand-reserved);

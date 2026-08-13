@@ -527,10 +527,10 @@ test("clicking a real reference reveals a highlighted excerpt centered on its li
     // once the panel has scrolled to the cited line (EXC-970).
     await expect(preview.getByRole("status")).toHaveText(`lines 12–72 of ${CACHE_TS_LINES}`);
     // And there is nothing at either boundary to click — the strips are gone,
-    // so a reintroduced one fails here rather than only looking wrong. Scoped to
-    // the code region: the header's close circle is a way OUT of the preview, not
-    // a way further into the file.
-    await expect(preview.locator(".fp-code button")).toHaveCount(0);
+    // so a reintroduced one fails here rather than only looking wrong. The whole
+    // pane, minus the close circle: the strips were the code region's SIBLINGS,
+    // so scoping this to `.fp-code` would look past exactly what it guards.
+    await expect(preview.locator("button:not(.fp-close)")).toHaveCount(0);
 
     // The referenced line itself (42) is the one highlighted, so the eye lands on it.
     await expect(preview.locator(".fp-target")).toHaveCount(1);
@@ -821,9 +821,13 @@ test("pressing Escape dismisses the open preview", async ({ daemon, page }) => {
 });
 
 test("clicking the close circle dismisses the open preview", async ({ daemon, page }) => {
-  // The pointer's way out, beside Escape's (EXC-1067). It has to exist: with the
-  // outside click no longer dismissing, the keyboard would otherwise be the only
-  // route out of a lane a reader opened with the mouse.
+  // The pointer's way out, beside Escape's (EXC-1067). It has to exist: an
+  // outside click dismisses nothing, so the keyboard would otherwise be the only
+  // route out of a lane a reader opened with the mouse. Here rather than in the
+  // component unit — which already pins that the button calls `onClose` — because
+  // what this covers is the rest of the route: FilePreview's callback reaching
+  // DiffPlanView's dismissal, and the lane surviving its 180ms closing wipe
+  // before it unmounts. Neither exists on a component mounted alone.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
     await daemon.seed({
@@ -947,7 +951,7 @@ test("scrolling walks the preview to both ends of the file", async ({ daemon, pa
     const preview = page.locator("[data-file-preview]");
     await expect(preview).toBeVisible();
     await settleDrawer(page);
-    await expect(preview.locator(".fp-code button")).toHaveCount(0);
+    await expect(preview.locator("button:not(.fp-close)")).toHaveCount(0);
 
     // Walk upward until the region starts at line 1. One scroll per attempt,
     // retried — a scroll landing while the previous chunk is still in flight is
@@ -1073,7 +1077,7 @@ test("a keyboard reader walks the preview to both ends with no pointer", async (
     // are the wrong thing to announce.
     await expect(preview.getByRole("status")).toHaveText(`${CACHE_TS_LINES} lines`);
     // And nothing was put back at the boundaries to achieve any of it.
-    await expect(preview.locator(".fp-code button")).toHaveCount(0);
+    await expect(preview.locator("button:not(.fp-close)")).toHaveCount(0);
 
     // Escape still closes the preview from inside the region, where focus sits.
     await expect(async () => {
@@ -1182,9 +1186,10 @@ test("swapping the reference re-frames the panel from the new file's first line"
   daemon,
   page,
 }) => {
-  // A click on another filename passes through the dismissal handler untouched,
-  // so the drawer swaps contents on that same click and FilePreview keeps its
-  // instance. The scroll offset the window reads is component state, and the
+  // A file-ref token's own click handler reassigns `filePreview` in place, so a
+  // click on another filename swaps the drawer's contents on that same click and
+  // FilePreview keeps its instance. The scroll offset the window reads is
+  // component state, and the
   // fresh `.fp-code` it is read against is back at zero — so an offset carried
   // over from the previous file would window the new one around a row far down
   // it, leaving the reader looking at a spacer where the head should be.

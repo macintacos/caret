@@ -409,12 +409,13 @@ describe("FilePreview snippet framing", () => {
   test("nothing at the boundaries offers to load more", async () => {
     // EXC-969 removed the "N lines above/below" strips: proximity loads the next
     // chunk, so a control there would be clutter that still looks clickable.
-    // Scoped to the code region — the header carries the close circle, which is
-    // a way out of the preview rather than a way further into the file.
+    // The whole panel minus the close circle, which is a way out of the preview
+    // rather than a way further into the file: the strips sat OUTSIDE .fp-code,
+    // as its siblings, so a narrower scope would not see one come back.
     cap = serveExcerpt(excerptFixture(25, 25, 122)); // 24 above, 73 below
     const { target } = render(FilePreview, props({ line: 37 }));
     await until(() => target.querySelector(".fp-lnum") != null);
-    expect(target.querySelectorAll(".fp-code button")).toHaveLength(0);
+    expect(target.querySelectorAll("button:not(.fp-close)")).toHaveLength(0);
     expect(target.querySelector(".fp-edge")).toBeNull();
   });
 });
