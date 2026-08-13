@@ -38,7 +38,7 @@ digraph caret_docs_router {
     "Which doc does the change affect?" -> "Edit doc/DEVELOPMENT.md" [label="developing caret: build-from-source, the mise task catalog and dev workflow, the tasks CLI, icons"];
     "Which doc does the change affect?" -> "Edit CONTRIBUTING.md" [label="human contributor onboarding: local setup, the mise workflow, where tests live"];
     "Which doc does the change affect?" -> "Edit CLAUDE.md" [label="the code-change routing index, plus the CodeGraph / verifying-changes prose"];
-    "Which doc does the change affect?" -> "Edit a doc/agents/*.md rule file" [label="a rule-of-the-road for a code area (architecture, logging, TS, Svelte, shadcn, testing, icons, settings, OpenCode, rumdl)"];
+    "Which doc does the change affect?" -> "Edit a doc/agents/*.md rule file" [label="a rule-of-the-road for a code area (architecture, logging, TS, Svelte, shadcn, testing, icons, settings, dependencies, OpenCode, rumdl)"];
     "Which doc does the change affect?" -> "Edit doc/README.md" [label="the router for the doc/ directory: which page answers a given reader's question"];
 }
 ```
@@ -70,9 +70,10 @@ digraph caret_docs_router {
   CodeGraph and verifying-changes guidance. Adding or moving a `doc/agents/*.md` rule file
   means adding or updating its edge here. How to edit it:
   [`references/claude-md.md`](references/claude-md.md).
-- **`doc/agents/*.md`** — the rules-of-the-road: one file per code area, the substance
-  behind `CLAUDE.md`'s digraph. This routing reference lives among them. How to add or
-  edit one: [`references/agent-rules.md`](references/agent-rules.md).
+- **`doc/agents/*.md`** — the rules-of-the-road: one file per code area (architecture,
+  logging, TypeScript, Svelte, shadcn, testing, icons, settings, dependencies, OpenCode,
+  rumdl), the substance behind `CLAUDE.md`'s digraph. This routing reference lives among
+  them. How to add or edit one: [`references/agent-rules.md`](references/agent-rules.md).
 - **`doc/README.md`** — the router for the `doc/` directory: a table mapping what a reader
   wants to do to the page that answers it, across the four reference pages, `doc/agents/`,
   and the two repo-root docs (`README.md` and `CONTRIBUTING.md`). How to edit it:
