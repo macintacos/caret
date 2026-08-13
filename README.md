@@ -16,7 +16,10 @@ Want to develop caret rather than use it? Start with [CONTRIBUTING.md](CONTRIBUT
 
 ## Screenshots
 
-![caret review UI with an inline annotation, both themes](doc/assets/caret-review-ui.png)
+![caret review UI with an inline annotation, stitched across four themes](doc/assets/caret-review-ui.png)
+
+[Watch a 30-second review](doc/assets/caret-review-demo.webm) — comment on a line, send
+the plan back, approve the revision, and the agent picks up where you left it.
 
 ## Install
 

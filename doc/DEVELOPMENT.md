@@ -286,6 +286,7 @@ forwarder sets `#MISE raw_args=true` so mise hands every argument — including 
 | `build` — bare, `ui`, `bin`, `bundle`               | `scripts/tasks/build.ts`        | Bare is the umbrella; `mise run build bin` reaches a target.                      |
 | `test` — bare / `unit`, `e2e`                       | `scripts/tasks/test.ts`         | Bare and `unit` are the same bun target; `e2e` is Playwright.                     |
 | `smoke` — bare, `bin`, `bundle`                     | `scripts/tasks/smoke.ts`        | Bare smokes both artifacts.                                                       |
+| `assets` — bare, `stitch`, `video`                  | `scripts/tasks/assets.ts`       | Regenerates the README hero image and demo recording. Needs ImageMagick on `PATH`. |
 | `lint`, `format`, `caret`                           | `scripts/tasks/lint.ts` et al.  | Passthroughs: operands and flags reach the underlying tool. Only `caret` forwards a bare `--help`. |
 | `setup`                                             | `scripts/tasks/setup.ts`        | The bootstrap's three steps, plus the e2e Chromium.                               |
 | `preflight`                                         | `scripts/preflight.ts`          | The one task with real Commander options: `--json`, `-v`, `--grep`, `--task`, `--full`. |
@@ -401,6 +402,32 @@ were fragile: mise runs file tasks under macOS `/bin/bash` 3.2, where expanding 
 aborted the task mid-boot and left Vite proxying to a killed daemon, and the smoke tasks
 built exactly such arrays from the served asset list. A typed, unit-tested CLI removes
 that whole class of footgun.
+
+### Regenerating the README assets
+
+The two artifacts under `doc/assets/` — the hero image and the demo recording — come out
+of `mise run assets`, so refreshing them after the UI moves is a task run rather than a
+hand-composed screenshot. It builds the UI, boots an isolated daemon on an ephemeral port,
+and drives the shipped `ui/dist` through the Playwright library:
+
+```sh
+mise run assets          # both artifacts
+mise run assets stitch   # just doc/assets/caret-review-ui.png
+mise run assets video    # just doc/assets/caret-review-demo.webm
+```
+
+`stitch` captures the plan view at 1440×900 in four palettes — caret-dark, caret-light,
+dracula, catppuccin-mocha — and composites them into bands cut along parallel
+anti-diagonals, seamed in the live `--accent`. `video` records the review arc, with the
+dev driver playing the agent's side through the real hook path, so **Request changes**
+really appends a revision and **Approve** really unblocks. It prints its own duration;
+keep it under about a minute.
+
+Two things to know. The stitch target needs **ImageMagick** on your `PATH`
+(`brew install imagemagick`) — it is a host tool, deliberately not pinned in `mise.toml`,
+because every registry alternative would put a multi-minute build in front of a fresh
+clone. And both artifacts are committed binaries, so a regeneration adds a blob to history
+forever: run it when the UI has actually changed, not as a matter of course.
 
 ### Icons
 
