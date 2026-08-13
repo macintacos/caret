@@ -74,10 +74,15 @@
     "pino": "^10.3.1",
     "semver": "^7.8.1",
     "shiki": "^4.1.0",
-    "smol-toml": "1.6.1",
+    "smol-toml": "^1.8.0",
     "tailwind-merge": "^3.6.0",
     "tailwind-variants": "^3.2.2",
     "xss": "^1.0.15",
-    "zod": "4.4.3"
+    "zod": "^4.4.3"
+  },
+  "pinned": {
+    "//": "bun.lock is committed, so it is what pins every dependency exactly; a range above is the upgrade policy, not the resolved version. A bare version therefore means `bun update` must never move this one on its own — these are the only such entries, and why. test/structure/exact-pin.test.ts fails if one is added without a reason, or if a reason outlives its pin.",
+    "@pierre/diffs": "Version-coupled to shiki through the resolve.alias block in ui/vite.config.ts, where an alias that stops matching grows the bundle by ~600 KB silently rather than failing anything. The pair moves as one reviewed bump, never on a sweep.",
+    "@pierre/trees": "1.0.0-beta.6 is latest on both the `latest` and `beta` dist-tags; no stable 1.0.0 has shipped. Exact rather than caret because `^1.0.0-beta.6` resolves to `>=1.0.0-beta.6 <2.0.0`, which would pull in a stable 1.0.0 the day it lands — and beta-to-stable is the jump that wants a human."
   }
 }
