@@ -33,6 +33,7 @@ function props(over: Partial<{ path: string; line: number; endLine: number }> = 
     path: over.path ?? "src/cache.ts",
     line: over.line,
     endLine: over.endLine,
+    onClose: () => {},
   };
 }
 
@@ -408,11 +409,31 @@ describe("FilePreview snippet framing", () => {
   test("nothing at the boundaries offers to load more", async () => {
     // EXC-969 removed the "N lines above/below" strips: proximity loads the next
     // chunk, so a control there would be clutter that still looks clickable.
+    // The whole panel minus the close circle, which is a way out of the preview
+    // rather than a way further into the file: the strips sat OUTSIDE .fp-code,
+    // as its siblings, so a narrower scope would not see one come back.
     cap = serveExcerpt(excerptFixture(25, 25, 122)); // 24 above, 73 below
     const { target } = render(FilePreview, props({ line: 37 }));
     await until(() => target.querySelector(".fp-lnum") != null);
-    expect(target.querySelectorAll("button")).toHaveLength(0);
+    expect(target.querySelectorAll("button:not(.fp-close)")).toHaveLength(0);
     expect(target.querySelector(".fp-edge")).toBeNull();
+  });
+});
+
+describe("FilePreview close control", () => {
+  test("the header's close circle reports through onClose", async () => {
+    // The pointer's way out of the preview (EXC-1067), beside Escape's. It is
+    // the header's only control, and it publishes the accessible name the e2e
+    // locators reach it by; dismissal itself stays DiffPlanView's, so all this
+    // owes is the callback.
+    cap = serveExcerpt(excerptFixture(1, 4, 80));
+    let closes = 0;
+    const { target } = render(FilePreview, { ...props(), onClose: () => (closes += 1) });
+    await until(() => target.querySelector(".fp-lnum") != null);
+    const close = target.querySelector<HTMLButtonElement>('button[aria-label="Close preview"]');
+    expect(close).not.toBeNull();
+    close?.click();
+    expect(closes).toBe(1);
   });
 });
 
@@ -606,7 +627,7 @@ describe("FilePreview scroll loading", () => {
     cap = serveWindowed(300, 60);
     // The parent reuses one instance across references, so the accumulated span
     // has to go with the old one rather than framing the new file.
-    const live = reactiveProps({ reviewId: ID, path: "src/cache.ts" });
+    const live = reactiveProps({ reviewId: ID, path: "src/cache.ts", onClose: () => {} });
     const { target, flush } = render(FilePreview, live);
     await until(() => target.querySelector(".fp-code") != null);
     const scrollTo = stubLayout(target);
@@ -788,7 +809,7 @@ describe("FilePreview settling", () => {
     // and a reference change is the switch they trigger most deliberately.
     const served = serveGated(20, 300);
     cap = served;
-    const live = reactiveProps({ reviewId: ID, path: "src/cache.ts" });
+    const live = reactiveProps({ reviewId: ID, path: "src/cache.ts", onClose: () => {} });
     const { target, flush } = render(FilePreview, live);
     await until(() => target.querySelector(".fp-code") != null);
     expect(target.querySelector(".fp-path")?.textContent).toBe("src/cache.ts");

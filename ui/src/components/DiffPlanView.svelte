@@ -384,8 +384,10 @@
   // The file reference whose preview is open (opened by clicking its token —
   // EXC-687/EXC-840), plus the token itself, which the reveal effect below
   // measures so the clicked filename stays visible beside the drawer. The
-  // preview stays put once open; it closes only through the dismissal effect
-  // below (Escape, or a click away).
+  // preview stays put once open; it closes on Escape (the dismissal effect
+  // below), on the pane's own close button, and when a directory reference takes
+  // its place. Compare mode hides the lane without clearing this — the dismissal
+  // effect carries the matching guard.
   let filePreview = $state<
     { path: string; line?: number; endLine?: number; token: HTMLElement } | undefined
   >();
@@ -437,8 +439,9 @@
   // One reference click, two surfaces. The daemon said which this is (EXC-916),
   // so the branch is on the kind the span carries rather than on the path's shape
   // — the whole point of resolving server-side. Opening either dismisses the
-  // other: they share the same dismissing-click machinery below, and two of them
-  // listening at once would race for the same click.
+  // other: the card's own effect below still swallows the clicks it dismisses on,
+  // so a card left open beside a preview would put that swallow back over a lane
+  // whose whole point is that clicks in the plan reach the plan.
   function openFileRef(ref: FileRefSpan, tokenElement: HTMLElement): void {
     if (ref.kind === "directory") {
       dismissFilePreview();
@@ -493,45 +496,32 @@
     };
   });
 
-  // Dismissal (EXC-840, superseding EXC-799's hover-intent tracker): an open
-  // preview stays open until the reader dismisses it — Escape, or a click anywhere
-  // outside the drawer. Both listen in the CAPTURE phase so they run before the plan's
-  // own handlers, and the outside click is SWALLOWED (stopImmediatePropagation +
-  // preventDefault): the first click only closes the preview and never also opens a
-  // line comment; a second click then does its normal thing. A click inside the lane
-  // is left alone, so the reader can still scroll a long excerpt line or select text
-  // in it. (A resize drag never reaches here at all: the handle's pointerdown calls
-  // preventDefault, so its release produces no click.) No pointer-trajectory
-  // tracking remains — moving the cursor away no longer dismisses.
+  // Escape dismissal (EXC-840), in the CAPTURE phase so it runs before the plan's
+  // own handlers. It is the keyboard half of a pair with the pane's close circle;
+  // `openFileRef` dismisses too when the reader opens a directory instead. A click
+  // OUTSIDE the lane deliberately does nothing here (EXC-1067) — the preview is a
+  // docked lane rather than a popover, so it takes layout space beside the plan
+  // instead of covering it and there is no "outside" in the modal sense to click
+  // away from. The reader works in the plan with the excerpt beside them, and every
+  // click they spend there does its own job on the first press. The folder card's
+  // effect above keeps its outside-click dismissal: that surface IS viewport-fixed
+  // over the plan, so the divergence tracks the two surfaces' shapes rather than
+  // being drift.
+  //
+  // Gated on `showDiff` to match the pane's own render condition below, not just on
+  // the state: compare mode hides the lane while leaving `filePreview` set, and an
+  // unrendered pane's handler would swallow Escape from whatever the reader is
+  // actually looking at.
   $effect(() => {
-    if (filePreview === undefined) return;
+    if (showDiff || filePreview === undefined) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || drawerClosing) return;
       dismissFilePreview();
       e.preventDefault();
       e.stopPropagation();
     };
-    const onClick = (e: MouseEvent) => {
-      // Already sliding shut: let the click do its normal thing rather than
-      // spending it on a drawer that is on its way out.
-      if (drawerClosing) return;
-      const path = e.composedPath();
-      // A click on another filename passes through untouched, so SourceView's
-      // token handler fires and swaps the drawer's contents on that same click
-      // rather than the click being spent closing the drawer.
-      if (path.some((n) => n instanceof Element && n.matches("[data-file-ref]"))) return;
-      const drawer = document.querySelector("[data-file-drawer]");
-      if (drawer != null && path.includes(drawer)) return;
-      dismissFilePreview();
-      e.preventDefault();
-      e.stopImmediatePropagation();
-    };
     window.addEventListener("keydown", onKey, { capture: true });
-    window.addEventListener("click", onClick, { capture: true });
-    return () => {
-      window.removeEventListener("keydown", onKey, { capture: true });
-      window.removeEventListener("click", onClick, { capture: true });
-    };
+    return () => window.removeEventListener("keydown", onKey, { capture: true });
   });
 
   // Which edge the preview docks to: the right of the plan surface when there is
@@ -1553,6 +1543,7 @@
           line={openRef.line}
           endLine={openRef.endLine}
           {showShortcutHints}
+          onClose={dismissFilePreview}
         />
       {/snippet}
     </FileDrawer>

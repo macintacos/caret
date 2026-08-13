@@ -6,10 +6,11 @@
 // hovering alone never does.
 // A path written as a markdown link's target counts as a reference too
 // (EXC-954), which is what the link spec below covers.
-// The popover is a click-opened card that stays put: moving the pointer away
-// never dismisses it (EXC-840 dropped EXC-799's hover-intent tracker); it closes
-// only on Escape or a click outside it, and that dismissing click is swallowed so
-// it doesn't also do its normal thing (open a line comment). Reading past the
+// The preview is a click-opened lane that stays put: moving the pointer away
+// never dismisses it (EXC-840 dropped EXC-799's hover-intent tracker), and
+// neither does clicking outside it (EXC-1067) — it docks beside the plan rather
+// than covering it, so a click in the plan does its own job while the excerpt
+// stays open. It closes on Escape or on the header's close circle. Reading past the
 // opening window costs no click either: scrolling near an end of the code region
 // loads the next chunk toward it (EXC-969), which needs real layout and so lives
 // here — as does reaching the same ends from the keyboard (EXC-972), which needs
@@ -526,8 +527,10 @@ test("clicking a real reference reveals a highlighted excerpt centered on its li
     // once the panel has scrolled to the cited line (EXC-970).
     await expect(preview.getByRole("status")).toHaveText(`lines 12–72 of ${CACHE_TS_LINES}`);
     // And there is nothing at either boundary to click — the strips are gone,
-    // so a reintroduced one fails here rather than only looking wrong.
-    await expect(preview.locator("button")).toHaveCount(0);
+    // so a reintroduced one fails here rather than only looking wrong. The whole
+    // pane, minus the close circle: the strips were the code region's SIBLINGS,
+    // so scoping this to `.fp-code` would look past exactly what it guards.
+    await expect(preview.locator("button:not(.fp-close)")).toHaveCount(0);
 
     // The referenced line itself (42) is the one highlighted, so the eye lands on it.
     await expect(preview.locator(".fp-target")).toHaveCount(1);
@@ -744,15 +747,16 @@ test("the preview omits the esc-to-close hint when shortcut hints are off", asyn
   }
 });
 
-test("clicking outside the preview dismisses it, swallowing that first click", async ({
+test("clicking outside the preview leaves it open and does its normal thing", async ({
   daemon,
   page,
 }) => {
-  // The preview is a click-opened popover: a click anywhere outside it closes it,
-  // and — since it took a click to open — that first outside click is SWALLOWED
-  // (EXC-840). So clicking a plan line while the preview is open only dismisses the
-  // preview; it does NOT also open that line's comment composer. A second click
-  // then opens the composer as usual, proving only the first click was consumed.
+  // The preview is a docked lane, not a popover: it takes layout space beside the
+  // plan rather than covering it, so there is no "outside" to click away from and a
+  // click there is not a dismissal (EXC-1067). Clicking a plan line while the
+  // preview is open opens that line's comment composer on that one click, and the
+  // preview stays put beside it — the reader is meant to work in the plan WITH the
+  // excerpt open. Dismissal is Escape or the close button, both specced below.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
     await daemon.seed({
@@ -770,24 +774,16 @@ test("clicking outside the preview dismisses it, swallowing that first click", a
     const preview = page.locator("[data-file-preview]");
     await expect(preview).toBeVisible();
 
-    // First click on the plain line: the preview dismisses…
+    // One click on the plain line opens the composer — the click is not spent
+    // closing anything.
     const proseLine = page.locator(".diffview").getByText("Just some plain prose here.", {
       exact: false,
     });
     await proseLine.click();
-    await expect(preview).toHaveCount(0);
+    await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
 
-    // …and that click was swallowed, so no composer opened. No positive event to
-    // await, so give the pipeline a beat then assert it stayed shut.
-    const composer = page.getByRole("dialog", { name: "Add a comment" });
-    const t0 = await page.evaluate(() => performance.now());
-    await page.waitForFunction((t) => performance.now() > t + 300, t0);
-    await expect(composer).toHaveCount(0);
-
-    // With the preview gone, a second click on the same line opens the composer
-    // normally — the swallow was one-shot, tied to the open preview.
-    await proseLine.click();
-    await expect(composer).toBeVisible();
+    // …and the excerpt is still there to write the comment against.
+    await expect(preview).toBeVisible();
   } finally {
     await proj.cleanup();
   }
@@ -819,6 +815,36 @@ test("pressing Escape dismisses the open preview", async ({ daemon, page }) => {
       await page.keyboard.press("Escape");
       await expect(preview).toHaveCount(0, { timeout: 500 });
     }).toPass({ timeout: 5_000 });
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("clicking the close circle dismisses the open preview", async ({ daemon, page }) => {
+  // The pointer's way out, beside Escape's (EXC-1067). It has to exist: an
+  // outside click dismisses nothing, so the keyboard would otherwise be the only
+  // route out of a lane a reader opened with the mouse. Here rather than in the
+  // component unit — which already pins that the button calls `onClose` — because
+  // what this covers is the rest of the route: FilePreview's callback reaching
+  // DiffPlanView's dismissal, and the lane surviving its 180ms closing wipe
+  // before it unmounts. Neither exists on a component mounted alone.
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n",
+    });
+    await page.goto("/");
+    await planSurface(page);
+
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+    await page.locator("[data-file-ref]").first().click();
+
+    const preview = page.locator("[data-file-preview]");
+    await expect(preview).toBeVisible();
+
+    await page.getByRole("button", { name: "Close preview" }).click();
+    await expect(preview).toHaveCount(0);
   } finally {
     await proj.cleanup();
   }
@@ -925,7 +951,7 @@ test("scrolling walks the preview to both ends of the file", async ({ daemon, pa
     const preview = page.locator("[data-file-preview]");
     await expect(preview).toBeVisible();
     await settleDrawer(page);
-    await expect(preview.locator("button")).toHaveCount(0);
+    await expect(preview.locator("button:not(.fp-close)")).toHaveCount(0);
 
     // Walk upward until the region starts at line 1. One scroll per attempt,
     // retried — a scroll landing while the previous chunk is still in flight is
@@ -1051,7 +1077,7 @@ test("a keyboard reader walks the preview to both ends with no pointer", async (
     // are the wrong thing to announce.
     await expect(preview.getByRole("status")).toHaveText(`${CACHE_TS_LINES} lines`);
     // And nothing was put back at the boundaries to achieve any of it.
-    await expect(preview.locator("button")).toHaveCount(0);
+    await expect(preview.locator("button:not(.fp-close)")).toHaveCount(0);
 
     // Escape still closes the preview from inside the region, where focus sits.
     await expect(async () => {
@@ -1160,9 +1186,10 @@ test("swapping the reference re-frames the panel from the new file's first line"
   daemon,
   page,
 }) => {
-  // A click on another filename passes through the dismissal handler untouched,
-  // so the drawer swaps contents on that same click and FilePreview keeps its
-  // instance. The scroll offset the window reads is component state, and the
+  // A file-ref token's own click handler reassigns `filePreview` in place, so a
+  // click on another filename swaps the drawer's contents on that same click and
+  // FilePreview keeps its instance. The scroll offset the window reads is
+  // component state, and the
   // fresh `.fp-code` it is read against is back at zero — so an offset carried
   // over from the previous file would window the new one around a row far down
   // it, leaving the reader looking at a spacer where the head should be.

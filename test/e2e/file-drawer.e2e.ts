@@ -384,10 +384,9 @@ test("clicking a second filename swaps the drawer's contents in place", async ({
   daemon,
   page,
 }) => {
-  // The dismissal handler swallows the first click outside the lane, so without
-  // a carve-out a click on another filename would only close the drawer. A click
-  // whose path contains a file-ref token passes through instead, so the token
-  // handler fires and the drawer's contents change on that same click.
+  // A file-ref token's own click handler reassigns `filePreview` in place, so a
+  // click on another filename swaps the drawer's contents on that same click,
+  // with nothing between the click and the token handler to spend it.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS, "src/other.ts": OTHER_TS });
   try {
     await daemon.seed({
@@ -478,7 +477,7 @@ test("the lane wipes out again when the preview is dismissed", async ({ daemon, 
   try {
     await daemon.seed({
       cwd: proj.dir,
-      plan: "# Refs\n\nEdit `src/cache.ts` to fix it.\n\nJust some plain prose here.\n",
+      plan: "# Refs\n\nEdit `src/cache.ts` to fix it.\n",
     });
     await page.setViewportSize(WIDE);
     await page.goto("/");
@@ -497,11 +496,9 @@ test("the lane wipes out again when the preview is dismissed", async ({ daemon, 
       );
     });
 
-    // Dismiss by clicking a plain plan line, well outside the lane.
-    await page
-      .locator(".diffview")
-      .getByText("Just some plain prose here.", { exact: false })
-      .click();
+    // Dismiss through the header's close circle — the pointer's route out; an
+    // outside click closes nothing (EXC-1067).
+    await page.getByRole("button", { name: "Close preview" }).click();
 
     // The collapse starts on the lane, and the excerpt is still inside it.
     await expect

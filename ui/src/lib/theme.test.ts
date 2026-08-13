@@ -394,6 +394,23 @@ describe("every theme", () => {
     }
   });
 
+  // The file preview's close circle (EXC-1067) is a graphical object required to
+  // understand the content in WCAG 1.4.11's own sense: it is a disc with its glyph
+  // held back until hover, so its SHAPE and its fill are the whole control and 3:1
+  // is the floor that binds. It renders on the preview panel's --paper, and it is
+  // the one place the chrome spends --danger on something that is not a semantic
+  // (doc/agents/svelte-rules.md § CSS-token discipline records the carve-out). A
+  // palette whose red goes muddy against its page fails here rather than shipping a
+  // close control a reader cannot find.
+  test("keeps the preview's close circle findable on every palette", () => {
+    for (const [id, theme] of themeEntries()) {
+      expect(
+        contrast(theme.tokens["--danger"], theme.tokens["--paper"]),
+        `${id} --danger on --paper`,
+      ).toBeGreaterThanOrEqual(3);
+    }
+  });
+
   // EXC-863 subdues a quoted line by fading its tokens with `opacity`, which no other
   // assertion in this file can see: opacity composites at paint time, so the ramp above
   // still measures the same solid tokens while what the reader gets is lighter. Quoted

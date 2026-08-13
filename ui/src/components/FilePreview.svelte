@@ -21,11 +21,13 @@
   // windowing; the header's line range is what still names the whole of it, and
   // is a live region besides, so a landed chunk is announced as one sentence
   // rather than as rows that may not even be mounted. It carries the "esc to
-  // close" hint too. The panel stays put until dismissed (Escape, or a click
-  // away; DiffPlanView owns that).
+  // close" hint too, and the close circle at its left. The panel stays put until
+  // dismissed — Escape, which DiffPlanView owns, or that button, which reports
+  // through `onClose` to the same dismissal there.
   import { tick, untrack } from "svelte";
 
   import { EXCERPT_RADIUS, MAX_CITED_SPAN_LINES } from "@core/config/constants";
+  import Icon from "@/components/Icon.svelte";
   import { appearance } from "@/state/appearance.svelte.ts";
   import { getFileExcerpt, HttpError } from "$lib/api.ts";
   import { type ChunkState, highlightChunk } from "$lib/diffview/highlight.ts";
@@ -47,8 +49,11 @@
      * header's "esc to close" chip. Defaults to shown; Escape still closes the
      * preview regardless. */
     showShortcutHints?: boolean;
+    /** Dismiss the preview. The header's close circle is the pointer's way out;
+     * Escape is the keyboard's, and DiffPlanView owns both. */
+    onClose: () => void;
   }
-  let { reviewId, path, line, endLine, showShortcutHints = true }: Props = $props();
+  let { reviewId, path, line, endLine, showShortcutHints = true, onClose }: Props = $props();
 
   // One rendered source line: its real file line number, plus either the
   // highlighted token HTML (shiki) or the raw text (plain fallback).
@@ -576,6 +581,9 @@
 
 <div class="file-preview" data-file-preview>
   <div class="fp-header">
+    <button type="button" class="fp-close" aria-label="Close preview" onclick={onClose}>
+      <Icon name="x" size={8} />
+    </button>
     <span class="fp-badge">Preview</span>
     <span class="fp-path">{preview.kind === "ready" ? preview.path : path}</span>
     <span class="fp-header-end">
@@ -675,6 +683,61 @@
     border-bottom: 1px solid var(--rule);
     font-family: var(--font-mono);
     font-size: var(--text-2xs);
+  }
+  /* The close circle: the macOS traffic light, at the pane's top-left where that
+     idiom lives. Shape carries it — a filled disc the reader decodes before
+     reading anything — with the glyph held back until hover or focus, as the
+     platform control does. The RED is a deliberate carve-out from the
+     every-hue-has-a-job rule; doc/agents/svelte-rules.md § CSS-token discipline
+     records it and why, and theme.test.ts pins its 3:1 non-text contrast on
+     --paper (WCAG 1.4.11, the clause that binds for a control carried by shape
+     alone).
+
+     align-self because the header is baseline-aligned and a disc has no baseline
+     worth sharing — the same opt-out .fp-badge takes. */
+  .fp-close {
+    position: relative;
+    flex: 0 0 auto;
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 11px;
+    height: 11px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: var(--danger);
+    color: var(--paper);
+  }
+  /* The disc reads at 11px because the idiom is small; the POINTER gets the 24px
+     WCAG 2.2 SC 2.5.8 asks for, as an invisible inset rather than a bigger circle. */
+  .fp-close::after {
+    content: "";
+    position: absolute;
+    inset: -7px;
+  }
+  /* Icon.svelte wraps its SVG in a .icon span, so the fade hangs on that rather
+     than on the svg itself. The stroke is thickened to hold at this size: the
+     vendored 24px glyph carries stroke-width 2, which at 8px renders under one
+     device pixel and smudges rather than reading as an x. */
+  .fp-close :global(.icon) {
+    opacity: 0;
+    transition: opacity var(--dur-fast) var(--ease-out);
+  }
+  .fp-close :global(svg) {
+    stroke-width: 3;
+  }
+  .fp-close:hover :global(.icon),
+  .fp-close:focus-visible :global(.icon) {
+    opacity: 1;
+  }
+  /* Nothing hovers on a touch screen, so the glyph would never arrive and the
+     control would stay an unexplained dot. */
+  @media (hover: none) {
+    .fp-close :global(.icon) {
+      opacity: 1;
+    }
   }
   /* The explicit "Preview" label — a filled chip so the panel is unmistakably a
      snippet, not the file itself. Neutral ink fill (amber stays brand-reserved);
