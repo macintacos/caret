@@ -113,6 +113,8 @@ local linters = new Mapping<String, Step> {
   // svelte-check checks the whole Svelte half with the 6.x peer instead, reporting
   // zero errors either way — a green gate over the wrong compiler.
   // test/structure/typescript-arrangement.test.ts is what keeps the flag here.
+  // Unlike its neighbours this linter is not purely read-only: tsgo reads .ts, not
+  // .svelte, so svelte-check writes svelte2tsx output to a gitignored cache dir.
   ["Svelte(Check)     [[svelte-check]]"] = new Step {
     glob = List("ui/**/*.svelte", "ui/**/*.ts")
     check = "bash -c 'cd ui && bunx svelte-check --tsconfig ./tsconfig.json --tsgo'"

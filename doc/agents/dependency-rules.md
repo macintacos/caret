@@ -105,8 +105,9 @@ gate, and each failing **by name** on an entry that outlived what it described:
 - **`held`** — a range deliberately stopping below the current major, with the evidence
   and the condition that lifts it. Its one entry, `typescript`, records a
   **peer obligation** rather than a blocked upgrade: the tree type-checks with TypeScript
-  7 through the `@typescript/native` alias, and `^6` stays only because svelte-check needs
-  both majors installed.
+  7 through the `@typescript/native` alias, and `^6` stays because svelte-check needs both
+  majors installed and because two suites under `test/structure/` import the compiler API
+  as a parser.
   [`../../test/structure/typescript-arrangement.test.ts`](../../test/structure/typescript-arrangement.test.ts)
   is its falsifier, and it reds when that peer range widens.
 

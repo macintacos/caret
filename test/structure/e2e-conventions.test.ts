@@ -37,6 +37,10 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+// Resolves to TypeScript 6, which is why this walk needs no port even though the tree
+// type-checks with 7: 7.x moves the API behind ./unstable/* and exposes no standalone
+// parse. That makes this import half the reason `typescript` stays installed at ^6 —
+// see package.json's `held` block, and port this file before collapsing to one major.
 import ts from "typescript";
 
 // The suite sits at test/structure/, two levels below the repo root; resolving

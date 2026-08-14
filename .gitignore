@@ -22,8 +22,10 @@ ui/src/styles/palette.generated.css*
 .rumdl_cache/
 
 # svelte-check --tsgo's transpile cache. The Go compiler reads .ts, not .svelte,
-# so svelte-check emits svelte2tsx output here for tsgo to type-check.
-ui/.svelte-check/
+# so svelte-check emits svelte2tsx output here for tsgo to type-check. Unanchored:
+# the dir lands wherever svelte-check was invoked, which is ui/ from hk.pkl but the
+# repo root for anyone running it by hand.
+.svelte-check/
 
 # Throwaway Phase-0 contract spike (never committed)
 spike/
