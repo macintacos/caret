@@ -97,14 +97,27 @@ local linters = new Mapping<String, Step> {
     check = "biome lint --error-on-warnings --no-errors-on-unmatched {{ files }}"
     fix = "biome lint --write --no-errors-on-unmatched {{ files }}"
   }
+  // Spelled as a path into the alias rather than `bun x tsc`, because two installed
+  // packages declare a `tsc` bin — `typescript` (6.x, svelte-check's peer) and
+  // `@typescript/native` (7.x, the Go port this repo type-checks with). Which one
+  // node_modules/.bin/tsc points at is decided by whichever install wrote the link
+  // last, so `bun x tsc` would name the compiler by luck, and landing on 6.x is
+  // silent — the backend program checks clean under either. The path names it
+  // outright. See package.json's `held` block.
   ["TypeScript(Check) [[tsc]]"] = new Step {
     glob = List("**/*.ts", "**/*.tsx")
     exclude = List("ui/**")
-    check = "bun x tsc --noEmit"
+    check = "bun node_modules/@typescript/native/bin/tsc --noEmit"
   }
+  // --tsgo is what routes the UI program through TypeScript 7. Drop it and
+  // svelte-check checks the whole Svelte half with the 6.x peer instead, reporting
+  // zero errors either way — a green gate over the wrong compiler.
+  // test/structure/typescript-arrangement.test.ts is what keeps the flag here.
+  // Unlike its neighbours this linter is not purely read-only: tsgo reads .ts, not
+  // .svelte, so svelte-check writes svelte2tsx output to a gitignored cache dir.
   ["Svelte(Check)     [[svelte-check]]"] = new Step {
     glob = List("ui/**/*.svelte", "ui/**/*.ts")
-    check = "bash -c 'cd ui && bunx svelte-check --tsconfig ./tsconfig.json'"
+    check = "bash -c 'cd ui && bunx svelte-check --tsconfig ./tsconfig.json --tsgo'"
   }
 
   // Inherited whole for the same reason as Shell(Format) above — the builtin's

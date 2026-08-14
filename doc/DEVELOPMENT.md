@@ -86,6 +86,14 @@ Formatting, linting, and type checking are all folded into `hk.pkl`'s `check` ho
 is deliberate: an unformatted or tab-indented file fails the gate instead of being
 silently reflowed at commit time, so what you committed is what you wrote.
 
+**Two TypeScript majors are installed, and the gate uses the newer one.** Type checking
+runs on TypeScript 7 (the Go port), which arrives as the `@typescript/native` alias, while
+`typescript` stays at 6.x because `svelte-check` requires both. Your editor's language
+service resolves `node_modules/typescript` — the 6.x one — so a green editor is not by
+itself a green gate. To reproduce the gate locally, name the compiler it actually runs:
+`bun node_modules/@typescript/native/bin/tsc --noEmit`. `package.json`'s `held` block has
+the full reasoning.
+
 ### Generated files
 
 Two files in the tree are generated, gitignored, and never hand-edited:
