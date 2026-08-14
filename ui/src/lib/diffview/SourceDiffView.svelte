@@ -8,11 +8,12 @@
   import { type SourceDiffViewLibOptions, toFileDiffOptions } from "$lib/diffview/options.ts";
   import { scrollToDiffLine } from "$lib/diffview/scroll.ts";
   import { registerCaretDiffThemes } from "$lib/diffview/theme.ts";
-  import type {
-    SourceDiffLineAnnotation,
-    SourceDiffViewApi,
-    SourceDiffViewOptions,
-    SourceDocument,
+  import {
+    libraryContents,
+    type SourceDiffLineAnnotation,
+    type SourceDiffViewApi,
+    type SourceDiffViewOptions,
+    type SourceDocument,
   } from "$lib/diffview/types.ts";
 
   // Teach the library's highlighter caret's themes before the first render
@@ -72,8 +73,8 @@
       contentKey,
       container,
       content: {
-        oldFile: { name: oldDoc.name, contents: oldDoc.text },
-        newFile: { name: newDoc.name, contents: newDoc.text },
+        oldFile: libraryContents(oldDoc),
+        newFile: libraryContents(newDoc),
       },
       options: libOptions,
       annotations,

@@ -48,18 +48,41 @@ export function selectionIn(root: ShadowRoot | null | undefined): Selection | nu
  * Reads the selection through `cloneContents()`, so the fragment is already clipped
  * to the range's endpoints and a partially-selected row keeps the ancestors the row
  * lookup needs.
+ *
+ * A blank source line carries no text at all — the library renders it as a row whose
+ * only child is a `<br>` — so a walk over text alone would never reach it, and the
+ * blank line would drop out of the copy: the exact fusing this module exists to
+ * prevent. The `<br>` is what the walk therefore also visits, and it is a sound proxy
+ * for "blank line" rather than a convenient one: the library emits a `<br>` only for a
+ * token whose text is empty, or for a line node with no children at all, and never
+ * anywhere else inside a row.
+ *
+ * Nothing else in the fragment may open a row. A range that stops at the very start of
+ * a row still encloses it, so `cloneContents()` brings that row back carrying only
+ * whatever ancestor chain the endpoint sat in — an empty row, an empty token span, or
+ * an empty text node, depending on where the drag landed. None of those stands for a
+ * line anyone selected, and all three fall out for free: a span is not a `<br>`, and an
+ * empty text node is skipped explicitly.
  */
 export function selectionText(selection: Selection | null): string | null {
   if (selection === null || selection.rangeCount === 0 || selection.isCollapsed) return null;
   const fragment = selection.getRangeAt(0).cloneContents();
-  const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_TEXT);
+  const walker = document.createTreeWalker(
+    fragment,
+    NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT,
+  );
   let text = "";
   let previous: Element | null | undefined;
   for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      if ((node as Element).tagName !== "BR") continue;
+    } else if (node.nodeValue === "") {
+      continue;
+    }
     const row = node.parentElement?.closest(ROW) ?? null;
     if (previous !== undefined && row !== previous) text += "\n";
     previous = row;
-    text += node.textContent ?? "";
+    text += node.nodeValue ?? "";
   }
   return text;
 }

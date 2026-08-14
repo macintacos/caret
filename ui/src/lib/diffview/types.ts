@@ -2,7 +2,7 @@
 // single owner of every `@pierre/diffs` import (enforced by
 // import-boundary.test.ts); code outside it imports these caret-named types
 // instead of the library's.
-import type { DiffLineAnnotation, LineAnnotation } from "@pierre/diffs";
+import type { DiffLineAnnotation, FileContents, LineAnnotation } from "@pierre/diffs";
 
 import type { ThemeId } from "$lib/theme.ts";
 
@@ -12,6 +12,24 @@ export interface SourceDocument {
   name: string;
   /** Full text of the document. */
   text: string;
+}
+
+/**
+ * A caret document as the library takes it.
+ *
+ * The terminating newline comes off because the library splits the text on "\n" and
+ * renders the empty tail as a further row. caret's own line model does not count that
+ * line — a plan of N lines has N of them whether or not its text ends in a newline — so
+ * the extra row is one the keyboard cursor cannot reach and one more than the gutter
+ * should number. `\r?` comes off with it, so a CRLF document is not left with a stray
+ * carriage return on what is now its last line.
+ *
+ * Both views convert through here rather than trimming at their own call sites: a
+ * compare whose two sides disagree about the trailing newline would otherwise render
+ * that disagreement as an added or removed blank line at the end of the file.
+ */
+export function libraryContents(doc: SourceDocument): FileContents {
+  return { name: doc.name, contents: doc.text.replace(/\r?\n$/, "") };
 }
 
 /** Layout for a two-document diff: side-by-side or stacked. */

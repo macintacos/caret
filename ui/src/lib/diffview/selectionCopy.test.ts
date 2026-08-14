@@ -8,9 +8,10 @@ import { selectionIn, selectionText } from "$lib/diffview/selectionCopy.ts";
 // selection, fusing the paragraphs on either side of it. This module rebuilds the
 // text from the selection's own rows instead, breaking where the row changes.
 
-/** A rendered row: tokens directly under [data-line]. The text node is appended
- * rather than assigned, because a blank line's token holds an EMPTY one — which is
- * what the walk below breaks on, and which `textContent = ""` would not create. */
+/** A rendered row: tokens directly under [data-line]. The text node is appended rather
+ * than assigned so that a token carrying the empty string still produces one, which
+ * `textContent = ""` would not — that is the shape the walk has to ignore, since an
+ * empty text node marks where a range stopped rather than a line. */
 function row(line: number, ...tokens: string[]): HTMLElement {
   const el = document.createElement("div");
   el.setAttribute("data-line", String(line));
@@ -19,6 +20,15 @@ function row(line: number, ...tokens: string[]): HTMLElement {
     span.appendChild(document.createTextNode(t));
     el.appendChild(span);
   }
+  return el;
+}
+
+/** A blank source line as @pierre/diffs renders one: a row whose only child is a
+ * `<br>`, with no text node anywhere inside it. */
+function blankRow(line: number): HTMLElement {
+  const el = document.createElement("div");
+  el.setAttribute("data-line", String(line));
+  el.appendChild(document.createElement("br"));
   return el;
 }
 
@@ -53,12 +63,36 @@ describe("selectionText", () => {
     expect(selectionText(selectionOver(host, one, two))).toBe("first\nsecond");
   });
 
-  // The whole reason this module outlived the tables it was written for: the blank
-  // row carries an empty token, which the serializer skips and this walk does not.
+  // The whole reason this module outlived the tables it was written for. The row holds
+  // only a `<br>`, so nothing in it is reachable by a text walk — it is the ROW that has
+  // to register, which is why the walk visits elements as well.
   test("keeps the blank line between two paragraphs", () => {
-    const [one, blank, two] = [row(1, "first"), row(2, ""), row(3, "second")];
+    const [one, blank, two] = [row(1, "first"), blankRow(2), row(3, "second")];
     const host = content(one, blank, two);
     expect(selectionText(selectionOver(host, one, two))).toBe("first\n\nsecond");
+  });
+
+  // A drag that stops at the very start of a row still encloses it, so the clone brings
+  // that row back — carrying whichever ancestors the endpoint sat in, and no `<br>`.
+  // Counting any of them would put a phantom newline on the end of every such copy, so
+  // all three spellings of the endpoint are pinned: Chromium anchors inside a descendant
+  // far more often than on the row itself, and a guard that only recognised the row
+  // shape would look right here while regressing the two the browser actually produces.
+  test.each([
+    ["the row itself", (r: HTMLElement) => [r, 0] as const],
+    ["a token span inside it", (r: HTMLElement) => [r.firstChild as Node, 0] as const],
+    ["a text node inside that", (r: HTMLElement) => [r.firstChild?.firstChild as Node, 0] as const],
+  ])("ignores a trailing row the range only touched the start of, anchored on %s", (_, endAt) => {
+    const [one, two, next] = [row(1, "first"), row(2, "second"), row(3, "third")];
+    document.body.replaceChildren(content(one, two, next));
+    const range = document.createRange();
+    range.setStartBefore(one);
+    const [node, offset] = endAt(next);
+    range.setEnd(node, offset);
+    const selection = document.getSelection() as Selection;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    expect(selectionText(selection)).toBe("first\nsecond");
   });
 
   test("breaks between gutter numbers, which are not [data-line] rows", () => {

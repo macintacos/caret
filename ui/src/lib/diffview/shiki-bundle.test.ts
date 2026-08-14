@@ -114,8 +114,8 @@ describe("caret's tokenize options", () => {
 //     an engine whose regexConstructor always throws still loads every grammar,
 //     and only throws once something is tokenized. So the cheap test below is a
 //     real guard on the bundle, but it is NOT evidence that patterns compile.
-//   - Translating all 14,234 patterns is the claim that actually justifies strict
-//     mode, and costs ~9s.
+//   - Translating every pattern in the bundle is the claim that actually justifies
+//     strict mode, and costs ~9s.
 //
 // Saying which is which matters: the load test alone reads like proof that strict
 // is safe, and it is not.
@@ -167,10 +167,32 @@ function collectPatterns(node: unknown, out: Set<string>) {
   }
 }
 
+/**
+ * The one pattern in the bundle that does not translate, recorded rather than worked
+ * around (EXC-1079). shiki 4.4 added the AutoHotkey v2 grammar, whose hotkey rule
+ * matches a raw byte range — `[^\x00-\xff]` — and oniguruma-to-es refuses `\xff` as an
+ * incomplete multibyte code. The throw is upstream and reaches caret unmodified: shiki's
+ * own strict engine and `defaultJavaScriptRegexConstructor` raise the identical error,
+ * so jsc-regex.ts is not involved and there is nothing on caret's side to repair.
+ *
+ * It is carved out rather than answered with `forgiving: true`, which would trade one
+ * unhighlighted grammar for silent degradation across all 15,027 patterns — exactly the
+ * failure mode EXC-911 removed. The cost is bounded, and by two different things on the
+ * two surfaces that tokenize: a fenced `ahk2` block inside a plan never reaches the
+ * grammar at all, because shiki's markdown grammar does not list ahk2 among the
+ * languages it embeds; and the file-preview excerpt, which CAN be asked for `ahk2` by
+ * filename, catches through both highlight.ts entry points and renders the chunk plain.
+ *
+ * Keyed on the offending construct rather than on oniguruma-to-es's wording, which is
+ * third-party prose free to change, and paired with an exact failure count below so a
+ * SECOND failure still reds the sweep.
+ */
+const UNTRANSLATABLE = "[^\\x00-\\xff]";
+
 // The expensive half — the claim that actually justifies strict mode, and the only
 // thing a shiki bump can invalidate. The ~9s is paid on every run deliberately:
 // behind an opt-in flag it would never actually run, and an unverified claim about
-// these 14,234 patterns is what let EXC-911 hide for as long as it did.
+// these 15,027 patterns is what let EXC-911 hide for as long as it did.
 describe("every bundled pattern translates strictly", () => {
   test("no pattern fails to compile through caret's regexConstructor", async () => {
     const patterns = new Set<string>();
@@ -190,8 +212,13 @@ describe("every bundled pattern translates strictly", () => {
       }
     }
 
-    expect(failures).toEqual([]);
-    // Non-vacuity again: an empty pattern set would pass the check above.
+    // Asserted in both directions, the way exact-pin.test.ts keeps its own record
+    // honest. Any failure that is not the carve-out reds, and names itself.
+    expect(failures.filter((f) => !f.includes(UNTRANSLATABLE))).toEqual([]);
+    // And the carve-out may not outlive its cause: a second untranslatable pattern, or
+    // an oniguruma-to-es that learns to translate this one, both red here.
+    expect(failures).toHaveLength(1);
+    // Non-vacuity again: an empty pattern set would pass the checks above.
     expect(patterns.size).toBeGreaterThan(10_000);
   }, 60_000);
 });
