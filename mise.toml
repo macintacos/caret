@@ -19,8 +19,8 @@ biome = "2.4"
 # Non-web formatters/linters (declared so hk runs these pinned versions, not global ones).
 
 # rumdl is held at the release mise.lock resolved, because caret ships that same release
-# to end users — so the bump is EXC-1075's, not a `mise up`. Why the two must agree, and
-# what else moves with them: doc/agents/rumdl-rules.md.
+# to end users — so moving it is a deliberate, verified bump, never a routine `mise up`
+# sweep. Why the two must agree, and what else moves with them: doc/agents/rumdl-rules.md.
 rumdl      = "latest" # aqua:rvben/rumdl (Markdown format + lint; mise.lock pins the version)
 yamlfmt    = "0"      # aqua:google/yamlfmt
 taplo      = "0"      # aqua:tamasfe/taplo
