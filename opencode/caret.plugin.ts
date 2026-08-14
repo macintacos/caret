@@ -23,9 +23,9 @@
 // file-deploy path substitutes the two __CARET_*__ markers instead.) It stays
 // self-contained: its only imports are node builtins (child_process, fs, url) and
 // @opencode-ai/plugin (resolved by OpenCode at runtime). Live in-OpenCode
-// verification of the exact ctx/tool/config shapes against the installed OpenCode
-// version is a documented follow-up; the pure logic below is covered by
-// test/opencode/.
+// verification of the exact ctx/tool/config shapes is recorded in
+// doc/agents/opencode-integration.md § Verified vs. follow-up, which also names what
+// remains unverified; the pure logic below is covered by test/opencode/.
 
 import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
