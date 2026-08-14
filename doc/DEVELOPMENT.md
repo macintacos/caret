@@ -395,9 +395,10 @@ by those links.
 
 The task file stays **bash**, not bun. mise derives the task name from the extensionless
 filename, and an extensionless TypeScript file can be neither Biome-linted nor
-`tsc`-typechecked, and breaks the shell linters (`hk.pkl` globs `.mise/tasks/*` as shell).
-The trivial `exec` forwarder sidesteps all of that while keeping the real logic in typed,
-tested TS.
+`tsc`-typechecked, and falls outside the shell linters too — hk's shfmt and shellcheck
+steps detect shell by shebang, so a bun-shebanged forwarder would be checked by nothing at
+all. The trivial `exec` forwarder sidesteps all of that while keeping the real logic in
+typed, tested TS.
 
 That shape replaced per-task bash scripts carrying `#USAGE` flag specs. Those worked, but
 were fragile: mise runs file tasks under macOS `/bin/bash` 3.2, where expanding an empty
