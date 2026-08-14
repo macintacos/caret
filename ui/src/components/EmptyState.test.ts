@@ -30,9 +30,10 @@ describe("EmptyState", () => {
   // The hint pill shares the badge numeric vocabulary by carrying the shared
   // .metric atom — the same source VersionBadge/DevBadge draw their tabular
   // figures from, so empty and populated chrome read as one tabular system. The
-  // sibling DevBadge test pins its own .metric the same way. (happy-dom's
-  // getComputedStyle doesn't resolve Svelte-injected scoped styles, so the
-  // runtime class — not a resolved font-feature value — is the falsifiable fact.)
+  // sibling DevBadge test pins its own .metric the same way. (.metric is a
+  // global atom in ui/src/styles/atoms.css, and the mount harness loads no
+  // stylesheet — only the component's own scoped block is injected — so the
+  // runtime class, not a resolved font-feature value, is the falsifiable fact.)
   test("the hint pill carries the .metric atom (badge numeric vocabulary)", () => {
     for (const connected of [true, false]) {
       const { target } = render(EmptyState, { connected });
@@ -84,9 +85,10 @@ describe("EmptyState", () => {
 });
 
 // Read a component's <style> block from source. Used to pin CSS token references
-// that happy-dom's getComputedStyle can't resolve (it ignores Svelte-injected
-// scoped styles), matching how type-scale.test.ts / css-bridge.test.ts assert
-// "one system" invariants from the CSS source itself.
+// by name: the harness loads no theme sheet, so a var() reference computes to ""
+// — and a resolved value could not pin the token's name even if it did. Matches
+// how type-scale.test.ts / css-bridge.test.ts assert "one system" invariants from
+// the CSS source itself.
 async function componentCss(file: string): Promise<string> {
   const src = await Bun.file(join(import.meta.dir, file)).text();
   return src.match(/<style>([\s\S]*)<\/style>/)?.[1] ?? "";
