@@ -44,7 +44,7 @@ test("package.json exposes a `caret` bin so `bunx @macintacos/caret` runs the CL
   expect(pkg.bin?.caret).toBe("./bin/caret");
 });
 
-test("@opencode-ai/plugin is a runtime dependency (moved out of devDependencies)", () => {
+test("@opencode-ai/plugin is a runtime dependency, not a devDependency", () => {
   expect(pkg.dependencies["@opencode-ai/plugin"]).toBeDefined();
   expect(pkg.devDependencies["@opencode-ai/plugin"]).toBeUndefined();
 });
