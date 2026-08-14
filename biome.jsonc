@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.16/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.8/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -11,9 +11,9 @@
     // skipped until someone remembers to extend an allowlist. The exclusions are
     // build output (dist/bin), deps, and the file types Biome doesn't own here:
     // `.svelte` (svelte-check owns the UI; Biome misparses runes as unused
-    // bindings) and `.css`/`.html` (hand-authored UI assets, not Biome's to
-    // reformat). (hk's wider glob still routes staged files here; these excludes
-    // filter them.)
+    // bindings) and `.css`/`.html`/`.svg` (hand-authored or vendored UI assets,
+    // not Biome's to reformat). (hk's wider glob still routes staged files here;
+    // these excludes filter them.)
     "includes": [
       "**",
       "!**/node_modules",
@@ -22,6 +22,15 @@
       "!**/*.svelte",
       "!**/*.css",
       "!**/*.html",
+      // Biome parses SVG, which puts `ui/src/icons/` in scope for a11y rules —
+      // noSvgWithoutTitle in particular. Those icons are vendored verbatim from
+      // Lucide (doc/agents/icon-rules.md), so annotating or reformatting them
+      // diffs the whole set against upstream on the next re-sync, and the
+      // accessible name belongs to ui/src/components/Icon.svelte — `aria-label`
+      // from its `label` prop, `aria-hidden` when decorative — not to the shared
+      // asset. Excluded by extension, like the file types above, rather than by
+      // switching the one rule off: biome owns nothing in a standalone SVG here.
+      "!**/*.svg",
       // Build-generated embed manifest (EXC-522): emitted under src/, which
       // biome lints — exclude the generated artifact from the lint/format gate.
       "!src/ui-manifest.generated.ts",
@@ -46,7 +55,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       // Biome ships this one at `info`, which sits below the threshold
       // `--error-on-warnings` enforces — so a useless String.raw was reported
       // on every lint run and failed none of them. Pinned to `error` so it
