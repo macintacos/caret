@@ -103,9 +103,12 @@ gate, and each failing **by name** on an entry that outlived what it described:
   on an undocumented pin, an empty reason, or an entry left behind after its package was
   removed or de-pinned.
 - **`held`** — a range deliberately stopping below the current major, with the evidence
-  and the condition that lifts it.
-  [`../../test/structure/typescript-hold.test.ts`](../../test/structure/typescript-hold.test.ts)
-  is its falsifier.
+  and the condition that lifts it. Its one entry, `typescript`, records a
+  **peer obligation** rather than a blocked upgrade: the tree type-checks with TypeScript
+  7 through the `@typescript/native` alias, and `^6` stays only because svelte-check needs
+  both majors installed.
+  [`../../test/structure/typescript-arrangement.test.ts`](../../test/structure/typescript-arrangement.test.ts)
+  is its falsifier, and it reds when that peer range widens.
 
 Removing or moving a dependency means checking **both** blocks for an entry that no longer
 names anything. Each block's own `//` note is its policy; don't restate them elsewhere.
