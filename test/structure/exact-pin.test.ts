@@ -27,12 +27,18 @@ const SCANNED = ["dependencies", "devDependencies", "overrides", "resolutions"] 
  * synthetic one: `undocumented` is an exact pin with no reason, `stale` a reason whose pin
  * is gone.
  *
- * Exactness is "the range names one concrete version", which is what `semver.valid` tests:
- * unlike a leading-digit check it rejects npm's bare shorthand ranges (`1`, `1.2`, `1.x`),
- * every one of which is caret-equivalent. It also rejects two forms that *do* name one
- * version — `=1.2.3`, and an `npm:` alias such as `npm:typescript@7.0.2` — so a pin written
- * either way goes uncaught. The alias gap is live rather than theoretical: `@typescript/native`
- * is an alias today.
+ * Exactness is "the range names one concrete version", tested by normalising the range and
+ * asking whether what comes back is itself a single version. `semver.validRange` turns
+ * `=1.2.3` into `1.2.3` but `^1.2.3` into `>=1.2.3 <2.0.0-0`, so only the former survives
+ * `semver.valid`. That rejects npm's bare shorthand ranges (`1`, `1.2`, `1.x`), every one of
+ * which is caret-equivalent, and still catches `=1.2.3`, which a bare `semver.valid` calls
+ * invalid despite naming one version.
+ *
+ * An `npm:` alias hides its range behind the aliased name, so the range is whatever follows
+ * the *last* `@` — last, because the name may itself be scoped (`npm:@scope/pkg@1.2.3`). An
+ * alias with no `@` at all falls through as a non-range and drops out. Both halves of the
+ * form are in force for bun: `npm:minimist@1.2.6` resolves to exactly 1.2.6, while
+ * `npm:typescript@^7.0.2` — the shape `@typescript/native` carries today — does not pin.
  *
  * An npm-style nested override is unwrapped rather than dropped, because bun honours the
  * `"."` pin nested beside the entry's sub-dependency overrides — its "does not support
@@ -55,7 +61,9 @@ function audit(manifest: Record<string, unknown>): { undocumented: string[]; sta
         .filter(([, value]) => {
           const range =
             typeof value === "object" && value !== null ? Reflect.get(value, ".") : value;
-          return typeof range === "string" && semver.valid(range) !== null;
+          if (typeof range !== "string") return false;
+          const spec = range.startsWith("npm:") ? range.slice(range.lastIndexOf("@") + 1) : range;
+          return semver.valid(semver.validRange(spec)) !== null;
         })
         .map(([name]) => name),
     ),
@@ -107,6 +115,20 @@ test("an npm-style nested override puts its `.` pin in force", () => {
   ).toEqual(["lodash"]);
 });
 
+test("an exact pin is recognised however it is spelled", () => {
+  expect(
+    audit({
+      overrides: {
+        plain: "1.2.3",
+        equals: "=1.2.3",
+        aliased: "npm:minimist@1.2.6",
+        aliasedScoped: "npm:@scope/pkg@1.2.3",
+      },
+      pinned: {},
+    }).undocumented,
+  ).toEqual(["aliased", "aliasedScoped", "equals", "plain"]);
+});
+
 test("a value naming no single version is not a pin", () => {
   expect(
     audit({
@@ -114,7 +136,8 @@ test("a value naming no single version is not a pin", () => {
         ranged: "^1.0.0",
         shorthand: "1.x",
         backReference: "$backReference",
-        aliased: "npm:typescript@7.0.2",
+        aliasedRange: "npm:typescript@^7.0.2",
+        aliasedBare: "npm:typescript",
         nestedWithoutRoot: { chalk: "5.0.0" },
       },
       pinned: {},
