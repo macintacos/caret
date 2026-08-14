@@ -58,10 +58,10 @@ const ALLOWED_LITERALS: Record<string, string> = {
  * would silently stop reporting real imports, and for a gate a loud false
  * positive (reword the prose) beats a silent false negative.
  *
- * The specifier half of this pattern is byte-identical to `importedPackages` in
+ * This pattern is byte-identical to the one in `importedPackages` in
  * dependency-placement.test.ts, which derives the shipped dependency set from
- * the same three forms. The duplication is deliberate — a six-line filter is not
- * shared scaffolding — so harden both or neither.
+ * the same three forms. The duplication is deliberate — a shared regex and loop
+ * is not `test/support/` scaffolding — so harden both or neither.
  */
 function offendingSpecifiers(source: string, allowedPrefix?: string): string[] {
   const found: string[] = [];
