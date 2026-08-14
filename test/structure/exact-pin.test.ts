@@ -7,8 +7,8 @@
 // This suite makes the record falsifiable in three directions — an exact pin added with no
 // reason, an empty reason added to quiet the gate, and a reason left behind after its
 // dependency was de-pinned — so it cannot rot back into the silence it exists to end. It
-// scans the four sections a concrete version can arrive through: `dependencies`,
-// `devDependencies`, `overrides`, and `resolutions`.
+// scans four sections — `dependencies`, `devDependencies`, `overrides`, and `resolutions`;
+// `SCANNED` below records why the list stops there.
 import { expect, test } from "bun:test";
 
 import semver from "semver";
@@ -27,27 +27,42 @@ const SCANNED = ["dependencies", "devDependencies", "overrides", "resolutions"] 
  * synthetic one: `undocumented` is an exact pin with no reason, `stale` a reason whose pin
  * is gone.
  *
- * Exactness is "the range names one concrete version", which is precisely what
- * `semver.valid` tests: unlike a leading-digit check it rejects npm's bare shorthand ranges
- * (`1`, `1.2`, `1.x`), every one of which is caret-equivalent. It is also what keeps a
- * value that is not a version out — an npm-style nested override object, a `$dep`
- * back-reference — since neither names one concrete version. A yarn-style `resolutions`
- * path key (`react-dom/scheduler`) is reported by the key that spells it, which is the
- * string a `pinned` entry has to name.
+ * Exactness is "the range names one concrete version", which is what `semver.valid` tests:
+ * unlike a leading-digit check it rejects npm's bare shorthand ranges (`1`, `1.2`, `1.x`),
+ * every one of which is caret-equivalent. It also rejects two forms that *do* name one
+ * version — `=1.2.3`, and an `npm:` alias such as `npm:typescript@7.0.2` — so a pin written
+ * either way goes uncaught. The alias gap is live rather than theoretical: `@typescript/native`
+ * is an alias today.
  *
- * On the documented side, `//` carries the policy rather than a package and a blank reason
- * is no reason — excluding both keeps either from satisfying the gate.
+ * An npm-style nested override is unwrapped rather than dropped, because bun honours the
+ * `"."` pin nested beside the entry's sub-dependency overrides — its "does not support
+ * nested overrides" warning covers only that sub-dependency half, so a pin written this way
+ * is in force and would otherwise be invisible. A `$dep` back-reference names no version and
+ * drops out on its own terms. A yarn-style `resolutions` path key (`react-dom/scheduler`) is
+ * reported by the key that spells it, which is the string a `pinned` entry has to name; a
+ * name appearing in two scanned sections is reported once.
+ *
+ * On the documented side, `//` carries the policy rather than a package, and a reason that is
+ * not a non-blank string is no reason — excluding those keeps any of them from satisfying the
+ * gate.
  */
 function audit(manifest: Record<string, unknown>): { undocumented: string[]; stale: string[] } {
-  const exact = SCANNED.flatMap((section) =>
-    Object.entries((manifest[section] ?? {}) as Record<string, string>),
-  )
-    .filter(([, range]) => semver.valid(range) !== null)
-    .map(([name]) => name)
-    .sort();
+  const exact = [
+    ...new Set(
+      SCANNED.flatMap((section) =>
+        Object.entries((manifest[section] ?? {}) as Record<string, unknown>),
+      )
+        .filter(([, value]) => {
+          const range =
+            typeof value === "object" && value !== null ? Reflect.get(value, ".") : value;
+          return typeof range === "string" && semver.valid(range) !== null;
+        })
+        .map(([name]) => name),
+    ),
+  ].sort();
 
-  const documented = Object.entries((manifest.pinned ?? {}) as Record<string, string>)
-    .filter(([name, reason]) => name !== "//" && reason.trim() !== "")
+  const documented = Object.entries((manifest.pinned ?? {}) as Record<string, unknown>)
+    .filter(([name, reason]) => name !== "//" && typeof reason === "string" && reason.trim() !== "")
     .map(([name]) => name)
     .sort();
 
@@ -67,13 +82,56 @@ test("every `pinned` entry still names an exact-pinned dependency", () => {
   expect(real.stale).toEqual([]);
 });
 
-test("a pin arriving through `overrides` or `resolutions` is checked like any other", () => {
+// Every section in `SCANNED` is named here, so deleting one from that list reds rather
+// than passing vacuously — `dependencies` carries no exact pin today, so nothing else in
+// this suite would notice its loss.
+test("an exact pin is checked in every scanned section", () => {
   expect(
-    audit({ overrides: { lodash: "4.17.21" }, resolutions: { minimist: "1.2.8" }, pinned: {} })
-      .undocumented,
-  ).toEqual(["lodash", "minimist"]);
+    audit({
+      dependencies: { alpha: "1.0.0" },
+      devDependencies: { bravo: "1.0.0" },
+      overrides: { lodash: "4.17.21" },
+      resolutions: { minimist: "1.2.8" },
+      pinned: {},
+    }).undocumented,
+  ).toEqual(["alpha", "bravo", "lodash", "minimist"]);
 });
 
 test("a `pinned` entry backed only by `overrides` is live, not stale", () => {
   expect(audit({ overrides: { lodash: "4.17.21" }, pinned: { lodash: "why" } }).stale).toEqual([]);
+});
+
+test("an npm-style nested override puts its `.` pin in force", () => {
+  expect(
+    audit({ overrides: { lodash: { ".": "4.17.21", chalk: "5.0.0" } }, pinned: {} }).undocumented,
+  ).toEqual(["lodash"]);
+});
+
+test("a value naming no single version is not a pin", () => {
+  expect(
+    audit({
+      overrides: {
+        ranged: "^1.0.0",
+        shorthand: "1.x",
+        backReference: "$backReference",
+        aliased: "npm:typescript@7.0.2",
+        nestedWithoutRoot: { chalk: "5.0.0" },
+      },
+      pinned: {},
+    }).undocumented,
+  ).toEqual([]);
+});
+
+test("a package pinned in two scanned sections is reported once", () => {
+  expect(
+    audit({ devDependencies: { lodash: "4.17.21" }, overrides: { lodash: "4.17.21" }, pinned: {} })
+      .undocumented,
+  ).toEqual(["lodash"]);
+});
+
+test("a `pinned` reason that is not a string is no reason", () => {
+  expect(
+    audit({ overrides: { lodash: "4.17.21" }, pinned: { lodash: { why: "structured" } } })
+      .undocumented,
+  ).toEqual(["lodash"]);
 });
