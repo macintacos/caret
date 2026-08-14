@@ -57,6 +57,11 @@ const ALLOWED_LITERALS: Record<string, string> = {
  * deliberate — a tokenizer that mis-parses a regex literal containing a quote
  * would silently stop reporting real imports, and for a gate a loud false
  * positive (reword the prose) beats a silent false negative.
+ *
+ * This pattern is byte-identical to the one in `importedPackages` in
+ * dependency-placement.test.ts, which derives the shipped dependency set from
+ * the same three forms. The duplication is deliberate — a shared regex and loop
+ * is not `test/support/` scaffolding — so harden both or neither.
  */
 function offendingSpecifiers(source: string, allowedPrefix?: string): string[] {
   const found: string[] = [];
