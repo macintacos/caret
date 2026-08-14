@@ -7,6 +7,11 @@ lockfile = true
 [env]
 HK_MISE = 1
 
+# mise.lock above is what pins these exactly, with per-platform checksums — so a value
+# here is the upgrade policy (what `mise up` may move to), not the resolved version, the
+# same split package.json's `^` ranges have against bun.lock. Tightening one to a full
+# patch version would only duplicate the lock while hiding the tool from upgrade sweeps.
+# The per-tool notes below say where a value is deliberately narrower than that.
 [tools]
 # Keep hk in lockstep with hk.pkl's amends/import version; the two are compared exactly,
 # so even a patch bump landing here needs the hk.pkl edit. test/structure/hk-pin.test.ts
