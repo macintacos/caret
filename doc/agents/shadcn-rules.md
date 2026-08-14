@@ -21,12 +21,12 @@ Button and Dialog already live there as the proof-of-life pair.
 Two things about that invocation. The CLI reads a `package.json` **beside**
 `components.json`, and caret keeps a single manifest at the repo root — so
 `ui/package.json` is a minimal stub that exists only to satisfy the CLI (without it, `add`
-dies with `ENOENT … ui/package.json`). And pass `--no-deps`: the runtime deps (`bits-ui`,
-`tailwind-variants`, `clsx`, `tailwind-merge`) already live in the root `node_modules`,
-which bun resolves by walking up, so skipping the install step leaves the stub and root
-lockfile untouched and never creates a `ui/node_modules`. The CLI pulls the *current*
-registry source, which may be newer than what's already vendored — diff before you keep an
-overwrite.
+dies with `ENOENT … ui/package.json`). And pass `--no-deps`: the component's own packages
+(`bits-ui`, `tailwind-variants`, `clsx`, `tailwind-merge`) already live in the root
+`node_modules`, which bun resolves by walking up, so skipping the install step leaves the
+stub and root lockfile untouched and never creates a `ui/node_modules`. The CLI pulls the
+*current* registry source, which may be newer than what's already vendored — diff before
+you keep an overwrite.
 
 - **Never hand-roll a primitive the catalog covers** — button, dialog, menu, tooltip,
   badge, select, toggle group, and the rest. If shadcn-svelte ships it, add it.
