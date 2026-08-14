@@ -25,6 +25,7 @@ digraph caret_rules_router {
     "Load doc/agents/test-layout.md" [shape=box];
     "Load doc/agents/logging-rules.md" [shape=box];
     "Load doc/agents/settings-rules.md" [shape=box];
+    "Load doc/agents/dependency-rules.md" [shape=box];
     "Load doc/agents/icon-rules.md" [shape=box];
     "Load doc/agents/opencode-integration.md" [shape=box];
     "Load doc/agents/rumdl-rules.md" [shape=box];
@@ -39,6 +40,7 @@ digraph caret_rules_router {
     "What does the change touch?" -> "Load doc/agents/test-layout.md" [label="where a backend test suite belongs under test/"];
     "What does the change touch?" -> "Load doc/agents/logging-rules.md" [label="logging: levels, message style, redaction"];
     "What does the change touch?" -> "Load doc/agents/settings-rules.md" [label="adding a config.toml key or CARET_* env var"];
+    "What does the change touch?" -> "Load doc/agents/dependency-rules.md" [label="package.json: adding, moving, removing, or pinning a dependency"];
     "What does the change touch?" -> "Load doc/agents/icon-rules.md" [label="adding or working with vendored icons"];
     "What does the change touch?" -> "Load doc/agents/opencode-integration.md" [label="OpenCode adapter, plugin, or install (caret install --target opencode)"];
     "What does the change touch?" -> "Load doc/agents/rumdl-rules.md" [label="rumdl: bumping its version, touching any of its three configs or invocations (repo hygiene, plan formatting, release notes), or scripts/tasks/dev/fake-plan.md"];

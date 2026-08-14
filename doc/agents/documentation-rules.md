@@ -38,7 +38,7 @@ digraph caret_docs_router {
     "Which doc does the change affect?" -> "Edit doc/DEVELOPMENT.md" [label="developing caret: build-from-source, the mise task catalog and dev workflow, the tasks CLI, icons"];
     "Which doc does the change affect?" -> "Edit CONTRIBUTING.md" [label="human contributor onboarding: local setup, the mise workflow, where tests live"];
     "Which doc does the change affect?" -> "Edit CLAUDE.md" [label="the code-change routing index, plus the CodeGraph / verifying-changes prose"];
-    "Which doc does the change affect?" -> "Edit a doc/agents/*.md rule file" [label="a rule-of-the-road for a code area (architecture, logging, TS, Svelte, shadcn, testing, icons, settings, OpenCode, rumdl)"];
+    "Which doc does the change affect?" -> "Edit a doc/agents/*.md rule file" [label="a rule-of-the-road for a code area (architecture, logging, TS, Svelte, shadcn, testing, icons, settings, dependencies, OpenCode, rumdl)"];
     "Which doc does the change affect?" -> "Edit doc/README.md" [label="the router for the doc/ directory: which page answers a given reader's question"];
 }
 ```
@@ -106,6 +106,8 @@ Documentation drifts when the map and the docs are edited in separate changes. S
 1. **this map** — the digraph above and the doc-landscape entry, and
 2. **its `CLAUDE.md` routing edge**, if the doc is a `doc/agents/*.md` rule file with one,
    and
-3. **its pointer file** under [`references/`](references/).
+3. **its pointer file** under [`references/`](references/) — for a `doc/agents/*.md` rule
+   file that is the shared [`references/agent-rules.md`](references/agent-rules.md), whose
+   area list you extend rather than adding a new pointer.
 
 A doc that exists without a place on this map is a doc no one will find.
