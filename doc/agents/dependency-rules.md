@@ -52,11 +52,12 @@ is — a peer obligation has no import site of its own, so it belongs wherever t
 declaring it belongs. Optional peers are not reachable: `@opencode-ai/plugin` declares
 three `@opentui/*` peers as optional, which is why caret declares none of them.
 
-**The manifest does not match this yet.** Every entry in `dependencies` but
-`@opencode-ai/plugin` is build-time input that belongs in `devDependencies`.
-[EXC-1086](https://linear.app/macintacos/issue/EXC-1086/reclassify-build-time-only-dependencies-to-devdependencies)
-carries the move; delete this paragraph when it lands. Until then, place new packages by
-the rule above rather than by copying a neighbour.
+[`../../test/structure/dependency-placement.test.ts`](../../test/structure/dependency-placement.test.ts)
+is the falsifier: it derives the reachable set from `opencode/`'s own imports and fails on
+a `dependencies` that holds anything else, so a package placed by copying a neighbour reds
+on the push that adds it. A peer obligation has no import site to derive, so it goes in
+the suite's expected set by hand — the header says so and names the one that would
+qualify.
 
 ## Four shapes a package with no imports still takes
 
