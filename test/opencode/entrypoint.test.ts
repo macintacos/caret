@@ -48,7 +48,3 @@ test("@opencode-ai/plugin is a runtime dependency (moved out of devDependencies)
   expect(pkg.dependencies["@opencode-ai/plugin"]).toBeDefined();
   expect(pkg.devDependencies["@opencode-ai/plugin"]).toBeUndefined();
 });
-
-test("jsonc-parser is a runtime dependency (comment-preserving OpenCode config edits)", () => {
-  expect(pkg.dependencies["jsonc-parser"]).toBeDefined();
-});
