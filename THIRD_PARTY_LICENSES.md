@@ -5,37 +5,37 @@ This file itemizes the third-party assets vendored into the repo.
 ## Lucide
 
 The icons under `ui/src/icons/` are copied verbatim from the Lucide release
-[`1.17.0`](https://github.com/lucide-icons/lucide/releases/tag/1.17.0). Lucide is licensed
+[`1.31.0`](https://github.com/lucide-icons/lucide/releases/tag/1.31.0). Lucide is licensed
 under the ISC license.
 
 | Icon | Vendored path | Upstream |
 | --- | --- | --- |
-| `arrow-big-up` | [ui/src/icons/arrow-big-up.svg](ui/src/icons/arrow-big-up.svg) | [arrow-big-up.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/arrow-big-up.svg) |
-| `bell` | [ui/src/icons/bell.svg](ui/src/icons/bell.svg) | [bell.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/bell.svg) |
-| `bell-off` | [ui/src/icons/bell-off.svg](ui/src/icons/bell-off.svg) | [bell-off.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/bell-off.svg) |
-| `check` | [ui/src/icons/check.svg](ui/src/icons/check.svg) | [check.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/check.svg) |
-| `chevron-down` | [ui/src/icons/chevron-down.svg](ui/src/icons/chevron-down.svg) | [chevron-down.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/chevron-down.svg) |
-| `chevron-right` | [ui/src/icons/chevron-right.svg](ui/src/icons/chevron-right.svg) | [chevron-right.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/chevron-right.svg) |
-| `circle-question-mark` | [ui/src/icons/circle-question-mark.svg](ui/src/icons/circle-question-mark.svg) | [circle-question-mark.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/circle-question-mark.svg) |
-| `command` | [ui/src/icons/command.svg](ui/src/icons/command.svg) | [command.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/command.svg) |
-| `copy` | [ui/src/icons/copy.svg](ui/src/icons/copy.svg) | [copy.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/copy.svg) |
-| `corner-down-left` | [ui/src/icons/corner-down-left.svg](ui/src/icons/corner-down-left.svg) | [corner-down-left.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/corner-down-left.svg) |
-| `corner-up-left` | [ui/src/icons/corner-up-left.svg](ui/src/icons/corner-up-left.svg) | [corner-up-left.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/corner-up-left.svg) |
-| `ellipsis` | [ui/src/icons/ellipsis.svg](ui/src/icons/ellipsis.svg) | [ellipsis.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/ellipsis.svg) |
-| `file` | [ui/src/icons/file.svg](ui/src/icons/file.svg) | [file.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/file.svg) |
-| `folder` | [ui/src/icons/folder.svg](ui/src/icons/folder.svg) | [folder.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/folder.svg) |
-| `git-compare` | [ui/src/icons/git-compare.svg](ui/src/icons/git-compare.svg) | [git-compare.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/git-compare.svg) |
-| `keyboard` | [ui/src/icons/keyboard.svg](ui/src/icons/keyboard.svg) | [keyboard.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/keyboard.svg) |
-| `monitor` | [ui/src/icons/monitor.svg](ui/src/icons/monitor.svg) | [monitor.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/monitor.svg) |
-| `moon` | [ui/src/icons/moon.svg](ui/src/icons/moon.svg) | [moon.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/moon.svg) |
-| `panel-left` | [ui/src/icons/panel-left.svg](ui/src/icons/panel-left.svg) | [panel-left.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/panel-left.svg) |
-| `settings` | [ui/src/icons/settings.svg](ui/src/icons/settings.svg) | [settings.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/settings.svg) |
-| `sun` | [ui/src/icons/sun.svg](ui/src/icons/sun.svg) | [sun.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/sun.svg) |
-| `trash-2` | [ui/src/icons/trash-2.svg](ui/src/icons/trash-2.svg) | [trash-2.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/trash-2.svg) |
-| `unplug` | [ui/src/icons/unplug.svg](ui/src/icons/unplug.svg) | [unplug.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/unplug.svg) |
-| `x` | [ui/src/icons/x.svg](ui/src/icons/x.svg) | [x.svg](https://github.com/lucide-icons/lucide/blob/1.17.0/icons/x.svg) |
+| `arrow-big-up` | [ui/src/icons/arrow-big-up.svg](ui/src/icons/arrow-big-up.svg) | [arrow-big-up.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/arrow-big-up.svg) |
+| `bell` | [ui/src/icons/bell.svg](ui/src/icons/bell.svg) | [bell.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/bell.svg) |
+| `bell-off` | [ui/src/icons/bell-off.svg](ui/src/icons/bell-off.svg) | [bell-off.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/bell-off.svg) |
+| `check` | [ui/src/icons/check.svg](ui/src/icons/check.svg) | [check.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/check.svg) |
+| `chevron-down` | [ui/src/icons/chevron-down.svg](ui/src/icons/chevron-down.svg) | [chevron-down.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/chevron-down.svg) |
+| `chevron-right` | [ui/src/icons/chevron-right.svg](ui/src/icons/chevron-right.svg) | [chevron-right.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/chevron-right.svg) |
+| `circle-question-mark` | [ui/src/icons/circle-question-mark.svg](ui/src/icons/circle-question-mark.svg) | [circle-question-mark.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/circle-question-mark.svg) |
+| `command` | [ui/src/icons/command.svg](ui/src/icons/command.svg) | [command.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/command.svg) |
+| `copy` | [ui/src/icons/copy.svg](ui/src/icons/copy.svg) | [copy.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/copy.svg) |
+| `corner-down-left` | [ui/src/icons/corner-down-left.svg](ui/src/icons/corner-down-left.svg) | [corner-down-left.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/corner-down-left.svg) |
+| `corner-up-left` | [ui/src/icons/corner-up-left.svg](ui/src/icons/corner-up-left.svg) | [corner-up-left.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/corner-up-left.svg) |
+| `ellipsis` | [ui/src/icons/ellipsis.svg](ui/src/icons/ellipsis.svg) | [ellipsis.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/ellipsis.svg) |
+| `file` | [ui/src/icons/file.svg](ui/src/icons/file.svg) | [file.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/file.svg) |
+| `folder` | [ui/src/icons/folder.svg](ui/src/icons/folder.svg) | [folder.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/folder.svg) |
+| `git-compare` | [ui/src/icons/git-compare.svg](ui/src/icons/git-compare.svg) | [git-compare.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/git-compare.svg) |
+| `keyboard` | [ui/src/icons/keyboard.svg](ui/src/icons/keyboard.svg) | [keyboard.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/keyboard.svg) |
+| `monitor` | [ui/src/icons/monitor.svg](ui/src/icons/monitor.svg) | [monitor.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/monitor.svg) |
+| `moon` | [ui/src/icons/moon.svg](ui/src/icons/moon.svg) | [moon.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/moon.svg) |
+| `panel-left` | [ui/src/icons/panel-left.svg](ui/src/icons/panel-left.svg) | [panel-left.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/panel-left.svg) |
+| `settings` | [ui/src/icons/settings.svg](ui/src/icons/settings.svg) | [settings.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/settings.svg) |
+| `sun` | [ui/src/icons/sun.svg](ui/src/icons/sun.svg) | [sun.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/sun.svg) |
+| `trash-2` | [ui/src/icons/trash-2.svg](ui/src/icons/trash-2.svg) | [trash-2.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/trash-2.svg) |
+| `unplug` | [ui/src/icons/unplug.svg](ui/src/icons/unplug.svg) | [unplug.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/unplug.svg) |
+| `x` | [ui/src/icons/x.svg](ui/src/icons/x.svg) | [x.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/x.svg) |
 
-The verbatim Lucide `LICENSE` text, as published at the `1.17.0` tag, follows:
+The verbatim Lucide `LICENSE` text, as published at the `1.31.0` tag, follows:
 
 ```text
 ISC License
