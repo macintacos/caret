@@ -27,6 +27,7 @@ digraph caret_rules_router {
     "Load doc/agents/settings-rules.md" [shape=box];
     "Load doc/agents/icon-rules.md" [shape=box];
     "Load doc/agents/opencode-integration.md" [shape=box];
+    "Load doc/agents/rumdl-rules.md" [shape=box];
     "Load doc/agents/documentation-rules.md" [shape=box];
 
     "Working on caret" -> "What does the change touch?";
@@ -40,6 +41,7 @@ digraph caret_rules_router {
     "What does the change touch?" -> "Load doc/agents/settings-rules.md" [label="adding a config.toml key or CARET_* env var"];
     "What does the change touch?" -> "Load doc/agents/icon-rules.md" [label="adding or working with vendored icons"];
     "What does the change touch?" -> "Load doc/agents/opencode-integration.md" [label="OpenCode adapter, plugin, or install (caret install --target opencode)"];
+    "What does the change touch?" -> "Load doc/agents/rumdl-rules.md" [label="rumdl: bumping its version, touching any of its three configs or invocations (repo hygiene, plan formatting, release notes), or scripts/tasks/dev/fake-plan.md"];
     "What does the change touch?" -> "Load doc/agents/documentation-rules.md" [label="documentation: which doc to update — README, the doc/ reference pages (CONFIGURING, RUNNING, ARCHITECTURE, DEVELOPMENT), CONTRIBUTING, the doc/ router, or the doc map itself"];
 }
 ```
