@@ -55,9 +55,9 @@ three `@opentui/*` peers as optional, which is why caret declares none of them.
 [`../../test/structure/dependency-placement.test.ts`](../../test/structure/dependency-placement.test.ts)
 is the falsifier: it derives the reachable set from `opencode/`'s own imports and fails on
 a `dependencies` that holds anything else, so a package placed by copying a neighbour reds
-on the push that adds it. A peer obligation has no import site to derive, so it goes in
-the suite's expected set by hand — the header says so and names the one that would
-qualify.
+on the push that adds it. A **reachable** peer obligation has no import site to derive, so
+it would go in the suite's expected set by hand; the header records that condition and why
+the term is empty today.
 
 ## Four shapes a package with no imports still takes
 

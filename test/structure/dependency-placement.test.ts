@@ -31,6 +31,12 @@ import pkg from "@root/package.json" with { type: "json" };
 const REPO_ROOT = join(import.meta.dir, "..", "..");
 const SHIPPED_DIR = "opencode";
 
+// The scan boundary is the publish boundary: `files` ships `opencode/` entire, so every
+// module extension a consumer could resolve is read, not just the two `.ts` files here
+// today. A shipped file this glob missed would go silently underived — the one failure
+// direction that leaves the gate green while a consumer's install breaks.
+const SHIPPED_GLOB = "**/*.{ts,mts,cts,js,mjs,cjs}";
+
 /**
  * Every npm package name `source` imports.
  *
@@ -41,6 +47,21 @@ const SHIPPED_DIR = "opencode";
  * (`@scope/pkg/sub` to `@scope/pkg`, `pkg/sub` to `pkg`), which is the unit `package.json`
  * declares. The `(?<!@)` guard drops CSS `@import` at-rules, matching the sibling
  * extractor in import-conventions.test.ts.
+ *
+ * Three properties worth knowing before reading a failure:
+ *
+ * - **Double-quoted specifiers only**, which is exhaustive here rather than lucky: biome
+ *   formats this tree with `quoteStyle: "double"` and `opencode/` is in its scope, so a
+ *   single-quoted import fails `mise run lint` before it can reach this scan. A
+ *   template-literal or `require()` specifier would be missed silently — neither has a
+ *   place in an ESM plugin, and both would have to survive review.
+ * - **Raw source is scanned, not a token stream.** A `from "…"` inside a comment or a
+ *   template literal is therefore read as a package name and reds the gate. That loud
+ *   false positive — reword the prose — is the deliberate trade against a tokenizer that
+ *   could mis-parse and silently stop seeing real imports.
+ * - **A type-only import counts.** Types are erased before a consumer runs anything, so
+ *   this is strict in the safe direction; keep `opencode/` free of `import type` from a
+ *   package you would not want every consumer to download.
  */
 function importedPackages(source: string): string[] {
   const found: string[] = [];
@@ -60,13 +81,22 @@ function importedPackages(source: string): string[] {
 }
 
 const shipped = new Set<string>();
-for (const file of new Bun.Glob("**/*.ts").scanSync({ cwd: join(REPO_ROOT, SHIPPED_DIR) })) {
+for (const file of new Bun.Glob(SHIPPED_GLOB).scanSync({ cwd: join(REPO_ROOT, SHIPPED_DIR) })) {
   const source = readFileSync(join(REPO_ROOT, SHIPPED_DIR, file), "utf-8");
   for (const name of importedPackages(source)) shipped.add(name);
 }
 
 test("`dependencies` carries exactly what opencode/ makes a consumer resolve", () => {
   expect(Object.keys(pkg.dependencies).sort()).toEqual([...shipped].sort());
+});
+
+test("`dependencies` is the only section a consumer's install pulls", () => {
+  // npm and bun both install `optionalDependencies` by default and auto-install
+  // non-optional peers, so either section is a second door the assertion above does not
+  // watch — a build input parked in one still reaches every consumer.
+  expect(Object.keys(pkg).filter((key) => key.endsWith("Dependencies"))).toEqual([
+    "devDependencies",
+  ]);
 });
 
 test("opencode/ still has imports to derive the expected set from", () => {
