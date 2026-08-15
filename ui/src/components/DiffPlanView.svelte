@@ -842,6 +842,11 @@
   // makes `b` inert there is the binding's own !showDiff guard; the closure would
   // no-op anyway, since it reads a `barEl` the unmount set back to null.
   let openHeadingNav: (() => void) | undefined;
+  // Opens the contents popup, handed over by PlanToc the same way (EXC-1097). Its
+  // closure only sets the popup's own `open` flag, so the stale-closure question the
+  // bar's comment answers does not arise here; `\` is inert in compare mode for the
+  // one reason that matters — the binding's !showDiff guard.
+  let openToc: (() => void) | undefined;
 
   // The plan's keyboard surface (EXC-875): the vim line cursor (EXC-788), visual
   // line-select (EXC-790), and the `/` full-text search HUD (EXC-832) in one
@@ -1131,16 +1136,23 @@
         }),
       ),
     );
-    // `b` opens the heading breadcrumbs bar's trailing crumb (EXC-947), and `\`
-    // does the same since EXC-949 retired the ToC rail it used to toggle — two
-    // reservations over one action, which is how the keymap spells alternative
-    // keys (see keymap.ts). Both are gated on the same `!showDiff` the bar's own
-    // render condition uses, so they are inert in compare mode. The optional call
-    // covers a heading-less plan too, where the bar renders nothing and never
-    // handed an open action back.
-    const openBar = { run: () => openHeadingNav?.(), enabled: () => !showDiff };
-    offs.push(shortcuts.register(bind("actions.headingNav", openBar)));
-    offs.push(shortcuts.register(bind("actions.toggleSidebar", openBar)));
+    // The two heading surfaces, one key each: `b` opens the breadcrumbs bar's
+    // trailing crumb (EXC-947), `\` the contents popup (EXC-1097). They shared one
+    // action while `\` was the bar's alias; EXC-1097 split them, so each key now
+    // reaches the surface its keymap label names. Both are gated on the same
+    // `!showDiff` those surfaces render behind, so neither fires in compare mode.
+    // The optional calls cover a heading-less plan too, where a surface renders
+    // nothing and never handed an open action back.
+    offs.push(
+      shortcuts.register(
+        bind("actions.headingNav", { run: () => openHeadingNav?.(), enabled: () => !showDiff }),
+      ),
+    );
+    offs.push(
+      shortcuts.register(
+        bind("actions.contents", { run: () => openToc?.(), enabled: () => !showDiff }),
+      ),
+    );
     return () => {
       for (const off of offs) off();
     };
@@ -1287,7 +1299,13 @@
        of its own, and it is gated on the same !showDiff — compare mode tracks no
        heading, so a contents popup there would open on a stale plan. -->
   {#if !showDiff}
-    <PlanToc {headings} {activeLine} onJump={pickHeading} />
+    <PlanToc
+      {headings}
+      {activeLine}
+      {showShortcutHints}
+      onJump={pickHeading}
+      onExposeOpen={(open) => (openToc = open)}
+    />
   {/if}
   <VersionComparePicker
     versions={review.versions}
@@ -1593,7 +1611,16 @@
        past the MIN_APP_WIDTH_PX (480) floor instead of ellipsising. min-width:0
        lets the row shrink so the .cwd's own overflow:ellipsis takes over — the
        same automatic-minimum footgun the topbar's min-width:0 fix addressed
-       (EXC-810/EXC-814). */
+       (EXC-810/EXC-814).
+       That is also the row's whole answer at narrow widths, and it settles what
+       the LEADING contents chip does there (EXC-1097). The chip cannot ellipsise —
+       the shadcn Button base is shrink-0 whitespace-nowrap — so it holds its width
+       and the two members with min-width:0 give theirs back first. Measured rather
+       than assumed: at the 480 floor with the `\` keycap showing, the chip renders
+       at its full 94px and neither the row nor the body overflows, the breadcrumbs
+       bar having collapsed to its ellipsis by then. So the cap is never dropped at
+       narrow — the width it costs is paid by a neighbour that has somewhere to
+       give. */
     min-width: 0;
   }
 

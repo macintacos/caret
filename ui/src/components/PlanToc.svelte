@@ -31,10 +31,14 @@
   // Presentational: the only state is the popup's own — open, query, and the
   // command's selected row — the tree is derived, and the parent owns both the
   // heading set and the scroll tracking that moves `activeLine`.
+  import { untrack } from "svelte";
+
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Command from "$lib/components/ui/command/index.js";
+  import { Kbd } from "$lib/components/ui/kbd/index.js";
   import * as Popover from "$lib/components/ui/popover/index.js";
   import { type FilteredHeadingNode, filteredHeadingTree } from "$lib/headingTrail.ts";
+  import { ariaKeyshortcutsFor } from "$lib/shortcuts/keymap.ts";
   import type { TocHeading } from "$lib/toc.ts";
 
   interface Props {
@@ -46,9 +50,15 @@
     activeLine: number | null;
     /** Jump the view to a heading's 1-based source line. */
     onJump: (line: number) => void;
+    /** Whether the `\` keycap is shown (EXC-1097). When off, the cap hides; the
+     * key still works, exactly as the breadcrumbs bar's `b` cap behaves. */
+    showShortcutHints?: boolean;
+    /** Hand the parent an action that opens the popup, so `\` can summon it
+     * (EXC-1097). The same handle PlanBreadcrumbs passes up for `b`. */
+    onExposeOpen?: (open: () => void) => void;
   }
 
-  let { headings, activeLine, onJump }: Props = $props();
+  let { headings, activeLine, onJump, showShortcutHints = false, onExposeOpen }: Props = $props();
 
   let open = $state(false);
   let query = $state("");
@@ -95,17 +105,21 @@
 
   // Whether the popup is closing because the reviewer picked a heading, which
   // onCloseAutoFocus below reads to decide where focus lands. The same flag
-  // PlanBreadcrumbs.svelte spends on the same job.
-  //
-  // One thing does NOT carry over from that bar, and it is worth stating rather than
-  // inheriting: the bar can afford to drop focus to the body because `b` summons it
-  // back (shortcuts/keymap.ts). This surface has no such key yet, so a keyboard
-  // reviewer who picks a heading restarts their tab order from the top of the
-  // document. Accepted for now — the trade the issue asked for is that a pick leaves
-  // the reviewer in the plan rather than ringed on a control they are done with —
-  // and EXC-1097, which gives the ToC its own key and top-bar button, is what closes
-  // the gap.
+  // PlanBreadcrumbs.svelte spends on the same job, and now on the same terms: a
+  // pick drops focus to the body so the reviewer lands in the plan rather than
+  // ringed on a control they are done with, which is affordable because `\`
+  // summons the popup back (shortcuts/keymap.ts) exactly as `b` does the bar.
   let leaving = false;
+
+  // Hand the open action up once, so `\` reaches this popup (EXC-1097). `untrack`
+  // keeps onExposeOpen from becoming a dependency; the closure sets this
+  // component's own `open`, so Popover.Root's onOpenChange seeding below runs for
+  // the key exactly as it does for the trigger.
+  $effect(() => {
+    untrack(() => onExposeOpen)?.(() => {
+      open = true;
+    });
+  });
 
   // Take the reviewer to a heading and leave. A command row does not dismiss its
   // host the way a menu item does, so the pick closes the popup itself.
@@ -163,8 +177,23 @@
       <!-- A neutral control, so it wears the topbar's chip surface rather than an
            outline or the amber primary (doc/agents/shadcn-rules.md § The caret
            surface language) — the same variant + class pairing the compare toggle
-           beside it in the control row uses. -->
-      <Button {...props} variant="secondary" size="sm" class="float-chip">Contents</Button>
+           beside it in the control row uses.
+           The `\` cap teaches the key on the same setting that gates the compare
+           toggle's `d` and the breadcrumbs bar's `b`; aria-hidden so the glyph
+           never lands in the button's name, which aria-keyshortcuts carries
+           instead — derived from the reservation, so the two cannot disagree. -->
+      <Button
+        {...props}
+        variant="secondary"
+        size="sm"
+        class="float-chip"
+        aria-keyshortcuts={ariaKeyshortcutsFor("actions.contents")}
+      >
+        Contents
+        {#if showShortcutHints}
+          <Kbd class="kbd-sm" aria-hidden="true">\</Kbd>
+        {/if}
+      </Button>
     {/snippet}
   </Popover.Trigger>
   <Popover.Content
