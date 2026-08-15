@@ -29,16 +29,24 @@ function listbox(): HTMLElement | null {
 }
 
 /** Every row the listbox holds, in document order — the selectable headings
- * (role=option) and the dimmed ancestors kept only for context
- * (role=presentation). */
+ * (role=option) and the dimmed ancestors kept only for context. Matched on the
+ * context row's own class rather than on `aria-hidden`, which Icon.svelte also
+ * stamps on every decorative glyph inside a row. */
 function rows(): HTMLElement[] {
-  return [
-    ...(listbox()?.querySelectorAll<HTMLElement>("[role='option'],[role='presentation']") ?? []),
-  ];
+  return [...(listbox()?.querySelectorAll<HTMLElement>("[role='option'],.toc-context") ?? [])];
 }
 
 function options(): HTMLElement[] {
   return [...(listbox()?.querySelectorAll<HTMLElement>("[role='option']") ?? [])];
+}
+
+function contextRows(): HTMLElement[] {
+  return [...(listbox()?.querySelectorAll<HTMLElement>(".toc-context") ?? [])];
+}
+
+/** The helper text, which is a sibling of the listbox rather than a row in it. */
+function helper(): HTMLElement | null {
+  return panel()?.querySelector<HTMLElement>(".toc-empty") ?? null;
 }
 
 function field(): HTMLInputElement | null {
@@ -72,13 +80,19 @@ async function close(target: HTMLElement, flush: () => void): Promise<void> {
 }
 
 /** Type into the filter field the way a reviewer would, so the bound query — and
- * with it the filtered tree — updates. */
-async function typeQuery(value: string, flush: () => void): Promise<void> {
+ * with it the filtered tree — updates. `done` says what settling looks like for
+ * this query: a query that matches nothing never grows the option set, so polling
+ * on that alone would burn every try and return silently green. */
+async function typeQuery(
+  value: string,
+  flush: () => void,
+  done: () => boolean = () => options().length > 0,
+): Promise<void> {
   const el = field();
   if (el === null) throw new Error("filter field not mounted");
   el.value = value;
   el.dispatchEvent(new Event("input", { bubbles: true }));
-  await flushUntil(flush, () => options().length > 0);
+  await flushUntil(flush, done);
 }
 
 describe("PlanToc surface", () => {
@@ -98,8 +112,11 @@ describe("PlanToc surface", () => {
     });
     await open(target, flush);
     expect(panel()).not.toBeNull();
+    expect(listbox()?.getAttribute("role")).toBe("listbox");
     expect(listbox()?.getAttribute("aria-label")).toBe("Plan headings");
-    expect(panel()?.querySelector("[data-slot='command-input']")).not.toBeNull();
+    // The field is named here rather than by the command's own label element,
+    // which the vendored primitive leaves empty — so the name is worth pinning.
+    expect(field()?.getAttribute("aria-label")).toBe("Filter headings");
     await close(target, flush);
   });
 
@@ -136,6 +153,23 @@ describe("PlanToc surface", () => {
     await close(target, flush);
   });
 
+  // Opening scrolled to the current heading rests on seeding the command's value,
+  // and the scroll itself is real-browser. The SELECTION that triggers it is not —
+  // it is an attribute, and it is the half a bits-ui bump could silently break
+  // while leaving every other assertion here green.
+  test("opens with the heading being read pre-selected", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    await flushUntil(flush, () => options().some((o) => o.hasAttribute("data-selected")));
+    const chosen = options().filter((o) => o.getAttribute("aria-selected") === "true");
+    expect(chosen.map(label)).toEqual(["Details"]);
+    await close(target, flush);
+  });
+
   test("keeps a filtered match at its own depth under a dimmed ancestor", async () => {
     const { target, flush } = render(PlanToc, {
       headings: HEADINGS,
@@ -150,9 +184,10 @@ describe("PlanToc surface", () => {
     await close(target, flush);
   });
 
-  // The ancestors are there to place the match, not to be picked: assistive tech
-  // sees presentation, and neither row is one of the command's items.
-  test("exposes unmatched ancestors as presentational, not as options", async () => {
+  // The ancestors are there to place the match, not to be picked: they are not
+  // among the command's items, and they are out of the accessibility tree
+  // entirely, so the listbox owns nothing but options.
+  test("exposes unmatched ancestors as inert context, not as options", async () => {
     const { target, flush } = render(PlanToc, {
       headings: HEADINGS,
       activeLine: 9,
@@ -160,9 +195,9 @@ describe("PlanToc surface", () => {
     });
     await open(target, flush);
     await typeQuery("details", flush);
-    const context = rows().filter((r) => r.getAttribute("role") === "presentation");
-    expect(context.map(label)).toEqual(["Overview", "Approach"]);
-    for (const row of context) {
+    expect(contextRows().map(label)).toEqual(["Overview", "Approach"]);
+    for (const row of contextRows()) {
+      expect(row.getAttribute("aria-hidden")).toBe("true");
       expect(row.getAttribute("data-slot")).not.toBe("command-item");
       expect(row.hasAttribute("data-value")).toBe(false);
     }
@@ -173,7 +208,24 @@ describe("PlanToc surface", () => {
     const { target, flush } = render(PlanToc, { headings: [], activeLine: null, onJump: () => {} });
     await open(target, flush);
     expect(options().length).toBe(0);
-    expect(listbox()?.textContent?.trim()).toBe("No headings in plan");
+    expect(helper()?.textContent?.trim()).toBe("No headings in plan");
+    // A status message about the list, not a row in it.
+    expect(listbox()?.contains(helper())).toBe(false);
+    await close(target, flush);
+  });
+
+  // A query that hits nothing is a different message from a plan that has no
+  // headings, and only the second is a property of the plan.
+  test("shows helper text when a query matches nothing", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    await typeQuery("nothing matches this", flush, () => options().length === 0);
+    expect(rows().length).toBe(0);
+    expect(helper()?.textContent?.trim()).toBe("No headings match");
     await close(target, flush);
   });
 

@@ -94,11 +94,37 @@ describe("DiffPlanView rendering", () => {
   });
 });
 
-// EXC-946's heading breadcrumbs bar has no unit test here on purpose: it renders
-// only once a heading is in the reading zone, and that tracking is measured with
+// The control row carries two heading-navigation surfaces, and they are covered in
+// different places — deliberately, because only one of them is unit-reachable.
+//
+// EXC-946's breadcrumbs bar has no unit test here on purpose: it renders only once
+// a heading is in the reading zone, and that tracking is measured with
 // getBoundingClientRect, which happy-dom reports as all zeros. The bar's own trail
 // logic is unit-tested in PlanBreadcrumbs.test.ts; its mounting, scroll tracking,
 // and compare-mode absence are covered by test/e2e/plan-breadcrumbs.e2e.ts.
+//
+// EXC-1095's ToC popup has no such gate — it renders whenever the view is not
+// comparing, including with no active heading at all — so its mount and its
+// compare-mode absence are a plain conditional branch, and belong here. Its own
+// panel structure and ARIA are unit-tested in PlanToc.test.ts.
+describe("DiffPlanView contents popup", () => {
+  test("mounts the contents trigger in the control row", () => {
+    const { target } = render(DiffPlanView, props());
+    const toc = target.querySelector<HTMLElement>(".control-row [data-slot='popover-trigger']");
+    expect(toc).not.toBeNull();
+    expect(toc?.textContent?.trim()).toBe("Contents");
+  });
+
+  // Compare mode tracks no heading, so a contents popup there would open on a
+  // stale plan. Dropped on the same condition the breadcrumbs bar is.
+  test("drops the contents trigger in compare mode", async () => {
+    const { target } = render(DiffPlanView, props({ review: multiVersionFixture(3) }));
+    expect(target.querySelector(".control-row [data-slot='popover-trigger']")).not.toBeNull();
+    target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();
+    await until(() => target.querySelector(".control-row [data-slot='popover-trigger']") == null);
+    expect(target.querySelector(".control-row [data-slot='popover-trigger']")).toBeNull();
+  });
+});
 
 describe("DiffPlanView gutter composer", () => {
   // The gutter `+` reveal, line-offset positioning, and the persisted create are
