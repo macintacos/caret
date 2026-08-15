@@ -28,6 +28,12 @@ rows, and the verbatim-file invariants, so a drifting set fails `bun test`.
   width/height. Color rides on `stroke="currentColor"` from the parent's `color`.
 - **`label`** sets an `aria-label` for an interactive or informative icon; omit it for a
   decorative icon, which then renders `aria-hidden`.
+- **`data-icon`** on the wrapper carries the icon's registry name, always. The SVG is
+  inlined, so without it nothing in the DOM tells one glyph from another: a caller that
+  picks its icon at runtime could only be styled positionally and only be tested by
+  matching path data. It is a `data-*` attribute rather than a class because production
+  code selects on it (`PlanToc.svelte`'s per-row heading marker) — the distinction
+  `browser-testing.md` § Locators draws.
 
 ## Adding an icon
 
