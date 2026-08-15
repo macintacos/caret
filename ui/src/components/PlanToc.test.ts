@@ -62,6 +62,32 @@ function label(row: HTMLElement): string {
   return row.textContent?.trim() ?? "";
 }
 
+/** The rows the roving selection is on. `aria-selected` rather than `data-selected`
+ * because it is the half a screen reader reads; the two move together. */
+function selectedLabels(): string[] {
+  return options()
+    .filter((o) => o.getAttribute("aria-selected") === "true")
+    .map(label);
+}
+
+/** Press Tab on the filter field and settle. Returns the event so a caller can read
+ * `defaultPrevented` — dispatchEvent leaves the same object it was handed. The key
+ * is dispatched at the FIELD, which is where focus sits, so it reaches the command
+ * root the way a real keypress does: by bubbling. */
+function pressTab(flush: () => void, { shift = false } = {}): KeyboardEvent {
+  const el = field();
+  if (el === null) throw new Error("filter field not mounted");
+  const event = new KeyboardEvent("keydown", {
+    key: "Tab",
+    shiftKey: shift,
+    bubbles: true,
+    cancelable: true,
+  });
+  el.dispatchEvent(event);
+  flush();
+  return event;
+}
+
 /** Open the popup and wait for its portalled content. The flush BEFORE the click
  * is load-bearing: render() leaves the mount's effects pending, and a click landing
  * on that unsettled graph flips the trigger's aria-expanded while bits-ui's portal
@@ -371,6 +397,81 @@ describe("PlanToc entry points", () => {
     expect(field()?.value).toBe("");
     await flushUntil(flush, () => options().length === 4);
     expect(options().map(label)).toEqual(["Overview", "Approach", "Details", "Verification"]);
+    await close(target, flush);
+  });
+
+  // Tab walks the list (EXC-1102). The primitive ignores Tab outright — its own
+  // keydown maps only the arrows and the vim chords — and the popover traps focus
+  // with a single tabbable inside, so before this the key did nothing at all.
+  // These pin the walk itself; that the newly selected row is SCROLLED into view is
+  // real-browser and lives in the e2e.
+  test("Tab walks the selection to the next row", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    await flushUntil(flush, () => options().some((o) => o.hasAttribute("data-selected")));
+    expect(selectedLabels()).toEqual(["Details"]);
+
+    pressTab(flush);
+    await flushUntil(flush, () => selectedLabels()[0] === "Verification");
+    expect(selectedLabels()).toEqual(["Verification"]);
+    await close(target, flush);
+  });
+
+  test("Shift+Tab walks the selection to the previous row", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    await flushUntil(flush, () => options().some((o) => o.hasAttribute("data-selected")));
+    expect(selectedLabels()).toEqual(["Details"]);
+
+    pressTab(flush, { shift: true });
+    await flushUntil(flush, () => selectedLabels()[0] === "Approach");
+    expect(selectedLabels()).toEqual(["Approach"]);
+    await close(target, flush);
+  });
+
+  // The whole point of walking from the field rather than moving focus row to row:
+  // `aria-activedescendant` on the field is what narrates the walk, and it only
+  // does that while the field is the focused element (EXC-1096).
+  test("the Tab walk leaves focus in the filter field", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    await flushUntil(flush, () => options().some((o) => o.hasAttribute("data-selected")));
+
+    pressTab(flush);
+    await flushUntil(flush, () => selectedLabels()[0] === "Verification");
+    // Asserted, not merely polled for: flushUntil gives up SILENTLY after its
+    // tries elapse, so a walk that never happened would leave the focus check
+    // below passing on its own — focus does not move when nothing moves it.
+    expect(selectedLabels()).toEqual(["Verification"]);
+    expect(document.activeElement).toBe(field());
+    await close(target, flush);
+  });
+
+  // A Tab that reached the browser's default would move focus out of the field and,
+  // with one tabbable in the trap, straight back to it — losing the walk silently.
+  test("the Tab walk suppresses the browser's own tab move", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    await flushUntil(flush, () => options().some((o) => o.hasAttribute("data-selected")));
+
+    const event = pressTab(flush);
+    expect(event.defaultPrevented).toBe(true);
     await close(target, flush);
   });
 });

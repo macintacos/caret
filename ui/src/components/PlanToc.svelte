@@ -237,7 +237,34 @@
          nesting-preserving filter above and shuffle document order. Filtering is
          the tree's job; the command's job here is the listbox semantics and the
          roving selection. -->
-    <Command.Root shouldFilter={false} bind:value={selected}>
+    <Command.Root
+      shouldFilter={false}
+      bind:value={selected}
+      onkeydown={(e) => {
+        // Tab walks the list instead of leaving it (EXC-1102). The primitive maps
+        // the arrows and the vim chords and ignores Tab, and the popover traps
+        // focus with a single tabbable inside — so untouched, Tab moved focus out
+        // of the field and straight back to it, doing nothing at all.
+        //
+        // Re-dispatching an arrow rather than writing `selected` is the load-bearing
+        // choice. bits-ui scrolls a selection into view from its OWN keydown path;
+        // assigning the bound value only does that on the command's initial mount
+        // (see `selected` above), so a hand-rolled walk would step the reviewer onto
+        // rows below the fold without ever bringing them into sight. `#next`/`#prev`
+        // are private, so the handler is the only door in. Dispatched from the field
+        // because that is where the keypress really landed, and the primitive listens
+        // for it on the root the event bubbles to.
+        if (e.key !== "Tab" || queryEl === null) return;
+        e.preventDefault();
+        queryEl.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: e.shiftKey ? "ArrowUp" : "ArrowDown",
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+      }}
+    >
       <Command.Input
         bind:ref={queryEl}
         bind:value={query}
@@ -284,6 +311,35 @@
     width: 20rem;
     padding: 0;
     gap: 0;
+  }
+
+  /* The list carries its own leading space so the first row is not flush against
+     the filter field: the vendored command-input wrapper is `p-1 pb-0` and the list
+     only `scroll-py-1`, so nothing sat between them. It rides on the scroll
+     container rather than on the first row, which keeps it a property of the list
+     as a whole — a row scrolled to the top does not carry a phantom offset with it.
+
+     The height is the ToC's own, deliberately NOT the vendored `max-h-72` (18rem)
+     it overrides: that class is shared with the breadcrumbs bar's filter panel
+     (EXC-1098), which anchors to a crumb mid-bar and wants to stay compact. This
+     panel hangs off the control row with the whole plan under it, so it earns twice
+     the run before scrolling.
+
+     Both terms of the min() have to be resolvable when the stylesheet is parsed,
+     which rules out the variable that looks made for this job.
+     --bits-popover-content-available-height is the room floating-ui measures between
+     the trigger and the viewport edge, but it is published a frame LATE, and a min()
+     over an unset variable is invalid at computed-value time — which drops
+     max-height to `unset` rather than falling back to any earlier declaration. The
+     list would then mount at its natural height, and bits-ui — which scrolls the
+     seeded row into view exactly once, on that mount — would correctly find nothing
+     overflowing and scroll nowhere. The variable arrives, the list shrinks, and the
+     popup opens parked at the top with the current heading stranded below the fold.
+     `vh` costs a clamp against the window rather than against the trigger's own
+     room, and is never invalid. */
+  :global(.plan-toc-panel [data-slot="command-list"]) {
+    padding-block-start: 0.5rem;
+    max-height: min(36rem, 70vh);
   }
 
   /* Both row kinds take the same box, so the tree's shape reads the same whether a

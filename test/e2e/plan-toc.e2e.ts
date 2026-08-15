@@ -40,9 +40,13 @@ const filler = (label: string) =>
 // single top-level heading and demotes every later one, so a fixture with two would be
 // stored with the second at level 2 and quietly change the tree these specs assert.
 
-// Twelve sections under one top-level heading — enough rows that the popup's list
-// overflows its 18rem max-height, which is what makes "the current heading is scrolled
+// Twenty-four sections under one top-level heading — enough rows that the popup's list
+// overflows its 36rem max-height, which is what makes "the current heading is scrolled
 // into view on open" a claim about scrolling rather than about a list that fits whole.
+// The count tracks that height and nothing else: EXC-1102 doubled the panel from 18rem,
+// and a fixture left at twelve sections then fit whole, turning the out-of-view half of
+// that assertion from a guard into a false alarm. Grow this list if the height grows
+// again — never relax the assertion, which is the only thing proving the list scrolls.
 const SECTIONS = [
   "Alpha",
   "Bravo",
@@ -56,6 +60,18 @@ const SECTIONS = [
   "Juliet",
   "Kilo",
   "Lima",
+  "Mike",
+  "November",
+  "Oscar",
+  "Papa",
+  "Quebec",
+  "Romeo",
+  "Sierra",
+  "Tango",
+  "Uniform",
+  "Victor",
+  "Whiskey",
+  "Xray",
 ];
 const TALL_PLAN = [
   "# Plan",
@@ -141,16 +157,16 @@ async function isWithinList(page: Page, row: Locator): Promise<boolean> {
 test("opens on the heading being read, scrolled into view", async ({ daemon, page }) => {
   await daemon.seed({ plan: TALL_PLAN });
   await page.goto("/");
-  // Kilo, not the trailing Lima: the plan scrolls only a third of a viewport past its
+  // Whiskey, not the trailing Xray: the plan scrolls only a third of a viewport past its
   // end, which is not enough room to bring the FINAL heading up to the reading zone, so
   // a jump there clamps short and the tracked heading stays on the section above it.
-  // Kilo is still far enough down that a popup opening at the top would leave its row
-  // below the list's 18rem fold.
-  await readingAt(page, "Kilo");
+  // Whiskey is still far enough down that a popup opening at the top would leave its row
+  // below the list's 36rem fold.
+  await readingAt(page, "Whiskey");
 
   await openToc(page);
   const current = options(page).and(page.locator('[aria-current="location"]'));
-  await expect(current).toHaveText("Kilo");
+  await expect(current).toHaveText("Whiskey");
 
   // The status line is mounted even with rows on screen — it has to be idle in the DOM
   // before it announces — so it must cost no height while it has nothing to say.
