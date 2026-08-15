@@ -253,7 +253,7 @@ describe("PlanToc surface", () => {
 
     const active = document.getElementById(field()?.getAttribute("aria-activedescendant") ?? "");
     expect(active?.getAttribute("role")).toBe("option");
-    expect(label(active as HTMLElement)).toBe("Details");
+    expect(active?.textContent?.trim()).toBe("Details");
     await close(target, flush);
   });
 

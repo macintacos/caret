@@ -1,8 +1,10 @@
-// Mount proof for the vendored Command + Popover primitives (EXC-1093). Nothing
-// imports them yet — their consumers land on sibling branches — so svelte-check
-// is otherwise the only thing that looks at this tree, and a type-check cannot
-// tell whether the copies actually resolve against the installed bits-ui or
-// whether the @lucide/svelte → Icon.svelte swap renders a glyph at all.
+// Mount proof for the vendored Command + Popover primitives (EXC-1093), and the
+// guard doc/agents/shadcn-rules.md names for the viewport a registry re-sync would
+// drop. A type-check cannot tell whether the copies actually resolve against the
+// installed bits-ui, whether the @lucide/svelte → Icon.svelte swap renders a glyph,
+// or whether the combobox still names the list it controls — so this suite mounts
+// them for real. It asserts the PRIMITIVES; PlanToc.test.ts asserts the one surface
+// composed from them.
 //
 // Popover is portalled, so its content is deferred exactly as
 // shadcn-foundation.test.ts recorded for Dialog: poll with flushUntil and query

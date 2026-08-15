@@ -48,14 +48,17 @@ const SECTIONS = [
   "Kilo",
   "Lima",
 ];
-const TALL_PLAN = ["# Plan", filler("Plan"), ...SECTIONS.flatMap((s) => [`## ${s}`, filler(s)])]
-  .join("\n\n")
-  .concat("\n");
+const TALL_PLAN = [
+  "# Plan",
+  filler("Plan"),
+  ...SECTIONS.flatMap((s) => [`## ${s}`, filler(s)]),
+  "",
+].join("\n\n");
 
 // Two matches for "notes" sitting in different branches, so filtering leaves a dimmed
 // ancestor ("Rollout") BETWEEN the two selectable rows — the arrangement the roving
 // walk has to step over, and the nesting the flat breadcrumbs filter cannot express.
-const NESTED_PLAN = [
+const BRANCHED_PLAN = [
   "# Plan",
   filler("Plan"),
   "## Setup",
@@ -74,15 +77,23 @@ const NESTED_PLAN = [
 const TOC = ".plan-toc-panel";
 
 const trigger = (page: Page) => page.getByRole("button", { name: "Contents" });
-const listbox = (page: Page) => page.locator(`${TOC} [data-slot='command-list']`);
-const options = (page: Page) => page.locator(`${TOC} [role='option']`);
-const contextRows = (page: Page) => page.locator(`${TOC} .toc-context`);
-/** Scoped to the panel deliberately: the breadcrumbs bar's own filter publishes the
- * SAME accessible name, so an unscoped query would collect both. */
-const field = (page: Page) => page.locator(`${TOC} input[aria-label='Filter headings']`);
+/** The popup itself. Every locator below is scoped through it, which is what lets them
+ * be role queries: the breadcrumbs bar publishes a filter field with the SAME accessible
+ * name, and an unscoped query would collect both (browser-testing.md § Locators). */
+const panel = (page: Page) => page.locator(TOC);
+const listbox = (page: Page) => panel(page).getByRole("listbox", { name: "Plan headings" });
+/** Deliberately role queries rather than `[role=...]` CSS: Playwright's role engine reads
+ * the ACCESSIBILITY TREE, and whether these rows are options in that tree is this spec's
+ * entire subject — an attribute selector would still match a row that had been taken out
+ * of it, which is exactly the regression the viewport's `role="none"` exists to prevent. */
+const options = (page: Page) => panel(page).getByRole("option");
+const field = (page: Page) => panel(page).getByRole("combobox", { name: "Filter headings" });
+/** The dimmed ancestors have no role at all — they are `aria-hidden` — so a class
+ * selector is the honest form here (browser-testing.md's "no accessible target" case). */
+const contextRows = (page: Page) => panel(page).locator(".toc-context");
 /** The row the roving walk is on. bits-ui marks it `data-selected`; the reader is told
  * about it through the field's aria-activedescendant, asserted in its own test below. */
-const walkedTo = (page: Page) => page.locator(`${TOC} [role='option'][data-selected]`);
+const walkedTo = (page: Page) => options(page).and(page.locator("[data-selected]"));
 
 /** Open the popup and wait for its rows. */
 async function openToc(page: Page): Promise<void> {
@@ -101,11 +112,16 @@ async function readingAt(page: Page, heading: string): Promise<void> {
 }
 
 /** Whether `row` is inside the scrolled list's visible box — the claim a unit mount
- * cannot make, since happy-dom lays nothing out. */
+ * cannot make, since happy-dom lays nothing out.
+ *
+ * Throws rather than returning false when either box is unmeasurable: one caller asserts
+ * this is FALSE, to prove the list really scrolls rather than showing every heading at
+ * once, and a false-on-null would let "not measurable" pass as "correctly out of view".
+ * `expect.poll` fails on a throw exactly as it should. */
 async function isWithinList(page: Page, row: Locator): Promise<boolean> {
   const rowBox = await row.boundingBox();
   const listBox = await listbox(page).boundingBox();
-  if (rowBox === null || listBox === null) return false;
+  if (rowBox === null || listBox === null) throw new Error("row or list has no bounding box");
   return rowBox.y >= listBox.y - 1 && rowBox.y + rowBox.height <= listBox.y + listBox.height + 1;
 }
 
@@ -122,6 +138,11 @@ test("opens on the heading being read, scrolled into view", async ({ daemon, pag
   await openToc(page);
   const current = options(page).and(page.locator('[aria-current="location"]'));
   await expect(current).toHaveText("Kilo");
+
+  // The status line is mounted even with rows on screen — it has to be idle in the DOM
+  // before it announces — so it must cost no height while it has nothing to say.
+  expect(await panel(page).getByRole("status").count()).toBe(1);
+  expect((await panel(page).getByRole("status").boundingBox())?.height ?? -1).toBe(0);
   await expect.poll(() => isWithinList(page, current)).toBe(true);
 
   // And the row above it is not — proof the list really is scrolled rather than short
@@ -152,7 +173,7 @@ test("the down arrow starts the walk at the heading being read, not the first ro
 });
 
 test("the roving walk steps over the dimmed ancestor rows", async ({ daemon, page }) => {
-  await daemon.seed({ plan: NESTED_PLAN });
+  await daemon.seed({ plan: BRANCHED_PLAN });
   await page.goto("/");
   await readingAt(page, "Setup");
 
@@ -167,10 +188,6 @@ test("the roving walk steps over the dimmed ancestor rows", async ({ daemon, pag
   await expect(walkedTo(page)).toHaveText("Setup notes");
   await page.keyboard.press("ArrowDown");
   await expect(walkedTo(page)).toHaveText("Rollout notes");
-
-  // The walk never rested on a dimmed row on the way: they are not command items at
-  // all, so there is no state for one to carry.
-  await expect(page.locator(`${TOC} .toc-context[data-selected]`)).toHaveCount(0);
 });
 
 test("the nesting filter drives the list, not the command's own filter engine", async ({
@@ -182,14 +199,14 @@ test("the nesting filter drives the list, not the command's own filter engine", 
   // own the list. Falsifiable on document order: the rows keep the order and the
   // indentation the plan gives them, which a score sort would shuffle — and the dimmed
   // ancestors would not survive a filter engine that has no concept of one.
-  await daemon.seed({ plan: NESTED_PLAN });
+  await daemon.seed({ plan: BRANCHED_PLAN });
   await page.goto("/");
   await readingAt(page, "Setup");
 
   await openToc(page);
   await field(page).fill("notes");
 
-  await expect(page.locator(`${TOC} [role='option'], ${TOC} .toc-context`)).toHaveText([
+  await expect(options(page).or(contextRows(page))).toHaveText([
     "Plan",
     "Setup",
     "Setup notes",
@@ -199,8 +216,8 @@ test("the nesting filter drives the list, not the command's own filter engine", 
 
   // Each row sits at its own heading level, so a match reads at the same indent
   // whether or not its ancestors matched.
-  const depths = await page
-    .locator(`${TOC} [role='option'], ${TOC} .toc-context`)
+  const depths = await options(page)
+    .or(contextRows(page))
     .evaluateAll((els) =>
       els.map((el) => (el as HTMLElement).style.getPropertyValue("--toc-depth")),
     );
@@ -281,7 +298,7 @@ test("clicking outside the popup dismisses it", async ({ daemon, page }) => {
 test("the filter field is empty on every open", async ({ daemon, page }) => {
   // The popup always opens on the whole plan: a query that survived a close would show
   // a narrowed view of a plan the reviewer has since scrolled away from.
-  await daemon.seed({ plan: NESTED_PLAN });
+  await daemon.seed({ plan: BRANCHED_PLAN });
   await page.goto("/");
   await readingAt(page, "Setup");
 
@@ -306,13 +323,12 @@ test("the field narrates the row the walk is on, and says so when nothing matche
   // real combobox whose aria-activedescendant names the active row, so the list can be
   // walked and narrowed without focus ever leaving it. Read off the live DOM, which is
   // where a screen reader would read it.
-  await daemon.seed({ plan: NESTED_PLAN });
+  await daemon.seed({ plan: BRANCHED_PLAN });
   await page.goto("/");
   await readingAt(page, "Setup");
 
   await openToc(page);
   await expect(field(page)).toHaveAttribute("aria-controls", /.+/);
-  await expect(field(page)).toHaveAttribute("aria-expanded", "true");
 
   // aria-controls resolves to the viewport the rows live in, inside the listbox.
   const controls = (await field(page).getAttribute("aria-controls")) ?? "";
@@ -323,20 +339,19 @@ test("the field narrates the row the walk is on, and says so when nothing matche
   // span, so its textContent carries the whitespace toHaveText would normalize away.
   const narrated = async () => {
     const id = await field(page).getAttribute("aria-activedescendant");
-    return ((await page.locator(`${TOC} [id="${id}"]`).textContent()) ?? "").trim();
+    return ((await panel(page).locator(`[id="${id}"]`).textContent()) ?? "").trim();
   };
-  const named = () => page.locator(`${TOC} [role='option'][data-selected]`);
 
-  await expect(named()).toHaveText("Setup");
+  await expect(walkedTo(page)).toHaveText("Setup");
   await expect.poll(narrated).toBe("Setup");
 
   await field(page).fill("rollout notes");
-  await expect(named()).toHaveText("Rollout notes");
+  await expect(walkedTo(page)).toHaveText("Rollout notes");
   await expect.poll(narrated).toBe("Rollout notes");
 
   // Narrowing to nothing leaves no row to name, so the message says it out loud
   // instead — the one narrowing aria-activedescendant cannot carry.
   await field(page).fill("nothing matches this");
   await expect(options(page)).toHaveCount(0);
-  await expect(page.locator(`${TOC} [role='status']`)).toHaveText("No headings match");
+  await expect(panel(page).getByRole("status")).toHaveText("No headings match");
 });

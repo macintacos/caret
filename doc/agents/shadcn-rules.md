@@ -60,6 +60,15 @@ unused files included (`input-group` landed 7 files for the one `command-input.s
 composes). Keep it: hand-editing the component to drop the dependency is the one change a
 later re-sync silently reverts with no comment to catch it.
 
+- **Never hand-roll a primitive the catalog covers** — button, dialog, menu, tooltip,
+  badge, select, toggle group, and the rest. If shadcn-svelte ships it, add it.
+- **The copied source is owned code, not a dependency.** Modifying it is expected and
+  encouraged — retune the `tailwind-variants` `tv()` recipe, adjust the `data-slot`
+  markup, change the `bits-ui` wiring. Mold the component in place; don't wrap it in a
+  bespoke look-alike that reimplements what the copy already does. `bits-ui` is the
+  headless primitive layer underneath the interactive components (Dialog, and the overlays
+  to come).
+
 ### Edits a re-sync will silently undo
 
 Because the revert above is wholesale, anything caret **added** to a vendored component
@@ -78,15 +87,6 @@ listbox may own options and groups but not a generic wrapper between them.
 
 `ui/src/lib/shadcn-command-popover.test.ts` is the guard, and it reds if a re-sync drops
 either half. Put the viewport back before you commit an overwrite of that file.
-
-- **Never hand-roll a primitive the catalog covers** — button, dialog, menu, tooltip,
-  badge, select, toggle group, and the rest. If shadcn-svelte ships it, add it.
-- **The copied source is owned code, not a dependency.** Modifying it is expected and
-  encouraged — retune the `tailwind-variants` `tv()` recipe, adjust the `data-slot`
-  markup, change the `bits-ui` wiring. Mold the component in place; don't wrap it in a
-  bespoke look-alike that reimplements what the copy already does. `bits-ui` is the
-  headless primitive layer underneath the interactive components (Dialog, and the overlays
-  to come).
 
 ## Token-bridge discipline
 

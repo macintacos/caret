@@ -33,6 +33,14 @@
 	     defect PlanToc.svelte's `aria-hidden` context rows already avoid. The role
 	     survives `mergeProps(restProps, state.props)` because `CommandViewportState.props`
 	     defines no `role` of its own to override it with.
+	     Two things to know before reading those attributes back. bits-ui's own List wraps
+	     its children in `{#key search === ""}`, so this viewport is destroyed and rebuilt
+	     — `viewportNode` briefly null, then a NEW id — every time a query crosses between
+	     empty and non-empty; poll them rather than sampling once. And `aria-controls`
+	     names this viewport rather than the listbox around it, which is bits-ui's choice
+	     and not one caret can make from here: closing it would mean teaching
+	     `CommandListState` to publish its own node upstream. `aria-activedescendant` is
+	     the attribute actually carrying the narration, and it resolves correctly.
 	     A re-sync from the registry (`shadcn-svelte add command`) will drop both, silently
 	     — `shadcn-command-popover.test.ts` is what reds when it does. -->
 	<CommandPrimitive.Viewport data-slot="command-viewport" role="none">
