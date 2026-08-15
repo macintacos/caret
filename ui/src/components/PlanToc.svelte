@@ -116,6 +116,18 @@
   const tree = $derived(headingTree(headings));
   const groups = $derived(groupedHeadingMatches(headings, query));
 
+  // The level the PLAN opens at, which is where its indent guides start (EXC-1106).
+  // The indent itself is measured from level 1 and always has been — that absolute
+  // origin is what keeps a section at one indent whatever else is on screen — so a
+  // plan whose top-level headings are `##` renders every row one step in with
+  // nothing at zero. Measuring the GUIDES from that empty column instead would draw
+  // a line down it, and a line down a column claims a parent sits at the top of it.
+  // Reading the shallowest level the plan actually has is the whole correction: the
+  // first column a guide can occupy is one a heading really opens.
+  const guideBase = $derived(
+    headings.length === 0 ? 1 : Math.min(...headings.map((h) => h.level)),
+  );
+
   // What a row marks — the SAME closure `filterHeadings` decides membership with, reached
   // from beside the filter rather than by transforming what it returns. `filterHeadings`
   // (toc.ts) carries why deriving the runs from its OUTPUT is the shape that silently
@@ -219,9 +231,12 @@
 
 <!-- ONE row, and the only place either view spells a destination out. Both views
      render every heading they show through here, so a per-row decoration has a
-     single home. `depth` is the indent the row sits at, in levels; see the
-     --toc-depth rule in the stylesheet for what each view passes and why. -->
-{#snippet row(heading: TocHeading, depth: number)}
+     single home. `depth` is the indent the row sits at, in levels, and `guides`
+     how many guide columns run down its left; see the --toc-depth and ::before
+     rules in the stylesheet for what each view passes and why. The two are
+     separate numbers rather than one because only the indent is measured from
+     level 1 — see `guideBase`. -->
+{#snippet row(heading: TocHeading, depth: number, guides: number)}
   <!-- The label as runs, so the characters the query matched can be marked. The fallback
        is the type's, not a case either view reaches: a filtered row matched by
        construction, and the unfiltered view's query is empty, which the matcher answers
@@ -230,7 +245,7 @@
   {@const parts = matcher(heading.text) ?? [{ text: heading.text, hit: false }]}
   <Command.Item
     value={String(heading.line)}
-    style="--toc-depth: {depth}"
+    style="--toc-depth: {depth}; --toc-guides: {guides}"
     aria-current={heading.line === activeLine ? "location" : undefined}
     onSelect={() => jump(heading.line)}
   >
@@ -270,13 +285,13 @@
      numbers from the source. -->
 {#snippet matchRows(group: HeadingGroup)}
   {#each group.matches as heading (heading.line)}
-    {@render row(heading, 0)}
+    {@render row(heading, 0, 0)}
   {/each}
 {/snippet}
 
 {#snippet nested(nodes: HeadingNode[])}
   {#each nodes as node (node.heading.line)}
-    {@render row(node.heading, node.heading.level - 1)}
+    {@render row(node.heading, node.heading.level - 1, node.heading.level - guideBase)}
     {@render nested(node.children)}
   {/each}
 {/snippet}
@@ -507,6 +522,48 @@
      cost the row width that the deepest matches need most. */
   :global(.plan-toc-panel [data-slot="command-item"]) {
     padding-inline-start: calc(0.5rem + var(--toc-depth, 0) * 0.75rem);
+  }
+
+  /* The indent guides (EXC-1106): one hairline per level between the plan's own
+     root and this row, at the indent's own pitch, so a row's text and the column
+     it hangs under agree about depth. A row draws NOTHING in its own column — the
+     line for a level is punctuated by the heading that opens it, which is what
+     makes the set read as a tree rather than as a ruled ledger. --toc-guides is
+     therefore the count, and where the band STARTS falls out of it: the rightmost
+     tooth always sits one step left of the text.
+     Zero is the whole of the filtered view's answer (a flush-left row hangs under
+     a breadcrumb header, not under a column) and of a plan's shallowest rows,
+     which is why the count is passed rather than derived from --toc-depth: only
+     the indent is measured from level 1. A zero width paints nothing, so both
+     cases fall out of the same declaration.
+
+     A ::before rather than the row's own background, for two reasons that both
+     fail silently. The row already takes `background:` — the SHORTHAND — when it
+     is the heading being read, and a shorthand resets background-image, so a
+     background-painted guide would vanish on exactly the row the reviewer is
+     looking at. And border-radius clips an element's own background layers while
+     leaving an absolutely-positioned child alone: the row is rounded-lg, so the
+     leftmost tooth would be nicked at the top and bottom of every row and the
+     line would stripe at each boundary — the one artifact these guides most have
+     to avoid. `inset-block: 0` on an already-relative row is what joins adjacent
+     rows into one line despite their padding-block.
+     content:"" and pointer-events:none: nothing in the accessibility tree, and
+     nothing between the reviewer and the row they are clicking.
+     --rule is caret's quiet hairline (ink at 10%, per palette), the same ink the
+     topbar's underline and the plan search field's border take, so the guides sit
+     below --ink-faint and retint with the theme for free. */
+  :global(.plan-toc-panel [data-slot="command-item"])::before {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: calc(0.5rem + (var(--toc-depth, 0) - var(--toc-guides, 0)) * 0.75rem);
+    width: calc(var(--toc-guides, 0) * 0.75rem);
+    background-image: repeating-linear-gradient(
+      to right,
+      var(--rule) 0 1px,
+      transparent 1px 0.75rem
+    );
+    pointer-events: none;
   }
 
   /* The vendored group ships `p-1`, which would inset its rows a step further than
