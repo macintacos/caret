@@ -13,9 +13,10 @@
 	bind:ref
 	data-slot="command-item"
 	class={cn(
-		// rounded-lg (stock: rounded-sm) keeps a link row flush with command-item.svelte
-		// and dropdown-menu-item.svelte.
-		"relative flex cursor-default items-center gap-2 rounded-lg px-2 py-1.5 text-sm outline-hidden select-none aria-selected:bg-accent aria-selected:text-accent-foreground data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground",
+		// rounded-lg + cursor-pointer (stock: rounded-sm + cursor-default) keep a link row
+		// flush with command-item.svelte and dropdown-menu-item.svelte. `data-disabled`
+		// is bare because bits-ui emits it as a presence attribute, not `="true"`.
+		"relative flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm outline-hidden select-none aria-selected:bg-accent aria-selected:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground",
 		className
 	)}
 	{...restProps}

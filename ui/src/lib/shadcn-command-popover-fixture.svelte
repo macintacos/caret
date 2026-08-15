@@ -12,7 +12,7 @@
 </script>
 
 <Popover.Root bind:open>
-  <Popover.Trigger data-testid="trigger">Open</Popover.Trigger>
+  <Popover.Trigger>Open</Popover.Trigger>
   <Popover.Content>
     <Command.Root>
       <Command.Input placeholder="Jump to section" />

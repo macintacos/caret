@@ -32,6 +32,34 @@ into the stub rather than skipping them. And pass `-y`: the CLI otherwise stops 
 silent hang rather than a prompt. The CLI pulls the *current* registry source, which may
 be newer than what's already vendored — diff before you keep an overwrite.
 
+### Adding a component that collides with the vendored tree
+
+`-y` covers the "Ready to install components?" confirmation and **nothing else**. A
+component with `registryDependencies` pulls those trees in too, and the moment one of them
+is already vendored the CLI stops on a second, separate prompt —
+*"Would you like to overwrite all existing files?"* — which `-y` does not answer. In an
+unattended run that reads as a hang. `command`, for instance, resolves to `dialog` →
+`button`, `input`, `textarea`, `input-group`, four of which caret has already modified.
+
+Pass `-o` (overwrite) so the CLI runs to completion, then
+**revert every tracked file it touched**:
+
+```bash
+cd ui && bunx shadcn-svelte@latest add <name> --no-deps -y -o
+cd .. && git status --porcelain          # exactly which trees it clobbered
+git diff                                 # read it — this is the "diff before you keep an overwrite" step
+git checkout -- .                        # drop the overwrites; the NEW trees are untracked and survive
+git status --porcelain -- ui/package.json package.json bun.lock   # must be empty: proves --no-deps held
+```
+
+Two things to expect from that `git status`. The overwrites routinely revert caret's own
+edits — the EXC-891 `data-[state=…]` animation spelling, the inlined Lucide `x` in
+`dialog-content.svelte`, the commented class groupings — which is why the revert is
+wholesale rather than selective. And a `registryDependency` arrives as a **whole tree**,
+unused files included (`input-group` landed 7 files for the one `command-input.svelte`
+composes). Keep it: hand-editing the component to drop the dependency is the one change a
+later re-sync silently reverts with no comment to catch it.
+
 - **Never hand-roll a primitive the catalog covers** — button, dialog, menu, tooltip,
   badge, select, toggle group, and the rest. If shadcn-svelte ships it, add it.
 - **The copied source is owned code, not a dependency.** Modifying it is expected and
@@ -157,6 +185,13 @@ later work doesn't rediscover it — see `shadcn-foundation.test.ts`:
   Escape-to-close, outside-click, focus restoration, scroll lock — are real-browser
   behaviors and stay **e2e**. The unit-vs-e2e split is governed by
   [`browser-testing.md`](browser-testing.md); defer to it.
+- **Where the test goes.** A primitive that stands alone gets its suite beside it
+  (`components/ui/switch/switch.test.ts`); one that only makes sense composed with another
+  gets a `lib/shadcn-<topic>.test.ts` plus a `lib/shadcn-<topic>-fixture.svelte`, beside
+  `shadcn-foundation.test.ts` (the harness takes props, not children, so a composed case
+  needs the fixture). Assert through `data-slot`, never through the registry's `cn-*`
+  marker classes — those are defined in the registry style's own CSS layer, which caret
+  does not import, so they are inert here and get renamed upstream freely.
 
 ## Related rules
 

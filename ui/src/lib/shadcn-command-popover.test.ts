@@ -47,7 +47,9 @@ test("the icon swap renders vendored SVGs, not the dropped @lucide/svelte compon
   const wrapper = document.body.querySelector("[data-slot='command-input-wrapper']");
   expect(wrapper?.querySelector("svg")).not.toBeNull();
 
-  // command-item's check indicator, one per row.
-  const indicators = document.body.querySelectorAll(".cn-command-item-indicator svg");
+  // command-item's check indicator, one per row. Queried through the data-slot
+  // contract rather than the `cn-*` marker class the registry style ships, which is
+  // undefined in caret and renamed freely upstream.
+  const indicators = document.body.querySelectorAll("[data-slot='command-item'] svg");
   expect(indicators.length).toBe(2);
 });

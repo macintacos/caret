@@ -21,17 +21,22 @@
 	data-slot="command-item"
 	class={cn(
 		// Layout + resting look — matched to dropdown-menu-item so a Command row and a
-		// DropdownMenu row read as the same control (stock ships rounded-sm, plus an
-		// `in-data-[slot=dialog-content]:rounded-lg!` override that this radius makes dead)
-		"group/command-item relative flex cursor-default items-center gap-2 rounded-lg px-2 py-1.5 text-sm outline-hidden select-none",
+		// DropdownMenu row read as the same control, cursor included (stock ships
+		// rounded-sm + cursor-default, plus an `in-data-[slot=dialog-content]:rounded-lg!`
+		// override that this radius makes dead)
+		"group/command-item relative flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm outline-hidden select-none",
 		// Highlighted (hover / keyboard) row. Stock reaches for bg-muted (caret's
 		// recessed --paper-sunk); caret's menu highlight is the neutral --chip-hover
 		// wash behind bg-accent, so a highlighted row matches the topbar's button hover
 		// app-wide (doc/agents/shadcn-rules.md § Menu highlight vs. selection). The
 		// sibling command-link-item.svelte already spells it this way upstream.
-		"data-selected:bg-accent data-selected:text-accent-foreground data-selected:*:[svg]:text-accent-foreground",
-		// Disabled row
-		"data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50",
+		// The glyph rule is a DESCENDANT selector: stock's `*:[svg]` compiles to a direct
+		// child, which Icon.svelte's wrapper <span> puts out of reach (dropdown-menu-item
+		// uses the descendant form for the same reason).
+		"data-selected:bg-accent data-selected:text-accent-foreground data-selected:[&_svg]:text-accent-foreground",
+		// Disabled row. bits-ui emits `data-disabled=""` (presence), so stock's
+		// `data-[disabled=true]` never matches — dropdown-menu-item already spells it bare.
+		"data-disabled:pointer-events-none data-disabled:opacity-50",
 		// Leading icon: sizing, no pointer capture
 		"[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
 		className
