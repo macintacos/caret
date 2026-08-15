@@ -4,8 +4,7 @@
 // heading being read, the flat filter results the breadcrumbs bar offers over
 // the plan, that same filter left nested for the ToC popup, and how much of the
 // trail a row of a given width can hold. Pure and DOM-free like `toc.ts`, so the
-// parenting, sibling, match, filter, and collapse logic is directly
-// unit-testable.
+// parenting, sibling, match, and collapse logic is directly unit-testable.
 
 import { filterHeadings, type TocHeading } from "$lib/toc.ts";
 
@@ -46,7 +45,10 @@ export interface HeadingMatch {
 // The parent of each heading, by index, or -1 for a heading with no ancestor.
 // Walks a stack of the enclosing headings at strictly increasing levels: a
 // heading pops every entry at or deeper than its own level, then belongs to
-// whatever is left on top. Skipped levels need no special case — a `###` under
+// whatever is left on top. Only an index already on that stack is ever handed
+// back, which is what guarantees a parent's index is lower than its child's —
+// the ordering every tree build here relies on. Skipped levels need no special
+// case — a `###` under
 // a `#` finds the `#` because no `##` was ever pushed — and a plan that opens
 // at `##` roots there because the stack is empty. The stack's own emptiness is
 // what ends the pop loop: without that clause a heading below level 1 pops an
@@ -65,9 +67,8 @@ function parentIndices(headings: TocHeading[]): number[] {
 /**
  * The plan's headings as the tree their levels imply — the top-level headings,
  * each carrying the headings nested under it, all in document order. Built off
- * the same `parentIndices` walk `headingTrail`, `headingMatches`, and
- * `filteredHeadingTree` climb, so the four views of the hierarchy can never
- * disagree.
+ * the one `parentIndices` walk every view in this module climbs, so they can
+ * never disagree about what encloses what.
  */
 export function headingTree(headings: TocHeading[]): HeadingNode[] {
   return treeOver(headings, parentIndices(headings));
@@ -173,13 +174,15 @@ export function headingMatches(headings: TocHeading[], query: string): HeadingMa
  * of its own non-matching descendants, and a heading that both matches and
  * encloses a match comes back a match. Matching is `filterHeadings`', so an
  * empty query returns the whole tree with everything matched, and the parenting
- * is the same `parentIndices` walk `headingTree` and `headingTrail` climb — the
- * filtered view cannot disagree with either about what encloses what.
+ * is the one `parentIndices` walk every view in this module climbs.
  */
 export function filteredHeadingTree(headings: TocHeading[], query: string): FilteredHeadingNode[] {
   const parents = parentIndices(headings);
   // Membership by reference: `filterHeadings` filters this very array, so it
-  // hands back the same objects rather than copies.
+  // hands back the same objects rather than copies. Deliberately not the source
+  // line `headingMatches` keys on — these exports take any `TocHeading[]`, and
+  // two headings sharing a line would collapse into one entry of a line-keyed
+  // set.
   const matches = new Set(filterHeadings(headings, query));
   // A heading survives if it matched, or if a match sits somewhere beneath it.
   // Climbing from each match stops at the first ancestor already kept — every
@@ -189,9 +192,9 @@ export function filteredHeadingTree(headings: TocHeading[], query: string): Filt
     if (!matches.has(heading)) continue;
     for (let i = index; i !== -1 && !kept.has(i); i = parents[i] ?? -1) kept.add(i);
   }
-  // Every kept heading's ancestors are kept too, and a parent always sits at a
-  // lower index than its child, so each node's parent is already built when the
-  // node reaches it.
+  // Every kept heading's ancestors are kept too, and a parent sits at a lower
+  // index than its child as `parentIndices` guarantees, so each node's parent is
+  // already built by the time the node reaches it.
   const nodes = new Map<number, FilteredHeadingNode>();
   const roots: FilteredHeadingNode[] = [];
   for (const [index, heading] of headings.entries()) {

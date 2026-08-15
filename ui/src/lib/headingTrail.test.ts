@@ -245,7 +245,10 @@ describe("headingMatches", () => {
 describe("filteredHeadingTree", () => {
   // A filtered tree written as nested text: a match is its own text, a heading
   // kept only to place a match below it is parenthesised — what the popup dims —
-  // and children follow in brackets.
+  // and children follow in brackets. Fixtures therefore keep brackets, parens,
+  // and commas out of their heading text: rendered here they are ambiguous, and
+  // the mismatch reads as a bug in `filteredHeadingTree` rather than in this
+  // helper.
   const shape = (nodes: FilteredHeadingNode[]): string[] =>
     nodes.map((node) => {
       const text = node.matched ? node.heading.text : `(${node.heading.text})`;
@@ -267,6 +270,16 @@ describe("filteredHeadingTree", () => {
   test("returns a heading that both matches and encloses a match as a match", () => {
     const headings = extractHeadings("# Setup\n\n## Setup notes\n");
     expect(shape(filteredHeadingTree(headings, "setup"))).toEqual(["Setup [Setup notes]"]);
+  });
+
+  test("dims an unmatched heading sitting between two matches", () => {
+    // The shape a real plan produces most: `matched` and the kept-set disagree
+    // at an interior node, which every other fixture here decides at a leaf or
+    // at the root.
+    const headings = extractHeadings("# Setup\n\n## Middle\n\n### Setup deep\n");
+    expect(shape(filteredHeadingTree(headings, "setup"))).toEqual([
+      "Setup [(Middle) [Setup deep]]",
+    ]);
   });
 
   test("leaves a context node's non-matching siblings out rather than dimming them", () => {
