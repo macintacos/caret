@@ -112,7 +112,11 @@ describe("DiffPlanView contents popup", () => {
     const { target } = render(DiffPlanView, props());
     const toc = target.querySelector<HTMLElement>(".control-row [data-slot='popover-trigger']");
     expect(toc).not.toBeNull();
-    expect(toc?.textContent?.trim()).toBe("Contents");
+    // Contains rather than equals: the trigger also holds the `\` keycap
+    // (EXC-1097), which this view renders because showShortcutHints defaults on.
+    // Whether that cap tracks the setting is PlanToc.test.ts's subject, not this
+    // one's — the claim here is only that the trigger mounts, labelled.
+    expect(toc?.textContent).toContain("Contents");
   });
 
   // Compare mode tracks no heading, so a contents popup there would open on a

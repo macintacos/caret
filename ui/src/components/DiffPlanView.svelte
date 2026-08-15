@@ -1620,7 +1620,10 @@
        at its full 94px and neither the row nor the body overflows, the breadcrumbs
        bar having collapsed to its ellipsis by then. So the cap is never dropped at
        narrow — the width it costs is paid by a neighbour that has somewhere to
-       give. */
+       give. What KEEPS that true is not this comment but
+       test/e2e/narrow-regression.e2e.ts, whose breakpoint sweep asserts no surface
+       overflows the viewport down to MIN_APP_WIDTH_PX — and it sweeps with the cap
+       present, since showShortcutHints defaults on. */
     min-width: 0;
   }
 
