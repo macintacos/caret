@@ -572,11 +572,18 @@
      markup of caret's own), or a `child` snippet reimplementing the vendored item. Both
      are behaviour, which this pass is not, and both put a JS-driven transition on every
      row of a list that runs to the low hundreds.
-     Scoped to the MATCHES arm for that same ceiling. The filtered view is the matches
-     only — a handful to a few dozen rows — where the outline is the whole plan mounting
-     at once, and several hundred simultaneous ramps is the one shape on this surface
-     that could genuinely drop a frame. The outline's arrival is already carried by the
-     panel's own zoom above, so nothing is lost by leaving it still.
+     Scoped to the MATCHES arm, and NOT because that view is always small — measured on
+     the dev plan, a one-character query matches 44 of its 64 headings across 15 groups
+     and every one of them mounts at once, so a short query is very nearly the whole
+     list. What the scoping buys is that the filtered view mounts only when the reviewer
+     types, where the outline mounts on every single open. The outline's arrival is
+     already carried by the panel's own zoom above and by the list rule beside it, so
+     animating its rows as well would be a second gesture saying the same thing, on the
+     one path a reviewer takes every time.
+     The 59 concurrent ramps that measurement found cost nothing readable: profiled over
+     that crossing, frame times were median 8.3ms / p95 9.7ms / max 16.6ms with this rule
+     and median 8.3 / p95 9.7 / max 16.7 with it disabled, and no frame over 32ms either
+     way. Mounting 44 rows is the expense; ramping their opacity afterwards is not.
      Opacity and transform only, and no `will-change`: a CSS-animated element is
      promoted by the browser on its own, and pinning a layer per row is how a list this
      long turns a cheap animation into a memory problem. The offset is vertical, so
