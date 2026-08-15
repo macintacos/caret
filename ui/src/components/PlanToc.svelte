@@ -41,6 +41,7 @@
   // heading set and the scroll tracking that moves `activeLine`.
   import { untrack } from "svelte";
 
+  import Icon from "@/components/Icon.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Command from "$lib/components/ui/command/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
@@ -51,6 +52,7 @@
     type HeadingNode,
     headingTree,
   } from "$lib/headingTrail.ts";
+  import type { IconName } from "$lib/icons.ts";
   import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
   import { headingMatcher, type TocHeading } from "$lib/toc.ts";
 
@@ -184,6 +186,25 @@
       .join(" › ");
   }
 
+  // The marker each row wears, by heading level (EXC-1105). Lucide ships exactly six
+  // heading glyphs, which is also the range ATX allows, so `extractHeadings` can never
+  // hand this anything else — the clamp is a floor under a level arriving from some
+  // future caller, not a case markdown reaches. What it rules out is asking Icon.svelte
+  // for a name the registry holds no SVG for, which renders an empty box in every row.
+  const LEVEL_ICONS = [
+    "heading-1",
+    "heading-2",
+    "heading-3",
+    "heading-4",
+    "heading-5",
+    "heading-6",
+  ] as const satisfies readonly IconName[];
+
+  function levelIcon(level: number): IconName {
+    const clamped = Math.min(LEVEL_ICONS.length, Math.max(1, Math.trunc(level)));
+    return LEVEL_ICONS[clamped - 1] ?? LEVEL_ICONS[0];
+  }
+
   // Take the reviewer to a heading and leave. A command row does not dismiss its
   // host the way a menu item does, so the pick closes the popup itself.
   function jump(line: number): void {
@@ -210,6 +231,16 @@
     aria-current={heading.line === activeLine ? "location" : undefined}
     onSelect={() => jump(heading.line)}
   >
+    <!-- What level this heading is, said once per row and in both views (EXC-1105). The
+         nested view already implies it in the indent; the FILTERED view passes depth 0 for
+         every row, so there this is the only thing carrying it — which is why the marker
+         lives in the shared snippet rather than in one view's branch.
+         No wrapper span: Icon.svelte's own <span> is the element, and `data-icon` names the
+         glyph on it, so the style rule below has a hook without a second node on each of a
+         plan's several hundred rows. Decorative, so Icon renders it aria-hidden and it
+         contributes no text — which is what keeps the option's accessible name exactly the
+         heading (test/e2e/plan-toc.e2e.ts pins that in a real role engine). -->
+    <Icon name={levelIcon(heading.level)} size={14} />
     <!-- Only a MATCHED run takes an element; unmatched text stays a bare text node. That
          keeps the unfiltered view's markup byte-identical to a plain `{heading.text}` —
          no wrapper span on any of a plan's several hundred rows — so this decoration is
@@ -502,6 +533,19 @@
   }
   :global(.plan-toc-panel [data-slot="command-group"]:first-child [data-command-group-heading]) {
     margin-block-start: 0;
+  }
+
+  /* The heading-level marker, at the same rung of the neutral ink ramp the breadcrumb
+     header's `.eyebrow` and the empty line take — it is the same KIND of thing as those,
+     subordinate wayfinding rather than content, so it reads dimmer than the label it
+     labels. Neutral rather than hued because it is none of the three jobs a hue has
+     (doc/agents/svelte-rules.md § Every hue has a job).
+     Being unlayered, this beats command-item.svelte's Tailwind
+     `data-selected:[&_svg]:text-accent-foreground`, so the marker stays dimmed on the row
+     the keyboard is on instead of brightening to the label's colour with it. That
+     precedence is measured in test/e2e/plan-toc.e2e.ts rather than assumed. */
+  :global(.plan-toc-panel [data-slot="command-item"] [data-icon^="heading-"]) {
+    color: var(--ink-faint);
   }
 
   /* A long heading truncates in its row rather than stretching the panel to the
