@@ -21,6 +21,7 @@ export const ICON_NAMES = [
   "monitor",
   "moon",
   "panel-left",
+  "search",
   "settings",
   "sun",
   "trash-2",
