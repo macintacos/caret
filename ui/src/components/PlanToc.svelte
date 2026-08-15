@@ -11,22 +11,26 @@
   // bar's own filter narrates nothing as its rows narrow (the deviation is
   // recorded in PlanBreadcrumbs.svelte's header).
   //
-  // What that buys HERE is the structural half, and only that half: the field is a
-  // legal sibling of the list, and the rows are real options a screen reader can
-  // browse. The narration half is NOT closed yet. bits-ui computes the field's
-  // `aria-controls` and `aria-activedescendant` from the command's viewport node,
-  // and the vendored command-list.svelte renders no `Command.Viewport` — so both
-  // come out null and nothing announces which option is active as the rows narrow.
-  // Wiring that viewport is a change to the vendored primitive; the narration
-  // contract that depends on it is EXC-1096. Do not read the combobox role alone
-  // as evidence the bar's defect is fixed.
+  // What that buys HERE is both halves (EXC-1096 closed the second). Structurally
+  // the field is a legal sibling of the list and the rows are real options a screen
+  // reader can browse; for narration, the field carries `aria-controls` and
+  // `aria-activedescendant`, so the row the roving walk lands on is announced as the
+  // list narrows without focus ever leaving the field. Those two attributes are
+  // bits-ui's, derived from the command's viewport node — which exists only because
+  // the vendored command-list.svelte renders a `Command.Viewport`. That is caret's
+  // addition to the registry source and the reason the whole vendoring paid off; see
+  // the comment there before touching it.
+  //
+  // The dimmed ancestor rows stay OUT of the accessibility tree (`aria-hidden`).
+  // That is EXC-1096's decision, not a gap: a listbox may own options and groups and
+  // not loose text, each option's accessible name is already the heading it goes to,
+  // and the ancestor names are sighted-only wayfinding for a reader scanning the
+  // indent. Handing them over as per-option descriptions would tax every row to
+  // serve the few sitting under a filtered-out parent.
   //
   // Presentational: the only state is the popup's own — open, query, and the
   // command's selected row — the tree is derived, and the parent owns both the
   // heading set and the scroll tracking that moves `activeLine`.
-  //
-  // Real-browser behavior — the keyboard walk, focus return, dismissal, narration
-  // — is EXC-1096 and is deliberately not implemented here.
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Command from "$lib/components/ui/command/index.js";
   import * as Popover from "$lib/components/ui/popover/index.js";
@@ -81,9 +85,18 @@
   // — see EXC-1062's Out of scope.
   const tree = $derived(filteredHeadingTree(headings, query));
 
+  // Whether the popup is closing because the reviewer picked a heading. A pick hands
+  // them to the plan, so that close skips the primitive's focus return
+  // (onCloseAutoFocus below) — otherwise the trigger keeps a focus ring over a plan
+  // the reviewer has already moved on to. Escape is deliberately untouched:
+  // dismissing leaves the reviewer at the trigger, which is where focus belongs. The
+  // same split, and the same flag, PlanBreadcrumbs.svelte spends on the same job.
+  let leaving = false;
+
   // Take the reviewer to a heading and leave. A command row does not dismiss its
   // host the way a menu item does, so the pick closes the popup itself.
   function jump(line: number): void {
+    leaving = true;
     open = false;
     onJump(line);
   }
@@ -158,6 +171,14 @@
       e.preventDefault();
       queryEl.focus();
     }}
+    onCloseAutoFocus={(e) => {
+      // Only a pick suppresses the return. Every other close — Escape, a click
+      // outside, Tab — hands focus back to the trigger as the primitive intends, so
+      // a dismissal never strands the reviewer's next key.
+      if (!leaving) return;
+      leaving = false;
+      e.preventDefault();
+    }}
   >
     <!-- shouldFilter={false} is load-bearing: the command ships a fuzzy filter
          that also RE-SORTS the rows by score, which would both fight the
@@ -179,9 +200,14 @@
            nothing, and only the first is a property of the plan.
            Deliberately a SIBLING of the list rather than a row inside it: it is a
            status message about the list, and a listbox may own options and groups
-           but not a stray paragraph. -->
+           but not a stray paragraph.
+           `role="status"` because this is the one narrowing a screen reader would
+           otherwise miss: every other keystroke moves the selection and the field's
+           aria-activedescendant announces the new row, but a query that matches
+           nothing leaves no active row to name, so without a live region the list
+           empties in silence. -->
       {#if tree.length === 0}
-        <p class="toc-empty">
+        <p class="toc-empty" role="status">
           {headings.length === 0 ? "No headings in plan" : "No headings match"}
         </p>
       {/if}
