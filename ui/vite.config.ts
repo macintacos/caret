@@ -52,6 +52,21 @@ export default defineConfig({
     },
   ],
   resolve: {
+    // CodeMirror's extension system is identity-sensitive: a Facet, StateField, or
+    // Language carries the identity of the module instance that created it, and
+    // `EditorState.create` rejects anything it does not recognise as its own with
+    // "Unrecognized extension value in extension set". So a SECOND physical copy of
+    // any of these anywhere in the install tree breaks MarkdownEditor.svelte — the
+    // editor never constructs, the $effect throws, and the surface renders as an
+    // empty bordered box (a reviewer sees the Notes label with no field under it).
+    //
+    // This is a property of the resolved node_modules tree, not of bun.lock, which
+    // is why a clean lockfile is no defence: bun does not reliably prune a stale
+    // nested copy left by an older install, and the duplicate then reaches both the
+    // dev server and `vite build`. Deduping resolves every importer to the one copy
+    // at the root regardless of how the tree is shaped. @lezer/common rides along
+    // because Tree/NodeType identity flows through the same extensions.
+    dedupe: ["@codemirror/state", "@codemirror/view", "@codemirror/language", "@lezer/common"],
     // `@core/*` resolves to the tool-agnostic core in src/, so the UI imports
     // the wire contract (src/lib/types.ts) directly. Type-only imports erase at
     // build, keeping the browser bundle free of node-only code; the matching
