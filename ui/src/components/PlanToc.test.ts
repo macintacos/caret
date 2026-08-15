@@ -730,6 +730,55 @@ describe("PlanToc level markers", () => {
   // fail for any edit this change could make would only look like coverage.
 });
 
+// The hook the motion pass hangs on (EXC-1107). The animation itself is CSS on a
+// portalled element and belongs to the browser suite; what belongs HERE is the one
+// thing a mount can answer — that the list really publishes which of its two views is
+// on screen, and that bits-ui's Command.List forwards the attribute to the DOM rather
+// than swallowing it. Every rule in the stylesheet keys on it, so a silently dropped
+// attribute would leave the whole pass inert with nothing else reding.
+describe("PlanToc view marker", () => {
+  test("publishes which view the list is rendering", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: BRANCHED,
+      activeLine: 5,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    // Asserted here rather than only inside a poll condition: flushUntil gives up
+    // silently after its tries, so a claim made only in the predicate passes vacuously.
+    expect(listbox()?.getAttribute("data-toc-view")).toBe("outline");
+
+    await typeQuery("notes", flush, () => options().length === 3);
+    expect(options()).toHaveLength(3);
+    expect(listbox()?.getAttribute("data-toc-view")).toBe("matches");
+
+    // Back to the outline, which is the direction the viewport's own animation
+    // carries — and the one the marker has to swing back for.
+    await typeQuery("", flush, () => options().length === BRANCHED.length);
+    expect(options()).toHaveLength(BRANCHED.length);
+    expect(listbox()?.getAttribute("data-toc-view")).toBe("outline");
+
+    await close(target, flush);
+  });
+
+  test("reads the trimmed query, so whitespace alone is still the outline", async () => {
+    // The marker is `query.trim() !== ""` while bits-ui remounts on `search === ""`,
+    // and a whitespace-only query is where the two disagree. It must land on the view
+    // that is actually rendered — the outline — or the filtered view's row animation
+    // would fire over a list of several hundred outline rows.
+    const { target, flush } = render(PlanToc, {
+      headings: BRANCHED,
+      activeLine: 5,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    await typeQuery("   ", flush, () => options().length === BRANCHED.length);
+    expect(options()).toHaveLength(BRANCHED.length);
+    expect(listbox()?.getAttribute("data-toc-view")).toBe("outline");
+    await close(target, flush);
+  });
+});
+
 // The popup's two entry points (EXC-1097): the trigger teaches its key, and the
 // key reaches the popup through a handle the component hands up. What a real
 // keydown does with that handle is e2e (test/e2e/plan-toc.e2e.ts); what belongs
