@@ -24,11 +24,13 @@ Three things about that invocation. The CLI reads a `package.json` **beside**
 dies with `ENOENT … ui/package.json`). Pass `--no-deps`: the component's own packages
 (`bits-ui`, `tailwind-variants`, `clsx`, `tailwind-merge`) already live in the root
 `node_modules`, which bun resolves by walking up, so skipping the install step leaves the
-stub and root lockfile untouched and never creates a `ui/node_modules`. And pass `-y`: the
-CLI otherwise stops on a "Ready to install components?" confirmation, which in an
-unattended agent run looks like a silent hang rather than a prompt. The CLI pulls the
-*current* registry source, which may be newer than what's already vendored — diff before
-you keep an overwrite.
+stub and root lockfile untouched and never creates a `ui/node_modules`. It is hidden from
+`--help` as of shadcn-svelte 1.5.0 but still supported — don't substitute the
+`--no-deps-install` the help text does list in its place, which writes the dependencies
+into the stub rather than skipping them. And pass `-y`: the CLI otherwise stops on a
+"Ready to install components?" confirmation, which in an unattended agent run looks like a
+silent hang rather than a prompt. The CLI pulls the *current* registry source, which may
+be newer than what's already vendored — diff before you keep an overwrite.
 
 - **Never hand-roll a primitive the catalog covers** — button, dialog, menu, tooltip,
   badge, select, toggle group, and the rest. If shadcn-svelte ships it, add it.
