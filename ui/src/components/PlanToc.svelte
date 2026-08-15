@@ -739,10 +739,45 @@
      against the leading space the list already carries.
      The atom is unlayered, so it wins over the vendored heading's Tailwind size and
      colour utilities the way .float-chip wins over the Button variant's. */
+  /* One line, elided from the START (EXC-1108). A deep path is mostly ancestors the
+     reader already knows; what places the match is the tail, so that is the half worth
+     keeping when the line runs out. Italic separates the path from the headings it is
+     made of — every segment here is also a heading's own text, and upright it reads as
+     one more row rather than as the trail above them.
+
+     CSS has no start-ellipsis, so this is the `direction: rtl` technique: the inline
+     END moves to the left, and `text-overflow` elides there. `text-align: left` puts
+     the line back where the rows are. The text itself is unaffected — every segment is
+     a strong LTR run, and the bidi algorithm resolves the neutral separators between
+     two LTR runs as LTR (UBA rule N1), so the path still reads left to right.
+
+     The `::after` is what makes that safe rather than nearly safe. Rule N1 needs a
+     strong character on BOTH sides; a TRAILING neutral has none, so it falls to N2 and
+     takes the paragraph direction — RTL — which throws it to the far left. A heading
+     ending in `?` or `)` really does render `?ROLLOUT PLAN › WHY`; the e2e reds on it.
+     A zero-width LEFT-TO-RIGHT MARK gives those neutrals the following strong LTR
+     character they need.
+
+     `/ ""` is the half that keeps it out of the accessibility tree, and it is not
+     decoration. Generated content participates in the accessible NAME computation, and
+     this heading is its group's `aria-labelledby` target — so a bare `content: "\200E"`
+     appends the mark to the group's name and the committed role-and-name query for
+     `Plan › Setup` stops matching. The alternative-text syntax hands the renderer the
+     mark and assistive tech an empty string. `textContent` never saw either form, which
+     is why the unit assertions could not have caught that. */
   :global(.plan-toc-panel [data-command-group-heading]) {
     padding-inline: 0.5rem;
     padding-block: 0.25rem;
     margin-block-start: 0.5rem;
+    font-style: italic;
+    direction: rtl;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  :global(.plan-toc-panel [data-command-group-heading])::after {
+    content: "\200E" / "";
   }
   :global(.plan-toc-panel [data-slot="command-group"]:first-child [data-command-group-heading]) {
     margin-block-start: 0;
