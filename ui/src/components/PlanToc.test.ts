@@ -59,6 +59,18 @@ async function open(target: HTMLElement, flush: () => void): Promise<void> {
   await flushUntil(flush, () => listbox() !== null);
 }
 
+/** Dismiss the popup before the test ends. Load-bearing rather than tidy: bits-ui's
+ * portal presence waits for an `animationend` that never fires under happy-dom, so
+ * content left open at unmount keeps its effects alive into the NEXT test file,
+ * where they read deriveds whose owner is already destroyed and svelte warns
+ * `derived_inert` — the effect half of the same leak ui/test-mount.ts purges the DOM
+ * half of. Guarded, so it is a no-op in the test whose pick already closed it. */
+async function close(target: HTMLElement, flush: () => void): Promise<void> {
+  if (listbox() === null) return;
+  trigger(target)?.click();
+  await flushUntil(flush, () => listbox() === null);
+}
+
 /** Type into the filter field the way a reviewer would, so the bound query — and
  * with it the filtered tree — updates. */
 async function typeQuery(value: string, flush: () => void): Promise<void> {
@@ -88,6 +100,7 @@ describe("PlanToc surface", () => {
     expect(panel()).not.toBeNull();
     expect(listbox()?.getAttribute("aria-label")).toBe("Plan headings");
     expect(panel()?.querySelector("[data-slot='command-input']")).not.toBeNull();
+    await close(target, flush);
   });
 
   test("renders every heading in document order, indented by level", async () => {
@@ -106,6 +119,7 @@ describe("PlanToc surface", () => {
     ]);
     // Every heading is a destination while nothing is filtered.
     expect(options().length).toBe(4);
+    await close(target, flush);
   });
 
   // Driven by the activeLine prop — the same value the breadcrumbs bar receives —
@@ -119,6 +133,7 @@ describe("PlanToc surface", () => {
     await open(target, flush);
     const marked = rows().filter((r) => r.getAttribute("aria-current") === "location");
     expect(marked.map(label)).toEqual(["Details"]);
+    await close(target, flush);
   });
 
   test("keeps a filtered match at its own depth under a dimmed ancestor", async () => {
@@ -132,6 +147,7 @@ describe("PlanToc surface", () => {
     expect(rows().map(label)).toEqual(["Overview", "Approach", "Details"]);
     expect(rows().map((r) => r.style.getPropertyValue("--toc-depth"))).toEqual(["0", "1", "2"]);
     expect(options().map(label)).toEqual(["Details"]);
+    await close(target, flush);
   });
 
   // The ancestors are there to place the match, not to be picked: assistive tech
@@ -150,6 +166,7 @@ describe("PlanToc surface", () => {
       expect(row.getAttribute("data-slot")).not.toBe("command-item");
       expect(row.hasAttribute("data-value")).toBe(false);
     }
+    await close(target, flush);
   });
 
   test("shows helper text when the plan has no headings", async () => {
@@ -157,9 +174,11 @@ describe("PlanToc surface", () => {
     await open(target, flush);
     expect(options().length).toBe(0);
     expect(listbox()?.textContent?.trim()).toBe("No headings in plan");
+    await close(target, flush);
   });
 
-  test("reports the picked heading's source line", async () => {
+  // A pick hands the reviewer to the plan, so it reports the line AND leaves.
+  test("reports the picked heading's source line and dismisses", async () => {
     const jump = capture<number>();
     const { target, flush } = render(PlanToc, {
       headings: HEADINGS,
@@ -168,7 +187,8 @@ describe("PlanToc surface", () => {
     });
     await open(target, flush);
     options()[3]?.click();
-    flush();
+    await flushUntil(flush, () => listbox() === null);
     expect(jump.last()).toBe(20);
+    expect(listbox()).toBeNull();
   });
 });

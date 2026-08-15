@@ -89,6 +89,7 @@
   import SourceAnnotationThread from "@/components/SourceAnnotationThread.svelte";
   import LegacyAnnotationList from "@/components/LegacyAnnotationList.svelte";
   import PlanBreadcrumbs from "@/components/PlanBreadcrumbs.svelte";
+  import PlanToc from "@/components/PlanToc.svelte";
   import CodeCopyButton from "@/components/CodeCopyButton.svelte";
   import FileDrawer from "@/components/FileDrawer.svelte";
   import FilePreview from "@/components/FilePreview.svelte";
@@ -1280,6 +1281,14 @@
      The heading breadcrumbs and the working-directory path each earn their place
      conditionally alongside it. -->
 <div class="control-row" class:comparing={compareStore.comparing}>
+  <!-- The plan's table of contents (EXC-1095): every heading at once, the
+       see-the-whole-shape surface the breadcrumbs bar beside it is not. It reads
+       the SAME headings and activeLine that bar does, so neither tracks a scroll
+       of its own, and it is gated on the same !showDiff — compare mode tracks no
+       heading, so a contents popup there would open on a stale plan. -->
+  {#if !showDiff}
+    <PlanToc {headings} {activeLine} onJump={pickHeading} />
+  {/if}
   <VersionComparePicker
     versions={review.versions}
     comparing={compareStore.comparing}
