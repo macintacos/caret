@@ -299,11 +299,18 @@
   // trail re-roots whenever the reader scrolls. The crumb the reader is on now is
   // the right fallback, since that is where `b` would have opened anyway.
   function restoreMenu(): void {
+    const origin = filterOrigin?.isConnected === true ? filterOrigin : null;
+    closeFilter();
+    (origin ?? barEl?.querySelector<HTMLElement>('.crumb[aria-current="location"]'))?.click();
+  }
+
+  // Shut the filter panel and forget what it was anchored to. The query goes with
+  // it: a menu always reopens on its hierarchy, so a query that survived would only
+  // reappear on the next `/` over a plan that has since scrolled.
+  function closeFilter(): void {
     filtering = false;
     query = "";
-    const origin = filterOrigin?.isConnected === true ? filterOrigin : null;
     filterOrigin = null;
-    (origin ?? barEl?.querySelector<HTMLElement>('.crumb[aria-current="location"]'))?.click();
   }
 
   // The bar elides the middle of its trail on the room the row actually gives it
@@ -551,12 +558,26 @@
        `/` inside an open menu is the whole invocation — so a trigger would be a
        phantom in the tab order and the accessibility tree. `customAnchor` gives
        the panel its position instead, on the very trigger the menu it replaces
-       hung from. -->
+       hung from.
+       It does not trap focus, which the vendored Popover.Content otherwise does:
+       the panel holds exactly one tabbable, so a trap turns Tab into a no-op and
+       strands a keyboard reviewer inside a bar-level control until they find
+       Escape. Tab leaving the bar is the behaviour EXC-948 shipped and the one the
+       spec pins, and `onFocusOutside` is what shuts the panel behind them. -->
   <Popover.Root bind:open={filtering}>
     <Popover.Content
       class="plan-crumb-filter"
       align="start"
       customAnchor={filterOrigin ?? barEl}
+      trapFocus={false}
+      onkeydown={(e) => {
+        // Tab leaves the bar, as it did when the filter lived inside the menu —
+        // bits-ui's own handleTabKeyDown closed that one. A popover ships no such
+        // handler, so without this the reviewer tabs on and leaves the panel
+        // standing over the plan. Deliberately not preventDefault'ed: the browser
+        // still moves focus, and the panel simply goes with them.
+        if (e.key === "Tab") closeFilter();
+      }}
       onOpenAutoFocus={(e) => {
         // The reviewer pressed `/` to type, so focus goes to the field rather
         // than to the panel bits-ui would otherwise focus. Suppressed only once
