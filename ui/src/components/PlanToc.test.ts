@@ -94,6 +94,13 @@ function label(row: HTMLElement): string {
   return row.textContent?.trim() ?? "";
 }
 
+/** The marked runs inside an element — the characters the query matched (EXC-1104).
+ * Queried by class rather than by role or `data-*`: highlighting is presentational and
+ * deliberately adds nothing to the accessibility tree, so a role locator cannot see it. */
+function hits(el: HTMLElement): string[] {
+  return [...el.querySelectorAll<HTMLElement>(".toc-hit")].map((s) => s.textContent ?? "");
+}
+
 /** The rows the roving selection is on. `aria-selected` rather than `data-selected`
  * because it is the half a screen reader reads; the two move together. */
 function selectedLabels(): string[] {
@@ -468,6 +475,109 @@ describe("PlanToc surface", () => {
     await flushUntil(flush, () => listbox() === null);
     expect(jump.last()).toBe(20);
     expect(listbox()).toBeNull();
+  });
+});
+
+// EXC-1104: a filtered row says WHY it survived, by marking the characters the query
+// matched inside its own label. The marking is presentational — it adds no node the
+// accessibility tree can see and no character to the row's text — so every assertion
+// here is structural or on raw text. Whether the mark is legible against the row's own
+// two fills is a computed colour in a real browser, not a mount.
+describe("PlanToc match highlighting", () => {
+  test("marks the characters the query matched inside the row's label", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    await typeQuery("det", flush);
+    const row = options()[0];
+    if (row === undefined) throw new Error("no match row rendered");
+    expect(hits(row)).toEqual(["Det"]);
+    await close(target, flush);
+  });
+
+  // AC6. The row's name comes from its contents, so whitespace leaked between the runs a
+  // template `{#each}` emits would silently rename every option. Asserted UNTRIMMED for
+  // exactly that reason — `label()` would launder it away — and on `.toc-label` rather
+  // than on the row, because the vendored Command.Item pads its own check indicator with
+  // whitespace this change neither adds nor can remove.
+  test("adds no character to the label, so the row's accessible name is unchanged", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    await typeQuery("det", flush);
+    expect(options()[0]?.querySelector(".toc-label")?.textContent).toBe("Details");
+    await close(target, flush);
+  });
+
+  // AC7, and the reason one matcher can serve both views: the unfiltered view's query is
+  // empty, so it renders through the same row snippet with nothing marked.
+  test("marks nothing while the query is empty", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    expect(options().length).toBe(4);
+    expect(options().flatMap(hits)).toEqual([]);
+    await close(target, flush);
+  });
+
+  // Clearing the query crosses bits-ui's `{#key search === ""}` boundary, which destroys
+  // and rebuilds the whole viewport — so the marks going away is a claim about the
+  // rebuilt view, not about the one that was marked.
+  test("clears every mark when the query is cleared", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    await typeQuery("det", flush);
+    expect(options().flatMap(hits)).toEqual(["Det"]);
+
+    await typeQuery("", flush, () => options().length === 4);
+    expect(options().flatMap(hits)).toEqual([]);
+    await close(target, flush);
+  });
+
+  // A group is a set rather than a run, so a heading that both matches and encloses a
+  // match appears TWICE — once as a row, once as text inside the header naming its
+  // children's path. Only the row is marked; the header is wayfinding, not a result.
+  test("leaves a breadcrumb header unmarked even when the query matches its text", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: BRANCHED,
+      activeLine: null,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    await typeQuery("setup", flush, () => options().length === 2);
+    expect(options().map(label)).toEqual(["Setup", "Setup notes"]);
+    expect(groupHeadings().map(label)).toEqual(["Plan", "Plan › Setup"]);
+    expect(options().flatMap(hits)).toEqual(["Setup", "Setup"]);
+    expect(groupHeadings().flatMap(hits)).toEqual([]);
+    await close(target, flush);
+  });
+
+  // Splitting a label into several spans is precisely the edit that could drop a text
+  // node where a listbox may not own one, so the structural guard is re-asserted with
+  // highlighting on rather than assumed to still hold from the unfiltered case.
+  test("keeps the listbox free of loose text while marks are rendered", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    await typeQuery("det", flush);
+    expect(looseText()).toEqual([]);
+    await close(target, flush);
   });
 });
 
