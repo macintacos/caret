@@ -1,6 +1,6 @@
 {
   "name": "@macintacos/caret",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "license": "MIT",
   "type": "module",
   "description": "A Claude Code plugin that replaces the terminal plan-approval prompt with a local web UI for inline review, annotation, and approval.",
