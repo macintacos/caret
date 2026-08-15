@@ -114,6 +114,24 @@ const TOC = ".plan-toc-panel";
  * hoists as MENU. */
 const CRUMB_MENU = "[data-slot='dropdown-menu-content']";
 
+/** WCAG relative luminance / contrast over a `rgb(r, g, b)` string, which is what
+ * `getComputedStyle` resolves an opaque colour to. Node-side rather than in the page: the
+ * page's job is to report the painted values, and doing the arithmetic here is what lets a
+ * failure print the two colours it compared. */
+function contrast(a: string, b: string): number {
+  const luminance = (colour: string): number => {
+    const parts = colour.match(/[\d.]+/g);
+    if (parts === null || parts.length < 3) throw new Error(`not an rgb() colour: ${colour}`);
+    const [r, g, bl] = parts.slice(0, 3).map((v) => {
+      const channel = Number(v) / 255;
+      return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * (r ?? 0) + 0.7152 * (g ?? 0) + 0.0722 * (bl ?? 0);
+  };
+  const [lighter, darker] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return ((lighter ?? 0) + 0.05) / ((darker ?? 0) + 0.05);
+}
+
 const trigger = (page: Page) => page.getByRole("button", { name: "Contents" });
 /** The popup itself. Every locator below is scoped through it, which is what lets them
  * be role queries: the breadcrumbs bar publishes a filter field with the SAME accessible
@@ -140,6 +158,24 @@ const crumbs = (page: Page) => panel(page).locator("[data-command-group-heading]
 /** The row the roving walk is on. bits-ui marks it `data-selected`; the reader is told
  * about it through the field's aria-activedescendant, asserted in its own test below. */
 const walkedTo = (page: Page) => options(page).and(page.locator("[data-selected]"));
+
+/** Each row's heading-level marker by registry name, in document order (EXC-1105).
+ * Addressed through `data-icon` — the handle Icon.svelte stamps with the glyph's name —
+ * because this is browser-testing.md § Locators' no-accessible-target case twice over: the
+ * marker is deliberately aria-hidden, so it is not in the tree a role query reads, and the
+ * SVG is inlined verbatim, so nothing else in the DOM tells one glyph from another. `null`
+ * for a row wearing none, so a missing marker reds as a value rather than throwing. */
+const markerNames = (page: Page): Promise<(string | null)[]> =>
+  options(page).evaluateAll((els) =>
+    els.map((el) => el.querySelector("[data-icon^='heading-']")?.getAttribute("data-icon") ?? null),
+  );
+
+/** Where each row's label starts, rounded to the pixel. Equal across rows at one indent is
+ * AC8 — a marker whose width varied with the level would push its label along with it. */
+const labelLefts = (page: Page): Promise<number[]> =>
+  options(page).evaluateAll((els) =>
+    els.map((el) => Math.round(el.querySelector(".toc-label")!.getBoundingClientRect().x)),
+  );
 
 /** Open the popup and wait for its rows. */
 async function openToc(page: Page): Promise<void> {
@@ -525,6 +561,92 @@ test("\\ and b reach different heading surfaces (EXC-1097)", async ({ daemon, pa
   await page.keyboard.press("\\");
   await expect(listbox(page)).toBeVisible();
   await expect(page.locator(CRUMB_MENU)).toHaveCount(0);
+});
+
+// EXC-1105 gives every row a vendored lucide heading-N glyph saying what level it is. Three
+// of its claims are real-browser and nothing else. The marker's COLOUR reaches it through an
+// unlayered `:global` rule that has to beat the vendored command item's Tailwind
+// `data-selected:[&_svg]:text-accent-foreground`, and only a real cascade decides which wins.
+// The labels lining up is a laid-out box, which happy-dom does not produce. And that the
+// marker adds nothing to an option's NAME is a computation only a role engine performs — the
+// same reason EXC-1104's marked-name spec sits here. The pure half — which glyph each row
+// wears, and the clamp for a level outside 1–6 — is ui/src/components/PlanToc.test.ts.
+test("every row wears its heading level, in both of the popup's views", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: BRANCHED_PLAN });
+  await page.goto("/");
+  await readingAt(page, "Setup");
+
+  await openToc(page);
+  await expect(options(page)).toHaveCount(6);
+  await expect
+    .poll(() => markerNames(page))
+    .toEqual(["heading-1", "heading-2", "heading-3", "heading-2", "heading-3", "heading-2"]);
+
+  // The view this exists for. "o" is chosen to survive at three DIFFERENT levels — a
+  // level-2 heading between two level-3 ones — because every filtered row is flush left, so
+  // rows at one indent carrying different markers is what makes the next two assertions say
+  // anything. A query matching one level would leave both of them true by accident.
+  await field(page).fill("o");
+  await expect(options(page)).toHaveText(["Setup notes", "Rollout", "Rollout notes"]);
+  const depths = await options(page).evaluateAll((els) =>
+    els.map((el) => (el as HTMLElement).style.getPropertyValue("--toc-depth")),
+  );
+  expect(depths).toEqual(["0", "0", "0"]);
+  expect(await markerNames(page)).toEqual(["heading-3", "heading-2", "heading-3"]);
+
+  // AC8. Three rows at one indent, three different glyphs, one left edge.
+  expect(new Set(await labelLefts(page)).size).toBe(1);
+
+  // AC7, in the engine that actually computes a name. The query splits each label mid-word
+  // as well, so this carries EXC-1104's claim forward over the added marker rather than
+  // replacing it: a separator leaking in from either decoration would show up here.
+  await expect(options(page).first()).toHaveAccessibleName("Setup notes");
+  await expect(options(page).nth(1)).toHaveAccessibleName("Rollout");
+  await expect(options(page).nth(2)).toHaveAccessibleName("Rollout notes");
+});
+
+test("the level marker reads dimmer than the label, on the walked-to row too", async ({
+  daemon,
+  page,
+}) => {
+  // AC5, as painted pixels. Falsifiable from both ends: drop the `--ink-faint` rule and the
+  // marker inherits the label's colour, which reds the first two assertions; drop only its
+  // unlayered-ness and the vendored item's `data-selected:[&_svg]:text-accent-foreground`
+  // takes the walked-to row's marker, which reds the last one.
+  await daemon.seed({ plan: BRANCHED_PLAN });
+  await page.goto("/");
+  await readingAt(page, "Setup");
+
+  await openToc(page);
+  await expect(walkedTo(page)).toHaveCount(1);
+
+  const paint = await panel(page).evaluate((el) => {
+    const rows = [...el.querySelectorAll<HTMLElement>("[role='option']")];
+    const resting = rows.find((r) => !r.hasAttribute("data-selected") && r.ariaCurrent === null);
+    const walked = rows.find((r) => r.hasAttribute("data-selected"));
+    if (resting === undefined || walked === undefined) throw new Error("no resting/walked row");
+    const inks = (row: HTMLElement) => ({
+      marker: getComputedStyle(row.querySelector("[data-icon^='heading-']")!).color,
+      label: getComputedStyle(row.querySelector(".toc-label")!).color,
+    });
+    return {
+      panelBg: getComputedStyle(el).backgroundColor,
+      ...inks(resting),
+      walked: inks(walked),
+    };
+  });
+
+  expect(paint.marker).not.toBe(paint.label);
+  expect(contrast(paint.marker, paint.panelBg)).toBeLessThan(contrast(paint.label, paint.panelBg));
+  // Dimmed, not lost: WCAG 1.4.11's 3:1 floor for a non-text graphic, which is the whole of
+  // what this marker is. The same floor theme.test.ts holds the file-preview close disc to.
+  expect(contrast(paint.marker, paint.panelBg)).toBeGreaterThanOrEqual(3);
+
+  // The keyboard landing on a row must not drag its marker up to the label's ink with it.
+  expect(paint.walked.marker).toBe(paint.marker);
 });
 
 test("compare mode drops both of the popup's entry points (EXC-1097)", async ({ daemon, page }) => {
