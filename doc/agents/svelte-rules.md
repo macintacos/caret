@@ -321,6 +321,13 @@ surface in the DOM on dismissal. For the same reason nothing in this vocabulary 
 resolve to `animation: none` on a portalled surface; the global guard below collapses the
 duration instead, which is what keeps that event firing under the preference.
 
+The refinement is **per-surface opt-in**, not a migration in progress. `tw-animate-css`'s
+own `duration-100` and plain `ease` remain the intended default for every portalled
+surface that has not opted in — including `PlanBreadcrumbs.svelte`'s crumb menu and its
+heading filter, which sit on the same control row as the ToC panel and are deliberately
+still on it. A surface reading a step quicker and flatter than its neighbour is the
+expected state, not drift to be reported.
+
 `prefers-reduced-motion: reduce` is the single global kill-switch over all of it: one rule
 in `app.css` collapses every animation and transition to one static frame, so no component
 honors the preference on its own. It is anchored to two real selectors, never a bare `*` —

@@ -772,6 +772,13 @@ describe("PlanToc view marker", () => {
       onJump: () => {},
     });
     await open(target, flush);
+    // Into the matches view FIRST, so the swing back to "outline" is what this test
+    // observes. Going straight to whitespace from an empty field would leave the poll
+    // predicate already true on entry and the assertion true before the keystroke —
+    // falsifiable only by accident, which is not falsifiable.
+    await typeQuery("notes", flush, () => options().length === 3);
+    expect(listbox()?.getAttribute("data-toc-view")).toBe("matches");
+
     await typeQuery("   ", flush, () => options().length === BRANCHED.length);
     expect(options()).toHaveLength(BRANCHED.length);
     expect(listbox()?.getAttribute("data-toc-view")).toBe("outline");

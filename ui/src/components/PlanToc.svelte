@@ -413,8 +413,12 @@
            on screen.
            `searching` rather than bits-ui's own `search === ""`: they agree except on
            a query that is only whitespace, where this stays "outline" while bits-ui
-           still remounts. Both halves of that disagreement degrade to "no animation on
-           that step" and never to the wrong one. -->
+           still remounts. The marker and the rendered branch come off the SAME derived,
+           so the arm can never disagree with what is on screen — "matches" over outline
+           rows is unreachable, and that is the case that would be wrong. What the
+           disagreement does cost is a spurious toc-list-in when a lone space is typed or
+           deleted: the list really did rebuild, so the fade is honest, it just answers a
+           keystroke that changed nothing. -->
       <Command.List aria-label="Plan headings" data-toc-view={searching ? "matches" : "outline"}>
         {#if searching}
           <!-- Each ancestor path collapses to one Command.Group, whose heading IS
@@ -535,12 +539,15 @@
 
   /* The list re-forming when the query crosses between empty and non-empty — the one
      boundary at which this surface really does swap one view for another. bits-ui's
-     `Command.List` wraps its children in `{#key search === ""}`, so the viewport is
+     `Command.List` wraps its OWN element in `{#key search === ""}`, so the list — the
+     element `data-toc-view` above hangs on — and the viewport under it are both
      destroyed and rebuilt at exactly that crossing (see command-list.svelte, which
-     documents it as the hazard it is for anything reading `viewportNode` back). A
-     remount restarts a CSS animation on its own, which makes that teardown the
-     trigger: no key of caret's own, no tick counter, nothing to retrigger, and it
-     cannot fire more than once per crossing however fast the reviewer types.
+     documents it as the hazard it is for anything reading `viewportNode` back). That
+     the marker is re-created with them is why it can never be read stale against a
+     fresh viewport. A remount restarts a CSS animation on its own, which makes that
+     teardown the trigger: no key of caret's own, no tick counter, nothing to
+     retrigger, and it cannot fire more than once per crossing however fast the
+     reviewer types.
      Scoped to the OUTLINE arm only. Coming back to the whole plan is the direction
      that has nothing else to carry it, since the outline's rows deliberately do not
      animate; going the other way the matches below carry it, and running both would

@@ -38,6 +38,13 @@
 // spec that pins the count itself against a plan rooted at `##` is the unit suite's
 // (PlanToc.test.ts); its browser half is the geometry that count produces.
 //
+// EXC-1107's motion pass is real-engine by necessity, and the most clear-cut case in the
+// file: happy-dom runs no animations at all — it resolves no `animation` shorthand, fires
+// no `animationstart`/`animationend`, and implements no Web Animations API — so every
+// assertion about this surface's motion is either a value the cascade computed or an event
+// the engine really fired. The only half a mount can reach is the `data-toc-view` marker
+// those rules key on, and that lives in ui/src/components/PlanToc.test.ts.
+//
 // Bare keys throughout, per the issue's constraint: a command modifier means the
 // reviewer is addressing the browser or the OS, not the popup. waitPastSafeModeGrace
 // (inside jumpToHeading) is mandatory before the first keystroke.
@@ -190,15 +197,26 @@ const labelLefts = (page: Page): Promise<(number | null)[]> =>
  *
  * A real promise on a real animation, not a sleep: `Animation.finished` settles when the
  * engine says the animation is done, so it costs nothing on a surface that has already
- * settled and cannot race the one that has not. `subtree: true` is what makes it cover
- * the rows and the breadcrumb headers as well as the panel's own zoom.
+ * settled and cannot race the one that has not. `subtree: true` covers the panel's
+ * descendants generally rather than any one of them — the only caller opens on an empty
+ * query, where no row or header declares a ramp at all.
  *
- * A cancelled animation rejects `finished` with an AbortError — an element removed
- * mid-flight is the ordinary case here, not a failure — so each is swallowed
- * individually rather than letting one poison the `Promise.all`. */
+ * Two filters, both about promises that would never settle. A cancelled animation rejects
+ * `finished` with an AbortError — an element removed mid-flight is the ordinary case here,
+ * not a failure — so each is swallowed individually rather than letting one poison the
+ * `Promise.all`. And an INFINITE animation never finishes at all: none is on this surface
+ * today, but a spinner in the vendored `command-loading.svelte` or an ambient pulse on
+ * some future row state would hang every `openToc()` in this file until the per-test
+ * budget fired, naming the test rather than the step — the failure shape
+ * browser-testing.md § Timeouts warns about. Excluded rather than waited on. */
 async function settled(page: Page): Promise<void> {
   await panel(page).evaluate(async (el) => {
-    await Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished.catch(() => {})));
+    await Promise.all(
+      el
+        .getAnimations({ subtree: true })
+        .filter((a) => a.effect?.getComputedTiming().iterations !== Number.POSITIVE_INFINITY)
+        .map((a) => a.finished.catch(() => {})),
+    );
   });
 }
 
@@ -915,7 +933,7 @@ test("filtering drops the guides, headers and all", async ({ daemon, page }) => 
  *
  * Filtered to the panel's own events. `animationstart`/`animationend` bubble, so a row or
  * a header animating inside would otherwise land in the same log. */
-type MotionLog = { type: string; name: string; elapsed: number }[];
+type MotionLog = { type: string; name: string; elapsed: number; easing: string }[];
 
 async function recordDismissal(page: Page, dismiss: () => Promise<void>): Promise<MotionLog> {
   await panel(page).evaluate((el) => {
@@ -928,6 +946,11 @@ async function recordDismissal(page: Page, dismiss: () => Promise<void>): Promis
         type: event.type,
         name: animation.animationName,
         elapsed: animation.elapsedTime,
+        // Sampled as the exit BEGINS, which is the only moment the closed cascade is
+        // live on a real dismissal. Reading it any other way means writing `data-state`
+        // by hand — poking an attribute the primitive owns, and starting then cancelling
+        // an exit to observe one.
+        easing: getComputedStyle(el).animationTimingFunction,
       });
     };
     el.addEventListener("animationstart", log);
@@ -967,32 +990,25 @@ test("the panel arrives on the enter token and leaves on the exit one", async ({
   const enterEasing = entering.easing;
 
   const log = await recordDismissal(page, () => page.keyboard.press("Escape"));
+  const started = log.find((e) => e.type === "animationstart");
   const ended = log.find((e) => e.type === "animationend");
-  expect(log.some((e) => e.type === "animationstart" && e.name === "exit")).toBe(true);
+  expect(started?.name).toBe("exit");
   expect(ended?.name).toBe("exit");
   // `elapsedTime` at animationend is the animation's own active duration, so this is the
   // exit really having run for the exit token's worth of time — not a frame we happened
   // to catch, and not a computed value that would read the same on a cancelled animation.
   expect(ended?.elapsed).toBeCloseTo(exitSeconds, 3);
-
   // And the curve turns around with it: leaving accelerates out where arriving decelerated
-  // in. Read from the closed panel's own cascade, so the two are the same kind of value.
-  await openToc(page);
-  const leavingEasing = await panel(page).evaluate((el) => {
-    el.setAttribute("data-state", "closed");
-    const easing = getComputedStyle(el).animationTimingFunction;
-    el.setAttribute("data-state", "open");
-    return easing;
-  });
-  expect(leavingEasing).not.toBe(enterEasing);
-  await page.keyboard.press("Escape");
-  await expect(panel(page)).toHaveCount(0);
+  // in. Sampled off the real exit as it began, so both easings are the same kind of value
+  // read on the animation that actually ran.
+  expect(started?.easing).not.toBe(enterEasing);
 });
 
 test("every way out of the popup is animated, not cut", async ({ daemon, page }) => {
-  // AC1 names four paths, and they are four different callers rather than four spellings
-  // of one: Escape and an outside click are the primitive's own dismissals, while a pick
-  // and the trigger both write `open` from caret's code. All four have to reach the same
+  // AC1 names four paths, and they are not four spellings of one: Escape, an outside
+  // click and the trigger are all the primitive's own dismissals — bits-ui runs
+  // onOpenChange from its own box setter for exactly those three — while a pick is
+  // caret's own `open = false` inside jump(). All four have to reach the same
   // `data-state` flip, or one of them would drop the panel out of the DOM instantly.
   await daemon.seed({ plan: TALL_PLAN });
   await page.goto("/");
@@ -1018,11 +1034,12 @@ test("every way out of the popup is animated, not cut", async ({ daemon, page })
   for (const [name, dismiss] of paths) {
     await openToc(page);
     const log = await recordDismissal(page, dismiss);
-    // Named in the assertion so a failure says which path lost its exit.
-    expect([name, log.map((e) => `${e.type}:${e.name}`)]).toEqual([
-      name,
-      ["animationstart:exit", "animationend:exit"],
-    ]);
+    // The path is the assertion's message rather than part of its value, so a failure
+    // names it without the diff showing a matching half beside the mismatched one.
+    expect(
+      log.map((e) => `${e.type}:${e.name}`),
+      `dismissed by ${name}`,
+    ).toEqual(["animationstart:exit", "animationend:exit"]);
   }
 });
 
@@ -1094,20 +1111,41 @@ test("the outline carries its motion on the list, never on its rows", async ({ d
   await expect(panel(page)).toHaveCount(0);
 });
 
-/** How many of the popup's own keyframe animations are alive, and how many elements are
- * eligible to be running one. A backlog is a RATIO rather than a count: one ramp per row
- * is the design, several generations stacked on the same rows is the failure. Scoped to
- * the panel's subtree and to CSSAnimations, so the vendored components' Tailwind
- * `transition-all` — a dozen colour and shadow transitions on the trigger and the field,
- * none of them this change's — cannot inflate either number. */
-async function motionLoad(page: Page): Promise<{ running: number; animatable: number }> {
-  return panel(page).evaluate((el) => ({
-    running: el
+/** The row ramps the panel is carrying, and how many distinct elements they sit on.
+ *
+ * `ramps` counts them regardless of play state, which is what makes it a claim about the
+ * cascade rather than about the frame this read happened to catch: a finished CSSAnimation
+ * stays in `getAnimations()` until its `animation-name` is removed or its element is, so
+ * "the rule fired" survives the round-trip even under the gate's contention. `running` is
+ * kept separate for the one question that really is about play state — whether it drains.
+ *
+ * `targets` is the backlog test proper. One ramp per element is the design; two live on
+ * the same row would be generations stacking, which is the failure AC4 names. Comparing
+ * the two counts says exactly that, where comparing `running` against the element count
+ * could not — a single `animation-name` can host at most one CSS animation, so that bound
+ * holds by construction and would pass over any implementation at all.
+ *
+ * Filtered by keyframe name, so the vendored components' Tailwind `transition-all` — a
+ * dozen colour and shadow transitions on the trigger and the field, none of them this
+ * change's — and the panel's own zoom stay out of both numbers. */
+async function motionLoad(
+  page: Page,
+): Promise<{ ramps: number; targets: number; running: number }> {
+  return panel(page).evaluate((el) => {
+    const ramps = el
       .getAnimations({ subtree: true })
-      .filter((a) => a instanceof CSSAnimation && a.playState === "running").length,
-    animatable: el.querySelectorAll("[data-slot='command-item'], [data-command-group-heading]")
-      .length,
-  }));
+      .filter((a): a is CSSAnimation => a instanceof CSSAnimation)
+      .filter((a) => a.animationName.endsWith("toc-row-in"));
+    // `target` lives on KeyframeEffect, not on the AnimationEffect base — a CSSAnimation
+    // always carries the former, but the cast has to be explicit for the type checker.
+    const targetOf = (a: CSSAnimation): Element | null =>
+      a.effect instanceof KeyframeEffect ? a.effect.target : null;
+    return {
+      ramps: ramps.length,
+      targets: new Set(ramps.map(targetOf)).size,
+      running: ramps.filter((a) => a.playState === "running").length,
+    };
+  });
 }
 
 test("typing fast queues no animation behind the reviewer", async ({ daemon, page }) => {
@@ -1132,15 +1170,17 @@ test("typing fast queues no animation behind the reviewer", async ({ daemon, pag
   await field(page).pressSequentially("a", { delay: 15 });
   await expect(options(page)).toHaveCount(broad);
   const wide = await motionLoad(page);
-  expect(wide.running).toBeGreaterThan(0);
-  expect(wide.running).toBeLessThanOrEqual(wide.animatable);
+  // The rule fired at all — this is the arm that reds if the row ramp is ever dropped.
+  expect(wide.ramps).toBeGreaterThan(0);
+  // And exactly one ramp per element it fired on. Two on one row is a stacked generation.
+  expect(wide.ramps).toBe(wide.targets);
 
   // Then narrowing, fast enough that a per-keystroke retrigger would have several
   // generations overlapping by the last character.
   await field(page).pressSequentially("lpha", { delay: 15 });
   await expect(options(page)).toHaveCount(1);
   const narrow = await motionLoad(page);
-  expect(narrow.running).toBeLessThanOrEqual(narrow.animatable);
+  expect(narrow.ramps).toBe(narrow.targets);
 
   // And it drains: nothing is left running once the reviewer stops.
   await expect.poll(async () => (await motionLoad(page)).running).toBe(0);
@@ -1170,24 +1210,33 @@ test("reduced motion collapses the surface and leaves it fully usable", async ({
   await readingAt(page, "Setup");
   await openToc(page);
 
-  const collapsed = await panel(page).evaluate((el) => {
-    const read = (node: Element | null) =>
-      node === null ? null : getComputedStyle(node).animationDuration;
-    return {
-      panel: read(el),
-      viewport: read(el.querySelector("[data-slot='command-viewport']")),
-      row: read(el.querySelector("[data-slot='command-item']")),
-    };
-  });
-  for (const duration of Object.values(collapsed)) {
-    expect(duration).not.toBeNull();
-    // Near-zero, not zero and not removed: still a real animation, still firing its end.
-    expect(Number.parseFloat(duration!)).toBeLessThan(0.001);
-  }
+  // Read in TWO passes, because no single view has all four animations live and a read
+  // taken where one is not declared measures the initial `0s` — which is under the
+  // threshold with the guard, without it, and with the guard's `[data-slot]` anchor
+  // deleted. An arm sampled in the wrong view is an arm that cannot fail.
+  const outline = await panel(page).evaluate((el) => ({
+    panel: getComputedStyle(el).animationDuration,
+    viewport: getComputedStyle(el.querySelector("[data-slot='command-viewport']")!)
+      .animationDuration,
+  }));
 
-  // Usable, which is the half a duration cannot show. Filter, walk, commit.
   await field(page).fill("notes");
   await expect(options(page)).toHaveText(["Setup notes", "Rollout notes"]);
+  // Only the matches view declares the row ramp — and the heading is the one animated
+  // element the guard reaches through its `[data-slot] *` arm rather than `[data-slot]`,
+  // so it is the arm worth sampling rather than assuming.
+  const matches = await panel(page).evaluate((el) => ({
+    row: getComputedStyle(el.querySelector("[data-slot='command-item']")!).animationDuration,
+    heading: getComputedStyle(el.querySelector("[data-command-group-heading]")!).animationDuration,
+  }));
+
+  for (const [where, duration] of Object.entries({ ...outline, ...matches })) {
+    // Named in the assertion so a failure says which element kept its motion. Near-zero,
+    // not zero and not removed: still a real animation, still firing its end.
+    expect([where, Number.parseFloat(duration) < 0.001]).toEqual([where, true]);
+  }
+
+  // Usable, which is the half a duration cannot show. Walk and commit.
   await page.keyboard.press("ArrowDown");
   await expect(walkedTo(page)).toHaveText("Rollout notes");
   await page.keyboard.press("Enter");
