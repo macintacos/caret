@@ -112,10 +112,10 @@
      neither the roving selection nor the primitive's item set — and is
      `aria-hidden`, which is stronger than the presentational role it reads as:
      `role="presentation"` strips an element's own role but leaves its text in the
-     tree, and bare text is not something a listbox may own. So the ancestor names
-     are sighted-only context for now. Handing them to assistive tech properly —
-     as the option's own description rather than as loose rows — is EXC-1096's
-     narration contract, not a gap to patch here. -->
+     tree, and bare text is not something a listbox may own. The ancestor names are
+     therefore sighted-only wayfinding, which is the settled decision rather than a
+     gap — the header records why. -->
+
 {#snippet rows(nodes: FilteredHeadingNode[])}
   {#each nodes as node (node.heading.line)}
     {@const heading = node.heading}
