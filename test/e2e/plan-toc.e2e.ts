@@ -680,3 +680,82 @@ test("compare mode drops both of the popup's entry points (EXC-1097)", async ({ 
   await page.keyboard.press("\\");
   await expect(panel(page)).toHaveCount(0);
 });
+
+test("the indent guides sit on the indent's own grid and join across rows", async ({
+  daemon,
+  page,
+}) => {
+  // EXC-1106, and the half a mount cannot reach at all: happy-dom lays nothing out and
+  // resolves no `calc`, so the unit suite can only read back the COUNT each row was
+  // handed. Whether that count becomes hairlines in the right columns is arithmetic the
+  // engine does — over a custom property, inside a pseudo-element that has no node to
+  // locate — and it is the whole of the affordance. Read off ::before for that reason;
+  // a bounding box cannot see it.
+  await daemon.seed({ plan: BRANCHED_PLAN });
+  await page.goto("/");
+  await readingAt(page, "Setup");
+  await openToc(page);
+
+  const bands = await options(page).evaluateAll((els) =>
+    els.map((node) => {
+      const el = node as HTMLElement;
+      const box = el.getBoundingClientRect();
+      const guide = getComputedStyle(el, "::before");
+      return {
+        left: Number.parseFloat(guide.left),
+        width: Number.parseFloat(guide.width),
+        height: Number.parseFloat(guide.height),
+        painted: guide.backgroundImage,
+        padding: Number.parseFloat(getComputedStyle(el).paddingLeft),
+        top: box.top,
+        bottom: box.bottom,
+        rowHeight: box.height,
+      };
+    }),
+  );
+  expect(bands).toHaveLength(6);
+
+  for (const [index, band] of bands.entries()) {
+    // AC3: the band ends exactly where the text begins, so its rightmost hairline sits
+    // one indent step left of the first glyph and every column lines up with the level
+    // that opens it. This is what would catch a guide drawn on a grid of its own.
+    expect(band.left + band.width).toBeCloseTo(band.padding, 1);
+    // This plan opens at `#`, so a row's guide count is exactly its depth: the top row
+    // draws none, and every other row draws its indent's worth back to the root.
+    expect(band.width).toBeCloseTo(band.padding - 8, 1);
+    // AC8: full row height, and rows that meet — so two same-depth neighbours join
+    // instead of striping at the padding-block each row carries. Half a pixel rather
+    // than a tenth because the two numbers are measured differently: a computed used
+    // height against a fractional layout rect, which disagree in the third decimal.
+    // Still far tighter than the failure it guards — a band clipped to the content box
+    // would come up a whole padding-block short.
+    expect(band.height).toBeCloseTo(band.rowHeight, 0);
+    if (index > 0) expect(band.top).toBeCloseTo(bands[index - 1]?.bottom ?? -1, 1);
+  }
+
+  // Something is really painted in the band. Width alone would pass on an empty box.
+  expect(bands[0]?.width).toBe(0);
+  expect(bands[2]?.painted).toContain("repeating-linear-gradient");
+});
+
+test("filtering drops the guides, headers and all", async ({ daemon, page }) => {
+  // AC4 and AC6. A filtered row is flush left under a breadcrumb header that carries the
+  // hierarchy, so a column beside it would mark a nesting this view does not show — and
+  // the header is not a row, so nothing should reach it either.
+  await daemon.seed({ plan: BRANCHED_PLAN });
+  await page.goto("/");
+  await readingAt(page, "Setup");
+  await openToc(page);
+  await field(page).fill("notes");
+  await expect(crumbs(page)).toHaveCount(2);
+
+  const widths = await options(page).evaluateAll((els) =>
+    els.map((el) => getComputedStyle(el, "::before").width),
+  );
+  expect(widths).toEqual(["0px", "0px"]);
+
+  const headers = await crumbs(page).evaluateAll((els) =>
+    els.map((el) => getComputedStyle(el, "::before").backgroundImage),
+  );
+  expect(headers).toEqual(["none", "none"]);
+});
