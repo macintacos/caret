@@ -60,6 +60,18 @@ async function openCrumb(target: HTMLElement, index: number, flush: () => void):
   await flushUntil(flush, () => menuRows().length > 0);
 }
 
+/** Let bits-ui's dismissible layer finish arming before anything tears it down.
+ * `use-dismissable-layer` registers its document listeners from an `afterSleep(1)`,
+ * so a panel opened and dismissed inside the same millisecond leaves that timer to
+ * fire against an already-destroyed effect, which svelte reports as `derived_inert`
+ * — once per stray pointer event for the rest of the process. One flushed tick past
+ * that 1ms is all it needs, and the number is bits-ui's rather than the app's, so
+ * there is no clock to inject instead (browser-testing.md § Timing discipline). */
+async function armed(flush: () => void): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  flush();
+}
+
 describe("PlanBreadcrumbs trail", () => {
   test("renders nothing when the plan has no headings", () => {
     const { target } = render(PlanBreadcrumbs, { headings: [], activeLine: 1, onJump: () => {} });
@@ -326,11 +338,13 @@ describe("PlanBreadcrumbs keyboard invocation", () => {
   });
 });
 
-// EXC-948: `/` swaps the open menu for a flat filter over every heading in the
-// plan. Only what a mounted component shows lives here — the swap, the rows and
-// their parents, the narrowing, the empty state, the jump. The keyboard walk
-// through the results and Escape's return to the hierarchy are real focus
-// movement, so they stay e2e (browser-testing.md).
+// EXC-948 gave the bar a flat `/` filter; EXC-1098 rebuilt it on the vendored
+// `command` inside a `popover`, so the field is a real combobox over a listbox
+// rather than a textbox inside role="menu". Only what a mounted component shows
+// lives here — the swap, the rows and their parents, the narrowing, the empty
+// state, the jump, and the narration attributes. The keyboard walk and Escape's
+// return to the hierarchy are real focus movement, so they stay e2e
+// (browser-testing.md).
 describe("PlanBreadcrumbs filter", () => {
   /** The open menu's own content element — where the bar claims `/`. */
   function menuContent(): HTMLElement | null {
@@ -345,23 +359,85 @@ describe("PlanBreadcrumbs filter", () => {
     );
   }
 
-  function queryField(): HTMLInputElement | null {
-    return document.body.querySelector("input[aria-label='Filter headings']");
+  /** The filter's own portalled panel, matched on the bar's class rather than on
+   * `popover-content` — which would also collect any other popover a future test
+   * in this file opens. */
+  function panel(): HTMLElement | null {
+    return document.body.querySelector<HTMLElement>(".plan-crumb-filter");
   }
 
-  function typeQuery(text: string, flush: () => void): void {
+  function listbox(): HTMLElement | null {
+    return panel()?.querySelector<HTMLElement>("[data-slot='command-list']") ?? null;
+  }
+
+  /** The result rows: real options now, not menu items. */
+  function options(): HTMLElement[] {
+    return [...(listbox()?.querySelectorAll<HTMLElement>("[role='option']") ?? [])];
+  }
+
+  function labels(): (string | undefined)[] {
+    return options().map((r) => r.querySelector(".crumb-label")?.textContent?.trim());
+  }
+
+  function queryField(): HTMLInputElement | null {
+    return panel()?.querySelector<HTMLInputElement>("[data-slot='command-input']") ?? null;
+  }
+
+  /** The status line, a sibling of the listbox rather than a row in it. */
+  function emptyLine(): HTMLElement | null {
+    return panel()?.querySelector<HTMLElement>(".crumb-filter-empty") ?? null;
+  }
+
+  /** Type into the field the way a reviewer would, so the bound query — and with it
+   * the match set — updates. `done` says what settling looks like for this query: a
+   * query matching nothing never grows the option set, so polling on that alone
+   * would burn every try and return silently green. */
+  async function typeQuery(
+    text: string,
+    flush: () => void,
+    done: () => boolean = () => options().length > 0,
+  ): Promise<void> {
     const field = queryField();
-    if (!field) throw new Error("no query field");
+    if (field === null) throw new Error("no query field");
     field.value = text;
     field.dispatchEvent(new Event("input", { bubbles: true }));
-    flush();
+    await flushUntil(flush, done);
   }
 
-  /** Open the trailing crumb's menu, then swap it for the filter. */
+  /** Open the trailing crumb's menu, then swap it for the filter. Settles on BOTH
+   * halves of the swap — the panel's rows arriving and the menu's content leaving —
+   * so no test starts against a bar still showing two panels, and none leaves the
+   * menu's effects behind for the next one (see `closeMenu`). */
   async function openFilter(target: HTMLElement, flush: () => void): Promise<void> {
     await openCrumb(target, 2, flush);
     pressInMenu("/");
-    await flushUntil(flush, () => queryField() !== null);
+    await flushUntil(flush, () => options().length > 0 && menuContent() === null);
+  }
+
+  /** Dismiss the filter before the test ends. Load-bearing rather than tidy, and the
+   * same guard PlanToc.test.ts carries: bits-ui's portal presence waits for an
+   * `animationend` that never fires under happy-dom, so content left open at unmount
+   * keeps its effects alive into the NEXT test file, where they read deriveds whose
+   * owner is already destroyed and svelte warns `derived_inert`. Picking a row is the
+   * deterministic dismissal here — it runs the component's own close path rather than
+   * bits-ui's dismiss layer, which wants a real pointer. Guarded, so it is a no-op in
+   * the test whose pick already closed it. */
+  async function closeFilter(flush: () => void): Promise<void> {
+    if (panel() === null) return;
+    if (options().length === 0) await typeQuery("", flush);
+    await armed(flush);
+    options()[0]?.click();
+    await flushUntil(flush, () => panel() === null);
+    await armed(flush);
+  }
+
+  /** Shut an open hierarchy menu, for the same reason. Its trigger is a toggle. */
+  async function closeMenu(target: HTMLElement, flush: () => void): Promise<void> {
+    if (menuContent() === null) return;
+    await armed(flush);
+    target.querySelector<HTMLButtonElement>('[aria-expanded="true"]')?.click();
+    await flushUntil(flush, () => menuContent() === null);
+    await armed(flush);
   }
 
   test("replaces the open menu's siblings with a field over every heading", async () => {
@@ -371,18 +447,38 @@ describe("PlanBreadcrumbs filter", () => {
       onJump: () => {},
     });
     // The innermost crumb's menu offers one row — its own level. The filter that
-    // replaces it spans all four headings, across every level.
+    // replaces it spans all four headings, across every level, and the menu it
+    // replaced is gone rather than left standing behind the panel.
     await openCrumb(target, 2, flush);
     expect(menuRows().length).toBe(1);
 
     pressInMenu("/");
-    await flushUntil(flush, () => queryField() !== null);
-    expect(menuRows().map((r) => r.querySelector(".crumb-label")?.textContent?.trim())).toEqual([
-      "Overview",
-      "Approach",
-      "Details",
-      "Verification",
-    ]);
+    await flushUntil(flush, () => options().length > 0);
+    expect(labels()).toEqual(["Overview", "Approach", "Details", "Verification"]);
+    // And the hierarchy it replaced is gone rather than left standing behind the
+    // panel. Polled: the swap shuts the menu through its own trigger, and bits-ui
+    // takes a beat to tear the portalled content down.
+    await flushUntil(flush, () => menuContent() === null);
+    expect(menuContent()).toBeNull();
+    await closeFilter(flush);
+  });
+
+  // The structural fix the header comment used to record as a deviation: a textbox
+  // is not a role `menu` admits, so the filter now publishes combobox + listbox.
+  test("publishes the field as a combobox over a labelled listbox", async () => {
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await openFilter(target, flush);
+    expect(queryField()?.getAttribute("role")).toBe("combobox");
+    expect(queryField()?.getAttribute("aria-label")).toBe("Filter headings");
+    expect(listbox()?.getAttribute("role")).toBe("listbox");
+    // Named apart from the ToC popup's "Plan headings", so a role query cannot
+    // collect both surfaces at once.
+    expect(listbox()?.getAttribute("aria-label")).toBe("Matching headings");
+    await closeFilter(flush);
   });
 
   test("claims the slash so the plan's own search never sees it", async () => {
@@ -397,6 +493,8 @@ describe("PlanBreadcrumbs filter", () => {
     // dispatcher.ts returns early on defaultPrevented, which is the whole
     // mechanism keeping actions.search shut while the bar owns the key.
     expect(slash.defaultPrevented).toBe(true);
+    await flushUntil(flush, () => options().length > 0);
+    await closeFilter(flush);
   });
 
   test("names each result's enclosing heading", async () => {
@@ -406,12 +504,13 @@ describe("PlanBreadcrumbs filter", () => {
       onJump: () => {},
     });
     await openFilter(target, flush);
-    expect(menuRows().map((r) => r.querySelector(".crumb-parent")?.textContent?.trim())).toEqual([
+    expect(options().map((r) => r.querySelector(".crumb-parent")?.textContent?.trim())).toEqual([
       undefined, // "Overview" is top-level, so it has no parent to name
       "Overview",
       "Approach",
       "Overview",
     ]);
+    await closeFilter(flush);
   });
 
   test("narrows the results as the query is typed", async () => {
@@ -421,11 +520,32 @@ describe("PlanBreadcrumbs filter", () => {
       onJump: () => {},
     });
     await openFilter(target, flush);
-    typeQuery("ver", flush);
-    expect(menuRows().map((r) => r.querySelector(".crumb-label")?.textContent?.trim())).toEqual([
-      "Overview",
-      "Verification",
-    ]);
+    await typeQuery("ver", flush, () => options().length === 2);
+    expect(labels()).toEqual(["Overview", "Verification"]);
+    await closeFilter(flush);
+  });
+
+  // The filter stays FLAT — its divergence from the ToC popup's nesting-preserving
+  // filter is deliberate. A match brings its enclosing heading's name along on the
+  // row rather than a dimmed ancestor row above it, and the rows keep document
+  // order, which the command's own score-sorting filter engine would shuffle.
+  test("flattens rather than nesting, and leaves the rows in document order", async () => {
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await openFilter(target, flush);
+    await typeQuery("e", flush, () => options().length === 3);
+    // Document order, which the command's own score sort would shuffle.
+    expect(labels()).toEqual(["Overview", "Details", "Verification"]);
+
+    // Flat: a match arrives alone, with its enclosing heading riding ON its row.
+    // The ToC popup's nesting filter would answer this query with three rows.
+    await typeQuery("details", flush, () => options().length === 1);
+    expect(labels()).toEqual(["Details"]);
+    expect(options()[0]?.querySelector(".crumb-parent")?.textContent?.trim()).toBe("Approach");
+    await closeFilter(flush);
   });
 
   test("shows an empty state rather than a blank panel when nothing matches", async () => {
@@ -435,11 +555,56 @@ describe("PlanBreadcrumbs filter", () => {
       onJump: () => {},
     });
     await openFilter(target, flush);
-    typeQuery("zzz", flush);
-    expect(menuRows().length).toBe(0);
-    expect(document.body.querySelector(".crumb-filter-empty")?.textContent?.trim()).toBe(
-      "No headings match",
+    await typeQuery("zzz", flush, () => options().length === 0);
+    expect(options().length).toBe(0);
+    expect(emptyLine()?.textContent?.trim()).toBe("No headings match");
+    // Narrowing to nothing is the one change aria-activedescendant cannot carry —
+    // no active row is left to name — so a live region says it out loud.
+    expect(emptyLine()?.getAttribute("role")).toBe("status");
+    await closeFilter(flush);
+  });
+
+  // A live region has to be idle in the DOM before the change it announces; one
+  // inserted with its content already in it is skipped by some AT outright.
+  test("keeps the status line mounted while there are rows to show", async () => {
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await openFilter(target, flush);
+    expect(options().length).toBeGreaterThan(0);
+    expect(emptyLine()).not.toBeNull();
+    expect(emptyLine()?.textContent).toBe("");
+    // A status ABOUT the list, not a row in it.
+    expect(listbox()?.contains(emptyLine())).toBe(false);
+    await closeFilter(flush);
+  });
+
+  // The narration EXC-1062 vendored `command` for, and the gap the bar's old
+  // dropdown filter could not close. The field names the row the selection is on,
+  // so the reviewer hears the list narrow without focus ever leaving the field.
+  // Polled rather than sampled: bits-ui rebuilds the viewport both attributes are
+  // derived from whenever a query crosses the empty/non-empty boundary.
+  test("the filter field narrates the row the selection is on", async () => {
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await openFilter(target, flush);
+    await flushUntil(flush, () => queryField()?.getAttribute("aria-activedescendant") != null);
+
+    const controls = document.getElementById(queryField()?.getAttribute("aria-controls") ?? "");
+    expect(listbox()?.contains(controls)).toBe(true);
+
+    const active = document.getElementById(
+      queryField()?.getAttribute("aria-activedescendant") ?? "",
     );
+    expect(active?.getAttribute("role")).toBe("option");
+    // The command selects its first row, which is what Enter from the field takes.
+    expect(active?.querySelector(".crumb-label")?.textContent?.trim()).toBe("Overview");
+    await closeFilter(flush);
   });
 
   test("jumps to a result's source line when it is picked", async () => {
@@ -450,10 +615,12 @@ describe("PlanBreadcrumbs filter", () => {
       onJump: jumped.cb,
     });
     await openFilter(target, flush);
-    typeQuery("verification", flush);
-    menuRows()[0]?.click();
-    flush();
+    await typeQuery("verification", flush, () => options().length === 1);
+    options()[0]?.click();
+    await flushUntil(flush, () => panel() === null);
     expect(jumped.last()).toBe(20);
+    // A pick hands the reviewer to the plan, so the panel leaves with them.
+    expect(panel()).toBeNull();
   });
 
   test("marks the heading the reader is on among the results", async () => {
@@ -463,12 +630,13 @@ describe("PlanBreadcrumbs filter", () => {
       onJump: () => {},
     });
     await openFilter(target, flush);
-    expect(menuRows().map((r) => r.getAttribute("aria-current"))).toEqual([
+    expect(options().map((r) => r.getAttribute("aria-current"))).toEqual([
       null,
       null,
       "location",
       null,
     ]);
+    await closeFilter(flush);
   });
 
   test("teaches the slash in the menu only while shortcut hints are shown", async () => {
@@ -481,6 +649,7 @@ describe("PlanBreadcrumbs filter", () => {
     });
     await openCrumb(on.target, 2, on.flush);
     expect(hint()?.textContent).toContain("/");
+    await closeMenu(on.target, on.flush);
 
     const off = render(PlanBreadcrumbs, {
       headings: HEADINGS,
@@ -490,6 +659,7 @@ describe("PlanBreadcrumbs filter", () => {
     });
     await openCrumb(off.target, 2, off.flush);
     expect(hint()).toBeNull();
+    await closeMenu(off.target, off.flush);
   });
 });
 
