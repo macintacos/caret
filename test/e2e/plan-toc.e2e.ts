@@ -186,12 +186,66 @@ const labelLefts = (page: Page): Promise<(number | null)[]> =>
     }),
   );
 
-/** Open the popup and wait for its rows. */
+/** Wait until nothing in the popup is still animating.
+ *
+ * A real promise on a real animation, not a sleep: `Animation.finished` settles when the
+ * engine says the animation is done, so it costs nothing on a surface that has already
+ * settled and cannot race the one that has not. `subtree: true` is what makes it cover
+ * the rows and the breadcrumb headers as well as the panel's own zoom.
+ *
+ * A cancelled animation rejects `finished` with an AbortError — an element removed
+ * mid-flight is the ordinary case here, not a failure — so each is swallowed
+ * individually rather than letting one poison the `Promise.all`. */
+async function settled(page: Page): Promise<void> {
+  await panel(page).evaluate(async (el) => {
+    await Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished.catch(() => {})));
+  });
+}
+
+/** Open the popup and wait for its rows — and then for its motion.
+ *
+ * The settle is EXC-1107's, and it is why every geometry spec below can keep reading
+ * boxes. The panel enters under tw-animate-css's `zoom-in-95`, so until that finishes a
+ * `getBoundingClientRect` is a *visual* box carrying the scale while `getComputedStyle`
+ * is the *layout* box that is not — the two spaces `measureGuides` documents at length,
+ * and the race EXC-1106 shipped a defect through. `toBeVisible()` resolves the moment the
+ * panel paints, mid-zoom, and `evaluateAll` is not an action, so Playwright's own
+ * not-animating check never applies. Waiting here closes the window for every caller at
+ * once rather than per assertion. */
 async function openToc(page: Page): Promise<void> {
   await trigger(page).click();
   await expect(listbox(page)).toBeVisible();
   await expect(options(page).first()).toBeVisible();
+  await settled(page);
 }
+
+/** A motion token as the engine resolves it, in the same units `getComputedStyle` and
+ * `AnimationEvent.elapsedTime` report. Asked of the engine rather than parsed out of the
+ * stylesheet, so a spec asserting a duration is asserting against the token the component
+ * actually references and not against a number retyped beside it. */
+async function motionToken(page: Page, token: string): Promise<number> {
+  return page.evaluate((name) => {
+    const probe = document.createElement("span");
+    probe.style.setProperty("animation-duration", `var(${name})`);
+    document.body.append(probe);
+    const value = getComputedStyle(probe).animationDuration;
+    probe.remove();
+    return Number.parseFloat(value); // seconds
+  }, token);
+}
+
+/** The animation an element is carrying, read off the cascade. `animationName` survives
+ * the animation itself — it is a computed value, not a running-state — so this is a
+ * question about what the stylesheet says rather than about what frame we caught. */
+const animationOf = (locator: Locator) =>
+  locator.evaluate((el) => {
+    const style = getComputedStyle(el);
+    return {
+      name: style.animationName,
+      duration: style.animationDuration,
+      easing: style.animationTimingFunction,
+    };
+  });
 
 /** Load the plan and park the reading position on `heading`. */
 async function readingAt(page: Page, heading: string): Promise<void> {
@@ -843,4 +897,275 @@ test("filtering drops the guides, headers and all", async ({ daemon, page }) => 
     els.map((el) => getComputedStyle(el, "::before").backgroundImage),
   );
   expect(headers).toEqual(["none", "none"]);
+});
+
+// EXC-1107's motion pass, and every spec below needs a real engine for the same reason:
+// happy-dom runs no animations at all. It resolves no `animation` shorthand, fires no
+// `animationstart`/`animationend`, and implements no Web Animations API — so the unit
+// suite can reach exactly one thing about this change, the `data-toc-view` marker the
+// rules key on, and that is where it lives (PlanToc.test.ts). Everything here is either a
+// value the cascade computed or an event the engine really fired.
+
+/** What the panel's exit really did, captured from the engine rather than inferred.
+ *
+ * A dismissal removes the panel, so the assertion cannot be a computed read afterwards —
+ * there is nothing left to read. Arming a recorder first and running the dismissal into
+ * it is what makes "dismissal is animated too" falsifiable: strip the exit and the array
+ * comes back empty rather than merely different.
+ *
+ * Filtered to the panel's own events. `animationstart`/`animationend` bubble, so a row or
+ * a header animating inside would otherwise land in the same log. */
+type MotionLog = { type: string; name: string; elapsed: number }[];
+
+async function recordDismissal(page: Page, dismiss: () => Promise<void>): Promise<MotionLog> {
+  await panel(page).evaluate((el) => {
+    const w = window as Window & { __tocMotion?: MotionLog };
+    w.__tocMotion = [];
+    const log = (event: Event): void => {
+      if (event.target !== el) return;
+      const animation = event as AnimationEvent;
+      w.__tocMotion?.push({
+        type: event.type,
+        name: animation.animationName,
+        elapsed: animation.elapsedTime,
+      });
+    };
+    el.addEventListener("animationstart", log);
+    el.addEventListener("animationend", log);
+  });
+  await dismiss();
+  await expect(panel(page)).toHaveCount(0);
+  return page.evaluate(() => (window as Window & { __tocMotion?: MotionLog }).__tocMotion ?? []);
+}
+
+test("the panel arrives on the enter token and leaves on the exit one", async ({
+  daemon,
+  page,
+}) => {
+  // AC1 and AC7 together. The vendored Popover.Content already animates through
+  // tw-animate-css, and that machinery is not decoration: bits-ui's portal presence waits
+  // on the `animationend` its `enter`/`exit` keyframes fire. So the refinement retimes
+  // those keyframes rather than declaring a competing one, and what this spec pins is
+  // exactly that — the animation is still tw-animate-css's, and only its timing is now
+  // caret's, asymmetric in the direction the vocabulary pairs its two easings for.
+  await daemon.seed({ plan: TALL_PLAN });
+  await page.goto("/");
+  await readingAt(page, "Delta");
+
+  const enterSeconds = await motionToken(page, "--dur-base");
+  const exitSeconds = await motionToken(page, "--dur-fast");
+  // The pairing is the claim; two tokens that had drifted to the same number would make
+  // every assertion below true while saying nothing.
+  expect(enterSeconds).not.toBe(exitSeconds);
+
+  await openToc(page);
+  const entering = await animationOf(panel(page));
+  // Still the vendored keyframes — a caret-named animation here would mean the exit
+  // bits-ui waits on had been replaced.
+  expect(entering.name).toBe("enter");
+  expect(Number.parseFloat(entering.duration)).toBeCloseTo(enterSeconds, 3);
+  const enterEasing = entering.easing;
+
+  const log = await recordDismissal(page, () => page.keyboard.press("Escape"));
+  const ended = log.find((e) => e.type === "animationend");
+  expect(log.some((e) => e.type === "animationstart" && e.name === "exit")).toBe(true);
+  expect(ended?.name).toBe("exit");
+  // `elapsedTime` at animationend is the animation's own active duration, so this is the
+  // exit really having run for the exit token's worth of time — not a frame we happened
+  // to catch, and not a computed value that would read the same on a cancelled animation.
+  expect(ended?.elapsed).toBeCloseTo(exitSeconds, 3);
+
+  // And the curve turns around with it: leaving accelerates out where arriving decelerated
+  // in. Read from the closed panel's own cascade, so the two are the same kind of value.
+  await openToc(page);
+  const leavingEasing = await panel(page).evaluate((el) => {
+    el.setAttribute("data-state", "closed");
+    const easing = getComputedStyle(el).animationTimingFunction;
+    el.setAttribute("data-state", "open");
+    return easing;
+  });
+  expect(leavingEasing).not.toBe(enterEasing);
+  await page.keyboard.press("Escape");
+  await expect(panel(page)).toHaveCount(0);
+});
+
+test("every way out of the popup is animated, not cut", async ({ daemon, page }) => {
+  // AC1 names four paths, and they are four different callers rather than four spellings
+  // of one: Escape and an outside click are the primitive's own dismissals, while a pick
+  // and the trigger both write `open` from caret's code. All four have to reach the same
+  // `data-state` flip, or one of them would drop the panel out of the DOM instantly.
+  await daemon.seed({ plan: TALL_PLAN });
+  await page.goto("/");
+  await readingAt(page, "Delta");
+
+  const outsideClick = async (): Promise<void> => {
+    // Below the panel's own box, on the plan: the panel hangs off the control row, so a
+    // click on the first rows would land on the dismiss layer instead of outside it.
+    const panelBox = await panel(page).boundingBox();
+    const planBox = await page.locator(PLAN_SURFACE).boundingBox();
+    expect(panelBox).not.toBeNull();
+    expect(planBox).not.toBeNull();
+    await page.mouse.click(planBox!.x + planBox!.width / 2, panelBox!.y + panelBox!.height + 40);
+  };
+
+  const paths: [string, () => Promise<void>][] = [
+    ["Escape", () => page.keyboard.press("Escape")],
+    ["an outside click", outsideClick],
+    ["picking a heading", () => options(page).first().click()],
+    ["the trigger", () => trigger(page).click()],
+  ];
+
+  for (const [name, dismiss] of paths) {
+    await openToc(page);
+    const log = await recordDismissal(page, dismiss);
+    // Named in the assertion so a failure says which path lost its exit.
+    expect([name, log.map((e) => `${e.type}:${e.name}`)]).toEqual([
+      name,
+      ["animationstart:exit", "animationend:exit"],
+    ]);
+  }
+});
+
+test("a match and its breadcrumb header arrive on one animation", async ({ daemon, page }) => {
+  // AC2 and AC3. The header being "in step with its rows" is not two constants that
+  // happen to agree — it is one declaration covering both, so the strongest form of the
+  // claim is a single equality between what the cascade handed each of them. A header
+  // given a duration of its own is exactly the drift that would pop it in above rows that
+  // were still fading, and it is what this reds on.
+  await daemon.seed({ plan: BRANCHED_PLAN });
+  await page.goto("/");
+  await readingAt(page, "Setup");
+  await openToc(page);
+
+  await field(page).fill("notes");
+  await expect(options(page)).toHaveCount(2);
+  await expect(crumbs(page)).toHaveCount(2);
+
+  const row = await animationOf(options(page).first());
+  const header = await animationOf(crumbs(page).first());
+  // Svelte scopes a component's keyframes with a build hash, so the name is asserted by
+  // suffix — pinning the hash would red on any unrelated edit to the stylesheet.
+  expect(row.name).toMatch(/toc-row-in$/);
+  expect(header).toEqual(row);
+
+  // The viewport stays still in this view: the rows are carrying the change, and running
+  // both would multiply two opacity ramps on nested elements for nothing.
+  const viewport = panel(page).locator("[data-slot='command-viewport']");
+  expect((await animationOf(viewport)).name).toBe("none");
+});
+
+test("the outline carries its motion on the list, never on its rows", async ({ daemon, page }) => {
+  // AC6, and the decision the whole design rests on. The outline is the WHOLE plan — the
+  // low hundreds of rows this popup is bounded at — and it mounts all at once, so a row
+  // animation scoped to it would start several hundred simultaneous ramps on open and on
+  // every clear. The list re-forming carries that direction instead, on one element.
+  // TALL_PLAN is the fixture that makes this say something: 25 headings, more than fit.
+  await daemon.seed({ plan: TALL_PLAN });
+  await page.goto("/");
+  await readingAt(page, "Delta");
+  await openToc(page);
+
+  const viewport = panel(page).locator("[data-slot='command-viewport']");
+  const list = await animationOf(viewport);
+  expect(list.name).toMatch(/toc-list-in$/);
+  expect(Number.parseFloat(list.duration)).toBeCloseTo(await motionToken(page, "--dur-fast"), 3);
+
+  const animated = await options(page).evaluateAll(
+    (els) => els.filter((el) => getComputedStyle(el).animationName !== "none").length,
+  );
+  expect(await options(page).count()).toBe(25);
+  expect(animated).toBe(0);
+
+  // And the same holds coming back: clearing the query crosses bits-ui's
+  // `{#key search === ""}` boundary, which rebuilds the viewport and restarts its
+  // animation — while the outline rows it rebuilds still animate nothing.
+  await field(page).fill("alpha");
+  await expect(options(page)).toHaveCount(1);
+  await field(page).fill("");
+  await expect(options(page)).toHaveCount(25);
+  expect((await animationOf(viewport)).name).toMatch(/toc-list-in$/);
+  expect(
+    await options(page).evaluateAll(
+      (els) => els.filter((el) => getComputedStyle(el).animationName !== "none").length,
+    ),
+  ).toBe(0);
+
+  await page.keyboard.press("Escape");
+  await expect(panel(page)).toHaveCount(0);
+});
+
+test("typing fast queues no animation behind the reviewer", async ({ daemon, page }) => {
+  // AC4. A row animates once when it appears and never again while it stays, so a burst
+  // of keystrokes cannot stack ramps on the same element — but "cannot" is a property of
+  // the design, and this is what makes it a measurement. Two numbers: how much is in
+  // flight at the moment typing stops, and whether it is all gone shortly after.
+  await daemon.seed({ plan: TALL_PLAN });
+  await page.goto("/");
+  await readingAt(page, "Delta");
+  await openToc(page);
+
+  // Faster than a person types, and long enough that a per-keystroke retrigger would have
+  // several generations overlapping by the last character.
+  await field(page).pressSequentially("alpha", { delay: 15 });
+  const inFlight = await page.evaluate(() => document.getAnimations().length);
+  await expect(options(page)).toHaveCount(1);
+  // One match, its group header, and the panel's own zoom is long finished. A design that
+  // re-animated the surviving rows on each keystroke, or that animated the outline, would
+  // be an order of magnitude past this.
+  expect(inFlight).toBeLessThanOrEqual(4);
+
+  await expect
+    .poll(() =>
+      page.evaluate(() => document.getAnimations().filter((a) => a.playState === "running").length),
+    )
+    .toBe(0);
+
+  await page.keyboard.press("Escape");
+  await expect(panel(page)).toHaveCount(0);
+});
+
+test("reduced motion collapses the surface and leaves it fully usable", async ({
+  daemon,
+  page,
+}) => {
+  // AC5, emulated HERE rather than in playwright.config.ts, and that is a decision rather
+  // than a convenience. Turning `reduce` on suite-wide would delete a whole race class
+  // from every geometry assertion in this file — but it would also stop the suite ever
+  // exercising the animated path in a real engine, which is the entire subject of this
+  // change. So the preference is emulated in the one spec that is about it.
+  //
+  // The guard is global (app.css) and reaches this panel through its `[data-slot]` anchor;
+  // there is deliberately no reduced-motion block in the component. It collapses the
+  // duration rather than removing the animation, and that distinction is load-bearing:
+  // bits-ui's portal presence waits on `animationend`, so an `animation: none` here would
+  // strand the panel in the DOM on every dismissal under the preference.
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await daemon.seed({ plan: BRANCHED_PLAN });
+  await page.goto("/");
+  await readingAt(page, "Setup");
+  await openToc(page);
+
+  const collapsed = await panel(page).evaluate((el) => {
+    const read = (node: Element | null) =>
+      node === null ? null : getComputedStyle(node).animationDuration;
+    return {
+      panel: read(el),
+      viewport: read(el.querySelector("[data-slot='command-viewport']")),
+      row: read(el.querySelector("[data-slot='command-item']")),
+    };
+  });
+  for (const duration of Object.values(collapsed)) {
+    expect(duration).not.toBeNull();
+    // Near-zero, not zero and not removed: still a real animation, still firing its end.
+    expect(Number.parseFloat(duration!)).toBeLessThan(0.001);
+  }
+
+  // Usable, which is the half a duration cannot show. Filter, walk, commit.
+  await field(page).fill("notes");
+  await expect(options(page)).toHaveText(["Setup notes", "Rollout notes"]);
+  await page.keyboard.press("ArrowDown");
+  await expect(walkedTo(page)).toHaveText("Rollout notes");
+  await page.keyboard.press("Enter");
+  await expect(panel(page)).toHaveCount(0);
+  await expect.poll(() => new URL(page.url()).searchParams.get("heading")).toBe("rollout-notes");
 });
