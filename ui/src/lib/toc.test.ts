@@ -4,6 +4,7 @@ import {
   activeHeadingLine,
   extractHeadings,
   filterHeadings,
+  headingMatcher,
   lineForSlug,
   slugForLine,
   type TocHeading,
@@ -129,6 +130,68 @@ describe("filterHeadings", () => {
     // silently, since the shapes still match.
     expect(filterHeadings(headings, "")[0]).toBe(headings[0]);
     expect(filterHeadings(headings, "app")[0]).toBe(headings[1]);
+  });
+});
+
+// The single definition of what the ToC counts as a match, and the reason the filter
+// and the highlight cannot disagree (EXC-1104): `filterHeadings` is built on this, so
+// a row is shown and its characters are marked by the same closure.
+describe("headingMatcher", () => {
+  // Every run rejoins to the input, always — a highlighter that drops or duplicates a
+  // character rewrites the label. Asserted on every case below through this helper.
+  function rejoined(runs: { text: string }[] | null): string {
+    return (runs ?? []).map((r) => r.text).join("");
+  }
+
+  test("matches every text with nothing marked for an empty query", () => {
+    for (const query of ["", "   "]) {
+      expect(headingMatcher(query)("Verification")).toEqual([{ text: "Verification", hit: false }]);
+    }
+  });
+
+  test("marks the matched run and leaves the rest alone", () => {
+    const runs = headingMatcher("ION")("Verification");
+    expect(runs).toEqual([
+      { text: "Verificat", hit: false },
+      { text: "ion", hit: true },
+    ]);
+    expect(rejoined(runs)).toBe("Verification");
+  });
+
+  test("marks every occurrence, not only the first", () => {
+    const runs = headingMatcher("test")("Test the test runner");
+    expect(runs).toEqual([
+      { text: "Test", hit: true },
+      { text: " the ", hit: false },
+      { text: "test", hit: true },
+      { text: " runner", hit: false },
+    ]);
+    expect(rejoined(runs)).toBe("Test the test runner");
+  });
+
+  test("emits no empty run when the match sits at either end", () => {
+    expect(headingMatcher("set")("Setup")).toEqual([
+      { text: "Set", hit: true },
+      { text: "up", hit: false },
+    ]);
+    expect(headingMatcher("up")("Setup")).toEqual([
+      { text: "Set", hit: false },
+      { text: "up", hit: true },
+    ]);
+    expect(headingMatcher("setup")("Setup")).toEqual([{ text: "Setup", hit: true }]);
+  });
+
+  test("returns null when the text does not match", () => {
+    expect(headingMatcher("zzz")("Verification")).toBeNull();
+  });
+
+  // A case fold that changes length shifts every later offset, so the marked run would
+  // land on the WRONG characters — worse than marking none. The heading still matches,
+  // because the filter's semantics are not this issue's to change.
+  test("keeps a length-changing case fold matching but marks nothing", () => {
+    const runs = headingMatcher("stanbul")("İstanbul");
+    expect(runs).toEqual([{ text: "İstanbul", hit: false }]);
+    expect(headingMatcher("zzz")("İstanbul")).toBeNull();
   });
 });
 
