@@ -491,7 +491,7 @@ describe("PlanToc match highlighting", () => {
       onJump: () => {},
     });
     await open(target, flush);
-    await typeQuery("det", flush);
+    await typeQuery("det", flush, () => options().length === 1);
     const row = options()[0];
     if (row === undefined) throw new Error("no match row rendered");
     expect(hits(row)).toEqual(["Det"]);
@@ -510,7 +510,7 @@ describe("PlanToc match highlighting", () => {
       onJump: () => {},
     });
     await open(target, flush);
-    await typeQuery("det", flush);
+    await typeQuery("det", flush, () => options().length === 1);
     expect(options()[0]?.querySelector(".toc-label")?.textContent).toBe("Details");
     await close(target, flush);
   });
@@ -539,7 +539,7 @@ describe("PlanToc match highlighting", () => {
       onJump: () => {},
     });
     await open(target, flush);
-    await typeQuery("det", flush);
+    await typeQuery("det", flush, () => options().length === 1);
     expect(options().flatMap(hits)).toEqual(["Det"]);
 
     await typeQuery("", flush, () => options().length === 4);
@@ -575,7 +575,7 @@ describe("PlanToc match highlighting", () => {
       onJump: () => {},
     });
     await open(target, flush);
-    await typeQuery("det", flush);
+    await typeQuery("det", flush, () => options().length === 1);
     expect(looseText()).toEqual([]);
     await close(target, flush);
   });

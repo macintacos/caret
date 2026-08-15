@@ -64,7 +64,7 @@ export function activeHeadingLine(headings: TocHeading[], topLine: number): numb
 }
 
 /** A run of a heading's text, flagged when the query matched those characters. */
-export interface TextRun {
+export interface MatchRun {
   text: string;
   /** Whether the query matched this run. */
   hit: boolean;
@@ -80,8 +80,12 @@ export interface TextRun {
  * An empty or whitespace-only query matches every text as a single unflagged run.
  * That one case is what lets `filterHeadings` return everything while a highlighter
  * built on the same closure marks nothing.
+ *
+ * A third outcome a highlighting caller has to expect: a text whose lowercase differs in
+ * LENGTH (`İ`) still matches, but comes back as one unflagged run. The offsets no longer
+ * align there, and marking the wrong characters is worse than marking none.
  */
-export function headingMatcher(query: string): (text: string) => TextRun[] | null {
+export function headingMatcher(query: string): (text: string) => MatchRun[] | null {
   const needle = query.trim().toLowerCase();
   return (text) => {
     if (needle === "") return [{ text, hit: false }];
@@ -92,7 +96,7 @@ export function headingMatcher(query: string): (text: string) => TextRun[] | nul
     if (haystack.length !== text.length) {
       return haystack.includes(needle) ? [{ text, hit: false }] : null;
     }
-    const runs: TextRun[] = [];
+    const runs: MatchRun[] = [];
     // `at` is both the start of the not-yet-emitted text and where the next search
     // resumes, so occurrences never overlap. An empty needle — the one value that would
     // spin this loop — has already returned above.

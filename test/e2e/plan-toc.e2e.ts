@@ -286,6 +286,15 @@ test("the grouping filter drives the list, not the command's own filter engine",
   await expect(crumbs(page)).toHaveText(["Plan › Setup", "Plan › Rollout"]);
   await expect(options(page)).toHaveText(["Setup notes", "Rollout notes"]);
 
+  // EXC-1104 marks the matched characters by cutting the label into runs, so an option's
+  // NAME became a name-from-content computation over several child nodes rather than over
+  // one text node — and engines have historically differed on whether they join those
+  // chunks with a separator. Only a role engine performs that computation; a mount can
+  // assert the label's textContent and nothing more. So it is pinned here, beside the
+  // aria-labelledby resolution above and for the same reason. Falsifiable: wrap the runs
+  // in anything that contributes text, and this reds while every unit test stays green.
+  await expect(options(page).first()).toHaveAccessibleName("Setup notes");
+
   // Every match row is flush left now, whatever its own heading level: the breadcrumb
   // above it carries the hierarchy, so the indent no longer repeats it (AC5).
   const depths = await options(page).evaluateAll((els) =>

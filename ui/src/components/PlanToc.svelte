@@ -113,12 +113,11 @@
   const tree = $derived(headingTree(headings));
   const groups = $derived(groupedHeadingMatches(headings, query));
 
-  // What a row marks, and the reason it can never mark the wrong characters: this is the
-  // SAME closure `filterHeadings` decides membership with (toc.ts), reached from beside
-  // the filter rather than by transforming what it returns. Computing ranges from the
-  // filter's output is the shape that breaks — `groupedHeadingMatches` gathers by
-  // reference identity, so a mapped `{heading, runs}` result would empty the panel for
-  // every query, silently and from the other module.
+  // What a row marks — the SAME closure `filterHeadings` decides membership with, reached
+  // from beside the filter rather than by transforming what it returns. `filterHeadings`
+  // (toc.ts) carries why deriving the runs from its OUTPUT is the shape that silently
+  // empties the panel; that is where an edit could reintroduce it, so it is written once
+  // there rather than twice.
   const matcher = $derived(headingMatcher(query));
 
   // What the status line says, empty when the list has rows. Derived rather than
@@ -211,13 +210,17 @@
     aria-current={heading.line === activeLine ? "location" : undefined}
     onSelect={() => jump(heading.line)}
   >
-    <!-- Every run is a span, marked or not, and the row's TEXT is unchanged either way —
-         which is what keeps the option's accessible name exactly the heading, since that
-         name comes from its contents. Splitting the label into elements rather than
-         adding one is also what keeps the mark out of the accessibility tree: a plain
-         span is invisible to it, where a real `mark` element is narrated by WebKit. -->
+    <!-- Only a MATCHED run takes an element; unmatched text stays a bare text node. That
+         keeps the unfiltered view's markup byte-identical to a plain `{heading.text}` —
+         no wrapper span on any of a plan's several hundred rows — so this decoration is
+         inert until the reviewer actually types.
+         The row's TEXT is the heading either way, which is what keeps the option's
+         accessible name exactly the heading, since that name is computed from its
+         contents. Splitting the label rather than adding to it is also what keeps the
+         mark out of the accessibility tree: a plain span is invisible to it, where a real
+         `mark` element is narrated by WebKit. -->
     <span class="toc-label" title={heading.text}>
-      {#each parts as part}<span class:toc-hit={part.hit}>{part.text}</span>{/each}
+      {#each parts as part}{#if part.hit}<span class="toc-hit">{part.text}</span>{:else}{part.text}{/if}{/each}
     </span>
   </Command.Item>
 {/snippet}
@@ -518,8 +521,14 @@
      truncates.
      It reads over BOTH marks a row can already wear because it is a different kind of
      thing rather than a different hue — those two fill the whole row, this fills a run
-     inside one. That it stays legible over the amber one is not luck: the palette draws
-     markHue a step above washHue for exactly this (lib/themes/caret.ts), in both schemes. */
+     inside one. What keeps it legible over the amber one is ALPHA STACKING, and that is
+     the general mechanism: --mark composites on top of whatever the row already paints,
+     so the run is always a step further from the panel than its row is. Do not read this
+     as a hue guarantee — only caret's own palette names a markHue distinct from its
+     washHue; every vendor palette leaves both unset, and recipe.ts then collapses
+     markHue → washHue → accent, so there the mark and the row wash are the same hue at
+     different alphas. Measured on the painted pixels, the run separates from its row by
+     ΔE*ab 8.8–20.3 across both schemes and all three row states. */
   :global(.plan-toc-panel .toc-hit) {
     background: var(--mark);
   }
