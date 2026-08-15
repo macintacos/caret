@@ -286,21 +286,42 @@ test("the grouping filter drives the list, not the command's own filter engine",
   await expect(crumbs(page)).toHaveText(["Plan › Setup", "Plan › Rollout"]);
   await expect(options(page)).toHaveText(["Setup notes", "Rollout notes"]);
 
-  // EXC-1104 marks the matched characters by cutting the label into runs, so an option's
-  // NAME became a name-from-content computation over several child nodes rather than over
-  // one text node — and engines have historically differed on whether they join those
-  // chunks with a separator. Only a role engine performs that computation; a mount can
-  // assert the label's textContent and nothing more. So it is pinned here, beside the
-  // aria-labelledby resolution above and for the same reason. Falsifiable: wrap the runs
-  // in anything that contributes text, and this reds while every unit test stays green.
-  await expect(options(page).first()).toHaveAccessibleName("Setup notes");
-
   // Every match row is flush left now, whatever its own heading level: the breadcrumb
   // above it carries the hierarchy, so the indent no longer repeats it (AC5).
   const depths = await options(page).evaluateAll((els) =>
     els.map((el) => (el as HTMLElement).style.getPropertyValue("--toc-depth")),
   );
   expect(depths).toEqual(["0", "0"]);
+});
+
+// EXC-1104 marks the matched characters by cutting a row's label into runs, which turns
+// the option's NAME into a name-from-content computation over several child nodes instead
+// of over one text node. Only a role engine performs that computation — a mount can assert
+// the label's textContent and nothing more — so it is pinned here, beside the
+// aria-labelledby resolution above and for the same reason.
+//
+// The QUERY is the load-bearing part of this spec, and a word-boundary one would make it
+// vacuous. Accessible names are whitespace-normalized, so a split at a space survives a
+// stray separator intact: "Setup " + "notes" with a separator between is "Setup  notes",
+// which normalizes straight back to the expected name and the assertion never reds. "ote"
+// splits mid-word into "Setup n" + "ote" + "s", where a separator normalizes to
+// "Setup n ote s" and cannot hide. Keep any future query here mid-word.
+test("marking the matched characters leaves the option's accessible name alone", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: BRANCHED_PLAN });
+  await page.goto("/");
+  await readingAt(page, "Setup");
+
+  await openToc(page);
+  await field(page).fill("ote");
+
+  // The mark is really rendered — otherwise the name below is trivially unchanged and
+  // this spec would pass against a build that highlights nothing at all.
+  await expect(panel(page).locator(".toc-hit")).toHaveText(["ote", "ote"]);
+  await expect(options(page).first()).toHaveAccessibleName("Setup notes");
+  await expect(options(page).nth(1)).toHaveAccessibleName("Rollout notes");
 });
 
 test("clearing the query puts the nested tree back", async ({ daemon, page }) => {
