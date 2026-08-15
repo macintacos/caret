@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
-import { headingMatches, headingTrail, headingTree, visibleDepths } from "$lib/headingTrail.ts";
+import {
+  type FilteredHeadingNode,
+  filteredHeadingTree,
+  headingMatches,
+  headingTrail,
+  headingTree,
+  visibleDepths,
+} from "$lib/headingTrail.ts";
 import { extractHeadings, type TocHeading } from "$lib/toc.ts";
 
 // Fixtures deliberately space their headings apart, so a heading's source line
@@ -229,5 +236,80 @@ describe("headingMatches", () => {
 
   test("returns nothing for a plan with no headings", () => {
     expect(headingMatches([], "")).toEqual([]);
+  });
+});
+
+// The filter the ToC popup renders (EXC-1094): the same matches `headingMatches`
+// finds, but left in the hierarchy, with the unmatched headings above them kept
+// as the context that places them.
+describe("filteredHeadingTree", () => {
+  // A filtered tree written as nested text: a match is its own text, a heading
+  // kept only to place a match below it is parenthesised — what the popup dims —
+  // and children follow in brackets.
+  const shape = (nodes: FilteredHeadingNode[]): string[] =>
+    nodes.map((node) => {
+      const text = node.matched ? node.heading.text : `(${node.heading.text})`;
+      return node.children.length === 0 ? text : `${text} [${shape(node.children).join(", ")}]`;
+    });
+
+  test("keeps a match at its own depth, under its unmatched ancestors as context", () => {
+    const headings = extractHeadings("# A\n\n## B\n\n### Target\n");
+    expect(shape(filteredHeadingTree(headings, "target"))).toEqual(["(A) [(B) [Target]]"]);
+  });
+
+  test("does not pull a match's non-matching descendants in with it", () => {
+    // The whole point of filtering: matching "Setup" must not re-admit the
+    // section under it, which is what makes a filtered list shorter than the tree.
+    const headings = extractHeadings("# Setup\n\n## Details\n");
+    expect(shape(filteredHeadingTree(headings, "setup"))).toEqual(["Setup"]);
+  });
+
+  test("returns a heading that both matches and encloses a match as a match", () => {
+    const headings = extractHeadings("# Setup\n\n## Setup notes\n");
+    expect(shape(filteredHeadingTree(headings, "setup"))).toEqual(["Setup [Setup notes]"]);
+  });
+
+  test("leaves a context node's non-matching siblings out rather than dimming them", () => {
+    // "## B" neither matches nor encloses a match, so it is absent — dimming it
+    // would make the filtered list as long as the tree.
+    const headings = extractHeadings("# A\n\n## B\n\n## Target\n");
+    expect(shape(filteredHeadingTree(headings, "target"))).toEqual(["(A) [Target]"]);
+  });
+
+  test("keeps every branch that holds a match, in document order", () => {
+    const headings = extractHeadings("# A\n\n## Target\n\n# B\n\n## C\n\n# Target too\n");
+    expect(shape(filteredHeadingTree(headings, "target"))).toEqual(["(A) [Target]", "Target too"]);
+  });
+
+  test("parents a skipped level under the nearest shallower heading", () => {
+    // "### Target" has no "##" above it, so its context is "# A" — the same
+    // parent walk `headingTree` and `headingTrail` climb.
+    const headings = extractHeadings("# A\n\n### Target\n");
+    expect(shape(filteredHeadingTree(headings, "target"))).toEqual(["(A) [Target]"]);
+  });
+
+  test("returns the whole tree, every node matched, for an empty query", () => {
+    const headings = extractHeadings("# A\n\n## B\n\n### C\n");
+    expect(shape(filteredHeadingTree(headings, ""))).toEqual(["A [B [C]]"]);
+  });
+
+  test("returns the whole tree, every node matched, for a whitespace-only query", () => {
+    // `filterHeadings` trims before matching; the popup's search field must not
+    // empty the list on a stray space.
+    const headings = extractHeadings("# A\n\n## B\n");
+    expect(shape(filteredHeadingTree(headings, "   "))).toEqual(["A [B]"]);
+  });
+
+  test("matches case-insensitively on a substring, as the breadcrumbs filter does", () => {
+    const headings = extractHeadings("# Verification\n");
+    expect(shape(filteredHeadingTree(headings, "RIFICA"))).toEqual(["Verification"]);
+  });
+
+  test("returns nothing when no heading matches", () => {
+    expect(filteredHeadingTree(extractHeadings("# A\n\n## B\n"), "zzz")).toEqual([]);
+  });
+
+  test("returns nothing for a plan with no headings", () => {
+    expect(filteredHeadingTree([], "")).toEqual([]);
   });
 });

@@ -1,9 +1,10 @@
-// Heading hierarchy for the plan's breadcrumbs bar. `toc.ts` models the plan's
-// headings as a flat list in document order; this module reads the tree that
-// list implies — the whole nesting, the ancestor chain enclosing the heading
-// being read, the flat filter results the bar offers over the plan, and how much
-// of the trail a row of a given width can hold. Pure and DOM-free like `toc.ts`,
-// so the parenting, sibling, match, and collapse logic is directly
+// Heading hierarchy for the plan's navigation surfaces. `toc.ts` models the
+// plan's headings as a flat list in document order; this module reads the tree
+// that list implies — the whole nesting, the ancestor chain enclosing the
+// heading being read, the flat filter results the breadcrumbs bar offers over
+// the plan, that same filter left nested for the ToC popup, and how much of the
+// trail a row of a given width can hold. Pure and DOM-free like `toc.ts`, so the
+// parenting, sibling, match, filter, and collapse logic is directly
 // unit-testable.
 
 import { filterHeadings, type TocHeading } from "$lib/toc.ts";
@@ -24,6 +25,15 @@ export interface HeadingCrumb {
    * what let the bar's menus descend into a section the reader is not in.
    */
   siblings: HeadingNode[];
+}
+
+/** A heading in a filtered tree, and whether it is a match or context for one. */
+export interface FilteredHeadingNode {
+  heading: TocHeading;
+  /** False for a heading kept only to place a match nested under it. */
+  matched: boolean;
+  /** Matches and context nested under this one, in document order. */
+  children: FilteredHeadingNode[];
 }
 
 /** A heading the bar's filter matched, paired with the heading enclosing it. */
@@ -55,8 +65,9 @@ function parentIndices(headings: TocHeading[]): number[] {
 /**
  * The plan's headings as the tree their levels imply — the top-level headings,
  * each carrying the headings nested under it, all in document order. Built off
- * the same `parentIndices` walk `headingTrail` and `headingMatches` climb, so
- * the three views of the hierarchy can never disagree.
+ * the same `parentIndices` walk `headingTrail`, `headingMatches`, and
+ * `filteredHeadingTree` climb, so the four views of the hierarchy can never
+ * disagree.
  */
 export function headingTree(headings: TocHeading[]): HeadingNode[] {
   return treeOver(headings, parentIndices(headings));
@@ -153,4 +164,41 @@ export function headingMatches(headings: TocHeading[], query: string): HeadingMa
     heading,
     parent: parentText.get(heading.line) ?? null,
   }));
+}
+
+/**
+ * The headings matching `query`, left in the hierarchy rather than flattened:
+ * every match at its own depth, and above it the unmatched headings needed to
+ * place it, marked as context so the surface can dim them. A match brings none
+ * of its own non-matching descendants, and a heading that both matches and
+ * encloses a match comes back a match. Matching is `filterHeadings`', so an
+ * empty query returns the whole tree with everything matched, and the parenting
+ * is the same `parentIndices` walk `headingTree` and `headingTrail` climb — the
+ * filtered view cannot disagree with either about what encloses what.
+ */
+export function filteredHeadingTree(headings: TocHeading[], query: string): FilteredHeadingNode[] {
+  const parents = parentIndices(headings);
+  // Membership by reference: `filterHeadings` filters this very array, so it
+  // hands back the same objects rather than copies.
+  const matches = new Set(filterHeadings(headings, query));
+  // A heading survives if it matched, or if a match sits somewhere beneath it.
+  // Climbing from each match stops at the first ancestor already kept — every
+  // ancestor above that one was kept on the same pass that added it.
+  const kept = new Set<number>();
+  for (const [index, heading] of headings.entries()) {
+    if (!matches.has(heading)) continue;
+    for (let i = index; i !== -1 && !kept.has(i); i = parents[i] ?? -1) kept.add(i);
+  }
+  // Every kept heading's ancestors are kept too, and a parent always sits at a
+  // lower index than its child, so each node's parent is already built when the
+  // node reaches it.
+  const nodes = new Map<number, FilteredHeadingNode>();
+  const roots: FilteredHeadingNode[] = [];
+  for (const [index, heading] of headings.entries()) {
+    if (!kept.has(index)) continue;
+    const node: FilteredHeadingNode = { heading, matched: matches.has(heading), children: [] };
+    nodes.set(index, node);
+    (nodes.get(parents[index] ?? -1)?.children ?? roots).push(node);
+  }
+  return roots;
 }
