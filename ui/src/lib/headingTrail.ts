@@ -3,9 +3,9 @@
 // that list implies — the whole nesting, the ancestor chain enclosing the
 // heading being read, the flat filter results the breadcrumbs bar offers over
 // the plan, that same filter gathered under its ancestor paths for the ToC
-// popup, and how much of the
-// trail a row of a given width can hold. Pure and DOM-free like `toc.ts`, so the
-// parenting, sibling, match, and collapse logic is directly unit-testable.
+// popup, and how much of the trail a row of a given width can hold. Pure and
+// DOM-free like `toc.ts`, so the parenting, sibling, match, and collapse logic
+// is directly unit-testable.
 
 import { filterHeadings, type TocHeading } from "$lib/toc.ts";
 
@@ -27,7 +27,11 @@ export interface HeadingCrumb {
   siblings: HeadingNode[];
 }
 
-/** A run of matches sharing one ancestor path. */
+/**
+ * Every match sharing one ancestor path — however far apart in the document they
+ * sit. A path gets exactly one group, so a group is a SET rather than a run: two
+ * matches under the same path join it even when other matches fall between them.
+ */
 export interface HeadingGroup {
   /**
    * The headings enclosing every match here, root-most first. Empty for a match
@@ -171,14 +175,22 @@ export function headingMatches(headings: TocHeading[], query: string): HeadingMa
 }
 
 /**
- * The headings matching `query`, gathered into runs that share an ancestor path
- * — so a surface can spend ONE breadcrumb header on a path however many matches
- * sit under it, rather than a row per unmatched ancestor per match. A match
- * brings none of its own non-matching descendants, and a heading that both
- * matches and encloses a match is a match in its own group and a trail segment
- * of the deeper one. Matching is `filterHeadings`', so an empty query groups
- * every heading by its own path, and the parenting is the one `parentIndices`
- * walk every view in this module climbs.
+ * The headings matching `query`, gathered by the ancestor path they share — so a
+ * surface can spend ONE breadcrumb header on a path however many matches sit
+ * under it, rather than a row per unmatched ancestor per match. A match brings
+ * none of its own non-matching descendants, and a heading that both matches and
+ * encloses a match is a match in its own group and a trail segment of the deeper
+ * one. Matching is `filterHeadings`', so an empty query groups every heading by
+ * its own path, and the parenting is the one `parentIndices` walk every view in
+ * this module climbs.
+ *
+ * **Groups are ordered by their first match, and matches within a group by
+ * document position — which is not the same as the flattened rows being in
+ * document order.** A query hitting both a section's title and its children puts
+ * every such title in one root group, so a later title is rendered above an
+ * earlier title's subsection. That is the price of one header per path, and it
+ * is the whole reason this returns groups rather than rows: the caller renders
+ * the header once and cannot also promise a single document-ordered sequence.
  */
 export function groupedHeadingMatches(headings: TocHeading[], query: string): HeadingGroup[] {
   const parents = parentIndices(headings);
@@ -190,8 +202,10 @@ export function groupedHeadingMatches(headings: TocHeading[], query: string): He
   const matches = new Set(filterHeadings(headings, query));
   // Keyed on the ancestor INDICES rather than on their text: two identically
   // titled sections enclose different matches and must stay different groups.
-  // Insertion order is what orders the groups, and walking the headings in
-  // document order is what makes that document order.
+  // Walking the headings in document order means a group is created at its first
+  // match and appended to at every later one, so `Map` insertion order puts the
+  // groups in first-match order — see the docstring for why that is weaker than
+  // the flattened rows being in document order.
   const groups = new Map<string, HeadingGroup>();
   for (const [index, heading] of headings.entries()) {
     if (!matches.has(heading)) continue;
@@ -199,14 +213,15 @@ export function groupedHeadingMatches(headings: TocHeading[], query: string): He
     // than its child, so the climb terminates.
     const chain: number[] = [];
     for (let i = parents[index] ?? -1; i !== -1; i = parents[i] ?? -1) chain.unshift(i);
-    const group = groups.get(chain.join(","));
+    const key = chain.join(",");
+    const group = groups.get(key);
     if (group !== undefined) {
       group.matches.push(heading);
       continue;
     }
     // `parentIndices` only ever reports an index it pushed onto its own ancestor
     // stack, so every link indexes a real heading; the `?? []` drops nothing.
-    groups.set(chain.join(","), {
+    groups.set(key, {
       trail: chain.flatMap((i) => headings[i] ?? []),
       matches: [heading],
     });

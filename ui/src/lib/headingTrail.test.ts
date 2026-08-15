@@ -328,6 +328,22 @@ describe("groupedHeadingMatches", () => {
     expect(shape(groupedHeadingMatches(headings, "target"))).toEqual(["A[Target]", "[Target too]"]);
   });
 
+  test("gathers matches under one path even when other matches fall between them", () => {
+    // What makes a group a SET rather than a run, and the model's most surprising
+    // property: a query hitting both a section's title and its children puts both
+    // titles in the single root group, so the rendered rows stop being one
+    // document-ordered sequence — "B x" is drawn above "A x"'s own subsection,
+    // and "A x" appears twice, once as a row and once as a header. One header per
+    // path is what buys that. The common shape rather than a corner: any query
+    // matching a heading and something beneath it lands here.
+    const headings = extractHeadings("# A x\n\n## A deep x\n\n# B x\n\n## B deep x\n");
+    expect(shape(groupedHeadingMatches(headings, "x"))).toEqual([
+      "[A x, B x]",
+      "A x[A deep x]",
+      "B x[B deep x]",
+    ]);
+  });
+
   test("parents a skipped level under the nearest shallower heading", () => {
     // "### Target" has no "##" above it, so its trail is "# A" — the same parent
     // walk `headingTree` and `headingTrail` climb.

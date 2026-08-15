@@ -47,16 +47,24 @@ function listbox(): HTMLElement | null {
   return document.body.querySelector<HTMLElement>("[data-slot='command-list']");
 }
 
-/** Every row the listbox holds, in document order. Since EXC-1103 every row is a
- * destination — the filtered view spends its ancestors on group headers instead
- * of on rows — so this is `options()` and stays only as the name the nesting
- * assertions read better under. */
-function rows(): HTMLElement[] {
-  return options();
-}
-
 function options(): HTMLElement[] {
   return [...(listbox()?.querySelectorAll<HTMLElement>("[role='option']") ?? [])];
+}
+
+/** Text sitting DIRECTLY in the list's viewport rather than inside an option or a
+ * group — which a listbox may not own, and which is the constraint the whole
+ * Command.Group choice rests on.
+ *
+ * Asserted structurally because nothing else here can see it: every other locator
+ * queries by role or by `data-*`, and a stray text node answers to neither. A
+ * mis-terminated markup comment put six lines of source prose in exactly this
+ * position while all 28 tests stayed green, so this is the guard for that whole
+ * class of defect rather than for one typo. */
+function looseText(): string[] {
+  const viewport = listbox()?.querySelector("[data-slot='command-viewport']");
+  return [...(viewport?.childNodes ?? [])]
+    .filter((n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? "").trim() !== "")
+    .map((n) => n.textContent?.trim() ?? "");
 }
 
 /** The breadcrumb groups the filtered view renders (EXC-1103), in document order.
@@ -182,8 +190,8 @@ describe("PlanToc surface", () => {
       onJump: () => {},
     });
     await open(target, flush);
-    expect(rows().map(label)).toEqual(["Overview", "Approach", "Details", "Verification"]);
-    expect(rows().map((r) => r.style.getPropertyValue("--toc-depth"))).toEqual([
+    expect(options().map(label)).toEqual(["Overview", "Approach", "Details", "Verification"]);
+    expect(options().map((r) => r.style.getPropertyValue("--toc-depth"))).toEqual([
       "0",
       "1",
       "2",
@@ -203,7 +211,7 @@ describe("PlanToc surface", () => {
       onJump: () => {},
     });
     await open(target, flush);
-    const marked = rows().filter((r) => r.getAttribute("aria-current") === "location");
+    const marked = options().filter((r) => r.getAttribute("aria-current") === "location");
     expect(marked.map(label)).toEqual(["Details"]);
     await close(target, flush);
   });
@@ -236,7 +244,9 @@ describe("PlanToc surface", () => {
     await open(target, flush);
     await typeQuery("details", flush);
     expect(groupHeadings().map(label)).toEqual(["Overview › Approach"]);
-    expect(rows().map(label)).toEqual(["Details"]);
+    expect(options().map(label)).toEqual(["Details"]);
+    // The listbox owns options and groups, and nothing else.
+    expect(looseText()).toEqual([]);
     await close(target, flush);
   });
 
@@ -252,7 +262,7 @@ describe("PlanToc surface", () => {
     // carries both; "Setup" holds the other. Groups, and the rows inside them,
     // in document order — no score reordering.
     expect(groupHeadings().map(label)).toEqual(["Plan › Setup", "Plan › Rollout"]);
-    expect(rows().map(label)).toEqual(["Setup notes", "Rollout notes", "Deploy notes"]);
+    expect(options().map(label)).toEqual(["Setup notes", "Rollout notes", "Deploy notes"]);
     expect(groups().length).toBe(2);
     await close(target, flush);
   });
@@ -273,7 +283,7 @@ describe("PlanToc surface", () => {
     });
     await open(target, flush);
     await typeQuery("notes", flush);
-    expect(rows().map(label)).toEqual(["Setup notes"]);
+    expect(options().map(label)).toEqual(["Setup notes"]);
     expect(groups()).toEqual([]);
     expect(groupHeadings()).toEqual([]);
     await close(target, flush);
@@ -303,7 +313,7 @@ describe("PlanToc surface", () => {
     });
     await open(target, flush);
     await typeQuery("overview", flush);
-    expect(rows().map(label)).toEqual(["Overview"]);
+    expect(options().map(label)).toEqual(["Overview"]);
     // No trail means no group at all, rather than an unlabelled one wrapping the row.
     expect(groupHeadings()).toEqual([]);
     expect(groups()).toEqual([]);
@@ -320,7 +330,7 @@ describe("PlanToc surface", () => {
     await typeQuery("notes", flush, () => options().length === 3);
     // The header carries the hierarchy, so the rows no longer have to: a level-3
     // match sits at the same indent as a level-2 one.
-    expect(rows().map((r) => r.style.getPropertyValue("--toc-depth"))).toEqual(["0", "0", "0"]);
+    expect(options().map((r) => r.style.getPropertyValue("--toc-depth"))).toEqual(["0", "0", "0"]);
     await close(target, flush);
   });
 
@@ -380,13 +390,15 @@ describe("PlanToc surface", () => {
 
     await typeQuery("", flush, () => options().length === 4);
     expect(groupHeadings()).toEqual([]);
-    expect(rows().map(label)).toEqual(["Overview", "Approach", "Details", "Verification"]);
-    expect(rows().map((r) => r.style.getPropertyValue("--toc-depth"))).toEqual([
+    expect(options().map(label)).toEqual(["Overview", "Approach", "Details", "Verification"]);
+    expect(options().map((r) => r.style.getPropertyValue("--toc-depth"))).toEqual([
       "0",
       "1",
       "2",
       "1",
     ]);
+    // Holds either side of the `{#key search === ""}` boundary, not just once.
+    expect(looseText()).toEqual([]);
     await close(target, flush);
   });
 
@@ -410,7 +422,7 @@ describe("PlanToc surface", () => {
     });
     await open(target, flush);
     await typeQuery("nothing matches this", flush, () => options().length === 0);
-    expect(rows().length).toBe(0);
+    expect(options().length).toBe(0);
     expect(helper()?.textContent?.trim()).toBe("No headings match");
     // Narrowing to nothing is the one case aria-activedescendant cannot narrate —
     // there is no active option left to name — so the message says it out loud.

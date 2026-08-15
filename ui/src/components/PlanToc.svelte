@@ -165,6 +165,11 @@
   // it would open the crumb on a separator with nothing before it. An all-empty
   // trail therefore yields "", which is what the markup reads as "render no
   // header", so a group can never be built without a name to give it.
+  //
+  // The separator is a literal rather than the chevron Icon PlanBreadcrumbs sets
+  // its trail with: `Command.Group` takes its heading as a STRING, so there is no
+  // markup to put an icon in. The two surfaces show the same idea with different
+  // glyphs for that reason, not by drift.
   function breadcrumb(group: HeadingGroup): string {
     return group.trail
       .map((h) => h.text)
@@ -202,6 +207,19 @@
      admits `option` and `group` children and not rows nested inside rows. The
      tree's depth rides on --toc-depth instead, which the stylesheet turns into an
      indent. -->
+<!-- One group's matches, all flush left. Both arms of the header/no-header branch
+     below render through here, so the two can never drift apart. Keyed on the
+     source line: the MODEL keys on reference rather than line, deliberately (see
+     `groupedHeadingMatches`), so this view is the stricter of the two — two
+     headings sharing a line would be a duplicate-key error here where the model
+     would have kept them apart. Unreachable through `extractHeadings`, which
+     numbers from the source. -->
+{#snippet matchRows(group: HeadingGroup)}
+  {#each group.matches as heading (heading.line)}
+    {@render row(heading, 0)}
+  {/each}
+{/snippet}
+
 {#snippet nested(nodes: HeadingNode[])}
   {#each nodes as node (node.heading.line)}
     {@render row(node.heading, node.heading.level - 1)}
@@ -263,11 +281,18 @@
       e.preventDefault();
     }}
   >
-    <!-- shouldFilter={false} is load-bearing: the command ships a fuzzy filter
-         that also RE-SORTS the rows by score, which would both fight the
-         nesting-preserving filter above and shuffle document order. Filtering is
-         the tree's job; the command's job here is the listbox semantics and the
-         roving selection. -->
+    <!-- shouldFilter={false} is load-bearing, and since EXC-1103 in two separate
+         ways. The command ships a fuzzy filter that also RE-SORTS rows by score,
+         which would fight the grouping above and shuffle document order — and it
+         scores a row against its VALUE, which here is a bare source line, so it
+         would match nothing and empty the panel rather than merely reorder it.
+         The second way is the groups: bits-ui short-circuits
+         `CommandGroupContainerState.shouldRender` to true only while
+         `shouldFilter === false`, and otherwise renders a group only if the
+         stock engine scored something into it. With line-valued rows that is
+         never, so every breadcrumb group would go `hidden` too.
+         Filtering is `groupedHeadingMatches`' job; the command's job here is the
+         listbox semantics and the roving selection. -->
     <Command.Root
       shouldFilter={false}
       bind:value={selected}
@@ -326,7 +351,7 @@
                the vendored component gives no heading to — an unlabelled one,
                exactly what this paragraph rules out. Empty segments drop out of
                the join for the same reason, or the crumb opens on a separator
-               with nothing before it. -->
+               with nothing before it.
 
                `value` is explicit and prefixed rather than left to the vendored
                default of the heading text. bits-ui keys `allGroups` on it and its
@@ -337,18 +362,10 @@
           {#each groups as group (group.matches[0]?.line)}
             {@const crumb = breadcrumb(group)}
             {#if crumb === ""}
-              {#each group.matches as heading (heading.line)}
-                {@render row(heading, 0)}
-              {/each}
+              {@render matchRows(group)}
             {:else}
-              <Command.Group
-                value="group:{group.matches[0]?.line}"
-                heading={crumb}
-                headingClass="eyebrow"
-              >
-                {#each group.matches as heading (heading.line)}
-                  {@render row(heading, 0)}
-                {/each}
+              <Command.Group value="group:{group.matches[0]?.line}" heading={crumb} headingClass="eyebrow">
+                {@render matchRows(group)}
               </Command.Group>
             {/if}
           {/each}

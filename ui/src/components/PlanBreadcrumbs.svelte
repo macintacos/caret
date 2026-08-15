@@ -37,10 +37,12 @@
   // ToC popup (PlanToc.svelte) is built on the same two primitives, so the plan's
   // two heading surfaces narrate identically.
   //
-  // Where they diverge is deliberate and stays: this filter FLATTENS. A match
-  // arrives as one row naming the heading that encloses it, rather than at its
-  // own depth under dimmed ancestors. Drilling down is what the crumb menus are
-  // for; the filter is for when the destination is already known.
+  // Where they diverge is deliberate and stays: this filter names each match's
+  // enclosing heading ON the row, one row per match, where the ToC popup gathers
+  // matches under a shared breadcrumb header carrying the whole ancestor path.
+  // This bar has one row's width to spend, which a path does not fit in.
+  // Drilling down is what the crumb menus are for; the filter is for when the
+  // destination is already known.
   import { type Snippet, untrack } from "svelte";
 
   import * as Breadcrumb from "$lib/components/ui/breadcrumb/index.js";

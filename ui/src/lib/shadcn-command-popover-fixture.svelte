@@ -18,7 +18,10 @@
       <Command.Input placeholder="Jump to section" />
       <Command.List>
         <Command.Empty>No sections</Command.Empty>
-        <Command.Group heading="Sections">
+        <!-- `headingClass` is caret's own addition to the vendored command-group,
+             carried here with a sentinel value so the suite can prove it reaches
+             the heading element. -->
+        <Command.Group heading="Sections" headingClass="fixture-eyebrow">
           <Command.Item value="overview">Overview</Command.Item>
           <Command.Item value="details">Details</Command.Item>
         </Command.Group>
