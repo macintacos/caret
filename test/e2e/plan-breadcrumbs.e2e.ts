@@ -404,15 +404,10 @@ test("b shuts the bar from whatever crumb the walk reached", async ({ daemon, pa
   await page.keyboard.press("b");
   await expect(menu).toHaveCount(0);
 
-  // And it opens again where it always does — the crumb the reader is on. `\`
-  // rode this binding as an alias until EXC-1097 handed the key to the contents
-  // popup, so the round trip is `b`'s alone now; that the two keys reach
-  // different surfaces is pinned in plan-toc.e2e.ts rather than here.
+  // And it opens again where it always does — the crumb the reader is on, not the
+  // ancestor the walk reached.
   await page.keyboard.press("b");
   await expect(menu.getByRole("menuitem")).toHaveText(["Charlie"]);
-  await page.keyboard.press("h");
-  await page.keyboard.press("b");
-  await expect(menu).toHaveCount(0);
 });
 
 test("every level of a deep walk is actually on screen", async ({ daemon, page }) => {

@@ -1137,12 +1137,11 @@
       ),
     );
     // The two heading surfaces, one key each: `b` opens the breadcrumbs bar's
-    // trailing crumb (EXC-947), `\` the contents popup (EXC-1097). They shared one
-    // action while `\` was the bar's alias; EXC-1097 split them, so each key now
-    // reaches the surface its keymap label names. Both are gated on the same
-    // `!showDiff` those surfaces render behind, so neither fires in compare mode.
-    // The optional calls cover a heading-less plan too, where a surface renders
-    // nothing and never handed an open action back.
+    // trailing crumb (EXC-947), `\` the contents popup (EXC-1097). Both are gated
+    // on the same `!showDiff` those surfaces render behind, so neither fires in
+    // compare mode. The optional calls cover the first render in compare mode,
+    // where the `{#if !showDiff}` below never creates either surface, so neither
+    // has handed an open action back yet.
     offs.push(
       shortcuts.register(
         bind("actions.headingNav", { run: () => openHeadingNav?.(), enabled: () => !showDiff }),
@@ -1616,9 +1615,9 @@
        the LEADING contents chip does there (EXC-1097). The chip cannot ellipsise —
        the shadcn Button base is shrink-0 whitespace-nowrap — so it holds its width
        and the two members with min-width:0 give theirs back first. Measured rather
-       than assumed: at the 480 floor with the `\` keycap showing, the chip renders
-       at its full 94px and neither the row nor the body overflows, the breadcrumbs
-       bar having collapsed to its ellipsis by then. So the cap is never dropped at
+       than assumed: at the 480 floor with the `\` keycap showing, neither the row
+       nor the body overflows, the breadcrumbs bar having collapsed to its
+       ellipsis by then. So the cap is never dropped at
        narrow — the width it costs is paid by a neighbour that has somewhere to
        give. What KEEPS that true is not this comment but
        test/e2e/narrow-regression.e2e.ts, whose breakpoint sweep asserts no surface

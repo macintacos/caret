@@ -84,6 +84,10 @@ const BRANCHED_PLAN = [
 ].join("\n\n");
 
 const TOC = ".plan-toc-panel";
+/** The breadcrumbs bar's dropdown — the OTHER heading surface, addressed here only
+ * to prove `\` and `b` do not reach the same one. Same selector plan-breadcrumbs
+ * hoists as MENU. */
+const CRUMB_MENU = "[data-slot='dropdown-menu-content']";
 
 const trigger = (page: Page) => page.getByRole("button", { name: "Contents" });
 /** The popup itself. Every locator below is scoped through it, which is what lets them
@@ -368,38 +372,42 @@ test("the field narrates the row the walk is on, and says so when nothing matche
 test("\\ opens the popup on the heading being read (EXC-1097)", async ({ daemon, page }) => {
   await daemon.seed({ plan: TALL_PLAN });
   await page.goto("/");
-  // readingAt parks the reading position AND clears the safe-mode grace, which the
-  // bare key below cannot be pressed before.
+  // readingAt parks the reading position AND waits past the safe-mode grace, which
+  // the bare key below cannot be pressed before.
   await readingAt(page, "Golf");
 
   await page.keyboard.press("\\");
 
-  // The key opens the popup on exactly the trigger's terms: seeded to the heading
-  // being read, with focus handed to the field so the reviewer can type straight
-  // away rather than tabbing into it.
+  // Opened on the trigger's terms: the walk starts on the heading being read and
+  // that row is scrolled into the list's box, with focus in the field so the
+  // reviewer can type straight away. The SELECTION is the load-bearing assertion —
+  // aria-current is derived from the activeLine prop and would read "Golf" even on
+  // a popup that opened at the top of the list.
   await expect(listbox(page)).toBeVisible();
-  await expect(options(page).and(page.locator('[aria-current="location"]'))).toHaveText("Golf");
+  await expect(walkedTo(page)).toHaveText("Golf");
+  await expect
+    .poll(() => isWithinList(page, options(page).and(page.locator('[aria-current="location"]'))))
+    .toBe(true);
   await expect(field(page)).toBeFocused();
 });
 
 test("\\ and b reach different heading surfaces (EXC-1097)", async ({ daemon, page }) => {
-  // `\` was an ALIAS for `b` until EXC-1097 — both opened the breadcrumbs bar — so
-  // the property worth pinning is that the two keys have come apart, not merely that
-  // each one opens something.
+  // Two keys, two surfaces: the property worth pinning is that neither one reaches
+  // the other's.
   await daemon.seed({ plan: TALL_PLAN });
   await page.goto("/");
   await readingAt(page, "Golf");
 
   await page.keyboard.press("b");
-  await expect(page.locator("[data-slot='dropdown-menu-content']")).toBeVisible();
+  await expect(page.locator(CRUMB_MENU)).toBeVisible();
   await expect(panel(page)).toHaveCount(0);
 
   await page.keyboard.press("Escape");
-  await expect(page.locator("[data-slot='dropdown-menu-content']")).toHaveCount(0);
+  await expect(page.locator(CRUMB_MENU)).toHaveCount(0);
 
   await page.keyboard.press("\\");
   await expect(listbox(page)).toBeVisible();
-  await expect(page.locator("[data-slot='dropdown-menu-content']")).toHaveCount(0);
+  await expect(page.locator(CRUMB_MENU)).toHaveCount(0);
 });
 
 test("compare mode drops both of the popup's entry points (EXC-1097)", async ({ daemon, page }) => {

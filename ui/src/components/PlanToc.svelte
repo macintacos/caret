@@ -38,7 +38,7 @@
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import * as Popover from "$lib/components/ui/popover/index.js";
   import { type FilteredHeadingNode, filteredHeadingTree } from "$lib/headingTrail.ts";
-  import { ariaKeyshortcutsFor } from "$lib/shortcuts/keymap.ts";
+  import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
   import type { TocHeading } from "$lib/toc.ts";
 
   interface Props {
@@ -111,14 +111,30 @@
   // summons the popup back (shortcuts/keymap.ts) exactly as `b` does the bar.
   let leaving = false;
 
-  // Hand the open action up once, so `\` reaches this popup (EXC-1097). `untrack`
-  // keeps onExposeOpen from becoming a dependency; the closure sets this
-  // component's own `open`, so Popover.Root's onOpenChange seeding below runs for
-  // the key exactly as it does for the trigger.
+  // A popup always opens on the whole plan, looking at the heading being read.
+  // Neither the query nor the row the last session walked to survives, so
+  // reopening is never a stale view of a plan that has since scrolled.
+  function seed(): void {
+    query = "";
+    selected = activeLine === null ? "" : String(activeLine);
+  }
+
+  // The whole open, for callers outside the primitive. bits-ui runs onOpenChange
+  // from its OWN box setter only — a trigger click, Escape, an outside click — so
+  // a programmatic write to `open` receives none of the seeding the trigger path
+  // gets. Poking the flag alone opens the popup on the first row carrying the
+  // previous session's query, and nothing errors: the heading being read is still
+  // marked, because aria-current is derived from `activeLine` rather than from the
+  // seeded selection. Both entry points go through here so they cannot diverge.
+  function openPopup(): void {
+    seed();
+    open = true;
+  }
+
+  // Hand that open up once, so `\` reaches this popup (EXC-1097). `untrack` keeps
+  // onExposeOpen from becoming a dependency.
   $effect(() => {
-    untrack(() => onExposeOpen)?.(() => {
-      open = true;
-    });
+    untrack(() => onExposeOpen)?.(openPopup);
   });
 
   // Take the reviewer to a heading and leave. A command row does not dismiss its
@@ -164,12 +180,9 @@
 <Popover.Root
   bind:open
   onOpenChange={(opening) => {
-    // A popup always opens on the whole plan, looking at the heading being read.
-    // Neither the query nor the row the last session walked to survives, so
-    // reopening is never a stale view of a plan that has since scrolled.
-    if (!opening) return;
-    query = "";
-    selected = activeLine === null ? "" : String(activeLine);
+    // The trigger's half of the seeding above; openPopup covers every other
+    // caller, since this fires only for the primitive's own opens.
+    if (opening) seed();
   }}
 >
   <Popover.Trigger>

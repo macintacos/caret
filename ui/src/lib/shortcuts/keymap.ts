@@ -162,13 +162,15 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
   // case, the same shape `d` and `n` take.
   { id: "actions.headingNav", keys: [{ key: "b" }], group: "actions", label: "Open breadcrumbs" },
   // EXC-1097: opens the plan's table-of-contents popup — the see-the-whole-shape
-  // surface beside the breadcrumbs bar's drill-down. `\` is on its third owner: it
-  // toggled the docked contents rail (EXC-830), then aliased `b` onto the
-  // breadcrumbs bar once EXC-949 retired that rail, and now names its own action
-  // again, so the id and label say "contents" rather than inheriting a name from
-  // either predecessor. A bare key with no cap override: keyCaps and
-  // ariaKeyshortcuts both derive from `keys`, so the trigger's advertised hint
+  // surface beside the breadcrumbs bar's drill-down. `\` has already been rebound
+  // twice (EXC-830's docked rail, then EXC-949's breadcrumbs alias), so a third
+  // move costs reviewers a third relearn. A bare key with no cap override: keyCaps
+  // and ariaKeyshortcuts both derive from `keys`, so the trigger's advertised hint
   // cannot drift from what the dispatcher fires on.
+  // Unlike `b`, this key only OPENS. The popup puts focus in a text field, so the
+  // dispatcher's editing-context guard suppresses bare keys while it is up and a
+  // second `\` types a backslash into the filter; Escape and the trigger close it.
+  // Both labels read "Open …" for that reason — neither claims to toggle.
   { id: "actions.contents", keys: [{ key: "\\" }], group: "actions", label: "Open contents" },
   // Settings — the Settings modal's scoped affordances, display-only (EXC-849/876).
   ...SETTINGS_SHORTCUTS,

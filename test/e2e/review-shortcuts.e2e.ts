@@ -242,7 +242,3 @@ test("Escape closes the breadcrumbs menu and hands focus back to the crumb", asy
   await expect(menu).toHaveCount(0);
   await expect(crumb).toBeFocused();
 });
-
-// `\` had a spec here while it was a second key onto the breadcrumbs bar. EXC-1097
-// gave it to the contents popup instead, so what it reaches is no longer this file's
-// subject: its spec lives beside that surface, in plan-toc.e2e.ts.

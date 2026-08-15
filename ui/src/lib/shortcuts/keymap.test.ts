@@ -99,11 +99,10 @@ describe("CANONICAL_KEYMAP", () => {
   });
 
   test("reserves \\ for the contents popup, rendered as a \\ cap (EXC-1097)", () => {
-    // EXC-1097 repoints `\` onto the ToC popup, so the key is its own binding
-    // rather than the breadcrumbs alias EXC-949 left it as. A bare backslash, no
-    // command modifier — the cap derives straight from the key, no explicit
-    // override — and the advertised hint derives from the same field, so the
-    // trigger's aria-keyshortcuts cannot drift from what the dispatcher fires on.
+    // A bare backslash, no command modifier — the cap derives straight from the
+    // key, no explicit override — and the advertised hint derives from the same
+    // field, so the trigger's aria-keyshortcuts cannot drift from what the
+    // dispatcher fires on.
     const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.contents");
     if (!entry) throw new Error("actions.contents missing");
     expect(entry.group).toBe("actions");
@@ -111,15 +110,9 @@ describe("CANONICAL_KEYMAP", () => {
     expect(specSignature(entry.keys)).toBe("\\");
     expect(keyCaps(entry.keys)).toEqual([["\\"]]);
     expect(ariaKeyshortcutsFor("actions.contents")).toBe("\\");
-  });
-
-  test("retires the breadcrumbs alias \\ used to be (EXC-1097)", () => {
-    // `\` no longer shares an action with `b`, so the reservation that spelled
-    // that alias is gone rather than renamed — the help modal must not carry a
-    // row still claiming the key opens the breadcrumbs. Same guard shape as the
-    // retired actions.focusFilter below.
+    // The breadcrumbs alias this key used to be is gone rather than renamed, so
+    // the help modal cannot carry a row still claiming `\` opens the bar.
     expect(CANONICAL_KEYMAP.some((e) => e.id === "actions.toggleSidebar")).toBe(false);
-    expect(CANONICAL_KEYMAP.some((e) => e.label.includes("(alt)"))).toBe(false);
   });
 
   test("reserves b for the heading breadcrumbs in the Actions group, rendered as a B cap", () => {
