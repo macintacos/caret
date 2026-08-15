@@ -29,6 +29,15 @@
 // state no prop can stand in for, so it is e2e on the axis browser-testing.md calls
 // the more interesting half.
 //
+// EXC-1106's indent guides are a third kind of subject again, and the one furthest
+// from anything a mount can reach: they are painted by a pseudo-element, from `calc`
+// over two custom properties, and happy-dom neither lays out nor resolves either. So
+// the unit suite can only read back the guide COUNT a row was handed, and everything
+// about where that count lands — the column grid, the band meeting its neighbours,
+// the empty band while filtering — is measured here off `getComputedStyle`. The one
+// spec that pins the count itself against a plan rooted at `##` is the unit suite's
+// (PlanToc.test.ts); its browser half is the geometry that count produces.
+//
 // Bare keys throughout, per the issue's constraint: a command modifier means the
 // reviewer is addressing the browser or the OS, not the popup. waitPastSafeModeGrace
 // (inside jumpToHeading) is mandatory before the first keystroke.
@@ -108,6 +117,20 @@ const BRANCHED_PLAN = [
   "",
 ].join("\n\n");
 
+// A plan whose shallowest heading is `##`, with no level-1 heading anywhere — the
+// shape the ToC's absolute indent renders one step in, with nothing at depth zero
+// (EXC-1106). Deliberately breaks the one-`#` convention the two fixtures above keep,
+// because the whole point of it is a plan that never opens a level-1 heading.
+const SHALLOW_PLAN = [
+  "## Setup",
+  filler("Setup"),
+  "### Prereqs",
+  filler("Prereqs"),
+  "## Rollout",
+  filler("Rollout"),
+  "",
+].join("\n\n");
+
 const TOC = ".plan-toc-panel";
 /** The breadcrumbs bar's dropdown — the OTHER heading surface, addressed here only
  * to prove `\` and `b` do not reach the same one. Same selector plan-breadcrumbs
@@ -177,6 +200,55 @@ async function readingAt(page: Page, heading: string): Promise<void> {
   await expect
     .poll(() => new URL(page.url()).searchParams.get("heading"))
     .toBe(heading.toLowerCase().replaceAll(" ", "-"));
+}
+
+/** The indent's origin in px — `0.5rem` at the default root size, the offset every
+ * row's padding and every guide band is measured from. Named because two specs below
+ * assert against it and a bare `8` reads as a magic number in both. */
+const INDENT_ORIGIN_PX = 8;
+
+/** Each row's indent guides, measured off the ::before that paints them (EXC-1106).
+ *
+ * Everything here is a COMPUTED read rather than a bounding box, and that is
+ * load-bearing rather than convenience. A pseudo-element has no node to locate, so
+ * there is no rect to take — and more importantly the popover animates in under
+ * `zoom-in-95 duration-100` (popover-content.svelte), so for the first frames after
+ * open a rect is a *visual* box carrying that scale while a computed value is the
+ * *layout* box that does not. Mixing the two spaces reads as a sub-pixel rounding
+ * disagreement and is really a race: `toBeVisible()` resolves the moment the panel
+ * paints, mid-zoom, and `evaluateAll` is not an action, so Playwright's
+ * not-animating check never applies. Both sides of every assertion below therefore
+ * come from `getComputedStyle`, which is why they can be exact rather than fuzzy.
+ *
+ * `rowHeight` is the row's computed `height` verbatim, which is already the border
+ * box: Tailwind's preflight sets `box-sizing: border-box` globally, and under it the
+ * resolved value of `height` includes the padding. That is exactly the box an
+ * absolutely-positioned child's `inset-block: 0` spans, since its containing block is
+ * the padding box and the row has no border — so the two numbers are equal rather
+ * than merely close. Were the box-sizing ever to change under this, the assertion
+ * would miss by the row's whole padding-block and red loudly.
+ *
+ * `top` and `bottom` stay rects: they are only ever compared against each other, and
+ * a shared scale cancels out of an adjacency test. */
+async function measureGuides(page: Page) {
+  return options(page).evaluateAll((els) =>
+    els.map((node) => {
+      const el = node as HTMLElement;
+      const box = el.getBoundingClientRect();
+      const row = getComputedStyle(el);
+      const guide = getComputedStyle(el, "::before");
+      return {
+        left: Number.parseFloat(guide.left),
+        width: Number.parseFloat(guide.width),
+        height: Number.parseFloat(guide.height),
+        painted: guide.backgroundImage,
+        padding: Number.parseFloat(row.paddingLeft),
+        rowHeight: Number.parseFloat(row.height),
+        top: box.top,
+        bottom: box.bottom,
+      };
+    }),
+  );
 }
 
 /** Whether `row` is inside the scrolled list's visible box — the claim a unit mount
@@ -696,46 +768,59 @@ test("the indent guides sit on the indent's own grid and join across rows", asyn
   await readingAt(page, "Setup");
   await openToc(page);
 
-  const bands = await options(page).evaluateAll((els) =>
-    els.map((node) => {
-      const el = node as HTMLElement;
-      const box = el.getBoundingClientRect();
-      const guide = getComputedStyle(el, "::before");
-      return {
-        left: Number.parseFloat(guide.left),
-        width: Number.parseFloat(guide.width),
-        height: Number.parseFloat(guide.height),
-        painted: guide.backgroundImage,
-        padding: Number.parseFloat(getComputedStyle(el).paddingLeft),
-        top: box.top,
-        bottom: box.bottom,
-        rowHeight: box.height,
-      };
-    }),
-  );
+  const bands = await measureGuides(page);
   expect(bands).toHaveLength(6);
 
   for (const [index, band] of bands.entries()) {
     // AC3: the band ends exactly where the text begins, so its rightmost hairline sits
     // one indent step left of the first glyph and every column lines up with the level
     // that opens it. This is what would catch a guide drawn on a grid of its own.
-    expect(band.left + band.width).toBeCloseTo(band.padding, 1);
-    // This plan opens at `#`, so a row's guide count is exactly its depth: the top row
-    // draws none, and every other row draws its indent's worth back to the root.
-    expect(band.width).toBeCloseTo(band.padding - 8, 1);
+    expect(band.left + band.width).toBeCloseTo(band.padding, 2);
+    // This plan opens at `#`, so every band starts at the indent's origin and a row's
+    // guide count is exactly its depth. The `##`-rooted spec below is what makes the
+    // --toc-depth term in that offset falsifiable; here it contributes nothing.
+    expect(band.left).toBeCloseTo(INDENT_ORIGIN_PX, 2);
     // AC8: full row height, and rows that meet — so two same-depth neighbours join
-    // instead of striping at the padding-block each row carries. Half a pixel rather
-    // than a tenth because the two numbers are measured differently: a computed used
-    // height against a fractional layout rect, which disagree in the third decimal.
-    // Still far tighter than the failure it guards — a band clipped to the content box
-    // would come up a whole padding-block short.
-    expect(band.height).toBeCloseTo(band.rowHeight, 0);
+    // instead of striping at the padding-block each row carries.
+    expect(band.height).toBeCloseTo(band.rowHeight, 2);
     if (index > 0) expect(band.top).toBeCloseTo(bands[index - 1]?.bottom ?? -1, 1);
   }
 
   // Something is really painted in the band. Width alone would pass on an empty box.
   expect(bands[0]?.width).toBe(0);
   expect(bands[2]?.painted).toContain("repeating-linear-gradient");
+});
+
+test("a plan that opens at `##` draws no guide for the root it does not have", async ({
+  daemon,
+  page,
+}) => {
+  // The shape the guide count exists for, and the ONLY one that can catch it. The
+  // indent is measured from level 1, so every row of this plan sits one step in with
+  // nothing at zero; a band measured from the indent's origin would run a hairline
+  // down a column no heading opens, beside every row, the length of the panel. With a
+  // `#`-rooted plan the term that prevents it is identically zero, so the spec above
+  // passes either way — this is where it becomes falsifiable.
+  await daemon.seed({ plan: SHALLOW_PLAN });
+  await page.goto("/");
+  await readingAt(page, "Setup");
+  await openToc(page);
+
+  // The plan reaches the UI still rooted at `##` — the daemon's formatter normalizes
+  // several things about an incoming plan and this is not one of them, which is what
+  // makes the shape reachable rather than hypothetical.
+  const depths = await options(page).evaluateAll((els) =>
+    els.map((el) => (el as HTMLElement).style.getPropertyValue("--toc-depth")),
+  );
+  expect(depths).toEqual(["1", "2", "1"]);
+
+  const bands = await measureGuides(page);
+  // Every band starts ONE step in from the indent's origin — the column `## Setup`
+  // occupies — rather than at the origin itself.
+  expect(bands.map((b) => Math.round(b.left))).toEqual([20, 20, 20]);
+  // And the plan's own top level still draws nothing: it is a root, not a nested row.
+  expect(bands.map((b) => Math.round(b.width))).toEqual([0, 12, 0]);
+  for (const band of bands) expect(band.left + band.width).toBeCloseTo(band.padding, 2);
 });
 
 test("filtering drops the guides, headers and all", async ({ daemon, page }) => {

@@ -121,9 +121,13 @@
   // origin is what keeps a section at one indent whatever else is on screen — so a
   // plan whose top-level headings are `##` renders every row one step in with
   // nothing at zero. Measuring the GUIDES from that empty column instead would draw
-  // a line down it, and a line down a column claims a parent sits at the top of it.
-  // Reading the shallowest level the plan actually has is the whole correction: the
-  // first column a guide can occupy is one a heading really opens.
+  // a line down a column the plan never opens. Reading the shallowest level it
+  // actually has is the whole correction, and it is a PLAN-WIDE floor rather than a
+  // per-row one — see the trade the ::before rule records.
+  // The empty arm is unreachable, since a plan with no headings renders no rows to
+  // read it; it is what keeps Math.min() off Infinity. The spread is safe at the low
+  // hundreds of headings this file's header bounds — a plan large enough to threaten
+  // the argument limit dies on one Command.Item per heading long first.
   const guideBase = $derived(
     headings.length === 0 ? 1 : Math.min(...headings.map((h) => h.level)),
   );
@@ -510,6 +514,18 @@
     max-height: min(36rem, 70vh);
   }
 
+  /* One step of nesting, and the panel's own grid. The indent, the guide band's
+     origin, its width, and the comb the guides are drawn with are four measurements
+     that MUST agree, and three of them are pinned against each other by the e2e's
+     `band.left + band.width === padding` — the gradient's repeat period is not, so a
+     step retuned in one place and not the other would slide every column but the
+     first off the text while the suite stayed green. One declaration, per
+     svelte-rules.md § CSS-token discipline ("a constant coupled across files gets
+     one named source"). */
+  :global(.plan-toc-panel) {
+    --toc-step: 0.75rem;
+  }
+
   /* The one indent rule, and the two views mean different things by it.
      Unfiltered, --toc-depth is the heading's own LEVEL minus one — absolute, not a
      position in a tree — so a section sits at the same indent whatever else is on
@@ -521,7 +537,7 @@
      hierarchy, so repeating it in the indent would say the same thing twice and
      cost the row width that the deepest matches need most. */
   :global(.plan-toc-panel [data-slot="command-item"]) {
-    padding-inline-start: calc(0.5rem + var(--toc-depth, 0) * 0.75rem);
+    padding-inline-start: calc(0.5rem + var(--toc-depth, 0) * var(--toc-step));
   }
 
   /* The indent guides (EXC-1106): one hairline per level between the plan's own
@@ -537,6 +553,17 @@
      the indent is measured from level 1. A zero width paints nothing, so both
      cases fall out of the same declaration.
 
+     A column marks a LEVEL, not a tree edge, and that is the trade — the same one
+     the indent rule above accepts, for the same reason. A plan that skips from `#`
+     to `###` draws a column at the level in between, and a plan that opens deeper
+     than a heading further down (`## Alpha` before `# Beta`) gives Alpha a column
+     with nothing above it. Accepted: the indent is absolute, so `###` sits two steps
+     in whether or not a `##` exists, and guides drawn from the real ancestors would
+     leave a guide-free channel immediately left of a row that is plainly indented —
+     saying the opposite of what the indent says. What guideBase closes is narrower
+     and is the case the eye actually reads as a claim: a column to the left of
+     EVERY row, down the whole panel, where the plan simply has no such level.
+
      A ::before rather than the row's own background, for two reasons that both
      fail silently. The row already takes `background:` — the SHORTHAND — when it
      is the heading being read, and a shorthand resets background-image, so a
@@ -549,19 +576,23 @@
      rows into one line despite their padding-block.
      content:"" and pointer-events:none: nothing in the accessibility tree, and
      nothing between the reviewer and the row they are clicking.
-     --rule is caret's quiet hairline (ink at 10%, per palette), the same ink the
-     topbar's underline and the plan search field's border take, so the guides sit
-     below --ink-faint and retint with the theme for free. */
+     --rule is caret's quiet hairline (ink at 10%, per palette), and it is already
+     what caret paints an indent guide with: FolderTree.svelte hands it to
+     `--trees-indent-guide-bg-override` for the file tree's own guides. So this is
+     the app's indent-guide ink rather than a hairline that happened to be handy, and
+     it sits below --ink-faint and retints with the theme for free. */
   :global(.plan-toc-panel [data-slot="command-item"])::before {
     content: "";
     position: absolute;
     inset-block: 0;
-    inset-inline-start: calc(0.5rem + (var(--toc-depth, 0) - var(--toc-guides, 0)) * 0.75rem);
-    width: calc(var(--toc-guides, 0) * 0.75rem);
+    inset-inline-start: calc(
+      0.5rem + (var(--toc-depth, 0) - var(--toc-guides, 0)) * var(--toc-step)
+    );
+    width: calc(var(--toc-guides, 0) * var(--toc-step));
     background-image: repeating-linear-gradient(
       to right,
       var(--rule) 0 1px,
-      transparent 1px 0.75rem
+      transparent 1px var(--toc-step)
     );
     pointer-events: none;
   }
