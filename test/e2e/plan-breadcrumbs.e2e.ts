@@ -5,12 +5,11 @@
 // Everything asserted here needs a real browser. The trail is driven by the plan's
 // scroll position measured with getBoundingClientRect, and the sibling menus are
 // bits-ui popovers whose open/close, portalling, and submenu reveal are real
-// interaction semantics — both e2e concerns per browser-testing.md. Since EXC-1098
-// the `/` filter is a `command` in a `popover` rather than a mode of the open menu,
-// which adds a second panel and a keyboard walk driven by a roving SELECTION rather
-// than by focus, plus the narration attributes a screen reader reads off the live
-// DOM — all of it real-browser too. The bar's pure trail logic, and the filter
-// panel's structure and ARIA, are unit-tested in
+// interaction semantics — both e2e concerns per browser-testing.md. The `/`
+// filter is a second panel — a `command` in a `popover` — whose keyboard walk is a
+// roving SELECTION rather than moving focus, and whose narration attributes a screen
+// reader reads off the live DOM; all of it real-browser too. The bar's pure trail
+// logic, and the filter panel's structure and ARIA, are unit-tested in
 // ui/src/components/PlanBreadcrumbs.test.ts.
 
 import type { Page } from "@playwright/test";
@@ -82,9 +81,8 @@ const SHOWN = `${BAR} .crumb-item:not(.elided) button.crumb`;
 const MARKER = `${BAR} .crumb-ellipsis`;
 const MENU = "[data-slot='dropdown-menu-content']";
 const SUBMENU = "[data-slot='dropdown-menu-sub-content']";
-// Since EXC-1098 the filter is a `command` in a `popover`, so it is a panel of its
-// own rather than a mode of the open menu — a different element, and one whose rows
-// are options rather than menu items. Every locator below is scoped through it,
+// The filter is its own panel — a `command` in a `popover` — so its rows are options
+// rather than menu items. Every locator below is scoped through it,
 // which is what lets them be role queries: the ToC popup publishes a filter field
 // with the SAME accessible name, and an unscoped query would collect both
 // (browser-testing.md § Locators).
@@ -553,20 +551,18 @@ test("the trail elides once the row cannot hold it, and the marker opens what it
   await expect(page.locator(SHOWN)).toHaveText(["Alpha", "Bravo"]);
 });
 
-// EXC-948 gave the bar a flat `/` filter; EXC-1098 rebuilt it on the vendored
-// `command` inside a `popover`. All of it is real browser behaviour — the key claim
-// against the plan's own search, the swap between the two panels, the roving walk
-// through a set that changes under it, the narration a screen reader reads off the
-// live DOM, and Escape's step back to the hierarchy — so it lives here rather than
-// in the component unit, which pins the panel's structure and ARIA instead.
+// The bar's flat `/` filter (EXC-948, EXC-1098): a `command` inside a `popover`.
+// All of it is real browser behaviour — the key claim against the plan's own search,
+// the swap between the two panels, the roving walk through a set that changes under
+// it, the narration a screen reader reads off the live DOM, and Escape's step back
+// to the hierarchy — so it lives here rather than in the component unit, which pins
+// the panel's structure and ARIA instead.
 //
-// One behaviour deliberately did NOT survive the retrofit, and the walk spec below
-// records it: `j`/`k` no longer step the results. They used to, because ArrowDown
-// moved real DOM focus off the field and onto a menu row, and the letters were walk
-// keys only in that second state. A combobox has no second state — focus stays in
-// the textbox, which is the very mechanism aria-activedescendant narration depends
-// on — and a textbox that swallowed `j` and `k` could not type "json", "keys" or
-// "jump". The arrows do that job now, from the field, exactly as the ToC popup's do.
+// The arrows walk the results and `j`/`k` are ordinary query text, which is the one
+// place this panel's keyboard differs from the bar's own menus. A combobox keeps
+// focus in the textbox — the mechanism aria-activedescendant narration depends on —
+// and a textbox that swallowed `j` and `k` could not search for "json", "keys" or
+// "jump". The specs below pin both halves.
 
 test("b then / then a query then Enter jumps across the hierarchy", async ({ daemon, page }) => {
   await daemon.seed({ plan: NESTED_PLAN });
@@ -643,10 +639,10 @@ test("the arrows walk the results without focus leaving the field, and it narrat
 });
 
 test("j and k are query text in the filter, not walk keys", async ({ daemon, page }) => {
-  // The deviation this retrofit accepts, pinned so it reads as a decision rather
-  // than an oversight. The hierarchy menus still walk on j/k — asserted by the
-  // specs above — but inside the filter a bare letter is a letter, because the
-  // field that swallowed it could not search for a heading containing it.
+  // Pinned so the split reads as a decision rather than an oversight. The hierarchy
+  // menus walk on j/k — asserted by the specs above — but inside the filter a bare
+  // letter is a letter, because a field that swallowed it could not search for a
+  // heading containing it.
   await daemon.seed({ plan: NESTED_PLAN });
   await page.goto("/");
   await expect(page.locator(`${CRUMB}.current`)).toBeVisible();
@@ -668,14 +664,10 @@ test("the flat filter drives the list, not the command's own filter engine", asy
   daemon,
   page,
 }) => {
-  // The vendored command ships a fuzzy filter that both hides non-matching rows and
-  // RE-SORTS the survivors by score, and EXC-1096's viewport reactivated that
-  // reordering for any Command that leaves `shouldFilter` at its default. Turning it
-  // off is what lets `headingMatches` own the list — the same one prop the ToC popup
-  // sets, which is what the issue means by sharing the override rather than copying
-  // it. Falsifiable on document order, and on the flattening: "Echo" arrives alone
-  // with its parent named ON its row, where the ToC popup's nesting filter would
-  // answer the same query with two dimmed ancestors above it.
+  // The vendored command scores every row against the query and hides what scores 0.
+  // Turning it off is what lets `headingMatches` own the list — the same one prop the
+  // ToC popup sets, which is what the issue means by sharing the override rather than
+  // copying it.
   await daemon.seed({ plan: NESTED_PLAN });
   await page.goto("/");
   await expect(page.locator(`${CRUMB}.current`)).toBeVisible();
@@ -685,11 +677,12 @@ test("the flat filter drives the list, not the command's own filter engine", asy
   await page.keyboard.press("/");
   await page.keyboard.type("o");
 
-  // Document order, which a score sort would shuffle: Foxtrot scores worst of the
-  // three on a fuzzy match and still comes last because the plan puts it last.
+  // Exactly the three matches, in document order, each naming its parent on its own
+  // row. Both halves are falsifiable here: the command's engine scores rows on their
+  // `value` — the source line — so with it on every row would score 0 and the panel
+  // would empty; and the nesting filter would answer this query with five rows,
+  // "Alpha" and "Delta" among them as dimmed ancestors.
   await expect(results(page)).toHaveText(["Bravo Alpha", "Echo Delta", "Foxtrot Alpha"]);
-  // And every row in the panel is a destination — no dimmed context rows.
-  await expect(filterPanel(page).locator(".toc-context")).toHaveCount(0);
 });
 
 test("the bar's / never reaches the plan's own search, and gives it back on close", async ({
@@ -750,8 +743,11 @@ test("Tab leaves the filter rather than being swallowed by the query field", asy
   daemon,
   page,
 }) => {
-  // Swallowing Tab strands a keyboard user inside the panel. The command claims a
-  // lot of keys to drive its own list, so the ones it must NOT claim need pinning.
+  // Two ways to get this wrong, and the landing site catches the second. Swallowing
+  // Tab strands a keyboard user inside the panel; letting the browser's own default
+  // run from a panel portalled to the END of the body walks them off the document
+  // instead, since nothing is tabbable after it. Both leave the reviewer stuck, and
+  // only asserting where focus LANDS tells them apart.
   await daemon.seed({ plan: NESTED_PLAN });
   await page.goto("/");
   await expect(page.locator(`${CRUMB}.current`)).toBeVisible();
@@ -762,8 +758,9 @@ test("Tab leaves the filter rather than being swallowed by the query field", asy
   await expect(queryField(page)).toBeFocused();
 
   await page.keyboard.press("Tab");
-  await expect(queryField(page)).not.toBeFocused();
   await expect(filterPanel(page)).toHaveCount(0);
+  // The next control in the row, which is where Tab out of the bar has always gone.
+  await expect(page.locator(".control-row .cwd")).toBeFocused();
 });
 
 test("a click outside dismisses the filter and leaves the plan where it was", async ({

@@ -24,12 +24,12 @@
   // when you already know the destination. Escape swaps the hierarchy back
   // rather than closing, so the two views are one surface from the bar's side.
   //
-  // EXC-1098 moved that filter off the dropdown and onto `command` in a
-  // `popover`, which is what closes the ARIA deviation this header used to
-  // record: bits-ui puts role="menu" on dropdown content, a textbox is not among
-  // the roles `menu` admits as children, and the role cannot be overridden from
-  // the call site — so the old filter gave a screen reader the field's label and
-  // then silence as its rows narrowed. The field is now a real combobox whose
+  // EXC-1098: that filter is `command` in a `popover` rather than a mode of the
+  // menu, and the reason is accessibility rather than layout. bits-ui puts
+  // role="menu" on dropdown content, a textbox is not among the roles `menu`
+  // admits as children, and the role cannot be overridden from the call site — so
+  // a filter field hosted inside the menu gives a screen reader the field's label
+  // and then silence as its rows narrow. Here the field is a real combobox whose
   // `aria-activedescendant` names the row the selection is on, over a listbox of
   // real options. Both attributes are bits-ui's, derived from the command's
   // viewport node, which exists only because the vendored command-list.svelte
@@ -163,10 +163,8 @@
   function onMenuKeydown(e: KeyboardEvent): void {
     if (e.ctrlKey || e.altKey || e.metaKey) return;
     // `/` trades the hierarchy for the flat filter, from whatever depth of the
-    // menu is open, and — once filtering — takes the reviewer back to the query
-    // from a row they walked to, the same second job it does in the comment
-    // navigator. It never arrives from the field itself, which stops its own
-    // keys, so a `/` there is typed into the query.
+    // menu is open. This handler hangs off menu content, so it cannot fire once
+    // the swap has happened — a `/` inside the field is typed into the query.
     // The preventDefault is load-bearing twice over: it keeps the key out of the
     // menu's typeahead, and the window dispatcher yields on defaultPrevented, so
     // the plan's own `/` search stays shut behind the bar.
@@ -175,7 +173,12 @@
       // The trigger whose menu is open, remembered before it is shut so Escape
       // can put that same hierarchy back — and used as the filter panel's anchor,
       // so the panel appears where the menu was.
-      filterOrigin = barEl?.querySelector<HTMLElement>('[aria-expanded="true"]') ?? null;
+      filterOrigin = barEl?.querySelector<HTMLButtonElement>('[aria-expanded="true"]') ?? null;
+      // Every opening starts on the whole plan. Reset on the OPEN edge rather
+      // than any close, for the reason the menu snippet gives about its own
+      // reset: a panel can be unmounted outright when the trail re-roots, and an
+      // unmount reports no close for a close-edge reset to hang off.
+      query = "";
       // The menu's close must not drag focus back to the crumb: the filter is
       // about to take it. Same suppression a pick uses, for the same reason.
       leaving = true;
@@ -226,14 +229,21 @@
   // the reviewer in the bar, where the crumb is exactly where focus belongs.
   let leaving = false;
 
-  // Take the reviewer to a heading. Landing focus on the body costs nothing here
-  // — the plan's own keys are window-level, and `b` summons the bar back — which
-  // is the same trade the search HUD makes when Enter commits a query and blurs.
-  // Clearing `filtering` is what dismisses the filter panel on a pick; a menu row
-  // closes its own menu, but a command row does not close its host.
+  // Take the reviewer to a heading from a MENU row. Landing focus on the body
+  // costs nothing here — the plan's own keys are window-level, and `b` summons the
+  // bar back — which is the same trade the search HUD makes when Enter commits a
+  // query and blurs. A filter row has its own select (`pick` below): it dismisses
+  // a different panel, and one whose close never consults `leaving`.
   function goTo(line: number): void {
     leaving = true;
-    filtering = false;
+    onJump(line);
+  }
+
+  // Take the reviewer to a heading from a FILTER row. A menu row closes its own
+  // menu on select; a command row does not close its host, so the pick shuts the
+  // panel itself.
+  function pick(line: number): void {
+    closeFilter();
     onJump(line);
   }
 
@@ -280,7 +290,16 @@
   // The trigger the filter was summoned from: the panel's anchor while it is
   // open, and the menu Escape puts back. `$state` because the anchor is read
   // reactively by the popover.
-  let filterOrigin = $state<HTMLElement | null>(null);
+  let filterOrigin = $state<HTMLButtonElement | null>(null);
+
+  // What the panel hangs off. The plan scrolls under an open panel — the popover
+  // locks no scroll — so the trail can re-root and take the remembered trigger
+  // out of the document with it. A detached node is still truthy, and floating-ui
+  // would measure it as a zero-sized box in the viewport corner, so the fallback
+  // has to be reached through `isConnected` rather than through `??`.
+  const filterAnchor = $derived(
+    filterOrigin?.isConnected === true ? filterOrigin : barEl,
+  );
 
   const matches = $derived(headingMatches(headings, query));
 
@@ -291,9 +310,8 @@
   const emptyMessage = $derived(matches.length > 0 ? "" : "No headings match");
 
   // Put the hierarchy back with the bar still open: shut the panel, then re-open
-  // the menu the filter was summoned from. A programmatic click carries detail: 0,
-  // which bits-ui treats as a keyboard-ish activation, so the menu lands focus on
-  // its first row and j/k keep working — the same invocation `b` uses.
+  // the menu the filter was summoned from, with the same programmatic click `b`
+  // uses (see openTrail for what detail: 0 buys and where focus lands).
   //
   // The remembered trigger can have been unmounted while the panel was open: the
   // trail re-roots whenever the reader scrolls. The crumb the reader is on now is
@@ -301,7 +319,7 @@
   function restoreMenu(): void {
     const origin = filterOrigin?.isConnected === true ? filterOrigin : null;
     closeFilter();
-    (origin ?? barEl?.querySelector<HTMLElement>('.crumb[aria-current="location"]'))?.click();
+    (origin ?? barEl?.querySelector<HTMLButtonElement>('.crumb[aria-current="location"]'))?.click();
   }
 
   // Shut the filter panel and forget what it was anchored to. The query goes with
@@ -454,17 +472,14 @@
      marker so the `/` claim and the hint cap have a single definition rather than
      one per kind of trigger.
      A menu always opens on its hierarchy: the filter is a panel the bar summons,
-     never a state a menu carries between openings. Reset on the OPEN edge rather
-     than the close one, because a trigger whose menu is open can be unmounted
-     outright — the trail re-roots whenever the reader moves — and an unmount
-     reports no close. -->
+     never a state a menu carries between openings. Shut on the OPEN edge rather
+     than on the panel's own close, because a panel whose trigger is unmounted —
+     the trail re-roots whenever the reader moves — reports no close to hang a
+     reset off. -->
 {#snippet menu(nodes: HeadingNode[], trigger: Snippet<[Record<string, unknown>]>)}
   <DropdownMenu.Root
     onOpenChange={(open) => {
-      if (open) {
-        filtering = false;
-        query = "";
-      }
+      if (open) filtering = false;
     }}
   >
     <DropdownMenu.Trigger>
@@ -562,21 +577,27 @@
        It does not trap focus, which the vendored Popover.Content otherwise does:
        the panel holds exactly one tabbable, so a trap turns Tab into a no-op and
        strands a keyboard reviewer inside a bar-level control until they find
-       Escape. Tab leaving the bar is the behaviour EXC-948 shipped and the one the
-       spec pins, and `onFocusOutside` is what shuts the panel behind them. -->
+       Escape. Tab leaving the bar is the behaviour the spec pins, and the keydown
+       handler below is what shuts the panel behind them. -->
   <Popover.Root bind:open={filtering}>
     <Popover.Content
       class="plan-crumb-filter"
       align="start"
-      customAnchor={filterOrigin ?? barEl}
+      customAnchor={filterAnchor}
       trapFocus={false}
       onkeydown={(e) => {
-        // Tab leaves the bar, as it did when the filter lived inside the menu —
-        // bits-ui's own handleTabKeyDown closed that one. A popover ships no such
-        // handler, so without this the reviewer tabs on and leaves the panel
-        // standing over the plan. Deliberately not preventDefault'ed: the browser
-        // still moves focus, and the panel simply goes with them.
-        if (e.key === "Tab") closeFilter();
+        // Tab carries on out of the bar, and the panel goes with it. Both halves
+        // need doing here: a popover ships no Tab handling at all, so without the
+        // close the panel is left standing over the plan — and without the focus
+        // move, Tab steps off the END OF THE DOCUMENT, because the panel is
+        // portalled to the body and there is nothing after it. Handing focus back
+        // to the crumb the panel hung from puts the reviewer back in the control
+        // row, so the browser's own default then continues to the control after
+        // the bar. Deliberately not preventDefault'ed: that default is the point.
+        if (e.key !== "Tab") return;
+        const origin = filterAnchor;
+        closeFilter();
+        origin?.focus();
       }}
       onOpenAutoFocus={(e) => {
         // The reviewer pressed `/` to type, so focus goes to the field rather
@@ -596,10 +617,6 @@
         // already places focus itself — a pick leaves the reviewer in the plan,
         // Escape re-opens the menu onto a row, and an outside click or Tab lands
         // where the reviewer put it.
-        // Clearing `leaving` is what keeps a pick made HERE from suppressing the
-        // focus return of the next menu the reviewer dismisses: `goTo` raised the
-        // flag, and this close is the only thing that ever comes after it.
-        leaving = false;
         e.preventDefault();
       }}
       onEscapeKeydown={(e) => {
@@ -610,12 +627,13 @@
         restoreMenu();
       }}
     >
-      <!-- shouldFilter={false} is load-bearing, and doubly so since EXC-1096 gave
-           command-list.svelte its Viewport: the command ships a fuzzy filter that
-           also RE-SORTS rows by score, so leaving it on would shuffle a list whose
-           order IS the plan's. Filtering is headingMatches' job; the command's job
-           here is the listbox semantics and the roving selection. The same one
-           prop the ToC popup sets, for the same reason. -->
+      <!-- shouldFilter={false} is load-bearing. The command scores each row's
+           `value` against the query and hides everything that scores 0 — and a
+           row's value here is its SOURCE LINE, which no heading query ever
+           matches, so leaving the engine on would empty the panel on the first
+           keystroke. Filtering is headingMatches' job; the command's job here is
+           the listbox semantics and the roving selection. The same one prop the
+           ToC popup sets, for its own version of the same reason. -->
       <Command.Root shouldFilter={false}>
         <Command.Input
           bind:ref={queryEl}
@@ -631,7 +649,7 @@
             <Command.Item
               value={String(match.heading.line)}
               aria-current={match.heading.line === activeLine ? "location" : undefined}
-              onSelect={() => goTo(match.heading.line)}
+              onSelect={() => pick(match.heading.line)}
             >
               <span class="crumb-label" title={match.heading.text}>{match.heading.text}</span>
               {#if match.parent}
@@ -640,9 +658,7 @@
             </Command.Item>
           {/each}
         </Command.List>
-        <!-- A query with no hits says so, in the row's own geometry, rather than
-             collapsing the panel to an empty box.
-             Deliberately a SIBLING of the list rather than a row inside it: a
+        <!-- Deliberately a SIBLING of the list rather than a row inside it: a
              listbox may own options and groups, not loose text.
              `role="status"` because this is the one narrowing a screen reader
              would otherwise miss: a keystroke that changes the first match moves
@@ -652,8 +668,7 @@
              has to be idle in the DOM before the change it announces, and one
              inserted with its content already in it is skipped by some AT
              outright. Same shape and same reason as FilePreview.svelte's
-             `.fp-range` and PlanToc.svelte's `.toc-empty`. Empty, it has no
-             padding and generates no line box, so it costs no height. -->
+             `.fp-range` and PlanToc.svelte's `.toc-empty`. -->
         <p class="crumb-filter-empty" role="status">{emptyMessage}</p>
       </Command.Root>
     </Popover.Content>
@@ -863,12 +878,14 @@
     max-width: 22rem;
   }
 
-  /* The filter panel takes the same width, so the two views of one surface do not
-     resize under the reviewer as `/` swaps between them. The vendored
-     Popover.Content ships padding and a gap of its own and the Command inside
-     already pads itself, so the padding is handed over rather than doubled — the
-     same handover .plan-toc-panel makes, which is what keeps the plan's two
-     heading panels reading as one thing. */
+  /* The filter panel is pinned at the width the menus cap out at, so the two
+     views of one surface stay in the same neighbourhood as `/` swaps between them
+     — a fixed width rather than a cap, because a query that narrows to one short
+     heading would otherwise collapse the panel around it while the reviewer is
+     still typing. The vendored Popover.Content ships padding and a gap of its own
+     and the Command inside already pads itself, so the padding is handed over
+     rather than doubled — the same handover .plan-toc-panel makes, which is what
+     keeps the plan's two heading panels reading as one thing. */
   :global(.plan-crumb-filter) {
     width: 22rem;
     padding: 0;

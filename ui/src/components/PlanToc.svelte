@@ -5,11 +5,12 @@
   // the drill-down surface, this is the see-the-whole-shape-at-once one — and
   // takes the same three props, so both read one heading model and one activeLine.
   //
-  // Built on `command` inside a `popover` rather than the `dropdown-menu` the bar
-  // uses, which is the whole point of the epic: bits-ui puts role="menu" on
-  // dropdown content, and a textbox is not a role `menu` admits as a child, so the
-  // bar's own filter narrates nothing as its rows narrow (the deviation is
-  // recorded in PlanBreadcrumbs.svelte's header).
+  // Built on `command` inside a `popover`, which is the whole point of the epic:
+  // bits-ui puts role="menu" on dropdown content, and a textbox is not a role
+  // `menu` admits as a child, so a filter field hosted inside a menu narrates
+  // nothing as its rows narrow. The breadcrumbs bar's own filter is built on the
+  // same two primitives for the same reason; only its hierarchy menus are
+  // dropdowns.
   //
   // What that buys HERE is both halves (EXC-1096 closed the second). Structurally
   // the field is a legal sibling of the list and the rows are real options a screen

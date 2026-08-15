@@ -60,18 +60,6 @@ async function openCrumb(target: HTMLElement, index: number, flush: () => void):
   await flushUntil(flush, () => menuRows().length > 0);
 }
 
-/** Let bits-ui's dismissible layer finish arming before anything tears it down.
- * `use-dismissable-layer` registers its document listeners from an `afterSleep(1)`,
- * so a panel opened and dismissed inside the same millisecond leaves that timer to
- * fire against an already-destroyed effect, which svelte reports as `derived_inert`
- * — once per stray pointer event for the rest of the process. One flushed tick past
- * that 1ms is all it needs, and the number is bits-ui's rather than the app's, so
- * there is no clock to inject instead (browser-testing.md § Timing discipline). */
-async function armed(flush: () => void): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 5));
-  flush();
-}
-
 describe("PlanBreadcrumbs trail", () => {
   test("renders nothing when the plan has no headings", () => {
     const { target } = render(PlanBreadcrumbs, { headings: [], activeLine: 1, onJump: () => {} });
@@ -338,13 +326,21 @@ describe("PlanBreadcrumbs keyboard invocation", () => {
   });
 });
 
-// EXC-948 gave the bar a flat `/` filter; EXC-1098 rebuilt it on the vendored
-// `command` inside a `popover`, so the field is a real combobox over a listbox
-// rather than a textbox inside role="menu". Only what a mounted component shows
-// lives here — the swap, the rows and their parents, the narrowing, the empty
-// state, the jump, and the narration attributes. The keyboard walk and Escape's
-// return to the hierarchy are real focus movement, so they stay e2e
-// (browser-testing.md).
+// The bar's flat `/` filter (EXC-948, EXC-1098): a `command` inside a `popover`,
+// so the field is a real combobox over a listbox of options. Only what a mounted
+// component shows lives here — the swap, the rows and their parents, the
+// narrowing, the empty state, the jump, and the narration attributes. The
+// keyboard walk and Escape's return to the hierarchy are real focus movement, so
+// they stay e2e (browser-testing.md).
+//
+// This file emits `svelte derived_inert` warnings — a few hundred on a scoped run,
+// two in the full unit suite. They are the harness, not the component: bits-ui's
+// portal presence waits on an `animationend` happy-dom never fires, so a panel left
+// open at unmount keeps its document listeners alive, and this panel's own dismiss
+// layer is what then reads those dead effects. Dismissing here (below) is measurably
+// better than not, and no amount of per-file settling closes the gap — the fix is
+// portal-effect teardown in ui/test-mount.ts, shared by every suite that mounts an
+// overlay, rather than a third per-file workaround.
 describe("PlanBreadcrumbs filter", () => {
   /** The open menu's own content element — where the bar claims `/`. */
   function menuContent(): HTMLElement | null {
@@ -414,30 +410,29 @@ describe("PlanBreadcrumbs filter", () => {
     await flushUntil(flush, () => options().length > 0 && menuContent() === null);
   }
 
-  /** Dismiss the filter before the test ends. Load-bearing rather than tidy, and the
-   * same guard PlanToc.test.ts carries: bits-ui's portal presence waits for an
-   * `animationend` that never fires under happy-dom, so content left open at unmount
-   * keeps its effects alive into the NEXT test file, where they read deriveds whose
-   * owner is already destroyed and svelte warns `derived_inert`. Picking a row is the
-   * deterministic dismissal here — it runs the component's own close path rather than
-   * bits-ui's dismiss layer, which wants a real pointer. Guarded, so it is a no-op in
-   * the test whose pick already closed it. */
+  /** Dismiss the filter before the test ends, the same guard PlanToc.test.ts carries:
+   * bits-ui's portal presence waits for an `animationend` that never fires under
+   * happy-dom, so content left open at unmount keeps its effects alive into whatever
+   * runs next. Picking a row is the deterministic dismissal here — it runs the
+   * component's own close path rather than bits-ui's dismiss layer, which wants a real
+   * pointer. Guarded, so it is a no-op in the test whose pick already closed it.
+   *
+   * It does NOT silence this file's `derived_inert` output on a scoped run: the
+   * describes above leave their menus open, and this panel's document-level dismiss
+   * listeners are what start reading those dead effects. Measured, dismissing here is
+   * still better than not — see the header note on where the real fix lives. */
   async function closeFilter(flush: () => void): Promise<void> {
     if (panel() === null) return;
     if (options().length === 0) await typeQuery("", flush);
-    await armed(flush);
     options()[0]?.click();
     await flushUntil(flush, () => panel() === null);
-    await armed(flush);
   }
 
   /** Shut an open hierarchy menu, for the same reason. Its trigger is a toggle. */
   async function closeMenu(target: HTMLElement, flush: () => void): Promise<void> {
     if (menuContent() === null) return;
-    await armed(flush);
     target.querySelector<HTMLButtonElement>('[aria-expanded="true"]')?.click();
     await flushUntil(flush, () => menuContent() === null);
-    await armed(flush);
   }
 
   test("replaces the open menu's siblings with a field over every heading", async () => {
