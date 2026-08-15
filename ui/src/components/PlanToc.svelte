@@ -22,12 +22,19 @@
   // addition to the registry source and the reason the whole vendoring paid off; see
   // the comment there before touching it.
   //
-  // The dimmed ancestor rows stay OUT of the accessibility tree (`aria-hidden`).
-  // That is EXC-1096's decision, not a gap: a listbox may own options and groups and
-  // not loose text, each option's accessible name is already the heading it goes to,
-  // and the ancestor names are sighted-only wayfinding for a reader scanning the
-  // indent. Handing them over as per-option descriptions would tax every row to
-  // serve the few sitting under a filtered-out parent.
+  // The popup shows TWO views of one heading model (EXC-1103), and the query picks
+  // between them. Empty, it is the whole plan nested by level — see the shape of a
+  // plan at a glance. Filtered, each ancestor path collapses into ONE breadcrumb
+  // header with its matches flush left beneath it, because a match four levels down
+  // otherwise spends four rows placing itself. The nesting is the browsing view; the
+  // breadcrumb is the searching one.
+  //
+  // That header is a `Command.Group` heading rather than markup of caret's own, and
+  // the reason is the same constraint that shaped EXC-1096: a listbox may own
+  // options and groups and NOT loose text. bits-ui wires the heading up as the
+  // group's `aria-labelledby` target, so the ancestor path reaches a screen reader
+  // as the group's name — where EXC-1096's dimmed ancestor rows could only be
+  // `aria-hidden`, sighted-only wayfinding for a reader scanning the indent.
   //
   // Presentational: the only state is the popup's own — open, query, and the
   // command's selected row — the tree is derived, and the parent owns both the
@@ -38,7 +45,12 @@
   import * as Command from "$lib/components/ui/command/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import * as Popover from "$lib/components/ui/popover/index.js";
-  import { type FilteredHeadingNode, filteredHeadingTree } from "$lib/headingTrail.ts";
+  import {
+    groupedHeadingMatches,
+    type HeadingGroup,
+    type HeadingNode,
+    headingTree,
+  } from "$lib/headingTrail.ts";
   import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
   import type { TocHeading } from "$lib/toc.ts";
 
@@ -79,29 +91,39 @@
   // silently gone.
   let selected = $state("");
 
-  // The whole tree when the query is empty, the filtered one otherwise —
-  // `filteredHeadingTree` is documented to return the entire tree with everything
-  // matched for an empty query, so this is ONE render path rather than a branch
-  // between two views of the same model. It is built on the same `parentIndices`
-  // walk `headingTree` is, in the same module, so the two can never disagree about
-  // what encloses what.
+  // Two views of one heading model, and which one is showing is the whole of
+  // EXC-1103. Trimmed rather than a bare `!== ""` so the boundary matches
+  // `filterHeadings`' own notion of empty — a stray space must not swap the view.
+  const searching = $derived(query.trim() !== "");
+
+  // The empty-query view: the whole plan, nested by level, exactly as before.
+  // The filtered view: matches gathered under one breadcrumb header per ancestor
+  // path, flush left. Both are built on the same `parentIndices` walk in the same
+  // module, so the two can never disagree about what encloses what. `$derived` is
+  // lazy, so only the view actually rendered below is ever computed.
   //
   // Every heading renders a row, and the ceiling that bounds is the low hundreds
   // of headings a caret plan carries — agent-authored markdown, not a book. What
-  // costs at that scale is not this recompute (four linear passes over the
+  // costs at that scale is not this recompute (a few linear passes over the
   // headings, microseconds) but what each row IS: a full bits-ui command item with
   // its own effects and id, and a Command.List that tears the whole list down and
   // rebuilds it whenever the query crosses between empty and non-empty. List
   // virtualization is out of scope until a real plan is measured past that ceiling
   // — see EXC-1062's Out of scope.
-  const tree = $derived(filteredHeadingTree(headings, query));
+  const tree = $derived(headingTree(headings));
+  const groups = $derived(groupedHeadingMatches(headings, query));
 
   // What the status line says, empty when the list has rows. Derived rather than
   // inlined in the markup because the element it feeds is always mounted — see the
   // comment on it for why a live region cannot be conjured up with its text already
-  // inside it.
+  // inside it. Read off whichever view is showing, so a query matching nothing and
+  // a plan with no headings stay the two distinct messages they were.
   const emptyMessage = $derived(
-    tree.length > 0 ? "" : headings.length === 0 ? "No headings in plan" : "No headings match",
+    (searching ? groups.length : tree.length) > 0
+      ? ""
+      : headings.length === 0
+        ? "No headings in plan"
+        : "No headings match",
   );
 
   // Whether the popup is closing because the reviewer picked a heading, which
@@ -138,6 +160,18 @@
     untrack(() => onExposeOpen)?.(openPopup);
   });
 
+  // A group's header text: its ancestor path, root-most first. Empty segments drop
+  // out — `# ` on its own line is a real heading whose text is empty, and keeping
+  // it would open the crumb on a separator with nothing before it. An all-empty
+  // trail therefore yields "", which is what the markup reads as "render no
+  // header", so a group can never be built without a name to give it.
+  function breadcrumb(group: HeadingGroup): string {
+    return group.trail
+      .map((h) => h.text)
+      .filter((text) => text !== "")
+      .join(" › ");
+  }
+
   // Take the reviewer to a heading and leave. A command row does not dismiss its
   // host the way a menu item does, so the pick closes the popup itself.
   function jump(line: number): void {
@@ -147,34 +181,31 @@
   }
 </script>
 
-<!-- One level of the filtered tree, and then the levels under it. A snippet emits
-     no wrapper element, so this recursion produces a FLAT sequence of rows in
-     document order — which is what role="listbox" needs, since it admits `option`
-     and `group` children and not rows nested inside rows. The tree's depth rides
-     on --toc-depth instead, which the stylesheet turns into an indent.
-     A match is a destination and renders as an option. A heading kept only to
-     place a match under it is a plain div — never a Command.Item, so it joins
-     neither the roving selection nor the primitive's item set — and is
-     `aria-hidden` rather than `role="presentation"`, which strips an element's own
-     role but leaves its text behind. The header records why that text may not stay. -->
-{#snippet rows(nodes: FilteredHeadingNode[])}
+<!-- ONE row, and the only place either view spells a destination out. Both views
+     render every heading they show through here, so a per-row decoration has a
+     single home. `depth` is the indent the row sits at, in levels; see the
+     --toc-depth rule in the stylesheet for what each view passes and why. -->
+{#snippet row(heading: TocHeading, depth: number)}
+  <Command.Item
+    value={String(heading.line)}
+    style="--toc-depth: {depth}"
+    aria-current={heading.line === activeLine ? "location" : undefined}
+    onSelect={() => jump(heading.line)}
+  >
+    <span class="toc-label" title={heading.text}>{heading.text}</span>
+  </Command.Item>
+{/snippet}
+
+<!-- The empty-query view: one level of the tree, and then the levels under it. A
+     snippet emits no wrapper element, so this recursion produces a FLAT sequence
+     of rows in document order — which is what role="listbox" needs, since it
+     admits `option` and `group` children and not rows nested inside rows. The
+     tree's depth rides on --toc-depth instead, which the stylesheet turns into an
+     indent. -->
+{#snippet nested(nodes: HeadingNode[])}
   {#each nodes as node (node.heading.line)}
-    {@const heading = node.heading}
-    {#if node.matched}
-      <Command.Item
-        value={String(heading.line)}
-        style="--toc-depth: {heading.level - 1}"
-        aria-current={heading.line === activeLine ? "location" : undefined}
-        onSelect={() => jump(heading.line)}
-      >
-        <span class="toc-label" title={heading.text}>{heading.text}</span>
-      </Command.Item>
-    {:else}
-      <div class="toc-context" aria-hidden="true" style="--toc-depth: {heading.level - 1}">
-        <span class="toc-label" title={heading.text}>{heading.text}</span>
-      </div>
-    {/if}
-    {@render rows(node.children)}
+    {@render row(node.heading, node.heading.level - 1)}
+    {@render nested(node.children)}
   {/each}
 {/snippet}
 
@@ -272,7 +303,58 @@
         aria-label="Filter headings"
       />
       <Command.List aria-label="Plan headings">
-        {@render rows(tree)}
+        {#if searching}
+          <!-- Each ancestor path collapses to one Command.Group, whose heading IS
+               the breadcrumb (EXC-1103). Reaching for the primitive rather than
+               hand-rolling the header is what makes the header the group's
+               accessible NAME: bits-ui renders the container `role="presentation"`
+               (so the listbox keeps ownership), the heading as a plain node with
+               an id, and the items wrapper as `role="group"` with
+               `aria-labelledby` pointing at it. Loose text is the one thing a
+               listbox may not own, and this is how the breadcrumb avoids being it
+               — the reason EXC-1096's ancestors had to be `aria-hidden` instead.
+               A header is not an item, so the roving walk — a flat DOM-order
+               querySelectorAll over the command's items — never lands on one.
+
+               A group with no breadcrumb renders its rows BARE. AC6 asks for no
+               header above a top-level match, and an unlabelled `role="group"`
+               around it would be a level of structure naming nothing.
+               The branch is on the CRUMB rather than on `trail.length`, and the
+               two are not the same test: `# ` on its own line is a real heading
+               whose text is empty, so a trail can be non-empty and still have
+               nothing to say. Branching on the length would then render a group
+               the vendored component gives no heading to — an unlabelled one,
+               exactly what this paragraph rules out. Empty segments drop out of
+               the join for the same reason, or the crumb opens on a separator
+               with nothing before it. -->
+
+               `value` is explicit and prefixed rather than left to the vendored
+               default of the heading text. bits-ui keys `allGroups` on it and its
+               cleanup deletes that key outright, so two groups sharing a value
+               have the first unmount corrupt the second — reachable whenever two
+               distinct sections carry the same title. The prefix keeps it clear of
+               the ITEM values too, which are bare source lines in the same map. -->
+          {#each groups as group (group.matches[0]?.line)}
+            {@const crumb = breadcrumb(group)}
+            {#if crumb === ""}
+              {#each group.matches as heading (heading.line)}
+                {@render row(heading, 0)}
+              {/each}
+            {:else}
+              <Command.Group
+                value="group:{group.matches[0]?.line}"
+                heading={crumb}
+                headingClass="eyebrow"
+              >
+                {#each group.matches as heading (heading.line)}
+                  {@render row(heading, 0)}
+                {/each}
+              </Command.Group>
+            {/if}
+          {/each}
+        {:else}
+          {@render nested(tree)}
+        {/if}
       </Command.List>
       <!-- Nothing to show, said in the row geometry rather than as an empty box.
            A plan with no headings is a different message from a query that hit
@@ -342,32 +424,43 @@
     max-height: min(36rem, 70vh);
   }
 
-  /* Both row kinds take the same box, so the tree's shape reads the same whether a
-     row is a destination or the context placing one. Depth is the only geometry
-     separating them, and it is the heading's own LEVEL rather than its position in
-     the filtered tree — so a section sits at the same indent whether or not its
-     ancestors matched, which is the property that keeps the list from reflowing
-     under the reviewer as they type. The trade is an absolute origin: a plan whose
-     top-level headings are `##` renders every row one step in, with nothing at
-     zero. Accepted — a uniform offset costs nothing to read, where a shifting
-     indent would. */
-  :global(.plan-toc-panel [data-slot="command-item"]),
-  :global(.plan-toc-panel .toc-context) {
+  /* The one indent rule, and the two views mean different things by it.
+     Unfiltered, --toc-depth is the heading's own LEVEL minus one — absolute, not a
+     position in a tree — so a section sits at the same indent whatever else is on
+     screen, which is what keeps the list from reflowing under the reviewer as they
+     type. The trade is an absolute origin: a plan whose top-level headings are
+     `##` renders every row one step in, with nothing at zero. Accepted — a uniform
+     offset costs nothing to read, where a shifting indent would.
+     Filtered, every row passes zero: the breadcrumb header above it carries the
+     hierarchy, so repeating it in the indent would say the same thing twice and
+     cost the row width that the deepest matches need most. */
+  :global(.plan-toc-panel [data-slot="command-item"]) {
     padding-inline-start: calc(0.5rem + var(--toc-depth, 0) * 0.75rem);
   }
 
-  /* A heading kept only to place a match under it: quiet ink, and the same box as
-     the command's own row so the two interleave without a rhythm change. Nothing
-     suppresses pointer events here — the row is a plain div with no handler and no
-     role, so there is no interaction to take away, and killing pointers would also
-     kill the native tooltip that rescues a heading truncated at depth. */
-  :global(.plan-toc-panel .toc-context) {
-    display: flex;
-    align-items: center;
-    padding-block: 0.375rem;
-    padding-inline-end: 0.5rem;
-    color: var(--ink-faint);
-    font-size: var(--text-sm);
+  /* The vendored group ships `p-1`, which would inset its rows a step further than
+     the unfiltered view's and open a gap the list already pads. The header and the
+     rows carry their own padding, so the group is a pure grouping box. */
+  :global(.plan-toc-panel [data-slot="command-group"]) {
+    padding: 0;
+  }
+
+  /* The breadcrumb header. `.eyebrow` (styles/atoms.css) is caret's uppercase-label
+     vocabulary and supplies the whole of it — smaller than the rows, tracked,
+     uppercase, at the faintest ink — so the only thing left here is placing it: the
+     rows' own inline padding, so header and labels share one left edge, and the
+     space above that separates one group from the group before it. `:first-child`
+     rather than a bottom margin on the group, so the first header sits flush
+     against the leading space the list already carries.
+     The atom is unlayered, so it wins over the vendored heading's Tailwind size and
+     colour utilities the way .float-chip wins over the Button variant's. */
+  :global(.plan-toc-panel [data-command-group-heading]) {
+    padding-inline: 0.5rem;
+    padding-block: 0.25rem;
+    margin-block-start: 0.5rem;
+  }
+  :global(.plan-toc-panel [data-slot="command-group"]:first-child [data-command-group-heading]) {
+    margin-block-start: 0;
   }
 
   /* A long heading truncates in its row rather than stretching the panel to the

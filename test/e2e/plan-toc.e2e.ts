@@ -1,16 +1,23 @@
 // The plan's table-of-contents popup (EXC-1095 built the surface, EXC-1096 gives it
 // this contract). The popup is a bits-ui Popover holding a Command: a filter field
-// over a listbox of every heading, nested by level, with the one being read marked.
+// over a listbox that shows TWO views of one heading model. With no query it is every
+// heading nested by level, the one being read marked. With a query it is the matches
+// only, gathered under one breadcrumb header per ancestor path and rendered flush left
+// (EXC-1103).
 //
 // Everything asserted here needs a real browser, which is why it is a spec rather
 // than an extension of ui/src/components/PlanToc.test.ts (browser-testing.md). The
 // keyboard walk is bits-ui's roving selection driven by real keydown; Escape,
 // outside-click and focus restoration are the popover's own interaction semantics;
 // "the current heading is scrolled into view" is a scroll measurement against a real
-// box; and the narration attributes are read back off the live DOM, where a screen
-// reader would find them. The pure half — the filtered tree's shape, the marked row,
-// the a11y attributes' presence on a mounted popup — is that unit suite, and the
-// vendored primitive's own viewport wiring is pinned in
+// box; the narration attributes are read back off the live DOM, where a screen reader
+// would find them; and a breadcrumb header naming its group is an aria-labelledby the
+// ROLE ENGINE has to resolve, which a mount can only assert points somewhere. Clearing
+// the query is browser work for a subtler reason: it crosses bits-ui's
+// `{#key search === ""}` boundary, which destroys and rebuilds the whole viewport.
+// The pure half — which groups exist and what sits in them, the marked row, the a11y
+// attributes' presence on a mounted popup — is that unit suite, and the vendored
+// primitive's own viewport wiring is pinned in
 // ui/src/lib/shadcn-command-popover.test.ts.
 //
 // EXC-1097 adds the `\` key, and its specs sit here for the same reason: a bare
@@ -80,9 +87,11 @@ const TALL_PLAN = [
   "",
 ].join("\n\n");
 
-// Two matches for "notes" sitting in different branches, so filtering leaves a dimmed
-// ancestor ("Rollout") BETWEEN the two selectable rows — the arrangement the roving
-// walk has to step over, and the nesting the flat breadcrumbs filter cannot express.
+// Two matches for "notes" sitting in different branches, so filtering produces two
+// distinct ancestor paths and puts a breadcrumb header BETWEEN the two selectable rows
+// — the arrangement the roving walk has to cross without landing on it, and the
+// hierarchy the flat breadcrumbs filter cannot express. "Wrapup" matches nothing, so it
+// is what proves the filtered view is shorter than the tree.
 const BRANCHED_PLAN = [
   "# Plan",
   filler("Plan"),
@@ -117,9 +126,17 @@ const listbox = (page: Page) => panel(page).getByRole("listbox", { name: "Plan h
  * of it, which is exactly the regression the viewport's `role="none"` exists to prevent. */
 const options = (page: Page) => panel(page).getByRole("option");
 const field = (page: Page) => panel(page).getByRole("combobox", { name: "Filter headings" });
-/** The dimmed ancestors have no role at all — they are `aria-hidden` — so a class
- * selector is the honest form here (browser-testing.md's "no accessible target" case). */
-const contextRows = (page: Page) => panel(page).locator(".toc-context");
+/** A breadcrumb group by the path it names (EXC-1103). A role-AND-name query, and the
+ * choice is this spec's subject rather than style: whether the ancestor path reaches the
+ * accessibility tree as the group's NAME is exactly what changed, and only the role
+ * engine can answer it — an attribute selector would match the header element whether or
+ * not anything was labelled by it. */
+const group = (page: Page, name: string) => panel(page).getByRole("group", { name, exact: true });
+/** Every breadcrumb header's text, in document order, for asserting the whole set at once
+ * and for its ORDER, which a per-name lookup cannot see. The header publishes no role of
+ * its own — it is the `aria-labelledby` target — so this is browser-testing.md's "no
+ * accessible target" case and a `data-*` selector is the honest form. */
+const crumbs = (page: Page) => panel(page).locator("[data-command-group-heading]");
 /** The row the roving walk is on. bits-ui marks it `data-selected`; the reader is told
  * about it through the field's aria-activedescendant, asserted in its own test below. */
 const walkedTo = (page: Page) => options(page).and(page.locator("[data-selected]"));
@@ -201,7 +218,14 @@ test("the down arrow starts the walk at the heading being read, not the first ro
   await expect(walkedTo(page)).toHaveText("Delta");
 });
 
-test("the roving walk steps over the dimmed ancestor rows", async ({ daemon, page }) => {
+test("the roving walk visits match rows only, never a breadcrumb header", async ({
+  daemon,
+  page,
+}) => {
+  // EXC-1103 removed the rows the walk used to have to step OVER, and the claim
+  // inverts rather than disappearing: the headers are still between the matches
+  // visually, and one arrow press still has to cross a header without landing on it.
+  // Real-browser because it is bits-ui's roving selection under a real keydown.
   await daemon.seed({ plan: BRANCHED_PLAN });
   await page.goto("/");
   await readingAt(page, "Setup");
@@ -209,25 +233,49 @@ test("the roving walk steps over the dimmed ancestor rows", async ({ daemon, pag
   await openToc(page);
   await field(page).fill("notes");
 
-  // "Rollout" is kept only to place the match under it, so it sits between the two
-  // selectable rows.
   await expect(options(page)).toHaveText(["Setup notes", "Rollout notes"]);
-  await expect(contextRows(page)).toHaveText(["Plan", "Setup", "Rollout"]);
+  await expect(crumbs(page)).toHaveText(["Plan › Setup", "Plan › Rollout"]);
 
   await expect(walkedTo(page)).toHaveText("Setup notes");
   await page.keyboard.press("ArrowDown");
+  // Lands on the next MATCH, not on the "Plan › Rollout" header sitting between them.
   await expect(walkedTo(page)).toHaveText("Rollout notes");
+  await expect(walkedTo(page)).toHaveCount(1);
 });
 
-test("the nesting filter drives the list, not the command's own filter engine", async ({
+test("each breadcrumb header names its group in the accessibility tree", async ({
+  daemon,
+  page,
+}) => {
+  // AC11, and the reason the header is a Command.Group heading rather than markup of
+  // caret's own: the ancestor path has to reach a screen reader as the group's NAME.
+  // Real-browser because only the role engine resolves aria-labelledby — the unit mount
+  // can assert the attribute points somewhere, not that the name computes from it.
+  await daemon.seed({ plan: BRANCHED_PLAN });
+  await page.goto("/");
+  await readingAt(page, "Setup");
+
+  await openToc(page);
+  await field(page).fill("notes");
+
+  await expect(group(page, "Plan › Setup")).toBeVisible();
+  await expect(group(page, "Plan › Rollout")).toBeVisible();
+  // The match sits INSIDE the group its breadcrumb names, which is what makes the
+  // header wayfinding rather than a caption that happens to be nearby.
+  await expect(group(page, "Plan › Setup").getByRole("option")).toHaveText(["Setup notes"]);
+  // The dimmed context rows this view used to render are gone (AC7).
+  await expect(panel(page).locator(".toc-context")).toHaveCount(0);
+});
+
+test("the grouping filter drives the list, not the command's own filter engine", async ({
   daemon,
   page,
 }) => {
   // The vendored command ships a fuzzy filter that both hides non-matching rows and
-  // RE-SORTS the survivors by score. Turning it off is what lets `filteredHeadingTree`
-  // own the list. Falsifiable on document order: the rows keep the order and the
-  // indentation the plan gives them, which a score sort would shuffle — and the dimmed
-  // ancestors would not survive a filter engine that has no concept of one.
+  // RE-SORTS the survivors by score. Turning it off is what lets `groupedHeadingMatches`
+  // own the list. Falsifiable two ways: a score sort would shuffle the document order
+  // the groups and their rows keep, and the stock engine — which scores a row against
+  // its VALUE, the source line — would empty the panel outright rather than re-sort it.
   await daemon.seed({ plan: BRANCHED_PLAN });
   await page.goto("/");
   await readingAt(page, "Setup");
@@ -235,22 +283,45 @@ test("the nesting filter drives the list, not the command's own filter engine", 
   await openToc(page);
   await field(page).fill("notes");
 
-  await expect(options(page).or(contextRows(page))).toHaveText([
+  await expect(crumbs(page)).toHaveText(["Plan › Setup", "Plan › Rollout"]);
+  await expect(options(page)).toHaveText(["Setup notes", "Rollout notes"]);
+
+  // Every match row is flush left now, whatever its own heading level: the breadcrumb
+  // above it carries the hierarchy, so the indent no longer repeats it (AC5).
+  const depths = await options(page).evaluateAll((els) =>
+    els.map((el) => (el as HTMLElement).style.getPropertyValue("--toc-depth")),
+  );
+  expect(depths).toEqual(["0", "0"]);
+});
+
+test("clearing the query puts the nested tree back", async ({ daemon, page }) => {
+  // AC8: the breadcrumb form is a search affordance only. Real-browser because it
+  // crosses bits-ui's `{#key search === ""}` boundary, which tears the whole viewport
+  // down and rebuilds it — the one transition a mounted unit cannot exercise honestly.
+  await daemon.seed({ plan: BRANCHED_PLAN });
+  await page.goto("/");
+  await readingAt(page, "Setup");
+
+  await openToc(page);
+  await field(page).fill("notes");
+  await expect(crumbs(page)).toHaveCount(2);
+
+  await field(page).fill("");
+  await expect(crumbs(page)).toHaveCount(0);
+  await expect(options(page)).toHaveText([
     "Plan",
     "Setup",
     "Setup notes",
     "Rollout",
     "Rollout notes",
+    "Wrapup",
   ]);
 
-  // Each row sits at its own heading level, so a match reads at the same indent
-  // whether or not its ancestors matched.
-  const depths = await options(page)
-    .or(contextRows(page))
-    .evaluateAll((els) =>
-      els.map((el) => (el as HTMLElement).style.getPropertyValue("--toc-depth")),
-    );
-  expect(depths).toEqual(["0", "1", "2", "1", "2"]);
+  // Back to indenting by the heading's own level.
+  const depths = await options(page).evaluateAll((els) =>
+    els.map((el) => (el as HTMLElement).style.getPropertyValue("--toc-depth")),
+  );
+  expect(depths).toEqual(["0", "1", "2", "1", "2", "1"]);
 });
 
 test("pressing Enter on a walked-to row goes there and leaves focus in the plan", async ({

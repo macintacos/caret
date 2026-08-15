@@ -15,6 +15,20 @@ const HEADINGS: TocHeading[] = [
   { level: 2, text: "Verification", line: 20 },
 ];
 
+// EXC-1103's own worked example, and the shape test/e2e/plan-toc.e2e.ts fixtures:
+// filtering on "notes" leaves one match under Setup and TWO under Rollout, which
+// is the arrangement a per-path header has to collapse and a shared header has to
+// survive. "Setup notes" sits a level deeper than "Deploy notes" so the flush-left
+// assertion has two different levels to flatten.
+const BRANCHED: TocHeading[] = [
+  { level: 1, text: "Plan", line: 1 },
+  { level: 2, text: "Setup", line: 5 },
+  { level: 3, text: "Setup notes", line: 9 },
+  { level: 2, text: "Rollout", line: 13 },
+  { level: 3, text: "Rollout notes", line: 17 },
+  { level: 3, text: "Deploy notes", line: 21 },
+];
+
 function trigger(target: HTMLElement): HTMLButtonElement | null {
   return target.querySelector<HTMLButtonElement>("[data-slot='popover-trigger']");
 }
@@ -33,20 +47,30 @@ function listbox(): HTMLElement | null {
   return document.body.querySelector<HTMLElement>("[data-slot='command-list']");
 }
 
-/** Every row the listbox holds, in document order — the selectable headings
- * (role=option) and the dimmed ancestors kept only for context. Matched on the
- * context row's own class rather than on `aria-hidden`, which Icon.svelte also
- * stamps on every decorative glyph inside a row. */
+/** Every row the listbox holds, in document order. Since EXC-1103 every row is a
+ * destination — the filtered view spends its ancestors on group headers instead
+ * of on rows — so this is `options()` and stays only as the name the nesting
+ * assertions read better under. */
 function rows(): HTMLElement[] {
-  return [...(listbox()?.querySelectorAll<HTMLElement>("[role='option'],.toc-context") ?? [])];
+  return options();
 }
 
 function options(): HTMLElement[] {
   return [...(listbox()?.querySelectorAll<HTMLElement>("[role='option']") ?? [])];
 }
 
-function contextRows(): HTMLElement[] {
-  return [...(listbox()?.querySelectorAll<HTMLElement>(".toc-context") ?? [])];
+/** The breadcrumb groups the filtered view renders (EXC-1103), in document order.
+ * `role="group"` is bits-ui's on Command.Group's items wrapper — the element that
+ * carries `aria-labelledby`, so it is the one the header actually names. */
+function groups(): HTMLElement[] {
+  return [...(listbox()?.querySelectorAll<HTMLElement>("[role='group']") ?? [])];
+}
+
+/** Each group's breadcrumb header. bits-ui stamps `data-command-group-heading` on
+ * it; the `cmdk-group-heading` the vendored component's Tailwind variant names is
+ * a cmdk-era selector that matches nothing in bits-ui 2.x. */
+function groupHeadings(): HTMLElement[] {
+  return [...(listbox()?.querySelectorAll<HTMLElement>("[data-command-group-heading]") ?? [])];
 }
 
 /** The helper text, which is a sibling of the listbox rather than a row in it. */
@@ -201,7 +225,9 @@ describe("PlanToc surface", () => {
     await close(target, flush);
   });
 
-  test("keeps a filtered match at its own depth under a dimmed ancestor", async () => {
+  // EXC-1103: filtering collapses a match's ancestors into ONE header rather than
+  // spending a row per ancestor per match.
+  test("collapses a match's ancestors into a single breadcrumb header", async () => {
     const { target, flush } = render(PlanToc, {
       headings: HEADINGS,
       activeLine: 9,
@@ -209,16 +235,100 @@ describe("PlanToc surface", () => {
     });
     await open(target, flush);
     await typeQuery("details", flush);
-    expect(rows().map(label)).toEqual(["Overview", "Approach", "Details"]);
-    expect(rows().map((r) => r.style.getPropertyValue("--toc-depth"))).toEqual(["0", "1", "2"]);
-    expect(options().map(label)).toEqual(["Details"]);
+    expect(groupHeadings().map(label)).toEqual(["Overview › Approach"]);
+    expect(rows().map(label)).toEqual(["Details"]);
     await close(target, flush);
   });
 
-  // The ancestors are there to place the match, not to be picked: they are not
-  // among the command's items, and they are out of the accessibility tree
-  // entirely, so the listbox owns nothing but options.
-  test("exposes unmatched ancestors as inert context, not as options", async () => {
+  test("gathers two matching siblings under one shared header", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: BRANCHED,
+      activeLine: null,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    await typeQuery("notes", flush, () => options().length === 3);
+    // "Setup notes" and "Deploy notes" share the Rollout path, so one header
+    // carries both; "Setup" holds the other. Groups, and the rows inside them,
+    // in document order — no score reordering.
+    expect(groupHeadings().map(label)).toEqual(["Plan › Setup", "Plan › Rollout"]);
+    expect(rows().map(label)).toEqual(["Setup notes", "Rollout notes", "Deploy notes"]);
+    expect(groups().length).toBe(2);
+    await close(target, flush);
+  });
+
+  // A `# ` line with nothing after it is a real heading with empty text, so a
+  // trail can be non-empty and still have nothing to SAY. The group renders on
+  // whether it has a breadcrumb, never on how many ancestors it has: the two
+  // disagree exactly here, and disagreeing leaves an unlabelled `role="group"` —
+  // a level of structure naming nothing, which is what AC11 rules out.
+  test("renders no header when every ancestor's text is empty", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: [
+        { level: 1, text: "", line: 1 },
+        { level: 2, text: "Setup notes", line: 5 },
+      ],
+      activeLine: null,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    await typeQuery("notes", flush);
+    expect(rows().map(label)).toEqual(["Setup notes"]);
+    expect(groups()).toEqual([]);
+    expect(groupHeadings()).toEqual([]);
+    await close(target, flush);
+  });
+
+  test("drops an empty ancestor from the breadcrumb rather than trailing a separator", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: [
+        { level: 1, text: "", line: 1 },
+        { level: 2, text: "Setup", line: 5 },
+        { level: 3, text: "Setup notes", line: 9 },
+      ],
+      activeLine: null,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    await typeQuery("notes", flush);
+    expect(groupHeadings().map(label)).toEqual(["Setup"]);
+    await close(target, flush);
+  });
+
+  test("renders a top-level match with no header above it", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: HEADINGS,
+      activeLine: 1,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    await typeQuery("overview", flush);
+    expect(rows().map(label)).toEqual(["Overview"]);
+    // No trail means no group at all, rather than an unlabelled one wrapping the row.
+    expect(groupHeadings()).toEqual([]);
+    expect(groups()).toEqual([]);
+    await close(target, flush);
+  });
+
+  test("renders every filtered match row flush left, whatever its heading level", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: BRANCHED,
+      activeLine: null,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    await typeQuery("notes", flush, () => options().length === 3);
+    // The header carries the hierarchy, so the rows no longer have to: a level-3
+    // match sits at the same indent as a level-2 one.
+    expect(rows().map((r) => r.style.getPropertyValue("--toc-depth"))).toEqual(["0", "0", "0"]);
+    await close(target, flush);
+  });
+
+  // AC11, and the whole reason this is Command.Group rather than hand-rolled
+  // markup: the header is the group's accessible NAME. It is neither an
+  // aria-hidden row (EXC-1096's shape, which this replaces) nor loose text a
+  // listbox may not own.
+  test("exposes each header as its group's label, not as an inert row", async () => {
     const { target, flush } = render(PlanToc, {
       headings: HEADINGS,
       activeLine: 9,
@@ -226,12 +336,57 @@ describe("PlanToc surface", () => {
     });
     await open(target, flush);
     await typeQuery("details", flush);
-    expect(contextRows().map(label)).toEqual(["Overview", "Approach"]);
-    for (const row of contextRows()) {
-      expect(row.getAttribute("aria-hidden")).toBe("true");
-      expect(row.getAttribute("data-slot")).not.toBe("command-item");
-      expect(row.hasAttribute("data-value")).toBe(false);
-    }
+
+    const group = groups()[0];
+    const named = document.getElementById(group?.getAttribute("aria-labelledby") ?? "");
+    expect(named?.textContent?.trim()).toBe("Overview › Approach");
+    expect(named?.hasAttribute("aria-hidden")).toBe(false);
+    // A header is not a destination: it joins neither the roving walk nor the
+    // primitive's item set, which is what keeps the walk on match rows alone.
+    expect(named?.getAttribute("role")).toBeNull();
+    expect(named?.getAttribute("data-slot")).not.toBe("command-item");
+    // The dimmed context rows this view used to render are gone entirely.
+    expect(listbox()?.querySelector(".toc-context")).toBeNull();
+    await close(target, flush);
+  });
+
+  // The header wears caret's shared uppercase-label atom rather than a treatment
+  // of its own. Pinned because the class reaches it through a `headingClass` prop
+  // added to the vendored command-group.svelte, which a registry re-sync reverts
+  // silently (doc/agents/shadcn-rules.md § Edits a re-sync will silently undo).
+  test("dresses the header in the shared eyebrow atom", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    await typeQuery("details", flush);
+    expect(groupHeadings()[0]?.classList.contains("eyebrow")).toBe(true);
+    await close(target, flush);
+  });
+
+  // AC8: the breadcrumb form is a search affordance only. Clearing the query puts
+  // the nested tree back, headers and all gone.
+  test("returns to the nested tree when the query is cleared", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    await typeQuery("details", flush);
+    expect(groupHeadings().length).toBe(1);
+
+    await typeQuery("", flush, () => options().length === 4);
+    expect(groupHeadings()).toEqual([]);
+    expect(rows().map(label)).toEqual(["Overview", "Approach", "Details", "Verification"]);
+    expect(rows().map((r) => r.style.getPropertyValue("--toc-depth"))).toEqual([
+      "0",
+      "1",
+      "2",
+      "1",
+    ]);
     await close(target, flush);
   });
 
