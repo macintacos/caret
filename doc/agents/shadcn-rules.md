@@ -12,19 +12,21 @@ stays custom.
 ## The compose-first norm
 
 Reach for a shadcn-svelte component first. From `ui/`,
-`bunx shadcn-svelte@latest add <name> --no-deps` copies the component's source into
+`bunx shadcn-svelte@latest add <name> --no-deps -y` copies the component's source into
 `ui/src/lib/components/ui/<name>/` (config: `ui/components.json`; the `$lib` import alias
 the copies assume is declared there and resolved by `ui/vite.config.ts` +
 `ui/tsconfig.json`, and the `cn()` class-merge helper lives in `ui/src/lib/utils.ts`).
 Button and Dialog already live there as the proof-of-life pair.
 
-Two things about that invocation. The CLI reads a `package.json` **beside**
+Three things about that invocation. The CLI reads a `package.json` **beside**
 `components.json`, and caret keeps a single manifest at the repo root — so
 `ui/package.json` is a minimal stub that exists only to satisfy the CLI (without it, `add`
-dies with `ENOENT … ui/package.json`). And pass `--no-deps`: the component's own packages
+dies with `ENOENT … ui/package.json`). Pass `--no-deps`: the component's own packages
 (`bits-ui`, `tailwind-variants`, `clsx`, `tailwind-merge`) already live in the root
 `node_modules`, which bun resolves by walking up, so skipping the install step leaves the
-stub and root lockfile untouched and never creates a `ui/node_modules`. The CLI pulls the
+stub and root lockfile untouched and never creates a `ui/node_modules`. And pass `-y`: the
+CLI otherwise stops on a "Ready to install components?" confirmation, which in an
+unattended agent run looks like a silent hang rather than a prompt. The CLI pulls the
 *current* registry source, which may be newer than what's already vendored — diff before
 you keep an overwrite.
 
