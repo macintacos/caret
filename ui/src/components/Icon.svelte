@@ -82,11 +82,8 @@
   let { name, size = 16, label }: Props = $props();
 </script>
 
-<!-- data-icon names which glyph this is. The SVG is inlined, so without it nothing in
-     the DOM distinguishes one icon from another and a caller that picks its glyph at
-     runtime can only be styled positionally and only be tested by matching path data.
-     A data-* attribute rather than a class because production code, not a spec, is
-     what selects on it (doc/agents/browser-testing.md § Locators). -->
+<!-- data-icon names the glyph; the SVG is inlined, so nothing else in the DOM does
+     (doc/agents/icon-rules.md § How icons render). -->
 <span
   class="icon"
   data-icon={name}

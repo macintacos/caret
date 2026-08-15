@@ -638,19 +638,25 @@ describe("PlanToc level markers", () => {
   // is a floor under a level arriving from a future caller rather than a case markdown
   // reaches. What it rules out is asking Icon.svelte for a name the registry has no SVG for,
   // which renders an empty box — hence the non-null assertions beside the names.
+  //
+  // NaN is the third fixture because it is the ONLY input that reaches the `??` fallback:
+  // every finite level leaves through the Math.min/Math.max pair, while NaN survives both
+  // and indexes the tuple out of range. Without it that branch goes unexercised and reads
+  // as dead code to the next person.
   test("falls back to the nearest glyph for a level outside 1–6", async () => {
     const { target, flush } = render(PlanToc, {
       headings: [
         { level: 0, text: "Below one", line: 1 },
         { level: 9, text: "Past six", line: 5 },
+        { level: Number.NaN, text: "Not a number", line: 9 },
       ],
       activeLine: null,
       onJump: () => {},
     });
     await open(target, flush);
-    expect(options().map(label)).toEqual(["Below one", "Past six"]);
+    expect(options().map(label)).toEqual(["Below one", "Past six", "Not a number"]);
     expect(options().every((o) => levelGlyph(o) !== null)).toBe(true);
-    expect(levelNames()).toEqual(["heading-1", "heading-6"]);
+    expect(levelNames()).toEqual(["heading-1", "heading-6", "heading-1"]);
     await close(target, flush);
   });
 

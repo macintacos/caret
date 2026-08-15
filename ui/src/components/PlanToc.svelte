@@ -41,7 +41,6 @@
   // heading set and the scroll tracking that moves `activeLine`.
   import { untrack } from "svelte";
 
-  import Icon from "@/components/Icon.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Command from "$lib/components/ui/command/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
@@ -55,6 +54,8 @@
   import type { IconName } from "$lib/icons.ts";
   import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
   import { headingMatcher, type TocHeading } from "$lib/toc.ts";
+
+  import Icon from "@/components/Icon.svelte";
 
   interface Props {
     /** Headings extracted from the plan source, in document order. */
@@ -191,6 +192,8 @@
   // hand this anything else — the clamp is a floor under a level arriving from some
   // future caller, not a case markdown reaches. What it rules out is asking Icon.svelte
   // for a name the registry holds no SVG for, which renders an empty box in every row.
+  // The `??` is not dead code beside that clamp: it is NaN's path, which survives both
+  // Math.min and Math.max and indexes the tuple out of range.
   const LEVEL_ICONS = [
     "heading-1",
     "heading-2",
@@ -231,15 +234,11 @@
     aria-current={heading.line === activeLine ? "location" : undefined}
     onSelect={() => jump(heading.line)}
   >
-    <!-- What level this heading is, said once per row and in both views (EXC-1105). The
-         nested view already implies it in the indent; the FILTERED view passes depth 0 for
-         every row, so there this is the only thing carrying it — which is why the marker
-         lives in the shared snippet rather than in one view's branch.
-         No wrapper span: Icon.svelte's own <span> is the element, and `data-icon` names the
-         glyph on it, so the style rule below has a hook without a second node on each of a
-         plan's several hundred rows. Decorative, so Icon renders it aria-hidden and it
-         contributes no text — which is what keeps the option's accessible name exactly the
-         heading (test/e2e/plan-toc.e2e.ts pins that in a real role engine). -->
+    <!-- What level this heading is (EXC-1105). It sits in the shared snippet rather than in
+         either view's branch, which is the whole of why both views get it — and the filtered
+         one, whose rows are all at depth 0, is the view that has nothing else to say it.
+         No wrapper element of its own: `data-icon` on Icon.svelte's own <span> is the hook
+         the style rule needs, so there is nothing for one to add. -->
     <Icon name={levelIcon(heading.level)} size={14} />
     <!-- Only a MATCHED run takes an element; unmatched text stays a bare text node. That
          keeps the unfiltered view's markup byte-identical to a plain `{heading.text}` —
@@ -535,17 +534,27 @@
     margin-block-start: 0;
   }
 
-  /* The heading-level marker, at the same rung of the neutral ink ramp the breadcrumb
-     header's `.eyebrow` and the empty line take — it is the same KIND of thing as those,
-     subordinate wayfinding rather than content, so it reads dimmer than the label it
-     labels. Neutral rather than hued because it is none of the three jobs a hue has
-     (doc/agents/svelte-rules.md § Every hue has a job).
-     Being unlayered, this beats command-item.svelte's Tailwind
-     `data-selected:[&_svg]:text-accent-foreground`, so the marker stays dimmed on the row
-     the keyboard is on instead of brightening to the label's colour with it. That
-     precedence is measured in test/e2e/plan-toc.e2e.ts rather than assumed. */
-  :global(.plan-toc-panel [data-slot="command-item"] [data-icon^="heading-"]) {
-    color: var(--ink-faint);
+  /* The heading-level marker, dimmer than the label it labels: subordinate wayfinding
+     rather than content, so it takes the neutral ink ramp and not a hue — it is none of
+     the three jobs a hue has (doc/agents/svelte-rules.md § Every hue has a job).
+     On the SVG rather than on Icon.svelte's wrapper, and that placement is the whole rule.
+     The vendored item declares `data-selected:[&_svg]:text-accent-foreground` on the svg
+     itself — which the bridge resolves to the LABEL's own --ink — and a declaration that
+     matches an element beats a value inherited into it, whatever layer either sits in. A
+     rule on the wrapper loses the walked-to row without ever being overridden, and that row
+     is no edge case: the popup seeds its selection to the heading being read on every open,
+     and the filtered view always lands on the first match.
+     --ink-soft rather than the fainter rung the eyebrow takes, because the ground that
+     decides it is not the panel but the SELECTED row's own bg-accent wash, which is where
+     this marker spends most of its life. Measured on the painted pixels in caret-light:
+     --ink-faint reaches only 2.90:1 there — under the 3:1 a non-text graphic wants — where
+     --ink-soft gives 5.88:1 against a label at 12.69:1, so it stays plainly subordinate
+     without going illegible on the one row the keyboard is always on. Whether 1.4.11
+     strictly binds a marker whose level is also recoverable from the indent is the open
+     question svelte-rules.md leaves open; this picks the rung that does not need it
+     answered. */
+  :global(.plan-toc-panel [data-slot="command-item"] [data-icon^="heading-"] svg) {
+    color: var(--ink-soft);
   }
 
   /* A long heading truncates in its row rather than stretching the panel to the
