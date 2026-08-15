@@ -60,6 +60,25 @@ unused files included (`input-group` landed 7 files for the one `command-input.s
 composes). Keep it: hand-editing the component to drop the dependency is the one change a
 later re-sync silently reverts with no comment to catch it.
 
+### Edits a re-sync will silently undo
+
+Because the revert above is wholesale, anything caret **added** to a vendored component
+survives only if someone notices it went missing. One such edit is worth naming here,
+since losing it breaks accessibility rather than looks:
+
+**`command-list.svelte` renders a `Command.Viewport` that the registry source does not**
+(EXC-1096). bits-ui derives the command input's `aria-controls` **and** its
+`aria-activedescendant` from `CommandRootState.viewportNode`, which only
+`CommandViewportState`'s `attachRef` ever sets — so a `Command.List` with no viewport
+inside it leaves both attributes undefined on *every* `Command` in the app, and the
+combobox names neither the list it controls nor the row the selection is on. Nothing is
+narrated as its rows narrow, which is the whole reason `command` was vendored. The
+viewport also carries `role="none"`: the list itself is the `role="listbox"`, and a
+listbox may own options and groups but not a generic wrapper between them.
+
+`ui/src/lib/shadcn-command-popover.test.ts` is the guard, and it reds if a re-sync drops
+either half. Put the viewport back before you commit an overwrite of that file.
+
 - **Never hand-roll a primitive the catalog covers** — button, dialog, menu, tooltip,
   badge, select, toggle group, and the rest. If shadcn-svelte ships it, add it.
 - **The copied source is owned code, not a dependency.** Modifying it is expected and
