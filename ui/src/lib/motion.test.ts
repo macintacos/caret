@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 
-import { readAppCss, rootBlock } from "$lib/appCss.ts";
+import { readAppCss, rootBlock, themeBlock } from "$lib/appCss.ts";
 import { FOLLOW_ANIM_MS, SCROLL_ANIM_MS } from "$lib/diffview/scroll.ts";
 
 // caret's motion vocabulary lives in app.css: a small set of functional
@@ -50,48 +51,18 @@ const modalSources: Record<string, string> = Object.fromEntries(
   ),
 );
 
-// Every light-DOM chrome component whose CSS carries a one-shot reveal or a
-// hover/state transition, loaded once for the migration-coverage suite below.
+// The chrome: every component in ui/src/components, plus the app root, READ OFF DISK
+// rather than enumerated. The directory is the contract, so a component that grows
+// motion is covered the moment it lands rather than whenever someone remembers to add
+// it — and the reduced-motion assertion below reaches the whole chrome rather than the
+// part anyone thought to name. A component with no motion costs one trivially-green
+// test, which is the cheaper of the two mistakes a list can make.
 const chromeComponents = [
   "App.svelte",
-  "components/RequestChangesDialog.svelte",
-  "components/EmptyState.svelte",
-  "components/TopBar.svelte",
-  "components/ReviewSwitcher.svelte",
-  // The plan's heading-navigation chrome: it inherited this list's slot from the
-  // contents rail EXC-949 deleted, so the surface keeps its motion-token coverage.
-  "components/PlanBreadcrumbs.svelte",
-  // The other half of that chrome (EXC-1107). Its panel is PORTALLED rather than
-  // light-DOM, which changes nothing this list checks: the tokens are the same
-  // vocabulary, and the reduced-motion assertion is if anything stronger there — the
-  // global rule reaches a portalled surface through its [data-slot] anchor, so a
-  // per-component block here would be dead CSS in the one place it looks most needed.
-  "components/PlanToc.svelte",
-  "components/CommentNavigator.svelte",
-  "components/NotifyBell.svelte",
-  "components/VersionBadge.svelte",
-  "components/SourceAnnotationCard.svelte",
-  "components/DiffPlanView.svelte",
-  // The plan surface's reference-teaching badge (EXC-1061). Its ping is ambient and
-  // carved out below, so what listing it buys is the OTHER assertion: the badge's
-  // whole reduced-motion story is that the global guard reaches it, which is only
-  // true while it grows no block of its own.
-  "components/RefHintBadge.svelte",
-  "components/FileDrawer.svelte",
-  "components/FilePreview.svelte",
-  "components/VersionComparePicker.svelte",
-  "components/UnsentCommentsDialog.svelte",
-  "components/AlertHost.svelte",
-  "components/ThemePreviewCard.svelte",
-  // The settings-redesign surfaces (EXC-837 tree), pulled under the same coverage so
-  // their one-shot hover/reveal motion stays on the shared --dur-* tokens and none
-  // grows a per-component reduced-motion block the global rule already subsumes.
-  "components/SettingsDialog.svelte",
-  "components/SettingSelect.svelte",
-  "components/NotificationsPane.svelte",
-  "components/AdvancedPane.svelte",
-  "components/ShortcutsHelp.svelte",
-  "components/KeyboardHelpButton.svelte",
+  ...(await readdir(join(uiDir, "components")))
+    .filter((name) => name.endsWith(".svelte"))
+    .sort()
+    .map((name) => `components/${name}`),
 ];
 const chromeSources: Record<string, string> = Object.fromEntries(
   await Promise.all(
@@ -103,6 +74,20 @@ const chromeSources: Record<string, string> = Object.fromEntries(
 // suite below asserts the choreography is UNLAYERED, which the reconstituted sheet cannot
 // show. See that block's own note.
 const modalBridgeCss = await Bun.file(join(uiDir, "styles/shadcn-bridge.css")).text();
+
+/** A component's stylesheet — its `<style>` block, or "" when it has none. Both
+ * chrome scans below are claims about CSS, and a `.svelte` file's SCRIPT can hold
+ * CSS-shaped text that is neither: `FolderTree.svelte` injects a reduced-motion block,
+ * as a template string, into the `@pierre/diffs` SHADOW root — a tree the global
+ * `#app` / `[data-slot]` guard provably cannot reach, which is what makes that block
+ * correct rather than redundant. Scanning whole files would score it as a violation.
+ *
+ * Both tags are anchored to the start of a line, which is where Svelte's own `<style>`
+ * sits and where CSS inside a script string never can — so the helper cannot be fooled
+ * by the very thing it exists to skip. */
+function styleBlock(source: string): string {
+  return source.match(/^<style[^>]*>([\s\S]*?)^<\/style>/m)?.[1] ?? "";
+}
 
 // Parse a ms/s duration value to milliseconds. Returns NaN for non-time values.
 function toMs(value: string): number {
@@ -412,11 +397,122 @@ describe("the modal surfaces share one choreography, written in the shadcn bridg
   });
 });
 
+describe("the portalled menus, popovers and tooltips run on caret's tempo", () => {
+  // tw-animate-css compiles `animate-in` as
+  // `enter var(--tw-animation-duration, var(--tw-duration, .15s)) var(--tw-ease, ease) …`,
+  // so a portalled shadcn surface runs 150ms on a plain `ease` — 100ms where the
+  // component ships a `duration-100`, as popover-content does — until something writes
+  // those two properties. app.css writes them for the surfaces that are NOT modals; the
+  // modal ones choreograph their own arrival, and their absence is asserted here rather
+  // than left to be noticed.
+  // Click-opened: a menu or a panel the reader asked for is a SURFACE, so it takes the
+  // enter/exit pair. The tooltip is the deliberate exception below — it is hover-
+  // triggered, and four of its six consumers open with no delay at all.
+  const SURFACES = ["dropdown-menu-content", "dropdown-menu-sub-content", "popover-content"];
+  const MODAL = [
+    "dialog-content",
+    "dialog-overlay",
+    "alert-dialog-content",
+    "alert-dialog-overlay",
+    "sheet-content",
+    "sheet-overlay",
+  ];
+
+  // Every rule in the sheet that writes --tw-duration, as selector-list plus body.
+  // `before` reaches back to the previous rule's brace, so the doc comment above a rule
+  // is trimmed off its selector list.
+  const portalRules = [...appCss.matchAll(/([^{}]*)\{([^{}]*--tw-duration:[^{}]*)\}/g)].map(
+    ([, before = "", body = ""]) => ({ selector: (before.split("*/").pop() ?? "").trim(), body }),
+  );
+  // Narrowed to the rules naming a surface from THIS set before anything is keyed on a
+  // tier. The modal choreography writes the same two properties and the same enter/exit
+  // tokens, so a tier alone does not identify a rule — it would hand this suite whichever
+  // of the two the sheet happens to @import first.
+  const mine = portalRules.filter((r) =>
+    [...SURFACES, "tooltip-content"].some((s) => r.selector.includes(`[data-slot="${s}"]`)),
+  );
+  const armFor = (tier: string) => mine.find((r) => r.body.includes(`var(--dur-${tier})`));
+  const enterArm = armFor("enter");
+  const exitArm = armFor("exit");
+  const tooltipArm = armFor("micro");
+  const read = (arm: typeof enterArm, prop: string): string =>
+    arm?.body.match(new RegExp(`${prop}:\\s*([^;]+);`))?.[1]?.trim() ?? "";
+
+  test("retimes the click-opened surfaces from the shared tokens, in both directions", () => {
+    for (const arm of [enterArm, exitArm]) {
+      for (const slot of SURFACES) expect(arm?.selector).toContain(`[data-slot="${slot}"]`);
+      expect(read(arm, "--tw-ease")).toMatch(/^var\(--ease-[a-z]+\)$/);
+    }
+    expect(exitArm?.selector).toContain('[data-state="closed"]');
+    expect(enterArm?.selector).not.toContain("data-state");
+  });
+
+  test("pairs a distinct enter and exit rather than spending one timing twice", () => {
+    // The same claim the ToC panel's suite above makes, for the same reason: the
+    // vendored default this supersedes spent one duration and one curve in both
+    // directions, and collapsing the arms back together is the regression to catch.
+    expect(read(enterArm, "--tw-duration")).not.toBe(read(exitArm, "--tw-duration"));
+    expect(read(enterArm, "--tw-ease")).not.toBe(read(exitArm, "--tw-ease"));
+  });
+
+  test("the tooltip takes the micro tier instead, symmetrically", () => {
+    // The one hover-TRIGGERED surface in the set: NotifyBell, StatusStrip, VersionBadge
+    // and VersionComparePicker all open it with delayDuration={0}, and an entrance's
+    // worth of time before an instant tooltip resolves is the lag on the pointer
+    // --dur-micro exists to avoid. Micro is symmetric by definition ("the SAME time in
+    // both directions", tokens.css), so the tooltip takes one rule and no closed-state
+    // arm — which also means it LEAVES on --ease-out, the one departure in the
+    // vocabulary that does not take --ease-in. That follows from the same symmetry: a
+    // hover tint does not invert its curve on the way out either.
+    expect(tooltipArm?.selector).toContain('[data-slot="tooltip-content"]');
+    expect(tooltipArm?.selector).not.toContain("data-state");
+    expect(read(tooltipArm, "--tw-duration")).toBe("var(--dur-micro)");
+    expect(read(tooltipArm, "--tw-ease")).toBe("var(--ease-out)");
+    for (const arm of [enterArm, exitArm]) {
+      expect(arm?.selector).not.toContain('[data-slot="tooltip-content"]');
+    }
+  });
+
+  test("never mixes these surfaces with the modal ones", () => {
+    // A dialog, an alert dialog and a sheet are not chrome that appears beside the
+    // pointer — they take the whole surface, with a backdrop, and their timing is
+    // theirs. They may well have rules of their own in this sheet; what must not happen
+    // is one rule retiming both, because that is how a menu's tempo silently becomes a
+    // modal's. So the check runs over every rule naming a surface from THIS set — three
+    // of them, which is asserted too, since the likeliest way a modal gets swept in is a
+    // FOURTH rule that a per-arm check would never look at.
+    expect(mine).toHaveLength(3);
+    for (const rule of mine) {
+      for (const slot of MODAL) expect(rule.selector).not.toContain(`[data-slot="${slot}"]`);
+    }
+  });
+});
+
+describe("the vendored components' hover/focus tempo is caret's micro tier", () => {
+  // The OTHER half of the two-track meeting, and the one that shows up on every
+  // button rather than only on a portal. A bare `transition-colors` / `transition-all`
+  // in the shadcn tree resolves through Tailwind's own theme defaults — 150ms on
+  // cubic-bezier(.4, 0, .2, 1) — beside caret chrome that tints in --dur-micro on
+  // --ease-out. Two hover tempos in one chrome is what the audit exists to catch, and
+  // the theme keys are the whole fix: no selector, no per-component override, and a
+  // vendored class that names its own duration (sheet's duration-200) still wins.
+  const theme = themeBlock(appCss);
+  const key = (name: string): string =>
+    theme.match(new RegExp(`--default-transition-${name}:\\s*([^;]+);`))?.[1]?.trim() ?? "";
+
+  test("both Tailwind transition defaults resolve to caret's tokens", () => {
+    expect(theme).not.toBe("");
+    expect(key("duration")).toBe("var(--dur-micro)");
+    expect(key("timing-function")).toBe("var(--ease-out)");
+  });
+});
+
 describe("chrome motion declarations draw from the tokens, not bare literals", () => {
-  // Every light-DOM chrome component whose CSS carries a one-shot reveal or a
-  // hover/state transition. Each is scanned for `transition:`/`animation:`
-  // declarations; the one-shot ones must time off var(--dur-*) with no bare
-  // seconds/ms literal, so the chrome harmonizes on the shared vocabulary.
+  // The whole chrome, motion or not (see chromeComponents above). Each component's
+  // `<style>` is scanned for `transition:`/`animation:` declarations; the one-shot ones
+  // must time off var(--dur-*) with no bare seconds/ms literal, so the chrome
+  // harmonizes on the shared vocabulary. A component with neither declares nothing to
+  // scan and passes on an empty loop, which is the point of scanning the directory.
   const chrome = chromeComponents;
 
   // The ambient carve-out: these animations run on their own bespoke durations and
@@ -434,7 +530,7 @@ describe("chrome motion declarations draw from the tokens, not bare literals", (
 
   for (const path of chrome) {
     test(`${path} times every one-shot motion off var(--dur-*)`, () => {
-      for (const decl of motionDecls(chromeSources[path] ?? "")) {
+      for (const decl of motionDecls(styleBlock(chromeSources[path] ?? ""))) {
         if (ambient.test(decl)) continue; // ambient carve-out keeps its literal
         // A one-shot reveal/transition references the duration token and leaves
         // no bare seconds/ms literal behind.
@@ -469,7 +565,7 @@ describe("chrome motion declarations draw from the tokens, not bare literals", (
     const withoutComments = (src: string) =>
       src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
     for (const path of chrome) {
-      const css = withoutComments(chromeSources[path] ?? "");
+      const css = withoutComments(styleBlock(chromeSources[path] ?? ""));
       expect(css).not.toMatch(/@media\s*\(prefers-reduced-motion/);
     }
   });

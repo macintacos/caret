@@ -108,10 +108,16 @@ in exactly one place — the shadcn semantic `:root` block plus the `@theme inli
   only for the shadcn components — caret's own semantic classes (`.chip`, `.collapse`, …)
   are never clobbered by an auto-detected utility. If you author Tailwind utilities in a
   caret chrome file, add that path to `@source`.
+- **The bridge is not only color.** That same `@theme inline` map carries Tailwind's
+  `--default-transition-duration` and `--default-transition-timing-function`, pointed at
+  caret's `--dur-micro` / `--ease-out`, so a bare `transition-colors` in the vendored tree
+  tints on the chrome's tempo rather than on Tailwind's 150ms default. Anything editing
+  that block should know it governs motion as well as palette.
 
 The deep detail — the full bridge invariants, the amber-scarcity rule, `color-mix(in lab)`
-over `oklch` — lives in [`svelte-rules.md`](svelte-rules.md) § CSS-token discipline. Defer
-to it rather than restating it here.
+over `oklch` — lives in [`svelte-rules.md`](svelte-rules.md) § CSS-token discipline, and
+the reasoning behind the two transition keys in that file's § Motion principles. Defer to
+them rather than restating either here.
 
 ## The caret surface language
 

@@ -401,12 +401,46 @@ a second thing the component `<style>` cannot — those rules are unlayered whil
 utilities they supersede compile into `@layer utilities`, so a `shadcn add --overwrite`
 that restores the stock timing is overridden rather than a silent regression.
 
-The refinement is **per-surface opt-in**, not a migration in progress. `tw-animate-css`'s
-own `duration-100` and plain `ease` remain the intended default for every portalled
-surface that has not opted in — including `PlanBreadcrumbs.svelte`'s crumb menu and its
-heading filter, which sit on the same control row as the ToC panel and are deliberately
-still on it. A surface reading a step quicker and flatter than its neighbour is the
-expected state, not drift to be reported.
+**The menus, popovers and tooltips take that timing by default**, from three unlayered
+rules in `styles/base.css`. The click-opened surfaces —
+`[data-slot="dropdown-menu-content"]`, `…-sub-content` and `popover-content` — are
+surfaces the reader asked for, so they take the enter tokens by default and the exit
+tokens on `[data-state="closed"]`. **The tooltip is the carve-out**: it is the one
+hover-TRIGGERED surface in the set, and four of its six consumers (`NotifyBell`,
+`StatusStrip`, `VersionBadge`, `VersionComparePicker`) open it with `delayDuration={0}`,
+so it takes `--dur-micro` in one rule with no closed-state arm — symmetric, for the reason
+`tokens.css` already gives for micro being the same time in both directions, which also
+makes it the one departure in the vocabulary that leaves on `--ease-out` rather than
+`--ease-in`. The slots are named one by one rather than swept as
+`[data-slot][data-state]`, and the modal surfaces (`dialog`, `alert-dialog`, `sheet`) sit
+deliberately outside all three: those take the whole viewport behind a backdrop and their
+arrival is choreographed with it, so a sweep would quietly overrule that. `motion.test.ts`
+asserts the inclusions and the separation both — specifically that no single rule ever
+names a surface from both sets.
+
+**The vendored components' own hover/focus tempo is bridged separately**, and it is not
+`animate-in`'s. A bare `transition-colors` / `transition-all` in the shadcn tree resolves
+through Tailwind's `--default-transition-duration` and
+`--default-transition-timing-function`, which ship as 150ms on
+`cubic-bezier(.4, 0, .2, 1)` — a second hover tempo beside caret's own 120ms `--ease-out`
+chips. Both keys point at the micro tier from the `@theme inline` block in
+`styles/shadcn-bridge.css`, which is the whole fix: no selector, no per-component
+override, and a vendored class that names its own duration (the sheet's `duration-200`)
+still wins over a default.
+
+Two things about where those rules live. They are in `base.css` rather than in the
+vendored components' class strings because `shadcn-svelte add` reverts those wholesale on
+a re-sync (`shadcn-rules.md` § Edits a re-sync will silently undo) and never reaches a
+caret-owned stylesheet. And **both arms sit at specificity zero** — the closed state wraps
+its own `[data-state="closed"]` in a second `:where()`, which is not decoration: left bare
+it would score (0,1,0) and a component's rule would have to tie-break against it on source
+order. At zero they are a true default, so a surface with timing of its own simply wins.
+`PlanToc.svelte` is that surface: the ToC panel is a `popover-content` and keeps the pin
+EXC-1107 designed for it. A default and a pin agreeing on today's values is the expected
+state, not a duplicate to collapse — the pin is what keeps the panel's timing the panel's
+if the default ever moves. Being unlayered is what still makes these beat the
+`duration-100` `popover-content` carries in `@layer utilities`; layer order decides that,
+not specificity.
 
 `prefers-reduced-motion: reduce` is the single global kill-switch over all of it: one rule
 in `app.css` collapses every animation and transition to one static frame, so no component

@@ -18,6 +18,7 @@ import { discardConfirm, unsentRows } from "@test/e2e/support/chrome.ts";
 import { makeProject } from "@test/e2e/support/file-refs.ts";
 import {
   expect,
+  motionToken,
   test,
   waitForTwoPollTicks,
   waitPastSafeModeGrace,
@@ -1858,8 +1859,13 @@ test("the composer reveal and the card swap share one opacity-only token transit
   await expect(composer).toBeVisible();
   const composerMotion = await composer.evaluate(motionOf);
   expect(composerMotion.name).toMatch(/reveal$/);
-  // --dur-micro is 120ms.
-  expect(composerMotion.duration).toBe("0.12s");
+  // The micro tier, read off the token rather than retyped as seconds. Compared as a
+  // number, not a formatted string: `toBe` on the string form would also be asserting
+  // that Number's toString and Chrome's animation-duration serialization agree.
+  expect(Number.parseFloat(composerMotion.duration)).toBeCloseTo(
+    await motionToken(page, "--dur-micro"),
+    3,
+  );
   // Opacity only — no scale bounce, no translate.
   expect(composerMotion.transform).toBe("none");
 

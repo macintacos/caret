@@ -70,14 +70,29 @@
   --sidebar-ring: var(--ring);
 }
 
-/* @theme inline: map shadcn's semantic vars onto Tailwind's color / radius / font
-   utility scales without emitting a second :root layer. Colors ride the bridged
-   --background/--primary/… above, so they resolve to caret tokens. Radius is
+/* @theme inline: map shadcn's semantic vars onto Tailwind's color / radius / font /
+   transition utility scales without emitting a second :root layer. Colors ride the
+   bridged --background/--primary/… above, so they resolve to caret tokens. Radius is
    single-sourced from caret's two radius roles — controls at --radius (6px, the
    Button's rounded-lg), panels at --radius-lg (10px, the Dialog's rounded-xl).
    Fonts point at caret's stacks so any font-sans/font-mono utility resolves to
-   Geist / Berkeley Mono, not Tailwind's built-in defaults. */
+   Geist / Berkeley Mono, not Tailwind's built-in defaults. The transition defaults are
+   the motion half, first in the block because they are the least colour-shaped thing
+   in it. */
 @theme inline {
+  /* The motion half of the bridge. A bare `transition-colors` / `transition-all` in
+     the vendored tree resolves its duration and curve through these two theme keys,
+     which ship as 150ms on cubic-bezier(0.4, 0, 0.2, 1) — without these overrides every
+     shadcn button, input and switch tints a step slower, and on a different curve, than
+     the caret chip beside it. The micro tier is where a hover tint belongs, and pointing
+     the defaults at it costs no selector and no per-component override; a vendored class
+     naming its own duration (the sheet's `duration-200`) still wins over a default. This
+     does NOT reach the `animate-in`/`animate-out` utilities — those read
+     --tw-duration/--tw-ease and fall back to their own literals, which styles/base.css
+     retimes per portalled surface. */
+  --default-transition-duration: var(--dur-micro);
+  --default-transition-timing-function: var(--ease-out);
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

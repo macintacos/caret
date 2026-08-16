@@ -51,7 +51,7 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { expect, motionToken, test } from "@test/e2e/support/fixtures.ts";
 import { jumpToHeading, PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
 
 // Sections taller than the viewport, so jumping to one genuinely changes which
@@ -260,21 +260,6 @@ async function openToc(page: Page): Promise<void> {
   await expect(listbox(page)).toBeVisible();
   await expect(options(page).first()).toBeVisible();
   await settled(page);
-}
-
-/** A motion token as the engine resolves it, in the same units `getComputedStyle` and
- * `AnimationEvent.elapsedTime` report. Asked of the engine rather than parsed out of the
- * stylesheet, so a spec asserting a duration is asserting against the token the component
- * actually references and not against a number retyped beside it. */
-async function motionToken(page: Page, token: string): Promise<number> {
-  return page.evaluate((name) => {
-    const probe = document.createElement("span");
-    probe.style.setProperty("animation-duration", `var(${name})`);
-    document.body.append(probe);
-    const value = getComputedStyle(probe).animationDuration;
-    probe.remove();
-    return Number.parseFloat(value); // seconds
-  }, token);
 }
 
 /** The animation an element is carrying, read off the cascade. `animationName` survives

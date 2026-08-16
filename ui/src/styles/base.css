@@ -63,6 +63,63 @@ body {
   }
 }
 
+/* The portalled shadcn surfaces, retimed onto caret's vocabulary. tw-animate-css
+   compiles the `animate-in`/`animate-out` utilities they arrive and leave on as
+   `enter var(--tw-animation-duration, var(--tw-duration, .15s)) var(--tw-ease, ease) …`,
+   so a surface runs 150ms on a plain `ease` — 100ms where the component ships a
+   `duration-100`, as popover-content does — unless something writes those two custom
+   properties. Either way it is the vendored tempo, audibly not the chrome's. Writing
+   them is the documented opt-in (svelte-rules.md § Motion principles): the keyframes
+   stay the vendored ones, which matters because bits-ui's portal presence waits on the
+   `animationend` they fire, and only the duration and the curve move. The exit arm is
+   the closed state alone, so a menu leaves on the same asymmetry every other surface
+   in the app leaves on.
+   THE SLOTS ARE NAMED ONE BY ONE, not swept as [data-slot][data-state]. A dialog, an
+   alert dialog and a sheet take the whole surface behind a backdrop; their arrival is
+   choreographed with that backdrop rather than borrowed from the menus, so a sweep
+   here would quietly overrule it. Here rather than in the vendored components' class
+   strings for a second reason: `shadcn-svelte add` reverts those wholesale on a
+   re-sync (shadcn-rules.md § Edits a re-sync will silently undo) and never reaches
+   this file. Unlayered, so it wins over the `duration-100` popover-content carries in
+   @layer utilities — layer order decides that, not specificity, which is what lets
+   BOTH arms sit at specificity ZERO. The closed state is wrapped in its own :where()
+   for exactly that reason: left bare it would score (0,1,0) and a component rule
+   would have to tie-break on source order. At zero, a surface with timing of its own
+   simply wins — which is how the ToC panel (`PlanToc.svelte`, itself a
+   popover-content) keeps the pin EXC-1107 designed for it. A default and a pin
+   agreeing on today's values is the expected state, not a duplicate to collapse: the
+   pin is what keeps the panel's timing the panel's if this default ever moves. */
+:where(
+  [data-slot="dropdown-menu-content"],
+  [data-slot="dropdown-menu-sub-content"],
+  [data-slot="popover-content"]
+) {
+  --tw-duration: var(--dur-enter);
+  --tw-ease: var(--ease-out);
+}
+:where(
+  [data-slot="dropdown-menu-content"],
+  [data-slot="dropdown-menu-sub-content"],
+  [data-slot="popover-content"]
+):where([data-state="closed"]) {
+  --tw-duration: var(--dur-exit);
+  --tw-ease: var(--ease-in);
+}
+
+/* The tooltip is the one HOVER-triggered surface in that set, and four of its six
+   consumers (NotifyBell, StatusStrip, VersionBadge, VersionComparePicker) open it with
+   delayDuration={0} — an entrance's worth of time before an instant tooltip resolves is
+   exactly the lag on the pointer the micro tier exists to avoid. So it takes micro, and
+   takes it symmetrically: at this size a departure has no arrival to be the inverse of,
+   which is the reasoning tokens.css already gives for micro being the same time in both
+   directions. One rule, no closed-state arm — which means the tooltip also LEAVES on
+   --ease-out, the only departure in the vocabulary that does not take --ease-in, and
+   for the same symmetry: a hover tint does not invert its curve on the way out either. */
+:where([data-slot="tooltip-content"]) {
+  --tw-duration: var(--dur-micro);
+  --tw-ease: var(--ease-out);
+}
+
 /* The theme-switch "wipe" (EXC-730). withWipe() (lib/themeWipe.ts) runs the
    palette swap inside document.startViewTransition, so the browser snapshots the
    whole page — the light-DOM chrome AND the shadow-DOM diff view, as pixels — and
