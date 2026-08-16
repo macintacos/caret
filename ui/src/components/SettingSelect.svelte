@@ -272,6 +272,11 @@
   :global(.setting-menu .setting-item[data-selected][data-highlighted]) {
     box-shadow: inset 0 0 0 1px var(--accent);
   }
+  /* The vendored indicator inherits the row's ink; amber is what marks a selection
+     here, and it is what the version picker's own check wears. */
+  :global(.setting-menu [data-icon="check"]) {
+    color: var(--accent);
+  }
   :global(.setting-menu .name) {
     flex: 1 1 auto;
     min-width: 0;

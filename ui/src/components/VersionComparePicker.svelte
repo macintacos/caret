@@ -13,9 +13,9 @@
   // presentational and reports changes through callback props.
   //
   // The controls are composed from the shadcn-svelte catalog (EXC-764): the two
-  // version pickers reuse the same bits-ui DropdownMenu the Settings SettingSelect
-  // uses (soft float-chip trigger, chevron that points right when collapsed and
-  // rotates down when open); the layout/indicator segmented controls are
+  // version pickers are a bits-ui DropdownMenu (soft float-chip trigger, chevron
+  // that points right when collapsed and rotates down when open); the
+  // layout/indicator segmented controls are
   // single-select ToggleGroups (each option a role="radio"); the enter/exit
   // control is a Button toggle; and the disabled-state explanation is a Tooltip.
   // Every control shares the topbar's neutral float-chip surface language and one
@@ -163,9 +163,9 @@
   $effect(() => (indicatorsTrack ? mountSlider(indicatorsTrack) : undefined));
 </script>
 
-<!-- A version picker, reused for both base and target. It is the same DropdownMenu
-     the Settings SettingSelect is built on: a float-chip trigger and a portalled
-     radio menu that commits-and-closes on pick. The chevron rotation (right when
+<!-- A version picker, reused for both base and target: a bits-ui DropdownMenu with a
+     float-chip trigger and a portalled radio menu that commits-and-closes on pick.
+     The chevron rotation (right when
      collapsed, down when open) rides bits-ui's aria-expanded via CSS, so no local
      open state is needed. -->
 {#snippet versionPicker(ariaLabel: string, current: number, onPick: (v: number) => void)}
@@ -411,8 +411,8 @@
     color: var(--ink-faint);
   }
 
-  /* Version pickers reuse the Settings SettingSelect's DropdownMenu, so the trigger
-     wears the same .float-chip skin as every neutral control. Sized to --ctl-h so
+  /* Version pickers are their own bits-ui DropdownMenu; the trigger wears the same
+     .float-chip skin as every neutral control. Sized to --ctl-h so
      it lines up with the compare Button and the segmented toggles. */
   .vpick {
     display: inline-flex;
@@ -445,8 +445,8 @@
 
   /* The portalled version menu carries this scope's classes; rows lay out
      [check] [label], with the active version's row highlighted on hover/keyboard
-     via --chip-hover and marked with an amber check on --accent — the same
-     language the SettingSelect menu uses. */
+     via --chip-hover and marked with an amber check on --accent, the DropdownMenu's
+     own selection language. */
   :global(.vmenu .vitem) {
     display: flex;
     align-items: center;

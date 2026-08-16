@@ -67,7 +67,7 @@ body {
    compiles the `animate-in`/`animate-out` utilities they arrive and leave on as
    `enter var(--tw-animation-duration, var(--tw-duration, .15s)) var(--tw-ease, ease) …`,
    so a surface runs 150ms on a plain `ease` — 100ms where the component ships a
-   `duration-100`, as popover-content and select-content do — unless something writes those two custom
+   `duration-100`, as popover-content does — unless something writes those two custom
    properties. Either way it is the vendored tempo, audibly not the chrome's. Writing
    them is the documented opt-in (svelte-rules.md § Motion principles): the keyframes
    stay the vendored ones, which matters because bits-ui's portal presence waits on the
