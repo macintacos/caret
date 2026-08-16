@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { readAppCss } from "$lib/appCss.ts";
+import { readAppCss, themeBlock } from "$lib/appCss.ts";
 
 // The caret↔shadcn-svelte COLOR bridge lives in exactly one place: the shadcn semantic
 // token block (`--background`, `--primary`, `--border`, …) plus the `@theme inline`
@@ -30,10 +30,6 @@ function shadcnRootBlock(css: string): string {
     if (m[1]!.includes("--background")) return m[1]!;
   }
   return "";
-}
-
-function themeInlineBlock(css: string): string {
-  return css.match(/@theme inline\s*\{([^}]*)\}/)?.[1] ?? "";
 }
 
 // shadcn semantic var → the caret THEMES token it must bridge to.
@@ -114,7 +110,7 @@ describe("the shadcn semantic :root → caret token bridge", () => {
 });
 
 describe("the shadcn @theme inline map", () => {
-  const block = themeInlineBlock(appCss);
+  const block = themeBlock(appCss);
   const decls = stripComments(block);
 
   test("--color-primary rides caret's amber via var(--primary) (→ var(--accent))", () => {

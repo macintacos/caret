@@ -27,9 +27,8 @@
 // writes a synthetic project dir and seeds a review whose cwd points at it. The
 // content is throwaway, non-identifying scaffolding — never a real plan.
 
-import { motionToken } from "@test/e2e/support/chrome.ts";
 import { fileRefCount, makeProject, settleDrawer } from "@test/e2e/support/file-refs.ts";
-import { expect, test, waitForTwoPollTicks } from "@test/e2e/support/fixtures.ts";
+import { expect, motionToken, test, waitForTwoPollTicks } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 import { OVERSCAN_ROWS } from "@ui/src/lib/previewWindow.ts";
 import { MAX_EXCERPT_BYTES } from "@/plan/excerpt.ts";

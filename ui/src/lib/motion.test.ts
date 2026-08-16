@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 
-import { readAppCss, rootBlock } from "$lib/appCss.ts";
+import { readAppCss, rootBlock, themeBlock } from "$lib/appCss.ts";
 import { FOLLOW_ANIM_MS, SCROLL_ANIM_MS } from "$lib/diffview/scroll.ts";
 
 // caret's motion vocabulary lives in app.css: a small set of functional
@@ -52,12 +52,11 @@ const modalSources: Record<string, string> = Object.fromEntries(
 );
 
 // The chrome: every component in ui/src/components, plus the app root, READ OFF DISK
-// rather than enumerated. A hand-kept list is a list that drifts — the one this
-// replaced had missed eight components, PlanSearch among them, so `search-collapse`
-// (one of the exit tier's six sites) carried no coverage at all. The directory is the
-// contract instead, and a component with no motion costs one trivially-green test,
-// which is the cheaper mistake. It also means the reduced-motion assertion below
-// covers the whole chrome rather than the part someone remembered.
+// rather than enumerated. The directory is the contract, so a component that grows
+// motion is covered the moment it lands rather than whenever someone remembers to add
+// it — and the reduced-motion assertion below reaches the whole chrome rather than the
+// part anyone thought to name. A component with no motion costs one trivially-green
+// test, which is the cheaper of the two mistakes a list can make.
 const chromeComponents = [
   "App.svelte",
   ...(await readdir(join(uiDir, "components")))
@@ -81,9 +80,13 @@ const modalBridgeCss = await Bun.file(join(uiDir, "styles/shadcn-bridge.css")).t
  * CSS-shaped text that is neither: `FolderTree.svelte` injects a reduced-motion block,
  * as a template string, into the `@pierre/diffs` SHADOW root — a tree the global
  * `#app` / `[data-slot]` guard provably cannot reach, which is what makes that block
- * correct rather than redundant. Scanning whole files would score it as a violation. */
+ * correct rather than redundant. Scanning whole files would score it as a violation.
+ *
+ * Both tags are anchored to the start of a line, which is where Svelte's own `<style>`
+ * sits and where CSS inside a script string never can — so the helper cannot be fooled
+ * by the very thing it exists to skip. */
 function styleBlock(source: string): string {
-  return source.match(/<style[^>]*>([\s\S]*)<\/style>/)?.[1] ?? "";
+  return source.match(/^<style[^>]*>([\s\S]*?)^<\/style>/m)?.[1] ?? "";
 }
 
 // Parse a ms/s duration value to milliseconds. Returns NaN for non-time values.
@@ -397,13 +400,14 @@ describe("the modal surfaces share one choreography, written in the shadcn bridg
 describe("the portalled menus, popovers and tooltips run on caret's tempo", () => {
   // tw-animate-css compiles `animate-in` as
   // `enter var(--tw-animation-duration, var(--tw-duration, .15s)) var(--tw-ease, ease) …`,
-  // so every portalled shadcn surface runs 150ms on a plain `ease` until something
-  // writes those two properties. app.css writes them for the surfaces that are NOT
-  // modals; the modal ones choreograph their own arrival, and their absence from the
-  // rule is asserted here rather than left to be noticed.
+  // so a portalled shadcn surface runs 150ms on a plain `ease` — 100ms where the
+  // component ships a `duration-100`, as popover-content does — until something writes
+  // those two properties. app.css writes them for the surfaces that are NOT modals; the
+  // modal ones choreograph their own arrival, and their absence is asserted here rather
+  // than left to be noticed.
   // Click-opened: a menu or a panel the reader asked for is a SURFACE, so it takes the
   // enter/exit pair. The tooltip is the deliberate exception below — it is hover-
-  // triggered, and one of its two consumers opens with no delay at all.
+  // triggered, and four of its six consumers open with no delay at all.
   const SURFACES = ["dropdown-menu-content", "dropdown-menu-sub-content", "popover-content"];
   const MODAL = [
     "dialog-content",
@@ -411,6 +415,7 @@ describe("the portalled menus, popovers and tooltips run on caret's tempo", () =
     "alert-dialog-content",
     "alert-dialog-overlay",
     "sheet-content",
+    "sheet-overlay",
   ];
 
   // The rules that write --tw-duration, as selector-list plus body. Nothing else in the
@@ -448,27 +453,37 @@ describe("the portalled menus, popovers and tooltips run on caret's tempo", () =
   });
 
   test("the tooltip takes the micro tier instead, symmetrically", () => {
-    // The one hover-TRIGGERED surface in the set, and NotifyBell opens it with
-    // delayDuration={0} — an entrance's worth of time before an instant tooltip
-    // resolves is the lag on the pointer --dur-micro exists to avoid. Micro is
-    // symmetric by definition ("the SAME time in both directions", tokens.css), so
-    // the tooltip takes one rule and no closed-state arm: a departure at this size
-    // has no arrival to be the inverse of.
+    // The one hover-TRIGGERED surface in the set: NotifyBell, StatusStrip, VersionBadge
+    // and VersionComparePicker all open it with delayDuration={0}, and an entrance's
+    // worth of time before an instant tooltip resolves is the lag on the pointer
+    // --dur-micro exists to avoid. Micro is symmetric by definition ("the SAME time in
+    // both directions", tokens.css), so the tooltip takes one rule and no closed-state
+    // arm — which also means it LEAVES on --ease-out, the one departure in the
+    // vocabulary that does not take --ease-in. That follows from the same symmetry: a
+    // hover tint does not invert its curve on the way out either.
     expect(tooltipArm?.selector).toContain('[data-slot="tooltip-content"]');
     expect(tooltipArm?.selector).not.toContain("data-state");
     expect(read(tooltipArm, "--tw-duration")).toBe("var(--dur-micro)");
+    expect(read(tooltipArm, "--tw-ease")).toBe("var(--ease-out)");
     for (const arm of [enterArm, exitArm]) {
       expect(arm?.selector).not.toContain('[data-slot="tooltip-content"]');
     }
   });
 
-  test("leaves the modal surfaces to their own choreography", () => {
+  test("never mixes these surfaces with the modal ones", () => {
     // A dialog, an alert dialog and a sheet are not chrome that appears beside the
     // pointer — they take the whole surface, with a backdrop, and their timing is
-    // theirs. Widening any of these rules to a bare [data-slot] sweep would silently
-    // retime them, so the exclusion is a test rather than a comment.
-    for (const arm of [enterArm, exitArm, tooltipArm]) {
-      for (const slot of MODAL) expect(arm?.selector).not.toContain(`[data-slot="${slot}"]`);
+    // theirs. They may well have rules of their own in this sheet; what must not happen
+    // is one rule retiming both, because that is how a menu's tempo silently becomes a
+    // modal's. So the check runs over every rule naming a surface from THIS set — three
+    // of them, which is asserted too, since the likeliest way a modal gets swept in is a
+    // FOURTH rule that a per-arm check would never look at.
+    const mine = portalRules.filter((r) =>
+      [...SURFACES, "tooltip-content"].some((s) => r.selector.includes(`[data-slot="${s}"]`)),
+    );
+    expect(mine).toHaveLength(3);
+    for (const rule of mine) {
+      for (const slot of MODAL) expect(rule.selector).not.toContain(`[data-slot="${slot}"]`);
     }
   });
 });
@@ -481,7 +496,7 @@ describe("the vendored components' hover/focus tempo is caret's micro tier", () 
   // --ease-out. Two hover tempos in one chrome is what the audit exists to catch, and
   // the theme keys are the whole fix: no selector, no per-component override, and a
   // vendored class that names its own duration (sheet's duration-200) still wins.
-  const theme = appCss.match(/@theme inline\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const theme = themeBlock(appCss);
   const key = (name: string): string =>
     theme.match(new RegExp(`--default-transition-${name}:\\s*([^;]+);`))?.[1]?.trim() ?? "";
 

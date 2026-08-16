@@ -33,3 +33,12 @@ export function rootBlock(css: string, marker: string): string {
   }
   return "";
 }
+
+/** The body of the sheet's one `@theme inline` block — the shadcn bridge's map onto
+ * Tailwind's utility scales — or `""` when it is absent. Flat like a `:root` body, so
+ * the same `[^}]*` capture holds. Shared rather than re-derived per suite: two suites
+ * now read this block for different keys, and two regexes for one block means two
+ * failure modes for one drift. */
+export function themeBlock(css: string): string {
+  return css.match(/@theme inline\s*\{([^}]*)\}/)?.[1] ?? "";
+}

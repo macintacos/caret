@@ -51,8 +51,7 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { motionToken } from "@test/e2e/support/chrome.ts";
-import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { expect, motionToken, test } from "@test/e2e/support/fixtures.ts";
 import { jumpToHeading, PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
 
 // Sections taller than the viewport, so jumping to one genuinely changes which

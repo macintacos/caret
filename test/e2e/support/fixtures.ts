@@ -369,4 +369,29 @@ export async function waitForTwoPollTicks(page: Page): Promise<void> {
   );
 }
 
+/**
+ * Resolve a motion token the way the engine does, in seconds — the units both
+ * `getComputedStyle` and `AnimationEvent.elapsedTime` report.
+ *
+ * Asked of the engine through a throwaway probe rather than parsed out of the
+ * stylesheet, so a spec asserting a duration asserts against the token the component
+ * actually references rather than a number retyped beside it. That is the difference
+ * between a retune moving one value in `tokens.css` and a retune hand-editing every
+ * spec that ever watched a surface move.
+ *
+ * Here rather than in `chrome.ts` because it is not a locator — that module's contract
+ * is the chrome's locators (browser-testing.md § Locators) — and its callers are not
+ * all chrome specs: the preview lane and the composer read tokens too.
+ */
+export async function motionToken(page: Page, token: string): Promise<number> {
+  return page.evaluate((name) => {
+    const probe = document.createElement("span");
+    probe.style.setProperty("animation-duration", `var(${name})`);
+    document.body.append(probe);
+    const value = getComputedStyle(probe).animationDuration;
+    probe.remove();
+    return Number.parseFloat(value); // seconds
+  }, token);
+}
+
 export { expect };
