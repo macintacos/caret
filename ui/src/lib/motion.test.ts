@@ -26,6 +26,12 @@ const chromeComponents = [
   // The plan's heading-navigation chrome: it inherited this list's slot from the
   // contents rail EXC-949 deleted, so the surface keeps its motion-token coverage.
   "components/PlanBreadcrumbs.svelte",
+  // The other half of that chrome (EXC-1107). Its panel is PORTALLED rather than
+  // light-DOM, which changes nothing this list checks: the tokens are the same
+  // vocabulary, and the reduced-motion assertion is if anything stronger there — the
+  // global rule reaches a portalled surface through its [data-slot] anchor, so a
+  // per-component block here would be dead CSS in the one place it looks most needed.
+  "components/PlanToc.svelte",
   "components/CommentNavigator.svelte",
   "components/NotifyBell.svelte",
   "components/VersionBadge.svelte",
@@ -152,6 +158,51 @@ describe("the formerly-unguarded composer reveal references the tokens", () => {
     const keyframes = composer.match(/@keyframes reveal\s*\{([\s\S]*?)\n {2}\}/)?.[1] ?? "";
     expect(keyframes).toContain("opacity");
     expect(keyframes).not.toContain("transform");
+  });
+});
+
+describe("the ToC panel refines the vendored popover animation rather than replacing it", () => {
+  // EXC-1107. The panel is one of the portalled shadcn surfaces, so its enter/exit is
+  // tw-animate-css's rather than caret's — and bits-ui's portal presence waits on the
+  // `animationend` those keyframes fire, which makes replacing them a correctness bug
+  // and not only a style one. The refinement therefore writes the two custom properties
+  // the compiled `animate-in` utility reads for its duration and its curve, leaving the
+  // keyframes alone. Those are longhand custom-property writes, invisible to the
+  // shorthand scan below (its pattern needs `animation:`, which `--tw-duration:` is
+  // not), so the whole refinement would otherwise ship uncovered.
+  const toc = chromeSources["components/PlanToc.svelte"] ?? "";
+  // The panel's motion block, found by the property it is the only one to carry — the
+  // selector itself is spelled three times in that stylesheet, one concern each.
+  const openBlock =
+    toc.match(/:global\(\.plan-toc-panel\)\s*\{([^}]*--tw-duration[^}]*)\}/)?.[1] ?? "";
+  const closedBlock =
+    toc.match(/:global\(\.plan-toc-panel\[data-state="closed"\]\)\s*\{([^}]*)\}/)?.[1] ?? "";
+  const read = (block: string, prop: string): string =>
+    block.match(new RegExp(`${prop}:\\s*([^;]+);`))?.[1]?.trim() ?? "";
+
+  test("retimes tw-animate-css's own properties, from the shared tokens", () => {
+    // A marker matching nothing yields "" and reds every assertion here, so a moved or
+    // deleted block cannot pass this suite by leaving it with nothing to check.
+    expect(openBlock).not.toBe("");
+    expect(closedBlock).not.toBe("");
+    for (const block of [openBlock, closedBlock]) {
+      for (const prop of ["--tw-duration", "--tw-ease"]) {
+        const value = read(block, prop);
+        expect(value).toMatch(/^var\(--(dur|ease)-[a-z]+\)$/);
+      }
+      // "Refined, not duplicated": a shorthand of caret's own on this element would
+      // replace the `enter`/`exit` keyframes and strand the portal on close.
+      expect(block).not.toContain("animation");
+    }
+  });
+
+  test("pairs a distinct enter and exit rather than spending one timing twice", () => {
+    // The vocabulary ships --ease-out and --ease-in as a pair precisely so a scripted
+    // exit reads as the inverse of its entrance, and the vendored default it supersedes
+    // used one plain `ease` at one duration in both directions. Collapsing the two arms
+    // back to one is the regression this catches.
+    expect(read(openBlock, "--tw-ease")).not.toBe(read(closedBlock, "--tw-ease"));
+    expect(read(openBlock, "--tw-duration")).not.toBe(read(closedBlock, "--tw-duration"));
   });
 });
 

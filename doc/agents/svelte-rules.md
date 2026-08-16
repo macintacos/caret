@@ -308,6 +308,26 @@ tooltips, popovers) instead animate their enter/exit through `tw-animate-css` �
 Ambient/infinite animations (the safe-mode pulse, the EmptyState float, the theme wipe)
 are exempt from both and keep their own bespoke durations.
 
+**The two tracks may meet, and there is exactly one way to do it.** A portalled surface
+that wants caret's timing sets `--tw-duration` and `--tw-ease` — the two custom properties
+`tw-animate-css`'s compiled `animate-in`/`animate-out` reads — from the
+`--dur-*`/`--ease-*` tokens, and declares no `animation` of its own on that element. The
+ToC panel (`PlanToc.svelte`, EXC-1107) is the worked example, including the asymmetric
+pairing the two easings exist for: `--dur-base`/`--ease-out` arriving,
+`--dur-fast`/`--ease-in` leaving. Writing a competing `animation` shorthand instead is a
+correctness bug and not only a style one — bits-ui's portal presence waits on the
+`animationend` the vendored `enter`/`exit` keyframes fire, so replacing them strands the
+surface in the DOM on dismissal. For the same reason nothing in this vocabulary may
+resolve to `animation: none` on a portalled surface; the global guard below collapses the
+duration instead, which is what keeps that event firing under the preference.
+
+The refinement is **per-surface opt-in**, not a migration in progress. `tw-animate-css`'s
+own `duration-100` and plain `ease` remain the intended default for every portalled
+surface that has not opted in — including `PlanBreadcrumbs.svelte`'s crumb menu and its
+heading filter, which sit on the same control row as the ToC panel and are deliberately
+still on it. A surface reading a step quicker and flatter than its neighbour is the
+expected state, not drift to be reported.
+
 `prefers-reduced-motion: reduce` is the single global kill-switch over all of it: one rule
 in `app.css` collapses every animation and transition to one static frame, so no component
 honors the preference on its own. It is anchored to two real selectors, never a bare `*` —

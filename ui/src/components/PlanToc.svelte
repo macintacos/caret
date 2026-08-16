@@ -400,7 +400,26 @@
         placeholder="Filter headings…"
         aria-label="Filter headings"
       />
-      <Command.List aria-label="Plan headings">
+      <!-- Which of the two views the list is rendering, published so the motion rules
+           in the stylesheet can tell them apart (EXC-1107). Inert in every other
+           respect: no role, no name, nothing narrated, nothing selectable.
+           It is needed because the two views are NOT distinguishable from the markup
+           they produce. A filtered row is a bare `Command.Item` exactly as an
+           unfiltered one is — the shared `{#snippet row}` emits one shape — and the
+           `Command.Group` wrapper is not a proxy for the view either, since a match
+           whose ancestor path is empty renders its rows outside any group. Only the
+           filtered view's rows animate in (see the toc-row-in rule for why the
+           outline's several hundred must not), so something has to say which view is
+           on screen.
+           `searching` rather than bits-ui's own `search === ""`: they agree except on
+           a query that is only whitespace, where this stays "outline" while bits-ui
+           still remounts. The marker and the rendered branch come off the SAME derived,
+           so the arm can never disagree with what is on screen — "matches" over outline
+           rows is unreachable, and that is the case that would be wrong. What the
+           disagreement does cost is a spurious toc-list-in when a lone space is typed or
+           deleted: the list really did rebuild, so the fade is honest, it just answers a
+           keystroke that changed nothing. -->
+      <Command.List aria-label="Plan headings" data-toc-view={searching ? "matches" : "outline"}>
         {#if searching}
           <!-- Each ancestor path collapses to one Command.Group, whose heading IS
                the breadcrumb (EXC-1103). Reaching for the primitive rather than
@@ -483,6 +502,113 @@
     width: 20rem;
     padding: 0;
     gap: 0;
+  }
+
+  /* The panel's own arrival and departure (EXC-1107), REFINED rather than replaced.
+     The vendored Popover.Content already carries tw-animate-css's `animate-in` /
+     `animate-out` keyed on `data-[state=…]`, and that machinery is load-bearing well
+     past the look: bits-ui's portal presence waits on the `animationend` those
+     keyframes fire, so a shorthand of caret's own here would replace them and strand
+     the panel in the DOM on close. What is retimed instead is the pair of custom
+     properties the utility itself reads — the compiled `animate-in` resolves its
+     duration from `--tw-duration` and its curve from `--tw-ease` — so the `enter` /
+     `exit` keyframes, the `--tw-enter-*` plumbing and the animationend all survive
+     untouched and only the timing becomes caret's. Both properties are registered
+     `inherits: false`, which is what keeps this override on the panel and off the
+     several hundred rows inside it. Unlayered, so it beats the `duration-100` utility
+     the vendored component ships.
+     The two arms are the motion vocabulary's own enter/exit pairing (tokens.css §
+     Motion) rather than one number used twice: a 20rem panel hanging off the control
+     row is the "entering surface a step larger" `--dur-base` is named for, and leaving
+     is quicker than arriving, on the accelerate-out curve `--ease-in` exists to be.
+     No spring and no overshoot — `--ease-spring` is reserved for a control sliding
+     between discrete positions, and a panel that bounces reads as a toy on a surface
+     whose whole register is quiet.
+     Reduced motion is not handled here, deliberately: the single global rule in
+     app.css already reaches this panel through its `[data-slot]` anchor, and it
+     collapses the duration rather than removing the keyframes — which is exactly what
+     keeps the animationend above firing under the preference. */
+  :global(.plan-toc-panel) {
+    --tw-duration: var(--dur-base);
+    --tw-ease: var(--ease-out);
+  }
+  :global(.plan-toc-panel[data-state="closed"]) {
+    --tw-duration: var(--dur-fast);
+    --tw-ease: var(--ease-in);
+  }
+
+  /* The list re-forming when the query crosses between empty and non-empty — the one
+     boundary at which this surface really does swap one view for another. bits-ui's
+     `Command.List` wraps its OWN element in `{#key search === ""}`, so the list — the
+     element `data-toc-view` above hangs on — and the viewport under it are both
+     destroyed and rebuilt at exactly that crossing (see command-list.svelte, which
+     documents it as the hazard it is for anything reading `viewportNode` back). That
+     the marker is re-created with them is why it can never be read stale against a
+     fresh viewport. A remount restarts a CSS animation on its own, which makes that
+     teardown the trigger: no key of caret's own, no tick counter, nothing to
+     retrigger, and it cannot fire more than once per crossing however fast the
+     reviewer types.
+     Scoped to the OUTLINE arm only. Coming back to the whole plan is the direction
+     that has nothing else to carry it, since the outline's rows deliberately do not
+     animate; going the other way the matches below carry it, and running both would
+     multiply two opacity ramps on nested elements for no gain. */
+  @keyframes toc-list-in {
+    from {
+      opacity: 0;
+      transform: translateY(-3px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  :global(.plan-toc-panel [data-toc-view="outline"] [data-slot="command-viewport"]) {
+    animation: toc-list-in var(--dur-fast) var(--ease-out);
+  }
+
+  /* A match arriving, and its breadcrumb header arriving with it. ONE declaration for
+     both, which is the whole of the claim: a header cannot pop in above rows that
+     faded when the header and the rows are literally the same animation on the same
+     clock.
+     Rows animate IN only. A row that stops matching is removed by Svelte with nothing
+     to hang an exit on, and the two mechanisms that could give it one — a Svelte
+     `transition` directive, or a FLIP `animate` one — are both element-only, where
+     `Command.Item` is a component. Reaching either would mean a wrapper element inside
+     the `role="listbox"`, which takes ownership of the options away from it (the same
+     constraint that put the breadcrumb header in a `Command.Group` rather than in
+     markup of caret's own), or a `child` snippet reimplementing the vendored item. Both
+     are behaviour, which this pass is not, and both put a JS-driven transition on every
+     row of a list that runs to the low hundreds.
+     Scoped to the MATCHES arm, and NOT because that view is always small — measured on
+     the dev plan, a one-character query matches 44 of its 64 headings across 15 groups
+     and every one of them mounts at once, so a short query is very nearly the whole
+     list. What the scoping buys is that the filtered view mounts only when the reviewer
+     types, where the outline mounts on every single open. The outline's arrival is
+     already carried by the panel's own zoom above and by the list rule beside it, so
+     animating its rows as well would be a second gesture saying the same thing, on the
+     one path a reviewer takes every time.
+     The 59 concurrent ramps that measurement found cost nothing readable: profiled over
+     that crossing, frame times were median 8.3ms / p95 9.7ms / max 16.6ms with this rule
+     and median 8.3 / p95 9.7 / max 16.7 with it disabled, and no frame over 32ms either
+     way. Mounting 44 rows is the expense; ramping their opacity afterwards is not.
+     Opacity and transform only, and no `will-change`: a CSS-animated element is
+     promoted by the browser on its own, and pinning a layer per row is how a list this
+     long turns a cheap animation into a memory problem. The offset is vertical, so
+     `--toc-step` — the one source for the indent rhythm and the guide comb — is not
+     involved and cannot be knocked out of agreement with itself. */
+  @keyframes toc-row-in {
+    from {
+      opacity: 0;
+      transform: translateY(-2px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  :global(.plan-toc-panel [data-toc-view="matches"] [data-slot="command-item"]),
+  :global(.plan-toc-panel [data-toc-view="matches"] [data-command-group-heading]) {
+    animation: toc-row-in var(--dur-fast) var(--ease-out);
   }
 
   /* The list carries its own leading space so the first row is not flush against
