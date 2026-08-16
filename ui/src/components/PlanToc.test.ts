@@ -101,6 +101,22 @@ function hits(el: HTMLElement): string[] {
   return [...el.querySelectorAll<HTMLElement>(".toc-hit")].map((s) => s.textContent ?? "");
 }
 
+/** The heading-level marker a row wears (EXC-1105). Queried on `data-icon` — the handle
+ * Icon.svelte stamps with the glyph's registry name — because the marker is aria-hidden by
+ * construction and publishes no role a role locator could find, and because the inlined SVG
+ * is otherwise indistinguishable from any other glyph without matching path data. The
+ * `heading-` prefix is what separates it from the vendored Command.Item's own check
+ * indicator, which is an Icon too. */
+function levelGlyph(row: HTMLElement): HTMLElement | null {
+  return row.querySelector<HTMLElement>("[data-icon^='heading-']");
+}
+
+/** Each row's marker by registry name, in document order. `null` for a row wearing none,
+ * so a missing marker reds as a value rather than throwing somewhere else. */
+function levelNames(): (string | null)[] {
+  return options().map((o) => levelGlyph(o)?.getAttribute("data-icon") ?? null);
+}
+
 /** The rows the roving selection is on. `aria-selected` rather than `data-selected`
  * because it is the half a screen reader reads; the two move together. */
 function selectedLabels(): string[] {
@@ -579,6 +595,101 @@ describe("PlanToc match highlighting", () => {
     expect(looseText()).toEqual([]);
     await close(target, flush);
   });
+});
+
+// EXC-1105: every row says what LEVEL its heading is, with a vendored lucide heading-N
+// glyph. The nested view already implies it in the indent; the filtered view passes
+// --toc-depth 0 for every row by design (EXC-1103), so there the marker is the only thing
+// carrying it. Which glyph a row wears, and that the marker stays out of the row's text and
+// out of the accessibility tree, are structural — the dimming and the alignment are painted
+// pixels and laid-out boxes, so they are pinned in test/e2e/plan-toc.e2e.ts instead.
+describe("PlanToc level markers", () => {
+  test("gives every row the glyph for its own heading level", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    expect(options().map(label)).toEqual(["Overview", "Approach", "Details", "Verification"]);
+    expect(levelNames()).toEqual(["heading-1", "heading-2", "heading-3", "heading-2"]);
+    await close(target, flush);
+  });
+
+  // The view the issue exists for: the breadcrumb header carries the hierarchy and every row
+  // is flush left, so nothing but the marker says how deep a match sits. Asserted beside the
+  // depths to keep the two claims in one place — a marker that survived while the indent
+  // came back would not be evidence of anything.
+  test("keeps the glyph on every filtered row, where the indent no longer says it", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: BRANCHED,
+      activeLine: null,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    await typeQuery("notes", flush, () => options().length === 3);
+    expect(options().map(label)).toEqual(["Setup notes", "Rollout notes", "Deploy notes"]);
+    expect(options().map((r) => r.style.getPropertyValue("--toc-depth"))).toEqual(["0", "0", "0"]);
+    expect(levelNames()).toEqual(["heading-3", "heading-3", "heading-3"]);
+    await close(target, flush);
+  });
+
+  // Lucide ships six heading glyphs and the ATX extractor cannot produce a seventh, so this
+  // is a floor under a level arriving from a future caller rather than a case markdown
+  // reaches. What it rules out is asking Icon.svelte for a name the registry has no SVG for,
+  // which renders an empty box — hence the non-null assertions beside the names.
+  //
+  // NaN is the third fixture because it is the ONLY input that reaches the `??` fallback:
+  // every finite level leaves through the Math.min/Math.max pair, while NaN survives both
+  // and indexes the tuple out of range. Without it that branch goes unexercised and reads
+  // as dead code to the next person.
+  test("falls back to the nearest glyph for a level outside 1–6", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: [
+        { level: 0, text: "Below one", line: 1 },
+        { level: 9, text: "Past six", line: 5 },
+        { level: Number.NaN, text: "Not a number", line: 9 },
+      ],
+      activeLine: null,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    expect(options().map(label)).toEqual(["Below one", "Past six", "Not a number"]);
+    expect(options().every((o) => levelGlyph(o) !== null)).toBe(true);
+    expect(levelNames()).toEqual(["heading-1", "heading-6", "heading-1"]);
+    await close(target, flush);
+  });
+
+  // AC7. A screen reader must not hear "heading 2" prepended to every row. Two independent
+  // halves, and the first is what actually carries it: `aria-hidden` takes the marker's
+  // whole subtree out of the name computation. The second is that it contributes no
+  // CHARACTER either — trimmed, because Icon.svelte inlines the vendored SVG verbatim and
+  // that file's own indentation lands as whitespace text nodes. Whitespace is the one thing
+  // that cannot rename an option (accessible names are whitespace-normalized, and the file's
+  // own `label` helper trims), so the claim worth pinning is that nothing else got in.
+  // Whether the name really computes to the heading alone is a role-engine question and is
+  // asserted in test/e2e/plan-toc.e2e.ts.
+  test("keeps the marker out of the accessibility tree and out of the row's text", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    const row = options()[2];
+    if (row === undefined) throw new Error("no rows rendered");
+    expect(levelGlyph(row)?.getAttribute("aria-hidden")).toBe("true");
+    expect(levelGlyph(row)?.textContent?.trim()).toBe("");
+    expect(row.querySelector(".toc-label")?.textContent).toBe("Details");
+    expect(label(row)).toBe("Details");
+    await close(target, flush);
+  });
+
+  // No `looseText()` guard here, deliberately, and the reason generalises: that helper
+  // counts TEXT nodes sitting in the viewport, and the marker is an element — hoisting it
+  // clean out of its Command.Item leaves the guard green. Every test above queries the
+  // marker THROUGH its row, so an escape reds four of them; a fifth assertion that cannot
+  // fail for any edit this change could make would only look like coverage.
 });
 
 // The popup's two entry points (EXC-1097): the trigger teaches its key, and the

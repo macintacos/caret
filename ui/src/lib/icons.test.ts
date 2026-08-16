@@ -46,6 +46,11 @@ describe("vendored icon set", () => {
       expect(stemByIdent.get(ident)).toBe(name);
     }
     expect(entries.map(([name]) => name).sort()).toEqual([...ICON_NAMES].sort());
+    // The wrapper names the glyph it rendered (doc/agents/icon-rules.md § How icons
+    // render). Callers select and assert on it, so it is a contract rather than
+    // decoration, and the gate belongs where that doc says the wiring is gated rather
+    // than only in whichever component happens to read it today.
+    expect(src).toContain("data-icon={name}");
   });
 
   // The licenses table is the one add-an-icon step nothing else gates

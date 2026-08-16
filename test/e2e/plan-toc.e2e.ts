@@ -141,6 +141,28 @@ const crumbs = (page: Page) => panel(page).locator("[data-command-group-heading]
  * about it through the field's aria-activedescendant, asserted in its own test below. */
 const walkedTo = (page: Page) => options(page).and(page.locator("[data-selected]"));
 
+/** Each row's heading-level marker by registry name, in document order (EXC-1105).
+ * Addressed through `data-icon` — the handle Icon.svelte stamps with the glyph's name —
+ * because this is browser-testing.md § Locators' no-accessible-target case twice over: the
+ * marker is deliberately aria-hidden, so it is not in the tree a role query reads, and the
+ * SVG is inlined verbatim, so nothing else in the DOM tells one glyph from another. `null`
+ * for a row wearing none, so a missing marker reds as a value rather than throwing. */
+const markerNames = (page: Page): Promise<(string | null)[]> =>
+  options(page).evaluateAll((els) =>
+    els.map((el) => el.querySelector("[data-icon^='heading-']")?.getAttribute("data-icon") ?? null),
+  );
+
+/** Where each row's label starts, rounded to the pixel. Equal across rows at one indent is
+ * AC8 — a marker whose width varied with the level would push its label along with it.
+ * `null` for a row with no label, on the same terms as `markerNames` above. */
+const labelLefts = (page: Page): Promise<(number | null)[]> =>
+  options(page).evaluateAll((els) =>
+    els.map((el) => {
+      const label = el.querySelector(".toc-label");
+      return label === null ? null : Math.round(label.getBoundingClientRect().x);
+    }),
+  );
+
 /** Open the popup and wait for its rows. */
 async function openToc(page: Page): Promise<void> {
   await trigger(page).click();
@@ -525,6 +547,122 @@ test("\\ and b reach different heading surfaces (EXC-1097)", async ({ daemon, pa
   await page.keyboard.press("\\");
   await expect(listbox(page)).toBeVisible();
   await expect(page.locator(CRUMB_MENU)).toHaveCount(0);
+});
+
+// EXC-1105 gives every row a vendored lucide heading-N glyph saying what level it is. Three
+// of its claims are real-browser and nothing else. The marker's COLOUR reaches it through an
+// unlayered `:global` rule that has to beat the vendored command item's Tailwind
+// `data-selected:[&_svg]:text-accent-foreground`, and only a real cascade decides which wins.
+// The labels lining up is a laid-out box, which happy-dom does not produce. And that the
+// marker adds nothing to an option's NAME is a computation only a role engine performs — the
+// same reason EXC-1104's marked-name spec sits here. The pure half — which glyph each row
+// wears, and the clamp for a level outside 1–6 — is ui/src/components/PlanToc.test.ts.
+test("every row wears its heading level, in both of the popup's views", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: BRANCHED_PLAN });
+  await page.goto("/");
+  await readingAt(page, "Setup");
+
+  await openToc(page);
+  await expect(options(page)).toHaveCount(6);
+  // Read bare rather than polled, here and below: a marker renders in the same pass as the
+  // row that owns it, so once `toHaveCount` has settled there is nothing left to wait for.
+  expect(await markerNames(page)).toEqual([
+    "heading-1",
+    "heading-2",
+    "heading-3",
+    "heading-2",
+    "heading-3",
+    "heading-2",
+  ]);
+
+  // The view this exists for. "o" is chosen to survive at three DIFFERENT levels — a
+  // level-2 heading between two level-3 ones — because every filtered row is flush left, so
+  // rows at one indent carrying different markers is what makes the next two assertions say
+  // anything. A query matching one level would leave both of them true by accident.
+  await field(page).fill("o");
+  await expect(options(page)).toHaveText(["Setup notes", "Rollout", "Rollout notes"]);
+  const depths = await options(page).evaluateAll((els) =>
+    els.map((el) => (el as HTMLElement).style.getPropertyValue("--toc-depth")),
+  );
+  expect(depths).toEqual(["0", "0", "0"]);
+  expect(await markerNames(page)).toEqual(["heading-3", "heading-2", "heading-3"]);
+
+  // AC8. Three rows at one indent, three different glyphs, one left edge.
+  const lefts = await labelLefts(page);
+  expect(lefts).not.toContain(null);
+  expect(new Set(lefts).size).toBe(1);
+
+  // AC7, in the engine that actually computes a name. The query splits each label mid-word
+  // as well, so this carries EXC-1104's claim forward over the added marker rather than
+  // replacing it: a separator leaking in from either decoration would show up here.
+  await expect(options(page).first()).toHaveAccessibleName("Setup notes");
+  await expect(options(page).nth(1)).toHaveAccessibleName("Rollout");
+  await expect(options(page).nth(2)).toHaveAccessibleName("Rollout notes");
+});
+
+test("the level marker paints a dimmer rung of the ink ramp than the label", async ({
+  daemon,
+  page,
+}) => {
+  // AC5, read off the element that is actually painted. The glyph strokes with
+  // `currentColor` resolved on the SVG, and the vendored command item declares
+  // `data-selected:[&_svg]:text-accent-foreground` — which the bridge resolves to the
+  // label's own --ink — on that same SVG. So the wrapper's `color` is NOT what a reader
+  // sees on the walked-to row: a rule placed on Icon.svelte's wrapper loses there while
+  // the wrapper keeps reporting the dimmed value, which is a green assertion over a bright
+  // glyph. The path's `stroke` cannot lie about it.
+  //
+  // Asserted against the ink-ramp TOKENS rather than by re-deriving a contrast ratio here.
+  // "Dimmer" then reduces to a property of the ramp, which theme.test.ts already pins
+  // across every palette — where a number measured in this one Playwright run, on this one
+  // palette, could not see a palette shipping a compressed ramp.
+  await daemon.seed({ plan: BRANCHED_PLAN });
+  await page.goto("/");
+  await readingAt(page, "Setup");
+
+  await openToc(page);
+  await expect(walkedTo(page)).toHaveCount(1);
+
+  const paint = await options(page).evaluateAll((els) => {
+    // Resolve a token to the same `rgb()` form getComputedStyle reports, by asking the
+    // engine rather than parsing: the tokens are hex and computed colours are not.
+    const resolve = (token: string): string => {
+      const probe = document.createElement("span");
+      probe.style.color = `var(${token})`;
+      document.body.append(probe);
+      const value = getComputedStyle(probe).color;
+      probe.remove();
+      return value;
+    };
+    const rows = els as HTMLElement[];
+    const resting = rows.find((r) => !r.hasAttribute("data-selected") && r.ariaCurrent === null);
+    const walked = rows.find((r) => r.hasAttribute("data-selected"));
+    if (resting === undefined || walked === undefined) throw new Error("no resting/walked row");
+    const marker = (row: HTMLElement) =>
+      getComputedStyle(row.querySelector("[data-icon^='heading-'] svg path")!).stroke;
+    const label = (row: HTMLElement) => getComputedStyle(row.querySelector(".toc-label")!).color;
+    return {
+      inkSoft: resolve("--ink-soft"),
+      ink: resolve("--ink"),
+      restingMarker: marker(resting),
+      restingLabel: label(resting),
+      walkedMarker: marker(walked),
+      walkedLabel: label(walked),
+    };
+  });
+
+  expect(paint.restingMarker).toBe(paint.inkSoft);
+  expect(paint.restingLabel).toBe(paint.ink);
+  expect(paint.restingMarker).not.toBe(paint.restingLabel);
+
+  // The row the keyboard is on, which is not a corner case: the popup seeds its selection
+  // to the heading being read on every open, and the filtered view always lands on the
+  // first match. The marker must not be dragged up to the label's ink with the row.
+  expect(paint.walkedMarker).toBe(paint.inkSoft);
+  expect(paint.walkedLabel).toBe(paint.ink);
 });
 
 test("compare mode drops both of the popup's entry points (EXC-1097)", async ({ daemon, page }) => {

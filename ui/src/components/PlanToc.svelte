@@ -51,8 +51,11 @@
     type HeadingNode,
     headingTree,
   } from "$lib/headingTrail.ts";
+  import type { IconName } from "$lib/icons.ts";
   import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
   import { headingMatcher, type TocHeading } from "$lib/toc.ts";
+
+  import Icon from "@/components/Icon.svelte";
 
   interface Props {
     /** Headings extracted from the plan source, in document order. */
@@ -184,6 +187,27 @@
       .join(" › ");
   }
 
+  // The marker each row wears, by heading level (EXC-1105). Lucide ships exactly six
+  // heading glyphs, which is also the range ATX allows, so `extractHeadings` can never
+  // hand this anything else — the clamp is a floor under a level arriving from some
+  // future caller, not a case markdown reaches. What it rules out is asking Icon.svelte
+  // for a name the registry holds no SVG for, which renders an empty box in every row.
+  // The `??` is not dead code beside that clamp: it is NaN's path, which survives both
+  // Math.min and Math.max and indexes the tuple out of range.
+  const LEVEL_ICONS = [
+    "heading-1",
+    "heading-2",
+    "heading-3",
+    "heading-4",
+    "heading-5",
+    "heading-6",
+  ] as const satisfies readonly IconName[];
+
+  function levelIcon(level: number): IconName {
+    const clamped = Math.min(LEVEL_ICONS.length, Math.max(1, Math.trunc(level)));
+    return LEVEL_ICONS[clamped - 1] ?? LEVEL_ICONS[0];
+  }
+
   // Take the reviewer to a heading and leave. A command row does not dismiss its
   // host the way a menu item does, so the pick closes the popup itself.
   function jump(line: number): void {
@@ -210,6 +234,12 @@
     aria-current={heading.line === activeLine ? "location" : undefined}
     onSelect={() => jump(heading.line)}
   >
+    <!-- What level this heading is (EXC-1105). It sits in the shared snippet rather than in
+         either view's branch, which is the whole of why both views get it — and the filtered
+         one, whose rows are all at depth 0, is the view that has nothing else to say it.
+         No wrapper element of its own: `data-icon` on Icon.svelte's own <span> is the hook
+         the style rule needs, so there is nothing for one to add. -->
+    <Icon name={levelIcon(heading.level)} size={14} />
     <!-- Only a MATCHED run takes an element; unmatched text stays a bare text node. That
          keeps the unfiltered view's markup byte-identical to a plain `{heading.text}` —
          no wrapper span on any of a plan's several hundred rows — so this decoration is
@@ -502,6 +532,29 @@
   }
   :global(.plan-toc-panel [data-slot="command-group"]:first-child [data-command-group-heading]) {
     margin-block-start: 0;
+  }
+
+  /* The heading-level marker, dimmer than the label it labels: subordinate wayfinding
+     rather than content, so it takes the neutral ink ramp and not a hue — it is none of
+     the three jobs a hue has (doc/agents/svelte-rules.md § Every hue has a job).
+     On the SVG rather than on Icon.svelte's wrapper, and that placement is the whole rule.
+     The vendored item declares `data-selected:[&_svg]:text-accent-foreground` on the svg
+     itself — which the bridge resolves to the LABEL's own --ink — and a declaration that
+     matches an element beats a value inherited into it, whatever layer either sits in. A
+     rule on the wrapper loses the walked-to row without ever being overridden, and that row
+     is no edge case: the popup seeds its selection to the heading being read on every open,
+     and the filtered view always lands on the first match.
+     --ink-soft rather than the fainter rung the eyebrow takes, because the ground that
+     decides it is not the panel but the SELECTED row's own bg-accent wash, which is where
+     this marker spends most of its life. Measured on the painted pixels in caret-light:
+     --ink-faint reaches only 2.90:1 there — under the 3:1 a non-text graphic wants — where
+     --ink-soft gives 5.88:1 against a label at 12.69:1, so it stays plainly subordinate
+     without going illegible on the one row the keyboard is always on. Whether 1.4.11
+     strictly binds a marker whose level is also recoverable from the indent is the open
+     question svelte-rules.md leaves open; this picks the rung that does not need it
+     answered. */
+  :global(.plan-toc-panel [data-slot="command-item"] [data-icon^="heading-"] svg) {
+    color: var(--ink-soft);
   }
 
   /* A long heading truncates in its row rather than stretching the panel to the

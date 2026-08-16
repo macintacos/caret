@@ -25,6 +25,12 @@ under the ISC license.
 | `file` | [ui/src/icons/file.svg](ui/src/icons/file.svg) | [file.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/file.svg) |
 | `folder` | [ui/src/icons/folder.svg](ui/src/icons/folder.svg) | [folder.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/folder.svg) |
 | `git-compare` | [ui/src/icons/git-compare.svg](ui/src/icons/git-compare.svg) | [git-compare.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/git-compare.svg) |
+| `heading-1` | [ui/src/icons/heading-1.svg](ui/src/icons/heading-1.svg) | [heading-1.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/heading-1.svg) |
+| `heading-2` | [ui/src/icons/heading-2.svg](ui/src/icons/heading-2.svg) | [heading-2.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/heading-2.svg) |
+| `heading-3` | [ui/src/icons/heading-3.svg](ui/src/icons/heading-3.svg) | [heading-3.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/heading-3.svg) |
+| `heading-4` | [ui/src/icons/heading-4.svg](ui/src/icons/heading-4.svg) | [heading-4.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/heading-4.svg) |
+| `heading-5` | [ui/src/icons/heading-5.svg](ui/src/icons/heading-5.svg) | [heading-5.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/heading-5.svg) |
+| `heading-6` | [ui/src/icons/heading-6.svg](ui/src/icons/heading-6.svg) | [heading-6.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/heading-6.svg) |
 | `keyboard` | [ui/src/icons/keyboard.svg](ui/src/icons/keyboard.svg) | [keyboard.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/keyboard.svg) |
 | `monitor` | [ui/src/icons/monitor.svg](ui/src/icons/monitor.svg) | [monitor.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/monitor.svg) |
 | `moon` | [ui/src/icons/moon.svg](ui/src/icons/moon.svg) | [moon.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/moon.svg) |
