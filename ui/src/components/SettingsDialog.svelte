@@ -483,11 +483,15 @@
      the next. `min-inline-size: 0` cancels the fieldset's own min-content default,
      which would otherwise let a wide row push the pane's grid track open. */
   .settings :global(.section) {
-    gap: 0.5rem;
+    gap: 0;
     min-inline-size: 0;
   }
+  /* The header hugs its rows from its own bottom margin, not the fieldset's gap: a
+     RENDERED <legend> is lifted out of its fieldset's flex flow, so a gap between it
+     and the rows never lands. Carrying the space on the legend itself is the one
+     spelling that holds whether or not an engine keeps it in flow. */
   .settings :global(.section-head) {
-    margin: 0;
+    margin: 0 0 0.5rem;
     font-size: var(--text-xs);
     font-weight: 600;
     text-transform: uppercase;
@@ -507,17 +511,24 @@
   .settings :global(.setting-item) {
     align-items: center;
     gap: 0.625rem;
-    padding-block: 0.625rem;
+    /* The Item this replaced stood 22px taller than its content: 10px of padding plus
+       the 1px transparent border it carried for its focus ring. Field has no border,
+       so the row reclaims that pixel as padding and the pitch is unchanged. */
+    padding-block: calc(0.625rem + 1px);
   }
   .settings :global(.setting-item [data-slot="field-content"]) {
     gap: 0.25rem;
   }
-  /* The separator ships as a 20px box with the rule floated through its middle. Zeroing
-     the box lands that rule at its top edge, so the hairline stays crisp and the 0.5rem
-     margins alone set the space either side of it. */
+  /* The separator ships as a 20px box with the rule floated through its middle. Shrink
+     the box to the hairline itself and pin the rule to its top — half of a 1px box is a
+     half-pixel offset, which renders the line soft. The 0.5rem margins either side then
+     reproduce the ItemSeparator this replaced, pitch for pitch. */
   .settings :global([data-slot="field-separator"]) {
-    height: 0;
+    height: 1px;
     margin-block: 0.5rem;
+  }
+  .settings :global([data-slot="field-separator"] [data-slot="separator"]) {
+    top: 0;
   }
   .settings :global(.setting-item .field-label) {
     font-size: var(--text-sm);
