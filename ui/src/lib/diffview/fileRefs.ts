@@ -74,12 +74,12 @@ const URL_RE = /\bhttps?:\/\/\S+/gi;
 
 // A maximal run of path characters, optionally trailed by a line reference:
 // `:154`, `#L154`, `:154:9` (line + column), or a range `:154-162` /
-// `:#L154–L162`. The class admits leading `.`/`/` so a `../x.ts` or `/abs/x.ts`
-// reference is captured whole (and then refused server-side) rather than
-// mis-parsed from its tail. Matching the whole run — the range's end line
+// `:154,162` / `:#L154–L162`. The class admits leading `.`/`/` so a `../x.ts` or
+// `/abs/x.ts` reference is captured whole (and then refused server-side) rather
+// than mis-parsed from its tail. Matching the whole run — the range's end line
 // included — is what puts the entire reference inside the span, and so inside
 // the click target.
-const CANDIDATE_RE = /[A-Za-z0-9._/~-]+(?:(?::L?|:?#L)\d+(?:[-–]L?\d+|:\d+)?)?/g;
+const CANDIDATE_RE = /[A-Za-z0-9._/~-]+(?:(?::L?|:?#L)\d+(?:[-–,]L?\d+|:\d+)?)?/g;
 
 // Splits a candidate's trailing line reference off the path: group 2 is the
 // start line, group 3 the range's end when it carries one. A `:\d+` tail is a
@@ -92,7 +92,7 @@ const CANDIDATE_RE = /[A-Za-z0-9._/~-]+(?:(?::L?|:?#L)\d+(?:[-–]L?\d+|:\d+)?)?
 // line 3. Requiring the `L` there is what keeps a fragment target inert, the
 // same guarantee links.ts holds for `doc/guide.md#setup`, which collapses like
 // any link but cites nothing.
-const LINE_SUFFIX = /^(.+?)(?::L?|:?#L)(\d+)(?:[-–]L?(\d+)|:\d+)?$/;
+const LINE_SUFFIX = /^(.+?)(?::L?|:?#L)(\d+)(?:[-–,]L?(\d+)|:\d+)?$/;
 
 /** Classifies a raw candidate run into a path + optional cited line or range, or
  * null when it is not plausibly a path at all. A reversed range is normalized

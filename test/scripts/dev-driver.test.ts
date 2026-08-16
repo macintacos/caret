@@ -322,7 +322,7 @@ const DEV_GUIDE_LINES = (await Bun.file(`${import.meta.dir}/../../${DEV_GUIDE}`)
 // line 3. Scoped to this one page on purpose — `mise.toml:900` is cited past the end
 // deliberately, to demonstrate the clamp.
 const DEV_GUIDE_CITATIONS = [
-  ...PLAN_V1.matchAll(/doc\/DEVELOPMENT\.md(?::L?|:?#L)(\d+)(?:[-–]L?(\d+)|:\d+)?/g),
+  ...PLAN_V1.matchAll(/doc\/DEVELOPMENT\.md(?::L?|:?#L)(\d+)(?:[-–,]L?(\d+)|:\d+)?/g),
 ].map((m) => ({ text: m[0], start: Number(m[1]), end: Number(m[2] ?? m[1]) }));
 
 test("every doc/DEVELOPMENT.md citation in the fixture lands on a real, non-blank line", () => {

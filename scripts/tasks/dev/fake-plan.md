@@ -551,6 +551,7 @@ EXC-938: a reference can cite a **span** rather than a single line, and the prev
 - `mise.toml:5-900` — a span running past the end: it clamps to the last line, and only the lines that exist are washed.
 - `README.md:37-37` — a one-line span: identical to writing `README.md:37`.
 - `README.md#L37-L44` and `README.md:L37-L44` — the same span in the `#L` spellings a code host would produce. Both parse; `README.md:37:5` is still a line and a **column**, so it marks one row and no range.
+- `doc/DEVELOPMENT.md:154,162` — the comma spelling of the span the first bullet writes with a dash, and it must open on exactly the same nine washed lines. The separator is the only difference: a comma reads as a selection an editor would hand you, so a plan that pastes one cites a range rather than falling back to the head of the file. `README.md:37,37` collapses to a single line the same way `README.md:37-37` does.
 
 ### As markdown links
 

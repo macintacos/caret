@@ -69,6 +69,7 @@ describe("detection (inside inline code)", () => {
 
   test.each([
     ["en dash", "doc/DEVELOPMENT.md:154–162"],
+    ["comma", "doc/DEVELOPMENT.md:154,162"],
     ["L-prefixed", "doc/DEVELOPMENT.md:L154-L162"],
     ["hash L-prefixed", "doc/DEVELOPMENT.md#L154-L162"],
     ["hash after colon", "doc/DEVELOPMENT.md:#L154-L162"],
