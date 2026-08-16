@@ -72,6 +72,15 @@ composed; the three search fields that joined it in EXC-1113 still reach for onl
 the seven). Keep it: hand-editing the component to drop the dependency is the one change a
 later re-sync silently reverts with no comment to catch it.
 
+**A vendored tree with no consumer stays too** — including one that has lost its last
+consumer, not just one that arrived unused. `item` (11 files, orphaned when EXC-1112
+rebuilt the settings rows on `field`) and `scroll-area` are both in that state today, and
+both stay. Deleting a tree looks like tidying, but re-adding it means another `add` —
+which, per the overwrite dance above, drags every already-modified tree back through a
+wholesale revert for the sake of files that cost nothing to leave alone. The verdict is
+the same whichever tree it is, so it is recorded here once rather than re-litigated per
+tree.
+
 The divergence also runs the other way — a vendored file quietly dropping something the
 registry passes through. `select-item.svelte` destructures `label` out of its props and
 never forwards it to `SelectPrimitive.Item`, so bits-ui's `data-label` is unset on every
@@ -105,6 +114,17 @@ listbox may own options and groups but not a generic wrapper between them.
 
 `ui/src/lib/shadcn-command-popover.test.ts` is the guard, and it reds if a re-sync drops
 either half. Put the viewport back before you commit an overwrite of that file.
+
+**That is the policy, not a one-off.** When the registry source is wrong on accessibility,
+patch the vendored file and leave a test that reds if a re-sync drops the patch — the pair
+is what makes the edit survivable. Don't work around an upstream defect at the call site
+instead: a state prop set inside the component wins the merge, so the call site frequently
+*cannot* fix it. Two known cases are still unpatched and want that treatment:
+`select-trigger.svelte` publishes `aria-activedescendant` on a bare `<button>` with no
+`role="combobox"` and no `aria-controls`, and its state props outrank anything a caller
+passes (EXC-1111); and `toggle-group.svelte` gives the root `role="group"` while its
+single-type items take `role="radio"`, which no `role="group"` may own (EXC-1112). Both
+also deserve an upstream issue — patching here is the local fix, not the cure.
 
 ## Token-bridge discipline
 
@@ -266,8 +286,8 @@ check rather than quietly aging.
   `overflow: auto` div out of the tab order, so that tab stop *is* the keyboard reading
   affordance), it sets `overflow-anchor: none` because `expand()` does its own `scrollTop`
   arithmetic on an upward chunk load, and `file-refs.e2e.ts` pins its computed metrics.
-  `NotificationsPane` has no scroll region at all. The vendored tree stays available for a
-  future consumer; neither of these is one.
+  `NotificationsPane` has no scroll region at all. The tree itself stays regardless, per §
+  Adding a component that collides with the vendored tree.
 - **`KbdCap`, `ModalPresence`, `StatusBar`** — the settled keeps: none is replaceable by a
   catalog component. `KbdCap` (`KbdCap.svelte`) is not a `Kbd` substitute — it renders cap
   *content* inside the vendored `Kbd` box the caller supplies, which is what lets the help
