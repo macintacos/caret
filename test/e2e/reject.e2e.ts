@@ -15,6 +15,7 @@
 // reject-and-wait body (including that it never carries the queued inline
 // comments) in ui/src/state/resolve.test.ts.
 
+import { alerts } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
@@ -119,5 +120,24 @@ test("a backdrop click does NOT dismiss the reject guard (deliberate verdict, EX
   await expect(guard).toBeVisible();
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
   await guard.getByRole("button", { name: "Reject", exact: true }).click();
+  await expect.poll(async () => (await daemon.getReview(id)).body?.decision?.behavior).toBe("deny");
+});
+
+test("rejecting confirms the outcome at its own weight", async ({ daemon, page }) => {
+  // The hand-off (EXC-894) on the reject arm. Same gesture as approve, different copy and
+  // a different weight: this confirmation is the neutral variant, not the success one —
+  // a rejection is a completed decision rather than a good outcome, and a green tick on
+  // "Plan rejected" would say otherwise.
+  const id = await daemon.seed();
+  await page.goto("/");
+  await planSurface(page);
+
+  await page.getByRole("button", { name: "Reject", exact: true }).click();
+  const guard = page.getByRole("alertdialog");
+  await expect(guard).toBeVisible();
+  await guard.getByRole("button", { name: "Reject", exact: true }).click();
+
+  await expect(alerts(page)).toContainText("Plan rejected");
+  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
   await expect.poll(async () => (await daemon.getReview(id)).body?.decision?.behavior).toBe("deny");
 });

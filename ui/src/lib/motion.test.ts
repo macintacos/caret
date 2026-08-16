@@ -507,6 +507,33 @@ describe("the vendored components' hover/focus tempo is caret's micro tier", () 
   });
 });
 
+describe("the arrival that uncovers the next state", () => {
+  // The other half of the hand-off a decided modal starts (EXC-894). The guard departs on
+  // the exit tier the block above pins; App.svelte's `.arrival` curtain lifts off whatever
+  // the resolve put in its place. Read out of App.svelte's own <style> block — the same
+  // source the chrome sweep below scans, which already covers the curtain's token
+  // discipline. What that sweep cannot see are the two facts that make the arrival correct.
+  const arrival = /\.arrival\s*\{([^}]*)\}/.exec(chromeSources["App.svelte"] ?? "")?.[1] ?? "";
+
+  test("the curtain lifts on the enter tier, against the modal's exit tier", () => {
+    expect(arrival).not.toBe("");
+    // An arrival, not a micro-reveal and not a travel. It is deliberately the LONGER half
+    // of the pair the departing modal spends, which is what makes the exit lead: the guard
+    // is gone at --dur-exit while the state behind it is still resolving at --dur-enter, so
+    // the two read as one gesture rather than as two events that happened to coincide.
+    expect(arrival).toContain("var(--dur-enter)");
+    expect(arrival).toContain("var(--ease-out)");
+  });
+
+  test("the curtain's fill is `forwards`, which is a correctness rule here", () => {
+    // Not a style preference. Without the fill the animation's final opacity is discarded
+    // at the end and the element snaps back to its `from` — a full-opacity paper rect
+    // pinned over the content region for the rest of the session, with the whole plan
+    // behind it. The one property whose absence is a blank app rather than a worse fade.
+    expect(arrival).toMatch(/animation:[^;]*\bforwards\b/);
+  });
+});
+
 describe("chrome motion declarations draw from the tokens, not bare literals", () => {
   // The whole chrome, motion or not (see chromeComponents above). Each component's
   // `<style>` is scanned for `transition:`/`animation:` declarations; the one-shot ones

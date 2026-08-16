@@ -11,6 +11,7 @@
 // bookkeeping (modalPresence.test.ts already does). Whether a real exit runs, what it
 // spends, and whether the surface actually leaves afterwards, is browser behavior.
 
+import { alerts } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
@@ -34,6 +35,37 @@ type ChoreographyWindow = {
   __exits: Promise<PlayedAnimation[]>;
   __closing: Promise<number[]>;
 };
+
+/** One animation the hand-off recorder saw START (EXC-894). Ordering is the claim, so the
+ * sample is taken at animationstart rather than at animationend — an exit that both begins
+ * and ends before a slower arrival begins would satisfy an end-ordering trivially. `who`
+ * is the surface's `data-slot`, or `arrival` for the curtain, which has no slot. */
+type HandoffAnimation = { who: string; name: string; at: number; seconds: number };
+type HandoffWindow = { __handoff: HandoffAnimation[] };
+
+/** Record every animation that starts anywhere in the document, tagged by the surface it
+ * ran on. Capture-phase on the document, so it sees the portalled modal surfaces (outside
+ * #app) and the in-shell curtain alike, and installed BEFORE the intent — a hand-off whose
+ * halves are 140ms and 220ms leaves no room to attach afterwards. */
+async function recordHandoff(page: import("@playwright/test").Page) {
+  await page.evaluate(() => {
+    (window as unknown as HandoffWindow).__handoff = [];
+    document.addEventListener(
+      "animationstart",
+      (e) => {
+        const el = e.target as HTMLElement;
+        if (!(el instanceof HTMLElement)) return;
+        (window as unknown as HandoffWindow).__handoff.push({
+          who: el.dataset.slot ?? (el.classList.contains("arrival") ? "arrival" : ""),
+          name: (e as AnimationEvent).animationName,
+          at: performance.now(),
+          seconds: Number.parseFloat(getComputedStyle(el).animationDuration),
+        });
+      },
+      true,
+    );
+  });
+}
 
 async function openSettings(page: import("@playwright/test").Page) {
   await page.getByRole("button", { name: "Settings" }).click();
@@ -290,4 +322,97 @@ test("a modal neither moves nor sticks under reduced motion", async ({ daemon, p
   const closing = await page.evaluate(() => (window as unknown as ChoreographyWindow).__closing);
   for (const ms of closing) expect(ms).toBeLessThan(1);
   await expect(page.locator(settingsDialog)).toHaveCount(0);
+});
+
+test("a decided guard's exit leads the arrival that uncovers the next state", async ({
+  daemon,
+  page,
+}) => {
+  // The hand-off as a SEQUENCE (EXC-894), which is the half neither a stylesheet read nor
+  // a screenshot can carry: the guard leaving and the next state arriving are two
+  // animations on two different elements, and what this ticket is about is their
+  // relationship. Both claims are ordering claims, so both are sampled at animationstart.
+  await daemon.seed();
+  await page.goto("/");
+  await planSurface(page);
+  await waitPastSafeModeGrace(page);
+
+  await page.getByRole("button", { name: "Reject", exact: true }).click();
+  const guard = page.getByRole("alertdialog");
+  await expect(guard).toBeVisible();
+  // Let the guard's own arrival finish first, so the recorder cannot mistake the enter it
+  // is still playing for part of the hand-off that has not started yet.
+  await page.waitForFunction(
+    (sels) => sels.every((s) => (document.querySelector(s)?.getAnimations().length ?? 1) === 0),
+    [guardContent, guardOverlay],
+  );
+
+  await recordHandoff(page);
+  await guard.getByRole("button", { name: "Reject", exact: true }).click();
+
+  // The curtain is the last of the hand-off's parts to start — it waits on a real HTTP
+  // round trip — so waiting for it is waiting for the whole gesture.
+  await page.waitForFunction(() =>
+    (window as unknown as HandoffWindow).__handoff.some((a) => a.who === "arrival"),
+  );
+  const played = await page.evaluate(() => (window as unknown as HandoffWindow).__handoff);
+  const exit = played.find((a) => a.who === "alert-dialog-content" && a.name === "exit");
+  const arrival = played.find((a) => a.who === "arrival");
+  expect(exit).toBeDefined();
+  expect(arrival).toBeDefined();
+
+  // The exit LEADS. The guard's flag clears in the same tick the resolve fires, so its
+  // departure is already running while the arrival is still waiting on the daemon.
+  expect(exit?.at ?? 0).toBeLessThanOrEqual(arrival?.at ?? 0);
+  // …and it is the SHORTER of the two, so it has cleared before the arrival settles. That
+  // pair of facts is the whole of "deliberately timed against each other" — a relationship
+  // drawn from the --dur-exit/--dur-enter tiers rather than a number this hand-off minted.
+  expect(exit?.seconds ?? 0).toBeLessThan(arrival?.seconds ?? 0);
+
+  // The curtain COVERS the content row rather than taking one. It is out of flow for a
+  // reason the shell's shape makes non-obvious: DiffPlanView renders two AUTO-PLACED
+  // siblings, so an in-flow curtain claiming row 3 is placed first and displaces one of
+  // them into an implicit fifth row — leaving the status bar above the plan. Counting the
+  // tracks states that directly: pinned-chrome.e2e.ts catches the consequence, this names
+  // the cause, and it belongs here because the curtain is the thing that would break it.
+  const rows = await page.evaluate(
+    () => getComputedStyle(document.querySelector(".shell") as Element).gridTemplateRows,
+  );
+  expect(rows.split(/\s+/)).toHaveLength(4);
+});
+
+test("diverting from a guard to the dialog acknowledges nothing and uncovers nothing", async ({
+  daemon,
+  page,
+}) => {
+  // The guard-to-dialog swap wears the SAME choreography as any other modal pair — since
+  // EXC-892 both surfaces take the bridge's two arms — but it is not a decision, and this
+  // is the assertion that keeps it from becoming one. Nothing resolved, so there is
+  // nothing to confirm; `active` never changed, so there is nothing to uncover. Written as
+  // a guard against this ticket's own change leaking one step further than it should.
+  const id = await daemon.seed();
+  await daemon.putDraft(id, {
+    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain cold cost" }],
+  });
+  await page.goto("/");
+  await planSurface(page);
+  await waitPastSafeModeGrace(page);
+
+  await page.getByRole("button", { name: "Reject", exact: true }).click();
+  const guard = page.getByRole("alertdialog");
+  await expect(guard).toBeVisible();
+
+  await recordHandoff(page);
+  await guard.getByRole("button", { name: "Request changes" }).click();
+
+  // The swap itself lands: one modal for another, the plan untouched behind both.
+  await expect(page.getByRole("dialog", { name: "Send the plan back for revision" })).toBeVisible();
+  await expect(guard).toHaveCount(0);
+  // Neither half of the hand-off fires.
+  await expect(alerts(page)).toHaveCount(0);
+  const played = await page.evaluate(() => (window as unknown as HandoffWindow).__handoff);
+  expect(played.filter((a) => a.who === "arrival")).toEqual([]);
+  // And the review is still pending, which is what makes the two silences correct rather
+  // than merely observed.
+  await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
 });

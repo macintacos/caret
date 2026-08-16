@@ -15,7 +15,7 @@
 // abbreviated quotes in ui/src/lib/feedback.test.ts, and the deny request body
 // in ui/src/state/resolve.test.ts.
 
-import { discardConfirm, inlineRows, unsentRows } from "@test/e2e/support/chrome.ts";
+import { alerts, discardConfirm, inlineRows, unsentRows } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
@@ -268,4 +268,27 @@ test("an inline comment reveals a nested Context with the anchored source lines 
   // preview quote — the reviewer sees the real code they commented on.
   await expect(context).toContainText("cache layer");
   await expect(context).toContainText("cold cost");
+});
+
+test("submitting confirms the outcome, and the waiting room arrives behind it", async ({
+  daemon,
+  page,
+}) => {
+  // The hand-off (EXC-894) on the request-changes arm — the third verdict, and the one
+  // whose modal is a full dialog rather than a guard, so it proves the acknowledgment is
+  // wired to the decision rather than to the alertdialog primitive.
+  const id = await daemon.seed();
+  await page.goto("/");
+  await planSurface(page);
+  await waitPastSafeModeGrace(page);
+
+  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
+  await page.getByRole("button", { name: "Request changes" }).click();
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("textbox", { name: "General comment" }).fill(FEEDBACK);
+  await page.keyboard.press("ControlOrMeta+Enter");
+
+  await expect(alerts(page)).toContainText("Changes requested");
+  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
+  await expect.poll(async () => (await daemon.getReview(id)).body?.decision?.behavior).toBe("deny");
 });

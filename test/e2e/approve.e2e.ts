@@ -15,6 +15,7 @@
 // in ui/src/components/UnsentCommentsDialog.test.ts, and the request body it
 // submits, reviewer notes included, in ui/src/state/resolve.test.ts.
 
+import { alerts, reviewSwitcher } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
@@ -316,4 +317,56 @@ test("Cancel dismisses the approve guard and leaves the review pending", async (
   await guard.getByRole("button", { name: "Cancel" }).click();
   await expect(guard).toHaveCount(0);
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
+});
+
+test("approving confirms the outcome, and the waiting room arrives behind it", async ({
+  daemon,
+  page,
+}) => {
+  // The hand-off (EXC-894), on the destination that drains the queue. Both halves are
+  // asserted together on purpose: a decision that lands with no acknowledgment fails here,
+  // and so does an acknowledgment for a decision that never reached the daemon.
+  const id = await daemon.seed();
+  await page.goto("/");
+  await planSurface(page);
+
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  const confirm = page.getByRole("dialog", APPROVE_CONFIRM);
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole("button", { name: "Approve", exact: true }).click();
+
+  // The confirmation rides the existing alert queue rather than a second toast system,
+  // and it names the verdict — before this the reviewer inferred "it worked" from an
+  // empty screen, which is the same thing a failed resolve would have shown them.
+  await expect(alerts(page)).toContainText("Plan approved");
+  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
+  await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).not.toContain(id);
+});
+
+test("approving with a plan stacked behind hands off to the next one", async ({ daemon, page }) => {
+  // The hand-off's OTHER destination: the queue does not drain, so the waiting room is the
+  // wrong answer and the next plan takes the space instead. Distinct sessions, so both
+  // stay pending rather than the second superseding the first.
+  await daemon.seed({ title: "Plan Alpha", cwd: "/tmp/proj-alpha" });
+  await daemon.seed({ title: "Plan Beta", cwd: "/tmp/proj-beta" });
+  await page.goto("/");
+  await planSurface(page);
+
+  // Pick Alpha explicitly rather than trusting the auto-selection, so the plan being
+  // approved and the plan expected afterwards are both named by this test.
+  const trigger = reviewSwitcher(page);
+  await trigger.click();
+  await page.getByRole("menuitem", { name: "Plan Alpha" }).click();
+  await expect(trigger.locator(".title")).toHaveText("Plan Alpha");
+
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  const confirm = page.getByRole("dialog", APPROVE_CONFIRM);
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole("button", { name: "Approve", exact: true }).click();
+
+  await expect(alerts(page)).toContainText("Plan approved");
+  // One review left, so the switcher collapses to its inert single-review label — which
+  // now reads Beta. The waiting room must NOT be what arrived.
+  await expect(page.locator(".switcher.single .title")).toHaveText("Plan Beta");
+  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toHaveCount(0);
 });
