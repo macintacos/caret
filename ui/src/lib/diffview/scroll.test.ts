@@ -1,29 +1,49 @@
 import "@ui/test-setup.ts";
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import {
   CURSOR_SCROLLOFF,
+  FOLLOW_ANIM_MS,
   followCursorLine,
   followScrollDelta,
   lineAtReadingZone,
   REVEAL_MARGIN_BOTTOM,
   revealCard,
   revealScrollDelta,
+  SCROLL_ANIM_MS,
   SCROLL_OFFSET_TOP,
   scrollToDiffLine,
   scrollToLine,
+  scrollTweenTop,
 } from "$lib/diffview/scroll.ts";
 
 // @pierre/diffs renders each source line as a <div data-line="N"> inside the
-// container's shadow root. scrollToLine finds that row and scrolls the nearest
-// scrollable ancestor so the row rests near the top; these tests build the
-// shadow root and a scroll container by hand (no library mount needed). happy-dom
-// has no layout, so getBoundingClientRect is all zeros and the computed target is
-// 0 — enough to assert the call shape, container resolution, and fallback.
+// container's shadow root. scrollToLine finds that row and tweens the nearest
+// scrollable ancestor's scrollTop so the row rests near the top; these tests build
+// the shadow root and a scroll container by hand (no library mount needed).
+// happy-dom has no layout, so every rect a jump measures is stubbed and the
+// resolved row is named by the scrollTop the flight lands on.
+
+/** A DOMRect in the viewport coordinate space getBoundingClientRect reads from.
+ * A one-argument call describes a zero-height row, which is all the row-resolution
+ * assertions need. */
+function rect(top: number, bottom = top): DOMRect {
+  return {
+    top,
+    bottom,
+    left: 0,
+    right: 0,
+    width: 0,
+    height: bottom - top,
+    x: 0,
+    y: top,
+    toJSON() {},
+  } as DOMRect;
+}
 
 interface Harness {
   host: HTMLElement;
-  scrollCalls: ScrollToOptions[];
+  scroller: HTMLElement;
 }
 
 /** A scroll container wrapping a shadow host whose root holds the given rows. */
@@ -37,32 +57,152 @@ function harness(lines: number[], scrollable = true): Harness {
     row.setAttribute("data-line", String(n));
     root.append(row);
   }
-  const scrollCalls: ScrollToOptions[] = [];
-  scroller.scrollTo = ((opts: ScrollToOptions) =>
-    scrollCalls.push(opts)) as typeof scroller.scrollTo;
   scroller.append(host);
   document.body.append(scroller);
-  return { host, scrollCalls };
+  return { host, scroller };
 }
 
+/** Resolves after `n` animation frames, so a rAF loop can run to a known point. */
+function frames(n: number): Promise<void> {
+  return new Promise((resolve) => {
+    let left = n;
+    const tick = () => (--left <= 0 ? resolve() : requestAnimationFrame(tick));
+    requestAnimationFrame(tick);
+  });
+}
+
+// The jump tween reads performance.now(), and happy-dom fires requestAnimationFrame
+// immediately without advancing the real clock — so time is stopped for this suite
+// and each flight is stepped by hand: move `now`, pump a frame, read where the
+// tween landed.
+let now = 0;
+const realNow = performance.now.bind(performance);
+
+beforeEach(() => {
+  now = 0;
+  performance.now = () => now;
+});
+
 afterEach(() => {
+  performance.now = realNow;
   document.body.replaceChildren();
 });
 
+/** Runs an in-flight jump tween out to the end of its flight. */
+async function settle(): Promise<void> {
+  now = SCROLL_ANIM_MS;
+  await frames(1);
+}
+
+/** Runs `fn` with the reduced-motion preference reported as set. */
+function withReducedMotion(fn: () => void): void {
+  const real = globalThis.matchMedia;
+  globalThis.matchMedia = ((query: string) => ({
+    matches: true,
+    media: query,
+  })) as typeof matchMedia;
+  try {
+    fn();
+  } finally {
+    globalThis.matchMedia = real;
+  }
+}
+
+// scrollTweenTop is the whole curve both of the plan's scrolls ride: where scrollTop
+// should be at a given point in a flight. Two properties have to hold together, and
+// pulling too hard on either one breaks the other — the motion is front-loaded, so it
+// decelerates rather than accelerates, AND its last frames still move far enough to
+// be seen, so the view is watched coming to rest instead of just stopping.
+describe("scrollTweenTop", () => {
+  const base = { from: 0, to: 1000, duration: SCROLL_ANIM_MS };
+
+  test("has not moved at the start of the flight", () => {
+    expect(scrollTweenTop({ ...base, elapsed: 0 })).toBe(base.from);
+  });
+
+  test("lands exactly on the target once the flight is over", () => {
+    expect(scrollTweenTop({ ...base, elapsed: SCROLL_ANIM_MS })).toBe(base.to);
+    // Clamped past the end, so an overrun frame cannot overshoot the target.
+    expect(scrollTweenTop({ ...base, elapsed: SCROLL_ANIM_MS * 3 })).toBe(base.to);
+  });
+
+  test("front-loads the flight — most of the distance is covered in the first half", () => {
+    // The floor that keeps the curve DECELERATING: linear reaches 500 at the
+    // midpoint and anything accelerating reaches less, so a swap that makes the
+    // scroll speed up into its target reds here.
+    expect(scrollTweenTop({ ...base, elapsed: SCROLL_ANIM_MS / 2 })).toBeGreaterThan(700);
+  });
+
+  test("is still visibly moving through the last quarter of the flight", () => {
+    // The contract the tuning is FOR, and the one a midpoint floor cannot express.
+    // Every decelerating curve slows down on paper; what separates them is whether
+    // the final frames still move far enough to see. Over a 1000px flight the last
+    // quarter of the time must carry >40px — quadOut spends 62px there, while
+    // cubicOut (16px) and --ease-out's quintic-feeling curve (~3px) finish in
+    // sub-pixel steps and read as a slide that simply stops.
+    const atThreeQuarters = scrollTweenTop({ ...base, elapsed: SCROLL_ANIM_MS * 0.75 });
+    expect(base.to - atThreeQuarters).toBeGreaterThan(40);
+  });
+});
+
 describe("scrollToLine", () => {
-  test("scrolls the surrounding container to the matching row and returns true", () => {
-    const { host, scrollCalls } = harness([1, 5, 9]);
+  function stubRow(host: HTMLElement, line: number, top: number): void {
+    const row = host.shadowRoot?.querySelector<HTMLElement>(`[data-line="${line}"]`);
+    if (row != null) row.getBoundingClientRect = () => rect(top);
+  }
+
+  test("tweens the surrounding container to the matching row and returns true", async () => {
+    const { host, scroller } = harness([1, 5, 9]);
+    stubRow(host, 5, 500);
     expect(scrollToLine(host, 5)).toBe(true);
-    expect(scrollCalls.length).toBeGreaterThanOrEqual(1);
-    // Smooth by default (no reduced-motion preference in the test env).
-    expect(scrollCalls[0]?.behavior).toBe("smooth");
-    expect(typeof scrollCalls[0]?.top).toBe("number");
+    now = SCROLL_ANIM_MS / 2;
+    await frames(1);
+    // Mid-flight: under way, not yet arrived.
+    expect(scroller.scrollTop).toBeGreaterThan(0);
+    expect(scroller.scrollTop).toBeLessThan(500 - SCROLL_OFFSET_TOP);
+    await settle();
+    expect(scroller.scrollTop).toBe(500 - SCROLL_OFFSET_TOP);
+  });
+
+  test("jumps outright, before any frame runs, under reduced motion", () => {
+    const { host, scroller } = harness([1, 5, 9]);
+    stubRow(host, 5, 500);
+    withReducedMotion(() => expect(scrollToLine(host, 5)).toBe(true));
+    // No await: the preference means the jump is done by the time the call returns.
+    expect(scroller.scrollTop).toBe(500 - SCROLL_OFFSET_TOP);
+  });
+
+  test("a second jump cancels the first, so only the newer target lands", async () => {
+    // Two tweens writing scrollTop on the same frame would fight; the first is
+    // cancelled instead, and the flight that finishes is the one just asked for.
+    const { host, scroller } = harness([1, 5, 9]);
+    stubRow(host, 5, 500);
+    stubRow(host, 9, 900);
+    expect(scrollToLine(host, 5)).toBe(true);
+    expect(scrollToLine(host, 9)).toBe(true);
+    await settle();
+    expect(scroller.scrollTop).toBe(900 - SCROLL_OFFSET_TOP);
+  });
+
+  test("stops when something else scrolls the container mid-flight", async () => {
+    // A wheel or a trackpad fling moving the scroller means the reader owns the
+    // position now — the jump lets go rather than dragging the view back for the
+    // rest of its flight. (The cursor follow is no longer such a case: it runs
+    // through the same driver, so it retargets the flight instead of fighting it.)
+    const { host, scroller } = harness([1, 5, 9]);
+    stubRow(host, 5, 500);
+    expect(scrollToLine(host, 5)).toBe(true);
+    now = SCROLL_ANIM_MS / 2;
+    await frames(1);
+    scroller.scrollTop = 1234;
+    await settle();
+    expect(scroller.scrollTop).toBe(1234);
   });
 
   test("returns false when no row carries the requested line", () => {
-    const { host, scrollCalls } = harness([1, 2, 3]);
+    const { host, scroller } = harness([1, 2, 3]);
     expect(scrollToLine(host, 99)).toBe(false);
-    expect(scrollCalls.length).toBe(0);
+    expect(scroller.scrollTop).toBe(0);
   });
 
   test("returns false when the container has no shadow root", () => {
@@ -87,23 +227,10 @@ describe("scrollToLine", () => {
 // data-line (its own side's number), data-alt-line (the other side's, absent on a
 // change row) and data-line-type. These tests build both layouts by hand; happy-dom
 // has no layout, so each row's rect is stubbed with a distinct top and the resolved
-// row is named by the scroll target it produces (rowTop - SCROLL_OFFSET_TOP, since
-// the unstubbed scroller reports an all-zero rect and scrollTop 0).
+// row is named by where the jump lands once its flight is over (rowTop -
+// SCROLL_OFFSET_TOP, since the unstubbed scroller reports an all-zero rect and
+// scrollTop 0).
 describe("scrollToDiffLine", () => {
-  function rect(top: number): DOMRect {
-    return {
-      top,
-      bottom: top,
-      left: 0,
-      right: 0,
-      width: 0,
-      height: 0,
-      x: 0,
-      y: top,
-      toJSON() {},
-    } as DOMRect;
-  }
-
   interface DiffRow {
     /** data-line: this row's own side's 1-based number. */
     line: number;
@@ -136,12 +263,9 @@ describe("scrollToDiffLine", () => {
       }
       root.append(code);
     }
-    const scrollCalls: ScrollToOptions[] = [];
-    scroller.scrollTo = ((opts: ScrollToOptions) =>
-      scrollCalls.push(opts)) as typeof scroller.scrollTo;
     scroller.append(host);
     document.body.append(scroller);
-    return { host, scrollCalls };
+    return { host, scroller };
   }
 
   // One change at line 2: the same number addresses a different row on each side.
@@ -166,51 +290,57 @@ describe("scrollToDiffLine", () => {
       ],
     });
 
-  test("split: the after side resolves the additions column", () => {
-    const { host, scrollCalls } = split();
+  test("split: the after side resolves the additions column", async () => {
+    const { host, scroller } = split();
     expect(scrollToDiffLine(host, 2, "after")).toBe(true);
-    expect(scrollCalls[0]?.top).toBe(300 - SCROLL_OFFSET_TOP);
+    await settle();
+    expect(scroller.scrollTop).toBe(300 - SCROLL_OFFSET_TOP);
   });
 
-  test("split: the before side resolves the deletions column", () => {
-    const { host, scrollCalls } = split();
+  test("split: the before side resolves the deletions column", async () => {
+    const { host, scroller } = split();
     expect(scrollToDiffLine(host, 2, "before")).toBe(true);
-    expect(scrollCalls[0]?.top).toBe(100 - SCROLL_OFFSET_TOP);
+    await settle();
+    expect(scroller.scrollTop).toBe(100 - SCROLL_OFFSET_TOP);
   });
 
-  test("unified: the after side resolves an addition row", () => {
-    const { host, scrollCalls } = unified();
+  test("unified: the after side resolves an addition row", async () => {
+    const { host, scroller } = unified();
     expect(scrollToDiffLine(host, 3, "after")).toBe(true);
-    expect(scrollCalls[0]?.top).toBe(200 - SCROLL_OFFSET_TOP);
+    await settle();
+    expect(scroller.scrollTop).toBe(200 - SCROLL_OFFSET_TOP);
   });
 
-  test("unified: the before side resolves a deletion row", () => {
-    const { host, scrollCalls } = unified();
+  test("unified: the before side resolves a deletion row", async () => {
+    const { host, scroller } = unified();
     expect(scrollToDiffLine(host, 2, "before")).toBe(true);
-    expect(scrollCalls[0]?.top).toBe(100 - SCROLL_OFFSET_TOP);
+    await settle();
+    expect(scroller.scrollTop).toBe(100 - SCROLL_OFFSET_TOP);
   });
 
-  test("unified: the after side skips the deletion row sharing the line number", () => {
+  test("unified: the after side skips the deletion row sharing the line number", async () => {
     // The change-deletion row carries data-line 2 too and comes first in document
     // order, so only the line-type exclusion lands the jump on the addition.
-    const { host, scrollCalls } = unified();
+    const { host, scroller } = unified();
     expect(scrollToDiffLine(host, 2, "after")).toBe(true);
-    expect(scrollCalls[0]?.top).toBe(150 - SCROLL_OFFSET_TOP);
+    await settle();
+    expect(scroller.scrollTop).toBe(150 - SCROLL_OFFSET_TOP);
   });
 
-  test("unified: the before side resolves a context row by its data-alt-line number", () => {
+  test("unified: the before side resolves a context row by its data-alt-line number", async () => {
     // Before-line 3 is context, rendered once carrying the after number (4) in
     // data-line — the row is only reachable through data-alt-line.
-    const { host, scrollCalls } = unified();
+    const { host, scroller } = unified();
     expect(scrollToDiffLine(host, 3, "before")).toBe(true);
-    expect(scrollCalls[0]?.top).toBe(250 - SCROLL_OFFSET_TOP);
+    await settle();
+    expect(scroller.scrollTop).toBe(250 - SCROLL_OFFSET_TOP);
   });
 
   test("returns false when no row carries the requested line on that side", () => {
     // The before document ends at line 3; nothing renders for a before-line 4.
-    const { host, scrollCalls } = unified();
+    const { host, scroller } = unified();
     expect(scrollToDiffLine(host, 4, "before")).toBe(false);
-    expect(scrollCalls.length).toBe(0);
+    expect(scroller.scrollTop).toBe(0);
   });
 });
 
@@ -237,7 +367,7 @@ describe("lineAtReadingZone", () => {
   });
 
   test("excludes a prior row whose bottom rounds a sub-pixel past the park line", () => {
-    // Smooth scrollTo rounds scrollTop to device pixels, so a parked heading can rest
+    // The browser rounds scrollTop to device pixels, so a parked heading can rest
     // a fraction low and the prior row's bottom lands just past PARK. The slop margin
     // must still exclude it, or the off-by-one returns intermittently.
     const rows = [
@@ -318,22 +448,8 @@ describe("followScrollDelta", () => {
 });
 
 describe("followCursorLine", () => {
-  function rect(top: number, bottom: number): DOMRect {
-    return {
-      top,
-      bottom,
-      left: 0,
-      right: 0,
-      width: 0,
-      height: bottom - top,
-      x: 0,
-      y: top,
-      toJSON() {},
-    } as DOMRect;
-  }
-
   /** A scroller (top 100, bottom 700 → 600px tall) wrapping a shadow host. */
-  function harness(lines: number[]): { host: HTMLElement; scrollBys: ScrollToOptions[] } {
+  function harness(lines: number[]): { host: HTMLElement; scroller: HTMLElement } {
     const scroller = document.createElement("div");
     scroller.style.overflowY = "auto";
     scroller.getBoundingClientRect = () => rect(100, 700);
@@ -344,12 +460,15 @@ describe("followCursorLine", () => {
       row.setAttribute("data-line", String(n));
       root.append(row);
     }
-    const scrollBys: ScrollToOptions[] = [];
-    scroller.scrollBy = ((opts: ScrollToOptions) =>
-      scrollBys.push(opts)) as typeof scroller.scrollBy;
     scroller.append(host);
     document.body.append(scroller);
-    return { host, scrollBys };
+    return { host, scroller };
+  }
+
+  /** Runs an in-flight follow tween out to the end of its (shorter) flight. */
+  async function settleFollow(): Promise<void> {
+    now = FOLLOW_ANIM_MS;
+    await frames(1);
   }
 
   function stubRow(host: HTMLElement, line: number, top: number, bottom: number): void {
@@ -357,26 +476,37 @@ describe("followCursorLine", () => {
     if (row != null) row.getBoundingClientRect = () => rect(top, bottom);
   }
 
-  test("scrolls by the follow delta, instantly, when the row passes the bottom band", () => {
-    const { host, scrollBys } = harness([1, 5, 9]);
+  test("tweens by the follow delta when the row passes the bottom band", async () => {
+    const { host, scroller } = harness([1, 5, 9]);
     stubRow(host, 5, 650, 670); // below the [200,600] band (margin CURSOR_SCROLLOFF*20)
     expect(followCursorLine(host, 5)).toBe(true);
-    expect(scrollBys.length).toBe(1);
-    expect(scrollBys[0]?.top).toBe(670 - (700 - CURSOR_SCROLLOFF * 20)); // overshoot past bottom bound
-    expect(scrollBys[0]?.behavior).toBe("auto"); // instant — no smooth lag under held motion
+    await settleFollow();
+    expect(scroller.scrollTop).toBe(670 - (700 - CURSOR_SCROLLOFF * 20)); // overshoot past bottom bound
   });
 
-  test("does not scroll when the row is comfortably inside the band", () => {
-    const { host, scrollBys } = harness([1, 5, 9]);
+  test("runs the follow shorter than a jump, so a held key is not left trailing", async () => {
+    // The follow and the jump share a curve but not a duration: at FOLLOW_ANIM_MS
+    // the follow has landed, which is a point a jump would still be flying past.
+    const { host, scroller } = harness([1, 5, 9]);
+    stubRow(host, 5, 650, 670);
+    expect(followCursorLine(host, 5)).toBe(true);
+    await settleFollow();
+    expect(scroller.scrollTop).toBe(670 - (700 - CURSOR_SCROLLOFF * 20));
+    expect(FOLLOW_ANIM_MS).toBeLessThan(SCROLL_ANIM_MS);
+  });
+
+  test("does not scroll when the row is comfortably inside the band", async () => {
+    const { host, scroller } = harness([1, 5, 9]);
     stubRow(host, 5, 300, 320);
     expect(followCursorLine(host, 5)).toBe(true);
-    expect(scrollBys.length).toBe(0);
+    await settleFollow();
+    expect(scroller.scrollTop).toBe(0);
   });
 
   test("returns false when the requested line is not rendered", () => {
-    const { host, scrollBys } = harness([1, 2, 3]);
+    const { host, scroller } = harness([1, 2, 3]);
     expect(followCursorLine(host, 99)).toBe(false);
-    expect(scrollBys.length).toBe(0);
+    expect(scroller.scrollTop).toBe(0);
   });
 
   test("returns false when the container has no shadow root", () => {
@@ -444,20 +574,6 @@ describe("revealScrollDelta", () => {
 });
 
 describe("revealCard", () => {
-  function rect(top: number, bottom: number): DOMRect {
-    return {
-      top,
-      bottom,
-      left: 0,
-      right: 0,
-      width: 0,
-      height: bottom - top,
-      x: 0,
-      y: top,
-      toJSON() {},
-    } as DOMRect;
-  }
-
   /** A card inside a scroller (top 100, bottom 700), clipped 20px past the bottom. */
   function harness(scrollable = true): { card: HTMLElement; scrollBys: ScrollToOptions[] } {
     const scroller = document.createElement("div");
@@ -471,15 +587,6 @@ describe("revealCard", () => {
     scroller.append(card);
     document.body.append(scroller);
     return { card, scrollBys };
-  }
-
-  /** Resolves after `n` animation frames, so the settle retry can run to completion. */
-  function frames(n: number): Promise<void> {
-    return new Promise((resolve) => {
-      let left = n;
-      const tick = () => (--left <= 0 ? resolve() : requestAnimationFrame(tick));
-      requestAnimationFrame(tick);
-    });
   }
 
   test("scrolls the card's scroll container by the reveal delta, smoothly", async () => {

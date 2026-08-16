@@ -12,15 +12,48 @@
 // page when the app overflows the viewport, landing the heading in the wrong
 // place. Scrolling the resolved container to an explicit top is exact and lands
 // the same regardless of the current scroll position or window size.
+import { quadOut } from "svelte/easing";
+
 import type { DiffSide } from "$lib/diffview/types.ts";
 
 /** Breathing room (px) above a jumped-to row so the heading isn't flush against
  * the very top edge of the scroll container. */
 export const SCROLL_OFFSET_TOP = 12;
 
+/** Duration (ms) of a jump to a place — the JS mirror of --dur-travel. */
+export const SCROLL_ANIM_MS = 240;
+
+/** Duration (ms) of the cursor follow — the JS mirror of --dur-fast. Shorter than
+ * a jump because it is a different move: the follow nudges by roughly one row, and
+ * a held j/k retargets it every few frames, so a jump-length glide would leave the
+ * view trailing the cursor instead of carrying it. */
+export const FOLLOW_ANIM_MS = 120;
+
+/**
+ * The scrollTop a scroll should be at `elapsed` ms into its flight. Pure (no DOM)
+ * so it is directly unit-testable, like followScrollDelta and revealScrollDelta.
+ *
+ * quadOut decelerates into the target, and the CHOICE OF EXPONENT is the whole
+ * design of this animation. --ease-out's curve is quintic-feeling and cubicOut is
+ * a step below it; both spend their last frames moving less than a pixel, so the
+ * deceleration is real in the maths and invisible on screen — the scroll reads as
+ * a fast slide that simply stops. quadOut keeps the final frames moving in
+ * perceptible steps, so the view is seen coming to rest. Clamped at both ends, so
+ * an early or overrun frame cannot overshoot.
+ */
+export function scrollTweenTop(g: {
+  from: number;
+  to: number;
+  elapsed: number;
+  duration: number;
+}): number {
+  const t = Math.min(1, Math.max(0, g.elapsed / g.duration));
+  return g.from + (g.to - g.from) * quadOut(t);
+}
+
 /** Sub-pixel margin (px) below the reading-zone line. A jumped heading parks with
- * its top on that line, and the row above ends its bottom exactly there; smooth
- * scrollTo rounds scrollTop to device pixels, so without this margin the prior
+ * its top on that line, and the row above ends its bottom exactly there; the
+ * browser rounds scrollTop to device pixels, so without this margin the prior
  * row's bottom can round a fraction past the line and steal the active slot — the
  * off-by-one this guards against. Kept well under a source line's height. */
 const READING_ZONE_SLOP = 1;
@@ -37,24 +70,89 @@ function nearestScrollParent(el: HTMLElement): HTMLElement | undefined {
 }
 
 // The JS-side mirror of app.css's global reduced-motion rule. The CSS guard
-// neutralizes animations and transitions, but scroll behavior is a JS option
-// (ScrollBehavior) that no stylesheet can gate from here, so the smooth-scroll
-// jump reads this directly to fall back to an instant jump under reduced motion.
+// neutralizes animations and transitions, but scroll position is a JS property no
+// stylesheet can drive from here, so every scroll in this file — the shared tween
+// behind the jump and the follow, the no-scroller fallback, and the composer
+// reveal — reads this directly to fall back to an instant move under the preference.
 function prefersReducedMotion(): boolean {
   return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/** How far (px) the scroller may drift from what the tween last wrote before the
+ * tween treats it as someone else's scroll. The read-back below already absorbs
+ * the browser's own rounding and clamping, so what is left for the slop is drift
+ * a set/get round-trip cannot report exactly — a fractional device-pixel ratio,
+ * page zoom, or a reflow re-clamping scrollTop as rows paint in. */
+const SCROLL_TAKEOVER_SLOP = 1;
+
+// The plan has one scroll container, so at most one flight is ever in the air: a
+// second scroll cancels the first rather than leaving two loops writing scrollTop
+// on the same frame. That is also how a held j/k works — each keystroke retargets
+// the flight from wherever it currently is, so the view chases the cursor rather
+// than restarting. No disposer is handed back — a flight lasts at most
+// SCROLL_ANIM_MS and a detached scroller absorbs the writes — so the handle is
+// cleared on every exit path instead, and undefined means nothing is in flight.
+let jumpFrame: number | undefined;
+
+/** Tweens `scroller` to `top` over `duration`, or moves outright under reduced
+ * motion. Both of the plan's scrolls run through here — the jump to a place and
+ * the cursor follow — so they share one curve and one in-flight handle, and only
+ * differ in how long they take.
+ *
+ * The tween owns the scroll only until something else moves it in ONE step — a
+ * wheel, a trackpad fling — at which point it lets go, the way the browser's own
+ * smooth scroll yields to a reader who scrolls. What it cannot detect is a gradual
+ * mover: revealCard's smooth scrollBy advances by less than SCROLL_TAKEOVER_SLOP
+ * per frame, so a composer reveal landing inside a flight is overwritten rather
+ * than yielded to. Narrow (a line click within one flight of a scroll) and left
+ * alone deliberately — routing revealCard through this driver is the real fix and
+ * is its own change. */
+function animateScrollTop(scroller: HTMLElement, top: number, duration: number): void {
+  if (jumpFrame !== undefined) cancelAnimationFrame(jumpFrame);
+  jumpFrame = undefined;
+  // Assignment, not scrollTo({ behavior: "instant" }): nothing sets scroll-behavior
+  // on the plan surface, and base.css forces it to `auto !important` under reduced
+  // motion — the path where a smooth behavior would actually defeat the guarantee.
+  if (prefersReducedMotion()) {
+    scroller.scrollTop = top;
+    return;
+  }
+
+  const from = scroller.scrollTop;
+  const start = performance.now();
+  // What the previous frame left behind, read back so the browser's own rounding
+  // and end-of-range clamping don't read as a third party taking over.
+  let written = from;
+
+  function step(): void {
+    if (Math.abs(scroller.scrollTop - written) > SCROLL_TAKEOVER_SLOP) {
+      jumpFrame = undefined;
+      return;
+    }
+    const elapsed = performance.now() - start;
+    if (elapsed >= duration) {
+      scroller.scrollTop = top;
+      jumpFrame = undefined;
+      return;
+    }
+    scroller.scrollTop = scrollTweenTop({ from, to: top, elapsed, duration });
+    written = scroller.scrollTop;
+    jumpFrame = requestAnimationFrame(step);
+  }
+
+  jumpFrame = requestAnimationFrame(step);
 }
 
 /** Scrolls `container`'s nearest scroll parent so `row` rests near the top,
  * animating unless the user prefers reduced motion. The geometry the
  * single-document and diff reveals share, once each has resolved its own row. */
 function scrollRowIntoView(container: HTMLElement, row: HTMLElement): void {
-  const behavior: ScrollBehavior = prefersReducedMotion() ? "auto" : "smooth";
-
   const scroller = nearestScrollParent(container);
   // No identifiable scroll container (e.g. detached/odd layout): fall back to the
-  // library row's own scrollIntoView so the jump still works.
+  // library row's own scrollIntoView so the jump still works. There is no element
+  // to tween, so this half keeps the browser's own smooth scroll.
   if (scroller == null) {
-    row.scrollIntoView({ block: "start", behavior });
+    row.scrollIntoView({ block: "start", behavior: prefersReducedMotion() ? "auto" : "smooth" });
     return;
   }
 
@@ -64,7 +162,7 @@ function scrollRowIntoView(container: HTMLElement, row: HTMLElement): void {
   const rowRect = row.getBoundingClientRect();
   const hostRect = scroller.getBoundingClientRect();
   const top = Math.max(0, scroller.scrollTop + (rowRect.top - hostRect.top) - SCROLL_OFFSET_TOP);
-  scroller.scrollTo({ top, behavior });
+  animateScrollTop(scroller, top, SCROLL_ANIM_MS);
 }
 
 /**
@@ -152,8 +250,11 @@ export function followScrollDelta(g: {
  * follow scroll. Unlike `scrollToLine` (which always parks the row near the top),
  * it scrolls by the exact overshoot and only once the cursor reaches the margin,
  * so a held `j`/`k` scrolls the view one row at a time and the cursor never
- * leaves the screen. Instant (never smooth) so the follow keeps pace with the
- * keystrokes. Returns whether a matching row was found.
+ * leaves the screen. Animated over FOLLOW_ANIM_MS through the same driver and
+ * curve as the jump — WHERE the two land still differs, but how they get there no
+ * longer does. A held key retargets the flight rather than restarting it, so the
+ * steps read as one continuous glide instead of a stack of hops. Returns whether a
+ * matching row was found.
  */
 export function followCursorLine(container: HTMLElement, line: number): boolean {
   const row = container.shadowRoot?.querySelector<HTMLElement>(`[data-line="${line}"]`);
@@ -171,7 +272,7 @@ export function followCursorLine(container: HTMLElement, line: number): boolean 
     viewBottom: hostRect.bottom,
     scrolloff: CURSOR_SCROLLOFF,
   });
-  if (delta !== 0) scroller.scrollBy({ top: delta, behavior: "auto" });
+  if (delta !== 0) animateScrollTop(scroller, scroller.scrollTop + delta, FOLLOW_ANIM_MS);
   return true;
 }
 

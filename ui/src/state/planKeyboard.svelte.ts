@@ -3,8 +3,8 @@
 // shell drives (EXC-875). Like the other state modules (compare, autosave), this is a
 // plain factory over an injected backing store plus a deps bag — the
 // component owns the reactive `$state` store, tests pass a plain object, and every DOM
-// effect (scroll-follow, focus/blur, the composer open) is injected so the transitions
-// stay testable without mounting the view.
+// effect (scroll-follow, the shared jump, focus/blur, the composer open) is injected so
+// the transitions stay testable without mounting the view.
 //
 // The three surfaces are one machine: they share the reading-position seed
 // (`cursorLine ?? readingLine()`), the Esc-priority chain (Esc closes search, THEN exits
@@ -58,6 +58,10 @@ export interface PlanKeyboardDeps {
   halfPage(): number;
   /** Scroll the view to keep `line` visible — the keyboard cursor's follow scroll. */
   follow(line: number): void;
+  /** Scroll `line` to the top of the view — the shared jump every navigation to an
+   * explicit place takes (a heading pick, a deep link), the counterpart to `follow`'s
+   * scrolloff-only nudge. */
+  jump(line: number): void;
   /** Open the comment composer over an inclusive line range (retaining any live text and
    * relocating the cursor, as a gutter/line click does). */
   openComposer(startLine: number, endLine: number): void;
@@ -80,8 +84,9 @@ export interface PlanKeyboard {
    * An empty query yields no matches. */
   matches(): SearchMatch[];
   /** A vim motion (j/k, Ctrl+d/u, gg/G, heading and blank-line jumps): resolve the target
-   * line, place the cursor there, and follow it. An unplaced cursor reveals at the reading
-   * position rather than stepping past it. */
+   * line, place the cursor there, and scroll to it — the heading motions take the shared
+   * top-parked jump, every other motion the scrolloff follow. An unplaced cursor reveals
+   * at the reading position rather than stepping past it. */
   moveCursor(motion: CursorMotion): void;
   /** `c`: open the composer over the cursor line, or — in visual mode — over the whole
    * anchored selection, exiting visual mode as it opens. Seeds an unplaced cursor at the
@@ -118,6 +123,14 @@ export interface PlanKeyboard {
 // Must match PlanSearch's search-collapse duration (--dur-fast = 120ms). happy-dom
 // fires no animationend, so a timer — not that event — drives the teardown.
 const CLOSE_ANIM_MS = 120;
+
+/** The motions that navigate to a named SECTION — the same move a breadcrumb or ToC
+ * pick makes — so they take the top-parked shared jump. Every other motion keeps the
+ * scrolloff follow, and that exclusion is the load-bearing half: gg/G/{/} step the
+ * reader THROUGH the document rather than to a section, and `G` is only right when the
+ * last line lands at the bottom. Widening this set on the "navigates somewhere
+ * explicit" reading alone would break it. */
+const JUMP_MOTIONS: ReadonlySet<CursorMotion> = new Set(["nextHeading", "prevHeading"]);
 
 export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardDeps): PlanKeyboard {
   const setTimer = deps.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
@@ -156,10 +169,13 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
       .flatMap((line, i) => (line.trim() === "" ? [i + 1] : []));
   }
 
-  // Land the cursor on `line` and scroll it into view — a match reveal or a motion.
-  function reveal(line: number): void {
+  // Land the cursor on `line` and scroll to it. `scroll` picks WHICH scroll: the
+  // scrolloff follow by default (a match reveal, the visual-mode anchor, every
+  // stepping motion), or the shared top-parked jump for a heading motion. Single
+  // source for the landing itself, so a rule added here reaches all of them.
+  function reveal(line: number, scroll: (line: number) => void = deps.follow): void {
     store.cursorLine = line;
-    deps.follow(line);
+    scroll(line);
   }
 
   function cancelClose(): void {
@@ -208,16 +224,15 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
     matches,
 
     moveCursor(motion) {
-      reveal(
-        resolveCursorLine(motion, {
-          cursor: store.cursorLine,
-          lineCount: lineCount(),
-          headingLines: deps.headingLines(),
-          blankLines: blankLines(),
-          halfPage: deps.halfPage(),
-          seed: deps.readingLine() ?? 1,
-        }),
-      );
+      const line = resolveCursorLine(motion, {
+        cursor: store.cursorLine,
+        lineCount: lineCount(),
+        headingLines: deps.headingLines(),
+        blankLines: blankLines(),
+        halfPage: deps.halfPage(),
+        seed: deps.readingLine() ?? 1,
+      });
+      reveal(line, JUMP_MOTIONS.has(motion) ? deps.jump : deps.follow);
     },
 
     commentCursorLine() {

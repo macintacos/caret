@@ -854,7 +854,7 @@
   // the runes live here — and the factory sequences the transitions over it; single-
   // version view only (compare mode is a read-only diff with no cursor). The DOM effects
   // are injected: the rendered lines, heading lines, the reading position, the half-page
-  // size, scroll-follow, the composer open, and focus/blur.
+  // size, scroll-follow, the shared jump, the composer open, and focus/blur.
   let keyboardStore = $state<PlanKeyboardStore>({
     cursorLine: null,
     visualAnchor: null,
@@ -871,6 +871,7 @@
     readingLine: () => topVisibleLine(),
     halfPage: cursorHalfPage,
     follow: (line) => api?.followCursorLine(line),
+    jump: (line) => api?.scrollToLine(line),
     openComposer: openRange,
     focusField: focusSearchField,
     blur: () => (document.activeElement as HTMLElement | null)?.blur(),

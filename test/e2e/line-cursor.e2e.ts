@@ -9,11 +9,16 @@
 // asserts RELATIVE motion and reads line numbers from the DOM, never hardcoding
 // them. waitPastSafeModeGrace is mandatory before the first keystroke (a key
 // inside the post-mount grace window is swallowed by Safe Mode).
+//
+// Where the two scrolls PARK the row is covered here for the same reason: ]]/[[
+// take the top-parked shared jump and j the scrolloff follow, so the difference
+// is a measurement against a real box — a laid-out row's top as a fraction of
+// the scroller's height, which happy-dom has no layout to report.
 
 import type { Page } from "@playwright/test";
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
-import { planSurface } from "@test/e2e/support/source-view.ts";
+import { PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
 
 // Tall enough that G and the half-page jump actually scroll, with three headings
 // so ]]/[[ have distinct targets.
@@ -71,6 +76,34 @@ async function expectCursorLine(page: Page, line: number): Promise<void> {
 async function readCursorLine(page: Page, notLine = -1): Promise<number> {
   await expect.poll(() => lineOf(page)).not.toBe(notLine);
   return lineOf(page);
+}
+
+// Where a scroll PARKED the cursor row: its top as a fraction of the scroller's
+// height. This is what tells the top-parked shared jump (]]/[[, the breadcrumb
+// and ToC picks) from the scrolloff follow (j), which leaves the row riding in
+// the lower band instead.
+const relTop = (page: Page) =>
+  cursor(page).evaluate((el, surface) => {
+    const row = el.getBoundingClientRect();
+    const view = document.querySelector(surface)!.getBoundingClientRect();
+    return (row.top - view.top) / view.height;
+  }, PLAN_SURFACE);
+
+/** Waits for the plan's scroll position to stop moving. The jump is animated, so
+ * a rect read on the frame after the keystroke measures the flight rather than
+ * where it parked; two identical non-zero reads mean it has landed. Only usable
+ * where the jump lands somewhere OTHER than the top — a zero landing is
+ * indistinguishable from "has not started", so it would poll until the deadline. */
+async function settleScroll(page: Page): Promise<void> {
+  let previous = -1;
+  await expect
+    .poll(async () => {
+      const now = await page.locator(PLAN_SURFACE).evaluate((el) => el.scrollTop);
+      const landed = now > 0 && now === previous;
+      previous = now;
+      return landed;
+    })
+    .toBe(true);
 }
 
 async function loadPlan(page: Page): Promise<void> {
@@ -172,6 +205,13 @@ test("]] and [[ jump between headings, and a line click relocates the cursor", a
   const charlie = await readCursorLine(page, bravo);
   expect(charlie).toBeGreaterThan(bravo);
 
+  // Charlie is well past the fold, so reaching it scrolled — and the jump parks
+  // it near the TOP of the scroller. The mirror of the scrolloff follow's
+  // relTop > 0.4 below: a `j` crossing rides the lower band, a heading jump does
+  // not, which is the whole difference between the two scrolls.
+  await settleScroll(page);
+  expect(await relTop(page)).toBeLessThan(0.2);
+
   await page.keyboard.press("[");
   await page.keyboard.press("[");
   await expectCursorLine(page, bravo);
@@ -231,12 +271,7 @@ test("holding j keeps the cursor on-screen and follows it, never yanking it to t
 
   // It rides in the lower part of the scroller (the scrolloff band), not parked
   // at the top: the view scrolls WITH the cursor instead of jumping it upward.
-  const relTop = await cursor(page).evaluate((el) => {
-    const row = el.getBoundingClientRect();
-    const view = document.querySelector(".diff-plan")!.getBoundingClientRect();
-    return (row.top - view.top) / view.height;
-  });
-  expect(relTop).toBeGreaterThan(0.4);
+  expect(await relTop(page)).toBeGreaterThan(0.4);
 });
 
 test("the focused-line cursor band paints the code row, not just its gutter", async ({

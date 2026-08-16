@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 
 import { readAppCss, rootBlock } from "$lib/appCss.ts";
+import { FOLLOW_ANIM_MS, SCROLL_ANIM_MS } from "$lib/diffview/scroll.ts";
 
 // caret's motion vocabulary lives in app.css: a small set of functional
 // duration/easing tokens for one-shot chrome reveals, plus a single global
@@ -83,6 +84,30 @@ describe("motion tokens in app.css", () => {
     expect(toMs(base)).toBeLessThanOrEqual(200);
     expect(toMs(fast)).toBeGreaterThan(0);
     expect(toMs(base)).toBeGreaterThan(0);
+  });
+
+  test("the plan's two JS scroll durations mirror their tokens", () => {
+    // scrollTop is a JS property no stylesheet can drive, so scroll.ts carries each
+    // token's value as a constant instead of reading it. That makes them numbers
+    // coupled across files, which svelte-rules.md § CSS-token discipline says to
+    // name once and TEST — the same pin layout.test.ts holds REFERENCE_WIDTH_PX to.
+    const travel = root.match(/--dur-travel:\s*([^;]+);/)?.[1] ?? "";
+    const fast = root.match(/--dur-fast:\s*([^;]+);/)?.[1] ?? "";
+    expect(travel).not.toBe("");
+    expect(fast).not.toBe("");
+    expect(SCROLL_ANIM_MS).toBe(toMs(travel)); // the jump to a place
+    expect(FOLLOW_ANIM_MS).toBe(toMs(fast)); // the cursor follow
+  });
+
+  test("--dur-travel is the only duration above the 200ms ceiling", () => {
+    // The carve-out has exactly one member, and this is what keeps it that way: it
+    // is a TRAVEL time (the plan's scroll crosses hundreds of px), not a reveal, so
+    // the ceiling's "chrome reads quick, never sluggish" reasoning does not apply.
+    // A second token slipping over 200ms reds here rather than at review.
+    const durations = [...root.matchAll(/--dur-([a-z]+):\s*([^;]+);/g)];
+    expect(durations.length).toBeGreaterThanOrEqual(3);
+    const over = durations.filter(([, , value]) => toMs(value ?? "") > 200).map(([, name]) => name);
+    expect(over).toEqual(["travel"]);
   });
 
   test("declares an enter and an exit easing as cubic-beziers", () => {
