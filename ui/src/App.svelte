@@ -210,7 +210,21 @@
     planText: () => active?.currentPlan ?? "",
     flushPending: () => autosave.flushPending(),
     afterResolve: (id) => selection.afterResolve(id),
-    onOffline: () => selection.setConnected(false),
+    onOffline: () => {
+      selection.setConnected(false);
+      // Resolve's OWN onOffline — createAutosave's and startPolling's are separate
+      // closures — and it fires only on a genuine network failure, since a daemon non-2xx
+      // means the daemon answered and still advances. So this is exactly the case the
+      // optimistic confirmations below get wrong: nothing advanced, the plan is still on
+      // screen, and this persistent alert is what keeps a failed decision from reading as
+      // a landed one. Same shape as applySetting's failure half above.
+      alerts.push({
+        variant: "destructive",
+        title: "Couldn't send the decision",
+        message: "caret can't reach the daemon. Make sure it's running, then send it again.",
+        persistent: true,
+      });
+    },
     clearGeneralComment: () => autosave.clearGeneralComment(),
   });
   // EXC-427 desktop-plan notifier. Component-scoped so both consumers — the poll
@@ -504,13 +518,26 @@
     // plain approve would drop.
     pendingApproveMode = mode;
   }
+  // The three verdict hand-offs (EXC-894). Each acknowledges BEFORE clearing its modal's
+  // flag, so the confirmation is already sliding in bottom-right while the surface recedes
+  // — the ordering is the point, not the toast. The acknowledgment is optimistic and the
+  // resolve stays fired-not-awaited, so nothing here can delay or block it; the failure it
+  // would otherwise mask is caught by createResolve's onOffline above. Each names its
+  // verdict in the past tense of the button that was pressed, so the action keeps one name
+  // through the whole gesture.
+  // Each of the three opens on its own flag, which is also what makes it idempotent: the
+  // surface stays mounted through its 140ms exit, so its confirm button is still clickable
+  // after the first press cleared the flag. Without the guard a second press inside that
+  // window pushes a second confirmation for one decision.
   function approveAnyway(notes: string) {
     // `notes` is the optional reviewer note from the confirm dialog (EXC-791); it
     // rides the allow as feedback and reaches the agent. resolve.approve omits a
     // blank note.
     const mode = pendingApproveMode;
+    if (!mode) return;
+    alerts.push({ variant: "success", message: "Plan approved" });
     pendingApproveMode = null;
-    if (mode) void resolve.approve(mode, notes);
+    void resolve.approve(mode, notes);
   }
   function onReject() {
     // Reject always confirms (EXC-685): consistent whether or not comments are
@@ -518,6 +545,12 @@
     pendingReject = true;
   }
   function rejectAnyway() {
+    if (!pendingReject) return;
+    // Neutral rather than success, here and on request-changes: both are completed
+    // decisions rather than good outcomes, and AlertHost leads the success variant with a
+    // check glyph that would read as approval on a plan being sent back. Same gesture,
+    // the weight each verdict deserves.
+    alerts.push({ variant: "default", message: "Plan rejected" });
     pendingReject = false;
     void resolve.reject();
   }
@@ -525,11 +558,18 @@
     // The annotations + general-comment draft are App.svelte's autosaved state,
     // so they survive the hand-off to the request-changes dialog untouched.
     // Shared by both guards (approve + reject), so clear both.
+    //
+    // Deliberately silent: this swaps one modal for another rather than deciding
+    // anything, so there is no verdict to confirm — and `active` is unchanged, so the
+    // arrival below does not replay either. The surfaces still cross on the shared
+    // choreography (EXC-892); only the two hand-off moves sit this one out.
     pendingApproveMode = null;
     pendingReject = false;
     showDialog = true;
   }
   function onRequestChanges(generalComment: string) {
+    if (!showDialog) return;
+    alerts.push({ variant: "default", message: "Changes requested" });
     showDialog = false;
     void resolve.requestChanges(generalComment);
   }
@@ -614,6 +654,27 @@
   {:else}
     <EmptyState connected={selection.connected} />
   {/if}
+
+  <!-- The arrival (EXC-894): the second half of the hand-off a decided modal starts. The
+       guard recedes on --dur-exit while this lifts on --dur-enter, so the departure has
+       cleared before the arrival settles and the two read as one gesture rather than as
+       two events that happened to coincide.
+
+       A curtain rather than an animation on the content itself, because the two
+       destinations arrive by different mechanisms: draining the queue MOUNTS EmptyState,
+       where a CSS animation would replay on its own, while a plan stacked behind this one
+       leaves DiffPlanView mounted and re-renders its shadow content through contentKey,
+       where it would not. Keying an element that owns nothing covers both with one rule,
+       and costs nothing — remounting the view to buy a fade would tear down the
+       @pierre/diffs render, re-init the compare store and strand revealLine. Owning
+       nothing is also why the plan under it does not move at all: this lifts off it.
+
+       Keyed on the review's identity rather than the derived object: the 2s poll bumps the
+       active review to a new version without changing the id, and a revision landing in
+       place is not an arrival. -->
+  {#key active?.id ?? "none"}
+    <div class="arrival" aria-hidden="true"></div>
+  {/key}
 
   <!-- The bottom status bar (EXC-787): the row-4 grid child consolidating the
        build/version badge (left), the plan-review status (right, when active),
@@ -793,6 +854,64 @@
   }
   .shell > :global(.status-bar) {
     grid-row: 4;
+  }
+
+  /* The hand-off's arrival, covering the content row it names but deliberately OUT OF
+     FLOW. The grid placement is what gives an absolutely-positioned child its containing
+     block — .shell is positioned for exactly this (layout.css) — and `inset: 0` then
+     stretches it to that area. In flow it could not work: the content row is filled by a
+     single AUTO-PLACED child. DiffPlanView renders `.control-row` and `.diff-surface` as
+     two siblings rather than one root — which is also why the `.diff-plan` arm of the rule
+     above has matched nothing since long before this curtain — and auto-placement drops the
+     first into row 2 (the banner's row, empty in the common case) and the second into row 3.
+     An in-flow item claiming row 3 is placed before either and pushes `.diff-surface` into
+     an implicit fifth row, under the status bar. Out of flow it takes part in no placement
+     at all. Declared after both content branches, so it paints over them with no z-index of
+     its own.
+
+     What that costs, stated rather than inherited: the curtain covers row 3, so on an
+     arriving plan `.control-row` — the ToC chip, compare picker, breadcrumbs and cwd — is
+     NOT covered and swaps at once beneath it. Widening to `grid-row: 2 / 4` is not the fix,
+     because row 2 is the daemon banner's when one is present. The real fix is a single
+     DiffPlanView root pinned to row 3, which would also make this boundary a deliberate
+     element rather than a track number; until then the drain-to-empty destination is fully
+     covered (`.empty` is pinned to row 3) and the stacked-plan one is covered from the
+     control row down.
+
+     Both ends of the placement are spelled out because out of flow they have to be: an
+     `auto` grid line on an absolutely-positioned child resolves to the grid container's
+     PADDING EDGE rather than to "span 1", so a bare `grid-row: 3` would run the curtain
+     down over the status bar as well — and the bar is chrome that stays continuous through
+     the hand-off, because the app did not change, only the plan did.
+
+     Opacity only, and deliberately not a wipe: the directional sweep is spoken for by the
+     theme switch, where it means "everything was restyled". A plan arriving is a smaller
+     claim, so the page simply develops back in under the curtain. One paper tone serves
+     both destinations: it matches the body's --paper exactly under the empty state, and
+     sits a step above the diff view's --paper-sunk under a plan, so that reveal begins on
+     a slight lift rather than on the same tone. Judged the better trade than tinting the
+     curtain per destination, which would need it to know which one it is. `forwards` is
+     load-bearing rather than cosmetic — without the fill the final opacity is discarded
+     and the curtain snaps back to full paper, blanking the content region for the rest of
+     the session. Reduced motion stays the global rule's job (styles/base.css), which
+     collapses this to 0.01ms and makes the hand-off the instant state change it should be
+     under that preference — hence no @media here. */
+  .arrival {
+    position: absolute;
+    grid-row: 3 / 4;
+    grid-column: 1 / 2;
+    inset: 0;
+    pointer-events: none;
+    background: var(--paper);
+    animation: arrival var(--dur-enter) var(--ease-out) forwards;
+  }
+  @keyframes arrival {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
   }
 
   /* Persistent, dismissible banner shown when the daemon behind the port was

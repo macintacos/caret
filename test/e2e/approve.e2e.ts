@@ -15,6 +15,7 @@
 // in ui/src/components/UnsentCommentsDialog.test.ts, and the request body it
 // submits, reviewer notes included, in ui/src/state/resolve.test.ts.
 
+import { alerts, reviewSwitcher } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
@@ -315,5 +316,100 @@ test("Cancel dismisses the approve guard and leaves the review pending", async (
   // closes the guard and sends nothing.
   await guard.getByRole("button", { name: "Cancel" }).click();
   await expect(guard).toHaveCount(0);
+  await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
+});
+
+test("approving confirms the outcome, and the waiting room arrives behind it", async ({
+  daemon,
+  page,
+}) => {
+  // The hand-off (EXC-894), on the destination that drains the queue. Both halves are
+  // asserted together on purpose: a decision that lands with no acknowledgment fails here,
+  // and so does an acknowledgment for a decision that never reached the daemon.
+  const id = await daemon.seed();
+  await page.goto("/");
+  await planSurface(page);
+
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  const confirm = page.getByRole("dialog", APPROVE_CONFIRM);
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole("button", { name: "Approve", exact: true }).click();
+
+  // The confirmation rides the existing alert queue rather than a second toast system,
+  // and it names the verdict — before this the reviewer inferred "it worked" from an
+  // empty screen, which is the same thing a failed resolve would have shown them.
+  await expect(alerts(page)).toContainText("Plan approved");
+  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
+  await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).not.toContain(id);
+});
+
+test("approving with a plan stacked behind hands off to the next one", async ({ daemon, page }) => {
+  // The hand-off's OTHER destination: the queue does not drain, so the waiting room is the
+  // wrong answer and the next plan takes the space instead. Distinct sessions, so both
+  // stay pending rather than the second superseding the first.
+  await daemon.seed({ title: "Plan Alpha", cwd: "/tmp/proj-alpha" });
+  await daemon.seed({ title: "Plan Beta", cwd: "/tmp/proj-beta" });
+  await page.goto("/");
+  await planSurface(page);
+
+  // Pick Alpha explicitly rather than trusting the auto-selection, so the plan being
+  // approved and the plan expected afterwards are both named by this test.
+  const trigger = reviewSwitcher(page);
+  await trigger.click();
+  await page.getByRole("menuitem", { name: "Plan Alpha" }).click();
+  await expect(trigger.locator(".title")).toHaveText("Plan Alpha");
+
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  const confirm = page.getByRole("dialog", APPROVE_CONFIRM);
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole("button", { name: "Approve", exact: true }).click();
+
+  await expect(alerts(page)).toContainText("Plan approved");
+  // One review left, so the switcher collapses to its inert single-review label — which
+  // now reads Beta. The waiting room must NOT be what arrived.
+  await expect(page.locator(".switcher.single .title")).toHaveText("Plan Beta");
+  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toHaveCount(0);
+
+  // The curtain COVERS the content row rather than taking one, asserted HERE because this
+  // is the destination that keeps a plan mounted — DiffPlanView contributes the auto-placed
+  // children the hazard needs, and on the drain-to-empty destination there are none left to
+  // displace, so the same count would hold there no matter how the curtain were placed. In
+  // flow it would be placed before them and push `.diff-surface` into an implicit fifth row,
+  // under the status bar; pinned-chrome.e2e.ts catches that consequence, this names the cause.
+  const rows = await page.evaluate(
+    () => getComputedStyle(document.querySelector(".shell") as Element).gridTemplateRows,
+  );
+  expect(rows.split(/\s+/)).toHaveLength(4);
+});
+
+test("a decision that never reaches the daemon does not read as a success", async ({
+  daemon,
+  page,
+}) => {
+  // The confirmation is pushed before the POST, which is what lets it lead the modal's
+  // exit — so the one case that ordering gets wrong, a genuine network failure, has to be
+  // louder than it is. Aborting the request is the real failure rather than a stub: it
+  // leaves the page and never lands, which is exactly what isNetworkFailure distinguishes
+  // from a daemon non-2xx (that one means the daemon answered, and still advances).
+  const id = await daemon.seed();
+  await page.goto("/");
+  await planSurface(page);
+  await page.route("**/api/reviews/*/resolve", (route) => route.abort());
+
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  const confirm = page.getByRole("dialog", APPROVE_CONFIRM);
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole("button", { name: "Approve", exact: true }).click();
+
+  // Located by role rather than through the alerts() helper on purpose: that helper reads
+  // role="status", and AlertHost gives only the destructive variant role="alert" so a
+  // failure interrupts the screen reader instead of waiting its turn. The locator is
+  // therefore also the assertion that this one is assertive.
+  await expect(page.locator(".alert-host").getByRole("alert")).toContainText(
+    "Couldn't send the decision",
+  );
+  // And nothing advanced — the plan is still on screen and still pending, so the optimistic
+  // confirmation is contradicted by the app rather than left standing as the last word.
+  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toHaveCount(0);
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
 });
