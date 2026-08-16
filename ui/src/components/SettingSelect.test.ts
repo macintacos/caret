@@ -287,6 +287,33 @@ describe("SettingSelect theme preview (EXC-753)", () => {
     await close(flush);
   });
 
+  // Opening a listbox scrolls, where opening the DropdownMenu this replaced did not:
+  // focusing the trigger scrolls the Settings pane to reveal it, and bits-ui scrolls the
+  // highlighted row into view (SelectContentState watches [isPositioned, highlightedNode]
+  // → scrollHighlightedNodeIntoView). The preview used to be dropped on any such scroll,
+  // which killed it on open — and permanently, since the mirror is only ever written by
+  // onHighlight and that does not fire again for a highlight that never changed. Both
+  // scroll origins are covered because they failed differently: the ancestor one is what
+  // e2e caught, the in-panel one is what a taller slot would hit.
+  for (const [origin, dispatch] of [
+    ["an ancestor of the panel", () => document.dispatchEvent(new Event("scroll"))],
+    ["inside the panel", () => content()?.dispatchEvent(new Event("scroll"))],
+  ] as const) {
+    test(`a scroll from ${origin} keeps the preview up`, async () => {
+      const { flush } = render(SettingSelect, previewProps);
+      flush();
+      await open(flush);
+
+      highlight("caret-dark");
+      await flushUntil(flush, () => card()?.style.getPropertyValue("--accent") === DARK_ACCENT);
+
+      dispatch();
+      flush();
+      expect(card()?.style.getPropertyValue("--accent")).toBe(DARK_ACCENT);
+      await close(flush);
+    });
+  }
+
   test("exactly one preview shows at a time — moving between options swaps it", async () => {
     const { flush } = render(SettingSelect, previewProps);
     flush();

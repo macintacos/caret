@@ -61,6 +61,8 @@
   let cardEl = $state<HTMLElement | null>(null);
   let posTop = $state<number>();
   let posLeft = $state<number>();
+  /** Ticks whenever something may have moved the panel, re-running the placement below. */
+  let anchorMoved = $state(0);
 
   const highlighted = $derived(options.find((o) => o.value === highlightedValue));
   const preview = $derived(highlighted?.preview);
@@ -78,11 +80,12 @@
   // a fast reopen can read the panel at the viewport origin and strand the card in the
   // top-left corner. Deferring to a frame lands the measurement after that microtask, so the
   // card anchors to the panel's settled rect (see themePreviewPlacement.ts). Re-runs when the
-  // highlighted option changes, so each move re-measures on its own frame. Coords stay
-  // undefined until the frame; the card's reveal keyframe fades from opacity 0 so the
-  // pre-measure frame never shows.
+  // highlighted option changes AND when `anchorMoved` ticks, so each move re-measures on its
+  // own frame. Coords stay undefined until the frame; the card's reveal keyframe fades from
+  // opacity 0 so the pre-measure frame never shows.
   $effect(() => {
     if (!preview || !menuEl || !cardEl) return;
+    anchorMoved;
     const menu = menuEl;
     const card = cardEl;
     return placeOnNextFrame(
@@ -101,16 +104,29 @@
     );
   });
 
-  // A fixed card can't track a scrolling / resizing anchor, so back the preview out
-  // rather than let it drift away from the panel.
+  // A fixed card can't track a moving anchor on its own, so anything that can move the
+  // panel re-runs the placement above. bits-ui keeps the panel itself glued to the trigger
+  // (Floating UI's autoUpdate), so re-measuring is all the card needs to stay beside it.
+  //
+  // This RE-PLACES rather than backing the preview out, which is what it used to do. Under
+  // the DropdownMenu that was survivable: nothing scrolled by itself, and the reader's next
+  // pointer move re-fired the row's onpointerenter and brought the preview straight back.
+  // A listbox has neither half. Opening one scrolls — focusing the trigger scrolls the
+  // Settings pane to reveal it, and bits-ui scrolls the highlighted row into view — so the
+  // drop fired on open; and because the mirror below is only ever written by bits-ui's
+  // onHighlight, which does not fire again for a highlight that never changed, the preview
+  // stayed dead for as long as the panel was open. Re-placing removes the divergence
+  // entirely: the mirror is never cleared behind bits-ui's back.
+  //
+  // Capture, because a scroll on an ancestor does not bubble.
   $effect(() => {
     if (!preview) return;
-    const drop = () => (highlightedValue = null);
-    window.addEventListener("scroll", drop, true);
-    window.addEventListener("resize", drop);
+    const reposition = () => anchorMoved++;
+    window.addEventListener("scroll", reposition, true);
+    window.addEventListener("resize", reposition);
     return () => {
-      window.removeEventListener("scroll", drop, true);
-      window.removeEventListener("resize", drop);
+      window.removeEventListener("scroll", reposition, true);
+      window.removeEventListener("resize", reposition);
     };
   });
 
