@@ -88,14 +88,19 @@
      shown by the explicit outline below. */
   :global(.ref-hint) {
     position: absolute;
-    /* Straddles the token's top-right corner instead of sitting beside it, so the dot
-       marks the reference without displacing a character cell. */
-    transform: translate(-50%, -50%);
-    /* A 24px pointer target (WCAG 2.5.8) around a ~6px dot: the padding reads as empty
-       because background-clip stops the fill at the content box. */
+    /* Sits ON the token's top-right corner rather than beside it, so the dot marks the
+       reference without displacing a character cell. Centred on the corner and then
+       pulled back in along both axes: the reference wears a rounded chip, and a dot
+       centred exactly on the corner point reads as detached because the radius curves
+       away beneath it. Biting into the corner instead reads as attached, and leaves
+       only a sliver overhanging the chip. */
+    transform: translate(calc(-50% - 0.2rem), calc(-50% + 0.2rem));
+    /* A 24px pointer target (WCAG 2.5.8) around a ~9.6px dot: the padding is
+       transparent because background-clip stops the fill at the content box, so the
+       target is legal without the affordance being that big. */
     width: 1.5rem;
     height: 1.5rem;
-    padding: 0.55rem;
+    padding: 0.45rem;
     border: 0;
     border-radius: 50%;
     background: var(--attention);
@@ -128,7 +133,7 @@
   :global(.ref-hint)::after {
     content: '';
     position: absolute;
-    inset: 0.55rem;
+    inset: 0.45rem;
     border: 1px solid var(--attention);
     border-radius: 50%;
     opacity: 0;

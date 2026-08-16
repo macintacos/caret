@@ -108,6 +108,30 @@ function spendFrameBudget(page: Page): Promise<void> {
   );
 }
 
+/**
+ * Assert a badge sits ON its token's top-right corner.
+ *
+ * Not an exact-point match, deliberately: the dot is pulled back inside the corner
+ * so it bites into the reference's rounded chip rather than floating off a curve.
+ * What has to hold is that the badge still COVERS the corner and stays centred
+ * within a glyph's reach of it — every failure this guards against (anchored to the
+ * wrong token, to a wrapped path's union box, or to a row that has since moved)
+ * misses by a line height rather than by a few pixels.
+ */
+async function expectOnCorner(page: Page, name: string, selector: string): Promise<void> {
+  const corner = await tokenTopRight(page, selector);
+  expect(corner).not.toBeNull();
+  const box = await page.getByRole("button", { name }).boundingBox();
+  expect(box).not.toBeNull();
+  expect(corner!.x).toBeGreaterThanOrEqual(box!.x);
+  expect(corner!.x).toBeLessThanOrEqual(box!.x + box!.width);
+  expect(corner!.y).toBeGreaterThanOrEqual(box!.y);
+  expect(corner!.y).toBeLessThanOrEqual(box!.y + box!.height);
+  const at = { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 };
+  expect(Math.abs(at.x - corner!.x)).toBeLessThanOrEqual(6);
+  expect(Math.abs(at.y - corner!.y)).toBeLessThanOrEqual(6);
+}
+
 /** Open the plan and wait for the daemon resolve to tag all four references. The
  * badges are measured a frame or two after that, so each test still awaits its own
  * badge — this is the sync point for the resolve, not for the placement. */
@@ -146,20 +170,8 @@ test("each badge sits on its token's top-right corner", async ({ daemon, page })
 
     // The first of each kind in reading order — `src/cache.ts` and `src/lib`, both
     // on line 3. The file's tag is valueless and the directory's carries its kind.
-    const fileCorner = await tokenTopRight(page, '[data-file-ref=""]');
-    const dirCorner = await tokenTopRight(page, '[data-file-ref="directory"]');
-    expect(fileCorner).not.toBeNull();
-    expect(dirCorner).not.toBeNull();
-
-    // A pixel of slack for sub-pixel glyph metrics; anything larger would mean the
-    // badge is anchored to the wrong token or to a union box.
-    const near = (a: number, b: number) => expect(Math.abs(a - b)).toBeLessThanOrEqual(1.5);
-    const fileAt = await badgeCenter(page, FILE_BADGE);
-    near(fileAt.x, fileCorner!.x);
-    near(fileAt.y, fileCorner!.y);
-    const dirAt = await badgeCenter(page, DIR_BADGE);
-    near(dirAt.x, dirCorner!.x);
-    near(dirAt.y, dirCorner!.y);
+    await expectOnCorner(page, FILE_BADGE, '[data-file-ref=""]');
+    await expectOnCorner(page, DIR_BADGE, '[data-file-ref="directory"]');
   } finally {
     await proj.cleanup();
   }
@@ -315,11 +327,7 @@ test("a reference below the fold is badged once the reviewer scrolls to it", asy
     await expect(fileBadge(page)).toHaveCount(1);
     await expect(dirBadge(page)).toHaveCount(1);
     // And it landed on its token rather than anywhere the scroll happened to stop.
-    const corner = await tokenTopRight(page, '[data-file-ref=""]');
-    expect(corner).not.toBeNull();
-    const at = await badgeCenter(page, FILE_BADGE);
-    expect(Math.abs(at.x - corner!.x)).toBeLessThanOrEqual(1.5);
-    expect(Math.abs(at.y - corner!.y)).toBeLessThanOrEqual(1.5);
+    await expectOnCorner(page, FILE_BADGE, '[data-file-ref=""]');
   } finally {
     await proj.cleanup();
   }
@@ -398,11 +406,8 @@ test("a new version re-measures the badges against the document it delivered", a
     // than staying where v1 put it. Retried, because the measure lands a frame or
     // two after the rows repaint.
     await expect(async () => {
-      const corner = await tokenTopRight(page, '[data-file-ref=""]');
-      expect(corner).not.toBeNull();
-      const at = await badgeCenter(page, FILE_BADGE);
-      expect(Math.abs(at.y - corner!.y)).toBeLessThanOrEqual(1.5);
-      expect(at.y).not.toBe(before.y);
+      await expectOnCorner(page, FILE_BADGE, '[data-file-ref=""]');
+      expect((await badgeCenter(page, FILE_BADGE)).y).not.toBe(before.y);
     }).toPass();
     await expect(fileBadge(page)).toHaveCount(1);
     await expect(dirBadge(page)).toHaveCount(1);
@@ -439,13 +444,7 @@ test("the dev fake plan badges both kinds, each on its own token", async ({ daem
       sh?.querySelector(sel)?.scrollIntoView({ block: "center" });
     }, selector);
     await expect(page.getByRole("button", { name })).toHaveCount(1);
-    await expect(async () => {
-      const corner = await tokenTopRight(page, selector);
-      expect(corner).not.toBeNull();
-      const at = await badgeCenter(page, name);
-      expect(Math.abs(at.x - corner!.x)).toBeLessThanOrEqual(1.5);
-      expect(Math.abs(at.y - corner!.y)).toBeLessThanOrEqual(1.5);
-    }).toPass();
+    await expect(() => expectOnCorner(page, name, selector)).toPass();
   };
 
   // The file reference first, then the directory one — which lives several
