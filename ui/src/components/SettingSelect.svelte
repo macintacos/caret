@@ -1,19 +1,24 @@
 <script lang="ts">
-  // A generic setting dropdown (EXC-843): a float-chip trigger showing the current
-  // option's label, opening a bits-ui DropdownMenu radio list that commits and closes
-  // on pick. Unlike a live-preview picker that applies each value as you arrow through
-  // it, this fires onSelect only for the chosen value, then closes — the setting
-  // applies immediately on pick. One component renders every `select` control in the
-  // registry (theme, diff layout, diff markers).
+  // A generic setting dropdown (EXC-843, moved onto the vendored shadcn Select in
+  // EXC-1111): a float-chip trigger showing the current option's label, opening a real
+  // listbox that commits and closes on pick. Unlike a live-preview picker that applies
+  // each value as you arrow through it, this fires onSelect only for the chosen value,
+  // then closes — the setting applies immediately on pick. One component renders every
+  // `select` control in the registry (theme, diff layout, diff markers), which is why the
+  // menu semantics it used to report were wrong three times over.
+  //
+  // Re-picking the value already selected fires nothing: bits-ui defaults
+  // `allowDeselect` to false, so SelectItemState.handleSelect closes without a
+  // value-change. That is a native <select>'s behaviour and it is deliberate — the
+  // DropdownMenu this replaced re-fired onSelect for an unchanged value.
   //
   // Theme preview (EXC-753): when the HIGHLIGHTED option carries a `preview` theme id
   // (only the theme options do), a single abstract ThemePreviewCard floats beside the
-  // open menu, tinted by that option BEFORE it is selected — a palette seen on Caret's
-  // own chrome. It tracks the highlight (pointer or keyboard), portals to document.body
-  // to escape the menu's overflow, and clamps into the viewport. The card paints that
-  // theme onto itself, so hovering never retints the real app.
-  import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
+  // open panel, tinted by that option BEFORE it is selected — a palette seen on Caret's
+  // own chrome. It portals to document.body to escape the panel's overflow, and clamps
+  // into the viewport. The card paints that theme onto itself, so highlighting never
+  // retints the real app.
+  import * as Select from "$lib/components/ui/select/index.js";
   import type { ThemeId } from "$lib/theme.ts";
   import { placeOnNextFrame } from "$lib/themePreviewPlacement.ts";
   import ThemePreviewCard from "@/components/ThemePreviewCard.svelte";
@@ -24,16 +29,16 @@
     /** Optional palette preview — CSS colors shown as dots after the label (theme). */
     swatch?: readonly string[];
     /** Optional theme id — when present, highlighting this option floats a
-     * ThemePreviewCard painted in that theme beside the menu (EXC-753). */
+     * ThemePreviewCard painted in that theme beside the panel (EXC-753). */
     preview?: ThemeId;
   }
 
   interface Props {
-    /** The current value — the selected radio and the trigger label. */
+    /** The current value — the selected option and the trigger label. */
     value: string;
     /** The choices, in display order. */
     options: readonly Option[];
-    /** Apply the picked value. bits-ui commits and closes the menu on select. */
+    /** Apply the picked value. bits-ui commits and closes the panel on select. */
     onSelect: (value: string) => void;
     /** Accessible name for the trigger (the field's label). */
     ariaLabel: string;
@@ -45,9 +50,11 @@
   const triggerLabel = $derived(options.find((o) => o.value === value)?.label ?? value);
 
   // --- Theme preview (EXC-753) --------------------------------------------------
-  // The open menu and the highlighted option: `highlightedValue` is set on an item's
-  // pointer-enter / focus (covering mouse and keyboard roving) and cleared when the
-  // menu closes, so a single preview card can track the highlight.
+  // The open panel and the highlighted option. bits-ui never focuses a row — it drives
+  // `aria-activedescendant` — so the highlight is mirrored through Select.Item's own
+  // onHighlight / onUnhighlight, which fire for pointer and keyboard movement alike.
+  // A listbox always has an active option, so opening already highlights the selected
+  // row and its preview appears with the panel.
   let menuOpen = $state(false);
   let highlightedValue = $state<string | null>(null);
   let menuEl = $state<HTMLElement | null>(null);
@@ -65,12 +72,12 @@
   const CARD_GAP = 10;
   const VIEWPORT_MARGIN = 8;
 
-  // Position the card beside the menu, measuring on the NEXT animation frame rather than
-  // synchronously. The menu is a bits-ui popover positioned ASYNCHRONOUSLY — Floating UI
+  // Position the card beside the panel, measuring on the NEXT animation frame rather than
+  // synchronously. The panel is a bits-ui popover positioned ASYNCHRONOUSLY — Floating UI
   // applies its transform a microtask after mount, so a synchronous measurement taken during
-  // a fast reopen can read the menu at the viewport origin and strand the card in the
+  // a fast reopen can read the panel at the viewport origin and strand the card in the
   // top-left corner. Deferring to a frame lands the measurement after that microtask, so the
-  // card anchors to the menu's settled rect (see themePreviewPlacement.ts). Re-runs when the
+  // card anchors to the panel's settled rect (see themePreviewPlacement.ts). Re-runs when the
   // highlighted option changes, so each move re-measures on its own frame. Coords stay
   // undefined until the frame; the card's reveal keyframe fades from opacity 0 so the
   // pre-measure frame never shows.
@@ -95,7 +102,7 @@
   });
 
   // A fixed card can't track a scrolling / resizing anchor, so back the preview out
-  // rather than let it drift away from the menu.
+  // rather than let it drift away from the panel.
   $effect(() => {
     if (!preview) return;
     const drop = () => (highlightedValue = null);
@@ -107,7 +114,7 @@
     };
   });
 
-  // Portal the card to document.body so the menu's own overflow (Content is
+  // Portal the card to document.body so the panel's own overflow (Content is
   // overflow-y-auto) can't clip it. Svelte removes the node on unmount.
   function portal(node: HTMLElement) {
     document.body.appendChild(node);
@@ -119,82 +126,45 @@
   }
 </script>
 
-<DropdownMenu.Root bind:open={menuOpen}>
-  <DropdownMenu.Trigger>
-    {#snippet child({ props })}
-      <button {...props} type="button" class="trigger float-chip" aria-label={ariaLabel}>
-        <span class="trigger-label">{triggerLabel}</span>
-        <!-- Vendored-icon convention (doc/agents/icon-rules.md): inline the Lucide
-             chevron-down glyph rather than import @lucide/svelte. -->
-        <svg
-          class="chevron"
-          xmlns="http://www.w3.org/2000/svg"
-          width="15"
-          height="15"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="m6 9 6 6 6-6" />
-        </svg>
-      </button>
-    {/snippet}
-  </DropdownMenu.Trigger>
+<Select.Root type="single" {value} onValueChange={(v) => onSelect(v)} bind:open={menuOpen}>
+  <Select.Trigger class="setting-trigger float-chip" aria-label={ariaLabel}>
+    <span class="trigger-label">{triggerLabel}</span>
+  </Select.Trigger>
 
-  <DropdownMenu.Content
-    bind:ref={menuEl}
-    align="end"
-    class="setting-menu"
-    style="min-width: var(--bits-dropdown-menu-anchor-width)"
-  >
-    <DropdownMenuPrimitive.RadioGroup {value} onValueChange={(v) => onSelect(v)}>
-      {#each options as option (option.value)}
-        <DropdownMenuPrimitive.RadioItem
-          value={option.value}
-          data-setting-option={option.value}
-          class="setting-item"
-          onpointerenter={() => (highlightedValue = option.value)}
-          onfocus={() => (highlightedValue = option.value)}
-        >
-          {#snippet children({ checked })}
-            <span class="check" aria-hidden="true">
-              {#if checked}
-                <!-- Inline Lucide check glyph (vendored-icon convention). -->
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="15"
-                  height="15"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.5"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M20 6 9 17l-5-5" />
-                </svg>
-              {/if}
+  <Select.Content bind:ref={menuEl} align="end" class="setting-menu">
+    {#each options as option (option.value)}
+      <!-- No `label` prop: the vendored select-item.svelte destructures it out and never
+           forwards it to the primitive, so it would set nothing. bits-ui's typeahead
+           matches each row's trimmed textContent anyway (DOMTypeahead), which the
+           `.name` span below is — the swatch dots contribute no text. -->
+      <Select.Item
+        value={option.value}
+        data-setting-option={option.value}
+        class="setting-item"
+        onHighlight={() => (highlightedValue = option.value)}
+        onUnhighlight={() => {
+          // Guarded: bits-ui fires the arriving row's onHighlight and the leaving
+          // row's onUnhighlight in an order this component does not control, so an
+          // unguarded clear can null out a highlight that was just set.
+          if (highlightedValue === option.value) highlightedValue = null;
+        }}
+      >
+        {#snippet children()}
+          <span class="name">{option.label}</span>
+          {#if option.swatch}
+            <span class="chips" aria-hidden="true">
+              {#each option.swatch as color, i (i)}
+                <span class="chip-dot" style="background: {color}"></span>
+              {/each}
             </span>
-            <span class="name">{option.label}</span>
-            {#if option.swatch}
-              <span class="chips" aria-hidden="true">
-                {#each option.swatch as color, i (i)}
-                  <span class="chip-dot" style="background: {color}"></span>
-                {/each}
-              </span>
-            {/if}
-          {/snippet}
-        </DropdownMenuPrimitive.RadioItem>
-      {/each}
-    </DropdownMenuPrimitive.RadioGroup>
-  </DropdownMenu.Content>
-</DropdownMenu.Root>
+          {/if}
+        {/snippet}
+      </Select.Item>
+    {/each}
+  </Select.Content>
+</Select.Root>
 
-<!-- The single hover preview (EXC-753): portaled beside the menu, tinted by the
+<!-- The single highlight preview (EXC-753): portaled beside the panel, tinted by the
      highlighted theme option. Only theme options carry `preview`, so other selects
      render nothing here. -->
 {#if menuOpen && preview}
@@ -212,8 +182,8 @@
 <style>
   /* The floating preview anchor (EXC-753): portaled to document.body, so it is styled
      globally. Fixed coords come from the inline styles the positioning effect sets; it
-     rides above the dropdown's portal layer (z-50) and is non-interactive — a preview,
-     not a target, so it never steals a hover from the menu underneath. */
+     rides above the select's portal layer (z-50) and is non-interactive — a preview,
+     not a target, so it never steals a hover from the panel underneath. */
   :global(.theme-preview-anchor) {
     position: fixed;
     top: 0;
@@ -222,56 +192,51 @@
     pointer-events: none;
   }
 
-  /* Trigger: a compact select-like control wearing the topbar's floating chip (soft
-     fill, no hard border, ink-soft label brightening on hover / while open — the
-     .float-chip atom supplies the fill + ink treatment). Sizes to its content and
-     sits flush-right in the field row. */
-  .trigger {
-    display: inline-flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.4rem;
-    padding: 0.4rem 0.6rem;
-    border-radius: var(--radius);
-    font-size: var(--text-sm);
-    text-align: left;
+  /* Trigger: the vendored Select.Trigger wearing the topbar's floating chip (soft fill,
+     no hard border, ink-soft label brightening on hover / while open — the .float-chip
+     atom supplies the fill + ink treatment). Global rather than scoped because Svelte
+     does not scope-hash a `class` passed to a COMPONENT, which is also why the panel
+     rules below are global. The vendored trigger already carries this control's gap,
+     radius, padding and text size; the only thing it has that caret's language forbids
+     is the outline border (doc/agents/shadcn-rules.md § The caret surface language —
+     the chip fill is the affordance). */
+  :global(.setting-trigger) {
+    border: none;
   }
-  .trigger-label {
+  :global(.setting-trigger .trigger-label) {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .chevron {
-    flex: none;
+  /* Mac disclosure affordance: the vendored chevron points RIGHT while collapsed and
+     rotates DOWN when the panel opens (reduced-motion is caught by the global guard in
+     app.css). `color: inherit` takes it off the vendored --muted-foreground so it keeps
+     riding the label's ink and brightens with it under .float-chip's hover rule. */
+  :global(.setting-trigger [data-icon="chevron-down"]) {
+    color: inherit;
     opacity: 0.6;
-    /* Mac disclosure affordance: the chevron points RIGHT while collapsed and
-       rotates DOWN when the menu opens (reduced-motion is caught by the global
-       guard in app.css). */
     transform: rotate(-90deg);
     transition: transform var(--dur-micro) var(--ease-out);
   }
-  .trigger[aria-expanded="true"] .chevron {
+  :global(.setting-trigger[aria-expanded="true"] [data-icon="chevron-down"]) {
     transform: rotate(0deg);
   }
 
-  /* The menu carries the scope hash into the portal via these classes. Rows lay out
-     as [check] [label]; the highlight (hover / keyboard focus) lifts to the topbar's
-     --chip-hover so it matches every other neutral control, while the ACTIVE row
-     carries an amber wash — the same "amber marks the selection" language the diff
-     view and theme picker use. Highlight is declared after so it wins when a row is
-     both. */
-  :global(.setting-menu .setting-item) {
-    display: flex;
-    align-items: center;
-    gap: 0.55rem;
-    padding: 0.4rem 0.55rem;
-    border-radius: var(--radius);
-    font-size: var(--text-sm);
-    color: var(--ink-soft);
-    cursor: pointer;
-    outline: none;
+  /* The panel carries the scope hash into the portal via these classes. Rows lay out as
+     [label] [swatch] with the vendored check indicator in the trailing column the item's
+     own `pr-8` reserves. The highlight (pointer or keyboard roving) lifts to the topbar's
+     --chip-hover so it matches every other neutral control, while the SELECTED row
+     carries an amber wash — the same "amber marks the selection" language the diff view
+     and theme picker use. Highlight is declared after so it wins when a row is both. */
+  :global(.setting-menu) {
+    /* select-content ships no padding of its own, where dropdown-menu-content ships p-1 —
+       without this the rows sit flush against the panel edge. */
+    padding: 0.25rem;
   }
-  :global(.setting-menu .setting-item[aria-checked="true"]) {
+  :global(.setting-menu .setting-item) {
+    color: var(--ink-soft);
+  }
+  :global(.setting-menu .setting-item[data-selected]) {
     background: var(--accent-wash);
     color: var(--ink);
   }
@@ -279,19 +244,13 @@
     background: var(--chip-hover);
     color: var(--ink);
   }
-  :global(.setting-menu .check) {
-    flex: none;
-    display: inline-flex;
-    width: 0.95rem;
-    color: var(--accent);
-  }
   :global(.setting-menu .name) {
     flex: 1 1 auto;
     min-width: 0;
     white-space: nowrap;
   }
   /* The palette preview: color dots, right-aligned. A hairline inset ring keeps a dot
-     visible when its color is near the menu surface (e.g. a dark palette's own
+     visible when its color is near the panel surface (e.g. a dark palette's own
      surfaces, which the first two dots are). */
   :global(.setting-menu .chips) {
     flex: none;
