@@ -655,13 +655,11 @@
   {:else if preview.kind === "error"}
     <div class="fp-message" data-preview-state="error">Couldn't load this file.</div>
   {:else}
-    <!-- The spinner is decorative: the "Loading…" beside it is already the
-         accessible message, and Spinner's own role="status" + aria-label would
-         otherwise say it a second time. Nothing here announces the wait — the
-         placeholder is inserted already populated, so a live region on it is
-         narrated unreliably (a region announces on content change); the header's
-         line range is the panel's live region, and it speaks on arrival. `size`
-         rather than a `size-*` class because Icon writes its dimensions inline. -->
+    <!-- Decorative: the "Loading…" beside it is the accessible message, so the
+         spinner's default role="status" + aria-label would say it twice. Nothing
+         announces the wait; spinner.svelte records why a region cannot here —
+         and `.fp-range` cannot either on a first open, being `{#if meta}`-mounted
+         and so inserted already populated itself. -->
     <div class="fp-message" data-preview-state="loading">
       <Spinner size={12} aria-hidden="true" />Loading…
     </div>

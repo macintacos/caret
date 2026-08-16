@@ -276,13 +276,9 @@
   {:else if view.kind === "error"}
     <div class="ft-message" data-folder-state="error">Couldn't read this folder.</div>
   {:else}
-    <!-- The spinner is decorative: the "Loading…" beside it is already the
-         accessible message, and Spinner's own role="status" + aria-label would
-         otherwise say it a second time. Nothing here announces the wait — the
-         placeholder is inserted already populated, so a live region on it is
-         narrated unreliably (a region announces on content change), and the
-         card's arrival is itself the event the reader triggered. `size` rather
-         than a `size-*` class because Icon writes its dimensions inline. -->
+    <!-- Decorative: the "Loading…" beside it is the accessible message, so the
+         spinner's default role="status" + aria-label would say it twice. Nothing
+         announces the wait; spinner.svelte records why a region cannot here. -->
     <div class="ft-message" data-folder-state="loading">
       <Spinner size={12} aria-hidden="true" />Loading…
     </div>

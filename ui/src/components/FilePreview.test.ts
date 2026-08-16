@@ -856,9 +856,10 @@ describe("FilePreview settling", () => {
     // aria-hidden because the "Loading…" beside it is already the accessible
     // message — a Spinner left at its default role="status" + aria-label
     // ="Loading" would put the word into the accessibility tree twice on one
-    // line. Asserting through data-slot is also what proves the reduced-motion
-    // criterion: that attribute is the selector styles/base.css's global
-    // kill-switch clamps.
+    // line. data-slot is the vendored tree's own assertion handle
+    // (doc/agents/shadcn-rules.md); the reduced-motion clamp is a media query
+    // happy-dom cannot evaluate, so it is verified in the browser rather than
+    // here.
     const served = serveGated(20, 300);
     cap = served;
     served.gateNext();
@@ -868,7 +869,7 @@ describe("FilePreview settling", () => {
     const placeholder = target.querySelector('[data-preview-state="loading"]');
     expect(placeholder?.textContent).toContain("Loading");
     const spinner = placeholder?.querySelector('[data-slot="spinner"]');
-    expect(spinner).not.toBeNull();
+    expect(spinner).toBeTruthy();
     expect(spinner?.getAttribute("aria-hidden")).toBe("true");
 
     served.release();
