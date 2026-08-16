@@ -1,10 +1,28 @@
-// Shared locators for the review chrome — the surfaces around the plan that
-// several specs address: the comment navigator, the status strip's tally, the
-// discard confirmation, and the breadcrumbs bar. Each is queried by the role and
-// accessible name the component already publishes, so a styling refactor cannot
-// red a spec (typescript-rules.md § Shared-helper policy: one idiom, one home).
+// Shared handles on the review chrome — the surfaces around the plan that several
+// specs address: the comment navigator, the status strip's tally, the discard
+// confirmation, the breadcrumbs bar, and the motion vocabulary they all animate on.
+// Each locator is queried by the role and accessible name the component already
+// publishes, so a styling refactor cannot red a spec (typescript-rules.md §
+// Shared-helper policy: one idiom, one home).
 
 import type { Locator, Page } from "@playwright/test";
+
+/** A motion token as the engine resolves it, in the same units `getComputedStyle` and
+ * `AnimationEvent.elapsedTime` report (seconds). Asked of the engine rather than parsed
+ * out of the stylesheet, so a spec asserting a duration is asserting against the token
+ * the component actually references and not against a number retyped beside it — which
+ * is the difference between a retune moving one value in `tokens.css` and a retune
+ * hand-editing every spec that watched a surface move. */
+export async function motionToken(page: Page, token: string): Promise<number> {
+  return page.evaluate((name) => {
+    const probe = document.createElement("span");
+    probe.style.setProperty("animation-duration", `var(${name})`);
+    document.body.append(probe);
+    const value = getComputedStyle(probe).animationDuration;
+    probe.remove();
+    return Number.parseFloat(value); // seconds
+  }, token);
+}
 
 /** The comment navigator panel. `CommentNavigator.svelte` labels the aside with its
  * header title, which is "Comments" plus a version range while comparing — so the

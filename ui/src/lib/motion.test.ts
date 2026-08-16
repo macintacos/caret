@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import { readAppCss, rootBlock } from "$lib/appCss.ts";
@@ -50,48 +51,19 @@ const modalSources: Record<string, string> = Object.fromEntries(
   ),
 );
 
-// Every light-DOM chrome component whose CSS carries a one-shot reveal or a
-// hover/state transition, loaded once for the migration-coverage suite below.
+// The chrome: every component in ui/src/components, plus the app root, READ OFF DISK
+// rather than enumerated. A hand-kept list is a list that drifts — the one this
+// replaced had missed eight components, PlanSearch among them, so `search-collapse`
+// (one of the exit tier's six sites) carried no coverage at all. The directory is the
+// contract instead, and a component with no motion costs one trivially-green test,
+// which is the cheaper mistake. It also means the reduced-motion assertion below
+// covers the whole chrome rather than the part someone remembered.
 const chromeComponents = [
   "App.svelte",
-  "components/RequestChangesDialog.svelte",
-  "components/EmptyState.svelte",
-  "components/TopBar.svelte",
-  "components/ReviewSwitcher.svelte",
-  // The plan's heading-navigation chrome: it inherited this list's slot from the
-  // contents rail EXC-949 deleted, so the surface keeps its motion-token coverage.
-  "components/PlanBreadcrumbs.svelte",
-  // The other half of that chrome (EXC-1107). Its panel is PORTALLED rather than
-  // light-DOM, which changes nothing this list checks: the tokens are the same
-  // vocabulary, and the reduced-motion assertion is if anything stronger there — the
-  // global rule reaches a portalled surface through its [data-slot] anchor, so a
-  // per-component block here would be dead CSS in the one place it looks most needed.
-  "components/PlanToc.svelte",
-  "components/CommentNavigator.svelte",
-  "components/NotifyBell.svelte",
-  "components/VersionBadge.svelte",
-  "components/SourceAnnotationCard.svelte",
-  "components/DiffPlanView.svelte",
-  // The plan surface's reference-teaching badge (EXC-1061). Its ping is ambient and
-  // carved out below, so what listing it buys is the OTHER assertion: the badge's
-  // whole reduced-motion story is that the global guard reaches it, which is only
-  // true while it grows no block of its own.
-  "components/RefHintBadge.svelte",
-  "components/FileDrawer.svelte",
-  "components/FilePreview.svelte",
-  "components/VersionComparePicker.svelte",
-  "components/UnsentCommentsDialog.svelte",
-  "components/AlertHost.svelte",
-  "components/ThemePreviewCard.svelte",
-  // The settings-redesign surfaces (EXC-837 tree), pulled under the same coverage so
-  // their one-shot hover/reveal motion stays on the shared --dur-* tokens and none
-  // grows a per-component reduced-motion block the global rule already subsumes.
-  "components/SettingsDialog.svelte",
-  "components/SettingSelect.svelte",
-  "components/NotificationsPane.svelte",
-  "components/AdvancedPane.svelte",
-  "components/ShortcutsHelp.svelte",
-  "components/KeyboardHelpButton.svelte",
+  ...(await readdir(join(uiDir, "components")))
+    .filter((name) => name.endsWith(".svelte"))
+    .sort()
+    .map((name) => `components/${name}`),
 ];
 const chromeSources: Record<string, string> = Object.fromEntries(
   await Promise.all(
@@ -103,6 +75,16 @@ const chromeSources: Record<string, string> = Object.fromEntries(
 // suite below asserts the choreography is UNLAYERED, which the reconstituted sheet cannot
 // show. See that block's own note.
 const modalBridgeCss = await Bun.file(join(uiDir, "styles/shadcn-bridge.css")).text();
+
+/** A component's stylesheet — its `<style>` block, or "" when it has none. Both
+ * chrome scans below are claims about CSS, and a `.svelte` file's SCRIPT can hold
+ * CSS-shaped text that is neither: `FolderTree.svelte` injects a reduced-motion block,
+ * as a template string, into the `@pierre/diffs` SHADOW root — a tree the global
+ * `#app` / `[data-slot]` guard provably cannot reach, which is what makes that block
+ * correct rather than redundant. Scanning whole files would score it as a violation. */
+function styleBlock(source: string): string {
+  return source.match(/<style[^>]*>([\s\S]*)<\/style>/)?.[1] ?? "";
+}
 
 // Parse a ms/s duration value to milliseconds. Returns NaN for non-time values.
 function toMs(value: string): number {
@@ -413,10 +395,11 @@ describe("the modal surfaces share one choreography, written in the shadcn bridg
 });
 
 describe("chrome motion declarations draw from the tokens, not bare literals", () => {
-  // Every light-DOM chrome component whose CSS carries a one-shot reveal or a
-  // hover/state transition. Each is scanned for `transition:`/`animation:`
-  // declarations; the one-shot ones must time off var(--dur-*) with no bare
-  // seconds/ms literal, so the chrome harmonizes on the shared vocabulary.
+  // The whole chrome, motion or not (see chromeComponents above). Each component's
+  // `<style>` is scanned for `transition:`/`animation:` declarations; the one-shot ones
+  // must time off var(--dur-*) with no bare seconds/ms literal, so the chrome
+  // harmonizes on the shared vocabulary. A component with neither declares nothing to
+  // scan and passes on an empty loop, which is the point of scanning the directory.
   const chrome = chromeComponents;
 
   // The ambient carve-out: these animations run on their own bespoke durations and
@@ -434,7 +417,7 @@ describe("chrome motion declarations draw from the tokens, not bare literals", (
 
   for (const path of chrome) {
     test(`${path} times every one-shot motion off var(--dur-*)`, () => {
-      for (const decl of motionDecls(chromeSources[path] ?? "")) {
+      for (const decl of motionDecls(styleBlock(chromeSources[path] ?? ""))) {
         if (ambient.test(decl)) continue; // ambient carve-out keeps its literal
         // A one-shot reveal/transition references the duration token and leaves
         // no bare seconds/ms literal behind.
@@ -469,7 +452,7 @@ describe("chrome motion declarations draw from the tokens, not bare literals", (
     const withoutComments = (src: string) =>
       src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
     for (const path of chrome) {
-      const css = withoutComments(chromeSources[path] ?? "");
+      const css = withoutComments(styleBlock(chromeSources[path] ?? ""));
       expect(css).not.toMatch(/@media\s*\(prefers-reduced-motion/);
     }
   });

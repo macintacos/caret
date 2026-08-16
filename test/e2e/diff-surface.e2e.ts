@@ -14,7 +14,7 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { discardConfirm, unsentRows } from "@test/e2e/support/chrome.ts";
+import { discardConfirm, motionToken, unsentRows } from "@test/e2e/support/chrome.ts";
 import { makeProject } from "@test/e2e/support/file-refs.ts";
 import {
   expect,
@@ -1858,8 +1858,8 @@ test("the composer reveal and the card swap share one opacity-only token transit
   await expect(composer).toBeVisible();
   const composerMotion = await composer.evaluate(motionOf);
   expect(composerMotion.name).toMatch(/reveal$/);
-  // --dur-micro is 120ms.
-  expect(composerMotion.duration).toBe("0.12s");
+  // The micro tier, read off the token rather than retyped as seconds.
+  expect(composerMotion.duration).toBe(`${await motionToken(page, "--dur-micro")}s`);
   // Opacity only — no scale bounce, no translate.
   expect(composerMotion.transform).toBe("none");
 
