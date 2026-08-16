@@ -8,6 +8,12 @@
   // without a daemon; the pure formatters live in lib/diagnostics.ts. Copy is
   // delegated up via onCopyDiagnostic — App writes the clipboard and fires the one
   // shared success alert (EXC-850), so this pane never stands up a second toast.
+  import {
+    Field,
+    FieldDescription,
+    FieldGroup,
+    FieldTitle,
+  } from "$lib/components/ui/field/index.js";
   import { getDiagnostics, getHealth } from "$lib/api.ts";
   import { configToToml, formatUptime, readDaemonPort } from "$lib/diagnostics.ts";
   import type { DaemonDiagnostics, HealthIdentity } from "@core/lib/types";
@@ -86,62 +92,76 @@
   ]);
 </script>
 
+<!-- The pane composes the shadcn field parts (EXC-1112). A block DISPLAYS a value and
+     labels no control, so it takes FieldTitle (a <div>), not FieldLabel. Each Field
+     renders role="group"; naming it after its own title keeps those groups structural
+     rather than four nameless boundaries. The plain wrapper below is deliberate — it
+     is the scoped element the styles anchor on, without which a class handed to a
+     component could only be reached by a top-level :global rule, i.e. app-wide. -->
 <div class="advanced" data-advanced-pane>
-  {#each blocks as block (block.key)}
-    <div class="diag-section" data-diag={block.key}>
-      <div class="diag-head">
-        <span class="diag-label">{block.label}</span>
-        {#if block.available}
-          <button
-            class="diag-copy"
-            aria-label={`Copy ${block.label} to clipboard`}
-            onclick={() => onCopyDiagnostic(block.text)}
-          >
-            Copy
-          </button>
-        {/if}
-      </div>
+  <FieldGroup class="diag-list">
+    {#each blocks as block (block.key)}
+      <Field class="diag-section" data-diag={block.key} aria-labelledby="diag-{block.key}-label">
+        <div class="diag-head">
+          <FieldTitle id="diag-{block.key}-label" class="diag-label">{block.label}</FieldTitle>
+          {#if block.available}
+            <button
+              class="diag-copy"
+              aria-label={`Copy ${block.label} to clipboard`}
+              onclick={() => onCopyDiagnostic(block.text)}
+            >
+              Copy
+            </button>
+          {/if}
+        </div>
 
-      {#if block.key === "config" && block.available}
-        <!-- The config file's path on disk, above its block (mockup). -->
-        <p class="diag-path">{configPath}</p>
-      {/if}
-
-      <!-- The sunk-paper block DISPLAYS the value — a presentational element that
-           stays in the accessibility tree, so a screen reader reads the value like
-           any text. The labelled Copy button above is the keyboard / AT control;
-           the block's own click is a mouse-only convenience for the "click a block
-           to copy" affordance (EXC-850), so its absent key handler is deliberate. -->
-      <!-- svelte-ignore a11y_click_events_have_key_events -->
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div
-        class="diag-block"
-        class:is-config={block.key === "config"}
-        class:is-unavailable={!block.available}
-        onclick={() => block.available && onCopyDiagnostic(block.text)}
-      >
-        {#if block.key === "daemon"}
-          <span class="diag-dot" data-live={block.available}></span>
+        {#if block.key === "config" && block.available}
+          <!-- The config file's path on disk, above its block (mockup). -->
+          <FieldDescription class="diag-path">{configPath}</FieldDescription>
         {/if}
-        <code class="diag-text">{block.available ? block.text : "Unavailable"}</code>
-      </div>
-    </div>
-  {/each}
+
+        <!-- The sunk-paper block DISPLAYS the value — a presentational element that
+             stays in the accessibility tree, so a screen reader reads the value like
+             any text. The labelled Copy button above is the keyboard / AT control;
+             the block's own click is a mouse-only convenience for the "click a block
+             to copy" affordance (EXC-850), so its absent key handler is deliberate. -->
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="diag-block"
+          class:is-config={block.key === "config"}
+          class:is-unavailable={!block.available}
+          onclick={() => block.available && onCopyDiagnostic(block.text)}
+        >
+          {#if block.key === "daemon"}
+            <span class="diag-dot" data-live={block.available}></span>
+          {/if}
+          <code class="diag-text">{block.available ? block.text : "Unavailable"}</code>
+        </div>
+      </Field>
+    {/each}
+  </FieldGroup>
 </div>
 
 <style>
   .advanced {
     display: flex;
     flex-direction: column;
+  }
+  /* The field parts carry shadcn's roomier default gaps, so the pane's own rhythm is
+     re-asserted here rather than in the vendored tree (shadcn-rules.md § Adding a
+     component that collides with the vendored tree — a re-sync reverts wholesale).
+     Svelte does not scope-hash a class handed to a COMPONENT, so every selector that
+     now sits on one is written :global — anchored on `.advanced`, which is a plain
+     element and so still carries the scope hash. */
+  .advanced :global(.diag-list) {
     gap: 1.15rem;
   }
 
   /* One diagnostics section: an uppercase label row (label + Copy) above its sunk
      block. The label mirrors the SettingsDialog section-head vocabulary so an
      Advanced label reads the same as the Appearance pane's "Diff view" header. */
-  .diag-section {
-    display: flex;
-    flex-direction: column;
+  .advanced :global(.diag-section) {
     gap: 0.4rem;
   }
   .diag-head {
@@ -150,7 +170,7 @@
     justify-content: space-between;
     min-height: 1.25rem;
   }
-  .diag-label {
+  .advanced :global(.diag-label) {
     font-size: var(--text-xs);
     font-weight: 600;
     text-transform: uppercase;
@@ -181,7 +201,7 @@
   }
 
   /* The config file path, above its block. */
-  .diag-path {
+  .advanced :global(.diag-path) {
     margin: 0;
     font-family: var(--font-mono);
     font-size: var(--text-2xs);

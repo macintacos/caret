@@ -36,7 +36,7 @@ const baseProps = {
   value: "split",
   options: OPTIONS,
   onSelect: () => {},
-  ariaLabel: "Layout",
+  id: "setting-layout",
 };
 
 const trigger = () => document.body.querySelector<HTMLElement>("[data-slot='select-trigger']");
@@ -69,10 +69,17 @@ async function close(flush: () => void): Promise<void> {
 }
 
 describe("SettingSelect trigger", () => {
-  test("shows the current option's label and carries the aria-label", () => {
+  // EXC-1112: the trigger takes the id the row's `<label for>` points at, so its
+  // accessible name comes from that visible label rather than a parallel aria-label.
+  // The naming contract therefore belongs to the COMPOSING component — mounted bare,
+  // as here, the trigger falls back to being named by its own contents. That is
+  // expected; don't "fix" it by re-adding an aria-label. SettingsDialog.test.ts and
+  // ThemeSection.test.ts pin the wiring, settings.e2e.ts pins the resulting names.
+  test("shows the current option's label and carries the label-target id", () => {
     const { flush } = render(SettingSelect, { ...baseProps, value: "unified" });
     flush();
-    expect(trigger()?.getAttribute("aria-label")).toBe("Layout");
+    expect(trigger()?.id).toBe("setting-layout");
+    expect(trigger()?.hasAttribute("aria-label")).toBe(false);
     expect(trigger()?.textContent).toContain("Unified");
   });
 

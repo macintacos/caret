@@ -38,10 +38,15 @@
     options: readonly Option[];
     /** Apply the picked value. bits-ui commits and closes the panel on select. */
     onSelect: (value: string) => void;
-    /** Accessible name for the trigger (the field's label). */
-    ariaLabel: string;
+    /** The trigger's DOM id — the row's `<label for>` target (EXC-1112). The trigger
+     * is a `<button>`, a labelable element, so that label supplies its accessible name
+     * natively and clicking the row's text reaches it. Passed to the bits-ui Trigger
+     * rather than stamped on the rendered button: bits-ui keeps the trigger id in its
+     * own state and looks the node back up by it (focus restore, the panel's anchor),
+     * so overriding only the attribute would break both. */
+    id: string;
   }
-  let { value, options, onSelect, ariaLabel }: Props = $props();
+  let { value, options, onSelect, id }: Props = $props();
 
   // The trigger shows the current option's label; fall back to the raw value so an
   // unknown value stays visible rather than blanking.
@@ -134,7 +139,7 @@
 </script>
 
 <Select.Root type="single" {value} onValueChange={(v) => onSelect(v)} bind:open={menuOpen}>
-  <Select.Trigger class="setting-trigger float-chip" aria-label={ariaLabel}>
+  <Select.Trigger {id} class="setting-trigger float-chip">
     <span class="trigger-label">{triggerLabel}</span>
   </Select.Trigger>
 

@@ -56,6 +56,31 @@ describe("AdvancedPane render", () => {
       "true",
     );
   });
+
+  // EXC-1112: the blocks title rather than label — they name no control — and each
+  // field is named by its own title rather than left a nameless grouping boundary.
+  test("each diagnostics block is a named field, titled rather than labelled", async () => {
+    const { target, flush } = render(AdvancedPane, {
+      onCopyDiagnostic: () => {},
+      loadHealth: () => Promise.resolve(health),
+      loadDiagnostics: () => Promise.resolve(diagnostics),
+    });
+
+    await flushUntil(flush, () => textOf(target, "version").includes("0.7.0"));
+
+    expect(target.querySelector("[data-advanced-pane] [data-slot='field-group']") !== null).toBe(
+      true,
+    );
+    const fields = [...target.querySelectorAll("[data-slot='field']")];
+    expect(fields.length).toBe(target.querySelectorAll("[data-diag]").length);
+    for (const field of fields) {
+      const title = field.querySelector(".diag-label");
+      expect(title?.tagName).toBe("DIV");
+      const titleId = title?.id ?? "";
+      expect(titleId).not.toBe("");
+      expect(field.getAttribute("aria-labelledby")).toBe(titleId);
+    }
+  });
 });
 
 describe("AdvancedPane per-block degrade", () => {

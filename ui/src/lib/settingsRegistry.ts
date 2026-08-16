@@ -89,6 +89,28 @@ export function stagedField<V>(def: Omit<StagedField<V>, "kind">): StagedField {
   return { kind: "staged", ...def } as StagedField;
 }
 
+// The label↔control wiring for a settings row (EXC-1112). Every pane that renders a
+// row spells these two ids, and the invariant binding them — a row's `<label for>` is
+// its control's `id` — is what supplies the control its accessible name. Spelled
+// inline at each site, a single typo would leave that control silently unnamed with
+// nothing to fail on it, so the convention lives here beside the field shape it keys
+// off.
+
+/** A setting control's DOM id — what its row's `<label for>` points at. */
+export const settingControlId = (key: string): string => `setting-${key}`;
+
+/** A setting row's `<label>` id — the target for a composite control's
+ * `aria-labelledby`, and what names the row's own group. */
+export const settingLabelId = (key: string): string => `${settingControlId(key)}-label`;
+
+/** What a row's `<label for>` may point at, or `undefined` when nothing may. `for`
+ * binds only to a LABELABLE element, and a segmented control renders a
+ * `<div role="group">`, which is not one — so that row names its control through
+ * `aria-labelledby` and leaves `for` off entirely, rather than pointing it at an
+ * element that cannot honour it. */
+export const settingLabelTarget = (field: StagedField): string | undefined =>
+  field.control.kind === "segmented" ? undefined : settingControlId(field.key);
+
 /** An entry's searchable text: its label plus its description, lowercased. */
 function searchText(entry: SettingEntry): string {
   return `${entry.label} ${entry.description}`.toLowerCase();

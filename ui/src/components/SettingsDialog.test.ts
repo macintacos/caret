@@ -5,7 +5,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { flushUntil, render } from "@ui/test-mount.ts";
 import SettingsDialog from "@/components/SettingsDialog.svelte";
 import { writeDiffStyle } from "$lib/diffStylePref.ts";
-import { SETTINGS_REGISTRY, type StagedField, THEME_FIELD } from "$lib/settingsRegistry.ts";
+import {
+  SETTINGS_REGISTRY,
+  type StagedField,
+  settingControlId,
+  settingLabelId,
+  THEME_FIELD,
+} from "$lib/settingsRegistry.ts";
 
 afterEach(() => localStorage.clear());
 
@@ -63,12 +69,12 @@ describe("SettingsDialog shell", () => {
     await flushUntil(flush, mounted);
     // The theme controls render as the composite block, not three generic rows.
     expect(has("[data-theme-section]")).toBe(true);
-    expect(has("button[aria-label='Light theme']")).toBe(true);
-    expect(has("button[aria-label='Dark theme']")).toBe(true);
+    expect(has("button#setting-themeLight")).toBe(true);
+    expect(has("button#setting-themeDark")).toBe(true);
     expect(has("[data-slot='switch']")).toBe(true);
     // The Diff view section's fields now live in the same (Appearance) pane.
-    expect(has("button[aria-label='Layout']")).toBe(true);
-    expect(has("button[aria-label='Change markers']")).toBe(true);
+    expect(has("button#setting-diffStyle")).toBe(true);
+    expect(has("button#setting-diffIndicators")).toBe(true);
   });
 
   // The pane's own "Appearance" header is the theme block's header, so the block
@@ -95,6 +101,70 @@ describe("SettingsDialog shell", () => {
     const { flush } = render(SettingsDialog, props());
     await flushUntil(flush, mounted);
     expect(has(".save-chip")).toBe(false);
+  });
+});
+
+describe("SettingsDialog label association (EXC-1112)", () => {
+  // The point of the field/label adoption: the visible row text IS the label element,
+  // so the accessible name and the rendered string are one string rather than two that
+  // can drift. Asserted over every rendered row rather than a hand-picked few — the
+  // invariant is that no row ships unwired, so a field added to the registry later is
+  // covered the day it lands. What the wiring then BUYS (the label click reaching the
+  // control, and the name a browser computes from it) is engine behaviour, and lives in
+  // test/e2e/settings.e2e.ts.
+  test("every row's visible text is a <label> wired to its control", async () => {
+    const { flush } = render(SettingsDialog, props());
+    await flushUntil(flush, mounted);
+    const rows = [...document.body.querySelectorAll("[data-field]")];
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      const key = row.getAttribute("data-field") ?? "";
+      const label = row.querySelector("label[data-slot='field-label']");
+      expect(label?.id).toBe(settingLabelId(key));
+      const target = label?.getAttribute("for") ?? null;
+      if (target === null) {
+        // `for` binds only to a labelable element, which a segmented control's
+        // <div role="group"> is not — that row names its group the other way.
+        expect(has(`[data-slot='toggle-group'][aria-labelledby='${settingLabelId(key)}']`)).toBe(
+          true,
+        );
+      } else {
+        expect(target).toBe(settingControlId(key));
+        expect(has(`#${settingControlId(key)}`)).toBe(true);
+      }
+    }
+  });
+
+  // The parallel aria-label string is gone from every control the visible label
+  // now names — that redundancy is what the ticket exists to remove.
+  test("no control carries a redundant aria-label", async () => {
+    const { flush } = render(SettingsDialog, props());
+    await flushUntil(flush, mounted);
+    expect(has("[data-slot='switch'][aria-label]")).toBe(false);
+    expect(has("#setting-diffStyle[aria-label]")).toBe(false);
+    expect(has("[data-slot='toggle-group'][aria-label]")).toBe(false);
+  });
+
+  // A labelled section is a real fieldset/legend group, not a bare heading over
+  // a div — the grouping semantics `field` exists to supply.
+  test("a labelled section groups its rows in a fieldset with a legend", async () => {
+    const { flush } = render(SettingsDialog, props());
+    await flushUntil(flush, mounted);
+    const head = document.body.querySelector(".section-head");
+    expect(head?.tagName).toBe("LEGEND");
+    expect(head?.closest("fieldset")?.getAttribute("data-slot")).toBe("field-set");
+  });
+
+  // …and an UNLABELLED section is not one. A fieldset with no legend is a group with
+  // no accessible name, which an accessibility change has no business adding.
+  test("no fieldset ships without a legend", async () => {
+    const { flush } = render(SettingsDialog, props());
+    await flushUntil(flush, mounted);
+    const sets = [...document.body.querySelectorAll("[data-slot='field-set']")];
+    expect(sets.length).toBeGreaterThan(0);
+    for (const set of sets) {
+      expect(set.querySelector(":scope > legend") !== null).toBe(true);
+    }
   });
 });
 
@@ -152,7 +222,7 @@ describe("SettingsDialog immediate apply", () => {
     writeDiffStyle("unified");
     const { flush } = render(SettingsDialog, props());
     await flushUntil(flush, mounted);
-    const label = document.body.querySelector("button[aria-label='Layout'] .trigger-label");
+    const label = document.body.querySelector("button#setting-diffStyle .trigger-label");
     expect(label?.textContent?.trim()).toBe("Unified");
   });
 });
