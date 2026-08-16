@@ -725,36 +725,73 @@
   // in place. Deliberately a plain `let`, so reading it below is not a dependency.
   let measured: { host: HTMLElement; key: string } | undefined;
 
-  // Measure once per document, retrying by frame. The badge cannot anchor at mount:
-  // the kinds arrive from a daemon round trip (resolveFileRefs above) and the token
+  // Place the badges once per document. The anchor cannot be taken at mount: the
+  // kinds arrive from a daemon round trip (resolveFileRefs above) and the token
   // tagging runs on a frame off SourceView's MutationObserver, so there is no moment
-  // after mount at which the tokens are known to exist — the same "wait for a painted
-  // row" problem retryFrames already budgets for. Once measured the coordinates never
-  // re-anchor and need no scroll listener: they are content coordinates, so the badge
-  // scrolls away with its token exactly as the copy button does.
+  // after mount at which the tokens are known to exist.
+  //
+  // A first attempt therefore comes up empty for two quite different reasons, and
+  // they want different waits. The tokens may not be TAGGED yet — a few frames, which
+  // is the budget retryFrames already spends on anything needing a painted row. Or
+  // every reference may simply be BELOW THE FOLD, which no number of frames fixes:
+  // the pick only anchors to something on screen, so the reviewer has to bring one
+  // into view first. Plans put their citations in the body rather than the opening
+  // paragraph, so that is the ordinary case rather than the corner one — hence the
+  // scroll listener, which keeps looking until a placement lands and then detaches
+  // for good. "Placed once" is a promise that a badge never RE-anchors, not that we
+  // only ever look at the first screenful.
+  //
+  // After that the coordinates need no tracking at all: they are content
+  // coordinates, so the badge scrolls away with its token as the copy button does.
   $effect(() => {
     const scroller = scrollEl;
     const el = host;
     const refs = fileRefs;
     const key = contentKey;
     // Nothing to teach on the compare surface, and its rows are a different
-    // document — measuring there would spend the frame budget walking the
-    // single-version view's torn-out shadow root.
+    // document — looking there would walk the single-version view's torn-out
+    // shadow root for a badge that cannot render anyway.
     if (showDiff || scroller == null || el == null || refs === undefined) return;
     if (measured?.host === el && measured.key === key) return;
-    // Anchors measured against the previous document point at coordinates this one
+    // Anchors taken against the previous document point at coordinates this one
     // does not share and at tokens its re-render detached; drop them before
-    // re-measuring rather than rendering a badge over a dead token.
+    // looking again rather than rendering a badge over a dead token.
     refHints = [];
     const kinds = (["file", "directory"] as const).filter((k) => !isRefHintDismissed(k));
     if (kinds.length === 0) return;
-    return retryFrames(() => {
+
+    let placed = false;
+    let raf = 0;
+    // Idempotent: whichever path lands the placement, every later call is a no-op,
+    // so a scroll can never move a badge already sitting on its token.
+    const place = (): boolean => {
+      if (placed) return true;
       const found = pickRefHintAnchors(el, scroller, refs, kinds);
       if (found.length === 0) return false;
       refHints = found;
       measured = { host: el, key };
+      placed = true;
       return true;
-    });
+    };
+    // rAF-throttled, so a flung scroll costs one pick per frame rather than one per
+    // event. `teardown` is declared below and only ever CALLED from here, which is
+    // after the effect body has run.
+    const onScroll = (): void => {
+      if (raf !== 0) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        if (place()) teardown();
+      });
+    };
+    const cancelFrames = retryFrames(place);
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    const teardown = (): void => {
+      cancelFrames();
+      cancelAnimationFrame(raf);
+      raf = 0;
+      scroller.removeEventListener("scroll", onScroll);
+    };
+    return teardown;
   });
 
   // Re-hover the row under a stationary cursor as the plan scrolls (EXC-836). The

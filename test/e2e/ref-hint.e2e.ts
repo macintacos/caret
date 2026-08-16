@@ -24,7 +24,7 @@ import type { Page } from "@playwright/test";
 
 import { makeProject } from "@test/e2e/support/file-refs.ts";
 import { expect, test, waitForTwoPollTicks } from "@test/e2e/support/fixtures.ts";
-import { planSurface } from "@test/e2e/support/source-view.ts";
+import { PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
 
 /** A project whose paths resolve to two files and two directories, so a plan can
  * cite several of each kind and the "first of each" claim has something to be
@@ -43,6 +43,20 @@ const PLAN = [
   "The cache lives in `src/cache.ts` and the tree under `src/lib` matters.",
   "",
   "Later, `src/lib/util.ts` sits beside `src/lib/deep`.",
+  "",
+].join("\n");
+
+// The same references, pushed past the first screenful behind enough prose to
+// guarantee a scroll. Real plans look like this — citations live in the body, not
+// the opening paragraph — which is why the badge cannot only look once at load.
+const DEEP_PLAN = [
+  "# Refs",
+  "",
+  ...Array.from(
+    { length: 120 },
+    (_, i) => `Paragraph ${i + 1} of scaffolding, holding no path of any kind.\n`,
+  ),
+  "The cache lives in `src/cache.ts` and the tree under `src/lib` matters.",
   "",
 ].join("\n");
 
@@ -70,6 +84,25 @@ async function badgeCenter(page: Page, name: string): Promise<{ x: number; y: nu
   const box = await page.getByRole("button", { name }).boundingBox();
   if (box === null) throw new Error(`badge "${name}" has no box`);
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+}
+
+/**
+ * Wait out the view's painted-row frame budget (PAINT_RETRY_FRAMES = 30 in
+ * DiffPlanView), so an assertion after it cannot be satisfied by that retry still
+ * running. Counted in FRAMES rather than milliseconds because frames are the unit
+ * the app's own deadline is written in — a ms sleep here would be the fixed wait
+ * browser-testing.md rules out, and would race the very budget it means to outlast.
+ */
+function spendFrameBudget(page: Page): Promise<void> {
+  return page.evaluate(
+    (n) =>
+      new Promise<void>((resolve) => {
+        let seen = 0;
+        const step = () => (++seen >= n ? resolve() : requestAnimationFrame(step));
+        requestAnimationFrame(step);
+      }),
+    40,
+  );
 }
 
 /** Open the plan and wait for the daemon resolve to tag all four references. The
@@ -236,9 +269,81 @@ test("the badge is reachable and operable from the keyboard", async ({ daemon, p
     // content's id instead), so a role query here can never match.
     await expect(page.locator('[data-slot="tooltip-content"]')).toContainText("src/cache.ts");
 
-    await page.keyboard.press("Enter");
-    await expect(page.locator("[data-file-preview]")).toBeVisible();
+    // Retried, like the folder card's Escape spec: Safe Mode swallows every key
+    // event for 2s when one lands within 300ms of the view arming, and focusing the
+    // badge re-arms it — so this first press can be eaten. The inner budget is
+    // deliberately LOWERED so the loop can press again instead of sitting out the
+    // suite's assertion timeout on a keystroke that was never delivered.
+    await expect(async () => {
+      await page.keyboard.press("Enter");
+      await expect(page.locator("[data-file-preview]")).toBeVisible({ timeout: 500 });
+    }).toPass();
     await expect(fileBadge(page)).toHaveCount(0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("a reference below the fold is badged once the reviewer scrolls to it", async ({
+  daemon,
+  page,
+}) => {
+  // The badge only ever anchors to something on screen, so a plan whose citations
+  // sit in the body has nothing to badge at load. Looking only once there would mean
+  // the hint never teaches on a realistic plan at all — so the pick keeps running on
+  // scroll until a placement lands, and stops for good once one has.
+  const proj = await makeProject(PROJECT);
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: DEEP_PLAN });
+    await page.goto("/");
+    await planSurface(page);
+    // The references resolve and tag while off screen; the badges wait for a view.
+    await expect(page.locator("[data-file-ref]")).toHaveCount(2);
+    // Spend the frame budget FIRST, so what follows proves the scroll placed the
+    // badge rather than the initial retry happening to still be alive.
+    await spendFrameBudget(page);
+    await expect(fileBadge(page)).toHaveCount(0);
+    await expect(dirBadge(page)).toHaveCount(0);
+
+    await page
+      .locator(PLAN_SURFACE)
+      .evaluate((el) => el.scrollTo({ top: el.scrollHeight, behavior: "instant" }));
+
+    await expect(fileBadge(page)).toHaveCount(1);
+    await expect(dirBadge(page)).toHaveCount(1);
+    // And it landed on its token rather than anywhere the scroll happened to stop.
+    const corner = await tokenTopRight(page, '[data-file-ref=""]');
+    expect(corner).not.toBeNull();
+    const at = await badgeCenter(page, FILE_BADGE);
+    expect(Math.abs(at.x - corner!.x)).toBeLessThanOrEqual(1.5);
+    expect(Math.abs(at.y - corner!.y)).toBeLessThanOrEqual(1.5);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("a placed badge is never re-anchored by a later scroll", async ({ daemon, page }) => {
+  // The other half of the same rule: looking continues only until a placement
+  // lands. Once a badge is on its token, scrolling must move it with the rows —
+  // content coordinates — and never re-pick a different reference to sit on.
+  const proj = await makeProject(PROJECT);
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: `${PLAN}\n${"\nFiller line.\n".repeat(60)}` });
+    await openPlan(page);
+    await expect(fileBadge(page)).toHaveCount(1);
+    const corner = await tokenTopRight(page, '[data-file-ref=""]');
+    const at = await badgeCenter(page, FILE_BADGE);
+    const offset = { x: at.x - corner!.x, y: at.y - corner!.y };
+
+    await page.locator(PLAN_SURFACE).evaluate((el) => el.scrollBy({ top: 200 }));
+
+    // Same token, same offset from it — it travelled with the row.
+    await expect(fileBadge(page)).toHaveCount(1);
+    const movedCorner = await tokenTopRight(page, '[data-file-ref=""]');
+    expect(movedCorner!.y).not.toBe(corner!.y);
+    const movedAt = await badgeCenter(page, FILE_BADGE);
+    expect(Math.abs(movedAt.x - movedCorner!.x - offset.x)).toBeLessThanOrEqual(1.5);
+    expect(Math.abs(movedAt.y - movedCorner!.y - offset.y)).toBeLessThanOrEqual(1.5);
   } finally {
     await proj.cleanup();
   }
