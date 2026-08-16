@@ -11,7 +11,9 @@ import RefHintBadge from "@/components/RefHintBadge.svelte";
 // given content coordinates, its copy follows the reference kind, both stay reactive,
 // and activating it opens the reference without waking the line-comment composer on
 // the row beneath. The attention ring is a CSS animation — happy-dom neither lays out
-// nor animates, so the ping and its reduced-motion collapse are e2e.
+// nor animates, so the ping is unasserted anywhere: its reduced-motion collapse is a
+// property of the global guard (pinned in motion.test.ts), and the wave itself is
+// decoration with no behaviour to hang an assertion on.
 
 const badge = (target: HTMLElement): HTMLButtonElement =>
   target.querySelector("button.ref-hint") as HTMLButtonElement;
@@ -20,6 +22,7 @@ describe("RefHintBadge", () => {
   test("anchors itself at the given content coordinates", () => {
     const { target, flush } = render(RefHintBadge, {
       kind: "file",
+      path: "src/cache.ts",
       top: 12,
       left: 34,
       onActivate: () => {},
@@ -32,28 +35,31 @@ describe("RefHintBadge", () => {
   test("teaches the preview gesture on a file reference", () => {
     const { target, flush } = render(RefHintBadge, {
       kind: "file",
+      path: "src/cache.ts",
       top: 0,
       left: 0,
       onActivate: () => {},
     });
     flush();
-    expect(badge(target).getAttribute("aria-label")).toBe("Click to preview this file");
+    expect(badge(target).getAttribute("aria-label")).toBe("Preview this file");
   });
 
   test("teaches the browse gesture on a directory reference", () => {
     const { target, flush } = render(RefHintBadge, {
       kind: "directory",
+      path: "src/lib",
       top: 0,
       left: 0,
       onActivate: () => {},
     });
     flush();
-    expect(badge(target).getAttribute("aria-label")).toBe("Click to browse this folder");
+    expect(badge(target).getAttribute("aria-label")).toBe("Browse this folder");
   });
 
   test("re-anchors and re-labels when its props change", () => {
     const props = reactiveProps({
       kind: "file" as FileRefKind,
+      path: "src/cache.ts",
       top: 4,
       left: 8,
       onActivate: () => {},
@@ -62,19 +68,39 @@ describe("RefHintBadge", () => {
     flush();
 
     props.kind = "directory";
+    props.path = "src/lib";
     props.top = 40;
     props.left = 80;
     flush();
 
     expect(badge(target).style.top).toBe("40px");
     expect(badge(target).style.left).toBe("80px");
-    expect(badge(target).getAttribute("aria-label")).toBe("Click to browse this folder");
+    expect(badge(target).getAttribute("aria-label")).toBe("Browse this folder");
+  });
+
+  test("names the path in the description rather than in the accessible name", () => {
+    // The name stays stable so it is not fixture data for a locator, and the path
+    // rides the tooltip — which bits-ui points aria-describedby at. A name equal to
+    // the description would be announced twice, and "this file" has no antecedent
+    // in the accessibility tree: the token is a shadow-root span with no role.
+    const { target, flush } = render(RefHintBadge, {
+      kind: "file",
+      path: "src/cache.ts",
+      top: 0,
+      left: 0,
+      onActivate: () => {},
+    });
+    flush();
+    const label = badge(target).getAttribute("aria-label") ?? "";
+    expect(label).toBe("Preview this file");
+    expect(label).not.toContain("src/cache.ts");
   });
 
   test("opens the reference when clicked", () => {
     let opened = 0;
     const { target, flush } = render(RefHintBadge, {
       kind: "file",
+      path: "src/cache.ts",
       top: 0,
       left: 0,
       onActivate: () => {
@@ -100,6 +126,7 @@ describe("RefHintBadge", () => {
     };
     const { target, flush } = render(RefHintBadge, {
       kind: "file",
+      path: "src/cache.ts",
       top: 0,
       left: 0,
       onActivate: () => {},

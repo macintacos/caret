@@ -51,6 +51,7 @@
     isRefHintDismissed,
     pickRefHintAnchors,
     type RefHintAnchor,
+    refHintToken,
   } from "$lib/diffview/refHint.ts";
   import { resolveFileRefs } from "$lib/api.ts";
   import { shortCwd } from "$lib/cwd.ts";
@@ -489,6 +490,10 @@
   // that same click reaches the token handler, which opens whichever surface the
   // reference it landed on calls for. Any other outside click is swallowed, so
   // dismissing the card never also opens a line comment.
+  //
+  // The hint badge (EXC-1061) is let through on the same terms and for the same
+  // reason — it opens a reference too, so swallowing its click would make the
+  // affordance it exists to teach dead for as long as a card is open.
   $effect(() => {
     if (folderTree === undefined) return;
     const onKey = (e: KeyboardEvent) => {
@@ -501,7 +506,8 @@
       const path = e.composedPath();
       if (path.some((n) => n instanceof Element && n.matches("[data-folder-tree]"))) return;
       folderTree = undefined;
-      if (path.some((n) => n instanceof Element && n.matches("[data-file-ref]"))) return;
+      if (path.some((n) => n instanceof Element && n.matches("[data-file-ref], [data-ref-hint]")))
+        return;
       e.preventDefault();
       e.stopImmediatePropagation();
     };
@@ -709,15 +715,17 @@
   // content coordinates. Empty once both kinds are retired, and the effect below
   // is what fills it.
   let refHints = $state<RefHintAnchor[]>([]);
-  // The SourceView host the hints were measured against, so a surface is measured
-  // exactly once. Keyed on the ELEMENT's identity, not a boolean: a plan switch, a
-  // version switch and a compare-mode toggle-back each mount a fresh surface and so
-  // re-measure, while scrolling and the 2s poll — which repaint the shadow rows and
-  // leave this component's badge instances untouched — never do. Deliberately a
-  // plain `let`, so reading it below is not a reactive dependency.
-  let measuredHost: HTMLElement | undefined;
+  // What the hints were last measured against, so a document is measured exactly
+  // once. It takes BOTH halves because neither moves on its own: a compare-mode
+  // toggle-back mounts a fresh SourceView (new host, same contentKey), while a
+  // review or version switch keeps the very same container element and only swaps
+  // its contents (same host, new contentKey) — the library re-renders into the
+  // container rather than remounting the component. Scrolling and an unchanged
+  // poll tick move neither, which is what keeps the badges and their running ping
+  // in place. Deliberately a plain `let`, so reading it below is not a dependency.
+  let measured: { host: HTMLElement; key: string } | undefined;
 
-  // Measure once per surface, retrying by frame. The badge cannot anchor at mount:
+  // Measure once per document, retrying by frame. The badge cannot anchor at mount:
   // the kinds arrive from a daemon round trip (resolveFileRefs above) and the token
   // tagging runs on a frame off SourceView's MutationObserver, so there is no moment
   // after mount at which the tokens are known to exist — the same "wait for a painted
@@ -728,9 +736,15 @@
     const scroller = scrollEl;
     const el = host;
     const refs = fileRefs;
-    if (scroller == null || el == null || refs === undefined || el === measuredHost) return;
-    // Stale anchors point at tokens the previous surface owned; drop them before
-    // the new surface is measured rather than rendering a badge over a dead token.
+    const key = contentKey;
+    // Nothing to teach on the compare surface, and its rows are a different
+    // document — measuring there would spend the frame budget walking the
+    // single-version view's torn-out shadow root.
+    if (showDiff || scroller == null || el == null || refs === undefined) return;
+    if (measured?.host === el && measured.key === key) return;
+    // Anchors measured against the previous document point at coordinates this one
+    // does not share and at tokens its re-render detached; drop them before
+    // re-measuring rather than rendering a badge over a dead token.
     refHints = [];
     const kinds = (["file", "directory"] as const).filter((k) => !isRefHintDismissed(k));
     if (kinds.length === 0) return;
@@ -738,7 +752,7 @@
       const found = pickRefHintAnchors(el, scroller, refs, kinds);
       if (found.length === 0) return false;
       refHints = found;
-      measuredHost = el;
+      measured = { host: el, key };
       return true;
     });
   });
@@ -1542,9 +1556,10 @@
         {#each refHints as hint (hint.kind)}
           <RefHintBadge
             kind={hint.kind}
+            path={hint.span.path}
             top={hint.top}
             left={hint.left}
-            onActivate={() => openFileRef(hint.span, hint.token)}
+            onActivate={() => openFileRef(hint.span, refHintToken(host, hint))}
           />
         {/each}
         <!-- Saved comments and the open composer are projected into the library's

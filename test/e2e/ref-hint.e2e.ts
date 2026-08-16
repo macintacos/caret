@@ -46,8 +46,8 @@ const PLAN = [
   "",
 ].join("\n");
 
-const FILE_BADGE = "Click to preview this file";
-const DIR_BADGE = "Click to browse this folder";
+const FILE_BADGE = "Preview this file";
+const DIR_BADGE = "Browse this folder";
 
 const fileBadge = (page: Page) => page.getByRole("button", { name: FILE_BADGE });
 const dirBadge = (page: Page) => page.getByRole("button", { name: DIR_BADGE });
@@ -72,9 +72,9 @@ async function badgeCenter(page: Page, name: string): Promise<{ x: number; y: nu
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
 
-/** Open the plan and wait until both badges have been measured and placed. The
- * measurement waits on a daemon resolve and on the library's token tagging, so a
- * badge is the sync point every test below needs before it asserts anything. */
+/** Open the plan and wait for the daemon resolve to tag all four references. The
+ * badges are measured a frame or two after that, so each test still awaits its own
+ * badge — this is the sync point for the resolve, not for the placement. */
 async function openPlan(page: Page): Promise<void> {
   await page.goto("/");
   await planSurface(page);
@@ -177,7 +177,68 @@ test("the folder badge retires on its own and leaves nothing behind", async ({ d
     await expect(fileBadge(page)).toHaveCount(0);
     await page.reload();
     await openPlan(page);
-    await expect(page.getByRole("button", { name: /^Click to (preview|browse)/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^(Preview|Browse) this/ })).toHaveCount(0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("the badge itself opens the reference it teaches", async ({ daemon, page }) => {
+  // The tests above click the TOKEN, which is the funnel; this is the other half —
+  // the badge's own onActivate, the one line of wiring the render site adds. The
+  // folder card is placed from the token's rect, so a card at the viewport origin
+  // is the signature of a stale, detached token. (That a REPAINT does not strand
+  // the token is a unit — refHint.test.ts's refHintToken cases — because forcing a
+  // library repaint here would prove less than the direct DOM swap does.)
+  const proj = await makeProject(PROJECT);
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: PLAN });
+    await openPlan(page);
+    await expect(dirBadge(page)).toHaveCount(1);
+
+    await dirBadge(page).click();
+    const card = page.locator("[data-folder-tree]");
+    await expect(card).toBeVisible();
+    await expect(card.locator(".ft-path")).toHaveText("src/lib");
+    const box = await card.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.x).toBeGreaterThan(0);
+    expect(box!.y).toBeGreaterThan(0);
+    // Activating retires it, exactly as the token click does.
+    await expect(dirBadge(page)).toHaveCount(0);
+
+    await fileBadge(page).click();
+    await expect(page.locator("[data-file-preview]")).toBeVisible();
+    await expect(fileBadge(page)).toHaveCount(0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("the badge is reachable and operable from the keyboard", async ({ daemon, page }) => {
+  // The design's central accessibility call: the badge is a real focusable button
+  // rather than aria-hidden decoration, because the token it teaches is a classless
+  // shiki span in a shadow root with no role and no tab stop — so this is the only
+  // route to the affordance without a mouse. Focus, tab order, tooltip-on-focus and
+  // key activation are all real-browser behaviour.
+  const proj = await makeProject(PROJECT);
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: PLAN });
+    await openPlan(page);
+    await expect(fileBadge(page)).toHaveCount(1);
+
+    await fileBadge(page).focus();
+    await expect(fileBadge(page)).toBeFocused();
+    // The tooltip opens on FOCUS, not just hover, and it is where the path is
+    // named — the accessible name is deliberately the stable half. Located by
+    // data-slot rather than by role: bits-ui's tooltip content publishes no
+    // `role="tooltip"` at all (it wires the trigger's aria-describedby to the
+    // content's id instead), so a role query here can never match.
+    await expect(page.locator('[data-slot="tooltip-content"]')).toContainText("src/cache.ts");
+
+    await page.keyboard.press("Enter");
+    await expect(page.locator("[data-file-preview]")).toBeVisible();
+    await expect(fileBadge(page)).toHaveCount(0);
   } finally {
     await proj.cleanup();
   }
@@ -200,6 +261,43 @@ test("the badges hold their place across the poll", async ({ daemon, page }) => 
     await expect(fileBadge(page)).toHaveCount(1);
     await expect(dirBadge(page)).toHaveCount(1);
     expect(await badgeCenter(page, FILE_BADGE)).toEqual(before);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("a new version re-measures the badges against the document it delivered", async ({
+  daemon,
+  page,
+}) => {
+  // The surface is NOT remounted for a version switch — the library re-renders into
+  // the very same container element, so the host the badges were measured against is
+  // unchanged and only the content key moves. A guard watching the host alone would
+  // return early here and leave v1's badges hanging at v1's coordinates over v2,
+  // holding tokens v2's re-render detached. The second plan pushes its references
+  // down the page precisely so stale coordinates cannot pass.
+  const proj = await makeProject(PROJECT);
+  try {
+    const id = await daemon.seed({ cwd: proj.dir, plan: PLAN });
+    await openPlan(page);
+    await expect(fileBadge(page)).toHaveCount(1);
+    const before = await badgeCenter(page, FILE_BADGE);
+
+    await daemon.addVersion(id, `# Refs\n\nA paragraph that pushes the references down.\n${PLAN}`);
+    await expect(page.locator(".diffview")).toContainText("pushes the references down");
+
+    // Re-measured against v2: the badge tracks its token to the new position rather
+    // than staying where v1 put it. Retried, because the measure lands a frame or
+    // two after the rows repaint.
+    await expect(async () => {
+      const corner = await tokenTopRight(page, '[data-file-ref=""]');
+      expect(corner).not.toBeNull();
+      const at = await badgeCenter(page, FILE_BADGE);
+      expect(Math.abs(at.y - corner!.y)).toBeLessThanOrEqual(1.5);
+      expect(at.y).not.toBe(before.y);
+    }).toPass();
+    await expect(fileBadge(page)).toHaveCount(1);
+    await expect(dirBadge(page)).toHaveCount(1);
   } finally {
     await proj.cleanup();
   }

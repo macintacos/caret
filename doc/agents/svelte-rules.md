@@ -137,7 +137,7 @@ stays green under any invocation.
   | Job | Token | What it marks |
   | -- | -- | -- |
   | Selection | `--accent` | the current selection, plus brand: the wordmark, the `^`, the primary action |
-  | Novelty | `--attention` | "look here" — new, unread, worth a glance. Every count that asks to be noticed: the TopBar pending badges, the compare picker's other-version count, the status strip's tallies |
+  | Novelty | `--attention` | "look here" — new, unread, worth a glance. Every count that asks to be noticed: the TopBar pending badges, the compare picker's other-version count, the status strip's tallies. Counts are not the whole job, though — the reference-hint badge (`RefHintBadge.svelte`, EXC-1061) spends it on a one-time teaching dot, which is the same "worth a glance" and no tally at all |
   | Semantics | `--ok` / `--danger` | added / removed, succeeded / failed |
   | Content highlight | `--mark`, `--mark-active`, `--mark-orphan` | a marked region of the document — plan-search hits, with `-active` the current one and `-orphan` the same mark with its anchor gone |
   | Content chip | `--chip-bold`, `--chip-italic`, `--chip-code`, `--chip-link`, `--chip-ref` | the tint behind a rendered markdown span — three neutral, hue only on the two destinations |

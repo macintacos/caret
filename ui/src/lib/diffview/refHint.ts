@@ -41,6 +41,8 @@ export const dismissRefHint = (kind: FileRefKind): void => prefs[kind].write(tru
 /** A reference the badge can teach on, with where to draw it. */
 export interface RefHintAnchor {
   kind: FileRefKind;
+  /** 1-based display line, kept so the token can be re-resolved after a repaint. */
+  line: number;
   span: FileRefSpan;
   token: HTMLElement;
   /** Top-right of the token's FIRST client rect, in `.diff-plan` content coords. */
@@ -48,11 +50,34 @@ export interface RefHintAnchor {
   left: number;
 }
 
+// Descendant, not child: an over-wide fenced block is re-parented into a card
+// (codeBlockScroll.ts), the same shape tagFileRefTokens reads rows with.
+const rowAt = (root: ShadowRoot, line: number): Element | null =>
+  root.querySelector(`[data-content] [data-line="${line}"]`);
+
+/**
+ * The hint's token as it exists NOW, re-resolved against the live shadow DOM.
+ *
+ * The anchor holds the element it was measured against, and the library replaces
+ * its rows on every repaint — a comment arriving, a theme switch, a fence
+ * resolving its grammar all rewrite them without changing the container or the
+ * content key. A detached element measures all zeros, which is what would park
+ * the folder card in the viewport's corner (DiffPlanView guards the file
+ * preview's stored token the same way). The measured element is the fallback,
+ * for the case where the row is genuinely gone rather than replaced.
+ */
+export function refHintToken(host: HTMLElement | undefined, hint: RefHintAnchor): HTMLElement {
+  const root = host?.shadowRoot;
+  const row = root == null ? null : rowAt(root, hint.line);
+  const live = row == null ? null : refTokenAt(row, hint.span.startCol, hint.span.endCol);
+  return live ?? hint.token;
+}
+
 // A wrapped path has several client rects and one union bounding box spanning
 // both fragments, whose top-right corner is a point the text never occupies —
 // so the badge reads the FIRST rect and lands where the reference visibly
-// begins. getBoundingClientRect is the fallback for an element with no client
-// rects at all (an unrendered token, or happy-dom, which lays nothing out).
+// begins. getBoundingClientRect is the fallback for an unrendered token, which
+// has no client rects at all.
 const firstRectReader: RectReader = (el) => {
   const r = el.getClientRects()[0] ?? el.getBoundingClientRect();
   return { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
@@ -84,9 +109,7 @@ export function pickRefHintAnchors(
   const anchors: RefHintAnchor[] = [];
   const s = read(scroller);
   for (const line of [...refs.keys()].sort((a, b) => a - b)) {
-    // Descendant, not child: an over-wide fenced block is re-parented into a
-    // card (codeBlockScroll.ts), same shape as tagFileRefTokens reads.
-    const row = root.querySelector(`[data-content] [data-line="${line}"]`);
+    const row = rowAt(root, line);
     if (row == null) continue;
     for (const span of refs.get(line) ?? []) {
       const kind = span.kind;
@@ -99,6 +122,7 @@ export function pickRefHintAnchors(
       }
       anchors.push({
         kind,
+        line,
         span,
         token,
         top: r.top - (s.top - scroller.scrollTop),

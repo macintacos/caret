@@ -14,6 +14,10 @@
   //
   // It sits in the .diff-plan light DOM (a sibling of the diff surface), so — unlike the
   // motionless shadow render surface — it may animate.
+  //
+  // `data-ref-hint` is a contract rather than a styling hook: the folder card's
+  // outside-click dismissal reads it to let an activation through unswallowed,
+  // exactly as it already does for a reference token. Renaming it breaks that.
   import type { FileRefKind } from "@core/lib/types";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
@@ -21,6 +25,8 @@
   interface Props {
     /** Which reference the badge sits over — decides the copy. */
     kind: FileRefKind;
+    /** The referenced path, which the tooltip names. */
+    path: string;
     /** Top/left of the token's top-right corner, in .diff-plan content coordinates. */
     top: number;
     left: number;
@@ -28,19 +34,27 @@
     onActivate: () => void;
   }
 
-  let { kind, top, left, onActivate }: Props = $props();
+  let { kind, path, top, left, onActivate }: Props = $props();
 
-  // One string for both the tooltip and the accessible name: the badge says the same
-  // thing however the reviewer meets it.
-  const label = $derived(
-    kind === "file" ? "Click to preview this file" : "Click to browse this folder",
+  // A stable NAME and a specific DESCRIPTION, the split browser-testing.md records
+  // for a control rendering live data. bits-ui points aria-describedby at the open
+  // tooltip, so a name identical to it would be announced twice — and "this file"
+  // names nothing a screen reader can find anyway: the token the badge sits over is
+  // a classless shiki span inside a shadow root, elsewhere in DOM order, with no
+  // role. The path in the description is the antecedent the name cannot carry.
+  const label = $derived(kind === "file" ? "Preview this file" : "Browse this folder");
+  const hint = $derived(
+    kind === "file" ? `Click to preview ${path}` : `Click to browse ${path}`,
   );
 </script>
 
 <!-- The badge is a shadcn Button wrapped in a shadcn Tooltip, following CodeCopyButton.
      The button stays the absolutely-positioned element (inline top/left from
      DiffPlanView), so its `.ref-hint` surface is molded in place. `{...props}` from the
-     tooltip trigger is spread first so the explicit handlers/label below win. -->
+     tooltip trigger is spread first so the explicit handlers/label below win — which
+     REPLACES bits-ui's own onpointerdown/onclick on the trigger (its press
+     suppression and close-on-click). Nothing is lost: the badge unmounts itself on
+     activation, and an unmounted trigger takes its tooltip with it. -->
 <Tooltip.Provider delayDuration={300}>
   <Tooltip.Root>
     <Tooltip.Trigger>
@@ -52,6 +66,7 @@
           class="ref-hint"
           style="top: {top}px; left: {left}px;"
           aria-label={label}
+          data-ref-hint=""
           onpointerdown={(event) => event.stopPropagation()}
           onclick={(event) => {
             // Keep the click off the diff surface beneath (line-click commenting / drag).
@@ -61,7 +76,7 @@
         />
       {/snippet}
     </Tooltip.Trigger>
-    <Tooltip.Content>{label}</Tooltip.Content>
+    <Tooltip.Content>{hint}</Tooltip.Content>
   </Tooltip.Root>
 </Tooltip.Provider>
 
@@ -87,7 +102,11 @@
     background-clip: content-box;
     box-shadow: none;
     /* Over the plan rows and the comment-span bracket rails (which take the default
-       layer), under the code-copy chip (4) and the drawer. */
+       layer), under the code-copy chip (4) and the drawer. Shared with the plan's
+       own rails — .drag-readout-rail, .drag-hint and .visual-hint are all 3 and all
+       later in DOM order, so each paints over the badge where they overlap. That is
+       the right way round: every one of them is transient, and the badge is what the
+       reviewer can come back to. */
     z-index: 3;
   }
 

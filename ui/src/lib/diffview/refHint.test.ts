@@ -3,7 +3,12 @@ import { beforeEach, describe, expect, test } from "bun:test";
 
 import type { RectReader } from "$lib/diffview/codeCopy.ts";
 import type { FileRefSpan, FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
-import { dismissRefHint, isRefHintDismissed, pickRefHintAnchors } from "$lib/diffview/refHint.ts";
+import {
+  dismissRefHint,
+  isRefHintDismissed,
+  pickRefHintAnchors,
+  refHintToken,
+} from "$lib/diffview/refHint.ts";
 
 // Both halves of the one-time reference hint (EXC-1061): the per-kind dismissal
 // flags, against the happy-dom localStorage test-setup wires, and the anchor
@@ -188,5 +193,91 @@ describe("pickRefHintAnchors", () => {
     // top = 100 - (5 - 50) = 145 ; left = 300 - (8 - 10) = 302
     const got = pickRefHintAnchors(host, scroller, refs, ["file"], read);
     expect(got.map((a) => ({ top: a.top, left: a.left }))).toEqual([{ top: 145, left: 302 }]);
+  });
+
+  test("carries the display line, so the token can be found again later", () => {
+    const host = makeHost([[7, ["a.ts"]]]);
+    const scroller = document.createElement("div");
+    const refs: FileRefSpanMap = new Map([[7, [span(0, 4, "a.ts", "file")]]]);
+    expect(pickRefHintAnchors(host, scroller, refs, ["file"], reader(scroller))[0]?.line).toBe(7);
+  });
+});
+
+// The default reader, which every test above injects past. It is the module's one
+// genuinely novel line, so it is exercised directly here.
+describe("the default rect reader", () => {
+  function stubClientRects(el: Element, ...rects: Rect[]): void {
+    Object.defineProperty(el, "getClientRects", { value: () => rects, configurable: true });
+  }
+
+  test("anchors to a wrapped token's FIRST fragment, not its union box", () => {
+    const host = makeHost([[1, ["src/some/long/path.ts"]]]);
+    const scroller = document.createElement("div");
+    stubClientRects(scroller, { top: 0, bottom: 100, left: 0, right: 400 });
+    // A path wrapped across two rows: the head runs to x=340 on the first row, the
+    // tail restarts at the left margin and reaches further right. The union box's
+    // top-right is (390, 10) — a point the text never occupies. The first
+    // fragment's is (340, 10), where the reference visibly begins.
+    const token = host.shadowRoot?.querySelector("span") as Element;
+    stubClientRects(
+      token,
+      { top: 10, bottom: 20, left: 300, right: 340 },
+      { top: 20, bottom: 30, left: 100, right: 390 },
+    );
+    const refs: FileRefSpanMap = new Map([[1, [span(0, 21, "src/some/long/path.ts", "file")]]]);
+    const got = pickRefHintAnchors(host, scroller, refs, ["file"]);
+    expect(got.map((a) => ({ top: a.top, left: a.left }))).toEqual([{ top: 10, left: 340 }]);
+  });
+
+  test("falls back to the bounding box when a token has no client rects", () => {
+    const host = makeHost([[1, ["a.ts"]]]);
+    const scroller = document.createElement("div");
+    stubClientRects(scroller, { top: 0, bottom: 100, left: 0, right: 400 });
+    const token = host.shadowRoot?.querySelector("span") as Element;
+    stubClientRects(token); // none at all
+    Object.defineProperty(token, "getBoundingClientRect", {
+      value: () => ({ top: 10, bottom: 20, left: 100, right: 200 }),
+      configurable: true,
+    });
+    const refs: FileRefSpanMap = new Map([[1, [span(0, 4, "a.ts", "file")]]]);
+    const got = pickRefHintAnchors(host, scroller, refs, ["file"]);
+    expect(got.map((a) => ({ top: a.top, left: a.left }))).toEqual([{ top: 10, left: 200 }]);
+  });
+});
+
+describe("refHintToken", () => {
+  const anchorOn = (host: HTMLElement, line: number) => {
+    const scroller = document.createElement("div");
+    const refs: FileRefSpanMap = new Map([[line, [span(0, 4, "a.ts", "file")]]]);
+    const got = pickRefHintAnchors(host, scroller, refs, ["file"], reader(scroller));
+    if (got[0] === undefined) throw new Error("no anchor to test against");
+    return got[0];
+  };
+
+  test("re-resolves the token the library replaced on a repaint", () => {
+    const host = makeHost([[1, ["a.ts"]]]);
+    const anchor = anchorOn(host, 1);
+    // What a rerender does: the row's children are rewritten, so the measured
+    // element is detached and a fresh span carries the same text.
+    const row = host.shadowRoot?.querySelector('[data-line="1"]') as Element;
+    const fresh = document.createElement("span");
+    fresh.textContent = "a.ts";
+    row.replaceChildren(fresh);
+
+    expect(anchor.token.isConnected).toBe(false);
+    expect(refHintToken(host, anchor)).toBe(fresh as HTMLElement);
+  });
+
+  test("falls back to the measured token when the row is gone", () => {
+    const host = makeHost([[1, ["a.ts"]]]);
+    const anchor = anchorOn(host, 1);
+    host.shadowRoot?.querySelector('[data-line="1"]')?.remove();
+    expect(refHintToken(host, anchor)).toBe(anchor.token);
+  });
+
+  test("falls back when there is no host at all", () => {
+    const host = makeHost([[1, ["a.ts"]]]);
+    const anchor = anchorOn(host, 1);
+    expect(refHintToken(undefined, anchor)).toBe(anchor.token);
   });
 });
