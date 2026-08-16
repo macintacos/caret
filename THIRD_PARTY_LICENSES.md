@@ -16,6 +16,7 @@ under the ISC license.
 | `check` | [ui/src/icons/check.svg](ui/src/icons/check.svg) | [check.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/check.svg) |
 | `chevron-down` | [ui/src/icons/chevron-down.svg](ui/src/icons/chevron-down.svg) | [chevron-down.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/chevron-down.svg) |
 | `chevron-right` | [ui/src/icons/chevron-right.svg](ui/src/icons/chevron-right.svg) | [chevron-right.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/chevron-right.svg) |
+| `chevron-up` | [ui/src/icons/chevron-up.svg](ui/src/icons/chevron-up.svg) | [chevron-up.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/chevron-up.svg) |
 | `circle-question-mark` | [ui/src/icons/circle-question-mark.svg](ui/src/icons/circle-question-mark.svg) | [circle-question-mark.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/circle-question-mark.svg) |
 | `command` | [ui/src/icons/command.svg](ui/src/icons/command.svg) | [command.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/command.svg) |
 | `copy` | [ui/src/icons/copy.svg](ui/src/icons/copy.svg) | [copy.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/copy.svg) |
@@ -32,6 +33,7 @@ under the ISC license.
 | `heading-5` | [ui/src/icons/heading-5.svg](ui/src/icons/heading-5.svg) | [heading-5.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/heading-5.svg) |
 | `heading-6` | [ui/src/icons/heading-6.svg](ui/src/icons/heading-6.svg) | [heading-6.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/heading-6.svg) |
 | `keyboard` | [ui/src/icons/keyboard.svg](ui/src/icons/keyboard.svg) | [keyboard.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/keyboard.svg) |
+| `loader-circle` | [ui/src/icons/loader-circle.svg](ui/src/icons/loader-circle.svg) | [loader-circle.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/loader-circle.svg) |
 | `monitor` | [ui/src/icons/monitor.svg](ui/src/icons/monitor.svg) | [monitor.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/monitor.svg) |
 | `moon` | [ui/src/icons/moon.svg](ui/src/icons/moon.svg) | [moon.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/moon.svg) |
 | `panel-left` | [ui/src/icons/panel-left.svg](ui/src/icons/panel-left.svg) | [panel-left.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/panel-left.svg) |
