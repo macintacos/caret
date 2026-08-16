@@ -19,6 +19,11 @@ function trigger(target: HTMLElement): HTMLButtonElement | null {
   return target.querySelector<HTMLButtonElement>("[data-slot='popover-trigger']");
 }
 
+/** The `\` keycap the trigger wears when shortcut hints are on (EXC-1097). */
+function cap(target: HTMLElement): HTMLElement | null {
+  return target.querySelector<HTMLElement>("[data-slot='kbd']");
+}
+
 /** The portalled panel. bits-ui teleports popover content to document.body. */
 function panel(): HTMLElement | null {
   return document.body.querySelector<HTMLElement>("[data-slot='popover-content']");
@@ -270,5 +275,102 @@ describe("PlanToc surface", () => {
     await flushUntil(flush, () => listbox() === null);
     expect(jump.last()).toBe(20);
     expect(listbox()).toBeNull();
+  });
+});
+
+// The popup's two entry points (EXC-1097): the trigger teaches its key, and the
+// key reaches the popup through a handle the component hands up. What a real
+// keydown does with that handle is e2e (test/e2e/plan-toc.e2e.ts); what belongs
+// here is the wiring either side of it.
+describe("PlanToc entry points", () => {
+  test("advertises the contents shortcut on the trigger", () => {
+    const { target } = render(PlanToc, { headings: HEADINGS, activeLine: 9, onJump: () => {} });
+    // Derived from the reservation rather than typed here, so the advertised hint
+    // cannot drift from the key the dispatcher fires on.
+    expect(trigger(target)?.getAttribute("aria-keyshortcuts")).toBe("\\");
+  });
+
+  test("teaches the \\ key with a cap when shortcut hints are on", () => {
+    const { target } = render(PlanToc, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+      showShortcutHints: true,
+    });
+    // aria-hidden, so the glyph never lands in the trigger's accessible name —
+    // the same split the compare toggle's `d` cap takes.
+    expect(cap(target)?.textContent?.trim()).toBe("\\");
+    expect(cap(target)?.getAttribute("aria-hidden")).toBe("true");
+    expect(trigger(target)?.textContent?.trim()).toContain("Contents");
+  });
+
+  test("hides the cap when shortcut hints are off", () => {
+    const { target } = render(PlanToc, { headings: HEADINGS, activeLine: 9, onJump: () => {} });
+    expect(cap(target)).toBeNull();
+  });
+
+  test("hands up an open action that summons the popup", async () => {
+    const expose = capture<() => void>();
+    const { target, flush } = render(PlanToc, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+      onExposeOpen: expose.cb,
+    });
+    flush();
+    const openToc = expose.last();
+    if (openToc === undefined) throw new Error("PlanToc never exposed its open action");
+    openToc();
+    await flushUntil(flush, () => listbox() !== null);
+    expect(panel()).not.toBeNull();
+    await close(target, flush);
+  });
+
+  // The key and the trigger have to open the SAME popup, and that is not free:
+  // bits-ui fires its onOpenChange from its own setter only (a trigger click,
+  // Escape, an outside click), so an open driven from outside the primitive
+  // receives none of the seeding the trigger path receives. Both tests below
+  // assert the seeded SELECTION and the cleared query rather than aria-current —
+  // that attribute is derived from the activeLine prop and reads the same whether
+  // the seeding ran or not, which is exactly how an unseeded open looks correct.
+  test("the exposed open seeds the heading being read, as the trigger does", async () => {
+    const expose = capture<() => void>();
+    const { target, flush } = render(PlanToc, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+      onExposeOpen: expose.cb,
+    });
+    flush();
+    expose.last()?.();
+    await flushUntil(flush, () => listbox() !== null);
+    await flushUntil(flush, () => options().some((o) => o.hasAttribute("data-selected")));
+    expect(
+      options()
+        .filter((o) => o.getAttribute("aria-selected") === "true")
+        .map(label),
+    ).toEqual(["Details"]);
+    await close(target, flush);
+  });
+
+  test("the exposed open clears a query left by the previous session", async () => {
+    const expose = capture<() => void>();
+    const { target, flush } = render(PlanToc, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+      onExposeOpen: expose.cb,
+    });
+    await open(target, flush);
+    await typeQuery("details", flush);
+    expect(options().length).toBe(1);
+    await close(target, flush);
+
+    expose.last()?.();
+    await flushUntil(flush, () => listbox() !== null);
+    expect(field()?.value).toBe("");
+    await flushUntil(flush, () => options().length === 4);
+    expect(options().map(label)).toEqual(["Overview", "Approach", "Details", "Verification"]);
+    await close(target, flush);
   });
 });

@@ -13,6 +13,15 @@
 // vendored primitive's own viewport wiring is pinned in
 // ui/src/lib/shadcn-command-popover.test.ts.
 //
+// EXC-1097 adds the `\` key, and its specs sit here for the same reason: a bare
+// keydown has to travel the real global dispatcher past the real safe-mode grace to
+// reach a popup that is really portalled, and none of that exists under a mount. The
+// pure half is again the unit suite — that the reservation carries the key and that
+// PlanToc hands an open action up (keymap.test.ts, PlanToc.test.ts). Compare mode is
+// a third thing still: what it needs is a review with TWO versions, which is daemon
+// state no prop can stand in for, so it is e2e on the axis browser-testing.md calls
+// the more interesting half.
+//
 // Bare keys throughout, per the issue's constraint: a command modifier means the
 // reviewer is addressing the browser or the OS, not the popup. waitPastSafeModeGrace
 // (inside jumpToHeading) is mandatory before the first keystroke.
@@ -75,6 +84,10 @@ const BRANCHED_PLAN = [
 ].join("\n\n");
 
 const TOC = ".plan-toc-panel";
+/** The breadcrumbs bar's dropdown — the OTHER heading surface, addressed here only
+ * to prove `\` and `b` do not reach the same one. Same selector plan-breadcrumbs
+ * hoists as MENU. */
+const CRUMB_MENU = "[data-slot='dropdown-menu-content']";
 
 const trigger = (page: Page) => page.getByRole("button", { name: "Contents" });
 /** The popup itself. Every locator below is scoped through it, which is what lets them
@@ -354,4 +367,61 @@ test("the field narrates the row the walk is on, and says so when nothing matche
   await field(page).fill("nothing matches this");
   await expect(options(page)).toHaveCount(0);
   await expect(panel(page).getByRole("status")).toHaveText("No headings match");
+});
+
+test("\\ opens the popup on the heading being read (EXC-1097)", async ({ daemon, page }) => {
+  await daemon.seed({ plan: TALL_PLAN });
+  await page.goto("/");
+  // readingAt parks the reading position AND waits past the safe-mode grace, which
+  // the bare key below cannot be pressed before.
+  await readingAt(page, "Golf");
+
+  await page.keyboard.press("\\");
+
+  // Opened on the trigger's terms: the walk starts on the heading being read and
+  // that row is scrolled into the list's box, with focus in the field so the
+  // reviewer can type straight away. The SELECTION is the load-bearing assertion —
+  // aria-current is derived from the activeLine prop and would read "Golf" even on
+  // a popup that opened at the top of the list.
+  await expect(listbox(page)).toBeVisible();
+  await expect(walkedTo(page)).toHaveText("Golf");
+  await expect
+    .poll(() => isWithinList(page, options(page).and(page.locator('[aria-current="location"]'))))
+    .toBe(true);
+  await expect(field(page)).toBeFocused();
+});
+
+test("\\ and b reach different heading surfaces (EXC-1097)", async ({ daemon, page }) => {
+  // Two keys, two surfaces: the property worth pinning is that neither one reaches
+  // the other's.
+  await daemon.seed({ plan: TALL_PLAN });
+  await page.goto("/");
+  await readingAt(page, "Golf");
+
+  await page.keyboard.press("b");
+  await expect(page.locator(CRUMB_MENU)).toBeVisible();
+  await expect(panel(page)).toHaveCount(0);
+
+  await page.keyboard.press("Escape");
+  await expect(page.locator(CRUMB_MENU)).toHaveCount(0);
+
+  await page.keyboard.press("\\");
+  await expect(listbox(page)).toBeVisible();
+  await expect(page.locator(CRUMB_MENU)).toHaveCount(0);
+});
+
+test("compare mode drops both of the popup's entry points (EXC-1097)", async ({ daemon, page }) => {
+  // Compare mode tracks no heading, so a contents popup there would open on a stale
+  // plan. The trigger is dropped with the surface; the key has to be gated too, or
+  // it would summon a component that is no longer mounted.
+  await daemon.seedVersions(2, [`# Plan\n\n${filler("Plan")}\n`, TALL_PLAN]);
+  await page.goto("/");
+  await readingAt(page, "Golf");
+  await expect(trigger(page)).toBeVisible();
+
+  await page.getByRole("button", { name: /^Compare versions/ }).click();
+  await expect(trigger(page)).toHaveCount(0);
+
+  await page.keyboard.press("\\");
+  await expect(panel(page)).toHaveCount(0);
 });

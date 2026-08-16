@@ -1,6 +1,6 @@
 // Review-verdict + chrome keyboard shortcuts. Approve (a), request changes (r),
 // reject (shift+R, EXC-913), toggle compare/diff (d), open plan search (/,
-// EXC-832), open the heading breadcrumbs (b and \), and open settings (,) are all
+// EXC-832), open the heading breadcrumbs (b), and open settings (,) are all
 // wired through the shortcut engine (EXC-786). These are real-browser keyboard behaviors — a
 // keydown routed through the global dispatcher into the same guarded path a click
 // takes — so they live here, not in a unit (browser-testing.md). Every action is
@@ -241,28 +241,4 @@ test("Escape closes the breadcrumbs menu and hands focus back to the crumb", asy
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
   await expect(crumb).toBeFocused();
-});
-
-test("backslash opens the breadcrumbs bar, the same as b", async ({ daemon, page }) => {
-  // EXC-949 retired the ToC rail `\` used to toggle (EXC-830) and pointed the key at
-  // the breadcrumbs bar instead, so the plan's one heading-navigation surface answers
-  // to both keys. Two keymap reservations share one action, which the unit suite pins
-  // (keymap.test.ts); what needs a browser is that the second key really does reach
-  // the menu through the dispatcher.
-  await daemon.seed({ plan: TALL_PLAN });
-  await page.goto("/");
-  await loadPlan(page);
-
-  const crumb = currentCrumb(page);
-  await expect(crumb).toBeVisible();
-
-  const menu = page.locator("[data-slot='dropdown-menu-content']");
-  await page.keyboard.press("\\");
-  await expect(menu).toBeVisible();
-
-  // And a second `\` shuts it, the same as `b` does: the key is the whole
-  // invocation, not a one-way open. Escape's dismissal is a different contract and
-  // is pinned by its own spec above.
-  await page.keyboard.press("\\");
-  await expect(menu).toHaveCount(0);
 });

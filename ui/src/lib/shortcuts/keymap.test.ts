@@ -98,33 +98,21 @@ describe("CANONICAL_KEYMAP", () => {
     expect(ariaKeyshortcutsFor("actions.reject")).toBe("Shift+R");
   });
 
-  test("reserves \\ as the breadcrumbs bar's second key, rendered as a \\ cap", () => {
-    // EXC-949 retired the ToC rail `\` used to toggle and handed the key to the
-    // breadcrumbs bar. A bare backslash, no command modifier — the cap derives
-    // straight from the key, no explicit override.
-    const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.toggleSidebar");
-    if (!entry) throw new Error("actions.toggleSidebar missing");
+  test("reserves \\ for the contents popup, rendered as a \\ cap (EXC-1097)", () => {
+    // A bare backslash, no command modifier — the cap derives straight from the
+    // key, no explicit override — and the advertised hint derives from the same
+    // field, so the trigger's aria-keyshortcuts cannot drift from what the
+    // dispatcher fires on.
+    const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.contents");
+    if (!entry) throw new Error("actions.contents missing");
     expect(entry.group).toBe("actions");
-    expect(entry.label).toBe("Open breadcrumbs (alt)");
+    expect(entry.label).toBe("Open contents");
     expect(specSignature(entry.keys)).toBe("\\");
     expect(keyCaps(entry.keys)).toEqual([["\\"]]);
-  });
-
-  test("\\ and b reach the breadcrumbs bar as two reservations, not one two-key entry", () => {
-    // `keys` models a key SEQUENCE (gg, ]]), so an alternatives set has no
-    // representation in a single entry: two keys onto one action is two
-    // reservations sharing a `run`. Both must stay separate and single-key, or `\`
-    // would silently become the first half of a chord nobody can complete.
-    const alt = CANONICAL_KEYMAP.find((e) => e.id === "actions.toggleSidebar");
-    const primary = CANONICAL_KEYMAP.find((e) => e.id === "actions.headingNav");
-    if (!alt || !primary) throw new Error("breadcrumbs keymap entries missing");
-    expect(alt.keys).toHaveLength(1);
-    expect(primary.keys).toHaveLength(1);
-    expect(alt.group).toBe(primary.group);
-    // Distinct labels: the help modal lists both, and two identical rows would
-    // read as a rendering bug rather than as an alias.
-    expect(alt.label).not.toBe(primary.label);
-    expect(ariaKeyshortcutsFor("actions.toggleSidebar")).toBe("\\");
+    expect(ariaKeyshortcutsFor("actions.contents")).toBe("\\");
+    // The breadcrumbs alias this key used to be is gone rather than renamed, so
+    // the help modal cannot carry a row still claiming `\` opens the bar.
+    expect(CANONICAL_KEYMAP.some((e) => e.id === "actions.toggleSidebar")).toBe(false);
   });
 
   test("reserves b for the heading breadcrumbs in the Actions group, rendered as a B cap", () => {

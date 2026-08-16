@@ -161,19 +161,17 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
   // command modifier and no cap override: keyCaps derives the capital from the key's
   // case, the same shape `d` and `n` take.
   { id: "actions.headingNav", keys: [{ key: "b" }], group: "actions", label: "Open breadcrumbs" },
-  // EXC-949 retired the ToC rail this key used to toggle (EXC-830) and handed `\` to
-  // the breadcrumbs bar, so the plan has one heading-navigation surface reachable by
-  // two keys. Two reservations rather than one entry with two keys, because
-  // ShortcutEntry.keys models a key SEQUENCE (gg, ]]) and has no spelling for a set
-  // of alternatives; DiffPlanView registers both ids against the same `run`. The
-  // label carries the "(alt)" so the `?` help lists an alias rather than what would
-  // otherwise read as a duplicated row.
-  {
-    id: "actions.toggleSidebar",
-    keys: [{ key: "\\" }],
-    group: "actions",
-    label: "Open breadcrumbs (alt)",
-  },
+  // EXC-1097: opens the plan's table-of-contents popup — the see-the-whole-shape
+  // surface beside the breadcrumbs bar's drill-down. `\` has already been rebound
+  // twice (EXC-830's docked rail, then EXC-949's breadcrumbs alias), so a third
+  // move costs reviewers a third relearn. A bare key with no cap override: keyCaps
+  // and ariaKeyshortcuts both derive from `keys`, so the trigger's advertised hint
+  // cannot drift from what the dispatcher fires on.
+  // Unlike `b`, this key only OPENS. The popup puts focus in a text field, so the
+  // dispatcher's editing-context guard suppresses bare keys while it is up and a
+  // second `\` types a backslash into the filter; Escape and the trigger close it.
+  // Both labels read "Open …" for that reason — neither claims to toggle.
+  { id: "actions.contents", keys: [{ key: "\\" }], group: "actions", label: "Open contents" },
   // Settings — the Settings modal's scoped affordances, display-only (EXC-849/876).
   ...SETTINGS_SHORTCUTS,
   // Help

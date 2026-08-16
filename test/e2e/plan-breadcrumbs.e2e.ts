@@ -404,13 +404,10 @@ test("b shuts the bar from whatever crumb the walk reached", async ({ daemon, pa
   await page.keyboard.press("b");
   await expect(menu).toHaveCount(0);
 
-  // And it opens again where it always does — the crumb the reader is on. `\`
-  // shares the binding, so the toggle is the same one from either key.
-  await page.keyboard.press("\\");
+  // And it opens again where it always does — the crumb the reader is on, not the
+  // ancestor the walk reached.
+  await page.keyboard.press("b");
   await expect(menu.getByRole("menuitem")).toHaveText(["Charlie"]);
-  await page.keyboard.press("h");
-  await page.keyboard.press("\\");
-  await expect(menu).toHaveCount(0);
 });
 
 test("every level of a deep walk is actually on screen", async ({ daemon, page }) => {
