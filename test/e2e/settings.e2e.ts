@@ -165,11 +165,17 @@ test("picking a slot's palette applies it immediately when that slot is live", a
 
   await openSettings(page);
 
-  // The dark slot is live under the emulated dark OS, so re-picking its palette
-  // applies at once and confirms with its own toast.
+  // The dark slot is live under the emulated dark OS, so changing its palette applies at
+  // once — no Save step — and confirms with its own toast. The pick is a DIFFERENT
+  // palette than the one already selected: the control is a listbox, so re-picking the
+  // current value commits nothing, exactly as a native <select> does (EXC-1111).
   await page.getByRole("button", { name: "Dark theme" }).click();
-  await page.getByRole("menuitemradio", { name: "caret dark" }).click();
+  await page.getByRole("option", { name: "GitHub Dark" }).click();
   await expect(page.getByText("Dark theme updated")).toBeVisible();
+
+  // The chrome repainted from GitHub Dark's own tokens, and the slot is still the live
+  // one — applying a palette to the live slot never changes which slot that is.
+  await expect(page.locator("html")).toHaveAttribute("style", /--paper:\s*#0d1117/i);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 });
 
@@ -205,7 +211,7 @@ test("picking a vendor palette retints the chrome and the code", async ({ daemon
 
   await openSettings(page);
   await page.getByRole("button", { name: "Dark theme" }).click();
-  await page.getByRole("menuitemradio", { name: "Dracula" }).click();
+  await page.getByRole("option", { name: "Dracula" }).click();
   await expect(page.getByText("Dark theme updated")).toBeVisible();
 
   // The chrome repaints from Dracula's own tokens, and the block still explains
@@ -268,7 +274,7 @@ test("hovering a theme option previews its palette beside the menu, without appl
   await page.getByRole("button", { name: "Light theme" }).click();
 
   // An abstract preview card appears beside the open menu — before any selection.
-  await page.getByRole("menuitemradio", { name: "caret light" }).hover();
+  await page.getByRole("option", { name: "caret light" }).hover();
   const preview = page.locator("[data-slot='theme-preview']");
   await expect(preview).toBeVisible();
 
@@ -305,7 +311,7 @@ test("hovering a theme option previews its palette beside the menu, without appl
   // swaps the single card to caret dark rather than stacking a second.
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Dark theme" }).click();
-  await page.getByRole("menuitemradio", { name: "caret dark" }).hover();
+  await page.getByRole("option", { name: "caret dark" }).hover();
   await expect(preview).toHaveCount(1);
   await expect(preview).toHaveAttribute("style", /--accent:\s*#ff8f3d/i);
 });
@@ -323,10 +329,19 @@ test("keyboard-highlighting a theme option previews it too (EXC-753)", async ({ 
   await waitPastSafeModeGrace(page);
   await page.getByRole("button", { name: "Light theme" }).click();
 
-  // Roving the menu with the keyboard highlights an option (real focus), which surfaces
-  // its preview just like a hover does — the keyboard clause of the acceptance criteria.
+  // A listbox always has an active option, so the selected palette's card is already up
+  // when the panel opens. Read it first — otherwise "a card is visible" after the keypress
+  // would pass without the keyboard having moved anything.
+  const preview = page.locator("[data-slot='theme-preview']");
+  await expect(preview).toBeVisible();
+  const atOpen = await preview.getAttribute("style");
+
+  // Roving the panel with the keyboard moves the highlight (bits-ui drives
+  // aria-activedescendant rather than focus), which re-tints the card just as a hover
+  // does — the keyboard clause of the acceptance criteria.
   await page.keyboard.press("ArrowDown");
-  await expect(page.locator("[data-slot='theme-preview']")).toBeVisible();
+  await expect(preview).toBeVisible();
+  await expect.poll(() => preview.getAttribute("style")).not.toBe(atOpen);
 });
 
 // The reopen path (the reported glitch): after switching themes, reopening the menu and
@@ -346,15 +361,16 @@ test("reopening the theme menu after a switch keeps the preview beside the menu,
 
   await openSettings(page);
 
-  // Commit a palette — the menu closes on pick.
+  // Commit a palette — the panel closes on pick. A palette other than the one already
+  // selected, since re-picking the current value commits nothing (EXC-1111).
   await page.getByRole("button", { name: "Dark theme" }).click();
-  await page.getByRole("menuitemradio", { name: "caret dark" }).click();
+  await page.getByRole("option", { name: "Dracula" }).click();
   await expect(page.getByText("Dark theme updated")).toBeVisible();
 
   // Reopen and highlight the first option — the fast reopen that raced the menu's async
   // positioning in the bug report.
   await page.getByRole("button", { name: "Dark theme" }).click();
-  await page.locator(".setting-menu [role='menuitemradio']").first().hover();
+  await page.locator(".setting-menu [role='option']").first().hover();
 
   const preview = page.locator("[data-slot='theme-preview']");
   await expect(preview).toBeVisible();
@@ -421,7 +437,7 @@ test("changing the diff Layout in Settings reflows an open compare diff live", a
     .getByRole("dialog", { name: "Settings" })
     .getByRole("button", { name: "Layout" })
     .click();
-  await page.getByRole("menuitemradio", { name: "Unified" }).click();
+  await page.getByRole("option", { name: "Unified" }).click();
   await expect(pre).toHaveAttribute("data-diff-type", "single");
 });
 
