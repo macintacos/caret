@@ -66,4 +66,16 @@ describe("Spinner", () => {
     expect(glyph?.style.width).toBe("24px");
     expect(glyph?.style.height).toBe("24px");
   });
+
+  // The other half of that contract, pinned rather than only described: shadcn's usual
+  // `class="size-*"` resize idiom does NOT reach the glyph, because Icon's inline style
+  // outranks the utility. Left unpinned, a caller lands a 24px box around a 16px glyph
+  // and reads it as a rendering bug rather than a wrong prop.
+  test("sizing through class alone does not reach the glyph", async () => {
+    const { target, flush } = render(Spinner, { class: "size-6" });
+    await flushUntil(flush, () => root(target) !== null);
+
+    const glyph = root(target)?.querySelector("[data-icon='loader-circle']") as HTMLElement | null;
+    expect(glyph?.style.width).toBe("16px");
+  });
 });

@@ -27,7 +27,14 @@
 		{preventScroll}
 		data-slot="select-content"
 		class={cn(
-			"min-w-36 rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 relative isolate z-50 overflow-x-hidden overflow-y-auto",
+			// Enter/exit is keyed on `data-[state=…]`, the attribute bits-ui actually stamps
+			// (`getDataOpenClosed` in bits/select/select.svelte.js) — stock ships a bare
+			// `data-open:`, which Tailwind compiles to an `[data-open]` PRESENCE selector
+			// nothing ever sets, leaving the whole set dead and the panel popping in with no
+			// transition (EXC-891). dialog-content, dialog-overlay and popover-content already
+			// spell it this way; a `shadcn add --overwrite` restores the broken form, so
+			// shadcn-select.test.ts pins it.
+			"min-w-36 rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 relative isolate z-50 overflow-x-hidden overflow-y-auto",
 			className
 		)}
 		{...restProps}

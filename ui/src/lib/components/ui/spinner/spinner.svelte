@@ -8,26 +8,33 @@
 	// because Icon writes its dimensions inline and would ignore a `size-*` utility in
 	// `class`, so a caller asking for a bigger spinner has to say so here.
 	//
-	// data-slot is a caret addition — stock stamps none, every other vendored
-	// component does, and spinner.test.ts asserts through it.
+	// data-slot and the bindable `ref` are caret additions — stock has neither, because
+	// stock forwards to a lucide component rather than owning a node. Every other
+	// component in the vendored tree exposes both, and spinner.test.ts asserts through
+	// the slot.
 	//
-	// The spin obeys the app-wide reduced-motion guard in styles/base.css, which
-	// clamps every animation under `prefers-reduced-motion: reduce`; the role/label
-	// pair below is what still announces the wait when it does.
+	// The spin obeys the app-wide reduced-motion guard in styles/base.css, which clamps
+	// every animation under `prefers-reduced-motion: reduce`. `role="status"` names the
+	// region for assistive tech, but note it does NOT reliably announce on its own: a
+	// live region is narrated when its CONTENT changes, and this one is created already
+	// populated with an aria-hidden glyph. A surface that needs the wait spoken should
+	// render the region before the state flips rather than rely on this component.
 	import Icon from "@/components/Icon.svelte";
-	import { cn } from "$lib/utils.js";
+	import { cn, type WithElementRef } from "$lib/utils.js";
 	import type { HTMLAttributes } from "svelte/elements";
 
 	let {
+		ref = $bindable(null),
 		class: className,
 		role = "status",
 		size = 16,
 		"aria-label": ariaLabel = "Loading",
 		...restProps
-	}: HTMLAttributes<HTMLSpanElement> & { size?: number } = $props();
+	}: WithElementRef<HTMLAttributes<HTMLSpanElement>> & { size?: number } = $props();
 </script>
 
 <span
+	bind:this={ref}
 	data-slot="spinner"
 	{role}
 	aria-label={ariaLabel}

@@ -4,11 +4,13 @@
 // the test goes. Field is not portalled — it mounts into the render target, like
 // Switch and unlike Select.
 //
-// The load-bearing assertion is the last one. Field's whole point for EXC-1112 is
-// that a settings row finally gets a real <label> pointing at its control; that
-// only works because `field` carries `label` as a registry dependency, and a
-// re-sync that drops the dependency would leave every other assertion here
-// passing. Nothing composes Field yet, so this suite is its only consumer.
+// The load-bearing assertion is `tagName === "LABEL"`. Field's whole point for
+// EXC-1112 is that a settings row finally gets a real <label> rather than a styled
+// div, and that only holds while `field-label.svelte` renders the pulled-in `label`
+// tree. (A re-sync dropping the registry dependency outright fails the import and
+// reds this whole file; a re-sync that swaps what field-label renders would not,
+// which is the case this assertion covers.) Nothing composes Field yet, so this
+// suite is its only consumer.
 import "@ui/test-mount.ts";
 
 import { expect, test } from "bun:test";

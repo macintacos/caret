@@ -14,6 +14,7 @@
 import "@ui/test-mount.ts";
 
 import { expect, test } from "bun:test";
+import { join } from "node:path";
 
 import { flushUntil, render } from "@ui/test-mount.ts";
 import SelectFixture from "$lib/shadcn-select-fixture.svelte";
@@ -27,11 +28,25 @@ const trigger = (target: HTMLElement) => target.querySelector("[data-slot='selec
  * open at unmount keeps its effects alive into the next test, which then reads
  * deriveds whose owner is already destroyed and svelte warns `derived_inert`.
  * test-mount.ts purges the DOM half of that leak; only closing purges the effect
- * half. Guarded, so it is a no-op if a test never opened. */
+ * half. Guarded, so it is a no-op if a test never opened.
+ *
+ * The gesture is a real `pointerdown`, NOT the `.click()` the Popover suite uses:
+ * `SelectTriggerState.onpointerdown` is what toggles, and its `onclick` only calls
+ * `focus()` (bits/select/select.svelte.js) — so a click leaves the select open and
+ * this helper silently stops guarding anything. The closing assertion is what keeps
+ * that from happening again, since `flushUntil` exhausts its budget without throwing. */
 async function close(target: HTMLElement, flush: () => void): Promise<void> {
   if (content() === null) return;
-  (trigger(target) as HTMLButtonElement | null)?.click();
+  trigger(target)?.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      bubbles: true,
+      button: 0,
+      pointerId: 1,
+      pointerType: "mouse",
+    }),
+  );
   await flushUntil(flush, () => content() === null);
+  expect(content()).toBeNull();
 }
 
 test("the trigger renders closed, announcing the listbox it opens", async () => {
@@ -95,4 +110,35 @@ test("select rows carry caret's menu-row geometry", async () => {
   expect(row?.classList.contains("rounded-lg")).toBe(true);
   expect(row?.classList.contains("cursor-pointer")).toBe(true);
   await close(target, flush);
+});
+
+// The two invariants a mount cannot reach, pinned against select-content.svelte's
+// source the way motion.test.ts pins the four modal surfaces. Both are exactly the
+// re-sync hazard doc/agents/shadcn-rules.md § Edits a re-sync will silently undo
+// describes: an overwrite restores stock and every mounted assertion above stays green.
+// Comment lines are stripped first: both assertions below look for a literal that the
+// file's own explanatory comments also spell, so an unstripped read matches the prose
+// rather than the markup it describes.
+const selectContentSource = (
+  await Bun.file(join(import.meta.dir, "components/ui/select/select-content.svelte")).text()
+).replace(/^\s*\/\/.*$/gm, "");
+
+test("the content keys its enter/exit on the attribute bits-ui actually stamps", () => {
+  // Stock's bare `data-open:` compiles to an `[data-open]` presence selector nothing
+  // sets, so the panel would pop in untransitioned (EXC-891). Asserted on the source
+  // because the class is inert either way — the DOM cannot tell the two spellings apart.
+  expect(selectContentSource).toContain("data-[state=open]:animate-in");
+  expect(selectContentSource).toContain("data-[state=closed]:animate-out");
+  expect(selectContentSource).not.toContain("data-open:");
+  expect(selectContentSource).not.toContain("data-closed:");
+});
+
+test("the content composes both scroll buttons", () => {
+  // bits-ui renders a scroll button only while the viewport is actually scrollable,
+  // which never happens under happy-dom's layout-free DOM — so the mounted assertions
+  // above cannot see them, and dropping either one would go unnoticed. This is the
+  // `Command.Viewport` shape of defect (EXC-1096): a missing sub-part that degrades a
+  // real surface silently, here leaving a long option list with no scroll affordance.
+  expect(selectContentSource).toContain("<SelectScrollUpButton />");
+  expect(selectContentSource).toContain("<SelectScrollDownButton />");
 });
