@@ -649,6 +649,27 @@
     <EmptyState connected={selection.connected} />
   {/if}
 
+  <!-- The arrival (EXC-894): the second half of the hand-off a decided modal starts. The
+       guard recedes on --dur-exit while this lifts on --dur-enter, so the departure has
+       cleared before the arrival settles and the two read as one gesture rather than as
+       two events that happened to coincide.
+
+       A curtain rather than an animation on the content itself, because the two
+       destinations arrive by different mechanisms: draining the queue MOUNTS EmptyState,
+       where a CSS animation would replay on its own, while a plan stacked behind this one
+       leaves DiffPlanView mounted and re-renders its shadow content through contentKey,
+       where it would not. Keying an element that owns nothing covers both with one rule,
+       and costs nothing — remounting the view to buy a fade would tear down the
+       @pierre/diffs render, re-init the compare store and strand revealLine. Owning
+       nothing is also why the plan under it does not move at all: this lifts off it.
+
+       Keyed on the review's identity rather than the derived object: the 2s poll bumps the
+       active review to a new version without changing the id, and a revision landing in
+       place is not an arrival. -->
+  {#key active?.id ?? "none"}
+    <div class="arrival" aria-hidden="true"></div>
+  {/key}
+
   <!-- The bottom status bar (EXC-787): the row-4 grid child consolidating the
        build/version badge (left), the plan-review status (right, when active),
        and the keyboard ? affordance (far right). While comparing, its tally
@@ -827,6 +848,49 @@
   }
   .shell > :global(.status-bar) {
     grid-row: 4;
+  }
+
+  /* The hand-off's arrival, covering the content row it names but deliberately OUT OF
+     FLOW. The grid placement is what gives an absolutely-positioned child its containing
+     block — .shell is positioned for exactly this (layout.css) — and `inset: 0` then
+     stretches it to that area. In flow it could not work: the content row is filled by
+     AUTO-PLACED children, because DiffPlanView renders `.control-row` and `.diff-surface`
+     as two siblings rather than one root — which is also why the `.diff-plan` arm of the
+     rule above matches nothing today. An in-flow item claiming row 3 is placed before them
+     and pushes `.diff-surface` into an implicit fifth row, under the status bar. Out of
+     flow it takes part in no placement at all. Declared after both content branches, so it
+     paints over them with no z-index of its own.
+
+     Both ends of the placement are spelled out because out of flow they have to be: an
+     `auto` grid line on an absolutely-positioned child resolves to the grid container's
+     PADDING EDGE rather than to "span 1", so a bare `grid-row: 3` would run the curtain
+     down over the status bar as well — and the bar is chrome that stays continuous through
+     the hand-off, because the app did not change, only the plan did.
+
+     Opacity only, and deliberately not a wipe: the directional sweep is spoken for by the
+     theme switch, where it means "everything was restyled". A plan arriving is a smaller
+     claim, so the page simply develops back in under the curtain. `forwards` is
+     load-bearing rather than cosmetic — without the fill the final opacity is discarded
+     and the curtain snaps back to full paper, blanking the content region for the rest of
+     the session. Reduced motion stays the global rule's job (styles/base.css), which
+     collapses this to 0.01ms and makes the hand-off the instant state change it should be
+     under that preference — hence no @media here. */
+  .arrival {
+    position: absolute;
+    grid-row: 3 / 4;
+    grid-column: 1 / 2;
+    inset: 0;
+    pointer-events: none;
+    background: var(--paper);
+    animation: arrival var(--dur-enter) var(--ease-out) forwards;
+  }
+  @keyframes arrival {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
   }
 
   /* Persistent, dismissible banner shown when the daemon behind the port was

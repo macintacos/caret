@@ -35,9 +35,20 @@
    viewport-pinned chrome and would break its pin. Two surfaces depend on this —
    the comment navigator (CommentNavigator.svelte `.comment-navigator`), which
    sits outside this grid, and the folder-reference card (FolderTree.svelte
-   `.folder-tree`), which renders inside it and so depends on it more directly. */
+   `.folder-tree`), which renders inside it and so depends on it more directly.
+   `position: relative` below is deliberately NOT one of those: it establishes a
+   containing block for absolutely-positioned descendants only, and both of those
+   surfaces are `position: fixed`, whose containing block only the four properties
+   above can steal. */
 .shell {
   display: grid;
+  /* Positioned so a grid-placed but out-of-flow child anchors to its grid AREA rather
+     than to the viewport — which is how App.svelte's `.arrival` curtain (EXC-894) covers
+     the content row without becoming a grid item. It has to stay out of flow: the content
+     row is filled by AUTO-PLACED children (DiffPlanView renders `.control-row` and
+     `.diff-surface` as two siblings, not one root), so an in-flow item claiming row 3
+     explicitly would push `.diff-surface` into an implicit fifth row below the status bar. */
+  position: relative;
   /* Rows: TopBar | optional daemon-replaced banner | content | bottom status bar
      (EXC-787). The middle row collapses to 0 when the banner is absent; content
      keeps the 1fr regardless (App.svelte pins each child to its row). */
