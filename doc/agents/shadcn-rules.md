@@ -32,16 +32,16 @@ into the stub rather than skipping them. And pass `-y`: the CLI otherwise stops 
 silent hang rather than a prompt. The CLI pulls the *current* registry source, which may
 be newer than what's already vendored — diff before you keep an overwrite.
 
-Two facts that diff needs, or it can't actually be performed (EXC-1109). **The registry
-item lives at `https://shadcn-svelte.com/registry/styles/<style>/<name>.json`, and caret's
-effective `<style>` is `nova`** — `ui/components.json` declares no `style` key, so the
-schema default applies rather than the `vega` a URL builder falls back to. Both styles
-resolve, so fetching the wrong one hands you a plausible source that is simply a different
-style. **And the comparison is never byte-for-byte**: `mise run format` runs a Tailwind
-canonicalizer over `ui/src/**/*.svelte` (`hk.pkl`, `check_first = false`) that rewrites
-`data-[disabled]:opacity-50` into `data-disabled:opacity-50`, so a vendored file diverges
-from its registry item the first time anyone formats. Read the diff for meaning, not for
-equality.
+Two facts that comparison needs, or it can't actually be performed (EXC-1109). **The
+registry item lives at `https://shadcn-svelte.com/registry/styles/<style>/<name>.json`,
+and caret's effective `<style>` is `nova`** — `ui/components.json` declares no `style`
+key, so the schema default applies rather than the `vega` a URL builder falls back to.
+Both styles resolve, so fetching the wrong one hands you a plausible source that is simply
+a different style. **And don't expect the comparison to be byte-for-byte**:
+`mise run format` runs a Tailwind canonicalizer over `ui/src/**/*.svelte` (`hk.pkl`) that
+rewrites `data-[disabled]:opacity-50` into `data-disabled:opacity-50`, so a vendored file
+diverges wherever that has something to rewrite — and the registry drifts on its own
+besides. Read the diff for meaning, not for equality.
 
 ### Adding a component that collides with the vendored tree
 
@@ -147,11 +147,11 @@ consistent with it rather than inventing a per-component treatment.
   writes its own `data-slot="button"` *before* it spreads `{...restProps}`, so the moment
   that Button is also a bits-ui trigger the primitive's slot value wins and every
   `[data-slot="button"].x` rule stops matching. Nothing about the markup looks different
-  and no test goes red — the styling simply leaves, which is how EXC-1110 found
-  `ConfirmPopover`'s `.danger` had quietly lost its trash-hover wobble. `atoms.css`'s
-  `button.float-chip` is the durable form. Still on the fragile spelling, and one trigger
-  conversion away from the same failure: `.chip` in `SourceAnnotationCard`, `.keep` in
-  `SourceComposer`, `.scratch` in `SourceScratchMarker`.
+  and no test goes red — the styling simply leaves, which is how EXC-1110 found the
+  Discard button's `.danger` in `SourceAnnotationCard` (a `ConfirmPopover` trigger since
+  that ticket) had quietly lost its trash-hover wobble. `atoms.css`'s `button.float-chip`
+  is the durable form. For what is still on the fragile spelling, one trigger conversion
+  away from the same failure: `grep -rn '\[data-slot="button"\]' ui/src`.
 - **Amber stays the single primary.** One action per surface carries amber
   (`variant="default"` → `--primary`); everything else is a neutral chip. Don't spend
   amber on secondary controls.
@@ -215,7 +215,8 @@ pipeline as the single icon source.
 ## What stays custom
 
 Not every surface is a shadcn candidate. These are caret-owned and are **not** to be
-replaced by a catalog component:
+replaced by a catalog component; the subsections below record the audit verdicts behind
+that, including which vendored trees stay put:
 
 - **The `@pierre/diffs` shadow-DOM surface** — `SourceView`, `SourceDiffView`,
   `DiffPlanView`. It's a shadow-encapsulated third-party render surface bridged through
@@ -227,27 +228,25 @@ replaced by a catalog component:
 ### Audited and declined (EXC-857)
 
 The EXC-857 audit reached "no" on the surfaces below, each against a specific catalog
-component. The reasons are recorded so the question stops being re-asked — and so a
-verdict that stops being true is falsifiable rather than merely unfashionable. Each points
-at the code a reader can check it against.
+component. Each names the code it rests on, so a verdict that stops being true fails a
+check rather than quietly aging.
 
 - **`FileDrawer`** over **`resizable`** — `resizable` is PaneForge, a new dependency
-  governed by [`dependency-rules.md`](dependency-rules.md). (The audit first recorded it
-  as the `paneforge@next` prerelease; the registry item now declares `paneforge@^1.0.2`,
-  so the *prerelease* half of that reason is void. What follows is the half that stands.)
-  FileDrawer is a docked lane with an opening and closing wipe, not a symmetric pane
-  group, and it already has pointer capture (`FileDrawer.svelte:55`), an arrow-key step
-  (`:89`), and a correct `role="separator"` carrying `aria-orientation`, `aria-valuenow`,
-  `aria-valuemin` and `aria-valuemax` (`:113`–`:119`), with the drag math factored out
-  into [`lib/fileDrawer.ts`](../../ui/src/lib/fileDrawer.ts). Adopting PaneForge would buy
-  a pane group it isn't, and re-cost the accessibility it has.
+  governed by [`dependency-rules.md`](dependency-rules.md). FileDrawer is a docked lane
+  with an opening and closing wipe, not a symmetric pane group, and it already has pointer
+  capture (`FileDrawer.svelte:55`), an arrow-key step (`:87`), and a correct
+  `role="separator"` carrying `aria-orientation`, `aria-valuenow`, `aria-valuemin` and
+  `aria-valuemax` (`:113`–`:119`), with the drag math factored out into
+  [`lib/fileDrawer.ts`](../../ui/src/lib/fileDrawer.ts). Adopting PaneForge would buy a
+  pane group it isn't, and re-cost the accessibility it has.
 - **`AlertHost`** over **`sonner`** — `sonner` needs **two** new dependencies
   (`svelte-sonner` and `mode-watcher`), and its registry file imports an
   `icon-placeholder` component caret does not vendor. It also brings an opinionated look
   and a second animation system, and would duplicate the dwell and the two-phase
   exit-then-remove that [`state/alerts.ts`](../../ui/src/state/alerts.ts) already owns.
-  The card is already the vendored `alert`, and the motion runs on the shared `--dur-*` /
-  `--ease-*` tokens, so the global reduced-motion rule governs it for free.
+  The card is already the vendored `alert`, and its motion is CSS-only on the shared
+  `--dur-*` / `--ease-*` tokens, so `base.css`'s global reduced-motion clamp — which keys
+  on where the node sits, not on which token supplied the duration — governs it for free.
 - **`SplitButton`** over **`button-group`** — this one costs no new dependency
   (`registryDependencies: ["separator"]`, already vendored), so the reason is purely what
   it brings. `SplitButton` already composes the shadcn `Button` and `DropdownMenu`; only
@@ -260,37 +259,42 @@ at the code a reader can check it against.
   a `tabindex`'d native scroll container (EXC-972 — Chrome and Safari leave a plain
   `overflow: auto` div out of the tab order, so that tab stop *is* the keyboard reading
   affordance), it sets `overflow-anchor: none` because `expand()` does its own `scrollTop`
-  arithmetic on an upward chunk load, and `file-refs.e2e.ts` pins its computed metrics
-  against the plan surface. `NotificationsPane` has no scroll region at all. The vendored
-  tree stays available for a future consumer; neither of these is one.
-- **`KbdCap`, `ModalPresence`, `StatusBar`** — the settled keeps, with no catalog analogue
-  between them. `KbdCap` renders cap *content* only, by design: the caller supplies the
-  `<Kbd>` box, so the help modal can wrap one cap per key while the status bar folds a
-  whole chord into a single key. `ModalPresence` is the exit-animation gate (EXC-891) that
-  keeps a surface mounted through its close via `onOpenChangeComplete`. `StatusBar` is a
-  pure layout container.
+  arithmetic on an upward chunk load, and `file-refs.e2e.ts` pins its computed metrics.
+  `NotificationsPane` has no scroll region at all. The vendored tree stays available for a
+  future consumer; neither of these is one.
+- **`KbdCap`, `ModalPresence`, `StatusBar`** — the settled keeps: none is replaceable by a
+  catalog component. `KbdCap` (`KbdCap.svelte`) is not a `Kbd` substitute — it renders cap
+  *content* inside the vendored `Kbd` box the caller supplies, which is what lets the help
+  modal wrap one cap per key while the status bar folds a whole chord into one.
+  `ModalPresence` (`ModalPresence.svelte`, `lib/modalPresence.ts`) is the exit-animation
+  gate (EXC-891) that keeps a surface mounted through its close via
+  `onOpenChangeComplete`. `StatusBar` (`StatusBar.svelte`) is a pure layout container.
 
 ### The vendored `sheet` tree stays
 
 It reads as orphaned — nothing caret wrote composes a Sheet — but
 `ui/src/lib/components/ui/sidebar/sidebar.svelte` imports it for its `isMobile` branch,
 and Sidebar *is* composed: `SettingsDialog.svelte` renders it as the Settings category
-rail (EXC-843). So `sheet` is Sidebar's registry dependency and § Adding a component that
-collides with the vendored tree applies unchanged — keep the whole tree. Removing it fails
-the build, which is the check to re-run rather than re-deriving the verdict from a grep:
+rail (EXC-843). caret never reaches that branch, because `SettingsDialog` passes
+`collapsible="none"` and `sidebar.svelte` handles that case first — but `sheet` is still
+Sidebar's registry dependency, so § Adding a component that collides with the vendored
+tree applies unchanged: keep the whole tree. `grep -rn "components/ui/sheet" ui/src`
+returns that one import and settles it; removing the tree and building confirms it the
+expensive way:
 
 ```text
 [UNLOADABLE_DEPENDENCY] Could not load src/lib/components/ui/sheet/index.js
    ╭─[ src/lib/components/ui/sidebar/sidebar.svelte:3:24 ]
+ 3 │ import * as Sheet from "$lib/components/ui/sheet/index.js";
 ```
 
 Two things about the tree are known-imperfect, and both are deliberately left for whoever
-first composes a Sheet, since neither is reachable today. `sheet-content.svelte` still
-carries the dead `data-open:` / `data-closed:` animation utilities that EXC-891 and
-EXC-1109 corrected in the dialog, popover and select trees — bits-ui emits `data-state`,
-so Tailwind compiles those into `[data-open]` selectors nothing ever stamps. And
-`sheet-overlay.svelte` is not yet on the shared modal choreography, per § The caret
-surface language.
+first composes a Sheet, since the branch that would render one is dead code today.
+`sheet-content.svelte` still carries the dead `data-open:` / `data-closed:` animation
+utilities that EXC-891's finding removed from the dialog, popover and select trees —
+bits-ui emits `data-state`, so Tailwind compiles those into `[data-open]` selectors
+nothing ever stamps. And `sheet-overlay.svelte` is not yet on the shared modal
+choreography, per § The caret surface language.
 
 ## Testing note
 
