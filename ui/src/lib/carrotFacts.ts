@@ -121,3 +121,42 @@ export const CARROT_FACTS: readonly CarrotFact[] = [
     source: "https://www.agmrc.org/commodities-products/vegetables/carrots",
   },
 ];
+
+/** How long one fact holds the line before the next is drawn. */
+export const ROTATE_MS = 50_000;
+
+export interface FactBag {
+  /** The next fact, drawn without replacement until the bag empties and refills. */
+  next: () => CarrotFact;
+}
+
+/**
+ * Draw facts from a shuffled bag rather than picking one at random each time.
+ * An independent pick repeats itself over a long wait, and a line that repeats
+ * is the one thing a reader parked on this screen would actually notice.
+ *
+ * @param facts - The bank to draw from.
+ * @param random - Source of randomness; injected so tests are deterministic.
+ */
+export function createFactBag(
+  facts: readonly CarrotFact[] = CARROT_FACTS,
+  random: () => number = Math.random,
+): FactBag {
+  let bag: CarrotFact[] = [];
+  return {
+    next() {
+      if (bag.length === 0) bag = shuffle(facts, random);
+      return bag.pop() as CarrotFact;
+    },
+  };
+}
+
+/** Fisher–Yates over a copy, so the caller's bank is never reordered. */
+function shuffle(facts: readonly CarrotFact[], random: () => number): CarrotFact[] {
+  const out = [...facts];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [out[i], out[j]] = [out[j] as CarrotFact, out[i] as CarrotFact];
+  }
+  return out;
+}
