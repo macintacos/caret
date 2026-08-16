@@ -11,22 +11,34 @@
   //     wears a solid amber rail + wash and bold ink (caret's "amber marks the
   //     selection" language), overriding shadcn's faint single-accent data-active
   //     treatment so the current pane is unmistakable.
-  //   • Item / ItemGroup — one Item per setting (title + description + control),
-  //     hairline-separated within each section group.
+  //   • Field / FieldSet (EXC-1112) — one Field per setting (label + description +
+  //     control), hairline-separated within a FieldGroup, the whole section wrapped
+  //     in a FieldSet whose FieldLegend is the section header. The FieldLabel is a
+  //     real <label>, so the visible text IS the accessible name and clicking it
+  //     reaches the control; the parallel aria-label strings are gone.
+  //
+  // shadcn's Field spacing is looser than caret's dense rows, and the retune for it
+  // lives HERE rather than in the vendored tv() recipe: shadcn-rules.md § Adding a
+  // component that collides with the vendored tree makes a re-sync's revert
+  // wholesale, so an edit inside field.svelte is undone silently with nothing to
+  // catch it. Note that Svelte does not scope-hash a class handed to a COMPONENT, so
+  // every one of those rules is written in the `.settings :global(…)` form — the
+  // same mechanism the rail rules below already use.
   // The Dialog primitive is composed directly rather than Modal.svelte — Modal's
   // eyebrow/title/footer identity doesn't fit the two-pane layout — keeping a
   // visually-hidden Dialog.Title so the dialog's accessible name is "Settings".
   import * as Dialog from "$lib/components/ui/dialog/index.js";
-  import * as InputGroup from "$lib/components/ui/input-group/index.js";
   import {
-    Item,
-    ItemActions,
-    ItemContent,
-    ItemDescription,
-    ItemGroup,
-    ItemSeparator,
-    ItemTitle,
-  } from "$lib/components/ui/item/index.js";
+    Field,
+    FieldContent,
+    FieldDescription,
+    FieldGroup,
+    FieldLabel,
+    FieldLegend,
+    FieldSeparator,
+    FieldSet,
+  } from "$lib/components/ui/field/index.js";
+  import * as InputGroup from "$lib/components/ui/input-group/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { isTopmostDialog } from "$lib/modalStack.ts";
   import { SETTINGS_SHORTCUTS, shortcuts } from "$lib/shortcuts/index.ts";
@@ -125,6 +137,14 @@
     onChange(field, value);
     values = { ...values, [field.key]: field.read() };
   }
+
+  // What a row's `<label for>` may point at (EXC-1112). A `<label for>` only binds to a
+  // LABELABLE element, and a segmented control is a `<div role="group">` — so `for`
+  // would be inert on it, and the group takes `aria-labelledby` back to this same label
+  // instead. Every other control renders a `<button>`, which is labelable, so `for`
+  // carries both the accessible name and the click-to-activate.
+  const labelTarget = (field: StagedField): string | undefined =>
+    field.control.kind === "segmented" ? undefined : `setting-${field.key}`;
 
   function focusContent(): void {
     document.querySelector<HTMLElement>(".settings-content")?.focus();
@@ -263,7 +283,7 @@
             <AdvancedPane {onCopyDiagnostic} />
           {:else}
             {#each paneSections as section, si (si)}
-              <div class="section">
+              <FieldSet class="section">
                 {#if section.label === THEME_SECTION}
                   <!-- The theme controls render as one composite block rather than
                        three independent rows: the IN USE marker and the resolved-state
@@ -271,21 +291,29 @@
                        header — the pane's own "Appearance" header is that header. -->
                   <ThemeSection fields={section.fields} {values} onApply={apply} />
                 {:else}
-                  {#if section.label}<h3 class="section-head">{section.label}</h3>{/if}
-                  <ItemGroup class="fields">
+                  <!-- The legend stays the fieldset's FIRST child, which is what makes
+                       a browser render it as the group's legend. -->
+                  {#if section.label}
+                    <FieldLegend class="section-head">{section.label}</FieldLegend>
+                  {/if}
+                  <FieldGroup class="fields">
                     {#each section.fields as field, i (field.key)}
-                      {#if i > 0}<ItemSeparator />{/if}
-                      <Item data-field={field.key} class="setting-item">
-                        <ItemContent>
-                          <ItemTitle class="field-label">{field.label}</ItemTitle>
-                          <ItemDescription>{field.description}</ItemDescription>
-                        </ItemContent>
-                        <ItemActions>{@render control(field)}</ItemActions>
-                      </Item>
+                      {#if i > 0}<FieldSeparator />{/if}
+                      <Field orientation="horizontal" data-field={field.key} class="setting-item">
+                        <FieldContent>
+                          <FieldLabel
+                            id="setting-{field.key}-label"
+                            for={labelTarget(field)}
+                            class="field-label">{field.label}</FieldLabel
+                          >
+                          <FieldDescription>{field.description}</FieldDescription>
+                        </FieldContent>
+                        {@render control(field)}
+                      </Field>
                     {/each}
-                  </ItemGroup>
+                  </FieldGroup>
                 {/if}
-              </div>
+              </FieldSet>
             {/each}
           {/if}
         {/if}
@@ -297,23 +325,23 @@
 {#snippet control(field: StagedField)}
   {#if field.control.kind === "select"}
     <SettingSelect
+      id="setting-{field.key}"
       value={String(values[field.key] ?? "")}
       options={field.control.options}
       onSelect={(v) => apply(field, v)}
-      ariaLabel={field.label}
     />
   {:else if field.control.kind === "segmented"}
     <SettingSegmented
+      labelledBy="setting-{field.key}-label"
       value={String(values[field.key] ?? "")}
       options={field.control.options}
       onSelect={(v) => apply(field, v)}
-      ariaLabel={field.label}
     />
   {:else}
     <Switch
+      id="setting-{field.key}"
       checked={values[field.key] === true}
       onCheckedChange={(v) => apply(field, v)}
-      aria-label={field.label}
     />
   {/if}
 {/snippet}
@@ -450,14 +478,15 @@
     color: var(--ink-faint);
   }
 
-  /* A labelled sub-group of settings within the pane (e.g. "Diff view"). The header
-     hugs its ItemGroup; the pane gap separates one section from the next. */
-  .section {
-    display: flex;
-    flex-direction: column;
+  /* A sub-group of settings within the pane (e.g. "Diff view") — a real fieldset, its
+     legend the header, hugging its FieldGroup; the pane gap separates one section from
+     the next. `min-inline-size: 0` cancels the fieldset's own min-content default,
+     which would otherwise let a wide row push the pane's grid track open. */
+  .settings :global(.section) {
     gap: 0.5rem;
+    min-inline-size: 0;
   }
-  .section-head {
+  .settings :global(.section-head) {
     margin: 0;
     font-size: var(--text-xs);
     font-weight: 600;
@@ -466,15 +495,29 @@
     color: var(--ink-faint);
   }
 
-  /* One setting = one shadcn Item (text block left, control flush right). Zero the
-     Item's own horizontal padding so rows align to the pane's edge; a hairline
-     ItemSeparator rules between them. */
+  /* One setting = one shadcn Field (label block left, control flush right), sized to
+     caret's dense rows rather than shadcn's roomier defaults: the row keeps the
+     vertical padding and the label/control gap the Item it replaced had, and the
+     rows stack flush so the hairline FieldSeparator is the only thing between them.
+     `align-items: center` re-asserts the Item centring over Field's
+     has-[field-content]:items-start, which would top-align the control instead. */
   .settings :global(.fields) {
     gap: 0;
   }
   .settings :global(.setting-item) {
-    padding-left: 0;
-    padding-right: 0;
+    align-items: center;
+    gap: 0.625rem;
+    padding-block: 0.625rem;
+  }
+  .settings :global(.setting-item [data-slot="field-content"]) {
+    gap: 0.25rem;
+  }
+  /* The separator ships as a 20px box with the rule floated through its middle. Zeroing
+     the box lands that rule at its top edge, so the hairline stays crisp and the 0.5rem
+     margins alone set the space either side of it. */
+  .settings :global([data-slot="field-separator"]) {
+    height: 0;
+    margin-block: 0.5rem;
   }
   .settings :global(.setting-item .field-label) {
     font-size: var(--text-sm);

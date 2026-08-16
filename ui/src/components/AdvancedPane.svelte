@@ -8,6 +8,12 @@
   // without a daemon; the pure formatters live in lib/diagnostics.ts. Copy is
   // delegated up via onCopyDiagnostic — App writes the clipboard and fires the one
   // shared success alert (EXC-850), so this pane never stands up a second toast.
+  import {
+    Field,
+    FieldDescription,
+    FieldGroup,
+    FieldTitle,
+  } from "$lib/components/ui/field/index.js";
   import { getDiagnostics, getHealth } from "$lib/api.ts";
   import { configToToml, formatUptime, readDaemonPort } from "$lib/diagnostics.ts";
   import type { DaemonDiagnostics, HealthIdentity } from "@core/lib/types";
@@ -86,11 +92,14 @@
   ]);
 </script>
 
-<div class="advanced" data-advanced-pane>
+<!-- The pane composes the shadcn field parts (EXC-1112). FieldTitle rather than
+     FieldLabel throughout: a block DISPLAYS a value and labels no control, and a
+     <label> with nothing to label would be worse than the plain text it replaces. -->
+<FieldGroup class="advanced" data-advanced-pane>
   {#each blocks as block (block.key)}
-    <div class="diag-section" data-diag={block.key}>
+    <Field class="diag-section" data-diag={block.key}>
       <div class="diag-head">
-        <span class="diag-label">{block.label}</span>
+        <FieldTitle class="diag-label">{block.label}</FieldTitle>
         {#if block.available}
           <button
             class="diag-copy"
@@ -104,7 +113,7 @@
 
       {#if block.key === "config" && block.available}
         <!-- The config file's path on disk, above its block (mockup). -->
-        <p class="diag-path">{configPath}</p>
+        <FieldDescription class="diag-path">{configPath}</FieldDescription>
       {/if}
 
       <!-- The sunk-paper block DISPLAYS the value — a presentational element that
@@ -125,23 +134,24 @@
         {/if}
         <code class="diag-text">{block.available ? block.text : "Unavailable"}</code>
       </div>
-    </div>
+    </Field>
   {/each}
-</div>
+</FieldGroup>
 
 <style>
-  .advanced {
-    display: flex;
-    flex-direction: column;
+  /* The field parts carry shadcn's roomier default gaps, so the pane's own rhythm is
+     re-asserted here rather than in the vendored tree (shadcn-rules.md § Adding a
+     component that collides with the vendored tree — a re-sync reverts wholesale).
+     Svelte does not scope-hash a class handed to a COMPONENT, so both selectors are
+     written :global and anchored on the pane's own data attribute. */
+  :global([data-advanced-pane].advanced) {
     gap: 1.15rem;
   }
 
   /* One diagnostics section: an uppercase label row (label + Copy) above its sunk
      block. The label mirrors the SettingsDialog section-head vocabulary so an
      Advanced label reads the same as the Appearance pane's "Diff view" header. */
-  .diag-section {
-    display: flex;
-    flex-direction: column;
+  :global([data-advanced-pane] .diag-section) {
     gap: 0.4rem;
   }
   .diag-head {
@@ -150,7 +160,7 @@
     justify-content: space-between;
     min-height: 1.25rem;
   }
-  .diag-label {
+  :global([data-advanced-pane] .diag-label) {
     font-size: var(--text-xs);
     font-weight: 600;
     text-transform: uppercase;
@@ -181,7 +191,7 @@
   }
 
   /* The config file path, above its block. */
-  .diag-path {
+  :global([data-advanced-pane] .diag-path) {
     margin: 0;
     font-family: var(--font-mono);
     font-size: var(--text-2xs);

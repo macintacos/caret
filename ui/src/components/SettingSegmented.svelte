@@ -22,17 +22,21 @@
     options: readonly SettingOption[];
     /** Apply the picked value. */
     onSelect: (value: string) => void;
-    /** Accessible name for the group (the field's label). */
-    ariaLabel: string;
+    /** The id of the row's `<label>` element, which names this group (EXC-1112).
+     * A toggle group renders a `<div role="group">` — not a labelable element —
+     * so `<label for>` is inert on it and `aria-labelledby` is the association
+     * ARIA gives a composite widget. The name still comes from the visible label,
+     * not a parallel string. */
+    labelledBy: string;
   }
-  let { value, options, onSelect, ariaLabel }: Props = $props();
+  let { value, options, onSelect, labelledBy }: Props = $props();
 </script>
 
 <div class="segmented">
   <ToggleGroup.Root
     type="single"
     size="sm"
-    aria-label={ariaLabel}
+    aria-labelledby={labelledBy}
     bind:value={
       () => value,
       (v) => {

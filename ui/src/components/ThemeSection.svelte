@@ -16,14 +16,13 @@
   import { appearance } from "@/state/appearance.svelte.ts";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import {
-    Item,
-    ItemActions,
-    ItemContent,
-    ItemDescription,
-    ItemGroup,
-    ItemSeparator,
-    ItemTitle,
-  } from "$lib/components/ui/item/index.js";
+    Field,
+    FieldContent,
+    FieldDescription,
+    FieldGroup,
+    FieldLabel,
+    FieldSeparator,
+  } from "$lib/components/ui/field/index.js";
   import { type StagedField, THEME_FIELD } from "$lib/settingsRegistry.ts";
   import SettingSegmented from "@/components/SettingSegmented.svelte";
   import SettingSelect from "@/components/SettingSelect.svelte";
@@ -51,12 +50,19 @@
 </script>
 
 <div class="theme-section" data-theme-section>
-  <ItemGroup class="fields">
+  <FieldGroup class="fields">
     {#each rows as field, i (field.key)}
-      {#if i > 0}<ItemSeparator />{/if}
-      <Item data-field={field.key} class="setting-item">
-        <ItemContent>
-          <ItemTitle class="field-label">
+      {#if i > 0}<FieldSeparator />{/if}
+      <Field orientation="horizontal" data-field={field.key} class="setting-item">
+        <FieldContent>
+          <!-- A real <label> (EXC-1112). The mode row omits `for`: its control is a
+               toggle group, a <div role="group">, which is not a labelable element —
+               that row's group points back here with aria-labelledby instead. -->
+          <FieldLabel
+            id="setting-{field.key}-label"
+            for={field.control.kind === "segmented" ? undefined : `setting-${field.key}`}
+            class="field-label"
+          >
             <span>{field.label}</span>
             {#if field.key === liveKey}
               <!-- The block's one amber mark: which palette is actually showing. It
@@ -64,29 +70,27 @@
                    changes, which replays its reveal on arrival. -->
               <Badge class="in-use">In use</Badge>
             {/if}
-          </ItemTitle>
-          <ItemDescription>{field.description}</ItemDescription>
-        </ItemContent>
-        <ItemActions>
-          {#if field.control.kind === "segmented"}
-            <SettingSegmented
-              value={String(values[field.key] ?? "")}
-              options={field.control.options}
-              onSelect={(v) => onApply(field, v)}
-              ariaLabel={field.label}
-            />
-          {:else if field.control.kind === "select"}
-            <SettingSelect
-              value={String(values[field.key] ?? "")}
-              options={field.control.options}
-              onSelect={(v) => onApply(field, v)}
-              ariaLabel={field.label}
-            />
-          {/if}
-        </ItemActions>
-      </Item>
+          </FieldLabel>
+          <FieldDescription>{field.description}</FieldDescription>
+        </FieldContent>
+        {#if field.control.kind === "segmented"}
+          <SettingSegmented
+            labelledBy="setting-{field.key}-label"
+            value={String(values[field.key] ?? "")}
+            options={field.control.options}
+            onSelect={(v) => onApply(field, v)}
+          />
+        {:else if field.control.kind === "select"}
+          <SettingSelect
+            id="setting-{field.key}"
+            value={String(values[field.key] ?? "")}
+            options={field.control.options}
+            onSelect={(v) => onApply(field, v)}
+          />
+        {/if}
+      </Field>
     {/each}
-  </ItemGroup>
+  </FieldGroup>
 
   <!-- The resolved state in one sentence, so "why is it dark right now" never
        needs working out from the three controls above. -->
@@ -99,15 +103,12 @@
     flex-direction: column;
     gap: 0.5rem;
   }
-  /* Match the pane's own field rhythm — the rows here and the Diff view rows
-     below are one list, not two treatments. */
-  .theme-section :global(.fields) {
-    gap: 0;
-  }
-  .theme-section :global(.setting-item) {
-    padding-left: 0;
-    padding-right: 0;
-  }
+  /* The row rhythm itself (group gap, row padding, the hairline separator) is NOT
+     re-declared here: this section only ever renders inside the settings pane, and
+     SettingsDialog's `.settings :global(…)` rules already reach these rows through the
+     component boundary. One source for it means the two halves of the Appearance pane
+     cannot drift into two treatments. What stays below is what is genuinely this
+     section's own. */
   /* The label line carries the moving IN USE pill beside its text. */
   .theme-section :global(.setting-item .field-label) {
     display: flex;

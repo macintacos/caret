@@ -63,12 +63,12 @@ describe("SettingsDialog shell", () => {
     await flushUntil(flush, mounted);
     // The theme controls render as the composite block, not three generic rows.
     expect(has("[data-theme-section]")).toBe(true);
-    expect(has("button[aria-label='Light theme']")).toBe(true);
-    expect(has("button[aria-label='Dark theme']")).toBe(true);
+    expect(has("button#setting-themeLight")).toBe(true);
+    expect(has("button#setting-themeDark")).toBe(true);
     expect(has("[data-slot='switch']")).toBe(true);
     // The Diff view section's fields now live in the same (Appearance) pane.
-    expect(has("button[aria-label='Layout']")).toBe(true);
-    expect(has("button[aria-label='Change markers']")).toBe(true);
+    expect(has("button#setting-diffStyle")).toBe(true);
+    expect(has("button#setting-diffIndicators")).toBe(true);
   });
 
   // The pane's own "Appearance" header is the theme block's header, so the block
@@ -95,6 +95,44 @@ describe("SettingsDialog shell", () => {
     const { flush } = render(SettingsDialog, props());
     await flushUntil(flush, mounted);
     expect(has(".save-chip")).toBe(false);
+  });
+});
+
+describe("SettingsDialog label association (EXC-1112)", () => {
+  // The point of the field/label adoption: the visible row text IS the label
+  // element, so the accessible name and the rendered string are one string rather
+  // than two that can drift. `for`/`id` where the control is a labelable element
+  // (the Switch and the select trigger are both <button>); the label-click
+  // behaviour that association buys is real-browser and lives in the e2e.
+  test("each row's visible text is a <label> wired to its control by for/id", async () => {
+    const { flush } = render(SettingsDialog, props());
+    await flushUntil(flush, mounted);
+    for (const key of ["shortcutHints", "diffStyle", "diffIndicators"]) {
+      const row = document.body.querySelector(`[data-field='${key}']`);
+      const label = row?.querySelector("label[data-slot='field-label']");
+      expect(label?.getAttribute("for")).toBe(`setting-${key}`);
+      expect(has(`#setting-${key}`)).toBe(true);
+    }
+  });
+
+  // The parallel aria-label string is gone from every control the visible label
+  // now names — that redundancy is what the ticket exists to remove.
+  test("no control carries a redundant aria-label", async () => {
+    const { flush } = render(SettingsDialog, props());
+    await flushUntil(flush, mounted);
+    expect(has("[data-slot='switch'][aria-label]")).toBe(false);
+    expect(has("#setting-diffStyle[aria-label]")).toBe(false);
+    expect(has("[data-slot='toggle-group'][aria-label]")).toBe(false);
+  });
+
+  // A labelled section is a real fieldset/legend group, not a bare heading over
+  // a div — the grouping semantics `field` exists to supply.
+  test("a labelled section groups its rows in a fieldset with a legend", async () => {
+    const { flush } = render(SettingsDialog, props());
+    await flushUntil(flush, mounted);
+    const head = document.body.querySelector(".section-head");
+    expect(head?.tagName).toBe("LEGEND");
+    expect(head?.closest("fieldset")?.getAttribute("data-slot")).toBe("field-set");
   });
 });
 
@@ -152,7 +190,7 @@ describe("SettingsDialog immediate apply", () => {
     writeDiffStyle("unified");
     const { flush } = render(SettingsDialog, props());
     await flushUntil(flush, mounted);
-    const label = document.body.querySelector("button[aria-label='Layout'] .trigger-label");
+    const label = document.body.querySelector("button#setting-diffStyle .trigger-label");
     expect(label?.textContent?.trim()).toBe("Unified");
   });
 });

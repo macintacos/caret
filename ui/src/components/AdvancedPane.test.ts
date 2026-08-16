@@ -56,6 +56,27 @@ describe("AdvancedPane render", () => {
       "true",
     );
   });
+
+  // EXC-1112: the pane composes the shadcn field parts. FieldTitle, not FieldLabel —
+  // these blocks display a value, they do not label a control, and a <label> that
+  // labels nothing would be worse than the <span> it replaced.
+  test("each diagnostics block is a field, titled rather than labelled", async () => {
+    const { target, flush } = render(AdvancedPane, {
+      onCopyDiagnostic: () => {},
+      loadHealth: () => Promise.resolve(health),
+      loadDiagnostics: () => Promise.resolve(diagnostics),
+    });
+
+    await flushUntil(flush, () => textOf(target, "version").includes("0.7.0"));
+
+    expect(target.querySelector("[data-advanced-pane]")?.getAttribute("data-slot")).toBe(
+      "field-group",
+    );
+    const version = target.querySelector('[data-diag="version"]');
+    expect(version?.getAttribute("data-slot")).toBe("field");
+    expect(version?.querySelector(".diag-label")?.tagName).not.toBe("LABEL");
+    expect(target.querySelectorAll("[data-slot='field']").length).toBe(4);
+  });
 });
 
 describe("AdvancedPane per-block degrade", () => {

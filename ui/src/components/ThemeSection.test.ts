@@ -59,8 +59,8 @@ describe("ThemeSection layout", () => {
   test("the mode row is a segmented radio group, the slots are dropdowns", () => {
     render(ThemeSection, props());
     expect(has("[data-slot='toggle-group']")).toBe(true);
-    expect(has("button[aria-label='Light theme']")).toBe(true);
-    expect(has("button[aria-label='Dark theme']")).toBe(true);
+    expect(has(`button#setting-${THEME_FIELD.light}`)).toBe(true);
+    expect(has(`button#setting-${THEME_FIELD.dark}`)).toBe(true);
   });
 
   test("each mode is a segment, all three visible at once", () => {
@@ -77,6 +77,31 @@ describe("ThemeSection layout", () => {
     expect(has(`[data-field='${THEME_FIELD.dark}']`)).toBe(true);
     expect(has(`[data-field='${THEME_FIELD.mode}']`)).toBe(false);
     expect(has(`[data-field='${THEME_FIELD.light}']`)).toBe(false);
+  });
+});
+
+describe("ThemeSection label association (EXC-1112)", () => {
+  // Both slot rows are named natively: their control is a <button>, which IS a
+  // labelable element, so `for`/`id` carries both the name and the click-to-focus.
+  test("each slot row's visible text is a <label> wired to its trigger by for/id", () => {
+    render(ThemeSection, props());
+    for (const key of [THEME_FIELD.light, THEME_FIELD.dark]) {
+      const label = q(`[data-field='${key}'] label[data-slot='field-label']`);
+      expect(label?.getAttribute("for")).toBe(`setting-${key}`);
+      expect(has(`button#setting-${key}`)).toBe(true);
+    }
+  });
+
+  // The mode row is the exception, and deliberately so: a toggle group renders a
+  // <div role="group">, which is not a labelable element, so `for` would be inert
+  // on it. aria-labelledby pointing at the same real <label> is the association
+  // ARIA gives a composite widget.
+  test("the mode row's group is named by aria-labelledby, not for/id", () => {
+    render(ThemeSection, props());
+    const label = q(`[data-field='${THEME_FIELD.mode}'] label[data-slot='field-label']`);
+    expect(label?.hasAttribute("for")).toBe(false);
+    expect(label?.id).toBe(`setting-${THEME_FIELD.mode}-label`);
+    expect(q("[data-slot='toggle-group']")?.getAttribute("aria-labelledby")).toBe(label?.id);
   });
 });
 
