@@ -246,6 +246,70 @@ describe("the default rect reader", () => {
   });
 });
 
+// A backticked path is the repo's commonest citation, and coreStyles.ts § the
+// citation carve-out paints the whole group — opening backtick, path, closing
+// backtick — as ONE chip, stripping the reference's own fill, inline padding and
+// radius. So the path token's right edge is a point inside the pill, and a badge
+// anchored there sits in the middle of the chip rather than on its corner.
+describe("a reference inside a codespan", () => {
+  const TICK_L: Rect = { top: 10, bottom: 20, left: 100, right: 110 };
+  const PATH: Rect = { top: 10, bottom: 20, left: 110, right: 190 };
+  const TICK_R: Rect = { top: 10, bottom: 20, left: 190, right: 200 };
+
+  /** A one-line row whose tokens each carry data-md-cite — the marker the
+   * carve-out keys on, and the only way to tell a pill's members apart. */
+  function citeHost(tokens: string[]): HTMLElement {
+    const host = makeHost([[1, tokens]]);
+    for (const el of host.shadowRoot?.querySelectorAll("[data-line] span") ?? []) {
+      el.setAttribute("data-md-cite", "");
+    }
+    return host;
+  }
+
+  const tokensOf = (host: HTMLElement): HTMLElement[] =>
+    Array.from(host.shadowRoot?.querySelectorAll("[data-line] span") ?? []);
+
+  /** Lays the row out token by token, by position rather than by text — both
+   * backticks read the same, and they are exactly what has to be told apart. */
+  function laidOut(scroller: HTMLElement, host: HTMLElement, rects: Rect[]): RectReader {
+    const toks = tokensOf(host);
+    return (el) => {
+      if (el === scroller) return SCROLLER;
+      const i = toks.indexOf(el as HTMLElement);
+      return i === -1 ? VISIBLE : (rects[i] ?? VISIBLE);
+    };
+  }
+
+  const anchor = (host: HTMLElement, rects: Rect[]) => {
+    const scroller = document.createElement("div");
+    const refs: FileRefSpanMap = new Map([[1, [span(1, 5, "a.ts", "file")]]]);
+    return pickRefHintAnchors(host, scroller, refs, ["file"], laidOut(scroller, host, rects))[0];
+  };
+
+  test("anchors to the pill's right edge, not the path token's", () => {
+    const got = anchor(citeHost(["`", "a.ts", "`"]), [TICK_L, PATH, TICK_R]);
+    expect({ top: got?.top, left: got?.left }).toEqual({ top: PATH.top, left: TICK_R.right });
+  });
+
+  test("stops walking where the pill does", () => {
+    // Prose follows the closing backtick. Without the cite marker gating the walk
+    // the badge would slide to the end of the sentence.
+    const host = citeHost(["`", "a.ts", "`", " and more prose"]);
+    tokensOf(host).at(-1)?.removeAttribute("data-md-cite");
+    const prose: Rect = { top: 10, bottom: 20, left: 200, right: 380 };
+    const got = anchor(host, [TICK_L, PATH, TICK_R, prose]);
+    expect(got?.left).toBe(TICK_R.right);
+  });
+
+  test("a pill that wrapped keeps the badge on the path's own row", () => {
+    // The closing backtick fell to the next row, whose right edge is a corner the
+    // path itself never reaches.
+    const wrapped: Rect = { top: 30, bottom: 40, left: 100, right: 110 };
+    const got = anchor(citeHost(["`", "a.ts", "`"]), [TICK_L, PATH, wrapped]);
+    expect({ top: got?.top, left: got?.left }).toEqual({ top: PATH.top, left: PATH.right });
+  });
+});
+
 describe("syncRefHints", () => {
   const scroller = () => document.createElement("div");
 

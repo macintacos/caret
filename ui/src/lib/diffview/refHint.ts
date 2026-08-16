@@ -130,7 +130,31 @@ export function syncRefHints(
   return [...kept, ...pickRefHintAnchors(host, scroller, refs, missing, read)];
 }
 
-// The token's top-right in the scroll container's content coordinates. The
+/**
+ * The last token of the pill the reference is drawn as.
+ *
+ * A reference INSIDE a codespan — a backticked path, the repo's commonest
+ * citation — gives up its own fill, inline padding and radius to the group
+ * (coreStyles.ts § the citation carve-out): what the reader sees as one chip is
+ * the opening backtick, the path, and the closing backtick, and only the group's
+ * LAST member reaches the pill's right edge. Anchoring to the path token alone
+ * parks the badge INSIDE the pill, short of the corner it means to mark.
+ *
+ * A standalone reference is its own pill — it keeps the chip's padding and
+ * radius and carries no cite member — so this walks zero steps and returns it.
+ */
+function pillEnd(token: HTMLElement): HTMLElement {
+  if (!token.hasAttribute("data-md-cite")) return token;
+  let end = token;
+  let next = end.nextElementSibling;
+  while (next?.hasAttribute("data-md-cite") === true) {
+    end = next as HTMLElement;
+    next = next.nextElementSibling;
+  }
+  return end;
+}
+
+// The pill's top-right in the scroll container's content coordinates. The
 // conversion mirrors copyAnchor: a row's content offset is its viewport edge
 // minus the scroller's viewport edge, plus how far the content is scrolled.
 function anchorFor(
@@ -139,10 +163,16 @@ function anchorFor(
   read: RectReader,
 ): { top: number; left: number } {
   const r = read(token);
+  const end = pillEnd(token);
+  const e = end === token ? r : read(end);
+  // A pill that WRAPPED leaves its closing token on the next row, whose right
+  // edge is a corner the path itself never reaches. The badge stays on the
+  // fragment the path occupies rather than jumping a line.
+  const right = Math.abs(e.top - r.top) < 1 ? e.right : r.right;
   const s = read(scroller);
   return {
     top: r.top - (s.top - scroller.scrollTop),
-    left: r.right - (s.left - scroller.scrollLeft),
+    left: right - (s.left - scroller.scrollLeft),
   };
 }
 

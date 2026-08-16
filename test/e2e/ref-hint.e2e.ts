@@ -69,20 +69,43 @@ const DIR_BADGE = "Browse this folder";
 const fileBadge = (page: Page) => page.getByRole("button", { name: FILE_BADGE });
 const dirBadge = (page: Page) => page.getByRole("button", { name: DIR_BADGE });
 
-/** The first client rect's top-right of the first token matching `selector`, read
- * from inside the plan's shadow root. The FIRST rect rather than the bounding box:
- * a wrapped path has two fragments and a union box whose corner the text never
- * occupies, which is the corner the badge deliberately does not use. */
-function tokenTopRight(page: Page, selector: string): Promise<{ x: number; y: number } | null> {
+/**
+ * The top-right of the PILL the first token matching `selector` is drawn as, read
+ * from inside the plan's shadow root.
+ *
+ * The pill, not the token: a backticked path — the repo's commonest citation —
+ * renders as three tokens sharing one chip, and the reference in the middle gives
+ * up its own fill, inline padding and radius to the group (coreStyles.ts § the
+ * citation carve-out). Its right edge is therefore a point INSIDE the pill, where
+ * the path text stops and the closing backtick begins, and a badge sitting there
+ * reads as floating in the middle of the chip. Only the group's last member
+ * reaches the corner the reader sees.
+ *
+ * The FIRST rect rather than the bounding box: a wrapped path has two fragments
+ * and a union box whose corner the text never occupies.
+ */
+function pillTopRight(page: Page, selector: string): Promise<{ x: number; y: number } | null> {
   return page.evaluate((sel) => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
-    const rect = sh?.querySelector(sel)?.getClientRects()[0];
-    return rect === undefined ? null : { x: rect.right, y: rect.top };
+    const tok = sh?.querySelector(sel) ?? null;
+    if (tok === null) return null;
+    let end = tok;
+    if (tok.hasAttribute("data-md-cite")) {
+      while (end.nextElementSibling?.hasAttribute("data-md-cite") === true) {
+        end = end.nextElementSibling;
+      }
+    }
+    const top = tok.getClientRects()[0];
+    const right = end.getClientRects()[0];
+    if (top === undefined || right === undefined) return null;
+    // A pill that wrapped leaves its closing token on the next row, which the
+    // badge does not follow.
+    return { x: Math.abs(right.top - top.top) < 1 ? right.right : top.right, y: top.top };
   }, selector);
 }
 
 /** The badge's own center — it is translated onto the anchor, so this is the point
- * that must land on the token's corner. */
+ * that must land on the pill's corner. */
 async function badgeCenter(page: Page, name: string): Promise<{ x: number; y: number }> {
   const box = await page.getByRole("button", { name }).boundingBox();
   if (box === null) throw new Error(`badge "${name}" has no box`);
@@ -109,17 +132,18 @@ function spendFrameBudget(page: Page): Promise<void> {
 }
 
 /**
- * Assert a badge sits ON its token's top-right corner.
+ * Assert a badge sits ON the top-right corner of the pill its reference is drawn as.
  *
  * Not an exact-point match, deliberately: the dot is pulled back inside the corner
- * so it bites into the reference's rounded chip rather than floating off a curve.
- * What has to hold is that the badge still COVERS the corner and stays centred
- * within a glyph's reach of it — every failure this guards against (anchored to the
- * wrong token, to a wrapped path's union box, or to a row that has since moved)
- * misses by a line height rather than by a few pixels.
+ * so it bites into the rounded chip rather than floating off a curve. What has to
+ * hold is that the badge still COVERS the corner and stays centred within a glyph's
+ * reach of it — every failure this guards against (anchored to the wrong token, to
+ * the path token rather than the pill it shares with its backticks, to a wrapped
+ * path's union box, or to a row that has since moved) misses by a whole glyph or
+ * more rather than by a few pixels.
  */
 async function expectOnCorner(page: Page, name: string, selector: string): Promise<void> {
-  const corner = await tokenTopRight(page, selector);
+  const corner = await pillTopRight(page, selector);
   expect(corner).not.toBeNull();
   const box = await page.getByRole("button", { name }).boundingBox();
   expect(box).not.toBeNull();
@@ -158,7 +182,10 @@ test("exactly one badge per kind, however many references the plan cites", async
   }
 });
 
-test("each badge sits on its token's top-right corner", async ({ daemon, page }) => {
+test("each badge sits on the top-right corner of its reference's pill", async ({
+  daemon,
+  page,
+}) => {
   // The whole point of measuring in content coordinates: the badge marks a specific
   // reference rather than floating somewhere over the plan. Only real layout can say
   // whether it landed, which is why this claim cannot be a unit.
@@ -342,7 +369,7 @@ test("a placed badge is never re-anchored by a later scroll", async ({ daemon, p
     await daemon.seed({ cwd: proj.dir, plan: `${PLAN}\n${"\nFiller line.\n".repeat(60)}` });
     await openPlan(page);
     await expect(fileBadge(page)).toHaveCount(1);
-    const corner = await tokenTopRight(page, '[data-file-ref=""]');
+    const corner = await pillTopRight(page, '[data-file-ref=""]');
     const at = await badgeCenter(page, FILE_BADGE);
     const offset = { x: at.x - corner!.x, y: at.y - corner!.y };
 
@@ -350,7 +377,7 @@ test("a placed badge is never re-anchored by a later scroll", async ({ daemon, p
 
     // Same token, same offset from it — it travelled with the row.
     await expect(fileBadge(page)).toHaveCount(1);
-    const movedCorner = await tokenTopRight(page, '[data-file-ref=""]');
+    const movedCorner = await pillTopRight(page, '[data-file-ref=""]');
     expect(movedCorner!.y).not.toBe(corner!.y);
     const movedAt = await badgeCenter(page, FILE_BADGE);
     expect(Math.abs(movedAt.x - movedCorner!.x - offset.x)).toBeLessThanOrEqual(1.5);
