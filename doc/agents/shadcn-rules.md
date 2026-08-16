@@ -146,7 +146,11 @@ consistent with it rather than inventing a per-component treatment.
   description, footer band, and raised-paper surface are styled **once** so the modals
   can't drift. A new modal reuses it instead of hand-rolling a Dialog. The shadcn
   `dialog-*` and `alert-dialog-*` `content`/`footer` are kept visually aligned as its
-  base.
+  base, and their **backdrop and their timing are shared outright** — one scrim, one blur,
+  one enter/exit pair for all four surfaces, declared in `app.css` § Modal choreography
+  (EXC-892) rather than per vendored file, because a dismissible pane and a decision guard
+  dimming the app differently is two backdrop languages in one app. A new modal inherits
+  all of it and should need no motion or backdrop CSS of its own.
 - **Palette-derived affordances read the registry.** Anything that visualizes a theme (the
   Settings theme swatch) derives its colors from the `THEMES` token set in
   [`lib/theme.ts`](../../ui/src/lib/theme.ts), not literals — so any future palette works

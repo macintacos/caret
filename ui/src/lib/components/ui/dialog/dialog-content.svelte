@@ -44,7 +44,11 @@
 			// selector that nothing ever sets, so the whole set is dead (EXC-891). The
 			// alert-dialog copies already spell it this way; a `shadcn add --overwrite`
 			// would restore the broken form.
-			"data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 duration-100",
+			// The stock `duration-100` is gone: timing is caret's now, written once for
+			// all four modal surfaces in styles/shadcn-bridge.css § Modal choreography
+			// (EXC-892). Those rules are unlayered, so a re-sync that puts the utility
+			// back is overridden rather than a regression.
+			"data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
 			className
 		)}
 		{...restProps}

@@ -29,8 +29,11 @@
 			"grid w-full max-w-[calc(100%-2rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto gap-4 sm:max-w-lg",
 			// Shape + spacing + type
 			"rounded-xl p-4 text-sm",
-			// Open / close animation
-			"data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 duration-200",
+			// Open / close animation. The stock `duration-200` is gone: timing is caret's
+			// now, written once for all four modal surfaces in styles/shadcn-bridge.css
+			// § Modal choreography (EXC-892) — which is also what stops this guard and
+			// the Dialog it shares a shell with drifting to different speeds again.
+			"data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
 			className
 		)}
 		{...restProps}

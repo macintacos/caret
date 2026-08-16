@@ -334,6 +334,19 @@ which `scroll.ts`'s `prefersReducedMotion()` is. Reach for this route only when 
 stylesheet genuinely cannot express the animation; wanting a different curve is not
 enough.
 
+**Before minting a sixth, check whether you have a DOM handle — if you do, await the
+animation instead of mirroring its duration.** A mirror is a number kept equal to a token
+by a test; awaiting `getAnimations()` is the same wait with nothing to drift, and it
+retimes itself for free when a tier moves. The repo ships both shapes of that already.
+`awaitDeparture` (`components/FilePreview.svelte`) awaits the region's own animations
+before swapping in a new excerpt, so a fetch faster than the departure still lets the
+departure play and a fetch slower than it waits for nothing. `createModalPresence`
+(`lib/modalPresence.ts`) is the same idea one level up: it holds a modal mounted until
+bits-ui reports the close complete, and bits-ui's `AnimationsComplete` resolves on
+`Promise.all` over **every** animation on the node — so a surface may grow or retime its
+choreography without the gate knowing. The five above exist because `scrollTop` is not a
+style and happy-dom fires no `animationend`, not because a modal is hard.
+
 Two things about that route are decisions rather than details, and both were EXC-1092's.
 
 **`--dur-travel` (240ms) is the one token off the enter/exit axis, because it times travel
@@ -374,6 +387,19 @@ correctness bug and not only a style one — bits-ui's portal presence waits on 
 surface in the DOM on dismissal. For the same reason nothing in this vocabulary may
 resolve to `animation: none` on a portalled surface; the global guard below collapses the
 duration instead, which is what keeps that event firing under the preference.
+
+**Where the opt-in is written follows how many surfaces share it.** One component owning
+one surface writes its two arms in its own `<style>`, as the ToC panel does. A
+choreography several surfaces must wear *identically* is written once in
+`styles/shadcn-bridge.css`, keyed on the `data-slot` every copied component stamps — that
+is § Modal choreography (EXC-892), which times the Dialog and AlertDialog content and
+overlay off one pair of arms because four vendored files each timing themselves is exactly
+how they ended up at `duration-100`, `duration-200` and tw-animate's implicit `.15s`.
+Overlay and content take the *same* arm there: the panel settling in as the room dims is
+one gesture, and giving the backdrop its own clock reads as two. Being in the bridge earns
+a second thing the component `<style>` cannot — those rules are unlayered while the
+utilities they supersede compile into `@layer utilities`, so a `shadcn add --overwrite`
+that restores the stock timing is overridden rather than a silent regression.
 
 The refinement is **per-surface opt-in**, not a migration in progress. `tw-animate-css`'s
 own `duration-100` and plain `ease` remain the intended default for every portalled
