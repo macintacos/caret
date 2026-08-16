@@ -29,6 +29,15 @@ const BRANCHED: TocHeading[] = [
   { level: 3, text: "Deploy notes", line: 21 },
 ];
 
+// A plan whose shallowest heading is `##` — the shape the ToC's absolute indent
+// renders one step in, with nothing at depth zero (EXC-1106). Deliberately has no
+// level-1 heading at all, which is what makes it the guide count's own fixture.
+const SHALLOW: TocHeading[] = [
+  { level: 2, text: "Setup", line: 1 },
+  { level: 3, text: "Prereqs", line: 5 },
+  { level: 2, text: "Rollout", line: 9 },
+];
+
 function trigger(target: HTMLElement): HTMLButtonElement | null {
   return target.querySelector<HTMLButtonElement>("[data-slot='popover-trigger']");
 }
@@ -220,8 +229,34 @@ describe("PlanToc surface", () => {
       "2",
       "1",
     ]);
+    // One guide column per level between the plan's own root and the row (EXC-1106).
+    // Read beside the indent it has to agree with, rather than in a test of its own.
+    expect(options().map((r) => r.style.getPropertyValue("--toc-guides"))).toEqual([
+      "0",
+      "1",
+      "2",
+      "1",
+    ]);
     // Every heading is a destination while nothing is filtered.
     expect(options().length).toBe(4);
+    await close(target, flush);
+  });
+
+  // The guide count is the indent measured from the PLAN's root rather than from
+  // level 1, and this is the fixture where the two part company. --toc-depth is the
+  // heading's own level minus one, so a plan opening at `##` renders every row one
+  // step in with nothing at zero — deliberate, and documented on the indent rule. A
+  // guide drawn in that empty column would claim a parent the plan does not have.
+  test("draws no guide for a root the plan does not have", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: SHALLOW,
+      activeLine: null,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    expect(options().map(label)).toEqual(["Setup", "Prereqs", "Rollout"]);
+    expect(options().map((r) => r.style.getPropertyValue("--toc-depth"))).toEqual(["1", "2", "1"]);
+    expect(options().map((r) => r.style.getPropertyValue("--toc-guides"))).toEqual(["0", "1", "0"]);
     await close(target, flush);
   });
 
@@ -354,6 +389,9 @@ describe("PlanToc surface", () => {
     // The header carries the hierarchy, so the rows no longer have to: a level-3
     // match sits at the same indent as a level-2 one.
     expect(options().map((r) => r.style.getPropertyValue("--toc-depth"))).toEqual(["0", "0", "0"]);
+    // And no guides either (EXC-1106): the hierarchy is in the header, so a column
+    // drawn beside a flush-left row would mark a nesting this view does not show.
+    expect(options().map((r) => r.style.getPropertyValue("--toc-guides"))).toEqual(["0", "0", "0"]);
     await close(target, flush);
   });
 
