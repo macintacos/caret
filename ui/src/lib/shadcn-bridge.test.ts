@@ -2,9 +2,11 @@ import { describe, expect, test } from "bun:test";
 
 import { readAppCss } from "$lib/appCss.ts";
 
-// The caret↔shadcn-svelte bridge lives in exactly one place: the shadcn semantic
+// The caret↔shadcn-svelte COLOR bridge lives in exactly one place: the shadcn semantic
 // token block (`--background`, `--primary`, `--border`, …) plus the `@theme inline`
-// map in ui/src/app.css. EXC-757 seeded it with stock shadcn `neutral` oklch
+// map in ui/src/app.css. (The same partial also carries the modal choreography — motion
+// and backdrop rather than tokens — which motion.test.ts owns; this suite is the color
+// contract and deliberately does not look at it.) EXC-757 seeded it with stock shadcn `neutral` oklch
 // literals as a stub; EXC-758 replaces those with live var() references to caret's
 // THEMES tokens so shadcn components paint on caret's palette and retint with theme
 // switches — the same pattern css-bridge.test.ts pins for the .diffview bridge.

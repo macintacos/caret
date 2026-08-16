@@ -13,13 +13,13 @@
 	bind:ref
 	data-slot="alert-dialog-overlay"
 	class={cn(
-		// Position only. The scrim and its blur come from styles/shadcn-bridge.css §
-		// Modal choreography (EXC-892), shared with the dialog overlay — a guard and a
-		// settings pane dim the app the same way or the app has two backdrop languages.
+		// Position only. No scrim or blur utility here: stock ships `bg-black/50`, and
+		// caret declares one scrim and one blur for BOTH modal overlays in
+		// styles/shadcn-bridge.css § Modal choreography (EXC-892).
 		"fixed inset-0 z-50",
-		// Open / close animation. No duration here and none wanted: this surface used to
-		// inherit tw-animate-css's implicit .15s, and now takes caret's enter/exit pair
-		// from the bridge like the other three.
+		// Open / close animation. Stock ships no duration here at all, which leaves the
+		// surface on tw-animate-css's implicit .15s; the bridge gives it caret's
+		// enter/exit pair like the other three.
 		"data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
 		className
 	)}

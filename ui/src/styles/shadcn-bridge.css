@@ -3,7 +3,10 @@
    …), bridged to caret's THEMES tokens so copied components paint on caret's
    palette and retint in lockstep with theme switches — the same single-source
    pattern the .diffview → --diffs-* rule uses. shadcn-bridge.test.ts pins this
-   contract, mirroring diffview/css-bridge.test.ts.
+   contract, mirroring diffview/css-bridge.test.ts. The file carries a second concern
+   below the token map: the modal choreography (motion + backdrop) the copied Dialog
+   and AlertDialog surfaces wear, which lives here for the same single-source reason
+   and is pinned by motion.test.ts.
 
    ONE flat block, no [data-theme="dark"] override: caret's color tokens are
    written inline on :root by paintTheme() (lib/theme.ts) for the active scheme,
@@ -126,58 +129,41 @@
 }
 
 /* ── Modal choreography (EXC-892) ─────────────────────────────────────────────
-   One arrival and one departure worn by every modal in the app. The four surfaces
-   are two bits-ui primitives across four vendored files — Dialog (Settings, Request
-   changes, Unsent comments, Shortcuts, Onboarding) and AlertDialog (the Approve /
-   Reject guards) — and their whole problem was that four files each timed and dimmed
-   themselves: duration-100 here, duration-200 there, tw-animate's implicit .15s on
-   the fourth, a 10%-black-plus-blur backdrop under one primitive and a 50%-black
-   no-blur one under the other. So the choreography is written ONCE, here, keyed on
-   the data-slot every copied component stamps, rather than four times in the tree it
-   belongs to. Being in the bridge is also what makes it survive: these rules are
-   unlayered and the utilities they supersede compile into @layer utilities, so a
-   `shadcn add --overwrite` that restores `duration-100` and `bg-black/50` is beaten
-   by this block rather than silently undoing it.
+   One arrival and one departure, worn by both bits-ui modal primitives: Dialog
+   (Settings, Request changes, Unsent comments, Shortcuts, Onboarding) and
+   AlertDialog (the Approve / Reject guards). It is written HERE, keyed on the
+   data-slot every copied component stamps, rather than in the four vendored files
+   the surfaces live in — one choreography four files each spell for themselves is
+   four chances to drift, and a `shadcn add --overwrite` rewrites all four. These
+   rules are unlayered while the utilities they supersede compile into Tailwind's
+   utilities layer, so a re-synced `duration-100` / `bg-black/50` loses to this block.
 
-   TIMING — refined, not replaced, exactly as PlanToc.svelte's panel is (EXC-1107,
-   svelte-rules.md § Motion principles). What is written is the pair of custom
-   properties tw-animate-css's compiled animate-in / animate-out already reads for
-   its duration and its curve; the `enter` / `exit` keyframes and the animationend
-   they fire are left untouched, which is load-bearing well past the look — bits-ui's
-   presence layer waits on those animations to decide when the surface may leave the
-   DOM, so an `animation` shorthand of caret's own on these elements would strand a
-   dismissed modal on screen. Nothing here may resolve to `animation: none` for the
-   same reason; the global reduced-motion rule in base.css collapses the duration
-   instead, which is what keeps the event firing under the preference.
-
-   Overlay and content take the SAME arm on purpose. They are one gesture — the panel
-   settles in as the room behind it dims — and staggering them, or giving the backdrop
-   its own clock, reads as two things happening near each other instead of one thing
-   happening. The asymmetry is carried entirely by the two arms: a surface arrives in
-   --dur-enter on the decelerate-in curve and leaves in --dur-exit on the accelerate-
-   out one, because you watch a thing arrive and only need a thing leaving to be gone.
-   No spring and no overshoot — --ease-spring is reserved for a control sliding between
-   discrete positions, and a modal that bounces reads as a toy on a surface whose whole
-   register is quiet.
+   TIMING — refined, not replaced: the two custom properties tw-animate-css's
+   compiled animate-in / animate-out reads, and no `animation` of caret's own. Why
+   that is a correctness rule and not a style one, and why overlay and content take
+   the same arm rather than staggering: svelte-rules.md § Motion principles, which
+   states it once for both this block and PlanToc.svelte's single-surface form.
+   Local to here: both properties are registered `inherits: false`, which is what
+   keeps these arms on the four surfaces and off the controls INSIDE them — a
+   dialog's buttons, inputs and switches all resolve
+   `var(--tw-duration, var(--default-transition-duration))` for their own
+   transitions, and would otherwise retime to a surface's duration.
 
    BACKDROP — the blur radius is deliberately CONSTANT, and that is what makes it
    deepen rather than pop. Element opacity composites the filtered backdrop, so the
    fade the `enter` keyframe already runs ramps the perceived blur with it (measured:
    a 6px backdrop-filter over a hard stripe pattern is fully sharp at 10% opacity and
-   fully blurred at 95%). What made the old backdrop snap was spending that ramp in
-   100ms, not the radius; retiming it to --dur-enter IS the deepening. Interpolating
-   the radius instead would force a re-blur of the whole plan behind the overlay on
-   every frame to buy the same thing.
+   fully blurred at 95%). The ramp is therefore a matter of how long it is spent, not
+   of the radius. Interpolating the radius instead would re-blur the whole plan behind
+   the overlay every frame to buy the same percept.
 
-   The scrim sits between the two it replaces: heavier than Settings' near-invisible
-   10% so a guard reads as blocking, lighter than the guards' 50% because the blur —
-   which only one of the two used to have — is now doing the separation work. It stays
-   a black at an alpha rather than becoming a caret token, and both halves of that are
-   deliberate: ColorToken in lib/theme.ts is a closed union every palette must supply,
-   so minting a --scrim is a nine-theme change; and a scrim is a shadow cast OVER the
-   app rather than a surface of it, so it should not flip with the scheme the way a
-   bridged token would. This is the one non-token color the bridge declares, and it
-   replaces two of them. */
+   The scrim is heavy enough that a guard reads as blocking and light enough that a
+   settings pane does not read as a curtain, with the blur doing the separation work;
+   judged by eye on both caret schemes. It is a black at an alpha rather than a caret
+   token, deliberately: ColorToken in lib/theme.ts is a closed union every palette must
+   supply, so minting a --scrim is a nine-theme change — and a scrim is a shadow cast
+   OVER the app rather than a surface of it, so it should not flip with the scheme the
+   way a bridged token would. It is the one non-token color the bridge declares. */
 [data-slot="dialog-overlay"],
 [data-slot="alert-dialog-overlay"] {
   background: rgb(0 0 0 / 0.28);

@@ -1,11 +1,15 @@
 // Modal exit presence (EXC-891). The host keeps a modal mounted while `open` is
 // false so bits-ui can play its exit, then unmounts it once the exit reports done.
 //
+// It also carries the choreography those exits play (EXC-892): that panel and backdrop
+// move as one gesture on the shared tokens, that leaving is quicker than arriving, and
+// that reduced motion stills both without stranding either.
+//
 // This layer is e2e and cannot be anything else: happy-dom has no getAnimations,
 // which is exactly what bits-ui's PresenceManager waits on — the hold this ticket
 // introduces does not exist there at all, so a unit could only assert the gate's
-// bookkeeping (modalPresence.test.ts already does). Whether a real exit runs, and
-// whether the surface actually leaves afterwards, is browser behavior.
+// bookkeeping (modalPresence.test.ts already does). Whether a real exit runs, what it
+// spends, and whether the surface actually leaves afterwards, is browser behavior.
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
@@ -58,8 +62,8 @@ test("closing a modal plays its exit before the surface leaves the DOM", async (
   await openSettings(page);
   await waitForEnterToSettle(page);
 
-  // Register before the close intent: the exit is over in ~100ms, so a listener
-  // attached after Escape would race the very event it is waiting on. Only a
+  // Register before the close intent: the exit is over in --dur-exit (140ms), so a
+  // listener attached after Escape would race the very event it is waiting on. Only a
   // self-targeted event counts — animationend BUBBLES, and a descendant inside
   // Settings (the theme pane's IN USE marker) animates on its own schedule, so an
   // unfiltered listener resolves with whichever fired first.
@@ -136,20 +140,23 @@ test("the backdrop moves with the panel, and both leave quicker than they arrive
   daemon,
   page,
 }) => {
-  // The choreography EXC-892 writes into the shadcn bridge, asserted on the real thing
-  // rather than read back out of the stylesheet that declares it. Two claims, neither of
-  // which survives a unit — happy-dom runs no animations at all:
-  //   1. Overlay and content are ONE gesture — same keyframe, same duration — so the
+  // The choreography (EXC-892) asserted on the real thing rather than read back out of the
+  // stylesheet that declares it. Three claims, none of which survives a unit — happy-dom
+  // runs no animations at all:
+  //   1. Both arms really ride the tokens, not tw-animate-css's .15s fallback.
+  //   2. Overlay and content are ONE gesture — same keyframe, same duration — so the
   //      backdrop deepens with the panel instead of on a clock of its own.
-  //   2. Leaving is quicker than arriving, which is what the --dur-enter/--dur-exit pair
+  //   3. Leaving is quicker than arriving, which is what the --dur-enter/--dur-exit pair
   //      EXC-890 tiered exists to buy.
   //
-  // Driven on the alertdialog GUARD rather than on Settings, because the guard is where
-  // both claims are load-bearing: before this ticket its content ran duration-200 while
-  // its overlay carried no duration at all and inherited tw-animate-css's implicit .15s,
-  // so the backdrop really was on a clock of its own. Settings had the two aligned by
-  // accident (duration-100 on both) and would have made claim 1 vacuous. The Dialog half
-  // is covered by the exit test above plus the shared arms motion.test.ts pins.
+  // Claim 1 is why the token values are read off :root and compared rather than the
+  // durations merely being ordered: --dur-exit (140ms) is BELOW the .15s fallback, so an
+  // open arm that silently stopped applying would still satisfy claims 2 and 3 on its own.
+  //
+  // Driven on the alertdialog GUARD; the Dialog branch is covered by the exit test above
+  // plus the shared arms motion.test.ts pins. The guard is the branch where a backdrop on
+  // its own clock is expressible at all — its overlay is the surface stock ships with no
+  // duration of its own.
   const id = await daemon.seed();
   await daemon.putDraft(id, {
     annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain cold cost" }],
@@ -173,8 +180,21 @@ test("the backdrop moves with the panel, and both leave quicker than they arrive
       }),
     [guardContent, guardOverlay],
   );
+  // The tokens themselves, off :root — no mirrored constant, so a retune moves both sides
+  // of the comparison together and only a surface falling OFF the vocabulary reds. Read
+  // unit-agnostically: tokens.css authors these in ms, and the build's minifier is free to
+  // emit either `220ms` or `.22s` for the same value.
+  const tokens = await page.evaluate(() => {
+    const seconds = (v: string): number =>
+      v.trim().endsWith("ms") ? Number.parseFloat(v) / 1000 : Number.parseFloat(v);
+    const root = getComputedStyle(document.documentElement);
+    return {
+      enter: seconds(root.getPropertyValue("--dur-enter")),
+      exit: seconds(root.getPropertyValue("--dur-exit")),
+    };
+  });
   expect(entering.map((a) => a.name)).toEqual(["enter", "enter"]);
-  expect(entering[0]?.seconds).toBeGreaterThan(0);
+  expect(entering[0]?.seconds).toBe(tokens.enter);
   expect(entering[0]?.seconds).toBe(entering[1]?.seconds);
 
   // Both enters must be over before the exit listeners go on, or the enter's own
@@ -211,6 +231,7 @@ test("the backdrop moves with the panel, and both leave quicker than they arrive
 
   const leaving = await page.evaluate(() => (window as unknown as ChoreographyWindow).__exits);
   expect(leaving.map((a) => a.name)).toEqual(["exit", "exit"]);
+  expect(leaving[0]?.seconds).toBeCloseTo(tokens.exit, 3);
   expect(leaving[0]?.seconds).toBe(leaving[1]?.seconds);
   expect(leaving[0]?.seconds).toBeLessThan(entering[0]?.seconds ?? 0);
   await expect(page.locator(guardContent)).toHaveCount(0);
@@ -243,8 +264,8 @@ test("a modal neither moves nor sticks under reduced motion", async ({ daemon, p
 
   // The closing arm is a second rule, and the surface wears it only during the exit —
   // which under this preference is over within a frame. Observe the state flip rather
-  // than chase it: getAnimations() flushes style, so the sample sees the closed arm
-  // resolved while the node is still mounted.
+  // than chase it: getComputedStyle resolves against the attribute the observer just saw
+  // change, so the sample sees the closed arm while the node is still mounted.
   await page.evaluate(
     (sels) => {
       (window as unknown as ChoreographyWindow).__closing = new Promise<number[]>((resolve) => {
@@ -254,9 +275,7 @@ test("a modal neither moves nor sticks under reduced motion", async ({ daemon, p
           observer.disconnect();
           resolve(
             sels.map((sel) => {
-              const el = document.querySelector(sel) as Element;
-              el.getAnimations();
-              const d = getComputedStyle(el).animationDuration;
+              const d = getComputedStyle(document.querySelector(sel) as Element).animationDuration;
               return d.endsWith("ms") ? Number.parseFloat(d) : Number.parseFloat(d) * 1000;
             }),
           );

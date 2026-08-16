@@ -99,6 +99,11 @@ const chromeSources: Record<string, string> = Object.fromEntries(
   ),
 );
 
+// The shadcn bridge partial, read on its own rather than through readAppCss(): the modal
+// suite below asserts the choreography is UNLAYERED, which the reconstituted sheet cannot
+// show. See that block's own note.
+const modalBridgeCss = await Bun.file(join(uiDir, "styles/shadcn-bridge.css")).text();
+
 // Parse a ms/s duration value to milliseconds. Returns NaN for non-time values.
 function toMs(value: string): number {
   const v = value.trim();
@@ -106,6 +111,10 @@ function toMs(value: string): number {
   if (v.endsWith("s")) return Number.parseFloat(v) * 1000;
   return Number.NaN;
 }
+
+/** A declaration's value inside a rule body, or "" when the body declares no such property. */
+const read = (block: string, prop: string): string =>
+  block.match(new RegExp(`${prop}:\\s*([^;]+);`))?.[1]?.trim() ?? "";
 
 describe("motion tokens in app.css", () => {
   // Keyed on a token the motion vocabulary owns, so the lookup is
@@ -266,8 +275,6 @@ describe("the ToC panel refines the vendored popover animation rather than repla
     toc.match(/:global\(\.plan-toc-panel\)\s*\{([^}]*--tw-duration[^}]*)\}/)?.[1] ?? "";
   const closedBlock =
     toc.match(/:global\(\.plan-toc-panel\[data-state="closed"\]\)\s*\{([^}]*)\}/)?.[1] ?? "";
-  const read = (block: string, prop: string): string =>
-    block.match(new RegExp(`${prop}:\\s*([^;]+);`))?.[1]?.trim() ?? "";
 
   test("retimes tw-animate-css's own properties, from the shared tokens", () => {
     // A marker matching nothing yields "" and reds every assertion here, so a moved or
@@ -296,19 +303,25 @@ describe("the ToC panel refines the vendored popover animation rather than repla
 });
 
 describe("the modal surfaces share one choreography, written in the shadcn bridge", () => {
-  // EXC-892. The four vendored dialog surfaces are the same refinement the ToC panel
-  // above makes, with one difference that decides where it is written: FOUR files across
-  // two bits-ui primitives have to wear it identically, and each of them timing itself is
-  // precisely how they reached duration-100, duration-200 and tw-animate's implicit .15s.
-  // So the arms live once in styles/shadcn-bridge.css, keyed on `data-slot`, and this
-  // block is what stops a fifth spelling appearing in a fifth place. The chrome sweep
-  // below cannot cover them: it is a list of light-DOM component files, and these carry
-  // no <style> at all — their motion is Tailwind utilities plus the bridge.
-  // Every flat `selector { body }` pair in the sheet, as [selector, body]. `[^{}]*` skips
-  // any rule holding a nested block, which is fine here: every rule this block looks for
-  // is flat, and the selector predicates below are specific enough that no inner
-  // declaration of an @theme/@media block can be mistaken for one.
-  const flatRules = [...appCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(
+  // EXC-892. The same refinement the ToC panel above makes, with one difference that
+  // decides where it is written: four vendored files across two bits-ui primitives have to
+  // wear it identically, so the arms live once in styles/shadcn-bridge.css keyed on
+  // `data-slot`, and this block is what keeps a fifth spelling from appearing in a fifth
+  // place. The chrome sweep below cannot cover them — it is a list of light-DOM component
+  // files, and these carry no <style> at all.
+  //
+  // Read from the PARTIAL, not from readAppCss(): the reconstituted sheet would let these
+  // rules pass this suite from inside an @layer, and being unlayered is the whole reason
+  // they beat a re-synced utility. Scanning the file that must hold them pins the location
+  // and the layering together, and keeps the selector predicates below off 100KB of
+  // unrelated prose.
+  const bridge = modalBridgeCss;
+  // Every `selector { body }` pair in the partial. `[^{}]*` skips a rule holding a nested
+  // block (the @theme inline map), which is fine: every rule below is flat. The selector
+  // capture is "everything since the last brace", so it carries the preceding comment too
+  // — harmless against these predicates, which look for bracket-quoted attribute selectors
+  // that the comments here do not spell.
+  const flatRules = [...bridge.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(
     ([, selector, body]) => [selector ?? "", body ?? ""] as const,
   );
   const ruleWhere = (pick: (selector: string) => boolean): string =>
@@ -328,15 +341,30 @@ describe("the modal surfaces share one choreography, written in the shadcn bridg
       s.includes('[data-slot="alert-dialog-overlay"]') &&
       !s.includes('[data-slot="dialog-content"]'),
   );
-  const read = (block: string, prop: string): string =>
-    block.match(new RegExp(`${prop}:\\s*([^;]+);`))?.[1]?.trim() ?? "";
+  // A predicate matching nothing yields "", which would leave every `read` below comparing
+  // "" to "". Proven present once, here, for all three.
+  const present = (): void => {
+    expect(openArm).not.toBe("");
+    expect(closedArm).not.toBe("");
+    expect(scrim).not.toBe("");
+  };
   const withoutComments = (src: string): string => src.replace(/^\s*\/\/.*$/gm, "");
 
-  test("no vendored modal surface still times itself", () => {
+  test("the bridge holds the choreography unlayered", () => {
+    present();
+    // The load-bearing property of the whole design: these rules are unlayered while the
+    // utilities they supersede compile into Tailwind's utilities layer, so a
+    // `shadcn add --overwrite` that restores the stock timing and scrim is overridden
+    // rather than silently reinstated. Wrapping this partial in a layer would forfeit that
+    // with no other symptom. Scanned comment-stripped — the section comment explains the
+    // cascade it depends on, and naming the at-rule there must not red its own guard.
+    expect(bridge.replace(/\/\*[\s\S]*?\*\//g, "")).not.toContain("@layer");
+  });
+
+  test("no vendored modal surface times itself", () => {
     for (const slot of modalSlots) {
-      // Comment-stripped: each of these files EXPLAINS which literal it used to carry and
-      // where the timing went, and a text rule that reds on the explanation teaches the
-      // next author to delete the explanation.
+      // Comment-stripped: each file names the stock utility it deliberately omits, and a
+      // text rule that reds on that explanation teaches the next author to delete it.
       expect(withoutComments(modalSources[slot] ?? "")).not.toMatch(/\bduration-\d/);
     }
   });
@@ -358,10 +386,7 @@ describe("the modal surfaces share one choreography, written in the shadcn bridg
   });
 
   test("all four surfaces arrive on the enter tier and leave on the exit tier", () => {
-    // A selector predicate matching nothing yields "" and would leave every `read` below
-    // comparing "" to "", so the arms are proven present before they are read.
-    expect(openArm).not.toBe("");
-    expect(closedArm).not.toBe("");
+    present();
     // The asymmetry EXC-890 tiered for, spent on the surfaces it was named for. Overlay
     // and content take the SAME arm on purpose: the panel settling in as the room dims is
     // one gesture, and a backdrop on its own clock reads as two.
@@ -372,15 +397,14 @@ describe("the modal surfaces share one choreography, written in the shadcn bridg
   });
 
   test("both overlays wear one scrim, and its blur radius is a constant", () => {
-    // The reconciliation (a 10%-black-plus-blur backdrop under Settings, a 50%-black
-    // no-blur one under the guards) asserted as SHARED — re-splitting it into two per-slot
-    // rules reds here even if the two values happen to agree that day.
-    expect(scrim).not.toBe("");
+    // "One treatment, declared once" as an assertion rather than two values that happen to
+    // agree today — re-splitting the rule into two per-slot ones reds here.
+    present();
     expect(scrim).toContain("backdrop-filter");
     // Constant radius, deliberately: element opacity composites the filtered backdrop, so
     // the fade the `enter` keyframe already runs ramps the blur with it. Interpolating the
     // radius instead re-blurs everything behind the overlay every frame to buy the same
-    // thing.
+    // percept.
     expect(scrim).not.toMatch(/transition|animation/);
     for (const slot of ["dialog-overlay", "alert-dialog-overlay"]) {
       expect(withoutComments(modalSources[slot] ?? "")).not.toMatch(/bg-black|backdrop-blur/);

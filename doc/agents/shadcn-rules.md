@@ -147,10 +147,12 @@ consistent with it rather than inventing a per-component treatment.
   can't drift. A new modal reuses it instead of hand-rolling a Dialog. The shadcn
   `dialog-*` and `alert-dialog-*` `content`/`footer` are kept visually aligned as its
   base, and their **backdrop and their timing are shared outright** — one scrim, one blur,
-  one enter/exit pair for all four surfaces, declared in `app.css` § Modal choreography
-  (EXC-892) rather than per vendored file, because a dismissible pane and a decision guard
-  dimming the app differently is two backdrop languages in one app. A new modal inherits
-  all of it and should need no motion or backdrop CSS of its own.
+  one enter/exit pair across all four Dialog and AlertDialog surfaces, declared in
+  `styles/shadcn-bridge.css` § Modal choreography (EXC-892) rather than per vendored file,
+  because a dismissible pane and a decision guard dimming the app differently is two
+  backdrop languages in one app. A modal built on either primitive inherits all of it and
+  should need no motion or backdrop CSS of its own. (`sheet-overlay.svelte` is not yet on
+  it — Sheet is composed nowhere today; fold it in when something reaches for one.)
 - **Palette-derived affordances read the registry.** Anything that visualizes a theme (the
   Settings theme swatch) derives its colors from the `THEMES` token set in
   [`lib/theme.ts`](../../ui/src/lib/theme.ts), not literals — so any future palette works
