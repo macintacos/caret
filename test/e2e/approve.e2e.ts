@@ -370,3 +370,35 @@ test("approving with a plan stacked behind hands off to the next one", async ({ 
   await expect(page.locator(".switcher.single .title")).toHaveText("Plan Beta");
   await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toHaveCount(0);
 });
+
+test("a decision that never reaches the daemon does not read as a success", async ({
+  daemon,
+  page,
+}) => {
+  // The confirmation is pushed before the POST, which is what lets it lead the modal's
+  // exit — so the one case that ordering gets wrong, a genuine network failure, has to be
+  // louder than it is. Aborting the request is the real failure rather than a stub: it
+  // leaves the page and never lands, which is exactly what isNetworkFailure distinguishes
+  // from a daemon non-2xx (that one means the daemon answered, and still advances).
+  const id = await daemon.seed();
+  await page.goto("/");
+  await planSurface(page);
+  await page.route("**/api/reviews/*/resolve", (route) => route.abort());
+
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  const confirm = page.getByRole("dialog", APPROVE_CONFIRM);
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole("button", { name: "Approve", exact: true }).click();
+
+  // Located by role rather than through the alerts() helper on purpose: that helper reads
+  // role="status", and AlertHost gives only the destructive variant role="alert" so a
+  // failure interrupts the screen reader instead of waiting its turn. The locator is
+  // therefore also the assertion that this one is assertive.
+  await expect(page.locator(".alert-host").getByRole("alert")).toContainText(
+    "Couldn't send the decision",
+  );
+  // And nothing advanced — the plan is still on screen and still pending, so the optimistic
+  // confirmation is contradicted by the app rather than left standing as the last word.
+  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toHaveCount(0);
+  await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
+});

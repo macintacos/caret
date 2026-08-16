@@ -525,6 +525,10 @@
   // would otherwise mask is caught by createResolve's onOffline above. Each names its
   // verdict in the past tense of the button that was pressed, so the action keeps one name
   // through the whole gesture.
+  // Each of the three opens on its own flag, which is also what makes it idempotent: the
+  // surface stays mounted through its 140ms exit, so its confirm button is still clickable
+  // after the first press cleared the flag. Without the guard a second press inside that
+  // window pushes a second confirmation for one decision.
   function approveAnyway(notes: string) {
     // `notes` is the optional reviewer note from the confirm dialog (EXC-791); it
     // rides the allow as feedback and reaches the agent. resolve.approve omits a
@@ -541,6 +545,7 @@
     pendingReject = true;
   }
   function rejectAnyway() {
+    if (!pendingReject) return;
     // Neutral rather than success, here and on request-changes: both are completed
     // decisions rather than good outcomes, and AlertHost leads the success variant with a
     // check glyph that would read as approval on a plan being sent back. Same gesture,
@@ -563,6 +568,7 @@
     showDialog = true;
   }
   function onRequestChanges(generalComment: string) {
+    if (!showDialog) return;
     alerts.push({ variant: "default", message: "Changes requested" });
     showDialog = false;
     void resolve.requestChanges(generalComment);
