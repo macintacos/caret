@@ -418,17 +418,20 @@ describe("the portalled menus, popovers and tooltips run on caret's tempo", () =
     "sheet-overlay",
   ];
 
-  // The rules that write --tw-duration, as selector-list plus body. Nothing else in the
-  // sheet writes that property, so the search is self-locating; a rule that moved or was
-  // deleted leaves both arms undefined and reds every assertion rather than passing on an
-  // empty check. `before` reaches back to the previous rule's brace, so the doc comment
-  // above the rule is trimmed off its selector list.
+  // Every rule in the sheet that writes --tw-duration, as selector-list plus body.
+  // `before` reaches back to the previous rule's brace, so the doc comment above a rule
+  // is trimmed off its selector list.
   const portalRules = [...appCss.matchAll(/([^{}]*)\{([^{}]*--tw-duration:[^{}]*)\}/g)].map(
     ([, before = "", body = ""]) => ({ selector: (before.split("*/").pop() ?? "").trim(), body }),
   );
-  // Keyed on the tier each rule hands out rather than on its shape, so the three cannot
-  // be mixed up as more of them land.
-  const armFor = (tier: string) => portalRules.find((r) => r.body.includes(`var(--dur-${tier})`));
+  // Narrowed to the rules naming a surface from THIS set before anything is keyed on a
+  // tier. The modal choreography writes the same two properties and the same enter/exit
+  // tokens, so a tier alone does not identify a rule — it would hand this suite whichever
+  // of the two the sheet happens to @import first.
+  const mine = portalRules.filter((r) =>
+    [...SURFACES, "tooltip-content"].some((s) => r.selector.includes(`[data-slot="${s}"]`)),
+  );
+  const armFor = (tier: string) => mine.find((r) => r.body.includes(`var(--dur-${tier})`));
   const enterArm = armFor("enter");
   const exitArm = armFor("exit");
   const tooltipArm = armFor("micro");
@@ -478,9 +481,6 @@ describe("the portalled menus, popovers and tooltips run on caret's tempo", () =
     // modal's. So the check runs over every rule naming a surface from THIS set — three
     // of them, which is asserted too, since the likeliest way a modal gets swept in is a
     // FOURTH rule that a per-arm check would never look at.
-    const mine = portalRules.filter((r) =>
-      [...SURFACES, "tooltip-content"].some((s) => r.selector.includes(`[data-slot="${s}"]`)),
-    );
     expect(mine).toHaveLength(3);
     for (const rule of mine) {
       for (const slot of MODAL) expect(rule.selector).not.toContain(`[data-slot="${slot}"]`);
