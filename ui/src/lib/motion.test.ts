@@ -394,6 +394,67 @@ describe("the modal surfaces share one choreography, written in the shadcn bridg
   });
 });
 
+describe("the portalled menus, popovers and tooltips run on caret's tempo", () => {
+  // tw-animate-css compiles `animate-in` as
+  // `enter var(--tw-animation-duration, var(--tw-duration, .15s)) var(--tw-ease, ease) …`,
+  // so every portalled shadcn surface runs 150ms on a plain `ease` until something
+  // writes those two properties. app.css writes them for the surfaces that are NOT
+  // modals; the modal ones choreograph their own arrival, and their absence from the
+  // rule is asserted here rather than left to be noticed.
+  const NON_MODAL = [
+    "dropdown-menu-content",
+    "dropdown-menu-sub-content",
+    "popover-content",
+    "tooltip-content",
+  ];
+  const MODAL = [
+    "dialog-content",
+    "dialog-overlay",
+    "alert-dialog-content",
+    "alert-dialog-overlay",
+    "sheet-content",
+  ];
+
+  // The rules that write --tw-duration, as selector-list plus body. Nothing else in the
+  // sheet writes that property, so the search is self-locating; a rule that moved or was
+  // deleted leaves both arms undefined and reds every assertion rather than passing on an
+  // empty check. `before` reaches back to the previous rule's brace, so the doc comment
+  // above the rule is trimmed off its selector list.
+  const portalRules = [...appCss.matchAll(/([^{}]*)\{([^{}]*--tw-duration:[^{}]*)\}/g)].map(
+    ([, before = "", body = ""]) => ({ selector: (before.split("*/").pop() ?? "").trim(), body }),
+  );
+  const enterArm = portalRules.find((r) => !r.selector.includes("data-state"));
+  const exitArm = portalRules.find((r) => r.selector.includes('[data-state="closed"]'));
+  const read = (arm: typeof enterArm, prop: string): string =>
+    arm?.body.match(new RegExp(`${prop}:\\s*([^;]+);`))?.[1]?.trim() ?? "";
+
+  test("retimes them from the shared tokens, in both directions", () => {
+    for (const arm of [enterArm, exitArm]) {
+      for (const slot of NON_MODAL) expect(arm?.selector).toContain(`[data-slot="${slot}"]`);
+      expect(read(arm, "--tw-duration")).toMatch(/^var\(--dur-[a-z]+\)$/);
+      expect(read(arm, "--tw-ease")).toMatch(/^var\(--ease-[a-z]+\)$/);
+    }
+  });
+
+  test("pairs a distinct enter and exit rather than spending one timing twice", () => {
+    // The same claim the ToC panel's suite above makes, for the same reason: the
+    // vendored default this supersedes spent one duration and one curve in both
+    // directions, and collapsing the arms back together is the regression to catch.
+    expect(read(enterArm, "--tw-duration")).not.toBe(read(exitArm, "--tw-duration"));
+    expect(read(enterArm, "--tw-ease")).not.toBe(read(exitArm, "--tw-ease"));
+  });
+
+  test("leaves the modal surfaces to their own choreography", () => {
+    // A dialog, an alert dialog and a sheet are not chrome that appears beside the
+    // pointer — they take the whole surface, with a backdrop, and their timing is
+    // theirs. Widening this rule to a bare [data-slot] sweep would silently retime
+    // them, so the exclusion is a test rather than a comment.
+    for (const arm of [enterArm, exitArm]) {
+      for (const slot of MODAL) expect(arm?.selector).not.toContain(`[data-slot="${slot}"]`);
+    }
+  });
+});
+
 describe("chrome motion declarations draw from the tokens, not bare literals", () => {
   // The whole chrome, motion or not (see chromeComponents above). Each component's
   // `<style>` is scanned for `transition:`/`animation:` declarations; the one-shot ones

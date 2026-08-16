@@ -401,12 +401,24 @@ a second thing the component `<style>` cannot — those rules are unlayered whil
 utilities they supersede compile into `@layer utilities`, so a `shadcn add --overwrite`
 that restores the stock timing is overridden rather than a silent regression.
 
-The refinement is **per-surface opt-in**, not a migration in progress. `tw-animate-css`'s
-own `duration-100` and plain `ease` remain the intended default for every portalled
-surface that has not opted in — including `PlanBreadcrumbs.svelte`'s crumb menu and its
-heading filter, which sit on the same control row as the ToC panel and are deliberately
-still on it. A surface reading a step quicker and flatter than its neighbour is the
-expected state, not drift to be reported.
+**The menus, popovers and tooltips take that timing by default**, from one unlayered rule
+pair in `styles/base.css` that writes the two properties for
+`[data-slot="dropdown-menu-content"]`, `…-sub-content`, `popover-content` and
+`tooltip-content` — the enter tokens on the surface, the exit tokens on
+`[data-state="closed"]`. The slots are named one by one rather than swept as
+`[data-slot][data-state]`, and the modal surfaces (`dialog`, `alert-dialog`, `sheet`) sit
+deliberately outside it: those take the whole viewport behind a backdrop and their arrival
+is choreographed with it, so a sweep would quietly overrule that. `motion.test.ts` asserts
+the inclusion and the exclusion both.
+
+Two things about where that rule lives. It is in `base.css` rather than in the vendored
+components' class strings because `shadcn-svelte add` reverts those wholesale on a re-sync
+(`shadcn-rules.md` § Edits a re-sync will silently undo) and never reaches a caret-owned
+stylesheet. And its slots sit inside `:where()`, at specificity **zero**: it is a default,
+so a surface that has earned its own timing overrides it with an ordinary class rule and
+no specificity fight — which is what the ToC panel, itself a `popover-content`, does.
+Being unlayered is what still makes it beat the `duration-100` `popover-content` carries
+in `@layer utilities`; layer order decides that, not specificity.
 
 `prefers-reduced-motion: reduce` is the single global kill-switch over all of it: one rule
 in `app.css` collapses every animation and transition to one static frame, so no component

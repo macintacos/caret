@@ -63,6 +63,46 @@ body {
   }
 }
 
+/* The portalled shadcn surfaces, retimed onto caret's vocabulary. tw-animate-css
+   compiles the `animate-in`/`animate-out` utilities they arrive and leave on as
+   `enter var(--tw-animation-duration, var(--tw-duration, .15s)) var(--tw-ease, ease) …`,
+   so a surface runs 150ms on a plain `ease` unless something writes those two custom
+   properties — the vendored tempo, audibly not the chrome's. Writing them is the
+   documented opt-in (svelte-rules.md § Motion principles): the keyframes stay the
+   vendored ones, which matters because bits-ui's portal presence waits on the
+   `animationend` they fire, and only the duration and the curve move. The exit arm is
+   the closed state alone, so a menu leaves on the same asymmetry every other surface
+   in the app leaves on.
+   THE SLOTS ARE NAMED ONE BY ONE, not swept as [data-slot][data-state]. A dialog, an
+   alert dialog and a sheet take the whole surface behind a backdrop; their arrival is
+   choreographed with that backdrop rather than borrowed from the menus, so a sweep
+   here would quietly overrule it. Here rather than in the vendored components' class
+   strings for a second reason: `shadcn-svelte add` reverts those wholesale on a
+   re-sync (shadcn-rules.md § Edits a re-sync will silently undo) and never reaches
+   this file. Unlayered, so it wins over the `duration-100` popover-content carries in
+   @layer utilities — layer order decides that, not specificity, which is what lets the
+   slots sit inside :where() at specificity ZERO. That is deliberate: this is a default,
+   and a surface that has earned its own timing must be able to say so without a
+   specificity fight. The ToC panel is a popover-content and does exactly that. */
+:where(
+  [data-slot="dropdown-menu-content"],
+  [data-slot="dropdown-menu-sub-content"],
+  [data-slot="popover-content"],
+  [data-slot="tooltip-content"]
+) {
+  --tw-duration: var(--dur-enter);
+  --tw-ease: var(--ease-out);
+}
+:where(
+  [data-slot="dropdown-menu-content"],
+  [data-slot="dropdown-menu-sub-content"],
+  [data-slot="popover-content"],
+  [data-slot="tooltip-content"]
+)[data-state="closed"] {
+  --tw-duration: var(--dur-exit);
+  --tw-ease: var(--ease-in);
+}
+
 /* The theme-switch "wipe" (EXC-730). withWipe() (lib/themeWipe.ts) runs the
    palette swap inside document.startViewTransition, so the browser snapshots the
    whole page — the light-DOM chrome AND the shadow-DOM diff view, as pixels — and
