@@ -57,7 +57,8 @@ edits — the EXC-891 `data-[state=…]` animation spelling, the inlined Lucide 
 `dialog-content.svelte`, the commented class groupings — which is why the revert is
 wholesale rather than selective. And a `registryDependency` arrives as a **whole tree**,
 unused files included (`input-group` landed 7 files for the one `command-input.svelte`
-composes). Keep it: hand-editing the component to drop the dependency is the one change a
+composed; the three search fields that joined it in EXC-1113 still reach for only three of
+the seven). Keep it: hand-editing the component to drop the dependency is the one change a
 later re-sync silently reverts with no comment to catch it.
 
 - **Never hand-roll a primitive the catalog covers** — button, dialog, menu, tooltip,

@@ -199,9 +199,10 @@
         <!-- Search atop the rail (EXC-845): filters the nav + fields across categories.
              The trailing `/` Kbd cap advertises the focus shortcut, mirroring
              ShortcutsHelp's search field; `/` focuses it from anywhere in the modal. The
-             cap rides an InputGroup inline-end addon (EXC-1113), which is what reserves
-             its track beside the control — so nothing pins it over the field and nothing
-             pads the field out of its way. -->
+             cap rides an InputGroup inline-end addon (EXC-1113), which reserves its own
+             track beside the control. The addon carries the aria-hidden rather than the
+             cap: it is a role="group", and one holding nothing announceable reads as an
+             empty group. -->
         <Sidebar.Header>
           <InputGroup.Root>
             <InputGroup.Input
@@ -211,8 +212,8 @@
               bind:value={query}
               bind:ref={searchInput}
             />
-            <InputGroup.Addon align="inline-end">
-              <Kbd aria-hidden="true">/</Kbd>
+            <InputGroup.Addon align="inline-end" aria-hidden="true">
+              <Kbd>/</Kbd>
             </InputGroup.Addon>
           </InputGroup.Root>
         </Sidebar.Header>

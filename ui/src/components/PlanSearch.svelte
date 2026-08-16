@@ -82,9 +82,12 @@
 </script>
 
 <div class="plan-search" class:closing role="search">
-  <InputGroup.Root class="search-row">
-    <InputGroup.Addon>
-      <span class="search-slash mono" aria-hidden="true">/</span>
+  <InputGroup.Root class="search-group">
+    <!-- Decorative; the field's aria-label already names the search, so the whole
+         addon is hidden rather than just its glyph — an addon is a role="group", and
+         one holding nothing announceable is an empty group to a screen reader. -->
+    <InputGroup.Addon aria-hidden="true">
+      <span class="search-slash mono">/</span>
     </InputGroup.Addon>
     <InputGroup.Input
       bind:ref={field}
@@ -98,7 +101,13 @@
       readonly={committed}
       onkeydown={onKeydown}
     />
-    <InputGroup.Addon align="inline-end" class="search-actions">
+    <!-- The addon ships a click-to-focus handler for the "click the icon, start
+         typing" case; a button row wants the opposite. Overriding it with a no-op
+         (restProps spreads last, so a caller's handler wins) keeps a click that lands
+         in the gaps between the chips from focusing the field — which on a committed
+         HUD would silently suppress the bare n / N, since any focused input reads as
+         an editing context to the shared dispatcher. -->
+    <InputGroup.Addon align="inline-end" class="search-actions" onclick={() => {}}>
       <button
         type="button"
         class="search-step float-chip"
@@ -191,32 +200,36 @@
      step / close chips in the trailing addon. The group carries the recessed field
      surface, so the whole row reads as distinct from the pill — a step off
      --paper-raised toward --paper-sunk, which recedes in both themes (a touch darker
-     on dark paper, a warm grey on light), with a hairline rule and the chip radius.
-     It hugs its content rather than taking the group's stock full width, since the
-     pill is inline and sized by this row. The overrides are reached via :global under
-     the scoped root, since the class is handed to <InputGroup.Root>. */
-  .plan-search :global(.search-row) {
+     on dark paper, a warm grey on light), with a hairline rule. The radius comes from
+     the group's own rounded-lg, which the bridge maps to --radius. It hugs its content
+     rather than taking the group's stock full width, since the pill is inline and
+     sized by this row. The overrides are reached via :global under the scoped root,
+     since the class is handed to <InputGroup.Root>.
+     The step / close chips ride that sunk ground rather than the pill's veil, so their
+     .float-chip fill — mixed off --paper-raised — sits a shade brighter than its
+     surface; that lift is what keeps them reading as controls inside the field. */
+  .plan-search :global(.search-group) {
     height: 1.75rem;
     width: auto;
     border: 1px solid var(--rule);
     background: var(--paper-sunk);
-    border-radius: var(--radius);
   }
   /* Dark paper's raised→sunk step is small, so drop the field to the base --paper
      there for a clearer recess; light's --paper-sunk already reads distinct. */
-  :global(:root[data-theme="dark"]) .plan-search :global(.search-row) {
+  :global(:root[data-theme="dark"]) .plan-search :global(.search-group) {
     background: var(--paper);
   }
   /* Focus firms the hairline rather than drawing the group's stock ring: the pill is
-     a HUD floating over the plan, and a ring would halo it against the text. */
-  .plan-search :global(.search-row:has(.search-input:focus-visible)) {
+     a HUD floating over the plan, and a ring would halo it against the text. Keyed on
+     the slot the group's own rule keys on, so it cannot drift from it. */
+  .plan-search :global(.search-group:has([data-slot="input-group-control"]:focus-visible)) {
     box-shadow: none;
     border-color: var(--rule-strong);
   }
 
-  /* The field is a bare control inside the group now; only its measure, height and
-     type size are set here. Fixed width rather than the group's stock flex-1, so the
-     pill keeps one measure whatever is typed into it. */
+  /* The field is a bare control inside the group; only its measure, height and type
+     size are set here. Fixed width rather than the group's stock flex-1, so the pill
+     keeps one measure whatever is typed into it. */
   .plan-search :global(.search-input) {
     height: 100%;
     width: 12rem;
@@ -230,8 +243,8 @@
     padding-block: 0;
     gap: 0.35rem;
   }
-  /* The trailing addon is a button row, so it does not offer the addon's default
-     click-to-type affordance. */
+  /* A button row, so it drops the addon's text cursor along with the click-to-focus
+     the markup already overrides. */
   .plan-search :global(.search-actions) {
     cursor: default;
   }

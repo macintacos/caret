@@ -171,8 +171,8 @@ describe("SettingsDialog search (EXC-845)", () => {
     flush();
   }
 
-  // The `/` hint cap rides an input-group addon slot (EXC-1113) rather than a wrapper
-  // div that pins it over the control, so the group's own layout reserves its track.
+  // The `/` hint cap rides an input-group addon slot (EXC-1113), so the group's own
+  // layout reserves its track beside the control.
   test("the search field composes input-group with the / cap in a trailing addon", async () => {
     const { flush } = render(SettingsDialog, props());
     await flushUntil(flush, mounted);
