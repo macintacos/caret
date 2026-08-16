@@ -32,6 +32,7 @@
   import { getFileExcerpt, HttpError } from "$lib/api.ts";
   import { type ChunkState, highlightChunk } from "$lib/diffview/highlight.ts";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
+  import { Spinner } from "$lib/components/ui/spinner/index.js";
   import { rowWindow } from "$lib/previewWindow.ts";
   import type { ThemeId } from "$lib/theme.ts";
 
@@ -654,7 +655,14 @@
   {:else if preview.kind === "error"}
     <div class="fp-message" data-preview-state="error">Couldn't load this file.</div>
   {:else}
-    <div class="fp-message" data-preview-state="loading">Loading…</div>
+    <!-- Decorative: the "Loading…" beside it is the accessible message, so the
+         spinner's default role="status" + aria-label would say it twice. Nothing
+         announces the wait; spinner.svelte records why a region cannot here —
+         and `.fp-range` cannot either on a first open, being `{#if meta}`-mounted
+         and so inserted already populated itself. -->
+    <div class="fp-message" data-preview-state="loading">
+      <Spinner size={12} aria-hidden="true" />Loading…
+    </div>
   {/if}
 </div>
 
@@ -904,6 +912,9 @@
     white-space: pre;
   }
   .fp-message {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
     padding: 0.5rem 0.6rem;
     color: var(--ink-soft);
     font-size: var(--text-2xs);

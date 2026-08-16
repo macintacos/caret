@@ -39,6 +39,7 @@
     type Levels,
   } from "$lib/folderTree.ts";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
+  import { Spinner } from "$lib/components/ui/spinner/index.js";
 
   interface Props {
     reviewId: string;
@@ -275,7 +276,12 @@
   {:else if view.kind === "error"}
     <div class="ft-message" data-folder-state="error">Couldn't read this folder.</div>
   {:else}
-    <div class="ft-message" data-folder-state="loading">Loading…</div>
+    <!-- Decorative: the "Loading…" beside it is the accessible message, so the
+         spinner's default role="status" + aria-label would say it twice. Nothing
+         announces the wait; spinner.svelte records why a region cannot here. -->
+    <div class="ft-message" data-folder-state="loading">
+      <Spinner size={12} aria-hidden="true" />Loading…
+    </div>
   {/if}
 </div>
 
@@ -407,6 +413,9 @@
     --trees-border-radius-override: var(--radius);
   }
   .ft-message {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
     padding: 0.5rem 0.6rem;
     color: var(--ink-soft);
     font-size: var(--text-2xs);

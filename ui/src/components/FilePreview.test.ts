@@ -851,6 +851,31 @@ describe("FilePreview settling", () => {
     expect(target.querySelector(".fp-code.fp-leaving")).toBeNull();
   });
 
+  test("spins a decorative glyph beside the loading text", async () => {
+    // The spinner is the motion that says the panel is fetching. It is
+    // aria-hidden because the "Loading…" beside it is already the accessible
+    // message — a Spinner left at its default role="status" + aria-label
+    // ="Loading" would put the word into the accessibility tree twice on one
+    // line. data-slot is the vendored tree's own assertion handle
+    // (doc/agents/shadcn-rules.md); the reduced-motion clamp is a media query
+    // happy-dom cannot evaluate, so it is verified in the browser rather than
+    // here.
+    const served = serveGated(20, 300);
+    cap = served;
+    served.gateNext();
+    const { target } = render(FilePreview, props());
+    await until(() => target.querySelector('[data-preview-state="loading"]') != null);
+
+    const placeholder = target.querySelector('[data-preview-state="loading"]');
+    expect(placeholder?.textContent).toContain("Loading");
+    const spinner = placeholder?.querySelector('[data-slot="spinner"]');
+    expect(spinner).toBeTruthy();
+    expect(spinner?.getAttribute("aria-hidden")).toBe("true");
+
+    served.release();
+    await until(() => target.querySelector(".fp-code") != null);
+  });
+
   test("a landed chunk leaves the region in place, unmarked and unreplaced", async () => {
     // Growth must not animate: the region is keyed on the loaded path, so a
     // chunk adds rows to the element already on screen. Recreating it per chunk
