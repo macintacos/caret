@@ -172,8 +172,8 @@
     letter-spacing: 0.02em;
     color: var(--ink-soft);
     transition:
-      color var(--dur-fast) var(--ease-out),
-      background-color var(--dur-fast) var(--ease-out);
+      color var(--dur-micro) var(--ease-out),
+      background-color var(--dur-micro) var(--ease-out);
   }
   .diag-copy:hover {
     color: var(--ink);
@@ -207,8 +207,8 @@
     cursor: pointer;
     overflow-x: auto;
     transition:
-      border-color var(--dur-fast) var(--ease-out),
-      background-color var(--dur-fast) var(--ease-out);
+      border-color var(--dur-micro) var(--ease-out),
+      background-color var(--dur-micro) var(--ease-out);
   }
   .diag-block:not(.is-unavailable):hover {
     border-color: var(--rule-strong);

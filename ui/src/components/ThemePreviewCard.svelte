@@ -102,7 +102,7 @@
      preview, since paintTheme stamps the previewed palette on this subtree. */
   .theme-preview {
     width: max-content;
-    animation: tp-in var(--dur-base) var(--ease-out);
+    animation: tp-in var(--dur-enter) var(--ease-out);
   }
 
   .tp-window {

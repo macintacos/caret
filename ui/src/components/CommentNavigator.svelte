@@ -268,7 +268,7 @@
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
     overflow: hidden;
-    animation: nav-open var(--dur-base) var(--ease-out);
+    animation: nav-open var(--dur-enter) var(--ease-out);
   }
   /* At ≤ --w-tight the navigator unpins from the right corner and widens to a
      full-bleed bottom sheet (EXC-812) — it keeps the base bottom offset, clearing

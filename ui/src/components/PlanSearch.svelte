@@ -150,7 +150,7 @@
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
     transform-origin: top right;
-    animation: search-expand var(--dur-base) var(--ease-out);
+    animation: search-expand var(--dur-enter) var(--ease-out);
   }
   @keyframes search-expand {
     from {
@@ -162,14 +162,15 @@
       transform: scale(1);
     }
   }
-  /* Closing reverses the expand, but quicker (--dur-fast, vs the open's --dur-base) for a
-     snappy dismiss: the pill collapses back toward the top-right chip while DiffPlanView
-     keeps it mounted for one --dur-fast, then unmounts it and the chip reappears.
+  /* Closing reverses the expand on the surface tier's exit arm (--dur-exit, against the
+     open's --dur-enter) for a snappy dismiss: the pill collapses back toward the
+     top-right chip while planKeyboard keeps it mounted for one --dur-exit, then unmounts
+     it and the chip reappears.
      `forwards` holds the shrunk/faded end frame until that unmount so it can't flash back
      to full size; exit easing (--ease-in) mirrors the enter --ease-out. Higher
      specificity than the base rule, so this animation wins while closing. */
   .plan-search.closing {
-    animation: search-collapse var(--dur-fast) var(--ease-in) forwards;
+    animation: search-collapse var(--dur-exit) var(--ease-in) forwards;
   }
   @keyframes search-collapse {
     from {

@@ -130,7 +130,7 @@
     font-weight: 600;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    animation: in-use-in var(--dur-fast) var(--ease-out);
+    animation: in-use-in var(--dur-micro) var(--ease-out);
   }
   .resolved {
     margin: 0;

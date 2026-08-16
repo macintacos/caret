@@ -54,11 +54,11 @@
     border: 1px dashed var(--rule);
     border-left: 3px dashed var(--ink-faint);
     border-radius: var(--radius);
-    transition: border-color var(--dur-fast) var(--ease-out);
+    transition: border-color var(--dur-micro) var(--ease-out);
     /* Opacity-only reveal, matching the comment chip and composer, so the row's
        measured height never moves (the preventScroll guard depends on it). The
        global reduced-motion rule in app.css collapses it to a static frame. */
-    animation: reveal var(--dur-fast) var(--ease-out);
+    animation: reveal var(--dur-micro) var(--ease-out);
   }
   :global([data-slot="button"].scratch:hover) {
     background: transparent;

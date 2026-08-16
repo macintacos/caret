@@ -819,7 +819,7 @@
     border-left: 3px solid var(--accent);
     border-radius: 0;
     font-size: var(--text-base);
-    animation: daemon-banner-in var(--dur-base) var(--ease-out);
+    animation: daemon-banner-in var(--dur-enter) var(--ease-out);
   }
   .db-text {
     margin: 0;
@@ -839,7 +839,7 @@
     cursor: pointer;
     border-radius: var(--radius);
     padding: 0.3rem 0.7rem;
-    transition: background var(--dur-fast) var(--ease-out);
+    transition: background var(--dur-micro) var(--ease-out);
   }
   .db-reload {
     background: var(--accent);
@@ -889,7 +889,7 @@
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
     font-size: var(--text-base);
-    animation: safe-mode-in var(--dur-base) var(--ease-out);
+    animation: safe-mode-in var(--dur-enter) var(--ease-out);
   }
   .sm-dot {
     flex: none;

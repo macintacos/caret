@@ -1071,8 +1071,8 @@ test("the panel arrives on the enter token and leaves on the exit one", async ({
   await page.goto("/");
   await readingAt(page, "Delta");
 
-  const enterSeconds = await motionToken(page, "--dur-base");
-  const exitSeconds = await motionToken(page, "--dur-fast");
+  const enterSeconds = await motionToken(page, "--dur-enter");
+  const exitSeconds = await motionToken(page, "--dur-exit");
   // The pairing is the claim; two tokens that had drifted to the same number would make
   // every assertion below true while saying nothing.
   expect(enterSeconds).not.toBe(exitSeconds);
@@ -1181,7 +1181,7 @@ test("the outline carries its motion on the list, never on its rows", async ({ d
   const viewport = panel(page).locator("[data-slot='command-viewport']");
   const list = await animationOf(viewport);
   expect(list.name).toMatch(/toc-list-in$/);
-  expect(Number.parseFloat(list.duration)).toBeCloseTo(await motionToken(page, "--dur-fast"), 3);
+  expect(Number.parseFloat(list.duration)).toBeCloseTo(await motionToken(page, "--dur-micro"), 3);
 
   const animated = await options(page).evaluateAll(
     (els) => els.filter((el) => getComputedStyle(el).animationName !== "none").length,

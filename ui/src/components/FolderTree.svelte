@@ -303,7 +303,7 @@
     border: 1px solid var(--rule);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
-    animation: ft-in var(--dur-base) var(--ease-out);
+    animation: ft-in var(--dur-enter) var(--ease-out);
   }
   /* The same header vocabulary FilePreview uses — a filled kind chip, the path,
      and the way out pushed right — so the two reference surfaces read as one
@@ -411,7 +411,7 @@
     color: var(--ink-soft);
     font-size: var(--text-2xs);
     font-family: var(--font-mono);
-    animation: ft-in var(--dur-fast) var(--ease-out);
+    animation: ft-in var(--dur-micro) var(--ease-out);
   }
   /* The card rises the same 4px onto the surface FilePreview's region does, so
      opening either reference surface reads as one gesture. Reduced motion is not

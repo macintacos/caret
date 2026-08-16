@@ -23,7 +23,7 @@ export const SCROLL_OFFSET_TOP = 12;
 /** Duration (ms) of a jump to a place — the JS mirror of --dur-travel. */
 export const SCROLL_ANIM_MS = 240;
 
-/** Duration (ms) of the cursor follow — the JS mirror of --dur-fast. Shorter than
+/** Duration (ms) of the cursor follow — the JS mirror of --dur-micro. Shorter than
  * a jump because it is a different move: the follow nudges by roughly one row, and
  * a held j/k retargets it every few frames, so a jump-length glide would leave the
  * view trailing the cursor instead of carrying it. */

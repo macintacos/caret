@@ -33,7 +33,7 @@
     color: var(--ink-soft);
     padding: 0.1rem 0.25rem;
     border-radius: var(--radius);
-    transition: color var(--dur-fast) var(--ease-out);
+    transition: color var(--dur-micro) var(--ease-out);
   }
   .kbd-help:hover {
     color: var(--accent);

@@ -236,9 +236,9 @@
        the library-reserved annotation row, so a transform that grew or shifted
        its box would change the row's measured height and fight the preventScroll
        guard. The global reduced-motion rule in app.css collapses it. */
-    animation: reveal var(--dur-fast) var(--ease-out);
+    animation: reveal var(--dur-micro) var(--ease-out);
     /* The hover lift (below) eases in and out rather than snapping. */
-    transition: background-color var(--dur-fast) var(--ease-out);
+    transition: background-color var(--dur-micro) var(--ease-out);
   }
   .card[data-state="approved"] {
     --state-accent: var(--ok);
@@ -310,7 +310,7 @@
   :global([data-slot="button"].chip .icon) {
     flex: none;
     color: var(--ink-faint);
-    transition: transform var(--dur-fast) var(--ease-out);
+    transition: transform var(--dur-micro) var(--ease-out);
   }
   :global([data-slot="button"].chip[aria-expanded="false"] .icon) {
     transform: rotate(-90deg);
@@ -382,9 +382,13 @@
      (not looping) and is deliberately small. The keyframes are declared -global- so
      the name still resolves from inside the :global() hover selector (Svelte only
      rewrites animation names for component-scoped rules); the global reduced-motion
-     rule in app.css ([data-slot] *) collapses it to a static frame when the OS asks. */
+     rule in app.css ([data-slot] *) collapses it to a static frame when the OS asks.
+     It is a hover flourish and so belongs to no direction, but it takes --dur-enter
+     rather than --dur-micro for the same reason --ease-spring does (tokens.css §
+     Motion): four rotation steps split across 120ms are ~30ms each, which reads as a
+     jitter rather than a wobble. The tier here buys legibility, not size. */
   :global([data-slot="button"].danger:hover .icon) {
-    animation: trash-shake var(--dur-base) var(--ease-out);
+    animation: trash-shake var(--dur-enter) var(--ease-out);
   }
   @keyframes -global-trash-shake {
     0%,
@@ -413,14 +417,20 @@
      tracks it), but nothing transforms, so a code line below never gets a
      transform-driven jump. The inner .body clips its overflow so the content can
      collapse to nothing. The single global reduced-motion rule in app.css
-     neutralizes the transition. */
+     neutralizes the transition.
+     The two arms carry their own timing rather than one `transition` on the base
+     rule timing both: a body opening is a surface arriving (--dur-enter/--ease-out)
+     and a body closing is the same surface leaving (--dur-exit/--ease-in). Which
+     rule is in force at the moment the class flips is what selects the arm — the
+     .expanded rule while opening, the base rule once it is dropped. */
   .body-wrap {
     display: grid;
     grid-template-rows: 0fr;
-    transition: grid-template-rows var(--dur-base) var(--ease-out);
+    transition: grid-template-rows var(--dur-exit) var(--ease-in);
   }
   .card.expanded .body-wrap {
     grid-template-rows: 1fr;
+    transition: grid-template-rows var(--dur-enter) var(--ease-out);
   }
   .body {
     overflow: hidden;

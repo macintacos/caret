@@ -123,7 +123,7 @@ test("the lane wipes in from the edge it docks to", async ({ daemon, page }) => 
       await expect.poll(() => fileRefCount(page)).toBe(1);
 
       // The keyframes are read HERE, inside the listener, not from a later
-      // getAnimations() call: the wipe runs for --dur-base (180ms) and then
+      // getAnimations() call: the wipe runs for --dur-enter (220ms) and then
       // leaves the element's animation list empty forever, so any read that
       // costs a round-trip is racing a window it loses on a loaded host.
       // animationstart is the one instant the animation is guaranteed live.

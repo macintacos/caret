@@ -556,7 +556,7 @@
     cursor: pointer;
     color: inherit;
     font: inherit;
-    transition: background var(--dur-fast) var(--ease-out);
+    transition: background var(--dur-micro) var(--ease-out);
   }
   :global(.row-trigger:hover) {
     background: var(--paper-raised);
@@ -623,8 +623,8 @@
      consequence reads before the click. Resting state stays the quiet float-chip. */
   :global(.save) {
     transition:
-      color var(--dur-fast) var(--ease-out),
-      border-color var(--dur-fast) var(--ease-out);
+      color var(--dur-micro) var(--ease-out),
+      border-color var(--dur-micro) var(--ease-out);
   }
   :global(.save:hover) {
     color: var(--ok);
@@ -632,8 +632,8 @@
   }
   :global(.discard) {
     transition:
-      color var(--dur-fast) var(--ease-out),
-      border-color var(--dur-fast) var(--ease-out);
+      color var(--dur-micro) var(--ease-out),
+      border-color var(--dur-micro) var(--ease-out);
   }
   :global(.discard:hover) {
     color: var(--danger);
@@ -666,7 +666,7 @@
     cursor: pointer;
     font-size: var(--text-xs);
     color: var(--ink-soft);
-    transition: background var(--dur-fast) var(--ease-out);
+    transition: background var(--dur-micro) var(--ease-out);
   }
   .preview :global(.preview-trigger:hover) {
     background: var(--paper-raised);
@@ -689,7 +689,7 @@
   :global(.rcd-content [data-slot="collapsible-trigger"] svg) {
     flex: none;
     color: var(--ink-faint);
-    transition: transform var(--dur-fast) var(--ease-out);
+    transition: transform var(--dur-micro) var(--ease-out);
   }
   :global(.rcd-content [data-slot="collapsible-trigger"][data-state="closed"] svg) {
     transform: rotate(-90deg);
@@ -708,10 +708,10 @@
     overflow: hidden;
   }
   :global(.rcd-content [data-slot="collapsible-content"][data-state="open"]) {
-    animation: rcd-expand var(--dur-base) var(--ease-out);
+    animation: rcd-expand var(--dur-enter) var(--ease-out);
   }
   :global(.rcd-content [data-slot="collapsible-content"][data-state="closed"]) {
-    animation: rcd-collapse var(--dur-base) var(--ease-in);
+    animation: rcd-collapse var(--dur-exit) var(--ease-in);
   }
   @keyframes rcd-expand {
     from {
