@@ -4,13 +4,11 @@
   // listbox that commits and closes on pick. Unlike a live-preview picker that applies
   // each value as you arrow through it, this fires onSelect only for the chosen value,
   // then closes — the setting applies immediately on pick. One component renders every
-  // `select` control in the registry (theme, diff layout, diff markers), which is why the
-  // menu semantics it used to report were wrong three times over.
+  // `select` control in the registry (theme, diff layout, diff markers).
   //
   // Re-picking the value already selected fires nothing: bits-ui defaults
   // `allowDeselect` to false, so SelectItemState.handleSelect closes without a
-  // value-change. That is a native <select>'s behaviour and it is deliberate — the
-  // DropdownMenu this replaced re-fired onSelect for an unchanged value.
+  // value-change — a native <select>'s behaviour.
   //
   // Theme preview (EXC-753): when the HIGHLIGHTED option carries a `preview` theme id
   // (only the theme options do), a single abstract ThemePreviewCard floats beside the
@@ -61,8 +59,6 @@
   let cardEl = $state<HTMLElement | null>(null);
   let posTop = $state<number>();
   let posLeft = $state<number>();
-  /** Ticks whenever something may have moved the panel, re-running the placement below. */
-  let anchorMoved = $state(0);
 
   const highlighted = $derived(options.find((o) => o.value === highlightedValue));
   const preview = $derived(highlighted?.preview);
@@ -79,52 +75,47 @@
   // applies its transform a microtask after mount, so a synchronous measurement taken during
   // a fast reopen can read the panel at the viewport origin and strand the card in the
   // top-left corner. Deferring to a frame lands the measurement after that microtask, so the
-  // card anchors to the panel's settled rect (see themePreviewPlacement.ts). Re-runs when the
-  // highlighted option changes AND when `anchorMoved` ticks, so each move re-measures on its
-  // own frame. Coords stay undefined until the frame; the card's reveal keyframe fades from
-  // opacity 0 so the pre-measure frame never shows.
+  // card anchors to the panel's settled rect (see themePreviewPlacement.ts). Coords stay
+  // undefined until the frame; the card's reveal keyframe fades from opacity 0 so the
+  // pre-measure frame never shows.
+  //
+  // Anything that can move the panel re-places the card rather than backing it out.
+  // bits-ui keeps the panel glued to the trigger (Floating UI's autoUpdate), so
+  // re-measuring is all the card needs. Clearing the highlight instead would strand it:
+  // opening the panel scrolls — focusing the trigger reveals it inside the Settings pane,
+  // and bits-ui scrolls the highlighted row into view — and `highlightedValue` is only
+  // ever written by onHighlight, which does not re-fire for a highlight that never moved,
+  // so the preview would stay dead for as long as the panel was open.
   $effect(() => {
     if (!preview || !menuEl || !cardEl) return;
-    anchorMoved;
     const menu = menuEl;
     const card = cardEl;
-    return placeOnNextFrame(
-      {
-        menu: () => menu.getBoundingClientRect(),
-        card: () => card.getBoundingClientRect(),
-        view: () => ({ width: window.innerWidth, height: window.innerHeight }),
-        place: ({ top, left }) => {
-          posTop = top;
-          posLeft = left;
+    const place = () =>
+      placeOnNextFrame(
+        {
+          menu: () => menu.getBoundingClientRect(),
+          card: () => card.getBoundingClientRect(),
+          view: () => ({ width: window.innerWidth, height: window.innerHeight }),
+          place: ({ top, left }) => {
+            posTop = top;
+            posLeft = left;
+          },
+          raf: (cb) => requestAnimationFrame(cb),
+          cancel: (handle) => cancelAnimationFrame(handle),
         },
-        raf: (cb) => requestAnimationFrame(cb),
-        cancel: (handle) => cancelAnimationFrame(handle),
-      },
-      { gap: CARD_GAP, margin: VIEWPORT_MARGIN },
-    );
-  });
+        { gap: CARD_GAP, margin: VIEWPORT_MARGIN },
+      );
 
-  // A fixed card can't track a moving anchor on its own, so anything that can move the
-  // panel re-runs the placement above. bits-ui keeps the panel itself glued to the trigger
-  // (Floating UI's autoUpdate), so re-measuring is all the card needs to stay beside it.
-  //
-  // This RE-PLACES rather than backing the preview out, which is what it used to do. Under
-  // the DropdownMenu that was survivable: nothing scrolled by itself, and the reader's next
-  // pointer move re-fired the row's onpointerenter and brought the preview straight back.
-  // A listbox has neither half. Opening one scrolls — focusing the trigger scrolls the
-  // Settings pane to reveal it, and bits-ui scrolls the highlighted row into view — so the
-  // drop fired on open; and because the mirror below is only ever written by bits-ui's
-  // onHighlight, which does not fire again for a highlight that never changed, the preview
-  // stayed dead for as long as the panel was open. Re-placing removes the divergence
-  // entirely: the mirror is never cleared behind bits-ui's back.
-  //
-  // Capture, because a scroll on an ancestor does not bubble.
-  $effect(() => {
-    if (!preview) return;
-    const reposition = () => anchorMoved++;
+    let cancel = place();
+    // Capture, because a scroll on an ancestor does not bubble.
+    const reposition = () => {
+      cancel();
+      cancel = place();
+    };
     window.addEventListener("scroll", reposition, true);
     window.addEventListener("resize", reposition);
     return () => {
+      cancel();
       window.removeEventListener("scroll", reposition, true);
       window.removeEventListener("resize", reposition);
     };
@@ -226,36 +217,28 @@
   }
   /* Mac disclosure affordance: the vendored chevron points RIGHT while collapsed and
      rotates DOWN when the panel opens (reduced-motion is caught by the global guard in
-     app.css). `color: inherit` takes it off the vendored --muted-foreground so it keeps
-     riding the label's ink and brightens with it under .float-chip's hover rule. */
-  :global(.setting-trigger [data-icon="chevron-down"]) {
+     app.css). Keyed on the WRAPPER span rather than the glyph: select-trigger.svelte puts
+     `text-muted-foreground` there, so colouring the glyph would only re-inherit it, and
+     the chevron would stop brightening with the label under .float-chip's hover rule. */
+  :global(.setting-trigger span:has(> [data-icon="chevron-down"])) {
     color: inherit;
     opacity: 0.6;
     transform: rotate(-90deg);
     transition: transform var(--dur-micro) var(--ease-out);
   }
-  :global(.setting-trigger[aria-expanded="true"] [data-icon="chevron-down"]) {
+  :global(.setting-trigger[aria-expanded="true"] span:has(> [data-icon="chevron-down"])) {
     transform: rotate(0deg);
   }
 
   /* The panel carries the scope hash into the portal via these classes. Rows lay out as
      [label] [swatch] with the vendored check indicator in the trailing column the item's
-     own `pr-8` reserves. The highlight (pointer or keyboard roving) lifts to the topbar's
-     --chip-hover so it matches every other neutral control, while the SELECTED row
-     carries an amber wash — the same "amber marks the selection" language the diff view
-     and theme picker use.
-     SELECTION WINS THE FILL, which is the opposite of the DropdownMenu this replaced.
-     There, nothing was highlighted until you moved, so a highlight-wins rule only ever
-     greyed the amber row under the cursor. A listbox has no such state: bits-ui parks the
-     cursor on the SELECTED row as the panel opens (setInitialHighlightedNode), so
-     highlight-wins would mean the panel resting with no amber in it at all — losing the
-     one signal that says which palette or layout is current, exactly when it is read.
-     The highlight then needs its own mark on that row, because with no real focus to
-     draw a ring around, [data-highlighted] IS this listbox's keyboard cursor: an inset
-     accent ring, so both signals stay legible on the row that carries both. */
-  :global(.setting-menu) {
-    /* select-content ships no padding of its own, where dropdown-menu-content ships p-1 —
-       without this the rows sit flush against the panel edge. */
+     own `pr-8` reserves. Selection wins the fill and the highlight marks the row carrying
+     both with a ring; the reasoning for that ordering, which is specific to a Select, is
+     in doc/agents/shadcn-rules.md § The caret surface language. */
+  :global(.setting-menu [data-select-viewport]) {
+    /* The rows' own container: select-content ships no padding, where
+       dropdown-menu-content ships p-1. On the content instead of the viewport this would
+       also inset the two scroll buttons, which are full-width children of it. */
     padding: 0.25rem;
   }
   :global(.setting-menu .setting-item) {

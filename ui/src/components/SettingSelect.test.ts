@@ -164,14 +164,13 @@ describe("SettingSelect panel", () => {
 const componentSource = await Bun.file(join(import.meta.dir, "SettingSelect.svelte")).text();
 
 describe("SettingSelect row states", () => {
-  const source = componentSource;
-  const at = (selector: string) => source.indexOf(selector);
+  // Anchored on the opening brace so a rule is matched rather than any prose above it
+  // that happens to spell the same selector — the guard shadcn-select.test.ts gets from
+  // stripping comments first, which cannot work here (this file's are `/* */`).
+  const at = (selector: string) => componentSource.indexOf(`${selector} {`);
 
   test("selection wins the fill over the highlight, not the other way round", () => {
-    // bits-ui parks the cursor on the SELECTED row when the panel opens, so a
-    // highlight-wins order (which is what the DropdownMenu this replaced used, safely,
-    // because it highlighted nothing until you moved) would leave the panel resting with
-    // no amber in it — losing "which palette is current" exactly when it is read.
+    // Why this ordering: doc/agents/shadcn-rules.md § The caret surface language.
     const highlighted = at(".setting-item[data-highlighted])");
     const selected = at(".setting-item[data-selected])");
     expect(highlighted).toBeGreaterThan(-1);
@@ -179,11 +178,10 @@ describe("SettingSelect row states", () => {
   });
 
   test("the row carrying both still shows the keyboard cursor", () => {
-    // With selection winning the fill, [data-highlighted] would otherwise be invisible on
-    // that one row — and with no real focus anywhere (bits-ui drives
-    // aria-activedescendant), that attribute IS this listbox's keyboard cursor.
-    expect(source).toContain(".setting-item[data-selected][data-highlighted])");
-    expect(source).toMatch(/\[data-selected\]\[data-highlighted\]\)\s*\{\s*box-shadow:/);
+    // [data-highlighted] is this listbox's keyboard cursor — bits-ui focuses no row — so
+    // it needs a mark of its own on the row selection has already filled.
+    expect(at(".setting-item[data-selected][data-highlighted])")).toBeGreaterThan(-1);
+    expect(componentSource).toMatch(/\[data-selected\]\[data-highlighted\]\)\s*\{\s*box-shadow:/);
   });
 });
 
@@ -239,10 +237,9 @@ describe("SettingSelect theme preview (EXC-753)", () => {
   const highlight = (value: string) => pointer(option(value), "pointermove");
 
   test("a listbox always has an active option, so opening previews the current one", async () => {
-    // Not a carried-over behaviour: `SelectSingleRootState.setInitialHighlightedNode`
-    // highlights the selected row as the content mounts, where the old menu highlighted
-    // nothing until a hover. There is no "nothing highlighted" state to preserve under
-    // aria-activedescendant, and the preview following the highlight is the feature.
+    // `SelectSingleRootState.setInitialHighlightedNode` highlights the selected row as the
+    // content mounts: under aria-activedescendant there is no "nothing highlighted" state,
+    // and the preview follows the highlight.
     const { flush } = render(SettingSelect, previewProps);
     flush();
     await open(flush);
@@ -287,14 +284,11 @@ describe("SettingSelect theme preview (EXC-753)", () => {
     await close(flush);
   });
 
-  // Opening a listbox scrolls, where opening the DropdownMenu this replaced did not:
-  // focusing the trigger scrolls the Settings pane to reveal it, and bits-ui scrolls the
-  // highlighted row into view (SelectContentState watches [isPositioned, highlightedNode]
-  // → scrollHighlightedNodeIntoView). The preview used to be dropped on any such scroll,
-  // which killed it on open — and permanently, since the mirror is only ever written by
-  // onHighlight and that does not fire again for a highlight that never changed. Both
-  // scroll origins are covered because they failed differently: the ancestor one is what
-  // e2e caught, the in-panel one is what a taller slot would hit.
+  // Opening a listbox scrolls — the trigger's reveal and bits-ui's own
+  // scrollHighlightedNodeIntoView — so a scroll must re-place the card, never drop it
+  // (SettingSelect.svelte's placement effect says why). Both origins are covered because
+  // they fail differently: the ancestor one is what e2e caught, the in-panel one is what
+  // a taller slot would hit.
   for (const [origin, dispatch] of [
     ["an ancestor of the panel", () => document.dispatchEvent(new Event("scroll"))],
     ["inside the panel", () => content()?.dispatchEvent(new Event("scroll"))],
