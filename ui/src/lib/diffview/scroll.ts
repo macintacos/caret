@@ -69,22 +69,34 @@ function prefersReducedMotion(): boolean {
 }
 
 /** How far (px) the scroller may drift from what the tween last wrote before the
- * tween treats it as someone else's scroll. Browsers round scrollTop to device
- * pixels — the same reason READING_ZONE_SLOP exists — so an exact comparison
- * would abort every flight on its second frame. */
+ * tween treats it as someone else's scroll. The read-back below already absorbs
+ * the browser's own rounding and clamping, so what is left for the slop is drift
+ * a set/get round-trip cannot report exactly — a fractional device-pixel ratio,
+ * page zoom, or a reflow re-clamping scrollTop as rows paint in. */
 const SCROLL_TAKEOVER_SLOP = 1;
 
 // The plan has one scroll container, so at most one jump is ever in flight: a
 // second jump cancels the first rather than leaving two loops writing scrollTop
-// on the same frame.
+// on the same frame. No disposer is handed back — a flight lasts at most
+// SCROLL_ANIM_MS and a detached scroller absorbs the writes — so the handle is
+// cleared on every exit path instead, and undefined means nothing is in flight.
 let jumpFrame: number | undefined;
 
 /** Tweens `scroller` to `top` over SCROLL_ANIM_MS, or jumps outright under reduced
- * motion. The tween owns the scroll only until something else moves it — a wheel,
- * followCursorLine's scrollBy, revealCard's reveal — at which point it lets go,
- * the way the browser's own smooth scroll yields to a reader who scrolls. */
+ * motion. The tween owns the scroll only until something else moves it in ONE step
+ * — a wheel, followCursorLine's instant scrollBy — at which point it lets go, the
+ * way the browser's own smooth scroll yields to a reader who scrolls. What it
+ * cannot detect is a gradual mover: revealCard's smooth scrollBy advances by less
+ * than SCROLL_TAKEOVER_SLOP per frame, so a composer reveal landing inside a
+ * flight is overwritten rather than yielded to. Narrow (a line click within
+ * SCROLL_ANIM_MS of a jump) and left alone deliberately — routing revealCard
+ * through this driver is the real fix and is its own change. */
 function animateScrollTop(scroller: HTMLElement, top: number): void {
   if (jumpFrame !== undefined) cancelAnimationFrame(jumpFrame);
+  jumpFrame = undefined;
+  // Assignment, not scrollTo({ behavior: "instant" }): nothing sets scroll-behavior
+  // on the plan surface, and base.css forces it to `auto !important` under reduced
+  // motion — the path where a smooth behavior would actually defeat the guarantee.
   if (prefersReducedMotion()) {
     scroller.scrollTop = top;
     return;
@@ -97,10 +109,14 @@ function animateScrollTop(scroller: HTMLElement, top: number): void {
   let written = from;
 
   function step(): void {
-    if (Math.abs(scroller.scrollTop - written) > SCROLL_TAKEOVER_SLOP) return;
+    if (Math.abs(scroller.scrollTop - written) > SCROLL_TAKEOVER_SLOP) {
+      jumpFrame = undefined;
+      return;
+    }
     const elapsed = performance.now() - start;
     if (elapsed >= SCROLL_ANIM_MS) {
       scroller.scrollTop = top;
+      jumpFrame = undefined;
       return;
     }
     scroller.scrollTop = scrollTweenTop({ from, to: top, elapsed, duration: SCROLL_ANIM_MS });

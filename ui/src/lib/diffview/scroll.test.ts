@@ -124,9 +124,11 @@ describe("scrollTweenTop", () => {
   });
 
   test("has covered more than three quarters of the distance at the halfway point", () => {
-    // The property the issue asks for, pinned as a contract rather than a curve
-    // name: a curve still near half its distance at the midpoint spends the rest of
-    // the flight in the slow drift this replaces.
+    // A front-loading FLOOR, not a pin on the curve: it excludes linear (500) and
+    // the quadratic/sine drifts (707, 750), so a swap that gives the jump a slow
+    // first half reds here. It does not separate cubicOut from --ease-out's own
+    // curve — both clear it — because what distinguishes those two is the shape of
+    // the last 10%, which no single-point assertion can see.
     expect(scrollTweenTop({ ...base, elapsed: SCROLL_ANIM_MS / 2 })).toBeGreaterThan(750);
   });
 });

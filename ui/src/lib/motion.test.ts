@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 
 import { readAppCss, rootBlock } from "$lib/appCss.ts";
+import { SCROLL_ANIM_MS } from "$lib/diffview/scroll.ts";
 
 // caret's motion vocabulary lives in app.css: a small set of functional
 // duration/easing tokens for one-shot chrome reveals, plus a single global
@@ -83,6 +84,16 @@ describe("motion tokens in app.css", () => {
     expect(toMs(base)).toBeLessThanOrEqual(200);
     expect(toMs(fast)).toBeGreaterThan(0);
     expect(toMs(base)).toBeGreaterThan(0);
+  });
+
+  test("the plan jump's JS duration mirrors --dur-base", () => {
+    // scrollTop is a JS property no stylesheet can drive, so scroll.ts carries the
+    // token's value as a constant instead of reading it. That makes it a number
+    // coupled across files, which svelte-rules.md § CSS-token discipline says to
+    // name once and TEST — the same pin layout.test.ts holds REFERENCE_WIDTH_PX to.
+    const base = root.match(/--dur-base:\s*([^;]+);/)?.[1] ?? "";
+    expect(base).not.toBe("");
+    expect(SCROLL_ANIM_MS).toBe(toMs(base));
   });
 
   test("declares an enter and an exit easing as cubic-beziers", () => {

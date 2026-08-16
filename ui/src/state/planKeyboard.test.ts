@@ -2,6 +2,7 @@ import "@ui/test-setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
 
 import { createPlanKeyboard, type PlanKeyboardStore } from "@/state/planKeyboard.svelte.ts";
+import type { CursorMotion } from "$lib/diffview/lineCursor.ts";
 
 // A plan whose lines carry known "alpha" matches: line 3 has two, line 5 has one
 // (the same fixture DiffPlanView.test.ts uses to prove the "1/3" counter). Split on
@@ -379,6 +380,34 @@ describe("moveCursor", () => {
     h.keyboard.moveCursor("top"); // → 1
     expect(h.followed).toEqual([2, 5, 1]);
     expect(h.jumped).toEqual([]);
+  });
+
+  test("exactly the two heading motions take the jump — every other motion follows", () => {
+    // The whole CursorMotion union, so the EXCLUSION is pinned rather than left to
+    // the two cases above: `{`/`}` and `G` navigate somewhere explicit too, and
+    // reading JUMP_MOTIONS' rule that broadly would wrongly sweep them in.
+    const motions: CursorMotion[] = [
+      "down",
+      "up",
+      "halfDown",
+      "halfUp",
+      "top",
+      "bottom",
+      "nextHeading",
+      "prevHeading",
+      "nextBlank",
+      "prevBlank",
+    ];
+    const jumping = motions.filter((motion) => {
+      const h = build(
+        { ...store, cursorLine: 3 },
+        { text: CURSOR_PLAN, headings: CURSOR_HEADINGS },
+      );
+      h.keyboard.moveCursor(motion);
+      expect(h.jumped.length + h.followed.length).toBe(1); // every motion scrolls exactly once
+      return h.jumped.length === 1;
+    });
+    expect(jumping).toEqual(["nextHeading", "prevHeading"]);
   });
 
   test("blank-line motions jump between the paragraph boundaries", () => {

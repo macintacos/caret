@@ -91,7 +91,9 @@ const relTop = (page: Page) =>
 
 /** Waits for the plan's scroll position to stop moving. The jump is animated, so
  * a rect read on the frame after the keystroke measures the flight rather than
- * where it parked; two identical non-zero reads mean it has landed. */
+ * where it parked; two identical non-zero reads mean it has landed. Only usable
+ * where the jump lands somewhere OTHER than the top — a zero landing is
+ * indistinguishable from "has not started", so it would poll until the deadline. */
 async function settleScroll(page: Page): Promise<void> {
   let previous = -1;
   await expect

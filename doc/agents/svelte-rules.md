@@ -308,6 +308,22 @@ tooltips, popovers) instead animate their enter/exit through `tw-animate-css` �
 Ambient/infinite animations (the safe-mode pulse, the EmptyState float, the theme wipe)
 are exempt from both and keep their own bespoke durations.
 
+**A property no stylesheet can drive takes a third route, and it is the narrowest one.**
+Where the thing being animated is a JS property rather than a style — `scrollTop` is the
+only case today — the duration is MIRRORED as a plain constant instead of read from the
+sheet, and the mirror is pinned by a test so the two cannot drift: `SCROLL_ANIM_MS`
+(`diffview/scroll.ts`) carries `--dur-base` for the plan's jump tween, held to it by
+`motion.test.ts`, and `CLOSE_ANIM_MS` (`state/planKeyboard.svelte.ts`) carries
+`--dur-fast` for the search-collapse teardown. That is the same "name it once and test the
+coupling" rule § CSS-token discipline states for `REFERENCE_WIDTH_PX`; a mirror without
+the pin is a comment, not an invariant. The jump also eases with `cubicOut` from
+`svelte/easing` rather than `--ease-out`, and that is the **one** deliberate departure
+from the token easings: `--ease-out` is the longest-tailed curve in the vocabulary, and
+EXC-1092 asked for that tail specifically to be shorter. A JS driver owes the
+reduced-motion preference directly, too — the global CSS guard cannot reach it — which
+`scroll.ts`'s `prefersReducedMotion()` is. Reach for this route only when a stylesheet
+genuinely cannot express the animation; wanting a different curve is not enough.
+
 **The two tracks may meet, and there is exactly one way to do it.** A portalled surface
 that wants caret's timing sets `--tw-duration` and `--tw-ease` — the two custom properties
 `tw-animate-css`'s compiled `animate-in`/`animate-out` reads — from the

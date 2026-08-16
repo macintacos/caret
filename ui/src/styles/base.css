@@ -43,9 +43,10 @@ body {
    Reach: light-DOM ONLY (both the #app tree and the body-level portal). The
    @pierre/diffs diff view renders into a Shadow DOM (.diffview's shadow root), a
    separate tree neither selector can pierce — its own reduced-motion handling
-   stays the library's concern. The JS-side mirror for scroll behavior (CSS
-   cannot gate ScrollBehavior) lives in lib/diffview/scroll.ts's
-   prefersReducedMotion(). */
+   stays the library's concern. The scroll-behavior line below reaches the browser's
+   OWN scrolling; the plan's jump animates scrollTop from JS, which no stylesheet
+   can drive, so it reads the preference itself through
+   lib/diffview/scroll.ts's prefersReducedMotion(). */
 @media (prefers-reduced-motion: reduce) {
   #app,
   #app *,

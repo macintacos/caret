@@ -3,8 +3,8 @@
 // shell drives (EXC-875). Like the other state modules (compare, autosave), this is a
 // plain factory over an injected backing store plus a deps bag — the
 // component owns the reactive `$state` store, tests pass a plain object, and every DOM
-// effect (scroll-follow, focus/blur, the composer open) is injected so the transitions
-// stay testable without mounting the view.
+// effect (scroll-follow, the shared jump, focus/blur, the composer open) is injected so
+// the transitions stay testable without mounting the view.
 //
 // The three surfaces are one machine: they share the reading-position seed
 // (`cursorLine ?? readingLine()`), the Esc-priority chain (Esc closes search, THEN exits
@@ -124,8 +124,12 @@ export interface PlanKeyboard {
 // fires no animationend, so a timer — not that event — drives the teardown.
 const CLOSE_ANIM_MS = 120;
 
-/** Motions that navigate to an explicit place, so they take the top-parked shared jump
- * rather than the cursor's scrolloff follow. */
+/** The motions that navigate to a named SECTION — the same move a breadcrumb or ToC
+ * pick makes — so they take the top-parked shared jump. Every other motion keeps the
+ * scrolloff follow, and that exclusion is the load-bearing half: gg/G/{/} step the
+ * reader THROUGH the document rather than to a section, and `G` is only right when the
+ * last line lands at the bottom. Widening this set on the "navigates somewhere
+ * explicit" reading alone would break it. */
 const JUMP_MOTIONS: ReadonlySet<CursorMotion> = new Set(["nextHeading", "prevHeading"]);
 
 export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardDeps): PlanKeyboard {
@@ -165,10 +169,13 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
       .flatMap((line, i) => (line.trim() === "" ? [i + 1] : []));
   }
 
-  // Land the cursor on `line` and scroll it into view — a match reveal or a motion.
-  function reveal(line: number): void {
+  // Land the cursor on `line` and scroll to it. `scroll` picks WHICH scroll: the
+  // scrolloff follow by default (a match reveal, the visual-mode anchor, every
+  // stepping motion), or the shared top-parked jump for a heading motion. Single
+  // source for the landing itself, so a rule added here reaches all of them.
+  function reveal(line: number, scroll: (line: number) => void = deps.follow): void {
     store.cursorLine = line;
-    deps.follow(line);
+    scroll(line);
   }
 
   function cancelClose(): void {
@@ -225,9 +232,7 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
         halfPage: deps.halfPage(),
         seed: deps.readingLine() ?? 1,
       });
-      store.cursorLine = line;
-      if (JUMP_MOTIONS.has(motion)) deps.jump(line);
-      else deps.follow(line);
+      reveal(line, JUMP_MOTIONS.has(motion) ? deps.jump : deps.follow);
     },
 
     commentCursorLine() {
