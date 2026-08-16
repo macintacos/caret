@@ -401,15 +401,29 @@ a second thing the component `<style>` cannot — those rules are unlayered whil
 utilities they supersede compile into `@layer utilities`, so a `shadcn add --overwrite`
 that restores the stock timing is overridden rather than a silent regression.
 
-**The menus, popovers and tooltips take that timing by default**, from one unlayered rule
-pair in `styles/base.css` that writes the two properties for
-`[data-slot="dropdown-menu-content"]`, `…-sub-content`, `popover-content` and
-`tooltip-content` — the enter tokens on the surface, the exit tokens on
-`[data-state="closed"]`. The slots are named one by one rather than swept as
-`[data-slot][data-state]`, and the modal surfaces (`dialog`, `alert-dialog`, `sheet`) sit
-deliberately outside it: those take the whole viewport behind a backdrop and their arrival
-is choreographed with it, so a sweep would quietly overrule that. `motion.test.ts` asserts
-the inclusion and the exclusion both.
+**The menus, popovers and tooltips take that timing by default**, from three unlayered
+rules in `styles/base.css`. The click-opened surfaces —
+`[data-slot="dropdown-menu-content"]`, `…-sub-content` and `popover-content` — are
+surfaces the reader asked for, so they take the enter tokens by default and the exit
+tokens on `[data-state="closed"]`. **The tooltip is the carve-out**: it is the one
+hover-TRIGGERED surface in the set (`NotifyBell.svelte` opens it with
+`delayDuration={0}`), so it takes `--dur-micro` in one rule with no closed-state arm —
+symmetric, for the reason `tokens.css` already gives for micro being the same time in both
+directions. The slots are named one by one rather than swept as `[data-slot][data-state]`,
+and the modal surfaces (`dialog`, `alert-dialog`, `sheet`) sit deliberately outside all
+three: those take the whole viewport behind a backdrop and their arrival is choreographed
+with it, so a sweep would quietly overrule that. `motion.test.ts` asserts the inclusions
+and the exclusion both.
+
+**The vendored components' own hover/focus tempo is bridged separately**, and it is not
+`animate-in`'s. A bare `transition-colors` / `transition-all` in the shadcn tree resolves
+through Tailwind's `--default-transition-duration` and
+`--default-transition-timing-function`, which ship as 150ms on
+`cubic-bezier(.4, 0, .2, 1)` — a second hover tempo beside caret's own 120ms `--ease-out`
+chips. Both keys point at the micro tier from the `@theme inline` block in
+`styles/shadcn-bridge.css`, which is the whole fix: no selector, no per-component
+override, and a vendored class that names its own duration (the sheet's `duration-200`)
+still wins over a default.
 
 Two things about where that rule lives. It is in `base.css` rather than in the vendored
 components' class strings because `shadcn-svelte add` reverts those wholesale on a re-sync

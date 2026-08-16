@@ -87,8 +87,7 @@ body {
 :where(
   [data-slot="dropdown-menu-content"],
   [data-slot="dropdown-menu-sub-content"],
-  [data-slot="popover-content"],
-  [data-slot="tooltip-content"]
+  [data-slot="popover-content"]
 ) {
   --tw-duration: var(--dur-enter);
   --tw-ease: var(--ease-out);
@@ -96,11 +95,21 @@ body {
 :where(
   [data-slot="dropdown-menu-content"],
   [data-slot="dropdown-menu-sub-content"],
-  [data-slot="popover-content"],
-  [data-slot="tooltip-content"]
+  [data-slot="popover-content"]
 )[data-state="closed"] {
   --tw-duration: var(--dur-exit);
   --tw-ease: var(--ease-in);
+}
+
+/* The tooltip is the one HOVER-triggered surface in that set, and NotifyBell opens it
+   with delayDuration={0} — an entrance's worth of time before an instant tooltip
+   resolves is exactly the lag on the pointer the micro tier exists to avoid. So it
+   takes micro, and takes it symmetrically: at this size a departure has no arrival to
+   be the inverse of, which is the reasoning tokens.css already gives for micro being
+   the same time in both directions. One rule, no closed-state arm. */
+:where([data-slot="tooltip-content"]) {
+  --tw-duration: var(--dur-micro);
+  --tw-ease: var(--ease-out);
 }
 
 /* The theme-switch "wipe" (EXC-730). withWipe() (lib/themeWipe.ts) runs the

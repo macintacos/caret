@@ -401,12 +401,10 @@ describe("the portalled menus, popovers and tooltips run on caret's tempo", () =
   // writes those two properties. app.css writes them for the surfaces that are NOT
   // modals; the modal ones choreograph their own arrival, and their absence from the
   // rule is asserted here rather than left to be noticed.
-  const NON_MODAL = [
-    "dropdown-menu-content",
-    "dropdown-menu-sub-content",
-    "popover-content",
-    "tooltip-content",
-  ];
+  // Click-opened: a menu or a panel the reader asked for is a SURFACE, so it takes the
+  // enter/exit pair. The tooltip is the deliberate exception below — it is hover-
+  // triggered, and one of its two consumers opens with no delay at all.
+  const SURFACES = ["dropdown-menu-content", "dropdown-menu-sub-content", "popover-content"];
   const MODAL = [
     "dialog-content",
     "dialog-overlay",
@@ -423,17 +421,22 @@ describe("the portalled menus, popovers and tooltips run on caret's tempo", () =
   const portalRules = [...appCss.matchAll(/([^{}]*)\{([^{}]*--tw-duration:[^{}]*)\}/g)].map(
     ([, before = "", body = ""]) => ({ selector: (before.split("*/").pop() ?? "").trim(), body }),
   );
-  const enterArm = portalRules.find((r) => !r.selector.includes("data-state"));
-  const exitArm = portalRules.find((r) => r.selector.includes('[data-state="closed"]'));
+  // Keyed on the tier each rule hands out rather than on its shape, so the three cannot
+  // be mixed up as more of them land.
+  const armFor = (tier: string) => portalRules.find((r) => r.body.includes(`var(--dur-${tier})`));
+  const enterArm = armFor("enter");
+  const exitArm = armFor("exit");
+  const tooltipArm = armFor("micro");
   const read = (arm: typeof enterArm, prop: string): string =>
     arm?.body.match(new RegExp(`${prop}:\\s*([^;]+);`))?.[1]?.trim() ?? "";
 
-  test("retimes them from the shared tokens, in both directions", () => {
+  test("retimes the click-opened surfaces from the shared tokens, in both directions", () => {
     for (const arm of [enterArm, exitArm]) {
-      for (const slot of NON_MODAL) expect(arm?.selector).toContain(`[data-slot="${slot}"]`);
-      expect(read(arm, "--tw-duration")).toMatch(/^var\(--dur-[a-z]+\)$/);
+      for (const slot of SURFACES) expect(arm?.selector).toContain(`[data-slot="${slot}"]`);
       expect(read(arm, "--tw-ease")).toMatch(/^var\(--ease-[a-z]+\)$/);
     }
+    expect(exitArm?.selector).toContain('[data-state="closed"]');
+    expect(enterArm?.selector).not.toContain("data-state");
   });
 
   test("pairs a distinct enter and exit rather than spending one timing twice", () => {
@@ -444,14 +447,48 @@ describe("the portalled menus, popovers and tooltips run on caret's tempo", () =
     expect(read(enterArm, "--tw-ease")).not.toBe(read(exitArm, "--tw-ease"));
   });
 
+  test("the tooltip takes the micro tier instead, symmetrically", () => {
+    // The one hover-TRIGGERED surface in the set, and NotifyBell opens it with
+    // delayDuration={0} — an entrance's worth of time before an instant tooltip
+    // resolves is the lag on the pointer --dur-micro exists to avoid. Micro is
+    // symmetric by definition ("the SAME time in both directions", tokens.css), so
+    // the tooltip takes one rule and no closed-state arm: a departure at this size
+    // has no arrival to be the inverse of.
+    expect(tooltipArm?.selector).toContain('[data-slot="tooltip-content"]');
+    expect(tooltipArm?.selector).not.toContain("data-state");
+    expect(read(tooltipArm, "--tw-duration")).toBe("var(--dur-micro)");
+    for (const arm of [enterArm, exitArm]) {
+      expect(arm?.selector).not.toContain('[data-slot="tooltip-content"]');
+    }
+  });
+
   test("leaves the modal surfaces to their own choreography", () => {
     // A dialog, an alert dialog and a sheet are not chrome that appears beside the
     // pointer — they take the whole surface, with a backdrop, and their timing is
-    // theirs. Widening this rule to a bare [data-slot] sweep would silently retime
-    // them, so the exclusion is a test rather than a comment.
-    for (const arm of [enterArm, exitArm]) {
+    // theirs. Widening any of these rules to a bare [data-slot] sweep would silently
+    // retime them, so the exclusion is a test rather than a comment.
+    for (const arm of [enterArm, exitArm, tooltipArm]) {
       for (const slot of MODAL) expect(arm?.selector).not.toContain(`[data-slot="${slot}"]`);
     }
+  });
+});
+
+describe("the vendored components' hover/focus tempo is caret's micro tier", () => {
+  // The OTHER half of the two-track meeting, and the one that shows up on every
+  // button rather than only on a portal. A bare `transition-colors` / `transition-all`
+  // in the shadcn tree resolves through Tailwind's own theme defaults — 150ms on
+  // cubic-bezier(.4, 0, .2, 1) — beside caret chrome that tints in --dur-micro on
+  // --ease-out. Two hover tempos in one chrome is what the audit exists to catch, and
+  // the theme keys are the whole fix: no selector, no per-component override, and a
+  // vendored class that names its own duration (sheet's duration-200) still wins.
+  const theme = appCss.match(/@theme inline\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const key = (name: string): string =>
+    theme.match(new RegExp(`--default-transition-${name}:\\s*([^;]+);`))?.[1]?.trim() ?? "";
+
+  test("both Tailwind transition defaults resolve to caret's tokens", () => {
+    expect(theme).not.toBe("");
+    expect(key("duration")).toBe("var(--dur-micro)");
+    expect(key("timing-function")).toBe("var(--ease-out)");
   });
 });
 
