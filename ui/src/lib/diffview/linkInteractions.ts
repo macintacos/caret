@@ -107,7 +107,7 @@ function tooltipMount(tokenElement: HTMLElement): ParentNode {
  * rule in app.css), which inherit through the shadow boundary; its geometry and
  * type borrow caret's FND/type-scale tokens, which inherit the same way. The
  * reveal is motionless — no transition is set here. That is the integration
- * point for the motion tokens (--dur-fast / --ease-out), a deliberate follow-up.
+ * point for the motion tokens (--dur-micro / --ease-out), a deliberate follow-up.
  *
  * The bubble does not reposition on scroll (no scroll listener is added);
  * dismissal relies on hideTooltip from onTokenLeave. */

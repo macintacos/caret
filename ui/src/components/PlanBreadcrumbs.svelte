@@ -783,7 +783,7 @@
   }
   :global(.plan-breadcrumbs .crumb-item),
   :global(.plan-breadcrumbs [data-slot="breadcrumb-separator"]) {
-    animation: crumb-in var(--dur-base) var(--ease-out);
+    animation: crumb-in var(--dur-enter) var(--ease-out);
   }
 
   /* Walking to a sibling at the same depth keeps the crumb mounted and swaps only
@@ -801,7 +801,7 @@
     }
   }
   :global(.plan-breadcrumbs .crumb-text) {
-    animation: crumb-text-in var(--dur-fast) var(--ease-out);
+    animation: crumb-text-in var(--dur-micro) var(--ease-out);
   }
 
   /* Each crumb is a menu trigger. It deliberately does NOT wear .float-chip: three
@@ -834,8 +834,8 @@
     text-overflow: ellipsis;
     cursor: pointer;
     transition:
-      background var(--dur-fast) var(--ease-out),
-      color var(--dur-fast) var(--ease-out);
+      background var(--dur-micro) var(--ease-out),
+      color var(--dur-micro) var(--ease-out);
   }
   :global(.plan-breadcrumbs .crumb:hover),
   :global(.plan-breadcrumbs .crumb[aria-expanded="true"]) {
@@ -854,8 +854,8 @@
     color: inherit;
     cursor: pointer;
     transition:
-      background var(--dur-fast) var(--ease-out),
-      color var(--dur-fast) var(--ease-out);
+      background var(--dur-micro) var(--ease-out),
+      color var(--dur-micro) var(--ease-out);
   }
   :global(.plan-breadcrumbs .crumb-ellipsis:hover),
   :global(.plan-breadcrumbs .crumb-ellipsis[aria-expanded="true"]) {

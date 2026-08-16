@@ -519,8 +519,9 @@
      the vendored component ships.
      The two arms are the motion vocabulary's own enter/exit pairing (tokens.css §
      Motion) rather than one number used twice: a 20rem panel hanging off the control
-     row is the "entering surface a step larger" `--dur-base` is named for, and leaving
-     is quicker than arriving, on the accelerate-out curve `--ease-in` exists to be.
+     row is the surface `--dur-enter` is named for, and leaving takes `--dur-exit` on the
+     accelerate-out curve `--ease-in` exists to be — quicker than arriving, which the
+     vocabulary now tiers for rather than leaving each surface to arrange.
      No spring and no overshoot — `--ease-spring` is reserved for a control sliding
      between discrete positions, and a panel that bounces reads as a toy on a surface
      whose whole register is quiet.
@@ -529,11 +530,11 @@
      collapses the duration rather than removing the keyframes — which is exactly what
      keeps the animationend above firing under the preference. */
   :global(.plan-toc-panel) {
-    --tw-duration: var(--dur-base);
+    --tw-duration: var(--dur-enter);
     --tw-ease: var(--ease-out);
   }
   :global(.plan-toc-panel[data-state="closed"]) {
-    --tw-duration: var(--dur-fast);
+    --tw-duration: var(--dur-exit);
     --tw-ease: var(--ease-in);
   }
 
@@ -563,7 +564,7 @@
     }
   }
   :global(.plan-toc-panel [data-toc-view="outline"] [data-slot="command-viewport"]) {
-    animation: toc-list-in var(--dur-fast) var(--ease-out);
+    animation: toc-list-in var(--dur-micro) var(--ease-out);
   }
 
   /* A match arriving, and its breadcrumb header arriving with it. ONE declaration for
@@ -608,7 +609,7 @@
   }
   :global(.plan-toc-panel [data-toc-view="matches"] [data-slot="command-item"]),
   :global(.plan-toc-panel [data-toc-view="matches"] [data-command-group-heading]) {
-    animation: toc-row-in var(--dur-fast) var(--ease-out);
+    animation: toc-row-in var(--dur-micro) var(--ease-out);
   }
 
   /* The list carries its own leading space so the first row is not flush against

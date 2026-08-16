@@ -120,9 +120,10 @@ export interface PlanKeyboard {
   clearForContentSwitch(): void;
 }
 
-// Must match PlanSearch's search-collapse duration (--dur-fast = 120ms). happy-dom
-// fires no animationend, so a timer — not that event — drives the teardown.
-const CLOSE_ANIM_MS = 120;
+// Must match PlanSearch's search-collapse duration (--dur-exit = 140ms), pinned by
+// motion.test.ts. happy-dom fires no animationend, so a timer — not that event —
+// drives the teardown.
+const CLOSE_ANIM_MS = 140;
 
 /** The motions that navigate to a named SECTION — the same move a breadcrumb or ToC
  * pick makes — so they take the top-parked shared jump. Every other motion keeps the
@@ -207,7 +208,7 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
 
   // Dismiss the pill. Blur now so focus returns to the plan and the cursor/highlights stay
   // where they landed. With hints on there's a "/ to search" chip to collapse back into,
-  // so keep the pill mounted for one --dur-fast playing its collapse animation, then reset;
+  // so keep the pill mounted for one --dur-exit playing its collapse animation, then reset;
   // with hints off there's no chip, so reset immediately. Shared by the Esc chain.
   function closeSearch(): void {
     deps.blur();

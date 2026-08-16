@@ -115,7 +115,7 @@
      global guard in app.css. */
   .split :global(.split-toggle .icon) {
     transform: rotate(-90deg);
-    transition: transform var(--dur-fast) var(--ease-out);
+    transition: transform var(--dur-micro) var(--ease-out);
   }
   .split :global(.split-toggle[aria-expanded="true"] .icon) {
     transform: rotate(0deg);

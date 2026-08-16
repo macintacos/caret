@@ -190,7 +190,7 @@
     /* One-shot pop, matching the chrome's ≤200ms one-shot vocabulary. Being
        out of flow, a small lift is safe here (unlike the composer's in-flow
        reveal). The global reduced-motion rule in app.css collapses it. */
-    animation: pop var(--dur-fast) var(--ease-out);
+    animation: pop var(--dur-micro) var(--ease-out);
     transform-origin: top var(--pop-origin, right);
   }
   .align-end {

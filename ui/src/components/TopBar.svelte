@@ -432,10 +432,10 @@
   .actions :global(.overflow-trigger),
   .approve-slot {
     transition:
-      opacity var(--dur-base) var(--ease-out),
-      transform var(--dur-base) var(--ease-out),
-      background-color var(--dur-fast) var(--ease-out),
-      color var(--dur-fast) var(--ease-out);
+      opacity var(--dur-enter) var(--ease-out),
+      transform var(--dur-enter) var(--ease-out),
+      background-color var(--dur-micro) var(--ease-out),
+      color var(--dur-micro) var(--ease-out);
   }
   @starting-style {
     .actions :global(.reject),

@@ -75,8 +75,8 @@
     color: var(--ink-soft);
     background: transparent;
     transition:
-      background-color var(--dur-fast) var(--ease-out),
-      color var(--dur-fast) var(--ease-out);
+      background-color var(--dur-micro) var(--ease-out),
+      color var(--dur-micro) var(--ease-out);
   }
   /* Hover on an unpressed segment takes the topbar's chip tint — the same
      neutral hover every other control in the modal uses. */

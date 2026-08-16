@@ -236,9 +236,9 @@
        the library-reserved annotation row, so a transform that grew or shifted
        its box would change the row's measured height and fight the preventScroll
        guard. The global reduced-motion rule in app.css collapses it. */
-    animation: reveal var(--dur-fast) var(--ease-out);
+    animation: reveal var(--dur-micro) var(--ease-out);
     /* The hover lift (below) eases in and out rather than snapping. */
-    transition: background-color var(--dur-fast) var(--ease-out);
+    transition: background-color var(--dur-micro) var(--ease-out);
   }
   .card[data-state="approved"] {
     --state-accent: var(--ok);
@@ -310,7 +310,7 @@
   :global([data-slot="button"].chip .icon) {
     flex: none;
     color: var(--ink-faint);
-    transition: transform var(--dur-fast) var(--ease-out);
+    transition: transform var(--dur-micro) var(--ease-out);
   }
   :global([data-slot="button"].chip[aria-expanded="false"] .icon) {
     transform: rotate(-90deg);
@@ -384,7 +384,7 @@
      rewrites animation names for component-scoped rules); the global reduced-motion
      rule in app.css ([data-slot] *) collapses it to a static frame when the OS asks. */
   :global([data-slot="button"].danger:hover .icon) {
-    animation: trash-shake var(--dur-base) var(--ease-out);
+    animation: trash-shake var(--dur-enter) var(--ease-out);
   }
   @keyframes -global-trash-shake {
     0%,
@@ -417,7 +417,7 @@
   .body-wrap {
     display: grid;
     grid-template-rows: 0fr;
-    transition: grid-template-rows var(--dur-base) var(--ease-out);
+    transition: grid-template-rows var(--dur-enter) var(--ease-out);
   }
   .card.expanded .body-wrap {
     grid-template-rows: 1fr;

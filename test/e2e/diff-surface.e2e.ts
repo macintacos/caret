@@ -1858,7 +1858,7 @@ test("the composer reveal and the card swap share one opacity-only token transit
   await expect(composer).toBeVisible();
   const composerMotion = await composer.evaluate(motionOf);
   expect(composerMotion.name).toMatch(/reveal$/);
-  // --dur-fast is 120ms.
+  // --dur-micro is 120ms.
   expect(composerMotion.duration).toBe("0.12s");
   // Opacity only — no scale bounce, no translate.
   expect(composerMotion.transform).toBe("none");

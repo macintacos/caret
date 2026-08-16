@@ -101,7 +101,7 @@
     cursor: pointer;
     z-index: 4;
     /* Fades in with the block hover (the button only mounts while hovered). */
-    animation: code-copy-in var(--dur-fast) var(--ease-out);
+    animation: code-copy-in var(--dur-micro) var(--ease-out);
   }
 
   :global(.code-copy:hover) {
@@ -122,7 +122,7 @@
   /* The checkmark pops in on a short scale; the copy glyph returns as a plain swap. */
   .glyph.done {
     color: var(--ok);
-    animation: code-copy-pop var(--dur-fast) var(--ease-out);
+    animation: code-copy-pop var(--dur-micro) var(--ease-out);
   }
 
   /* Global keyframe: referenced from the :global(.code-copy) rule above, so it

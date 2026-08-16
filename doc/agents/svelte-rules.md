@@ -300,37 +300,49 @@ stays green under any invocation.
 ## Motion principles
 
 caret runs two motion tracks, one system by intent. The chrome's own motion is restraint
-over flourish: functional one-shot transitions stay ≤200ms and draw their duration/easing
-from the `--dur-*`/`--ease-*` tokens in `app.css` (one enter easing, one exit easing — a
-caret design call, not ported). The portalled shadcn surfaces (dialogs, dropdown menus,
-tooltips, popovers) instead animate their enter/exit through `tw-animate-css` — the
-`animate-in`/`fade`/`zoom`/`slide` utilities the copied components ship with.
-Ambient/infinite animations (the safe-mode pulse, the EmptyState float, the theme wipe)
-are exempt from both and keep their own bespoke durations.
+over flourish: functional one-shot transitions draw their duration/easing from the
+`--dur-*`/`--ease-*` tokens in `app.css` (one enter easing, one exit easing — a caret
+design call, not ported). Those durations are **tiered by what moves**, not held under one
+ceiling — `--dur-micro` (a tint or a pop, the same time in both directions), the
+`--dur-enter`/`--dur-exit` pair for a surface, and `--dur-travel` for a scroll crossing
+distance. The ladder is monotonic and `motion.test.ts` pins it as an ordering rather than
+as values, so a surface leaving quicker than it arrives is the vocabulary's contract and
+tuning any tier by eye stays free. Pick the tier from the thing that moves: a hover tint
+on `--dur-enter` reads as lag, a dialog on `--dur-micro` reads as a pop. The portalled
+shadcn surfaces (dialogs, dropdown menus, tooltips, popovers) instead animate their
+enter/exit through `tw-animate-css` — the `animate-in`/`fade`/`zoom`/`slide` utilities the
+copied components ship with. Ambient/infinite animations (the safe-mode pulse, the
+EmptyState float, the theme wipe) are exempt from both and keep their own bespoke
+durations.
 
 **A property no stylesheet can drive takes a third route, and it is the narrowest one.**
-Where the thing being animated is a JS property rather than a style — `scrollTop` is the
-only case today — the duration is MIRRORED as a plain constant instead of read from the
-sheet, and the mirror is pinned by a test so the two cannot drift: `SCROLL_ANIM_MS` and
-`FOLLOW_ANIM_MS` (`diffview/scroll.ts`) carry `--dur-travel` and `--dur-fast` for the
-plan's two scrolls, both held by `motion.test.ts`, and `CLOSE_ANIM_MS`
-(`state/planKeyboard.svelte.ts`) carries `--dur-fast` for the search-collapse teardown.
-That is the same "name it once and test the coupling" rule § CSS-token discipline states
-for `REFERENCE_WIDTH_PX`; a mirror without the pin is a comment, not an invariant. A JS
-driver owes the reduced-motion preference directly too — the global CSS guard cannot reach
-it — which `scroll.ts`'s `prefersReducedMotion()` is. Reach for this route only when a
+Where the thing being animated is a JS property rather than a style — `scrollTop`, or a
+timer standing in for the `animationend` happy-dom never fires — the duration is MIRRORED
+as a plain constant instead of read from the sheet, and every mirror is pinned by
+`motion.test.ts` so the two cannot drift. There are five: `SCROLL_ANIM_MS` and
+`FOLLOW_ANIM_MS` (`diffview/scroll.ts`) carry `--dur-travel` and `--dur-micro` for the
+plan's two scrolls, and three exit windows carry `--dur-exit` — `CLOSE_ANIM_MS` in
+`state/planKeyboard.svelte.ts` (PlanSearch's collapse), `CLOSE_ANIM_MS` in
+`components/DiffPlanView.svelte` (FileDrawer's close wipe), and the `exitMs` default in
+`state/alerts.ts` (AlertHost's `alert-out`). The three exit ones are pinned by scanning
+source text rather than by import, deliberately: none is exported, and an export minted
+only to be asserted on is a worse seam than the regex that avoids it. That is the same
+"name it once and test the coupling" rule § CSS-token discipline states for
+`REFERENCE_WIDTH_PX`; a mirror without the pin is a comment, not an invariant. A JS driver
+owes the reduced-motion preference directly too — the global CSS guard cannot reach it —
+which `scroll.ts`'s `prefersReducedMotion()` is. Reach for this route only when a
 stylesheet genuinely cannot express the animation; wanting a different curve is not
 enough.
 
 Two things about that route are decisions rather than details, and both were EXC-1092's.
 
-**`--dur-travel` (240ms) is the one duration above the ≤200ms ceiling, because it times
-travel rather than a reveal.** The ceiling exists so a surface appearing in place reads
-quick; a scroll crossing hundreds of pixels is a different perceptual job, and the eye
-needs longer to follow a thing that moves than to accept a thing that appears. At 180ms
-the same scroll read as an instant cut. Nothing that fades, slides, pops or rises may
-borrow it — `motion.test.ts` asserts `travel` is the ONLY `--dur-*` over 200ms, so a
-second one has to argue for itself here first.
+**`--dur-travel` (240ms) is the one token off the enter/exit axis, because it times travel
+rather than a surface.** Distance sets it, not surface size: a scroll crossing hundreds of
+pixels is a different perceptual job from a panel arriving in place, the eye needs longer
+to follow a thing that moves than to accept a thing that appears, and a scroll has no exit
+to be asymmetric against. At 180ms the same scroll read as an instant cut. Nothing that
+fades, slides, pops or rises may borrow it — `motion.test.ts` asserts the vocabulary is
+CLOSED at the four tiers, so a fifth duration has to argue for itself here first.
 
 **The easing is `quadOut` from `svelte/easing`, not `--ease-out`, and the exponent is the
 whole design.** Every decelerating curve slows down on paper; what decides whether a
@@ -344,9 +356,9 @@ name is the implementation and the visible glide is the contract. Judge a JS eas
 what its last frames do over the real distance, not by where it sits at the midpoint.
 
 **Both of the plan's scrolls ride that one curve and driver**, differing only in duration:
-the jump to a place (`--dur-travel`) and the keyboard cursor's follow (`--dur-fast`, since
-a held `j`/`k` retargets it every few frames and a jump-length glide would leave the view
-trailing the cursor). Sharing the driver is also what stops them fighting — a follow
+the jump to a place (`--dur-travel`) and the keyboard cursor's follow (`--dur-micro`,
+since a held `j`/`k` retargets it every few frames and a jump-length glide would leave the
+view trailing the cursor). Sharing the driver is also what stops them fighting — a follow
 landing inside a jump retargets that flight rather than being mistaken for a reader
 grabbing the scrollbar.
 
@@ -355,8 +367,8 @@ that wants caret's timing sets `--tw-duration` and `--tw-ease` — the two custo
 `tw-animate-css`'s compiled `animate-in`/`animate-out` reads — from the
 `--dur-*`/`--ease-*` tokens, and declares no `animation` of its own on that element. The
 ToC panel (`PlanToc.svelte`, EXC-1107) is the worked example, including the asymmetric
-pairing the two easings exist for: `--dur-base`/`--ease-out` arriving,
-`--dur-fast`/`--ease-in` leaving. Writing a competing `animation` shorthand instead is a
+pairing the vocabulary tiers for: `--dur-enter`/`--ease-out` arriving,
+`--dur-exit`/`--ease-in` leaving. Writing a competing `animation` shorthand instead is a
 correctness bug and not only a style one — bits-ui's portal presence waits on the
 `animationend` the vendored `enter`/`exit` keyframes fire, so replacing them strands the
 surface in the DOM on dismissal. For the same reason nothing in this vocabulary may

@@ -826,7 +826,7 @@ test("clicking the close circle dismisses the open preview", async ({ daemon, pa
   // route out of a lane a reader opened with the mouse. Here rather than in the
   // component unit — which already pins that the button calls `onClose` — because
   // what this covers is the rest of the route: FilePreview's callback reaching
-  // DiffPlanView's dismissal, and the lane surviving its 180ms closing wipe
+  // DiffPlanView's dismissal, and the lane surviving its 140ms closing wipe
   // before it unmounts. Neither exists on a component mounted alone.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
@@ -1700,7 +1700,7 @@ test("switching references lets the outgoing file leave before the next arrives"
     await expect(page.locator(".fp-path")).toHaveText("src/cache.ts");
     await expect(page.locator('[data-preview-state="loading"]')).toHaveCount(0);
     // On the exit curve, at the exit duration — both off the tokens.
-    await expect(page.locator(".fp-code")).toHaveCSS("animation-duration", "0.12s");
+    await expect(page.locator(".fp-code")).toHaveCSS("animation-duration", "0.14s");
     await expect(page.locator(".fp-code")).toHaveCSS(
       "animation-timing-function",
       "cubic-bezier(0.4, 0, 1, 1)",

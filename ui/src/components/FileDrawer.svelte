@@ -146,7 +146,7 @@
        animation-name below, which restarts the wipe — so an open drawer crossing
        the breakpoint wipes in from its new edge rather than jumping there. The
        global #app reduced-motion rule collapses all of it. */
-    animation: fd-open-right var(--dur-base) var(--ease-out);
+    animation: fd-open-right var(--dur-enter) var(--ease-out);
   }
   aside.fd-bottom {
     flex-direction: column;
@@ -176,14 +176,16 @@
 
   /* The close wipe: the same travel on the same dimension, run the other way, so
      the pane reads as one object sliding shut rather than a second effect. It
-     keeps the open's --dur-base (a lane this size collapsing in --dur-fast reads
-     as a snap, not a slide) and takes the paired --ease-in, the exit curve — a
-     pane leaving accelerates away, where an entering one decelerates into place.
+     takes --dur-exit against the open's --dur-enter, and the paired --ease-in, the
+     exit curve — a pane leaving accelerates away, where an entering one decelerates
+     into place. The lane once kept the open's duration to stop the collapse reading
+     as a snap; the surface tier now carries that itself — --dur-exit is a shorter
+     entrance rather than a micro-interaction, so the pane still slides shut.
      `forwards` holds the collapsed frame until the host unmounts, so the lane
      cannot flash back to full width in the gap. Higher specificity than the
      rules above, so it wins for whichever edge is docked. */
   aside.fd-closing {
-    animation: fd-close-right var(--dur-base) var(--ease-in) forwards;
+    animation: fd-close-right var(--dur-exit) var(--ease-in) forwards;
     /* The pane is leaving — its handle is no longer a thing to grab. */
     pointer-events: none;
   }

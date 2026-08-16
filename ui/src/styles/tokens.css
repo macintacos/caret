@@ -41,36 +41,53 @@
   --leading-normal: 1.55;
   --leading-relaxed: 1.7;
 
-  /* Motion. A small functional vocabulary for the chrome's ONE-SHOT reveals:
-     two durations and two easings, so a reveal tunes from a single lever instead
-     of scattered literals. --dur-fast (120ms) is for micro-reveals — the inline
-     composer pop, the drag readout/hint slide; --dur-base (180ms) is for an
-     entering surface a step larger, like a dialog rise. Both stay ≤200ms so the
-     chrome reads quick, never sluggish. --ease-out is the ENTER curve (a soft
+  /* Motion. A small functional vocabulary for the chrome's ONE-SHOT reveals,
+     tiered by WHAT MOVES rather than held under one ceiling, so the chrome reads
+     native: a hover tint and a dialog are different perceptual jobs and have no
+     business sharing a duration. Three tiers plus one exception, and the ladder
+     is monotonic — micro < exit < enter < travel — which is the shape
+     motion.test.ts pins.
+     --dur-micro (120ms) is a micro-interaction: a hover/focus tint, a small pop,
+     the inline composer reveal, the drag readout/hint slide. It is deliberately
+     the SAME time in both directions — at this size there is no arrival to
+     contrast a departure against, and a tint spending an entrance's time reads
+     as lag on the pointer.
+     --dur-enter (220ms) and --dur-exit (140ms) are the pair for a SURFACE: a
+     dialog, a drawer, a preview lane, a popover panel. Native UI gives an
+     entrance room to be read and takes the exit away quicker — you watch a thing
+     arrive, you only need a thing leaving to be gone — so a surface spends two
+     durations rather than one twice. --ease-out is the ENTER curve (a soft
      decelerate-in — content settling into place); --ease-in is the EXIT curve
-     (an accelerate-out for content leaving), kept paired so scripted exits read
-     as the inverse of their entrance.
+     (an accelerate-out for content leaving), kept paired so an exit reads as the
+     inverse of its entrance rather than a second effect.
      Ambient/infinite animations are deliberately EXEMPT: the safe-mode pulse
-     (1.2s) and EmptyState float (4s) breathe on their own bespoke durations and
-     must not borrow these one-shot tokens — a 120ms loop would strobe. They keep
-     their literals; only one-shot reveals draw from here.
-     --dur-travel (240ms) is the ONE duration above the ≤200ms ceiling, and it is
-     not a reveal: it times the plan's scroll TRAVEL, which crosses hundreds of
-     pixels rather than fading a surface in place. A distance that large read as
-     an instant cut at 180ms — the eye needs longer to follow a thing moving than
-     to accept a thing appearing — so the ceiling's reasoning does not reach it.
-     Nothing that appears, fades, slides or pops may borrow this; if a second
-     traveling animation ever wants it, that is the bar. */
-  --dur-fast: 120ms;
-  --dur-base: 180ms;
+     (1.2s), the EmptyState float (4s) and the reference-hint ping (1.6s) breathe
+     on their own bespoke durations and must not borrow these one-shot tokens — a
+     120ms loop would strobe. The theme wipe (0.45s, styles/base.css) is exempt
+     from the other side: it is a full-viewport view transition, not a surface
+     arriving in place. They keep their literals; only one-shot reveals draw from
+     here.
+     --dur-travel (240ms) is the one token OFF the enter/exit axis, and that is
+     what earns it a name of its own rather than a fold into --dur-enter: it
+     times the plan's scroll TRAVEL, which crosses hundreds of pixels and has no
+     exit to be asymmetric against. Distance sets it, not surface size — the eye
+     needs longer to follow a thing moving than to accept a thing appearing — and
+     240ms is where that scroll was landed by eye against the plan's real
+     heights. Nothing that appears, fades, slides or pops may borrow this; if a
+     second traveling animation ever wants it, that is the bar. */
+  --dur-micro: 120ms;
+  --dur-enter: 220ms;
+  --dur-exit: 140ms;
   --dur-travel: 240ms;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
   /* A damped-spring easing (linear() curve, ~6% overshoot then settle) for
      controls that slide between discrete positions — the segmented-control pill.
-     Paired with --dur-base, it reads as a springy snap, not a bounce. Modern
-     browsers only (Chrome 113+, Safari 17.2+, Firefox 112+); older ones fall back
-     to a plain ease. */
+     Paired with --dur-enter, it reads as a springy snap, not a bounce: the pill
+     is small in space, but an overshoot-and-settle needs surface-scale TIME to
+     be seen as one considered move rather than a twitch, which is why it takes
+     the enter tier and not --dur-micro. Modern browsers only (Chrome 113+,
+     Safari 17.2+, Firefox 112+); older ones fall back to a plain ease. */
   --ease-spring: linear(
     0, 0.008, 0.031, 0.068, 0.117, 0.177, 0.246, 0.324, 0.407, 0.496, 0.587, 0.679,
     0.769, 0.855, 0.935, 1.006, 1.049, 1.065, 1.062, 1.049, 1.031, 1.014, 1.001,

@@ -248,7 +248,7 @@
        rotates DOWN when the menu opens (reduced-motion is caught by the global
        guard in app.css). */
     transform: rotate(-90deg);
-    transition: transform var(--dur-fast) var(--ease-out);
+    transition: transform var(--dur-micro) var(--ease-out);
   }
   .trigger[aria-expanded="true"] .chevron {
     transform: rotate(0deg);

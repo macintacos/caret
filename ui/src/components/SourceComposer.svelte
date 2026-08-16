@@ -226,7 +226,7 @@
        the same considered reveal as the annotation card's expand. The global
        reduced-motion rule in app.css collapses it to a static frame when the OS
        asks. */
-    animation: reveal var(--dur-fast) var(--ease-out);
+    animation: reveal var(--dur-micro) var(--ease-out);
   }
   .label {
     margin: 0 0 0.4rem;

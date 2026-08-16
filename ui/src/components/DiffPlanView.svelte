@@ -405,9 +405,10 @@
   // pane slides shut with the excerpt still in it instead of blinking out. The
   // drawer stays mounted for that beat and `drawerClosing` puts it in its closing
   // state; the timer then drops it. Must match FileDrawer's fd-close-* duration
-  // (--dur-base = 180ms) — a timer rather than animationend because happy-dom
-  // fires no animation events, so the unit env would strand the drawer forever.
-  const CLOSE_ANIM_MS = 180;
+  // (--dur-exit = 140ms, pinned by motion.test.ts) — a timer rather than animationend
+  // because happy-dom fires no animation events, so the unit env would strand the
+  // drawer forever.
+  const CLOSE_ANIM_MS = 140;
   let drawerClosing = $state(false);
   let closeTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -1799,13 +1800,13 @@
     /* Brightens on hover to read as clickable — the affordance that replaces the
        removed full-path tooltip. */
     cursor: pointer;
-    transition: color var(--dur-fast) var(--ease-out);
+    transition: color var(--dur-micro) var(--ease-out);
     /* Returning to plan review (leaving compare mode) re-mounts the path, so it
        reveals with the same quick slide-in the compare controls use when
        entering (VersionComparePicker's compare-reveal, EXC-808) — the switch now
        reads symmetric in both directions. The global #app reduced-motion guard
        zeroes it. */
-    animation: cwd-reveal var(--dur-base) var(--ease-out);
+    animation: cwd-reveal var(--dur-enter) var(--ease-out);
   }
   .cwd:hover {
     color: var(--ink-soft);
@@ -1872,7 +1873,7 @@
     font-size: var(--text-sm);
     white-space: nowrap;
     user-select: none;
-    animation: search-hint-in var(--dur-fast) var(--ease-out);
+    animation: search-hint-in var(--dur-micro) var(--ease-out);
   }
   @keyframes search-hint-in {
     from {
@@ -1937,7 +1938,7 @@
     border-radius: var(--radius);
     box-shadow: var(--shadow-card);
     pointer-events: none;
-    animation: readout-in var(--dur-fast) var(--ease-out);
+    animation: readout-in var(--dur-micro) var(--ease-out);
   }
 
   /* The one-time drag hint and the visual-select affordance hint share one chip:
@@ -1960,7 +1961,7 @@
     border: 1px solid var(--rule-strong);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
-    animation: readout-in var(--dur-fast) var(--ease-out);
+    animation: readout-in var(--dur-micro) var(--ease-out);
   }
 
   @keyframes readout-in {

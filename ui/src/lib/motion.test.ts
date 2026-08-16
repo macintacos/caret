@@ -7,14 +7,20 @@ import { FOLLOW_ANIM_MS, SCROLL_ANIM_MS } from "$lib/diffview/scroll.ts";
 // caret's motion vocabulary lives in app.css: a small set of functional
 // duration/easing tokens for one-shot chrome reveals, plus a single global
 // prefers-reduced-motion rule that neutralizes movement for the light-DOM app
-// root. This suite pins the substrate the acceptance criteria require — the
-// token shape, the ≤200ms functional ceiling, and the global guard — so a drift
+// root. This suite pins the substrate the acceptance criteria require — the tier
+// ladder (micro < exit < enter < travel, so a surface leaves quicker than it
+// arrives), the JS constants that mirror it, and the global guard — so a drift
 // fails the unit suite rather than only showing as motion under reduced-motion.
 
 const uiDir = join(import.meta.dir, "..");
 const appCss = readAppCss();
 const composer = await Bun.file(join(uiDir, "components/SourceComposer.svelte")).text();
 const emptyState = await Bun.file(join(uiDir, "components/EmptyState.svelte")).text();
+// The two exit-window mirrors that live outside the chrome list below. Read as source
+// text because neither constant is exported, and neither should be — an export minted
+// only to be asserted on is a worse seam than the regex that avoids it.
+const planKeyboard = await Bun.file(join(uiDir, "state/planKeyboard.svelte.ts")).text();
+const alertsState = await Bun.file(join(uiDir, "state/alerts.ts")).text();
 
 // Every light-DOM chrome component whose CSS carries a one-shot reveal or a
 // hover/state transition, loaded once for the migration-coverage suite below.
@@ -77,18 +83,42 @@ describe("motion tokens in app.css", () => {
   // Keyed on a token the motion vocabulary owns, so the lookup is
   // self-locating. A marker that matches nothing yields "" and every assertion
   // below fails, so this cannot mask a missing block.
-  const root = rootBlock(appCss, "--dur-fast:");
+  const root = rootBlock(appCss, "--dur-micro:");
 
-  test("declares two functional one-shot durations, both ≤200ms", () => {
-    const fast = root.match(/--dur-fast:\s*([^;]+);/)?.[1] ?? "";
-    const base = root.match(/--dur-base:\s*([^;]+);/)?.[1] ?? "";
-    expect(fast).not.toBe("");
-    expect(base).not.toBe("");
-    // Functional reveal durations stay snappy — the AC caps them at 200ms.
-    expect(toMs(fast)).toBeLessThanOrEqual(200);
-    expect(toMs(base)).toBeLessThanOrEqual(200);
-    expect(toMs(fast)).toBeGreaterThan(0);
-    expect(toMs(base)).toBeGreaterThan(0);
+  // Both reads below anchor to the start of a line, so they see DECLARATIONS and not the
+  // doc comment above them — which names every token it explains, and may legitimately
+  // follow one with a colon mid-sentence.
+  /** A `--dur-<name>` token's value in ms, or NaN when the block declares no such token. */
+  const dur = (name: string): number =>
+    toMs(root.match(new RegExp(`^\\s*--dur-${name}:\\s*([^;]+);`, "m"))?.[1] ?? "");
+
+  test("declares the three surface tiers plus the travel exception", () => {
+    // The vocabulary is tiered by WHAT MOVES, not capped at one ceiling: a micro
+    // tier for tints and pops, an enter/exit pair for surfaces, and travel for a
+    // scroll crossing distance. All four are real times.
+    for (const name of ["micro", "enter", "exit", "travel"]) {
+      expect(dur(name)).toBeGreaterThan(0);
+    }
+  });
+
+  test("the ladder is monotonic, and a surface leaves quicker than it arrives", () => {
+    // The retune's whole claim (EXC-890). `exit < enter` is the native asymmetry —
+    // you watch a thing arrive, you only need a thing leaving to be gone — and the
+    // micro tier sits below both because a hover tint spending an entrance's time
+    // reads as lag on the pointer. Ordering rather than absolute values, so tuning
+    // by eye stays free while an inverted pair reds here.
+    expect(dur("micro")).toBeLessThan(dur("exit"));
+    expect(dur("exit")).toBeLessThan(dur("enter"));
+    expect(dur("enter")).toBeLessThan(dur("travel"));
+  });
+
+  test("the vocabulary is closed — every --dur-* is one of the four tiers", () => {
+    // What the old "--dur-travel is the only token over 200ms" test bought, kept
+    // under the new shape: a fifth duration cannot be slipped in without arguing
+    // for itself in tokens.css first. Travel is the standing exception because it
+    // is the one token OFF the enter/exit axis — distance, not surface size.
+    const names = [...root.matchAll(/^\s*--dur-([a-z]+):/gm)].map(([, name]) => name);
+    expect(names.sort()).toEqual(["enter", "exit", "micro", "travel"]);
   });
 
   test("the plan's two JS scroll durations mirror their tokens", () => {
@@ -96,23 +126,22 @@ describe("motion tokens in app.css", () => {
     // token's value as a constant instead of reading it. That makes them numbers
     // coupled across files, which svelte-rules.md § CSS-token discipline says to
     // name once and TEST — the same pin layout.test.ts holds REFERENCE_WIDTH_PX to.
-    const travel = root.match(/--dur-travel:\s*([^;]+);/)?.[1] ?? "";
-    const fast = root.match(/--dur-fast:\s*([^;]+);/)?.[1] ?? "";
-    expect(travel).not.toBe("");
-    expect(fast).not.toBe("");
-    expect(SCROLL_ANIM_MS).toBe(toMs(travel)); // the jump to a place
-    expect(FOLLOW_ANIM_MS).toBe(toMs(fast)); // the cursor follow
+    expect(SCROLL_ANIM_MS).toBe(dur("travel")); // the jump to a place
+    expect(FOLLOW_ANIM_MS).toBe(dur("micro")); // the cursor follow
   });
 
-  test("--dur-travel is the only duration above the 200ms ceiling", () => {
-    // The carve-out has exactly one member, and this is what keeps it that way: it
-    // is a TRAVEL time (the plan's scroll crosses hundreds of px), not a reveal, so
-    // the ceiling's "chrome reads quick, never sluggish" reasoning does not apply.
-    // A second token slipping over 200ms reds here rather than at review.
-    const durations = [...root.matchAll(/--dur-([a-z]+):\s*([^;]+);/g)];
-    expect(durations.length).toBeGreaterThanOrEqual(3);
-    const over = durations.filter(([, , value]) => toMs(value ?? "") > 200).map(([, name]) => name);
-    expect(over).toEqual(["travel"]);
+  test("the three exit-window timers mirror --dur-exit", () => {
+    // happy-dom fires no animationend, so each surface that must outlive its own
+    // closing keyframe holds the duration as a timer instead. Same coupling as the
+    // scroll mirrors above and the same reason to pin it: these three moved when the
+    // exit tier landed, and a future retune that misses one strands or flashes the
+    // surface rather than failing anything.
+    const exit = dur("exit");
+    expect(planKeyboard).toContain(`const CLOSE_ANIM_MS = ${exit};`); // PlanSearch's collapse
+    expect(chromeSources["components/DiffPlanView.svelte"]).toContain(
+      `const CLOSE_ANIM_MS = ${exit};`, // FileDrawer's close wipe
+    );
+    expect(alertsState).toContain(`deps.exitMs ?? ${exit};`); // AlertHost's alert-out
   });
 
   test("declares an enter and an exit easing as cubic-beziers", () => {
@@ -247,7 +276,7 @@ describe("chrome motion declarations draw from the tokens, not bare literals", (
   // are deliberately EXEMPT from the one-shot tokens, so their literals are expected
   // to remain. Matched by keyframe name. The first two are infinite; ref-hint-ping
   // is finite (three pings) and is ambient by SCALE rather than by repetition — a
-  // teaching pulse that read at --dur-base would be a flicker, not a wave.
+  // teaching pulse that read at --dur-enter would be a flicker, not a wave.
   const ambient = /\b(float|safe-mode-pulse|ref-hint-ping)\b/;
 
   // Pull every `transition:`/`animation:` declaration body (the text up to the

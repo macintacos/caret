@@ -437,7 +437,7 @@
     height: 0.85em;
     opacity: 0.6;
     transform: rotate(-90deg);
-    transition: transform var(--dur-fast) var(--ease-out);
+    transition: transform var(--dur-micro) var(--ease-out);
   }
   .vpick[aria-expanded="true"] .chevron {
     transform: rotate(0deg);
@@ -517,8 +517,8 @@
     background: var(--chip);
     pointer-events: none;
     transition:
-      transform var(--dur-base) var(--ease-spring),
-      width var(--dur-base) var(--ease-spring);
+      transform var(--dur-enter) var(--ease-spring),
+      width var(--dur-enter) var(--ease-spring);
   }
   .compare-picker :global([data-slot="toggle-group-item"]) {
     position: relative;
@@ -545,7 +545,7 @@
      neutralizes the movement. */
   .pair,
   .controls {
-    animation: compare-reveal var(--dur-base) var(--ease-out);
+    animation: compare-reveal var(--dur-enter) var(--ease-out);
   }
   @keyframes compare-reveal {
     from {
