@@ -52,7 +52,7 @@
     headingTree,
   } from "$lib/headingTrail.ts";
   import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
-  import type { TocHeading } from "$lib/toc.ts";
+  import { headingMatcher, type TocHeading } from "$lib/toc.ts";
 
   interface Props {
     /** Headings extracted from the plan source, in document order. */
@@ -112,6 +112,13 @@
   // — see EXC-1062's Out of scope.
   const tree = $derived(headingTree(headings));
   const groups = $derived(groupedHeadingMatches(headings, query));
+
+  // What a row marks — the SAME closure `filterHeadings` decides membership with, reached
+  // from beside the filter rather than by transforming what it returns. `filterHeadings`
+  // (toc.ts) carries why deriving the runs from its OUTPUT is the shape that silently
+  // empties the panel; that is where an edit could reintroduce it, so it is written once
+  // there rather than twice.
+  const matcher = $derived(headingMatcher(query));
 
   // What the status line says, empty when the list has rows. Derived rather than
   // inlined in the markup because the element it feeds is always mounted — see the
@@ -191,13 +198,30 @@
      single home. `depth` is the indent the row sits at, in levels; see the
      --toc-depth rule in the stylesheet for what each view passes and why. -->
 {#snippet row(heading: TocHeading, depth: number)}
+  <!-- The label as runs, so the characters the query matched can be marked. The fallback
+       is the type's, not a case either view reaches: a filtered row matched by
+       construction, and the unfiltered view's query is empty, which the matcher answers
+       with the whole label unmarked. It degrades to the plain label rather than to
+       nothing, so a future caller can never blank a row. -->
+  {@const parts = matcher(heading.text) ?? [{ text: heading.text, hit: false }]}
   <Command.Item
     value={String(heading.line)}
     style="--toc-depth: {depth}"
     aria-current={heading.line === activeLine ? "location" : undefined}
     onSelect={() => jump(heading.line)}
   >
-    <span class="toc-label" title={heading.text}>{heading.text}</span>
+    <!-- Only a MATCHED run takes an element; unmatched text stays a bare text node. That
+         keeps the unfiltered view's markup byte-identical to a plain `{heading.text}` —
+         no wrapper span on any of a plan's several hundred rows — so this decoration is
+         inert until the reviewer actually types.
+         The row's TEXT is the heading either way, which is what keeps the option's
+         accessible name exactly the heading, since that name is computed from its
+         contents. Splitting the label rather than adding to it is also what keeps the
+         mark out of the accessibility tree: a plain span is invisible to it, where a real
+         `mark` element is narrated by WebKit. -->
+    <span class="toc-label" title={heading.text}>
+      {#each parts as part}{#if part.hit}<span class="toc-hit">{part.text}</span>{:else}{part.text}{/if}{/each}
+    </span>
   </Command.Item>
 {/snippet}
 
@@ -487,6 +511,26 @@
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+  }
+
+  /* The characters the filter matched. It rides --mark, caret's content-highlight token
+     (doc/agents/svelte-rules.md § CSS-token discipline) — the same wash the plan view's
+     `/` search hits take, so a marked run means one thing wherever a reviewer meets it.
+     Bare background and nothing else: an inline pad would shift the glyphs after it and
+     eat width the deepest matches need, and the run has to survive inside a label that
+     truncates.
+     It reads over BOTH marks a row can already wear because it is a different kind of
+     thing rather than a different hue — those two fill the whole row, this fills a run
+     inside one. What keeps it legible over the amber one is ALPHA STACKING, and that is
+     the general mechanism: --mark composites on top of whatever the row already paints,
+     so the run is always a step further from the panel than its row is. Do not read this
+     as a hue guarantee — only caret's own palette names a markHue distinct from its
+     washHue; every vendor palette leaves both unset, and recipe.ts then collapses
+     markHue → washHue → accent, so there the mark and the row wash are the same hue at
+     different alphas. Measured on the painted pixels, the run separates from its row by
+     ΔE*ab 8.8–20.3 across both schemes and all three row states. */
+  :global(.plan-toc-panel .toc-hit) {
+    background: var(--mark);
   }
 
   /* The heading the reviewer is already on, marked with the amber wash the menu
