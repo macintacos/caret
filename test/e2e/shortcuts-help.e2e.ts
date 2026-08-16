@@ -81,8 +81,10 @@ test("/ focuses the search input without typing a slash; the field shows a / hin
   await page.keyboard.press("?");
   await expect(dialog).toBeVisible();
 
-  // A / hint cap sits in the search field, advertising the shortcut.
-  await expect(page.locator(".help-search-hint")).toBeVisible();
+  // A / hint cap sits in the search field's trailing addon, advertising the shortcut.
+  const hint = dialog.locator("[data-slot='input-group-addon']");
+  await expect(hint).toBeVisible();
+  await expect(hint).toHaveText("/");
 
   // / moves focus into the search input and is NOT typed — the modal's local
   // handler wins over the global plan-search binding and preventDefaults, so no

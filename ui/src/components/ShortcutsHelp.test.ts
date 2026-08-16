@@ -53,6 +53,23 @@ describe("ShortcutsHelp render", () => {
     );
   });
 
+  // The `/` hint cap rides an input-group addon slot (EXC-1113) rather than a wrapper
+  // div that pins it over the control, so the group's own layout reserves its track.
+  test("the search field composes input-group with the / cap in a trailing addon", async () => {
+    const { flush } = render(ShortcutsHelp, {
+      open: true,
+      entries: makeEntries(() => {}),
+      onClose: () => {},
+    });
+    await flushUntil(flush, mounted);
+    const group = document.body.querySelector("[data-slot='input-group']");
+    expect(group !== null).toBe(true);
+    expect(group?.querySelector("[data-slot='input-group-control']") !== null).toBe(true);
+    const addon = group?.querySelector("[data-slot='input-group-addon']");
+    expect(addon?.getAttribute("data-align")).toBe("inline-end");
+    expect(addon?.textContent?.trim()).toBe("/");
+  });
+
   test("renders a group heading, an entry label, and its key cap", async () => {
     const { flush } = render(ShortcutsHelp, {
       open: true,
@@ -95,7 +112,9 @@ describe("ShortcutsHelp wiring", () => {
       onClose: () => {},
     });
     await flushUntil(flush, mounted);
-    const search = document.body.querySelector<HTMLInputElement>("[data-slot='input']");
+    const search = document.body.querySelector<HTMLInputElement>(
+      "[data-slot='input-group-control']",
+    );
     expect(search).not.toBeNull();
     search!.value = "approve";
     search!.dispatchEvent(new Event("input", { bubbles: true }));

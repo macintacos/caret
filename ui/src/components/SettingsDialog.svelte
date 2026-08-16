@@ -17,7 +17,7 @@
   // eyebrow/title/footer identity doesn't fit the two-pane layout — keeping a
   // visually-hidden Dialog.Title so the dialog's accessible name is "Settings".
   import * as Dialog from "$lib/components/ui/dialog/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
+  import * as InputGroup from "$lib/components/ui/input-group/index.js";
   import {
     Item,
     ItemActions,
@@ -198,19 +198,23 @@
       <Sidebar.Root collapsible="none" class="settings-rail">
         <!-- Search atop the rail (EXC-845): filters the nav + fields across categories.
              The trailing `/` Kbd cap advertises the focus shortcut, mirroring
-             ShortcutsHelp's search field; `/` focuses it from anywhere in the modal. -->
+             ShortcutsHelp's search field; `/` focuses it from anywhere in the modal. The
+             cap rides an InputGroup inline-end addon (EXC-1113), which is what reserves
+             its track beside the control — so nothing pins it over the field and nothing
+             pads the field out of its way. -->
         <Sidebar.Header>
-          <div class="search-field">
-            <Input
+          <InputGroup.Root>
+            <InputGroup.Input
               type="text"
-              class="search-input"
               placeholder="Search settings…"
               aria-label="Search settings"
               bind:value={query}
               bind:ref={searchInput}
             />
-            <Kbd class="search-hint" aria-hidden="true">/</Kbd>
-          </div>
+            <InputGroup.Addon align="inline-end">
+              <Kbd aria-hidden="true">/</Kbd>
+            </InputGroup.Addon>
+          </InputGroup.Root>
         </Sidebar.Header>
         <Sidebar.Content>
           <Sidebar.Group>
@@ -348,24 +352,6 @@
      shade under the raised pane, reading as recessed. */
   .settings :global(.settings-rail) {
     border-right: 1px solid var(--rule);
-  }
-  /* Search field in the rail header (EXC-845): a relative wrapper that pins the trailing
-     `/` hint cap to the input's right edge, mirroring ShortcutsHelp's search field. */
-  .search-field {
-    position: relative;
-  }
-  /* Pad the input so typed text never slides under the pinned cap. */
-  .search-field :global(.search-input) {
-    padding-right: 2.5rem;
-  }
-  /* Pin the `/` cap to the input's right edge. The shadcn Kbd sets pointer-events:none,
-     so clicks fall through to the input. The class rides the Kbd root (no scope hash →
-     :global), bounded under the scoped field. */
-  .search-field :global(.search-hint) {
-    position: absolute;
-    top: 50%;
-    right: 0.5rem;
-    transform: translateY(-50%);
   }
   /* Nav rows sit a little apart (the shadcn menu ships gap-0) so a hover tint on
      one doesn't crowd its neighbor. */

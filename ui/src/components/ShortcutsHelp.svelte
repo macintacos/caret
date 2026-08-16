@@ -4,7 +4,7 @@
   // (kind="dialog": Escape + backdrop dismiss). The host mounts this per open
   // (ModalPresence) and passes shortcuts.list() at mount, so the list reflects
   // whatever is registered when it opens — it grows as later tickets register.
-  import { Input } from "$lib/components/ui/input/index.js";
+  import * as InputGroup from "$lib/components/ui/input-group/index.js";
   import { Kbd, KbdGroup } from "$lib/components/ui/kbd/index.js";
   import { isTopmostDialog, topmostDialogContent } from "$lib/modalStack.ts";
   import { filterShortcuts, fitsSingleColumn, groupShortcuts } from "$lib/shortcuts/help.ts";
@@ -100,11 +100,11 @@
   <div class="help">
     <!-- The search field carries a trailing `/` Kbd cap (EXC-835): `/` focuses it
          (the input is not autofocused). The cap renders through the same shadcn
-         Kbd as every other cap, pinned to the input's right edge. -->
-    <div class="help-search-field">
-      <Input
+         Kbd as every other cap, in an InputGroup inline-end addon (EXC-1113) that
+         gives it a track of its own beside the control. -->
+    <InputGroup.Root>
+      <InputGroup.Input
         type="text"
-        class="help-search"
         placeholder="Search shortcuts…"
         aria-label="Search shortcuts"
         bind:value={query}
@@ -112,8 +112,10 @@
       />
       <!-- Decorative hint only; the field's aria-label already names it, so hide
            the lone "/" glyph from screen readers. -->
-      <Kbd class="help-search-hint" aria-hidden="true">/</Kbd>
-    </div>
+      <InputGroup.Addon align="inline-end">
+        <Kbd aria-hidden="true">/</Kbd>
+      </InputGroup.Addon>
+    </InputGroup.Root>
 
     {#if groups.length === 0}
       <p class="help-empty">No shortcuts match your search.</p>
@@ -189,23 +191,6 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
-  }
-  /* The search field anchors the trailing `/` hint cap (EXC-835). */
-  .help-search-field {
-    position: relative;
-  }
-  /* Pad the input so typed text never slides under the pinned cap. */
-  .help-search-field :global(input) {
-    padding-right: 2.5rem;
-  }
-  /* Pin the `/` cap to the input's right edge. The shadcn Kbd already sets
-     pointer-events:none, so clicks fall through to the input. The class rides the
-     Kbd root (no scope hash → :global), bounded under the scoped field. */
-  .help-search-field :global(.help-search-hint) {
-    position: absolute;
-    top: 50%;
-    right: 0.5rem;
-    transform: translateY(-50%);
   }
   /* The grouped sections flow across up to three newspaper columns (EXC-835) so
      the whole keymap fits at a glance; the count drops as the viewport narrows.
