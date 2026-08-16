@@ -72,6 +72,12 @@ composed; the three search fields that joined it in EXC-1113 still reach for onl
 the seven). Keep it: hand-editing the component to drop the dependency is the one change a
 later re-sync silently reverts with no comment to catch it.
 
+The divergence also runs the other way — a vendored file quietly dropping something the
+registry passes through. `select-item.svelte` destructures `label` out of its props and
+never forwards it to `SelectPrimitive.Item`, so bits-ui's `data-label` is unset on every
+Select row in the app (EXC-1111). Harmless while a row's text *is* its label; a trap for
+the first consumer whose row renders something richer. Forward it when that lands.
+
 - **Never hand-roll a primitive the catalog covers** — button, dialog, menu, tooltip,
   badge, select, toggle group, and the rest. If shadcn-svelte ships it, add it.
 - **The copied source is owned code, not a dependency.** Modifying it is expected and
