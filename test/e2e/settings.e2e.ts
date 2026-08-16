@@ -10,6 +10,10 @@
 // The appearance specs (EXC-773) drive page.emulateMedia: caret follows the OS by
 // default, so the emulated prefers-color-scheme — pinned to dark in the project
 // config — is what a fresh origin resolves against.
+//
+// The label specs (EXC-1112) are here for the same reason: whether a <label> forwards a
+// click to its control, and what accessible name a browser then computes, are both
+// engine behaviour that happy-dom does not model.
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
@@ -399,6 +403,47 @@ test("reopening the theme menu after a switch keeps the preview beside the menu,
     // it near y≈8 while the menu opened far lower down the pane.
     expect(Math.abs(cardBox.y - menuBox.y)).toBeLessThan(40);
   }
+});
+
+// Real labels (EXC-1112). Both halves of the claim are real-browser behaviour: whether a
+// <label> forwards its click to the control, and what name the browser computes for that
+// control once it has one. A unit test can assert the for/id attributes but neither of
+// these — and every other locator in this file passes `name` without `exact`, which
+// matches on substring, so a name that silently GREW would satisfy all of them.
+// toHaveAccessibleName is exact, which is the point of asserting it here.
+test("clicking a row's label reaches its control, and names it", async ({ daemon, page }) => {
+  await daemon.seed();
+  await page.goto("/");
+  await planSurface(page);
+
+  await openSettings(page);
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+
+  // The switch is a <button>, so it is labelable: the label forwards its click.
+  const hints = dialog.getByRole("switch");
+  await expect(hints).toHaveAccessibleName("Shortcut hints");
+  await expect(hints).toBeChecked();
+  await dialog.locator("#setting-shortcutHints-label").click();
+  await expect(hints).not.toBeChecked();
+  await expect(page.getByText("Shortcut hints updated")).toBeVisible();
+
+  // A menu trigger is a <button> too, so the label click lands on it.
+  await dialog.locator("#setting-diffStyle-label").click();
+  await expect(dialog.locator("#setting-diffStyle")).toBeFocused();
+  await page.keyboard.press("Escape");
+
+  // The names come from the visible label rather than a parallel string. The theme rows
+  // are the pair that could regress unseen: their IN USE badge sits inside the label, so
+  // it is aria-hidden to keep the trigger's name off the live scheme — without that these
+  // read "Light theme In use" and move between rows on an OS flip.
+  await expect(dialog.locator("#setting-diffStyle")).toHaveAccessibleName("Layout");
+  await expect(dialog.locator("#setting-diffIndicators")).toHaveAccessibleName("Change markers");
+  await expect(dialog.locator("#setting-themeLight")).toHaveAccessibleName("Light theme");
+  await expect(dialog.locator("#setting-themeDark")).toHaveAccessibleName("Dark theme");
+
+  // The segmented Mode control is a <div role="group">, which no <label for> can bind to;
+  // it takes its name from that same label through aria-labelledby.
+  await expect(dialog.locator("[data-slot='toggle-group']")).toHaveAccessibleName("Mode");
 });
 
 test("toggling shortcut hints applies immediately and persists", async ({ daemon, page }) => {

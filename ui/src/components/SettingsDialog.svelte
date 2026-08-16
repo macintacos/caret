@@ -4,7 +4,7 @@
   // pane calls onChange the moment a control changes and App persists + confirms
   // with a toast; there is no staged draft, no Save/Discard. A category's fields are
   // sub-grouped into labelled sections (Diff view lives as a section under
-  // Appearance), each an ItemGroup of shadcn Items.
+  // Appearance), each a FieldGroup of shadcn Fields.
   //
   // Two shadcn primitives carry the layout (compose-first, per doc/agents/shadcn-rules):
   //   • Sidebar (collapsible="none") — the static category rail. The SELECTED row
@@ -12,10 +12,12 @@
   //     selection" language), overriding shadcn's faint single-accent data-active
   //     treatment so the current pane is unmistakable.
   //   • Field / FieldSet (EXC-1112) — one Field per setting (label + description +
-  //     control), hairline-separated within a FieldGroup, the whole section wrapped
-  //     in a FieldSet whose FieldLegend is the section header. The FieldLabel is a
-  //     real <label>, so the visible text IS the accessible name and clicking it
-  //     reaches the control; the parallel aria-label strings are gone.
+  //     control), hairline-separated within a FieldGroup. A LABELLED section wraps its
+  //     FieldGroup in a FieldSet whose FieldLegend is the header; an unlabelled one
+  //     stays a plain div, since a fieldset with no legend is a group with no name.
+  //     The FieldLabel is a real <label>, so the visible text IS each control's
+  //     accessible name and clicking it reaches the control; no settings control
+  //     carries an aria-label. settingsRegistry.ts owns the label↔control id wiring.
   //
   // shadcn's Field spacing is looser than caret's dense rows, and the retune for it
   // lives HERE rather than in the vendored tv() recipe: shadcn-rules.md § Adding a
@@ -49,6 +51,9 @@
     isStagedField,
     SETTINGS_CATEGORIES,
     type SettingEntry,
+    settingControlId,
+    settingLabelId,
+    settingLabelTarget,
     type StagedField,
     THEME_SECTION,
   } from "$lib/settingsRegistry.ts";
@@ -137,14 +142,6 @@
     onChange(field, value);
     values = { ...values, [field.key]: field.read() };
   }
-
-  // What a row's `<label for>` may point at (EXC-1112). A `<label for>` only binds to a
-  // LABELABLE element, and a segmented control is a `<div role="group">` — so `for`
-  // would be inert on it, and the group takes `aria-labelledby` back to this same label
-  // instead. Every other control renders a `<button>`, which is labelable, so `for`
-  // carries both the accessible name and the click-to-activate.
-  const labelTarget = (field: StagedField): string | undefined =>
-    field.control.kind === "segmented" ? undefined : `setting-${field.key}`;
 
   function focusContent(): void {
     document.querySelector<HTMLElement>(".settings-content")?.focus();
@@ -283,37 +280,27 @@
             <AdvancedPane {onCopyDiagnostic} />
           {:else}
             {#each paneSections as section, si (si)}
-              <FieldSet class="section">
-                {#if section.label === THEME_SECTION}
-                  <!-- The theme controls render as one composite block rather than
-                       three independent rows: the IN USE marker and the resolved-state
-                       line only mean anything across all three. It carries no section
-                       header — the pane's own "Appearance" header is that header. -->
+              {#if section.label === THEME_SECTION}
+                <!-- The theme controls render as one composite block rather than three
+                     independent rows: the IN USE marker and the resolved-state line only
+                     mean anything across all three. It carries no section header — the
+                     pane's own "Appearance" header is that header. -->
+                <div class="section">
                   <ThemeSection fields={section.fields} {values} onApply={apply} />
-                {:else}
-                  <!-- The legend stays the fieldset's FIRST child, which is what makes
-                       a browser render it as the group's legend. -->
-                  {#if section.label}
-                    <FieldLegend class="section-head">{section.label}</FieldLegend>
-                  {/if}
-                  <FieldGroup class="fields">
-                    {#each section.fields as field, i (field.key)}
-                      {#if i > 0}<FieldSeparator />{/if}
-                      <Field orientation="horizontal" data-field={field.key} class="setting-item">
-                        <FieldContent>
-                          <FieldLabel
-                            id="setting-{field.key}-label"
-                            for={labelTarget(field)}
-                            class="field-label">{field.label}</FieldLabel
-                          >
-                          <FieldDescription>{field.description}</FieldDescription>
-                        </FieldContent>
-                        {@render control(field)}
-                      </Field>
-                    {/each}
-                  </FieldGroup>
-                {/if}
-              </FieldSet>
+                </div>
+              {:else if section.label}
+                <!-- Only a LABELLED section becomes a fieldset. A fieldset with no legend
+                     is a group with no accessible name — a grouping boundary announced
+                     for nothing — so the sectionless fields below stay a plain div. The
+                     legend is the fieldset's FIRST child, which is what makes a browser
+                     render it as the group's legend. -->
+                <FieldSet class="section">
+                  <FieldLegend class="section-head">{section.label}</FieldLegend>
+                  {@render rows(section.fields)}
+                </FieldSet>
+              {:else}
+                <div class="section">{@render rows(section.fields)}</div>
+              {/if}
             {/each}
           {/if}
         {/if}
@@ -322,24 +309,50 @@
   </Dialog.Content>
 </Dialog.Root>
 
+{#snippet rows(fields: StagedField[])}
+  <FieldGroup class="fields">
+    {#each fields as field, i (field.key)}
+      {#if i > 0}<FieldSeparator />{/if}
+      <!-- Field carries role="group"; naming it after the row's own label turns a
+           nameless boundary into the row's structure. -->
+      <Field
+        orientation="horizontal"
+        data-field={field.key}
+        class="setting-item"
+        aria-labelledby={settingLabelId(field.key)}
+      >
+        <FieldContent>
+          <FieldLabel
+            id={settingLabelId(field.key)}
+            for={settingLabelTarget(field)}
+            class="field-label">{field.label}</FieldLabel
+          >
+          <FieldDescription>{field.description}</FieldDescription>
+        </FieldContent>
+        {@render control(field)}
+      </Field>
+    {/each}
+  </FieldGroup>
+{/snippet}
+
 {#snippet control(field: StagedField)}
   {#if field.control.kind === "select"}
     <SettingSelect
-      id="setting-{field.key}"
+      id={settingControlId(field.key)}
       value={String(values[field.key] ?? "")}
       options={field.control.options}
       onSelect={(v) => apply(field, v)}
     />
   {:else if field.control.kind === "segmented"}
     <SettingSegmented
-      labelledBy="setting-{field.key}-label"
+      labelledBy={settingLabelId(field.key)}
       value={String(values[field.key] ?? "")}
       options={field.control.options}
       onSelect={(v) => apply(field, v)}
     />
   {:else}
     <Switch
-      id="setting-{field.key}"
+      id={settingControlId(field.key)}
       checked={values[field.key] === true}
       onCheckedChange={(v) => apply(field, v)}
     />
@@ -478,11 +491,15 @@
     color: var(--ink-faint);
   }
 
-  /* A sub-group of settings within the pane (e.g. "Diff view") — a real fieldset, its
-     legend the header, hugging its FieldGroup; the pane gap separates one section from
-     the next. `min-inline-size: 0` cancels the fieldset's own min-content default,
-     which would otherwise let a wide row push the pane's grid track open. */
+  /* A sub-group of settings within the pane (e.g. "Diff view"), hugging its FieldGroup;
+     the pane gap separates one section from the next. A labelled section is a fieldset
+     and an unlabelled one a plain div, so this sets the column layout both need —
+     FieldSet ships it, a div does not. `min-inline-size: 0` cancels the fieldset's own
+     min-content default, which would otherwise let a wide row push the pane's grid
+     track open. */
   .settings :global(.section) {
+    display: flex;
+    flex-direction: column;
     gap: 0;
     min-inline-size: 0;
   }
@@ -500,20 +517,18 @@
   }
 
   /* One setting = one shadcn Field (label block left, control flush right), sized to
-     caret's dense rows rather than shadcn's roomier defaults: the row keeps the
-     vertical padding and the label/control gap the Item it replaced had, and the
-     rows stack flush so the hairline FieldSeparator is the only thing between them.
-     `align-items: center` re-asserts the Item centring over Field's
-     has-[field-content]:items-start, which would top-align the control instead. */
+     caret's dense rows rather than shadcn's roomier defaults: rows stack flush so the
+     hairline FieldSeparator is the only thing between them, and `align-items: center`
+     out-specifies Field's own has-[field-content]:items-start, which would otherwise
+     top-align the control against a two-line description. */
   .settings :global(.fields) {
     gap: 0;
   }
   .settings :global(.setting-item) {
     align-items: center;
     gap: 0.625rem;
-    /* The Item this replaced stood 22px taller than its content: 10px of padding plus
-       the 1px transparent border it carried for its focus ring. Field has no border,
-       so the row reclaims that pixel as padding and the pitch is unchanged. */
+    /* 11px a side — 22px of pitch above the content. Spelled as the rem step plus the
+       device pixel rather than 0.6875rem so the two stay separable. */
     padding-block: calc(0.625rem + 1px);
   }
   .settings :global(.setting-item [data-slot="field-content"]) {
@@ -521,8 +536,7 @@
   }
   /* The separator ships as a 20px box with the rule floated through its middle. Shrink
      the box to the hairline itself and pin the rule to its top — half of a 1px box is a
-     half-pixel offset, which renders the line soft. The 0.5rem margins either side then
-     reproduce the ItemSeparator this replaced, pitch for pitch. */
+     half-pixel offset, which renders the line soft. */
   .settings :global([data-slot="field-separator"]) {
     height: 1px;
     margin-block: 0.5rem;

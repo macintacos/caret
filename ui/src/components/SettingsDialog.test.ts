@@ -5,7 +5,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { flushUntil, render } from "@ui/test-mount.ts";
 import SettingsDialog from "@/components/SettingsDialog.svelte";
 import { writeDiffStyle } from "$lib/diffStylePref.ts";
-import { SETTINGS_REGISTRY, type StagedField, THEME_FIELD } from "$lib/settingsRegistry.ts";
+import {
+  SETTINGS_REGISTRY,
+  type StagedField,
+  settingControlId,
+  settingLabelId,
+  THEME_FIELD,
+} from "$lib/settingsRegistry.ts";
 
 afterEach(() => localStorage.clear());
 
@@ -99,19 +105,33 @@ describe("SettingsDialog shell", () => {
 });
 
 describe("SettingsDialog label association (EXC-1112)", () => {
-  // The point of the field/label adoption: the visible row text IS the label
-  // element, so the accessible name and the rendered string are one string rather
-  // than two that can drift. `for`/`id` where the control is a labelable element
-  // (the Switch and the select trigger are both <button>); the label-click
-  // behaviour that association buys is real-browser and lives in the e2e.
-  test("each row's visible text is a <label> wired to its control by for/id", async () => {
+  // The point of the field/label adoption: the visible row text IS the label element,
+  // so the accessible name and the rendered string are one string rather than two that
+  // can drift. Asserted over every rendered row rather than a hand-picked few — the
+  // invariant is that no row ships unwired, so a field added to the registry later is
+  // covered the day it lands. What the wiring then BUYS (the label click reaching the
+  // control, and the name a browser computes from it) is engine behaviour, and lives in
+  // test/e2e/settings.e2e.ts.
+  test("every row's visible text is a <label> wired to its control", async () => {
     const { flush } = render(SettingsDialog, props());
     await flushUntil(flush, mounted);
-    for (const key of ["shortcutHints", "diffStyle", "diffIndicators"]) {
-      const row = document.body.querySelector(`[data-field='${key}']`);
-      const label = row?.querySelector("label[data-slot='field-label']");
-      expect(label?.getAttribute("for")).toBe(`setting-${key}`);
-      expect(has(`#setting-${key}`)).toBe(true);
+    const rows = [...document.body.querySelectorAll("[data-field]")];
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      const key = row.getAttribute("data-field") ?? "";
+      const label = row.querySelector("label[data-slot='field-label']");
+      expect(label?.id).toBe(settingLabelId(key));
+      const target = label?.getAttribute("for") ?? null;
+      if (target === null) {
+        // `for` binds only to a labelable element, which a segmented control's
+        // <div role="group"> is not — that row names its group the other way.
+        expect(has(`[data-slot='toggle-group'][aria-labelledby='${settingLabelId(key)}']`)).toBe(
+          true,
+        );
+      } else {
+        expect(target).toBe(settingControlId(key));
+        expect(has(`#${settingControlId(key)}`)).toBe(true);
+      }
     }
   });
 
@@ -133,6 +153,18 @@ describe("SettingsDialog label association (EXC-1112)", () => {
     const head = document.body.querySelector(".section-head");
     expect(head?.tagName).toBe("LEGEND");
     expect(head?.closest("fieldset")?.getAttribute("data-slot")).toBe("field-set");
+  });
+
+  // …and an UNLABELLED section is not one. A fieldset with no legend is a group with
+  // no accessible name, which an accessibility change has no business adding.
+  test("no fieldset ships without a legend", async () => {
+    const { flush } = render(SettingsDialog, props());
+    await flushUntil(flush, mounted);
+    const sets = [...document.body.querySelectorAll("[data-slot='field-set']")];
+    expect(sets.length).toBeGreaterThan(0);
+    for (const set of sets) {
+      expect(set.querySelector(":scope > legend") !== null).toBe(true);
+    }
   });
 });
 

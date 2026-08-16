@@ -13,6 +13,16 @@
   // The shell renders this in place of the generic field rows for the Theme
   // section, and hands it that section's fields — which the /-search may have
   // filtered — so each row is rendered only when its field is present.
+  //
+  // It renders ONLY inside the settings pane, and leans on that: the row rhythm
+  // (group gap, row padding, the hairline separator) is declared once in
+  // SettingsDialog's `.settings :global(…)` rules, which reach these rows through the
+  // component boundary. That is what keeps the two halves of the Appearance pane from
+  // drifting into two treatments — but it means this component is not self-sufficient
+  // elsewhere. A second consumer moves that rhythm into a caret-owned stylesheet keyed
+  // on `[data-slot="field"].setting-item` rather than copying it back here; key on the
+  // data-slot as well as the class, because SettingSelect puts `.setting-item` on its
+  // portalled menu rows too.
   import { appearance } from "@/state/appearance.svelte.ts";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import {
@@ -23,7 +33,13 @@
     FieldLabel,
     FieldSeparator,
   } from "$lib/components/ui/field/index.js";
-  import { type StagedField, THEME_FIELD } from "$lib/settingsRegistry.ts";
+  import {
+    settingControlId,
+    settingLabelId,
+    settingLabelTarget,
+    type StagedField,
+    THEME_FIELD,
+  } from "$lib/settingsRegistry.ts";
   import SettingSegmented from "@/components/SettingSegmented.svelte";
   import SettingSelect from "@/components/SettingSelect.svelte";
 
@@ -53,36 +69,47 @@
   <FieldGroup class="fields">
     {#each rows as field, i (field.key)}
       {#if i > 0}<FieldSeparator />{/if}
-      <Field orientation="horizontal" data-field={field.key} class="setting-item">
+      <Field
+        orientation="horizontal"
+        data-field={field.key}
+        class="setting-item"
+        aria-labelledby={settingLabelId(field.key)}
+      >
         <FieldContent>
           <!-- A real <label> (EXC-1112). The mode row omits `for`: its control is a
                toggle group, a <div role="group">, which is not a labelable element —
                that row's group points back here with aria-labelledby instead. -->
           <FieldLabel
-            id="setting-{field.key}-label"
-            for={field.control.kind === "segmented" ? undefined : `setting-${field.key}`}
+            id={settingLabelId(field.key)}
+            for={settingLabelTarget(field)}
             class="field-label"
           >
             <span>{field.label}</span>
             {#if field.key === liveKey}
               <!-- The block's one amber mark: which palette is actually showing. It
                    unmounts from one row and mounts in the other as the live scheme
-                   changes, which replays its reveal on arrival. -->
-              <Badge class="in-use">In use</Badge>
+                   changes, which replays its reveal on arrival.
+                   aria-hidden is load-bearing: this pill sits INSIDE the row's <label>,
+                   and a <button> takes its name from its label — so without it the slot
+                   trigger would be named "Dark theme In use", a name that silently moves
+                   between the two rows on an OS flip. The resolved-state line below says
+                   which palette is showing in a sentence, which is how that reaches a
+                   screen reader. -->
+              <Badge class="in-use" aria-hidden="true">In use</Badge>
             {/if}
           </FieldLabel>
           <FieldDescription>{field.description}</FieldDescription>
         </FieldContent>
         {#if field.control.kind === "segmented"}
           <SettingSegmented
-            labelledBy="setting-{field.key}-label"
+            labelledBy={settingLabelId(field.key)}
             value={String(values[field.key] ?? "")}
             options={field.control.options}
             onSelect={(v) => onApply(field, v)}
           />
         {:else if field.control.kind === "select"}
           <SettingSelect
-            id="setting-{field.key}"
+            id={settingControlId(field.key)}
             value={String(values[field.key] ?? "")}
             options={field.control.options}
             onSelect={(v) => onApply(field, v)}
@@ -103,20 +130,12 @@
     flex-direction: column;
     gap: 0.5rem;
   }
-  /* The row rhythm itself (group gap, row padding, the hairline separator) is NOT
-     re-declared here: this section only ever renders inside the settings pane, and
-     SettingsDialog's `.settings :global(…)` rules already reach these rows through the
-     component boundary. One source for it means the two halves of the Appearance pane
-     cannot drift into two treatments. What stays below is what is genuinely this
-     section's own. */
-  /* The label line carries the moving IN USE pill beside its text. */
+  /* The label line carries the moving IN USE pill beside its text — the row's type is
+     SettingsDialog's, so only the pill's layout is declared here. */
   .theme-section :global(.setting-item .field-label) {
     display: flex;
     align-items: center;
     gap: 0.45rem;
-    font-size: var(--text-sm);
-    font-weight: 600;
-    color: var(--ink);
   }
   /* IN USE: an amber-wash pill in the eyebrow's uppercase treatment. The label is
      written in sentence case and uppercased here, so it is announced as words
