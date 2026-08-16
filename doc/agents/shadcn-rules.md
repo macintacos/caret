@@ -146,7 +146,18 @@ consistent with it rather than inventing a per-component treatment.
   `bg-accent`, bound (via `--color-accent`) to `--chip-hover` so it matches the topbar's
   button hover app-wide. The **active/selected** row instead carries an amber wash
   (`--accent-wash`) — the same "amber marks the selection" language the diff view uses —
-  so the current choice reads distinct from one that's merely hovered.
+  so the current choice reads distinct from one that's merely hovered. **Which of the two
+  wins depends on the primitive, and a `Select` is the opposite of a `DropdownMenu`.** A
+  menu highlights nothing until the reader moves, so letting the highlight win is safe
+  there — it only ever greys the amber row transiently, under the cursor. A listbox has no
+  such state: bits-ui parks the highlight on the **selected** row as the content mounts
+  (`setInitialHighlightedNode`), so highlight-wins leaves the panel *resting* with no
+  amber in it at all, losing the current choice exactly when it is read. On a `Select`,
+  declare `[data-selected]` after `[data-highlighted]`, and give the row that carries both
+  its own mark for the highlight — an inset `--accent` ring in `SettingSelect.svelte`.
+  That mark is not decoration: bits-ui focuses no row (it drives `aria-activedescendant`
+  from the trigger), so `[data-highlighted]` **is** the listbox's keyboard cursor and has
+  to stay visible on every row, the selected one included.
 - **Modals compose `Modal.svelte`.** `ui/src/components/Modal.svelte` is the shared shell:
   `kind="dialog"` (dismissible, e.g. Settings) or `kind="confirm"` (an `alertdialog`
   guard, e.g. Approve/Reject) selects the bits-ui primitive, but the eyebrow, title,
@@ -217,6 +228,15 @@ later work doesn't rediscover it — see `shadcn-foundation.test.ts`:
   Escape-to-close, outside-click, focus restoration, scroll lock — are real-browser
   behaviors and stay **e2e**. The unit-vs-e2e split is governed by
   [`browser-testing.md`](browser-testing.md); defer to it.
+- **Drive the gesture the primitive listens for, not the one you would perform.** A test
+  that reaches for `.click()` and `pointerenter` out of habit passes vacuously against a
+  `Select`, because bits-ui binds none of them: the trigger toggles on **`pointerdown`**
+  (its `onclick` only calls `focus()`), a row commits on **`pointerup`**, and the
+  highlight moves on **`pointermove`**. `shadcn-select.test.ts` and
+  `SettingSelect.test.ts` carry the worked form; check the primitive's `props` getter in
+  `bits-ui/dist/bits/<name>/*.svelte.js` before writing a new one. `flushUntil` exhausts
+  its budget without throwing, so a test built on the wrong gesture goes green rather than
+  red.
 - **Where the test goes.** A primitive that stands alone gets its suite beside it
   (`components/ui/switch/switch.test.ts`); one that only makes sense composed with another
   gets a `lib/shadcn-<topic>.test.ts` plus a `lib/shadcn-<topic>-fixture.svelte`, beside

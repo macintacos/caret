@@ -488,10 +488,15 @@ test("a vendor palette resolves every decoration's paint", async ({ daemon, page
   // replacement markers moved to --ink-soft (theme.test.ts owns those numbers across all
   // nine). What a browser adds is the half arithmetic cannot reach: that a DERIVED
   // vendor token actually resolves through the shadow boundary and into the sheet.
-  await page.getByRole("button", { name: "Settings" }).click();
+  // `exact`, unlike the rest of the e2e suite, because this is the one spec seeding
+  // `cwd: REPO_ROOT` rather than the fixture's `/tmp/caret-e2e` — so the breadcrumb
+  // renders a "Copy path <checkout>" button, and a substring name match ties with it for
+  // any checkout whose directory contains "settings". Sibling worktrees are named after
+  // their branch, so that is not hypothetical.
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
   await page.getByRole("button", { name: "Light theme" }).click();
-  await page.getByRole("menuitemradio", { name: "Catppuccin Latte" }).click();
+  await page.getByRole("option", { name: "Catppuccin Latte" }).click();
   await page.keyboard.press("Escape");
   // The identity anchor: this really is Latte and not whichever palette was live before.
   // It is the one hard-coded colour here, and it is what stops the token comparisons

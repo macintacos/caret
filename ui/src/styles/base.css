@@ -92,7 +92,8 @@ body {
 :where(
   [data-slot="dropdown-menu-content"],
   [data-slot="dropdown-menu-sub-content"],
-  [data-slot="popover-content"]
+  [data-slot="popover-content"],
+  [data-slot="select-content"]
 ) {
   --tw-duration: var(--dur-enter);
   --tw-ease: var(--ease-out);
@@ -100,7 +101,8 @@ body {
 :where(
   [data-slot="dropdown-menu-content"],
   [data-slot="dropdown-menu-sub-content"],
-  [data-slot="popover-content"]
+  [data-slot="popover-content"],
+  [data-slot="select-content"]
 ):where([data-state="closed"]) {
   --tw-duration: var(--dur-exit);
   --tw-ease: var(--ease-in);
