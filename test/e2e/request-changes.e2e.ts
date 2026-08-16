@@ -160,7 +160,7 @@ test("discarding an unsent comment asks to confirm before dropping it (EXC-762)"
   const row = unsentRows(dialog);
   await expect(row).toHaveCount(1);
   // Discard opens a confirmation bubble — the scratch is NOT dropped yet. The
-  // bubble portals to the body (viewport-aware, EXC-762), so it's a page locator,
+  // bubble portals to the body (bits-ui Popover, EXC-1110), so it's a page locator,
   // not a descendant of the dialog element — which is also why scoping the row's
   // own Discard to the list item can't collect the bubble's confirm button.
   await row.getByRole("button", { name: "Discard", exact: true }).click();

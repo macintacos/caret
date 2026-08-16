@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import { EditorView } from "@codemirror/view";
 
 import type { LineAnnotation } from "@core/lib/types";
-import { capture, render } from "@ui/test-mount.ts";
+import { capture, flushUntil, render } from "@ui/test-mount.ts";
 import SourceAnnotationCard from "@/components/SourceAnnotationCard.svelte";
 
 // SourceAnnotationCard is the collapsible inline card for the source-view
@@ -19,9 +19,11 @@ function click(root: ParentNode, selector: string): void {
   (root.querySelector(selector) as HTMLElement).click();
 }
 
-// The Discard confirmation portals to document.body (anchor mode, viewport-aware —
-// the same path the Request Changes dialog uses), so it is reached from the
-// document, not the mount target.
+// The Discard confirmation is a `popover` (EXC-1110), so bits-ui portals it to
+// document.body and mounts it deferred — reached from the document rather than the
+// mount target, and polled for rather than read straight after the click.
+const confirmPopover = () => document.body.querySelector(".confirm-popover");
+
 function clickDoc(selector: string): void {
   (document.querySelector(selector) as HTMLElement).click();
 }
@@ -88,20 +90,21 @@ describe("SourceAnnotationCard collapse", () => {
     expect(target.querySelector(".card.expanded")).not.toBeNull();
   });
 
-  test("Discard from a collapsed card confirms, then deletes via the shared path", () => {
+  test("Discard from a collapsed card confirms, then deletes via the shared path", async () => {
     const deleted = capture<string>();
     const { target, flush } = render(
       SourceAnnotationCard,
       base({ focused: false, onDelete: deleted.cb }),
     );
+    flush();
     // Same confirm bubble and code path as the expanded Discard: nothing deleted
     // until the reviewer confirms, and the card never has to expand first.
     click(target, ".danger");
-    flush();
-    expect(document.querySelector(".confirm-popover")).not.toBeNull();
+    await flushUntil(flush, () => confirmPopover() !== null);
+    expect(confirmPopover()).not.toBeNull();
     expect(deleted.last()).toBeUndefined();
     clickDoc(".confirm-popover .confirm");
-    flush();
+    await flushUntil(flush, () => confirmPopover() === null);
     expect(deleted.last()).toBe("a1");
     expect(target.querySelector(".card.expanded")).toBeNull();
   });
@@ -275,37 +278,39 @@ describe("SourceAnnotationCard focus + position", () => {
 });
 
 describe("SourceAnnotationCard edit/delete", () => {
-  test("delete confirms first, then fires onDelete without focusing", () => {
+  test("delete confirms first, then fires onDelete without focusing", async () => {
     const deleted = capture<string>();
     let focused = false;
     const { target, flush } = render(
       SourceAnnotationCard,
       base({ focused: true, onFocus: () => (focused = true), onDelete: deleted.cb }),
     );
-    click(target, ".danger");
     flush();
+    click(target, ".danger");
+    await flushUntil(flush, () => confirmPopover() !== null);
     // The confirm pops out of the Discard button; nothing is deleted yet.
-    expect(document.querySelector(".confirm-popover")).not.toBeNull();
+    expect(confirmPopover()).not.toBeNull();
     expect(deleted.last()).toBeUndefined();
     // Confirming deletes, and the original click never focused the card.
     clickDoc(".confirm-popover .confirm");
-    flush();
+    await flushUntil(flush, () => confirmPopover() === null);
     expect(deleted.last()).toBe("a1");
     expect(focused).toBe(false);
   });
 
-  test("canceling the delete keeps the comment", () => {
+  test("canceling the delete keeps the comment", async () => {
     const deleted = capture<string>();
     const { target, flush } = render(
       SourceAnnotationCard,
       base({ focused: true, onDelete: deleted.cb }),
     );
+    flush();
     click(target, ".danger");
-    flush();
+    await flushUntil(flush, () => confirmPopover() !== null);
     clickDoc(".confirm-popover .cancel");
-    flush();
+    await flushUntil(flush, () => confirmPopover() === null);
     expect(deleted.last()).toBeUndefined();
-    expect(document.querySelector(".confirm-popover")).toBeNull();
+    expect(confirmPopover()).toBeNull();
   });
 
   test("Discard renders as a trash icon with an accessible label", () => {

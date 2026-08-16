@@ -82,7 +82,16 @@ afterEach(() => {
  * (or `tries` iterations elapse). bits-ui portal/presence surfaces (Dialog,
  * AlertDialog, Select content) mount deferred on a timer, so structure/ARIA
  * assertions must poll rather than sleep a fixed interval — a fixed wait risks
- * flaking on a loaded box. Records the verdict recorded by shadcn-foundation.test.ts. */
+ * flaking on a loaded box. Records the verdict recorded by shadcn-foundation.test.ts.
+ *
+ * **A test that opens an overlay by CLICKING must flush once after `render()` and
+ * before the click**, or the content never appears however long this polls.
+ * bits-ui's `PresenceManager` seeds `shouldRender` from `open` in its constructor and
+ * then watches it, but the watch deliberately swallows its own first run
+ * (`#hasMounted`). `render()` does not flush, so a click landing before that first run
+ * collapses "false, then true" into a single run — the swallowed one — leaving
+ * `shouldRender` stuck at the constructor's `false` for good. Mounting with
+ * `open: true` sidesteps it, because the constructor seeds `true` directly. */
 export async function flushUntil(
   flush: () => void,
   done: () => boolean,

@@ -2,7 +2,7 @@ import "@ui/test-mount.ts";
 import { describe, expect, test } from "bun:test";
 
 import type { LineAnnotation } from "@core/lib/types";
-import { capture, render } from "@ui/test-mount.ts";
+import { capture, flushUntil, render } from "@ui/test-mount.ts";
 import SourceAnnotationThread from "@/components/SourceAnnotationThread.svelte";
 
 // SourceAnnotationThread is the caret-owned chrome that frames the comments
@@ -83,17 +83,22 @@ describe("SourceAnnotationThread stacked comments", () => {
     expect(target.querySelector('[data-annotation-card="a"] .chip')).not.toBeNull();
   });
 
-  test("routes a card's delete to onDelete with its id", () => {
+  test("routes a card's delete to onDelete with its id", async () => {
     const deleted = capture<string>();
     const { target, flush } = render(
       SourceAnnotationThread,
       base({ annotations: two, focusedAnnotation: "a", onDelete: deleted.cb }),
     );
-    (target.querySelector('[data-annotation-card="a"] .danger') as HTMLElement).click();
     flush();
-    // Delete now confirms first (EXC-749); confirm to fire onDelete. The confirm
-    // bubble portals to document.body (anchor mode), so it's reached from there.
+    (target.querySelector('[data-annotation-card="a"] .danger') as HTMLElement).click();
+    // Delete confirms first (EXC-749); confirm to fire onDelete. The confirmation is
+    // a `popover`, so it portals to document.body and mounts deferred — polled for
+    // rather than read straight after the click, and closed before the test ends so
+    // its effects don't outlive the mount (see flushUntil in ui/test-mount.ts).
+    const bubble = () => document.body.querySelector(".confirm-popover");
+    await flushUntil(flush, () => bubble() !== null);
     (document.querySelector(".confirm-popover .confirm") as HTMLElement).click();
+    await flushUntil(flush, () => bubble() === null);
     expect(deleted.last()).toBe("a");
   });
 

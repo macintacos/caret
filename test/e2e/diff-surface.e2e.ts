@@ -1575,7 +1575,7 @@ test("Discarding a scratch removes it and never sends it", async ({ daemon, page
   // Discard sits outside the collapsed disclosure (EXC-746), so no expand is needed.
   // It asks to confirm before dropping the draft (EXC-762).
   await unsentRows(dialog).getByRole("button", { name: "Discard", exact: true }).click();
-  // The confirm bubble portals to the body (viewport-aware, EXC-762), so it's a
+  // The confirm bubble portals to the body (bits-ui Popover, EXC-1110), so it's a
   // page locator rather than a descendant of the dialog element.
   await discardConfirm(page).getByRole("button", { name: "Discard" }).click();
 

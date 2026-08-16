@@ -58,15 +58,6 @@
   // Editing reuses SourceComposer (mode="edit"); implies expanded.
   let editing = $state(false);
 
-  // Whether the "are you sure?" confirmation is showing over the Discard button.
-  // Deleting a submitted comment is irreversible, so it routes through a confirm
-  // (EXC-749) instead of firing on the first click.
-  let confirming = $state(false);
-  // The Discard button the confirm bubble anchors to, captured on click so the
-  // popover left-aligns to it and shifts off any viewport edge — the same
-  // viewport-aware path the Request Changes dialog uses, so every discard
-  // confirmation behaves the same wherever the reviewer opens it (EXC-765).
-  let confirmAnchor = $state<HTMLElement | null>(null);
 
   const label = $derived(
     annotation.startLine === annotation.endLine
@@ -121,7 +112,6 @@
   }
 
   function confirmDelete() {
-    confirming = false;
     onDelete(annotation.id);
   }
 </script>
@@ -174,30 +164,19 @@
       </Button>
       <div class="actions">
         <Button variant="ghost" size="sm" class="edit" onclick={startEdit}>Edit</Button>
-        <span class="discard-wrap">
-          <Button
-            variant="ghost"
-            size="sm"
-            class="danger"
-            aria-label="Discard comment"
-            onclick={(e) => {
-              confirmAnchor = e.currentTarget as HTMLElement;
-              confirming = true;
-            }}
-          >
-            <Icon name="trash-2" size={14} />
-          </Button>
-          {#if confirming}
-            <ConfirmPopover
-              question="Discard this comment?"
-              confirmLabel="Discard"
-              align="start"
-              anchor={confirmAnchor ?? undefined}
-              onConfirm={confirmDelete}
-              onCancel={() => (confirming = false)}
-            />
-          {/if}
-        </span>
+        <!-- Deleting a submitted comment is irreversible, so it routes through a
+             confirmation (EXC-749) instead of firing on the first click. -->
+        <ConfirmPopover
+          question="Discard this comment?"
+          confirmLabel="Discard"
+          onConfirm={confirmDelete}
+        >
+          {#snippet trigger(props)}
+            <Button {...props} variant="ghost" size="sm" class="danger" aria-label="Discard comment">
+              <Icon name="trash-2" size={14} />
+            </Button>
+          {/snippet}
+        </ConfirmPopover>
       </div>
     </div>
     <!-- The comment body, revealed by a grid-template-rows height animation (see
@@ -361,8 +340,14 @@
     align-items: center;
     gap: 0.1rem;
   }
-  :global([data-slot="button"].edit),
-  :global([data-slot="button"].danger) {
+  /* Keyed on the ELEMENT, not on `data-slot`. A Button's own `data-slot="button"` is
+     written before its `{...restProps}` spread, so when that Button is also a bits-ui
+     trigger the trigger's slot value wins and any `[data-slot="button"].x` rule stops
+     matching — silently, since nothing about the markup looks different. Discard is a
+     Popover.Trigger; Edit takes the same form so it cannot break the day it grows a
+     menu. atoms.css's `button.float-chip` is the precedent. */
+  :global(button.edit),
+  :global(button.danger) {
     height: auto;
     padding: 0.2rem 0.45rem;
     font-size: var(--text-xs);
@@ -370,11 +355,11 @@
   /* Discard is the one destructive action, now a trash icon rather than a word:
      squared padding so the icon button reads as a target, caret's danger red on
      hover so the consequence reads before the click, quiet the rest of the time. */
-  :global([data-slot="button"].danger) {
+  :global(button.danger) {
     padding: 0.25rem 0.3rem;
     color: var(--ink-faint);
   }
-  :global([data-slot="button"].danger:hover) {
+  :global(button.danger:hover) {
     color: var(--danger);
   }
   /* On hover the trash icon does a quick, subtle wobble — a wink of whimsy that
@@ -387,7 +372,7 @@
      rather than --dur-micro for the same reason --ease-spring does (tokens.css §
      Motion): four rotation steps split across 120ms are ~30ms each, which reads as a
      jitter rather than a wobble. The tier here buys legibility, not size. */
-  :global([data-slot="button"].danger:hover .icon) {
+  :global(button.danger:hover .icon) {
     animation: trash-shake var(--dur-enter) var(--ease-out);
   }
   @keyframes -global-trash-shake {
@@ -405,12 +390,6 @@
       transform: rotate(-4deg);
     }
   }
-  /* Anchors the Discard confirmation to its button (see ConfirmPopover). */
-  .discard-wrap {
-    position: relative;
-    display: inline-flex;
-  }
-
   /* The expand/collapse reveal: a grid-template-rows: 0fr -> 1fr height animation.
      The row's measured height legitimately changes on expand/collapse (the library
      re-measures its reserved annotation row and the bracket overlay's ResizeObserver

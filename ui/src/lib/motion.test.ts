@@ -287,6 +287,38 @@ describe("the ToC panel refines the vendored popover animation rather than repla
   });
 });
 
+describe("the confirm bubble refines the vendored popover animation, symmetrically", () => {
+  // EXC-1110. Same mechanism as the ToC panel above — longhand `--tw-duration` /
+  // `--tw-ease` writes, invisible to the shorthand scan below — so it needs its own pin
+  // for the same reason. What differs is the TIER, and that is the whole point of
+  // asserting it: the bubble takes micro in BOTH directions, where the panel takes the
+  // surface tier's enter/exit pair.
+  //
+  // A closed-state arm here would be a regression, not an omission. tokens.css § Motion
+  // gives --dur-micro as deliberately the same time in both directions, so pairing it
+  // with --dur-exit (140ms) would make the bubble LEAVE SLOWER than it arrives (120ms) —
+  // inverting the ladder the suite pins at the top of this file. styles/base.css's
+  // tooltip is the same call for the same reason; both of base.css's default arms sit at
+  // specificity zero, so this one rule governs open and closed alike.
+  const confirm = chromeSources["components/ConfirmPopover.svelte"] ?? "";
+  const openBlock = confirm.match(/:global\(\.confirm-popover\)\s*\{([\s\S]*?)\n {2}\}/)?.[1] ?? "";
+
+  test("retimes tw-animate-css's own properties, from the shared tokens", () => {
+    // A marker matching nothing yields "" and reds every assertion here, so a moved or
+    // deleted block cannot pass this suite by leaving it with nothing to check.
+    expect(openBlock).not.toBe("");
+    expect(read(openBlock, "--tw-duration")).toBe("var(--dur-micro)");
+    expect(read(openBlock, "--tw-ease")).toBe("var(--ease-out)");
+    // "Refined, not duplicated": a shorthand of caret's own on this element would
+    // replace the `enter`/`exit` keyframes and strand the portal on close.
+    expect(openBlock).not.toContain("animation");
+  });
+
+  test("declares no closed-state arm, so the bubble leaves on the time it arrived in", () => {
+    expect(confirm).not.toContain('.confirm-popover[data-state="closed"]');
+  });
+});
+
 describe("the modal surfaces share one choreography, written in the shadcn bridge", () => {
   // EXC-892. The same refinement the ToC panel above makes, with one difference that
   // decides where it is written: four vendored files across two bits-ui primitives have to

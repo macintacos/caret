@@ -1,7 +1,7 @@
 import "@ui/test-mount.ts";
 import { describe, expect, test } from "bun:test";
 
-import { render } from "@ui/test-mount.ts";
+import { flushUntil, render } from "@ui/test-mount.ts";
 import SourceComposer from "@/components/SourceComposer.svelte";
 
 // SourceComposer is the inline comment editor for the source-view gutter flow.
@@ -43,9 +43,11 @@ function mount(over: Record<string, unknown> = {}) {
   };
 }
 
-const confirmPopover = (target: HTMLElement) => target.querySelector(".confirm-popover");
-const clickIn = (target: HTMLElement, sel: string) =>
-  (target.querySelector(sel) as HTMLElement).click();
+// The discard confirmation is a `popover` (EXC-1110), so bits-ui portals it to
+// document.body and mounts it deferred — reached from the document, and polled for
+// rather than read straight after the click.
+const confirmPopover = () => document.body.querySelector(".confirm-popover");
+const clickDoc = (sel: string) => (document.querySelector(sel) as HTMLElement).click();
 
 function key(content: HTMLElement, k: string, mods: Partial<KeyboardEventInit> = {}) {
   content.dispatchEvent(
@@ -94,36 +96,39 @@ describe("SourceComposer submit/discard/keep", () => {
     expect(keptWith).toEqual(["draft text"]);
   });
 
-  test("the Discard button confirms before dropping a non-empty draft", () => {
-    const { target, discardBtn, flush, discardCount, keptWith } = mount({ initial: "draft text" });
+  test("the Discard button confirms before dropping a non-empty draft", async () => {
+    const { discardBtn, flush, discardCount, keptWith } = mount({ initial: "draft text" });
     discardBtn!.click();
-    flush();
+    await flushUntil(flush, () => confirmPopover() !== null);
     // The confirm pops out; nothing is dropped yet.
-    expect(confirmPopover(target)).not.toBeNull();
+    expect(confirmPopover()).not.toBeNull();
     expect(discardCount()).toBe(0);
     // Confirming drops the draft, keeping nothing.
-    clickIn(target, ".confirm-popover .confirm");
-    flush();
+    clickDoc(".confirm-popover .confirm");
+    await flushUntil(flush, () => confirmPopover() === null);
     expect(discardCount()).toBe(1);
     expect(keptWith).toHaveLength(0);
   });
 
-  test("canceling the discard keeps the draft and closes the confirm", () => {
-    const { target, discardBtn, flush, discardCount } = mount({ initial: "draft text" });
+  test("canceling the discard keeps the draft and closes the confirm", async () => {
+    const { discardBtn, flush, discardCount } = mount({ initial: "draft text" });
     discardBtn!.click();
-    flush();
-    clickIn(target, ".confirm-popover .cancel");
-    flush();
+    await flushUntil(flush, () => confirmPopover() !== null);
+    clickDoc(".confirm-popover .cancel");
+    await flushUntil(flush, () => confirmPopover() === null);
     expect(discardCount()).toBe(0);
-    expect(confirmPopover(target)).toBeNull();
+    expect(confirmPopover()).toBeNull();
   });
 
-  test("an empty composer discards immediately without confirming", () => {
-    const { target, discardBtn, flush, discardCount } = mount();
+  test("an empty composer discards immediately without confirming", async () => {
+    const { discardBtn, flush, discardCount } = mount();
     discardBtn!.click();
-    flush();
+    // Polled rather than read once, so a confirmation that merely arrives late would
+    // still red this rather than slipping through as "never appeared" — but with a
+    // short budget, since every run pays this one in full to prove a negative.
+    await flushUntil(flush, () => confirmPopover() !== null, 4);
     expect(discardCount()).toBe(1);
-    expect(confirmPopover(target)).toBeNull();
+    expect(confirmPopover()).toBeNull();
   });
 
   test("Keep for later is disabled with an empty box and enabled once there is text", () => {
@@ -140,11 +145,11 @@ describe("SourceComposer keyboard chords", () => {
   });
 
   test("the first Escape blurs the field without dismissing the draft", () => {
-    const { target, content, flush, discardCount, keptWith } = mount({ initial: "abandon me" });
+    const { content, flush, discardCount, keptWith } = mount({ initial: "abandon me" });
     key(content, "Escape");
     flush();
     // Only a blur: no confirm, nothing kept or discarded yet.
-    expect(confirmPopover(target)).toBeNull();
+    expect(confirmPopover()).toBeNull();
     expect(discardCount()).toBe(0);
     expect(keptWith).toHaveLength(0);
   });
