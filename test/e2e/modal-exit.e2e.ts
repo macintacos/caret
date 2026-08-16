@@ -39,7 +39,14 @@ type ChoreographyWindow = {
 /** One animation the hand-off recorder saw START (EXC-894). Ordering is the claim, so the
  * sample is taken at animationstart rather than at animationend — an exit that both begins
  * and ends before a slower arrival begins would satisfy an end-ordering trivially. `who`
- * is the surface's `data-slot`, or `arrival` for the curtain, which has no slot. */
+ * is the surface's `data-slot`, or `arrival` for the curtain, which has no slot.
+ *
+ * `at` is the event's own `timeStamp` — the frame the animation was scheduled for — and
+ * NOT a `performance.now()` read inside the handler. Two animations that start in the same
+ * frame are dispatched in document order, and the curtain (inside #app) precedes the
+ * portalled modal surfaces (appended to body), so a sampled clock would report the arrival
+ * as first whenever the resolve lands inside one frame. `timeStamp` makes a same-frame pair
+ * compare EQUAL, which is what the ordering assertion below is actually claiming. */
 type HandoffAnimation = { who: string; name: string; at: number; seconds: number };
 type HandoffWindow = { __handoff: HandoffAnimation[] };
 
@@ -53,12 +60,12 @@ async function recordHandoff(page: import("@playwright/test").Page) {
     document.addEventListener(
       "animationstart",
       (e) => {
-        const el = e.target as HTMLElement;
+        const el = e.target;
         if (!(el instanceof HTMLElement)) return;
         (window as unknown as HandoffWindow).__handoff.push({
           who: el.dataset.slot ?? (el.classList.contains("arrival") ? "arrival" : ""),
           name: (e as AnimationEvent).animationName,
-          at: performance.now(),
+          at: e.timeStamp,
           seconds: Number.parseFloat(getComputedStyle(el).animationDuration),
         });
       },
@@ -328,10 +335,12 @@ test("a decided guard's exit leads the arrival that uncovers the next state", as
   daemon,
   page,
 }) => {
-  // The hand-off as a SEQUENCE (EXC-894), which is the half neither a stylesheet read nor
-  // a screenshot can carry: the guard leaving and the next state arriving are two
-  // animations on two different elements, and what this ticket is about is their
-  // relationship. Both claims are ordering claims, so both are sampled at animationstart.
+  // The hand-off as a SEQUENCE (EXC-894): the guard leaving and the next state arriving are
+  // two animations on two different elements, and what this ticket is about is their
+  // relationship. Which one STARTS first is the half no screenshot and no stylesheet read
+  // can carry — it only exists while the app runs — so it is sampled at animationstart. The
+  // duration comparison beside it is a computed-style read, and is here only because the
+  // two claims are the same claim: the exit leads, and it is over first.
   await daemon.seed();
   await page.goto("/");
   await planSurface(page);
@@ -368,17 +377,6 @@ test("a decided guard's exit leads the arrival that uncovers the next state", as
   // pair of facts is the whole of "deliberately timed against each other" — a relationship
   // drawn from the --dur-exit/--dur-enter tiers rather than a number this hand-off minted.
   expect(exit?.seconds ?? 0).toBeLessThan(arrival?.seconds ?? 0);
-
-  // The curtain COVERS the content row rather than taking one. It is out of flow for a
-  // reason the shell's shape makes non-obvious: DiffPlanView renders two AUTO-PLACED
-  // siblings, so an in-flow curtain claiming row 3 is placed first and displaces one of
-  // them into an implicit fifth row — leaving the status bar above the plan. Counting the
-  // tracks states that directly: pinned-chrome.e2e.ts catches the consequence, this names
-  // the cause, and it belongs here because the curtain is the thing that would break it.
-  const rows = await page.evaluate(
-    () => getComputedStyle(document.querySelector(".shell") as Element).gridTemplateRows,
-  );
-  expect(rows.split(/\s+/)).toHaveLength(4);
 });
 
 test("diverting from a guard to the dialog acknowledges nothing and uncovers nothing", async ({
@@ -408,7 +406,10 @@ test("diverting from a guard to the dialog acknowledges nothing and uncovers not
   // The swap itself lands: one modal for another, the plan untouched behind both.
   await expect(page.getByRole("dialog", { name: "Send the plan back for revision" })).toBeVisible();
   await expect(guard).toHaveCount(0);
-  // Neither half of the hand-off fires.
+  // Neither half of the hand-off fires. alerts() reads role="status", which is the role
+  // AlertHost gives every variant EXCEPT destructive — so this is precisely the claim that
+  // no CONFIRMATION was pushed, which is the one the divert could plausibly get wrong. A
+  // destructive alert here would need a failed resolve, and the divert resolves nothing.
   await expect(alerts(page)).toHaveCount(0);
   const played = await page.evaluate(() => (window as unknown as HandoffWindow).__handoff);
   expect(played.filter((a) => a.who === "arrival")).toEqual([]);

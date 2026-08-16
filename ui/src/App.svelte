@@ -859,13 +859,24 @@
   /* The hand-off's arrival, covering the content row it names but deliberately OUT OF
      FLOW. The grid placement is what gives an absolutely-positioned child its containing
      block — .shell is positioned for exactly this (layout.css) — and `inset: 0` then
-     stretches it to that area. In flow it could not work: the content row is filled by
-     AUTO-PLACED children, because DiffPlanView renders `.control-row` and `.diff-surface`
-     as two siblings rather than one root — which is also why the `.diff-plan` arm of the
-     rule above matches nothing today. An in-flow item claiming row 3 is placed before them
-     and pushes `.diff-surface` into an implicit fifth row, under the status bar. Out of
-     flow it takes part in no placement at all. Declared after both content branches, so it
-     paints over them with no z-index of its own.
+     stretches it to that area. In flow it could not work: the content row is filled by a
+     single AUTO-PLACED child. DiffPlanView renders `.control-row` and `.diff-surface` as
+     two siblings rather than one root — which is also why the `.diff-plan` arm of the rule
+     above has matched nothing since long before this curtain — and auto-placement drops the
+     first into row 2 (the banner's row, empty in the common case) and the second into row 3.
+     An in-flow item claiming row 3 is placed before either and pushes `.diff-surface` into
+     an implicit fifth row, under the status bar. Out of flow it takes part in no placement
+     at all. Declared after both content branches, so it paints over them with no z-index of
+     its own.
+
+     What that costs, stated rather than inherited: the curtain covers row 3, so on an
+     arriving plan `.control-row` — the ToC chip, compare picker, breadcrumbs and cwd — is
+     NOT covered and swaps at once beneath it. Widening to `grid-row: 2 / 4` is not the fix,
+     because row 2 is the daemon banner's when one is present. The real fix is a single
+     DiffPlanView root pinned to row 3, which would also make this boundary a deliberate
+     element rather than a track number; until then the drain-to-empty destination is fully
+     covered (`.empty` is pinned to row 3) and the stacked-plan one is covered from the
+     control row down.
 
      Both ends of the placement are spelled out because out of flow they have to be: an
      `auto` grid line on an absolutely-positioned child resolves to the grid container's
@@ -875,7 +886,11 @@
 
      Opacity only, and deliberately not a wipe: the directional sweep is spoken for by the
      theme switch, where it means "everything was restyled". A plan arriving is a smaller
-     claim, so the page simply develops back in under the curtain. `forwards` is
+     claim, so the page simply develops back in under the curtain. One paper tone serves
+     both destinations: it matches the body's --paper exactly under the empty state, and
+     sits a step above the diff view's --paper-sunk under a plan, so that reveal begins on
+     a slight lift rather than on the same tone. Judged the better trade than tinting the
+     curtain per destination, which would need it to know which one it is. `forwards` is
      load-bearing rather than cosmetic — without the fill the final opacity is discarded
      and the curtain snaps back to full paper, blanking the content region for the rest of
      the session. Reduced motion stays the global rule's job (styles/base.css), which

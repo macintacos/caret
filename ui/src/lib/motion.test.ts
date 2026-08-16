@@ -513,7 +513,8 @@ describe("the arrival that uncovers the next state", () => {
   // the resolve put in its place. Read out of App.svelte's own <style> block — the same
   // source the chrome sweep below scans, which already covers the curtain's token
   // discipline. What that sweep cannot see are the two facts that make the arrival correct.
-  const arrival = /\.arrival\s*\{([^}]*)\}/.exec(chromeSources["App.svelte"] ?? "")?.[1] ?? "";
+  const arrival =
+    /\.arrival\s*\{([^}]*)\}/.exec(styleBlock(chromeSources["App.svelte"] ?? ""))?.[1] ?? "";
 
   test("the curtain lifts on the enter tier, against the modal's exit tier", () => {
     expect(arrival).not.toBe("");

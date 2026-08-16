@@ -369,6 +369,17 @@ test("approving with a plan stacked behind hands off to the next one", async ({ 
   // now reads Beta. The waiting room must NOT be what arrived.
   await expect(page.locator(".switcher.single .title")).toHaveText("Plan Beta");
   await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toHaveCount(0);
+
+  // The curtain COVERS the content row rather than taking one, asserted HERE because this
+  // is the destination that keeps a plan mounted — DiffPlanView contributes the auto-placed
+  // children the hazard needs, and on the drain-to-empty destination there are none left to
+  // displace, so the same count would hold there no matter how the curtain were placed. In
+  // flow it would be placed before them and push `.diff-surface` into an implicit fifth row,
+  // under the status bar; pinned-chrome.e2e.ts catches that consequence, this names the cause.
+  const rows = await page.evaluate(
+    () => getComputedStyle(document.querySelector(".shell") as Element).gridTemplateRows,
+  );
+  expect(rows.split(/\s+/)).toHaveLength(4);
 });
 
 test("a decision that never reaches the daemon does not read as a success", async ({
