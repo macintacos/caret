@@ -51,7 +51,10 @@
      the inline composer reveal, the drag readout/hint slide. It is deliberately
      the SAME time in both directions — at this size there is no arrival to
      contrast a departure against, and a tint spending an entrance's time reads
-     as lag on the pointer.
+     as lag on the pointer. Its one consumer that is not an interaction is the
+     keyboard cursor's scroll follow (FOLLOW_ANIM_MS, lib/diffview/scroll.ts),
+     which retargets every few frames and so cannot ride --dur-travel; retune this
+     value by eye for hover feel and that scroll retimes with it.
      --dur-enter (220ms) and --dur-exit (140ms) are the pair for a SURFACE: a
      dialog, a drawer, a preview lane, a popover panel. Native UI gives an
      entrance room to be read and takes the exit away quicker — you watch a thing

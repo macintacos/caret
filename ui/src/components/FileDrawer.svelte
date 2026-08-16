@@ -178,9 +178,9 @@
      the pane reads as one object sliding shut rather than a second effect. It
      takes --dur-exit against the open's --dur-enter, and the paired --ease-in, the
      exit curve — a pane leaving accelerates away, where an entering one decelerates
-     into place. The lane once kept the open's duration to stop the collapse reading
-     as a snap; the surface tier now carries that itself — --dur-exit is a shorter
-     entrance rather than a micro-interaction, so the pane still slides shut.
+     into place. A lane this size needs the exit tier rather than --dur-micro to
+     still read as a slide: --dur-exit is a shortened entrance, and at micro length
+     the collapse would land as a snap.
      `forwards` holds the collapsed frame until the host unmounts, so the lane
      cannot flash back to full width in the gap. Higher specificity than the
      rules above, so it wins for whichever edge is docked. */

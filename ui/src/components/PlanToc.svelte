@@ -521,7 +521,7 @@
      Motion) rather than one number used twice: a 20rem panel hanging off the control
      row is the surface `--dur-enter` is named for, and leaving takes `--dur-exit` on the
      accelerate-out curve `--ease-in` exists to be — quicker than arriving, which the
-     vocabulary now tiers for rather than leaving each surface to arrange.
+     vocabulary tiers for.
      No spring and no overshoot — `--ease-spring` is reserved for a control sliding
      between discrete positions, and a panel that bounces reads as a toy on a surface
      whose whole register is quiet.

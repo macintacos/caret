@@ -113,11 +113,13 @@ describe("motion tokens in app.css", () => {
   });
 
   test("the vocabulary is closed — every --dur-* is one of the four tiers", () => {
-    // What the old "--dur-travel is the only token over 200ms" test bought, kept
-    // under the new shape: a fifth duration cannot be slipped in without arguing
-    // for itself in tokens.css first. Travel is the standing exception because it
+    // A fifth duration cannot be slipped in without arguing for itself in
+    // tokens.css first. Travel is the standing exception inside the set because it
     // is the one token OFF the enter/exit axis — distance, not surface size.
-    const names = [...root.matchAll(/^\s*--dur-([a-z]+):/gm)].map(([, name]) => name);
+    // [\w-] rather than [a-z]: a fifth token spelled the way most tokens in this
+    // sheet are (--dur-fade-out, --dur-enter2) would slip past a letters-only class
+    // and leave this green with the vocabulary silently at six.
+    const names = [...root.matchAll(/^\s*--dur-([\w-]+):/gm)].map(([, name]) => name);
     expect(names.sort()).toEqual(["enter", "exit", "micro", "travel"]);
   });
 

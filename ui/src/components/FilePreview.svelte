@@ -907,9 +907,9 @@
     padding: 0.5rem 0.6rem;
     color: var(--ink-soft);
     font-size: var(--text-2xs);
-    /* One line of text rather than a screenful, so it takes the shorter
-       duration — long enough not to pop, short enough that a reader waiting to
-       be told the file is too large is not watching it arrive. */
+    /* One line of text rather than a screenful, so it takes the micro tier
+       rather than the surface one — long enough not to pop, short enough that a
+       reader waiting to be told the file is too large is not watching it arrive. */
     animation: fp-in var(--dur-micro) var(--ease-out);
   }
   /* Both halves travel the same 4px in the same direction: contents rise into

@@ -129,7 +129,7 @@
      the badge's hit area. Three pings rather than an infinite loop: the badge teaches
      once, then goes quiet whether or not the reviewer looked. The 1.6s is an ambient-scale
      literal, not a --dur-* token — svelte-rules § Motion principles carves ambient
-     animations out of the ≤200ms one-shot vocabulary. */
+     animations out of the one-shot vocabulary entirely. */
   :global(.ref-hint)::after {
     content: '';
     position: absolute;

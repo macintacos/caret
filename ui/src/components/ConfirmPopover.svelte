@@ -187,7 +187,8 @@
     border: 1px solid var(--rule-strong);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
-    /* One-shot pop, matching the chrome's ≤200ms one-shot vocabulary. Being
+    /* One-shot pop on the vocabulary's micro tier — a popover this small pops
+       rather than rises, so it takes the micro time, not a surface's. Being
        out of flow, a small lift is safe here (unlike the composer's in-flow
        reveal). The global reduced-motion rule in app.css collapses it. */
     animation: pop var(--dur-micro) var(--ease-out);

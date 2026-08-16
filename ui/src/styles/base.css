@@ -69,7 +69,7 @@ body {
    animates between the old and new themes. The new snapshot wipes in from the left
    over the old (which is held static beneath it); a directional sweep reads as a
    deliberate "restyled everything" gesture rather than a cross-fade. 0.45s is a
-   one-off, larger than the chrome's ≤200ms one-shot vocabulary on purpose — a
+   one-off, larger than every tier of the chrome's one-shot vocabulary on purpose — a
    full-viewport sweep needs the extra time to read, the same way the ambient
    animations keep their own longer literals. These pseudo-elements live on the
    document root, outside #app, so the reduced-motion guard above can't reach them:
