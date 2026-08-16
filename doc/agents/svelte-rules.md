@@ -311,18 +311,44 @@ are exempt from both and keep their own bespoke durations.
 **A property no stylesheet can drive takes a third route, and it is the narrowest one.**
 Where the thing being animated is a JS property rather than a style — `scrollTop` is the
 only case today — the duration is MIRRORED as a plain constant instead of read from the
-sheet, and the mirror is pinned by a test so the two cannot drift: `SCROLL_ANIM_MS`
-(`diffview/scroll.ts`) carries `--dur-base` for the plan's jump tween, held to it by
-`motion.test.ts`, and `CLOSE_ANIM_MS` (`state/planKeyboard.svelte.ts`) carries
-`--dur-fast` for the search-collapse teardown. That is the same "name it once and test the
-coupling" rule § CSS-token discipline states for `REFERENCE_WIDTH_PX`; a mirror without
-the pin is a comment, not an invariant. The jump also eases with `cubicOut` from
-`svelte/easing` rather than `--ease-out`, and that is the **one** deliberate departure
-from the token easings: `--ease-out` is the longest-tailed curve in the vocabulary, and
-EXC-1092 asked for that tail specifically to be shorter. A JS driver owes the
-reduced-motion preference directly, too — the global CSS guard cannot reach it — which
-`scroll.ts`'s `prefersReducedMotion()` is. Reach for this route only when a stylesheet
-genuinely cannot express the animation; wanting a different curve is not enough.
+sheet, and the mirror is pinned by a test so the two cannot drift: `SCROLL_ANIM_MS` and
+`FOLLOW_ANIM_MS` (`diffview/scroll.ts`) carry `--dur-travel` and `--dur-fast` for the
+plan's two scrolls, both held by `motion.test.ts`, and `CLOSE_ANIM_MS`
+(`state/planKeyboard.svelte.ts`) carries `--dur-fast` for the search-collapse teardown.
+That is the same "name it once and test the coupling" rule § CSS-token discipline states
+for `REFERENCE_WIDTH_PX`; a mirror without the pin is a comment, not an invariant. A JS
+driver owes the reduced-motion preference directly too — the global CSS guard cannot reach
+it — which `scroll.ts`'s `prefersReducedMotion()` is. Reach for this route only when a
+stylesheet genuinely cannot express the animation; wanting a different curve is not
+enough.
+
+Two things about that route are decisions rather than details, and both were EXC-1092's.
+
+**`--dur-travel` (240ms) is the one duration above the ≤200ms ceiling, because it times
+travel rather than a reveal.** The ceiling exists so a surface appearing in place reads
+quick; a scroll crossing hundreds of pixels is a different perceptual job, and the eye
+needs longer to follow a thing that moves than to accept a thing that appears. At 180ms
+the same scroll read as an instant cut. Nothing that fades, slides, pops or rises may
+borrow it — `motion.test.ts` asserts `travel` is the ONLY `--dur-*` over 200ms, so a
+second one has to argue for itself here first.
+
+**The easing is `quadOut` from `svelte/easing`, not `--ease-out`, and the exponent is the
+whole design.** Every decelerating curve slows down on paper; what decides whether a
+reader SEES it stop is how far the final frames actually move. `--ease-out`
+(`cubic-bezier(0.22, 1, 0.36, 1)`) is quintic-feeling and `cubicOut` is a step below it —
+over a 1000px flight their last quarter carries ~3px and ~16px respectively, which is
+sub-pixel per frame and therefore invisible, so the scroll reads as a fast slide that
+simply stops. `quadOut` spends 62px there and is watched coming to rest. `scroll.test.ts`
+pins that as a floor on the last quarter's distance rather than as a curve name, since the
+name is the implementation and the visible glide is the contract. Judge a JS easing by
+what its last frames do over the real distance, not by where it sits at the midpoint.
+
+**Both of the plan's scrolls ride that one curve and driver**, differing only in duration:
+the jump to a place (`--dur-travel`) and the keyboard cursor's follow (`--dur-fast`, since
+a held `j`/`k` retargets it every few frames and a jump-length glide would leave the view
+trailing the cursor). Sharing the driver is also what stops them fighting — a follow
+landing inside a jump retargets that flight rather than being mistaken for a reader
+grabbing the scrollbar.
 
 **The two tracks may meet, and there is exactly one way to do it.** A portalled surface
 that wants caret's timing sets `--tw-duration` and `--tw-ease` — the two custom properties

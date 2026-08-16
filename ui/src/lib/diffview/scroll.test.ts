@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import {
   CURSOR_SCROLLOFF,
+  FOLLOW_ANIM_MS,
   followCursorLine,
   followScrollDelta,
   lineAtReadingZone,
@@ -107,9 +108,11 @@ function withReducedMotion(fn: () => void): void {
   }
 }
 
-// scrollTweenTop is the jump animation's whole curve: where scrollTop should be at
-// a given point in the flight. The contract the snappy jump needs is that the
-// motion is front-loaded — most of the distance covered early, so the tail is short.
+// scrollTweenTop is the whole curve both of the plan's scrolls ride: where scrollTop
+// should be at a given point in a flight. Two properties have to hold together, and
+// pulling too hard on either one breaks the other — the motion is front-loaded, so it
+// decelerates rather than accelerates, AND its last frames still move far enough to
+// be seen, so the view is watched coming to rest instead of just stopping.
 describe("scrollTweenTop", () => {
   const base = { from: 0, to: 1000, duration: SCROLL_ANIM_MS };
 
@@ -123,13 +126,22 @@ describe("scrollTweenTop", () => {
     expect(scrollTweenTop({ ...base, elapsed: SCROLL_ANIM_MS * 3 })).toBe(base.to);
   });
 
-  test("has covered more than three quarters of the distance at the halfway point", () => {
-    // A front-loading FLOOR, not a pin on the curve: it excludes linear (500) and
-    // the quadratic/sine drifts (707, 750), so a swap that gives the jump a slow
-    // first half reds here. It does not separate cubicOut from --ease-out's own
-    // curve — both clear it — because what distinguishes those two is the shape of
-    // the last 10%, which no single-point assertion can see.
-    expect(scrollTweenTop({ ...base, elapsed: SCROLL_ANIM_MS / 2 })).toBeGreaterThan(750);
+  test("front-loads the flight — most of the distance is covered in the first half", () => {
+    // The floor that keeps the curve DECELERATING: linear reaches 500 at the
+    // midpoint and anything accelerating reaches less, so a swap that makes the
+    // scroll speed up into its target reds here.
+    expect(scrollTweenTop({ ...base, elapsed: SCROLL_ANIM_MS / 2 })).toBeGreaterThan(700);
+  });
+
+  test("is still visibly moving through the last quarter of the flight", () => {
+    // The contract the tuning is FOR, and the one a midpoint floor cannot express.
+    // Every decelerating curve slows down on paper; what separates them is whether
+    // the final frames still move far enough to see. Over a 1000px flight the last
+    // quarter of the time must carry >40px — quadOut spends 62px there, while
+    // cubicOut (16px) and --ease-out's quintic-feeling curve (~3px) finish in
+    // sub-pixel steps and read as a slide that simply stops.
+    const atThreeQuarters = scrollTweenTop({ ...base, elapsed: SCROLL_ANIM_MS * 0.75 });
+    expect(base.to - atThreeQuarters).toBeGreaterThan(40);
   });
 });
 
@@ -173,9 +185,10 @@ describe("scrollToLine", () => {
   });
 
   test("stops when something else scrolls the container mid-flight", async () => {
-    // A wheel, the cursor follow, or a composer reveal moving the scroller means
-    // the reader (or another scroll) owns the position now — the jump lets go
-    // rather than dragging the view back for the rest of its flight.
+    // A wheel or a trackpad fling moving the scroller means the reader owns the
+    // position now — the jump lets go rather than dragging the view back for the
+    // rest of its flight. (The cursor follow is no longer such a case: it runs
+    // through the same driver, so it retargets the flight instead of fighting it.)
     const { host, scroller } = harness([1, 5, 9]);
     stubRow(host, 5, 500);
     expect(scrollToLine(host, 5)).toBe(true);
@@ -436,7 +449,7 @@ describe("followScrollDelta", () => {
 
 describe("followCursorLine", () => {
   /** A scroller (top 100, bottom 700 → 600px tall) wrapping a shadow host. */
-  function harness(lines: number[]): { host: HTMLElement; scrollBys: ScrollToOptions[] } {
+  function harness(lines: number[]): { host: HTMLElement; scroller: HTMLElement } {
     const scroller = document.createElement("div");
     scroller.style.overflowY = "auto";
     scroller.getBoundingClientRect = () => rect(100, 700);
@@ -447,12 +460,15 @@ describe("followCursorLine", () => {
       row.setAttribute("data-line", String(n));
       root.append(row);
     }
-    const scrollBys: ScrollToOptions[] = [];
-    scroller.scrollBy = ((opts: ScrollToOptions) =>
-      scrollBys.push(opts)) as typeof scroller.scrollBy;
     scroller.append(host);
     document.body.append(scroller);
-    return { host, scrollBys };
+    return { host, scroller };
+  }
+
+  /** Runs an in-flight follow tween out to the end of its (shorter) flight. */
+  async function settleFollow(): Promise<void> {
+    now = FOLLOW_ANIM_MS;
+    await frames(1);
   }
 
   function stubRow(host: HTMLElement, line: number, top: number, bottom: number): void {
@@ -460,26 +476,37 @@ describe("followCursorLine", () => {
     if (row != null) row.getBoundingClientRect = () => rect(top, bottom);
   }
 
-  test("scrolls by the follow delta, instantly, when the row passes the bottom band", () => {
-    const { host, scrollBys } = harness([1, 5, 9]);
+  test("tweens by the follow delta when the row passes the bottom band", async () => {
+    const { host, scroller } = harness([1, 5, 9]);
     stubRow(host, 5, 650, 670); // below the [200,600] band (margin CURSOR_SCROLLOFF*20)
     expect(followCursorLine(host, 5)).toBe(true);
-    expect(scrollBys.length).toBe(1);
-    expect(scrollBys[0]?.top).toBe(670 - (700 - CURSOR_SCROLLOFF * 20)); // overshoot past bottom bound
-    expect(scrollBys[0]?.behavior).toBe("auto"); // instant — no smooth lag under held motion
+    await settleFollow();
+    expect(scroller.scrollTop).toBe(670 - (700 - CURSOR_SCROLLOFF * 20)); // overshoot past bottom bound
   });
 
-  test("does not scroll when the row is comfortably inside the band", () => {
-    const { host, scrollBys } = harness([1, 5, 9]);
+  test("runs the follow shorter than a jump, so a held key is not left trailing", async () => {
+    // The follow and the jump share a curve but not a duration: at FOLLOW_ANIM_MS
+    // the follow has landed, which is a point a jump would still be flying past.
+    const { host, scroller } = harness([1, 5, 9]);
+    stubRow(host, 5, 650, 670);
+    expect(followCursorLine(host, 5)).toBe(true);
+    await settleFollow();
+    expect(scroller.scrollTop).toBe(670 - (700 - CURSOR_SCROLLOFF * 20));
+    expect(FOLLOW_ANIM_MS).toBeLessThan(SCROLL_ANIM_MS);
+  });
+
+  test("does not scroll when the row is comfortably inside the band", async () => {
+    const { host, scroller } = harness([1, 5, 9]);
     stubRow(host, 5, 300, 320);
     expect(followCursorLine(host, 5)).toBe(true);
-    expect(scrollBys.length).toBe(0);
+    await settleFollow();
+    expect(scroller.scrollTop).toBe(0);
   });
 
   test("returns false when the requested line is not rendered", () => {
-    const { host, scrollBys } = harness([1, 2, 3]);
+    const { host, scroller } = harness([1, 2, 3]);
     expect(followCursorLine(host, 99)).toBe(false);
-    expect(scrollBys.length).toBe(0);
+    expect(scroller.scrollTop).toBe(0);
   });
 
   test("returns false when the container has no shadow root", () => {

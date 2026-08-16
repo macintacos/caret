@@ -53,9 +53,17 @@
      Ambient/infinite animations are deliberately EXEMPT: the safe-mode pulse
      (1.2s) and EmptyState float (4s) breathe on their own bespoke durations and
      must not borrow these one-shot tokens — a 120ms loop would strobe. They keep
-     their literals; only one-shot reveals draw from here. */
+     their literals; only one-shot reveals draw from here.
+     --dur-travel (240ms) is the ONE duration above the ≤200ms ceiling, and it is
+     not a reveal: it times the plan's scroll TRAVEL, which crosses hundreds of
+     pixels rather than fading a surface in place. A distance that large read as
+     an instant cut at 180ms — the eye needs longer to follow a thing moving than
+     to accept a thing appearing — so the ceiling's reasoning does not reach it.
+     Nothing that appears, fades, slides or pops may borrow this; if a second
+     traveling animation ever wants it, that is the bar. */
   --dur-fast: 120ms;
   --dur-base: 180ms;
+  --dur-travel: 240ms;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
   /* A damped-spring easing (linear() curve, ~6% overshoot then settle) for
