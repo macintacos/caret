@@ -90,9 +90,6 @@
   // button stays disabled until the reviewer has typed.
   const canKeep = $derived(comment.trim() !== "");
 
-  // Whether the "are you sure?" confirmation is showing over the Discard button.
-  let confirming = $state(false);
-
   // The composer surface, focused when the first Escape blurs the editor so the
   // card can catch the second Escape (see the two-stage Escape below).
   let cardEl = $state<HTMLElement | null>(null);
@@ -112,20 +109,6 @@
 
   function submit() {
     onSubmit(comment);
-  }
-
-  // Dropping a non-empty draft loses typed text with no undo, so it routes
-  // through a confirmation (EXC-749). An empty box has nothing to lose, so it
-  // discards at once — no nag for the "clicked a line, changed my mind" case.
-  // The create-mode Discard button enters here.
-  function requestDiscard() {
-    if (canKeep) confirming = true;
-    else onDiscard();
-  }
-
-  function confirmDiscard() {
-    confirming = false;
-    onDiscard();
   }
 
   function keep() {
@@ -152,6 +135,14 @@
     if (e.key === "Escape" && e.target === e.currentTarget) dismiss();
   }
 </script>
+
+<!-- One Discard button, rendered down whichever branch below applies: as the
+     confirmation's trigger (where it takes bits-ui's props) or on its own. Declared
+     out here rather than inside the Card, since a snippet inside a component's tags
+     is passed to that component as a prop. -->
+{#snippet discardButton(props: Record<string, unknown>)}
+  <Button {...props} variant="secondary" class="float-chip ghost">Discard</Button>
+{/snippet}
 
 <Card
   bind:ref={cardEl}
@@ -184,19 +175,23 @@
       </Button>
     {:else}
       <Button variant="ghost" class="keep" onclick={keep} disabled={!canKeep}>Keep for later</Button>
-      <span class="discard-wrap">
-        <Button variant="secondary" class="float-chip ghost" onclick={requestDiscard}>Discard</Button>
-        {#if confirming}
-          <ConfirmPopover
-            question="Discard this comment?"
-            confirmLabel="Discard"
-            cancelLabel="Keep editing"
-            align="start"
-            onConfirm={confirmDiscard}
-            onCancel={() => (confirming = false)}
-          />
-        {/if}
-      </span>
+      <!-- Dropping a non-empty draft loses typed text with no undo, so it routes
+           through a confirmation (EXC-749). An empty box has nothing to lose, so it
+           discards at once — no nag for the "clicked a line, changed my mind" case.
+           The rule lives in the branch rather than inside the click handler because
+           Popover.Trigger opens unconditionally: the empty case never gets a
+           trigger at all. -->
+      {#if canKeep}
+        <ConfirmPopover
+          question="Discard this comment?"
+          confirmLabel="Discard"
+          cancelLabel="Keep editing"
+          onConfirm={onDiscard}
+          trigger={discardButton}
+        />
+      {:else}
+        {@render discardButton({ onclick: onDiscard })}
+      {/if}
       <Button onclick={submit} aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}>
         Comment
         <Kbd aria-hidden="true">
@@ -240,12 +235,6 @@
     justify-content: flex-end;
     gap: 0.4rem;
     margin-top: 0.55rem;
-  }
-  /* Positioning context for the discard confirmation, so it anchors to the
-     button rather than floating (see ConfirmPopover). */
-  .discard-wrap {
-    position: relative;
-    display: inline-flex;
   }
   /* Keep for later is the deliberate "stash for later" opt-in — the quietest
      control in the row, so its ghost Button drops to the faint ink until hovered.
