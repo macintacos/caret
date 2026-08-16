@@ -138,6 +138,31 @@ const SHALLOW_PLAN = [
   "",
 ].join("\n\n");
 
+// A trail whose last segment ends in punctuation, and a trail long enough to overflow
+// the header (EXC-1108). Both are rendering-only concerns, which is why they are here
+// and not in a mount: the header elides from the start via `direction: rtl`, and under
+// an RTL paragraph a TRAILING neutral character has no following strong character to
+// resolve against, so it takes the paragraph direction and lands at the far left —
+// `Why?` renders `?WHY`. `textContent` reads correctly the whole time; only the glyphs
+// move. A zero-width LRM in generated content is what prevents it.
+const PUNCTUATED_PLAN = [
+  "# Rollout plan",
+  filler("Rollout plan"),
+  "## Why?",
+  filler("Why"),
+  "### Migration notes",
+  filler("Migration notes"),
+  "## Phase two considerations",
+  filler("Phase two"),
+  "### Deployment procedures",
+  filler("Deployment"),
+  "#### Rollback and recovery",
+  filler("Rollback"),
+  "##### Checksum notes",
+  filler("Checksum notes"),
+  "",
+].join("\n\n");
+
 const TOC = ".plan-toc-panel";
 /** The breadcrumbs bar's dropdown — the OTHER heading surface, addressed here only
  * to prove `\` and `b` do not reach the same one. Same selector plan-breadcrumbs
@@ -407,6 +432,77 @@ test("the roving walk visits match rows only, never a breadcrumb header", async 
   // Lands on the next MATCH, not on the "Plan › Rollout" header sitting between them.
   await expect(walkedTo(page)).toHaveText("Rollout notes");
   await expect(walkedTo(page)).toHaveCount(1);
+});
+
+test("a breadcrumb header keeps one line, elides from the start, and holds its punctuation", async ({
+  daemon,
+  page,
+}) => {
+  // EXC-1108, and every claim here is rendering-only — `textContent` is identical
+  // whether this passes or fails, which is why none of it can live in a mount.
+  await daemon.seed({ plan: PUNCTUATED_PLAN });
+  await page.goto("/");
+  // Parked on a punctuation-free heading on purpose: readingAt asserts the `?heading=`
+  // slug, and the daemon strips punctuation when it builds one, so "Why?" would never
+  // match. Where the reader is parked is irrelevant to what this spec measures.
+  await readingAt(page, "Migration notes");
+
+  await openToc(page);
+  await field(page).fill("notes");
+  await expect(crumbs(page)).toHaveCount(2);
+
+  const measured = await crumbs(page).evaluateAll((els) =>
+    els.map((el) => {
+      const node = el.firstChild;
+      const text = node?.textContent ?? "";
+      // The first and last CHARACTERS' painted positions. Under a correct render the
+      // last character sits to the right of the first; a trailing neutral thrown to
+      // the paragraph's RTL edge inverts them, which no text assertion can see.
+      const at = (i: number) => {
+        const r = document.createRange();
+        r.setStart(node as Node, i);
+        r.setEnd(node as Node, i + 1);
+        return r.getBoundingClientRect().x;
+      };
+      const box = el.getBoundingClientRect();
+      return {
+        text,
+        firstCharX: at(0),
+        lastCharX: at(text.length - 1),
+        boxLeft: box.left,
+        boxRight: box.right,
+        // One line: nowrap means an overflowing header grows scrollWidth, never height.
+        overflows: el.scrollWidth > el.clientWidth,
+        contentHeight: el.clientHeight - 8, // padding-block 0.25rem each side
+        lineHeight: parseFloat(getComputedStyle(el).lineHeight),
+        fontStyle: getComputedStyle(el).fontStyle,
+      };
+    }),
+  );
+
+  const punctuated = measured.find((m) => m.text.endsWith("?"));
+  const deep = measured.find((m) => m.text.startsWith("Rollout plan › Phase"));
+  expect(punctuated, "the Why? group should render").toBeDefined();
+  expect(deep, "the deep group should render").toBeDefined();
+
+  // The `?` paints AFTER the first letter, not thrown to the far left.
+  expect(punctuated!.lastCharX).toBeGreaterThan(punctuated!.firstCharX);
+  // Short enough to sit whole; the deep one is not, and elides.
+  expect(punctuated!.overflows).toBe(false);
+  expect(deep!.overflows).toBe(true);
+
+  // …and elides from the START, which is the whole request. The direction to assert is
+  // which END survives: with start-elision the LAST character is painted inside the box
+  // and the FIRST is clipped away past its left edge. Ordinary end-elision inverts both,
+  // so this is what reds if the rtl technique is dropped — `overflows` alone would not.
+  expect(deep!.lastCharX).toBeLessThanOrEqual(deep!.boxRight);
+  expect(deep!.firstCharX).toBeLessThan(deep!.boxLeft);
+
+  for (const m of measured) {
+    // One line each: content box never exceeds a single line box.
+    expect(m.contentHeight).toBeLessThanOrEqual(Math.ceil(m.lineHeight) + 1);
+    expect(m.fontStyle).toBe("italic");
+  }
 });
 
 test("each breadcrumb header names its group in the accessibility tree", async ({
