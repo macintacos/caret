@@ -8,7 +8,7 @@
   // through these callbacks.
   import { untrack } from "svelte";
   import Icon from "@/components/Icon.svelte";
-  import { Input } from "$lib/components/ui/input/index.js";
+  import * as InputGroup from "$lib/components/ui/input-group/index.js";
 
   interface Props {
     /** The live query text, two-way bound so typing drives the parent's incremental
@@ -82,9 +82,14 @@
 </script>
 
 <div class="plan-search" class:closing role="search">
-  <div class="search-row">
-    <span class="search-slash mono" aria-hidden="true">/</span>
-    <Input
+  <InputGroup.Root class="search-group">
+    <!-- Decorative; the field's aria-label already names the search, so the whole
+         addon is hidden rather than just its glyph — an addon is a role="group", and
+         one holding nothing announceable is an empty group to a screen reader. -->
+    <InputGroup.Addon aria-hidden="true">
+      <span class="search-slash mono">/</span>
+    </InputGroup.Addon>
+    <InputGroup.Input
       bind:ref={field}
       bind:value={query}
       class="search-input"
@@ -96,33 +101,41 @@
       readonly={committed}
       onkeydown={onKeydown}
     />
-    <button
-      type="button"
-      class="search-step float-chip"
-      aria-label="Previous match"
-      disabled={!hasMatches}
-      onclick={onprev}
-    >
-      <span class="chev-up"><Icon name="chevron-down" size={14} /></span>
-    </button>
-    <button
-      type="button"
-      class="search-step float-chip"
-      aria-label="Next match"
-      disabled={!hasMatches}
-      onclick={onnext}
-    >
-      <Icon name="chevron-down" size={14} />
-    </button>
-    <button
-      type="button"
-      class="search-close float-chip"
-      aria-label="Close search"
-      onclick={onclose}
-    >
-      <Icon name="x" size={14} />
-    </button>
-  </div>
+    <!-- The addon ships a click-to-focus handler for the "click the icon, start
+         typing" case; a button row wants the opposite. Overriding it with a no-op
+         (restProps spreads last, so a caller's handler wins) keeps a click that lands
+         in the gaps between the chips from focusing the field — which on a committed
+         HUD would silently suppress the bare n / N, since any focused input reads as
+         an editing context to the shared dispatcher. -->
+    <InputGroup.Addon align="inline-end" class="search-actions" onclick={() => {}}>
+      <button
+        type="button"
+        class="search-step float-chip"
+        aria-label="Previous match"
+        disabled={!hasMatches}
+        onclick={onprev}
+      >
+        <span class="chev-up"><Icon name="chevron-down" size={14} /></span>
+      </button>
+      <button
+        type="button"
+        class="search-step float-chip"
+        aria-label="Next match"
+        disabled={!hasMatches}
+        onclick={onnext}
+      >
+        <Icon name="chevron-down" size={14} />
+      </button>
+      <button
+        type="button"
+        class="search-close float-chip"
+        aria-label="Close search"
+        onclick={onclose}
+      >
+        <Icon name="x" size={14} />
+      </button>
+    </InputGroup.Addon>
+  </InputGroup.Root>
   <span
     class="search-count metric"
     class:has-matches={hasMatches}
@@ -183,44 +196,63 @@
     }
   }
 
-  /* The controls row: the leading glyph, the field, then the step / close chips. */
-  .search-row {
-    display: inline-flex;
-    align-items: center;
+  /* The controls row is an InputGroup: the leading `/` addon, the field, then the
+     step / close chips in the trailing addon. The group carries the recessed field
+     surface, so the whole row reads as distinct from the pill — a step off
+     --paper-raised toward --paper-sunk, which recedes in both themes (a touch darker
+     on dark paper, a warm grey on light), with a hairline rule. The radius comes from
+     the group's own rounded-lg, which the bridge maps to --radius. It hugs its content
+     rather than taking the group's stock full width, since the pill is inline and
+     sized by this row. The overrides are reached via :global under the scoped root,
+     since the class is handed to <InputGroup.Root>.
+     The step / close chips ride that sunk ground rather than the pill's veil, so their
+     .float-chip fill — mixed off --paper-raised — sits a shade brighter than its
+     surface; that lift is what keeps them reading as controls inside the field. */
+  .plan-search :global(.search-group) {
+    height: 1.75rem;
+    width: auto;
+    border: 1px solid var(--rule);
+    background: var(--paper-sunk);
+  }
+  /* Dark paper's raised→sunk step is small, so drop the field to the base --paper
+     there for a clearer recess; light's --paper-sunk already reads distinct. */
+  :global(:root[data-theme="dark"]) .plan-search :global(.search-group) {
+    background: var(--paper);
+  }
+  /* Focus firms the hairline rather than drawing the group's stock ring: the pill is
+     a HUD floating over the plan, and a ring would halo it against the text. Keyed on
+     the slot the group's own rule keys on, so it cannot drift from it. */
+  .plan-search :global(.search-group:has([data-slot="input-group-control"]:focus-visible)) {
+    box-shadow: none;
+    border-color: var(--rule-strong);
+  }
+
+  /* The field is a bare control inside the group; only its measure, height and type
+     size are set here. Fixed width rather than the group's stock flex-1, so the pill
+     keeps one measure whatever is typed into it. */
+  .plan-search :global(.search-input) {
+    height: 100%;
+    width: 12rem;
+    flex: none;
+    font-size: var(--text-sm);
+  }
+
+  /* The addons keep their inline padding but drop the block padding, which is sized
+     for the stock 2rem group and would push the 1.5rem chips past this row. */
+  .plan-search :global([data-slot="input-group-addon"]) {
+    padding-block: 0;
     gap: 0.35rem;
+  }
+  /* A button row, so it drops the addon's text cursor along with the click-to-focus
+     the markup already overrides. */
+  .plan-search :global(.search-actions) {
+    cursor: default;
   }
 
   .search-slash {
     color: var(--ink-faint);
     font-size: var(--text-sm);
     user-select: none;
-  }
-
-  /* The shadcn Input given its own recessed field surface, so it reads as distinct
-     from the pill — a step off --paper-raised toward --paper-sunk, which recedes in
-     both themes (a touch darker on dark paper, a warm grey on light), with a hairline
-     rule and the chip radius. Its height/font come from the Input recipe; the
-     field-look overrides live here (reached via :global under the scoped root, since
-     the class is handed to <Input>). */
-  .plan-search :global(.search-input) {
-    height: 1.75rem;
-    width: 12rem;
-    border: 1px solid var(--rule);
-    background: var(--paper-sunk);
-    box-shadow: none;
-    border-radius: var(--radius);
-    padding: 0 0.5rem;
-    font-size: var(--text-sm);
-  }
-  /* Dark paper's raised→sunk step is small, so drop the field to the base --paper
-     there for a clearer recess; light's --paper-sunk already reads distinct. */
-  :global(:root[data-theme="dark"]) .plan-search :global(.search-input) {
-    background: var(--paper);
-  }
-  .plan-search :global(.search-input:focus-visible) {
-    outline: none;
-    box-shadow: none;
-    border-color: var(--rule-strong);
   }
 
   /* The counter sits BELOW the row, right-aligned to the pill's edge, so a changing

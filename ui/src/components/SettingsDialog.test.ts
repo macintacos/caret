@@ -163,13 +163,29 @@ describe("SettingsDialog search (EXC-845)", () => {
   // stays in test/e2e/settings.e2e.ts.
   function typeQuery(flush: () => void, q: string): void {
     const input = document.body.querySelector<HTMLInputElement>(
-      "input[aria-label='Search settings']",
+      "[data-slot='input-group-control'][aria-label='Search settings']",
     );
     if (!input) throw new Error("settings search input not found");
     input.value = q;
     input.dispatchEvent(new Event("input", { bubbles: true }));
     flush();
   }
+
+  // The `/` hint cap rides an input-group addon slot (EXC-1113), so the group's own
+  // layout reserves its track beside the control.
+  test("the search field composes input-group with the / cap in a trailing addon", async () => {
+    const { flush } = render(SettingsDialog, props());
+    await flushUntil(flush, mounted);
+    const group = document.body.querySelector("[data-slot='input-group']");
+    expect(group !== null).toBe(true);
+    expect(
+      group?.querySelector("[data-slot='input-group-control'][aria-label='Search settings']") !==
+        null,
+    ).toBe(true);
+    const addon = group?.querySelector("[data-slot='input-group-addon']");
+    expect(addon?.getAttribute("data-align")).toBe("inline-end");
+    expect(addon?.textContent?.trim()).toBe("/");
+  });
 
   test("filters nav rows and fields to the matches only", async () => {
     const { flush } = render(SettingsDialog, props());
