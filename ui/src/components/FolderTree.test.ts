@@ -89,6 +89,38 @@ test("says an empty directory is empty rather than showing a blank card", async 
   expect(target.textContent).toContain("This folder is empty.");
 });
 
+test("spins a decorative glyph beside the loading text", async () => {
+  // The spinner is the motion that says the card is fetching. It is aria-hidden
+  // because the "Loading…" beside it is already the accessible message — a
+  // Spinner left at its default role="status" + aria-label="Loading" would put
+  // the word into the accessibility tree twice on one line. Asserting through
+  // data-slot is also what proves the reduced-motion criterion: that attribute
+  // is the selector styles/base.css's global kill-switch clamps.
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  cap = logCapture(async (url) => {
+    if (!url.includes("/dir?")) return new Response(null, { status: 204 });
+    await gate;
+    return new Response(JSON.stringify({ path: "src/lib", entries: [], total: 0 }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  });
+  const { target } = render(FolderTree, props());
+  await until(() => state(target) === "loading");
+
+  const placeholder = target.querySelector('[data-folder-state="loading"]');
+  expect(placeholder?.textContent).toContain("Loading");
+  const spinner = placeholder?.querySelector('[data-slot="spinner"]');
+  expect(spinner).not.toBeNull();
+  expect(spinner?.getAttribute("aria-hidden")).toBe("true");
+
+  release();
+  await until(() => state(target) === "empty");
+});
+
 test("says so when the level cannot be read", async () => {
   // One 404 covers every refusal the route makes, so the card has one failure to
   // show rather than a taxonomy the reader cannot act on.

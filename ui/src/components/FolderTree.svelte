@@ -39,6 +39,7 @@
     type Levels,
   } from "$lib/folderTree.ts";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
+  import { Spinner } from "$lib/components/ui/spinner/index.js";
 
   interface Props {
     reviewId: string;
@@ -275,7 +276,16 @@
   {:else if view.kind === "error"}
     <div class="ft-message" data-folder-state="error">Couldn't read this folder.</div>
   {:else}
-    <div class="ft-message" data-folder-state="loading">Loading…</div>
+    <!-- The spinner is decorative: the "Loading…" beside it is already the
+         accessible message, and Spinner's own role="status" + aria-label would
+         otherwise say it a second time. Nothing here announces the wait — the
+         placeholder is inserted already populated, so a live region on it is
+         narrated unreliably (a region announces on content change), and the
+         card's arrival is itself the event the reader triggered. `size` rather
+         than a `size-*` class because Icon writes its dimensions inline. -->
+    <div class="ft-message" data-folder-state="loading">
+      <Spinner size={12} aria-hidden="true" />Loading…
+    </div>
   {/if}
 </div>
 
@@ -407,6 +417,9 @@
     --trees-border-radius-override: var(--radius);
   }
   .ft-message {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
     padding: 0.5rem 0.6rem;
     color: var(--ink-soft);
     font-size: var(--text-2xs);

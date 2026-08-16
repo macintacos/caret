@@ -32,6 +32,7 @@
   import { getFileExcerpt, HttpError } from "$lib/api.ts";
   import { type ChunkState, highlightChunk } from "$lib/diffview/highlight.ts";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
+  import { Spinner } from "$lib/components/ui/spinner/index.js";
   import { rowWindow } from "$lib/previewWindow.ts";
   import type { ThemeId } from "$lib/theme.ts";
 
@@ -654,7 +655,16 @@
   {:else if preview.kind === "error"}
     <div class="fp-message" data-preview-state="error">Couldn't load this file.</div>
   {:else}
-    <div class="fp-message" data-preview-state="loading">Loading…</div>
+    <!-- The spinner is decorative: the "Loading…" beside it is already the
+         accessible message, and Spinner's own role="status" + aria-label would
+         otherwise say it a second time. Nothing here announces the wait — the
+         placeholder is inserted already populated, so a live region on it is
+         narrated unreliably (a region announces on content change); the header's
+         line range is the panel's live region, and it speaks on arrival. `size`
+         rather than a `size-*` class because Icon writes its dimensions inline. -->
+    <div class="fp-message" data-preview-state="loading">
+      <Spinner size={12} aria-hidden="true" />Loading…
+    </div>
   {/if}
 </div>
 
@@ -904,6 +914,9 @@
     white-space: pre;
   }
   .fp-message {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
     padding: 0.5rem 0.6rem;
     color: var(--ink-soft);
     font-size: var(--text-2xs);
