@@ -11,6 +11,7 @@
   import check from "@/icons/check.svg?raw";
   import chevronDown from "@/icons/chevron-down.svg?raw";
   import chevronRight from "@/icons/chevron-right.svg?raw";
+  import chevronUp from "@/icons/chevron-up.svg?raw";
   import circleQuestionMark from "@/icons/circle-question-mark.svg?raw";
   import command from "@/icons/command.svg?raw";
   import copy from "@/icons/copy.svg?raw";
@@ -27,6 +28,7 @@
   import heading5 from "@/icons/heading-5.svg?raw";
   import heading6 from "@/icons/heading-6.svg?raw";
   import keyboard from "@/icons/keyboard.svg?raw";
+  import loaderCircle from "@/icons/loader-circle.svg?raw";
   import monitor from "@/icons/monitor.svg?raw";
   import moon from "@/icons/moon.svg?raw";
   import panelLeft from "@/icons/panel-left.svg?raw";
@@ -45,6 +47,7 @@
     check,
     "chevron-down": chevronDown,
     "chevron-right": chevronRight,
+    "chevron-up": chevronUp,
     "circle-question-mark": circleQuestionMark,
     command,
     copy,
@@ -61,6 +64,7 @@
     "heading-5": heading5,
     "heading-6": heading6,
     keyboard,
+    "loader-circle": loaderCircle,
     monitor,
     moon,
     "panel-left": panelLeft,
