@@ -74,9 +74,23 @@
     <p class="question">{question}</p>
     <div class="actions">
       <Popover.Close class="cancel">{cancelLabel}</Popover.Close>
-      <Popover.Close class="confirm" bind:ref={confirmEl} onclick={onConfirm}>
+      <!-- Deliberately NOT a Popover.Close, unlike Cancel. Popover.Close handles
+           Enter/Space itself and calls preventDefault, so the native click never
+           fires and an onclick on it is silently skipped on keyboard activation —
+           the bubble would close without confirming, which on a destructive guard
+           reads to the reviewer as a completed action. A plain button keeps Enter,
+           Space and the pointer on one path. -->
+      <button
+        class="confirm"
+        type="button"
+        bind:this={confirmEl}
+        onclick={() => {
+          open = false;
+          onConfirm();
+        }}
+      >
         {confirmLabel}
-      </Popover.Close>
+      </button>
     </div>
     <span class="tail" aria-hidden="true"></span>
   </Popover.Content>
