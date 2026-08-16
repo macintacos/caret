@@ -12,7 +12,7 @@ import "@ui/test-mount.ts";
 
 import { expect, test } from "bun:test";
 
-import { capture, flushUntil, render } from "@ui/test-mount.ts";
+import { flushUntil, render } from "@ui/test-mount.ts";
 import ConfirmPopoverFixture from "@/components/ConfirmPopover-fixture.svelte";
 
 const bubble = () => document.body.querySelector<HTMLElement>(".confirm-popover");
@@ -78,23 +78,33 @@ test("defaults the cancel label to Cancel", async () => {
   await close(flush);
 });
 
-test("confirming fires onConfirm and closes the bubble", async () => {
-  const confirmed = capture<true>();
-  const { target, flush } = render(ConfirmPopoverFixture, { onConfirm: () => confirmed.cb(true) });
+test("confirming fires onConfirm exactly once and closes the bubble", async () => {
+  // Counted rather than captured: `capture` keeps only the last value, so a double
+  // invocation — the failure that would delete a comment twice — is invisible to it.
+  let calls = 0;
+  const { target, flush } = render(ConfirmPopoverFixture, {
+    onConfirm: () => {
+      calls += 1;
+    },
+  });
   await open(target, flush);
   confirmBtn()?.click();
   await flushUntil(flush, () => bubble() === null);
-  expect(confirmed.last()).toBe(true);
+  expect(calls).toBe(1);
   expect(bubble()).toBeNull();
 });
 
 test("cancelling closes the bubble without firing onConfirm", async () => {
-  const confirmed = capture<true>();
-  const { target, flush } = render(ConfirmPopoverFixture, { onConfirm: () => confirmed.cb(true) });
+  let calls = 0;
+  const { target, flush } = render(ConfirmPopoverFixture, {
+    onConfirm: () => {
+      calls += 1;
+    },
+  });
   await open(target, flush);
   cancelBtn()?.click();
   await flushUntil(flush, () => bubble() === null);
   // The whole point of the guard: backing out is never a confirmation.
-  expect(confirmed.last()).toBeUndefined();
+  expect(calls).toBe(0);
   expect(bubble()).toBeNull();
 });

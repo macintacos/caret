@@ -98,12 +98,6 @@
       : `${scratches.length} unsent drafts below won't be sent unless you Save them.`,
   );
 
-  // Each row's Discard routes through a ConfirmPopover, which owns its own open
-  // state and anchors itself to the trigger — the dialog body scrolls, and bits-ui
-  // portals the bubble out and tracks the button through it. Only one is ever open:
-  // opening a second row's bubble is an outside interaction that dismisses the
-  // first. Mark-as-draft and Save are non-destructive and skip the bubble.
-
   function submit() {
     onSubmit(generalComment.trim());
   }
@@ -214,6 +208,13 @@
                         Mark as draft
                       </Button>
                     {/if}
+                    <!-- Discarding is the destructive one, so it routes through a
+                         confirmation; Mark as draft and Save do not. The bubble owns
+                         its own open state and anchors itself to the trigger — this
+                         dialog's body scrolls, and bits-ui tracks the button through
+                         it. Only one settles open: opening a second row's bubble is
+                         an outside interaction that dismisses the first, though the
+                         loser plays its exit before leaving the DOM. -->
                     <ConfirmPopover
                       question="Discard this comment?"
                       confirmLabel="Discard"
@@ -289,6 +290,13 @@
                     >
                       Save
                     </Button>
+                    <!-- Discarding is the destructive one, so it routes through a
+                         confirmation; Mark as draft and Save do not. The bubble owns
+                         its own open state and anchors itself to the trigger — this
+                         dialog's body scrolls, and bits-ui tracks the button through
+                         it. Only one settles open: opening a second row's bubble is
+                         an outside interaction that dismisses the first, though the
+                         loser plays its exit before leaving the DOM. -->
                     <ConfirmPopover
                       question="Discard this comment?"
                       confirmLabel="Discard"

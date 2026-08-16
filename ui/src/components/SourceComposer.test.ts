@@ -123,9 +123,10 @@ describe("SourceComposer submit/discard/keep", () => {
   test("an empty composer discards immediately without confirming", async () => {
     const { discardBtn, flush, discardCount } = mount();
     discardBtn!.click();
-    // Polled rather than read once, so a confirmation that merely arrives late
-    // would still red this rather than slipping through as "never appeared".
-    await flushUntil(flush, () => confirmPopover() !== null);
+    // Polled rather than read once, so a confirmation that merely arrives late would
+    // still red this rather than slipping through as "never appeared" — but with a
+    // short budget, since every run pays this one in full to prove a negative.
+    await flushUntil(flush, () => confirmPopover() !== null, 4);
     expect(discardCount()).toBe(1);
     expect(confirmPopover()).toBeNull();
   });

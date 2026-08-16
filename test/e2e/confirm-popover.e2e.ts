@@ -135,10 +135,9 @@ test("inside the scrolling dialog the bubble tracks its trigger and still takes 
   await expect(discardConfirm(page)).toBeVisible();
 
   // The gap between the trigger and the bubble hanging off it, across a scroll of
-  // the dialog body. The hand-rolled bubble this replaced could not follow a moving
-  // anchor and so CLOSED on any scroll; Floating UI's autoUpdate tracks it, which is
-  // the behaviour EXC-1110 chose — losing a destructive prompt to a stray wheel
-  // nudge is worse than letting it follow.
+  // the dialog body. Floating UI's autoUpdate keeps the bubble on its anchor rather
+  // than dismissing it, which is the call EXC-1110 made for a destructive prompt:
+  // losing one to a stray wheel nudge is worse than letting it follow.
   //
   // The scroll is deliberately small and the FIRST row is the trigger, so it stays
   // well inside the body: scrolling far enough to push the anchor out of view would
@@ -150,6 +149,17 @@ test("inside the scrolling dialog the bubble tracks its trigger and still takes 
     return Math.round(b.y - t.y);
   };
   const triggerY = async () => Math.round((await trigger.boundingBox())?.y ?? Number.NaN);
+  // Measure only once the enter animation has finished. The vendored Popover.Content
+  // animates in with `zoom-in-95`, and a scale transform moves the bounding box — so a
+  // gap read mid-flight is a few px off the resting one and the comparison below would
+  // fail on the animation rather than on the tracking. Awaiting the element's own
+  // animations is what bits-ui's presence layer waits on too; a fixed sleep is banned
+  // by doc/agents/browser-testing.md § Timing discipline.
+  const settle = () =>
+    discardConfirm(page).evaluate(async (el) => {
+      await Promise.all(el.getAnimations().map((a) => a.finished.catch(() => undefined)));
+    });
+  await settle();
   const before = await gap();
   const yBefore = await triggerY();
   const scrolled = await dialog.locator(".body").evaluate((el) => {
@@ -170,6 +180,10 @@ test("inside the scrolling dialog the bubble tracks its trigger and still takes 
   // floating wrapper and the content, so the confirm is live and the dialog beneath
   // treats the click as inside its own layer stack rather than as a dismiss.
   await discardConfirm(page).getByRole("button", { name: "Discard" }).click();
+  // The bubble must actually leave, not merely stop mattering: a portal stranded in
+  // the DOM after its close is the failure mode the "refine, don't replace" rule on
+  // the vendored animation exists to prevent, and it would otherwise pass here.
+  await expect(discardConfirm(page)).toHaveCount(0);
   await expect(dialog).toBeVisible();
   await expect(inlineRows(dialog)).toHaveCount(23);
 });
@@ -200,4 +214,91 @@ test("Escape closes the dialog's bubble without closing the dialog", async ({ da
   // The second Escape reaches the dialog, which is now the topmost layer.
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
+});
+
+// The three cases that finish the "Escape and outside-click cancel at ALL THREE call
+// sites" grid the issue's acceptance criteria set. They share one bits-ui code path
+// with the composer cases above, so the risk each carries is low — but a shared path
+// is an argument about the implementation, and the criterion is about the sites.
+
+test("Escape backs out of the card's delete without touching the comment", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  await daemon.putDraft(id, {
+    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain the cold cost" }],
+  });
+  await page.goto("/");
+  await planSurface(page);
+  await waitPastSafeModeGrace(page);
+
+  const trigger = page.locator("[data-annotation-card]").getByRole("button", { name: "Discard" });
+  await trigger.click();
+  await expect(discardConfirm(page)).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(discardConfirm(page)).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
+    .toBe(1);
+});
+
+test("a click outside the card's delete bubble keeps the comment", async ({ daemon, page }) => {
+  const id = await daemon.seed();
+  await daemon.putDraft(id, {
+    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain the cold cost" }],
+  });
+  await page.goto("/");
+  await planSurface(page);
+  await waitPastSafeModeGrace(page);
+
+  const card = page.locator("[data-annotation-card]");
+  await card.getByRole("button", { name: "Discard" }).click();
+  await expect(discardConfirm(page)).toBeVisible();
+
+  // A real pointerdown on the plan, placed BELOW the bubble's own box rather than on
+  // a named element — the same gesture plan-toc.e2e.ts uses, and for the same reason:
+  // the bubble hangs under its trigger and covers whatever is nominally "next to" it,
+  // so a click aimed at a named element can land on the dismiss layer instead of
+  // outside it. Unlike the composer, a card is not itself dismissed by an outside
+  // click, so the plan is a safe target: only the bubble goes away.
+  const bubbleBox = await discardConfirm(page).boundingBox();
+  const planBox = await (await planSurface(page)).boundingBox();
+  expect(bubbleBox).not.toBeNull();
+  expect(planBox).not.toBeNull();
+  await page.mouse.click(planBox!.x + planBox!.width / 2, bubbleBox!.y + bubbleBox!.height + 40);
+  await expect(discardConfirm(page)).toHaveCount(0);
+  await expect
+    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
+    .toBe(1);
+});
+
+test("a click outside the dialog's discard bubble keeps the comment and the dialog", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  await daemon.putDraft(id, {
+    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain the cold cost" }],
+  });
+  await page.goto("/");
+  await planSurface(page);
+  await waitPastSafeModeGrace(page);
+
+  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
+  await page.getByRole("button", { name: "Request changes" }).click();
+  await expect(dialog).toBeVisible();
+
+  await inlineRows(dialog).getByRole("button", { name: "Discard", exact: true }).click();
+  await expect(discardConfirm(page)).toBeVisible();
+
+  // Inside the dialog but outside the bubble — the dialog's own title, which is
+  // inert. The bubble is the topmost dismissible layer, so it takes the dismissal
+  // and the dialog beneath it is untouched.
+  await dialog.getByRole("heading", { name: "Send the plan back for revision" }).click();
+  await expect(discardConfirm(page)).toHaveCount(0);
+  await expect(dialog).toBeVisible();
+  await expect(inlineRows(dialog)).toHaveCount(1);
 });

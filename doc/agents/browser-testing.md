@@ -322,8 +322,8 @@ so the honest move is to note it, leave the class selector, and file it.
   `PLAN_SURFACE` (`test/e2e/support/source-view.ts`) rather than writing a fresh
   `.diff-plan` literal per spec.
 - **`getByRole("dialog")` does not match `role="alertdialog"`.** That is why
-  `ConfirmPopover` (`ui/src/components/ConfirmPopover.svelte:147-148`) went so long
-  queried by class despite publishing both a role and an `aria-label`. Ask for
+  `ConfirmPopover` (`ui/src/components/ConfirmPopover.svelte:59-60`) went so long queried
+  by class despite publishing both a role and an `aria-label`. Ask for
   `getByRole("alertdialog", { name })`.
 - **A selector *production* code queries is a contract, not a styling hook.**
   `ui/src/components/CommentNavigator.svelte` reads `[data-nav-row]` to build its keyboard

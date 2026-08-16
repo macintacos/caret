@@ -58,9 +58,6 @@
   // Editing reuses SourceComposer (mode="edit"); implies expanded.
   let editing = $state(false);
 
-  // Deleting a submitted comment is irreversible, so it routes through a confirm
-  // (EXC-749) instead of firing on the first click. The bubble owns its own open
-  // state and anchors itself to the trigger (see ConfirmPopover).
 
   const label = $derived(
     annotation.startLine === annotation.endLine
@@ -167,6 +164,8 @@
       </Button>
       <div class="actions">
         <Button variant="ghost" size="sm" class="edit" onclick={startEdit}>Edit</Button>
+        <!-- Deleting a submitted comment is irreversible, so it routes through a
+             confirmation (EXC-749) instead of firing on the first click. -->
         <ConfirmPopover
           question="Discard this comment?"
           confirmLabel="Discard"
@@ -341,12 +340,13 @@
     align-items: center;
     gap: 0.1rem;
   }
-  /* Discard is a Popover.Trigger now, and the trigger's own data-slot lands LAST in
-     the Button's attribute spread — so it reads `popover-trigger`, not `button`, and
-     a selector keyed on the slot value stops matching (it silently dropped the hover
-     wobble below). `button.danger` is data-slot-agnostic, the same shape
-     atoms.css's `button.float-chip` uses for exactly this reason. */
-  :global([data-slot="button"].edit),
+  /* Keyed on the ELEMENT, not on `data-slot`. A Button's own `data-slot="button"` is
+     written before its `{...restProps}` spread, so when that Button is also a bits-ui
+     trigger the trigger's slot value wins and any `[data-slot="button"].x` rule stops
+     matching — silently, since nothing about the markup looks different. Discard is a
+     Popover.Trigger; Edit takes the same form so it cannot break the day it grows a
+     menu. atoms.css's `button.float-chip` is the precedent. */
+  :global(button.edit),
   :global(button.danger) {
     height: auto;
     padding: 0.2rem 0.45rem;

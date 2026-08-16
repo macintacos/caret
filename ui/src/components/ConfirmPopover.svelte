@@ -10,15 +10,13 @@
   // edge, Escape, and outside-click. Neither of those dismissals calls onConfirm —
   // backing out of a destructive prompt can only ever cancel.
   //
-  // Floating UI's autoUpdate TRACKS the anchor through a scroll, where the previous
-  // hand-rolled version closed on any scroll or resize. That was a limitation, not a
-  // preference: a `fixed` bubble measured once could not follow a moving anchor, so
-  // it backed out rather than drift. Tracking is the better answer for a prompt the
-  // reviewer just opened — dismissing it because they nudged the wheel throws away
-  // the intent they expressed and is behaviour no other caret popover has.
+  // A scroll TRACKS the anchor (Floating UI's autoUpdate) rather than dismissing the
+  // bubble, which is the deliberate call for a destructive prompt: dropping one
+  // because the reviewer nudged the wheel throws away the intent they just expressed,
+  // and is behaviour no other caret popover has.
   //
-  // The trigger arrives as a snippet, so the popover owns its own open state and the
-  // hosts no longer carry a `confirming` flag, a captured anchor element, or a
+  // The trigger arrives as a snippet, so the popover owns its own open state — the
+  // hosts carry no `confirming` flag, no captured anchor element, and no
   // position:relative wrapper. It is also what makes focus restoration free: bits-ui
   // tracks the trigger node and hands focus back to it on dismiss.
   import type { Snippet } from "svelte";
@@ -100,12 +98,24 @@
   /* The bubble renders outside this component's style scope — bits-ui teleports it
      to the body — so every rule here is :global and anchored on .confirm-popover,
      the same shape PlanToc uses for .plan-toc-panel. Being unlayered, they also beat
-     the vendored Popover.Content's own Tailwind utilities, which is what lets the
-     panel drop w-72 and the popover surface for caret's own.
+     the vendored Popover.Content's own Tailwind utilities, which is what lets it drop
+     w-72 and swap the vendored popover surface for caret's own.
 
      It sits over the same --paper-raised surface as the composer/card, so --pop-bg
      takes the chip fill — the same step lighter the topbar's chips ride — to read as
-     its own floating layer rather than melting into what it covers. */
+     its own floating layer rather than melting into what it covers.
+
+     The --tw-* pair below retimes the vendored animation rather than replacing it —
+     the EXC-1107 lesson PlanToc.svelte records at length and svelte-rules.md § Motion
+     principles names as the worked example; defer to those two rather than restating
+     the argument a third time. What differs here is the tier: micro, taken
+     SYMMETRICALLY — one rule, no closed-state arm, so the bubble also leaves on
+     --ease-out. A popover this small pops rather than rises, and at that size a
+     departure has no arrival to be the inverse of (tokens.css § Motion, on
+     --dur-micro being the same time in both directions); styles/base.css's tooltip is
+     the same call for the same reason. Taking --dur-exit would make this surface
+     leave SLOWER than it arrives. Both of base.css's default arms sit at specificity
+     zero, so this single rule governs open and closed alike. */
   :global(.confirm-popover) {
     --pop-bg: var(--chip);
     /* Pin the sans stack explicitly: the bubble is portalled to the body — outside
@@ -122,24 +132,8 @@
     border: 1px solid var(--rule-strong);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
-    /* The arrival and departure, REFINED rather than replaced (the EXC-1107 lesson
-       PlanToc records at length): Popover.Content already carries tw-animate-css's
-       animate-in / animate-out keyed on data-[state=…], and bits-ui's portal
-       presence waits on the animationend those keyframes fire — so an `animation`
-       shorthand of caret's own would replace them and strand the bubble in the DOM
-       on close. Only the two custom properties the utility reads are overridden, so
-       the keyframes and the animationend survive untouched.
-       The micro tier, not the surface tier the 20rem ToC panel takes: a popover this
-       small pops rather than rises, which is the tier its own motion has always had.
-       Reduced motion is not handled here — the single global rule in app.css reaches
-       it through the [data-slot] anchor and collapses the duration rather than
-       removing the keyframes, which is what keeps the animationend firing. */
     --tw-duration: var(--dur-micro);
     --tw-ease: var(--ease-out);
-  }
-  :global(.confirm-popover[data-state="closed"]) {
-    --tw-duration: var(--dur-exit);
-    --tw-ease: var(--ease-in);
   }
   :global(.confirm-popover .question) {
     margin: 0 0 0.5rem;
@@ -185,9 +179,13 @@
   /* The tail that makes it read as popping *out of* the button: a rotated square
      wearing the bubble's own fill + border, showing only the two sides that face the
      trigger. It sits at the aligned edge, matching align="start".
-     Floating UI can shift the panel horizontally off a viewport edge, which decouples
-     the tail from the trigger's centre — no worse than before, where the whole tail
-     was dropped the moment the bubble was clamped. */
+     Known ceiling: Floating UI can shift the panel horizontally to clear a viewport
+     edge, and the tail does not follow that shift, so against an edge it stops
+     pointing exactly at the trigger's centre. Accepted rather than fixed — a tail
+     that tracks the shift means bits-ui's Popover.Arrow, which the shadcn registry's
+     popover tree does not ship, so vendoring one is precisely the local addition a
+     registry re-sync drops with no comment to catch it (shadcn-rules.md § Edits a
+     re-sync will silently undo). */
   :global(.confirm-popover .tail) {
     position: absolute;
     left: 1rem;
