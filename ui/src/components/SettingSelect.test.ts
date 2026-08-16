@@ -21,6 +21,7 @@
 import "@ui/test-mount.ts";
 
 import { describe, expect, test } from "bun:test";
+import { join } from "node:path";
 
 import { capture, flushUntil, render } from "@ui/test-mount.ts";
 import SettingSelect from "@/components/SettingSelect.svelte";
@@ -153,6 +154,36 @@ describe("SettingSelect panel", () => {
     expect(document.body.querySelectorAll("[data-setting-option='a'] .chip-dot").length).toBe(3);
     expect(document.body.querySelectorAll("[data-setting-option='b'] .chip-dot").length).toBe(0);
     await close(flush);
+  });
+});
+
+// Asserted against the source, not a computed style: happy-dom applies no stylesheet, so
+// a mount cannot see which rule won. The same route shadcn-select.test.ts takes for
+// select-content's animation keys, and for the same reason — the DOM cannot tell the two
+// orderings apart, while the reader can.
+const componentSource = await Bun.file(join(import.meta.dir, "SettingSelect.svelte")).text();
+
+describe("SettingSelect row states", () => {
+  const source = componentSource;
+  const at = (selector: string) => source.indexOf(selector);
+
+  test("selection wins the fill over the highlight, not the other way round", () => {
+    // bits-ui parks the cursor on the SELECTED row when the panel opens, so a
+    // highlight-wins order (which is what the DropdownMenu this replaced used, safely,
+    // because it highlighted nothing until you moved) would leave the panel resting with
+    // no amber in it — losing "which palette is current" exactly when it is read.
+    const highlighted = at(".setting-item[data-highlighted])");
+    const selected = at(".setting-item[data-selected])");
+    expect(highlighted).toBeGreaterThan(-1);
+    expect(selected).toBeGreaterThan(highlighted);
+  });
+
+  test("the row carrying both still shows the keyboard cursor", () => {
+    // With selection winning the fill, [data-highlighted] would otherwise be invisible on
+    // that one row — and with no real focus anywhere (bits-ui drives
+    // aria-activedescendant), that attribute IS this listbox's keyboard cursor.
+    expect(source).toContain(".setting-item[data-selected][data-highlighted])");
+    expect(source).toMatch(/\[data-selected\]\[data-highlighted\]\)\s*\{\s*box-shadow:/);
   });
 });
 

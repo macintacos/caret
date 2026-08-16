@@ -227,7 +227,16 @@
      own `pr-8` reserves. The highlight (pointer or keyboard roving) lifts to the topbar's
      --chip-hover so it matches every other neutral control, while the SELECTED row
      carries an amber wash — the same "amber marks the selection" language the diff view
-     and theme picker use. Highlight is declared after so it wins when a row is both. */
+     and theme picker use.
+     SELECTION WINS THE FILL, which is the opposite of the DropdownMenu this replaced.
+     There, nothing was highlighted until you moved, so a highlight-wins rule only ever
+     greyed the amber row under the cursor. A listbox has no such state: bits-ui parks the
+     cursor on the SELECTED row as the panel opens (setInitialHighlightedNode), so
+     highlight-wins would mean the panel resting with no amber in it at all — losing the
+     one signal that says which palette or layout is current, exactly when it is read.
+     The highlight then needs its own mark on that row, because with no real focus to
+     draw a ring around, [data-highlighted] IS this listbox's keyboard cursor: an inset
+     accent ring, so both signals stay legible on the row that carries both. */
   :global(.setting-menu) {
     /* select-content ships no padding of its own, where dropdown-menu-content ships p-1 —
        without this the rows sit flush against the panel edge. */
@@ -236,13 +245,16 @@
   :global(.setting-menu .setting-item) {
     color: var(--ink-soft);
   }
+  :global(.setting-menu .setting-item[data-highlighted]) {
+    background: var(--chip-hover);
+    color: var(--ink);
+  }
   :global(.setting-menu .setting-item[data-selected]) {
     background: var(--accent-wash);
     color: var(--ink);
   }
-  :global(.setting-menu .setting-item[data-highlighted]) {
-    background: var(--chip-hover);
-    color: var(--ink);
+  :global(.setting-menu .setting-item[data-selected][data-highlighted]) {
+    box-shadow: inset 0 0 0 1px var(--accent);
   }
   :global(.setting-menu .name) {
     flex: 1 1 auto;
