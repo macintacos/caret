@@ -680,8 +680,8 @@ test("the flat filter drives the list, not the command's own filter engine", asy
   // Exactly the three matches, in document order, each naming its parent on its own
   // row. Both halves are falsifiable here: the command's engine scores rows on their
   // `value` — the source line — so with it on every row would score 0 and the panel
-  // would empty; and the nesting filter would answer this query with five rows,
-  // "Alpha" and "Delta" among them as dimmed ancestors.
+  // would empty; and the ToC's grouped filter would answer this query with breadcrumb
+  // headers naming "Alpha" and "Delta" above their matches instead.
   await expect(results(page)).toHaveText(["Bravo Alpha", "Echo Delta", "Foxtrot Alpha"]);
 });
 

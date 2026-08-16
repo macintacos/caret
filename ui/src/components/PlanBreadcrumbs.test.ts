@@ -520,11 +520,11 @@ describe("PlanBreadcrumbs filter", () => {
     await closeFilter(flush);
   });
 
-  // The filter stays FLAT — its divergence from the ToC popup's nesting-preserving
-  // filter is deliberate. A match brings its enclosing heading's name along on the
-  // row rather than a dimmed ancestor row above it, and the rows keep document
-  // order, which the command's own score-sorting filter engine would shuffle.
-  test("flattens rather than nesting, and leaves the rows in document order", async () => {
+  // The filter stays FLAT — its divergence from the ToC popup's grouped filter is
+  // deliberate. A match brings its enclosing heading's name along on the row
+  // rather than sitting under a shared breadcrumb header, and the rows keep
+  // document order, which the command's own score-sorting engine would shuffle.
+  test("flattens rather than grouping, and leaves the rows in document order", async () => {
     const { target, flush } = render(PlanBreadcrumbs, {
       headings: HEADINGS,
       activeLine: 9,
@@ -536,7 +536,8 @@ describe("PlanBreadcrumbs filter", () => {
     expect(labels()).toEqual(["Overview", "Details", "Verification"]);
 
     // Flat: a match arrives alone, with its enclosing heading riding ON its row.
-    // The ToC popup's nesting filter would answer this query with three rows.
+    // The ToC popup's grouped filter answers this query with a breadcrumb header
+    // above the match instead.
     await typeQuery("details", flush, () => options().length === 1);
     expect(labels()).toEqual(["Details"]);
     expect(options()[0]?.querySelector(".crumb-parent")?.textContent?.trim()).toBe("Approach");

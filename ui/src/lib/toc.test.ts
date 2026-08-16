@@ -120,6 +120,16 @@ describe("filterHeadings", () => {
   test("returns an empty list when nothing matches", () => {
     expect(filterHeadings(headings, "zzz")).toEqual([]);
   });
+
+  test("hands back the caller's own heading objects, never copies", () => {
+    // Load-bearing, and asserted with `toBe` because every other assertion here
+    // uses `toEqual` and would pass on a mapped copy. `groupedHeadingMatches`
+    // (headingTrail.ts) decides group membership with a Set over this result, so
+    // a copy introduced anywhere in this path makes every query return nothing —
+    // silently, since the shapes still match.
+    expect(filterHeadings(headings, "")[0]).toBe(headings[0]);
+    expect(filterHeadings(headings, "app")[0]).toBe(headings[1]);
+  });
 });
 
 describe("header slugs", () => {

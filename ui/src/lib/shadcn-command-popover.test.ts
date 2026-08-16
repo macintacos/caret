@@ -116,3 +116,29 @@ test("the icon swap renders vendored SVGs, not the dropped @lucide/svelte compon
   expect(indicators.length).toBe(2);
   await close(target, flush);
 });
+
+// The second caret addition to the vendored command tree, alongside the Viewport
+// above (EXC-1103). The registry's command-group hardcodes its heading's classes and
+// offers no override, so a caret surface wanting its own label vocabulary — the ToC
+// popup dresses the breadcrumb header in the shared `.eyebrow` atom — has nowhere to
+// put one. The guard belongs HERE rather than only on that surface: it is the
+// PRIMITIVE a re-sync reverts, and a guard living on the one consumer disappears the
+// day that consumer restyles, leaving the vendored edit to rot silently — which is
+// the whole failure mode doc/agents/shadcn-rules.md § Edits a re-sync will silently
+// undo exists to prevent.
+//
+// Asserted on `data-command-group-heading`, which is what bits-ui 2.x actually
+// stamps. The `**:[[cmdk-group-heading]]:…` Tailwind variants the registry source
+// still carries target a cmdk-era attribute that appears nowhere in this tree.
+test("Command.Group forwards headingClass onto the heading element", async () => {
+  const { target, flush } = render(CommandPopoverFixture, { open: true });
+  await flushUntil(flush, () => popoverContent() !== null);
+
+  const heading = document.body.querySelector("[data-command-group-heading]");
+  expect(heading?.textContent?.trim()).toBe("Sections");
+  expect(heading?.classList.contains("fixture-eyebrow")).toBe(true);
+  // Merged with the stock classes rather than replacing them, so a re-sync that
+  // drops the prop degrades the look instead of breaking the group.
+  expect(heading?.classList.contains("text-xs")).toBe(true);
+  await close(target, flush);
+});

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  type FilteredHeadingNode,
-  filteredHeadingTree,
+  groupedHeadingMatches,
+  type HeadingGroup,
   headingMatches,
   headingTrail,
   headingTree,
@@ -239,90 +239,148 @@ describe("headingMatches", () => {
   });
 });
 
-// The filter the ToC popup renders (EXC-1094): the same matches `headingMatches`
-// finds, but left in the hierarchy, with the unmatched headings above them kept
-// as the context that places them.
-describe("filteredHeadingTree", () => {
-  // A filtered tree written as nested text: a match is its own text, a heading
-  // kept only to place a match below it is parenthesised — what the popup dims —
-  // and children follow in brackets. Fixtures therefore keep brackets, parens,
-  // and commas out of their heading text: rendered here they are ambiguous, and
-  // the mismatch reads as a bug in `filteredHeadingTree` rather than in this
+// The filter the ToC popup renders (EXC-1103): the same matches `headingMatches`
+// finds, gathered into runs that share an ancestor path, so the popup can spend
+// one breadcrumb header on a path however many matches sit under it.
+describe("groupedHeadingMatches", () => {
+  // A group written as one line: the trail joined by ` › `, then its matches in
+  // brackets. A group with no trail opens on the bracket, which is what the popup
+  // renders headerless. Fixtures therefore keep brackets, commas, and the
+  // separator out of their heading text — rendered here they are ambiguous, and
+  // the mismatch reads as a bug in `groupedHeadingMatches` rather than in this
   // helper.
-  const shape = (nodes: FilteredHeadingNode[]): string[] =>
-    nodes.map((node) => {
-      const text = node.matched ? node.heading.text : `(${node.heading.text})`;
-      return node.children.length === 0 ? text : `${text} [${shape(node.children).join(", ")}]`;
+  const shape = (groups: HeadingGroup[]): string[] =>
+    groups.map((group) => {
+      const trail = group.trail.map((h) => h.text).join(" › ");
+      return `${trail}[${group.matches.map((m) => m.text).join(", ")}]`;
     });
 
-  test("keeps a match at its own depth, under its unmatched ancestors as context", () => {
+  test("collapses a match's whole ancestor chain into one trail, root-most first", () => {
     const headings = extractHeadings("# A\n\n## B\n\n### Target\n");
-    expect(shape(filteredHeadingTree(headings, "target"))).toEqual(["(A) [(B) [Target]]"]);
+    expect(shape(groupedHeadingMatches(headings, "target"))).toEqual(["A › B[Target]"]);
+  });
+
+  test("gathers two matching siblings under a single shared trail", () => {
+    // AC3, and the reason the model groups at all: one header, two rows.
+    const headings = extractHeadings("# A\n\n## Target one\n\n## Target two\n");
+    expect(shape(groupedHeadingMatches(headings, "target"))).toEqual(["A[Target one, Target two]"]);
+  });
+
+  test("gives a match with no ancestors an empty trail", () => {
+    // What the popup renders with no header above it at all.
+    const headings = extractHeadings("# Target\n");
+    expect(shape(groupedHeadingMatches(headings, "target"))).toEqual(["[Target]"]);
+  });
+
+  test("splits matches under different paths into their own groups", () => {
+    const headings = extractHeadings(
+      "# P\n\n## Setup\n\n### Setup notes\n\n## Roll\n\n### Roll notes\n",
+    );
+    expect(shape(groupedHeadingMatches(headings, "notes"))).toEqual([
+      "P › Setup[Setup notes]",
+      "P › Roll[Roll notes]",
+    ]);
+  });
+
+  test("keeps two identically titled sections as separate groups", () => {
+    // Keyed on the ancestor chain's position, not on its text: a text key would
+    // merge these two "Details" sections into one header holding both matches.
+    const headings = extractHeadings(
+      "# A\n\n## Details\n\n### Target one\n\n# B\n\n## Details\n\n### Target two\n",
+    );
+    expect(groupedHeadingMatches(headings, "target").length).toBe(2);
   });
 
   test("does not pull a match's non-matching descendants in with it", () => {
     // The whole point of filtering: matching "Setup" must not re-admit the
     // section under it, which is what makes a filtered list shorter than the tree.
     const headings = extractHeadings("# Setup\n\n## Details\n");
-    expect(shape(filteredHeadingTree(headings, "setup"))).toEqual(["Setup"]);
+    expect(shape(groupedHeadingMatches(headings, "setup"))).toEqual(["[Setup]"]);
   });
 
-  test("returns a heading that both matches and encloses a match as a match", () => {
+  test("groups a heading that both matches and encloses a match by its own path", () => {
+    // "Setup" is a match at the root and the parent of another, so the two sit in
+    // different groups rather than one nesting inside the other.
     const headings = extractHeadings("# Setup\n\n## Setup notes\n");
-    expect(shape(filteredHeadingTree(headings, "setup"))).toEqual(["Setup [Setup notes]"]);
-  });
-
-  test("dims an unmatched heading sitting between two matches", () => {
-    // The shape a real plan produces most: `matched` and the kept-set disagree
-    // at an interior node, which every other fixture here decides at a leaf or
-    // at the root.
-    const headings = extractHeadings("# Setup\n\n## Middle\n\n### Setup deep\n");
-    expect(shape(filteredHeadingTree(headings, "setup"))).toEqual([
-      "Setup [(Middle) [Setup deep]]",
+    expect(shape(groupedHeadingMatches(headings, "setup"))).toEqual([
+      "[Setup]",
+      "Setup[Setup notes]",
     ]);
   });
 
-  test("leaves a context node's non-matching siblings out rather than dimming them", () => {
-    // "## B" neither matches nor encloses a match, so it is absent — dimming it
-    // would make the filtered list as long as the tree.
-    const headings = extractHeadings("# A\n\n## B\n\n## Target\n");
-    expect(shape(filteredHeadingTree(headings, "target"))).toEqual(["(A) [Target]"]);
+  test("carries an unmatched heading sitting between two matches in the trail", () => {
+    // The shape a real plan produces most: the middle heading places the deep
+    // match without being a match itself, so it survives only as a trail segment.
+    const headings = extractHeadings("# Setup\n\n## Middle\n\n### Setup deep\n");
+    expect(shape(groupedHeadingMatches(headings, "setup"))).toEqual([
+      "[Setup]",
+      "Setup › Middle[Setup deep]",
+    ]);
   });
 
-  test("keeps every branch that holds a match, in document order", () => {
+  test("leaves a non-matching heading that encloses no match out of every trail", () => {
+    const headings = extractHeadings("# A\n\n## B\n\n## Target\n");
+    expect(shape(groupedHeadingMatches(headings, "target"))).toEqual(["A[Target]"]);
+  });
+
+  test("orders groups, and the matches inside them, in document order", () => {
     const headings = extractHeadings("# A\n\n## Target\n\n# B\n\n## C\n\n# Target too\n");
-    expect(shape(filteredHeadingTree(headings, "target"))).toEqual(["(A) [Target]", "Target too"]);
+    expect(shape(groupedHeadingMatches(headings, "target"))).toEqual(["A[Target]", "[Target too]"]);
+  });
+
+  test("gathers matches under one path even when other matches fall between them", () => {
+    // What makes a group a SET rather than a run, and the model's most surprising
+    // property: a query hitting both a section's title and its children puts both
+    // titles in the single root group, so the rendered rows stop being one
+    // document-ordered sequence — "B x" is drawn above "A x"'s own subsection,
+    // and "A x" appears twice, once as a row and once as a header. One header per
+    // path is what buys that. The common shape rather than a corner: any query
+    // matching a heading and something beneath it lands here.
+    const headings = extractHeadings("# A x\n\n## A deep x\n\n# B x\n\n## B deep x\n");
+    expect(shape(groupedHeadingMatches(headings, "x"))).toEqual([
+      "[A x, B x]",
+      "A x[A deep x]",
+      "B x[B deep x]",
+    ]);
   });
 
   test("parents a skipped level under the nearest shallower heading", () => {
-    // "### Target" has no "##" above it, so its context is "# A" — the same
-    // parent walk `headingTree` and `headingTrail` climb.
+    // "### Target" has no "##" above it, so its trail is "# A" — the same parent
+    // walk `headingTree` and `headingTrail` climb.
     const headings = extractHeadings("# A\n\n### Target\n");
-    expect(shape(filteredHeadingTree(headings, "target"))).toEqual(["(A) [Target]"]);
+    expect(shape(groupedHeadingMatches(headings, "target"))).toEqual(["A[Target]"]);
   });
 
-  test("returns the whole tree, every node matched, for an empty query", () => {
+  test("groups every heading by its own path for an empty query", () => {
     const headings = extractHeadings("# A\n\n## B\n\n### C\n");
-    expect(shape(filteredHeadingTree(headings, ""))).toEqual(["A [B [C]]"]);
+    expect(shape(groupedHeadingMatches(headings, ""))).toEqual(["[A]", "A[B]", "A › B[C]"]);
   });
 
-  test("returns the whole tree, every node matched, for a whitespace-only query", () => {
-    // `filterHeadings` trims before matching; the popup's search field must not
-    // empty the list on a stray space.
+  test("treats a whitespace-only query as empty, as filterHeadings does", () => {
     const headings = extractHeadings("# A\n\n## B\n");
-    expect(shape(filteredHeadingTree(headings, "   "))).toEqual(["A [B]"]);
+    expect(shape(groupedHeadingMatches(headings, "   "))).toEqual(["[A]", "A[B]"]);
   });
 
   test("matches case-insensitively on a substring, as the breadcrumbs filter does", () => {
     const headings = extractHeadings("# Verification\n");
-    expect(shape(filteredHeadingTree(headings, "RIFICA"))).toEqual(["Verification"]);
+    expect(shape(groupedHeadingMatches(headings, "RIFICA"))).toEqual(["[Verification]"]);
+  });
+
+  test("returns the heading objects it was handed, not copies", () => {
+    // The popup keys rows on identity-derived values and EXC-1104 will mark
+    // character offsets on these very objects; a mapped copy anywhere in the path
+    // would leave both reading a different array than the caller holds.
+    const headings = extractHeadings("# A\n\n## Target\n");
+    const group = groupedHeadingMatches(headings, "target")[0];
+    expect(group?.matches[0]).toBe(headings[1]);
+    expect(group?.trail[0]).toBe(headings[0]);
   });
 
   test("returns nothing when no heading matches", () => {
-    expect(filteredHeadingTree(extractHeadings("# A\n\n## B\n"), "zzz")).toEqual([]);
+    expect(groupedHeadingMatches(extractHeadings("# A\n\n## B\n"), "zzz")).toEqual([]);
   });
 
   test("returns nothing for a plan with no headings", () => {
-    expect(filteredHeadingTree([], "")).toEqual([]);
+    expect(groupedHeadingMatches([], "")).toEqual([]);
   });
 });

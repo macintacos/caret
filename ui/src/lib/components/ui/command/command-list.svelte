@@ -29,8 +29,9 @@
 	     it has to be a descendant of this List and nowhere else.
 	     `role="none"` is the other half. The List itself carries `role="listbox"`, and a
 	     listbox may own options and groups but not a generic element — an untyped wrapper
-	     here would take ownership of the rows away from the listbox, which is the exact
-	     defect PlanToc.svelte's `aria-hidden` context rows already avoid. The role
+	     here would take ownership of the rows away from the listbox. That same constraint
+	     is why PlanToc.svelte spends a `Command.Group` on its breadcrumb headers rather
+	     than emitting them as loose text the listbox may not own. The role
 	     survives `mergeProps(restProps, state.props)` because `CommandViewportState.props`
 	     defines no `role` of its own to override it with.
 	     Two things to know before reading those attributes back. bits-ui's own List wraps
