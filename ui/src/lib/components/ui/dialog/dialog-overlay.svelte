@@ -13,14 +13,19 @@
 	bind:ref
 	data-slot="dialog-overlay"
 	class={cn(
-		// Position + surface
-		"fixed inset-0 isolate z-50 bg-black/10 supports-backdrop-filter:backdrop-blur-xs",
+		// Position only. No scrim or blur utility here: stock ships `bg-black/50`, and
+		// caret declares one scrim and one blur for BOTH modal overlays in
+		// styles/shadcn-bridge.css § Modal choreography (EXC-892), so a dismissible
+		// pane and a decision guard dim the app the same way.
+		"fixed inset-0 isolate z-50",
 		// Open / close animation. Keyed on data-[state=…], the attribute bits-ui
 		// actually emits — a bare `data-open:` compiles to an [data-open] presence
 		// selector that nothing ever sets, so the whole set is dead (EXC-891). The
 		// alert-dialog copies already spell it this way; a `shadcn add --overwrite`
 		// would restore the broken form.
-		"data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 duration-100",
+		// No duration utility either, and for the same reason: the backdrop rides the
+		// panel's clock so the two read as one gesture.
+		"data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
 		className
 	)}
 	{...restProps}

@@ -3,7 +3,10 @@
    …), bridged to caret's THEMES tokens so copied components paint on caret's
    palette and retint in lockstep with theme switches — the same single-source
    pattern the .diffview → --diffs-* rule uses. shadcn-bridge.test.ts pins this
-   contract, mirroring diffview/css-bridge.test.ts.
+   contract, mirroring diffview/css-bridge.test.ts. The file carries a second concern
+   below the token map: the modal choreography (motion + backdrop) the copied Dialog
+   and AlertDialog surfaces wear, which lives here for the same single-source reason
+   and is pinned by motion.test.ts.
 
    ONE flat block, no [data-theme="dark"] override: caret's color tokens are
    written inline on :root by paintTheme() (lib/theme.ts) for the active scheme,
@@ -123,4 +126,63 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+}
+
+/* ── Modal choreography (EXC-892) ─────────────────────────────────────────────
+   One arrival and one departure, worn by both bits-ui modal primitives: Dialog
+   (Settings, Request changes, Unsent comments, Shortcuts, Onboarding) and
+   AlertDialog (the Approve / Reject guards). It is written HERE, keyed on the
+   data-slot every copied component stamps, rather than in the four vendored files
+   the surfaces live in — one choreography four files each spell for themselves is
+   four chances to drift, and a `shadcn add --overwrite` rewrites all four. These
+   rules are unlayered while the utilities they supersede compile into Tailwind's
+   utilities layer, so a re-synced `duration-100` / `bg-black/50` loses to this block.
+
+   TIMING — refined, not replaced: the two custom properties tw-animate-css's
+   compiled animate-in / animate-out reads, and no `animation` of caret's own. Why
+   that is a correctness rule and not a style one, and why overlay and content take
+   the same arm rather than staggering: svelte-rules.md § Motion principles, which
+   states it once for both this block and PlanToc.svelte's single-surface form.
+   Local to here: both properties are registered `inherits: false`, which is what
+   keeps these arms on the four surfaces and off the controls INSIDE them — a
+   dialog's buttons, inputs and switches all resolve
+   `var(--tw-duration, var(--default-transition-duration))` for their own
+   transitions, and would otherwise retime to a surface's duration.
+
+   BACKDROP — the blur radius is deliberately CONSTANT, and that is what makes it
+   deepen rather than pop. Element opacity composites the filtered backdrop, so the
+   fade the `enter` keyframe already runs ramps the perceived blur with it (measured:
+   a 6px backdrop-filter over a hard stripe pattern is fully sharp at 10% opacity and
+   fully blurred at 95%). The ramp is therefore a matter of how long it is spent, not
+   of the radius. Interpolating the radius instead would re-blur the whole plan behind
+   the overlay every frame to buy the same percept.
+
+   The scrim is heavy enough that a guard reads as blocking and light enough that a
+   settings pane does not read as a curtain, with the blur doing the separation work;
+   judged by eye on both caret schemes. It is a black at an alpha rather than a caret
+   token, deliberately: ColorToken in lib/theme.ts is a closed union every palette must
+   supply, so minting a --scrim is a nine-theme change — and a scrim is a shadow cast
+   OVER the app rather than a surface of it, so it should not flip with the scheme the
+   way a bridged token would. It is the one non-token color the bridge declares. */
+[data-slot="dialog-overlay"],
+[data-slot="alert-dialog-overlay"] {
+  background: rgb(0 0 0 / 0.28);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+[data-slot="dialog-overlay"],
+[data-slot="dialog-content"],
+[data-slot="alert-dialog-overlay"],
+[data-slot="alert-dialog-content"] {
+  --tw-duration: var(--dur-enter);
+  --tw-ease: var(--ease-out);
+}
+
+[data-slot="dialog-overlay"][data-state="closed"],
+[data-slot="dialog-content"][data-state="closed"],
+[data-slot="alert-dialog-overlay"][data-state="closed"],
+[data-slot="alert-dialog-content"][data-state="closed"] {
+  --tw-duration: var(--dur-exit);
+  --tw-ease: var(--ease-in);
 }
