@@ -214,6 +214,21 @@ export const MARKDOWN_READ_BY_TESTS: readonly string[] = [
   "doc/DEVELOPMENT.md", // test/scripts/dev-driver.test.ts checks fake-plan.md's line citations into it
 ];
 
+/**
+ * Markdown files an E2E SPEC reads from disk. The same rule as
+ * MARKDOWN_READ_BY_TESTS one list up, for the other suite: a diff confined to
+ * Markdown still has to run `test e2e` when it touches one of these. Kept
+ * separate rather than folded in because the two suites cost very differently —
+ * a doc-only edit should not pay for a browser run it cannot affect.
+ *
+ * An entry belongs in BOTH lists when both suites read it.
+ */
+export const MARKDOWN_READ_BY_E2E: readonly string[] = [
+  // test/e2e/ref-hint.e2e.ts seeds it as a real plan and asserts the reference
+  // hints land on its citations, so removing them would break that spec (EXC-1061).
+  "scripts/tasks/dev/fake-plan.md",
+];
+
 function fullGate(reason: string): TaskSelection {
   return { tasks: TASK_ORDER, narrowed: false, reason };
 }
@@ -242,9 +257,26 @@ export function selectTasks(changed: readonly string[] | null): TaskSelection {
   }
 
   const readByTests = changed.filter((path) => MARKDOWN_READ_BY_TESTS.includes(path));
-  const also = readByTests.length > 0 ? `, and \`test\` reads ${readByTests.join(", ")}` : "";
+  const readByE2e = changed.filter((path) => MARKDOWN_READ_BY_E2E.includes(path));
+  // TASK_ORDER decides the running order, so the set is built by filtering it
+  // rather than by pushing — a task can never land out of sequence here.
+  const suites = new Set<string>(["lint"]);
+  if (readByTests.length > 0) suites.add("test");
+  if (readByE2e.length > 0) suites.add("test e2e");
+  // Pull in whatever a selected task waits on, transitively. A dependent spawns
+  // only once its gate PASSES, so selecting `test e2e` without `build ui` would
+  // park it forever rather than run it — the narrowing must never produce a set
+  // that cannot finish.
+  for (const dep of [...DEPENDENT].reverse()) {
+    if (suites.has(dep.name)) suites.add(dep.after);
+  }
+  const reads = [
+    readByTests.length > 0 ? `\`test\` reads ${readByTests.join(", ")}` : "",
+    readByE2e.length > 0 ? `\`test e2e\` reads ${readByE2e.join(", ")}` : "",
+  ].filter(Boolean);
+  const also = reads.length > 0 ? `, and ${reads.join(", and ")}` : "";
   return {
-    tasks: readByTests.length > 0 ? ["lint", "test"] : ["lint"],
+    tasks: TASK_ORDER.filter((t) => suites.has(t)),
     narrowed: true,
     reason: `all ${changed.length} changed paths are Markdown${also}; \`lint\` still scans the whole tree`,
   };
