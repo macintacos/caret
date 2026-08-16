@@ -440,7 +440,17 @@ describe("the portalled menus, popovers and tooltips run on caret's tempo", () =
   // Click-opened: a menu or a panel the reader asked for is a SURFACE, so it takes the
   // enter/exit pair. The tooltip is the deliberate exception below — it is hover-
   // triggered, and four of its six consumers open with no delay at all.
-  const SURFACES = ["dropdown-menu-content", "dropdown-menu-sub-content", "popover-content"];
+  // select-content joined the set with EXC-1111, which gave it its first live consumer:
+  // SettingSelect, and so every `select` control in the settings registry. It is a
+  // click-opened surface exactly like the dropdown menu it replaced, and without this it
+  // would arrive on the `duration-100` its vendored class string ships rather than on the
+  // tempo the rest of the app's panels arrive and leave on.
+  const SURFACES = [
+    "dropdown-menu-content",
+    "dropdown-menu-sub-content",
+    "popover-content",
+    "select-content",
+  ];
   const MODAL = [
     "dialog-content",
     "dialog-overlay",
