@@ -22,6 +22,34 @@ const emptyState = await Bun.file(join(uiDir, "components/EmptyState.svelte")).t
 const planKeyboard = await Bun.file(join(uiDir, "state/planKeyboard.svelte.ts")).text();
 const alertsState = await Bun.file(join(uiDir, "state/alerts.ts")).text();
 
+// The four vendored modal surfaces (EXC-892), keyed by the `data-slot` each stamps. The
+// slot name IS the filename and its primitive is the slot minus `-overlay` / `-content`,
+// so the sources locate themselves and a renamed file reds rather than reads as empty.
+const modalSlots = [
+  "dialog-overlay",
+  "dialog-content",
+  "alert-dialog-overlay",
+  "alert-dialog-content",
+];
+const modalSources: Record<string, string> = Object.fromEntries(
+  await Promise.all(
+    modalSlots.map(
+      async (slot) =>
+        [
+          slot,
+          await Bun.file(
+            join(
+              uiDir,
+              "lib/components/ui",
+              slot.startsWith("alert-") ? "alert-dialog" : "dialog",
+              `${slot}.svelte`,
+            ),
+          ).text(),
+        ] as const,
+    ),
+  ),
+);
+
 // Every light-DOM chrome component whose CSS carries a one-shot reveal or a
 // hover/state transition, loaded once for the migration-coverage suite below.
 const chromeComponents = [
@@ -264,6 +292,99 @@ describe("the ToC panel refines the vendored popover animation rather than repla
     // back to one is the regression this catches.
     expect(read(openBlock, "--tw-ease")).not.toBe(read(closedBlock, "--tw-ease"));
     expect(read(openBlock, "--tw-duration")).not.toBe(read(closedBlock, "--tw-duration"));
+  });
+});
+
+describe("the modal surfaces share one choreography, written in the shadcn bridge", () => {
+  // EXC-892. The four vendored dialog surfaces are the same refinement the ToC panel
+  // above makes, with one difference that decides where it is written: FOUR files across
+  // two bits-ui primitives have to wear it identically, and each of them timing itself is
+  // precisely how they reached duration-100, duration-200 and tw-animate's implicit .15s.
+  // So the arms live once in styles/shadcn-bridge.css, keyed on `data-slot`, and this
+  // block is what stops a fifth spelling appearing in a fifth place. The chrome sweep
+  // below cannot cover them: it is a list of light-DOM component files, and these carry
+  // no <style> at all — their motion is Tailwind utilities plus the bridge.
+  // Every flat `selector { body }` pair in the sheet, as [selector, body]. `[^{}]*` skips
+  // any rule holding a nested block, which is fine here: every rule this block looks for
+  // is flat, and the selector predicates below are specific enough that no inner
+  // declaration of an @theme/@media block can be mistaken for one.
+  const flatRules = [...appCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(
+    ([, selector, body]) => [selector ?? "", body ?? ""] as const,
+  );
+  const ruleWhere = (pick: (selector: string) => boolean): string =>
+    flatRules.find(([selector]) => pick(selector))?.[1] ?? "";
+  const namesEverySlot = (selector: string): boolean =>
+    modalSlots.every((slot) => selector.includes(`[data-slot="${slot}"]`));
+
+  // The two timing arms: the open one carries no state qualifier, the exit one is the same
+  // four slots narrowed to [data-state="closed"].
+  const openArm = ruleWhere((s) => namesEverySlot(s) && !s.includes('[data-state="closed"]'));
+  const closedArm = ruleWhere((s) => namesEverySlot(s) && s.includes('[data-state="closed"]'));
+  // The scrim: both OVERLAYS and neither content, which is what makes "one treatment,
+  // declared once" an assertion rather than two values that happen to agree today.
+  const scrim = ruleWhere(
+    (s) =>
+      s.includes('[data-slot="dialog-overlay"]') &&
+      s.includes('[data-slot="alert-dialog-overlay"]') &&
+      !s.includes('[data-slot="dialog-content"]'),
+  );
+  const read = (block: string, prop: string): string =>
+    block.match(new RegExp(`${prop}:\\s*([^;]+);`))?.[1]?.trim() ?? "";
+  const withoutComments = (src: string): string => src.replace(/^\s*\/\/.*$/gm, "");
+
+  test("no vendored modal surface still times itself", () => {
+    for (const slot of modalSlots) {
+      // Comment-stripped: each of these files EXPLAINS which literal it used to carry and
+      // where the timing went, and a text rule that reds on the explanation teaches the
+      // next author to delete the explanation.
+      expect(withoutComments(modalSources[slot] ?? "")).not.toMatch(/\bduration-\d/);
+    }
+  });
+
+  test("the vendored enter/exit keyframes are refined, never replaced", () => {
+    // Not a style rule: bits-ui's presence layer waits on the animations tw-animate-css's
+    // `animate-in`/`animate-out` start before it lets a dismissed surface leave the DOM.
+    // Dropping those utilities, or writing a competing `animation` over them, strands a
+    // closed modal on screen — so the utilities must survive and the arms must set only
+    // the two custom properties the compiled utility reads.
+    for (const slot of modalSlots) {
+      const src = modalSources[slot] ?? "";
+      expect(src).toContain("data-[state=open]:animate-in");
+      expect(src).toContain("data-[state=closed]:animate-out");
+    }
+    for (const arm of [openArm, closedArm]) {
+      expect(arm).not.toContain("animation");
+    }
+  });
+
+  test("all four surfaces arrive on the enter tier and leave on the exit tier", () => {
+    // A selector predicate matching nothing yields "" and would leave every `read` below
+    // comparing "" to "", so the arms are proven present before they are read.
+    expect(openArm).not.toBe("");
+    expect(closedArm).not.toBe("");
+    // The asymmetry EXC-890 tiered for, spent on the surfaces it was named for. Overlay
+    // and content take the SAME arm on purpose: the panel settling in as the room dims is
+    // one gesture, and a backdrop on its own clock reads as two.
+    expect(read(openArm, "--tw-duration")).toBe("var(--dur-enter)");
+    expect(read(openArm, "--tw-ease")).toBe("var(--ease-out)");
+    expect(read(closedArm, "--tw-duration")).toBe("var(--dur-exit)");
+    expect(read(closedArm, "--tw-ease")).toBe("var(--ease-in)");
+  });
+
+  test("both overlays wear one scrim, and its blur radius is a constant", () => {
+    // The reconciliation (a 10%-black-plus-blur backdrop under Settings, a 50%-black
+    // no-blur one under the guards) asserted as SHARED — re-splitting it into two per-slot
+    // rules reds here even if the two values happen to agree that day.
+    expect(scrim).not.toBe("");
+    expect(scrim).toContain("backdrop-filter");
+    // Constant radius, deliberately: element opacity composites the filtered backdrop, so
+    // the fade the `enter` keyframe already runs ramps the blur with it. Interpolating the
+    // radius instead re-blurs everything behind the overlay every frame to buy the same
+    // thing.
+    expect(scrim).not.toMatch(/transition|animation/);
+    for (const slot of ["dialog-overlay", "alert-dialog-overlay"]) {
+      expect(withoutComments(modalSources[slot] ?? "")).not.toMatch(/bg-black|backdrop-blur/);
+    }
   });
 });
 
