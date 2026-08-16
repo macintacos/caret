@@ -210,7 +210,21 @@
     planText: () => active?.currentPlan ?? "",
     flushPending: () => autosave.flushPending(),
     afterResolve: (id) => selection.afterResolve(id),
-    onOffline: () => selection.setConnected(false),
+    onOffline: () => {
+      selection.setConnected(false);
+      // Resolve's OWN onOffline — createAutosave's and startPolling's are separate
+      // closures — and it fires only on a genuine network failure, since a daemon non-2xx
+      // means the daemon answered and still advances. So this is exactly the case the
+      // optimistic confirmations below get wrong: nothing advanced, the plan is still on
+      // screen, and this persistent alert is what keeps a failed decision from reading as
+      // a landed one. Same shape as applySetting's failure half above.
+      alerts.push({
+        variant: "destructive",
+        title: "Couldn't send the decision",
+        message: "caret can't reach the daemon. Make sure it's running, then send it again.",
+        persistent: true,
+      });
+    },
     clearGeneralComment: () => autosave.clearGeneralComment(),
   });
   // EXC-427 desktop-plan notifier. Component-scoped so both consumers — the poll
@@ -504,13 +518,22 @@
     // plain approve would drop.
     pendingApproveMode = mode;
   }
+  // The three verdict hand-offs (EXC-894). Each acknowledges BEFORE clearing its modal's
+  // flag, so the confirmation is already sliding in bottom-right while the surface recedes
+  // — the ordering is the point, not the toast. The acknowledgment is optimistic and the
+  // resolve stays fired-not-awaited, so nothing here can delay or block it; the failure it
+  // would otherwise mask is caught by createResolve's onOffline above. Each names its
+  // verdict in the past tense of the button that was pressed, so the action keeps one name
+  // through the whole gesture.
   function approveAnyway(notes: string) {
     // `notes` is the optional reviewer note from the confirm dialog (EXC-791); it
     // rides the allow as feedback and reaches the agent. resolve.approve omits a
     // blank note.
     const mode = pendingApproveMode;
+    if (!mode) return;
+    alerts.push({ variant: "success", message: "Plan approved" });
     pendingApproveMode = null;
-    if (mode) void resolve.approve(mode, notes);
+    void resolve.approve(mode, notes);
   }
   function onReject() {
     // Reject always confirms (EXC-685): consistent whether or not comments are
@@ -518,6 +541,11 @@
     pendingReject = true;
   }
   function rejectAnyway() {
+    // Neutral rather than success, here and on request-changes: both are completed
+    // decisions rather than good outcomes, and AlertHost leads the success variant with a
+    // check glyph that would read as approval on a plan being sent back. Same gesture,
+    // the weight each verdict deserves.
+    alerts.push({ variant: "default", message: "Plan rejected" });
     pendingReject = false;
     void resolve.reject();
   }
@@ -525,11 +553,17 @@
     // The annotations + general-comment draft are App.svelte's autosaved state,
     // so they survive the hand-off to the request-changes dialog untouched.
     // Shared by both guards (approve + reject), so clear both.
+    //
+    // Deliberately silent: this swaps one modal for another rather than deciding
+    // anything, so there is no verdict to confirm — and `active` is unchanged, so the
+    // arrival below does not replay either. The surfaces still cross on the shared
+    // choreography (EXC-892); only the two hand-off moves sit this one out.
     pendingApproveMode = null;
     pendingReject = false;
     showDialog = true;
   }
   function onRequestChanges(generalComment: string) {
+    alerts.push({ variant: "default", message: "Changes requested" });
     showDialog = false;
     void resolve.requestChanges(generalComment);
   }
