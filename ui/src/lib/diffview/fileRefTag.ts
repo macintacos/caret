@@ -33,14 +33,34 @@ export function tagFileRefTokens(root: ParentNode, spanMap: FileRefSpanMap): voi
   }
 }
 
-// Tags the row's token that BEGINS at `startCol` and stays within `endCol`.
-// Tokens partition the line, so a running length locates the boundary.
-// Both bounds are required so the icon never lands on a coarse token that spans
-// more than the path: one merely CONTAINING the reference starts too early, and
-// a collapsed link's prose token starts exactly at it but runs to the end of the
-// line — tagging that would draw the glyph and the hover chip around the whole
-// sentence. The icon sits immediately left of the filename, or is omitted rather
-// than misplaced when no token fits.
+/** The row's token that BEGINS at `startCol` and stays within `endCol`, or null
+ * when none does. Tokens partition the line, so a running length locates the
+ * boundary.
+ *
+ * Both bounds are required so a decoration never lands on a coarse token that
+ * spans more than the path: one merely CONTAINING the reference starts too
+ * early, and a collapsed link's prose token starts exactly at it but runs to the
+ * end of the line, which would stretch the decoration across the whole sentence.
+ * Nothing is returned rather than something misplaced when no token fits.
+ *
+ * The one definition of "the token that begins this reference": the tag pass
+ * below places the glyph on it, and the hint badge anchors to it (refHint.ts,
+ * EXC-1061), so the two can never point at different halves of a line. shiki
+ * emits every token as a span element, hence the HTMLElement result. */
+export function refTokenAt(rowEl: Element, startCol: number, endCol: number): HTMLElement | null {
+  let col = 0;
+  for (const token of rowEl.children) {
+    const len = token.textContent?.length ?? 0;
+    if (col === startCol) return col + len <= endCol ? (token as HTMLElement) : null;
+    if (col > startCol) return null;
+    col += len;
+  }
+  return null;
+}
+
+// Tags the reference's opening token so the override sheet draws the glyph
+// immediately left of the filename; a reference whose token cannot be resolved
+// gets no glyph rather than a misplaced one.
 //
 // The kind rides on the attribute's VALUE rather than a second attribute, so
 // `[data-file-ref]` — which every selector, hit-test and e2e probe already uses
@@ -54,15 +74,8 @@ function tagTokenAt(
   endCol: number,
   kind: FileRefKind | undefined,
 ): void {
-  const value = kind === "directory" ? "directory" : "";
-  let col = 0;
-  for (const token of rowEl.children) {
-    const len = token.textContent?.length ?? 0;
-    if (col === startCol) {
-      if (col + len <= endCol) token.setAttribute(FILE_REF_ATTR, value);
-      return;
-    }
-    if (col > startCol) return;
-    col += len;
-  }
+  refTokenAt(rowEl, startCol, endCol)?.setAttribute(
+    FILE_REF_ATTR,
+    kind === "directory" ? "directory" : "",
+  );
 }

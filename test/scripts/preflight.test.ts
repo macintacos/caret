@@ -24,6 +24,7 @@ import {
   buildStartReport,
   changedPaths,
   createProcessGroupController,
+  MARKDOWN_READ_BY_E2E,
   MARKDOWN_READ_BY_TESTS,
   resolveSelection,
   runPreflight,
@@ -359,7 +360,12 @@ test("a Markdown-only diff narrows the gate to lint alone", async () => {
 // path, three separate reasons to exist — looping covers a fourth entry for free.
 test("Markdown a test reads from disk keeps `test` in the narrowed gate", async () => {
   for (const path of MARKDOWN_READ_BY_TESTS) {
-    expect(await spawnedFor(["doc/CONFIGURING.md", path])).toEqual(["lint", "test"]);
+    // `test` is the claim here; a path an e2e spec ALSO reads brings its own
+    // suite along (asserted below), so this checks membership rather than the
+    // exact set.
+    expect(await spawnedFor(["doc/CONFIGURING.md", path])).toContain("test");
+    expect(await spawnedFor(["doc/CONFIGURING.md", path])).toContain("lint");
+    expect(selectTasks(["doc/CONFIGURING.md", path]).narrowed).toBe(true);
   }
 });
 
@@ -371,11 +377,37 @@ test("Markdown a test reads from disk keeps `test` in the narrowed gate", async 
 // alone or together.
 test("a docs-only diff touching the fake plan or the dev guide still runs `test`", async () => {
   expect(await spawnedFor(["doc/DEVELOPMENT.md"])).toEqual(["lint", "test"]);
-  expect(await spawnedFor(["scripts/tasks/dev/fake-plan.md"])).toEqual(["lint", "test"]);
-  expect(await spawnedFor(["doc/DEVELOPMENT.md", "scripts/tasks/dev/fake-plan.md"])).toEqual([
-    "lint",
-    "test",
-  ]);
+  // The fake plan is read by BOTH suites — dev-driver.test.ts asserts on its
+  // content, and ref-hint.e2e.ts seeds it as a real plan — so it pulls `test e2e`
+  // in as well, and `build ui` with it (EXC-1061).
+  const withPlan = ["build ui", "lint", "test", "test e2e"];
+  expect(await spawnedFor(["scripts/tasks/dev/fake-plan.md"])).toEqual(withPlan);
+  expect(await spawnedFor(["doc/DEVELOPMENT.md", "scripts/tasks/dev/fake-plan.md"])).toEqual(
+    withPlan,
+  );
+});
+
+// The e2e half of the same rule. `test e2e` is a DEPENDENT task, so selecting it
+// has to drag `build ui` in with it — a dependent spawns only once its gate
+// passes, and a set holding the dependent without the gate would never finish.
+test("Markdown an e2e spec reads keeps `test e2e` and its gate in the narrowed set", async () => {
+  for (const path of MARKDOWN_READ_BY_E2E) {
+    const spawned = await spawnedFor(["doc/CONFIGURING.md", path]);
+    expect(spawned).toContain("test e2e");
+    expect(spawned).toContain("build ui");
+    // Still narrowed — `build bin` and `smoke` have no stake in a Markdown diff.
+    expect(spawned).not.toContain("smoke");
+    expect(selectTasks(["doc/CONFIGURING.md", path]).narrowed).toBe(true);
+  }
+});
+
+// A renamed or deleted fixture would silently orphan its entry, and the gate
+// would quietly stop running `test e2e` for the file that replaced it.
+test("every MARKDOWN_READ_BY_E2E entry still exists on disk", () => {
+  expect(MARKDOWN_READ_BY_E2E.length).toBeGreaterThan(0);
+  for (const path of MARKDOWN_READ_BY_E2E) {
+    expect(existsSync(join(import.meta.dir, "../..", path))).toBe(true);
+  }
 });
 
 // A renamed or deleted fixture would silently orphan its entry, and the gate

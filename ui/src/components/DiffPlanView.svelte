@@ -46,6 +46,13 @@
     type FileRefSpanMap,
     mergeFileRefSpans,
   } from "$lib/diffview/fileRefs.ts";
+  import {
+    dismissRefHint,
+    isRefHintDismissed,
+    type RefHintAnchor,
+    refHintToken,
+    syncRefHints,
+  } from "$lib/diffview/refHint.ts";
   import { resolveFileRefs } from "$lib/api.ts";
   import { shortCwd } from "$lib/cwd.ts";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
@@ -91,6 +98,7 @@
   import PlanBreadcrumbs from "@/components/PlanBreadcrumbs.svelte";
   import PlanToc from "@/components/PlanToc.svelte";
   import CodeCopyButton from "@/components/CodeCopyButton.svelte";
+  import RefHintBadge from "@/components/RefHintBadge.svelte";
   import FileDrawer from "@/components/FileDrawer.svelte";
   import FilePreview from "@/components/FilePreview.svelte";
   import FolderTree from "@/components/FolderTree.svelte";
@@ -444,6 +452,15 @@
   // so a card left open beside a preview would put that swallow back over a lane
   // whose whole point is that clicks in the plan reach the plan.
   function openFileRef(ref: FileRefSpan, tokenElement: HTMLElement): void {
+    // The one funnel every reference open passes through — the token click, the
+    // badge's own activation, and any keyboard opener a later change adds — so
+    // retiring the hint here (EXC-1061) covers all of them without a second call
+    // site to keep in step. Only the opened kind retires: learning that a
+    // filename opens an excerpt teaches nothing about the folder tree.
+    if (ref.kind !== undefined) {
+      dismissRefHint(ref.kind);
+      refHints = refHints.filter((h) => h.kind !== ref.kind);
+    }
     if (ref.kind === "directory") {
       dismissFilePreview();
       folderTree = { path: ref.path, rect: tokenElement.getBoundingClientRect() };
@@ -473,6 +490,10 @@
   // that same click reaches the token handler, which opens whichever surface the
   // reference it landed on calls for. Any other outside click is swallowed, so
   // dismissing the card never also opens a line comment.
+  //
+  // The hint badge (EXC-1061) is let through on the same terms and for the same
+  // reason — it opens a reference too, so swallowing its click would make the
+  // affordance it exists to teach dead for as long as a card is open.
   $effect(() => {
     if (folderTree === undefined) return;
     const onKey = (e: KeyboardEvent) => {
@@ -485,7 +506,8 @@
       const path = e.composedPath();
       if (path.some((n) => n instanceof Element && n.matches("[data-folder-tree]"))) return;
       folderTree = undefined;
-      if (path.some((n) => n instanceof Element && n.matches("[data-file-ref]"))) return;
+      if (path.some((n) => n instanceof Element && n.matches("[data-file-ref], [data-ref-hint]")))
+        return;
       e.preventDefault();
       e.stopImmediatePropagation();
     };
@@ -685,6 +707,87 @@
       cancelAnimationFrame(raf);
       scroller.removeEventListener("pointermove", onMove);
       scroller.removeEventListener("pointerleave", onLeave);
+    };
+  });
+
+  // The one-time reference hints (EXC-1061): where to badge the first on-screen
+  // file reference and the first on-screen directory reference, in .diff-plan
+  // content coordinates. Empty once both kinds are retired, and the effect below
+  // is what fills it.
+  let refHints = $state<RefHintAnchor[]>([]);
+  // What the hints were last measured against, so a document is measured exactly
+  // once. It takes BOTH halves because neither moves on its own: a compare-mode
+  // toggle-back mounts a fresh SourceView (new host, same contentKey), while a
+  // review or version switch keeps the very same container element and only swaps
+  // its contents (same host, new contentKey) — the library re-renders into the
+  // container rather than remounting the component. Scrolling and an unchanged
+  // poll tick move neither, which is what keeps the badges and their running ping
+  // in place. Deliberately a plain `let`, so reading it below is not a dependency.
+  let measured: { host: HTMLElement; key: string } | undefined;
+
+  // Keep the badges anchored, for as long as this document is on screen. The work
+  // is syncRefHints (refHint.ts); this effect only decides WHEN to run it, and the
+  // answer is "whenever anything could have moved a token", because two things can:
+  //
+  // The reviewer SCROLLS. The pick only ever anchors to a reference in view, and a
+  // plan puts its citations in the body rather than the opening paragraph, so the
+  // kinds are usually taught one at a time as each comes into view — the file
+  // reference on one screenful, the directory reference several screenfuls later.
+  //
+  // The content RESIZES. Content coordinates survive scrolling by construction, but
+  // not a change in the height of anything above the token — a web font arriving,
+  // shiki repainting a row, an over-wide fenced block moving into its own card. Each
+  // shifts every row below it, and a badge holding coordinates from before the shift
+  // sits where its token used to be. Observing the host catches all of them without
+  // caring which: they all change the rendered height.
+  //
+  // rAF-throttled together, so a flung scroll costs one sync per frame. `refHints` is
+  // keyed by kind in the template, so a sync updates the badge's props and leaves the
+  // instance — and its running ping — alone.
+  $effect(() => {
+    const scroller = scrollEl;
+    const el = host;
+    const refs = fileRefs;
+    const key = contentKey;
+    // Nothing to teach on the compare surface, and its rows are a different
+    // document — syncing there would walk the single-version view's torn-out
+    // shadow root for a badge that cannot render anyway.
+    if (showDiff || scroller == null || el == null || refs === undefined) return;
+    // A different document: its rows are not the ones the current hints chose, so
+    // start the choice over rather than re-anchoring onto whatever now sits there.
+    if (measured?.host !== el || measured.key !== key) {
+      refHints = [];
+      measured = { host: el, key };
+    }
+    if (isRefHintDismissed("file") && isRefHintDismissed("directory")) return;
+
+    let raf = 0;
+    const sync = (): void => {
+      raf = 0;
+      // Re-read the flags every sync rather than closing over a snapshot: opening a
+      // reference retires its kind without changing anything this effect depends on,
+      // so a captured list would re-pick the badge the reviewer just spent.
+      const kinds = (["file", "directory"] as const).filter((k) => !isRefHintDismissed(k));
+      refHints = syncRefHints(el, scroller, refs, kinds, refHints);
+    };
+    const schedule = (): void => {
+      if (raf === 0) raf = requestAnimationFrame(sync);
+    };
+    // The first sync still spends the painted-row budget: the tokens are tagged on a
+    // frame off SourceView's MutationObserver, so there is nothing to anchor to for
+    // the first few frames after a document arrives.
+    const cancelFrames = retryFrames(() => {
+      sync();
+      return refHints.length > 0;
+    });
+    scroller.addEventListener("scroll", schedule, { passive: true });
+    const observer = new ResizeObserver(schedule);
+    observer.observe(el);
+    return () => {
+      cancelFrames();
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+      scroller.removeEventListener("scroll", schedule);
     };
   });
 
@@ -1473,6 +1576,26 @@
             <CodeCopyButton text={hoveredCopy.text} top={hoveredCopy.top} left={hoveredCopy.left} />
           {/key}
         {/if}
+        <!-- The one-time reference hints (EXC-1061): one badge over the first
+             on-screen file reference and one over the first directory reference,
+             teaching that a path token opens a preview. Layered over the .diff-plan
+             scroll content like the copy button, so they scroll with the rows.
+             Rendered in this branch only, so compare mode drops both — and since
+             nothing renders there, neither flag is spent and the hints survive to
+             teach on the next single-version render.
+             NOT gated on showShortcutHints, unlike the two hint chips further down:
+             that pref governs keyboard-shortcut affordances, and this teaches a
+             mouse gesture. Keyed on the kind — never on a value a poll tick changes
+             — so the instance and its running ping survive a re-render. -->
+        {#each refHints as hint (hint.kind)}
+          <RefHintBadge
+            kind={hint.kind}
+            path={hint.span.path}
+            top={hint.top}
+            left={hint.left}
+            onActivate={() => openFileRef(hint.span, refHintToken(host, hint))}
+          />
+        {/each}
         <!-- Saved comments and the open composer are projected into the library's
              per-line annotation rows (slotInto), so they render inline between the
              code lines at their anchor line rather than floating over them. One node

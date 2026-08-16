@@ -38,6 +38,11 @@ const chromeComponents = [
   "components/VersionBadge.svelte",
   "components/SourceAnnotationCard.svelte",
   "components/DiffPlanView.svelte",
+  // The plan surface's reference-teaching badge (EXC-1061). Its ping is ambient and
+  // carved out below, so what listing it buys is the OTHER assertion: the badge's
+  // whole reduced-motion story is that the global guard reaches it, which is only
+  // true while it grows no block of its own.
+  "components/RefHintBadge.svelte",
   "components/FileDrawer.svelte",
   "components/FilePreview.svelte",
   "components/VersionComparePicker.svelte",
@@ -238,10 +243,12 @@ describe("chrome motion declarations draw from the tokens, not bare literals", (
   // seconds/ms literal, so the chrome harmonizes on the shared vocabulary.
   const chrome = chromeComponents;
 
-  // The ambient/infinite carve-out: these two animations breathe on their own
-  // bespoke durations and are deliberately EXEMPT from the one-shot tokens, so
-  // their literals are expected to remain. Matched by keyframe name.
-  const ambient = /\b(float|safe-mode-pulse)\b/;
+  // The ambient carve-out: these animations run on their own bespoke durations and
+  // are deliberately EXEMPT from the one-shot tokens, so their literals are expected
+  // to remain. Matched by keyframe name. The first two are infinite; ref-hint-ping
+  // is finite (three pings) and is ambient by SCALE rather than by repetition — a
+  // teaching pulse that read at --dur-base would be a flicker, not a wave.
+  const ambient = /\b(float|safe-mode-pulse|ref-hint-ping)\b/;
 
   // Pull every `transition:`/`animation:` declaration body (the text up to the
   // terminating semicolon) from a stylesheet, multi-line shorthands included.
@@ -261,12 +268,15 @@ describe("chrome motion declarations draw from the tokens, not bare literals", (
     });
   }
 
-  test("the ambient float + safe-mode pulse keep their bespoke durations", () => {
+  test("the ambient animations keep their bespoke durations", () => {
     // The carve-out is real, not vacuous: each ambient animation still carries
-    // its own long literal (4s float, 1.2s pulse) — the sweep must not have
-    // pulled them onto the snappy one-shot tokens.
+    // its own long literal (4s float, 1.2s pulse, 1.6s ping) — the sweep must not
+    // have pulled them onto the snappy one-shot tokens.
     expect(emptyState).toMatch(/animation:\s*float\s+4s\b/);
     expect(chromeSources["App.svelte"]).toMatch(/animation:\s*safe-mode-pulse\s+1\.2s\b/);
+    expect(chromeSources["components/RefHintBadge.svelte"]).toMatch(
+      /animation:\s*ref-hint-ping\s+1\.6s\b/,
+    );
   });
 
   test("no chrome component keeps a reduced-motion block the global rule subsumes", () => {
@@ -274,8 +284,16 @@ describe("chrome motion declarations draw from the tokens, not bare literals", (
     // light-DOM root, so a per-component `@media (prefers-reduced-motion)`
     // block in these files is dead CSS. (app.css itself hosts the one global
     // rule and is excluded.)
+    //
+    // Matched against the comment-stripped source, the same way coreStyles.test.ts
+    // reads its override body: a component that DEPENDS on the global guard has
+    // every reason to say so in a comment — RefHintBadge's whole reduced-motion
+    // story is that the guard reaches it — and a text rule that reds on the
+    // explanation teaches the next author to delete the explanation.
+    const withoutComments = (src: string) =>
+      src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
     for (const path of chrome) {
-      const css = chromeSources[path] ?? "";
+      const css = withoutComments(chromeSources[path] ?? "");
       expect(css).not.toMatch(/@media\s*\(prefers-reduced-motion/);
     }
   });
