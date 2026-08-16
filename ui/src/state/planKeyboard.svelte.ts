@@ -58,6 +58,10 @@ export interface PlanKeyboardDeps {
   halfPage(): number;
   /** Scroll the view to keep `line` visible — the keyboard cursor's follow scroll. */
   follow(line: number): void;
+  /** Scroll `line` to the top of the view — the shared jump every navigation to an
+   * explicit place takes (a heading pick, a deep link), the counterpart to `follow`'s
+   * scrolloff-only nudge. */
+  jump(line: number): void;
   /** Open the comment composer over an inclusive line range (retaining any live text and
    * relocating the cursor, as a gutter/line click does). */
   openComposer(startLine: number, endLine: number): void;
@@ -80,8 +84,9 @@ export interface PlanKeyboard {
    * An empty query yields no matches. */
   matches(): SearchMatch[];
   /** A vim motion (j/k, Ctrl+d/u, gg/G, heading and blank-line jumps): resolve the target
-   * line, place the cursor there, and follow it. An unplaced cursor reveals at the reading
-   * position rather than stepping past it. */
+   * line, place the cursor there, and scroll to it — the heading motions take the shared
+   * top-parked jump, every other motion the scrolloff follow. An unplaced cursor reveals
+   * at the reading position rather than stepping past it. */
   moveCursor(motion: CursorMotion): void;
   /** `c`: open the composer over the cursor line, or — in visual mode — over the whole
    * anchored selection, exiting visual mode as it opens. Seeds an unplaced cursor at the
@@ -118,6 +123,10 @@ export interface PlanKeyboard {
 // Must match PlanSearch's search-collapse duration (--dur-fast = 120ms). happy-dom
 // fires no animationend, so a timer — not that event — drives the teardown.
 const CLOSE_ANIM_MS = 120;
+
+/** Motions that navigate to an explicit place, so they take the top-parked shared jump
+ * rather than the cursor's scrolloff follow. */
+const JUMP_MOTIONS: ReadonlySet<CursorMotion> = new Set(["nextHeading", "prevHeading"]);
 
 export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardDeps): PlanKeyboard {
   const setTimer = deps.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
@@ -208,16 +217,17 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
     matches,
 
     moveCursor(motion) {
-      reveal(
-        resolveCursorLine(motion, {
-          cursor: store.cursorLine,
-          lineCount: lineCount(),
-          headingLines: deps.headingLines(),
-          blankLines: blankLines(),
-          halfPage: deps.halfPage(),
-          seed: deps.readingLine() ?? 1,
-        }),
-      );
+      const line = resolveCursorLine(motion, {
+        cursor: store.cursorLine,
+        lineCount: lineCount(),
+        headingLines: deps.headingLines(),
+        blankLines: blankLines(),
+        halfPage: deps.halfPage(),
+        seed: deps.readingLine() ?? 1,
+      });
+      store.cursorLine = line;
+      if (JUMP_MOTIONS.has(motion)) deps.jump(line);
+      else deps.follow(line);
     },
 
     commentCursorLine() {

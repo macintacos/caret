@@ -23,8 +23,8 @@ function makeStore(over: Partial<PlanKeyboardStore> = {}): PlanKeyboardStore {
 }
 
 /** Fake deps around a mutable text/reading/hints control surface, capturing the
- * effects (follow lines, focus/blur counts) and the scheduled close timers so a
- * test can fire them by hand — no real DOM, no real setTimeout. */
+ * effects (follow and jump lines, focus/blur counts) and the scheduled close timers
+ * so a test can fire them by hand — no real DOM, no real setTimeout. */
 function build(
   store: PlanKeyboardStore,
   over: {
@@ -41,6 +41,7 @@ function build(
   const headings = over.headings ?? [];
   const halfPage = over.halfPage ?? 5;
   const followed: number[] = [];
+  const jumped: number[] = [];
   const composerOpens: Array<{ startLine: number; endLine: number }> = [];
   const scheduled: Array<{ fn: () => void; handle: number }> = [];
   let nextHandle = 1;
@@ -53,6 +54,7 @@ function build(
     readingLine: () => reading,
     halfPage: () => halfPage,
     follow: (line) => followed.push(line),
+    jump: (line) => jumped.push(line),
     openComposer: (startLine, endLine) => {
       composerOpens.push({ startLine, endLine });
       // Mirror the component's openRange, which relocates the cursor onto the opened line.
@@ -79,6 +81,7 @@ function build(
   return {
     keyboard,
     followed,
+    jumped,
     composerOpens,
     focusCount: () => focused,
     blurCount: () => blurred,
@@ -357,13 +360,25 @@ describe("moveCursor", () => {
     expect(store.cursorLine).toBe(4);
   });
 
-  test("heading motions jump between the heading lines", () => {
+  test("heading motions jump between the heading lines, taking the shared jump", () => {
     store.cursorLine = 1;
     const h = build(store, { text: CURSOR_PLAN, headings: CURSOR_HEADINGS });
     h.keyboard.moveCursor("nextHeading"); // 1 → 5
     expect(store.cursorLine).toBe(5);
     h.keyboard.moveCursor("prevHeading"); // 5 → 1
     expect(store.cursorLine).toBe(1);
+    expect(h.jumped).toEqual([5, 1]);
+    expect(h.followed).toEqual([]);
+  });
+
+  test("stepping and page motions keep the scrolloff follow", () => {
+    store.cursorLine = 1;
+    const h = build(store, { text: CURSOR_PLAN, headings: CURSOR_HEADINGS, halfPage: 3 });
+    h.keyboard.moveCursor("down"); // 1 → 2
+    h.keyboard.moveCursor("halfDown"); // 2 → 5
+    h.keyboard.moveCursor("top"); // → 1
+    expect(h.followed).toEqual([2, 5, 1]);
+    expect(h.jumped).toEqual([]);
   });
 
   test("blank-line motions jump between the paragraph boundaries", () => {
