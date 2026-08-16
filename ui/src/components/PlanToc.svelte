@@ -11,22 +11,26 @@
   // bar's own filter narrates nothing as its rows narrow (the deviation is
   // recorded in PlanBreadcrumbs.svelte's header).
   //
-  // What that buys HERE is the structural half, and only that half: the field is a
-  // legal sibling of the list, and the rows are real options a screen reader can
-  // browse. The narration half is NOT closed yet. bits-ui computes the field's
-  // `aria-controls` and `aria-activedescendant` from the command's viewport node,
-  // and the vendored command-list.svelte renders no `Command.Viewport` — so both
-  // come out null and nothing announces which option is active as the rows narrow.
-  // Wiring that viewport is a change to the vendored primitive; the narration
-  // contract that depends on it is EXC-1096. Do not read the combobox role alone
-  // as evidence the bar's defect is fixed.
+  // What that buys HERE is both halves (EXC-1096 closed the second). Structurally
+  // the field is a legal sibling of the list and the rows are real options a screen
+  // reader can browse; for narration, the field carries `aria-controls` and
+  // `aria-activedescendant`, so the row the roving walk lands on is announced as the
+  // list narrows without focus ever leaving the field. Those two attributes are
+  // bits-ui's, derived from the command's viewport node — which exists only because
+  // the vendored command-list.svelte renders a `Command.Viewport`. That is caret's
+  // addition to the registry source and the reason the whole vendoring paid off; see
+  // the comment there before touching it.
+  //
+  // The dimmed ancestor rows stay OUT of the accessibility tree (`aria-hidden`).
+  // That is EXC-1096's decision, not a gap: a listbox may own options and groups and
+  // not loose text, each option's accessible name is already the heading it goes to,
+  // and the ancestor names are sighted-only wayfinding for a reader scanning the
+  // indent. Handing them over as per-option descriptions would tax every row to
+  // serve the few sitting under a filtered-out parent.
   //
   // Presentational: the only state is the popup's own — open, query, and the
   // command's selected row — the tree is derived, and the parent owns both the
   // heading set and the scroll tracking that moves `activeLine`.
-  //
-  // Real-browser behavior — the keyboard walk, focus return, dismissal, narration
-  // — is EXC-1096 and is deliberately not implemented here.
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Command from "$lib/components/ui/command/index.js";
   import * as Popover from "$lib/components/ui/popover/index.js";
@@ -81,9 +85,32 @@
   // — see EXC-1062's Out of scope.
   const tree = $derived(filteredHeadingTree(headings, query));
 
+  // What the status line says, empty when the list has rows. Derived rather than
+  // inlined in the markup because the element it feeds is always mounted — see the
+  // comment on it for why a live region cannot be conjured up with its text already
+  // inside it.
+  const emptyMessage = $derived(
+    tree.length > 0 ? "" : headings.length === 0 ? "No headings in plan" : "No headings match",
+  );
+
+  // Whether the popup is closing because the reviewer picked a heading, which
+  // onCloseAutoFocus below reads to decide where focus lands. The same flag
+  // PlanBreadcrumbs.svelte spends on the same job.
+  //
+  // One thing does NOT carry over from that bar, and it is worth stating rather than
+  // inheriting: the bar can afford to drop focus to the body because `b` summons it
+  // back (shortcuts/keymap.ts). This surface has no such key yet, so a keyboard
+  // reviewer who picks a heading restarts their tab order from the top of the
+  // document. Accepted for now — the trade the issue asked for is that a pick leaves
+  // the reviewer in the plan rather than ringed on a control they are done with —
+  // and EXC-1097, which gives the ToC its own key and top-bar button, is what closes
+  // the gap.
+  let leaving = false;
+
   // Take the reviewer to a heading and leave. A command row does not dismiss its
   // host the way a menu item does, so the pick closes the popup itself.
   function jump(line: number): void {
+    leaving = true;
     open = false;
     onJump(line);
   }
@@ -97,12 +124,8 @@
      A match is a destination and renders as an option. A heading kept only to
      place a match under it is a plain div — never a Command.Item, so it joins
      neither the roving selection nor the primitive's item set — and is
-     `aria-hidden`, which is stronger than the presentational role it reads as:
-     `role="presentation"` strips an element's own role but leaves its text in the
-     tree, and bare text is not something a listbox may own. So the ancestor names
-     are sighted-only context for now. Handing them to assistive tech properly —
-     as the option's own description rather than as loose rows — is EXC-1096's
-     narration contract, not a gap to patch here. -->
+     `aria-hidden` rather than `role="presentation"`, which strips an element's own
+     role but leaves its text behind. The header records why that text may not stay. -->
 {#snippet rows(nodes: FilteredHeadingNode[])}
   {#each nodes as node (node.heading.line)}
     {@const heading = node.heading}
@@ -158,6 +181,13 @@
       e.preventDefault();
       queryEl.focus();
     }}
+    onCloseAutoFocus={(e) => {
+      // Only a pick suppresses the return; Escape, an outside click and Tab all hand
+      // focus back to the trigger as the primitive intends. See `leaving` above.
+      if (!leaving) return;
+      leaving = false;
+      e.preventDefault();
+    }}
   >
     <!-- shouldFilter={false} is load-bearing: the command ships a fuzzy filter
          that also RE-SORTS the rows by score, which would both fight the
@@ -177,14 +207,19 @@
       <!-- Nothing to show, said in the row geometry rather than as an empty box.
            A plan with no headings is a different message from a query that hit
            nothing, and only the first is a property of the plan.
-           Deliberately a SIBLING of the list rather than a row inside it: it is a
-           status message about the list, and a listbox may own options and groups
-           but not a stray paragraph. -->
-      {#if tree.length === 0}
-        <p class="toc-empty">
-          {headings.length === 0 ? "No headings in plan" : "No headings match"}
-        </p>
-      {/if}
+           Deliberately a SIBLING of the list rather than a row inside it, for the
+           ownership reason the header gives.
+           `role="status"` because this is the one narrowing a screen reader would
+           otherwise miss: a keystroke that changes the first match moves the
+           selection and the field's aria-activedescendant announces the new row,
+           but a query matching nothing leaves no active row to name, so without a
+           live region the list empties in silence.
+           Mounted unconditionally, with only its TEXT switched — a live region has
+           to be idle in the DOM before the change it announces, and one inserted
+           with its content already in it is skipped by some AT outright. Same shape
+           and same reason as FilePreview.svelte's `.fp-range`. Empty, it has no
+           padding and generates no line box, so it costs no height. -->
+      <p class="toc-empty" role="status">{emptyMessage}</p>
     </Command.Root>
   </Popover.Content>
 </Popover.Root>
@@ -261,11 +296,17 @@
   }
 
   /* An empty list says why, at the quietest ink — the same weight the breadcrumbs'
-     own no-match line takes. */
+     own no-match line takes. The box is always in the markup so the live region is
+     idle before it speaks, so the padding is what it wears only when it has
+     something to say: with no text and no padding it generates no line box and the
+     panel closes up exactly as it did when the element was conditional. */
   :global(.plan-toc-panel .toc-empty) {
     margin: 0;
-    padding: 0.5rem;
+    padding: 0;
     color: var(--ink-faint);
     font-size: var(--text-xs);
+  }
+  :global(.plan-toc-panel .toc-empty:not(:empty)) {
+    padding: 0.5rem;
   }
 </style>

@@ -69,6 +69,25 @@ later re-sync silently reverts with no comment to catch it.
   headless primitive layer underneath the interactive components (Dialog, and the overlays
   to come).
 
+### Edits a re-sync will silently undo
+
+Because the revert above is wholesale, anything caret **added** to a vendored component
+survives only if someone notices it went missing. One such edit is worth naming here,
+since losing it breaks accessibility rather than looks:
+
+**`command-list.svelte` renders a `Command.Viewport` that the registry source does not**
+(EXC-1096). bits-ui derives the command input's `aria-controls` **and** its
+`aria-activedescendant` from `CommandRootState.viewportNode`, which only
+`CommandViewportState`'s `attachRef` ever sets — so a `Command.List` with no viewport
+inside it leaves both attributes undefined on *every* `Command` in the app, and the
+combobox names neither the list it controls nor the row the selection is on. Nothing is
+narrated as its rows narrow, which is the whole reason `command` was vendored. The
+viewport also carries `role="none"`: the list itself is the `role="listbox"`, and a
+listbox may own options and groups but not a generic wrapper between them.
+
+`ui/src/lib/shadcn-command-popover.test.ts` is the guard, and it reds if a re-sync drops
+either half. Put the viewport back before you commit an overwrite of that file.
+
 ## Token-bridge discipline
 
 Components consume caret's palette through the **bridged shadcn semantic variables**

@@ -226,6 +226,34 @@ describe("PlanToc surface", () => {
     await typeQuery("nothing matches this", flush, () => options().length === 0);
     expect(rows().length).toBe(0);
     expect(helper()?.textContent?.trim()).toBe("No headings match");
+    // Narrowing to nothing is the one case aria-activedescendant cannot narrate —
+    // there is no active option left to name — so the message says it out loud.
+    expect(helper()?.getAttribute("role")).toBe("status");
+    await close(target, flush);
+  });
+
+  // EXC-1096's narration contract: the field names the row the roving walk is on, so
+  // the reviewer hears the list narrow without focus ever leaving the field. This is
+  // the whole reason the epic vendored `command` over reusing the breadcrumbs bar's
+  // dropdown, and it rests on the Viewport that command-list.svelte renders — see
+  // ui/src/lib/shadcn-command-popover.test.ts for the primitive-level pin.
+  test("the filter field narrates the row the selection is on", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    await flushUntil(flush, () => field()?.getAttribute("aria-activedescendant") != null);
+
+    expect(field()?.getAttribute("role")).toBe("combobox");
+    // Controls the list it narrows, and names the row inside it.
+    const controls = document.getElementById(field()?.getAttribute("aria-controls") ?? "");
+    expect(listbox()?.contains(controls)).toBe(true);
+
+    const active = document.getElementById(field()?.getAttribute("aria-activedescendant") ?? "");
+    expect(active?.getAttribute("role")).toBe("option");
+    expect(active?.textContent?.trim()).toBe("Details");
     await close(target, flush);
   });
 
