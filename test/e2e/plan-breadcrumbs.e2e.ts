@@ -5,8 +5,12 @@
 // Everything asserted here needs a real browser. The trail is driven by the plan's
 // scroll position measured with getBoundingClientRect, and the sibling menus are
 // bits-ui popovers whose open/close, portalling, and submenu reveal are real
-// interaction semantics — both e2e concerns per browser-testing.md. The bar's pure
-// trail logic is unit-tested in ui/src/components/PlanBreadcrumbs.test.ts.
+// interaction semantics — both e2e concerns per browser-testing.md. The `/`
+// filter is a second panel — a `command` in a `popover` — whose keyboard walk is a
+// roving SELECTION rather than moving focus, and whose narration attributes a screen
+// reader reads off the live DOM; all of it real-browser too. The bar's pure trail
+// logic, and the filter panel's structure and ARIA, are unit-tested in
+// ui/src/components/PlanBreadcrumbs.test.ts.
 
 import type { Page } from "@playwright/test";
 
@@ -77,7 +81,19 @@ const SHOWN = `${BAR} .crumb-item:not(.elided) button.crumb`;
 const MARKER = `${BAR} .crumb-ellipsis`;
 const MENU = "[data-slot='dropdown-menu-content']";
 const SUBMENU = "[data-slot='dropdown-menu-sub-content']";
-const QUERY = "input[aria-label='Filter headings']";
+// The filter is its own panel — a `command` in a `popover` — so its rows are options
+// rather than menu items. Every locator below is scoped through it,
+// which is what lets them be role queries: the ToC popup publishes a filter field
+// with the SAME accessible name, and an unscoped query would collect both
+// (browser-testing.md § Locators).
+const FILTER = ".plan-crumb-filter";
+const filterPanel = (page: Page) => page.locator(FILTER);
+const results = (page: Page) => filterPanel(page).getByRole("option");
+const queryField = (page: Page) =>
+  filterPanel(page).getByRole("combobox", { name: "Filter headings" });
+/** The row the roving selection is on. bits-ui marks it `data-selected`; the reader
+ * is told about it through the field's aria-activedescendant, asserted below. */
+const walkedTo = (page: Page) => results(page).and(page.locator("[data-selected]"));
 
 /** Where the plan is parked. Several specs below assert that walking the menus
  * moves nothing until the reviewer commits to a heading. */
@@ -535,10 +551,18 @@ test("the trail elides once the row cannot hold it, and the marker opens what it
   await expect(page.locator(SHOWN)).toHaveText(["Alpha", "Bravo"]);
 });
 
-// EXC-948: `/` swaps the open menu for a flat filter over every heading. All of
-// it is real browser behaviour — the key claim against the plan's own search, the
-// roving walk through a set that changes under it, and Escape's step back to the
-// hierarchy — so it lives here rather than in the component unit.
+// The bar's flat `/` filter (EXC-948, EXC-1098): a `command` inside a `popover`.
+// All of it is real browser behaviour — the key claim against the plan's own search,
+// the swap between the two panels, the roving walk through a set that changes under
+// it, the narration a screen reader reads off the live DOM, and Escape's step back
+// to the hierarchy — so it lives here rather than in the component unit, which pins
+// the panel's structure and ARIA instead.
+//
+// The arrows walk the results and `j`/`k` are ordinary query text, which is the one
+// place this panel's keyboard differs from the bar's own menus. A combobox keeps
+// focus in the textbox — the mechanism aria-activedescendant narration depends on —
+// and a textbox that swallowed `j` and `k` could not search for "json", "keys" or
+// "jump". The specs below pin both halves.
 
 test("b then / then a query then Enter jumps across the hierarchy", async ({ daemon, page }) => {
   await daemon.seed({ plan: NESTED_PLAN });
@@ -555,12 +579,14 @@ test("b then / then a query then Enter jumps across the hierarchy", async ({ dae
   await expect(menu.getByRole("menuitem")).toHaveText(["Charlie"]);
 
   await page.keyboard.press("/");
-  await expect(menu.locator(QUERY)).toBeFocused();
-  // Every heading in the plan, at every level, not just this menu's siblings.
-  await expect(menu.getByRole("menuitem")).toHaveCount(6);
+  await expect(queryField(page)).toBeFocused();
+  // The hierarchy is swapped for the filter, not left standing behind it.
+  await expect(menu).toHaveCount(0);
+  // Every heading in the plan, at every level, not just that menu's siblings.
+  await expect(results(page)).toHaveCount(6);
 
   await page.keyboard.type("echo");
-  await expect(menu.getByRole("menuitem")).toHaveText(["Echo Delta"]);
+  await expect(results(page)).toHaveText(["Echo Delta"]);
   await page.keyboard.press("Enter");
 
   // Echo sits under Delta — a different branch from the Bravo one being read.
@@ -568,55 +594,95 @@ test("b then / then a query then Enter jumps across the hierarchy", async ({ dae
   await expect.poll(() => new URL(page.url()).searchParams.get("heading")).toBe("echo");
 });
 
-test("j and k walk the results, and stay coherent as the query narrows them", async ({
+test("the arrows walk the results without focus leaving the field, and it narrates", async ({
   daemon,
   page,
 }) => {
+  // The accessibility payoff the retrofit was for: the field is a real combobox, so
+  // the list can be walked and narrowed while focus never leaves it and every stop
+  // is announced. Read off the live DOM, which is where a screen reader reads it.
   await daemon.seed({ plan: NESTED_PLAN });
   await page.goto("/");
   await expect(page.locator(`${CRUMB}.current`)).toBeVisible();
   await waitPastSafeModeGrace(page);
 
   await page.keyboard.press("b");
-  const menu = page.locator(MENU);
-  await expect(menu).toBeVisible();
-  await expect(menu.getByRole("menuitem")).toHaveCount(1);
   await page.keyboard.press("/");
-  await expect(menu.locator(QUERY)).toBeVisible();
+  await expect(queryField(page)).toBeFocused();
   await page.keyboard.type("a");
-  await expect(menu.getByRole("menuitem")).toHaveText([
-    "Alpha",
-    "Bravo Alpha",
-    "Charlie Bravo",
-    "Delta Alpha",
-  ]);
+  await expect(results(page)).toHaveText(["Alpha", "Bravo Alpha", "Charlie Bravo", "Delta Alpha"]);
 
-  // The arrows hand the field's focus to the list — the field is not one of the
-  // menu's roving candidates, so it enters at the top going down and at the bottom
-  // going up. From there the walk is the menu's own, so j/k step it one row at a
-  // time in either direction.
+  // The named row is whichever the walk is on, and it moves with the arrows.
+  // Trimmed rather than read raw: a row also holds the command's check-indicator
+  // span, so its textContent carries whitespace toHaveText would normalize away.
+  const narrated = async () => {
+    const id = await queryField(page).getAttribute("aria-activedescendant");
+    return ((await filterPanel(page).locator(`[id="${id}"]`).textContent()) ?? "").trim();
+  };
+  await expect(walkedTo(page)).toHaveText("Alpha");
+  await expect.poll(narrated).toBe("Alpha");
+
+  await page.keyboard.press("ArrowDown");
+  await expect(walkedTo(page)).toHaveText("Bravo Alpha");
+  await expect.poll(narrated).toBe("Bravo Alpha");
   await page.keyboard.press("ArrowUp");
-  await expect(menu.getByRole("menuitem", { name: "Delta Alpha" })).toBeFocused();
-  await page.keyboard.press("/");
-  await page.keyboard.press("ArrowDown");
-  await expect(menu.getByRole("menuitem", { name: "Alpha", exact: true })).toBeFocused();
-  await page.keyboard.press("j");
-  await page.keyboard.press("j");
-  await expect(menu.getByRole("menuitem", { name: "Charlie Bravo" })).toBeFocused();
-  await page.keyboard.press("k");
-  await expect(menu.getByRole("menuitem", { name: "Bravo Alpha" })).toBeFocused();
+  await expect(walkedTo(page)).toHaveText("Alpha");
+  // Focus never moved, which is the whole reason the narration works.
+  await expect(queryField(page)).toBeFocused();
 
-  // `/` returns to the query from a walked-to row. Narrowing then drops three of
-  // the four rows, including the one that had focus — and the walk still enters
-  // the NEW set at its top rather than chasing a row that no longer exists.
-  await page.keyboard.press("/");
-  await expect(menu.locator(QUERY)).toBeFocused();
+  // Narrowing drops three of the four rows, including ones the walk had visited —
+  // and the walk re-seats at the top of the NEW set rather than chasing a row that
+  // no longer exists.
   await page.keyboard.type("lph");
-  await expect(menu.getByRole("menuitem")).toHaveText(["Alpha"]);
-  await page.keyboard.press("ArrowDown");
-  await expect(menu.getByRole("menuitem", { name: "Alpha", exact: true })).toBeFocused();
-  await page.keyboard.press("j");
-  await expect(menu.getByRole("menuitem", { name: "Alpha", exact: true })).toBeFocused();
+  await expect(results(page)).toHaveText(["Alpha"]);
+  await expect(walkedTo(page)).toHaveText("Alpha");
+});
+
+test("j and k are query text in the filter, not walk keys", async ({ daemon, page }) => {
+  // Pinned so the split reads as a decision rather than an oversight. The hierarchy
+  // menus walk on j/k — asserted by the specs above — but inside the filter a bare
+  // letter is a letter, because a field that swallowed it could not search for a
+  // heading containing it.
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+  await expect(page.locator(`${CRUMB}.current`)).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  await page.keyboard.press("b");
+  await page.keyboard.press("/");
+  await expect(queryField(page)).toBeFocused();
+  await page.keyboard.type("k");
+
+  await expect(queryField(page)).toHaveValue("k");
+  // No heading in this plan holds a "k", so the letter narrowed the list rather
+  // than stepping it.
+  await expect(results(page)).toHaveCount(0);
+  await expect(filterPanel(page).getByRole("status")).toHaveText("No headings match");
+});
+
+test("the flat filter drives the list, not the command's own filter engine", async ({
+  daemon,
+  page,
+}) => {
+  // The vendored command scores every row against the query and hides what scores 0.
+  // Turning it off is what lets `headingMatches` own the list — the same one prop the
+  // ToC popup sets, which is what the issue means by sharing the override rather than
+  // copying it.
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+  await expect(page.locator(`${CRUMB}.current`)).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  await page.keyboard.press("b");
+  await page.keyboard.press("/");
+  await page.keyboard.type("o");
+
+  // Exactly the three matches, in document order, each naming its parent on its own
+  // row. Both halves are falsifiable here: the command's engine scores rows on their
+  // `value` — the source line — so with it on every row would score 0 and the panel
+  // would empty; and the nesting filter would answer this query with five rows,
+  // "Alpha" and "Delta" among them as dimmed ancestors.
+  await expect(results(page)).toHaveText(["Bravo Alpha", "Echo Delta", "Foxtrot Alpha"]);
 });
 
 test("the bar's / never reaches the plan's own search, and gives it back on close", async ({
@@ -632,7 +698,7 @@ test("the bar's / never reaches the plan's own search, and gives it back on clos
   const search = page.getByRole("search");
   await page.keyboard.press("b");
   await page.keyboard.press("/");
-  await expect(menu.locator(QUERY)).toBeFocused();
+  await expect(queryField(page)).toBeFocused();
   // The bar's keydown handler called preventDefault, which the window dispatcher
   // honours by returning early — so actions.search never fired.
   await expect(search).toHaveCount(0);
@@ -640,6 +706,7 @@ test("the bar's / never reaches the plan's own search, and gives it back on clos
   // Escape steps back to the hierarchy, a second one closes the menu; `/` on the
   // plan then opens the search pill exactly as it does with the bar untouched.
   await page.keyboard.press("Escape");
+  await expect(menu).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
   await page.keyboard.press("/");
@@ -656,14 +723,14 @@ test("Escape restores the hierarchical menu without leaving the bar", async ({ d
   const menu = page.locator(MENU);
   await page.keyboard.press("b");
   await page.keyboard.press("/");
-  await expect(menu.locator(QUERY)).toBeVisible();
+  await expect(queryField(page)).toBeVisible();
 
   await page.keyboard.press("Escape");
-  // Same menu, back on the hierarchy it opened with — and focus landed on a row,
-  // which is the whole reason restoring waits a tick for the swap to render. A
+  // The filter panel goes and the same crumb's menu comes back, on the hierarchy it
+  // opened with — and focus landed on a row, which is what keeps the walk alive. A
   // restore that stranded focus on the body would still pass the assertions above.
+  await expect(filterPanel(page)).toHaveCount(0);
   await expect(menu).toBeVisible();
-  await expect(menu.locator(QUERY)).toHaveCount(0);
   await expect(menu.getByRole("menuitem")).toHaveText(["Charlie"]);
   await expect(menu.getByRole("menuitem", { name: "Charlie" })).toBeFocused();
 
@@ -676,21 +743,56 @@ test("Tab leaves the filter rather than being swallowed by the query field", asy
   daemon,
   page,
 }) => {
-  // The field stops nearly every key to keep it out of the menu's typeahead, so
-  // the keys it must NOT stop need pinning: swallowing Tab strands a keyboard user
-  // inside the panel, because the menu's focus scope pulls focus straight back.
+  // Two ways to get this wrong, and the landing site catches the second. Swallowing
+  // Tab strands a keyboard user inside the panel; letting the browser's own default
+  // run from a panel portalled to the END of the body walks them off the document
+  // instead, since nothing is tabbable after it. Both leave the reviewer stuck, and
+  // only asserting where focus LANDS tells them apart.
   await daemon.seed({ plan: NESTED_PLAN });
   await page.goto("/");
   await expect(page.locator(`${CRUMB}.current`)).toBeVisible();
   await waitPastSafeModeGrace(page);
 
-  const menu = page.locator(MENU);
   await page.keyboard.press("b");
   await page.keyboard.press("/");
-  await expect(menu.locator(QUERY)).toBeFocused();
+  await expect(queryField(page)).toBeFocused();
 
   await page.keyboard.press("Tab");
-  await expect(menu).toHaveCount(0);
+  await expect(filterPanel(page)).toHaveCount(0);
+  // The next control in the row, which is where Tab out of the bar has always gone.
+  await expect(page.locator(".control-row .cwd")).toBeFocused();
+});
+
+test("a click outside dismisses the filter and leaves the plan where it was", async ({
+  daemon,
+  page,
+}) => {
+  // The filter is a panel of its own now, so the menu's dismissal no longer covers
+  // it: a popover left standing over the plan after the reviewer clicks away is the
+  // failure this pins.
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+
+  await jumpTo(page, "Charlie");
+  const parked = await parkedAt(page);
+
+  await page.keyboard.press("b");
+  await page.keyboard.press("/");
+  await expect(queryField(page)).toBeFocused();
+
+  // Below the panel's own box rather than on a named element: the panel hangs off a
+  // crumb at the top of the plan, so the first rows sit beneath it and a click there
+  // would land on the dismiss layer instead of outside it.
+  const panelBox = await filterPanel(page).boundingBox();
+  const planBox = await page.locator(PLAN_SURFACE).boundingBox();
+  expect(panelBox).not.toBeNull();
+  expect(planBox).not.toBeNull();
+  await page.mouse.click(planBox!.x + planBox!.width / 2, panelBox!.y + panelBox!.height + 40);
+
+  await expect(filterPanel(page)).toHaveCount(0);
+  await expect(page.locator(MENU)).toHaveCount(0);
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
+  expect(await scrollTop(page)).toBe(parked);
 });
 
 test("/ reaches the filter from inside a submenu too", async ({ daemon, page }) => {
@@ -707,14 +809,14 @@ test("/ reaches the filter from inside a submenu too", async ({ daemon, page }) 
   await page.locator(CRUMB).first().click();
   await page.keyboard.press("j");
   await page.keyboard.press("ArrowRight");
-  const submenu = page.locator("[data-slot='dropdown-menu-sub-content']");
+  const submenu = page.locator(SUBMENU);
   await expect(submenu).toBeVisible();
 
   await page.keyboard.press("/");
-  const menu = page.locator(MENU);
-  await expect(menu.locator(QUERY)).toBeFocused();
+  await expect(queryField(page)).toBeFocused();
   await expect(submenu).toHaveCount(0);
-  await expect(menu.getByRole("menuitem")).toHaveCount(6);
+  await expect(page.locator(MENU)).toHaveCount(0);
+  await expect(results(page)).toHaveCount(6);
 });
 
 test("a query matching nothing says so instead of emptying the panel", async ({ daemon, page }) => {
@@ -723,16 +825,17 @@ test("a query matching nothing says so instead of emptying the panel", async ({ 
   await expect(page.locator(`${CRUMB}.current`)).toBeVisible();
   await waitPastSafeModeGrace(page);
 
-  const menu = page.locator(MENU);
   await page.keyboard.press("b");
   await page.keyboard.press("/");
   await page.keyboard.type("zzz");
-  await expect(menu.getByRole("menuitem")).toHaveCount(0);
-  await expect(menu.locator(".crumb-filter-empty")).toHaveText("No headings match");
+  await expect(results(page)).toHaveCount(0);
+  // Narrowing to nothing is the one change aria-activedescendant cannot carry —
+  // there is no active row left to name — so a live region says it out loud.
+  await expect(filterPanel(page).getByRole("status")).toHaveText("No headings match");
 
   // Enter with nothing to jump to leaves the plan where it was.
   await page.keyboard.press("Enter");
-  await expect(menu).toBeVisible();
+  await expect(filterPanel(page)).toBeVisible();
   await expect(page.locator(CRUMB)).toHaveText(["Alpha"]);
 });
 
