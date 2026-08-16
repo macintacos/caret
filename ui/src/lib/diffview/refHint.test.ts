@@ -8,6 +8,7 @@ import {
   isRefHintDismissed,
   pickRefHintAnchors,
   refHintToken,
+  syncRefHints,
 } from "$lib/diffview/refHint.ts";
 
 // Both halves of the one-time reference hint (EXC-1061): the per-kind dismissal
@@ -242,6 +243,87 @@ describe("the default rect reader", () => {
     const refs: FileRefSpanMap = new Map([[1, [span(0, 4, "a.ts", "file")]]]);
     const got = pickRefHintAnchors(host, scroller, refs, ["file"]);
     expect(got.map((a) => ({ top: a.top, left: a.left }))).toEqual([{ top: 10, left: 200 }]);
+  });
+});
+
+describe("syncRefHints", () => {
+  const scroller = () => document.createElement("div");
+
+  test("picks a kind that only comes into view later, keeping the one already placed", () => {
+    // The reference kinds are rarely both on screen at once, so a sync that stopped
+    // as soon as anything was placed would leave the other kind untaught for good.
+    const host = makeHost([
+      [1, ["a.ts"]],
+      [2, ["src/lib"]],
+    ]);
+    const sc = scroller();
+    const refs: FileRefSpanMap = new Map([
+      [1, [span(0, 4, "a.ts", "file")]],
+      [2, [span(0, 7, "src/lib", "directory")]],
+    ]);
+    const kinds = ["file", "directory"] as const;
+    // Only the file is on screen at first.
+    const first = syncRefHints(host, sc, refs, kinds, [], reader(sc, { "src/lib": BELOW }));
+    expect(first.map((h) => h.kind)).toEqual(["file"]);
+    // The reviewer scrolls; now both are, and the directory joins.
+    const second = syncRefHints(host, sc, refs, kinds, first, reader(sc));
+    expect(second.map((h) => h.kind).sort()).toEqual(["directory", "file"]);
+  });
+
+  test("re-derives coordinates when the content above a token shifts", () => {
+    // Content coordinates survive scrolling, but not a height change above the
+    // token — a font arriving, a row repainting, a wide block moving into a card.
+    const host = makeHost([[1, ["a.ts"]]]);
+    const sc = scroller();
+    const refs: FileRefSpanMap = new Map([[1, [span(0, 4, "a.ts", "file")]]]);
+    const placed = syncRefHints(host, sc, refs, ["file"], [], reader(sc));
+    expect(placed[0]?.top).toBe(10);
+
+    const shifted = syncRefHints(host, sc, refs, ["file"], placed, (el) =>
+      el === sc ? SCROLLER : { top: 40, bottom: 50, left: 100, right: 200 },
+    );
+    expect(shifted[0]?.top).toBe(40);
+    expect(shifted.map((h) => h.kind)).toEqual(["file"]);
+  });
+
+  test("never moves a placed hint onto a different reference of its kind", () => {
+    // Which reference a kind teaches on is decided once. Scrolling past a later one
+    // must re-anchor the badge it has, not adopt the new one.
+    const host = makeHost([
+      [1, ["a.ts"]],
+      [2, ["b.ts"]],
+    ]);
+    const sc = scroller();
+    const refs: FileRefSpanMap = new Map([
+      [1, [span(0, 4, "a.ts", "file")]],
+      [2, [span(0, 4, "b.ts", "file")]],
+    ]);
+    const placed = syncRefHints(host, sc, refs, ["file"], [], reader(sc));
+    expect(placed[0]?.span.path).toBe("a.ts");
+    const again = syncRefHints(host, sc, refs, ["file"], placed, reader(sc));
+    expect(again.map((h) => h.span.path)).toEqual(["a.ts"]);
+  });
+
+  test("drops a hint whose kind has been retired since the last sync", () => {
+    const host = makeHost([[1, ["a.ts", " ", "src/lib"]]]);
+    const sc = scroller();
+    const refs: FileRefSpanMap = new Map([
+      [1, [span(0, 4, "a.ts", "file"), span(5, 12, "src/lib", "directory")]],
+    ]);
+    const both = syncRefHints(host, sc, refs, ["file", "directory"], [], reader(sc));
+    expect(both).toHaveLength(2);
+    // The reviewer opened a file, so only the directory is still being taught.
+    const after = syncRefHints(host, sc, refs, ["directory"], both, reader(sc));
+    expect(after.map((h) => h.kind)).toEqual(["directory"]);
+  });
+
+  test("drops a hint whose row has left the document", () => {
+    const host = makeHost([[1, ["a.ts"]]]);
+    const sc = scroller();
+    const refs: FileRefSpanMap = new Map([[1, [span(0, 4, "a.ts", "file")]]]);
+    const placed = syncRefHints(host, sc, refs, ["file"], [], reader(sc));
+    host.shadowRoot?.querySelector('[data-line="1"]')?.remove();
+    expect(syncRefHints(host, sc, refs, ["file"], placed, reader(sc))).toEqual([]);
   });
 });
 

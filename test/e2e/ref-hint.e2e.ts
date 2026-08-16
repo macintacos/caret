@@ -20,6 +20,9 @@
 // a synthetic project dir and seeds a review whose cwd points at it. The content is
 // throwaway, non-identifying scaffolding — never a real plan.
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import type { Page } from "@playwright/test";
 
 import { makeProject } from "@test/e2e/support/file-refs.ts";
@@ -406,6 +409,51 @@ test("a new version re-measures the badges against the document it delivered", a
   } finally {
     await proj.cleanup();
   }
+});
+
+// The dev fixture, against the repo it cites. Every synthetic plan above is a few
+// lines long and finishes laying out in one frame, which is exactly why none of them
+// caught the two defects this covers: on a real plan the content above a reference
+// keeps settling after first paint (a font arriving, shiki repainting, an over-wide
+// fenced block moving into its own card), and the two kinds are screenfuls apart
+// rather than on one line. `mise run dev` renders this same file, so a reviewer
+// eyeballing the badge and this spec are looking at the same thing.
+const FAKE_PLAN_PATH = "scripts/tasks/dev/fake-plan.md";
+
+test("the dev fake plan badges both kinds, each on its own token", async ({ daemon, page }) => {
+  const repoRoot = process.cwd();
+  const plan = readFileSync(join(repoRoot, FAKE_PLAN_PATH), "utf8");
+  // The repo itself is the cwd, so the plan's citations resolve the way they do
+  // under `mise run dev`.
+  await daemon.seed({ cwd: repoRoot, plan });
+  await page.goto("/");
+  await planSurface(page);
+  await expect(page.locator("[data-file-ref]").first()).toBeAttached();
+
+  /** Scroll the first reference of a kind into view and assert its badge lands on
+   * it. Retried: the anchor re-derives as the content settles, so the claim is
+   * that it converges on the token, not that it is right on the first frame. */
+  const check = async (selector: string, name: string) => {
+    await page.evaluate((sel) => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+      sh?.querySelector(sel)?.scrollIntoView({ block: "center" });
+    }, selector);
+    await expect(page.getByRole("button", { name })).toHaveCount(1);
+    await expect(async () => {
+      const corner = await tokenTopRight(page, selector);
+      expect(corner).not.toBeNull();
+      const at = await badgeCenter(page, name);
+      expect(Math.abs(at.x - corner!.x)).toBeLessThanOrEqual(1.5);
+      expect(Math.abs(at.y - corner!.y)).toBeLessThanOrEqual(1.5);
+    }).toPass();
+  };
+
+  // The file reference first, then the directory one — which lives several
+  // screenfuls further down, so it can only be picked up on a later scroll.
+  await check('[data-file-ref=""]', FILE_BADGE);
+  await check('[data-file-ref="directory"]', DIR_BADGE);
+  // And the first badge is still there, still on its own token.
+  await expect(fileBadge(page)).toHaveCount(1);
 });
 
 test("compare mode shows no badge, and spends neither hint", async ({ daemon, page }) => {

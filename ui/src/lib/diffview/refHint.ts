@@ -84,11 +84,73 @@ const firstRectReader: RectReader = (el) => {
 };
 
 /**
+ * Bring `current` up to date and pick anchors for any requested kind that has
+ * none yet. The one entry point the view drives.
+ *
+ * Two jobs, and both have to keep happening rather than being done once:
+ *
+ * Coordinates are RE-DERIVED, never stored and trusted. They are content
+ * coordinates, so scrolling alone cannot invalidate them — but anything above the
+ * token changing height does, and plenty does after first paint: a web font
+ * arriving, shiki repainting a row, an over-wide fenced block being re-parented
+ * into its own card. A badge placed once then left alone drifts off its token by
+ * however much the content above it settled.
+ *
+ * And a kind with no anchor yet keeps being looked for. The pick only ever
+ * anchors to a reference ON SCREEN, so the file and the directory reference are
+ * rarely both in view at the same moment — placing whichever arrives first and
+ * stopping would leave the other kind untaught for the whole session.
+ *
+ * What is decided once and never revisited is WHICH reference a kind teaches on:
+ * a hint already in `current` keeps its line and span, so scrolling past a later
+ * reference never moves a badge onto it.
+ */
+export function syncRefHints(
+  host: HTMLElement,
+  scroller: HTMLElement,
+  refs: FileRefSpanMap,
+  kinds: readonly FileRefKind[],
+  current: readonly RefHintAnchor[],
+  read: RectReader = firstRectReader,
+): RefHintAnchor[] {
+  const kept: RefHintAnchor[] = [];
+  for (const hint of current) {
+    // A kind absent from `kinds` has been retired since the last sync; its badge
+    // goes with it rather than being re-anchored.
+    if (!kinds.includes(hint.kind)) continue;
+    const token = refHintToken(host, hint);
+    // The row is gone entirely (a plan switch mid-flight); drop rather than
+    // freeze the badge over whatever now occupies those coordinates.
+    if (!token.isConnected) continue;
+    const at = anchorFor(token, scroller, read);
+    kept.push({ ...hint, token, top: at.top, left: at.left });
+  }
+  const missing = kinds.filter((k) => !kept.some((h) => h.kind === k));
+  if (missing.length === 0) return kept;
+  return [...kept, ...pickRefHintAnchors(host, scroller, refs, missing, read)];
+}
+
+// The token's top-right in the scroll container's content coordinates. The
+// conversion mirrors copyAnchor: a row's content offset is its viewport edge
+// minus the scroller's viewport edge, plus how far the content is scrolled.
+function anchorFor(
+  token: HTMLElement,
+  scroller: HTMLElement,
+  read: RectReader,
+): { top: number; left: number } {
+  const r = read(token);
+  const s = read(scroller);
+  return {
+    top: r.top - (s.top - scroller.scrollTop),
+    left: r.right - (s.left - scroller.scrollLeft),
+  };
+}
+
+/**
  * The first on-screen reference of each requested kind, in reading order, with
- * its top-right in the scroll container's content coordinates — a badge placed
- * absolutely there sits at the reference's corner and scrolls with the rows.
- * At most one anchor per kind: the hint teaches the affordance once, not once
- * per path.
+ * its top-right in the scroll container's content coordinates. At most one anchor
+ * per kind: the hint teaches the affordance once, not once per path. Callers go
+ * through syncRefHints; this is the choosing half on its own.
  *
  * Reading order is by line, so the keys are sorted numerically — the merged map
  * appends its link-emitted lines after the scanned ones (mergeFileRefSpans), so
@@ -120,14 +182,7 @@ export function pickRefHintAnchors(
       if (r.bottom <= s.top || r.top >= s.bottom || r.right <= s.left || r.left >= s.right) {
         continue;
       }
-      anchors.push({
-        kind,
-        line,
-        span,
-        token,
-        top: r.top - (s.top - scroller.scrollTop),
-        left: r.right - (s.left - scroller.scrollLeft),
-      });
+      anchors.push({ kind, line, span, token, ...anchorFor(token, scroller, read) });
       wanted.delete(kind);
       if (wanted.size === 0) return anchors;
     }

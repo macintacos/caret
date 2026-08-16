@@ -49,9 +49,9 @@
   import {
     dismissRefHint,
     isRefHintDismissed,
-    pickRefHintAnchors,
     type RefHintAnchor,
     refHintToken,
+    syncRefHints,
   } from "$lib/diffview/refHint.ts";
   import { resolveFileRefs } from "$lib/api.ts";
   import { shortCwd } from "$lib/cwd.ts";
@@ -725,73 +725,70 @@
   // in place. Deliberately a plain `let`, so reading it below is not a dependency.
   let measured: { host: HTMLElement; key: string } | undefined;
 
-  // Place the badges once per document. The anchor cannot be taken at mount: the
-  // kinds arrive from a daemon round trip (resolveFileRefs above) and the token
-  // tagging runs on a frame off SourceView's MutationObserver, so there is no moment
-  // after mount at which the tokens are known to exist.
+  // Keep the badges anchored, for as long as this document is on screen. The work
+  // is syncRefHints (refHint.ts); this effect only decides WHEN to run it, and the
+  // answer is "whenever anything could have moved a token", because two things can:
   //
-  // A first attempt therefore comes up empty for two quite different reasons, and
-  // they want different waits. The tokens may not be TAGGED yet — a few frames, which
-  // is the budget retryFrames already spends on anything needing a painted row. Or
-  // every reference may simply be BELOW THE FOLD, which no number of frames fixes:
-  // the pick only anchors to something on screen, so the reviewer has to bring one
-  // into view first. Plans put their citations in the body rather than the opening
-  // paragraph, so that is the ordinary case rather than the corner one — hence the
-  // scroll listener, which keeps looking until a placement lands and then detaches
-  // for good. "Placed once" is a promise that a badge never RE-anchors, not that we
-  // only ever look at the first screenful.
+  // The reviewer SCROLLS. The pick only ever anchors to a reference in view, and a
+  // plan puts its citations in the body rather than the opening paragraph, so the
+  // kinds are usually taught one at a time as each comes into view — the file
+  // reference on one screenful, the directory reference several screenfuls later.
   //
-  // After that the coordinates need no tracking at all: they are content
-  // coordinates, so the badge scrolls away with its token as the copy button does.
+  // The content RESIZES. Content coordinates survive scrolling by construction, but
+  // not a change in the height of anything above the token — a web font arriving,
+  // shiki repainting a row, an over-wide fenced block moving into its own card. Each
+  // shifts every row below it, and a badge holding coordinates from before the shift
+  // sits where its token used to be. Observing the host catches all of them without
+  // caring which: they all change the rendered height.
+  //
+  // rAF-throttled together, so a flung scroll costs one sync per frame. `refHints` is
+  // keyed by kind in the template, so a sync updates the badge's props and leaves the
+  // instance — and its running ping — alone.
   $effect(() => {
     const scroller = scrollEl;
     const el = host;
     const refs = fileRefs;
     const key = contentKey;
     // Nothing to teach on the compare surface, and its rows are a different
-    // document — looking there would walk the single-version view's torn-out
+    // document — syncing there would walk the single-version view's torn-out
     // shadow root for a badge that cannot render anyway.
     if (showDiff || scroller == null || el == null || refs === undefined) return;
-    if (measured?.host === el && measured.key === key) return;
-    // Anchors taken against the previous document point at coordinates this one
-    // does not share and at tokens its re-render detached; drop them before
-    // looking again rather than rendering a badge over a dead token.
-    refHints = [];
-    const kinds = (["file", "directory"] as const).filter((k) => !isRefHintDismissed(k));
-    if (kinds.length === 0) return;
-
-    let placed = false;
-    let raf = 0;
-    // Idempotent: whichever path lands the placement, every later call is a no-op,
-    // so a scroll can never move a badge already sitting on its token.
-    const place = (): boolean => {
-      if (placed) return true;
-      const found = pickRefHintAnchors(el, scroller, refs, kinds);
-      if (found.length === 0) return false;
-      refHints = found;
+    // A different document: its rows are not the ones the current hints chose, so
+    // start the choice over rather than re-anchoring onto whatever now sits there.
+    if (measured?.host !== el || measured.key !== key) {
+      refHints = [];
       measured = { host: el, key };
-      placed = true;
-      return true;
+    }
+    if (isRefHintDismissed("file") && isRefHintDismissed("directory")) return;
+
+    let raf = 0;
+    const sync = (): void => {
+      raf = 0;
+      // Re-read the flags every sync rather than closing over a snapshot: opening a
+      // reference retires its kind without changing anything this effect depends on,
+      // so a captured list would re-pick the badge the reviewer just spent.
+      const kinds = (["file", "directory"] as const).filter((k) => !isRefHintDismissed(k));
+      refHints = syncRefHints(el, scroller, refs, kinds, refHints);
     };
-    // rAF-throttled, so a flung scroll costs one pick per frame rather than one per
-    // event. `teardown` is declared below and only ever CALLED from here, which is
-    // after the effect body has run.
-    const onScroll = (): void => {
-      if (raf !== 0) return;
-      raf = requestAnimationFrame(() => {
-        raf = 0;
-        if (place()) teardown();
-      });
+    const schedule = (): void => {
+      if (raf === 0) raf = requestAnimationFrame(sync);
     };
-    const cancelFrames = retryFrames(place);
-    scroller.addEventListener("scroll", onScroll, { passive: true });
-    const teardown = (): void => {
+    // The first sync still spends the painted-row budget: the tokens are tagged on a
+    // frame off SourceView's MutationObserver, so there is nothing to anchor to for
+    // the first few frames after a document arrives.
+    const cancelFrames = retryFrames(() => {
+      sync();
+      return refHints.length > 0;
+    });
+    scroller.addEventListener("scroll", schedule, { passive: true });
+    const observer = new ResizeObserver(schedule);
+    observer.observe(el);
+    return () => {
       cancelFrames();
       cancelAnimationFrame(raf);
-      raf = 0;
-      scroller.removeEventListener("scroll", onScroll);
+      observer.disconnect();
+      scroller.removeEventListener("scroll", schedule);
     };
-    return teardown;
   });
 
   // Re-hover the row under a stationary cursor as the plan scrolls (EXC-836). The
