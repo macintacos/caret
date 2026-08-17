@@ -185,9 +185,10 @@ export function approvedMessage(notes?: string): string {
  * plan every round is redundant. A feedback line reference indexes the plan
  * version caret stored, and the abbreviated quote paired with it is what the agent
  * matches against its own text. `abbreviate` in ui/src/lib/feedback.ts builds that
- * quote. On this path the stored version is rumdl-reflowed to 90 columns at ingest
- * (src/plan/markdown.ts) and there is no plan file, so the numbers need not line up
- * with the agent's copy at all. */
+ * quote. The stored version is rumdl-reflowed to 90 columns at ingest
+ * (src/plan/markdown.ts); on this path there is no plan file to mirror it back to,
+ * so the numbers need not line up with the agent's copy at all. (Pinned across its
+ * three surfaces by test/structure/line-anchor-claim.test.ts.) */
 export function deniedMessage(feedback: string): string {
   return [
     "caret: the user requested CHANGES to this plan.",

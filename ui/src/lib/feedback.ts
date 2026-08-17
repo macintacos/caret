@@ -7,9 +7,8 @@
 // inline; a line-anchored annotation pairs it with the annotation's 1-based line
 // reference. A feedback line reference indexes the plan version caret stored, and
 // the abbreviated quote paired with it is what the agent matches against its own
-// text. That is what lets the agent find the feedback even when its own line
-// numbering differs. (Pinned across its three surfaces by
-// test/structure/line-anchor-claim.test.ts.)
+// text. So it finds the feedback even when its own line numbering differs. (Pinned
+// across its three surfaces by test/structure/line-anchor-claim.test.ts.)
 
 import {
   type Annotation,

@@ -241,10 +241,9 @@ feedback line reference indexes the plan version caret stored, and the abbreviat
 paired with it is what the agent matches against its own text. That stored version is
 reflowed to caret's 90-column shape at ingest (see
 [Plan formatting](CONFIGURING.md#plan-formatting-rumdl)), so the numbers are caret's, not
-yours — match on the quote. So the loop is call, read the feedback, revise, call again,
-until an approval returns. An approval may carry reviewer notes of its own, in a clearly
-labeled section, to fold in as the work proceeds; that is not another round, the plan is
-already approved.
+yours. So the loop is call, read the feedback, revise, call again, until an approval
+returns. An approval may carry reviewer notes of its own, in a clearly labeled section, to
+fold in as the work proceeds; that is not another round, the plan is already approved.
 
 The same **fail-safe = deny** rule holds where it matters, on the review decision itself:
 a spawn failure, an unparseable decision, or a timeout (`review.timeout_s`, 1 hour by
