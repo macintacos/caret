@@ -12,7 +12,7 @@
 // pure boot decisions (planStateDir, daemonCommand, childEnvFor, makeCleanup)
 // are plain functions tested directly.
 
-import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, rmSync } from "node:fs";
+import { closeSync, mkdirSync, mkdtempSync, openSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -176,14 +176,6 @@ const realDevDeps: DevDeps = {
  * Never returns on the signal path — the handler calls process.exit — and calls
  * process.exit with Vite's code on the normal path. */
 export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): Promise<never> {
-  // Self-heal missing JS deps so a fresh clone or worktree can run dev without a
-  // separate install first. The Vite bin is the sentinel, so the common path
-  // (deps present) is a cheap stat, not a full install on every boot.
-  if (!existsSync("node_modules/.bin/vite")) {
-    console.error("caret dev: JS deps not installed — running bun install");
-    await deps.spawn(["bun", "install"], { stdout: "inherit", stderr: "inherit" }).exited;
-  }
-
   // Dev reads its own config.dev.toml, never the user's production config.toml
   // (EXC-781). --fresh instead boots from built-in defaults by pointing at a path
   // that does not exist (loadSettings falls back to DEFAULTS on a missing file),
