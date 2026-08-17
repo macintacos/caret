@@ -22,6 +22,7 @@ import { readDiffStyle, writeDiffStyle } from "$lib/diffStylePref.ts";
 import type { DiffIndicators, DiffStyle } from "$lib/diffview/types.ts";
 import type { IconName } from "$lib/icons.ts";
 import { readShortcutHints, writeShortcutHints } from "$lib/shortcutHintsPref.ts";
+import { readSoundEnabled, writeSoundEnabled } from "$lib/soundPref.ts";
 import { type Scheme, type ThemeId, themesForScheme } from "$lib/theme.ts";
 
 /** One choice in a select or segmented control. `swatch` is an optional row of CSS
@@ -260,6 +261,19 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     read: readDiffIndicators,
     write: writeDiffIndicators,
   }),
+  // The one off-switch for every sound caret makes (EXC-1100). The sound layer reads
+  // the same preference on every play, so flipping this silences the app on the next
+  // cue with nothing to resync. The volume it also reads is persisted but has no
+  // control yet — EXC-1101 adds the slider.
+  stagedField<boolean>({
+    key: "sound",
+    category: "Sound",
+    label: "Sounds",
+    description: "Play a short cue when a plan arrives, a decision lands, or something fails.",
+    control: { kind: "toggle" },
+    read: readSoundEnabled,
+    write: writeSoundEnabled,
+  }),
   // Live, browser-owned notification permission (EXC-847): a search-only entry so
   // /-search (EXC-845) finds it. The pane itself (NotificationsPane) renders the
   // live state and the enable / test affordance — there is nothing to persist.
@@ -315,9 +329,12 @@ export interface SettingCategory {
 /** The ordered sidebar taxonomy (EXC-843). The two-pane shell renders a nav item
  * per category that has at least one registry entry, in this order, and shows the
  * blurb beneath the pane title. Later panes append their categories here —
- * Notifications (EXC-847), Advanced (EXC-848). */
+ * Sound (EXC-1100), Notifications (EXC-847), Advanced (EXC-848). Sound sits directly
+ * before Notifications: both are how caret gets the reviewer's attention, so they read
+ * as a pair. */
 export const SETTINGS_CATEGORIES: readonly SettingCategory[] = [
   { id: "Appearance", blurb: "How the interface looks, including the diff view." },
+  { id: "Sound", blurb: "Short cues when a plan arrives and a decision lands." },
   { id: "Notifications", blurb: "Desktop alerts when a new plan is ready for review." },
   { id: "Advanced", blurb: "Read-only details about this install. Click a block to copy it." },
 ];
