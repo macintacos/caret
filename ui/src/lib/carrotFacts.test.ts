@@ -32,6 +32,16 @@ describe("CARROT_FACTS", () => {
     expect(new Set(sources).size).toBe(sources.length);
   });
 
+  // The line carries no heading and no context, so a fact that never names the
+  // carrot reads as a stray sentence about a pigment, a name, or a plant family.
+  // This is the floor; prominence is editorial — put the carrot in the subject
+  // rather than in a trailing clause or an aside.
+  test("every fact names the carrot", () => {
+    for (const fact of CARROT_FACTS) {
+      expect(fact.text).toMatch(/carrots?\b/i);
+    }
+  });
+
   test("no fact strays into health claims or the night-vision myth", () => {
     for (const fact of CARROT_FACTS) {
       for (const pattern of FORBIDDEN) {

@@ -42,7 +42,7 @@ export const CARROT_FACTS: readonly CarrotFact[] = [
     source: "https://en.wikipedia.org/wiki/Carrot#Propagation",
   },
   {
-    text: "Splitting in the ground and breaking after harvest can between them affect over 30% of a commercial carrot crop.",
+    text: "Carrots split in the ground and break after harvest, and between them those two defects can affect over 30% of a commercial crop.",
     source: "https://en.wikipedia.org/wiki/Carrot#Pests_and_diseases",
   },
   {
@@ -54,11 +54,11 @@ export const CARROT_FACTS: readonly CarrotFact[] = [
     source: "https://en.wikipedia.org/wiki/Carrot#Storage",
   },
   {
-    text: "World production of carrots and turnips reached 45 million tonnes in 2024, and China grew 42% of it.",
+    text: "Carrots and turnips together came to 45 million tonnes of world production in 2024, 42% of it grown in China.",
     source: "https://en.wikipedia.org/wiki/Carrot#Production",
   },
   {
-    text: "So that Portugal could keep selling its carrot jam, the Council of the European Union classified the carrot as a fruit for the purposes of jam regulation.",
+    text: "Carrot jam counts as fruit jam in the EU: only fruit may go into one, so the Council of the European Union ruled the carrot a fruit to save a Portuguese delicacy.",
     source: "https://en.wikipedia.org/wiki/Carrot#Culinary",
   },
   {
@@ -74,7 +74,7 @@ export const CARROT_FACTS: readonly CarrotFact[] = [
     source: "https://en.wikipedia.org/wiki/Daucus_carota#Association_with_other_plants",
   },
   {
-    text: "The name Queen Anne's lace is not recorded before 1895 — some 180 years after the queen it honours.",
+    text: "The wild carrot is known as Queen Anne's lace in North America, though the name is not recorded before 1895 — some 180 years after the queen it honours.",
     source: "https://en.wikipedia.org/wiki/Daucus_carota#Culture",
   },
   {
@@ -102,7 +102,7 @@ export const CARROT_FACTS: readonly CarrotFact[] = [
     source: "https://en.wikipedia.org/wiki/Holtville,_California",
   },
   {
-    text: "Anthocyanins — the pigments behind a purple carrot — are approved as food colouring in the EU, Australia and New Zealand under the code E163.",
+    text: "A black carrot takes its colour from anthocyanins, the pigment class approved as food colouring in the EU, Australia and New Zealand under the code E163.",
     source: "https://en.wikipedia.org/wiki/Anthocyanin#Colorant_safety",
   },
   {
