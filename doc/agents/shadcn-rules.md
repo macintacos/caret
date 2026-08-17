@@ -314,13 +314,13 @@ expensive way:
  3 │ import * as Sheet from "$lib/components/ui/sheet/index.js";
 ```
 
-Two things about the tree are known-imperfect, and both are deliberately left for whoever
-first composes a Sheet, since the branch that would render one is dead code today.
-`sheet-content.svelte` still carries the dead `data-open:` / `data-closed:` animation
-utilities that EXC-891's finding removed from the dialog, popover and select trees —
-bits-ui emits `data-state`, so Tailwind compiles those into `[data-open]` selectors
-nothing ever stamps. And `sheet-overlay.svelte` is not yet on the shared modal
-choreography, per § The caret surface language.
+`sheet-content.svelte`'s animation utilities carried the same dead `data-open:` /
+`data-closed:` spelling EXC-891's finding removed from the dialog, popover and select
+trees; EXC-1117 corrected them to `data-[state=open]:` / `data-[state=closed]:` along with
+the rest of the tree, so the branch renders correctly whenever it is first reached. One
+known-imperfection remains, deliberately left for whoever first composes a Sheet, since
+the branch that would render one is dead code today: `sheet-overlay.svelte` is not yet on
+the shared modal choreography, per § The caret surface language.
 
 ## Testing note
 
@@ -363,6 +363,32 @@ later work doesn't rediscover it — see `shadcn-foundation.test.ts`:
   needs the fixture). Assert through `data-slot`, never through the registry's `cn-*`
   marker classes — those are defined in the registry style's own CSS layer, which caret
   does not import, so they are inert here and get renamed upstream freely.
+
+### A bare `data-<word>:` variant is only for a presence attribute
+
+Tailwind compiles a bare `data-open:` into an `[data-open]` **presence** selector. Where
+the thing stamping the attribute gives it a *value*, the utility silently misfires — dead
+(`data-horizontal:` against bits-ui's `data-orientation="horizontal"`) or always-on
+(`data-active:` against Svelte's serialization of `isActive={false}` as
+`data-active="false"`). Neither mode is visible to a mount suite, because happy-dom
+computes no layout: EXC-1101 shipped a slider whose track was 0px tall behind 290 lines of
+passing new tests.
+
+So the bare form is legal only where bits-ui stamps the attribute as `"" | undefined`.
+Today's tree uses four of those — `data-disabled`, `data-highlighted`, `data-selected`,
+`data-placeholder` — and `PRESENCE_VALUED` in the gate lists exactly those. bits-ui stamps
+around twenty more the same way (`data-readonly`, `data-invalid`, `data-today`, …), so a
+newly vendored tree may legitimately extend the set: check `bits-ui/dist` before
+converting a bare variant, and extend the allowlist when the attribute really is presence.
+Everything else takes the valued bracket form (`data-[state=open]:`,
+`data-[active=true]:`).
+
+`test/structure/shadcn-data-variants.test.ts` is the gate; it reads every `.svelte` and
+`.ts` file in the vendored tree, so a re-sync restoring a stock spelling reds `bun test`
+rather than waiting for someone to look at the pixels. Correct a violation at the
+**selector**, not by changing what the component stamps — caret's own CSS selects
+`[data-active="true"]` in `SettingsDialog.svelte`, and switching the stamp to presence
+would break those rules while letting the guard go green on a re-synced bare class.
 
 ## Related rules
 

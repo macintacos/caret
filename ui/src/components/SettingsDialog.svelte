@@ -416,17 +416,15 @@
      and bold ink ("amber marks the selection") — so selection reads at a glance.
      `position: relative` anchors the rail pseudo-element.
 
-     `background: transparent` is load-bearing: shadcn's SidebarMenuButton ships
-     `data-active:bg-sidebar-accent`, and Tailwind matches that variant on the
-     PRESENCE of data-active — Svelte serializes isActive={false} as
-     data-active="false" (attribute present), so every unselected row would
-     otherwise wear the grey accent fill at rest. This out-specifies it; the amber
-     selected rule and the hover tint below paint over it where wanted. */
+     Unselected rows sit at the inherited weight. The vendored
+     `data-[active=true]:font-medium` reaches only the selected row, which the rule
+     below overrides to 600 — so the weight axis carries selection on its own, and
+     the 500 the row would otherwise wear is what made an unselected row read as
+     half-selected. */
   .settings :global([data-slot="sidebar-menu-button"]) {
     position: relative;
     justify-content: flex-start;
     color: var(--ink-soft);
-    background: transparent;
   }
   /* Unselected rows are transparent at rest; on hover they take --ink-wash, the
      shared neutral tint for a control the surface shows through — gentler than the

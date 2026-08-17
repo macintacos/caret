@@ -117,29 +117,16 @@
   .volume :global([data-slot="slider"]) {
     width: 9rem;
   }
-  /* The track's SIZE is set here, not left to the vendored classes. The registry ships
-     `data-horizontal:h-1 data-horizontal:w-full` on the track and `data-horizontal:h-full`
-     on the range, which Tailwind compiles to `[data-horizontal]` — but the component
-     stamps `data-orientation="horizontal"`, so none of them ever match and the track
-     renders 0px tall. It is the same dead-variant shape shadcn-rules.md § The vendored
-     `sheet` tree stays records for sheet-content's `data-open:` utilities, and it is
-     invisible to the unit and e2e suites because neither computes layout — only looking
-     at it catches it. Spelling the geometry here rather than fixing the vendored classes
-     keeps it out of reach of a re-sync's wholesale revert, and caret renders no vertical
-     slider for the orientation variants to matter to.
-
-     Track and fill are the Switch's two fills, unrolled: --rule-strong for the empty part
+  /* Track and fill are the Switch's two fills, unrolled: --rule-strong for the empty part
      is the Switch's off state, and the filled part needs no rule here at all — the
      vendored `bg-primary` already bridges to --accent, which is the Switch's on state.
      The Sound pane's two rows then read as one control surface rather than two languages,
-     and the fill inherits the app's "amber marks the live value" convention. */
+     and the fill inherits the app's "amber marks the live value" convention.
+
+     Geometry is the vendored classes' job, gated by
+     test/structure/shadcn-data-variants.test.ts. */
   .volume :global([data-slot="slider-track"]) {
-    width: 100%;
-    height: 0.25rem;
     background: var(--rule-strong);
-  }
-  .volume :global([data-slot="slider-range"]) {
-    height: 100%;
   }
   /* The thumb matches the Switch's knob: same 1rem circle, same --paper fill (which the
      vendored `bg-background` bridges to). Its border is the only thing defining it —
