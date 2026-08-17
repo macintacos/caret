@@ -236,13 +236,14 @@ from the tool context, so there is nothing else to thread through.
 
 It **blocks until you decide**. A change request comes back as the tool result: the
 reviewer's feedback, plus an instruction to revise and call again. The plan itself is
-deliberately not echoed back — the agent still holds it in its own tool-call arguments.
-The feedback's line numbers point into caret's stored copy, which is reflowed to caret's
-90-column shape at ingest (see [Plan formatting](CONFIGURING.md#plan-formatting-rumdl)),
-so each one carries an abbreviated quote to match against your own text. So the loop is
-call, read the feedback, revise, call again, until an approval returns. An approval may
-carry reviewer notes of its own, in a clearly labeled section, to fold in as the work
-proceeds; that is not another round, the plan is already approved.
+deliberately not echoed back — the agent still holds it in its own tool-call arguments. A
+feedback line reference indexes the plan version caret stored, and the abbreviated quote
+paired with it is what the agent matches against its own text. That stored version is
+reflowed to caret's 90-column shape at ingest (see
+[Plan formatting](CONFIGURING.md#plan-formatting-rumdl)), so the numbers are caret's, not
+yours. So the loop is call, read the feedback, revise, call again, until an approval
+returns. An approval may carry reviewer notes of its own, in a clearly labeled section, to
+fold in as the work proceeds; that is not another round, the plan is already approved.
 
 The same **fail-safe = deny** rule holds where it matters, on the review decision itself:
 a spawn failure, an unparseable decision, or a timeout (`review.timeout_s`, 1 hour by
