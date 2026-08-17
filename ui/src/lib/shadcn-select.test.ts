@@ -129,8 +129,8 @@ test("the content keys its enter/exit on the attribute bits-ui actually stamps",
   // because the class is inert either way — the DOM cannot tell the two spellings apart.
   expect(selectContentSource).toContain("data-[state=open]:animate-in");
   expect(selectContentSource).toContain("data-[state=closed]:animate-out");
-  expect(selectContentSource).not.toContain("data-open:");
-  expect(selectContentSource).not.toContain("data-closed:");
+  // That the bare spelling is absent is gated tree-wide by
+  // test/structure/shadcn-data-variants.test.ts; these two claim the animation exists.
 });
 
 test("the content composes both scroll buttons", () => {

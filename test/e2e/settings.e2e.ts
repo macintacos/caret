@@ -513,12 +513,13 @@ test("only the selected category is filled — an unselected nav row is transpar
 
   await openSettings(page);
 
-  // Appearance is selected by default; Notifications is not. shadcn's SidebarMenuButton
-  // ships `data-active:bg-sidebar-accent`, and Tailwind matches that variant on the mere
-  // PRESENCE of data-active — Svelte serializes the unselected row as data-active="false"
-  // (attribute present), so without an explicit transparent it wears the grey accent fill
-  // at rest and rivals the amber selection (EXC-847 regression). Assert in a real browser:
-  // the unselected row is transparent, the selected row is not.
+  // Appearance is selected by default; Notifications is not. sidebar-menu-button.svelte
+  // keys its accent fill on `data-[active=true]:`; stock's bare `data-active:` matches on
+  // the mere PRESENCE of the attribute, and Svelte serializes the unselected row as
+  // data-active="false" — so a revert paints every row with the grey accent fill at rest
+  // and it rivals the amber selection (EXC-847 regression, EXC-1117 fix). Assert in a real
+  // browser: the unselected row is transparent, the selected row is not.
+  // test/structure/shadcn-data-variants.test.ts is the cheaper guard and reds first.
   const unselected = page.locator("[data-category='Notifications']");
   const selected = page.locator("[data-category='Appearance']");
   await expect(unselected).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
@@ -823,11 +824,12 @@ test("the volume slider is keyboard-operable, named, and persists", async ({ dae
   await expect(slider).toHaveAttribute("aria-valuenow", "25");
   await expect(dialog.locator("[data-field='soundVolume'] .readout")).toHaveText("25%");
 
-  // The track has to actually be a track. The vendored registry sizes it with
-  // `data-horizontal:h-1`, which Tailwind compiles to `[data-horizontal]` while the
-  // component stamps `data-orientation="horizontal"` — so the utility never matches and
-  // the track renders 0px tall, invisible, with every ARIA assertion above still green.
-  // SettingSlider.svelte sets the geometry itself; this is what notices if that goes.
+  // The track has to actually be a track. slider.svelte sizes it with
+  // `data-[orientation=horizontal]:h-1`; stock's bare `data-horizontal:` compiles to
+  // `[data-horizontal]` while the component stamps `data-orientation="horizontal"`, so a
+  // revert leaves the track 0px tall and invisible with every ARIA assertion above still
+  // green (EXC-1117). This is what notices in a browser;
+  // test/structure/shadcn-data-variants.test.ts is the cheaper guard and reds first.
   const box = await dialog.locator("[data-slot='slider-track']").boundingBox();
   expect(box?.height).toBeGreaterThan(0);
   expect(box?.width).toBeGreaterThan(0);
