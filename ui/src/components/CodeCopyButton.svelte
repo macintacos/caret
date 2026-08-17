@@ -7,6 +7,7 @@
   // the diff surface), so — unlike the motionless shadow render surface — it may
   // animate; the app.css reduced-motion kill-switch collapses it for that preference.
   import { Button } from "$lib/components/ui/button/index.js";
+  import { sound } from "$lib/sound.ts";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import Icon from "@/components/Icon.svelte";
 
@@ -34,6 +35,8 @@
     } catch {
       return; // clipboard can reject (permissions / unavailable) — leave the copy glyph.
     }
+    // Only on the path that actually copied — a rejected write is not a success.
+    sound.play("copyCode");
     copied = true;
     clearTimeout(timer);
     timer = setTimeout(() => {

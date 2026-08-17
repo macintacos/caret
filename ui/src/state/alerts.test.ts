@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { type AlertStore, createAlerts } from "@/state/alerts.ts";
+import type { SoundEvent } from "$lib/sound.ts";
 
 // A controllable scheduler so the auto-dismiss + exit timing is deterministic —
 // the same injected-timer discipline safeMode.test.ts uses. `schedule` records a
@@ -115,5 +116,62 @@ describe("createAlerts", () => {
     alerts.push({ message: "first" });
     alerts.push({ message: "second" });
     expect(store.alerts.map((a) => a.message)).toEqual(["first", "second"]);
+  });
+});
+
+describe("createAlerts sound (EXC-1100)", () => {
+  /** An alert queue wired to a recording sound dep, plus what it has played. */
+  function withSound() {
+    const store = makeStore();
+    const events: SoundEvent[] = [];
+    const alerts = createAlerts(store, {
+      schedule: makeScheduler().schedule,
+      sound: (e) => events.push(e),
+    });
+    return { alerts, events };
+  }
+
+  test("a success toast sounds success", () => {
+    const { alerts, events } = withSound();
+    alerts.push({ variant: "success", message: "Copied path to clipboard" });
+    expect(events).toEqual(["toastSuccess"]);
+  });
+
+  test("a destructive toast sounds the error", () => {
+    const { alerts, events } = withSound();
+    alerts.push({ variant: "destructive", message: "Couldn't send the decision" });
+    expect(events).toEqual(["toastError"]);
+  });
+
+  test("a plain toast sounds the neutral notice", () => {
+    const { alerts, events } = withSound();
+    alerts.push({ message: "Plan rejected" });
+    expect(events).toEqual(["toastNotice"]);
+  });
+
+  test("an explicit sound displaces the variant's default, so a verdict is heard once", () => {
+    const { alerts, events } = withSound();
+    alerts.push({ variant: "success", message: "Plan approved", sound: "approved" });
+    expect(events).toEqual(["approved"]);
+  });
+
+  test("a null sound pushes the toast silently", () => {
+    const { alerts, events } = withSound();
+    alerts.push({ message: "Nothing to hear", sound: null });
+    expect(events).toEqual([]);
+  });
+
+  test("dismissing an alert makes no sound of its own", () => {
+    const { alerts, events } = withSound();
+    const id = alerts.push({ message: "one" });
+    alerts.dismiss(id);
+    expect(events).toEqual(["toastNotice"]);
+  });
+
+  test("the dep is optional — a queue with no sound still pushes", () => {
+    const store = makeStore();
+    const alerts = createAlerts(store, { schedule: makeScheduler().schedule });
+    alerts.push({ message: "hi" });
+    expect(store.alerts).toHaveLength(1);
   });
 });

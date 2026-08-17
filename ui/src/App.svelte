@@ -12,6 +12,7 @@
   import { createPlanNotifier } from "$lib/notify.ts";
   import { installUiGoneBeacon } from "$lib/presence.ts";
   import { createSafeModeGuard } from "$lib/safeMode.ts";
+  import { sound } from "$lib/sound.ts";
   import { createSeenWatcher } from "$lib/seen.ts";
   import {
     bind,
@@ -44,7 +45,7 @@
     shouldShowOnboarding,
   } from "$lib/prefs.ts";
   import { readShortcutHints } from "$lib/shortcutHintsPref.ts";
-  import { SETTINGS_REGISTRY, type StagedField } from "$lib/settingsRegistry.ts";
+  import { SETTINGS_REGISTRY, type StagedField, THEME_FIELD } from "$lib/settingsRegistry.ts";
   import { type ComposerScratch, createSourceCommenting } from "$lib/diffview/commenting.ts";
   import type { DiffSide } from "$lib/diffview/types.ts";
   import type { ApproveVariant, ApproveVariantId, Annotation, PersistedScratch } from "@core/lib/types";
@@ -123,6 +124,20 @@
   let safeMode = $state(false);
 
   let showSettings = $state(false);
+  // The theme fields' registry keys, as the plain strings applySetting compares
+  // against — the registry owns them, so they are never re-spelled here.
+  const THEME_KEYS: readonly string[] = Object.values(THEME_FIELD);
+  // Settings and the shortcuts help are the two surfaces that open over a plan.
+  // Each announces itself once, on the way in — closing is the reviewer's own move
+  // and needs no confirmation.
+  function openSettings(): void {
+    sound.play("modalOpen");
+    showSettings = true;
+  }
+  function openHelp(): void {
+    sound.play("modalOpen");
+    showHelp = true;
+  }
   // First-run onboarding (EXC-781): opens once for a brand-new user whose
   // notification permission is still undecided. Guarded on Notification support
   // so a browser without the API never shows a modal that can't enable anything.
@@ -167,7 +182,13 @@
     }
     showShortcutHints = readShortcutHints();
     settingsRev++;
-    alerts.push({ variant: "success", message: `${field.label} updated` });
+    alerts.push({
+      variant: "success",
+      message: `${field.label} updated`,
+      // A theme change is the one settings edit with a sound of its own; the rest
+      // take the success toast's. Either way the edit is heard exactly once.
+      sound: THEME_KEYS.includes(field.key) ? "themeSwitch" : undefined,
+    });
   }
 
   // The unsent-scratch controller lives here (EXC-877): App owns createSourceCommenting
@@ -181,7 +202,7 @@
   let scratches = $state<ComposerScratch[]>([]);
 
   // ----- State modules -----
-  const selection = createReviewSelection(selStore);
+  const selection = createReviewSelection(selStore, { onSound: sound.play });
   const autosave = createAutosave(work, () => selection.activeId, {
     onOffline: () => selection.setConnected(false),
   });
@@ -189,7 +210,10 @@
   // onCreate graduates a submitted composer draft straight into the autosaved annotation
   // set; onChange mirrors the controller's non-reactive reads into the three runes above.
   const commenting = createSourceCommenting({
-    onCreate: autosave.createLineAnnotation,
+    onCreate: (anchor) => {
+      sound.play("annotationPosted");
+      autosave.createLineAnnotation(anchor);
+    },
     onChange: () => {
       pending = commenting.pending();
       pendingText = commenting.pendingText();
@@ -239,7 +263,7 @@
     target: window,
     doc: document,
   });
-  const alerts = createAlerts(alertStore);
+  const alerts = createAlerts(alertStore, { sound: sound.play });
   let active = $derived(selection.active);
   // The variants the split-button renders: the declared set when present, else
   // the built-in fallback.
@@ -440,7 +464,8 @@
     // key and its global scope come from the reservation.
     const unregisterHelp = reg("help.show", {
       run: () => {
-        showHelp = !showHelp;
+        if (showHelp) showHelp = false;
+        else openHelp();
       },
     });
     // The review-verdict + chrome shortcuts (EXC-789). Each binds EXC-786's canonical
@@ -461,11 +486,7 @@
         enabled: canAct,
       }),
       reg("actions.reject", { run: onReject, enabled: canAct }),
-      reg("actions.settings", {
-        run: () => {
-          showSettings = true;
-        },
-      }),
+      reg("actions.settings", { run: openSettings }),
       reg("actions.toggleComments", {
         run: () => {
           showComments = !showComments;
@@ -492,6 +513,13 @@
       dispatcher.destroy();
     };
   });
+
+  // ----- Sound unlock (EXC-1100) -----
+  // Browsers refuse to start audio until the page has been interacted with, so the
+  // shared AudioContext is created inside the first gesture rather than inside
+  // whichever poll tick happens to want the first sound. Mount-once: reads no
+  // reactive state, returns the listener disposer.
+  $effect(() => sound.unlock());
 
   // ----- Tab-close presence retraction (EXC-562) -----
   // Tell the daemon when this tab is closing so it stops counting us as a live
@@ -535,7 +563,7 @@
     // blank note.
     const mode = pendingApproveMode;
     if (!mode) return;
-    alerts.push({ variant: "success", message: "Plan approved" });
+    alerts.push({ variant: "success", message: "Plan approved", sound: "approved" });
     pendingApproveMode = null;
     void resolve.approve(mode, notes);
   }
@@ -550,7 +578,7 @@
     // decisions rather than good outcomes, and AlertHost leads the success variant with a
     // check glyph that would read as approval on a plan being sent back. Same gesture,
     // the weight each verdict deserves.
-    alerts.push({ variant: "default", message: "Plan rejected" });
+    alerts.push({ variant: "default", message: "Plan rejected", sound: "rejected" });
     pendingReject = false;
     void resolve.reject();
   }
@@ -569,7 +597,7 @@
   }
   function onRequestChanges(generalComment: string) {
     if (!showDialog) return;
-    alerts.push({ variant: "default", message: "Changes requested" });
+    alerts.push({ variant: "default", message: "Changes requested", sound: "changesRequested" });
     showDialog = false;
     void resolve.requestChanges(generalComment);
   }
@@ -603,7 +631,7 @@
     {onApprove}
     onRequestChanges={() => (showDialog = true)}
     {onReject}
-    onOpenSettings={() => (showSettings = true)}
+    onOpenSettings={openSettings}
     {showShortcutHints}
   />
 
@@ -695,7 +723,7 @@
     connected={selection.connected}
     commentsOpen={showComments}
     onToggleComments={() => (showComments = !showComments)}
-    onOpenHelp={() => (showHelp = true)}
+    onOpenHelp={openHelp}
     {showShortcutHints}
   />
 </div>

@@ -7,11 +7,18 @@
 // keeps the active review stable across the 2s poll and auto-advances after a
 // resolve. The working-copy reload is driven reactively off the derived active
 // review (App.svelte), not from here.
+//
+// The selection also reports the four moments only it can see (EXC-1100): a plan
+// arriving, a plan revised under the reviewer, a plan expiring, and the daemon
+// going or coming back. Each is a diff between what the last poll held and what
+// this one carries — data that lives nowhere else — so the detection sits here
+// rather than in a module that would have to keep a second copy of the list.
 
 import type { ClientReview, HealthIdentity } from "@core/lib/types";
 import { deepLinkId, setUrl } from "@/state/deepLink.ts";
 import { getHealth, listReviews } from "$lib/api.ts";
 import { uiLog } from "$lib/log.ts";
+import type { SoundEvent } from "$lib/sound.ts";
 
 // Re-check the daemon's identity every Nth successful poll: a same-port
 // takeover by a newer build can complete between 2s polls without a single
@@ -141,6 +148,13 @@ export interface ReviewSelection {
   afterResolve: (id: string) => void;
 }
 
+/** The effects the selection performs beyond mutating its store, injectable in
+ * the shape the rest of `@/state/*` uses. */
+export interface SelectionDeps {
+  /** Report a moment worth hearing. Absent, the selection is silent. */
+  onSound?: (event: SoundEvent) => void;
+}
+
 /** Backing fields the selection reads and writes. App.svelte supplies a
  * `$state`-backed implementation; tests supply a plain object. */
 export interface SelectionStore {
@@ -157,7 +171,10 @@ export interface SelectionStore {
  * reactive `active` — including the case where the poll bumps the active
  * review to a new version without changing the id.
  */
-export function createReviewSelection(store: SelectionStore): ReviewSelection {
+export function createReviewSelection(
+  store: SelectionStore,
+  deps: SelectionDeps = {},
+): ReviewSelection {
   const activeOf = (): ClientReview | null =>
     store.reviews.find((r) => r.id === store.activeId) ?? null;
 
@@ -165,6 +182,27 @@ export function createReviewSelection(store: SelectionStore): ReviewSelection {
     store.activeId = id;
     setUrl(id);
   };
+
+  // The first snapshot seeds silently: reviews already pending when the page
+  // opened are on screen, not news — the same rule createPlanNotifier's seen-set
+  // follows for desktop notifications.
+  let seeded = false;
+
+  /** Announce what changed between the last snapshot and `incoming`. At most one
+   * cue per kind, so a poll that brings three plans is one arrival rather than
+   * three overlapping sounds. */
+  function announceMerge(incoming: readonly ClientReview[]): void {
+    if (!seeded) {
+      seeded = true;
+      return;
+    }
+    const before = new Map(store.reviews.map((r) => [r.id, r.version]));
+    if (incoming.some((r) => !before.has(r.id))) deps.onSound?.("planArrived");
+    else if (incoming.some((r) => (before.get(r.id) ?? r.version) < r.version))
+      deps.onSound?.("planRevised");
+    const after = new Set(incoming.map((r) => r.id));
+    if (store.reviews.some((r) => !after.has(r.id))) deps.onSound?.("planExpired");
+  }
 
   return {
     get reviews() {
@@ -183,6 +221,9 @@ export function createReviewSelection(store: SelectionStore): ReviewSelection {
       return store.daemonChanged;
     },
     setConnected(value) {
+      // Sound the transition only. Every poll tick reports the connection, so a
+      // per-call cue would be a metronome.
+      if (value !== store.connected) deps.onSound?.(value ? "daemonReconnected" : "daemonDropped");
       store.connected = value;
     },
     markDaemonChanged() {
@@ -193,6 +234,7 @@ export function createReviewSelection(store: SelectionStore): ReviewSelection {
     },
     selectReview: select,
     mergeReviews(incoming) {
+      announceMerge(incoming);
       store.reviews = incoming;
       // Pick active: keep current if still present, else deep link, else first.
       if (!store.activeId || !incoming.some((r) => r.id === store.activeId)) {

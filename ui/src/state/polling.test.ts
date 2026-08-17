@@ -9,6 +9,7 @@ import {
   startPolling,
 } from "@/state/polling.svelte.ts";
 import { flush } from "$lib/log.ts";
+import type { SoundEvent } from "$lib/sound.ts";
 
 // Shared URL-routing fetch double (test-helpers.ts): /api/logs POSTs are
 // captured; the review/health endpoints answer from the per-test `respond`.
@@ -334,5 +335,102 @@ describe("createReviewSelection", () => {
     expect(store.daemonChanged).toBe(true);
     sel.dismissDaemonChanged();
     expect(store.daemonChanged).toBe(false);
+  });
+});
+
+describe("createReviewSelection sound events (EXC-1100)", () => {
+  function review(id: string, version = 1): ClientReview {
+    return { id, version } as unknown as ClientReview;
+  }
+
+  function makeStore(over: Partial<SelectionStore> = {}): SelectionStore {
+    return { reviews: [], activeId: null, connected: true, daemonChanged: false, ...over };
+  }
+
+  /** A selection wired to a recording onSound, plus the events it has reported. */
+  function withSound(over: Partial<SelectionStore> = {}) {
+    const store = makeStore(over);
+    const events: SoundEvent[] = [];
+    const sel = createReviewSelection(store, { onSound: (e) => events.push(e) });
+    return { store, sel, events };
+  }
+
+  test("the first merge seeds silently — reviews already pending at page open are not news", () => {
+    const { sel, events } = withSound();
+    sel.mergeReviews([review("a"), review("b")]);
+    expect(events).toEqual([]);
+  });
+
+  test("a genuinely-new review announces one arrival", () => {
+    const { sel, events } = withSound();
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("a"), review("b")]);
+    expect(events).toEqual(["planArrived"]);
+  });
+
+  test("two new reviews in one poll still announce one arrival", () => {
+    const { sel, events } = withSound();
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("a"), review("b"), review("c")]);
+    expect(events).toEqual(["planArrived"]);
+  });
+
+  test("an unchanged snapshot is silent, so the 2s poll never repeats itself", () => {
+    const { sel, events } = withSound();
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("a")]);
+    expect(events).toEqual([]);
+  });
+
+  test("a review bumped to a new version announces a revision, not an arrival", () => {
+    const { sel, events } = withSound();
+    sel.mergeReviews([review("a", 1)]);
+    sel.mergeReviews([review("a", 2)]);
+    expect(events).toEqual(["planRevised"]);
+  });
+
+  test("a review that vanishes from the snapshot announces an expiry", () => {
+    const { sel, events } = withSound();
+    sel.mergeReviews([review("a"), review("b")]);
+    sel.mergeReviews([review("a")]);
+    expect(events).toEqual(["planExpired"]);
+  });
+
+  test("a resolved review is already gone locally, so it never reads as an expiry", () => {
+    const { sel, events } = withSound({ reviews: [review("a")], activeId: "a" });
+    sel.mergeReviews([review("a")]);
+    sel.afterResolve("a");
+    sel.mergeReviews([]);
+    expect(events).toEqual([]);
+  });
+
+  test("losing the daemon announces a drop, once", () => {
+    const { sel, events } = withSound();
+    sel.setConnected(false);
+    sel.setConnected(false);
+    expect(events).toEqual(["daemonDropped"]);
+  });
+
+  test("getting the daemon back announces a reconnect", () => {
+    const { sel, events } = withSound();
+    sel.setConnected(false);
+    sel.setConnected(true);
+    expect(events).toEqual(["daemonDropped", "daemonReconnected"]);
+  });
+
+  test("a poll confirming the daemon is still up is silent", () => {
+    const { sel, events } = withSound();
+    sel.setConnected(true);
+    sel.setConnected(true);
+    expect(events).toEqual([]);
+  });
+
+  test("the dep is optional — a selection with no onSound still merges", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("a"), review("b")]);
+    expect(store.reviews).toHaveLength(2);
   });
 });
