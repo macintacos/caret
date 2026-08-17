@@ -123,8 +123,12 @@ describe("SettingsDialog label association (EXC-1112)", () => {
       expect(label?.id).toBe(settingLabelId(key));
       const target = label?.getAttribute("for") ?? null;
       if (target === null) {
-        // `for` binds only to a labelable element, which a segmented control's
-        // <div role="group"> is not — that row names its group the other way.
+        // `for` binds only to a labelable element, which neither a segmented control's
+        // <div role="group"> nor a slider's <span> root is (UNLABELABLE_CONTROLS in
+        // settingsRegistry.ts) — both name their control through aria-labelledby instead.
+        // Only the segmented case reaches here: the shell renders one category at a time
+        // and this mounts on the default (Appearance), so the Sound pane's slider is
+        // covered in test/e2e/settings.e2e.ts, where a browser computes the name for real.
         expect(has(`[data-slot='toggle-group'][aria-labelledby='${settingLabelId(key)}']`)).toBe(
           true,
         );

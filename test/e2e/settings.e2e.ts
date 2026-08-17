@@ -799,3 +799,98 @@ test("? over Settings lists only the settings-view shortcuts, not the review key
   await expect(help.getByText("Approve", { exact: true })).toHaveCount(0);
   await expect(help.getByText("Request changes")).toHaveCount(0);
 });
+
+// The Sound pane's volume slider (EXC-1101). Everything asserted here is engine
+// behaviour happy-dom does not model: the accessible name a browser actually computes
+// for a bits-ui thumb named through aria-labelledby, real keyboard on a focused
+// element, and localStorage surviving a reload. The unit suites
+// (ui/src/components/SettingSlider.test.ts, ui/src/lib/components/ui/slider/) cover
+// the coalescing and the ARIA wiring; this covers that it works in a browser.
+test("the volume slider is keyboard-operable, named, and persists", async ({ daemon, page }) => {
+  await daemon.seed();
+  await page.goto("/");
+  await planSurface(page);
+
+  await openSettings(page);
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await dialog.locator("[data-category='Sound']").click();
+
+  // The slider's root is a <span>, so no <label for> can bind to it — the name has to
+  // arrive via aria-labelledby, forwarded to the thumb that carries role="slider".
+  // This is the assertion the vendored-file patch exists to satisfy.
+  const slider = dialog.getByRole("slider");
+  await expect(slider).toHaveAccessibleName("Volume");
+  await expect(slider).toHaveAttribute("aria-valuenow", "25");
+  await expect(dialog.locator("[data-field='soundVolume'] .readout")).toHaveText("25%");
+
+  // The track has to actually be a track. The vendored registry sizes it with
+  // `data-horizontal:h-1`, which Tailwind compiles to `[data-horizontal]` while the
+  // component stamps `data-orientation="horizontal"` — so the utility never matches and
+  // the track renders 0px tall, invisible, with every ARIA assertion above still green.
+  // SettingSlider.svelte sets the geometry itself; this is what notices if that goes.
+  const box = await dialog.locator("[data-slot='slider-track']").boundingBox();
+  expect(box?.height).toBeGreaterThan(0);
+  expect(box?.width).toBeGreaterThan(0);
+  const fill = await dialog.locator("[data-slot='slider-range']").boundingBox();
+  expect(fill?.height).toBeGreaterThan(0);
+
+  // Three steps of 5% from the keyboard, coalesced into one applied change.
+  await slider.focus();
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await expect(slider).toHaveAttribute("aria-valuenow", "40");
+  await expect(dialog.locator("[data-field='soundVolume'] .readout")).toHaveText("40%");
+
+  // Wait for the confirming toast before reloading — it is the app's own signal that the
+  // write landed. Deliberately NOT a count assertion: toasts dwell 4s then exit, so a
+  // retrying toHaveCount(1) would catch any stack of them mid-decay and pass even with
+  // coalescing removed. It would also demand three CDP round-trips inside the app's own
+  // 200ms window, i.e. a test required to outrun a deadline — the shape
+  // browser-testing.md warns about for a loaded host. SettingSlider.test.ts pins the
+  // coalescing deterministically with an injected timer; this spec owns what only a
+  // browser can prove.
+  await expect(page.getByText("Volume updated").first()).toBeVisible();
+
+  // The level survives a reload: it is a persisted preference, not view state.
+  await page.reload();
+  await planSurface(page);
+  await openSettings(page);
+  await page.getByRole("dialog", { name: "Settings" }).locator("[data-category='Sound']").click();
+  await expect(page.getByRole("dialog", { name: "Settings" }).getByRole("slider")).toHaveAttribute(
+    "aria-valuenow",
+    "40",
+  );
+});
+
+test("the volume slider reaches silence, which is a real setting", async ({ daemon, page }) => {
+  await daemon.seed();
+  await page.goto("/");
+  await planSurface(page);
+
+  await openSettings(page);
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await dialog.locator("[data-category='Sound']").click();
+
+  // 0 is falsy, so a `||` anywhere on the read path would resurrect the default and
+  // leave the left end of the track unreachable.
+  await dialog.getByRole("slider").focus();
+  await page.keyboard.press("Home");
+  await expect(dialog.getByRole("slider")).toHaveAttribute("aria-valuenow", "0");
+  await expect(dialog.locator("[data-field='soundVolume'] .readout")).toHaveText("0%");
+
+  // Wait for the confirming toast, not a sleep: the slider applies once the reviewer
+  // settles rather than on the keystroke, and the toast is the app's own signal that
+  // the write landed. Reloading before it appears would discard the in-flight change
+  // and test nothing.
+  await expect(page.getByText("Volume updated")).toBeVisible();
+
+  await page.reload();
+  await planSurface(page);
+  await openSettings(page);
+  await page.getByRole("dialog", { name: "Settings" }).locator("[data-category='Sound']").click();
+  await expect(page.getByRole("dialog", { name: "Settings" }).getByRole("slider")).toHaveAttribute(
+    "aria-valuenow",
+    "0",
+  );
+});
