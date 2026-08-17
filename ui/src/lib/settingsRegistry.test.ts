@@ -43,8 +43,9 @@ function sampleValue(field: StagedField): unknown {
     return opts[opts.length - 1]?.value;
   }
   // A slider's value is a whole percent, not a flag. `true` would be REJECTED by the
-  // volume pref's own guard rather than throwing, so the two blanket round-trip tests
-  // below would go vacuously green on it. 60 is off every default.
+  // volume pref's own guard rather than throwing — so the round-trip test below would
+  // fail loudly, but the "touches no unregistered key" one would find nothing stored and
+  // pass vacuously. 60 is off every default and on the control's own 5% ladder.
   if (field.control.kind === "slider") return 60;
   return true;
 }
@@ -173,6 +174,22 @@ describe("Sound volume (EXC-1101)", () => {
     volume()?.write(0);
     expect(readSoundVolume()).toBe(0);
     expect(volume()?.read()).toBe(0);
+  });
+
+  test("reads back onto the control's 5% ladder, never between its steps", () => {
+    // bits-ui rewrites an off-step slider value to the nearest step and sends it back
+    // out through the binding as if the reviewer had moved it — so a value between
+    // steps would write, toast and chime just from opening the pane. Snapping on read
+    // means there is never an off-step value for it to correct.
+    writeSoundVolume(0.37);
+    expect(volume()?.read()).toBe(35);
+    writeSoundVolume(0.58);
+    expect(volume()?.read()).toBe(60);
+    for (const stored of [0, 0.13, 0.25, 0.55, 0.99, 1]) {
+      writeSoundVolume(stored);
+      // The registry erases each field's value type, so read() is `unknown` here.
+      expect(Number(volume()?.read() ?? -1) % 5, `stored ${stored}`).toBe(0);
+    }
   });
 
   test("its row names the control through aria-labelledby, not <label for>", () => {

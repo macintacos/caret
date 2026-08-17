@@ -118,17 +118,16 @@ export const settingControlId = (key: string): string => `setting-${key}`;
  * `aria-labelledby`, and what names the row's own group. */
 export const settingLabelId = (key: string): string => `${settingControlId(key)}-label`;
 
-/** The control kinds whose root is not a LABELABLE element, so no `<label for>` can
- * reach them: a segmented control renders a `<div role="group">`, and a slider a
- * bits-ui `<span>` whose `role="slider"` lives on the thumb inside it. Both name
- * their control through `aria-labelledby` instead. */
-const UNLABELABLE_CONTROLS: readonly SettingControl["kind"][] = ["segmented", "slider"];
-
-/** What a row's `<label for>` may point at, or `undefined` when nothing may — for a
- * control in UNLABELABLE_CONTROLS the row leaves `for` off entirely rather than
- * pointing it at an element that cannot honour it. */
+/** What a row's `<label for>` may point at, or `undefined` when nothing may. `for` binds
+ * only to a LABELABLE element, and two controls render roots that are not: a segmented
+ * control is a `<div role="group">`, and a slider a bits-ui `<span>` whose `role="slider"`
+ * lives on the thumb inside it. Those rows name their control through `aria-labelledby`
+ * and leave `for` off entirely, rather than pointing it at an element that cannot
+ * honour it. */
 export const settingLabelTarget = (field: StagedField): string | undefined =>
-  UNLABELABLE_CONTROLS.includes(field.control.kind) ? undefined : settingControlId(field.key);
+  field.control.kind === "segmented" || field.control.kind === "slider"
+    ? undefined
+    : settingControlId(field.key);
 
 /** An entry's searchable text: its label plus its description, lowercased. */
 function searchText(entry: SettingEntry): string {
@@ -296,17 +295,23 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     write: writeSoundEnabled,
   }),
   // How loud those cues are (EXC-1101), read per play by the same sound layer. The
-  // control speaks whole percents and the preference a 0–1 multiplier, so the
-  // conversion sits here — the one place that knows both units. Math.round keeps the
-  // slider landing on its own 5% steps after a round-trip; without it a stored 0.25
-  // reads back as 25.000000000000004 and the thumb sits fractionally off its notch.
+  // control speaks whole percents and the preference a 0–1 multiplier, so the conversion
+  // sits here — the one place that knows both units.
+  //
+  // The read SNAPS to the control's own 5% ladder rather than merely rounding, and that
+  // is load-bearing rather than tidiness: bits-ui's slider watches its value and quietly
+  // rewrites an off-step one to the nearest step, which travels back out through the
+  // binding as if the reviewer had moved it — so a stored volume off the ladder would
+  // write, toast and chime the instant the pane opened. Rounding alone leaves that live
+  // (float drift is real here too: 0.55 * 100 is 55.00000000000001, though 0.25 * 100 is
+  // exactly 25), so the ladder is what actually closes it.
   stagedField<number>({
     key: "soundVolume",
     category: "Sound",
     label: "Volume",
     description: "How loud caret's sounds play.",
     control: { kind: "slider" },
-    read: () => Math.round(readSoundVolume() * 100),
+    read: () => Math.round(readSoundVolume() * 20) * 5,
     write: (percent) => writeSoundVolume(percent / 100),
   }),
   // Live, browser-owned notification permission (EXC-847): a search-only entry so

@@ -47,8 +47,10 @@
 
   let { value, onSelect, labelledBy, schedule = defaultSchedule }: Props = $props();
 
-  /** Coarse enough that the whole range is a few keypresses away, fine enough that
-   * the step below the default is still audibly different. */
+  /** Fine enough that the step below the default is still audibly different, coarse
+   * enough that an arrow key moves an audible amount. Reaching an end is Home / End
+   * (or ⌘-arrow) rather than twenty presses — bits-ui's VALID_SLIDER_KEYS is the
+   * arrows plus those two, with no page keys. */
   const STEP = 5;
 
   /** How long the control waits for the next nudge before writing. Short enough to
@@ -126,9 +128,10 @@
      keeps it out of reach of a re-sync's wholesale revert, and caret renders no vertical
      slider for the orientation variants to matter to.
 
-     Track and fill are the Switch's two fills, unrolled — --rule-strong for the empty
-     part (the Switch's off state) and --accent for the filled part (its on state). The
-     Sound pane's two rows then read as one control surface rather than two languages,
+     Track and fill are the Switch's two fills, unrolled: --rule-strong for the empty part
+     is the Switch's off state, and the filled part needs no rule here at all — the
+     vendored `bg-primary` already bridges to --accent, which is the Switch's on state.
+     The Sound pane's two rows then read as one control surface rather than two languages,
      and the fill inherits the app's "amber marks the live value" convention. */
   .volume :global([data-slot="slider-track"]) {
     width: 100%;
@@ -137,19 +140,26 @@
   }
   .volume :global([data-slot="slider-range"]) {
     height: 100%;
-    background: var(--accent);
   }
-  /* The thumb matches the Switch's knob: same 1rem circle, same --paper fill (which
-     the vendored `bg-background` bridges to). Its border is retinted off the amber
-     --ring to a neutral hairline so the knob stays separable from the amber fill it
-     rides — the ring itself is left alone, since that IS the focus indicator. */
+  /* The thumb matches the Switch's knob: same 1rem circle, same --paper fill (which the
+     vendored `bg-background` bridges to). Its border is the only thing defining it —
+     --paper against the pane's --paper-raised measures 1.02–1.46:1, so the fill
+     contributes nothing — and a slider thumb is a control whose position carries the
+     value, which puts it under WCAG 1.4.11's 3:1 non-text floor.
+
+     Hence --ink-soft, not a hairline token. --rule-strong measures 1.27–1.62:1 against
+     the pane and the registry's own --ring 1.33–2.03:1; both read as no edge at all.
+     This is the same verdict theme.test.ts reached for the thematic-break rule, down to
+     the token it settled on — see its RULE_INK case, which also rejects --ink-faint for
+     missing the floor on catppuccin-latte and github-light. The focus ring is left alone:
+     that IS the focus indicator. */
   .volume :global([data-slot="slider-thumb"]) {
     width: 1rem;
     height: 1rem;
-    border-color: var(--rule-strong);
+    border-color: var(--ink-soft);
   }
   /* Tabular figures and a reserved width, so the track does not shift as the number
-     goes 5% → 100%. */
+     goes 0% → 100%. */
   .volume .readout {
     min-width: 2.5rem;
     font-size: var(--text-xs);

@@ -76,6 +76,10 @@ describe("vendored Slider", () => {
     // `bg-white` is what the registry ships and what a re-sync puts back.
     expect(source).not.toContain("bg-white");
     expect(source).toContain("bg-background");
+    // Any literal black/white utility, not just the one the registry happens to ship
+    // today — `bg-black/10` and `text-white` both live elsewhere in the vendored tree,
+    // so a re-sync could reintroduce the same rule-break under a different name.
+    expect(source).not.toMatch(/\b(bg|text|border|ring)-(white|black)\b/);
     // The broader bridge rule, in the form shadcn-bridge.test.ts pins for the CSS.
     expect(source).not.toMatch(/#[0-9a-fA-F]{3,8}\b|oklch\(/);
   });

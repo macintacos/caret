@@ -354,7 +354,8 @@
   {:else if field.control.kind === "slider"}
     <!-- Named through the row's label like the segmented control, and for the same
          reason: the slider's root is a <span>, which `<label for>` cannot bind to.
-         `?? 0` rather than a truthier default — 0 is a real volume. -->
+         `??` rather than `||` on the fallback — 0 is a real volume, and `||` would
+         swap silence for the default. -->
     <SettingSlider
       labelledBy={settingLabelId(field.key)}
       value={Number(values[field.key] ?? 0)}
