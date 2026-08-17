@@ -69,6 +69,11 @@ That works because every task sources `scripts/bootstrap.sh` before it reaches b
 whichever task you run first installs the pinned tools, the JS deps, and the generated
 palette before doing its own job.
 
+The same preamble keeps an existing clone current. When a pull moves `bun.lock` or
+`package.json` ahead of your last install, the next task reinstalls the JS deps before
+running its own job — so a pull that adds a dependency no longer needs a manual
+`mise run setup`, nor the crash that tells you to run one.
+
 The one thing the bootstrap deliberately excludes is the e2e Chromium download, which is
 why `mise run setup` exists alongside it — same three steps, plus Chromium. On a fresh
 clone its own forwarder has already run the three, so it goes straight to the download.
