@@ -182,11 +182,12 @@ export function approvedMessage(notes?: string): string {
 /** Tool result returned to the agent on a change request: the reviewer feedback
  * and a resubmit instruction. The plan itself is NOT echoed — the agent already
  * has it in its own `caret_review_plan` tool-call args, so re-pasting the full
- * plan every round is redundant. The feedback's line references index caret's
- * STORED plan version, rumdl-reflowed to 90 columns at ingest (src/plan/markdown.ts),
- * so they need not line up with the agent's copy; the abbreviated quote paired
- * with each one (see `abbreviate` in ui/src/lib/feedback.ts) is what the agent
- * matches against its own text. */
+ * plan every round is redundant. A feedback line reference indexes the plan
+ * version caret stored, and the abbreviated quote paired with it is what the agent
+ * matches against its own text. `abbreviate` in ui/src/lib/feedback.ts builds that
+ * quote. On this path the stored version is rumdl-reflowed to 90 columns at ingest
+ * (src/plan/markdown.ts) and there is no plan file, so the numbers need not line up
+ * with the agent's copy at all. */
 export function deniedMessage(feedback: string): string {
   return [
     "caret: the user requested CHANGES to this plan.",

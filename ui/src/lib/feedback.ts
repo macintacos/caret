@@ -5,8 +5,11 @@
 // and last few words around an ellipsis — so the agent can locate the feedback by
 // content without the full selection's token cost. A legacy annotation cites it
 // inline; a line-anchored annotation pairs it with the annotation's 1-based line
-// reference into the stored plan version, so the agent can find the feedback even
-// when its own line numbering differs.
+// reference. A feedback line reference indexes the plan version caret stored, and
+// the abbreviated quote paired with it is what the agent matches against its own
+// text. That is what lets the agent find the feedback even when its own line
+// numbering differs. (Pinned across its three surfaces by
+// test/structure/line-anchor-claim.test.ts.)
 
 import {
   type Annotation,
@@ -48,11 +51,11 @@ const QUOTE_HEAD_WORDS = 3;
 const QUOTE_TAIL_WORDS = 3;
 
 /** Abbreviates a quote to the line reference's companion: the first and last few
- * words joined by an ellipsis, dropping the middle. The line reference indexes the
- * stored plan version, so the anchor words are what the agent matches against its
- * own text whenever its line numbering differs; the elided middle would only add
- * tokens, since the agent already holds the plan. A quote short enough that
- * abbreviation would drop no words is returned whole (whitespace collapsed). */
+ * words joined by an ellipsis, dropping the middle. The middle is elided because
+ * the agent already holds the plan, so those words would only add tokens; the head
+ * and tail are what it matches on (see the module header for why that matching is
+ * what resolves the anchor). A quote short enough that abbreviation would drop no
+ * words is returned whole (whitespace collapsed). */
 function abbreviate(text: string): string {
   const flat = flatten(text);
   const words = flat.split(" ");
