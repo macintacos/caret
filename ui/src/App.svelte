@@ -12,7 +12,6 @@
   import { createPlanNotifier } from "$lib/notify.ts";
   import { installUiGoneBeacon } from "$lib/presence.ts";
   import { createSafeModeGuard } from "$lib/safeMode.ts";
-  import { sound } from "$lib/sound.ts";
   import { createSeenWatcher } from "$lib/seen.ts";
   import {
     bind,
@@ -22,6 +21,7 @@
     scopedShortcuts,
     shortcuts,
   } from "$lib/shortcuts/index.ts";
+  import { sound } from "$lib/sound.ts";
   import { type AlertStore, createAlerts } from "@/state/alerts.ts";
   import { appearance } from "@/state/appearance.svelte.ts";
   import { createAutosave } from "@/state/autosave.svelte.ts";
@@ -45,7 +45,7 @@
     shouldShowOnboarding,
   } from "$lib/prefs.ts";
   import { readShortcutHints } from "$lib/shortcutHintsPref.ts";
-  import { SETTINGS_REGISTRY, type StagedField, THEME_FIELD } from "$lib/settingsRegistry.ts";
+  import { SETTINGS_REGISTRY, type StagedField, THEME_KEYS } from "$lib/settingsRegistry.ts";
   import { type ComposerScratch, createSourceCommenting } from "$lib/diffview/commenting.ts";
   import type { DiffSide } from "$lib/diffview/types.ts";
   import type { ApproveVariant, ApproveVariantId, Annotation, PersistedScratch } from "@core/lib/types";
@@ -124,12 +124,10 @@
   let safeMode = $state(false);
 
   let showSettings = $state(false);
-  // The theme fields' registry keys, as the plain strings applySetting compares
-  // against — the registry owns them, so they are never re-spelled here.
-  const THEME_KEYS: readonly string[] = Object.values(THEME_FIELD);
-  // Settings and the shortcuts help are the two surfaces that open over a plan.
-  // Each announces itself once, on the way in — closing is the reviewer's own move
-  // and needs no confirmation.
+  // Settings and the shortcuts help are the two surfaces the reviewer summons over
+  // a plan; each announces itself once, on the way in, since closing is their own
+  // move. The verdict dialogs also open over a plan but sit this out — they belong
+  // to the decision flow, which sounds through its own verdict cue.
   function openSettings(): void {
     sound.play("modalOpen");
     showSettings = true;
@@ -211,8 +209,8 @@
   // set; onChange mirrors the controller's non-reactive reads into the three runes above.
   const commenting = createSourceCommenting({
     onCreate: (anchor) => {
-      sound.play("annotationPosted");
       autosave.createLineAnnotation(anchor);
+      sound.play("annotationPosted");
     },
     onChange: () => {
       pending = commenting.pending();

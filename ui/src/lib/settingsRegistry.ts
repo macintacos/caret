@@ -1,9 +1,10 @@
 // The registry of user-facing settings surfaced in the Settings modal (EXC-837),
 // plus the field/control shapes the two-pane shell (EXC-843) renders. Each field
-// wraps an existing browser-preference module, so its read/write hit the SAME
-// localStorage key the pref already owns (theme, shortcut hints, diff
-// style/indicators) — no new keys are registered and existing users'
-// stored values survive. Editing a setting applies it immediately: the shell
+// wraps a browser-preference module and reads/writes through the key that module
+// owns, never one of its own — so a field over an existing pref (theme, shortcut
+// hints, diff style/indicators) leaves users' stored values untouched, and a field
+// over a new one (sound) registers its key there rather than here. Editing a
+// setting applies it immediately: the shell
 // calls write() the moment a control changes (App confirms with a toast); there
 // is no staged draft.
 //
@@ -180,6 +181,10 @@ export const THEME_FIELD = {
   dark: "themeDark",
 } as const;
 
+/** The same three keys as a plain list, for callers asking only "is this a theme
+ * field?" — App's applySetting, which gives a theme change its own sound. */
+export const THEME_KEYS: readonly string[] = Object.values(THEME_FIELD);
+
 const diffStyleOptions = [
   { value: "split", label: "Split" },
   { value: "unified", label: "Unified" },
@@ -192,8 +197,8 @@ const diffIndicatorOptions = [
 ] as const;
 
 /** Every setting the Settings modal surfaces. Each staged field applies through
- * its pref module's existing localStorage key; search-only entries (contributed
- * by later panes) never apply. */
+ * its own pref module's localStorage key; search-only entries (contributed by
+ * later panes) never apply. */
 export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
   // The appearance trio (EXC-773). They share the THEME_SECTION label, which the
   // shell renders as one composite block (ThemeSection.svelte) rather than three

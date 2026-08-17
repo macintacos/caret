@@ -8,11 +8,11 @@
 // resolve. The working-copy reload is driven reactively off the derived active
 // review (App.svelte), not from here.
 //
-// The selection also reports the four moments only it can see (EXC-1100): a plan
-// arriving, a plan revised under the reviewer, a plan expiring, and the daemon
-// going or coming back. Each is a diff between what the last poll held and what
-// this one carries — data that lives nowhere else — so the detection sits here
-// rather than in a module that would have to keep a second copy of the list.
+// The selection also reports the moments only it can see (EXC-1100): a plan
+// arriving, one revised in place, one expiring, and the daemon going or coming
+// back. Each is a diff between what the last poll held and what this one carries
+// — data that lives nowhere else — so the detection sits here rather than in a
+// module that would have to keep a second copy of the list.
 
 import type { ClientReview, HealthIdentity } from "@core/lib/types";
 import { deepLinkId, setUrl } from "@/state/deepLink.ts";
@@ -190,7 +190,10 @@ export function createReviewSelection(
 
   /** Announce what changed between the last snapshot and `incoming`. At most one
    * cue per kind, so a poll that brings three plans is one arrival rather than
-   * three overlapping sounds. */
+   * three overlapping sounds — and an arrival SUPPRESSES a revision in the same
+   * poll, since the bigger news wins. An expiry is not on that ladder: it can
+   * sound alongside either, because a plan leaving and a plan landing are two
+   * separate pieces of news. */
   function announceMerge(incoming: readonly ClientReview[]): void {
     if (!seeded) {
       seeded = true;

@@ -22,13 +22,7 @@ function recorder(): SoundEngine & { played: Array<{ sound: string; volume?: num
 
 describe("SOUND_MAP", () => {
   test("every mapped event names a real cuelume sound", () => {
-    for (const [event, name] of Object.entries(SOUND_MAP)) {
-      expect(`${event} → ${name}`).toBe(`${event} → ${sounds.includes(name) ? name : "MISSING"}`);
-    }
-  });
-
-  test("maps at least the moments the settings toggle silences", () => {
-    expect(Object.keys(SOUND_MAP).length).toBeGreaterThan(0);
+    for (const name of Object.values(SOUND_MAP)) expect(sounds).toContain(name);
   });
 });
 
@@ -66,6 +60,28 @@ describe("play", () => {
     const engine = recorder();
     createSound({ engine }).play("neverMapped" as SoundEvent);
     expect(engine.played).toHaveLength(0);
+  });
+});
+
+// A cue must never be able to cost its caller anything: the poll reports a
+// consumer's exception as an unreachable daemon, and two call sites do real work
+// beside their cue. So the guarantee is "play never throws", and the only honest
+// test of it injects the throw — the poisoned-dependency shape log.test.ts uses.
+const poisoned: SoundEngine = {
+  play() {
+    throw new Error("AudioContext is closed");
+  },
+};
+
+describe("an engine that throws", () => {
+  test("play swallows it — a wedged AudioContext is not the caller's problem", () => {
+    expect(() => createSound({ engine: poisoned }).play("planArrived")).not.toThrow();
+  });
+
+  test("unlock swallows it too, from inside the gesture handler", () => {
+    const target = new EventTarget();
+    createSound({ engine: poisoned, target }).unlock();
+    expect(() => target.dispatchEvent(new Event("pointerdown"))).not.toThrow();
   });
 });
 

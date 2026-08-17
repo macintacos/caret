@@ -41,6 +41,9 @@ registerPrefKey(SOUND_VOLUME_KEY);
  * — which is how both a junk stored string and a junk caller argument are
  * rejected in one place. */
 function asVolume(value: unknown): number | undefined {
+  // `Number("")` is 0, so an empty or blank stored value would read as silence
+  // with the toggle still showing on — and no slider yet to recover with.
+  if (typeof value === "string" && value.trim() === "") return undefined;
   const n = typeof value === "string" ? Number(value) : value;
   if (typeof n !== "number" || !Number.isFinite(n)) return undefined;
   return Math.min(1, Math.max(0, n));

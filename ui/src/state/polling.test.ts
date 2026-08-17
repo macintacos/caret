@@ -426,6 +426,20 @@ describe("createReviewSelection sound events (EXC-1100)", () => {
     expect(events).toEqual([]);
   });
 
+  test("an arrival suppresses a revision in the same poll — the bigger news wins", () => {
+    const { sel, events } = withSound();
+    sel.mergeReviews([review("a", 1)]);
+    sel.mergeReviews([review("a", 2), review("b", 1)]);
+    expect(events).toEqual(["planArrived"]);
+  });
+
+  test("an expiry sounds alongside an arrival — two separate pieces of news", () => {
+    const { sel, events } = withSound();
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("b")]);
+    expect(events).toEqual(["planArrived", "planExpired"]);
+  });
+
   test("the dep is optional — a selection with no onSound still merges", () => {
     const store = makeStore();
     const sel = createReviewSelection(store);

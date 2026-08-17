@@ -17,6 +17,7 @@
 
 import { play as cuelumePlay, type SoundName } from "cuelume";
 
+import { uiLog } from "$lib/log.ts";
 import { readSoundEnabled, readSoundVolume } from "$lib/soundPref.ts";
 
 /** A moment caret makes a sound for. Every one is a discrete state change or an
@@ -51,8 +52,11 @@ export type SoundEvent =
  * action are the same news to the ear.
  */
 export const SOUND_MAP: Partial<Record<SoundEvent, SoundName>> = {
-  // The daemon's news, loudest of the set because the reviewer may be away.
+  // The daemon's news, which the reviewer may be away from the tab for.
   planArrived: "arrival",
+  // A revision landing in a tab that did not request it. The tab that DID send a
+  // Request Changes dropped the review locally on resolve, so the revision returns
+  // to it as an arrival — which is what it is, from that seat.
   planRevised: "page",
   planExpired: "whisper",
   daemonDropped: "error",
@@ -97,8 +101,9 @@ export interface SoundEngine {
 export interface SoundDeps {
   /** The audio backend. Defaults to cuelume. */
   engine?: SoundEngine;
-  /** Where `unlock` listens for the first gesture. Defaults to `window`, and a
-   * runtime without one (SSR) leaves the service silent rather than throwing. */
+  /** Where `unlock` listens for the first gesture. Defaults to `window`; with no
+   * target `unlock` is a no-op. Playback is unaffected — cuelume has its own guard
+   * for a runtime with no Web Audio. */
   target?: EventTarget;
 }
 
@@ -115,6 +120,9 @@ export interface Sound {
    * when it does — but that resume would land inside whatever task asked for the
    * sound (a poll tick), where the strictest browsers still refuse it. Unlocking
    * from inside the gesture itself is what makes the first real sound audible.
+   *
+   * Unlocks even while sound is switched off, so switching it back on needs no
+   * second gesture. The cue it plays to do so is inaudible either way.
    */
   unlock(): () => void;
 }
@@ -127,12 +135,26 @@ export function createSound(deps: SoundDeps = {}): Sound {
   const engine: SoundEngine = deps.engine ?? { play: cuelumePlay };
   const target = deps.target ?? (typeof window === "undefined" ? undefined : window);
 
+  // The one place the engine is touched, and the one place a throw is contained.
+  // cuelume guards context creation, but its node graph is built unguarded — a
+  // wedged AudioContext throws synchronously from createOscillator. That throw
+  // would surface as someone else's failure: the poll wraps its consumers in the
+  // same try as its fetch, so a silent cue would be reported as an unreachable
+  // daemon. Logged rather than swallowed, like notify.ts's construct failure.
+  function render(name: SoundName, volume: number): void {
+    try {
+      engine.play(name, { volume });
+    } catch (err) {
+      uiLog.warn("ui", "sound failed to play", { sound: name, reason: String(err) });
+    }
+  }
+
   return {
     play(event) {
       if (!readSoundEnabled()) return;
       const name = SOUND_MAP[event];
       if (!name) return;
-      engine.play(name, { volume: readSoundVolume() });
+      render(name, readSoundVolume());
     },
     unlock() {
       if (!target) return () => {};
@@ -143,7 +165,7 @@ export function createSound(deps: SoundDeps = {}): Sound {
       // gesture unlocks, and the other type's listener must go with it.
       const onGesture = () => {
         detach();
-        engine.play(UNLOCK_SOUND, { volume: UNLOCK_VOLUME });
+        render(UNLOCK_SOUND, UNLOCK_VOLUME);
       };
       for (const type of UNLOCK_EVENTS) target.addEventListener(type, onGesture);
       return detach;

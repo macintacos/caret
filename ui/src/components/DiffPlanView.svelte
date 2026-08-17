@@ -422,9 +422,9 @@
   /** Start the closing wipe, dropping the drawer once it has played. */
   function dismissFilePreview(): void {
     if (filePreview === undefined || drawerClosing) return;
+    drawerClosing = true;
     // Below the early return, so a redundant dismiss stays silent.
     sound.play("filePreviewClose");
-    drawerClosing = true;
     closeTimer = setTimeout(() => {
       filePreview = undefined;
       cancelDrawerClose();

@@ -94,6 +94,13 @@ describe("readSoundVolume", () => {
     expect(readSoundVolume()).toBe(DEFAULT_SOUND_VOLUME);
   });
 
+  test("defaults on an empty stored value rather than reading it as silence", () => {
+    localStorage.setItem(SOUND_VOLUME_KEY, "");
+    expect(readSoundVolume()).toBe(DEFAULT_SOUND_VOLUME);
+    localStorage.setItem(SOUND_VOLUME_KEY, "   ");
+    expect(readSoundVolume()).toBe(DEFAULT_SOUND_VOLUME);
+  });
+
   test("fails safe to the default when localStorage throws", () => {
     withBlockedStorage(() => {
       expect(readSoundVolume()).toBe(DEFAULT_SOUND_VOLUME);
