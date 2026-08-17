@@ -823,6 +823,17 @@ test("the volume slider is keyboard-operable, named, and persists", async ({ dae
   await expect(slider).toHaveAttribute("aria-valuenow", "25");
   await expect(dialog.locator("[data-field='soundVolume'] .readout")).toHaveText("25%");
 
+  // The track has to actually be a track. The vendored registry sizes it with
+  // `data-horizontal:h-1`, which Tailwind compiles to `[data-horizontal]` while the
+  // component stamps `data-orientation="horizontal"` — so the utility never matches and
+  // the track renders 0px tall, invisible, with every ARIA assertion above still green.
+  // SettingSlider.svelte sets the geometry itself; this is what notices if that goes.
+  const box = await dialog.locator("[data-slot='slider-track']").boundingBox();
+  expect(box?.height).toBeGreaterThan(0);
+  expect(box?.width).toBeGreaterThan(0);
+  const fill = await dialog.locator("[data-slot='slider-range']").boundingBox();
+  expect(fill?.height).toBeGreaterThan(0);
+
   // Three steps of 5% from the keyboard, coalesced into one applied change.
   await slider.focus();
   await page.keyboard.press("ArrowRight");

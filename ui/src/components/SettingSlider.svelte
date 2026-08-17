@@ -115,14 +115,28 @@
   .volume :global([data-slot="slider"]) {
     width: 9rem;
   }
-  /* Track and fill are the Switch's two fills, unrolled — --rule-strong for the empty
+  /* The track's SIZE is set here, not left to the vendored classes. The registry ships
+     `data-horizontal:h-1 data-horizontal:w-full` on the track and `data-horizontal:h-full`
+     on the range, which Tailwind compiles to `[data-horizontal]` — but the component
+     stamps `data-orientation="horizontal"`, so none of them ever match and the track
+     renders 0px tall. It is the same dead-variant shape shadcn-rules.md § The vendored
+     `sheet` tree stays records for sheet-content's `data-open:` utilities, and it is
+     invisible to the unit and e2e suites because neither computes layout — only looking
+     at it catches it. Spelling the geometry here rather than fixing the vendored classes
+     keeps it out of reach of a re-sync's wholesale revert, and caret renders no vertical
+     slider for the orientation variants to matter to.
+
+     Track and fill are the Switch's two fills, unrolled — --rule-strong for the empty
      part (the Switch's off state) and --accent for the filled part (its on state). The
      Sound pane's two rows then read as one control surface rather than two languages,
      and the fill inherits the app's "amber marks the live value" convention. */
   .volume :global([data-slot="slider-track"]) {
+    width: 100%;
+    height: 0.25rem;
     background: var(--rule-strong);
   }
   .volume :global([data-slot="slider-range"]) {
+    height: 100%;
     background: var(--accent);
   }
   /* The thumb matches the Switch's knob: same 1rem circle, same --paper fill (which

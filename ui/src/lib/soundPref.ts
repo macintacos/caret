@@ -9,8 +9,9 @@
 // carve-out fileDrawer.ts's remembered sizes take. Both keys are registered either
 // way, so `mise run dev --fresh` resets them and prefKeys.test.ts sees them.
 //
-// The volume is defined here even though nothing writes it yet: EXC-1101 adds the
-// slider, and persisting from the start means the read path is built once.
+// The volume's writer is the Sound pane's slider (EXC-1101) — SETTINGS_REGISTRY's
+// `soundVolume` field, which converts between this module's 0–1 multiplier and the
+// whole percents that control speaks.
 
 import { definePref, registerPrefKey } from "$lib/definePref.ts";
 
@@ -42,7 +43,7 @@ registerPrefKey(SOUND_VOLUME_KEY);
  * rejected in one place. */
 function asVolume(value: unknown): number | undefined {
   // `Number("")` is 0, so an empty or blank stored value would read as silence
-  // with the toggle still showing on — and no slider yet to recover with.
+  // with the toggle still showing on — this guard defaults it instead.
   if (typeof value === "string" && value.trim() === "") return undefined;
   const n = typeof value === "string" ? Number(value) : value;
   if (typeof n !== "number" || !Number.isFinite(n)) return undefined;

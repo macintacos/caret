@@ -73,8 +73,10 @@ comment posted; a toast firing; the file preview opening or closing; Settings or
 shortcuts help opening; a theme change; and copy-code. None is longer than a fraction of a
 second, and none is attached to scrolling, hovering, or pointer movement.
 
-**Settings → Sound** holds the single switch that silences all of it. It defaults **on**,
-at a deliberately low volume.
+**Settings → Sound** holds the switch that silences all of it, plus a **Volume** slider
+for how loud the rest play. Sound defaults **on** at a deliberately low 25%; the slider
+moves in steps of 5% and applies once you stop moving it, so the confirmation you hear is
+already at the level you just set.
 
 > [!NOTE]
 > Browsers refuse to start audio until the page has been interacted with, so a tab you
