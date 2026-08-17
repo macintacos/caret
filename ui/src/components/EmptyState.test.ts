@@ -2,8 +2,9 @@ import "@ui/test-mount.ts";
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 
-import { render } from "@ui/test-mount.ts";
+import { flushUntil, render } from "@ui/test-mount.ts";
 import EmptyState from "@/components/EmptyState.svelte";
+import { CARROT_FACTS } from "$lib/carrotFacts.ts";
 
 describe("EmptyState", () => {
   test("connected (default): shows the listening copy, no warning", () => {
@@ -81,6 +82,92 @@ describe("EmptyState", () => {
     const h2 = target.querySelector("h2");
     expect(h2).not.toBeNull();
     expect(h2!.textContent).toContain("No plans awaiting review");
+  });
+
+  // EXC-381: one quiet sourced carrot fact docks above the status bar while the
+  // reader waits. It is gated on `connected` so the disconnected screen's warning
+  // is the only thing on it — a flourish under a "something is wrong" message
+  // reads as the app not noticing.
+  test("shows a carrot fact when connected", () => {
+    const { target } = render(EmptyState, { connected: true });
+    const line = target.querySelector(".carrot-fact");
+    expect(line).not.toBeNull();
+    expect(line!.textContent!.length).toBeGreaterThan(20);
+  });
+
+  test("hides the carrot fact when disconnected", () => {
+    const { target } = render(EmptyState, { connected: false });
+    expect(target.querySelector(".carrot-fact")).toBeNull();
+  });
+
+  // The first outbound link anywhere in ui/src, so its safe-window attributes are
+  // pinned rather than left to review.
+  test("the fact links out to its source in a new tab", () => {
+    const { target } = render(EmptyState, { connected: true });
+    const link = target.querySelector<HTMLAnchorElement>(".carrot-fact a");
+    expect(link).not.toBeNull();
+    expect(CARROT_FACTS.map((f) => f.source)).toContain(link!.getAttribute("href") ?? "");
+    expect(link!.getAttribute("target")).toBe("_blank");
+    expect(link!.getAttribute("rel")).toBe("noreferrer");
+    expect(link!.getAttribute("aria-label")).toContain(new URL(link!.href).hostname);
+  });
+
+  // rotateMs injects the clock so rotation is provable without a 50-second wait
+  // — the same seam lib/safeMode.ts takes for its grace and duration windows.
+  test("rotates to another fact on the injected interval", async () => {
+    const { target, flush } = render(EmptyState, { connected: true, rotateMs: 10 });
+    const text = () => target.querySelector(".carrot-fact")!.textContent;
+    const first = text();
+    await flushUntil(flush, () => text() !== first);
+    expect(text()).not.toBe(first);
+  });
+
+  // The line docks above the status bar off the shared --status-bar-h token (the
+  // same one CommentNavigator docks from), and cross-fades on both arms of the
+  // surface duration pair. Pinned against the CSS source so a retune that drops
+  // an arm — leaving the swap to snap in one direction — reds the unit suite.
+  test("the fact line docks off --status-bar-h and cross-fades on both arms", async () => {
+    const css = await componentCss("EmptyState.svelte");
+    const rule = ruleBody(css, ".carrot-fact");
+    expect(rule).toContain("var(--status-bar-h)");
+    expect(rule).toContain("var(--dur-enter)");
+    expect(ruleBody(css, ".carrot-fact.leaving")).toContain("var(--dur-exit)");
+  });
+
+  // WCAG 2.2.2: auto-updating content running indefinitely needs a way to hold it.
+  // The concrete bug it also closes is that the link's href swaps under a pointer
+  // already reaching for it.
+  test("holds the rotation while the pointer is over the line", async () => {
+    const { target, flush } = render(EmptyState, { connected: true, rotateMs: 10 });
+    const line = target.querySelector(".carrot-fact")!;
+    line.dispatchEvent(new MouseEvent("mouseenter"));
+    flush();
+    const held = line.textContent;
+    await flushUntil(flush, () => line.textContent !== held, 12);
+    expect(line.textContent).toBe(held);
+
+    // …and resumes on the way out, so the hold is a pause and not a stop.
+    line.dispatchEvent(new MouseEvent("mouseleave"));
+    flush();
+    await flushUntil(flush, () => line.textContent !== held);
+    expect(line.textContent).not.toBe(held);
+  });
+
+  // The strip spans the bottom band, and during the exit window its link is
+  // invisible but would still hit-test. AlertHost draws the same pair.
+  test("the strip lets clicks through but the link itself does not", async () => {
+    const css = await componentCss("EmptyState.svelte");
+    expect(ruleBody(css, ".carrot-fact")).toContain("pointer-events: none;");
+    expect(ruleBody(css, ".carrot-fact a")).toContain("pointer-events: auto;");
+  });
+
+  // The source link spends no accent and sits mid-sentence in the same faint ink
+  // as its own text, so the underline is the only thing marking it as a link.
+  // Tailwind's preflight resets text-decoration-line to none, so relying on the
+  // UA default leaves it with no affordance whatsoever — declare it explicitly.
+  test("the source link declares its own underline (preflight resets the UA one)", async () => {
+    const rule = ruleBody(await componentCss("EmptyState.svelte"), ".carrot-fact a");
+    expect(rule).toContain("text-decoration-line: underline;");
   });
 });
 
