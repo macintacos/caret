@@ -5,9 +5,10 @@
 #
 #   source "$(dirname "${BASH_SOURCE[0]}")/../../scripts/bootstrap.sh" || exit 1
 #
-# The `|| exit 1` is part of the contract, not decoration: a failed cold install
-# returns non-zero here, and the `exec bun …` that follows would otherwise die
-# on a bare command-not-found instead of the real error.
+# The `|| exit 1` is part of the contract, not decoration: a failed install —
+# cold, or the warm path's refresh — returns non-zero here, and the `exec bun …`
+# that follows would otherwise die on a bare command-not-found instead of the
+# real error.
 #
 # Every forwarder is `exec bun scripts/tasks/cli.ts <name> "$@"`, and cli.ts
 # imports its CLI framework and every task module at load time — so on a fresh
@@ -52,8 +53,11 @@ caret_bootstrap() {
     # node_modules/.bun, so a lockfile whose content changed without changing
     # the on-disk tree would keep that guard permanently stale. Deciding is all
     # this does — `bun install` is the authority on what is actually missing,
-    # it is idempotent, and a no-op run costs ~30ms. The two `-nt` tests are
-    # builtins, so the common case stays as cheap and as silent as before.
+    # it is idempotent, and a no-op run costs milliseconds. The two `-nt` tests
+    # are builtins, so the common case stays as cheap and as silent as before.
+    #
+    # Stamped only on success, so a failed install leaves the guard armed and
+    # the next task retries rather than declaring the tree current.
     if [ "$root/bun.lock" -nt "$stamp" ] || [ "$root/package.json" -nt "$stamp" ]; then
       (
         cd "$root" || exit 1

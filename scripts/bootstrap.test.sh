@@ -2,9 +2,10 @@
 #
 # Hermetic tests for scripts/bootstrap.sh — the dep-free preamble a mise task
 # forwarder sources before it reaches bun (EXC-932). Each case builds a throwaway
-# checkout root plus a PATH holding nothing but stubs and the one coreutil the
-# script needs, sources the script in a fresh shell, and asserts on what the fake
-# `mise` was asked to do — and where it was asked to do it.
+# checkout root plus a PATH holding nothing but stubs and the few real binaries
+# the script and those stubs shell out to, sources the script in a fresh shell,
+# and asserts on what the fake `mise` was asked to do — and where it was asked to
+# do it.
 #
 #   bash scripts/bootstrap.test.sh
 #
@@ -26,10 +27,6 @@ assert_contains() {
   *) fail "$3 (missing substring: $2; got: $1)" ;;
   esac
 }
-assert_exists() {
-  if [ -e "$1" ]; then ok "$2"; else fail "$2 (missing: $1)"; fi
-}
-
 # Create a fixture file with an explicit mtime. bash 3.2's `-nt` compares whole
 # seconds, so staleness cases place their fixtures decades apart rather than
 # racing a `sleep`.
@@ -58,13 +55,13 @@ make_root() {
 # stamp lands inside it. Cases run with PATH set to this alone, so a real bun on
 # the developer's machine can't leak in and turn a cold case warm.
 make_stub_path() {
-  local stub install_rc="${1:-0}" fail_on="${2:-install}"
+  local stub fail_rc="${1:-0}" fail_on="${2:-install}"
   stub="$(mktemp -d "${TMPDIR:-/tmp}/caret-bootstrap-bin.XXXXXX")"
   cat >"$stub/mise" <<STUB
 #!$bash_bin
 if read -r stdin_line; then leak=" <stdin:\$stdin_line>"; else leak=""; fi
 echo "\$* @ \$PWD\$leak" >>"$stub/mise.log"
-[ "\$1" = $fail_on ] && exit $install_rc
+[ "\$1" = $fail_on ] && exit $fail_rc
 case "\$*" in "exec -- bun install") mkdir -p "\$PWD/node_modules" ;; esac
 exit 0
 STUB
@@ -107,7 +104,11 @@ assert_contains "$out" "MARKER=1 RC=0 PWD=[/]" "cold: exports the marker, return
 assert_contains "$(cat "$stub/mise.log" 2>&1)" "install @ $root
 exec -- bun install @ $root
 exec -- bun ui/generate-palette-css.ts @ $root" "cold: mise install, bun install, then the palette generator — each at the checkout root"
-assert_exists "$root/node_modules/.caret-deps" "cold: stamps the install, so the first warm run after it stays silent"
+if [ -e "$root/node_modules/.caret-deps" ]; then
+  ok "cold: stamps the install, so the first warm run after it stays silent"
+else
+  fail "cold: stamps the install, so the first warm run after it stays silent"
+fi
 rm -rf "$root" "$stub"
 
 # --- 2. cold: aborts on the first failing step ----------------------------
@@ -172,7 +173,10 @@ rm -rf "$root" "$stub"
 # The ticket's state (EXC-1064): a pull moves bun.lock ahead of what is unpacked
 # in node_modules, so the warm test says "installed" and the task dies resolving
 # a dependency that never landed. Only `bun install` runs — the palette step and
-# `mise install` stay the cold path's business.
+# `mise install` stay the cold path's business. Each case pipes a payload in,
+# because this branch now sits between `mise run caret review < payload.json` and
+# its reader far more often than the cold path ever did; a leaked byte shows up
+# in the exact-equality log check below.
 for ahead in bun.lock package.json; do
   root="$(make_root)"
   mkdir -p "$root/node_modules"
@@ -181,7 +185,7 @@ for ahead in bun.lock package.json; do
   touch_at "$root/node_modules/.caret-deps" "$old_mtime"
   touch_at "$root/$ahead" "$new_mtime"
   stub="$(make_bun_stub_path)"
-  out="$(run_bootstrap "$stub" "$root" 2>&1)"
+  out="$(run_bootstrap "$stub" "$root" '{"kind":"review"}' 2>&1)"
   assert_contains "$out" "MARKER=unset RC=0 PWD=[/]" "warm+stale ($ahead): returns 0, marker unset, leaves the caller's cwd"
   log="$(cat "$stub/mise.log" 2>&1)"
   if [ "$log" = "exec -- bun install @ $root" ]; then
@@ -199,7 +203,30 @@ for ahead in bun.lock package.json; do
   rm -rf "$root" "$stub"
 done
 
-# --- 9. warm but stale: a failed install leaves nothing to claim currency --
+# --- 9. warm, never stamped: the state every existing clone is in -----------
+# A missing stamp is `-nt`-true, so the first task after this lands reinstalls
+# once and stamps. Without that, an already-warm clone would sit un-repaired
+# until some future pull happened to touch a manifest.
+root="$(make_root)"
+mkdir -p "$root/node_modules"
+touch_at "$root/bun.lock" "$old_mtime"
+stub="$(make_bun_stub_path)"
+out="$(run_bootstrap "$stub" "$root" 2>&1)"
+assert_contains "$out" "MARKER=unset RC=0" "warm+unstamped: returns 0, marker unset"
+log="$(cat "$stub/mise.log" 2>&1)"
+if [ "$log" = "exec -- bun install @ $root" ]; then
+  ok "warm+unstamped: bun install alone, at the checkout root"
+else
+  fail "warm+unstamped: bun install alone, at the checkout root (log: $log)"
+fi
+if [ -e "$root/node_modules/.caret-deps" ]; then
+  ok "warm+unstamped: stamps, so it repairs itself exactly once"
+else
+  fail "warm+unstamped: stamps, so it repairs itself exactly once"
+fi
+rm -rf "$root" "$stub"
+
+# --- 10. warm but stale: a failed install leaves nothing to claim currency --
 root="$(make_root)"
 mkdir -p "$root/node_modules"
 touch_at "$root/bun.lock" "$new_mtime"
