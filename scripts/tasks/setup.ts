@@ -13,8 +13,9 @@ import { runForward } from "@/tasks/lib/exec.ts";
  * The commands `setup` runs, in order. `scripts/bootstrap.sh` sets
  * CARET_BOOTSTRAPPED only after its cold path has run the `preamble` set below
  * and every step succeeded, so a set marker means those are already done. Unset
- * means nothing vouches for them — the warm path, where the bootstrap no-ops, or
- * any invocation outside a mise forwarder — and the full list runs.
+ * means nothing vouches for them — the warm path, which never claims the marker
+ * even when it reinstalls behind a moved lockfile, or any invocation outside a
+ * mise forwarder — and the full list runs.
  */
 export function setupCommands(env: Record<string, string | undefined>): string[][] {
   // What scripts/bootstrap.sh re-implements in bash. A new step the tasks CLI

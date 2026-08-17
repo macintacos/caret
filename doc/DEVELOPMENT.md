@@ -60,7 +60,7 @@ mise run smoke      # smoke the shipped artifacts; also `smoke bin` / `smoke bun
 mise run preflight  # pre-push gate: lint + tests (unit ∥ e2e) + build + smoke, scoped to the diff
 ```
 
-### Bootstrapping a fresh clone
+### Bootstrapping a clone
 
 A fresh clone can go straight to `mise run dev` or `mise run lint` — there is no setup
 step to run first.
@@ -76,6 +76,11 @@ clone its own forwarder has already run the three, so it goes straight to the do
 One wrinkle worth knowing about ahead of time: in a non-interactive shell, a clone whose
 mise config you have not trusted is a hard error rather than a prompt. `mise trust`
 answers that up front.
+
+The same preamble keeps an _existing_ clone current: when a pull moves `bun.lock` or
+`package.json` ahead of your last install, the next task reinstalls the JS deps first — no
+manual `mise run setup`, and no `Cannot find package` crash as your only hint. It tracks
+that with a stamp file, `node_modules/.caret-deps`; delete it to reinstall.
 
 ### The lint gate
 
