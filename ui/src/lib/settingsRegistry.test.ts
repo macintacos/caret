@@ -10,11 +10,18 @@ import {
   SETTINGS_REGISTRY,
   type SearchOnlyEntry,
   type StagedField,
+  settingLabelTarget,
   stagedField,
   THEME_FIELD,
   THEME_SECTION,
 } from "$lib/settingsRegistry.ts";
-import { SOUND_ENABLED_KEY } from "$lib/soundPref.ts";
+import {
+  DEFAULT_SOUND_VOLUME,
+  readSoundVolume,
+  SOUND_ENABLED_KEY,
+  SOUND_VOLUME_KEY,
+  writeSoundVolume,
+} from "$lib/soundPref.ts";
 import { THEME_IDS, THEMES, type ThemeId } from "$lib/theme.ts";
 
 afterEach(() => localStorage.clear());
@@ -35,6 +42,10 @@ function sampleValue(field: StagedField): unknown {
     const opts = field.control.options;
     return opts[opts.length - 1]?.value;
   }
+  // A slider's value is a whole percent, not a flag. `true` would be REJECTED by the
+  // volume pref's own guard rather than throwing, so the two blanket round-trip tests
+  // below would go vacuously green on it. 60 is off every default.
+  if (field.control.kind === "slider") return 60;
   return true;
 }
 
@@ -117,10 +128,11 @@ describe("Sound (EXC-1100)", () => {
     expect(ids.indexOf("Sound")).toBe(ids.indexOf("Notifications") - 1);
   });
 
-  test("contributes one toggle field, defaulting on", () => {
+  test("contributes the on/off toggle then the volume slider, in that order", () => {
     const fields = staged.filter((f) => f.category === "Sound");
-    expect(fields).toHaveLength(1);
-    expect(fields[0]?.control.kind).toBe("toggle");
+    expect(fields.map((f) => f.control.kind)).toEqual(["toggle", "slider"]);
+    // The off-switch reads first: there is no point setting a level for sound you
+    // have turned off.
     expect(fields[0]?.read()).toBe(true);
   });
 
@@ -129,6 +141,45 @@ describe("Sound (EXC-1100)", () => {
     field?.write(false);
     expect(storedKeys()).toContain(SOUND_ENABLED_KEY);
     expect(field?.read()).toBe(false);
+  });
+});
+
+// EXC-1101. The registry field speaks WHOLE PERCENTS and the pref module speaks a
+// 0–1 multiplier; the field owns that conversion so the control can stay a dumb
+// 0–100 slider and its ARIA can announce a number a listener can act on.
+describe("Sound volume (EXC-1101)", () => {
+  const volume = () => staged.find((f) => f.key === "soundVolume");
+
+  test("is a slider whose resting value is the pref's default, as a percent", () => {
+    expect(volume()?.control.kind).toBe("slider");
+    expect(volume()?.read()).toBe(Math.round(DEFAULT_SOUND_VOLUME * 100));
+  });
+
+  test("reads the persisted multiplier as a percent", () => {
+    writeSoundVolume(0.4);
+    expect(volume()?.read()).toBe(40);
+  });
+
+  test("writes a percent back as a multiplier, through the volume key", () => {
+    volume()?.write(60);
+    expect(storedKeys()).toContain(SOUND_VOLUME_KEY);
+    expect(readSoundVolume()).toBeCloseTo(0.6, 10);
+    expect(volume()?.read()).toBe(60);
+  });
+
+  test("silence round-trips as silence, not as the default", () => {
+    // 0 is falsy, so a `||` anywhere on this path would resurrect the default and
+    // make the slider's left end unreachable.
+    volume()?.write(0);
+    expect(readSoundVolume()).toBe(0);
+    expect(volume()?.read()).toBe(0);
+  });
+
+  test("its row names the control through aria-labelledby, not <label for>", () => {
+    // bits-ui's Slider root is a <span>, and `for` binds only to a labelable
+    // element — the same reason the segmented control opts out.
+    const field = volume();
+    expect(field && settingLabelTarget(field)).toBeUndefined();
   });
 });
 

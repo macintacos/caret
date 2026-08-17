@@ -23,7 +23,12 @@ import { readDiffStyle, writeDiffStyle } from "$lib/diffStylePref.ts";
 import type { DiffIndicators, DiffStyle } from "$lib/diffview/types.ts";
 import type { IconName } from "$lib/icons.ts";
 import { readShortcutHints, writeShortcutHints } from "$lib/shortcutHintsPref.ts";
-import { readSoundEnabled, writeSoundEnabled } from "$lib/soundPref.ts";
+import {
+  readSoundEnabled,
+  readSoundVolume,
+  writeSoundEnabled,
+  writeSoundVolume,
+} from "$lib/soundPref.ts";
 import { type Scheme, type ThemeId, themesForScheme } from "$lib/theme.ts";
 
 /** One choice in a select or segmented control. `swatch` is an optional row of CSS
@@ -42,10 +47,18 @@ export interface SettingOption {
 
 /** How the two-pane shell (EXC-843) renders a field's control: the kind drives
  * both the rendered control and search. `segmented` is the always-visible 3-up
- * form — every option readable at a glance — for a small fixed option set. */
+ * form — every option readable at a glance — for a small fixed option set.
+ *
+ * `slider` (EXC-1101) is the one continuous control, and carries no range of its
+ * own: its value is a WHOLE PERCENT, 0–100, and SettingSlider.svelte owns that
+ * scale. A field whose preference is stored in another unit converts inside its own
+ * read/write — sound volume stores a 0–1 multiplier — which keeps the conversion
+ * beside the pref that needs it rather than spreading min/max/step/unit config
+ * through a registry holding exactly one continuous setting. */
 export type SettingControl =
   | { kind: "select"; options: readonly SettingOption[] }
   | { kind: "segmented"; options: readonly SettingOption[] }
+  | { kind: "slider" }
   | { kind: "toggle" };
 
 interface SettingEntryBase {
@@ -105,13 +118,17 @@ export const settingControlId = (key: string): string => `setting-${key}`;
  * `aria-labelledby`, and what names the row's own group. */
 export const settingLabelId = (key: string): string => `${settingControlId(key)}-label`;
 
-/** What a row's `<label for>` may point at, or `undefined` when nothing may. `for`
- * binds only to a LABELABLE element, and a segmented control renders a
- * `<div role="group">`, which is not one — so that row names its control through
- * `aria-labelledby` and leaves `for` off entirely, rather than pointing it at an
- * element that cannot honour it. */
+/** The control kinds whose root is not a LABELABLE element, so no `<label for>` can
+ * reach them: a segmented control renders a `<div role="group">`, and a slider a
+ * bits-ui `<span>` whose `role="slider"` lives on the thumb inside it. Both name
+ * their control through `aria-labelledby` instead. */
+const UNLABELABLE_CONTROLS: readonly SettingControl["kind"][] = ["segmented", "slider"];
+
+/** What a row's `<label for>` may point at, or `undefined` when nothing may — for a
+ * control in UNLABELABLE_CONTROLS the row leaves `for` off entirely rather than
+ * pointing it at an element that cannot honour it. */
 export const settingLabelTarget = (field: StagedField): string | undefined =>
-  field.control.kind === "segmented" ? undefined : settingControlId(field.key);
+  UNLABELABLE_CONTROLS.includes(field.control.kind) ? undefined : settingControlId(field.key);
 
 /** An entry's searchable text: its label plus its description, lowercased. */
 function searchText(entry: SettingEntry): string {
@@ -268,8 +285,7 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
   }),
   // The one off-switch for every sound caret makes (EXC-1100). The sound layer reads
   // the same preference on every play, so flipping this silences the app on the next
-  // cue with nothing to resync. The volume it also reads is persisted but has no
-  // control yet — EXC-1101 adds the slider.
+  // cue with nothing to resync.
   stagedField<boolean>({
     key: "sound",
     category: "Sound",
@@ -278,6 +294,20 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     control: { kind: "toggle" },
     read: readSoundEnabled,
     write: writeSoundEnabled,
+  }),
+  // How loud those cues are (EXC-1101), read per play by the same sound layer. The
+  // control speaks whole percents and the preference a 0–1 multiplier, so the
+  // conversion sits here — the one place that knows both units. Math.round keeps the
+  // slider landing on its own 5% steps after a round-trip; without it a stored 0.25
+  // reads back as 25.000000000000004 and the thumb sits fractionally off its notch.
+  stagedField<number>({
+    key: "soundVolume",
+    category: "Sound",
+    label: "Volume",
+    description: "How loud caret's sounds play.",
+    control: { kind: "slider" },
+    read: () => Math.round(readSoundVolume() * 100),
+    write: (percent) => writeSoundVolume(percent / 100),
   }),
   // Live, browser-owned notification permission (EXC-847): a search-only entry so
   // /-search (EXC-845) finds it. The pane itself (NotificationsPane) renders the

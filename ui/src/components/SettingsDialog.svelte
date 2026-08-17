@@ -61,6 +61,7 @@
   import NotificationsPane from "@/components/NotificationsPane.svelte";
   import SettingSegmented from "@/components/SettingSegmented.svelte";
   import SettingSelect from "@/components/SettingSelect.svelte";
+  import SettingSlider from "@/components/SettingSlider.svelte";
   import ThemeSection from "@/components/ThemeSection.svelte";
 
   interface Props {
@@ -348,6 +349,15 @@
       labelledBy={settingLabelId(field.key)}
       value={String(values[field.key] ?? "")}
       options={field.control.options}
+      onSelect={(v) => apply(field, v)}
+    />
+  {:else if field.control.kind === "slider"}
+    <!-- Named through the row's label like the segmented control, and for the same
+         reason: the slider's root is a <span>, which `<label for>` cannot bind to.
+         `?? 0` rather than a truthier default — 0 is a real volume. -->
+    <SettingSlider
+      labelledBy={settingLabelId(field.key)}
+      value={Number(values[field.key] ?? 0)}
       onSelect={(v) => apply(field, v)}
     />
   {:else}
