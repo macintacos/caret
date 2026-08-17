@@ -25,7 +25,7 @@
 		// Leading icon: sizing, no pointer capture, and the default muted tint
 		"[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground",
 		// Inset rows get leading space so their labels align under icon rows
-		"data-inset:ps-8",
+		"data-[inset=true]:ps-8",
 		// Highlighted (hover / keyboard) row
 		"data-highlighted:bg-accent data-highlighted:text-accent-foreground",
 		// Disabled row
