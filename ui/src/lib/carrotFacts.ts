@@ -148,7 +148,10 @@ export function createFactBag(
   return {
     next() {
       if (bag.length === 0) bag = shuffle(facts, random);
-      return bag.pop()!;
+      // `as`, not `!`: biome's noNonNullAssertion forbids the latter in ui/src.
+      // The bank is non-empty (carrotFacts.test.ts holds a floor of 20), so the
+      // pop always finds one.
+      return bag.pop() as CarrotFact;
     },
   };
 }
@@ -158,7 +161,7 @@ function shuffle(facts: readonly CarrotFact[], random: () => number): CarrotFact
   const out = [...facts];
   for (let i = out.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));
-    [out[i], out[j]] = [out[j]!, out[i]!];
+    [out[i], out[j]] = [out[j] as CarrotFact, out[i] as CarrotFact];
   }
   return out;
 }
