@@ -1,7 +1,7 @@
 # caret — Running
 
-*Audience: users running caret day to day — desktop notifications, cmux unread marks, and
-logging & debugging.*
+*Audience: users running caret day to day — desktop notifications, sound, cmux unread
+marks, and logging & debugging.*
 
 Part of the deep reference behind [README.md](../README.md). For what caret is, how to
 install it, and basic usage, start there.
@@ -64,6 +64,22 @@ fails silently, with no error the page can catch. On macOS, check in order:
 > A *hidden* tab's poll is throttled by Chrome after ~5 minutes in the background, which
 > can delay a notification by up to a minute. An unfocused-but-visible window polls at
 > full rate.
+
+## Sound
+
+caret plays a short synthesized cue at the moments worth hearing — a plan arriving, being
+revised in place, or expiring; the daemon dropping or coming back; a verdict going out; a
+comment posted; a toast firing; the file preview opening or closing; Settings or the
+shortcuts help opening; a theme change; and copy-code. None is longer than a fraction of a
+second, and none is attached to scrolling, hovering, or pointer movement.
+
+**Settings → Sound** holds the single switch that silences all of it. It defaults **on**,
+at a deliberately low volume.
+
+> [!NOTE]
+> Browsers refuse to start audio until the page has been interacted with, so a tab you
+> have never clicked stays silent for its first cue. Desktop notifications cover that case
+> — see above.
 
 ## cmux unread marks
 

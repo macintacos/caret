@@ -5,6 +5,13 @@
 // App.svelte owns the reactive `$state` backing store; AlertHost.svelte renders
 // it; this module owns the lifecycle: push, auto-dismiss dwell, and the two-phase
 // exit (mark `leaving` so the CSS exit animation runs, then remove).
+//
+// It is also caret's one funnel for "something just happened", so it is where the
+// sound layer attaches (EXC-1100): a push carries a cue derived from its variant,
+// or an explicit one the caller names. A verdict names its own so it is heard once
+// — as its verdict — rather than sounding twice alongside its confirmation toast.
+
+import type { SoundEvent } from "$lib/sound.ts";
 
 export type AlertVariant = "default" | "success" | "destructive";
 
@@ -32,6 +39,10 @@ export interface AlertDeps {
   /** Exit-animation window before the item is removed (matches --dur-exit = 140ms,
    * pinned by motion.test.ts). */
   exitMs?: number;
+  /** Play a cue for a pushed alert. Injectable so tests observe the cue without
+   * an AudioContext; absent, the queue is silent. Dismissal never sounds — the
+   * news was the alert arriving. */
+  sound?: (event: SoundEvent) => void;
 }
 
 export interface Alerts {
@@ -45,10 +56,19 @@ export interface Alerts {
     title?: string;
     message: string;
     persistent?: boolean;
+    /** Override the cue the variant would play — `null` pushes silently. */
+    sound?: SoundEvent | null;
   }): number;
   /** Begin dismissing an alert now (exit animation, then removal). Idempotent. */
   dismiss(id: number): void;
 }
+
+/** The cue a variant plays when the caller names none. */
+const VARIANT_SOUND: Record<AlertVariant, SoundEvent> = {
+  default: "toastNotice",
+  success: "toastSuccess",
+  destructive: "toastError",
+};
 
 const defaultSchedule = (fn: () => void, ms: number) => {
   const t = setTimeout(fn, ms);
@@ -83,18 +103,23 @@ export function createAlerts(store: AlertStore, deps: AlertDeps = {}): Alerts {
     title?: string;
     message: string;
     persistent?: boolean;
+    sound?: SoundEvent | null;
   }): number {
     const id = nextId++;
+    const variant = alert.variant ?? "default";
     store.alerts = [
       ...store.alerts,
       {
         id,
-        variant: alert.variant ?? "default",
+        variant,
         title: alert.title,
         message: alert.message,
         leaving: false,
       },
     ];
+    // `undefined` takes the variant's cue; `null` is a deliberate silence.
+    const cue = alert.sound === undefined ? VARIANT_SOUND[variant] : alert.sound;
+    if (cue) deps.sound?.(cue);
     // A persistent alert never auto-dismisses — it waits for the user's click.
     if (!alert.persistent) {
       dwellCancels.set(

@@ -8,6 +8,7 @@
   // animate; the app.css reduced-motion kill-switch collapses it for that preference.
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
+  import { sound } from "$lib/sound.ts";
   import Icon from "@/components/Icon.svelte";
 
   interface Props {
@@ -35,6 +36,8 @@
       return; // clipboard can reject (permissions / unavailable) — leave the copy glyph.
     }
     copied = true;
+    // Only on the path that actually copied — a rejected write is not a success.
+    sound.play("copyCode");
     clearTimeout(timer);
     timer = setTimeout(() => {
       copied = false;

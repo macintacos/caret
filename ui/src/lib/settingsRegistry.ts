@@ -1,9 +1,10 @@
 // The registry of user-facing settings surfaced in the Settings modal (EXC-837),
 // plus the field/control shapes the two-pane shell (EXC-843) renders. Each field
-// wraps an existing browser-preference module, so its read/write hit the SAME
-// localStorage key the pref already owns (theme, shortcut hints, diff
-// style/indicators) — no new keys are registered and existing users'
-// stored values survive. Editing a setting applies it immediately: the shell
+// wraps a browser-preference module and reads/writes through the key that module
+// owns, never one of its own — so a field over an existing pref (theme, shortcut
+// hints, diff style/indicators) leaves users' stored values untouched, and a field
+// over a new one (sound) registers its key there rather than here. Editing a
+// setting applies it immediately: the shell
 // calls write() the moment a control changes (App confirms with a toast); there
 // is no staged draft.
 //
@@ -22,6 +23,7 @@ import { readDiffStyle, writeDiffStyle } from "$lib/diffStylePref.ts";
 import type { DiffIndicators, DiffStyle } from "$lib/diffview/types.ts";
 import type { IconName } from "$lib/icons.ts";
 import { readShortcutHints, writeShortcutHints } from "$lib/shortcutHintsPref.ts";
+import { readSoundEnabled, writeSoundEnabled } from "$lib/soundPref.ts";
 import { type Scheme, type ThemeId, themesForScheme } from "$lib/theme.ts";
 
 /** One choice in a select or segmented control. `swatch` is an optional row of CSS
@@ -179,6 +181,10 @@ export const THEME_FIELD = {
   dark: "themeDark",
 } as const;
 
+/** The same three keys as a plain list, for callers asking only "is this a theme
+ * field?" — App's applySetting, which gives a theme change its own sound. */
+export const THEME_KEYS: readonly string[] = Object.values(THEME_FIELD);
+
 const diffStyleOptions = [
   { value: "split", label: "Split" },
   { value: "unified", label: "Unified" },
@@ -191,8 +197,8 @@ const diffIndicatorOptions = [
 ] as const;
 
 /** Every setting the Settings modal surfaces. Each staged field applies through
- * its pref module's existing localStorage key; search-only entries (contributed
- * by later panes) never apply. */
+ * its own pref module's localStorage key; search-only entries (contributed by
+ * later panes) never apply. */
 export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
   // The appearance trio (EXC-773). They share the THEME_SECTION label, which the
   // shell renders as one composite block (ThemeSection.svelte) rather than three
@@ -260,6 +266,19 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     read: readDiffIndicators,
     write: writeDiffIndicators,
   }),
+  // The one off-switch for every sound caret makes (EXC-1100). The sound layer reads
+  // the same preference on every play, so flipping this silences the app on the next
+  // cue with nothing to resync. The volume it also reads is persisted but has no
+  // control yet — EXC-1101 adds the slider.
+  stagedField<boolean>({
+    key: "sound",
+    category: "Sound",
+    label: "Sounds",
+    description: "Play a short cue when a plan arrives, a decision lands, or something fails.",
+    control: { kind: "toggle" },
+    read: readSoundEnabled,
+    write: writeSoundEnabled,
+  }),
   // Live, browser-owned notification permission (EXC-847): a search-only entry so
   // /-search (EXC-845) finds it. The pane itself (NotificationsPane) renders the
   // live state and the enable / test affordance — there is nothing to persist.
@@ -315,9 +334,12 @@ export interface SettingCategory {
 /** The ordered sidebar taxonomy (EXC-843). The two-pane shell renders a nav item
  * per category that has at least one registry entry, in this order, and shows the
  * blurb beneath the pane title. Later panes append their categories here —
- * Notifications (EXC-847), Advanced (EXC-848). */
+ * Sound (EXC-1100), Notifications (EXC-847), Advanced (EXC-848). Sound sits directly
+ * before Notifications: both are how caret gets the reviewer's attention, so they read
+ * as a pair. */
 export const SETTINGS_CATEGORIES: readonly SettingCategory[] = [
   { id: "Appearance", blurb: "How the interface looks, including the diff view." },
+  { id: "Sound", blurb: "Short cues when a plan arrives and a decision lands." },
   { id: "Notifications", blurb: "Desktop alerts when a new plan is ready for review." },
   { id: "Advanced", blurb: "Read-only details about this install. Click a block to copy it." },
 ];

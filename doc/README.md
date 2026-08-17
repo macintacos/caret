@@ -12,6 +12,7 @@ Find the row that matches what you came here to do, then follow the link.
 | Look up a `CARET_*` environment variable | [`CONFIGURING.md` § Environment variables](CONFIGURING.md#environment-variables) |
 | Understand how caret reformats a plan before you read it | [`CONFIGURING.md` § Plan formatting (rumdl)](CONFIGURING.md#plan-formatting-rumdl) |
 | Turn on desktop notifications, or work out why none appear | [`RUNNING.md` § Desktop notifications](RUNNING.md#desktop-notifications) |
+| Turn caret's sounds off | [`RUNNING.md` § Sound](RUNNING.md#sound) |
 | Clear a cmux pane's unread mark from a review | [`RUNNING.md` § cmux unread marks](RUNNING.md#cmux-unread-marks) |
 | Find the logs, or scrub them before sharing | [`RUNNING.md` § Logging & Debugging](RUNNING.md#logging--debugging) |
 | Understand how caret works, and how it hooks into your agent | [`ARCHITECTURE.md` § How it works](ARCHITECTURE.md#how-it-works) |

@@ -14,6 +14,7 @@ import {
   THEME_FIELD,
   THEME_SECTION,
 } from "$lib/settingsRegistry.ts";
+import { SOUND_ENABLED_KEY } from "$lib/soundPref.ts";
 import { THEME_IDS, THEMES, type ThemeId } from "$lib/theme.ts";
 
 afterEach(() => localStorage.clear());
@@ -66,7 +67,7 @@ describe("SETTINGS_REGISTRY", () => {
 });
 
 describe("SETTINGS_CATEGORIES (the two-pane sidebar taxonomy)", () => {
-  test("Appearance groups every staged field (Diff view folded in as a section)", () => {
+  test("Appearance groups the appearance fields (Diff view folded in as a section)", () => {
     const appearance = staged.filter((f) => f.category === "Appearance").map((f) => f.key);
     expect(appearance).toContain(THEME_FIELD.mode);
     expect(appearance).toContain(THEME_FIELD.light);
@@ -106,6 +107,28 @@ describe("SETTINGS_CATEGORIES (the two-pane sidebar taxonomy)", () => {
 
   test("leads with Appearance", () => {
     expect(SETTINGS_CATEGORIES[0]?.id).toBe("Appearance");
+  });
+});
+
+describe("Sound (EXC-1100)", () => {
+  test("Sound is a sidebar category with a blurb, sitting beside Notifications", () => {
+    const ids = SETTINGS_CATEGORIES.map((c) => c.id);
+    expect(SETTINGS_CATEGORIES.find((c) => c.id === "Sound")?.blurb).toBeTruthy();
+    expect(ids.indexOf("Sound")).toBe(ids.indexOf("Notifications") - 1);
+  });
+
+  test("contributes one toggle field, defaulting on", () => {
+    const fields = staged.filter((f) => f.category === "Sound");
+    expect(fields).toHaveLength(1);
+    expect(fields[0]?.control.kind).toBe("toggle");
+    expect(fields[0]?.read()).toBe(true);
+  });
+
+  test("the toggle writes through the sound preference's own key", () => {
+    const field = staged.find((f) => f.category === "Sound");
+    field?.write(false);
+    expect(storedKeys()).toContain(SOUND_ENABLED_KEY);
+    expect(field?.read()).toBe(false);
   });
 });
 

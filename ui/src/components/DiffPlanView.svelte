@@ -73,6 +73,7 @@
   } from "$lib/diffview/types.ts";
   import type { ThemeId } from "$lib/theme.ts";
   import { bind, defaultIsEditingContext, shortcuts } from "$lib/shortcuts/index.ts";
+  import { sound } from "$lib/sound.ts";
   import type { CursorMotion } from "$lib/diffview/lineCursor.ts";
   import { activeHeadingLine, extractHeadings, lineForSlug, slugForLine } from "$lib/toc.ts";
   import { NARROW_WIDTH_PX } from "$lib/layout.ts";
@@ -422,6 +423,8 @@
   function dismissFilePreview(): void {
     if (filePreview === undefined || drawerClosing) return;
     drawerClosing = true;
+    // Below the early return, so a redundant dismiss stays silent.
+    sound.play("filePreviewClose");
     closeTimer = setTimeout(() => {
       filePreview = undefined;
       cancelDrawerClose();
@@ -432,6 +435,7 @@
     // Reopening mid-collapse: drop the pending unmount so the lane wipes back
     // open on the same instance rather than being torn out from under it.
     cancelDrawerClose();
+    sound.play("filePreviewOpen");
     filePreview = { path: ref.path, line: ref.line, endLine: ref.endLine, token: tokenElement };
   }
 
