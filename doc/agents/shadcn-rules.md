@@ -374,15 +374,21 @@ the thing stamping the attribute gives it a *value*, the utility silently misfir
 computes no layout: EXC-1101 shipped a slider whose track was 0px tall behind 290 lines of
 passing new tests.
 
-So the bare form is legal only for the four attributes bits-ui stamps as `"" | undefined`
-— `data-disabled`, `data-highlighted`, `data-selected`, `data-placeholder`. Everything
-else takes the valued bracket form (`data-[state=open]:`, `data-[active=true]:`).
-`test/structure/shadcn-data-variants.test.ts` is the gate; it walks the whole vendored
-tree, so a re-sync restoring a stock spelling reds `bun test` rather than waiting for
-someone to look at the pixels. Correct a violation at the **selector**, not by changing
-what the component stamps — caret's own CSS selects `[data-active="true"]` in
-`SettingsDialog.svelte`, and switching the stamp to presence would break those rules while
-letting the guard go green on a re-synced bare class.
+So the bare form is legal only where bits-ui stamps the attribute as `"" | undefined`.
+Today's tree uses four of those — `data-disabled`, `data-highlighted`, `data-selected`,
+`data-placeholder` — and `PRESENCE_VALUED` in the gate lists exactly those. bits-ui stamps
+around twenty more the same way (`data-readonly`, `data-invalid`, `data-today`, …), so a
+newly vendored tree may legitimately extend the set: check `bits-ui/dist` before
+converting a bare variant, and extend the allowlist when the attribute really is presence.
+Everything else takes the valued bracket form (`data-[state=open]:`,
+`data-[active=true]:`).
+
+`test/structure/shadcn-data-variants.test.ts` is the gate; it reads every `.svelte` and
+`.ts` file in the vendored tree, so a re-sync restoring a stock spelling reds `bun test`
+rather than waiting for someone to look at the pixels. Correct a violation at the
+**selector**, not by changing what the component stamps — caret's own CSS selects
+`[data-active="true"]` in `SettingsDialog.svelte`, and switching the stamp to presence
+would break those rules while letting the guard go green on a re-synced bare class.
 
 ## Related rules
 

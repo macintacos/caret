@@ -116,9 +116,9 @@ test("select rows carry caret's menu-row geometry", async () => {
 // source the way motion.test.ts pins the four modal surfaces. Both are exactly the
 // re-sync hazard doc/agents/shadcn-rules.md § Edits a re-sync will silently undo
 // describes: an overwrite restores stock and every mounted assertion above stays green.
-// Comment lines are stripped first: both assertions below look for a literal that the
-// file's own explanatory comments also spell, so an unstripped read matches the prose
-// rather than the markup it describes.
+// Comment lines are stripped first: a positive `toContain` would otherwise be satisfied by
+// the file's own prose about these utilities rather than by the class string, which is how
+// a re-synced revert could pass vacuously.
 const selectContentSource = (
   await Bun.file(join(import.meta.dir, "components/ui/select/select-content.svelte")).text()
 ).replace(/^\s*\/\/.*$/gm, "");

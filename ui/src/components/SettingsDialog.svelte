@@ -414,7 +414,13 @@
   /* Nav row: quiet --ink-soft at rest, transparent. The SELECTED row is the single
      amber-filled row — a solid amber rail down its leading edge plus an amber wash
      and bold ink ("amber marks the selection") — so selection reads at a glance.
-     `position: relative` anchors the rail pseudo-element. */
+     `position: relative` anchors the rail pseudo-element.
+
+     Unselected rows sit at the inherited weight. The vendored
+     `data-[active=true]:font-medium` reaches only the selected row, which the rule
+     below overrides to 600 — so the weight axis carries selection on its own, and
+     the 500 the row would otherwise wear is what made an unselected row read as
+     half-selected. */
   .settings :global([data-slot="sidebar-menu-button"]) {
     position: relative;
     justify-content: flex-start;
