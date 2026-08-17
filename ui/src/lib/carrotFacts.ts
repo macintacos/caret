@@ -3,10 +3,11 @@
 // it be true, checkable, and forgettable — a flourish, never a distraction.
 //
 // Every `source` was fetched and the claim located in the page text before the
-// entry was written; each deep-links to the section that states it rather than
-// to the article root, which is also what keeps the sources unique. Entries are
-// bounded by carrotFacts.test.ts: no health claims, and nothing shaped like the
-// wartime night-vision myth.
+// entry was written, and deep-links to the stating section where the article has
+// one. carrotFacts.test.ts requires the source URLs to be distinct, which is
+// per-URL and not per-page: eleven entries cite different sections of the same
+// Carrot article. Entries are bounded by that same suite — no health claims, and
+// nothing shaped like the wartime night-vision myth.
 
 export interface CarrotFact {
   /** One verifiable sentence. No health claims, no violent framing. */
@@ -17,7 +18,7 @@ export interface CarrotFact {
 
 export const CARROT_FACTS: readonly CarrotFact[] = [
   {
-    text: "The word carrot reached English around 1530 by way of the Middle French carotte, from a Greek root meaning horn — for the shape.",
+    text: "The word carrot reached English around 1530 by way of the Middle French carotte, and traces back through Greek to a root meaning horn — for the shape.",
     source: "https://en.wikipedia.org/wiki/Carrot#Etymology",
   },
   {
@@ -37,7 +38,7 @@ export const CARROT_FACTS: readonly CarrotFact[] = [
     source: "https://en.wikipedia.org/wiki/Carrot#History",
   },
   {
-    text: "Most carrot cultivars are ready 70 to 80 days after sowing, given deep, loose, sandy soil.",
+    text: "Most carrot cultivars mature within 70 to 80 days, and do best in deep, loose, well-drained soil.",
     source: "https://en.wikipedia.org/wiki/Carrot#Propagation",
   },
   {
@@ -65,7 +66,7 @@ export const CARROT_FACTS: readonly CarrotFact[] = [
     source: "https://en.wikipedia.org/wiki/Daucus_carota",
   },
   {
-    text: "A wild carrot's flower head often carries one dark red floret at its centre, known as the ruby.",
+    text: "A wild carrot's flower head may carry a single pink or purple floret at its centre, known as the ruby.",
     source: "https://en.wikipedia.org/wiki/Daucus_carota#Description",
   },
   {
@@ -125,15 +126,16 @@ export const CARROT_FACTS: readonly CarrotFact[] = [
 /** How long one fact holds the line before the next is drawn. */
 export const ROTATE_MS = 50_000;
 
-export interface FactBag {
-  /** The next fact, drawn without replacement until the bag empties and refills. */
-  next: () => CarrotFact;
-}
-
 /**
  * Draw facts from a shuffled bag rather than picking one at random each time.
  * An independent pick repeats itself over a long wait, and a line that repeats
  * is the one thing a reader parked on this screen would actually notice.
+ *
+ * No fact reappears until every other has been shown, save possibly across a
+ * refill: a fresh bag may open on the one that just left. That is the standard
+ * bag-randomizer seam, and at 26 facts it is a 1-in-26 chance every 22 minutes
+ * of continuous waiting — left open rather than closed with last-drawn tracking,
+ * which is more machinery than the odds buy.
  *
  * @param facts - The bank to draw from.
  * @param random - Source of randomness; injected so tests are deterministic.
@@ -141,12 +143,12 @@ export interface FactBag {
 export function createFactBag(
   facts: readonly CarrotFact[] = CARROT_FACTS,
   random: () => number = Math.random,
-): FactBag {
+): { next: () => CarrotFact } {
   let bag: CarrotFact[] = [];
   return {
     next() {
       if (bag.length === 0) bag = shuffle(facts, random);
-      return bag.pop() as CarrotFact;
+      return bag.pop()!;
     },
   };
 }
@@ -156,7 +158,7 @@ function shuffle(facts: readonly CarrotFact[], random: () => number): CarrotFact
   const out = [...facts];
   for (let i = out.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));
-    [out[i], out[j]] = [out[j] as CarrotFact, out[i] as CarrotFact];
+    [out[i], out[j]] = [out[j]!, out[i]!];
   }
   return out;
 }

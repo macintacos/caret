@@ -1,4 +1,3 @@
-import "@ui/test-setup.ts";
 import { describe, expect, test } from "bun:test";
 
 import { CARROT_FACTS, type CarrotFact, createFactBag, ROTATE_MS } from "$lib/carrotFacts.ts";
@@ -26,7 +25,9 @@ describe("CARROT_FACTS", () => {
     expect(new Set(texts).size).toBe(texts.length);
   });
 
-  test("no source repeats — each fact deep-links to where its claim is stated", () => {
+  // Per-URL, not per-page: eleven entries cite different sections of the same
+  // Carrot article, which is the convention rather than a leak in this check.
+  test("no source repeats", () => {
     const sources = CARROT_FACTS.map((f) => f.source);
     expect(new Set(sources).size).toBe(sources.length);
   });
@@ -56,6 +57,18 @@ describe("createFactBag", () => {
     let i = 0;
     return () => values[i++ % values.length]!;
   };
+
+  // The set-based tests below all stay green against `shuffle = (f) => [...f]`,
+  // so the module's headline behaviour needs one assertion on ORDER. The shuffle
+  // is deterministic given `random`, so the permutation is a fair thing to pin:
+  // with random() === 0 Fisher-Yates walks [0,1,2,3,4] to [1,2,3,4,0], which pops
+  // as below, where an unshuffled bag would pop 4,3,2,1,0. This also reds on the
+  // classic `i >= 0` bound slip, which biases the shuffle while preserving the set.
+  test("the bag is shuffled, not merely drained in order", () => {
+    const bag = createFactBag(facts(5), () => 0);
+    const drawn = Array.from({ length: 5 }, () => bag.next().text);
+    expect(drawn).toEqual(["fact 0", "fact 4", "fact 3", "fact 2", "fact 1"]);
+  });
 
   test("a full pass yields every fact exactly once", () => {
     const bank = facts(5);

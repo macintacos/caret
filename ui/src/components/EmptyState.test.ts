@@ -133,6 +133,42 @@ describe("EmptyState", () => {
     expect(rule).toContain("var(--dur-enter)");
     expect(ruleBody(css, ".carrot-fact.leaving")).toContain("var(--dur-exit)");
   });
+
+  // WCAG 2.2.2: auto-updating content running indefinitely needs a way to hold it.
+  // The concrete bug it also closes is that the link's href swaps under a pointer
+  // already reaching for it.
+  test("holds the rotation while the pointer is over the line", async () => {
+    const { target, flush } = render(EmptyState, { connected: true, rotateMs: 10 });
+    const line = target.querySelector(".carrot-fact")!;
+    line.dispatchEvent(new MouseEvent("mouseenter"));
+    flush();
+    const held = line.textContent;
+    await flushUntil(flush, () => line.textContent !== held, 12);
+    expect(line.textContent).toBe(held);
+
+    // …and resumes on the way out, so the hold is a pause and not a stop.
+    line.dispatchEvent(new MouseEvent("mouseleave"));
+    flush();
+    await flushUntil(flush, () => line.textContent !== held);
+    expect(line.textContent).not.toBe(held);
+  });
+
+  // The strip spans the bottom band, and during the exit window its link is
+  // invisible but would still hit-test. AlertHost draws the same pair.
+  test("the strip lets clicks through but the link itself does not", async () => {
+    const css = await componentCss("EmptyState.svelte");
+    expect(ruleBody(css, ".carrot-fact")).toContain("pointer-events: none;");
+    expect(ruleBody(css, ".carrot-fact a")).toContain("pointer-events: auto;");
+  });
+
+  // The source link spends no accent and sits mid-sentence in the same faint ink
+  // as its own text, so the underline is the only thing marking it as a link.
+  // Tailwind's preflight resets text-decoration-line to none, so relying on the
+  // UA default leaves it with no affordance whatsoever — declare it explicitly.
+  test("the source link declares its own underline (preflight resets the UA one)", async () => {
+    const rule = ruleBody(await componentCss("EmptyState.svelte"), ".carrot-fact a");
+    expect(rule).toContain("text-decoration-line: underline;");
+  });
 });
 
 // Read a component's <style> block from source. Used to pin CSS token references
