@@ -12,7 +12,9 @@
 // arriving, one revised in place, one expiring, and the daemon going or coming
 // back. Each is a diff between what the last poll held and what this one carries
 // — data that lives nowhere else — so the detection sits here rather than in a
-// module that would have to keep a second copy of the list.
+// module that would have to keep a second copy of the list. That same diff feeds
+// the unread marks (EXC-411): a plan that arrives or gains a version while you
+// read a different one is marked, and making it active clears it.
 
 import type { ClientReview, HealthIdentity } from "@core/lib/types";
 import { deepLinkId, setUrl } from "@/state/deepLink.ts";
@@ -133,6 +135,8 @@ export interface ReviewSelection {
   readonly connected: boolean;
   /** Set once when the daemon behind the port is replaced (instanceId flip). */
   readonly daemonChanged: boolean;
+  /** Ids of plans that arrived or were revised while you read another one. */
+  readonly unread: string[];
 
   /** Mark the daemon connected/disconnected from an API outcome. */
   setConnected: (value: boolean) => void;
@@ -162,6 +166,11 @@ export interface SelectionStore {
   activeId: string | null;
   connected: boolean;
   daemonChanged: boolean;
+  // Ids, never (id, version) tuples: the re-mark is driven by the merge diff and
+  // the clear is scoped by id, so a version in the key would carry nothing the
+  // bare id does not. An array rather than a Set because $state proxies plain
+  // arrays but not Set/Map, and the list is a handful of entries.
+  unread: string[];
 }
 
 /**
@@ -180,6 +189,11 @@ export function createReviewSelection(
 
   const select = (id: string | null) => {
     store.activeId = id;
+    // Making a plan active is what reads it, so clearing keys off this funnel: a
+    // dropdown pick, a deep link, mergeReviews' re-select and afterResolve's
+    // auto-advance all arrive here. Scoped by id, never by (id, version), so a
+    // plan bumped twice while unread clears in one select.
+    if (id !== null) store.unread = store.unread.filter((u) => u !== id);
     setUrl(id);
   };
 
@@ -188,24 +202,38 @@ export function createReviewSelection(
   // follows for desktop notifications.
   let seeded = false;
 
-  /** Announce what changed between the last snapshot and `incoming`. At most one
-   * cue per kind, so a poll that brings three plans is one arrival rather than
-   * three overlapping sounds — and an arrival SUPPRESSES a revision in the same
-   * poll, since the bigger news wins. An expiry is not on that ladder: it can
-   * sound alongside either, because a plan leaving and a plan landing are two
-   * separate pieces of news. */
-  function announceMerge(incoming: readonly ClientReview[]): void {
+  /** Diff the last snapshot against `incoming`, then do the two jobs that diff
+   * feeds. Announce what changed: at most one cue per kind, so a poll that brings
+   * three plans is one arrival rather than three overlapping sounds — and an
+   * arrival SUPPRESSES a revision in the same poll, since the bigger news wins.
+   * An expiry is not on that ladder: it can sound alongside either, because a
+   * plan leaving and a plan landing are two separate pieces of news. Then mark
+   * every arrival and every revision unread, unless it is the plan being read. */
+  function observeMerge(incoming: readonly ClientReview[]): void {
     if (!seeded) {
       seeded = true;
       return;
     }
     const before = new Map(store.reviews.map((r) => [r.id, r.version]));
-    if (incoming.some((r) => !before.has(r.id))) deps.onSound?.("planArrived");
-    else if (incoming.some((r) => (before.get(r.id) ?? r.version) < r.version))
-      deps.onSound?.("planRevised");
+    const news = incoming.filter((r) => {
+      const was = before.get(r.id);
+      return was === undefined || was < r.version;
+    });
+    if (news.some((r) => !before.has(r.id))) deps.onSound?.("planArrived");
+    else if (news.length > 0) deps.onSound?.("planRevised");
     const after = new Set(incoming.map((r) => r.id));
     if (store.reviews.some((r) => !after.has(r.id))) deps.onSound?.("planExpired");
+    const fresh = news.filter((r) => r.id !== store.activeId && !store.unread.includes(r.id));
+    if (fresh.length > 0) store.unread = [...store.unread, ...fresh.map((r) => r.id)];
   }
+
+  /** Drop unread entries for plans no longer present, through both removal paths,
+   * so a mark can never outlive the row that would clear it. */
+  const pruneUnread = (present: readonly ClientReview[]) => {
+    if (store.unread.length === 0) return;
+    const ids = new Set(present.map((r) => r.id));
+    store.unread = store.unread.filter((id) => ids.has(id));
+  };
 
   return {
     get reviews() {
@@ -223,6 +251,9 @@ export function createReviewSelection(
     get daemonChanged() {
       return store.daemonChanged;
     },
+    get unread() {
+      return store.unread;
+    },
     setConnected(value) {
       // Sound the transition only. Every poll tick reports the connection, so a
       // per-call cue would be a metronome.
@@ -237,8 +268,9 @@ export function createReviewSelection(
     },
     selectReview: select,
     mergeReviews(incoming) {
-      announceMerge(incoming);
+      observeMerge(incoming);
       store.reviews = incoming;
+      pruneUnread(incoming);
       // Pick active: keep current if still present, else deep link, else first.
       if (!store.activeId || !incoming.some((r) => r.id === store.activeId)) {
         const wanted = deepLinkId();
@@ -250,6 +282,7 @@ export function createReviewSelection(
     afterResolve(id) {
       const remaining = store.reviews.filter((r) => r.id !== id);
       store.reviews = remaining;
+      pruneUnread(remaining);
       // Auto-advance to the next pending review, or clear.
       select(remaining[0]?.id ?? null);
     },

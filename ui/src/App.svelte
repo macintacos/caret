@@ -74,6 +74,7 @@
     activeId: null,
     connected: true,
     daemonChanged: false,
+    unread: [],
   });
   let resStore = $state<ResolveStore>({ approveMode: "default", busy: false });
   // The in-UI alert/toast queue (EXC-850): App owns the reactive backing store,

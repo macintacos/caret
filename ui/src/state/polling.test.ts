@@ -245,7 +245,14 @@ describe("createReviewSelection", () => {
   }
 
   function makeStore(over: Partial<SelectionStore> = {}): SelectionStore {
-    return { reviews: [], activeId: null, connected: true, daemonChanged: false, ...over };
+    return {
+      reviews: [],
+      activeId: null,
+      connected: true,
+      daemonChanged: false,
+      unread: [],
+      ...over,
+    };
   }
 
   // Set the `?review=` deep-link param. happy-dom's base is about:blank and
@@ -344,7 +351,14 @@ describe("createReviewSelection sound events (EXC-1100)", () => {
   }
 
   function makeStore(over: Partial<SelectionStore> = {}): SelectionStore {
-    return { reviews: [], activeId: null, connected: true, daemonChanged: false, ...over };
+    return {
+      reviews: [],
+      activeId: null,
+      connected: true,
+      daemonChanged: false,
+      unread: [],
+      ...over,
+    };
   }
 
   /** A selection wired to a recording onSound, plus the events it has reported. */
@@ -446,5 +460,148 @@ describe("createReviewSelection sound events (EXC-1100)", () => {
     sel.mergeReviews([review("a")]);
     sel.mergeReviews([review("a"), review("b")]);
     expect(store.reviews).toHaveLength(2);
+  });
+});
+
+describe("createReviewSelection unread markers (EXC-411)", () => {
+  function review(id: string, version = 1): ClientReview {
+    return { id, version } as unknown as ClientReview;
+  }
+
+  function makeStore(over: Partial<SelectionStore> = {}): SelectionStore {
+    return {
+      reviews: [],
+      activeId: null,
+      connected: true,
+      daemonChanged: false,
+      unread: [],
+      ...over,
+    };
+  }
+
+  function setDeepLink(id: string | null) {
+    const url = new URL(location.href);
+    if (id) url.searchParams.set("review", id);
+    else url.searchParams.delete("review");
+    history.replaceState(null, "", url.href);
+  }
+
+  beforeEach(() => {
+    setDeepLink(null);
+  });
+
+  test("the first snapshot marks nothing — what was already pending is not news", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a"), review("b")]);
+    expect(sel.unread).toEqual([]);
+  });
+
+  test("a plan arriving while another is active is marked unread", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("a"), review("b")]);
+    expect(sel.unread).toEqual(["b"]);
+  });
+
+  test("a version bump on a background plan re-marks it", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a"), review("b", 1)]);
+    sel.selectReview("b");
+    sel.selectReview("a");
+    sel.mergeReviews([review("a"), review("b", 2)]);
+    expect(sel.unread).toEqual(["b"]);
+  });
+
+  test("the plan you are reading is never marked, however it became active", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a", 1)]);
+    sel.mergeReviews([review("a", 2)]);
+    expect(sel.unread).toEqual([]);
+  });
+
+  test("an unchanged snapshot marks nothing, so the 2s poll never accumulates", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("a")]);
+    expect(sel.unread).toEqual([]);
+  });
+
+  test("picking the plan from the dropdown clears its mark", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("a"), review("b")]);
+    sel.selectReview("b");
+    expect(sel.unread).toEqual([]);
+  });
+
+  test("a deep link resolving to the plan clears its mark", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("a"), review("b")]);
+    setDeepLink("b");
+    // The active plan vanishes, so merge re-selects — through the deep link.
+    sel.mergeReviews([review("b")]);
+    expect(store.activeId).toBe("b");
+    expect(sel.unread).toEqual([]);
+  });
+
+  test("merge auto-reselecting onto the plan clears its mark", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("a"), review("b")]);
+    expect(sel.unread).toEqual(["b"]);
+    sel.mergeReviews([review("b")]);
+    expect(store.activeId).toBe("b");
+    expect(sel.unread).toEqual([]);
+  });
+
+  test("resolve auto-advancing onto the plan clears its mark", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("a"), review("b")]);
+    sel.afterResolve("a");
+    expect(store.activeId).toBe("b");
+    expect(sel.unread).toEqual([]);
+  });
+
+  test("a plan bumped twice while unread clears in one select", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a"), review("b", 1)]);
+    sel.mergeReviews([review("a"), review("b", 2)]);
+    sel.mergeReviews([review("a"), review("b", 3)]);
+    expect(sel.unread).toEqual(["b"]);
+    sel.selectReview("b");
+    expect(sel.unread).toEqual([]);
+  });
+
+  test("a plan expiring while unread is pruned, so no mark outlives its row", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("a"), review("b")]);
+    expect(sel.unread).toEqual(["b"]);
+    sel.mergeReviews([review("a")]);
+    expect(sel.unread).toEqual([]);
+  });
+
+  test("resolving an unread plan prunes its mark", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("a"), review("b"), review("c")]);
+    expect(sel.unread).toEqual(["b", "c"]);
+    sel.afterResolve("b");
+    expect(sel.unread).toEqual(["c"]);
   });
 });
