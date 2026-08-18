@@ -2610,7 +2610,7 @@ test("compare mode never reaches the decoration pass (EXC-867)", async ({ daemon
   await planSurface(page);
   await expect.poll(async () => (await readEmphasis(page, 5)).tagged.length).toBeGreaterThan(0);
 
-  await page.getByRole("button", { name: "Compare versions" }).click();
+  await page.getByRole("button", { name: "Versions" }).click();
   await expect
     .poll(() =>
       page.evaluate(() => {

@@ -210,7 +210,7 @@ test("commenting keys are inert in compare (read-only) mode", async ({ daemon, p
 
   // Enter compare mode; the Target-version control is compare-only, so its
   // presence confirms the read-only diff is up.
-  await page.getByRole("button", { name: "Compare versions" }).click();
+  await page.getByRole("button", { name: "Versions" }).click();
   await expect(page.getByLabel("Target version")).toBeVisible();
 
   // Neither the cursor motions nor the commenting keys are registered here, so

@@ -115,7 +115,7 @@ async function rowsAtTop(page: Page): Promise<string> {
  * — the only way in, now that entering compare mode opens nothing by itself. */
 async function openComparePanel(page: Page) {
   await planSurface(page);
-  await page.getByRole("button", { name: "Compare versions" }).click();
+  await page.getByRole("button", { name: "Versions" }).click();
   await commentTally(page).click();
   const nav = commentNavigator(page);
   await expect(nav).toBeVisible();
@@ -141,7 +141,7 @@ test("entering compare mode leaves the panel closed; the tally opens it", async 
 
   // …and entering compare mode does not change that: the diff comes up with the
   // panel still shut, and the same tally opens it on the compared range.
-  await page.getByRole("button", { name: "Compare versions" }).click();
+  await page.getByRole("button", { name: "Versions" }).click();
   await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-diff-type", "split");
   await expect(nav).toHaveCount(0);
 
@@ -153,7 +153,7 @@ test("entering compare mode leaves the panel closed; the tally opens it", async 
 /** Enter compare mode in `layout` with the side-anchor fixture, and open the panel. */
 async function openSideAnchors(page: Page, layout: "Split" | "Unified") {
   await planSurface(page);
-  await page.getByRole("button", { name: "Compare versions" }).click();
+  await page.getByRole("button", { name: "Versions" }).click();
   await page.getByRole("radio", { name: layout }).click();
   await commentTally(page).click();
   const nav = commentNavigator(page);
@@ -230,7 +230,7 @@ test("reveals a compare comment past the fold (split), including after a round t
   // stale handle here would scroll nothing.
   // The layout radios are compare-only, so their absence is the signal the diff
   // really unmounted rather than merely re-rendering.
-  const compareToggle = page.getByRole("button", { name: "Compare versions" });
+  const compareToggle = page.getByRole("button", { name: "Versions" });
   await compareToggle.click();
   await expect(page.getByRole("radio", { name: "Split" })).toHaveCount(0);
   await compareToggle.click();
@@ -345,7 +345,7 @@ test("the panel is dismissable with Escape and with the status-strip tally", asy
   await page.goto("/");
   await planSurface(page);
   await waitPastSafeModeGrace(page);
-  await page.getByRole("button", { name: "Compare versions" }).click();
+  await page.getByRole("button", { name: "Versions" }).click();
 
   // The tally counts the compared range's comments (v2's two plus v3's one).
   const nav = commentNavigator(page);
@@ -372,7 +372,7 @@ test("leaving compare mode restores the single-version list", async ({ daemon, p
   // The panel is the reviewer's own now, so leaving compare mode leaves it up —
   // it just swaps back to the current version's own index: no version badges,
   // and the plain title.
-  await page.getByRole("button", { name: "Compare versions" }).click();
+  await page.getByRole("button", { name: "Versions" }).click();
   await expect(nav).toHaveAccessibleName("Comments");
   await expect(nav.getByRole("listitem").getByRole("button")).toHaveCount(1);
   await expect(nav.getByRole("listitem").getByRole("button")).toContainText(

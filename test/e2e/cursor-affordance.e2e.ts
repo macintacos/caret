@@ -67,7 +67,7 @@ test("compare-versions controls and version options show the pointer cursor", as
   await daemon.seedVersions(3, ["# Plan\n\nalpha\n", "# Plan\n\nbeta\n", "# Plan\n\ngamma\n"]);
   await page.goto("/");
   await planSurface(page);
-  await page.getByRole("button", { name: "Compare versions" }).click();
+  await page.getByRole("button", { name: "Versions" }).click();
 
   // Every interactive control in the compare bar: the version chips plus the
   // segmented layout/indicator toggles.

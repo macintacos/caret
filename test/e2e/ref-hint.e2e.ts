@@ -496,7 +496,7 @@ test("compare mode shows no badge, and spends neither hint", async ({ daemon, pa
     await openPlan(page);
     await expect(fileBadge(page)).toHaveCount(1);
 
-    const compare = page.getByRole("button", { name: "Compare versions" });
+    const compare = page.getByRole("button", { name: "Versions" });
     await compare.click();
     await expect(fileBadge(page)).toHaveCount(0);
     await expect(dirBadge(page)).toHaveCount(0);

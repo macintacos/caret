@@ -1720,7 +1720,7 @@
 
 <style>
   /* The control bar above the surface. Carries the bar chrome (raised paper,
-     hairline rule) for the version-compare picker: the "Compare versions" toggle
+     hairline rule) for the version-compare picker: the "Versions" toggle
      sits at the left, and (in compare mode) the layout / indicator toggles are
      pushed to the right edge. The horizontal inset is the app's shared --bar-inset
      (the same the TopBar and the shell use), symmetric now that EXC-949 removed

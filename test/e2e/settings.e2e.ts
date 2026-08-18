@@ -476,7 +476,7 @@ test("changing the diff Layout in Settings reflows an open compare diff live", a
     "# Plan\n\ngamma line three\n",
   ]);
   await page.goto("/");
-  await page.getByRole("button", { name: "Compare versions" }).click();
+  await page.getByRole("button", { name: "Versions" }).click();
   // The library renders split as data-diff-type="split" and unified as "single".
   const pre = page.locator(".diffview pre").first();
   await expect(pre).toHaveAttribute("data-diff-type", "split");
