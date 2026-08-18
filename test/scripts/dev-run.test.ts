@@ -22,6 +22,7 @@ import {
   planStateDir,
   runDev,
   type SpawnedChild,
+  viteUrlFrom,
 } from "@/tasks/dev/run.ts";
 
 // ---- planStateDir ----
@@ -360,6 +361,29 @@ describe("runDev supervision", () => {
     });
   });
 
+  test("reads the UI url out of Vite's banner, colours and all", () => {
+    // The real banner, as Vite prints it: an arrow, padding, and SGR colour
+    // around the URL. This is the only place the dev task can learn the UI port
+    // — Vite chooses it, and auto-increments when 5173 is taken.
+    expect(
+      viteUrlFrom("  \x1b[32m➜\x1b[0m  \x1b[1mLocal\x1b[0m:   http://caret.localhost:5173/"),
+    ).toBe("http://caret.localhost:5173");
+    expect(viteUrlFrom("  ➜  Local:   http://caret.localhost:5174/")).toBe(
+      "http://caret.localhost:5174",
+    );
+  });
+
+  test("ignores lines that are not the Vite banner", () => {
+    // A reformatted banner must leave the console showing what it already has,
+    // never a wrong or half-parsed url.
+    expect(viteUrlFrom("  ➜  Network: use --host to expose")).toBeNull();
+    expect(viteUrlFrom("[caret dev driver] bootstrapped fake-plan.md")).toBeNull();
+    expect(
+      viteUrlFrom("caret: review this plan at http://caret.localhost:52241/?review=x"),
+    ).toBeNull();
+    expect(viteUrlFrom("")).toBeNull();
+  });
+
   test("capturing process output leaves an already-bound terminal writer alone", () => {
     // The console paints through a writer bound before this call. If capturing
     // reached that binding too, every frame would be redirected into the log
@@ -390,6 +414,31 @@ describe("runDev supervision", () => {
     // Bun's console writes straight to the fd, so patching the stream alone
     // misses it — the capture has to take console.* as well.
     expect(captured.join("")).toContain("a log line");
+  });
+
+  test("--plain skips the console entirely, keeping stdio inherited", async () => {
+    await withCleanDevEnv(async () => {
+      const { spawn, calls } = capturingSpawn(0);
+      let started = 0;
+      const deps = baseDeps({
+        spawn,
+        startTui: () => {
+          started++;
+          return null;
+        },
+      });
+
+      await expect(
+        runDev({ numVersions: 4, notify: false, persist: false, plain: true }, deps),
+      ).rejects.toBeInstanceOf(ExitSignal);
+
+      // Not merely ignored — never started, so the screen is never taken.
+      expect(started).toBe(0);
+      expect(calls[0]?.stderr).toBe("inherit");
+      expect(calls.at(-1)?.stdout).toBe("inherit");
+
+      rmSync(calls[0]?.env?.XDG_STATE_HOME as string, { recursive: true, force: true });
+    });
   });
 
   test("the driver is handed a key subscription only when the terminal UI owns stdin", async () => {

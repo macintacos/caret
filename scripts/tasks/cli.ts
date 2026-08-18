@@ -127,6 +127,10 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
     )
     .option("--persist", "keep the ephemeral state dir on exit instead of wiping it")
     .option(
+      "--plain",
+      "skip the split-pane console and stream logs straight to the terminal, so they scroll and can be piped or copied",
+    )
+    .option(
       "--fresh",
       "boot as a brand-new user: ignore config.dev.toml (use built-in defaults) and reset the UI's saved preferences",
     )
@@ -138,6 +142,7 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
         stateDir: opts.stateDir,
         persist: opts.persist ?? false,
         fresh: opts.fresh ?? false,
+        plain: opts.plain ?? false,
       });
     });
 

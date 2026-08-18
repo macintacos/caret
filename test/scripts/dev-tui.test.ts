@@ -90,10 +90,40 @@ describe("renderFrame", () => {
     for (const row of rows) expect(visibleWidth(row)).toBe(60);
   });
 
-  test("the rail takes a third of the width and the log takes the rest", () => {
+  // The split starts under the header and its rule, so body rows begin at 2.
+  const bodyRow = (rows: string[], i = 0) => rows[i + 2] as string;
+
+  // Which screen column the divider lands in. Measured in visible columns, not
+  // string offsets — the rail is full of SGR codes that occupy no width.
+  const dividerCol = (row: string) => visibleWidth(row.slice(0, row.indexOf("│")));
+
+  test("the rail is drawn with a divider separating it from the log", () => {
     const rows = renderFrame({ ...base, lines: [] }, 60, 8);
-    // The divider sits at the rail's width; left of it is rail, right is log.
-    for (const row of rows) expect(row).toContain("│");
+    for (let i = 2; i < rows.length; i++) expect(rows[i]).toContain("│");
+  });
+
+  test("the rail takes only what its content needs, not a fixed fraction", () => {
+    // A wide terminal must not hand a third of itself to six short labels; the
+    // log pane is the thing worth the space.
+    const wide = renderFrame({ ...base, lines: ["log"] }, 200, 6);
+    expect(dividerCol(bodyRow(wide))).toBeLessThan(40);
+  });
+
+  test("a long status url widens the header, never the rail", () => {
+    // The whole reason status sits in the header: a url is wider than the entire
+    // shortcut list, and on the rail it would cost the log that width every row.
+    const withUrl = { ...base, status: ["open  http://caret.localhost:5173"] };
+    const narrow = renderFrame({ ...base, status: [], lines: [] }, 100, 8);
+    const wide = renderFrame({ ...withUrl, lines: [] }, 100, 8);
+    expect(dividerCol(bodyRow(wide))).toBe(dividerCol(bodyRow(narrow)));
+    expect(wide[0]).toContain("caret.localhost:5173");
+  });
+
+  test("the rail still yields to the cap when its content is enormous", () => {
+    const shouty = [{ key: "n", label: "x".repeat(500) }];
+    const rows = renderFrame({ ...base, shortcuts: shouty, lines: [] }, 90, 8);
+    // Capped at a third, so a runaway label cannot crowd out the log.
+    expect(dividerCol(bodyRow(rows))).toBeLessThanOrEqual(30);
   });
 
   test("the shortcut keys and their labels are on the rail", () => {

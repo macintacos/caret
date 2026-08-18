@@ -1,5 +1,6 @@
-// The dev task's terminal UI: a fixed shortcut rail on the left third, the live
-// log tail on the right two thirds.
+// The dev task's terminal UI: a shortcut rail down the left, the live log tail
+// filling the rest. The rail is only as wide as its own longest line (capped at
+// a third), so the log gets everything else.
 //
 // Why it repaints the whole screen rather than printing a banner and letting
 // output scroll past: a terminal's scroll region (DECSTBM) reserves ROWS, never
@@ -77,7 +78,7 @@ export interface FrameState {
   /** Lines scrolled back from the tail; 0 follows. */
   offset: number;
   title: string;
-  /** Short status lines pinned under the shortcuts (port, state dir, …). */
+  /** Status items for the header row — the UI url to open, the daemon port. */
   status: readonly string[];
 }
 
@@ -94,15 +95,28 @@ function fit(s: string, width: number): string {
   return `${wrapAnsi(s, width)[0] ?? ""}${RESET}`;
 }
 
-/** The rail's width: a third of the terminal, floored so the log pane gets the
- * remainder, and bounded so a narrow window still shows both panes. */
-function railWidth(cols: number): number {
-  return Math.max(10, Math.min(Math.floor(cols / 3), cols - 4));
+/** The rail's width. Sized to its widest line rather than to a fraction of the
+ * terminal: the shortcut labels are short and fixed, so a proportional rail just
+ * grows whitespace on a wide window and steals it from the log. Capped at a
+ * third so a long status line cannot crowd the pane out. */
+export function railWidth(cols: number, lines: readonly string[] = []): number {
+  const content = Math.max(0, ...lines.map(visibleWidth));
+  return Math.max(10, Math.min(content + RAIL_PAD, Math.floor(cols / 3), cols - 4));
 }
 
+/** Breathing room to the right of the rail's longest line. */
+const RAIL_PAD = 2;
+
 /** The log pane's width — the rest of the row, less the divider column. */
-export function paneWidth(cols: number): number {
-  return Math.max(1, cols - railWidth(cols) - 1);
+export function paneWidth(cols: number, railLines: readonly string[] = []): number {
+  return Math.max(1, cols - railWidth(cols, railLines) - 1);
+}
+
+/** Rows the split gets: the terminal less the header and the rule under it.
+ * Scroll bounds and the renderer must agree on this, or scrolling stops short of
+ * the oldest line by exactly the header's height. */
+export function bodyRowsFor(rows: number): number {
+  return Math.max(1, rows - 2);
 }
 
 /** How many rows `lines` occupies once wrapped to the pane. Scroll bounds count
@@ -115,40 +129,49 @@ export function wrappedRowCount(lines: readonly string[], pane: number): number 
   return n;
 }
 
+/** The full-width header: the title and the status items, one row above the
+ * split. Status lives here rather than on the rail because the most useful item
+ * is a URL to click, and a URL is wider than the whole shortcut list — putting it
+ * on the rail would size the rail to the URL and steal that width from the log
+ * on every row. */
+export function headerLine(state: FrameState): string {
+  const parts = [`${BOLD}${state.title}${RESET}`, ...state.status];
+  return parts.join(`${DIM}  ·  ${RESET}`);
+}
+
+/** The rail's rendered lines: the shortcut list, nothing else. Shared with the
+ * scroll clamp, which needs the pane width the next frame will use — and that
+ * depends on the rail's content. */
+export function railLines(state: FrameState): string[] {
+  // Keys are padded to a common width so the labels form a column — they range
+  // from "n" to "PgUp/Dn", which reads as ragged otherwise.
+  const keyCol = Math.max(0, ...state.shortcuts.map((s) => s.key.length));
+  return state.shortcuts.map((s) => ` ${BOLD}${s.key.padEnd(keyCol)}${RESET}  ${s.label}`);
+}
+
 /** Render one full frame as `rows` strings of exactly `cols` visible columns.
  * Pure: the caller decides when to paint it. */
 export function renderFrame(state: FrameState, cols: number, rows: number): string[] {
-  const rail = railWidth(cols);
-  const pane = paneWidth(cols);
-
-  // Left rail: title, the shortcut list, then status pinned below it. Keys are
-  // padded to a common width so the labels form a column — they range from "n"
-  // to "PgUp/Dn", which reads as ragged otherwise.
-  const keyCol = Math.max(0, ...state.shortcuts.map((s) => s.key.length));
-  const left: string[] = [`${BOLD}${state.title}${RESET}`, ""];
-  for (const s of state.shortcuts) {
-    left.push(` ${BOLD}${s.key.padEnd(keyCol)}${RESET}  ${s.label}`);
-  }
-  if (state.status.length > 0) {
-    left.push("");
-    for (const line of state.status) left.push(`${DIM}${line}${RESET}`);
-  }
+  const left = railLines(state);
+  const rail = railWidth(cols, left);
+  const pane = paneWidth(cols, left);
+  const bodyRows = bodyRowsFor(rows);
 
   // Right pane: the backlog wrapped to the pane width, windowed by the offset.
   const wrapped: string[] = [];
   for (const line of state.lines) wrapped.push(...wrapAnsi(line, pane));
-  const offset = clampOffset(state.offset, wrapped.length, rows);
+  const offset = clampOffset(state.offset, wrapped.length, bodyRows);
   const end = wrapped.length - offset;
-  const view = wrapped.slice(Math.max(0, end - rows), end);
+  const view = wrapped.slice(Math.max(0, end - bodyRows), end);
   // Bottom-align a short backlog so output grows downward like a normal terminal
   // rather than sitting at the top of the pane.
-  const padded = [...Array<string>(Math.max(0, rows - view.length)).fill(""), ...view];
+  const padded = [...Array<string>(Math.max(0, bodyRows - view.length)).fill(""), ...view];
 
-  const out: string[] = [];
-  for (let i = 0; i < rows; i++) {
+  const out: string[] = [fit(headerLine(state), cols), `${DIM}${"─".repeat(cols)}${RESET}`];
+  for (let i = 0; i < bodyRows; i++) {
     out.push(`${fit(left[i] ?? "", rail)}${DIM}│${RESET}${fit(padded[i] ?? "", pane)}`);
   }
-  return out;
+  return out.slice(0, rows);
 }
 
 export type KeyAction =
@@ -264,17 +287,22 @@ export function createTui(opts: TuiOptions, deps: TuiDeps): Tui {
     return { cols: Math.max(20, cols || 80), rows: Math.max(4, rows || 24) };
   };
 
+  const frameState = (): FrameState => ({
+    shortcuts: opts.shortcuts,
+    title: opts.title,
+    lines,
+    offset,
+    status,
+  });
+
+  /** The pane width the next frame will use. Scroll bounds have to agree with
+   * what gets drawn, and the rail now sizes itself to its own content. */
+  const currentPaneWidth = () => paneWidth(size().cols, railLines(frameState()));
+
   const paint = () => {
     if (stopped) return;
     const { cols, rows } = size();
-    const state: FrameState = {
-      shortcuts: opts.shortcuts,
-      title: opts.title,
-      lines,
-      offset,
-      status,
-    };
-    const frame = renderFrame(state, cols, rows);
+    const frame = renderFrame(frameState(), cols, rows);
     deps.write(HOME + frame.map((r) => r + CLEAR_EOL).join("\r\n"));
   };
 
@@ -302,10 +330,10 @@ export function createTui(opts: TuiOptions, deps: TuiDeps): Tui {
         opts.onInject(action.key);
         continue;
       }
-      const { cols, rows } = size();
+      const { rows } = size();
       if (action.kind === "follow") offset = 0;
       else offset += action.by * (action.kind === "page" ? rows : 1);
-      offset = clampOffset(offset, wrappedRowCount(lines, paneWidth(cols)), rows);
+      offset = clampOffset(offset, wrappedRowCount(lines, currentPaneWidth()), bodyRowsFor(rows));
       paint();
     }
   });
@@ -322,8 +350,12 @@ export function createTui(opts: TuiOptions, deps: TuiDeps): Tui {
       // Scrolled back? Hold position as new lines land, rather than yanking the
       // reader to the tail mid-read.
       if (offset > 0) {
-        const { cols, rows } = size();
-        offset = clampOffset(offset + parts.length, wrappedRowCount(lines, paneWidth(cols)), rows);
+        const { rows } = size();
+        offset = clampOffset(
+          offset + parts.length,
+          wrappedRowCount(lines, currentPaneWidth()),
+          bodyRowsFor(rows),
+        );
       }
       repaint();
     },

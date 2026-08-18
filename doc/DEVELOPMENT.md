@@ -161,6 +161,7 @@ it off. The config keys are documented in full under
 | —                   | —                       | `[dev.notify].max_pending` | `3`     | Cap on unresolved extra reviews.                                                          |
 | `--num-versions <n>`| —                       | —                        | `4`       | How many versions the primary dev review opens with; a positive integer.                  |
 | `--fresh`           | —                       | —                        | off       | Boot as a brand-new user — see below.                                                     |
+| `--plain`           | —                       | —                        | off       | Skip the dev console and stream logs straight to the terminal, so they scroll and pipe.   |
 
 † A positive `CARET_DEV_NEW_REVIEW_MS` also arms the seeder, not just sets its cadence.
 
@@ -221,8 +222,23 @@ clears the mark. You can fire either event on demand from the terminal running
 
 #### The dev console
 
-In a terminal, `mise run dev` takes over the screen and splits it: the keys you can press
-down the left, the live log — daemon, Vite, and the driver, interleaved — down the right.
+In a terminal, `mise run dev` takes over the screen: a header with the URL to open, the
+keys you can press down the left, and the live log — daemon, Vite, and the driver,
+interleaved — filling the rest.
+
+The header names **two different ports**, which is the thing to get right:
+
+```text
+caret dev  ·  open  http://caret.localhost:5173  ·  daemon  :52241
+```
+
+`open` is Vite's dev server — the one to click, and the only one that serves the UI. Vite
+picks that port itself and auto-increments when 5173 is taken, so it is read back from
+Vite's own banner rather than chosen by the dev task. `daemon` is the review daemon's
+ephemeral port: it is what the `?review=` links in the log point at, and it changes every
+run. Opening the daemon port instead of the UI port is the easy mistake; the labels exist
+to stop it.
+
 Press a key in that terminal, with no Enter:
 
 | Key           | What it does                                                             |
@@ -245,8 +261,15 @@ normally. That costs the terminal's own scrollback, which is why the log pane sc
 itself. Because the keys are read raw, `Ctrl-C` is handled in the console rather than
 arriving as a signal — it still tears the whole stack down.
 
-**Piped or redirected, none of this happens.** `mise run dev > log.txt`, or any non-TTY
-run, keeps the plain interleaved output it always had, and takes no keys.
+**`mise run dev --plain` turns the console off** and streams logs straight to the terminal
+— so they scroll with your terminal's own scrollback, copy, and pipe, which is what you
+want when capturing output rather than driving the loop. The keys still work there, but in
+line mode: `n` and `r` need Enter, because raw mode with no console to catch Ctrl-C would
+leave nothing to quit with.
+
+Piped or redirected, the console never starts in the first place:
+`mise run dev > log.txt`, or any non-TTY run, keeps the plain interleaved output it always
+had.
 
 One artifact of `r`: the daemon's review list is pending-only, so between the
 request-changes and the resubmit the plan is briefly absent. If the UI's 2s poll ticks

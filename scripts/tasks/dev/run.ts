@@ -55,6 +55,10 @@ export interface RunDevOptions {
    * defaults) and tell the UI (via CARET_FRESH) to clear its saved preferences.
    * Optional; absent counts as not-fresh. */
   fresh?: boolean;
+  /** --plain: skip the split-pane console even on a TTY, streaming logs straight
+   * to the terminal so they scroll, pipe, and copy the way they always did.
+   * Optional; absent counts as not-plain. */
+  plain?: boolean;
 }
 
 /** The daemon argv, adding `--ephemeral` only in ephemeral port mode (a fixed
@@ -226,15 +230,53 @@ export function captureProcessOutput(tui: Tui): void {
   console.warn = (...args: unknown[]) => tui.write(toLine(args));
 }
 
+/** Pull Vite's dev-server URL out of its boot banner (`➜  Local:   http://…`).
+ *
+ * The dev task cannot know this port any other way: Vite picks it itself, and
+ * auto-increments when 5173 is taken, so there is nothing to read until it says
+ * so. Returns null for any line that is not the banner — a Vite that reformats
+ * it simply leaves the console showing the daemon port alone, which is why this
+ * degrades rather than throwing. */
+export function viteUrlFrom(line: string): string | null {
+  // Strip SGR first: the banner is colourised, so the URL is wrapped in escapes.
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: matching ESC is the intent
+  const plain = line.replace(/\x1b\[[0-9;]*m/g, "");
+  return /\bLocal:\s*(https?:\/\/\S+?)\/?\s*$/.exec(plain)?.[1] ?? null;
+}
+
+/** Read shortcut keys from the terminal a line at a time — the `--plain` path,
+ * where no console owns the keyboard. Line mode rather than raw so Ctrl-C still
+ * reaches the signal handlers, which is why these presses need Enter. */
+export function lineModeKeys(handler: (key: string) => void): void {
+  process.stderr.write("[caret dev] press n + Enter for a new plan, r + Enter to revise\n");
+  process.stdin.on("data", (chunk) => {
+    for (const line of String(chunk).split("\n")) handler(line);
+  });
+}
+
 /** Forward a piped child stream into the log pane. Best-effort: a child dying
- * mid-read ends the pump rather than taking the dev task down with it. */
-function pumpIntoTui(stream: SpawnedChild["stdout"], tui: Tui): void {
+ * mid-read ends the pump rather than taking the dev task down with it.
+ *
+ * `onLine` sees each completed line on the way past, which is how the UI url is
+ * spotted in Vite's banner. */
+function pumpIntoTui(
+  stream: SpawnedChild["stdout"],
+  tui: Tui,
+  onLine?: (line: string) => void,
+): void {
   if (!stream || typeof stream === "number") return;
   void (async () => {
     const decoder = new TextDecoder();
+    let partial = "";
     try {
       for await (const bytes of stream as ReadableStream<Uint8Array>) {
-        tui.write(decoder.decode(bytes, { stream: true }));
+        const chunk = decoder.decode(bytes, { stream: true });
+        tui.write(chunk);
+        if (!onLine) continue;
+        partial += chunk;
+        const lines = partial.split("\n");
+        partial = lines.pop() ?? "";
+        for (const line of lines) onLine(line);
       }
     } catch {
       // child gone; its exit is handled by the supervision
@@ -297,22 +339,33 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
   // the keyboard from boot — before the driver exists — so presses route through
   // this hole and are dropped until the driver fills it.
   let onDriverKey: ((key: string) => void) | null = null;
-  const tui = deps.startTui({
-    title: "caret dev",
-    shortcuts: [
-      { key: "n", label: "new plan" },
-      { key: "r", label: "revise last plan" },
-      { key: "↑ ↓", label: "scroll" },
-      { key: "PgUp/Dn", label: "scroll a page" },
-      { key: "G", label: "follow live" },
-      { key: "q", label: "quit" },
-    ],
-    onInject: (key) => onDriverKey?.(key),
-    onQuit: () => {
-      cleanup();
-      deps.exit(0);
-    },
-  });
+  // Two ports, and they are not interchangeable: the daemon's is where reviews
+  // live, Vite's is what you open in a browser. The console names both so the
+  // number on screen is never the wrong one to click.
+  let daemonPort: number | null = null;
+  let uiUrl: string | null = null;
+  const statusLines = () => [
+    ...(uiUrl ? [`open  ${uiUrl}`] : []),
+    ...(daemonPort ? [`daemon  :${daemonPort}`] : []),
+  ];
+  const tui = opts.plain
+    ? null
+    : deps.startTui({
+        title: "caret dev",
+        shortcuts: [
+          { key: "n", label: "new plan" },
+          { key: "r", label: "revise last plan" },
+          { key: "↑ ↓", label: "scroll" },
+          { key: "PgUp/Dn", label: "scroll a page" },
+          { key: "G", label: "follow live" },
+          { key: "q", label: "quit" },
+        ],
+        onInject: (key) => onDriverKey?.(key),
+        onQuit: () => {
+          cleanup();
+          deps.exit(0);
+        },
+      });
   // Reap the children and drop the ephemeral state dir, so a teardown never
   // leaves an orphan holding the dev port or stale reviews (AC6). Restoring the
   // terminal is first: a cleanup that killed the children but left the alternate
@@ -397,17 +450,26 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
     // daemon and pino-pretty are already spawned (env snapshotted) and Vite below
     // is spawned with an explicit `env: childEnv`, so this reaches only the driver.
     process.env.XDG_STATE_HOME = stateDirPath;
-    // Port only: a state-dir path is far wider than the rail and would truncate
-    // to nothing useful. The boot line carries it in full, into the log pane.
-    tui?.setStatus([`port ${port}`]);
+    // Label the daemon port explicitly: the UI url below lands on a *different*
+    // port (Vite's), and an unlabelled number is the one a reader will try to
+    // open. The state dir stays out of the header — the boot line carries it in
+    // full into the log pane.
+    daemonPort = port;
+    tui?.setStatus(statusLines());
     deps.runDriver({
       base: `http://127.0.0.1:${port}`,
       numVersions: opts.numVersions,
       notify: opts.notify,
       settings,
-      // The terminal UI holds raw stdin, so it forwards keys rather than the
-      // driver reading them itself; without it there is no keyboard to own.
-      onKey: tui ? (handler) => (onDriverKey = handler) : undefined,
+      // The console holds raw stdin and forwards keys. Without it (--plain) the
+      // keys still work, read line-mode from the terminal — so `n` and `r` need
+      // Enter, since raw mode with no console would swallow Ctrl-C. Not a TTY at
+      // all means no keyboard to own.
+      onKey: tui
+        ? (handler) => (onDriverKey = handler)
+        : process.stdin.isTTY
+          ? lineModeKeys
+          : undefined,
     });
 
     // Vite last; block on it (like the bash `wait "$vite_pid"`) so the process
@@ -423,8 +485,16 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
     });
     children.push(vite);
     if (tui) {
-      pumpIntoTui(vite.stdout, tui);
-      pumpIntoTui(vite.stderr, tui);
+      // Watch Vite's banner for the URL to open; until it lands the header shows
+      // the daemon port alone.
+      const watchForUrl = (line: string) => {
+        const url = viteUrlFrom(line);
+        if (!url || url === uiUrl) return;
+        uiUrl = url;
+        tui.setStatus(statusLines());
+      };
+      pumpIntoTui(vite.stdout, tui, watchForUrl);
+      pumpIntoTui(vite.stderr, tui, watchForUrl);
     }
 
     const code = await vite.exited;
