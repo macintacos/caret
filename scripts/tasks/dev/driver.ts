@@ -249,6 +249,11 @@ export interface DriverOptions {
   notify: boolean;
   /** Settings snapshot the seeder's cadence and pending cap come from. */
   settings: Settings;
+  /** Subscribe to shortcut keys (`n`, `r`). Under `mise run dev` the terminal UI
+   * owns the keyboard — only one reader can hold raw stdin — and forwards them
+   * here; the standalone entry below reads stdin itself. Absent, the driver
+   * simply takes no injections. */
+  onKey?: (handler: (key: string) => void) => void;
 }
 
 /** Supervise ONE fixture's review forever, resuming from its bootstrapped state:
@@ -365,18 +370,13 @@ export async function run(opts: DriverOptions): Promise<void> {
   for (const fixture of fixtures) {
     started.push({ fixture, state: await bootstrapReview(base, fixture, deps) });
   }
-  // Live injections (EXC-411), TTY only. Line mode rather than raw mode, so
-  // Ctrl-C still tears the dev stack down; a key press is fire-and-forget because
-  // `n` only settles once its review is resolved.
-  if (process.stdin.isTTY) {
+  // Live injections (EXC-411). The caller owns the keyboard and hands each key
+  // over; a press is fire-and-forget because `n` only settles once its review is
+  // resolved, and a key that arrives mid-bootstrap must not block the loops below.
+  if (opts.onKey) {
     const inject = injectDeps(base, basePlan, deps);
-    log("press n + Enter for a brand-new plan, r + Enter to revise the last pending one");
-    process.stdin.on("data", (chunk) => {
-      // One chunk can carry several lines when keys are typed faster than the
-      // read loop drains them; each line is its own key press.
-      for (const line of String(chunk).split("\n")) {
-        void injectKey(line, inject).catch((err) => log(`inject failed: ${err}`));
-      }
+    opts.onKey((key) => {
+      void injectKey(key, inject).catch((err) => log(`inject failed: ${err}`));
     });
   }
   // Each loop resumes from its bootstrapped (rejected) review, appending its next
@@ -396,6 +396,16 @@ if (import.meta.main) {
     numVersions: parseNumVersions(Bun.argv),
     notify: Bun.argv.includes("--notify"),
     settings: loadSettings(),
+    // No terminal UI on this path, so read the keys here — line mode, since
+    // nothing else is holding stdin and raw mode would swallow Ctrl-C.
+    onKey: process.stdin.isTTY
+      ? (handler) => {
+          log("press n + Enter for a brand-new plan, r + Enter to revise the last pending one");
+          process.stdin.on("data", (chunk) => {
+            for (const line of String(chunk).split("\n")) handler(line);
+          });
+        }
+      : undefined,
   }).catch((err) => {
     process.stderr.write(`caret dev driver: ${err}\n`);
     process.exit(1);

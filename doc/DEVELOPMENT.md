@@ -50,7 +50,7 @@ Prerequisites are [`git`](https://git-scm.com) and [mise](https://mise.jdx.dev);
 mise run setup      # install pinned tools + JS deps + the generated palette + e2e Chromium + register git hooks
 mise run build      # build the UI (Vite multi-asset) then the binary (bun build --compile, embeds the UI)
 mise run build ui   # just the Svelte UI (Vite -> ui/dist); also `build bin` / `build bundle`
-mise run dev        # isolated daemon + three fake plans + Vite UI (ephemeral port)
+mise run dev        # dev console: isolated daemon + three fake plans + Vite UI
 mise run caret      # caret's own CLI from src/cli.ts, e.g. `mise run caret discovery`
 mise run test       # bun test (unit); `mise run test unit` is the same target
 mise run test e2e   # Playwright browser e2e (isolated daemon, Chromium)
@@ -216,19 +216,39 @@ loop's next plan, so you stay at three.
 
 The switcher marks a plan **unread** — a dot on the trigger, a marker on its dropdown row
 — when it shows up, or gains a version, while you are reading a different one; opening it
-clears the mark. Two keys on the dev task's stdin fire those two events on demand, so you
-can watch them land in a page that is already open. They are read from the terminal, so
-they do nothing when stdin is not a TTY; when it is, the driver prints a reminder at boot.
+clears the mark. You can fire either event on demand from the terminal running
+`mise run dev`, and watch it land in a browser tab that is already open.
 
-- **`n` + Enter** seeds a brand-new plan under a fresh session — the same one-shot the
-  extra-review seeder above fires on a timer. A review id the page has never seen
-  **arrives**.
-- **`r` + Enter** requests changes on the **most recently created** pending plan — the
-  bottom of the switcher, not the one you are reading. Its own loop appends a `Revision N`
-  section and resubmits onto the same review id, so that plan is **revised** in place.
+#### The dev console
 
-The keys are read in line mode rather than raw mode, so `Ctrl-C` still tears the stack
-down. One artifact of `r`: the daemon's review list is pending-only, so between the
+In a terminal, `mise run dev` takes over the screen and splits it: the keys you can press
+down the left, the live log — daemon, Vite, and the driver, interleaved — down the right.
+Press a key in that terminal, with no Enter:
+
+| Key           | What it does                                                             |
+| ------------- | ------------------------------------------------------------------------ |
+| `n`           | Seed a brand-new plan under a fresh session — a plan **arrives**         |
+| `r`           | Request changes on the newest pending plan — that plan is **revised**    |
+| `↑` `↓`       | Scroll the log a line                                                    |
+| `PgUp` `PgDn` | Scroll the log a page                                                    |
+| `G`           | Jump back to following the live tail                                     |
+| `q`, `Ctrl-C` | Quit, tearing down the daemon, Vite, and the state dir                   |
+
+`n` is the same one-shot the extra-review seeder above fires on a timer, so it produces a
+review id the page has never seen. `r` targets the **newest** pending plan — the bottom of
+the switcher, not the one you land on — whose own loop appends a `Revision N` section and
+resubmits it under the same review id.
+
+Taking the screen is what buys the fixed key list: a terminal can reserve rows but never
+columns, so there is no way to pin a left-hand rail and still let output scroll past it
+normally. That costs the terminal's own scrollback, which is why the log pane scrolls
+itself. Because the keys are read raw, `Ctrl-C` is handled in the console rather than
+arriving as a signal — it still tears the whole stack down.
+
+**Piped or redirected, none of this happens.** `mise run dev > log.txt`, or any non-TTY
+run, keeps the plain interleaved output it always had, and takes no keys.
+
+One artifact of `r`: the daemon's review list is pending-only, so between the
 request-changes and the resubmit the plan is briefly absent. If the UI's 2s poll ticks
 inside that sub-second window it sees the plan leave and come back, and marks it as an
 arrival rather than a revision. The mark is right either way; only the event that produced

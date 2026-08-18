@@ -7,10 +7,15 @@
 // mode, lock-based port discovery, the typed constants), imported directly.
 //
 // The effects are injected through DevDeps (spawn, discoverPort, the in-process
-// driver, exit, cleanup registration) so the supervision — teardown and the
-// daemon-died path — is unit-testable without launching real processes; the
-// pure boot decisions (planStateDir, daemonCommand, childEnvFor, makeCleanup)
-// are plain functions tested directly.
+// driver, exit, cleanup registration, the terminal UI) so the supervision —
+// teardown and the daemon-died path — is unit-testable without launching real
+// processes; the pure boot decisions (planStateDir, daemonCommand, childEnvFor,
+// makeCleanup) are plain functions tested directly.
+//
+// On a TTY the task runs the split-pane console in scripts/tasks/dev/tui.ts,
+// which owns the screen — so every child is piped into it rather than inheriting
+// the terminal, and this process's own writes are captured too. Piped or
+// redirected, startTui returns null and the original inherited stdio stands.
 
 import { closeSync, mkdirSync, mkdtempSync, openSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -28,6 +33,7 @@ import {
   resolvePortMode,
 } from "@/tasks/dev/dev-env.ts";
 import { type DriverOptions, run as runDriverEntry } from "@/tasks/dev/driver.ts";
+import { createTui, type Tui, type TuiOptions } from "@/tasks/dev/tui.ts";
 import { installCleanupHandlers } from "@/tasks/lib/signals.ts";
 
 export interface RunDevOptions {
@@ -156,6 +162,10 @@ export interface DevDeps {
   runDriver: (opts: DriverOptions) => void;
   installCleanupHandlers: (cleanup: () => void) => void;
   exit: (code: number) => never;
+  /** Start the split-pane terminal UI, or return null to keep the children's
+   * stdio inherited. Null whenever stdout is not a TTY — piped, redirected, or
+   * under CI — which is what keeps `mise run dev > log.txt` behaving as before. */
+  startTui: (opts: TuiOptions) => Tui | null;
 }
 
 const realDevDeps: DevDeps = {
@@ -170,7 +180,67 @@ const realDevDeps: DevDeps = {
   },
   installCleanupHandlers,
   exit: (code) => process.exit(code),
+  startTui: (opts) => {
+    if (!process.stdout.isTTY) return null;
+    return createTui(opts, {
+      write: (s) => void writeToTerminal(s),
+      size: () => ({ cols: process.stdout.columns ?? 80, rows: process.stdout.rows ?? 24 }),
+      onKey: (handler) => {
+        process.stdin.setEncoding("utf8");
+        process.stdin.resume();
+        process.stdin.on("data", (chunk) => handler(String(chunk)));
+      },
+      onResize: (handler) => process.stdout.on("resize", handler),
+      setRaw: (on) => process.stdin.isTTY && process.stdin.setRawMode(on),
+      // Coalesce a burst of child output into one repaint per frame; a busy boot
+      // otherwise redraws the screen once per log line.
+      schedule: (fn) => setTimeout(fn, 16),
+    });
+  },
 };
+
+/** The real terminal writer, captured at import — before `captureProcessOutput`
+ * below replaces `process.stdout.write`. The console paints through this rather
+ * than through the live `process.stdout`, which would otherwise feed every frame
+ * back into the log buffer it just rendered and leave the screen frozen on the
+ * first paint. Holding the reference makes that independent of call ordering. */
+const writeToTerminal = process.stdout.write.bind(process.stdout);
+
+/** Route this process's own output into the log pane. The driver logs through
+ * stderr and the boot line through console.log; both would otherwise paint over
+ * the frame. `console.*` is patched separately because Bun's console writes
+ * straight to the fd rather than through `process.stdout.write`, so patching the
+ * stream alone silently misses it. Nothing restores the originals: the only exit
+ * path tears the process down, and `tui.stop()` has already left the alternate
+ * screen by then. */
+export function captureProcessOutput(tui: Tui): void {
+  for (const stream of [process.stdout, process.stderr]) {
+    stream.write = ((chunk: unknown) => {
+      tui.write(typeof chunk === "string" ? chunk : String(chunk));
+      return true;
+    }) as typeof stream.write;
+  }
+  const toLine = (args: unknown[]) => `${args.map((a) => String(a)).join(" ")}\n`;
+  console.log = (...args: unknown[]) => tui.write(toLine(args));
+  console.error = (...args: unknown[]) => tui.write(toLine(args));
+  console.warn = (...args: unknown[]) => tui.write(toLine(args));
+}
+
+/** Forward a piped child stream into the log pane. Best-effort: a child dying
+ * mid-read ends the pump rather than taking the dev task down with it. */
+function pumpIntoTui(stream: SpawnedChild["stdout"], tui: Tui): void {
+  if (!stream || typeof stream === "number") return;
+  void (async () => {
+    const decoder = new TextDecoder();
+    try {
+      for await (const bytes of stream as ReadableStream<Uint8Array>) {
+        tui.write(decoder.decode(bytes, { stream: true }));
+      }
+    } catch {
+      // child gone; its exit is handled by the supervision
+    }
+  })();
+}
 
 /** Boot the dev stack and block until Vite exits (or a signal tears it down).
  * Never returns on the signal path — the handler calls process.exit — and calls
@@ -223,14 +293,44 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
   rmSync(lockFile, { force: true });
 
   const children: SpawnedChild[] = [];
+  // The driver's key handler, wired once the driver starts. The terminal UI owns
+  // the keyboard from boot — before the driver exists — so presses route through
+  // this hole and are dropped until the driver fills it.
+  let onDriverKey: ((key: string) => void) | null = null;
+  const tui = deps.startTui({
+    title: "caret dev",
+    shortcuts: [
+      { key: "n", label: "new plan" },
+      { key: "r", label: "revise last plan" },
+      { key: "↑ ↓", label: "scroll" },
+      { key: "PgUp/Dn", label: "scroll a page" },
+      { key: "G", label: "follow live" },
+      { key: "q", label: "quit" },
+    ],
+    onInject: (key) => onDriverKey?.(key),
+    onQuit: () => {
+      cleanup();
+      deps.exit(0);
+    },
+  });
   // Reap the children and drop the ephemeral state dir, so a teardown never
-  // leaves an orphan holding the dev port or stale reviews (AC6).
-  const cleanup = makeCleanup(children, {
+  // leaves an orphan holding the dev port or stale reviews (AC6). Restoring the
+  // terminal is first: a cleanup that killed the children but left the alternate
+  // screen up would hand back an unusable shell.
+  const killChildren = makeCleanup(children, {
     stateDirPath,
     wipeOnExit,
     rm: (dir) => rmSync(dir, { recursive: true, force: true }),
   });
+  const cleanup = () => {
+    tui?.stop();
+    killChildren();
+  };
   deps.installCleanupHandlers(cleanup);
+  // With the screen taken over, this process's own writes have to be captured
+  // too — the driver logs through stderr and boot logs through stdout, and both
+  // would otherwise scribble over the frame.
+  if (tui) captureProcessOutput(tui);
 
   try {
     // Daemon: stock daemon from source (so edits are live without a rebuild). It
@@ -248,11 +348,15 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
     mkdirSync(daemonLogDir, { recursive: true, mode: 0o700 });
     closeSync(openSync(daemonLogPath, "a", 0o600));
     const daemon = deps.spawn(daemonCommand(portMode), {
-      stdout: "inherit",
-      stderr: "inherit",
+      stdout: tui ? "pipe" : "inherit",
+      stderr: tui ? "pipe" : "inherit",
       env: childEnv,
     });
     children.push(daemon);
+    if (tui) {
+      pumpIntoTui(daemon.stdout, tui);
+      pumpIntoTui(daemon.stderr, tui);
+    }
     const tail = deps.spawn(["tail", "-n", "+1", "-F", daemonLogPath], {
       stdout: "pipe",
       stderr: "ignore",
@@ -260,9 +364,15 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
     children.push(tail);
     const pretty = deps.spawn(
       ["bunx", "pino-pretty", "--colorize", "--translateTime", "UTC:yyyy-mm-dd'T'HH:MM:ss.l'Z'"],
-      { stdin: tail.stdout, stdout: 2, stderr: "inherit" },
+      tui
+        ? { stdin: tail.stdout, stdout: "pipe", stderr: "pipe" }
+        : { stdin: tail.stdout, stdout: 2, stderr: "inherit" },
     );
     children.push(pretty);
+    if (tui) {
+      pumpIntoTui(pretty.stdout, tui);
+      pumpIntoTui(pretty.stderr, tui);
+    }
 
     // Discover the daemon's bound port from its own-world lock (written after a
     // successful bind). Bounded wait, loud failure — including a daemon that died
@@ -287,11 +397,17 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
     // daemon and pino-pretty are already spawned (env snapshotted) and Vite below
     // is spawned with an explicit `env: childEnv`, so this reaches only the driver.
     process.env.XDG_STATE_HOME = stateDirPath;
+    // Port only: a state-dir path is far wider than the rail and would truncate
+    // to nothing useful. The boot line carries it in full, into the log pane.
+    tui?.setStatus([`port ${port}`]);
     deps.runDriver({
       base: `http://127.0.0.1:${port}`,
       numVersions: opts.numVersions,
       notify: opts.notify,
       settings,
+      // The terminal UI holds raw stdin, so it forwards keys rather than the
+      // driver reading them itself; without it there is no keyboard to own.
+      onKey: tui ? (handler) => (onDriverKey = handler) : undefined,
     });
 
     // Vite last; block on it (like the bash `wait "$vite_pid"`) so the process
@@ -299,11 +415,17 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
     // above even if it hits this PID alone rather than the whole group.
     const vite = deps.spawn(["bunx", "vite"], {
       cwd: "ui",
-      stdout: "inherit",
-      stderr: "inherit",
-      env: childEnv,
+      stdout: tui ? "pipe" : "inherit",
+      stderr: tui ? "pipe" : "inherit",
+      // Piping costs Vite its TTY, and it drops colour when it cannot see one;
+      // the pane renders SGR fine, so ask for colour back explicitly.
+      env: tui ? { ...childEnv, FORCE_COLOR: "1" } : childEnv,
     });
     children.push(vite);
+    if (tui) {
+      pumpIntoTui(vite.stdout, tui);
+      pumpIntoTui(vite.stderr, tui);
+    }
 
     const code = await vite.exited;
     cleanup();

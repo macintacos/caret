@@ -14,6 +14,7 @@ import { DEFAULTS } from "@/config/settings.ts";
 import { DAEMON_DIED } from "@/tasks/dev/dev-env.ts";
 import type { DriverOptions } from "@/tasks/dev/driver.ts";
 import {
+  captureProcessOutput,
   childEnvFor,
   type DevDeps,
   daemonCommand,
@@ -132,6 +133,7 @@ function capturingSpawn(viteCode = 0) {
     cmd: string[];
     env: Record<string, string> | undefined;
     stderr: unknown;
+    stdout: unknown;
   }> = [];
   const children: FakeChild[] = [];
   const spawn: DevDeps["spawn"] = (cmd, opts) => {
@@ -146,7 +148,12 @@ function capturingSpawn(viteCode = 0) {
     };
     // Snapshot env at spawn time: real Bun.spawn snapshots it, and runDev mutates
     // the shared childEnv (CARET_PORT) afterward for Vite.
-    calls.push({ cmd, env: opts.env ? { ...opts.env } : undefined, stderr: opts.stderr });
+    calls.push({
+      cmd,
+      env: opts.env ? { ...opts.env } : undefined,
+      stderr: opts.stderr,
+      stdout: opts.stdout,
+    });
     children.push(child);
     return child;
   };
@@ -165,6 +172,9 @@ function baseDeps(over: Partial<DevDeps>): DevDeps {
     exit: ((code: number): never => {
       throw new ExitSignal(String(code));
     }) as (code: number) => never,
+    // No terminal UI, which is what a non-TTY boot resolves to for real — so
+    // these cases exercise the inherited-stdio path the tests below assert on.
+    startTui: () => null,
     ...over,
   };
 }
@@ -224,7 +234,7 @@ describe("runDev supervision", () => {
 
       // The daemon owns logs/daemon.log (EXC-1068), so pino-pretty is fed by
       // tailing that file — not by the daemon's stderr, which now carries only
-      // raw crash output and inherits the terminal.
+      // raw crash output and, with no terminal UI, inherits the terminal.
       expect(calls[1]?.cmd.at(-1)).toBe(
         join(calls[0]?.env?.XDG_STATE_HOME as string, "caret", "logs", "daemon.log"),
       );
@@ -315,6 +325,87 @@ describe("runDev supervision", () => {
       expect(existsSync(stateDir)).toBe(true);
 
       rmSync(stateDir, { recursive: true, force: true });
+    });
+  });
+
+  test("with the terminal UI up, every child is piped into it instead of the terminal", async () => {
+    await withCleanDevEnv(async () => {
+      const { spawn, calls } = capturingSpawn(0);
+      const written: string[] = [];
+      let stopped = 0;
+      const tui = {
+        write: (s: string) => written.push(s),
+        setStatus: () => {},
+        lineCount: () => written.length,
+        stop: () => stopped++,
+      };
+      const deps = baseDeps({ spawn, startTui: () => tui });
+
+      await expect(
+        runDev({ numVersions: 4, notify: false, persist: false }, deps),
+      ).rejects.toBeInstanceOf(ExitSignal);
+
+      // Nothing may inherit the terminal: the UI owns the screen, so an inherited
+      // writer would paint straight over the frame.
+      for (const call of calls) {
+        expect(call.stdout).not.toBe("inherit");
+        expect(call.stderr).not.toBe("inherit");
+      }
+      // Vite loses its TTY when piped and drops colour unless asked.
+      expect(calls.at(-1)?.env?.FORCE_COLOR).toBe("1");
+      // Teardown restores the terminal, not just the children.
+      expect(stopped).toBeGreaterThan(0);
+
+      rmSync(calls[0]?.env?.XDG_STATE_HOME as string, { recursive: true, force: true });
+    });
+  });
+
+  test("capturing process output leaves an already-bound terminal writer alone", () => {
+    // The console paints through a writer bound before this call. If capturing
+    // reached that binding too, every frame would be redirected into the log
+    // buffer it had just rendered and the screen would freeze on the first paint.
+    const terminal: string[] = [];
+    const captured: string[] = [];
+    const realWrite = process.stdout.write;
+    const realLog = console.log;
+    process.stdout.write = ((c: unknown) => {
+      terminal.push(String(c));
+      return true;
+    }) as typeof process.stdout.write;
+    const boundBefore = process.stdout.write.bind(process.stdout);
+    try {
+      captureProcessOutput({
+        write: (s) => captured.push(s),
+        setStatus: () => {},
+        lineCount: () => 0,
+        stop: () => {},
+      });
+      boundBefore("a painted frame");
+      console.log("a log line");
+    } finally {
+      process.stdout.write = realWrite;
+      console.log = realLog;
+    }
+    expect(terminal).toContain("a painted frame");
+    // Bun's console writes straight to the fd, so patching the stream alone
+    // misses it — the capture has to take console.* as well.
+    expect(captured.join("")).toContain("a log line");
+  });
+
+  test("the driver is handed a key subscription only when the terminal UI owns stdin", async () => {
+    await withCleanDevEnv(async () => {
+      const { spawn, calls } = capturingSpawn(0);
+      const driverCalls: DriverOptions[] = [];
+      const deps = baseDeps({ spawn, runDriver: (o) => driverCalls.push(o) });
+
+      await expect(
+        runDev({ numVersions: 4, notify: false, persist: false }, deps),
+      ).rejects.toBeInstanceOf(ExitSignal);
+
+      // startTui returned null here, so there is no keyboard owner to forward from.
+      expect(driverCalls[0]?.onKey).toBeUndefined();
+
+      rmSync(calls[0]?.env?.XDG_STATE_HOME as string, { recursive: true, force: true });
     });
   });
 });
