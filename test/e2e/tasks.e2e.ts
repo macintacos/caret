@@ -51,8 +51,8 @@ import {
   taggedRuns,
 } from "@test/e2e/support/source-view.ts";
 
-// Checked, uppercase-checked and unchecked; a task nested under a task; a task
-// carrying inline chips; a quoted task. Prose rows sit above and below so a glyph
+// Checked, uppercase-checked, unchecked and in-progress; a task nested under a task; a
+// task carrying inline chips; a quoted task. Prose rows sit above and below so a glyph
 // position has an ordinary row to be compared against, and the two shapes that only
 // look like a checkbox close the negative half.
 const TASK_PLAN = `# Task Plan
@@ -62,6 +62,7 @@ Prose above the tasks, on a row with no checkbox at all.
 - [x] A finished task
 - [X] An uppercase finished task
 - [ ] An unfinished task
+- [/] A task still in progress
   - [ ] A nested task under a task
 - [x] A task carrying \`inline code\` and a [link](#task-plan)
 
@@ -81,6 +82,10 @@ const PROSE_ABOVE = "Prose above the tasks, on a row with no checkbox at all.";
 const CHECKED = "- [x] A finished task";
 const UPPER = "- [X] An uppercase finished task";
 const UNCHECKED = "- [ ] An unfinished task";
+// `[/]` is not CommonMark's checkbox — it is what the agents caret reads plans from
+// write for work that is underway, and it takes a glyph of its own rather than passing
+// for done or for not-started.
+const SLASHED = "- [/] A task still in progress";
 const NESTED = "  - [ ] A nested task under a task";
 // The link markup is COLLAPSED to its label by the time it renders (EXC-859), so the
 // row's text carries `a link` rather than the `[link](#task-plan)` the plan was seeded
@@ -124,20 +129,19 @@ function drawnRun(page: import("@playwright/test").Page, line: number) {
       proseCursor: prose == null ? null : getComputedStyle(prose).cursor,
       content: glyph.content,
       position: glyph.position,
-      // The box is DRAWN, so what carries it is its border, its fill and its size rather
-      // than a glyph's color. Resolved across the shadow boundary: a token that failed to
-      // resolve would come back as the initial color rather than the palette's ink.
-      boxBorder: glyph.borderTopColor,
+      // The box is a masked Lucide square, so what carries it is the mask (which glyph)
+      // and the background it paints through that mask (what ink). Resolved across the
+      // shadow boundary: a token that failed to resolve would come back as the initial
+      // color rather than the palette's ink.
+      boxMask: glyph.maskImage,
       boxFill: glyph.backgroundColor,
       boxWidth: Number.parseFloat(glyph.width),
       boxInsetStart: Number.parseFloat(glyph.insetInlineStart),
-      // The tick is the checked state's other half, and absent entirely when unchecked.
-      tick: getComputedStyle(first, "::after").content,
-      tickBorder: getComputedStyle(first, "::after").borderBottomColor,
       width:
         Math.round(
           (Math.max(...rects.map((r) => r.right)) - Math.min(...rects.map((r) => r.left))) * 100,
         ) / 100,
+      left: Math.round(Math.min(...rects.map((r) => r.left)) * 100) / 100,
       tabIndex: (first as HTMLElement).tabIndex,
       tag: first.tagName.toLowerCase(),
     };
@@ -194,6 +198,7 @@ test("each checkbox is tagged with its state, over its own three characters", as
     // one the emitter could most easily have spelled with a case-sensitive class.
     { row: UPPER, value: "checked", text: "[X]" },
     { row: UNCHECKED, value: "unchecked", text: "[ ]" },
+    { row: SLASHED, value: "slashed", text: "[/]" },
     // Nested under a task rather than under a bullet: the run's columns come off the
     // item's own indentation, so a nested item is where an offset counted from column
     // zero would land on the wrong characters.
@@ -216,11 +221,13 @@ test("the box is painted over the brackets, which are still in the row", async (
   expect(box?.text).toBe("[x]");
   expect(box?.color).toBe("rgba(0, 0, 0, 0)");
   expect(box?.position).toBe("absolute");
-  // DRAWN rather than typed: the pseudo-element carries no character at all, and what
-  // makes it a checkbox is its border — which also proves the ink token resolved across
-  // the shadow boundary, since an unresolved one would come back as the initial color.
+  // AN ICON rather than a typed glyph: the pseudo-element carries no character at all,
+  // and what makes it a checkbox is the vendored Lucide SVG masked into it — painted in
+  // the row's ink through background-color, which is also what proves the theme token
+  // resolved across the shadow boundary rather than falling back to the initial color.
   expect(box?.content).toBe('""');
-  expect(box?.boxBorder).not.toBe("rgba(0, 0, 0, 0)");
+  expect(box?.boxMask).toContain("data:image/svg+xml");
+  expect(box?.boxFill).not.toBe("rgba(0, 0, 0, 0)");
   expect(box?.boxWidth).toBeGreaterThan(0);
   // Exactly THREE character cells wide, measured against a prose row rather than
   // asserted to be merely positive. Paired with the `position` assertion above, this
@@ -246,7 +253,7 @@ test("one box is drawn per run, however many tokens shiki cut the run into", asy
   // side until the suppression rule landed. Read off the rendered page per token, so a
   // regression names the row and the token rather than showing up as a puzzling
   // screenshot.
-  for (const text of [CHECKED, UPPER, UNCHECKED, NESTED, CHIPPED, QUOTED]) {
+  for (const text of [CHECKED, UPPER, UNCHECKED, SLASHED, NESTED, CHIPPED, QUOTED]) {
     const run = await drawnRun(page, await lineOf(page, text));
     const boxes = (run?.glyphs ?? []).filter((content) => content !== "none");
     expect(boxes.length, `${text} — ${run?.tokens} tagged token(s)`).toBe(1);
@@ -259,28 +266,23 @@ test("one box is drawn per run, however many tokens shiki cut the run into", asy
   expect((await drawnRun(page, await lineOf(page, UPPER)))?.tokens).toBeGreaterThan(1);
 });
 
-test("checked and unchecked differ in shape, not in colour", async ({ page, daemon }) => {
+test("the three states differ in shape, not in colour", async ({ page, daemon }) => {
   await open(page, daemon, TASK_PLAN);
   await decorated(page);
-  const [checked, unchecked] = await Promise.all([
-    drawnRun(page, await lineOf(page, CHECKED)),
-    drawnRun(page, await lineOf(page, UNCHECKED)),
-  ]);
+  const [checked, unchecked, slashed] = await Promise.all(
+    [CHECKED, UNCHECKED, SLASHED].map(async (text) => drawnRun(page, await lineOf(page, text))),
+  );
   // The accessibility claim of this ticket, read off the rendered page rather than
   // inferred from the sheet. A state indicator separated only by a hue or an opacity
-  // step fails for a colour-blind reader whatever the contrast maths says, so the two
-  // states are one ink and two shapes: an outline, and that same outline filled with a
-  // tick in it.
-  expect(checked?.boxBorder).toBe(unchecked?.boxBorder);
-  expect(checked?.boxFill).not.toBe(unchecked?.boxFill);
-  expect(unchecked?.boxFill).toBe("rgba(0, 0, 0, 0)");
-  // The tick exists on one state and not on the other, and is knocked out of the fill —
-  // so it carries the same measured ratio from the other side.
-  expect(checked?.tick).toBe('""');
-  expect(unchecked?.tick).toBe("none");
-  expect(checked?.tickBorder).not.toBe(checked?.boxFill);
-  // And both really resolved the theme token rather than falling back to initial ink.
-  expect(checked?.boxBorder).not.toBe(checked?.color);
+  // step fails for a colour-blind reader whatever the contrast maths says, so the three
+  // states are one ink and three glyphs: an empty square, a square with a check, a
+  // square with a slash.
+  expect(checked?.boxFill).toBe(unchecked?.boxFill);
+  expect(slashed?.boxFill).toBe(unchecked?.boxFill);
+  expect(new Set([checked?.boxMask, unchecked?.boxMask, slashed?.boxMask]).size).toBe(3);
+  // And the ink really resolved the theme token rather than falling back to initial ink
+  // — which is also what the brackets under it are NOT wearing, since they are hidden.
+  expect(checked?.boxFill).not.toBe(checked?.color);
 });
 
 test("the checkbox is not interactive", async ({ page, daemon }) => {
@@ -349,6 +351,7 @@ test("copying a task row yields the source brackets, not the box", async ({
       return {
         checked: await read(lines.checked),
         unchecked: await read(lines.unchecked),
+        slashed: await read(lines.slashed),
         nested: await read(lines.nested),
         quoted: await read(lines.quoted),
       };
@@ -356,6 +359,7 @@ test("copying a task row yields the source brackets, not the box", async ({
     {
       checked: await lineOf(page, CHECKED),
       unchecked: await lineOf(page, UNCHECKED),
+      slashed: await lineOf(page, SLASHED),
       nested: await lineOf(page, NESTED),
       quoted: await lineOf(page, QUOTED),
     },
@@ -363,6 +367,7 @@ test("copying a task row yields the source brackets, not the box", async ({
   expect(copied.checked.clipboard).toBe(CHECKED);
   expect(copied.checked.selection).toBe(copied.checked.clipboard);
   expect(copied.unchecked.clipboard).toBe(UNCHECKED);
+  expect(copied.slashed.clipboard).toBe(SLASHED);
   // The indentation is the nesting and the `>` is the quoting, so both have to survive
   // the copy verbatim as well.
   expect(copied.nested.clipboard).toBe(NESTED);
@@ -375,24 +380,31 @@ test("copying a task row yields the source brackets, not the box", async ({
   }
 });
 
-test("the monospace grid does not move on a task row or its neighbours", async ({
-  page,
-  daemon,
-}) => {
+test("the box lands where the item begins, and only a task row moves", async ({ page, daemon }) => {
   await open(page, daemon, TASK_PLAN);
   await decorated(page);
-  const [above, checked, unchecked, chipped, below] = await Promise.all(
-    [PROSE_ABOVE, CHECKED, UNCHECKED, CHIPPED, PROSE_BELOW].map(async (text) =>
-      firstGlyphX(page, await lineOf(page, text)),
+  const cell = await cellWidth(page, PROSE_ABOVE);
+  const [above, below] = await Promise.all(
+    [PROSE_ABOVE, PROSE_BELOW].map(async (text) => firstGlyphX(page, await lineOf(page, text))),
+  );
+  const [checked, unchecked, chipped, nested] = await Promise.all(
+    [CHECKED, UNCHECKED, CHIPPED, NESTED].map(async (text) =>
+      drawnRun(page, await lineOf(page, text)),
     ),
   );
-  // Rows render white-space: pre, so a glyph drawn in flow would push everything after
-  // it and the source columns vim motions, drag-range selection and the search
-  // highlights resolve against would stop matching. The pseudo-element is out of flow
-  // precisely so these stay equal.
-  expect(checked).toBe(above);
-  expect(unchecked).toBe(above);
-  expect(chipped).toBe(above);
+  // The marker run is collapsed rather than overdrawn, so the box slides onto the columns
+  // the `- ` was spending and starts flush with the prose above it. This is the criterion
+  // in one number: a box two cells in reads as a stray indent on a surface where nothing
+  // else indents, and that is what the collapse buys.
+  expect(checked?.left).toBeCloseTo(above ?? 0, 0);
+  expect(unchecked?.left).toBeCloseTo(above ?? 0, 0);
+  expect(chipped?.left).toBeCloseTo(above ?? 0, 0);
+  // Indentation is NOT part of the run, so nesting survives the collapse intact: this row
+  // is indented two spaces in the source and lands exactly two cells in.
+  expect((nested?.left ?? 0) - (checked?.left ?? 0)).toBeCloseTo(2 * cell, 0);
+  // The pull is the row's own. Rows render white-space: pre and every OTHER decoration on
+  // this surface is drawn out of flow precisely so no column moves, so a neighbour that
+  // shifted would mean the collapse had escaped the run it belongs to.
   expect(below).toBe(above);
 });
 

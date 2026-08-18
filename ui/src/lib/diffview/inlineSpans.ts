@@ -51,7 +51,9 @@
 // columns to its left are what spell the nesting depth. Its kind is settled here
 // rather than in CSS, because a task item's `-` and its `[ ]` would otherwise both
 // claim to be the item's marker — so a marker whose item is a task is emitted as
-// `task`, leaving EXC-860's checkbox as the row's one treatment.
+// `task`, leaving EXC-860's checkbox as the row's one treatment. A `task` run also
+// swallows the gap to the checkbox, because the sheet collapses that run instead of
+// overdrawing it and the box has to land at the column the marker started at.
 
 import { Lexer, type Token } from "marked";
 
@@ -73,8 +75,8 @@ export interface InlineSpan {
    * while an image takes one whether or not its target can be fetched — the chip
    * with no picture under it is exactly what a failed image is meant to read as. */
   link?: true;
-  /** The `[ ]` / `[x]` bracket run of a task-list item, and only that run. */
-  checkbox?: "checked" | "unchecked";
+  /** The `[ ]` / `[x]` / `[/]` bracket run of a task-list item, and only that run. */
+  checkbox?: "checked" | "unchecked" | "slashed";
   /** The 1-based nesting level of the `>` marker this run IS. Marker runs only —
    * the line's depth is reported separately, since it belongs to the row. */
   quoteMarker?: number;
@@ -82,8 +84,11 @@ export interface InlineSpan {
    * and only those characters (EXC-861). `task` is a marker whose item also
    * carries a checkbox: the two would otherwise compete for the same row, and the
    * checkbox is the marker of a task item, so the kind is decided here rather than
-   * left to CSS to unpick. Indentation is NOT part of the run — the marker is
-   * overdrawn where it sits, and the columns before it are what carry the nesting. */
+   * left to CSS to unpick. A `task` run is the ONE kind that reaches past the marker
+   * characters, to the checkbox: the sheet collapses it to nothing so the box lands
+   * where the item's text would have begun, which takes the gap with it. Indentation
+   * is NOT part of any run — the columns before the marker carry the nesting, and a
+   * task item keeps its. */
   listMarker?: "bullet" | "ordered" | "task";
 }
 
@@ -127,8 +132,10 @@ const QUOTE_MARKER = /^ {0,3}>/;
 const LIST_PREFIX = /^ {0,3}(?:[-*+]|\d{1,9}[.)])\s+(?=>)/;
 
 // A task-list item's bracket run, anchored at the start of the line's content
-// (past any quote prefix): a bullet or an ordered marker, then `[ ]`, `[x]` or
-// `[X]`, then whitespace or the line's end — `- [x]done` is not a task item.
+// (past any quote prefix): a bullet or an ordered marker, then `[ ]`, `[x]`, `[X]`
+// or `[/]`, then whitespace or the line's end — `- [x]done` is not a task item.
+// `[/]` is not CommonMark's — it is the in-progress state the agents caret reads
+// plans from already write — and it costs the scan one character to accept.
 // Group 1 is what precedes the brackets, so its length is their offset from the
 // content start rather than from column zero.
 //
@@ -138,7 +145,7 @@ const LIST_PREFIX = /^ {0,3}(?:[-*+]|\d{1,9}[.)])\s+(?=>)/;
 // digit run past the cap opens none, so every scan must refuse it. One scan reading
 // further than another leaves the row carrying half a decoration: a checkbox with no
 // marker tagged beside it, or a quote prefix measured past an indent that is not one.
-const TASK_MARKER = /^(\s*(?:[-*+]|\d{1,9}[.)])\s+)\[([ xX])\](?=\s|$)/;
+const TASK_MARKER = /^(\s*(?:[-*+]|\d{1,9}[.)])\s+)\[([ xX/])\](?=\s|$)/;
 
 // A thematic break: three or more of the SAME marker, spaces or tabs allowed
 // between them, and nothing else on the line. Checked before the list scan
@@ -262,7 +269,10 @@ function insideReference(interval: ColumnRange, refs: readonly ColumnRange[]): b
 /** Pushes the list-marker interval opening at `offset`, if one does. A thematic
  * break is refused first, and the kind is decided from the SAME slice the marker
  * came from: a marker is `task` only when the brackets belong to its own item, so
- * a bullet outside a quote does not inherit the taskness of a bullet inside it. */
+ * a bullet outside a quote does not inherit the taskness of a bullet inside it.
+ * That one scan settles the run's width as well as its kind — a task's marker is
+ * collapsed rather than overdrawn, so it has to cover everything the row stops
+ * spending, which is the marker AND the gap to the checkbox. */
 function listMarkerAt(display: string, offset: number, into: Interval[]): void {
   const slice = display.slice(offset);
   if (THEMATIC_BREAK.test(slice)) return;
@@ -270,11 +280,15 @@ function listMarkerAt(display: string, offset: number, into: Interval[]): void {
   if (list === null) return;
   const marker = list[2] ?? "";
   const startCol = offset + (list[1] ?? "").length;
+  const task = TASK_MARKER.exec(slice);
   into.push({
+    // A task's run runs to the checkbox rather than stopping at the marker, so the
+    // whitespace between them belongs to it — group 1 is indentation, marker and that
+    // whitespace together, and the indentation is already what `startCol` skipped.
     startCol,
-    endCol: startCol + marker.length,
+    endCol: task === null ? startCol + marker.length : offset + (task[1] ?? "").length,
     attributes: {
-      listMarker: TASK_MARKER.test(slice) ? "task" : /\d/.test(marker) ? "ordered" : "bullet",
+      listMarker: task !== null ? "task" : /\d/.test(marker) ? "ordered" : "bullet",
     },
   });
 }
@@ -304,7 +318,9 @@ export function buildInlineSpans(
     intervals.push({
       startCol,
       endCol: startCol + 3,
-      attributes: { checkbox: task[2] === " " ? "unchecked" : "checked" },
+      attributes: {
+        checkbox: task[2] === " " ? "unchecked" : task[2] === "/" ? "slashed" : "checked",
+      },
     });
   }
 

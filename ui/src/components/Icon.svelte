@@ -34,6 +34,9 @@
   import panelLeft from "@/icons/panel-left.svg?raw";
   import search from "@/icons/search.svg?raw";
   import settings from "@/icons/settings.svg?raw";
+  import square from "@/icons/square.svg?raw";
+  import squareCheckBig from "@/icons/square-check-big.svg?raw";
+  import squareSlash from "@/icons/square-slash.svg?raw";
   import sun from "@/icons/sun.svg?raw";
   import trash2 from "@/icons/trash-2.svg?raw";
   import unplug from "@/icons/unplug.svg?raw";
@@ -70,6 +73,9 @@
     "panel-left": panelLeft,
     search,
     settings,
+    square,
+    "square-check-big": squareCheckBig,
+    "square-slash": squareSlash,
     sun,
     "trash-2": trash2,
     unplug,

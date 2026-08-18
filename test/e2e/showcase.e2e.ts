@@ -532,9 +532,10 @@ test("a vendor palette resolves every decoration's paint", async ({ daemon, page
       quoteBar: pick("[data-content] [data-line] [data-md-quote]", (el) => {
         return getComputedStyle(el, "::before").backgroundColor;
       }),
-      // The checkbox is drawn rather than typed, so its ink rides the box's border.
+      // The checkbox is a masked Lucide square, so its ink rides the background the mask
+      // is painted through rather than any border or glyph colour.
       checkbox: pick("[data-content] [data-line] [data-md-checkbox]", (el) => {
-        return getComputedStyle(el, "::before").borderTopColor;
+        return getComputedStyle(el, "::before").backgroundColor;
       }),
       rule: pick("[data-content] [data-line][data-md-rule]", (el) => {
         return getComputedStyle(el).backgroundImage;

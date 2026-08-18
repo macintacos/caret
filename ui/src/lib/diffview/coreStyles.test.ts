@@ -26,7 +26,12 @@ function caretOverrides(src: string): string {
   return match?.[1] ?? "";
 }
 
-const overrides = caretOverrides(coreStyles);
+// A `${…}` interpolation in the sheet — an icon mask, a shared constant — carries braces,
+// and every rule capture in this file is a `{[^}]*}` scan, so an interpolated declaration
+// would end its rule's capture early and silently hide every declaration after it. The
+// parens are the same width as the braces, so the backtick-truncation check above still
+// measures what it means to.
+const overrides = caretOverrides(coreStyles).replace(/\$\{([^{}]*)\}/g, "$($1)");
 
 // CARET_OVERRIDES is a template literal, so one backtick anywhere inside it — most often
 // in a CSS comment quoting markdown syntax — closes it early. Every assertion below then
@@ -857,6 +862,7 @@ describe("the list markers (EXC-861)", () => {
   const anyMarker = rulesFor(String.raw`\[data-md-list\]`)[0] ?? "";
   const bulletRule = rulesFor(String.raw`\[data-md-list="bullet"\]`)[0] ?? "";
   const glyphRule = rulesFor(String.raw`\[data-md-list="bullet"\]::before`)[0] ?? "";
+  const taskRule = rulesFor(String.raw`\[data-md-list="task"\]`)[0] ?? "";
 
   test("marks a SURVIVING marker with the ink the supplementary markers wear", () => {
     // An ordered item's `1.` keeps its glyph and is only tinted, so it is supplementary
@@ -908,14 +914,25 @@ describe("the list markers (EXC-861)", () => {
     expect(glyphRule).toMatch(/user-select:\s*none/);
   });
 
-  test("gives a task item's marker the ink and not the glyph", () => {
-    // One treatment per row: a checkbox IS a task item's marker, so a bullet beside it
-    // would be two markers arguing. The kind is settled in the emission (inlineSpans.ts
-    // tags it "task"), which is why the glyph selector can name "bullet" exactly rather
-    // than carving the task case back out here. EXC-860's checkbox hangs off a different
-    // attribute (data-md-checkbox), so the sheet needs no data-md-list="task" rule at all.
+  test("collapses a task item's marker instead of drawing over it", () => {
+    // One treatment per row: a checkbox IS a task item's marker, so the `-` beside it is
+    // neither a second marker nor faint punctuation to read past. The kind is settled in
+    // the emission (inlineSpans.ts tags it "task"), which is why the glyph selector can
+    // name "bullet" exactly rather than carving the task case back out of it. What this
+    // pins is the one place the family breaks its own transform-in-place rule: the task
+    // run costs no advance, so the box lands where the item's text begins rather than two
+    // cells into a row nothing else indents. Nothing is painted back in its place.
     expect(glyphRule).toContain('[data-md-list="bullet"]');
-    expect(rulesFor(String.raw`\[data-md-list="task"\]`)).toEqual([]);
+    expect(taskRule).toMatch(/font-size:\s*0/);
+    expect(rulesFor(String.raw`\[data-md-list="task"\]::before`)).toEqual([]);
+  });
+
+  test("collapses it in the one way that keeps the row copyable", () => {
+    // display: none and visibility: hidden collapse the run just as well and are the two
+    // spellings Blink drops from a copied selection — the row would lose the `- ` from its
+    // markdown, which is the contract the whole family is built around (tasks.e2e.ts reads
+    // the real clipboard). A zero font-size keeps the characters in the serialization.
+    expect(taskRule).not.toMatch(/display:\s*none|visibility:\s*hidden/);
   });
 
   test("carries no transition", () => {
@@ -924,22 +941,20 @@ describe("the list markers (EXC-861)", () => {
   });
 });
 
-// EXC-860: the task-list checkbox, drawn over the `[ ]` / `[x]` run inlineSpans.ts already
-// tags. Structurally this is the list marker one block up scaled from one character cell to
-// three, and it is DRAWN rather than typed: a box (::before) and, on a done item, a tick
-// (::after). A glyph took its weight, its corner radius and its size from whichever font
-// the platform resolved, which is what made the U+2610 / U+2611 pair read as ASCII art of a
-// checkbox rather than as a control. That the run really measures three cells and that the
-// box really paints is tasks.e2e.ts's job; this suite pins the declarations.
+// EXC-860: the task-list checkbox, drawn over the `[ ]` / `[x]` / `[/]` run inlineSpans.ts
+// already tags. Structurally this is the list marker one block up scaled from one character
+// cell to three, and it is an ICON rather than a glyph: one vendored Lucide square per state,
+// masked into ::before. A typed U+2610 / U+2611 took its weight, its corner radius and its
+// size from whichever font the platform resolved, which is what made the pair read as ASCII
+// art of a checkbox rather than as a control. That the run really measures three cells and
+// that the box really paints is tasks.e2e.ts's job; this suite pins the declarations.
 describe("the task-list checkbox (EXC-860)", () => {
   const runRule = rulesFor(String.raw`\[data-md-checkbox\]`)[0] ?? "";
   const glyphRule = rulesFor(String.raw`\[data-md-checkbox\]::before`)[0] ?? "";
   const checkedRule = rulesFor(String.raw`\[data-md-checkbox="checked"\]::before`)[0] ?? "";
-  const tickRule = rulesFor(String.raw`\[data-md-checkbox="checked"\]::after`)[0] ?? "";
-  // Anchored on ::after because the rule lists both pseudo-elements and rulesFor matches
-  // the selector that immediately precedes the brace.
+  const slashedRule = rulesFor(String.raw`\[data-md-checkbox="slashed"\]::before`)[0] ?? "";
   const suppressRule =
-    rulesFor(String.raw`\[data-md-checkbox\] ~ \[data-md-checkbox\]::after`)[0] ?? "";
+    rulesFor(String.raw`\[data-md-checkbox\] ~ \[data-md-checkbox\]::before`)[0] ?? "";
 
   test("hands the bracket run's own cells to the glyph drawn over them", () => {
     // Transform-in-place (EXC-855): the brackets are still in the DOM and still copied —
@@ -947,33 +962,45 @@ describe("the task-list checkbox (EXC-860)", () => {
     expect(runRule).toMatch(/color:\s*transparent/);
   });
 
-  test("tells the two states apart by shape, not by colour", () => {
-    // The unchecked state is the outlined box alone; the checked one fills that same box
-    // and adds the tick. Neither introduces a hue or an opacity step of its own, so the
+  test("tells the three states apart by shape, not by colour", () => {
+    // Empty square, square with a check, square with a slash — three Lucide glyphs on one
+    // ink. Neither state rule introduces a hue or an opacity step of its own, so the
     // distinction survives a reader who cannot separate two colours (EXC-863 records the
     // same failure one rule family over).
-    expect(checkedRule).toMatch(/background-color:\s*var\(--ink-soft\)/);
-    expect(tickRule).toMatch(/border:/);
-    expect(tickRule).toMatch(/transform:\s*rotate\(45deg\)/);
-    // The tick is knocked out of the fill rather than tinted: --paper is the ground the
-    // pinned --ink-soft ratio is already measured against, so the pair needs no second
-    // measurement of its own.
-    expect(tickRule).toMatch(/var\(--paper\)/);
-    expect(checkedRule).not.toMatch(/opacity/);
+    for (const rule of [checkedRule, slashedRule]) {
+      expect(rule).toMatch(/mask-image:/);
+      expect(rule).not.toMatch(/color|opacity/);
+    }
+    // And the two really are different pictures, not the same one named twice.
+    expect(checkedRule).not.toBe(slashedRule);
   });
 
-  test("is drawn rather than typed, so no font decides how it looks", () => {
+  test("is an icon rather than a glyph, so no font decides how it looks", () => {
     // The whole point of the shape. A glyph renders at the text's own stroke weight in
     // whichever face the platform resolved — and a colour emoji font may substitute a
-    // picture outright, which ignores color. An empty content string with a border, a
-    // radius and an explicit size is the same control in every font and every palette.
-    for (const rule of [glyphRule, tickRule]) {
-      expect(rule).toMatch(/content:\s*""/);
-      expect(rule).toMatch(/box-sizing:\s*border-box/);
-    }
-    expect(glyphRule).toMatch(/border-radius:/);
+    // picture outright, which ignores color. An empty content string masked with a vendored
+    // SVG is the same control in every font and every palette. The mask is inlined as a
+    // data: URI, so it needs no network round-trip and no emitted asset either.
+    expect(glyphRule).toMatch(/content:\s*""/);
+    expect(glyphRule).toMatch(/mask:\s*\$\(CHECKBOX_MASKS\.unchecked\)/);
     // Sized in em, so the control tracks the type scale rather than one viewport's pixels.
     expect(overrideDecls).toMatch(/--checkbox-size:\s*[\d.]+em/);
+  });
+
+  test("ships the same vendored Lucide squares the rest of the product wears", () => {
+    // doc/agents/icon-rules.md: icons live in ui/src/icons/ and are imported ?raw, never
+    // hand-drawn a second time in a stylesheet and never fetched from a CDN. The three
+    // states name three DIFFERENT files, so a copy-paste that pointed two states at one
+    // glyph fails here rather than in a screenshot. That each file is the verbatim Lucide
+    // SVG, and that the registry and the licence table know it, is icons.test.ts's job.
+    for (const icon of ["square", "square-check-big", "square-slash"]) {
+      expect(coreStyles).toContain(`@/icons/${icon}.svg?raw`);
+    }
+    expect(coreStyles).toMatch(/data:image\/svg\+xml,\$\{encodeURIComponent\(square/);
+    const masked = (rule: string) => rule.match(/CHECKBOX_MASKS\.(\w+)/)?.[1];
+    expect(new Set([glyphRule, checkedRule, slashedRule].map(masked))).toEqual(
+      new Set(["unchecked", "checked", "slashed"]),
+    );
   });
 
   test("spends one step above the faint marker ink, which the floor requires", () => {
@@ -982,8 +1009,10 @@ describe("the task-list checkbox (EXC-860)", () => {
     // on (--paper-sunk and the row's ink bands, not the --paper / --paper-raised the ramp
     // test measures) --ink-faint falls under that floor on two of the nine palettes.
     // theme.test.ts pins the ink chosen here against all nine on that surface; this only
-    // holds the sheet to the same token, so the two cannot drift apart.
-    expect(glyphRule).toMatch(/border:[^;]*var\(--ink-soft\)/);
+    // holds the sheet to the same token, so the two cannot drift apart. The mask is what
+    // makes the token reachable at all: background-color paints through it, so the glyph
+    // rides the palette rather than whatever colour an <img> would have baked in.
+    expect(glyphRule).toMatch(/background-color:\s*var\(--ink-soft\)/);
     expect(glyphRule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(glyphRule).not.toMatch(/--chip-/);
     expect(glyphRule).not.toMatch(/opacity/);
@@ -994,35 +1023,28 @@ describe("the task-list checkbox (EXC-860)", () => {
     // in flow would push every glyph after it. Absolutely positioned, it contributes
     // nothing to the line whatever its size, so the three source columns keep their
     // advance and no margin is needed (or allowed) to claw any back.
-    for (const rule of [glyphRule, tickRule]) {
-      expect(rule).toMatch(/position:\s*absolute/);
-      expect(rule).not.toMatch(/\bmargin[a-z-]*\s*:/);
-    }
+    expect(glyphRule).toMatch(/position:\s*absolute/);
+    expect(glyphRule).not.toMatch(/\bmargin[a-z-]*\s*:/);
   });
 
-  test("centres both halves on the same point in the three-cell run", () => {
+  test("centres the glyph in the three-cell run", () => {
     // A bullet overdraws ONE cell and needs no offset; the brackets are THREE, so the box
     // has to be placed in them — 1.5ch is the run's middle, and half the box's own width
-    // brings its edge back to centre it there. The tick measures from the same 1.5ch and
-    // the same --checkbox-size, so the two cannot drift apart. Both are anchored to the
-    // MARKER SPAN (position: relative), because ::after's static position is past the
-    // run's three characters and would otherwise land the tick beside the box.
+    // brings its edge back to centre it there. Anchored to the MARKER SPAN (position:
+    // relative), because the static position of a pseudo-element on a later token would
+    // land the box past the run's three characters.
     expect(runRule).toMatch(/position:\s*relative/);
-    for (const rule of [glyphRule, tickRule]) {
-      expect(rule).toMatch(/inset-inline-start:\s*calc\(1\.5ch/);
-      expect(rule).toMatch(/var\(--checkbox-size\)/);
-    }
+    expect(glyphRule).toMatch(/inset-inline-start:\s*calc\(1\.5ch/);
+    expect(glyphRule).toMatch(/var\(--checkbox-size\)/);
   });
 
   test("keeps the drawn box out of the clipboard", () => {
     // The epic's copy contract. Blink emits generated content into the plain-text flavour
     // of a copied selection, invisible to Selection.toString() and visible only in the real
-    // clipboard, which tasks.e2e.ts reads. A drawn box cannot leak a character the way the
-    // ☐ glyph could, but generated content is still content, so both halves stay out of
-    // the selection outright.
-    for (const rule of [glyphRule, tickRule]) {
-      expect(rule).toMatch(/user-select:\s*none/);
-    }
+    // clipboard, which tasks.e2e.ts reads. A masked box cannot leak a character the way the
+    // ☐ glyph could, but generated content is still content, so it stays out of the
+    // selection outright.
+    expect(glyphRule).toMatch(/user-select:\s*none/);
   });
 
   test("draws one box per run, however many tokens shiki cut the run into", () => {
@@ -1031,9 +1053,6 @@ describe("the task-list checkbox (EXC-860)", () => {
     // boxes. The sheet's block carries the reasoning; what is pinned here is the rule's
     // two load-bearing properties.
     expect(suppressRule).toMatch(/content:\s*none/);
-    // Both halves are suppressed, or a second run would draw a stray tick beside the box.
-    expect(suppressRule).toContain("::before");
-    expect(suppressRule).toContain("::after");
     // GENERAL sibling, not adjacent: tagRow leaves a zero-length token untagged, which
     // would sit between two tagged ones and break an adjacent-only chain into two boxes.
     expect(suppressRule).toContain("[data-md-checkbox] ~ [data-md-checkbox]");
@@ -1045,19 +1064,17 @@ describe("the task-list checkbox (EXC-860)", () => {
   });
 
   test("carries no type metrics of its own, so the em sizes track the row", () => {
-    // Both halves are sized from --checkbox-size, which is em-relative — so they resolve
+    // The glyph is sized from --checkbox-size, which is em-relative — so it resolves
     // against the token's own inherited font-size. Declaring one here would silently
     // decouple the control from the type scale the row is set in.
     expect(glyphRule).not.toBe("");
-    for (const rule of [glyphRule, tickRule]) {
-      expect(rule).not.toMatch(/font-size|line-height|font-family/);
-    }
+    expect(glyphRule).not.toMatch(/font-size|line-height|font-family/);
   });
 
   test("carries no transition", () => {
     // svelte-rules § Motion: the diff surface swaps state instantly. The non-empty guard is
     // what keeps this from passing on four selectors that resolved to nothing.
-    const all = [runRule, glyphRule, checkedRule, tickRule];
+    const all = [runRule, glyphRule, checkedRule, slashedRule];
     expect(all.filter((rule) => rule !== "")).toHaveLength(4);
     expect(all.join("")).not.toMatch(/transition/);
   });
@@ -1161,7 +1178,7 @@ describe("the filename-reference icon (EXC-687)", () => {
 
   test("tints the mask with the faint ink token (no hardcoded color)", () => {
     expect(iconRule).toContain("background-color: var(--ink-faint)");
-    expect(iconRule).toMatch(/mask:\s*\$\{FILE_ICON_MASK\}/);
+    expect(iconRule).toMatch(/mask:\s*\$\(FILE_ICON_MASK\)/);
   });
 });
 
@@ -1179,7 +1196,7 @@ describe("the folder-reference glyph (EXC-918)", () => {
 
   test("swaps in the folder mask for a directory reference", () => {
     expect(folderRule).not.toBe("");
-    expect(folderRule).toMatch(/mask:\s*\$\{FOLDER_ICON_MASK\}/);
+    expect(folderRule).toMatch(/mask:\s*\$\(FOLDER_ICON_MASK\)/);
   });
 
   test("overrides nothing but the mask, so the file rule's tint and box still apply", () => {

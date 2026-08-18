@@ -284,7 +284,7 @@ describe("task-list checkboxes", () => {
 
   test("a checkbox coexists with inline chips later on the line", () => {
     expect(runs("- [x] ship **now**")).toEqual([
-      { startCol: 0, endCol: 1, listMarker: "task" },
+      { startCol: 0, endCol: 2, listMarker: "task" },
       { startCol: 2, endCol: 5, checkbox: "checked" },
       { startCol: 11, endCol: 18, bold: true },
     ]);
@@ -297,7 +297,7 @@ describe("task-list checkboxes", () => {
   // carrying half a decoration, which is worse than carrying none.
   test("an ordered task item at CommonMark's nine-digit cap is still a task", () => {
     expect(runs("123456789. [x] task")).toEqual([
-      { startCol: 0, endCol: 10, listMarker: "task" },
+      { startCol: 0, endCol: 11, listMarker: "task" },
       { startCol: 11, endCol: 14, checkbox: "checked" },
     ]);
   });
@@ -358,14 +358,24 @@ describe("list markers", () => {
     // CSS: the marker column of a task line is never a bullet, so EXC-860's
     // checkbox is the one treatment the row carries.
     expect(runs("- [x] task")).toEqual([
-      { startCol: 0, endCol: 1, listMarker: "task" },
+      { startCol: 0, endCol: 2, listMarker: "task" },
       { startCol: 2, endCol: 5, checkbox: "checked" },
+    ]);
+  });
+
+  test("an in-progress item takes the slashed state", () => {
+    // `[/]` is not CommonMark's — it is what the agents caret reads plans from write for
+    // work that is underway — so it takes a state of its own rather than passing for
+    // done. Its marker is a task like any other's, so the row is treated the same way.
+    expect(runs("- [/] task")).toEqual([
+      { startCol: 0, endCol: 2, listMarker: "task" },
+      { startCol: 2, endCol: 5, checkbox: "slashed" },
     ]);
   });
 
   test("an ordered task item's marker is a task too", () => {
     expect(runs("1. [ ] task")).toEqual([
-      { startCol: 0, endCol: 2, listMarker: "task" },
+      { startCol: 0, endCol: 3, listMarker: "task" },
       { startCol: 3, endCol: 6, checkbox: "unchecked" },
     ]);
   });
@@ -433,7 +443,7 @@ describe("blockquote depth and markers", () => {
   test("a quoted task item marks both the quote and the checkbox", () => {
     expect(runs("> - [ ] task")).toEqual([
       { startCol: 0, endCol: 1, quoteMarker: 1 },
-      { startCol: 2, endCol: 3, listMarker: "task" },
+      { startCol: 2, endCol: 4, listMarker: "task" },
       { startCol: 4, endCol: 7, checkbox: "unchecked" },
     ]);
   });
@@ -462,7 +472,7 @@ describe("blockquote depth and markers", () => {
   test("a tab after a single marker leaves the content start past it", () => {
     expect(runs(">\t- [x] task")).toEqual([
       { startCol: 0, endCol: 1, quoteMarker: 1 },
-      { startCol: 2, endCol: 3, listMarker: "task" },
+      { startCol: 2, endCol: 4, listMarker: "task" },
       { startCol: 4, endCol: 7, checkbox: "checked" },
     ]);
   });
@@ -525,7 +535,7 @@ describe("blockquote depth and markers", () => {
 
   test("a list marker with no quote after it leaves the task scan alone", () => {
     expect(runs("- [x] done")).toEqual([
-      { startCol: 0, endCol: 1, listMarker: "task" },
+      { startCol: 0, endCol: 2, listMarker: "task" },
       { startCol: 2, endCol: 5, checkbox: "checked" },
     ]);
   });

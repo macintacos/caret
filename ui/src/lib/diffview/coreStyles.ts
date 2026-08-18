@@ -6,6 +6,9 @@
 
 import fileIconRaw from "@/icons/file.svg?raw";
 import folderIconRaw from "@/icons/folder.svg?raw";
+import squareIconRaw from "@/icons/square.svg?raw";
+import squareCheckIconRaw from "@/icons/square-check-big.svg?raw";
+import squareSlashIconRaw from "@/icons/square-slash.svg?raw";
 import { DIFFS_CORE_STYLES } from "$lib/diffview/diffsCoreStyles.ts";
 
 // The vendored Lucide `file` glyph as a CSS mask source (EXC-687). Rendered as a
@@ -14,6 +17,14 @@ import { DIFFS_CORE_STYLES } from "$lib/diffview/diffsCoreStyles.ts";
 const FILE_ICON_MASK = `url("data:image/svg+xml,${encodeURIComponent(fileIconRaw)}")`;
 // Its counterpart for a reference the daemon resolved to a directory (EXC-918).
 const FOLDER_ICON_MASK = `url("data:image/svg+xml,${encodeURIComponent(folderIconRaw)}")`;
+// The task-list checkbox's three states, one vendored Lucide glyph each. Masks for the
+// same reason the file glyph is one: the row's ink is a palette token, and a mask takes
+// it through background-color where an <img> would be stuck with whatever the file draws.
+const CHECKBOX_MASKS = {
+  unchecked: `url("data:image/svg+xml,${encodeURIComponent(squareIconRaw)}")`,
+  checked: `url("data:image/svg+xml,${encodeURIComponent(squareCheckIconRaw)}")`,
+  slashed: `url("data:image/svg+xml,${encodeURIComponent(squareSlashIconRaw)}")`,
+};
 
 /**
  * How far a blockquote's ink fades (EXC-863). Quoted prose is still body copy a
@@ -94,13 +105,15 @@ const CARET_OVERRIDES = `
     --chip-pad-inline: 0.32em;
     --chip-pad-block: 0.16em;
   }
-  /* The drawn task-list checkbox's size (EXC-860), which its box and its tick both
-     measure from. Held a little under 1em so the control sits inside the row's line box
-     rather than filling it, and em-relative so it tracks the type scale — the three
-     source columns it is drawn over are a fixed 3ch, so a fixed pixel would drift out of
-     the middle of them at any other size. */
+  /* The task-list checkbox's size (EXC-860) — the box the masked Lucide glyph is painted
+     into, which every state measures from. Lucide draws its square inset in the viewBox
+     (18 of 24 units), so the SQUARE a reader sees is about three quarters of this: the
+     number is the one that puts that square a little under 1em, inside the row's line box
+     rather than filling it. Em-relative so it tracks the type scale — the three source
+     columns it is drawn over are a fixed 3ch, so a fixed pixel would drift out of the
+     middle of them at any other size. */
   :host {
-    --checkbox-size: 0.92em;
+    --checkbox-size: 1.23em;
   }
   [data-utility-button] {
     margin-right: calc(1ch - 1lh - 0.5rem);
@@ -582,12 +595,22 @@ const CARET_OVERRIDES = `
      anyway, the fallback is a radial-gradient dot painted as a background, which cannot
      reach a selection because it is paint rather than content.
 
-     A TASK item's marker takes the ink and not the glyph, and that decision is made in the
-     emission (inlineSpans.ts tags it "task", never "bullet") rather than unpicked here. The
-     issue asks for one treatment per row: a checkbox IS the marker of a task item, so a
-     bullet beside it would be two markers arguing. EXC-860 draws that checkbox over
-     [data-md-checkbox]; if it wants the bullet back, this rule's selector is the one line to
-     change.
+     A TASK item's marker takes neither the ink nor the glyph, and it is the ONE member of
+     this family that does not keep its columns either. That the marker is a task at all is
+     decided in the emission (inlineSpans.ts tags it "task", never "bullet") rather than
+     unpicked here, and so is the run's width: it covers the marker AND the gap to the
+     checkbox, which is exactly what this rule takes away.
+
+     font-size: 0 is what takes it. The run keeps its characters — they are still in the DOM
+     and still in the clipboard, which tasks.e2e.ts reads — but it costs no advance, so the
+     checkbox and the item's text slide left onto the columns the marker was spending and the
+     box lands where the item begins. Every other decoration on this surface is drawn in
+     place precisely so no column moves; this one moves them on purpose, because a box
+     floating two cells into a row nothing else indents reads as a stray indent rather than
+     as a control. Indentation is NOT part of the run, so a nested item keeps its nesting.
+     The collapse is spelled as a font-size rather than as display: none or visibility:
+     hidden because those two are the spellings Blink drops from a copied selection, which
+     would cost the row its markdown.
 
      No transition — the diff surface swaps state instantly (svelte-rules § Motion). */
   [data-content] [data-line] [data-md-list] {
@@ -596,6 +619,9 @@ const CARET_OVERRIDES = `
   [data-content] [data-line] [data-md-list="bullet"] {
     color: transparent;
   }
+  [data-content] [data-line] [data-md-list="task"] {
+    font-size: 0;
+  }
   [data-content] [data-line] [data-md-list="bullet"]::before {
     content: "•";
     position: absolute;
@@ -603,14 +629,13 @@ const CARET_OVERRIDES = `
     user-select: none;
   }
 
-  /* EXC-860: the task-list checkbox. Structurally this IS the list marker above — the same
-     transform-in-place stance, the same overdraw — scaled from the one cell a bullet covers
-     to the three the brackets cover. inlineSpans.ts has tagged the run since EXC-866, so
-     what the sheet receives is a child exactly three character cells wide sitting at the
-     column the source puts it at. Everything the bullet's comment says about why the glyph
-     is a pseudo-element rather than an appended node, why absolute positioning with no
-     insets is what holds the advance at zero, and why user-select: none is the copy contract
-     rather than tidiness applies here unchanged and is not repeated.
+  /* EXC-860: the task-list checkbox, drawn over the [ ] / [x] / [/] run
+     inlineSpans.ts tags. Structurally this IS the list marker above — the same overdraw,
+     the same zero advance — scaled from the one cell a bullet covers to the three the
+     brackets cover. Everything the bullet's comment says about why the glyph is a
+     pseudo-element rather than an appended node, why absolute positioning with no insets
+     holds the advance at zero, and why user-select: none is the copy contract rather than
+     tidiness applies here unchanged and is not repeated.
 
      THREE things are genuinely new, and all three are worth reading.
 
@@ -635,29 +660,25 @@ const CARET_OVERRIDES = `
      inline half is arithmetic on the run: 1.5ch is the run's middle, and half the box's own
      width brings its left edge back to centre it there. 1ch is the width of the zero glyph,
      which on this monospace surface is the cell width — the same unit the grid is built
-     from, so the centring cannot drift from the columns. It is spelled as a transform
-     rather than as an inset on purpose: transform is not a layout property, so the offset
-     is free, while an inset would abandon the static position and resolve against whatever
+     from, so the centring cannot drift from the columns. It is spelled as a transform-free
+     inset on the marker span (position: relative) rather than resolved against whatever
      ancestor happens to be positioned. The block half is a nudge rather than a calculation
      — the static position is the top of the font's content box, which sits a little above
      the row's optical middle — and it is small enough that no metric it could be derived
      from would be more honest than the number.
 
-     IT IS DRAWN, NOT TYPED, and that is the change EXC-871 left on the table. A checkbox
-     spelled with U+2610 / U+2611 is a GLYPH: its weight, its corner radius, its tick and
-     its size all come from whichever font the platform resolves, it renders at the text's
-     own stroke weight beside prose set in the same face, and it reads as ASCII art of a
-     checkbox rather than as a control — which is exactly what a reviewer sees. Two
-     pseudo-elements draw it instead: ::before is the box, a square with the family's own
-     border radius, and ::after is the tick, a rectangle with two of its four borders and a
-     45-degree rotation, which is the smallest thing that draws a checkmark with no font, no
-     asset and no extra node. Both are sized in em, so the control tracks the type scale.
-
-     Two properties survive the swap unchanged and both are load-bearing. The box is square
-     by construction (one length for both axes) rather than by the font's advance width, and
-     nothing here participates in flow — an absolutely positioned box contributes nothing to
-     the line, so the three source columns keep their advance and the monospace grid never
-     learns that anything was drawn.
+     IT IS AN ICON, NOT A GLYPH. A checkbox spelled with U+2610 / U+2611 takes its weight,
+     its corner radius, its tick and its size from whichever font the platform resolves, it
+     renders at the text's own stroke weight beside prose set in the same face, and it reads
+     as ASCII art of a checkbox rather than as a control. What draws it instead is the same
+     vendored Lucide set the rest of the product wears (doc/agents/icon-rules.md), masked
+     into ::before exactly the way the file-reference glyph below is: square unchecked,
+     square-check-big checked, square-slash for the in-progress [/]. One property
+     separates the three — the mask image — because the box, the ink, the size and the
+     placement are the shared rule's, so a state cannot drift in anything but its shape.
+     A mask rather than an <img> or a background-image is what lets the ink stay a palette
+     token: the glyph is painted by background-color through the mask, so it inherits the
+     row's ramp the way Icon.svelte's SVGs inherit currentColor.
 
      The INK AND THE STATE. This is the one member of the marker family that WCAG 1.4.11
      binds, because it reports STATE rather than merely marking structure, and that is why
@@ -670,56 +691,39 @@ const CARET_OVERRIDES = `
      structure rather than state and are left as they are; that gap is real but it is the
      epic's, not this rule's.
 
-     The two states are then told apart by SHAPE — an empty outline against a filled box
-     carrying a tick, on one ink. Separating them by hue or by an opacity step instead would
-     fail outright for a colour-blind reader whatever a contrast ratio said about it (the
-     failure mode EXC-863 records one rule family over), so shape is what makes the
-     distinction palette-independent and is why this block still needs no subdue constant.
-     The tick is --paper rather than a second ink: it is knocked out of the --ink-soft fill
-     it sits on, so the pair carries the same ratio theme.test.ts already pins, from the
-     other side.
+     The three states are then told apart by SHAPE — an empty square, a square with a check,
+     a square with a slash — on one ink. Separating them by hue or by an opacity step
+     instead would fail outright for a colour-blind reader whatever a contrast ratio said
+     about it (the failure mode EXC-863 records one rule family over), so shape is what makes
+     the distinction palette-independent and is why this block still needs no subdue
+     constant.
 
      No transition — the diff surface swaps state instantly (svelte-rules § Motion). */
   [data-content] [data-line] [data-md-checkbox] {
     position: relative;
     color: transparent;
   }
-  /* The box. */
   [data-content] [data-line] [data-md-checkbox]::before {
     content: "";
     position: absolute;
-    box-sizing: border-box;
     inset-inline-start: calc(1.5ch - var(--checkbox-size) / 2);
     inset-block-start: calc((100% - var(--checkbox-size)) / 2);
     width: var(--checkbox-size);
     height: var(--checkbox-size);
-    border: 0.1em solid var(--ink-soft);
-    border-radius: 0.22em;
+    background-color: var(--ink-soft);
+    -webkit-mask: ${CHECKBOX_MASKS.unchecked} no-repeat center / contain;
+    mask: ${CHECKBOX_MASKS.unchecked} no-repeat center / contain;
     user-select: none;
   }
   [data-content] [data-line] [data-md-checkbox="checked"]::before {
-    background-color: var(--ink-soft);
+    -webkit-mask-image: ${CHECKBOX_MASKS.checked};
+    mask-image: ${CHECKBOX_MASKS.checked};
   }
-  /* The tick, knocked out of the fill above: two borders of a rectangle, turned 45
-     degrees, which is the smallest checkmark that needs no font and no asset. Centred on
-     the same 1.5ch the box is, then lifted a hair — a checkmark's optical centre sits
-     below its bounding box's, so a geometrically centred one reads as low. */
-  [data-content] [data-line] [data-md-checkbox="checked"]::after {
-    content: "";
-    position: absolute;
-    box-sizing: border-box;
-    inset-inline-start: calc(1.5ch - var(--checkbox-size) / 5.2);
-    inset-block-start: calc((100% - var(--checkbox-size) / 1.55) / 2 - 0.04em);
-    width: calc(var(--checkbox-size) / 2.6);
-    height: calc(var(--checkbox-size) / 1.55);
-    transform: rotate(45deg);
-    border: 0.11em solid var(--paper);
-    border-block-start: 0;
-    border-inline-start: 0;
-    user-select: none;
+  [data-content] [data-line] [data-md-checkbox="slashed"]::before {
+    -webkit-mask-image: ${CHECKBOX_MASKS.slashed};
+    mask-image: ${CHECKBOX_MASKS.slashed};
   }
-  [data-content] [data-line] [data-md-checkbox] ~ [data-md-checkbox]::before,
-  [data-content] [data-line] [data-md-checkbox] ~ [data-md-checkbox]::after {
+  [data-content] [data-line] [data-md-checkbox] ~ [data-md-checkbox]::before {
     content: none;
   }
 

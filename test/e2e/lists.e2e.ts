@@ -125,10 +125,16 @@ test("each marker is tagged with its kind, over its own characters", async ({ pa
     { row: "2. Second step", value: "ordered", text: "2." },
     { row: "   1. A nested ordered step", value: "ordered", text: "1." },
     { row: "3. Third step", value: "ordered", text: "3." },
-    // A task item's marker is a task, never a bullet: the checkbox EXC-860 draws
-    // is the item's marker, so the dash beside it takes the ink and no glyph.
+    // A task item's marker is a task, never a bullet: the checkbox EXC-860 draws is
+    // the item's marker, so the dash beside it is collapsed rather than drawn over —
+    // and the run reaches to the checkbox, gap included, because that is the width
+    // the row stops spending. Shiki hands that run over as two tokens, the dash and
+    // the gap, and every token a run covers is tagged; the sheet collapses each, so
+    // what matters is that between them they cover exactly `- `.
     { row: "- [x] A finished task", value: "task", text: "-" },
+    { row: "- [x] A finished task", value: "task", text: " " },
     { row: "- [ ] An unfinished task", value: "task", text: "-" },
+    { row: "- [ ] An unfinished task", value: "task", text: " " },
     // Inside a quote the marker's columns come off the content start, not column
     // zero — the offset EXC-866 recorded the task scan getting wrong.
     { row: "> - A quoted bullet", value: "bullet", text: "-" },
@@ -180,7 +186,10 @@ test("the bullet is painted over the dash, which is still in the row", async ({ 
   await expect(page.locator(".diffview")).toContainText(BULLET);
 });
 
-test("an ordered marker and a task marker take the ink and no glyph", async ({ page, daemon }) => {
+test("an ordered marker takes the ink and a task marker takes no room", async ({
+  page,
+  daemon,
+}) => {
   await open(page, daemon, LIST_PLAN);
   await expect.poll(async () => (await taggedRuns(page, "data-md-list")).length).toBeGreaterThan(0);
   const kinds = await page.evaluate(
@@ -192,6 +201,7 @@ test("an ordered marker and a task marker take the ink and no glyph", async ({ p
         return {
           color: getComputedStyle(el).color,
           glyph: getComputedStyle(el, "::before").content,
+          width: el.getBoundingClientRect().width,
         };
       };
       return { bullet: read(lines.bullet), ordered: read(lines.ordered), task: read(lines.task) };
@@ -203,16 +213,20 @@ test("an ordered marker and a task marker take the ink and no glyph", async ({ p
     },
   );
   // The "not double-styled" criterion, read off the rendered page rather than
-  // inferred from the absence of a rule. A task item's dash keeps its own glyphs
-  // and takes the marker ink, so the checkbox EXC-860 draws over the brackets is
-  // the row's only glyph; if this ever grows a bullet, that ticket's first
-  // screenshot is two markers arguing.
+  // inferred from the absence of a rule. Neither kind draws a glyph: an ordered
+  // marker keeps its own characters, and a task item's dash is collapsed away
+  // entirely, so the checkbox EXC-860 draws over the brackets is the row's only
+  // mark; if this ever grows a bullet, that ticket's first screenshot is two
+  // markers arguing.
   expect(kinds.ordered?.glyph).toBe("none");
   expect(kinds.task?.glyph).toBe("none");
-  // Both wear the same marker ink the bullet's glyph does — one family, whatever
-  // the kind — and neither is the transparent the bullet's own character takes.
-  expect(kinds.ordered?.color).toBe(kinds.task?.color);
+  // The ordered marker wears the marker ink the bullet's glyph does — one family,
+  // and not the transparent the bullet's own character takes. The task marker is
+  // the one that spends nothing at all: no ink to compare, because it has no room.
+  // tasks.e2e.ts owns where the box lands once the room is gone.
   expect(kinds.ordered?.color).not.toBe(kinds.bullet?.color);
+  expect(kinds.bullet?.width).toBeGreaterThan(0);
+  expect(kinds.task?.width).toBe(0);
 });
 
 test("copying a marked row yields the source markers, not the glyph", async ({
