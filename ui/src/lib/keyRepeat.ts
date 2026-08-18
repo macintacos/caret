@@ -71,43 +71,55 @@ export function createKeyRepeat(deps: KeyRepeatDeps = {}): KeyRepeat {
   const delayMs = deps.delayMs ?? KEY_REPEAT_DELAY_MS;
   const intervalMs = deps.intervalMs ?? KEY_REPEAT_INTERVAL_MS;
 
-  // Teardown for the hold in flight, undefined when nothing is held. One handle
-  // for the timer AND the two listeners, so there is a single thing to forget.
-  let end: (() => void) | undefined;
+  // The hold in flight, undefined when nothing is held. It is an OBJECT rather than
+  // a boolean because its identity is what the run checks itself against: `step()`
+  // can end the hold from the inside — a menu closing calls stop() synchronously —
+  // and a run that armed its next tick without re-reading this would leave a timer
+  // nothing has a handle to. Releasing the key could not cancel it, an unmount could
+  // not, and neither could the next hold, so it would tick for the life of the page.
+  let live: { cancel(): void } | undefined;
 
   function stop(): void {
-    const teardown = end;
-    // Cleared before the teardown runs, not after: removing the blur listener
-    // re-enters nothing today, but a stop that is still "in flight" while its own
-    // teardown fires is the shape that turns into a double-cancel later.
-    end = undefined;
-    teardown?.();
+    const hold = live;
+    // Cleared before the teardown runs, so a cancel that re-enters stop() — or a
+    // step() that is still on the stack — sees the hold already gone.
+    live = undefined;
+    hold?.cancel();
   }
 
   function start(key: string, step: () => void): void {
     stop();
-    step();
 
     // A re-arming timeout rather than an interval, so the delay and the cadence
     // are one mechanism with one cancel handle — and so `schedule` stays the
     // single injected effect a test has to drive.
     let cancelTimer: (() => void) | undefined;
-    const tick = (): void => {
-      step();
-      cancelTimer = schedule(tick, intervalMs);
-    };
-    cancelTimer = schedule(tick, delayMs);
-
     const onKeyUp = (e: KeyboardEvent): void => {
       if (e.key === key) stop();
     };
+    const hold = {
+      cancel(): void {
+        cancelTimer?.();
+        window.removeEventListener("keyup", onKeyUp);
+        window.removeEventListener("blur", stop);
+      },
+    };
+
+    // Registered BEFORE the first move, so a step() that ends the hold on the spot
+    // finds something to end rather than being swallowed and leaving a run armed.
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", stop);
-    end = () => {
-      cancelTimer?.();
-      window.removeEventListener("keyup", onKeyUp);
-      window.removeEventListener("blur", stop);
+    live = hold;
+
+    const tick = (): void => {
+      step();
+      if (live !== hold) return;
+      cancelTimer = schedule(tick, intervalMs);
     };
+
+    step();
+    if (live !== hold) return;
+    cancelTimer = schedule(tick, delayMs);
   }
 
   return { start, stop };

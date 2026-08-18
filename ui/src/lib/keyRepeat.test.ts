@@ -125,6 +125,42 @@ describe("createKeyRepeat", () => {
     repeat.stop();
   });
 
+  // The move itself can end the hold, and it does so SYNCHRONOUSLY: the breadcrumbs
+  // bar's `h` shuts one crumb's menu to open the next, and bits-ui reports that close
+  // on the spot — so the surface's own close handler calls stop() from inside step().
+  // A run that re-armed behind that stop would hold a timer nothing has a handle to:
+  // releasing the key could not cancel it, and neither could the next hold.
+  test("a step that stops the hold arms no run behind it", () => {
+    const clock = makeScheduler();
+    let steps = 0;
+    const repeat = createKeyRepeat({ schedule: clock.schedule });
+
+    repeat.start("h", () => {
+      steps++;
+      if (steps === 2) repeat.stop();
+    });
+    clock.runNext();
+
+    expect(steps).toBe(2);
+    expect(clock.armed()).toEqual([]);
+    clock.runNext();
+    expect(steps).toBe(2);
+  });
+
+  test("a first step that stops the hold arms nothing at all", () => {
+    const clock = makeScheduler();
+    let steps = 0;
+    const repeat = createKeyRepeat({ schedule: clock.schedule });
+
+    repeat.start("h", () => {
+      steps++;
+      repeat.stop();
+    });
+
+    expect(steps).toBe(1);
+    expect(clock.armed()).toEqual([]);
+  });
+
   test("stop is idempotent", () => {
     const clock = makeScheduler();
     const repeat = createKeyRepeat({ schedule: clock.schedule });

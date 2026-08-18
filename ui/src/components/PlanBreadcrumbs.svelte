@@ -291,6 +291,14 @@
     });
   }
 
+  // Whether the bar is swapping one crumb's menu for another's rather than being
+  // dismissed. The two are the same event from the menu's side — a close — and the
+  // hold-to-repeat cancel below has to tell them apart: `h` shuts the open menu on
+  // its way to the next crumb, so reading that as a dismissal would end a held `h`
+  // after a single step. Set only around the pair of clicks that perform the swap,
+  // both synchronous, so nothing else can observe it raised.
+  let swapping = false;
+
   // Move the open menu one crumb outward, if there is one and no submenu is open
   // beneath it. Both steps are the programmatic click openTrail uses — the first
   // toggles the open trigger shut, the second opens its neighbour — so focus
@@ -306,8 +314,10 @@
     const open = cells.findIndex((cell) => cell.querySelector('[aria-expanded="true"]') !== null);
     const previous = cells[open - 1]?.querySelector<HTMLButtonElement>("button");
     if (open < 1 || previous === undefined || previous === null) return false;
+    swapping = true;
     cells[open]?.querySelector<HTMLButtonElement>("button")?.click();
     previous.click();
+    swapping = false;
     return true;
   }
 
@@ -735,8 +745,9 @@
       // A menu shut mid-hold takes the run with it (EXC-1122). Without this the
       // timer keeps firing arrows at whatever holds focus next — and ArrowDown on a
       // closed crumb's trigger is how bits-ui OPENS it, so the menu would reappear
-      // and start walking on its own.
-      else repeat.stop();
+      // and start walking on its own. The walk's own swap is exempt (see `swapping`),
+      // since there the close is the first half of a move rather than a dismissal.
+      else if (!swapping) repeat.stop();
     }}
   >
     <DropdownMenu.Trigger>

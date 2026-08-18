@@ -153,6 +153,16 @@ function pressTab(flush: () => void, { shift = false, repeat = false } = {}): Ke
   return event;
 }
 
+/** Press an arrow on the filter field and settle. A synthetic arrow is untrusted, so
+ * the component's own handler lets it past — which is what makes this a question
+ * about the primitive's `loop` rather than about the app's claim on the key. */
+function pressArrow(flush: () => void, key: "ArrowUp" | "ArrowDown"): void {
+  const el = field();
+  if (el === null) throw new Error("filter field not mounted");
+  el.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  flush();
+}
+
 /** Open the popup and wait for its portalled content. The flush BEFORE the click
  * is load-bearing: render() leaves the mount's effects pending, and a click landing
  * on that unsettled graph flips the trigger's aria-expanded while bits-ui's portal
@@ -985,6 +995,33 @@ describe("PlanToc entry points", () => {
     pressTab(flush, { shift: true });
     await flushUntil(flush, () => selectedLabels()[0] === "Verification");
     expect(selectedLabels()).toEqual(["Verification"]);
+    await close(target, flush);
+  });
+
+  // The arrows wrap on the same prop, which is the half of it that matters: `loop`
+  // is set for the list, not for one key, and Tab wrapping while the arrows stopped
+  // dead in the same list would read as a bug.
+  test("the arrows wrap at both ends of the list", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    await flushUntil(flush, () => options().some((o) => o.hasAttribute("data-selected")));
+    expect(selectedLabels()).toEqual(["Details"]);
+
+    pressArrow(flush, "ArrowUp");
+    await flushUntil(flush, () => selectedLabels()[0] === "Approach");
+    pressArrow(flush, "ArrowUp");
+    await flushUntil(flush, () => selectedLabels()[0] === "Overview");
+    pressArrow(flush, "ArrowUp");
+    await flushUntil(flush, () => selectedLabels()[0] === "Verification");
+    expect(selectedLabels()).toEqual(["Verification"]);
+
+    pressArrow(flush, "ArrowDown");
+    await flushUntil(flush, () => selectedLabels()[0] === "Overview");
+    expect(selectedLabels()).toEqual(["Overview"]);
     await close(target, flush);
   });
 

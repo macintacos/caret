@@ -735,6 +735,36 @@ test("a second Escape leaves the bar with nothing focused", async ({ daemon, pag
   await expect(page.locator(CRUMB).last()).toBeFocused();
 });
 
+test("holding h walks out to the top of the trail and settles there", async ({ daemon, page }) => {
+  // `h` is the one walk key whose move ENDS the hold from the inside: stepping out
+  // shuts the open crumb's menu, which the bar answers by cancelling the run. The
+  // hold has to survive that and stop cleanly at the outermost crumb, rather than
+  // re-arming behind its own cancel — the shape ui/src/lib/keyRepeat.test.ts pins
+  // directly, and the only place a browser can show what it looks like.
+  await daemon.seed({ plan: DEEP_PLAN });
+  await page.goto("/");
+
+  await jumpTo(page, "Echo");
+  const parked = await parkedAt(page);
+  const menu = page.locator(MENU);
+
+  await page.keyboard.press("b");
+  await expect(menu.getByRole("menuitem")).toHaveText(["Echo"]);
+
+  await page.keyboard.down("h");
+  await expect(menu.getByRole("menuitem")).toHaveText(["Alpha"]);
+  await page.keyboard.up("h");
+
+  // Settled at the top: one menu, on the outermost crumb, and still there once the
+  // window a run would have ticked in has passed. The plan never moved either — the
+  // walk browses, only Enter travels.
+  await pastRepeatDelay(page);
+  await expect(menu).toHaveCount(1);
+  await expect(menu.getByRole("menuitem")).toHaveText(["Alpha"]);
+  await expect(page.locator(CRUMB).first()).toHaveAttribute("aria-expanded", "true");
+  expect(await scrollTop(page)).toBe(parked);
+});
+
 test("b shuts the bar from whatever crumb the walk reached", async ({ daemon, page }) => {
   // The key toggles the BAR, not the trailing crumb: `h` moves the open menu out
   // onto an ancestor, so the trigger `b` opened is no longer the open one, and
