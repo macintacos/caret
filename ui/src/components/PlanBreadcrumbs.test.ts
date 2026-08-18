@@ -384,6 +384,32 @@ describe("PlanBreadcrumbs filter", () => {
     return panel()?.querySelector<HTMLElement>(".crumb-filter-empty") ?? null;
   }
 
+  /** The rows the roving selection is on. `aria-selected` rather than `data-selected`
+   * because it is the half a screen reader reads; the two move together. */
+  function selectedLabels(): (string | undefined)[] {
+    return options()
+      .filter((r) => r.getAttribute("aria-selected") === "true")
+      .map((r) => r.querySelector(".crumb-label")?.textContent?.trim());
+  }
+
+  /** Press Tab on the query field and settle. Returns the event so a caller can read
+   * `defaultPrevented` — dispatchEvent leaves the same object it was handed. Dispatched
+   * at the FIELD, which is where focus sits, so it reaches the command root the way a
+   * real keypress does: by bubbling. */
+  function pressTab(flush: () => void, { shift = false } = {}): KeyboardEvent {
+    const field = queryField();
+    if (field === null) throw new Error("no query field");
+    const event = new KeyboardEvent("keydown", {
+      key: "Tab",
+      shiftKey: shift,
+      bubbles: true,
+      cancelable: true,
+    });
+    field.dispatchEvent(event);
+    flush();
+    return event;
+  }
+
   /** Type into the field the way a reviewer would, so the bound query — and with it
    * the match set — updates. `done` says what settling looks like for this query: a
    * query matching nothing never grows the option set, so polling on that alone
@@ -632,6 +658,110 @@ describe("PlanBreadcrumbs filter", () => {
       "location",
       null,
     ]);
+    await closeFilter(flush);
+  });
+
+  // Tab walks the results too (EXC-1121), the way it walks the hierarchy menus and
+  // the way it already walks the ToC popup's list. The primitive ignores Tab
+  // outright — its own keydown maps only the arrows and the vim chords — so before
+  // this the key closed the panel and handed focus back to the crumb. These pin the
+  // walk itself; that the newly selected row is SCROLLED into view is real-browser
+  // and lives in the e2e.
+  test("Tab walks the selection to the next row", async () => {
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await openFilter(target, flush);
+    await flushUntil(flush, () => selectedLabels().length > 0);
+    expect(selectedLabels()).toEqual(["Overview"]);
+
+    pressTab(flush);
+    await flushUntil(flush, () => selectedLabels()[0] === "Approach");
+    expect(selectedLabels()).toEqual(["Approach"]);
+    await closeFilter(flush);
+  });
+
+  test("Shift+Tab walks the selection to the previous row", async () => {
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await openFilter(target, flush);
+    await flushUntil(flush, () => selectedLabels().length > 0);
+    pressTab(flush);
+    await flushUntil(flush, () => selectedLabels()[0] === "Approach");
+
+    pressTab(flush, { shift: true });
+    await flushUntil(flush, () => selectedLabels()[0] === "Overview");
+    expect(selectedLabels()).toEqual(["Overview"]);
+    await closeFilter(flush);
+  });
+
+  // The command defaults `loop` OFF, where menu content defaults it on — so the two
+  // views of one surface would stop at opposite ends without the prop being set.
+  test("the Tab walk wraps at both ends of the list", async () => {
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await openFilter(target, flush);
+    await flushUntil(flush, () => selectedLabels().length > 0);
+    expect(selectedLabels()).toEqual(["Overview"]);
+
+    // Backwards off the first row lands on the last.
+    pressTab(flush, { shift: true });
+    await flushUntil(flush, () => selectedLabels()[0] === "Verification");
+    expect(selectedLabels()).toEqual(["Verification"]);
+
+    // And forwards off the last comes back to the first.
+    pressTab(flush);
+    await flushUntil(flush, () => selectedLabels()[0] === "Overview");
+    expect(selectedLabels()).toEqual(["Overview"]);
+    await closeFilter(flush);
+  });
+
+  // The whole point of walking from the field rather than moving focus row to row:
+  // `aria-activedescendant` on the field is what narrates the walk, and it only does
+  // that while the field is the focused element.
+  test("the Tab walk leaves focus in the query field", async () => {
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await openFilter(target, flush);
+    await flushUntil(flush, () => selectedLabels().length > 0);
+
+    pressTab(flush);
+    await flushUntil(flush, () => selectedLabels()[0] === "Approach");
+    // Asserted, not merely polled for: flushUntil gives up SILENTLY after its tries
+    // elapse, so a walk that never happened would leave the focus check below
+    // passing on its own — focus does not move when nothing moves it.
+    expect(selectedLabels()).toEqual(["Approach"]);
+    expect(document.activeElement).toBe(queryField());
+    await closeFilter(flush);
+  });
+
+  // A Tab that reached the browser's default would take focus out of the panel, which
+  // traps none, and off the end of the document — the panel is portalled to the body
+  // and nothing is tabbable after it.
+  test("the Tab walk suppresses the browser's own tab move", async () => {
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await openFilter(target, flush);
+    await flushUntil(flush, () => selectedLabels().length > 0);
+
+    const event = pressTab(flush);
+    expect(event.defaultPrevented).toBe(true);
+    // And the panel is still standing: Tab no longer dismisses it.
+    expect(panel()).not.toBeNull();
     await closeFilter(flush);
   });
 

@@ -12,7 +12,7 @@
 // logic, and the filter panel's structure and ARIA, are unit-tested in
 // ui/src/components/PlanBreadcrumbs.test.ts.
 
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { jumpToHeading, PLAN_SURFACE } from "@test/e2e/support/source-view.ts";
@@ -72,6 +72,20 @@ const DEEP_PLAN = [
   "",
 ].join("\n\n");
 
+// More headings than the filter panel's list can show at once, which is what makes
+// "the walk brought the row into view" a claim about scrolling rather than about a
+// list that already showed everything. Only the COUNT matters, so the sections carry
+// the same filler as the fixtures above rather than anything of their own.
+const LONG_PLAN = [
+  "# Alpha",
+  filler("Alpha"),
+  ...Array.from({ length: 12 }, (_, i) => [
+    `## Section ${i + 1}`,
+    filler(`Section ${i + 1}`),
+  ]).flat(),
+  "",
+].join("\n\n");
+
 const BAR = ".plan-breadcrumbs";
 const CRUMB = `${BAR} button.crumb`;
 // The crumbs the row is actually showing. A level it cannot hold stays in the
@@ -94,6 +108,18 @@ const queryField = (page: Page) =>
 /** The row the roving selection is on. bits-ui marks it `data-selected`; the reader
  * is told about it through the field's aria-activedescendant, asserted below. */
 const walkedTo = (page: Page) => results(page).and(page.locator("[data-selected]"));
+
+/** Whether `row` sits inside the results list's visible box — the claim a unit mount
+ * cannot make, since happy-dom lays nothing out. Throws rather than returning false
+ * when either box is unmeasurable: one caller asserts this is FALSE, to prove the
+ * list really scrolls, and a false-on-null would let "not measurable" pass as
+ * "correctly out of view". `expect.poll` fails on a throw exactly as it should. */
+async function isWithinResults(page: Page, row: Locator): Promise<boolean> {
+  const rowBox = await row.boundingBox();
+  const listBox = await filterPanel(page).locator("[data-slot='command-list']").boundingBox();
+  if (rowBox === null || listBox === null) throw new Error("row or list has no bounding box");
+  return rowBox.y >= listBox.y - 1 && rowBox.y + rowBox.height <= listBox.y + listBox.height + 1;
+}
 
 /** Where the plan is parked. Several specs below assert that walking the menus
  * moves nothing until the reviewer commits to a heading. */
@@ -813,15 +839,12 @@ test("Escape restores the hierarchical menu without leaving the bar", async ({ d
   await expect(page.locator(CRUMB).last()).toBeFocused();
 });
 
-test("Tab leaves the filter rather than being swallowed by the query field", async ({
-  daemon,
-  page,
-}) => {
-  // Two ways to get this wrong, and the landing site catches the second. Swallowing
-  // Tab strands a keyboard user inside the panel; letting the browser's own default
-  // run from a panel portalled to the END of the body walks them off the document
-  // instead, since nothing is tabbable after it. Both leave the reviewer stuck, and
-  // only asserting where focus LANDS tells them apart.
+test("Tab walks the filter's results without leaving the panel", async ({ daemon, page }) => {
+  // EXC-1121 supersedes the Tab-leaves-the-bar behaviour EXC-1098 pinned: the key
+  // now walks this list the way it walks the hierarchy menus. Left to the browser it
+  // would step off the END OF THE DOCUMENT, since the panel is portalled to the body
+  // and nothing is tabbable after it — so "focus never moved" is half the claim and
+  // "the selection did" is the other half.
   await daemon.seed({ plan: NESTED_PLAN });
   await page.goto("/");
   await expect(page.locator(`${CRUMB}.current`)).toBeVisible();
@@ -830,11 +853,48 @@ test("Tab leaves the filter rather than being swallowed by the query field", asy
   await page.keyboard.press("b");
   await page.keyboard.press("/");
   await expect(queryField(page)).toBeFocused();
+  await expect(walkedTo(page)).toHaveText("Alpha");
 
   await page.keyboard.press("Tab");
-  await expect(filterPanel(page)).toHaveCount(0);
-  // The next control in the row, which is where Tab out of the bar has always gone.
-  await expect(page.locator(".control-row .cwd")).toBeFocused();
+  await expect(walkedTo(page)).toHaveText("Bravo Alpha");
+  await page.keyboard.press("Tab");
+  await expect(walkedTo(page)).toHaveText("Charlie Bravo");
+  await page.keyboard.press("Shift+Tab");
+  await expect(walkedTo(page)).toHaveText("Bravo Alpha");
+
+  // The panel is still standing and the field still has focus, which is what the
+  // narration depends on.
+  await expect(filterPanel(page)).toHaveCount(1);
+  await expect(queryField(page)).toBeFocused();
+});
+
+test("the Tab walk wraps, and brings the row it lands on into view", async ({ daemon, page }) => {
+  // `loop` on the command is what wraps here — it defaults OFF, where the menus'
+  // own `loop` defaults on. And wrapping backwards off the first row is the cheapest
+  // gesture that also proves the scroll: it lands on the last row of a list taller
+  // than its box, which the re-dispatched arrow brings into sight and a hand-written
+  // selection would not.
+  await daemon.seed({ plan: LONG_PLAN });
+  await page.goto("/");
+  await expect(page.locator(`${CRUMB}.current`)).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  await page.keyboard.press("b");
+  await page.keyboard.press("/");
+  await expect(queryField(page)).toBeFocused();
+  await expect(walkedTo(page)).toHaveText("Alpha");
+
+  const last = results(page).last();
+  await expect(last).toHaveText("Section 12 Alpha");
+  expect(await isWithinResults(page, last)).toBe(false);
+
+  await page.keyboard.press("Shift+Tab");
+  await expect(walkedTo(page)).toHaveText("Section 12 Alpha");
+  await expect.poll(() => isWithinResults(page, last)).toBe(true);
+
+  // And forwards off the last row comes back to the first.
+  await page.keyboard.press("Tab");
+  await expect(walkedTo(page)).toHaveText("Alpha");
 });
 
 test("a click outside dismisses the filter and leaves the plan where it was", async ({

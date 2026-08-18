@@ -585,31 +585,16 @@
        phantom in the tab order and the accessibility tree. `customAnchor` gives
        the panel its position instead, on the very trigger the menu it replaces
        hung from.
-       It does not trap focus, which the vendored Popover.Content otherwise does:
-       the panel holds exactly one tabbable, so a trap turns Tab into a no-op and
-       strands a keyboard reviewer inside a bar-level control until they find
-       Escape. Tab leaving the bar is the behaviour the spec pins, and the keydown
-       handler below is what shuts the panel behind them. -->
+       It does not trap focus, which the vendored Popover.Content otherwise does.
+       Nothing here needs one: the panel holds exactly one tabbable, and since
+       EXC-1121 the command below claims Tab outright, so focus never reaches the
+       browser's own default and never leaves the field. -->
   <Popover.Root bind:open={filtering}>
     <Popover.Content
       class="plan-crumb-filter"
       align="start"
       customAnchor={filterAnchor}
       trapFocus={false}
-      onkeydown={(e) => {
-        // Tab carries on out of the bar, and the panel goes with it. Both halves
-        // need doing here: a popover ships no Tab handling at all, so without the
-        // close the panel is left standing over the plan — and without the focus
-        // move, Tab steps off the END OF THE DOCUMENT, because the panel is
-        // portalled to the body and there is nothing after it. Handing focus back
-        // to the crumb the panel hung from puts the reviewer back in the control
-        // row, so the browser's own default then continues to the control after
-        // the bar. Deliberately not preventDefault'ed: that default is the point.
-        if (e.key !== "Tab") return;
-        const origin = filterAnchor;
-        closeFilter();
-        origin?.focus();
-      }}
       onOpenAutoFocus={(e) => {
         // The reviewer pressed `/` to type, so focus goes to the field rather
         // than to the panel bits-ui would otherwise focus. Suppressed only once
@@ -626,8 +611,8 @@
         // trigger of its own, so there is nothing for bits-ui to hand focus back
         // to and the default is a no-op at best and a race at worst. Every close
         // already places focus itself — a pick leaves the reviewer in the plan,
-        // Escape re-opens the menu onto a row, and an outside click or Tab lands
-        // where the reviewer put it.
+        // Escape re-opens the menu onto a row, and an outside click lands where
+        // the reviewer put it.
         e.preventDefault();
       }}
       onEscapeKeydown={(e) => {
@@ -645,7 +630,42 @@
            keystroke. Filtering is headingMatches' job; the command's job here is
            the listbox semantics and the roving selection. The same one prop the
            ToC popup sets, for its own version of the same reason. -->
-      <Command.Root shouldFilter={false}>
+      <!-- `loop` is the other prop this surface has to set, and for the opposite
+           reason: the command defaults it OFF where menu content defaults it on
+           (bits-ui command.svelte vs. menu-content.svelte), so without it the bar's
+           two views would stop at opposite ends of their lists. It wraps EVERY one
+           of the command's navigation keys, not only the Tab below — the arrows go
+           with it, which is the point: Tab wrapping while the arrows stopped in the
+           same list would read as a bug. -->
+      <Command.Root
+        shouldFilter={false}
+        loop
+        onkeydown={(e) => {
+          // Tab walks the results instead of leaving them (EXC-1121), the same claim
+          // the hierarchy menus make on the same key. The primitive maps the arrows
+          // and the vim chords and ignores Tab, so untouched it fell through to the
+          // browser — and with nothing tabbable after a panel portalled to the body,
+          // that stepped off the end of the document.
+          //
+          // Re-dispatching an arrow rather than writing the selection is the
+          // load-bearing choice. bits-ui scrolls a selection into view from its OWN
+          // keydown path, so a hand-rolled walk would step the reviewer onto rows
+          // below the fold without ever bringing them into sight. `#next`/`#prev` are
+          // private, so the handler is the only door in. Dispatched from the field
+          // because that is where the keypress really landed, and the primitive
+          // listens for it on the root the event bubbles to. Same shape, same reason,
+          // as PlanToc.svelte's own Tab walk.
+          if (e.key !== "Tab" || queryEl === null) return;
+          e.preventDefault();
+          queryEl.dispatchEvent(
+            new KeyboardEvent("keydown", {
+              key: e.shiftKey ? "ArrowUp" : "ArrowDown",
+              bubbles: true,
+              cancelable: true,
+            }),
+          );
+        }}
+      >
         <Command.Input
           bind:ref={queryEl}
           bind:value={query}
