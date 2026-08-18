@@ -19,6 +19,9 @@
   // menu's rows — including a submenu's — by re-dispatching as the arrow keys the
   // menu already handles.
   //
+  // EXC-1121: Tab and Shift+Tab walk whichever list is open — a crumb's menu, a
+  // submenu, or the filter panel below — and wrap at its ends.
+  //
   // EXC-948: `/` swaps the open menu for a flat filter over EVERY heading in the
   // plan — the browsing model the menus give you, traded for the one you want
   // when you already know the destination. Escape swaps the hierarchy back
@@ -503,7 +506,7 @@
       onkeydown={onMenuKeydown}
       onCloseAutoFocus={(e) => {
         // Only a pick or the `/` swap suppresses the return. Every other close —
-        // Escape, a click outside, Tab — hands focus back to the trigger as the
+        // Escape, a click outside — hands focus back to the trigger as the
         // primitive intends, so a dismissal never strands the reviewer's next key.
         if (!leaving) return;
         leaving = false;
@@ -585,10 +588,14 @@
        phantom in the tab order and the accessibility tree. `customAnchor` gives
        the panel its position instead, on the very trigger the menu it replaces
        hung from.
-       It does not trap focus, which the vendored Popover.Content otherwise does.
-       Nothing here needs one: the panel holds exactly one tabbable, and since
-       EXC-1121 the command below claims Tab outright, so focus never reaches the
-       browser's own default and never leaves the field. -->
+       It does not trap focus, which the vendored Popover.Content otherwise does —
+       and the prop is load-bearing rather than inert. A trap arms a focusin guard
+       that pulls focus back inside the panel from anywhere outside it, which this
+       surface has to be able to lose: the plan scrolls under an open panel (see
+       filterAnchor), and onCloseAutoFocus below is suppressed unconditionally
+       precisely so every close lands where the reviewer put it. Tab is not the
+       reason either way — the command below claims it outright, so it never
+       reaches the browser's own default. -->
   <Popover.Root bind:open={filtering}>
     <Popover.Content
       class="plan-crumb-filter"
@@ -633,10 +640,13 @@
       <!-- `loop` is the other prop this surface has to set, and for the opposite
            reason: the command defaults it OFF where menu content defaults it on
            (bits-ui command.svelte vs. menu-content.svelte), so without it the bar's
-           two views would stop at opposite ends of their lists. It wraps EVERY one
-           of the command's navigation keys, not only the Tab below — the arrows go
-           with it, which is the point: Tab wrapping while the arrows stopped in the
-           same list would read as a bug. -->
+           two views would disagree at their ends — the menus wrap, the filter would
+           stop dead. It wraps EVERY one of the command's navigation keys, not only
+           the Tab below — the arrows go with it, which is the point: Tab wrapping
+           while the arrows stopped in the same list would read as a bug.
+           The ToC popup's Command is still unlooped, so until its own `loop` lands
+           the plan's two heading lists genuinely differ at their ends. That is a
+           known gap, not an oversight here. -->
       <Command.Root
         shouldFilter={false}
         loop
@@ -650,11 +660,20 @@
           // Re-dispatching an arrow rather than writing the selection is the
           // load-bearing choice. bits-ui scrolls a selection into view from its OWN
           // keydown path, so a hand-rolled walk would step the reviewer onto rows
-          // below the fold without ever bringing them into sight. `#next`/`#prev` are
-          // private, so the handler is the only door in. Dispatched from the field
-          // because that is where the keypress really landed, and the primitive
-          // listens for it on the root the event bubbles to. Same shape, same reason,
-          // as PlanToc.svelte's own Tab walk.
+          // below the fold without ever bringing them into sight.
+          //
+          // The synthetic event is not the only way in: the vendored Command.Root
+          // exposes the primitive through `bind:api`, whose `updateSelectedByItem`
+          // wraps on `loop` and scrolls identically. This takes the dispatch anyway,
+          // to hold ONE shape across the plan's two heading surfaces — PlanToc.svelte
+          // walks its own list this way, and a second spelling here would make the
+          // next bits-ui change something to find twice.
+          //
+          // Dispatched from the field because that is where the keypress really
+          // landed, and the primitive listens for it on the root the event bubbles
+          // to. With no matches the arrow lands on an empty item set and the key goes
+          // quiet — still preferable to letting the default step the reviewer off the
+          // end of the document.
           if (e.key !== "Tab" || queryEl === null) return;
           e.preventDefault();
           queryEl.dispatchEvent(

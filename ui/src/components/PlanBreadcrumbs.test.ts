@@ -329,9 +329,15 @@ describe("PlanBreadcrumbs keyboard invocation", () => {
 // The bar's flat `/` filter (EXC-948, EXC-1098): a `command` inside a `popover`,
 // so the field is a real combobox over a listbox of options. Only what a mounted
 // component shows lives here — the swap, the rows and their parents, the
-// narrowing, the empty state, the jump, and the narration attributes. The
-// keyboard walk and Escape's return to the hierarchy are real focus movement, so
-// they stay e2e (browser-testing.md).
+// narrowing, the empty state, the jump, and the narration attributes. The arrow
+// walk and Escape's return to the hierarchy are real focus movement, so they stay
+// e2e (browser-testing.md).
+//
+// The Tab walk is the one thing split across both layers, deliberately, and the same
+// split PlanToc.test.ts already draws. Where the walk LANDS is a roving selection —
+// DOM state a mount can read — so it is pinned here. What only a browser can show is
+// in test/e2e/plan-breadcrumbs.e2e.ts: a real keypress reaching the primitive, and
+// the newly selected row being scrolled into the list's box.
 //
 // This file emits `svelte derived_inert` warnings — a few hundred on a scoped run,
 // two in the full unit suite. They are the harness, not the component: bits-ui's

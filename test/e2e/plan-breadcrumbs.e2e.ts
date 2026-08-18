@@ -6,10 +6,15 @@
 // scroll position measured with getBoundingClientRect, and the sibling menus are
 // bits-ui popovers whose open/close, portalling, and submenu reveal are real
 // interaction semantics — both e2e concerns per browser-testing.md. The `/`
-// filter is a second panel — a `command` in a `popover` — whose keyboard walk is a
-// roving SELECTION rather than moving focus, and whose narration attributes a screen
-// reader reads off the live DOM; all of it real-browser too. The bar's pure trail
-// logic, and the filter panel's structure and ARIA, are unit-tested in
+// filter is a second panel — a `command` in a `popover` — whose narration attributes
+// a screen reader reads off the live DOM; real-browser too.
+//
+// The filter's keyboard walk is the one thing split across both layers, deliberately.
+// Where it lands — the roving SELECTION, which is DOM state rather than focus — a
+// mount can see, so it is unit-tested. What only a browser can show is the rest: a
+// real keypress reaching the primitive, the browser's own tab move being suppressed,
+// and the newly selected row being scrolled into the list's box. Those are here. The
+// bar's pure trail logic and the filter panel's structure and ARIA are likewise in
 // ui/src/components/PlanBreadcrumbs.test.ts.
 
 import type { Locator, Page } from "@playwright/test";
@@ -76,6 +81,12 @@ const DEEP_PLAN = [
 // "the walk brought the row into view" a claim about scrolling rather than about a
 // list that already showed everything. Only the COUNT matters, so the sections carry
 // the same filler as the fixtures above rather than anything of their own.
+//
+// That count is sized against the vendored command-list's `max-h-72` (18rem), which
+// these thirteen rows overflow by about four. Raise that height and this fixture has
+// to grow with it — never relax the out-of-view half of the assertion, which is the
+// only thing proving the list scrolls at all. The ToC popup's TALL_PLAN carries the
+// same warning, having already been caught by it once.
 const LONG_PLAN = [
   "# Alpha",
   filler("Alpha"),
@@ -103,6 +114,8 @@ const SUBMENU = "[data-slot='dropdown-menu-sub-content']";
 const FILTER = ".plan-crumb-filter";
 const filterPanel = (page: Page) => page.locator(FILTER);
 const results = (page: Page) => filterPanel(page).getByRole("option");
+const resultsList = (page: Page) =>
+  filterPanel(page).getByRole("listbox", { name: "Matching headings" });
 const queryField = (page: Page) =>
   filterPanel(page).getByRole("combobox", { name: "Filter headings" });
 /** The row the roving selection is on. bits-ui marks it `data-selected`; the reader
@@ -110,13 +123,16 @@ const queryField = (page: Page) =>
 const walkedTo = (page: Page) => results(page).and(page.locator("[data-selected]"));
 
 /** Whether `row` sits inside the results list's visible box — the claim a unit mount
- * cannot make, since happy-dom lays nothing out. Throws rather than returning false
- * when either box is unmeasurable: one caller asserts this is FALSE, to prove the
- * list really scrolls, and a false-on-null would let "not measurable" pass as
- * "correctly out of view". `expect.poll` fails on a throw exactly as it should. */
+ * cannot make, since happy-dom lays nothing out.
+ *
+ * Throws rather than returning false when either box is unmeasurable: one caller
+ * asserts this is FALSE, to prove the list really scrolls, and a false-on-null would
+ * let "not measurable" pass as "correctly out of view". `expect.poll` fails on a throw
+ * exactly as it should. The one-pixel tolerance absorbs sub-pixel layout rounding,
+ * which would otherwise red a row correctly scrolled flush against an edge. */
 async function isWithinResults(page: Page, row: Locator): Promise<boolean> {
   const rowBox = await row.boundingBox();
-  const listBox = await filterPanel(page).locator("[data-slot='command-list']").boundingBox();
+  const listBox = await resultsList(page).boundingBox();
   if (rowBox === null || listBox === null) throw new Error("row or list has no bounding box");
   return rowBox.y >= listBox.y - 1 && rowBox.y + rowBox.height <= listBox.y + listBox.height + 1;
 }
@@ -652,11 +668,11 @@ test("the trail elides once the row cannot hold it, and the marker opens what it
 });
 
 // The bar's flat `/` filter (EXC-948, EXC-1098): a `command` inside a `popover`.
-// All of it is real browser behaviour — the key claim against the plan's own search,
-// the swap between the two panels, the roving walk through a set that changes under
-// it, the narration a screen reader reads off the live DOM, and Escape's step back
-// to the hierarchy — so it lives here rather than in the component unit, which pins
-// the panel's structure and ARIA instead.
+// What sits here is real browser behaviour — the key claim against the plan's own
+// search, the swap between the two panels, the roving walk through a set that changes
+// under it, the narration a screen reader reads off the live DOM, and Escape's step
+// back to the hierarchy. The component unit pins the panel's structure and ARIA, and
+// the half of the Tab walk a mount can see (see the file header).
 //
 // The arrows walk the results and `j`/`k` are ordinary query text, which is the one
 // place this panel's keyboard differs from the bar's own menus. A combobox keeps
