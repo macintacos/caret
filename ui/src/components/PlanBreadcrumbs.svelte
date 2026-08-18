@@ -48,6 +48,7 @@
   // destination is already known.
   import { type Snippet, untrack } from "svelte";
 
+  import Icon from "@/components/Icon.svelte";
   import * as Breadcrumb from "$lib/components/ui/breadcrumb/index.js";
   import * as Command from "$lib/components/ui/command/index.js";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
@@ -403,7 +404,17 @@
     if (list === null || bar === null) return;
     list.classList.add("measuring");
     const gap = Number.parseFloat(getComputedStyle(list).columnGap) || 0;
-    const widths = [...list.querySelectorAll<HTMLElement>(".crumb-item")].map((el) => el.offsetWidth);
+    // A level on its way out is still in the list for --dur-exit, so it is skipped here:
+    // visibleDepths reads this array BY INDEX as the depth, and a ghost would leave it one
+    // longer than the trail it is meant to describe. What the skip does NOT fix is `avail`
+    // below — the bar is flex: 1 in the control row, so on an over-full row its width
+    // still follows the ghost's content for those 140ms and a level can be kept that will
+    // not fit. That settles on the resize pass the ghost's own removal triggers, one flash
+    // later. The separator probe needs no skip: querySelector takes the FIRST one, which is
+    // always the marker's, and the marker leaves through no transition.
+    const widths = [...list.querySelectorAll<HTMLElement>(".crumb-item:not(.crumb-leaving)")].map(
+      (el) => el.offsetWidth,
+    );
     const separator =
       (list.querySelector<HTMLElement>("[data-slot='breadcrumb-separator']")?.offsetWidth ?? 0) +
       gap * 2;
@@ -443,6 +454,41 @@
     void barWidth;
     measure();
   });
+
+  // A level leaving the trail (EXC-1123). The `{#each}` below is keyed on DEPTH, which
+  // is what makes this fire on exactly the right change: a trail that shortens destroys
+  // the trailing keyed block, while a walk to a sibling keeps every key and only swaps
+  // the heading, so that swap keeps the `{#key}` text fade below and never runs an exit.
+  //
+  // The motion itself stays in CSS — `crumb-out` in the stylesheet — and this directive
+  // does nothing but hold the node in the list while it plays. That split is the point.
+  // Svelte drives a transition's own keyframes through the Web Animations API, which the
+  // reduced-motion clamp in styles/base.css cannot reach; a real CSS animation is
+  // governed by it like every other one in the chrome. Returning a duration read back off
+  // the computed style rather than mirroring --dur-exit as a constant follows from the
+  // same choice: there is no number to drift (svelte-rules.md § Motion principles), and
+  // under the preference the clamp collapses the wait along with the motion.
+  //
+  // Focus needs nothing here: Svelte's transition manager sets `inert` on an outroing
+  // element before it ever calls this, so a crumb stops being reachable — to the pointer,
+  // to Tab, and to assistive tech — the moment it starts leaving. Focus sitting on it
+  // drops to the document exactly as it does when the node is removed today, just 140ms
+  // sooner, which is why the exit needs no focus handling of its own.
+  //
+  // `|global` at the call sites is not decoration either. The <li> is rendered through
+  // the vendored component's `child` snippet, so it sits inside that component's `{#if}`
+  // — a block Svelte does not treat as transparent — and a local transition would never
+  // be collected when the crumb's own block is destroyed. The price is that a teardown of
+  // the WHOLE bar plays the exit too: entering compare mode holds the control row for
+  // --dur-exit while the crumbs fade, and the version picker stretches once they are gone.
+  function crumbOut(node: HTMLElement): { duration: number } {
+    node.classList.add("crumb-leaving");
+    const ms = Number.parseFloat(getComputedStyle(node).animationDuration) * 1000;
+    // No computed animation at all — happy-dom expands no `animation` shorthand — means
+    // there is nothing to wait for, so the node goes on the spot rather than leaning on
+    // Svelte's own falsy-duration short-circuit to catch the NaN.
+    return { duration: Number.isFinite(ms) ? ms : 0 };
+  }
 </script>
 
 <!-- One level of the heading tree. EVERY heading that encloses others nests them
@@ -550,8 +596,21 @@
             {@render menu(trail[1]?.siblings ?? [], markerTrigger)}
           </Breadcrumb.Item>
         {/if}
+        <!-- The crumb's leading chevron, which travelled in with it and leaves with it.
+             Rendered through the vendored component's `child` snippet rather than as a
+             plain <Breadcrumb.Separator>, because a transition directive attaches only to
+             a node in this template. The marker's separator above keeps the plain form:
+             the marker is punctuation for the levels the ROW could not hold, not a level
+             of its own, so it has nothing to animate out of. It does still sit in this
+             each-block, so a collapse all the way down to one level holds its DOM behind
+             the crumbs' outros and the "…" pops rather than fading — reachable only on a
+             row already tight enough to be eliding. -->
         {#if depth > 0}
-          <Breadcrumb.Separator class={hidden} />
+          <Breadcrumb.Separator class={hidden}>
+            {#snippet child({ props })}
+              <li {...props} out:crumbOut|global><Icon name="chevron-right" size={14} /></li>
+            {/snippet}
+          </Breadcrumb.Separator>
         {/if}
         {#snippet crumbTrigger(props: Record<string, unknown>)}
           <button
@@ -565,7 +624,9 @@
           >{#key crumb.heading.line}<span class="crumb-text">{crumb.heading.text}</span>{/key}</button>
         {/snippet}
         <Breadcrumb.Item class="crumb-item {current ? 'current' : ''} {hidden}">
-          {@render menu(crumb.siblings, crumbTrigger)}
+          {#snippet child({ props })}
+            <li {...props} out:crumbOut|global>{@render menu(crumb.siblings, crumbTrigger)}</li>
+          {/snippet}
         </Breadcrumb.Item>
       {/each}
     </Breadcrumb.List>
@@ -832,6 +893,32 @@
   :global(.plan-breadcrumbs .crumb-item),
   :global(.plan-breadcrumbs [data-slot="breadcrumb-separator"]) {
     animation: crumb-in var(--dur-enter) var(--ease-out);
+  }
+
+  /* And the way back out (EXC-1123), so a trail that shortens reads as the trail
+     retracting rather than as a jump. The enter's shape run backwards — the crumb sinks
+     back the quarter-rem it came from — deliberately NOT a width collapse: the levels
+     that stay are not asked to reflow smoothly into the gap, they simply close up.
+     The vocabulary's own asymmetry supplies the rest: --dur-exit against --dur-enter, on
+     --ease-in's accelerate-out against --ease-out's decelerate-in, so leaving is quicker
+     than arriving. `forwards` holds the last frame for the sliver between the animation
+     ending and the node going, which matters most under reduced motion, where the clamp
+     lands the crumb on that frame immediately.
+     The class is added by crumbOut() above, which also reads this rule's duration back to
+     know how long to keep the node. Declared AFTER the enter rule on purpose: the two tie
+     on specificity, so source order is what decides. */
+  @keyframes crumb-out {
+    from {
+      opacity: 1;
+      transform: none;
+    }
+    to {
+      opacity: 0;
+      transform: translateX(-0.25rem);
+    }
+  }
+  :global(.plan-breadcrumbs .crumb-leaving) {
+    animation: crumb-out var(--dur-exit) var(--ease-in) forwards;
   }
 
   /* Walking to a sibling at the same depth keeps the crumb mounted and swaps only

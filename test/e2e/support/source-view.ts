@@ -265,7 +265,15 @@ export async function revealGutterPlus(page: Page, line: number): Promise<Locato
  * finished rather than that the keystroke was delivered. Waiting here rather than in
  * each caller matters because the window is invisible from the call site, and it
  * closed on its own for as long as the jump's scroll outlasted it (EXC-1092 shortened
- * that scroll to 180ms, which is how the race surfaced). */
+ * that scroll to 180ms, which is how the race surfaced).
+ *
+ * One thing this does NOT wait out: a jump that shortens the trail leaves the departing
+ * crumb in the bar for --dur-exit while it animates away (EXC-1123), and that crumb keeps
+ * its aria-current, so `currentCrumb` resolves to two nodes for those 140ms and a second
+ * jump inside the window would trip strict mode. Every caller today is incidentally safe
+ * because each shortening is followed by an exact `toHaveText([…])` that cannot pass until
+ * the ghost is gone. A new spec that jumps twice in a row should settle the trail between
+ * them the same way. */
 export async function jumpToHeading(page: Page, heading: string): Promise<void> {
   await waitPastSafeModeGrace(page);
   await currentCrumb(page).click();

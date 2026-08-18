@@ -244,6 +244,44 @@ describe("the formerly-unguarded composer reveal references the tokens", () => {
   });
 });
 
+describe("the breadcrumb trail is animated in both directions", () => {
+  // EXC-1123. The bar re-roots continuously as the reviewer scrolls, so an arrival and a
+  // departure are the same event seen from two sides — and the pairing is the claim. The
+  // chrome sweep below only asks that a declaration reference SOME duration token; this
+  // asks that the two arms take the two halves of the pair, which is the whole reason the
+  // vocabulary ships --dur-enter/--ease-out and --dur-exit/--ease-in rather than one of
+  // each.
+  const bar = chromeSources["components/PlanBreadcrumbs.svelte"] ?? "";
+
+  test("the enter and the exit take opposite halves of the token pair", () => {
+    const enter = bar.match(/animation:\s*crumb-in\s+([^;]+);/)?.[1] ?? "";
+    const exit = bar.match(/animation:\s*crumb-out\s+([^;]+);/)?.[1] ?? "";
+    expect(enter).toContain("var(--dur-enter)");
+    expect(enter).toContain("var(--ease-out)");
+    expect(exit).toContain("var(--dur-exit)");
+    expect(exit).toContain("var(--ease-in)");
+  });
+
+  test("the exit mirrors the enter's shape rather than collapsing the crumb's box", () => {
+    // Read as the two arms, each asserted as an EXACT property set. Direction is half the
+    // claim — an inverted exit would still mention `opacity` and the right translate — and
+    // "does not resize the box" has to be a closed set rather than a blocklist of the few
+    // properties nobody proposed. The trail that stays is meant to close up on the gap,
+    // not to reflow smoothly into it, and a width arm here would also leave the bar's own
+    // elision measurement chasing a moving target.
+    const keyframes = bar.match(/@keyframes crumb-out\s*\{([\s\S]*?)\n {2}\}/)?.[1] ?? "";
+    const arm = (name: string): Record<string, string> =>
+      Object.fromEntries(
+        (keyframes.match(new RegExp(`${name}\\s*\\{([^}]*)\\}`))?.[1] ?? "")
+          .split(";")
+          .map((declaration) => declaration.split(":").map((part) => part.trim()))
+          .filter((parts): parts is [string, string] => parts.length === 2 && parts[0] !== ""),
+      );
+    expect(arm("from")).toEqual({ opacity: "1", transform: "none" });
+    expect(arm("to")).toEqual({ opacity: "0", transform: "translateX(-0.25rem)" });
+  });
+});
+
 describe("the ToC panel refines the vendored popover animation rather than replacing it", () => {
   // EXC-1107. The panel is one of the portalled shadcn surfaces, so its enter/exit is
   // tw-animate-css's rather than caret's — and bits-ui's portal presence waits on the

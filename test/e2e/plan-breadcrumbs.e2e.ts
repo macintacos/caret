@@ -19,7 +19,7 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { expect, motionToken, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { jumpToHeading, PLAN_SURFACE } from "@test/e2e/support/source-view.ts";
 
 // Each section must be taller than the viewport, so scrolling to a later one
@@ -94,6 +94,25 @@ const LONG_PLAN = [
     `## Section ${i + 1}`,
     filler(`Section ${i + 1}`),
   ]).flat(),
+  "",
+].join("\n\n");
+
+// Three level-2 sections under one top-level heading and NOTHING nested inside them, so a
+// walk from one to the next holds the trail at two levels for every frame of the scroll.
+// That is the only shape in which "walking to a sibling" is a clean claim: in a plan whose
+// sections have subsections, a jump between two of them really does pass through a
+// shallower heading on the way, and the trail really does shorten there.
+const SIBLING_PLAN = [
+  "# Alpha",
+  filler("Alpha"),
+  "## Bravo",
+  filler("Bravo"),
+  "## Delta",
+  filler("Delta"),
+  // Trailing, so Delta is not the last section — the plan cannot scroll far enough past
+  // its end to bring a final heading into the reading zone.
+  "## Foxtrot",
+  filler("Foxtrot"),
   "",
 ].join("\n\n");
 
@@ -1005,4 +1024,145 @@ test("compare mode drops the bar, which tracks no heading there", async ({ daemo
   expect(controls).not.toBeNull();
   expect(row).not.toBeNull();
   expect(row!.x + row!.width - (controls!.x + controls!.width)).toBeLessThan(40);
+});
+
+// EXC-1123's exit pass. Every spec below needs a real engine for the reason plan-toc.e2e.ts
+// records at length: happy-dom resolves no `animation` shorthand, fires no
+// `animationstart`/`animationend`, and implements no Web Animations API, so a mount suite
+// can reach nothing about motion at all.
+
+/** What the bar's own elements really animated, captured from the engine.
+ *
+ * Sampled at `animationstart` rather than at `animationend`, because the exit's whole
+ * point is that its element is leaving: the end races the removal, while the start is
+ * guaranteed to happen with the crumb still in the list. `animationstart` bubbles, so one
+ * listener on the bar covers every crumb and separator inside it — and the menus a jump
+ * opens are portalled to the body, so their own motion never lands in this log.
+ *
+ * Arming a recorder first and running the gesture into it is what makes "a departure is
+ * animated too" falsifiable: strip the exit and the array comes back empty rather than
+ * merely different. */
+type BarMotion = { name: string; slot: string; duration: number; easing: string }[];
+
+async function armBarMotion(page: Page): Promise<void> {
+  await page.locator(BAR).evaluate((bar) => {
+    const w = window as Window & { __barMotion?: BarMotion };
+    w.__barMotion = [];
+    bar.addEventListener("animationstart", (event) => {
+      const target = event.target as HTMLElement;
+      const style = getComputedStyle(target);
+      w.__barMotion?.push({
+        name: (event as AnimationEvent).animationName,
+        slot: target.dataset.slot ?? "",
+        // Both read as the animation BEGINS, the one moment the leaving cascade is live on
+        // a crumb that is about to stop existing.
+        duration: Number.parseFloat(style.animationDuration),
+        easing: style.animationTimingFunction,
+      });
+    });
+  });
+}
+
+const barMotion = (page: Page): Promise<BarMotion> =>
+  page.evaluate(() => (window as Window & { __barMotion?: BarMotion }).__barMotion ?? []);
+
+/** Matched by SUFFIX, never by equality: Svelte hashes a component's `@keyframes` names,
+ * so what the engine reports is `svelte-<hash>-crumb-out` and the hash moves whenever the
+ * component's CSS is edited. */
+const named = (log: BarMotion, keyframes: string): BarMotion =>
+  log.filter((event) => event.name.endsWith(keyframes));
+
+test("a level leaving the trail plays the exit, and its separator leaves with it", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+
+  // Armed before the DEEPENING as well, so both halves of the pairing are sampled off the
+  // same engine on the same elements. That is what lets the easing assertion below be a
+  // comparison rather than two readings that happen to differ.
+  await armBarMotion(page);
+  await jumpTo(page, "Charlie");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
+  await jumpTo(page, "Bravo");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo"]);
+
+  const log = await barMotion(page);
+  const leaving = named(log, "crumb-out");
+  const arriving = named(log, "crumb-in");
+  // The crumb AND the chevron that travelled in with it. A separator left hanging for a
+  // frame after its level has gone is the artefact the pairing exists to avoid.
+  expect([...new Set(leaving.map((event) => event.slot))].sort()).toEqual([
+    "breadcrumb-item",
+    "breadcrumb-separator",
+  ]);
+
+  // On the exit tier, not the enter one. The pairing is the claim, so the two tokens are
+  // read as well — drifted to the same number they would make this assertion vacuous.
+  const exitSeconds = await motionToken(page, "--dur-exit");
+  const enterSeconds = await motionToken(page, "--dur-enter");
+  expect(exitSeconds).not.toBe(enterSeconds);
+  expect(arriving.length).toBeGreaterThan(0);
+  for (const event of leaving) expect(event.duration).toBeCloseTo(exitSeconds, 3);
+  for (const event of arriving) expect(event.duration).toBeCloseTo(enterSeconds, 3);
+
+  // And the curve turns around with it: leaving accelerates out where arriving decelerated
+  // in. Read off the animations that really ran, so --ease-in is pinned by the engine
+  // rather than only by a regex over the stylesheet.
+  expect(leaving[0]?.easing).not.toBe(arriving[0]?.easing);
+});
+
+test("walking to a sibling swaps the label without firing the exit", async ({ daemon, page }) => {
+  // SIBLING_PLAN rather than NESTED_PLAN, and that is the spec rather than a convenience.
+  // A jump between two sections that HAVE subsections scrolls through one of those
+  // subsections, so the trail genuinely deepens and shortens on the way and an exit there
+  // is correct. What must not animate out is the swap itself: a re-root that leaves the
+  // depth where it was.
+  await daemon.seed({ plan: SIBLING_PLAN });
+  await page.goto("/");
+
+  await jumpTo(page, "Bravo");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo"]);
+
+  await armBarMotion(page);
+  await jumpTo(page, "Delta");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Delta"]);
+
+  const log = await barMotion(page);
+  // No level was destroyed: the crumb kept its box, keyed on depth, and swapped its label.
+  // An exit here would read as the trail shortening when it did not.
+  expect(named(log, "crumb-out")).toEqual([]);
+  expect(named(log, "crumb-text-in").length).toBeGreaterThan(0);
+});
+
+test("reduced motion collapses the exit rather than removing it", async ({ daemon, page }) => {
+  // AC5, emulated HERE rather than in playwright.config.ts, for the reason plan-toc.e2e.ts
+  // gives: turning `reduce` on suite-wide would stop this file ever exercising the animated
+  // path that is the whole subject of the change.
+  //
+  // The guard is the global one in styles/base.css, reaching the bar through its `#app *`
+  // arm; there is deliberately no reduced-motion block in the component. It collapses the
+  // duration rather than deleting the animation, and here that distinction is load-bearing
+  // twice over: the same duration is what holds the leaving crumb in the DOM, so an
+  // `animation: none` would leave a wait behind with nothing left to wait for.
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+
+  await jumpTo(page, "Charlie");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
+
+  await armBarMotion(page);
+  await jumpTo(page, "Bravo");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo"]);
+
+  const leaving = named(await barMotion(page), "crumb-out");
+  expect(leaving.length).toBeGreaterThan(0);
+  for (const event of leaving) expect(event.duration).toBeLessThan(0.001);
+
+  // The vocabulary underneath is untouched — what changed is what the cascade computed on
+  // the crumb. motionToken probes outside #app and carries no data-slot, so neither arm of
+  // the guard reaches it.
+  expect(await motionToken(page, "--dur-exit")).toBeGreaterThan(0.1);
 });
