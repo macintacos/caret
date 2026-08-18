@@ -22,6 +22,11 @@
   // EXC-1121: Tab and Shift+Tab walk whichever list is open — a crumb's menu, a
   // submenu, or the filter panel below — and wrap at its ends.
   //
+  // EXC-1120: each arrow is its vim twin, ArrowLeft included, and Escape means
+  // one step out at every depth the bar has — filter back to hierarchy, hierarchy
+  // shut, and then out of the bar itself, which stays on screen with nothing in
+  // it focused.
+  //
   // EXC-948: `/` swaps the open menu for a flat filter over EVERY heading in the
   // plan — the browsing model the menus give you, traded for the one you want
   // when you already know the destination. Escape swaps the hierarchy back
@@ -46,11 +51,6 @@
   // This bar has one row's width to spend, which a path does not fit in.
   // Drilling down is what the crumb menus are for; the filter is for when the
   // destination is already known.
-  //
-  // EXC-1120: the arrow keys are their vim twins everywhere, ArrowLeft included,
-  // and Escape means one step out at every depth the bar has — filter back to
-  // hierarchy, hierarchy shut, and then out of the bar itself, which stays on
-  // screen with nothing in it focused.
   import { type Snippet, untrack } from "svelte";
 
   import Icon from "@/components/Icon.svelte";
@@ -169,7 +169,9 @@
   //   2. The window dispatcher yields on defaultPrevented, so the plan's own j/k
   //      line cursor stays put behind the open menu.
   // The re-dispatch below cannot loop: it carries an ARROW, which is neither Tab
-  // nor in the map, so the second pass returns at the lookup rather than
+  // nor in the map. ArrowLeft's own branch is the one thing a second pass does
+  // reach — by design, since that branch is where `h` takes its cross-crumb step
+  // — and whether the step fires or not, the pass ends at the lookup rather than
   // dispatching a third. (Before EXC-957 portalled the SubContent, a submenu's
   // keydown also bubbled into the parent Content's copy of this handler, and
   // defaultPrevented was what stopped that. It no longer reaches there; both still
@@ -204,15 +206,26 @@
       filtering = true;
       return;
     }
-    // ArrowLeft takes the same step `h` does (EXC-1120), and has to be offered it
-    // BEFORE the lookup below: the map holds ArrowLeft as a value rather than a
-    // key, so the arrow returns at that lookup and would never reach the `h` line.
-    // preventDefault only when the step actually fires — an ArrowLeft with a
-    // submenu still to close belongs to the primitive, whose SUB_CLOSE_KEYS
-    // handling it reaches by falling through untouched. The `h` re-dispatch below
-    // therefore passes back through here, where openPreviousCrumb has already
-    // answered false on the same DOM and answers false again.
-    if (e.key === "ArrowLeft" && openPreviousCrumb()) {
+    // At the top of a crumb's own menu there is no submenu for ArrowLeft to
+    // close, so it steps out to the crumb before it in the trail instead. That is
+    // the "up" a reviewer means once the menu they are in is already the outermost
+    // one open — and without it the keyboard could only ever reach the subtree of
+    // whichever crumb the menu was opened on, while a mouse could reach the whole
+    // plan from the outermost one.
+    //
+    // `h` gets this for free rather than through a branch of its own (EXC-1120):
+    // the map below turns it into an ArrowLeft, which arrives back here and takes
+    // the step. One call site, so the two keys cannot drift apart.
+    //
+    // It sits BEFORE the lookup because the map holds ArrowLeft as a value rather
+    // than a key, so a real ArrowLeft returns at that lookup. preventDefault only
+    // when the step fires: an ArrowLeft the step declines belongs to the
+    // primitive, whose SUB_CLOSE_KEYS handling it reaches by falling through
+    // untouched. Shift is excluded here where the map leaves it alone, because on
+    // an arrow it is a distinct chord rather than a different `key` — `h` shifted
+    // is `H` and never arrives at all, so filtering it is what keeps the two the
+    // same key.
+    if (e.key === "ArrowLeft" && !e.shiftKey && openPreviousCrumb()) {
       e.preventDefault();
       return;
     }
@@ -221,13 +234,6 @@
     const arrow = e.key === "Tab" ? (e.shiftKey ? "ArrowUp" : "ArrowDown") : MENU_ARROWS[e.key];
     if (arrow === undefined) return;
     e.preventDefault();
-    // At the top of a crumb's own menu there is no submenu for ArrowLeft to
-    // close, so `h` steps out to the crumb before it in the trail instead. That
-    // is the "up" a reviewer means once the menu they are in is already the
-    // outermost one open — and without it the keyboard could only ever reach the
-    // subtree of whichever crumb the menu was opened on, while a mouse could
-    // reach the whole plan from the outermost one.
-    if (e.key === "h" && openPreviousCrumb()) return;
     document.activeElement?.dispatchEvent(
       new KeyboardEvent("keydown", { key: arrow, bubbles: true, cancelable: true }),
     );
@@ -263,11 +269,14 @@
   // marker the same behaviour without a second copy of it: both are buttons
   // inside this element, and both carry aria-expanded.
   //
-  // That attribute is also the whole gate, and it is what keeps the FIRST Escape
-  // unchanged. A menu opened from the keyboard holds focus inside its portalled
-  // content, so its Escape never reaches here at all; one opened with the mouse
-  // leaves focus on the trigger, so its Escape DOES bubble through — and blurring
-  // on it would collapse the two steps into one for mouse users.
+  // What keeps the FIRST Escape unchanged is the portal, not the check below.
+  // Every surface the bar opens — Content, SubContent, the filter popover — is
+  // portalled out of this element AND takes focus on open, so a dismissal fires
+  // out there and never bubbles in here at all. The aria-expanded query is a
+  // guard on the invariant rather than the mechanism behind it: nothing in the
+  // bar may blur while the bar still owns an open surface. It costs two lines and
+  // is the only thing standing between a change to that focus model — ours or
+  // bits-ui's — and an Escape that silently does two steps at once.
   //
   // Deliberately not preventDefault'ed: an Escape on a focused crumb already
   // reaches the window dispatcher today, so the blur is the only thing this adds.
@@ -275,8 +284,7 @@
   // focused costs the reviewer nothing.
   function onBarKeydown(e: KeyboardEvent): void {
     if (e.key !== "Escape" || e.ctrlKey || e.altKey || e.metaKey) return;
-    const open = barEl?.querySelector<HTMLButtonElement>('[aria-expanded="true"]') ?? null;
-    if (open !== null) return;
+    if (barEl?.querySelector('[aria-expanded="true"]')) return;
     (document.activeElement as HTMLElement | null)?.blur();
   }
 
