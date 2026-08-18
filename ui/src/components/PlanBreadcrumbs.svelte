@@ -133,34 +133,41 @@
   // h/j/k/l walk the open menu, re-dispatched as the arrow keys above — so a
   // submenu (whose content has its own roving group) walks with the same few
   // lines, and disabled rows, wrapping, and Enter-to-select all stay the
-  // primitive's. Handled here, on the content, rather than as a global
+  // primitive's. Tab and Shift+Tab join them on the same two arrows (EXC-1121), so
+  // they walk whichever level is already open and cross no submenu boundary in
+  // either direction: Tab was never one of bits-ui's SUB_OPEN_KEYS or
+  // SUB_CLOSE_KEYS, so the arrow it becomes is the only thing it can do here.
+  // Handled here, on the content, rather than as a global
   // binding, because the dispatcher suppresses nothing just because a menu owns
   // focus. That is only half of what CommentNavigator does (EXC-792): it ALSO
   // extends the dispatcher's editing-context check in App.svelte, which buys it
-  // every key at once. This claims four keys, so the rest of the review keys still
+  // every key at once. This claims five keys, so the rest of the review keys still
   // reach the plan while a crumb menu is open.
   //
   // Only bare keys. A command modifier means the reviewer is talking to the
   // browser or the OS (⌘J is Downloads), so those pass straight through — the same
-  // line bits-ui's typeahead and the dispatcher's own isBareSpec draw. A shifted
-  // J/K never arrives here at all: the key is then uppercase.
+  // line bits-ui's typeahead and the dispatcher's own isBareSpec draw. Shift is not
+  // one of them, because it is how Tab carries its direction; a shifted J/K never
+  // arrives here at all, since the key is then uppercase.
   //
   // The one preventDefault does two jobs, and the order each needs is guaranteed
   // by svelte-toolbelt's composeHandlers, which re-checks defaultPrevented before
   // EVERY handler in a merged chain:
   //   1. bits-ui merges this handler ahead of its own, so the letter never reaches
-  //      the menu's typeahead and jumps to some row starting with "j".
+  //      the menu's typeahead and jumps to some row starting with "j" — and Tab
+  //      never reaches the primitive's own Tab, which closes the whole menu and
+  //      moves focus to the first tabbable past the root trigger.
   //   2. The window dispatcher yields on defaultPrevented, so the plan's own j/k
   //      line cursor stays put behind the open menu.
-  // The re-dispatch below cannot loop: it carries an ARROW, which the map does not
-  // hold, so the second pass returns at the lookup rather than dispatching a
-  // third. (Before EXC-957 portalled the SubContent, a submenu's keydown also
-  // bubbled into the parent Content's copy of this handler, and defaultPrevented
-  // was what stopped that. It no longer reaches there; both still carry the
-  // handler, which is why the walk works at every depth either way.)
-  // Job 2 is vacuous for h and l — neither is bound in keymap.ts — but they take
-  // the same path as j/k rather than a second, quieter one, so a later binding on
-  // either key cannot reach the plan from behind an open menu.
+  // The re-dispatch below cannot loop: it carries an ARROW, which is neither Tab
+  // nor in the map, so the second pass returns at the lookup rather than
+  // dispatching a third. (Before EXC-957 portalled the SubContent, a submenu's
+  // keydown also bubbled into the parent Content's copy of this handler, and
+  // defaultPrevented was what stopped that. It no longer reaches there; both still
+  // carry the handler, which is why the walk works at every depth either way.)
+  // Job 2 is vacuous for h, l and Tab — none of them is bound in keymap.ts — but
+  // they take the same path as j/k rather than a second, quieter one, so a later
+  // binding on any of them cannot reach the plan from behind an open menu.
   // Arrow keys are untouched and keep working.
   function onMenuKeydown(e: KeyboardEvent): void {
     if (e.ctrlKey || e.altKey || e.metaKey) return;
@@ -188,7 +195,9 @@
       filtering = true;
       return;
     }
-    const arrow = MENU_ARROWS[e.key];
+    // Tab sits beside the map rather than in it: the map is keyed on a bare
+    // character, and Tab's direction rides the shift modifier instead.
+    const arrow = e.key === "Tab" ? (e.shiftKey ? "ArrowUp" : "ArrowDown") : MENU_ARROWS[e.key];
     if (arrow === undefined) return;
     e.preventDefault();
     // At the top of a crumb's own menu there is no submenu for ArrowLeft to

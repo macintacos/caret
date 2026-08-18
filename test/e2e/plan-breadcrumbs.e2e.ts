@@ -314,6 +314,80 @@ test("j and k walk a nested submenu, not the plan behind it", async ({ daemon, p
   );
 });
 
+// EXC-1121: Tab walks the open list too, and stays on the level it is on. Left to
+// bits-ui the key closes the whole menu and moves focus to the next tabbable after
+// the root trigger, which is the least obvious thing it could do from inside an open
+// list. Real focus movement through the primitive's roving group, so it lives here.
+
+test("Tab and Shift+Tab walk the open menu, wrapping at its ends", async ({ daemon, page }) => {
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+
+  await jumpTo(page, "Charlie");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
+
+  const menu = page.locator(MENU);
+  await page.locator(CRUMB).nth(1).click();
+  await expect(menu.getByRole("menuitem")).toHaveText(["Bravo", "Delta", "Foxtrot"]);
+
+  await page.keyboard.press("Tab");
+  await expect(menu.getByRole("menuitem", { name: "Bravo" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(menu.getByRole("menuitem", { name: "Delta" })).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(menu.getByRole("menuitem", { name: "Bravo" })).toBeFocused();
+
+  // Past the last row and back to the first, and the same in reverse. The menus
+  // take this from the primitive's own `loop`, which defaults on.
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  await expect(menu.getByRole("menuitem", { name: "Foxtrot" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(menu.getByRole("menuitem", { name: "Bravo" })).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(menu.getByRole("menuitem", { name: "Foxtrot" })).toBeFocused();
+
+  // The menu is still the one that was open, on the crumb it was opened from: Tab
+  // neither dismissed it, nor opened a submenu, nor stepped the bar to another
+  // trigger.
+  await expect(menu).toHaveCount(1);
+  await expect(page.locator(SUBMENU)).toHaveCount(0);
+  await expect(page.locator(CRUMB).nth(1)).toHaveAttribute("aria-expanded", "true");
+});
+
+test("Tab walks a submenu without stepping out of it", async ({ daemon, page }) => {
+  // A submenu's content has its own roving group and its own copy of the handler,
+  // so the walk has to keep working one level in — and `Tab` was never one of
+  // bits-ui's SUB_OPEN_KEYS or SUB_CLOSE_KEYS, so it cannot cross the boundary in
+  // either direction.
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+
+  await jumpTo(page, "Charlie");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
+
+  await page.locator(CRUMB).first().click();
+  await page.keyboard.press("j");
+  await page.keyboard.press("ArrowRight");
+
+  const submenu = page.locator(SUBMENU);
+  await expect(submenu.getByRole("menuitem", { name: "Bravo" })).toBeFocused();
+
+  await page.keyboard.press("Tab");
+  await expect(submenu.getByRole("menuitem", { name: "Delta" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(submenu.getByRole("menuitem", { name: "Foxtrot" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(submenu.getByRole("menuitem", { name: "Bravo" })).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(submenu.getByRole("menuitem", { name: "Foxtrot" })).toBeFocused();
+
+  // One submenu, still open, with the level above it still standing: nothing was
+  // entered and nothing was closed.
+  await expect(submenu).toHaveCount(1);
+  await expect(page.locator(MENU)).toHaveCount(1);
+});
+
 // EXC-957: the menus recurse the whole heading tree, so the bar reaches any
 // heading in the plan; h and l walk that hierarchy alongside j and k; and the
 // trail elides on the room the row measures rather than on how deep it is. Focus
