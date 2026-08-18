@@ -1720,9 +1720,9 @@
 
 <style>
   /* The control bar above the surface. Carries the bar chrome (raised paper,
-     hairline rule) for the version-compare picker: the "Versions" toggle
-     sits at the left, and (in compare mode) the layout / indicator toggles are
-     pushed to the right edge. The horizontal inset is the app's shared --bar-inset
+     hairline rule) for the version-compare picker: the "Versions" toggle sits at
+     the left, and (in compare mode) the layout / indicator toggles are pushed to
+     the right edge. The horizontal inset is the app's shared --bar-inset
      (the same the TopBar and the shell use), symmetric now that EXC-949 removed
      the contents rail the left edge used to align with. */
   .control-row {
@@ -1755,11 +1755,11 @@
     min-width: 0;
   }
 
-  /* In compare mode the picker owns the bar: it spans the row so the "Compare
-     versions" toggle sits at the left and its display toggles (margin-left: auto)
-     reach the right edge. Reading a single version it sizes to its toggle instead,
-     so the breadcrumbs sit directly beside that toggle rather than being shoved to
-     the right edge by a stretched picker. The modifier tracks
+  /* In compare mode the picker owns the bar: it spans the row so the "Versions"
+     toggle sits at the left and its display toggles (margin-left: auto) reach the
+     right edge. Reading a single version it sizes to its toggle instead, so the
+     breadcrumbs sit directly beside that toggle rather than being shoved to the
+     right edge by a stretched picker. The modifier tracks
      `compareStore.comparing` — the same flag the .controls cluster renders on. */
   .control-row :global(.compare-picker) {
     flex: 0 1 auto;

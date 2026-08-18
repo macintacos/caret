@@ -115,8 +115,7 @@ describe("VersionComparePicker compare icon", () => {
     expect(toggle!.querySelector(".icon svg")).not.toBeNull();
     // The icon is decorative, so it adds no text: the visible label stays exactly
     // "Versions". A stray label= on the Icon would break this at unit speed. The
-    // EXC-804 count badge is subtracted — it's chrome beside the label, not part
-    // of it.
+    // EXC-804 count badge is subtracted — chrome beside the label, not part of it.
     expect(labelOf(toggle!)).toBe("Versions");
     // EXC-808: the icon leads the label (sits to its left), so it precedes the
     // "Versions" text in DOM order.
@@ -206,9 +205,9 @@ describe("VersionComparePicker version count badge", () => {
   });
 
   // Every accessible name this toggle can take still STARTS with the visible label,
-  // which is what keeps ~20 e2e `getByRole("button", { name: "Versions" })`
-  // locators resolving (Playwright matches a substring) and satisfies WCAG 2.5.3
-  // Label in Name. Previously implicit; pinned here so a reworded label fails fast.
+  // which is what keeps the e2e `getByRole("button", { name: "Versions" })` locators
+  // resolving (Playwright matches a substring) and satisfies WCAG 2.5.3 Label in
+  // Name. Pinned here so a reworded label fails fast.
   test("every accessible name begins with the visible label", () => {
     for (const n of [1, 2, 3]) {
       const { target } = render(VersionComparePicker, {
