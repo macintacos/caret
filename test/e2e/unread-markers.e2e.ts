@@ -42,7 +42,8 @@ test("marks a plan arriving mid-review, and clears the mark on opening it", asyn
   await expect(dot).toBeVisible();
 
   // In the menu the mark is per row, and only the arrival carries one.
-  const rowMark = (name: string) => page.getByRole("menuitem", { name }).locator(".opt-unread");
+  const rowMark = (name: string) =>
+    page.getByRole("menuitem", { name }).locator(".opt-unread .dot");
   await trigger.click();
   await expect(rowMark("Plan Gamma")).toBeVisible();
   await expect(rowMark("Plan Alpha")).toHaveCount(0);

@@ -28,7 +28,7 @@ includes it.
 ## Everyday tasks
 
 ```sh
-mise run dev        # isolated daemon + a fake plan + the Vite UI on an ephemeral port
+mise run dev        # isolated daemon + three fake plans + the Vite UI on an ephemeral port
 mise run preflight  # the pre-push gate: lint + unit/e2e tests + build + artifact smoke
 ```
 

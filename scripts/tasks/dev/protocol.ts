@@ -318,7 +318,9 @@ export function nextPlan(
 
 /** Retitle the fake plan's h1 so an extra review is distinguishable from the
  * primary one in the switcher and in the notification body (review titles
- * derive from the plan's first heading, src/review/threading.ts). */
-export function extraPlan(plan: string, n: number): string {
-  return plan.replace(/^# .*$/m, (title) => `${title} — extra ${n}`);
+ * derive from the plan's first heading, src/review/threading.ts). `label` takes
+ * a string where two sources of extras coexist — the timed seeder and the `n`
+ * key each count from 1, so a bare number would title them identically. */
+export function extraPlan(plan: string, label: number | string): string {
+  return plan.replace(/^# .*$/m, (title) => `${title} — extra ${label}`);
 }

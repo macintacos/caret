@@ -1,3 +1,8 @@
+// `injectKey` — the dev task's n/r stdin handler, which produces the two events
+// that raise an unread marker (a fresh plan arriving, an existing one revised).
+// It is a pure handler over injected effects, so these cases drive it with fakes;
+// the real daemon calls behind those effects are wired in scripts/tasks/dev/driver.ts.
+
 import { expect, test } from "bun:test";
 
 import type { ClientReview } from "@/lib/types.ts";

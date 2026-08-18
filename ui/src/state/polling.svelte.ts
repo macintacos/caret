@@ -137,6 +137,9 @@ export interface ReviewSelection {
   readonly daemonChanged: boolean;
   /** Ids of plans that arrived or were revised while you read another one. */
   readonly unread: string[];
+  /** Bumped once per poll that raised a mark; the switcher replays its dot's
+   * animation off this rather than off an unread-count delta. */
+  readonly arrivals: number;
 
   /** Mark the daemon connected/disconnected from an API outcome. */
   setConnected: (value: boolean) => void;
@@ -171,6 +174,10 @@ export interface SelectionStore {
   // bare id does not. An array rather than a Set because $state proxies plain
   // arrays but not Set/Map, and the list is a handful of entries.
   unread: string[];
+  // Monotonic count of polls that raised at least one mark, so the switcher can
+  // replay its dot's animation on a genuine arrival. A count delta cannot say
+  // that: a tick that clears one mark and raises another leaves the total at one.
+  arrivals: number;
 }
 
 /**
@@ -191,9 +198,10 @@ export function createReviewSelection(
     store.activeId = id;
     // Making a plan active is what reads it, so clearing keys off this funnel: a
     // dropdown pick, a deep link, mergeReviews' re-select and afterResolve's
-    // auto-advance all arrive here. Scoped by id, never by (id, version), so a
-    // plan bumped twice while unread clears in one select.
-    if (id !== null) store.unread = store.unread.filter((u) => u !== id);
+    // auto-advance all arrive here. Scoped by id, so a plan bumped twice while
+    // unread clears in one select.
+    if (id !== null && store.unread.includes(id))
+      store.unread = store.unread.filter((u) => u !== id);
     setUrl(id);
   };
 
@@ -224,15 +232,20 @@ export function createReviewSelection(
     const after = new Set(incoming.map((r) => r.id));
     if (store.reviews.some((r) => !after.has(r.id))) deps.onSound?.("planExpired");
     const fresh = news.filter((r) => r.id !== store.activeId && !store.unread.includes(r.id));
-    if (fresh.length > 0) store.unread = [...store.unread, ...fresh.map((r) => r.id)];
+    if (fresh.length > 0) {
+      store.unread = [...store.unread, ...fresh.map((r) => r.id)];
+      store.arrivals++;
+    }
   }
 
-  /** Drop unread entries for plans no longer present, through both removal paths,
-   * so a mark can never outlive the row that would clear it. */
+  /** Drop unread entries for plans no longer present. Called from both removal
+   * paths — `mergeReviews` for expiry, `afterResolve` for resolve — so a mark can
+   * never outlive the row that would clear it. */
   const pruneUnread = (present: readonly ClientReview[]) => {
     if (store.unread.length === 0) return;
     const ids = new Set(present.map((r) => r.id));
-    store.unread = store.unread.filter((id) => ids.has(id));
+    const next = store.unread.filter((id) => ids.has(id));
+    if (next.length !== store.unread.length) store.unread = next;
   };
 
   return {
@@ -253,6 +266,9 @@ export function createReviewSelection(
     },
     get unread() {
       return store.unread;
+    },
+    get arrivals() {
+      return store.arrivals;
     },
     setConnected(value) {
       // Sound the transition only. Every poll tick reports the connection, so a

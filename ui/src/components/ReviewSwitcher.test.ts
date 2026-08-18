@@ -21,6 +21,7 @@ describe("ReviewSwitcher single review", () => {
       reviews: [review("r1", "Only plan")],
       activeId: "r1",
       unread: [],
+      arrivals: 0,
       onSelect: () => {},
     });
     expect(target.querySelector(".title")!.textContent).toBe("Only plan");
@@ -34,6 +35,7 @@ describe("ReviewSwitcher single review", () => {
       reviews: [review("r1", "Only plan")],
       activeId: "r1",
       unread: [],
+      arrivals: 0,
       onSelect: () => {},
     });
     expect(target.querySelector("[data-slot='dropdown-menu-trigger']")).toBeNull();
@@ -45,6 +47,7 @@ describe("ReviewSwitcher single review", () => {
       reviews: [review("r1", "Plan")],
       activeId: "missing",
       unread: [],
+      arrivals: 0,
       onSelect: () => {},
     });
     expect(target.querySelector(".title")!.textContent).toBe("—");
@@ -55,7 +58,7 @@ describe("ReviewSwitcher multiple reviews", () => {
   const reviews = [review("r1", "First"), review("r2", "Second"), review("r3", "Third")];
 
   test("renders a dropdown trigger carrying the active title", () => {
-    const props = { reviews, activeId: "r2", unread: [], onSelect: () => {} };
+    const props = { reviews, activeId: "r2", unread: [], arrivals: 0, onSelect: () => {} };
     const { target } = render(ReviewSwitcher, props);
     expect(target.querySelector(".switcher-trigger")).not.toBeNull();
     expect(target.querySelector(".title")!.textContent).toBe("Second");
@@ -63,7 +66,7 @@ describe("ReviewSwitcher multiple reviews", () => {
   });
 
   test("shows the review count in the trigger badge", () => {
-    const props = { reviews, activeId: "r1", unread: [], onSelect: () => {} };
+    const props = { reviews, activeId: "r1", unread: [], arrivals: 0, onSelect: () => {} };
     const { target } = render(ReviewSwitcher, props);
     expect(target.querySelector(".count")!.textContent).toBe("3");
   });
@@ -78,6 +81,7 @@ describe("ReviewSwitcher multiple reviews", () => {
         reviews: many,
         activeId: "r0",
         unread: [],
+        arrivals: 0,
         onSelect: () => {},
       });
       const badge = target.querySelector(".count")!;
@@ -95,13 +99,13 @@ describe("ReviewSwitcher unread marker (EXC-411)", () => {
   const reviews = [review("r1", "First"), review("r2", "Second")];
 
   test("shows the trigger dot when a review is unread", () => {
-    const props = { reviews, activeId: "r1", unread: ["r2"], onSelect: () => {} };
+    const props = { reviews, activeId: "r1", unread: ["r2"], arrivals: 0, onSelect: () => {} };
     const { target } = render(ReviewSwitcher, props);
     expect(target.querySelector(".unread-dot")).not.toBeNull();
   });
 
   test("shows no trigger dot when nothing is unread", () => {
-    const props = { reviews, activeId: "r1", unread: [], onSelect: () => {} };
+    const props = { reviews, activeId: "r1", unread: [], arrivals: 0, onSelect: () => {} };
     const { target } = render(ReviewSwitcher, props);
     expect(target.querySelector(".unread-dot")).toBeNull();
   });
@@ -109,7 +113,7 @@ describe("ReviewSwitcher unread marker (EXC-411)", () => {
   // The dot is aria-hidden, so the tally has to ride the trigger's accessible
   // description — the same hidden span the pending count already uses.
   test("folds the unread tally into the trigger's accessible description", () => {
-    const props = { reviews, activeId: "r1", unread: ["r2"], onSelect: () => {} };
+    const props = { reviews, activeId: "r1", unread: ["r2"], arrivals: 0, onSelect: () => {} };
     const { target } = render(ReviewSwitcher, props);
     expect(target.querySelector("#switcher-count")!.textContent).toBe(
       "2 reviews pending, 1 unread",
@@ -117,7 +121,7 @@ describe("ReviewSwitcher unread marker (EXC-411)", () => {
   });
 
   test("describes only the pending count when nothing is unread", () => {
-    const props = { reviews, activeId: "r1", unread: [], onSelect: () => {} };
+    const props = { reviews, activeId: "r1", unread: [], arrivals: 0, onSelect: () => {} };
     const { target } = render(ReviewSwitcher, props);
     expect(target.querySelector("#switcher-count")!.textContent).toBe("2 reviews pending");
   });
@@ -127,6 +131,7 @@ describe("ReviewSwitcher unread marker (EXC-411)", () => {
       reviews: [review("r1", "Only plan")],
       activeId: "r1",
       unread: ["r1"],
+      arrivals: 0,
       onSelect: () => {},
     };
     const { target } = render(ReviewSwitcher, props);
@@ -143,6 +148,7 @@ describe("ReviewSwitcher strips markdown links from the trigger title", () => {
       reviews: [review("r1", linked)],
       activeId: "r1",
       unread: [],
+      arrivals: 0,
       onSelect: () => {},
     });
     expect(target.querySelector(".title")!.textContent).toBe(stripped);
@@ -153,6 +159,7 @@ describe("ReviewSwitcher strips markdown links from the trigger title", () => {
       reviews: [review("r1", linked), review("r2", "Second")],
       activeId: "r1",
       unread: [],
+      arrivals: 0,
       onSelect: () => {},
     });
     expect(target.querySelector(".title")!.textContent).toBe(stripped);

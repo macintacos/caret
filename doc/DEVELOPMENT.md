@@ -198,11 +198,11 @@ persisted key isn't registered.
 
 Boot opens three pending plans, in the order the switcher lists them:
 
-| Plan                  | What it is                                    | Versions          |
-| --------------------- | --------------------------------------------- | ----------------- |
-| `fake-plan.md`        | The long markdown stress test — the showcase below | `--num-versions` |
-| `short-plan-a.md`     | _Retry the worker health check before declaring it dead_ | 2          |
-| `short-plan-b.md`     | _Move the session cookie's expiry into config_ | 2                 |
+| Plan              | What it is                                               | Versions         |
+| ----------------- | -------------------------------------------------------- | ---------------- |
+| `fake-plan.md`    | The long markdown stress test — the showcase below       | `--num-versions` |
+| `short-plan-a.md` | _Retry the worker health check before declaring it dead_ | 2                |
+| `short-plan-b.md` | _Move the session cookie's expiry into config_           | 2                |
 
 The big one is bootstrapped first and the daemon sorts pending reviews oldest-first, so it
 stays at the top of the switcher and is the plan you land on. The two short ones exist to
@@ -227,18 +227,18 @@ they do nothing when stdin is not a TTY; when it is, the driver prints a reminde
   bottom of the switcher, not the one you are reading. Its own loop appends a `Revision N`
   section and resubmits onto the same review id, so that plan is **revised** in place.
 
-The keys are read in line mode rather than raw mode, so <kbd>Ctrl</kbd>+<kbd>C</kbd> still
-tears the stack down. One artifact of `r`: the daemon's review list is pending-only, so
-between the request-changes and the resubmit the plan is briefly absent. If the UI's 2s
-poll ticks inside that sub-second window it sees the plan leave and come back, and marks
-it as an arrival rather than a revision. The mark is right either way; only the event that
-produced it differs.
+The keys are read in line mode rather than raw mode, so `Ctrl-C` still tears the stack
+down. One artifact of `r`: the daemon's review list is pending-only, so between the
+request-changes and the resubmit the plan is briefly absent. If the UI's 2s poll ticks
+inside that sub-second window it sees the plan leave and come back, and marks it as an
+arrival rather than a revision. The mark is right either way; only the event that produced
+it differs.
 
 #### The markdown showcase
 
-The seed plan (`scripts/tasks/dev/fake-plan.md`) carries a `## Rendering showcase` section
-near its end: one sub-heading per markdown construct — `Emphasis`, `Inline code`, `Links`,
-`File and folder references`, `Paths that look like markup`, `Fenced blocks`,
+The primary seed plan (`scripts/tasks/dev/fake-plan.md`) carries a `## Rendering showcase`
+section near its end: one sub-heading per markdown construct — `Emphasis`, `Inline code`,
+`Links`, `File and folder references`, `Paths that look like markup`, `Fenced blocks`,
 `Task lists`, `Bullet and ordered lists`, `Quoted text`, `Tabular data`,
 `Rules and separators`, `Images` — each short enough to screenshot whole. It is the fixed
 surface plan-view rendering is compared against, so a change to how a plan is drawn has a

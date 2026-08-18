@@ -30,6 +30,7 @@ const baseProps = {
   variants,
   pendingCount: 0,
   unread: [],
+  arrivals: 0,
   onSelect: () => {},
   onApprove: () => {},
   onRequestChanges: () => {},
@@ -259,7 +260,7 @@ describe("TopBar reject", () => {
 describe("TopBar unread marks (EXC-411)", () => {
   test("hands the unread marks to the review switcher", () => {
     const reviews = [review("r1", "Plan A"), review("r2", "Plan B")];
-    const { target } = render(TopBar, { ...baseProps, reviews, unread: ["r2"] });
+    const { target } = render(TopBar, { ...baseProps, reviews, unread: ["r2"], arrivals: 1 });
     expect(target.querySelector(".switcher-trigger .unread-dot")).not.toBeNull();
   });
 });

@@ -37,6 +37,33 @@ function reviewsOfLength(n: number): ClientReview[] {
   return Array.from({ length: n }, (_, i) => ({ id: `r${i}` }) as unknown as ClientReview);
 }
 
+// A minimal review with just the fields the selection reads.
+function review(id: string, version = 1): ClientReview {
+  return { id, version } as unknown as ClientReview;
+}
+
+function makeStore(over: Partial<SelectionStore> = {}): SelectionStore {
+  return {
+    reviews: [],
+    activeId: null,
+    connected: true,
+    daemonChanged: false,
+    unread: [],
+    arrivals: 0,
+    ...over,
+  };
+}
+
+// Set the `?review=` deep-link param. happy-dom's base is about:blank and
+// rejects a bare relative path, so build the href off the current location
+// (the same shape setUrl writes).
+function setDeepLink(id: string | null) {
+  const url = new URL(location.href);
+  if (id) url.searchParams.set("review", id);
+  else url.searchParams.delete("review");
+  history.replaceState(null, "", url.href);
+}
+
 // Await until `predicate` holds or a deadline passes, polling real timers. The
 // deadline only bounds the failure case — generous so a loaded CI machine
 // (parallel suites, saturated event loop) can't outrun it and flake.
@@ -239,32 +266,6 @@ describe("startPolling daemon identity (onSwap)", () => {
 });
 
 describe("createReviewSelection", () => {
-  // A minimal review with just the fields the selection reads.
-  function review(id: string): ClientReview {
-    return { id } as unknown as ClientReview;
-  }
-
-  function makeStore(over: Partial<SelectionStore> = {}): SelectionStore {
-    return {
-      reviews: [],
-      activeId: null,
-      connected: true,
-      daemonChanged: false,
-      unread: [],
-      ...over,
-    };
-  }
-
-  // Set the `?review=` deep-link param. happy-dom's base is about:blank and
-  // rejects a bare relative path, so build the href off the current location
-  // (the same shape setUrl writes).
-  function setDeepLink(id: string | null) {
-    const url = new URL(location.href);
-    if (id) url.searchParams.set("review", id);
-    else url.searchParams.delete("review");
-    history.replaceState(null, "", url.href);
-  }
-
   beforeEach(() => {
     // Reset the deep-link param between cases (selectReview writes the URL).
     setDeepLink(null);
@@ -346,21 +347,6 @@ describe("createReviewSelection", () => {
 });
 
 describe("createReviewSelection sound events (EXC-1100)", () => {
-  function review(id: string, version = 1): ClientReview {
-    return { id, version } as unknown as ClientReview;
-  }
-
-  function makeStore(over: Partial<SelectionStore> = {}): SelectionStore {
-    return {
-      reviews: [],
-      activeId: null,
-      connected: true,
-      daemonChanged: false,
-      unread: [],
-      ...over,
-    };
-  }
-
   /** A selection wired to a recording onSound, plus the events it has reported. */
   function withSound(over: Partial<SelectionStore> = {}) {
     const store = makeStore(over);
@@ -464,28 +450,6 @@ describe("createReviewSelection sound events (EXC-1100)", () => {
 });
 
 describe("createReviewSelection unread markers (EXC-411)", () => {
-  function review(id: string, version = 1): ClientReview {
-    return { id, version } as unknown as ClientReview;
-  }
-
-  function makeStore(over: Partial<SelectionStore> = {}): SelectionStore {
-    return {
-      reviews: [],
-      activeId: null,
-      connected: true,
-      daemonChanged: false,
-      unread: [],
-      ...over,
-    };
-  }
-
-  function setDeepLink(id: string | null) {
-    const url = new URL(location.href);
-    if (id) url.searchParams.set("review", id);
-    else url.searchParams.delete("review");
-    history.replaceState(null, "", url.href);
-  }
-
   beforeEach(() => {
     setDeepLink(null);
   });
@@ -593,6 +557,28 @@ describe("createReviewSelection unread markers (EXC-411)", () => {
     expect(sel.unread).toEqual(["b"]);
     sel.mergeReviews([review("a")]);
     expect(sel.unread).toEqual([]);
+  });
+
+  test("a tick that clears one mark and raises another still counts an arrival", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("a"), review("b")]);
+    expect(sel.unread).toEqual(["b"]);
+    const before = sel.arrivals;
+    // b expires and c lands in the same poll: the total stays at one, so a count
+    // delta would report no arrival even though a plan did arrive.
+    sel.mergeReviews([review("a"), review("c")]);
+    expect(sel.unread).toEqual(["c"]);
+    expect(sel.arrivals).toBe(before + 1);
+  });
+
+  test("seeding and unchanged snapshots never count an arrival", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a"), review("b")]);
+    sel.mergeReviews([review("a"), review("b")]);
+    expect(sel.arrivals).toBe(0);
   });
 
   test("resolving an unread plan prunes its mark", () => {

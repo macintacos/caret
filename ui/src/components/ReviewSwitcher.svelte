@@ -19,9 +19,13 @@
      * (EXC-411). Marks the trigger and the matching dropdown rows; a plan drops
      * out of the list the moment it becomes the active one. */
     unread: string[];
+    /** Bumped by the selection once per poll that raised a mark. Keying the dot
+     * on it replays the jiggle on a genuine arrival — including the tick that
+     * clears one mark and raises another, which leaves `unread.length` flat. */
+    arrivals: number;
     onSelect: (id: string) => void;
   }
-  let { reviews, activeId, unread, onSelect }: Props = $props();
+  let { reviews, activeId, unread, arrivals, onSelect }: Props = $props();
 
   let active = $derived(reviews.find((r) => r.id === activeId) ?? null);
   let multiple = $derived(reviews.length > 1);
@@ -31,15 +35,6 @@
   let countDescription = $derived(
     `${reviews.length} reviews pending${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`,
   );
-
-  // Replay the jiggle on each ARRIVAL, not on every count change: clearing a mark
-  // drops the count and must not re-animate the dot that remains.
-  let jiggle = $state(0);
-  let lastCount = 0;
-  $effect(() => {
-    if (unreadCount > lastCount) jiggle++;
-    lastCount = unreadCount;
-  });
 </script>
 
 {#if multiple}
@@ -66,7 +61,7 @@
           {#if unreadCount > 0}
             <!-- Keyed on the arrival counter so the jiggle replays each time a plan
                  lands, rather than only on the dot's first mount. -->
-            {#key jiggle}<span class="unread-dot" aria-hidden="true"></span>{/key}
+            {#key arrivals}<span class="unread-dot" aria-hidden="true"></span>{/key}
           {/if}
           <span class="chev"><Icon name="chevron-down" size={14} /></span>
           <span id="switcher-count" hidden>{countDescription}</span>
@@ -168,8 +163,6 @@
     margin-inline-start: auto;
     color: var(--ink-soft);
   }
-  /* The unread rows take the same trailing slot as the check, so the two never
-     need to share a row and the layout is unchanged either way. */
   .opt-unread {
     display: inline-flex;
     align-items: center;

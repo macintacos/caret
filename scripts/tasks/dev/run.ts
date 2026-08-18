@@ -276,7 +276,7 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
       `caret dev: port=${port} state=${stateDirPath} config=${configFilePath} fresh=${opts.fresh ? 1 : 0} persistent=${persistState ? 1 : 0}`,
     );
 
-    // Driver: seeds the fake plan and plays the agent's protocol side, in this
+    // Driver: seeds the dev fixtures and plays the agent's protocol side, in this
     // same process. Its options arrive already parsed (commander), so there is no
     // subprocess and no argv re-parse; the loop never resolves and dies with this
     // process on teardown, so it is not among the reaped children. Because it runs

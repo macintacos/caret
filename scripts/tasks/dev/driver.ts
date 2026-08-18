@@ -141,11 +141,15 @@ export function assertDevEnv(): void {
   }
 }
 
-/** Record a reviewer-style deny on the primary session's pending review, so the
- * next bootstrap submission threads onto it as a new version. Seeds the version's
+/** Record a reviewer-style deny on `sessionId`'s pending review, so the next
+ * bootstrap submission threads onto it as a new version. Seeds the version's
  * fake comments first — annotations are version-scoped, so they have to land while
  * this version is still the current one. Returns once the deny is recorded; the
- * concurrently-running runReview then observes the decision and returns. */
+ * concurrently-running runReview then observes the decision and returns.
+ *
+ * The resolve POST stays hand-rolled rather than reusing `resolveReview`: that
+ * helper carries a 1s AbortSignal, and a slow local resolve during bootstrap
+ * must retry rather than abort the boot. */
 async function denyPendingReview(base: string, sessionId: string, feedback: string): Promise<void> {
   // The bootstrap is the only writer for this session this early, so it has
   // exactly one pending review; poll briefly for runReview's POST to land
@@ -252,7 +256,7 @@ export interface DriverOptions {
  * fresh v1 (approve), or resubmit unchanged (the hook's own fail-safe denies).
  * Every submission goes out under the fixture's own session, so a revision
  * threads onto that fixture's review and never onto a sibling's. */
-export async function runFixtureLoop(
+async function runFixtureLoop(
   fixture: LoadedFixture,
   initial: DriverState,
   deps: ReviewDeps,
@@ -298,7 +302,11 @@ function injectDeps(base: string, basePlan: string, deps: ReviewDeps): InjectDep
     listReviews: () => listReviews(base),
     seedNew: () => {
       const n = ++seeded;
-      return runExtraReview(`${DEV_SESSION}-injected-${n}`, extraPlan(basePlan, n), deps);
+      return runExtraReview(
+        `${DEV_SESSION}-injected-${n}`,
+        extraPlan(basePlan, `injected ${n}`),
+        deps,
+      );
     },
     // Reviewer-shaped feedback on purpose: a "caret: " prefix would read as one of
     // the hook's own fail-safe denies and resubmit unchanged instead of revising.
@@ -316,7 +324,9 @@ export async function run(opts: DriverOptions): Promise<void> {
   // --num-versions applies to the primary review; the short fixtures keep their
   // authored counts, so the extra boot cost stays fixed.
   const fixtures = await Promise.all(
-    DEV_FIXTURES.map((f, i) => loadFixture(i === 0 ? { ...f, versions: numVersions } : f)),
+    DEV_FIXTURES.map((f) =>
+      loadFixture(f.session === DEV_SESSION ? { ...f, versions: numVersions } : f),
+    ),
   );
   // The canonical demo plan — the primary fixture's final ("current") version —
   // which every extra review, seeded or injected, is retitled from.

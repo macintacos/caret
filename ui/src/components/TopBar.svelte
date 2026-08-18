@@ -45,6 +45,8 @@
      * another plan was being read (EXC-411). Handed straight to the switcher,
      * which marks its trigger and the matching dropdown rows. */
     unread: string[];
+    /** Arrival counter the switcher keys its dot animation on (EXC-411). */
+    arrivals: number;
     onSelect: (id: string) => void;
     onApprove: (mode: ApproveVariantId) => void;
     onRequestChanges: () => void;
@@ -68,6 +70,7 @@
     source,
     pendingCount,
     unread,
+    arrivals,
     onSelect,
     onApprove,
     onRequestChanges,
@@ -85,7 +88,7 @@
     <DevBadge {isDev} />
     <Separator orientation="vertical" style="height: 1.4rem; min-height: 0" />
     {#if active}
-      <ReviewSwitcher {reviews} activeId={active.id} {unread} {onSelect} />
+      <ReviewSwitcher {reviews} activeId={active.id} {unread} {arrivals} {onSelect} />
       <VersionLabel version={active.version} />
     {/if}
   </div>
