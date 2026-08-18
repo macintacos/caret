@@ -27,6 +27,11 @@
   // shut, and then out of the bar itself, which stays on screen with nothing in
   // it focused.
   //
+  // EXC-1122: and HOLDING any navigation key traverses, on a delay and a cadence
+  // the bar owns rather than the OS's. The lifecycle is $lib/keyRepeat.ts; what the
+  // bar owes it is dropping the OS's own repeat, which is why every handler below
+  // bails on `e.repeat` and why the arrows are claimed rather than left to bits-ui.
+  //
   // EXC-948: `/` swaps the open menu for a flat filter over EVERY heading in the
   // plan — the browsing model the menus give you, traded for the one you want
   // when you already know the destination. Escape swaps the hierarchy back
@@ -65,6 +70,7 @@
     headingTrail,
     visibleDepths,
   } from "$lib/headingTrail.ts";
+  import { createKeyRepeat } from "$lib/keyRepeat.ts";
   import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
   import type { TocHeading } from "$lib/toc.ts";
 
@@ -127,16 +133,45 @@
     untrack(() => onExposeOpen)?.(openTrail);
   });
 
+  // The whole bar's hold-to-repeat (EXC-1122): a held navigation key moves once,
+  // pauses, then runs at the app's own cadence rather than the OS's. ONE instance
+  // for the bar, because its two views are never open together — the `/` swap shuts
+  // the menu on its way to the filter panel — so a second would only ever be idle.
+  const repeat = createKeyRepeat();
+
+  // Nothing should be left running if the bar is unmounted mid-hold: the trail
+  // re-roots as the reader scrolls, and a plan scrolled past its last heading takes
+  // the whole bar out of the document.
+  $effect(() => repeat.stop);
+
   // The vim keys the open menu answers to, mapped onto the arrows bits-ui's own
   // roving focus and submenu handling already implement (EXC-947 for the walk,
   // EXC-957 for the hierarchy). Left/right are the primitive's SUB_CLOSE_KEYS and
   // SUB_OPEN_KEYS, so `h` steps back out to the row that opened the submenu and
   // `l` descends into the highlighted row's own.
+  //
+  // The arrows map to THEMSELVES (EXC-1122), which buys nothing about where the
+  // walk goes — the primitive would do the same — and everything about the cadence
+  // it goes at: a key claimed here is repeated by the timer, and one left to the
+  // primitive is repeated by the OS. Holding `j` and holding ArrowDown have to feel
+  // the same, so both take this path — ArrowLeft included, which is what carries
+  // EXC-1120's cross-crumb step onto the same timer as the `h` that maps to it.
+  //
+  // ArrowRight is deliberately absent, and belongs to onRowKeydown instead. bits-ui
+  // handles it on the SUB-TRIGGER (MenuSubTriggerState.onkeydown, its SUB_OPEN_KEYS
+  // branch), which fires in the target phase and calls preventDefault — so by the
+  // time the press reaches this handler on the content, composeHandlers has already
+  // skipped the whole chain. The other three are handled on the content itself
+  // (roving focus for up/down, menu-sub-content's own close handler for left), where
+  // this handler is merged AHEAD of the primitive's and preventDefault still bites.
   const MENU_ARROWS: Record<string, string> = {
     j: "ArrowDown",
     k: "ArrowUp",
     h: "ArrowLeft",
     l: "ArrowRight",
+    ArrowDown: "ArrowDown",
+    ArrowUp: "ArrowUp",
+    ArrowLeft: "ArrowLeft",
   };
 
   // h/j/k/l walk the open menu, re-dispatched as the arrow keys above — so a
@@ -150,7 +185,7 @@
   // binding, because the dispatcher suppresses nothing just because a menu owns
   // focus. That is only half of what CommentNavigator does (EXC-792): it ALSO
   // extends the dispatcher's editing-context check in App.svelte, which buys it
-  // every key at once. This claims five keys, so the rest of the review keys still
+  // every key at once. This claims eight keys, so the rest of the review keys still
   // reach the plan while a crumb menu is open.
   //
   // Only bare keys. A command modifier means the reviewer is talking to the
@@ -168,18 +203,20 @@
   //      moves focus to the first tabbable past the root trigger.
   //   2. The window dispatcher yields on defaultPrevented, so the plan's own j/k
   //      line cursor stays put behind the open menu.
-  // The re-dispatch below cannot loop: it carries an ARROW, which is neither Tab
-  // nor in the map. ArrowLeft's own branch is the one thing a second pass does
-  // reach — by design, since that branch is where `h` takes its cross-crumb step
-  // — and whether the step fires or not, the pass ends at the lookup rather than
-  // dispatching a third. (Before EXC-957 portalled the SubContent, a submenu's
-  // keydown also bubbled into the parent Content's copy of this handler, and
-  // defaultPrevented was what stopped that. It no longer reaches there; both still
-  // carry the handler, which is why the walk works at every depth either way.)
-  // Job 2 is vacuous for h, l and Tab — none of them is bound in keymap.ts — but
-  // they take the same path as j/k rather than a second, quieter one, so a later
-  // binding on any of them cannot reach the plan from behind an open menu.
-  // Arrow keys are untouched and keep working.
+  // The re-dispatch below carries an ARROW, and since EXC-1122 the arrows are in
+  // the map too — so what stops it answering its own event forever is `isTrusted`:
+  // a KeyboardEvent built here is untrusted by construction, a real press never is.
+  // An untrusted arrow therefore returns UNCLAIMED — no preventDefault — and flows
+  // on to the primitive, which is the whole point of dispatching one. That is also
+  // what keeps ArrowLeft's cross-crumb branch reachable on the second pass, which
+  // is where `h` takes its step. (Before EXC-957 portalled the SubContent, a
+  // submenu's keydown also bubbled into the parent Content's copy of this handler,
+  // and defaultPrevented was what stopped that. It no longer reaches there; both
+  // still carry the handler, which is why the walk works at every depth either way.)
+  // Job 2 is vacuous for h, l, Tab and the arrows — none of them is bound in
+  // keymap.ts — but they take the same path as j/k rather than a second, quieter
+  // one, so a later binding on any of them cannot reach the plan from behind an
+  // open menu.
   function onMenuKeydown(e: KeyboardEvent): void {
     if (e.ctrlKey || e.altKey || e.metaKey) return;
     // `/` trades the hierarchy for the flat filter, from whatever depth of the
@@ -206,37 +243,52 @@
       filtering = true;
       return;
     }
-    // At the top of a crumb's own menu there is no submenu for ArrowLeft to
-    // close, so it steps out to the crumb before it in the trail instead. That is
-    // the "up" a reviewer means once the menu they are in is already the outermost
-    // one open — and without it the keyboard could only ever reach the subtree of
-    // whichever crumb the menu was opened on, while a mouse could reach the whole
-    // plan from the outermost one.
-    //
-    // `h` gets this for free rather than through a branch of its own (EXC-1120):
-    // the map below turns it into an ArrowLeft, which arrives back here and takes
-    // the step. One call site, so the two keys cannot drift apart.
-    //
-    // It sits BEFORE the lookup because the map holds ArrowLeft as a value rather
-    // than a key, so a real ArrowLeft returns at that lookup. preventDefault only
-    // when the step fires: an ArrowLeft the step declines belongs to the
-    // primitive, whose SUB_CLOSE_KEYS handling it reaches by falling through
-    // untouched. Shift is excluded here where the map leaves it alone, because on
-    // an arrow it is a distinct chord rather than a different `key` — `h` shifted
-    // is `H` and never arrives at all, so filtering it is what keeps the two the
-    // same key.
-    if (e.key === "ArrowLeft" && !e.shiftKey && openPreviousCrumb()) {
-      e.preventDefault();
-      return;
-    }
     // Tab sits beside the map rather than in it: the map is keyed on a bare
     // character, and Tab's direction rides the shift modifier instead.
     const arrow = e.key === "Tab" ? (e.shiftKey ? "ArrowUp" : "ArrowDown") : MENU_ARROWS[e.key];
     if (arrow === undefined) return;
+    // An arrow that maps to itself is either the reviewer's press or the walk's own
+    // re-dispatch; only the press is claimed. See the isTrusted note above.
+    if (arrow === e.key && !e.isTrusted) return;
     e.preventDefault();
-    document.activeElement?.dispatchEvent(
-      new KeyboardEvent("keydown", { key: arrow, bubbles: true, cancelable: true }),
-    );
+    walk(e, arrow);
+  }
+
+  // Hand a claimed key to the repeat: one move now, then the app's own cadence
+  // until it is released (EXC-1122). The OS's repeat is dropped rather than acted
+  // on — preventDefault does not stop the browser emitting it, so a held key that
+  // was walked here as well as by the timer would step twice per tick. The tell is
+  // only on the real press: the arrow re-dispatched below does not copy it.
+  //
+  // The caller has already claimed the key, so the only return here is that bail.
+  function walk(e: KeyboardEvent, arrow: string): void {
+    if (e.repeat) return;
+    // At the top of a crumb's own menu there is no submenu for ArrowLeft to close,
+    // so it steps out to the crumb before it in the trail instead (EXC-1120). That
+    // is the "up" a reviewer means once the menu they are in is already the
+    // outermost one open — and without it the keyboard could only ever reach the
+    // subtree of whichever crumb the menu was opened on, while a mouse could reach
+    // the whole plan from the outermost one. `h` gets it for free, since the map
+    // turns it into exactly this arrow: one call site, so the two cannot drift.
+    //
+    // Shift is filtered out where the map leaves it alone, because on an arrow it is
+    // a distinct chord rather than a different `key` — `h` shifted is `H` and never
+    // arrives at all, so filtering it is what keeps the two the same key. Decided
+    // once, out here: a run walks the SAME key throughout, so the chord cannot
+    // change under it.
+    const stepsOut = arrow === "ArrowLeft" && !e.shiftKey;
+    repeat.start(e.key, () => {
+      // Re-asked every tick rather than once, because a held key walks out through
+      // the trail and eventually runs out of crumbs — at which point the arrow it
+      // falls through to is what closes a submenu, or does nothing at the top.
+      if (stepsOut && openPreviousCrumb()) return;
+      // Dispatched at whatever holds focus NOW rather than at the element the press
+      // arrived on: a held key walks into submenus and across crumbs, so the target
+      // moves under the run.
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: arrow, bubbles: true, cancelable: true }),
+      );
+    });
   }
 
   // Move the open menu one crumb outward, if there is one and no submenu is open
@@ -335,8 +387,21 @@
   // reads above. Enter never reaches that point: it is claimed here first,
   // because bits-ui's own handler would have flattened it into the very click
   // this cannot distinguish.
+  //
+  // ArrowRight is claimed here for a different reason and on the same terms: this
+  // is the one navigation key bits-ui answers on the SUB-TRIGGER rather than on the
+  // content, so onMenuKeydown never sees it and the hold-to-repeat claim has to be
+  // made where the handler still runs ahead of the primitive's (EXC-1122). `l` is
+  // unaffected — it is claimed on the content and arrives here as the untrusted
+  // arrow the walk re-dispatched, which passes straight through to open the level.
   function onRowKeydown(e: KeyboardEvent, line: number): void {
-    if (e.key !== "Enter" || e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    if (e.key === "ArrowRight" && e.isTrusted) {
+      e.preventDefault();
+      walk(e, "ArrowRight");
+      return;
+    }
+    if (e.key !== "Enter" || e.shiftKey) return;
     e.preventDefault();
     jump(line);
   }
@@ -375,6 +440,58 @@
   // the comment on it for why a live region cannot be conjured up with its text
   // already inside it.
   const emptyMessage = $derived(matches.length > 0 ? "" : "No headings match");
+
+  // The keys the filter's list walks with, mapped onto themselves for the reason
+  // MENU_ARROWS maps its own: the walk is the primitive's, the cadence is ours.
+  // Left and right are deliberately absent — the panel's focus sits in a text field,
+  // where they move the caret.
+  const FILTER_ARROWS: Record<string, string> = {
+    ArrowDown: "ArrowDown",
+    ArrowUp: "ArrowUp",
+  };
+
+  // Tab walks the results instead of leaving them (EXC-1121), the same claim the
+  // hierarchy menus make on the same key, and the arrows join it for the cadence
+  // (EXC-1122) exactly as they join MENU_ARROWS above. The primitive maps the arrows
+  // and the vim chords and ignores Tab, so untouched Tab fell through to the browser
+  // — and with nothing tabbable after a panel portalled to the body, that stepped off
+  // the end of the document.
+  //
+  // Re-dispatching an arrow rather than writing the selection is the load-bearing
+  // choice. bits-ui scrolls a selection into view from its OWN keydown path, so a
+  // hand-rolled walk would step the reviewer onto rows below the fold without ever
+  // bringing them into sight.
+  //
+  // The synthetic event is not the only way in: the vendored Command.Root exposes the
+  // primitive through `bind:api`, whose `updateSelectedByItem` wraps on `loop` and
+  // scrolls identically. This takes the dispatch anyway, to hold ONE shape across the
+  // plan's two heading surfaces — PlanToc.svelte walks its own list this way, and a
+  // second spelling here would make the next bits-ui change something to find twice.
+  //
+  // Dispatched from the field because that is where the keypress really landed, and
+  // the primitive listens for it on the root the event bubbles to. With no matches
+  // the arrow lands on an empty item set and the key goes quiet — still preferable to
+  // letting the default step the reviewer off the end of the document.
+  //
+  // Bare keys only, and here that is load-bearing rather than tidiness: bits-ui reads
+  // ⌘ and ⌥ off its own arrow handling (first/last row, previous/next group), so
+  // claiming a modified arrow would delete two behaviours.
+  function onFilterKeydown(e: KeyboardEvent): void {
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    const field = queryEl;
+    if (field === null) return;
+    const arrow = e.key === "Tab" ? (e.shiftKey ? "ArrowUp" : "ArrowDown") : FILTER_ARROWS[e.key];
+    if (arrow === undefined) return;
+    // The walk's own re-dispatch, on its way to the primitive. See onMenuKeydown.
+    if (arrow === e.key && !e.isTrusted) return;
+    e.preventDefault();
+    if (e.repeat) return;
+    repeat.start(e.key, () =>
+      field.dispatchEvent(
+        new KeyboardEvent("keydown", { key: arrow, bubbles: true, cancelable: true }),
+      ),
+    );
+  }
 
   // Put the hierarchy back with the bar still open: shut the panel, then re-open
   // the menu the filter was summoned from, with the same programmatic click `b`
@@ -615,6 +732,11 @@
   <DropdownMenu.Root
     onOpenChange={(open) => {
       if (open) filtering = false;
+      // A menu shut mid-hold takes the run with it (EXC-1122). Without this the
+      // timer keeps firing arrows at whatever holds focus next — and ArrowDown on a
+      // closed crumb's trigger is how bits-ui OPENS it, so the menu would reappear
+      // and start walking on its own.
+      else repeat.stop();
     }}
   >
     <DropdownMenu.Trigger>
@@ -737,7 +859,14 @@
        precisely so every close lands where the reviewer put it. Tab is not the
        reason either way — the command below claims it outright, so it never
        reaches the browser's own default. -->
-  <Popover.Root bind:open={filtering}>
+  <Popover.Root
+    bind:open={filtering}
+    onOpenChange={(open) => {
+      // The panel's half of the menu's close-cancel above: a run left going after
+      // the panel is gone keeps dispatching arrows at whatever took focus.
+      if (!open) repeat.stop();
+    }}
+  >
     <Popover.Content
       class="plan-crumb-filter"
       align="start"
@@ -785,47 +914,9 @@
            stop dead. It wraps EVERY one of the command's navigation keys, not only
            the Tab below — the arrows go with it, which is the point: Tab wrapping
            while the arrows stopped in the same list would read as a bug.
-           The ToC popup's Command is still unlooped, so until its own `loop` lands
-           the plan's two heading lists genuinely differ at their ends. That is a
-           known gap, not an oversight here. -->
-      <Command.Root
-        shouldFilter={false}
-        loop
-        onkeydown={(e) => {
-          // Tab walks the results instead of leaving them (EXC-1121), the same claim
-          // the hierarchy menus make on the same key. The primitive maps the arrows
-          // and the vim chords and ignores Tab, so untouched it fell through to the
-          // browser — and with nothing tabbable after a panel portalled to the body,
-          // that stepped off the end of the document.
-          //
-          // Re-dispatching an arrow rather than writing the selection is the
-          // load-bearing choice. bits-ui scrolls a selection into view from its OWN
-          // keydown path, so a hand-rolled walk would step the reviewer onto rows
-          // below the fold without ever bringing them into sight.
-          //
-          // The synthetic event is not the only way in: the vendored Command.Root
-          // exposes the primitive through `bind:api`, whose `updateSelectedByItem`
-          // wraps on `loop` and scrolls identically. This takes the dispatch anyway,
-          // to hold ONE shape across the plan's two heading surfaces — PlanToc.svelte
-          // walks its own list this way, and a second spelling here would make the
-          // next bits-ui change something to find twice.
-          //
-          // Dispatched from the field because that is where the keypress really
-          // landed, and the primitive listens for it on the root the event bubbles
-          // to. With no matches the arrow lands on an empty item set and the key goes
-          // quiet — still preferable to letting the default step the reviewer off the
-          // end of the document.
-          if (e.key !== "Tab" || queryEl === null) return;
-          e.preventDefault();
-          queryEl.dispatchEvent(
-            new KeyboardEvent("keydown", {
-              key: e.shiftKey ? "ArrowUp" : "ArrowDown",
-              bubbles: true,
-              cancelable: true,
-            }),
-          );
-        }}
-      >
+           The ToC popup's Command sets it too (EXC-1122), so the plan's two heading
+           lists now agree at their ends. -->
+      <Command.Root shouldFilter={false} loop onkeydown={onFilterKeydown}>
         <Command.Input
           bind:ref={queryEl}
           bind:value={query}

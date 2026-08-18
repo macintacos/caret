@@ -271,6 +271,42 @@ describe("PlanBreadcrumbs menus", () => {
     flush();
     expect(jumped.last()).toBe(20);
   });
+
+  // EXC-1122: a held key is walked by the app's own repeat timer alone. The OS keeps
+  // emitting keydowns while the key is down and preventDefault does not stop them, so
+  // a handler acting on every one would drive the list twice over, at two rates. The
+  // bail has to read the REAL press — the arrow the walk re-dispatches never carries
+  // `repeat`, so by then the tell is gone.
+  test("an OS repeat of a walk key re-dispatches no second arrow", async () => {
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await openCrumb(target, 1, flush);
+
+    // The walk's own arrow, counted where it lands: it is dispatched at whatever
+    // holds focus and bubbles, so the document sees every one.
+    const keys: string[] = [];
+    const spy = (e: Event) => keys.push((e as KeyboardEvent).key);
+    document.addEventListener("keydown", spy);
+    const pressJ = (repeat: boolean) =>
+      document.body
+        .querySelector("[data-slot='dropdown-menu-content']")
+        ?.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "j", repeat, bubbles: true, cancelable: true }),
+        );
+
+    pressJ(false);
+    flush();
+    pressJ(true);
+    flush();
+    document.removeEventListener("keydown", spy);
+
+    // Two presses of j in; one ArrowDown out.
+    expect(keys.filter((k) => k === "j")).toHaveLength(2);
+    expect(keys.filter((k) => k === "ArrowDown")).toEqual(["ArrowDown"]);
+  });
 });
 
 // EXC-947: the bar's keyboard surface. Only the wiring a mounted component can show
@@ -402,12 +438,13 @@ describe("PlanBreadcrumbs filter", () => {
    * `defaultPrevented` — dispatchEvent leaves the same object it was handed. Dispatched
    * at the FIELD, which is where focus sits, so it reaches the command root the way a
    * real keypress does: by bubbling. */
-  function pressTab(flush: () => void, { shift = false } = {}): KeyboardEvent {
+  function pressTab(flush: () => void, { shift = false, repeat = false } = {}): KeyboardEvent {
     const field = queryField();
     if (field === null) throw new Error("no query field");
     const event = new KeyboardEvent("keydown", {
       key: "Tab",
       shiftKey: shift,
+      repeat,
       bubbles: true,
       cancelable: true,
     });
@@ -768,6 +805,31 @@ describe("PlanBreadcrumbs filter", () => {
     expect(event.defaultPrevented).toBe(true);
     // And the panel is still standing: Tab no longer dismisses it.
     expect(panel()).not.toBeNull();
+    await closeFilter(flush);
+  });
+
+  // EXC-1122: while a key is held the OS keeps emitting keydowns, and
+  // preventDefault does not stop it — so a held Tab would be walked by the native
+  // repeat AND by the hold-to-repeat timer, at two different rates, and every hold
+  // would double-step. The repeat is dropped here; the timer owns the cadence.
+  test("an OS repeat of a held Tab walks no further", async () => {
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await openFilter(target, flush);
+    await flushUntil(flush, () => selectedLabels().length > 0);
+    expect(selectedLabels()).toEqual(["Overview"]);
+
+    const event = pressTab(flush, { repeat: true });
+    // Spun rather than settled: this asserts an ABSENCE, so the walk is given the
+    // same room a real one gets before the row is read back.
+    await flushUntil(flush, () => false, 5);
+    expect(selectedLabels()).toEqual(["Overview"]);
+    // Still claimed while held, so the browser's own tab move stays suppressed for
+    // as long as the key is down rather than only on its first press.
+    expect(event.defaultPrevented).toBe(true);
     await closeFilter(flush);
   });
 
