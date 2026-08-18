@@ -50,7 +50,7 @@ Prerequisites are [`git`](https://git-scm.com) and [mise](https://mise.jdx.dev);
 mise run setup      # install pinned tools + JS deps + the generated palette + e2e Chromium + register git hooks
 mise run build      # build the UI (Vite multi-asset) then the binary (bun build --compile, embeds the UI)
 mise run build ui   # just the Svelte UI (Vite -> ui/dist); also `build bin` / `build bundle`
-mise run dev        # isolated daemon + fake plan + Vite UI (ephemeral port)
+mise run dev        # isolated daemon + three fake plans + Vite UI (ephemeral port)
 mise run caret      # caret's own CLI from src/cli.ts, e.g. `mise run caret discovery`
 mise run test       # bun test (unit); `mise run test unit` is the same target
 mise run test e2e   # Playwright browser e2e (isolated daemon, Chromium)
@@ -136,7 +136,7 @@ The isolation is total. The dev daemon never reads or writes a globally-installe
 reviews or config: it reads `config.dev.toml`, not your production `config.toml` (see
 [Config file](CONFIGURING.md#config-file)).
 
-The daemon is seeded with one fake pending plan, and a driver plays the agent's side
+The daemon is seeded with three fake pending plans, and a driver plays the agent's side
 through the real review hook path — **Request changes** appends a revision section quoting
 your feedback and resubmits, **Approve** re-seeds a fresh plan, and real hook records land
 in the dev state dir's `logs/caret.log`.
@@ -193,6 +193,46 @@ Every user-facing UI setting the browser persists is built through `definePref` 
 `defineFlagPref` (`ui/src/lib/definePref.ts`), which registers its key so `--fresh` resets
 it. `knownPrefKeys()` derives from those registrations, and `prefKeys.test.ts` fails if a
 persisted key isn't registered.
+
+#### The three plans, and injecting a fourth
+
+Boot opens three pending plans, in the order the switcher lists them:
+
+| Plan                  | What it is                                    | Versions          |
+| --------------------- | --------------------------------------------- | ----------------- |
+| `fake-plan.md`        | The long markdown stress test — the showcase below | `--num-versions` |
+| `short-plan-a.md`     | _Retry the worker health check before declaring it dead_ | 2          |
+| `short-plan-b.md`     | _Move the session cookie's expiry into config_ | 2                 |
+
+The big one is bootstrapped first and the daemon sorts pending reviews oldest-first, so it
+stays at the top of the switcher and is the plan you land on. The two short ones exist to
+give the switcher something to switch _to_ — ordinary small plans, deliberately short
+enough that the dropdown and the version picker have realistic content without four extra
+screens of markdown.
+
+Each plan threads its own session and runs its own driver loop, so they never expire one
+another: a verdict on one leaves the other two on screen, and approving one re-seeds that
+loop's next plan, so you stay at three.
+
+The switcher marks a plan **unread** — a dot on the trigger, a marker on its dropdown row
+— when it shows up, or gains a version, while you are reading a different one; opening it
+clears the mark. Two keys on the dev task's stdin fire those two events on demand, so you
+can watch them land in a page that is already open. They are read from the terminal, so
+they do nothing when stdin is not a TTY; when it is, the driver prints a reminder at boot.
+
+- **`n` + Enter** seeds a brand-new plan under a fresh session — the same one-shot the
+  extra-review seeder above fires on a timer. A review id the page has never seen
+  **arrives**.
+- **`r` + Enter** requests changes on the **most recently created** pending plan — the
+  bottom of the switcher, not the one you are reading. Its own loop appends a `Revision N`
+  section and resubmits onto the same review id, so that plan is **revised** in place.
+
+The keys are read in line mode rather than raw mode, so <kbd>Ctrl</kbd>+<kbd>C</kbd> still
+tears the stack down. One artifact of `r`: the daemon's review list is pending-only, so
+between the request-changes and the resubmit the plan is briefly absent. If the UI's 2s
+poll ticks inside that sub-second window it sees the plan leave and come back, and marks
+it as an arrival rather than a revision. The mark is right either way; only the event that
+produced it differs.
 
 #### The markdown showcase
 
