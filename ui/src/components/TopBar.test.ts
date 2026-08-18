@@ -29,6 +29,7 @@ const baseProps = {
   approveMode: "default" as const,
   variants,
   pendingCount: 0,
+  unread: [],
   onSelect: () => {},
   onApprove: () => {},
   onRequestChanges: () => {},
@@ -252,6 +253,14 @@ describe("TopBar reject", () => {
     expect((cap as HTMLElement).querySelector(".icon")?.getAttribute("aria-label")).toBe("Shift");
     expect((cap as HTMLElement).textContent).toContain("R");
     expect((cap as HTMLElement).textContent).not.toContain("⇧");
+  });
+});
+
+describe("TopBar unread marks (EXC-411)", () => {
+  test("hands the unread marks to the review switcher", () => {
+    const reviews = [review("r1", "Plan A"), review("r2", "Plan B")];
+    const { target } = render(TopBar, { ...baseProps, reviews, unread: ["r2"] });
+    expect(target.querySelector(".switcher-trigger .unread-dot")).not.toBeNull();
   });
 });
 

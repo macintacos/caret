@@ -41,6 +41,10 @@
      * shared pendingCount). Surfaced as a count on the Request-changes button so
      * the pending work is visible before they open the dialog; hidden at zero. */
     pendingCount: number;
+    /** Ids of plans marked unread — arrivals and revisions that landed while
+     * another plan was being read (EXC-411). Handed straight to the switcher,
+     * which marks its trigger and the matching dropdown rows. */
+    unread: string[];
     onSelect: (id: string) => void;
     onApprove: (mode: ApproveVariantId) => void;
     onRequestChanges: () => void;
@@ -63,6 +67,7 @@
     isDev = false,
     source,
     pendingCount,
+    unread,
     onSelect,
     onApprove,
     onRequestChanges,
@@ -80,7 +85,7 @@
     <DevBadge {isDev} />
     <Separator orientation="vertical" style="height: 1.4rem; min-height: 0" />
     {#if active}
-      <ReviewSwitcher {reviews} activeId={active.id} {onSelect} />
+      <ReviewSwitcher {reviews} activeId={active.id} {unread} {onSelect} />
       <VersionLabel version={active.version} />
     {/if}
   </div>

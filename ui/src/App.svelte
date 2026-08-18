@@ -626,6 +626,7 @@
     {isDev}
     {source}
     {pendingCount}
+    unread={selection.unread}
     onSelect={selection.selectReview}
     {onApprove}
     onRequestChanges={() => (showDialog = true)}
