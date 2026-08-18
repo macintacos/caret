@@ -46,6 +46,11 @@
   // This bar has one row's width to spend, which a path does not fit in.
   // Drilling down is what the crumb menus are for; the filter is for when the
   // destination is already known.
+  //
+  // EXC-1120: the arrow keys are their vim twins everywhere, ArrowLeft included,
+  // and Escape means one step out at every depth the bar has — filter back to
+  // hierarchy, hierarchy shut, and then out of the bar itself, which stays on
+  // screen with nothing in it focused.
   import { type Snippet, untrack } from "svelte";
 
   import Icon from "@/components/Icon.svelte";
@@ -199,6 +204,18 @@
       filtering = true;
       return;
     }
+    // ArrowLeft takes the same step `h` does (EXC-1120), and has to be offered it
+    // BEFORE the lookup below: the map holds ArrowLeft as a value rather than a
+    // key, so the arrow returns at that lookup and would never reach the `h` line.
+    // preventDefault only when the step actually fires — an ArrowLeft with a
+    // submenu still to close belongs to the primitive, whose SUB_CLOSE_KEYS
+    // handling it reaches by falling through untouched. The `h` re-dispatch below
+    // therefore passes back through here, where openPreviousCrumb has already
+    // answered false on the same DOM and answers false again.
+    if (e.key === "ArrowLeft" && openPreviousCrumb()) {
+      e.preventDefault();
+      return;
+    }
     // Tab sits beside the map rather than in it: the map is keyed on a bare
     // character, and Tab's direction rides the shift modifier instead.
     const arrow = e.key === "Tab" ? (e.shiftKey ? "ArrowUp" : "ArrowDown") : MENU_ARROWS[e.key];
@@ -234,6 +251,33 @@
     cells[open]?.querySelector<HTMLButtonElement>("button")?.click();
     previous.click();
     return true;
+  }
+
+  // A second Escape leaves the bar (EXC-1120). The first one is the primitive's:
+  // it dismisses the menu and hands focus back to the crumb (onCloseAutoFocus
+  // below). From there nothing was listening — onMenuKeydown rides on menu
+  // content, which is portalled out of the bar — so the ring sat on the crumb
+  // with no way off it from the keyboard.
+  //
+  // On the bar rather than on each trigger, which is what gives the elision
+  // marker the same behaviour without a second copy of it: both are buttons
+  // inside this element, and both carry aria-expanded.
+  //
+  // That attribute is also the whole gate, and it is what keeps the FIRST Escape
+  // unchanged. A menu opened from the keyboard holds focus inside its portalled
+  // content, so its Escape never reaches here at all; one opened with the mouse
+  // leaves focus on the trigger, so its Escape DOES bubble through — and blurring
+  // on it would collapse the two steps into one for mouse users.
+  //
+  // Deliberately not preventDefault'ed: an Escape on a focused crumb already
+  // reaches the window dispatcher today, so the blur is the only thing this adds.
+  // The bar itself stays up and `b` re-opens it, which is why leaving nothing
+  // focused costs the reviewer nothing.
+  function onBarKeydown(e: KeyboardEvent): void {
+    if (e.key !== "Escape" || e.ctrlKey || e.altKey || e.metaKey) return;
+    const open = barEl?.querySelector<HTMLButtonElement>('[aria-expanded="true"]') ?? null;
+    if (open !== null) return;
+    (document.activeElement as HTMLElement | null)?.blur();
   }
 
   // Whether the menu is closing on something that must NOT hand focus back to the
@@ -600,7 +644,12 @@
      scrolled — renders no bar at all. There is deliberately no minimum-heading
      gate beyond that: a one-heading plan still has a location. -->
 {#if trail.length > 0}
-  <Breadcrumb.Root bind:ref={barEl} class="plan-breadcrumbs" aria-label="Plan location">
+  <Breadcrumb.Root
+    bind:ref={barEl}
+    class="plan-breadcrumbs"
+    aria-label="Plan location"
+    onkeydown={onBarKeydown}
+  >
     <Breadcrumb.List bind:ref={listEl}>
       {#each trail as crumb, depth (depth)}
         {@const current = depth === trail.length - 1}

@@ -532,6 +532,80 @@ test("h steps out to the crumb before it once there is no submenu left to close"
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Delta", "Echo"]);
 });
 
+test("ArrowLeft walks the trail exactly as h does", async ({ daemon, page }) => {
+  // `l` and ArrowRight already agreed; ArrowLeft stopped at closing a submenu and
+  // never made the step out onto the previous crumb, so which key set the reviewer
+  // reached for changed what they got (EXC-1120).
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+
+  await jumpTo(page, "Charlie");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
+  const parked = await parkedAt(page);
+
+  await page.keyboard.press("b");
+  const menu = page.locator(MENU);
+  await expect(menu.getByRole("menuitem")).toHaveText(["Charlie"]);
+
+  // Out to Bravo's level — the step `h` makes and ArrowLeft did not.
+  await page.keyboard.press("ArrowLeft");
+  await expect(menu.getByRole("menuitem")).toHaveText(["Bravo", "Delta", "Foxtrot"]);
+  await expect(menu.getByRole("menuitem", { name: "Bravo" })).toBeFocused();
+
+  // With a submenu open ArrowLeft still closes just that submenu: the cross-crumb
+  // walk only fires when the primitive has nothing left to close.
+  await page.keyboard.press("l");
+  const submenu = page.locator(SUBMENU);
+  await expect(submenu.getByRole("menuitem")).toHaveText(["Charlie"]);
+  await page.keyboard.press("ArrowLeft");
+  await expect(submenu).toHaveCount(0);
+  await expect(menu.getByRole("menuitem")).toHaveText(["Bravo", "Delta", "Foxtrot"]);
+
+  // On out to the top of the trail, where one more has nowhere to go and leaves
+  // the menu open where it is — and nothing has moved, since only a commit does.
+  await page.keyboard.press("ArrowLeft");
+  await expect(menu.getByRole("menuitem")).toHaveText(["Alpha"]);
+  await page.keyboard.press("ArrowLeft");
+  await expect(menu.getByRole("menuitem")).toHaveText(["Alpha"]);
+  expect(await scrollTop(page)).toBe(parked);
+});
+
+test("a second Escape leaves the bar with nothing focused", async ({ daemon, page }) => {
+  // Dismissing a menu hands focus back to the crumb, and until EXC-1120 no key took
+  // it off again: the bar's keydown handler rides on portalled menu content, so
+  // nothing was listening once the menu had gone.
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+
+  await jumpTo(page, "Charlie");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
+  await waitPastSafeModeGrace(page);
+
+  const menu = page.locator(MENU);
+  await page.keyboard.press("b");
+  await expect(menu).toBeVisible();
+
+  // The first Escape is unchanged: the menu goes, the crumb keeps focus.
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await expect(page.locator(CRUMB).last()).toBeFocused();
+
+  // The second leaves the bar entirely — still on screen, merely unfocused. Read
+  // off the live document because "no focus ring anywhere in the bar" is a claim
+  // about where focus IS, which no locator assertion can make.
+  await page.keyboard.press("Escape");
+  await expect(page.locator(BAR)).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).toBe("BODY");
+
+  // Which is the whole point of landing on the body: the plan's window-level keys
+  // reach it again, `/` opens the search HUD, and `b` brings the bar back.
+  await page.keyboard.press("/");
+  await expect(page.getByRole("search")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("b");
+  await expect(menu).toBeVisible();
+});
+
 test("b shuts the bar from whatever crumb the walk reached", async ({ daemon, page }) => {
   // The key toggles the BAR, not the trailing crumb: `h` moves the open menu out
   // onto an ancestor, so the trigger `b` opened is no longer the open one, and
@@ -872,6 +946,12 @@ test("Escape restores the hierarchical menu without leaving the bar", async ({ d
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
   await expect(page.locator(CRUMB).last()).toBeFocused();
+
+  // And a third leaves the bar. Escape means one step out at every depth the bar
+  // has, the filter panel included: hierarchy back, menu shut, bar unfocused.
+  await page.keyboard.press("Escape");
+  await expect(page.locator(BAR)).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).toBe("BODY");
 });
 
 test("Tab walks the filter's results without leaving the panel", async ({ daemon, page }) => {
