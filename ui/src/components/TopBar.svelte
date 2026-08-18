@@ -326,6 +326,23 @@
     min-width: 0;
     flex: 1 1 auto;
   }
+  /* The switcher trigger is a shadcn Button, whose base carries `shrink-0`. Left
+     at that it never yields, so the lead shrank *past* it and the trigger spilled
+     out of its own box and under the action chips (its .title cap is a vw, which
+     knows nothing about how much room the controls left). Making it the row's
+     shrinkable item hands the pressure to .title, which ellipsizes — and the floor
+     below stops the name vanishing entirely before the --w-narrow collapse
+     relieves the row. Everything else in the lead holds its size: the brand is
+     nowrap text and both badges are shrink-0. */
+  .lead :global(.switcher-trigger) {
+    flex-shrink: 1;
+    /* Roughly a dozen characters plus the count badge and chevron — enough name
+       left to tell two plans apart. Raising it risks the opposite failure: the
+       lead's own min-width:0 lets it shrink past this floor, spilling the trigger
+       back under the controls, so the sweep in topbar-overflow.e2e.ts is what
+       bounds this number. */
+    min-width: 10rem;
+  }
   .brand {
     font-family: var(--font-display);
     font-weight: 600;

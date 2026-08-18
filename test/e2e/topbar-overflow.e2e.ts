@@ -12,6 +12,7 @@
 // locator, .approve-slot, resolves to the mounted node and so asserts hidden
 // (doc/agents/browser-testing.md § Absence and invisibility).
 
+import { reviewSwitcher } from "@test/e2e/support/chrome.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
@@ -189,4 +190,35 @@ test("the overflow Reject glyph is red like its label", async ({ daemon, page })
   // The glyph matches the red label, not the muted-foreground grey the base rule
   // gives other menu icons.
   expect(glyphColor).toBe(labelColor);
+});
+
+test("a long plan title truncates instead of running under the action buttons", async ({
+  daemon,
+  page,
+}) => {
+  // Regression: the switcher trigger is a shadcn Button, which carries `shrink-0`,
+  // so `.lead` shrank past it and the trigger overflowed its own box — sliding
+  // under the inline Reject / Request-changes chips instead of ellipsizing. The
+  // band just above --w-narrow, where all three verdict buttons are still inline,
+  // is where the title has to give; the widths below it are what bound the
+  // trigger's min-width floor, since a floor too tall to fit the collapsed row
+  // would put the trigger straight back under the controls.
+  await daemon.seed({
+    title: "caret dev — markdown rendering stress test — extra long plan title",
+    cwd: "/tmp/proj-alpha",
+  });
+  await daemon.seed({ title: "Plan Beta", cwd: "/tmp/proj-beta" });
+  await page.goto("/");
+  await planSurface(page);
+  await expect(reviewSwitcher(page)).toBeVisible();
+
+  for (const width of [1400, 1200, 1100, 1024, 1000, 960, 900, 800, 720, 640, 560, 500, 480]) {
+    await page.setViewportSize({ width, height: 400 });
+    const slack = await page.evaluate(() => {
+      const trigger = document.querySelector(".switcher-trigger")!.getBoundingClientRect();
+      const actions = document.querySelector(".actions")!.getBoundingClientRect();
+      return actions.left - trigger.right;
+    });
+    expect(slack, `the plan title runs under the actions at ${width}px`).toBeGreaterThanOrEqual(0);
+  }
 });
