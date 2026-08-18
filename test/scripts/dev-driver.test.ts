@@ -21,7 +21,7 @@ import {
   appendRevision,
   DEFAULT_NUM_VERSIONS,
   DEMO_COMMENTS,
-  DEMO_EDIT_GROUPS,
+  DEV_FIXTURES,
   DEV_SESSION,
   demoAnnotations,
   demoVersions,
@@ -32,9 +32,13 @@ import {
   parsePositiveInt,
 } from "@/tasks/dev/protocol.ts";
 
-// The final ("current") demo plan the driver seeds — read independently here so
-// the assertions don't lean on the driver's own loader.
-const PLAN_V1 = await Bun.file(`${import.meta.dir}/../../scripts/tasks/dev/fake-plan.md`).text();
+// Each fixture's final ("current") plan — read independently here so the
+// assertions don't lean on the driver's own loader.
+const DEV_DIR = `${import.meta.dir}/../../scripts/tasks/dev`;
+const fixtureText = (f: { file: string }) => Bun.file(`${DEV_DIR}/${f.file}`).text();
+// The primary fixture: the stress-test plan every single-fixture case below uses.
+const PRIMARY = DEV_FIXTURES[0]!;
+const PLAN_V1 = await fixtureText(PRIMARY);
 
 // Lines that differ positionally between two same-shaped texts — lets a test
 // assert a change is narrowly targeted (no lines added or removed, one rewritten).
@@ -180,7 +184,7 @@ test("demoVersions makes every consecutive pair a non-empty, varied diff (not ap
   // output of the ones before it, so a group whose `to` swallowed a later
   // group's `from` would be a silent no-op that the drift guard — which tests
   // every `from` against the FINAL plan — cannot see.
-  const plans = demoVersions(PLAN_V1, DEMO_EDIT_GROUPS.length + 1);
+  const plans = demoVersions(PLAN_V1, PRIMARY.edits.length + 1, PRIMARY.edits);
   // No two adjacent versions are equal — each edit group actually lands.
   for (let i = 1; i < plans.length; i++) {
     expect(plans[i]).not.toBe(plans[i - 1]);
@@ -213,14 +217,56 @@ test("demoVersions never introduces untagged code blocks", () => {
   }
 });
 
-// Fixture-drift guard: every reverse edit must still match fake-plan.md, or the
-// diff it produces silently flattens to empty. Fails loudly if the fixture is
-// edited out from under an edit's `from` span.
-test("every DEMO_EDIT_GROUPS `from` span still exists in the fixture", () => {
-  for (const group of DEMO_EDIT_GROUPS) {
-    for (const { from } of group) {
-      expect(PLAN_V1.includes(from)).toBe(true);
+// Fixture-drift guard: every reverse edit must still match ITS OWN fixture file,
+// or the diff it produces silently flattens to empty. Fails loudly if a fixture
+// is edited out from under an edit's `from` span — including by a `rumdl fmt`
+// run rewrapping the short plans, which are ordinary repo markdown.
+test("every DEV_FIXTURES `from` span still exists in its own fixture file", async () => {
+  const stranded: string[] = [];
+  for (const fixture of DEV_FIXTURES) {
+    const text = await fixtureText(fixture);
+    for (const group of fixture.edits) {
+      for (const { from } of group) {
+        if (!text.includes(from)) stranded.push(`${fixture.file}: ${JSON.stringify(from)}`);
+      }
     }
+  }
+  expect(stranded).toEqual([]);
+});
+
+// The switcher needs more than one plan to switch between, and each has to thread
+// its own review — two fixtures sharing a session would thread onto one review.
+test("DEV_FIXTURES gives every fixture its own file and session", () => {
+  expect(DEV_FIXTURES.length).toBeGreaterThan(1);
+  expect(PRIMARY.session).toBe(DEV_SESSION);
+  expect(new Set(DEV_FIXTURES.map((f) => f.session)).size).toBe(DEV_FIXTURES.length);
+  expect(new Set(DEV_FIXTURES.map((f) => f.file)).size).toBe(DEV_FIXTURES.length);
+});
+
+// The per-fixture twin of the demoVersions cases above: each fixture's authored
+// version count and edits have to produce that many genuinely-different plans the
+// hook's format gate accepts, or its compare picker opens on an empty diff.
+test("every DEV_FIXTURES entry opens with distinct, format-clean versions", async () => {
+  for (const fixture of DEV_FIXTURES) {
+    const final = await fixtureText(fixture);
+    const plans = demoVersions(final, fixture.versions, fixture.edits);
+    expect(plans).toHaveLength(fixture.versions);
+    expect(plans.at(-1)).toBe(final);
+    for (let i = 1; i < plans.length; i++) {
+      expect({ file: fixture.file, same: plans[i] === plans[i - 1] }).toEqual({
+        file: fixture.file,
+        same: false,
+      });
+    }
+    for (const plan of plans) expect(hasUntaggedCodeBlock(plan)).toBe(false);
+  }
+});
+
+// The documented graceful path: DEMO_COMMENTS' anchors are fake-plan.md spans, so
+// every other fixture gets no fake comments rather than arbitrary ones.
+test("only the primary fixture carries DEMO_COMMENTS anchors", async () => {
+  for (const fixture of DEV_FIXTURES.slice(1)) {
+    expect(demoAnnotations(await fixtureText(fixture), 1)).toEqual([]);
   }
 });
 
@@ -505,7 +551,7 @@ test("a revision round-trips through the real runReview hook path and logs to ca
 test("bootstrapReview grows the primary review to several varied versions before the loop", async () => {
   await boot();
   const deps = devReviewDeps(base);
-  const state = await bootstrapReview(base, PLAN_V1, deps);
+  const state = await bootstrapReview(base, { ...PRIMARY, plan: PLAN_V1 }, deps);
   const review = d.store.bySession(DEV_SESSION)[0];
   expect(review).toBeDefined();
   // Default is four versions — the final plan plus three earlier drafts, one per
@@ -553,7 +599,7 @@ test("bootstrapReview grows the primary review to several varied versions before
 test("bootstrapReview honors an explicit --num-versions count", async () => {
   await boot();
   const deps = devReviewDeps(base);
-  const state = await bootstrapReview(base, PLAN_V1, deps, 5);
+  const state = await bootstrapReview(base, { ...PRIMARY, plan: PLAN_V1, versions: 5 }, deps);
   const review = d.store.bySession(DEV_SESSION)[0];
   expect(review!.versions).toHaveLength(5);
   expect(state.revision).toBe(5);
@@ -563,10 +609,29 @@ test("bootstrapReview honors an explicit --num-versions count", async () => {
 test("bootstrapReview with a single version seeds just v1", async () => {
   await boot();
   const deps = devReviewDeps(base);
-  const state = await bootstrapReview(base, PLAN_V1, deps, 1);
+  const state = await bootstrapReview(base, { ...PRIMARY, plan: PLAN_V1, versions: 1 }, deps);
   const review = d.store.bySession(DEV_SESSION)[0];
   expect(review!.versions).toHaveLength(1);
   expect(state.revision).toBe(1);
+});
+
+test("each fixture bootstraps onto its own review, in table order", async () => {
+  await boot();
+  const deps = devReviewDeps(base);
+  for (const fixture of DEV_FIXTURES) {
+    await bootstrapReview(base, { ...fixture, plan: await fixtureText(fixture) }, deps);
+  }
+  // One review per fixture, opened at that fixture's authored version count —
+  // the switcher has genuinely separate plans to switch between.
+  const created = DEV_FIXTURES.map((fixture) => {
+    const reviews = d.store.bySession(fixture.session);
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0]!.versions).toHaveLength(fixture.versions);
+    return reviews[0]!.createdAt;
+  });
+  // store.list() sorts pending reviews by createdAt ascending, so bootstrapping
+  // in table order is what puts the primary first in the switcher.
+  expect([...created].sort((a, b) => a - b)).toEqual(created);
 });
 
 test("runExtraReview runs one fresh-session review to resolution and stops", async () => {

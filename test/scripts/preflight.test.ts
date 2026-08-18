@@ -33,6 +33,7 @@ import {
   selectTasks,
 } from "@scripts/preflight.ts";
 import { waitFor } from "@test/support/poll.ts";
+import { DEV_FIXTURES } from "@/tasks/dev/protocol.ts";
 
 const ALL_TASKS = ["build bin", "build ui", "lint", "smoke", "test", "test e2e"];
 
@@ -407,6 +408,16 @@ test("every MARKDOWN_READ_BY_E2E entry still exists on disk", () => {
   expect(MARKDOWN_READ_BY_E2E.length).toBeGreaterThan(0);
   for (const path of MARKDOWN_READ_BY_E2E) {
     expect(existsSync(join(import.meta.dir, "../..", path))).toBe(true);
+  }
+});
+
+// The other direction, for the one list that grows: test/scripts/dev-driver.test.ts
+// reads EVERY dev fixture from disk — the drift guard resolves each edit's `from`
+// span against its own file — so a fixture missing here is a Markdown-only diff
+// that skips the suite guarding it.
+test("every DEV_FIXTURES plan file is in MARKDOWN_READ_BY_TESTS", () => {
+  for (const { file } of DEV_FIXTURES) {
+    expect(MARKDOWN_READ_BY_TESTS).toContain(`scripts/tasks/dev/${file}`);
   }
 });
 

@@ -37,6 +37,33 @@ function reviewsOfLength(n: number): ClientReview[] {
   return Array.from({ length: n }, (_, i) => ({ id: `r${i}` }) as unknown as ClientReview);
 }
 
+// A minimal review with just the fields the selection reads.
+function review(id: string, version = 1): ClientReview {
+  return { id, version } as unknown as ClientReview;
+}
+
+function makeStore(over: Partial<SelectionStore> = {}): SelectionStore {
+  return {
+    reviews: [],
+    activeId: null,
+    connected: true,
+    daemonChanged: false,
+    unread: [],
+    arrivals: 0,
+    ...over,
+  };
+}
+
+// Set the `?review=` deep-link param. happy-dom's base is about:blank and
+// rejects a bare relative path, so build the href off the current location
+// (the same shape setUrl writes).
+function setDeepLink(id: string | null) {
+  const url = new URL(location.href);
+  if (id) url.searchParams.set("review", id);
+  else url.searchParams.delete("review");
+  history.replaceState(null, "", url.href);
+}
+
 // Await until `predicate` holds or a deadline passes, polling real timers. The
 // deadline only bounds the failure case — generous so a loaded CI machine
 // (parallel suites, saturated event loop) can't outrun it and flake.
@@ -239,25 +266,6 @@ describe("startPolling daemon identity (onSwap)", () => {
 });
 
 describe("createReviewSelection", () => {
-  // A minimal review with just the fields the selection reads.
-  function review(id: string): ClientReview {
-    return { id } as unknown as ClientReview;
-  }
-
-  function makeStore(over: Partial<SelectionStore> = {}): SelectionStore {
-    return { reviews: [], activeId: null, connected: true, daemonChanged: false, ...over };
-  }
-
-  // Set the `?review=` deep-link param. happy-dom's base is about:blank and
-  // rejects a bare relative path, so build the href off the current location
-  // (the same shape setUrl writes).
-  function setDeepLink(id: string | null) {
-    const url = new URL(location.href);
-    if (id) url.searchParams.set("review", id);
-    else url.searchParams.delete("review");
-    history.replaceState(null, "", url.href);
-  }
-
   beforeEach(() => {
     // Reset the deep-link param between cases (selectReview writes the URL).
     setDeepLink(null);
@@ -339,14 +347,6 @@ describe("createReviewSelection", () => {
 });
 
 describe("createReviewSelection sound events (EXC-1100)", () => {
-  function review(id: string, version = 1): ClientReview {
-    return { id, version } as unknown as ClientReview;
-  }
-
-  function makeStore(over: Partial<SelectionStore> = {}): SelectionStore {
-    return { reviews: [], activeId: null, connected: true, daemonChanged: false, ...over };
-  }
-
   /** A selection wired to a recording onSound, plus the events it has reported. */
   function withSound(over: Partial<SelectionStore> = {}) {
     const store = makeStore(over);
@@ -446,5 +446,148 @@ describe("createReviewSelection sound events (EXC-1100)", () => {
     sel.mergeReviews([review("a")]);
     sel.mergeReviews([review("a"), review("b")]);
     expect(store.reviews).toHaveLength(2);
+  });
+});
+
+describe("createReviewSelection unread markers (EXC-411)", () => {
+  beforeEach(() => {
+    setDeepLink(null);
+  });
+
+  test("the first snapshot marks nothing — what was already pending is not news", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a"), review("b")]);
+    expect(sel.unread).toEqual([]);
+  });
+
+  test("a plan arriving while another is active is marked unread", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("a"), review("b")]);
+    expect(sel.unread).toEqual(["b"]);
+  });
+
+  test("a version bump on a background plan re-marks it", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a"), review("b", 1)]);
+    sel.selectReview("b");
+    sel.selectReview("a");
+    sel.mergeReviews([review("a"), review("b", 2)]);
+    expect(sel.unread).toEqual(["b"]);
+  });
+
+  test("the plan you are reading is never marked, however it became active", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a", 1)]);
+    sel.mergeReviews([review("a", 2)]);
+    expect(sel.unread).toEqual([]);
+  });
+
+  test("an unchanged snapshot marks nothing, so the 2s poll never accumulates", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("a")]);
+    expect(sel.unread).toEqual([]);
+  });
+
+  test("picking the plan from the dropdown clears its mark", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("a"), review("b")]);
+    sel.selectReview("b");
+    expect(sel.unread).toEqual([]);
+  });
+
+  test("a deep link resolving to the plan clears its mark", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("a"), review("b")]);
+    setDeepLink("b");
+    // The active plan vanishes, so merge re-selects — through the deep link.
+    sel.mergeReviews([review("b")]);
+    expect(store.activeId).toBe("b");
+    expect(sel.unread).toEqual([]);
+  });
+
+  test("merge auto-reselecting onto the plan clears its mark", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("a"), review("b")]);
+    expect(sel.unread).toEqual(["b"]);
+    sel.mergeReviews([review("b")]);
+    expect(store.activeId).toBe("b");
+    expect(sel.unread).toEqual([]);
+  });
+
+  test("resolve auto-advancing onto the plan clears its mark", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("a"), review("b")]);
+    sel.afterResolve("a");
+    expect(store.activeId).toBe("b");
+    expect(sel.unread).toEqual([]);
+  });
+
+  test("a plan bumped twice while unread clears in one select", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a"), review("b", 1)]);
+    sel.mergeReviews([review("a"), review("b", 2)]);
+    sel.mergeReviews([review("a"), review("b", 3)]);
+    expect(sel.unread).toEqual(["b"]);
+    sel.selectReview("b");
+    expect(sel.unread).toEqual([]);
+  });
+
+  test("a plan expiring while unread is pruned, so no mark outlives its row", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("a"), review("b")]);
+    expect(sel.unread).toEqual(["b"]);
+    sel.mergeReviews([review("a")]);
+    expect(sel.unread).toEqual([]);
+  });
+
+  test("a tick that clears one mark and raises another still counts an arrival", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("a"), review("b")]);
+    expect(sel.unread).toEqual(["b"]);
+    const before = sel.arrivals;
+    // b expires and c lands in the same poll: the total stays at one, so a count
+    // delta would report no arrival even though a plan did arrive.
+    sel.mergeReviews([review("a"), review("c")]);
+    expect(sel.unread).toEqual(["c"]);
+    expect(sel.arrivals).toBe(before + 1);
+  });
+
+  test("seeding and unchanged snapshots never count an arrival", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a"), review("b")]);
+    sel.mergeReviews([review("a"), review("b")]);
+    expect(sel.arrivals).toBe(0);
+  });
+
+  test("resolving an unread plan prunes its mark", () => {
+    const store = makeStore();
+    const sel = createReviewSelection(store);
+    sel.mergeReviews([review("a")]);
+    sel.mergeReviews([review("a"), review("b"), review("c")]);
+    expect(sel.unread).toEqual(["b", "c"]);
+    sel.afterResolve("b");
+    expect(sel.unread).toEqual(["c"]);
   });
 });

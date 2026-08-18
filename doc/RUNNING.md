@@ -83,6 +83,26 @@ already at the level you just set.
 > have never clicked stays silent for its first cue. Desktop notifications cover that case
 > — see above.
 
+## Unread plans
+
+While you read one plan, another can arrive — or the one you read earlier can come back
+revised. Neither interrupts you: the plan on screen stays put. What changes is the plan
+switcher in the top bar, which grows a small dot beside its count, and opening it shows a
+marker on each plan you have not looked at yet.
+
+A plan is marked when it shows up, or gains a new version, while a different plan is
+active. Opening it clears its mark, however you got there — picking it from the switcher,
+following a link to it, or landing on it after you resolve the plan you were on. The dot
+goes dark once nothing is left unmarked.
+
+The marks live in the tab, so a reload starts clean: whatever is pending when the page
+opens counts as already seen, not as news. The plan you are reading is never marked, and a
+plan that expires or gets resolved takes its mark with it.
+
+> [!NOTE]
+> This is not the same thing as § cmux unread marks below, which is about the terminal
+> pane your agent runs in rather than the review UI.
+
 ## cmux unread marks
 
 Under [cmux](https://github.com/coder/cmux), the pane an agent runs in gets an unread mark

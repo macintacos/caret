@@ -74,6 +74,8 @@
     activeId: null,
     connected: true,
     daemonChanged: false,
+    unread: [],
+    arrivals: 0,
   });
   let resStore = $state<ResolveStore>({ approveMode: "default", busy: false });
   // The in-UI alert/toast queue (EXC-850): App owns the reactive backing store,
@@ -625,6 +627,8 @@
     {isDev}
     {source}
     {pendingCount}
+    unread={selection.unread}
+    arrivals={selection.arrivals}
     onSelect={selection.selectReview}
     {onApprove}
     onRequestChanges={() => (showDialog = true)}

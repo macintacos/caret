@@ -85,6 +85,17 @@ reports it filtered out by exclude patterns and does nothing. `--no-exclude` is 
 way past — don't. If a format run ever rewraps the fixture, one of the three entries has
 been dropped: revert the hunk and restore it.
 
+**Its two siblings are deliberately not excluded.** `scripts/tasks/dev/short-plan-a.md`
+and `short-plan-b.md` sit in the same directory and seed the same dev loop, so the exclude
+list looks two entries short — it is not. They exist to give the switcher a second and
+third plan to switch between, not to exercise the ingest reflow, so nothing is lost by
+letting the repo-hygiene role reach them. They are authored inside `.rumdl.toml`'s
+90-column budget, which makes `rumdl fmt` a no-op on them, and
+`test/scripts/dev-driver.test.ts` resolves every fixture's edit anchors verbatim — so a
+future format run that did move a line fails loudly rather than silently stranding an
+anchor. Add a fixture that must keep the agent's own wrapping and it joins `fake-plan.md`
+in all three `exclude` lists; otherwise leave them out.
+
 ## Bumping the version
 
 One version moves; the three configs do not move with it.

@@ -81,7 +81,7 @@ export function parseNumVersions(argv: string[]): number {
 
 /** A single reverse edit: an exact span of the FINAL plan (`from`) and the earlier
  * DRAFT wording (`to`) that replaces it when walking back to a prior version. */
-interface DemoEdit {
+export interface DemoEdit {
   from: string;
   to: string;
 }
@@ -150,8 +150,67 @@ Text below it, so the rule has a paragraph on each side to be measured against.`
   ],
 ];
 
-/** The DEMO_EDITS groups exposed for the unit suite's fixture-drift guard. */
-export const DEMO_EDIT_GROUPS = DEMO_EDITS;
+/** One plan `mise run dev` opens a review on. Three of them, so the switcher has
+ * something to switch between and a plan arriving or revising while you read a
+ * different one is watchable rather than only unit-tested (EXC-411). */
+export interface DevFixture {
+  /** Session this fixture threads under, so each fixture owns one review. */
+  session: string;
+  /** Fixture filename beside this module. */
+  file: string;
+  /** Reverse edits from the final plan, newest group first (demoVersions' shape).
+   * Every `from` must exist verbatim in this fixture's own file; the dev-driver
+   * unit suite asserts that for every entry. */
+  edits: readonly (readonly DemoEdit[])[];
+  /** Versions this fixture opens with; the primary takes --num-versions instead. */
+  versions: number;
+}
+
+/** The dev fixtures, in bootstrap order — store.list() sorts pending reviews by
+ * createdAt ascending, so the primary is first here to sort first in the switcher.
+ *
+ * The primary is the markdown stress test; the two short plans are switcher
+ * content, small enough that opening them costs four extra submit/deny round
+ * trips at boot. They carry none of DEMO_COMMENTS' anchors, so demoAnnotations
+ * returns [] for them — the documented graceful path. Unlike fake-plan.md they
+ * are ordinary repo markdown (not excluded from rumdl), authored at the repo's 90
+ * columns so `rumdl fmt` is a no-op on them; the drift guard is what catches a
+ * future format run stranding one of these `from` spans. */
+export const DEV_FIXTURES: readonly DevFixture[] = [
+  {
+    session: DEV_SESSION,
+    file: "fake-plan.md",
+    edits: DEMO_EDITS,
+    versions: DEFAULT_NUM_VERSIONS,
+  },
+  {
+    session: `${DEV_SESSION}-short-a`,
+    file: "short-plan-a.md",
+    edits: [
+      [{ from: "Three of last week's five restarts", to: "Two of last week's five restarts" }],
+      [
+        { from: "The budget is deliberately small.", to: "The budget is kept small." },
+        { from: "so a flapping worker stays visible", to: "so a flapping worker is still visible" },
+      ],
+    ],
+    versions: 2,
+  },
+  {
+    session: `${DEV_SESSION}-short-b`,
+    file: "short-plan-b.md",
+    edits: [
+      [{ from: "the current fourteen days", to: "the current thirty days" }],
+      [
+        { from: "what is really a policy knob", to: "what is really a configuration knob" },
+        {
+          from: "Reject a non-positive or unparseable value at load, naming the key.",
+          to: "Reject a bad value at load, naming the key.",
+        },
+      ],
+    ],
+    versions: 2,
+  },
+];
 
 /** Rewrite each `from` span to its `to` draft wording. Plain global replacement;
  * every `from` is a prose span (never inside a code fence), so the drafts stay
@@ -160,20 +219,20 @@ function applyDemoEdits(plan: string, edits: readonly DemoEdit[]): string {
   return edits.reduce((acc, { from, to }) => acc.split(from).join(to), plan);
 }
 
-/** The sequence of plans the dev bootstrap submits to grow the primary review to
- * several versions before the interactive loop, so `mise run dev` always shows a
- * multi-version review (the version-compare picker needs one). The LAST entry is
+/** The sequence of plans the dev bootstrap submits to grow one fixture's review
+ * to several versions before the interactive loop, so `mise run dev` always shows
+ * a multi-version review (the version-compare picker needs one). The LAST entry is
  * `final` verbatim — the polished "current" plan the reviewer lands on — and each
- * earlier entry is a DRAFT produced by applying DEMO_EDITS outward from it, so
+ * earlier entry is a DRAFT produced by applying `edits` outward from it, so
  * consecutive versions diff in varied ways instead of only appending (EXC-811).
  * With `count` of n the result has n entries (versions v1..vn), oldest first. */
-export function demoVersions(final: string, count: number): string[] {
+export function demoVersions(final: string, count: number, edits = DEMO_EDITS): string[] {
   const versions = [final];
   for (let i = 0; i < count - 1; i++) {
-    const edits = DEMO_EDITS[i];
+    const group = edits[i];
     // Past the authored groups (an unusually large --num-versions), repeat the
     // oldest draft rather than inventing edits — the extra pair just shows no diff.
-    const older = edits ? applyDemoEdits(versions[0] as string, edits) : (versions[0] as string);
+    const older = group ? applyDemoEdits(versions[0] as string, group) : (versions[0] as string);
     versions.unshift(older);
   }
   return versions;
@@ -259,7 +318,9 @@ export function nextPlan(
 
 /** Retitle the fake plan's h1 so an extra review is distinguishable from the
  * primary one in the switcher and in the notification body (review titles
- * derive from the plan's first heading, src/review/threading.ts). */
-export function extraPlan(plan: string, n: number): string {
-  return plan.replace(/^# .*$/m, (title) => `${title} — extra ${n}`);
+ * derive from the plan's first heading, src/review/threading.ts). `label` takes
+ * a string where two sources of extras coexist — the timed seeder and the `n`
+ * key each count from 1, so a bare number would title them identically. */
+export function extraPlan(plan: string, label: number | string): string {
+  return plan.replace(/^# .*$/m, (title) => `${title} — extra ${label}`);
 }

@@ -44,6 +44,7 @@ describe("tasks CLI: dev command", () => {
       notify: false,
       persist: false,
       fresh: false,
+      plain: false,
     });
   });
 
@@ -53,6 +54,7 @@ describe("tasks CLI: dev command", () => {
       notify: false,
       persist: false,
       fresh: false,
+      plain: false,
     });
   });
 
@@ -62,6 +64,7 @@ describe("tasks CLI: dev command", () => {
       notify: true,
       persist: false,
       fresh: false,
+      plain: false,
     });
   });
 
@@ -71,6 +74,7 @@ describe("tasks CLI: dev command", () => {
       notify: true,
       persist: false,
       fresh: false,
+      plain: false,
     });
   });
 
@@ -82,6 +86,17 @@ describe("tasks CLI: dev command", () => {
       stateDir: "/tmp/x",
       persist: true,
       fresh: false,
+      plain: false,
+    });
+  });
+
+  test("parses --plain", async () => {
+    expect(await parseDevArgs(["--plain"])).toEqual({
+      numVersions: 4,
+      notify: false,
+      persist: false,
+      fresh: false,
+      plain: true,
     });
   });
 
@@ -91,6 +106,7 @@ describe("tasks CLI: dev command", () => {
       notify: false,
       persist: false,
       fresh: true,
+      plain: false,
     });
   });
 });

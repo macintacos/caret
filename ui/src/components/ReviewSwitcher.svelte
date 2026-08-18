@@ -15,12 +15,26 @@
   interface Props {
     reviews: ClientReview[];
     activeId: string | null;
+    /** Ids of plans that arrived or gained a version while another was being read
+     * (EXC-411). Marks the trigger and the matching dropdown rows; a plan drops
+     * out of the list the moment it becomes the active one. */
+    unread: string[];
+    /** Bumped by the selection once per poll that raised a mark. Keying the dot
+     * on it replays the jiggle on a genuine arrival — including the tick that
+     * clears one mark and raises another, which leaves `unread.length` flat. */
+    arrivals: number;
     onSelect: (id: string) => void;
   }
-  let { reviews, activeId, onSelect }: Props = $props();
+  let { reviews, activeId, unread, arrivals, onSelect }: Props = $props();
 
   let active = $derived(reviews.find((r) => r.id === activeId) ?? null);
   let multiple = $derived(reviews.length > 1);
+  let unreadCount = $derived(unread.length);
+  // The trigger's accessible description. The dot is aria-hidden — a shape, not
+  // text — so the tally rides the same hidden span the pending count already does.
+  let countDescription = $derived(
+    `${reviews.length} reviews pending${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`,
+  );
 </script>
 
 {#if multiple}
@@ -44,8 +58,13 @@
         >
           <span class="title">{stripTitleLinks(active?.title ?? "—")}</span>
           <Badge variant="secondary" class="count metric">{reviews.length}</Badge>
+          {#if unreadCount > 0}
+            <!-- Keyed on the arrival counter so the jiggle replays each time a plan
+                 lands, rather than only on the dot's first mount. -->
+            {#key arrivals}<span class="unread-dot" aria-hidden="true"></span>{/key}
+          {/if}
           <span class="chev"><Icon name="chevron-down" size={14} /></span>
-          <span id="switcher-count" hidden>{reviews.length} reviews pending</span>
+          <span id="switcher-count" hidden>{countDescription}</span>
         </Button>
       {/snippet}
     </DropdownMenu.Trigger>
@@ -64,6 +83,14 @@
                  check is the only thing that says which review is active, so it has
                  to reach the accessibility tree. -->
             <span class="opt-check"><Icon name="check" size={14} label="Active review" /></span>
+          {:else if unread.includes(r.id)}
+            <!-- Same trailing slot as the check above: an unread row is never the
+                 active row by construction, so the two can never collide. The dot
+                 is the visual marker and the sr-only text the announced one — the
+                 mark is a shape's presence, not a tint on a shared glyph. -->
+            <span class="opt-unread">
+              <span class="dot" aria-hidden="true"></span><span class="sr-only">Unread</span>
+            </span>
           {/if}
         </DropdownMenu.Item>
       {/each}
@@ -135,5 +162,42 @@
     display: inline-flex;
     margin-inline-start: auto;
     color: var(--ink-soft);
+  }
+  .opt-unread {
+    display: inline-flex;
+    align-items: center;
+    margin-inline-start: auto;
+  }
+  /* --attention is the palette's novelty job ("new, unread, worth a glance"), and
+     a bare disc is what tells this apart from the count Badge two elements to its
+     left — a shape rather than a pill with a number in it. */
+  .unread-dot,
+  .opt-unread .dot {
+    display: inline-block;
+    width: 0.4rem;
+    height: 0.4rem;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: var(--attention);
+  }
+  /* A one-shot shudder on the arrival of a plan, twice over --dur-micro: enough to
+     catch the eye in a header the reviewer is not looking at, short enough not to
+     read as an ambient loop the way RefHintBadge's teaching ping deliberately does.
+     No local prefers-reduced-motion query — the trigger renders inside #app, which
+     app.css's single global guard covers, exactly as that badge's ping relies on. */
+  .unread-dot {
+    animation: switcher-jiggle var(--dur-micro) var(--ease-out) 2;
+  }
+  @keyframes switcher-jiggle {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    25% {
+      transform: translateX(-1.5px);
+    }
+    75% {
+      transform: translateX(1.5px);
+    }
   }
 </style>

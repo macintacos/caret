@@ -41,6 +41,12 @@
      * shared pendingCount). Surfaced as a count on the Request-changes button so
      * the pending work is visible before they open the dialog; hidden at zero. */
     pendingCount: number;
+    /** Ids of plans marked unread — arrivals and revisions that landed while
+     * another plan was being read (EXC-411). Handed straight to the switcher,
+     * which marks its trigger and the matching dropdown rows. */
+    unread: string[];
+    /** Arrival counter the switcher keys its dot animation on (EXC-411). */
+    arrivals: number;
     onSelect: (id: string) => void;
     onApprove: (mode: ApproveVariantId) => void;
     onRequestChanges: () => void;
@@ -63,6 +69,8 @@
     isDev = false,
     source,
     pendingCount,
+    unread,
+    arrivals,
     onSelect,
     onApprove,
     onRequestChanges,
@@ -80,7 +88,7 @@
     <DevBadge {isDev} />
     <Separator orientation="vertical" style="height: 1.4rem; min-height: 0" />
     {#if active}
-      <ReviewSwitcher {reviews} activeId={active.id} {onSelect} />
+      <ReviewSwitcher {reviews} activeId={active.id} {unread} {arrivals} {onSelect} />
       <VersionLabel version={active.version} />
     {/if}
   </div>
@@ -317,6 +325,23 @@
     gap: 0.75rem;
     min-width: 0;
     flex: 1 1 auto;
+  }
+  /* The switcher trigger is a shadcn Button, whose base carries `shrink-0`. Left
+     at that it never yields, so the lead shrank *past* it and the trigger spilled
+     out of its own box and under the action chips (its .title cap is a vw, which
+     knows nothing about how much room the controls left). Making it the row's
+     shrinkable item hands the pressure to .title, which ellipsizes — and the floor
+     below stops the name vanishing entirely before the --w-narrow collapse
+     relieves the row. Everything else in the lead holds its size: the brand is
+     nowrap text and both badges are shrink-0. */
+  .lead :global(.switcher-trigger) {
+    flex-shrink: 1;
+    /* Roughly a dozen characters plus the count badge and chevron — enough name
+       left to tell two plans apart. Raising it risks the opposite failure: the
+       lead's own min-width:0 lets it shrink past this floor, spilling the trigger
+       back under the controls, so the sweep in topbar-overflow.e2e.ts is what
+       bounds this number. */
+    min-width: 10rem;
   }
   .brand {
     font-family: var(--font-display);

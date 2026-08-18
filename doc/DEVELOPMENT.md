@@ -50,7 +50,7 @@ Prerequisites are [`git`](https://git-scm.com) and [mise](https://mise.jdx.dev);
 mise run setup      # install pinned tools + JS deps + the generated palette + e2e Chromium + register git hooks
 mise run build      # build the UI (Vite multi-asset) then the binary (bun build --compile, embeds the UI)
 mise run build ui   # just the Svelte UI (Vite -> ui/dist); also `build bin` / `build bundle`
-mise run dev        # isolated daemon + fake plan + Vite UI (ephemeral port)
+mise run dev        # dev console: isolated daemon + three fake plans + Vite UI
 mise run caret      # caret's own CLI from src/cli.ts, e.g. `mise run caret discovery`
 mise run test       # bun test (unit); `mise run test unit` is the same target
 mise run test e2e   # Playwright browser e2e (isolated daemon, Chromium)
@@ -136,7 +136,7 @@ The isolation is total. The dev daemon never reads or writes a globally-installe
 reviews or config: it reads `config.dev.toml`, not your production `config.toml` (see
 [Config file](CONFIGURING.md#config-file)).
 
-The daemon is seeded with one fake pending plan, and a driver plays the agent's side
+The daemon is seeded with three fake pending plans, and a driver plays the agent's side
 through the real review hook path — **Request changes** appends a revision section quoting
 your feedback and resubmits, **Approve** re-seeds a fresh plan, and real hook records land
 in the dev state dir's `logs/caret.log`.
@@ -161,6 +161,7 @@ it off. The config keys are documented in full under
 | —                   | —                       | `[dev.notify].max_pending` | `3`     | Cap on unresolved extra reviews.                                                          |
 | `--num-versions <n>`| —                       | —                        | `4`       | How many versions the primary dev review opens with; a positive integer.                  |
 | `--fresh`           | —                       | —                        | off       | Boot as a brand-new user — see below.                                                     |
+| `--plain`           | —                       | —                        | off       | Skip the dev console and stream logs straight to the terminal, so they scroll and pipe.   |
 
 † A positive `CARET_DEV_NEW_REVIEW_MS` also arms the seeder, not just sets its cadence.
 
@@ -194,11 +195,93 @@ Every user-facing UI setting the browser persists is built through `definePref` 
 it. `knownPrefKeys()` derives from those registrations, and `prefKeys.test.ts` fails if a
 persisted key isn't registered.
 
+#### The three plans, and injecting a fourth
+
+Boot opens three pending plans, in the order the switcher lists them:
+
+| Plan              | What it is                                               | Versions         |
+| ----------------- | -------------------------------------------------------- | ---------------- |
+| `fake-plan.md`    | The long markdown stress test — the showcase below       | `--num-versions` |
+| `short-plan-a.md` | _Retry the worker health check before declaring it dead_ | 2                |
+| `short-plan-b.md` | _Move the session cookie's expiry into config_           | 2                |
+
+The big one is bootstrapped first and the daemon sorts pending reviews oldest-first, so it
+stays at the top of the switcher and is the plan you land on. The two short ones exist to
+give the switcher something to switch _to_ — ordinary small plans, deliberately short
+enough that the dropdown and the version picker have realistic content without four extra
+screens of markdown.
+
+Each plan threads its own session and runs its own driver loop, so they never expire one
+another: a verdict on one leaves the other two on screen, and approving one re-seeds that
+loop's next plan, so you stay at three.
+
+The switcher marks a plan **unread** — a dot on the trigger, a marker on its dropdown row
+— when it shows up, or gains a version, while you are reading a different one; opening it
+clears the mark. You can fire either event on demand from the terminal running
+`mise run dev`, and watch it land in a browser tab that is already open.
+
+#### The dev console
+
+In a terminal, `mise run dev` takes over the screen: a header with the URL to open, the
+keys you can press down the left, and the live log — daemon, Vite, and the driver,
+interleaved — filling the rest.
+
+The header names **two different ports**, which is the thing to get right:
+
+```text
+caret dev  ·  open  http://caret.localhost:5173  ·  daemon  :52241
+```
+
+`open` is Vite's dev server — the one to click, and the only one that serves the UI. Vite
+picks that port itself and auto-increments when 5173 is taken, so it is read back from
+Vite's own banner rather than chosen by the dev task. `daemon` is the review daemon's
+ephemeral port: it is what the `?review=` links in the log point at, and it changes every
+run. Opening the daemon port instead of the UI port is the easy mistake; the labels exist
+to stop it.
+
+Press a key in that terminal, with no Enter:
+
+| Key           | What it does                                                             |
+| ------------- | ------------------------------------------------------------------------ |
+| `n`           | Seed a brand-new plan under a fresh session — a plan **arrives**         |
+| `r`           | Request changes on the newest pending plan — that plan is **revised**    |
+| `↑` `↓`       | Scroll the log a line                                                    |
+| `PgUp` `PgDn` | Scroll the log a page                                                    |
+| `G`           | Jump back to following the live tail                                     |
+| `q`, `Ctrl-C` | Quit, tearing down the daemon, Vite, and the state dir                   |
+
+`n` is the same one-shot the extra-review seeder above fires on a timer, so it produces a
+review id the page has never seen. `r` targets the **newest** pending plan — the bottom of
+the switcher, not the one you land on — whose own loop appends a `Revision N` section and
+resubmits it under the same review id.
+
+Taking the screen is what buys the fixed key list: a terminal can reserve rows but never
+columns, so there is no way to pin a left-hand rail and still let output scroll past it
+normally. That costs the terminal's own scrollback, which is why the log pane scrolls
+itself. Because the keys are read raw, `Ctrl-C` is handled in the console rather than
+arriving as a signal — it still tears the whole stack down.
+
+**`mise run dev --plain` turns the console off** and streams logs straight to the terminal
+— so they scroll with your terminal's own scrollback, copy, and pipe, which is what you
+want when capturing output rather than driving the loop. The keys still work there, but in
+line mode: `n` and `r` need Enter, because raw mode with no console to catch Ctrl-C would
+leave nothing to quit with.
+
+Piped or redirected, the console never starts in the first place:
+`mise run dev > log.txt`, or any non-TTY run, keeps the plain interleaved output it always
+had.
+
+One artifact of `r`: the daemon's review list is pending-only, so between the
+request-changes and the resubmit the plan is briefly absent. If the UI's 2s poll ticks
+inside that sub-second window it sees the plan leave and come back, and marks it as an
+arrival rather than a revision. The mark is right either way; only the event that produced
+it differs.
+
 #### The markdown showcase
 
-The seed plan (`scripts/tasks/dev/fake-plan.md`) carries a `## Rendering showcase` section
-near its end: one sub-heading per markdown construct — `Emphasis`, `Inline code`, `Links`,
-`File and folder references`, `Paths that look like markup`, `Fenced blocks`,
+The primary seed plan (`scripts/tasks/dev/fake-plan.md`) carries a `## Rendering showcase`
+section near its end: one sub-heading per markdown construct — `Emphasis`, `Inline code`,
+`Links`, `File and folder references`, `Paths that look like markup`, `Fenced blocks`,
 `Task lists`, `Bullet and ordered lists`, `Quoted text`, `Tabular data`,
 `Rules and separators`, `Images` — each short enough to screenshot whole. It is the fixed
 surface plan-view rendering is compared against, so a change to how a plan is drawn has a
