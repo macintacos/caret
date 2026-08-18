@@ -45,6 +45,14 @@
 // the engine really fired. The only half a mount can reach is the `data-toc-view` marker
 // those rules key on, and that lives in ui/src/components/PlanToc.test.ts.
 //
+// EXC-1122's hold-to-repeat is the sharpest layer call in the file: what it adds is a
+// CURVE — one move, a pause, then a run — which exists only against a real clock and a
+// real key that is HELD rather than pressed. Playwright's `keyboard.down` emits one
+// keydown and no repeats of its own, so everything the walk does past the first row is
+// the app's timer and nothing else. The halves a mount can reach — the repeat bail and
+// the wrap `loop` buys — are in ui/src/components/PlanToc.test.ts, and the helper's own
+// delay/run lifecycle runs off an injected clock in ui/src/lib/keyRepeat.test.ts.
+//
 // Bare keys throughout, per the issue's constraint: a command modifier means the
 // reviewer is addressing the browser or the OS, not the popup. waitPastSafeModeGrace
 // (inside jumpToHeading) is mandatory before the first keystroke.
@@ -53,6 +61,7 @@ import type { Locator, Page } from "@playwright/test";
 
 import { expect, motionToken, test } from "@test/e2e/support/fixtures.ts";
 import { jumpToHeading, PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
+import { KEY_REPEAT_DELAY_MS } from "@ui/src/lib/keyRepeat.ts";
 
 // Sections taller than the viewport, so jumping to one genuinely changes which
 // heading is being read rather than leaving the whole plan in view.
@@ -392,6 +401,53 @@ test("the down arrow starts the walk at the heading being read, not the first ro
   // And back, which lands on the heading being read rather than stepping past it.
   await page.keyboard.press("ArrowUp");
   await expect(walkedTo(page)).toHaveText("Delta");
+});
+
+test("holding a walk key keeps traversing until it is released", async ({ daemon, page }) => {
+  // EXC-1122. Before it, holding Tab here advanced exactly one row — the primitive
+  // ignores Tab outright, so the OS's repeats reached a handler that had already
+  // done its one job — and the list stopped dead at its ends besides. See the file
+  // header for why the whole of this lives in the browser layer.
+  await daemon.seed({ plan: TALL_PLAN });
+  await page.goto("/");
+  await readingAt(page, "Delta");
+
+  await openToc(page);
+  await expect(walkedTo(page)).toHaveText("Delta");
+
+  // The SET is the assertion, not the row the walk is on: the list wraps, so it is
+  // somewhere different by the time any single read lands, while the set only grows.
+  // Five distinct rows takes four steps past the one the press itself made.
+  const selected = async () => (await walkedTo(page).allTextContents()).join("");
+  const seen = new Set<string>();
+  await page.keyboard.down("Tab");
+  await expect
+    // Sampled on a fixed short interval rather than Playwright's backing-off default,
+    // which climbs to a second between reads and would spend most of the per-test
+    // budget watching a walk that is already several rows on.
+    .poll(
+      async () => {
+        const row = await selected();
+        if (row !== "") seen.add(row);
+        return seen.size;
+      },
+      { intervals: [50] },
+    )
+    .toBeGreaterThanOrEqual(5);
+  await page.keyboard.up("Tab");
+
+  // Released, the walk stops where it stopped. Waiting past the delay the app arms
+  // before a run is an honest wait rather than a sleep on browser-testing.md § Timing
+  // discipline's own discriminator — KEY_REPEAT_DELAY_MS is imported from the module
+  // that holds it, and a run still going would have ticked several times inside it.
+  const stopped = await selected();
+  expect(stopped).not.toBe("");
+  const deadline = (await page.evaluate(() => performance.now())) + KEY_REPEAT_DELAY_MS;
+  await page.waitForFunction((until) => performance.now() > until, deadline);
+  expect(await selected()).toBe(stopped);
+
+  // And focus never left the field, which is what narrates the walk.
+  await expect(field(page)).toBeFocused();
 });
 
 test("the roving walk visits match rows only, never a breadcrumb header", async ({
