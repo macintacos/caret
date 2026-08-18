@@ -59,6 +59,8 @@ test("a review posted while the page is open appears without a reload", async ({
   // The switcher's count flips to 2 with no reload; the suite's assertion budget
   // absorbs the poll interval (never a fixed sleep). The trigger itself only
   // appears once there's a second review, so this also waits for the
-  // single→multiple switch.
-  await expect(reviewSwitcher(page)).toHaveAccessibleDescription("2 reviews pending");
+  // single→multiple switch. The arrival is unread by construction — it landed
+  // while another plan was active — which is what the suffix reports (EXC-411);
+  // test/e2e/unread-markers.e2e.ts is where that marking is the subject.
+  await expect(reviewSwitcher(page)).toHaveAccessibleDescription("2 reviews pending, 1 unread");
 });
