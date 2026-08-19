@@ -484,6 +484,29 @@
   function crumbOut(node: HTMLElement): { duration: number } {
     node.classList.add("crumb-leaving");
     const ms = Number.parseFloat(getComputedStyle(node).animationDuration) * 1000;
+
+    // An exit does not always finish. A level that comes back before --dur-exit is up — which
+    // a trail re-rooting under a scroll does constantly — makes Svelte ABORT the outro and
+    // keep the node, and the class above is this component's rather than Svelte's, so nothing
+    // in that path takes it off again. Left on, `crumb-out`'s `forwards` pins the revived node
+    // at opacity 0 for as long as it lives, while it keeps `position: static` and its box: the
+    // row goes on reserving the chevron's width and paints nothing into it. measure() reads
+    // `.crumb-item:not(.crumb-leaving)` too, so a crumb stuck this way also drops out of the
+    // widths the elision is computed from.
+    //
+    // `inert` is what tells the two endings apart, and Svelte owns both edges of it: it is set
+    // before this function is ever called and cleared again on an abort. Watching it rather
+    // than `animationend` means the level comes back the moment it is revived, and — since a
+    // real exit stays inert until the node goes — the held last frame is never swapped back to
+    // full opacity for the frame before removal.
+    const revived = new MutationObserver(() => {
+      if (node.hasAttribute("inert")) return;
+      node.classList.remove("crumb-leaving");
+      revived.disconnect();
+    });
+    revived.observe(node, { attributeFilter: ["inert"] });
+    node.addEventListener("animationend", () => revived.disconnect(), { once: true });
+
     // No computed animation at all — happy-dom expands no `animation` shorthand — means
     // there is nothing to wait for, so the node goes on the spot rather than leaning on
     // Svelte's own falsy-duration short-circuit to catch the NaN.

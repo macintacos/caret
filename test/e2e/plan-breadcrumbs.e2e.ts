@@ -1166,3 +1166,116 @@ test("reduced motion collapses the exit rather than removing it", async ({ daemo
   // the guard reaches it.
   expect(await motionToken(page, "--dur-exit")).toBeGreaterThan(0.1);
 });
+
+test("a level that comes back mid-exit leaves no hole where its chevron was", async ({
+  daemon,
+  page,
+}) => {
+  // The trail re-roots continuously as the reader scrolls, so a level can start leaving and
+  // be back before --dur-exit is up. Svelte aborts the outro there and keeps the node — but
+  // `crumb-leaving` is added by crumbOut() rather than by Svelte, so nothing in the abort
+  // path knows to take it off again. Left on, `crumb-out ... forwards` pins the last frame
+  // at opacity 0 for good, while the element keeps `position: static` and its box: the row
+  // still reserves the chevron's width and paints nothing into it.
+  //
+  // Scrolled directly rather than through jumpTo, which opens a menu and types: the abort
+  // only happens INSIDE the exit window, and the gesture has to be quicker than the thing
+  // it is racing.
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+
+  // The exit is widened for this spec, and that is the difference between a test and a coin
+  // toss. What is under test is what an ABORTED outro leaves behind, not how quickly one can
+  // be caught: at the real 140ms the abort has to win a race against whatever else the machine
+  // is doing, which under a full gate it does not reliably. Stretching the token makes the
+  // abort a certainty and changes nothing about the mechanism — crumbOut() reads its wait back
+  // out of the cascade, so the longer exit is honoured end to end.
+  await page.addStyleTag({ content: ":root { --dur-exit: 2s; }" });
+  expect(await motionToken(page, "--dur-exit")).toBeGreaterThan(1);
+
+  await jumpTo(page, "Charlie");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
+
+  const deep = await page.locator(PLAN_SURFACE).evaluate((el) => el.scrollTop);
+
+  // Both scrolls happen in the PAGE: a round-trip per step would put the wire inside the
+  // window this is trying to land in. The trail is shortened, the exit is waited for by
+  // FRAME rather than by clock, and the levels go back the moment it is seen to have started.
+  // What that wait observed is asserted below, so a version that stops aborting anything fails
+  // instead of passing vacuously.
+  const abortedAnExit = await page.evaluate(
+    async ({ selector, y }) => {
+      const surface = document.querySelector<HTMLElement>(selector);
+      if (surface === null) return false;
+      surface.scrollTop = 0;
+      const leaving = await new Promise<boolean>((resolve) => {
+        let frames = 0;
+        const look = (): void => {
+          if (document.querySelectorAll(".plan-breadcrumbs .crumb-leaving").length > 0) {
+            resolve(true);
+            return;
+          }
+          if (++frames > 120) {
+            resolve(false);
+            return;
+          }
+          requestAnimationFrame(look);
+        };
+        requestAnimationFrame(look);
+      });
+      surface.scrollTop = y;
+      return leaving;
+    },
+    { selector: PLAN_SURFACE, y: deep },
+  );
+  expect(abortedAnExit).toBe(true);
+
+  // The abort is only exercised if the levels really came back, so that is asserted before
+  // the claim rather than assumed by it.
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
+
+  // Settled on the engine rather than on a duration: mid-flight the exit is PART way down, so
+  // an opacity read taken then says nothing, and `expect.poll` would take the first sample
+  // that happened to look clean. Once nothing is running, a node still dark is one `forwards`
+  // has pinned there for good — which is exactly the state under test.
+  // RUNNING, not merely present: an exit pinned by `forwards` stays in getAnimations() for as
+  // long as it is holding a frame, so counting them all would make this wait the assertion and
+  // the real claim below unreachable.
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        () =>
+          document
+            .querySelector(".plan-breadcrumbs")
+            ?.getAnimations({ subtree: true })
+            .filter((animation) => animation.playState === "running").length,
+      ),
+    )
+    .toBe(0);
+
+  // The reader's claim: every chevron the row is holding space for actually paints. Read off
+  // computed opacity rather than the class, so it fails on what the reader sees rather than
+  // on the mechanism that happens to cause it today.
+  const holes = await page.evaluate(() => {
+    const list = document.querySelector(".plan-breadcrumbs [data-slot='breadcrumb-list']");
+    if (list === null) return [];
+    return [...list.children]
+      .filter((el) => {
+        const style = getComputedStyle(el);
+        const inFlow = style.position !== "absolute" && style.visibility !== "hidden";
+        return (
+          el.getAttribute("data-slot") === "breadcrumb-separator" &&
+          inFlow &&
+          Number(style.opacity) === 0
+        );
+      })
+      .map((el) => (el as HTMLElement).className);
+  });
+  expect(holes).toEqual([]);
+
+  // And the mechanism, so a regression is named at its cause: the class crumbOut() adds must
+  // not outlive the transition it belongs to. It is the crumbs' own guard too — measure()
+  // reads `.crumb-item:not(.crumb-leaving)`, so one stuck here drops that level out of the
+  // widths the elision is computed from, for as long as the node lives.
+  await expect(page.locator(`${BAR} .crumb-leaving`)).toHaveCount(0);
+});
