@@ -1078,10 +1078,14 @@ const CARET_OVERRIDES = `
      a wide table reflows and the prose cell never wraps any sooner. justify-content keeps
      a narrow table at its natural width rather than stretching it across the card.
 
-     44ch is the one tuned number, and it means "a cell wider than this is prose". The
-     seed plan splits cleanly around it: across its seven tables every data cell is at most
-     39ch wide, and the only cell above that is the 94ch link cell in the reflow-exemptions
-     table, which is exactly the one that must wrap. Nothing sits in between.
+     64ch is the one tuned number, and it means "a cell wider than this is prose". It is
+     the measure prose is set to everywhere else for the same reason — a line much longer
+     than this is hard to return from, and one much shorter breaks too often to read as a
+     sentence — and the seed plan splits cleanly around it: across its eight tables every
+     data cell is at most 39ch wide, and everything above is a sentence (the reflow
+     exemption table's 94ch link cell, the two wrapping rows under Tables). Nothing sits in
+     between. A cell measures its own box, so a cell that opens with a pipe spends two of
+     those characters on the pipe and the space after it.
 
      No fill and no padding. The table sits on the bare diff surface rather than in a
      panel: a fenced block is a different mode of reading and earns its own surface, where
@@ -1163,7 +1167,29 @@ const CARET_OVERRIDES = `
      token-level rule would only ever reach the first visual line. */
   [data-content] > [data-table-card] [data-table-cell] {
     white-space: pre-wrap;
-    max-width: 44ch;
+    max-width: 64ch;
+  }
+  /* A wrapped cell hangs its continuation lines under its own first line. The text of a
+     cell does not start at the cell's edge — the source puts two characters before it,
+     the pipe and the space after it — so continuation lines starting at the edge sat two
+     characters left of everything above them, and ran through the column rule painted
+     half a character in.
+
+     The classic hanging-indent pair: the padding moves every line of the cell right by
+     those two characters, and the negative indent pulls the FIRST one back to where it
+     was, so the pipe still sits on its own character column and the rule still lands on
+     it. It costs the track nothing — a negative text-indent takes the same two characters
+     off the first line's max-content contribution that the padding adds — so a cell that
+     does not wrap is exactly as wide as it was.
+
+     Keyed on the edge attribute because that IS "this cell opens with a pipe". A table
+     written without outer pipes has a first cell whose text starts at the cell edge, and
+     it correctly indents nothing. */
+  [data-content]
+    > [data-table-card]
+    [data-table-cell]:is([data-table-edge="start"], [data-table-edge="both"]) {
+    padding-inline-start: 2ch;
+    text-indent: -2ch;
   }
   /* The source's own alignment padding, and the delimiter row's dashes (tables.ts's
      inertRuns). Zero-size rather than hidden: the characters stay in the layout tree,

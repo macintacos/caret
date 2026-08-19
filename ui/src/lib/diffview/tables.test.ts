@@ -184,7 +184,7 @@ describe("the seed plan's tables", () => {
     expect(found).toHaveLength(8);
     // The widest is what drives the horizontal-scroll path in a real browser.
     expect(Math.max(...found.map((t) => t.align.length))).toBe(10);
-    // And one cell runs past the sheet's 44ch per-column cap, which is the only thing
+    // And one cell runs past the sheet's 64ch per-column cap, which is the only thing
     // that makes a column WRAP rather than merely grow. It is stated as a property of
     // the fixture rather than left to the browser suite: shorten that cell and the
     // showcase silently stops demonstrating the case it was added for.
@@ -193,7 +193,7 @@ describe("the seed plan's tables", () => {
         table.rows.flatMap((row) => row.cells.map((cell) => cell.endCol - cell.startCol)),
       ),
     );
-    expect(widest).toBeGreaterThan(44);
+    expect(widest).toBeGreaterThan(64);
   });
 
   test("respects the alignment markers the showcase writes", () => {

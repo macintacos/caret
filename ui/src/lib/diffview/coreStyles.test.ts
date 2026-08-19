@@ -1447,7 +1447,11 @@ describe("tables (EXC-864)", () => {
   const cellRule = rulesFor(String.raw`\[data-table-cell\]`).find((r) => r.includes("max-width:"));
   const inertRule = rulesFor(String.raw`\[data-table-inert\]`)[0];
   const pipeRule = rulesFor(String.raw`\[data-table-pipe\]`)[0];
-  const dividerRule = rulesFor(String.raw`\[data-table-edge="both"\]\s*\)`)[0];
+  // Two rules key off the same "this cell opens with a pipe" selector: the divider it
+  // paints, and the hanging indent it owes.
+  const edgeRules = rulesFor(String.raw`\[data-table-edge="both"\]\s*\)`);
+  const dividerRule = edgeRules.find((r) => r.includes("background-image:"));
+  const hangRule = edgeRules.find((r) => r.includes("text-indent:"));
   const ruleRow = rulesFor(String.raw`\[data-line\]\[data-table-rule\]`).find((r) =>
     r.includes("background-image:"),
   );
@@ -1498,6 +1502,7 @@ describe("tables (EXC-864)", () => {
       dotRule,
       numberRule,
       slotRule,
+      hangRule,
     })) {
       expect(rule, `${name} did not match`).toBeTruthy();
     }
@@ -1543,8 +1548,26 @@ describe("tables (EXC-864)", () => {
     // A max-content track never shrinks under space pressure, so the cap riding the cell
     // resolves each track to min(its content, the cap). Capping the tracks instead lets
     // the grid squeeze every column at once, which is the reflow this avoids.
-    expect(cellRule).toMatch(/max-width:\s*44ch/);
+    expect(cellRule).toMatch(/max-width:\s*64ch/);
     expect(cellRule).toMatch(/white-space:\s*pre-wrap/);
+  });
+
+  test("hangs a wrapped cell's continuation lines under its own first line", () => {
+    // A cell's text does not start at the cell's edge: the source puts a pipe and a space
+    // before it. Continuation lines starting at the edge therefore sat two characters
+    // left of every line above them, and ran through the column rule painted half a
+    // character in.
+    //
+    // The padding and the indent are one mechanism and have to match: the padding moves
+    // every line right, the indent pulls the first one back, so the pipe stays on its own
+    // character column and the track is the width it always was.
+    expect(hangRule).toMatch(/padding-inline-start:\s*2ch/);
+    expect(hangRule).toMatch(/text-indent:\s*-2ch/);
+    // Keyed on the edge attribute, which IS "this cell opens with a pipe" — a table
+    // written without outer pipes has a first cell whose text starts at the edge, and it
+    // must indent nothing. Not :not(:first-child), which is the DIVIDER's question.
+    expect(hangRule).toContain('[data-table-edge="start"]');
+    expect(hangRule).not.toContain(":not(:first-child)");
   });
 
   test("keeps the source's own alignment padding out of the column's width", () => {

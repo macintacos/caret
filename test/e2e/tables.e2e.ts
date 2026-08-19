@@ -7,7 +7,7 @@
 // source widths; that each column's declared alignment resolves to a `text-align` in the
 // live cascade and puts the glyphs where the marker asked, on a wrapped cell's
 // continuation lines as much as on its first; that the card grows past the prose measure
-// with no scrollbar while a cell over the 44ch cap wraps inside its own column; that the
+// with no scrollbar while a cell over the 64ch cap wraps inside its own column; that the
 // inline layers — code, bold, italic, a collapsing link, a file reference — still find
 // their columns once a row's tokens sit one level down inside cells; that the pipes
 // compute to
@@ -65,7 +65,7 @@ import {
 //
 // B is written with NO outer pipes, which is what puts a cell with no `data-table-edge`
 // on the page — the phantom rule down column 0 that the edge attribute exists to
-// prevent. Its Note column is right-aligned AND holds a cell far past the sheet's 44ch
+// prevent. Its Note column is right-aligned AND holds a cell far past the sheet's 64ch
 // cap, which is the pair that makes a wrapped cell's alignment observable at all. That
 // cell also carries one run of every inline layer the epic decorates — inline code, bold,
 // italic, a collapsing link, and a file reference — so all five can be shown surviving
@@ -162,6 +162,20 @@ const LINK_PADDED = `# Padded
 Trailing prose, one paragraph.
 
 And a second, so the plan runs past ten lines.
+`;
+
+/** A left-aligned column carrying a cell past the cap, which is what a hanging indent is
+ * visible on. Its second column opens with a pipe, so it is the branch the sheet indents;
+ * both columns are unmarked, so the row hangs left. */
+const WRAP_PROSE = "Prose above a table whose second column wraps.";
+const WRAP_LEFT = `# Wrapping
+
+${WRAP_PROSE}
+
+| Step | Notes |
+| ---- | ----- |
+| 1 | Drain the queue before the cutover, then hold the relay closed until the health probe has reported two consecutive green intervals. |
+| 2 | Short. |
 `;
 
 /** The three tables on the page, by their header row's text. */
@@ -944,6 +958,57 @@ test("a wide table outgrows the reading measure without a scrollbar", async ({ p
   }
 });
 
+test("a wrapped cell hangs its continuation lines under its own first line", async ({
+  page,
+  daemon,
+}) => {
+  // A cell's text does not start at the cell's edge: the source puts a pipe and the space
+  // after it there first. Continuation lines left at the edge therefore sat two characters
+  // left of every line above them, and ran through the column rule painted half a
+  // character in.
+  //
+  // Its own fixture rather than TABLE_PLAN's wrapping cell, which is right-aligned: a
+  // hanging indent is invisible by construction on flush-right lines, since they share
+  // their trailing edge and not their leading one. This needs a column that hangs left,
+  // and a cell that opens with a pipe — the two conditions the sheet keys on.
+  await open(page, daemon, WRAP_LEFT);
+  await carded(page, 1);
+
+  const ch = await cellWidth(page, WRAP_PROSE);
+  const geom = await page.evaluate((want) => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const cell = [...(sh?.querySelectorAll("[data-content] [data-table-cell]") ?? [])].find((c) =>
+      (c.textContent ?? "").includes(want),
+    ) as HTMLElement;
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    // One entry per visual line: its top, and the leftmost ink on it. A Range yields a
+    // rect per span per line, so a cell's several tokens have to be folded together.
+    const byTop = new Map<number, number>();
+    for (const rect of range.getClientRects()) {
+      const key = Math.round(rect.top);
+      byTop.set(key, Math.min(byTop.get(key) ?? Number.POSITIVE_INFINITY, rect.left));
+    }
+    return {
+      cellLeft: cell.getBoundingClientRect().left,
+      edge: cell.getAttribute("data-table-edge"),
+      lefts: [...byTop.entries()].sort((a, b) => a[0] - b[0]).map(([, left]) => left),
+    };
+  }, "Drain the queue");
+
+  // The conditions the claim rests on, so it cannot pass on a cell that never wrapped or
+  // never had a pipe to indent past.
+  expect(geom.edge).not.toBeNull();
+  expect(geom.lefts.length).toBeGreaterThan(1);
+  const [first, ...rest] = geom.lefts;
+  // The first line still opens at the cell's edge, so the pipe stays on its own character
+  // column and the rule painted there still lands on it.
+  expect(first).toBeCloseTo(geom.cellLeft, 0);
+  // And every line after it starts one pipe and one space in — under the first line's
+  // text, clear of the rule.
+  for (const left of rest) expect(left - (first ?? 0)).toBeCloseTo(2 * ch, 0);
+});
+
 test("a cell past the cap wraps inside its own column", async ({ page, daemon }) => {
   // The per-column half of the sizing policy: max-content tracks plus a max-width on the
   // CELL, so a genuinely prose-heavy cell hits the cap and wraps while the columns
@@ -955,12 +1020,13 @@ test("a cell past the cap wraps inside its own column", async ({ page, daemon })
   const [wrapped, short] = await Promise.all([cellBoxes(page, B_WRAPPED), cellBoxes(page, B_ROW2)]);
   const note = wrapped[1];
   const plain = short[1];
-  expect(note?.text.length).toBeGreaterThan(44);
-  // Capped at 44ch — the cell wrapped rather than taking the width its text asked for.
-  expect(note?.width).toBeLessThanOrEqual(44 * ch + 1);
+  expect(note?.text.length).toBeGreaterThan(64);
+  // Capped at 64ch — the cell wrapped rather than taking the width its text asked for.
+  expect(note?.width).toBeLessThanOrEqual(64 * ch + 1);
   expect(note?.width).toBeLessThan((note?.text.length ?? 0) * ch);
   // Two visual lines rather than one: the ROW grew, not the table.
   expect(note?.height).toBeGreaterThan(plain?.height ?? 0);
+
   // And the gutter number grew with it, which is what keeps a line number pointing at
   // its own text — the card's subgrid does that with no height syncing anywhere.
   const heights = await rowHeights(page, await lineOf(page, B_WRAPPED));
