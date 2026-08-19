@@ -1044,6 +1044,212 @@ const CARET_OVERRIDES = `
     top: -0.12em;
   }
 
+  /* EXC-864: a GFM table renders as a real column-aligned table. This is the one place
+     in the epic that RESTRUCTURES the DOM instead of overdrawing in place, because the
+     source's pipe columns do not line up with a table's columns — alignment has to come
+     from layout. tables.ts moves a table's rows into a card and groups each row's tokens
+     into cells; these rules are the whole visual treatment.
+
+     TWO NESTED SUBGRIDS, and both are load-bearing. The card takes its ROWS from the
+     parent, exactly as the code card above does, so a table's rows still map to the
+     shared row tracks and the gutter numbers stay aligned — including when a cell wraps
+     and grows its track, which is why there is no ResizeObserver and no per-row height
+     syncing here. The card declares the COLUMN tracks, and each row takes those from the
+     card, so cells line up across rows while every row keeps its own box. That last part
+     is why a real table element was refused rather than merely awkward: table rows cannot
+     participate in the parent's row tracks, and display: contents rows would drop the box
+     the library's selection and hover fills, the cursor band and the annotation anchors
+     all need.
+
+     NO max-width and NO overflow, which is the one place this card parts company with the
+     code card above. A fenced block is a different MODE of reading and earns a panel with
+     a scroll box of its own; a table is prose-adjacent data whose whole value is being
+     comparable at a glance, so it grows past the prose measure until every column is
+     visible rather than hiding the last ones behind a scrollbar. The per-column cap below
+     is what keeps that from running away.
+
+     The sizing policy is max-content tracks plus a max-width on the CELL, and the split
+     between the two is what makes the cap per-column rather than per-table. A max-content
+     track never shrinks under space pressure, so a track resolves to min(its content, the
+     cap): a column of ordinary data keeps its natural width and never wraps, while a
+     genuinely prose-heavy cell hits the cap and wraps inside its own column, growing the
+     ROW rather than the table. Sizing the TRACKS with minmax(min-content, …) or
+     fit-content() cannot express this — both let the grid squeeze every column at once, so
+     a wide table reflows and the prose cell never wraps any sooner. justify-content keeps
+     a narrow table at its natural width rather than stretching it across the card.
+
+     44ch is the one tuned number, and it means "a cell wider than this is prose". The
+     seed plan splits cleanly around it: across its seven tables every data cell is at most
+     39ch wide, and the only cell above that is the 94ch link cell in the reflow-exemptions
+     table, which is exactly the one that must wrap. Nothing sits in between.
+
+     No fill and no padding. The table sits on the bare diff surface rather than in a
+     panel: a fenced block is a different mode of reading and earns its own surface, where
+     a table is prose-adjacent data. And a cell needs no padding because the source already
+     carries it — a written cell has its own spaces, so the breathing room inside one is
+     text the author typed. The chip family's no-padding rule (EXC-867, EXC-869) lands
+     here free. */
+  [data-content] > [data-table-card] {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-rows: subgrid;
+    grid-template-columns: repeat(var(--table-columns, 1), max-content);
+    justify-content: start;
+    margin-inline: var(--caret-card-inset);
+  }
+  [data-content] > [data-table-card] > [data-line] {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: subgrid;
+  }
+  /* pre-wrap rather than the library's pre: wrapping is opt-in INSIDE cells only, and
+     stays off everywhere else. The max-width is the wrap trigger described above — it caps
+     the cell's max-content contribution, which is what caps the track. text-align rides
+     the CELL rather than its tokens so a wrapped cell's continuation lines follow the
+     column's declared alignment too; alignment is a property of the column, and a
+     token-level rule would only ever reach the first visual line. */
+  [data-content] [data-table-cell] {
+    white-space: pre-wrap;
+    max-width: 44ch;
+  }
+  [data-content] [data-table-cell][data-table-align="left"] { text-align: left; }
+  [data-content] [data-table-cell][data-table-align="center"] { text-align: center; }
+  [data-content] [data-table-cell][data-table-align="right"] { text-align: right; }
+
+  /* THE PIPES GO; THE RULES THEY STOOD FOR STAY. Every cell opens with its own pipe and
+     a row's last cell closes with one. The glyphs are taken to transparent and a hairline is
+     painted down the column each vacated, so the reader sees borders where they had been
+     reading a picket fence — which is the whole issue. Nothing is added to the source and
+     nothing moves, so copy, vim search and motions, and the comment anchors all still
+     resolve against the same column space. The selector outranks the library's own
+     [data-line] span color rule, which is where a token's shiki ink is applied.
+
+     Inking the glyph instead was the previous attempt and it cannot work: a pipe does not
+     fill its line box, so a column of them reads as a dotted stack rather than a border,
+     and the moment a cell wraps the pipes are all on its first visual line with nothing
+     down the rest of the row. */
+  [data-content] [data-line] [data-table-pipe] {
+    color: transparent;
+  }
+
+  /* The rules themselves, painted on the CELL rather than on the pipe token — which is
+     what makes one continuous down a wrapped row's full height instead of one line of it.
+     A background layer rather than a border, because a border joins the box model and
+     would shift the monospace grid by a pixel per column; that grid is what the search
+     highlights, the drag range and the vim motions all resolve against.
+
+     Positioned at the CENTRE of the pipe's own character cell — 0.5ch in from whichever
+     edge that pipe sits on — rather than flush to the cell's box edge. The ch unit is the width
+     of the zero glyph, which on this monospace surface IS the cell width, so the rule
+     lands where the character it replaces was drawn. It also makes the air symmetric: a
+     cell's text clears its own pipe by one space on the left and the next cell's by one on
+     the right, so every rule sits in one and a half cells of space on each side.
+
+     data-table-edge names which of a cell's own edges carry a pipe, so a table written
+     without a leading pipe draws nothing down column 0 — there is no character there for a
+     rule to stand in for, and drawing one anyway would be the single mark on the table
+     that is not in the file. It is an attribute the pass writes rather than a :has() probe
+     because this selector runs on every cell of every table on every repaint.
+
+     --ink-soft, and never --rule or --rule-strong. The glyph these replace is transparent,
+     so the rules are the only thing left saying where one column ends and the next begins,
+     which is WCAG 1.4.11's own test for a graphical object required to understand the
+     content. doc/agents/svelte-rules.md § chips carries the measured ranges. */
+  [data-content] [data-table-cell][data-table-edge] {
+    background-image: linear-gradient(var(--ink-soft), var(--ink-soft));
+    background-repeat: no-repeat;
+    background-size: 1px 100%;
+  }
+  [data-content] [data-table-cell][data-table-edge="start"] {
+    background-position: 0.5ch 0;
+  }
+  [data-content] [data-table-cell][data-table-edge="end"] {
+    background-position: calc(100% - 0.5ch) 0;
+  }
+  /* Both edges: two layers, one per pipe. background-size and -repeat above carry over —
+     a single value applies to every layer. */
+  [data-content] [data-table-cell][data-table-edge="both"] {
+    background-image:
+      linear-gradient(var(--ink-soft), var(--ink-soft)),
+      linear-gradient(var(--ink-soft), var(--ink-soft));
+    background-position: 0.5ch 0, calc(100% - 0.5ch) 0;
+  }
+
+  /* The header row is bold, and the weight is declared HERE rather than routed through
+     shiki's fontStyle — @pierre/diffs carries that into an invalid font-weight:
+     light-dark(...) and drops it, so every token renders at one weight whatever the theme
+     says (EXC-867's standing upstream finding). */
+  [data-content] [data-line][data-table-head] {
+    font-weight: bold;
+  }
+
+  /* The delimiter row keeps its line AND its gutter number: one source line is one table
+     row, which is correctness rather than look — the comment anchors rest on it. What the
+     reader sees in place of a row of dashes and colons is the separator it stands for. The dashes and
+     colons go transparent and the row draws one full-width rule, which the dashes
+     themselves cannot do because they are only ever as long as someone typed them.
+
+     EXC-862's thematic-break paint shape verbatim, and for its reasons. A background
+     rather than an appended node or a ::before, because paint is invisible to a settle
+     check — tables.ts settles a celled row by COUNTING its children, so a pass that
+     appended a rule here would have every repaint rebuild the row and never adopt it, the
+     loop EXC-870 measured at ~10,800 childList mutations in two seconds. And no inset and
+     no margin, so the row keeps its height to the character: the gutter numbers are one
+     per row, and a rule that changed the vertical rhythm would read as drift long before
+     it read as a separator.
+
+     --ink-soft, promoted from the --ink-faint EXC-871 left it on. That ruling was right
+     while the dashes stayed legible beside the line — the row's own markers, the bold
+     header above and the column rules were three things already saying where the header
+     ended, so the line only had to be visible. Here the dashes are transparent and the
+     line is the only thing carrying them, which makes this a replacement decoration under
+     the same 3:1 floor as the thematic break above. doc/agents/svelte-rules.md § chips
+     carries the ranges. */
+  [data-content] [data-line][data-table-rule] {
+    background-image: linear-gradient(var(--ink-soft), var(--ink-soft));
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 100% 1px;
+  }
+  /* The row and everything under it, so a repaint that has not yet celled the line — or
+     not yet wrapped it in shiki spans — shows no glyph either. A descendant selector
+     rather than the thematic break's child combinator: a celled row's tokens sit one level
+     further down, inside the cells. */
+  [data-content] [data-line][data-table-rule],
+  [data-content] [data-line][data-table-rule] * {
+    color: transparent;
+  }
+
+  /* A comment anchored to a table line. Its row rides inside the table's card so it lands
+     under the row it belongs to and pushes the rest of the table down, rather than after
+     the whole table — but the card is a grid of max-content columns, so the row needs
+     placing in it, and placing it there must not change the table.
+
+     contain: inline-size is what keeps the columns exactly where they were. A spanning
+     grid item otherwise contributes its own max-content to every track it covers, and a
+     composer's is large enough to stretch a narrow table wider the moment someone comments
+     on it. Containment takes the row's width from the grid instead of from its contents,
+     so opening a comment moves nothing.
+
+     container-type on the card would express the visible width directly, and is not
+     usable: it brings layout containment, which stops the card's subgrid contributing the
+     comment's height to the parent's row track, and the whole thread collapses to one
+     line. */
+  [data-content] > [data-table-card] > [data-line-annotation] {
+    grid-column: 1 / -1;
+    contain: inline-size;
+  }
+  /* The width the comment is actually drawn at. It cannot be set on the row above: a grid
+     item with a definite width distributes it back across the tracks it spans, which is
+     the inflation the containment was for. It belongs on the library's own wrapper, which
+     already carries an explicit width (--diffs-column-content-width, the full content
+     column). The cap is the reading measure and nothing else — the table's own width is
+     the wrong answer at both ends, giving a cramped thread on a narrow table and an
+     over-long one on a wide. */
+  [data-content] > [data-table-card] > [data-line-annotation] > [data-annotation-content] {
+    max-width: var(--caret-read-max);
+  }
+
   /* EXC-788: a banded row — the focused-line cursor OR a pointer hover — ON a
      fenced code line. The code-panel fill above is same-specificity-but-later than
      the base cursor/hover bands, so on a code row the band dies at the seam: the
@@ -1158,11 +1364,13 @@ const CARET_OVERRIDES = `
     border-right-color: transparent;
   }
 
-  /* EXC-865: the same seam fill, for a row that lives inside a card. The pull above
-     is a direct-child rule and deliberately stays one — a carded row cannot pull left
-     at all, because its card is an overflow-x: auto scroll container and anything
-     painted outside that padding box is clipped. So the strip is painted from the
-     GUTTER side instead, which nothing clips: a ::before hung off the banded gutter
+  /* EXC-865: the same seam fill, for a row that lives inside a card of either kind.
+     The pull above is a direct-child rule and deliberately stays one — a code card is
+     an overflow-x: auto scroll container, so anything a row inside it painted outside
+     that padding box is clipped, and widening the pull to reach a table's rows would
+     move it into a state the code card's own rows cannot honour. So the strip is
+     painted from the GUTTER side instead, which nothing clips and which both card
+     kinds share: a ::before hung off the banded gutter
      cell's inline-end edge, spanning the content column's seam plus the card's own
      inset — exactly the gap between the two halves. background-color: inherit takes
      the cell's own band, so one rule covers selection amber, hover grey and the
@@ -1180,11 +1388,11 @@ const CARET_OVERRIDES = `
      position: relative is set unconditionally rather than on the same state list: it
      costs nothing on an unbanded cell, and two copies of a six-state list is a rule
      that silently mispositions the strip the day someone extends one of them. */
-  [data-gutter] [data-code-card-gutter] > [data-column-number] {
+  [data-gutter] :is([data-table-card-gutter], [data-code-card-gutter]) > [data-column-number] {
     position: relative;
   }
   [data-gutter]
-    [data-code-card-gutter]
+    :is([data-table-card-gutter], [data-code-card-gutter])
     > [data-column-number]:is(
       [data-selected-line],
       [data-hovered],
@@ -1274,23 +1482,25 @@ const CARET_OVERRIDES = `
   }
   [data-gutter]
     > [data-column-number][data-selected-line]
-    ~ [data-code-card-gutter]
+    ~ :is([data-table-card-gutter], [data-code-card-gutter])
     > [data-column-number][data-selected-line] {
     border-top-left-radius: 0;
   }
   [data-content]
     > [data-line][data-selected-line]
-    ~ [data-code-card]
+    ~ :is([data-table-card], [data-code-card])
     > [data-line][data-selected-line] {
     border-top-right-radius: 0;
   }
   [data-gutter]
-    > [data-code-card-gutter]:has(~ [data-column-number][data-selected-line])
+    > :is([data-table-card-gutter], [data-code-card-gutter]):has(
+      ~ [data-column-number][data-selected-line]
+    )
     > [data-column-number][data-selected-line] {
     border-bottom-left-radius: 0;
   }
   [data-content]
-    > [data-code-card]:has(~ [data-line][data-selected-line])
+    > :is([data-table-card], [data-code-card]):has(~ [data-line][data-selected-line])
     > [data-line][data-selected-line] {
     border-bottom-right-radius: 0;
   }

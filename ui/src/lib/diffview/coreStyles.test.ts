@@ -238,11 +238,12 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
   // (cardSelection.ts owns that), and two of the three things that then paint the band
   // had to change shape to reach it — which is what these pin.
   test("carries the band across the seam from the gutter side for a carded row", () => {
-    // A carded row cannot pull left across the seam: its card is an overflow-x: auto
-    // scroll container, so anything painted outside that box is clipped. The strip is
-    // painted from the gutter cell instead, which nothing clips.
+    // A code card is an overflow-x: auto scroll container, so a row inside one cannot
+    // pull left across the seam — anything painted outside that box is clipped. The
+    // strip is painted from the gutter cell instead, which nothing clips and which
+    // BOTH card kinds share (EXC-864's table card is the second).
     const extension = overrideDecls.match(
-      /\[data-gutter\]\s+\[data-code-card-gutter\]\s*>\s*\[data-column-number\]:is\([^)]*\)::before\s*\{([^}]*)\}/,
+      /\[data-gutter\]\s+:is\(\[data-table-card-gutter\],\s*\[data-code-card-gutter\]\)\s*>\s*\[data-column-number\]:is\([^)]*\)::before\s*\{([^}]*)\}/,
     );
     expect(extension).not.toBeNull();
     // Its width is exactly the two insets it has to cover, both named rather than
@@ -1427,5 +1428,142 @@ describe("thematic breaks (EXC-862)", () => {
     expect(ruleRule).not.toMatch(
       /(?:^|[;{])\s*(?:margin|padding|height|min-height|line-height|border)[a-z-]*\s*:/,
     );
+  });
+});
+
+// EXC-864: a GFM table renders as a real column-aligned table — a subgrid card whose
+// rows take its column tracks, with the source pipes taken to transparent and the
+// column rules painted in the space they vacate. The previous attempt at this shipped
+// the opposite trade (visible pipes, no painted rules, on the chip family's faint ink)
+// and was reverted, so what this suite pins is the trade rather than the layout: which
+// glyphs go, what replaces them, what ink that owes, and that the card does NOT scroll.
+describe("tables (EXC-864)", () => {
+  const cardRule =
+    overrideDecls.match(/\[data-content\]\s*>\s*\[data-table-card\]\s*\{[^}]*\}/)?.[0] ?? "";
+  const cellRule = rulesFor(String.raw`\[data-table-cell\]`).find((r) => r.includes("max-width:"));
+  const pipeRule = rulesFor(String.raw`\[data-table-pipe\]`)[0];
+  const edgeRule = rulesFor(String.raw`\[data-table-cell\]\[data-table-edge\]`)[0];
+  const bothRule = rulesFor(String.raw`\[data-table-edge="both"\]`)[0];
+  const ruleRow = rulesFor(String.raw`\[data-line\]\[data-table-rule\]`).find((r) =>
+    r.includes("background-image:"),
+  );
+  const ruleInk = rulesFor(String.raw`\[data-line\]\[data-table-rule\][^{}]*`).find((r) =>
+    r.includes("color:"),
+  );
+
+  test("every rule this suite reads is present", () => {
+    for (const rule of [cardRule, cellRule, pipeRule, edgeRule, bothRule, ruleRow, ruleInk]) {
+      expect(rule).toBeTruthy();
+    }
+  });
+
+  test("grows the card until the whole table is visible rather than scrolling it", () => {
+    // The one place this card parts company with the code card: a fenced block earns a
+    // panel with its own scroll box, where a table's value is being comparable at a
+    // glance. A max-width or an overflow here would hide the last columns behind a
+    // scrollbar, which is what the issue asks not to happen.
+    expect(cardRule).not.toContain("max-width");
+    expect(cardRule).not.toContain("overflow");
+    expect(overrideDecls).not.toMatch(/\[data-table-card\][^{]*::-webkit-scrollbar/);
+  });
+
+  test("takes its rows from the parent and declares its own columns", () => {
+    // Subgrid rows are what keep the gutter numbers aligned as a wrapped cell grows its
+    // track — no ResizeObserver, no per-row height syncing.
+    expect(cardRule).toMatch(/grid-template-rows:\s*subgrid/);
+    expect(cardRule).toMatch(
+      /grid-template-columns:\s*repeat\(var\(--table-columns[^)]*\), max-content\)/,
+    );
+    expect(cardRule).toMatch(/justify-content:\s*start/);
+  });
+
+  test("caps the CELL, not the track, so one prose column wraps and the rest do not", () => {
+    // A max-content track never shrinks under space pressure, so the cap riding the cell
+    // resolves each track to min(its content, the cap). Capping the tracks instead lets
+    // the grid squeeze every column at once, which is the reflow this avoids.
+    expect(cellRule).toMatch(/max-width:\s*44ch/);
+    expect(cellRule).toMatch(/white-space:\s*pre-wrap/);
+  });
+
+  test("aligns a wrapped cell's continuation lines with its column", () => {
+    // text-align on the cell rather than its tokens: a token-level rule would only ever
+    // reach the first visual line of a wrapped cell.
+    for (const [value, want] of [
+      ["left", "left"],
+      ["center", "center"],
+      ["right", "right"],
+    ] as const) {
+      const rule = rulesFor(String.raw`\[data-table-align="${value}"\]`)[0];
+      expect(rule).toMatch(new RegExp(String.raw`text-align:\s*${want}`));
+    }
+  });
+
+  test("hides the pipes and paints the rules on the cell instead", () => {
+    // The glyph does not fill its line box, so a column of pipes reads as a dotted stack
+    // and disappears entirely below a wrapped cell's first line. The rule rides the cell
+    // box, which is full height whatever the row does.
+    expect(pipeRule).toMatch(/color:\s*transparent/);
+    expect(edgeRule).toMatch(/background-image:\s*linear-gradient\(/);
+    expect(edgeRule).toMatch(/background-size:\s*1px\s+100%/);
+    expect(edgeRule).toMatch(/background-repeat:\s*no-repeat/);
+  });
+
+  test("draws a rule only where the cell has a pipe of its own", () => {
+    // Gated on data-table-edge, so a table written without a leading pipe draws nothing
+    // down column 0 — a rule there would be the one mark on the table not in the file.
+    // Both edges take two layers, one per pipe.
+    expect(rulesFor(String.raw`\[data-table-edge="start"\]`)[0]).toMatch(
+      /background-position:\s*0\.5ch/,
+    );
+    expect(rulesFor(String.raw`\[data-table-edge="end"\]`)[0]).toMatch(
+      /background-position:\s*calc\(100% - 0\.5ch\)/,
+    );
+    expect(bothRule?.match(/linear-gradient\(/g)).toHaveLength(2);
+  });
+
+  test("replaces the delimiter row's markers with one full-width rule", () => {
+    // Paint, never a node: tables.ts settles a celled row by counting its children, so a
+    // pass that appended a rule here would rebuild the row on every repaint and never
+    // adopt it. The row keeps its height to the character so the gutter numbers hold.
+    expect(ruleRow).toMatch(/background-image:\s*linear-gradient\(/);
+    expect(ruleRow).toMatch(/background-size:\s*100%\s+1px/);
+    expect(overrideDecls).not.toMatch(/\[data-table-rule\][^{]*::(?:before|after)/);
+    expect(ruleInk).toMatch(/color:\s*transparent/);
+    // Descendant, not the thematic break's child combinator: a celled row's tokens sit
+    // one level further down, inside the cells.
+    expect(ruleInk).toMatch(/\[data-line\]\[data-table-rule\] \*/);
+  });
+
+  test("spends the replacement family's ink on both rules, never a chrome token", () => {
+    // Both the column rules and the header rule stand in for a glyph that is now
+    // transparent, so each is the only thing left carrying that character's meaning —
+    // WCAG 1.4.11's own test. theme.test.ts owns the measurements; this pins the spend.
+    for (const rule of [edgeRule, bothRule, ruleRow]) {
+      expect(rule).toContain("var(--ink-soft)");
+      expect(rule).not.toContain("--ink-faint");
+      expect(rule).not.toContain("--rule");
+    }
+  });
+
+  test("declares the header weight here rather than through shiki", () => {
+    // @pierre/diffs carries a theme's fontStyle into an invalid font-weight:
+    // light-dark(...) and drops it, so every token renders at one weight (EXC-867).
+    expect(rulesFor(String.raw`\[data-line\]\[data-table-head\]`)[0]).toMatch(
+      /font-weight:\s*bold/,
+    );
+  });
+
+  test("keeps a comment inside the card from widening the table", () => {
+    // A spanning grid item contributes its own max-content to every track it covers, and
+    // a composer's is large enough to stretch a narrow table the moment someone comments.
+    // container-type on the card would say this directly and cannot be used: its layout
+    // containment stops the subgrid contributing the comment's height, collapsing the
+    // thread to one line.
+    const annotation =
+      overrideDecls.match(
+        /\[data-content\]\s*>\s*\[data-table-card\]\s*>\s*\[data-line-annotation\]\s*\{[^}]*\}/,
+      )?.[0] ?? "";
+    expect(annotation).toMatch(/contain:\s*inline-size/);
+    expect(cardRule).not.toContain("container-type");
   });
 });
