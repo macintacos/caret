@@ -1313,25 +1313,74 @@ const CARET_OVERRIDES = `
   [data-content] [data-line][data-table-rule] * {
     color: transparent;
   }
-  /* And the row that carries it loses its LEADING, which is where the air under a header
-     was coming from. The delimiter is a full text line of the source that draws a single
-     hairline, so at the surrounding line height it sets half a line of space above that
-     hairline and half below — more space under the header than the header's own row
-     occupies. Dropping the leading takes the row to the height of one character: the rule
-     closes on the header above it and on the first body row below, and the row is
-     otherwise untouched — it keeps its line, its number and its comment anchor. The font
-     size is deliberately not what shrinks; a digit's ink is shorter than the em box it
-     sits in, so the gutter number still draws every pixel it had.
+  /* And the row that carries it keeps almost no height, which is where the air under a
+     header was coming from. The delimiter is a full text line of the source that draws a
+     single hairline, so at the surrounding line height it set half a line of space above
+     that hairline and half below — more space under the header than the header's own row
+     occupies. At 0.4 the header and the first body row close on the rule from both sides
+     and read as one table rather than as two blocks with a line between them.
 
-     Both columns or neither: the row track is the taller of the gutter cell and the
-     content row, so shrinking one of them alone changes nothing. The gutter's half is
-     reached positionally because that side carries no per-line marker and adding one
-     would cost a query per repaint. It is exact rather than a guess about the DOM —
-     "of [data-column-number]" counts only the line cells, skipping the buffer a comment
-     inserts, and the second line of a table is its delimiter by GFM's grammar. */
-  [data-content] > [data-table-card] > [data-line][data-table-rule],
+     line-height rather than a height, so the row tracks the type scale like everything
+     else here, and 0.4 is the tuned number: a fifth of a line of air on each side of the
+     hairline, which is enough to keep it clear of both rows' descenders and ascenders and
+     little enough that the pair reads as adjacent. It is a floor as much as a choice —
+     the row still has to hold the dot below.
+
+     ONE column, where this once needed both. The row track is the taller of the gutter
+     cell and the content row, so shrinking the content row alone used to change nothing;
+     what frees it is that the gutter cell no longer holds any in-flow content of its own
+     (see below), so it contributes no height and stretches to whatever this sets. */
+  [data-content] > [data-table-card] > [data-line][data-table-rule] {
+    line-height: 0.4;
+  }
+  /* The gutter half: no number, a dot. A line number is an address a reader takes to a
+     comment or a diff, and the delimiter is the one line of a table that says nothing —
+     it is punctuation for the parser, and its rendering is the header rule two rules up.
+     Numbering it spent a full line of vertical rhythm on an address for nothing, and the
+     row above is now far too short to set a digit in anyway. The dot says "a line is
+     here" — which stays true, because it is still a line: the comment anchors rest on it
+     and the numbering either side of it is unbroken.
+
+     PAINTED, not swapped. The number is the library's own node, so replacing its text
+     would mean writing to the DOM on every repaint — the childList churn tables.ts is
+     built to avoid — and a ::before is spoken for on these cells by EXC-865's seam strip.
+     A background layer is neither. currentColor rather than a token of its own: the dot
+     stands exactly where a number stood and is the same mark, so it takes the same ink
+     the numbers around it do, hover and selection states included.
+
+     Centred in the CONTENT box, which is where the digits are — the cell's padding is
+     lopsided (the gutter's own inset on one side, the divider's on the other), so
+     centring in the border box would set the dot visibly left of the column it replaces.
+
+     The cell is reached positionally because the gutter carries no per-line marker and
+     adding one would cost a query per repaint. It is exact rather than a guess about the
+     DOM — "of [data-column-number]" counts only the line cells, skipping the buffer a
+     comment inserts, and the second line of a table is its delimiter by GFM's grammar. */
   [data-gutter] [data-table-card-gutter] > :nth-child(2 of [data-column-number]) {
-    line-height: 1;
+    /* closest-side, so the disc is inscribed in the box below rather than reaching its
+       corners — a farthest-corner circle is clipped square by its own painting area and
+       the "dot" comes out a tiny block. */
+    background-image: radial-gradient(circle closest-side, currentColor 100%, transparent 100%);
+    background-origin: content-box;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 0.3em 0.3em;
+  }
+  [data-gutter]
+    [data-table-card-gutter]
+    > :nth-child(2 of [data-column-number])
+    > [data-line-number-content] {
+    display: none;
+  }
+  /* The hover "+" is a fixed size and its row is not, so it is centred on the row rather
+     than hung from the top of it. On every other line the two are the same height and
+     this changes nothing; on the delimiter row the button is several times the height of
+     the line it is offered for, and flex centring overflows it evenly above and below
+     instead of dropping it out of the bottom. Stated for every row rather than for that
+     one, because "the affordance is centred on its line" is the rule and the delimiter is
+     only the row that made it visible. */
+  [data-gutter] [data-gutter-utility-slot] {
+    align-items: center;
   }
 
   /* A comment anchored to a table line. Its row rides inside the table's card so it lands

@@ -593,55 +593,108 @@ test("no pipe glyph paints, and the rules stand where the pipes did", async ({ p
   expect(frame.middle).toEqual([flat, flat, flat, flat]);
 });
 
-test("the delimiter row keeps its number and loses its leading", async ({ page, daemon }) => {
-  // The row draws the header separator and is a full text line tall, which put half a
+test("the delimiter row is a dot and a hairline, not a numbered line", async ({ page, daemon }) => {
+  // The row draws the header separator and was a full text line tall, which put half a
   // line of air above that separator and half below — a gap under the header wider than
-  // the header's own row. It now stands at one character's height instead.
+  // the header's own row. It is now barely a line at all: the digits give way to a dot,
+  // which is what lets the height go, and the header closes on the rule from above while
+  // the first body row closes on it from below.
   //
-  // Browser-only twice over. The row track is the TALLER of the gutter cell and the
-  // content row, so whether the sheet's two halves resolve to the same short height is a
-  // question only a real grid answers — and the gutter's half is reached positionally,
-  // so that it lands on the delimiter's own cell rather than on the row above or on a
-  // comment's buffer is likewise a claim about the live DOM.
+  // Browser-only three times over. Whether shrinking the CONTENT row alone actually
+  // shortens the track depends on the gutter cell contributing no height once its number
+  // is out of flow, which only a real grid answers. The gutter cell is reached
+  // positionally, so that it lands on the delimiter's own cell rather than on the row
+  // above is a claim about the live DOM. And the hover "+" is a fixed size overflowing a
+  // row several times shorter than itself, so where it ends up is a layout answer.
   await open(page, daemon, LINK_PADDED);
   await carded(page, 1);
-  const geom = await page.evaluate(() => {
-    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-    const card = sh?.querySelector("[data-content] > [data-table-card]") as HTMLElement;
-    const rows = [...card.querySelectorAll(":scope > [data-line]")] as HTMLElement[];
-    const rule = rows.find((r) => r.hasAttribute("data-table-rule")) as HTMLElement;
-    const body = rows.filter((r) => r !== rule);
-    const ruleLine = rule.getAttribute("data-line") ?? "";
-    const gutter = sh?.querySelector(
-      `[data-gutter] [data-table-card-gutter] > [data-column-number="${ruleLine}"]`,
-    ) as HTMLElement;
-    const ink = document.createRange();
-    ink.selectNodeContents(gutter);
-    const heights = body.map((r) => r.getBoundingClientRect().height);
-    return {
-      ruleLine,
-      ruleHeight: rule.getBoundingClientRect().height,
-      gutterHeight: gutter.getBoundingClientRect().height,
-      bodyHeight: Math.min(...heights),
-      fontSize: Number.parseFloat(getComputedStyle(rule).fontSize),
-      // The number is still drawn: a shorter row must not mean an invisible one, which
-      // is what shrinking the type rather than the leading would have cost.
-      numberInk: ink.getBoundingClientRect().height,
-      numberText: (gutter.textContent ?? "").trim(),
-    };
-  });
-  // One character tall rather than one line: shorter than a body row, and no shorter than
-  // the type it is set in.
-  expect(geom.ruleHeight).toBeLessThan(geom.bodyHeight);
-  expect(geom.ruleHeight).toBeGreaterThanOrEqual(geom.fontSize);
-  // Both halves landed on the same track, which is the whole point of the pair: the
-  // gutter cell the positional selector picked is the delimiter's own, and it came down
-  // with the row rather than holding the track open at the old height.
-  expect(geom.numberText).toBe(geom.ruleLine);
-  expect(geom.gutterHeight).toBeCloseTo(geom.ruleHeight, 1);
-  expect(geom.numberInk).toBeGreaterThan(0);
-});
+  const read = () =>
+    page.evaluate(() => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+      const card = sh?.querySelector("[data-content] > [data-table-card]") as HTMLElement;
+      const rows = [...card.querySelectorAll(":scope > [data-line]")] as HTMLElement[];
+      const rule = rows.find((r) => r.hasAttribute("data-table-rule")) as HTMLElement;
+      const line = Number(rule.getAttribute("data-line"));
+      const cellFor = (n: number) =>
+        sh?.querySelector(
+          `[data-gutter] [data-table-card-gutter] > [data-column-number="${n}"]`,
+        ) as HTMLElement;
+      const numberOf = (n: number) => {
+        const span = cellFor(n).querySelector("[data-line-number-content]") as HTMLElement;
+        return { display: getComputedStyle(span).display, text: (span.textContent ?? "").trim() };
+      };
+      const dot = getComputedStyle(cellFor(line));
+      return {
+        line,
+        ruleHeight: rule.getBoundingClientRect().height,
+        bodyHeight: Math.min(
+          ...rows.filter((r) => r !== rule).map((r) => r.getBoundingClientRect().height),
+        ),
+        gutterHeight: cellFor(line).getBoundingClientRect().height,
+        number: numberOf(line),
+        // The lines either side still carry theirs: one line lost its address, not the
+        // numbering.
+        neighbours: [numberOf(line - 1), numberOf(line + 1)],
+        dot: {
+          image: dot.backgroundImage,
+          position: dot.backgroundPosition,
+          origin: dot.backgroundOrigin,
+        },
+      };
+    });
 
+  const before = await read();
+  // Barely a line: a fraction of a body row rather than the whole of one.
+  expect(before.ruleHeight).toBeLessThan(before.bodyHeight / 2);
+  expect(before.ruleHeight).toBeGreaterThan(0);
+  // Both halves landed on the same short track — the gutter cell no longer holds it open.
+  expect(before.gutterHeight).toBeCloseTo(before.ruleHeight, 1);
+  // The number is gone and a dot stands where it stood, painted rather than swapped in:
+  // a text change here would be a DOM write on every repaint.
+  expect(before.number.display).toBe("none");
+  expect(before.dot.image).toContain("radial-gradient");
+  // currentColor resolved to the gutter's own ink rather than to nothing — the disc's
+  // stop, not the surrounding transparent one the gradient also carries.
+  expect(before.dot.image).toMatch(/rgb\(\d+, \d+, \d+\) 100%/);
+  // Centred where the digits are, which is the content box — the cell's padding is
+  // lopsided, so the border box would put the dot left of the column it replaces.
+  expect(before.dot.origin).toBe("content-box");
+  expect(before.dot.position).toBe("50% 50%");
+  for (const neighbour of before.neighbours) {
+    expect(neighbour.display).not.toBe("none");
+    expect(neighbour.text).not.toBe("");
+  }
+
+  // The hover affordance is centred ON that row rather than hung from the top of it:
+  // it is several times the row's height, so anchored at the top it drops out of the
+  // bottom and reads as belonging to the line below.
+  await revealGutterPlus(page, before.line);
+  const plus = await page.evaluate((line) => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const cell = sh?.querySelector(
+      `[data-gutter] [data-table-card-gutter] > [data-column-number="${line}"]`,
+    ) as HTMLElement;
+    const btn = sh?.querySelector("[data-utility-button]") as HTMLElement;
+    const b = btn.getBoundingClientRect();
+    const c = cell.getBoundingClientRect();
+    return { taller: b.height > c.height, delta: b.top + b.height / 2 - (c.top + c.height / 2) };
+  }, before.line);
+  expect(plus.taller).toBe(true);
+  expect(Math.abs(plus.delta)).toBeLessThanOrEqual(1);
+
+  // And it survives a comment on the HEADER row, which is the trap the positional
+  // selector is written around: the library inserts a gutter buffer after the commented
+  // line, so plain :nth-child(2) would shrink and dot THAT instead of the delimiter.
+  await page.keyboard.press("Escape");
+  const head = await revealGutterPlus(page, before.line - 1);
+  await head.click();
+  await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
+  const after = await read();
+  expect(after.number.display).toBe("none");
+  expect(after.dot.image).toBe(before.dot.image);
+  expect(after.neighbours[0]?.display).not.toBe("none");
+  expect(after.ruleHeight).toBeCloseTo(before.ruleHeight, 1);
+});
 test("a column is as wide as what it shows, not as wide as the source", async ({
   page,
   daemon,
