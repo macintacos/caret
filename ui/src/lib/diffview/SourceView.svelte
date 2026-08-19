@@ -583,7 +583,7 @@
       // Draw the plan's images onto their rows (EXC-870). Ordered last because
       // it is the only pass here that ADDS a node rather than tagging or
       // splitting one — not because the token passes above would break on it.
-      // They walk a row's direct children accumulating text length, and an
+      // They walk a row through tokenChildren accumulating text length, and an
       // appended <img> holds no characters at the end of the line, so either
       // order is safe. Idempotent, so a settled row costs one comparison rather
       // than an observer loop, and always run so a populated→empty transition

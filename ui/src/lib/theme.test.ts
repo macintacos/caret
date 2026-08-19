@@ -467,11 +467,10 @@ describe("every theme", () => {
   // the whole epic and the list is now closed by a rule rather than by inspection: a marker
   // whose glyph SURVIVES is supplementary and stays on --ink-faint (the fence markers, the
   // ** / _ emphasis markers, an ordered item's number), and only a marker that has been
-  // replaced appears below. EXC-864 moved the table pipes and the delimiter row's dashes
-  // across that line — both went transparent — so the column rules and the header rule
-  // painted where they stood are measured here too. The thematic break is measured
-  // separately, one test down, because its paint can carry an alpha suffix that has to
-  // composite before it is measured.
+  // replaced appears below. A table's pipes and its delimiter row's dashes are
+  // transparent, so the column rules and the header rule painted where they stood are
+  // measured here too. The thematic break is measured separately, one test down, because
+  // its paint can carry an alpha suffix that has to composite before it is measured.
   //
   // One assertion rather than one per member: all five draw in the same token, so a
   // per-marker loop would run the identical arithmetic five times for a longer message.

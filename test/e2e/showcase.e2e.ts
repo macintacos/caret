@@ -86,6 +86,9 @@ const DECORATIONS = [
   ["data-md-image", "inline images (EXC-870)"],
   ["data-code-fence", "fence markers (EXC-869)"],
   ["data-code-card", "the scroll card an overflowing fence gets (EXC-729)"],
+  ["data-table-cell", "table cells (EXC-864)"],
+  ["data-table-pipe", "table pipes (EXC-864)"],
+  ["data-table-card", "the card every GFM table gets (EXC-864)"],
   ["data-file-ref", "file and folder references (EXC-687, EXC-918, EXC-880)"],
 ] as const;
 
@@ -141,7 +144,7 @@ test("every replacement marker really does hide the character it draws over", as
   page,
 }) => {
   await openShowcase(page, daemon);
-  // The claim the whole replacement/supplementary split rests on: these four take their
+  // The claim the whole replacement/supplementary split rests on: these six take their
   // source glyph to `transparent` and draw in the column it vacated, which is what puts
   // them under WCAG 1.4.11 rather than among the merely-tinted markers.
   //
@@ -163,6 +166,9 @@ test("every replacement marker really does hide the character it draws over", as
       checkbox: read("[data-content] [data-line] [data-md-checkbox]"),
       // The rule row takes the whole line's ink, tokens and all.
       rule: read("[data-content] [data-line][data-md-rule]"),
+      tablePipe: read("[data-content] [data-line] [data-table-pipe]"),
+      // As does the delimiter row, whose dashes and colons the header rule replaces.
+      tableRule: read("[data-content] [data-line][data-table-rule]"),
     };
   });
   expect(hidden).toEqual({
@@ -170,6 +176,8 @@ test("every replacement marker really does hide the character it draws over", as
     bullet: "rgba(0, 0, 0, 0)",
     checkbox: "rgba(0, 0, 0, 0)",
     rule: "rgba(0, 0, 0, 0)",
+    tablePipe: "rgba(0, 0, 0, 0)",
+    tableRule: "rgba(0, 0, 0, 0)",
   });
 });
 
@@ -540,6 +548,14 @@ test("a vendor palette resolves every decoration's paint", async ({ daemon, page
       rule: pick("[data-content] [data-line][data-md-rule]", (el) => {
         return getComputedStyle(el).backgroundImage;
       }),
+      // A table's header rule, the same background-layer shape the break takes.
+      tableRule: pick("[data-content] [data-line][data-table-rule]", (el) => {
+        return getComputedStyle(el).backgroundImage;
+      }),
+      // And its column rules, which ride the cell rather than the row.
+      tableColumn: pick("[data-content] [data-table-cell][data-table-edge]", (el) => {
+        return getComputedStyle(el).backgroundImage;
+      }),
     };
   });
 
@@ -552,6 +568,8 @@ test("a vendor palette resolves every decoration's paint", async ({ daemon, page
   expect(paint.quoteBar).toBe(paint.inkSoft);
   expect(paint.checkbox).toBe(paint.inkSoft);
   expect(paint.rule).toContain(paint.inkSoft);
+  expect(paint.tableRule).toContain(paint.inkSoft);
+  expect(paint.tableColumn).toContain(paint.inkSoft);
 
   // The chip is four background layers, one per member, each resolving to `transparent`
   // through its var() fallback when its member is absent — so "contains a gradient" would

@@ -15,9 +15,10 @@
 //
 // The image is APPENDED, so it sits past the last text token. Both this pass and
 // the token passes are safe in either order — an <img> holds no characters, and
-// splitRow, tagRow (inlineDecorate.ts) and tagTokenAt (fileRefTag.ts) all locate a
-// token by walking direct children and accumulating text length, so a zero-length
-// child at the end of the line is invisible to each. What the placement buys is
+// splitTokens (rowTokens.ts), tagRow (inlineDecorate.ts) and refTokenAt
+// (fileRefTag.ts) all locate a token through tokenChildren — a row's own children,
+// or a celled table row's cells' children one level down — accumulating text
+// length, so a zero-length child appended after them is invisible to each. What the placement buys is
 // the row's own text: the literal `![alt](url)` links.ts refused to collapse is
 // untouched, which is what keeps copy, selection, the gutter number and the
 // comment affordance exactly as they were.

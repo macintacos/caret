@@ -4,8 +4,13 @@
 // that land in them — so almost every claim worth making about it is a claim about
 // layout that only a real engine resolves. What needs a browser here: that two nested
 // subgrids resolve into columns whose cells line up down a table written with ragged
-// source widths; that the card grows past the prose measure with no scrollbar while a
-// cell over the 44ch cap wraps inside its own column; that the pipes compute to
+// source widths; that each column's declared alignment resolves to a `text-align` in the
+// live cascade and puts the glyphs where the marker asked, on a wrapped cell's
+// continuation lines as much as on its first; that the card grows past the prose measure
+// with no scrollbar while a cell over the 44ch cap wraps inside its own column; that the
+// inline layers — code, bold, italic, a collapsing link, a file reference — still find
+// their columns once a row's tokens sit one level down inside cells; that the pipes
+// compute to
 // transparent and the rules that stand in for them paint as background layers whose
 // `var()` inks resolve ACROSS the shadow boundary; that a table's rows and its gutter
 // numbers still pair one-for-one, which is the guard against @pierre/diffs'
@@ -27,7 +32,13 @@
 // rumdl leaves alone is a DELIMITER row short of the header's count — it pads that to an
 // empty trailing cell, which is not a delimiter, so the table is voided outright. That is
 // the degrade case asserted here. Ragged column WIDTHS survive ingest verbatim, which is
-// what makes the alignment claim below a claim about layout rather than about the source.
+// what makes the alignment claim below a claim about layout rather than about the source,
+// and the delimiter row's `:---` / `:---:` / `---:` markers survive it verbatim too.
+//
+// One row's constant is NOT its seeded text, and B_WRAPPED says which form it is: the
+// link layer collapses `[label](url)` to its label, the only rewrite between a plan's
+// source and what the view paints. Everything downstream indexes the display text, so
+// the cells are cut on the collapsed columns and the collapse costs the pass nothing.
 
 import type { Page } from "@playwright/test";
 
@@ -47,13 +58,18 @@ import {
 // Three tables and one that only looks like one.
 //
 // A is written with ragged column widths on purpose: its pipes do not line up in the
-// source, so cells that line up on screen can only have come from the grid.
+// source, so cells that line up on screen can only have come from the grid. Its
+// delimiter row declares all three MARKED alignments — `:---`, `:---:`, `---:` — one per
+// column; the fourth spelling, an unmarked `---`, is what tables B and C are written
+// with, so between them the four cover every case the classifier can produce.
 //
 // B is written with NO outer pipes, which is what puts a cell with no `data-table-edge`
 // on the page — the phantom rule down column 0 that the edge attribute exists to
-// prevent. Its last column carries a backticked path and a bold run so the inline layers
-// can be shown surviving inside a cell, and its first body row is deliberately far past
-// the sheet's 44ch cap so it has to wrap inside its own column.
+// prevent. Its Note column is right-aligned AND holds a cell far past the sheet's 44ch
+// cap, which is the pair that makes a wrapped cell's alignment observable at all. That
+// cell also carries one run of every inline layer the epic decorates — inline code, bold,
+// italic, a collapsing link, and a file reference — so all five can be shown surviving
+// the regrouping into cells.
 //
 // C is wide enough that the table cannot fit the prose reading measure.
 //
@@ -63,7 +79,7 @@ const TABLE_PLAN = `# Table Plan
 Prose above the tables, on a row with no table at all.
 
 | Component | Owner | Status |
-| --- | --- | --- |
+| :--- | :---: | ---: |
 | cache     | ops | warm |
 | queue        | infra   | cold |
 | relay | net | draining |
@@ -71,9 +87,10 @@ Prose above the tables, on a row with no table at all.
 Prose between the first and second tables.
 
 Area  | Note
------ | ----
-queue | drains through \`src/queue.ts\` once the **cold path** is armed and the relay has quiesced
+----- | ---:
+queue | drains through \`src/queue.ts\` once the **cold path** is *armed* and the [relay docs](https://docs.example.test/relay) say it has quiesced
 relay | short note
+badge | ![status](https://assets.invalid/badge.png)
 
 Prose between the second and third tables.
 
@@ -96,15 +113,26 @@ Trailing prose below every table.
 // which is seeded `| --- | --- |` and arrives padded to three cells.
 const PROSE_ABOVE = "Prose above the tables, on a row with no table at all.";
 const A_HEAD = "| Component | Owner | Status |";
-const A_RULE = "| --- | --- | --- |";
+const A_RULE = "| :--- | :---: | ---: |";
 const A_ROW1 = "| cache     | ops | warm |";
 const A_ROW2 = "| queue        | infra   | cold |";
 const A_ROW3 = "| relay | net | draining |";
 const A_ROWS = [A_HEAD, A_RULE, A_ROW1, A_ROW2, A_ROW3];
 const B_HEAD = "Area  | Note";
+// The DISPLAY form, not the seeded one: `links.ts` collapses `[label](url)` to its
+// label, and that is the only rewrite between a plan's source and what the view paints.
+// Everything downstream is indexed over the display text — `tableRanges` parses it and
+// `syncTableCards` guards on the painted row's length matching the parsed line — so the
+// cells are cut on the collapsed columns, and `lineOf` looks a row up by what it reads.
 const B_WRAPPED =
-  "queue | drains through `src/queue.ts` once the **cold path** is armed and the relay has quiesced";
+  "queue | drains through `src/queue.ts` once the **cold path** is *armed* and the relay docs say it has quiesced";
 const B_ROW2 = "relay | short note";
+// The image row. inlineImages.ts appends its <img> to a row this pass has already
+// celled, so a celled row's child count legitimately exceeds its cell count — the one
+// place two passes write to the same row, and the one that can loop the repaint if
+// either disagrees with the other about what a settled row looks like. The host is on
+// the reserved .invalid domain, so nothing is ever fetched.
+const B_IMAGE = "badge | ![status](https://assets.invalid/badge.png)";
 const C_HEAD = "| One | Two | Three | Four | Five | Six |";
 const C_ROW =
   "| aaaaaaaaaaaaaaaaaaaa | bbbbbbbbbbbbbbbbbbbb | cccccccccccccccccccc | dddddddddddddddddddd | eeeeeeeeeeeeeeeeeeee | ffffffffffffffffffff |";
@@ -168,6 +196,68 @@ function cellBoxes(
         edge: cell.getAttribute("data-table-edge"),
         align: cell.getAttribute("data-table-align"),
         fill: getComputedStyle(cell).backgroundImage,
+      };
+    });
+  }, rowText);
+}
+
+/** Per cell of `rowText`: the alignment its column declared, what the sheet resolved
+ * `text-align` to, the cell's own track box, and the extent of its GLYPHS on each visual
+ * line — a Range over the cell's contents, grouped into line boxes.
+ *
+ * The glyph extents are what make an alignment claim geometric rather than a restatement
+ * of the stylesheet: A's tracks are `max-content` and every body cell is shorter than its
+ * track, so where a cell's glyphs sit inside that slack is the alignment. Grouped BY LINE
+ * because that is also how a wrapped cell's continuation is read — the sheet puts
+ * `text-align` on the cell rather than on its tokens precisely so every visual line
+ * follows the column, not just the first. */
+function cellGlyphs(
+  page: Page,
+  rowText: string,
+): Promise<
+  {
+    align: string | null;
+    textAlign: string;
+    left: number;
+    right: number;
+    lines: { left: number; right: number }[];
+  }[]
+> {
+  return page.evaluate((want) => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const row = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])].find(
+      (r) => (r.textContent ?? "") === want,
+    );
+    return [...(row?.querySelectorAll(":scope > [data-table-cell]") ?? [])].map((cell) => {
+      const box = cell.getBoundingClientRect();
+      const range = cell.ownerDocument.createRange();
+      range.selectNodeContents(cell);
+      // One entry per VISUAL LINE. A cell yields one rect per token per line, and a
+      // zero-width one at every seam between two token spans — but the tokens on one line
+      // do not share a `top`, because a chip (the inline-code pill, the file reference)
+      // pads its box taller than the prose beside it. So rects are grouped by vertical
+      // OVERLAP rather than by an equal top, which a bucketed key would split into two.
+      const lines: { top: number; bottom: number; left: number; right: number }[] = [];
+      for (const rect of [...range.getClientRects()]
+        .filter((r) => r.width > 0)
+        .sort((a, b) => a.top - b.top)) {
+        const mid = (rect.top + rect.bottom) / 2;
+        const open = lines.find((l) => mid > l.top && mid < l.bottom);
+        if (open === undefined) {
+          lines.push({ top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right });
+        } else {
+          open.top = Math.min(open.top, rect.top);
+          open.bottom = Math.max(open.bottom, rect.bottom);
+          open.left = Math.min(open.left, rect.left);
+          open.right = Math.max(open.right, rect.right);
+        }
+      }
+      return {
+        align: cell.getAttribute("data-table-align"),
+        textAlign: getComputedStyle(cell).textAlign,
+        left: box.left,
+        right: box.right,
+        lines: lines.map((l) => ({ left: l.left, right: l.right })),
       };
     });
   }, rowText);
@@ -320,6 +410,80 @@ test("a table's columns line up down its length, ragged source and all", async (
   expect(ruleRow?.size).toBe("100% 1px");
 });
 
+test("each column wears the alignment its delimiter row declared", async ({ page, daemon }) => {
+  // The sheet's three text-align rules only reach a cell through `data-table-align`, an
+  // attribute the pass writes, inside an adopted stylesheet, across the shadow boundary —
+  // so whether they resolve at all is a browser question. The GEOMETRY beside each one is
+  // what stops this being a restatement of coreStyles.test.ts's text scan: A's tracks are
+  // max-content, every body cell here is shorter than its track, and where the glyphs sit
+  // in that slack is the alignment.
+  await open(page, daemon, TABLE_PLAN);
+  await carded(page);
+
+  const ch = await cellWidth(page, PROSE_ABOVE);
+  const cells = await cellGlyphs(page, A_ROW1);
+  expect(cells.map((c) => c.align)).toEqual(["left", "center", "right"]);
+  expect(cells.map((c) => c.textAlign)).toEqual(["left", "center", "right"]);
+
+  const gaps = cells.map((cell) => {
+    const line = cell.lines[0];
+    return { start: (line?.left ?? 0) - cell.left, end: cell.right - (line?.right ?? 0) };
+  });
+  // Non-vacuous: each cell really is narrower than the track it sits in, so there is
+  // slack for the alignment to spend. A track sized exactly to this row would make every
+  // claim below true by construction.
+  for (const [i, gap] of gaps.entries()) {
+    expect(gap.start + gap.end, `column ${i} has no slack`).toBeGreaterThan(ch);
+  }
+  // Left: flush to the track's start, slack left over at the end.
+  expect(gaps[0]?.start).toBeLessThan(ch);
+  expect(gaps[0]?.end).toBeGreaterThan(ch);
+  // Right: flush to the track's end, slack left over at the start.
+  expect(gaps[2]?.end).toBeLessThan(ch);
+  expect(gaps[2]?.start).toBeGreaterThan(ch);
+  // Centre: inset from BOTH edges, by the same amount.
+  expect(gaps[1]?.start).toBeGreaterThan(0);
+  expect(gaps[1]?.end).toBeGreaterThan(0);
+  expect(Math.abs((gaps[1]?.start ?? 0) - (gaps[1]?.end ?? 0))).toBeLessThan(ch);
+
+  // The unmarked spelling is the fourth, and it is what tables B and C are written with:
+  // no attribute, and the cell keeps whatever the row's own direction gives it.
+  const unmarked = await cellGlyphs(page, C_ROW);
+  expect(unmarked.map((c) => c.align)).toEqual([null, null, null, null, null, null]);
+});
+
+test("a wrapped cell's continuation lines follow its column too", async ({ page, daemon }) => {
+  // The deliberate call the sheet makes by putting text-align on the CELL rather than on
+  // its tokens: a token-level rule would only ever reach the first visual line, so a
+  // wrapped right-aligned cell would read as one aligned line above a stack of ragged
+  // ones. B's Note column is right-aligned and its first body cell wraps, which is the
+  // only place on the page where the two meet.
+  await open(page, daemon, TABLE_PLAN);
+  await carded(page);
+
+  const ch = await cellWidth(page, PROSE_ABOVE);
+  const note = (await cellGlyphs(page, B_WRAPPED))[1];
+  expect(note?.align).toBe("right");
+  expect(note?.textAlign).toBe("right");
+  expect(note?.lines.length).toBeGreaterThan(1);
+  // Every visual line ends at the track's right edge, within one character cell. The
+  // tolerance is a cell rather than a pixel because `pre-wrap` HANGS the trailing space
+  // of a soft-wrapped line past the content edge, so each line but the last measures
+  // exactly one cell over — and it is two-sided, so a line ending short of the edge (what
+  // a token-level rule would leave every continuation doing) still fails.
+  for (const [i, line] of (note?.lines ?? []).entries()) {
+    expect(
+      Math.abs((note?.right ?? 0) - line.right),
+      `visual line ${i} is not flush right`,
+    ).toBeLessThanOrEqual(ch + 1);
+  }
+  // And at least one of them is genuinely short of the track's start — otherwise every
+  // line would fill the column and "aligned" would say nothing.
+  expect(Math.max(...(note?.lines ?? []).map((l) => l.left - (note?.left ?? 0)))).toBeGreaterThan(
+    ch,
+  );
+});
+
 test("no pipe glyph paints, and the rules stand where the pipes did", async ({ page, daemon }) => {
   await open(page, daemon, TABLE_PLAN);
   await carded(page);
@@ -410,8 +574,16 @@ test("inline decoration survives inside a cell", async ({ page, daemon }) => {
         .join("");
     expect(covered("code")).toBe("`src/queue.ts`");
     expect(covered("bold")).toBe("**cold path**");
+    expect(covered("italic")).toBe("*armed*");
+    // The link is the one run whose characters are NOT the ones that were seeded: the
+    // display text is the collapsed label, so the run covers `relay docs` and the
+    // `[...](https://…)` around it is gone by the time the cells are cut. Everything
+    // downstream agrees on that, which is why the collapse survives the regrouping —
+    // tableRanges parses the same display text the row paints.
+    expect(covered("link")).toBe("relay docs");
 
-    // And both landed inside the LAST cell rather than being smeared across the row.
+    // And every one of them landed inside the LAST cell rather than being smeared
+    // across the row.
     const inLastCell = await page.evaluate((want) => {
       const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
       const row = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])].find(
@@ -422,12 +594,21 @@ test("inline decoration survives inside a cell", async ({ page, daemon }) => {
       return {
         cells: cells.length,
         ref: last?.querySelectorAll("[data-file-ref]").length ?? 0,
-        md: last?.querySelectorAll("[data-md]").length ?? 0,
+        members: [
+          ...new Set(
+            [...(last?.querySelectorAll("[data-md]") ?? [])].flatMap((el) =>
+              (el.getAttribute("data-md") ?? "").split(" "),
+            ),
+          ),
+        ].sort(),
+        // Nothing leaked into the first cell, which holds only the row's key.
+        strays: cells[0]?.querySelectorAll("[data-md], [data-file-ref]").length ?? 0,
       };
     }, B_WRAPPED);
     expect(inLastCell.cells).toBe(2);
     expect(inLastCell.ref).toBe(1);
-    expect(inLastCell.md).toBeGreaterThan(0);
+    expect(inLastCell.members).toEqual(["bold", "code", "italic", "link"]);
+    expect(inLastCell.strays).toBe(0);
   } finally {
     await proj.cleanup();
   }
@@ -471,8 +652,17 @@ test("the repaint settles over a plan of tables", async ({ page, daemon }) => {
   await open(page, daemon, TABLE_PLAN);
   const mutations = await settledMutations(page);
   expect(mutations).toBe(0);
-  // Not vacuous: the tables really are carded at rest.
+  // Not vacuous: the tables really are carded at rest, and the image row — the one
+  // line on the page two passes both write to — still holds the image the other one
+  // put there. Without that second check the zero above would also be what a pass
+  // that quietly deleted the image and never looked again produced.
   await carded(page);
+  const line = await lineOf(page, B_IMAGE);
+  await expect(
+    (await planSurface(page)).locator(
+      `[data-content] [data-line="${line}"][data-table-card] img, [data-content] [data-table-card] [data-line="${line}"] img`,
+    ),
+  ).toHaveCount(1);
 });
 
 test("a wide table outgrows the reading measure without a scrollbar", async ({ page, daemon }) => {
@@ -562,7 +752,7 @@ test("vim motion and `/` search reach every table line", async ({ page, daemon }
   expect(seen).toEqual([...seen].sort((a, b) => a - b));
   for (const [head, tail] of [
     [A_HEAD, A_ROW3],
-    [B_HEAD, B_ROW2],
+    [B_HEAD, B_IMAGE],
     [C_HEAD, C_ROW],
   ]) {
     expect(seen).toContain((await lineOf(page, head ?? "")) - 1);

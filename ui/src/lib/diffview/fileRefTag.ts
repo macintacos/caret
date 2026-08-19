@@ -19,8 +19,9 @@ const FILE_REF_ATTR = "data-file-ref";
  * rows). Idempotent and safe to call on every repaint.
  *
  * Descendant, not child: an over-wide fenced block is re-parented into a card
- * (codeBlockScroll.ts), so its rows are no longer direct children of
- * [data-content]. Same shape as tagCodeBlockRows. */
+ * (codeBlockScroll.ts) and a table into one of its own (tables.ts), so either way
+ * those rows are no longer direct children of [data-content]. Same shape as
+ * tagCodeBlockRows. */
 export function tagFileRefTokens(root: ParentNode, spanMap: FileRefSpanMap): void {
   for (const stale of root.querySelectorAll(`[${FILE_REF_ATTR}]`)) {
     stale.removeAttribute(FILE_REF_ATTR);

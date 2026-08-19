@@ -235,9 +235,9 @@ export function decorateInlineRuns(
   // any emphasis, inline code, link, checkbox or quote marker, so it names most
   // of a prose document, and a per-line lookup would walk the whole subtree
   // hundreds of times on every repaint. Descendant, not child: an overflowing
-  // code block's rows get moved into a scroll card (codeBlockScroll.ts), so they
-  // are no longer direct children of [data-content]. Same shape as
-  // tagCodeBlockRows.
+  // code block's rows get moved into a scroll card (codeBlockScroll.ts) and a
+  // table's rows into a table card (tables.ts), so either way they are no longer
+  // direct children of [data-content]. Same shape as tagCodeBlockRows.
   const rows = new Map<number, Element>();
   for (const row of root.querySelectorAll("[data-content] [data-line]")) {
     const line = Number(row.getAttribute("data-line"));

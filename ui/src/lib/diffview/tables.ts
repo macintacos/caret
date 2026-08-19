@@ -61,11 +61,17 @@ export interface TableRange {
 // colons are the alignment markers; the dashes carry no meaning beyond being there.
 const DELIMITER = /^:?-+:?$/;
 
-// A line that cannot open or continue a table: blank, indented past CommonMark's
-// three-space allowance (which makes it indented content), or blockquote-prefixed.
-// A quoted table is deliberately excluded — its `>` prefix would need a column track
-// of its own, and nothing in the epic asks for one.
-const NOT_A_ROW = /^(?:\s*$| {4}|\s{0,3}>)/;
+// A line that cannot open or continue a table: blank, indented at all, or
+// blockquote-prefixed. Both non-blank cases are carve-outs for the same reason —
+// the prefix would need a column track of its own, and nothing in the epic asks for
+// one. Indentation is the wider of the two: CommonMark would allow up to three
+// spaces, so a table inside a list item classifies, but the render has nowhere to
+// put the indent. It folds into the first cell ahead of that cell's pipe, and a
+// pipe that is not the cell's first character is one the cell cannot hide or draw a
+// rule for — one column reading as bare markdown beside painted rules, which is the
+// exact look this construct exists to remove. Whole-table fallback to plain source
+// is the honest degrade; an indented table renders as the source the author wrote.
+const NOT_A_ROW = /^(?:\s*$|\s|>)/;
 
 /** The column where a run of exactly `run` backticks closes the one opened at
  * `from - run`, or `-1` when nothing on the line closes it. Longer runs do not
@@ -101,7 +107,8 @@ function pipeColumns(line: string): number[] {
       continue;
     }
     if (line[i] !== "`") continue;
-    const run = (/^`+/.exec(line.slice(i)) ?? [""])[0].length;
+    let run = 1;
+    while (line[i + run] === "`") run++;
     const close = closingRun(line, i + run, run);
     // Past the span, or past the run itself when it never closes; the loop's own
     // ++ steps onto the next column either way.
@@ -268,27 +275,35 @@ const EDGE_ATTR = "data-table-edge";
  * after each opening pipe and before the row's closing pipe, so each pipe ends up as
  * a token of its own that PIPE_ATTR can mark. */
 function cellCuts(text: string, cells: TableCell[]): number[] {
+  // Cut only at a real DELIMITER. A cell's own text can end in an escaped `\|`,
+  // which is a literal pipe the author wrote and not the row's closing one — cutting
+  // it out would hide the glyph and draw a table rule where the source has neither.
+  const delimiters = new Set(pipeColumns(text));
   const cuts = new Set<number>();
   for (const cell of cells) {
     cuts.add(cell.startCol);
     cuts.add(cell.endCol);
-    if (text[cell.startCol] === "|") cuts.add(cell.startCol + 1);
+    if (delimiters.has(cell.startCol)) cuts.add(cell.startCol + 1);
   }
   const last = cells[cells.length - 1];
-  if (last !== undefined && text[last.endCol - 1] === "|") cuts.add(last.endCol - 1);
+  if (last !== undefined && delimiters.has(last.endCol - 1)) cuts.add(last.endCol - 1);
   return [...cuts].sort((a, b) => a - b);
 }
 
 /** Whether `row` already carries exactly the cells `cells` describes. Compared by
  * count and text length rather than by rebuilding: an already-correct row must
- * mutate nothing, or SourceView's MutationObserver would re-fire every frame. */
+ * mutate nothing, or SourceView's MutationObserver would re-fire every frame.
+ *
+ * Counts the row's CELLS rather than its children, and that is the difference
+ * between settling and looping. inlineImages.ts appends its <img> to the row after
+ * this pass has celled it, so a celled row's child count legitimately exceeds its
+ * cell count; reading it as unsettled would rebuild the row every frame, the image
+ * pass would re-append, and neither would ever converge. */
 function isCelled(row: Element, cells: TableCell[]): boolean {
-  const existing = row.children;
+  const existing = [...row.children].filter((el) => el.hasAttribute(CELL_ATTR));
   if (existing.length !== cells.length) return false;
   return cells.every(
-    (cell, i) =>
-      existing[i]?.hasAttribute(CELL_ATTR) === true &&
-      (existing[i]?.textContent ?? "").length === cell.endCol - cell.startCol,
+    (cell, i) => (existing[i]?.textContent ?? "").length === cell.endCol - cell.startCol,
   );
 }
 
@@ -298,6 +313,9 @@ function isCelled(row: Element, cells: TableCell[]): boolean {
 function unCell(row: Element): void {
   if (row.firstElementChild?.hasAttribute(CELL_ATTR) !== true) return;
   for (const cell of [...row.children]) {
+    // Another pass's node — an appended <img> — holds no tokens to hoist, and
+    // removing it would destroy work this pass does not own.
+    if (!cell.hasAttribute(CELL_ATTR)) continue;
     while (cell.firstChild !== null) row.insertBefore(cell.firstChild, cell);
     cell.remove();
   }
@@ -332,6 +350,14 @@ function buildCells(row: Element, text: string, cells: TableCell[]): void {
     if (edge !== null) cell.setAttribute(EDGE_ATTR, edge);
     row.appendChild(cell);
   }
+  // Anything left is another pass's node rather than a token — inlineImages.ts's
+  // <img>, which holds no characters and so fell through the distribution above.
+  // It ends up ahead of the cells, where it would take the first column track; move
+  // it past them, where the sheet spans it across the row instead. Only ever a real
+  // move: the cells were appended just now, so nothing is already last.
+  for (const foreign of [...row.children]) {
+    if (!foreign.hasAttribute(CELL_ATTR)) row.appendChild(foreign);
+  }
 }
 
 /** Puts each column's declared alignment on the row's matching cell. Applied on every
@@ -344,14 +370,6 @@ function applyAlign(row: Element, align: (TableAlign | undefined)[]): void {
     if (value === undefined) cell.removeAttribute(ALIGN_ATTR);
     else cell.setAttribute(ALIGN_ATTR, value);
   }
-}
-
-/** A range's content rows, wherever they currently sit — direct children before the
- * table is carded, the card's children after. */
-function rowElements(root: ParentNode, range: TableRange): (HTMLElement | null)[] {
-  return range.rows.map((row) =>
-    root.querySelector<HTMLElement>(`[data-content] [data-line="${row.line}"]`),
-  );
 }
 
 /** A range's source lines, the key both columns are walked by. */
@@ -425,6 +443,7 @@ function cardHoldsRange(card: HTMLElement, range: TableRange): boolean {
   const rows = card.querySelectorAll(":scope > [data-line]");
   if (rows.length !== range.rows.length) return false;
   if (card.style.gridRow !== `span ${card.children.length}`) return false;
+  if (card.style.getPropertyValue("--table-columns") !== String(range.align.length)) return false;
   return range.rows.every((row, i) => rows[i]?.getAttribute("data-line") === String(row.line));
 }
 
@@ -477,7 +496,7 @@ function wrapGutterCard(gutter: Element, key: string, lines: number[]): void {
  * still holds its range and a row that already carries its cells are both left
  * completely untouched.
  *
- * A row whose painted text is not the line that parsed is skipped rather than celled,
+ * A row whose painted text LENGTH is not the parsed line's is skipped rather than celled,
  * and the next repaint brings this pass back to finish it. That is a guard on the two
  * inputs agreeing rather than a known race: `ranges` is derived from the rendered text
  * and the rows are the library's, so a mismatch means they came from different content
@@ -491,6 +510,16 @@ export function syncTableCards(root: ParentNode, ranges: TableRange[]): void {
   const wanted = new Map(ranges.map((range) => [String(range.start), range]));
   const headLines = new Set(ranges.map((r) => r.start));
   const ruleLines = new Set(ranges.map((r) => r.rule));
+
+  // ONE walk of the content column, reused by the cell loop and the retire loop
+  // below. A query per table row is the shape EXC-864 measured at ~2,800 selector
+  // matches per repaint, and this pass runs after every one of them. The list is
+  // static, so it survives the wrap and unwrap below: those re-parent rows rather
+  // than replacing them, so every element in it stays the row it was.
+  const rows = new Map<number, HTMLElement>();
+  for (const row of content.querySelectorAll<HTMLElement>("[data-line]")) {
+    rows.set(Number(row.getAttribute("data-line")), row);
+  }
 
   // The keys that actually carry a content card, which is what the gutter mirrors.
   // Mirroring `wanted` instead would card the gutter for a table whose content card
@@ -509,9 +538,9 @@ export function syncTableCards(root: ParentNode, ranges: TableRange[]): void {
         carded.set(key, range);
       }
     }
-    for (const [i, row] of rowElements(root, range).entries()) {
-      const spec = range.rows[i];
-      if (row === null || spec === undefined) continue;
+    for (const spec of range.rows) {
+      const row = rows.get(spec.line);
+      if (row === undefined) continue;
       const width = spec.cells[spec.cells.length - 1]?.endCol ?? 0;
       if ((row.textContent ?? "").length !== width) continue;
       if (!isCelled(row, spec.cells)) buildCells(row, row.textContent ?? "", spec.cells);
@@ -524,8 +553,7 @@ export function syncTableCards(root: ParentNode, ranges: TableRange[]): void {
     if (!wanted.has(card.getAttribute(TABLE_CARD_ATTR) ?? "")) unwrapCard(content, card);
   }
   const inTable = new Set(ranges.flatMap((r) => r.rows.map((row) => row.line)));
-  for (const row of root.querySelectorAll<HTMLElement>("[data-content] [data-line]")) {
-    const line = Number(row.getAttribute("data-line"));
+  for (const [line, row] of rows) {
     if (!inTable.has(line)) unCell(row);
     row.toggleAttribute(HEAD_ATTR, headLines.has(line));
     row.toggleAttribute(RULE_ATTR, ruleLines.has(line));

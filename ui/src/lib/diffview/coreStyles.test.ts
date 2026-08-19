@@ -1433,10 +1433,10 @@ describe("thematic breaks (EXC-862)", () => {
 
 // EXC-864: a GFM table renders as a real column-aligned table — a subgrid card whose
 // rows take its column tracks, with the source pipes taken to transparent and the
-// column rules painted in the space they vacate. The previous attempt at this shipped
-// the opposite trade (visible pipes, no painted rules, on the chip family's faint ink)
-// and was reverted, so what this suite pins is the trade rather than the layout: which
-// glyphs go, what replaces them, what ink that owes, and that the card does NOT scroll.
+// column rules painted in the space they vacate. What this suite pins is that trade
+// rather than the layout: which glyphs go, what replaces them, what ink that owes, and
+// that the card does NOT scroll. The boxes those declarations produce are
+// test/e2e/tables.e2e.ts's.
 describe("tables (EXC-864)", () => {
   const cardRule =
     overrideDecls.match(/\[data-content\]\s*>\s*\[data-table-card\]\s*\{[^}]*\}/)?.[0] ?? "";
@@ -1527,6 +1527,10 @@ describe("tables (EXC-864)", () => {
     // adopt it. The row keeps its height to the character so the gutter numbers hold.
     expect(ruleRow).toMatch(/background-image:\s*linear-gradient\(/);
     expect(ruleRow).toMatch(/background-size:\s*100%\s+1px/);
+    // content-box, not the padding-box default: the library pads every row 1ch inline
+    // and the cells live in the content box, so a padding-box percentage would run the
+    // separator a character past the outermost column rule at each end.
+    expect(ruleRow).toMatch(/background-origin:\s*content-box/);
     expect(overrideDecls).not.toMatch(/\[data-table-rule\][^{]*::(?:before|after)/);
     expect(ruleInk).toMatch(/color:\s*transparent/);
     // Descendant, not the thematic break's child combinator: a celled row's tokens sit

@@ -492,3 +492,79 @@ test("is a no-op for a plan with no tables", () => {
   syncTableCards(root, ranges);
   expect(root.innerHTML).toBe(before);
 });
+
+test("leaves a node another pass appended alone, and settles with it there", () => {
+  // inlineImages.ts appends its <img> to the row AFTER this pass has celled it, so a
+  // celled row's child count legitimately exceeds its cell count. Reading that as
+  // unsettled rebuilds the row, unCell drops the image (it has no tokens to hoist), the
+  // image pass re-appends, and the repaint observer never converges — the ~10,800
+  // mutations in two seconds EXC-870 measured. The image rides AFTER the cells so it is
+  // not mistaken for the first column.
+  const { root, ranges } = build(SIMPLE);
+  syncTableCards(root, ranges);
+  const row = root.querySelector('[data-line="4"]');
+  const img = document.createElement("img");
+  row?.appendChild(img);
+  const before = [...(row?.children ?? [])];
+  syncTableCards(root, ranges);
+  // Element IDENTITY, not markup: a rebuild is output-idempotent here — it hoists the
+  // tokens out, re-splits them and appends fresh cells holding the same text — so the
+  // innerHTML afterwards is byte-identical and cannot see the mutation. What the
+  // observer sees is the childList churn, and the only trace of that left in the DOM is
+  // that the cells are different objects.
+  expect([...(row?.children ?? [])]).toEqual(before);
+  expect(row?.lastElementChild).toBe(img);
+  expect(cellTexts(root, 4)).toEqual(["| 1 ", "| 2 |"]);
+});
+
+test("moves an appended node past the cells when it rebuilds a row", () => {
+  // The distribution loop places tokens by column, and a zero-length node at the end of
+  // the line matches no cell — so it is left where it was, ahead of the freshly appended
+  // cells, where it would take the first column track.
+  const { root, ranges } = build(SIMPLE);
+  const row = root.querySelector('[data-line="4"]');
+  const img = document.createElement("img");
+  row?.appendChild(img);
+  syncTableCards(root, ranges);
+  expect(row?.lastElementChild).toBe(img);
+  expect(cellTexts(root, 4)).toEqual(["| 1 ", "| 2 |"]);
+});
+
+test("does not classify an indented table at all", () => {
+  // CommonMark allows three spaces, so a table inside a list item would classify — but
+  // the indent folds into the first cell ahead of its pipe, and a pipe that is not the
+  // cell's first character can be neither hidden nor drawn as a rule. One column would
+  // read as bare markdown beside painted rules. Whole-table fallback is the honest
+  // degrade, the same carve-out a blockquoted table takes.
+  expect(tableRanges(lines("  | a | b |", "  | - | - |"), NO_CODE)).toEqual([]);
+  expect(tableRanges(lines(" | a | b |", " | - | - |"), NO_CODE)).toEqual([]);
+  // The unindented spelling of the same table still parses.
+  expect(tableRanges(lines("| a | b |", "| - | - |"), NO_CODE)).toHaveLength(1);
+});
+
+test("keeps an escaped pipe at the end of a row as text, not as a border", () => {
+  // `\|` is a literal pipe the author wrote. Cutting it out as the row's closing
+  // delimiter would take its glyph to transparent and draw a table rule where the source
+  // has neither.
+  const { root, ranges } = build(lines("| a | b \\|", "| - | - |"));
+  syncTableCards(root, ranges);
+  expect(cellEdges(root, 1)).toEqual(["start", "start"]);
+  const last = root.querySelectorAll(`[data-line="1"] > [${CELL_ATTR}]`)[1];
+  expect(last?.textContent).toBe("| b \\|");
+  expect(last?.querySelectorAll("[data-table-pipe]")).toHaveLength(1);
+});
+
+test("re-cards a table whose column count changed under its key", () => {
+  // The card carries the track list the sheet builds its columns from, so a card holding
+  // the right lines at the wrong count overflows its cells into an implicit row.
+  const { root, ranges } = build(SIMPLE);
+  syncTableCards(root, ranges);
+  const card = root.querySelector<HTMLElement>(`[${TABLE_CARD_ATTR}="2"]`);
+  card?.style.setProperty("--table-columns", "5");
+  syncTableCards(root, ranges);
+  expect(
+    root
+      .querySelector<HTMLElement>(`[${TABLE_CARD_ATTR}="2"]`)
+      ?.style.getPropertyValue("--table-columns"),
+  ).toBe("2");
+});

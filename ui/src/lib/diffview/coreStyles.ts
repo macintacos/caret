@@ -819,8 +819,8 @@ const CARET_OVERRIDES = `
      a graphical object required to understand the content. --ink-faint measures 2.90 on
      catppuccin-latte and 2.97 on github-light against --paper-sunk and the row's 2-8% ink
      bands, under the 3:1 floor; --ink-soft bottoms at 4.21 across the nine. theme.test.ts
-     pins the whole replacement family — this bar, the list bullet, the task checkbox — on
-     that surface, and it reds naming the palette if any of them is stepped back down.
+     pins the whole replacement family — this bar, the list bullet, the task checkbox, a
+     table's column and header rules — on that surface, and it reds naming the palette if any of them is stepped back down.
 
      Depth reads off the BAR COUNT, and that comes free: the decoration pass gives every
      marker its own child at its own source column (data-md-quote carries the level), so a
@@ -1108,13 +1108,28 @@ const CARET_OVERRIDES = `
      the CELL rather than its tokens so a wrapped cell's continuation lines follow the
      column's declared alignment too; alignment is a property of the column, and a
      token-level rule would only ever reach the first visual line. */
-  [data-content] [data-table-cell] {
+  [data-content] > [data-table-card] [data-table-cell] {
     white-space: pre-wrap;
     max-width: 44ch;
   }
-  [data-content] [data-table-cell][data-table-align="left"] { text-align: left; }
-  [data-content] [data-table-cell][data-table-align="center"] { text-align: center; }
-  [data-content] [data-table-cell][data-table-align="right"] { text-align: right; }
+  [data-content] > [data-table-card] [data-table-cell][data-table-align="left"] {
+    text-align: left;
+  }
+  [data-content] > [data-table-card] [data-table-cell][data-table-align="center"] {
+    text-align: center;
+  }
+  [data-content] > [data-table-card] [data-table-cell][data-table-align="right"] {
+    text-align: right;
+  }
+  /* A celled row can hold a node this pass did not make — inlineImages.ts appends its
+     <img> past the cells. Span it across the tracks so it drops onto its own line
+     under the row rather than taking the first column and pushing every cell right.
+     Stated as everything that is NOT a cell rather than by naming the image: what the
+     rule means is that only cells belong to the column grid, which stays true for
+     whatever the next pass appends. */
+  [data-content] > [data-table-card] > [data-line] > :not([data-table-cell]) {
+    grid-column: 1 / -1;
+  }
 
   /* THE PIPES GO; THE RULES THEY STOOD FOR STAY. Every cell opens with its own pipe and
      a row's last cell closes with one. The glyphs are taken to transparent and a hairline is
@@ -1124,7 +1139,7 @@ const CARET_OVERRIDES = `
      resolve against the same column space. The selector outranks the library's own
      [data-line] span color rule, which is where a token's shiki ink is applied.
 
-     Inking the glyph instead was the previous attempt and it cannot work: a pipe does not
+     Inking the glyph instead cannot work: a pipe does not
      fill its line box, so a column of them reads as a dotted stack rather than a border,
      and the moment a cell wraps the pipes are all on its first visual line with nothing
      down the rest of the row. */
@@ -1141,9 +1156,12 @@ const CARET_OVERRIDES = `
      Positioned at the CENTRE of the pipe's own character cell — 0.5ch in from whichever
      edge that pipe sits on — rather than flush to the cell's box edge. The ch unit is the width
      of the zero glyph, which on this monospace surface IS the cell width, so the rule
-     lands where the character it replaces was drawn. It also makes the air symmetric: a
-     cell's text clears its own pipe by one space on the left and the next cell's by one on
-     the right, so every rule sits in one and a half cells of space on each side.
+     lands where the character it replaces was drawn — which is unconditional, where the
+     air around it is not: at the default alignment a cell's text clears its own pipe by
+     one space and the next cell's by one, so each rule sits in a cell and a half of
+     space either side, but a centred or right-aligned column moves its glyphs within the
+     track and the gaps stop matching. The rule stays on the character column regardless,
+     which is the property that has to hold.
 
      data-table-edge names which of a cell's own edges carry a pipe, so a table written
      without a leading pipe draws nothing down column 0 — there is no character there for a
@@ -1189,25 +1207,29 @@ const CARET_OVERRIDES = `
      colons go transparent and the row draws one full-width rule, which the dashes
      themselves cannot do because they are only ever as long as someone typed them.
 
-     EXC-862's thematic-break paint shape verbatim, and for its reasons. A background
+     EXC-862's thematic-break paint shape, down to the content-box origin. A background
      rather than an appended node or a ::before, because paint is invisible to a settle
-     check — tables.ts settles a celled row by COUNTING its children, so a pass that
-     appended a rule here would have every repaint rebuild the row and never adopt it, the
-     loop EXC-870 measured at ~10,800 childList mutations in two seconds. And no inset and
-     no margin, so the row keeps its height to the character: the gutter numbers are one
-     per row, and a rule that changed the vertical rhythm would read as drift long before
-     it read as a separator.
+     check — tables.ts settles a celled row by COUNTING its cells, so a pass that appended
+     a rule here would have every repaint rebuild the row and never adopt it, the loop
+     EXC-870 measured at ~10,800 childList mutations in two seconds. And no inset and no
+     margin, so the row keeps its height to the character: the gutter numbers are one per
+     row, and a rule that changed the vertical rhythm would read as drift long before it
+     read as a separator.
 
-     --ink-soft, promoted from the --ink-faint EXC-871 left it on. That ruling was right
-     while the dashes stayed legible beside the line — the row's own markers, the bold
-     header above and the column rules were three things already saying where the header
-     ended, so the line only had to be visible. Here the dashes are transparent and the
-     line is the only thing carrying them, which makes this a replacement decoration under
-     the same 3:1 floor as the thematic break above. doc/agents/svelte-rules.md § chips
-     carries the ranges. */
+     background-origin is CONTENT-BOX for a reason of this row's own, not only for the
+     seam-pull one the break records: the library gives every [data-line] a 1ch inline
+     padding, and the cells are laid out in the content box, so a percentage of the
+     padding box would run the separator a full character past the outermost column rule
+     at each end. The content box is exactly the span the cells cover.
+
+     --ink-soft, not the --ink-faint the surviving markers take. The dashes and colons
+     here are transparent, so this line is the only thing carrying what they said, which
+     makes it a replacement decoration under the same 3:1 floor as the thematic break
+     above. doc/agents/svelte-rules.md § chips carries the ranges. */
   [data-content] [data-line][data-table-rule] {
     background-image: linear-gradient(var(--ink-soft), var(--ink-soft));
     background-repeat: no-repeat;
+    background-origin: content-box;
     background-position: center;
     background-size: 100% 1px;
   }
