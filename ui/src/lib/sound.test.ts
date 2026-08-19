@@ -24,6 +24,30 @@ describe("SOUND_MAP", () => {
   test("every mapped event names a real cuelume sound", () => {
     for (const name of Object.values(SOUND_MAP)) expect(sounds).toContain(name);
   });
+
+  // The action-bound moments sound from inside the action they belong to, so the
+  // keyboard path and the click path reach one entry. Naming them here is what
+  // reds when one joins the union and is forgotten in the table — the case above
+  // only checks the entries that already exist.
+  test("every action-bound moment carries an entry", () => {
+    const actionBound: SoundEvent[] = [
+      "commentOpen",
+      "commentDropped",
+      "commentDiscarded",
+      "contentsOpen",
+      "breadcrumbOpen",
+      "compareToggled",
+      "planSwitched",
+      "searchOpened",
+      "searchCommitted",
+      "searchClosed",
+      "searchStepped",
+      "visualEntered",
+      "visualExited",
+      "commentsToggled",
+    ];
+    for (const event of actionBound) expect(SOUND_MAP[event]).toBeDefined();
+  });
 });
 
 describe("play", () => {

@@ -9,6 +9,14 @@
 // (CodeCopyButton inside the diff view) read directly rather than through five
 // levels of prop-drilling, exactly as they read `appearance`.
 //
+// A moment's cue is played from inside the ACTION it belongs to, never at the
+// call site that triggered it (EXC-1126). Both a keyboard binding and a click
+// already funnel through one function, so sounding there is what makes the two
+// paths physically unable to drift apart — there is no second place to write it.
+// Where that function is a plain factory the play arrives as an injected
+// `sound?: (event) => void` dep, the shape polling.svelte.ts already uses; where
+// it is a component with no such seam, the surface reads the singleton directly.
+//
 // The enabled/volume preferences are read PER CALL rather than mirrored into
 // instance state, so flipping the settings toggle takes effect on the next sound
 // with nothing to keep in sync. That also leaves cuelume's own setEnabled /
@@ -39,7 +47,21 @@ export type SoundEvent =
   | "filePreviewClose"
   | "modalOpen"
   | "themeSwitch"
-  | "copyCode";
+  | "copyCode"
+  | "commentOpen"
+  | "commentDropped"
+  | "commentDiscarded"
+  | "contentsOpen"
+  | "breadcrumbOpen"
+  | "compareToggled"
+  | "planSwitched"
+  | "searchOpened"
+  | "searchCommitted"
+  | "searchClosed"
+  | "searchStepped"
+  | "visualEntered"
+  | "visualExited"
+  | "commentsToggled";
 
 /**
  * The single event→sound table. Which cuelume sound suits which moment is a
@@ -77,6 +99,26 @@ export const SOUND_MAP: Partial<Record<SoundEvent, SoundName>> = {
   modalOpen: "scan",
   themeSwitch: "toggle",
   copyCode: "tick",
+  // Commenting: starting one, and the two ways of abandoning one. A composer
+  // holding text is discarded and takes the verdict-weight droplet; an empty one
+  // is merely dropped.
+  commentOpen: "press",
+  commentDropped: "release",
+  commentDiscarded: "droplet",
+  // The plan's two navigation surfaces opening, by whichever path.
+  contentsOpen: "scan",
+  breadcrumbOpen: "page",
+  // Reading the plan differently: against another version, or another plan.
+  compareToggled: "toggle",
+  planSwitched: "page",
+  // The search HUD's four moments, and visual line-select's two.
+  searchOpened: "scan",
+  searchCommitted: "ready",
+  searchClosed: "whisper",
+  searchStepped: "tick",
+  visualEntered: "press",
+  visualExited: "release",
+  commentsToggled: "toggle",
 };
 
 /** The sound cuelume synthesizes to unlock its AudioContext, kept out of
