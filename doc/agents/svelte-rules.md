@@ -347,6 +347,21 @@ bits-ui reports the close complete, and bits-ui's `AnimationsComplete` resolves 
 choreography without the gate knowing. The five above exist because `scrollTop` is not a
 style and happy-dom fires no `animationend`, not because a modal is hard.
 
+**A Svelte `out:` transition takes a fourth shape: the motion stays CSS, and the directive
+is only the wait.** Svelte 5 compiles a transition's own keyframes into a Web Animations
+API call, which the global reduced-motion guard below cannot reach — a `css`-returning
+transition keeps animating under the preference. So `crumbOut`
+(`components/PlanBreadcrumbs.svelte`, EXC-1123) declares the exit as a real
+`@keyframes crumb-out` on a class it adds, and returns nothing but a `duration`, leaving
+Svelte to hold the node in the DOM while that animation plays. That duration is neither
+mirrored nor awaited but **read back off the element** with
+`getComputedStyle(node).animationDuration` — a third answer to the paragraph above:
+nothing to drift, and the guard collapses the wait along with the motion, so reduced
+motion drops the level on the spot rather than holding an invisible one for `--dur-exit`.
+Reach for this when a departure needs animating at all; a plain CSS `animation:` still
+covers every arrival, since an arriving element is already in the DOM and needs no
+directive.
+
 Two things about that route are decisions rather than details, and both were EXC-1092's.
 
 **`--dur-travel` (240ms) is the one token off the enter/exit axis, because it times travel
