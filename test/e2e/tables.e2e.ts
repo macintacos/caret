@@ -1007,6 +1007,42 @@ test("a wrapped cell hangs its continuation lines under its own first line", asy
   // And every line after it starts one pipe and one space in — under the first line's
   // text, clear of the rule.
   for (const left of rest) expect(left - (first ?? 0)).toBeCloseTo(2 * ch, 0);
+
+  // The hover affordance stays on the line its NUMBER is on. A wrapped row is several
+  // lines tall while its number sits on the first, so a "+" centred on the whole box
+  // lands a full line below the address it belongs to and reads as offering to comment
+  // on the row underneath.
+  const line = await page.evaluate((want) => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const row = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])].find((r) =>
+      (r.textContent ?? "").includes(want),
+    );
+    return Number(row?.getAttribute("data-line"));
+  }, "Drain the queue");
+  await revealGutterPlus(page, line);
+  const plus = await page.evaluate((n) => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const cell = sh?.querySelector(
+      `[data-gutter] [data-table-card-gutter] > [data-column-number="${n}"]`,
+    ) as HTMLElement;
+    const number = cell.querySelector("[data-line-number-content]") as HTMLElement;
+    const btn = sh?.querySelector("[data-utility-button]") as HTMLElement;
+    const mid = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      return r.top + r.height / 2;
+    };
+    return {
+      // Not vacuous unless the row really is taller than its number's line.
+      rowHeight: cell.getBoundingClientRect().height,
+      numberHeight: number.getBoundingClientRect().height,
+      offNumber: mid(btn) - mid(number),
+      offRow: mid(btn) - mid(cell),
+    };
+  }, line);
+  expect(plus.rowHeight).toBeGreaterThan(plus.numberHeight * 2);
+  expect(Math.abs(plus.offNumber)).toBeLessThanOrEqual(1);
+  // Which is a different place from the row's middle, so this cannot pass by accident.
+  expect(Math.abs(plus.offRow)).toBeGreaterThan(plus.numberHeight / 2);
 });
 
 test("a cell past the cap wraps inside its own column", async ({ page, daemon }) => {

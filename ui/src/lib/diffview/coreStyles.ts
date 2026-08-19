@@ -1421,15 +1421,31 @@ const CARET_OVERRIDES = `
     background-repeat: no-repeat;
     background-size: 0.3em 0.3em;
   }
-  /* The hover "+" is a fixed size and its row is not, so it is centred on the row rather
-     than hung from the top of it. On every other line the two are the same height and
-     this changes nothing; on the delimiter row the button is several times the height of
-     the line it is offered for, and flex centring overflows it evenly above and below
-     instead of dropping it out of the bottom. Stated for every row rather than for that
-     one, because "the affordance is centred on its line" is the rule and the delimiter is
-     only the row that made it visible. */
+  /* The hover "+" is a fixed size and a row is not, so it is centred on its row rather
+     than hung from the top of it — and the row it is centred on is ONE LINE, not the
+     whole box. The two are the same thing on almost every line and this changes nothing
+     there, but a row grows when a table cell wraps or an image lands on it, and its
+     number does not: the number stays on the first line while the box runs on for two or
+     three more, so a button centred on the box sits a full line below the address it
+     belongs to and reads as pointing at the wrong row.
+
+     The slot the library gives the button is stretched over the whole cell, so the clamp
+     is what takes it back to a line. It is a max rather than a height because a row can
+     also be SHORTER than a line — the delimiter row below is — and there the row itself
+     is the reference; an absolutely positioned box over-constrained this way keeps its
+     top edge, so the clamp only ever trims from the bottom. */
   [data-gutter] [data-gutter-utility-slot] {
     align-items: center;
+    max-height: 1lh;
+  }
+  /* The exception the clamp cannot state itself. The delimiter row's cell is set without
+     leading (above), so a line THERE is shorter than the row, and clamping to one would
+     lift the button off the row's own centre. */
+  [data-gutter]
+    [data-table-card-gutter]
+    > :nth-child(2 of [data-column-number])
+    > [data-gutter-utility-slot] {
+    max-height: none;
   }
 
   /* A comment anchored to a table line. Its row rides inside the table's card so it lands

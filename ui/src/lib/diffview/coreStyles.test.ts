@@ -1485,6 +1485,10 @@ describe("tables (EXC-864)", () => {
     )?.[0] ?? "";
   const slotRule =
     overrideDecls.match(/\[data-gutter\]\s*\[data-gutter-utility-slot\]\s*\{[^}]*\}/)?.[0] ?? "";
+  const slotOverride =
+    overrideDecls.match(
+      /:nth-child\(2 of \[data-column-number\]\)\s*>\s*\[data-gutter-utility-slot\]\s*\{[^}]*\}/,
+    )?.[0] ?? "";
 
   test("every rule this suite reads is present", () => {
     for (const [name, rule] of Object.entries({
@@ -1502,6 +1506,7 @@ describe("tables (EXC-864)", () => {
       dotRule,
       numberRule,
       slotRule,
+      slotOverride,
       hangRule,
     })) {
       expect(rule, `${name} did not match`).toBeTruthy();
@@ -1718,13 +1723,22 @@ describe("tables (EXC-864)", () => {
     }
   });
 
-  test("centres the hover affordance on its line rather than hanging it from the top", () => {
-    // The "+" is a fixed size and a row is not. On the delimiter row it is several times
-    // the height of the line it is offered for, so anchored at the top it falls out of
-    // the bottom and reads as belonging to the line below. Stated for every row, because
-    // that is the rule — the delimiter is only the row that made it visible.
+  test("centres the hover affordance on one line of its row, not on the whole row", () => {
+    // The "+" is a fixed size and a row is not, so it is centred rather than hung from
+    // the top. What it is centred ON is one line: a row grows when a cell wraps or an
+    // image lands on it and its number does not, so a button centred on the box sits a
+    // full line below the address it belongs to. The library stretches the slot over the
+    // whole cell, so the clamp is what takes it back to a line.
     expect(slotRule).toMatch(/align-items:\s*center/);
+    expect(slotRule).toMatch(/max-height:\s*1lh/);
+    // A max rather than a height, because a row can be shorter than a line too — an
+    // over-constrained absolute box keeps its top edge, so this only trims from below.
+    expect(slotRule).not.toMatch(/[^-]height:\s*1lh/);
+    // Stated for every row, because that is the rule; the one exception is scoped and
+    // says why it is one.
     expect(slotRule).not.toContain("[data-table-card-gutter]");
+    expect(slotOverride).toMatch(/max-height:\s*none/);
+    expect(slotOverride).toMatch(/:nth-child\(2 of \[data-column-number\]\)/);
   });
 
   test("declares the header weight here rather than through shiki", () => {
