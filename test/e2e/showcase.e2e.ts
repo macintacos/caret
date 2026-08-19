@@ -207,7 +207,7 @@ test("compare mode offers none of the decorations", async ({ daemon, page }) => 
     .poll(async () => (await taggedRuns(page, "data-md-image")).length)
     .toBeGreaterThan(0);
 
-  await page.getByRole("button", { name: "Compare versions" }).click();
+  await page.getByRole("button", { name: "Versions" }).click();
   // The positive anchor first, and it is what makes the absences mean anything. Both
   // views mount a host with class `diffview`, so once compare has swapped one in for the
   // other every count below reads 0 — including on a compare view that rendered nothing

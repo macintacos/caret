@@ -3,8 +3,8 @@
   // plan view and lets a reviewer enter compare mode, pick any two stored
   // versions (base vs. target), switch the diff layout between split and unified,
   // and switch the gutter change markers between vertical bars and classic +/-
-  // glyphs. The "Compare versions" toggle is always present, but disabled (greyed
-  // out) when fewer than two versions exist, since there is nothing to compare —
+  // glyphs. The "Versions" toggle is always present, but disabled (greyed out)
+  // when fewer than two versions exist, since there is nothing to compare —
   // shown-but-disabled keeps the affordance discoverable (EXC-664). When there IS
   // something to compare, the toggle carries a badge counting the other versions
   // available, and the base/target menus mark the newest row "(current)" so the
@@ -228,7 +228,7 @@
      own gap. This text is the visible label; the accessible name is the same
      string, extended with the version count when there is one (EXC-804). -->
 {#snippet compareLabel()}
-  <Icon name="git-compare" size={14} />Compare versions
+  <Icon name="git-compare" size={14} />Versions
 {/snippet}
 
 <div class="compare-picker">
@@ -240,7 +240,7 @@
       aria-pressed={comparing}
       aria-keyshortcuts={ariaKeyshortcutsFor("actions.toggleDiff")}
       aria-label={otherCount > 0
-        ? `Compare versions, ${otherCount} other version${otherCount === 1 ? "" : "s"}`
+        ? `Versions, ${otherCount} other version${otherCount === 1 ? "" : "s"}`
         : undefined}
       onclick={() => onSetComparing(!comparing)}
     >

@@ -114,17 +114,16 @@ describe("VersionComparePicker compare icon", () => {
     const toggle = target.querySelector<HTMLButtonElement>(".compare-toggle");
     expect(toggle!.querySelector(".icon svg")).not.toBeNull();
     // The icon is decorative, so it adds no text: the visible label stays exactly
-    // "Compare versions". A stray label= on the Icon would break this at unit
-    // speed. The EXC-804 count badge is subtracted — it's chrome beside the label,
-    // not part of it.
-    expect(labelOf(toggle!)).toBe("Compare versions");
+    // "Versions". A stray label= on the Icon would break this at unit speed. The
+    // EXC-804 count badge is subtracted — chrome beside the label, not part of it.
+    expect(labelOf(toggle!)).toBe("Versions");
     // EXC-808: the icon leads the label (sits to its left), so it precedes the
-    // "Compare versions" text in DOM order.
+    // "Versions" text in DOM order.
     const kids = [...toggle!.childNodes];
     const iconIdx = kids.findIndex(
       (n) => n.nodeType === 1 && (n as Element).classList.contains("icon"),
     );
-    const labelIdx = kids.findIndex((n) => n.textContent?.includes("Compare"));
+    const labelIdx = kids.findIndex((n) => n.textContent?.includes("Versions"));
     expect(iconIdx).toBeGreaterThanOrEqual(0);
     expect(iconIdx).toBeLessThan(labelIdx);
   });
@@ -194,21 +193,21 @@ describe("VersionComparePicker version count badge", () => {
       targetVersion: 1,
     });
     expect(target.querySelector(".compare-toggle")?.getAttribute("aria-label")).toBe(
-      "Compare versions, 1 other version",
+      "Versions, 1 other version",
     );
   });
 
   test("pluralizes the toggle's accessible name beyond one", () => {
     const { target } = render(VersionComparePicker, baseProps);
     expect(target.querySelector(".compare-toggle")?.getAttribute("aria-label")).toBe(
-      "Compare versions, 2 other versions",
+      "Versions, 2 other versions",
     );
   });
 
   // Every accessible name this toggle can take still STARTS with the visible label,
-  // which is what keeps ~20 e2e `getByRole("button", { name: "Compare versions" })`
-  // locators resolving (Playwright matches a substring) and satisfies WCAG 2.5.3
-  // Label in Name. Previously implicit; pinned here so a reworded label fails fast.
+  // which is what keeps the e2e `getByRole("button", { name: "Versions" })` locators
+  // resolving (Playwright matches a substring) and satisfies WCAG 2.5.3 Label in
+  // Name. Pinned here so a reworded label fails fast.
   test("every accessible name begins with the visible label", () => {
     for (const n of [1, 2, 3]) {
       const { target } = render(VersionComparePicker, {
@@ -220,7 +219,7 @@ describe("VersionComparePicker version count badge", () => {
       });
       const toggle = target.querySelector(".compare-toggle");
       const name = toggle?.getAttribute("aria-label") ?? labelOf(toggle!);
-      expect(name.startsWith("Compare versions")).toBe(true);
+      expect(name.startsWith("Versions")).toBe(true);
     }
   });
 

@@ -158,7 +158,7 @@ test("d toggles the compare/diff view when there are multiple versions", async (
   await page.goto("/");
   await loadPlan(page);
 
-  const toggle = page.getByRole("button", { name: "Compare versions" });
+  const toggle = page.getByRole("button", { name: "Versions" });
   await expect(toggle).toHaveAttribute("aria-keyshortcuts", "d");
   await expect(toggle).toHaveAttribute("aria-pressed", "false");
 

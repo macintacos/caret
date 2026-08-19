@@ -844,7 +844,7 @@ test("compare mode drops the bar, which tracks no heading there", async ({ daemo
   await page.goto("/");
 
   await expect(page.locator(BAR)).toBeVisible();
-  await page.getByRole("button", { name: /^Compare versions/ }).click();
+  await page.getByRole("button", { name: /^Versions/ }).click();
   await expect(page.locator(BAR)).toHaveCount(0);
 
   // With the bar gone the picker stretches again, which is what keeps its display

@@ -39,7 +39,7 @@ test("the compare control is disabled for a single-version review", async ({ dae
   // EXC-664: the picker is always present; with nothing to compare its toggle is
   // disabled (greyed out) rather than hidden.
   await expect(page.locator(".compare-picker")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Compare versions" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Versions" })).toBeDisabled();
 
   // The native title is gone: the disabled toggle explains itself through a
   // shadcn Tooltip on its span-wrapped trigger (a disabled button can't hover).
@@ -55,7 +55,7 @@ test("entering compare mode diffs a chosen non-default pair", async ({ daemon, p
   // The picker is available; compare mode is off by default (single-version
   // view), so the body shows the current version.
   await expect(page.locator(".compare-picker")).toBeVisible();
-  await page.getByRole("button", { name: "Compare versions" }).click();
+  await page.getByRole("button", { name: "Versions" }).click();
 
   // Default pair is current (v3) vs previous (v2); pick a non-default pair:
   // base = v3, target = v1, so the diff spans the alpha→gamma change.
@@ -76,7 +76,7 @@ test("toggling split↔unified switches layout in place without a remount", asyn
 }) => {
   await daemon.seedVersions(3, [V1, V2, V3]);
   await page.goto("/");
-  await page.getByRole("button", { name: "Compare versions" }).click();
+  await page.getByRole("button", { name: "Versions" }).click();
   await expect(page.getByText("gamma line three")).toBeVisible();
 
   // The library renders split as data-diff-type="split" and unified as "single".
@@ -97,7 +97,7 @@ test("toggling layout preserves the diff scroll position", async ({ daemon, page
     Array.from({ length: 80 }, (_, i) => `${tag} line ${i + 1} of the plan body.`).join("\n\n");
   await daemon.seedVersions(2, [`# Plan\n\n${body("alpha")}\n`, `# Plan\n\n${body("beta")}\n`]);
   await page.goto("/");
-  await page.getByRole("button", { name: "Compare versions" }).click();
+  await page.getByRole("button", { name: "Versions" }).click();
 
   const view = await planSurface(page);
   await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-diff-type", "split");
@@ -125,7 +125,7 @@ test("the compare header stays pinned to the top and reads the version pair", as
     Array.from({ length: 80 }, (_, i) => `${tag} line ${i + 1} of the plan body.`).join("\n\n");
   await daemon.seedVersions(2, [`# Plan\n\n${body("alpha")}\n`, `# Plan\n\n${body("beta")}\n`]);
   await page.goto("/");
-  await page.getByRole("button", { name: "Compare versions" }).click();
+  await page.getByRole("button", { name: "Versions" }).click();
 
   const view = await planSurface(page);
   // The header reads the default pair: target=v1 on the before side (the rename
@@ -161,13 +161,13 @@ test("the compare header stays pinned to the top and reads the version pair", as
 test("the chosen layout persists across a reload", async ({ daemon, page }) => {
   await daemon.seedVersions(3, [V1, V2, V3]);
   await page.goto("/");
-  await page.getByRole("button", { name: "Compare versions" }).click();
+  await page.getByRole("button", { name: "Versions" }).click();
   await expect(page.getByText("gamma line three")).toBeVisible();
   await page.getByRole("radio", { name: "Unified" }).click();
   await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-diff-type", "single");
 
   await page.reload();
-  await page.getByRole("button", { name: "Compare versions" }).click();
+  await page.getByRole("button", { name: "Versions" }).click();
   // The remembered layout drives the initial diff style after reload.
   await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-diff-type", "single");
 });
@@ -178,7 +178,7 @@ test("toggling bars↔classic↔both switches gutter indicators in place without
 }) => {
   await daemon.seedVersions(3, [V1, V2, V3]);
   await page.goto("/");
-  await page.getByRole("button", { name: "Compare versions" }).click();
+  await page.getByRole("button", { name: "Versions" }).click();
   await expect(page.getByText("gamma line three")).toBeVisible();
 
   // The library marks the pre with data-indicators; the default is "bars".
@@ -203,13 +203,13 @@ test("toggling bars↔classic↔both switches gutter indicators in place without
 test("the chosen gutter indicators persist across a reload", async ({ daemon, page }) => {
   await daemon.seedVersions(3, [V1, V2, V3]);
   await page.goto("/");
-  await page.getByRole("button", { name: "Compare versions" }).click();
+  await page.getByRole("button", { name: "Versions" }).click();
   await expect(page.getByText("gamma line three")).toBeVisible();
   await page.getByRole("radio", { name: "+/−" }).click();
   await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-indicators", "classic");
 
   await page.reload();
-  await page.getByRole("button", { name: "Compare versions" }).click();
+  await page.getByRole("button", { name: "Versions" }).click();
   // The remembered indicators drive the initial diff markers after reload.
   await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-indicators", "classic");
 });
@@ -246,7 +246,7 @@ for (const colorScheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme });
     await daemon.seedVersions(2, [EMPH_V1, EMPH_V2]);
     await page.goto("/");
-    await page.getByRole("button", { name: "Compare versions" }).click();
+    await page.getByRole("button", { name: "Versions" }).click();
     // Default pair is current (v2) vs previous (v1): v1's "alpha" line is the
     // deletion side, v2's "omega" line the addition side.
     await expect(page.getByText("omega", { exact: false })).toBeVisible();
@@ -314,7 +314,7 @@ for (const colorScheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme });
     await daemon.seedVersions(2, [CTX_V1, CTX_V2]);
     await page.goto("/");
-    await page.getByRole("button", { name: "Compare versions" }).click();
+    await page.getByRole("button", { name: "Versions" }).click();
     // The changed first/last lines flank a long identical middle, so the library
     // collapses that middle behind one line-info separator band.
     await expect(page.getByText("first line OMEGA")).toBeVisible();
@@ -362,7 +362,7 @@ for (const colorScheme of ["light", "dark"] as const) {
 test("clicking the expand pill reveals the collapsed context", async ({ daemon, page }) => {
   await daemon.seedVersions(2, [CTX_V1, CTX_V2]);
   await page.goto("/");
-  await page.getByRole("button", { name: "Compare versions" }).click();
+  await page.getByRole("button", { name: "Versions" }).click();
   await expect(page.getByText("first line OMEGA")).toBeVisible();
 
   // How many of the shared middle's lines are currently rendered in the diff. The
@@ -407,7 +407,7 @@ test("forces unified and drops the layout toggle below --w-narrow", async ({ dae
   await page.setViewportSize({ width: 800, height: 900 });
   await daemon.seedVersions(3, [V1, V2, V3]);
   await page.goto("/");
-  await page.getByRole("button", { name: "Compare versions" }).click();
+  await page.getByRole("button", { name: "Versions" }).click();
   await expect(page.getByText("gamma line three")).toBeVisible();
 
   // Split's two columns can't fit, so the diff renders unified ("single") even
@@ -427,7 +427,7 @@ test("crossing --w-narrow forces unified then restores the split preference", as
   // Fixture viewport is wide (1600), so the stored split preference applies.
   await daemon.seedVersions(3, [V1, V2, V3]);
   await page.goto("/");
-  await page.getByRole("button", { name: "Compare versions" }).click();
+  await page.getByRole("button", { name: "Versions" }).click();
   await expect(page.getByText("gamma line three")).toBeVisible();
 
   // The same <pre> element throughout — the layout switches in place (setOptions),
@@ -528,7 +528,7 @@ test("the version pickers annotate the current version, and only that one", asyn
   // picker is clicked next, and an unclosed target menu swallows that click.
   // Measured 348ms after mount, i.e. 48ms clear of the 300ms grace (EXC-897).
   await waitPastSafeModeGrace(page);
-  await page.getByRole("button", { name: "Compare versions" }).click();
+  await page.getByRole("button", { name: "Versions" }).click();
 
   await page.getByLabel("Target version").click();
   // v3 is the newest, so it is the current plan; v1 and v2 are history.

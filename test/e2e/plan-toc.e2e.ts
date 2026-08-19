@@ -899,7 +899,7 @@ test("compare mode drops both of the popup's entry points (EXC-1097)", async ({ 
   await readingAt(page, "Golf");
   await expect(trigger(page)).toBeVisible();
 
-  await page.getByRole("button", { name: /^Compare versions/ }).click();
+  await page.getByRole("button", { name: /^Versions/ }).click();
   await expect(trigger(page)).toHaveCount(0);
 
   await page.keyboard.press("\\");
