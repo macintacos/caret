@@ -451,7 +451,7 @@ describe("every theme", () => {
   // to transparent and draws in the column it vacated. Nothing legible survives beside one,
   // so each is the only thing carrying what its marker used to say — which is precisely
   // WCAG 1.4.11's test for a graphical object required to understand the content, and puts
-  // all five under its 3:1 floor. The ink-ramp case above cannot speak to them: it measures
+  // all three under its 3:1 floor. The ink-ramp case above cannot speak to them: it measures
   // --paper and --paper-raised, the two CHROME surfaces, while a marker renders on the diff
   // surface (--diffs-bg is --paper-sunk, styles/diffview.css) and on the 2-8% ink mixes the
   // row bands lay over it.
@@ -467,13 +467,13 @@ describe("every theme", () => {
   // the whole epic and the list is now closed by a rule rather than by inspection: a marker
   // whose glyph SURVIVES is supplementary and stays on --ink-faint (the fence markers, the
   // ** / _ emphasis markers, an ordered item's number), and only a marker that has been
-  // replaced appears below. A table's pipes and its delimiter row's dashes are
-  // transparent, so the column rules and the header rule painted where they stood are
-  // measured here too. The thematic break is measured separately, one test down, because
-  // its paint can carry an alpha suffix that has to composite before it is measured.
+  // replaced appears below. Two of the family are measured separately, one test down
+  // each, because neither paints its token neat: the thematic break's can carry an alpha
+  // suffix that has to composite first, and a table's rules soften theirs toward the
+  // surface, so measuring the token would measure a color the sheet never paints.
   //
-  // One assertion rather than one per member: all five draw in the same token, so a
-  // per-marker loop would run the identical arithmetic five times for a longer message.
+  // One assertion rather than one per member: all three draw in the same token, so a
+  // per-marker loop would run the identical arithmetic three times for a longer message.
   // Which SELECTORS spend it is coreStyles.test.ts's job — it pins the six this epic drew
   // by name. Neither file can catch a SEVENTH replacement marker shipped on --ink-faint;
   // that gap is real and named here rather than papered over.
@@ -524,6 +524,40 @@ describe("every theme", () => {
         expect(
           contrast(over(theme.tokens[RULE_INK], ground), ground),
           `${id} thematic-break rule ${RULE_INK} on --paper-sunk banded ${pct * 100}%`,
+        ).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+
+  // EXC-864's table rules — the frame, the column dividers and the header rule — are one
+  // mark declared once as --table-rule (diffview/coreStyles.ts). They are a replacement
+  // decoration: the pipes and the delimiter row's dashes go transparent and these are
+  // drawn where they stood, so the 3:1 floor binds exactly as it does for the break above.
+  //
+  // What makes this its own case is that the rules do NOT paint --ink-soft neat. Drawn at
+  // full strength a table read as a cage — --ink-soft is 9.10 against caret-dark's bare
+  // surface, which is text contrast for something that is only supposed to say "column
+  // ends here" — so the sheet softens it toward the surface. This pins how far that can
+  // go: SOFTEN is the most that still clears the floor everywhere, and it is
+  // catppuccin-latte's widest row band that binds at 3.19. Raise it to 0.2 and this reds
+  // naming that palette.
+  //
+  // Mixed in sRGB here AND in the sheet, which is the one place this file's usual
+  // "lab and sRGB differ by well under the headroom" note does not hold: the headroom is
+  // 0.19 of a ratio point, so the two spaces have to be the same one or the pin stops
+  // measuring what ships.
+  test("keeps a table's rules above the non-text floor once softened", () => {
+    const SOFTEN = 0.15;
+    for (const [id, theme] of themeEntries()) {
+      const sunk = theme.tokens["--paper-sunk"];
+      // color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 15%) — banded() is that
+      // same channel-wise mix, read the other way round.
+      const painted = banded(theme.tokens["--ink-soft"], sunk, SOFTEN);
+      for (const pct of ROW_BANDS) {
+        const ground = banded(sunk, theme.tokens["--ink"], pct);
+        expect(
+          contrast(painted, ground),
+          `${id} table rule --ink-soft softened ${SOFTEN * 100}% on --paper-sunk banded ${pct * 100}%`,
         ).toBeGreaterThanOrEqual(3);
       }
     }

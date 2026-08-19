@@ -265,16 +265,67 @@ const RULE_ATTR = "data-table-rule";
 // A cell's column alignment, when its column declared one.
 const ALIGN_ATTR = "data-table-align";
 
+// A run of characters inside a cell that must not drive the column's width: the
+// source's own alignment padding, and the delimiter row's dashes. The glyphs stay in
+// the DOM — copy reads the rendered text (selectionCopy.ts) and the search Ranges
+// resolve against it — but the sheet takes them to zero size so a track is as wide as
+// what the reader can actually see.
+const INERT_ATTR = "data-table-inert";
+
 // Which of a cell's own edges carry a pipe. The sheet paints the column rules from
 // this rather than probing for a pipe token with :has() on every cell — and it is what
 // keeps a table written without a leading pipe from drawing a phantom rule down column
 // 0, where there is no character for a rule to stand in for.
 const EDGE_ATTR = "data-table-edge";
 
-/** The columns a row's tokens must be cut at: every cell boundary, plus the column
- * after each opening pipe and before the row's closing pipe, so each pipe ends up as
- * a token of its own that PIPE_ATTR can mark. */
-function cellCuts(text: string, cells: TableCell[]): number[] {
+/**
+ * The half-open column ranges of `text` that must not contribute to the column's
+ * intrinsic width.
+ *
+ * A markdown author aligns a table by PADDING every cell out to the widest one, and
+ * that width is a property of the SOURCE — of the longest thing anyone typed in the
+ * column. Once the rows are laid out on a real grid the padding buys nothing, and it
+ * actively lies whenever the display text is shorter than the source: a collapsed
+ * link is the standing case, so a column of one-word cells stays as wide as the URL
+ * nobody can see. So each cell keeps ONE space either side of its content — which is
+ * what puts its glyphs the same distance from the rules on both sides — and the rest
+ * of the run goes inert.
+ *
+ * The delimiter row's dashes go inert whole. They are already transparent, replaced by
+ * the painted header rule, so a column sized to fit them would be sized to a mark that
+ * is not on the screen — and an author writes as many dashes as the SOURCE column was
+ * wide, which is the same lie one row over.
+ */
+function inertRuns(
+  text: string,
+  cells: TableCell[],
+  delimiters: Set<number>,
+  isRule: boolean,
+): [number, number][] {
+  const runs: [number, number][] = [];
+  for (const cell of cells) {
+    const from = delimiters.has(cell.startCol) ? cell.startCol + 1 : cell.startCol;
+    const to = delimiters.has(cell.endCol - 1) ? cell.endCol - 1 : cell.endCol;
+    if (to <= from) continue;
+    const body = text.slice(from, to);
+    const lead = from + (body.length - body.trimStart().length);
+    const tail = to - (body.length - body.trimEnd().length);
+    if (lead >= tail) {
+      // An empty cell: nothing to keep beside, so keep a single space and inert the rest.
+      if (to - from > 1) runs.push([from + 1, to]);
+      continue;
+    }
+    if (lead - from >= 2) runs.push([from, lead - 1]);
+    if (to - tail >= 2) runs.push([tail + 1, to]);
+    if (isRule) runs.push([lead, tail]);
+  }
+  return runs;
+}
+
+/** The columns a row's tokens must be cut at: every cell boundary, the column after
+ * each opening pipe and before the row's closing pipe so each pipe ends up as a token
+ * of its own that PIPE_ATTR can mark, and both ends of every inert run. */
+function cellCuts(text: string, cells: TableCell[], inert: [number, number][]): number[] {
   // Cut only at a real DELIMITER. A cell's own text can end in an escaped `\|`,
   // which is a literal pipe the author wrote and not the row's closing one — cutting
   // it out would hide the glyph and draw a table rule where the source has neither.
@@ -287,6 +338,10 @@ function cellCuts(text: string, cells: TableCell[]): number[] {
   }
   const last = cells[cells.length - 1];
   if (last !== undefined && delimiters.has(last.endCol - 1)) cuts.add(last.endCol - 1);
+  for (const [from, to] of inert) {
+    cuts.add(from);
+    cuts.add(to);
+  }
   return [...cuts].sort((a, b) => a - b);
 }
 
@@ -323,12 +378,16 @@ function unCell(row: Element): void {
 
 /** Splits `row`'s tokens on the cell boundaries and groups them under one element
  * per cell, so each cell becomes a grid item in the card's shared column tracks. */
-function buildCells(row: Element, text: string, cells: TableCell[]): void {
+function buildCells(row: Element, text: string, cells: TableCell[], isRule: boolean): void {
   unCell(row);
-  splitTokens(row, cellCuts(text, cells));
+  const inert = inertRuns(text, cells, new Set(pipeColumns(text)), isRule);
+  splitTokens(row, cellCuts(text, cells, inert));
   const built = cells.map(() => row.ownerDocument.createElement("span"));
   let col = 0;
   for (const token of tokenChildren(row)) {
+    // Cuts were added at every inert boundary, so a token lies wholly inside a run or
+    // wholly outside one and its start column decides which.
+    if (inert.some(([from, to]) => col >= from && col < to)) token.setAttribute(INERT_ATTR, "");
     // The cells tile [0, line.length) and the caller has already matched the row's
     // text length to the last cell's end, so every token lands in exactly one.
     built[cells.findIndex((cell) => col >= cell.startCol && col < cell.endCol)]?.appendChild(token);
@@ -543,7 +602,8 @@ export function syncTableCards(root: ParentNode, ranges: TableRange[]): void {
       if (row === undefined) continue;
       const width = spec.cells[spec.cells.length - 1]?.endCol ?? 0;
       if ((row.textContent ?? "").length !== width) continue;
-      if (!isCelled(row, spec.cells)) buildCells(row, row.textContent ?? "", spec.cells);
+      if (!isCelled(row, spec.cells))
+        buildCells(row, row.textContent ?? "", spec.cells, spec.line === range.rule);
       applyAlign(row, range.align);
     }
   }

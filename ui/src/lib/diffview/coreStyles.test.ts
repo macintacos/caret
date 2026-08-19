@@ -1431,19 +1431,23 @@ describe("thematic breaks (EXC-862)", () => {
   });
 });
 
-// EXC-864: a GFM table renders as a real column-aligned table — a subgrid card whose
-// rows take its column tracks, with the source pipes taken to transparent and the
+// EXC-864: a GFM table renders as a real column-aligned table — a framed subgrid card
+// whose rows take its column tracks, with the source pipes taken to transparent and the
 // column rules painted in the space they vacate. What this suite pins is that trade
-// rather than the layout: which glyphs go, what replaces them, what ink that owes, and
-// that the card does NOT scroll. The boxes those declarations produce are
-// test/e2e/tables.e2e.ts's.
+// rather than the layout: which glyphs go, what replaces them, what ink that owes, what
+// is allowed to size a column, and that the card does NOT scroll. The boxes those
+// declarations produce are test/e2e/tables.e2e.ts's.
 describe("tables (EXC-864)", () => {
   const cardRule =
     overrideDecls.match(/\[data-content\]\s*>\s*\[data-table-card\]\s*\{[^}]*\}/)?.[0] ?? "";
+  const rowRule =
+    overrideDecls.match(
+      /\[data-content\]\s*>\s*\[data-table-card\]\s*>\s*\[data-line\]\s*\{[^}]*\}/,
+    )?.[0] ?? "";
   const cellRule = rulesFor(String.raw`\[data-table-cell\]`).find((r) => r.includes("max-width:"));
+  const inertRule = rulesFor(String.raw`\[data-table-inert\]`)[0];
   const pipeRule = rulesFor(String.raw`\[data-table-pipe\]`)[0];
-  const edgeRule = rulesFor(String.raw`\[data-table-cell\]\[data-table-edge\]`)[0];
-  const bothRule = rulesFor(String.raw`\[data-table-edge="both"\]`)[0];
+  const dividerRule = rulesFor(String.raw`\[data-table-edge="both"\]\s*\)`)[0];
   const ruleRow = rulesFor(String.raw`\[data-line\]\[data-table-rule\]`).find((r) =>
     r.includes("background-image:"),
   );
@@ -1452,8 +1456,17 @@ describe("tables (EXC-864)", () => {
   );
 
   test("every rule this suite reads is present", () => {
-    for (const rule of [cardRule, cellRule, pipeRule, edgeRule, bothRule, ruleRow, ruleInk]) {
-      expect(rule).toBeTruthy();
+    for (const [name, rule] of Object.entries({
+      cardRule,
+      rowRule,
+      cellRule,
+      inertRule,
+      pipeRule,
+      dividerRule,
+      ruleRow,
+      ruleInk,
+    })) {
+      expect(rule, `${name} did not match`).toBeTruthy();
     }
   });
 
@@ -1467,14 +1480,30 @@ describe("tables (EXC-864)", () => {
     expect(overrideDecls).not.toMatch(/\[data-table-card\][^{]*::-webkit-scrollbar/);
   });
 
-  test("takes its rows from the parent and declares its own columns", () => {
+  test("takes its rows from the parent, declares its own columns, and shrinks to them", () => {
     // Subgrid rows are what keep the gutter numbers aligned as a wrapped cell grows its
-    // track — no ResizeObserver, no per-row height syncing.
+    // track. justify-self is what makes the frame below hug the TABLE: a stretched card
+    // would box the whole content column instead.
     expect(cardRule).toMatch(/grid-template-rows:\s*subgrid/);
     expect(cardRule).toMatch(
       /grid-template-columns:\s*repeat\(var\(--table-columns[^)]*\), max-content\)/,
     );
-    expect(cardRule).toMatch(/justify-content:\s*start/);
+    expect(cardRule).toMatch(/justify-self:\s*start/);
+  });
+
+  test("frames the table, with corners", () => {
+    // Markdown has no syntax for a table's outer edge, so this is the one mark here with
+    // no character behind it — without it the column rules stop in mid-air.
+    expect(cardRule).toMatch(/border:\s*1px solid var\(--table-rule\)/);
+    expect(cardRule).toMatch(/border-radius:\s*var\(--radius\)/);
+  });
+
+  test("zeroes the row padding so the subgrid tracks are the card's", () => {
+    // The library pads every row 1ch inline, which on a subgrid insets the row's own
+    // tracks from the card's — the cells stop filling the columns they define, and the
+    // header rule (a percentage of the row) stops matching the frame.
+    expect(rowRule).toMatch(/grid-template-columns:\s*subgrid/);
+    expect(rowRule).toMatch(/padding-inline:\s*0/);
   });
 
   test("caps the CELL, not the track, so one prose column wraps and the rest do not", () => {
@@ -1485,16 +1514,22 @@ describe("tables (EXC-864)", () => {
     expect(cellRule).toMatch(/white-space:\s*pre-wrap/);
   });
 
+  test("keeps the source's own alignment padding out of the column's width", () => {
+    // An author pads every cell out to the widest thing typed in the column, which is a
+    // fact about the SOURCE — and a lie the moment the display text is shorter, as a
+    // collapsed link's is. Zero-size rather than hidden, so the characters stay in the
+    // layout tree where selectionCopy.ts and the search Ranges still find them.
+    expect(inertRule).toMatch(/font-size:\s*0/);
+    expect(inertRule).not.toMatch(/display:\s*none/);
+    expect(inertRule).not.toMatch(/visibility:\s*hidden/);
+  });
+
   test("aligns a wrapped cell's continuation lines with its column", () => {
     // text-align on the cell rather than its tokens: a token-level rule would only ever
     // reach the first visual line of a wrapped cell.
-    for (const [value, want] of [
-      ["left", "left"],
-      ["center", "center"],
-      ["right", "right"],
-    ] as const) {
+    for (const value of ["left", "center", "right"] as const) {
       const rule = rulesFor(String.raw`\[data-table-align="${value}"\]`)[0];
-      expect(rule).toMatch(new RegExp(String.raw`text-align:\s*${want}`));
+      expect(rule).toMatch(new RegExp(String.raw`text-align:\s*${value}`));
     }
   });
 
@@ -1503,34 +1538,28 @@ describe("tables (EXC-864)", () => {
     // and disappears entirely below a wrapped cell's first line. The rule rides the cell
     // box, which is full height whatever the row does.
     expect(pipeRule).toMatch(/color:\s*transparent/);
-    expect(edgeRule).toMatch(/background-image:\s*linear-gradient\(/);
-    expect(edgeRule).toMatch(/background-size:\s*1px\s+100%/);
-    expect(edgeRule).toMatch(/background-repeat:\s*no-repeat/);
+    expect(dividerRule).toMatch(/background-image:\s*linear-gradient\(/);
+    expect(dividerRule).toMatch(/background-size:\s*1px\s+100%/);
+    expect(dividerRule).toMatch(/background-position:\s*0\.5ch/);
   });
 
-  test("draws a rule only where the cell has a pipe of its own", () => {
-    // Gated on data-table-edge, so a table written without a leading pipe draws nothing
-    // down column 0 — a rule there would be the one mark on the table not in the file.
-    // Both edges take two layers, one per pipe.
-    expect(rulesFor(String.raw`\[data-table-edge="start"\]`)[0]).toMatch(
-      /background-position:\s*0\.5ch/,
-    );
-    expect(rulesFor(String.raw`\[data-table-edge="end"\]`)[0]).toMatch(
-      /background-position:\s*calc\(100% - 0\.5ch\)/,
-    );
-    expect(bothRule?.match(/linear-gradient\(/g)).toHaveLength(2);
+  test("draws the dividers BETWEEN columns and leaves the edges to the frame", () => {
+    // A cell draws its own pipe, so the first cell of a row would draw the table's left
+    // edge and the last its right — half a character inside the frame, which reads as a
+    // doubled line. There is no inline-end layer at all, and :first-child drops the
+    // leading one.
+    expect(dividerRule).toContain(":not(:first-child)");
+    expect(overrideDecls).not.toMatch(/\[data-table-edge[^{]*\{[^}]*calc\(100% - 0\.5ch\)/);
   });
 
   test("replaces the delimiter row's markers with one full-width rule", () => {
-    // Paint, never a node: tables.ts settles a celled row by counting its children, so a
+    // Paint, never a node: tables.ts settles a celled row by counting its cells, so a
     // pass that appended a rule here would rebuild the row on every repaint and never
-    // adopt it. The row keeps its height to the character so the gutter numbers hold.
+    // adopt it. A plain 100% spans the frame's inner width exactly, which is what
+    // zeroing the row padding above buys.
     expect(ruleRow).toMatch(/background-image:\s*linear-gradient\(/);
     expect(ruleRow).toMatch(/background-size:\s*100%\s+1px/);
-    // content-box, not the padding-box default: the library pads every row 1ch inline
-    // and the cells live in the content box, so a padding-box percentage would run the
-    // separator a character past the outermost column rule at each end.
-    expect(ruleRow).toMatch(/background-origin:\s*content-box/);
+    expect(ruleRow).not.toContain("background-origin");
     expect(overrideDecls).not.toMatch(/\[data-table-rule\][^{]*::(?:before|after)/);
     expect(ruleInk).toMatch(/color:\s*transparent/);
     // Descendant, not the thematic break's child combinator: a celled row's tokens sit
@@ -1538,15 +1567,21 @@ describe("tables (EXC-864)", () => {
     expect(ruleInk).toMatch(/\[data-line\]\[data-table-rule\] \*/);
   });
 
-  test("spends the replacement family's ink on both rules, never a chrome token", () => {
-    // Both the column rules and the header rule stand in for a glyph that is now
-    // transparent, so each is the only thing left carrying that character's meaning —
-    // WCAG 1.4.11's own test. theme.test.ts owns the measurements; this pins the spend.
-    for (const rule of [edgeRule, bothRule, ruleRow]) {
-      expect(rule).toContain("var(--ink-soft)");
+  test("declares the rule ink once, softened, and spends it everywhere", () => {
+    // The frame, the dividers and the header rule are one mark in three places; a tuned
+    // number written out three times is three numbers waiting to drift apart. It is
+    // --ink-soft softened toward the surface — theme.test.ts owns how far that can go
+    // before the 3:1 floor bites; this pins only that the sheet spends what it chose.
+    expect(cardRule).toMatch(
+      /--table-rule:\s*color-mix\(in srgb, var\(--ink-soft\), var\(--paper-sunk\) 15%\)/,
+    );
+    for (const rule of [dividerRule, ruleRow]) {
+      expect(rule).toContain("var(--table-rule)");
       expect(rule).not.toContain("--ink-faint");
       expect(rule).not.toContain("--rule");
     }
+    // One declaration, nowhere else.
+    expect(overrideDecls.match(/--table-rule:/g)).toHaveLength(1);
   });
 
   test("declares the header weight here rather than through shiki", () => {

@@ -140,6 +140,20 @@ const MALFORMED_HEAD = "| x | y | z |";
 const MALFORMED_RULE = "| --- | --- |  |";
 const MALFORMED_ROW = "| 1 | 2 | 3 |";
 
+/** The seed plan's inline-markup table verbatim (scripts/tasks/dev/fake-plan.md), which
+ * is where this was first seen: every cell is padded out to 25 characters so the source
+ * aligns under `[a linked cell](#links)`, and that link renders as three words. */
+const LINK_PADDED = `# Padded
+
+| Cell kind | Content                 |
+| --------- | ----------------------- |
+| bold      | **a bold cell**         |
+| italic    | *an italic cell*        |
+| code      | \`a code cell\`           |
+| link      | [a linked cell](#links) |
+| reference | \`mise.toml\`             |
+`;
+
 /** The three tables on the page, by their header row's text. */
 const TABLES = [A_HEAD, B_HEAD, C_HEAD];
 
@@ -153,7 +167,7 @@ async function open(page: Page, daemon: Daemon, plan: string): Promise<void> {
 /** Resolve once all three tables have been carded. The pass runs from a
  * MutationObserver a frame behind the rows, so every read waits for the cards to exist
  * rather than racing the paint. */
-async function carded(page: Page): Promise<void> {
+async function carded(page: Page, count: number = TABLES.length): Promise<void> {
   await expect
     .poll(() =>
       page.evaluate(() => {
@@ -161,7 +175,7 @@ async function carded(page: Page): Promise<void> {
         return sh?.querySelectorAll("[data-content] > [data-table-card]").length ?? 0;
       }),
     )
-    .toBe(TABLES.length);
+    .toBe(count);
 }
 
 /** One row's cells, as the boxes they resolved to plus the two attributes the sheet
@@ -500,35 +514,95 @@ test("no pipe glyph paints, and the rules stand where the pipes did", async ({ p
   expect([...new Set(pipes.map((p) => p.text))]).toEqual(["|"]);
   expect([...new Set(pipes.map((p) => p.color))]).toEqual(["rgba(0, 0, 0, 0)"]);
 
-  // One background layer per pipe the cell actually carries, and none at all on a cell
-  // that carries neither — table B is written with no outer pipes, so its first column
-  // has no character for a rule to stand in for and must not draw one.
+  // A divider on every cell that opens a column, and none on the cell that opens the
+  // ROW — a table's outer edges belong to the frame, and a rule half a character inside
+  // it would read as a doubled line. Table B is written with no outer pipes, so its
+  // first column has no character for a rule to stand in for either way.
   const cells = await page.evaluate(() => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
     return [...(sh?.querySelectorAll("[data-content] [data-table-cell]") ?? [])].map((cell) => ({
       edge: cell.getAttribute("data-table-edge"),
+      first: cell.previousElementSibling === null,
       layers: getComputedStyle(cell).backgroundImage,
     }));
   });
   const layerCount = (fill: string) =>
     fill === "none" ? 0 : fill.split("linear-gradient").length - 1;
-  const wanted: Record<string, number> = { start: 1, end: 1, both: 2 };
   expect(cells.length).toBeGreaterThan(0);
   for (const cell of cells) {
-    expect(layerCount(cell.layers), `edge ${String(cell.edge)}`).toBe(wanted[cell.edge ?? ""] ?? 0);
+    const opens = cell.edge === "start" || cell.edge === "both";
+    const wanted = opens && !cell.first ? 1 : 0;
+    expect(layerCount(cell.layers), `edge ${String(cell.edge)} first ${cell.first}`).toBe(wanted);
     // The ink resolved across the shadow boundary rather than falling back to nothing.
-    if (cell.edge !== null) expect(cell.layers).not.toContain("rgba(0, 0, 0, 0)");
+    if (wanted > 0) expect(cell.layers).not.toContain("rgba(0, 0, 0, 0)");
   }
-  // All three edge states a plan can actually produce are on the page, so the loop above
-  // is not vacuous for any of them. `end` is the fourth and is unreachable from markdown:
-  // a cell's closing pipe is only ever its last token when the cell also opened with one,
-  // which is `both` — so the map carries it for completeness rather than for coverage.
-  for (const edge of [null, "start", "both"]) {
-    expect(
-      cells.some((c) => c.edge === edge),
-      `no cell with edge ${String(edge)}`,
-    ).toBe(true);
+  // Every case the loop distinguishes is on the page, so it is vacuous for none of them:
+  // a first cell that opens with a pipe (drawn by the frame, not by the cell), a first
+  // cell that does not (table B), and an interior cell that does.
+  for (const [name, match] of [
+    ["first cell with a pipe", (c: (typeof cells)[number]) => c.first && c.edge !== null],
+    ["first cell without one", (c: (typeof cells)[number]) => c.first && c.edge === null],
+    ["interior cell", (c: (typeof cells)[number]) => !c.first && c.edge !== null],
+  ] as const) {
+    expect(cells.some(match), `no ${name}`).toBe(true);
   }
+
+  // And the frame the edges were handed to: one border, on the card, with corners.
+  const frame = await page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const card = sh?.querySelector("[data-content] > [data-table-card]") as HTMLElement;
+    const cs = getComputedStyle(card);
+    return {
+      width: cs.borderTopWidth,
+      color: cs.borderTopColor,
+      radius: cs.borderTopLeftRadius,
+      // Every side, so a table never reads as rules stopping in mid-air.
+      sides: [cs.borderTopStyle, cs.borderRightStyle, cs.borderBottomStyle, cs.borderLeftStyle],
+    };
+  });
+  expect(frame.sides).toEqual(["solid", "solid", "solid", "solid"]);
+  expect(frame.width).toBe("1px");
+  expect(frame.color).not.toBe("rgba(0, 0, 0, 0)");
+  expect(Number.parseFloat(frame.radius)).toBeGreaterThan(0);
+});
+
+test("a column is as wide as what it shows, not as wide as the source", async ({
+  page,
+  daemon,
+}) => {
+  // A markdown author pads every cell out to the widest thing typed in the column, so a
+  // column that holds a link is padded for the link's SOURCE — and the source is what
+  // nobody can see once it collapses. Left alone, the whole column stays as wide as a
+  // URL that renders as three words.
+  await open(page, daemon, LINK_PADDED);
+  await carded(page, 1);
+  const geom = await page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const card = sh?.querySelector("[data-content] > [data-table-card]") as HTMLElement;
+    const cells = [...card.querySelectorAll("[data-line] [data-table-cell]:last-child")];
+    const widest = Math.max(
+      ...cells.map((c) => {
+        const r = document.createRange();
+        r.selectNodeContents(c);
+        return r.getBoundingClientRect().width;
+      }),
+    );
+    const probe = document.createElement("span");
+    probe.style.cssText = "position:absolute;visibility:hidden;white-space:pre";
+    probe.textContent = "0".repeat(10);
+    card.appendChild(probe);
+    const ch = probe.getBoundingClientRect().width / 10;
+    probe.remove();
+    const track = Number.parseFloat(
+      getComputedStyle(card).gridTemplateColumns.split(" ")[1] ?? "0",
+    );
+    return { trackCh: track / ch, widestCh: widest / ch };
+  });
+  // The source pads that column to 25 characters to fit `[a linked cell](#links)`; what
+  // it actually shows is `**a bold cell**` plus its chip. The track follows the glyphs.
+  expect(geom.trackCh).toBeLessThan(22);
+  // Not vacuous in the other direction either — the column still fits what it draws.
+  expect(geom.trackCh).toBeGreaterThanOrEqual(geom.widestCh - 0.5);
 });
 
 test("every row still has exactly one gutter number, with three tables on the page", async ({
