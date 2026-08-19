@@ -1,7 +1,12 @@
 import "@ui/test-setup.ts";
 import { describe, expect, test } from "bun:test";
 
-import { createKeyRepeat, KEY_REPEAT_DELAY_MS, KEY_REPEAT_INTERVAL_MS } from "$lib/keyRepeat.ts";
+import {
+  createKeyRepeat,
+  KEY_REPEAT_DELAY_MS,
+  KEY_REPEAT_INTERVAL_MS,
+  walkCommandList,
+} from "$lib/keyRepeat.ts";
 
 // A controllable scheduler so the delay and the run are deterministic — the same
 // injected-timer discipline alerts.test.ts and safeMode.test.ts use, and the reason
@@ -187,16 +192,99 @@ describe("createKeyRepeat", () => {
     expect(stepped).toEqual(["j", "k", "k"]);
     repeat.stop();
   });
+});
 
-  test("the delay and the cadence are overridable", () => {
+describe("walkCommandList", () => {
+  /** A stand-in for the panel's query field, recording what the walk dispatches at
+   * it. A real element rather than a stub: the claim is that bits-ui receives a
+   * bubbling keydown, and only a node can carry one. */
+  function makeField() {
+    const field = document.createElement("input");
+    document.body.append(field);
+    const keys: string[] = [];
+    field.addEventListener("keydown", (e) => keys.push(e.key));
+    return { field, keys };
+  }
+
+  const press = (init: KeyboardEventInit) =>
+    new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+
+  test("Tab and Shift+Tab walk down and up", () => {
     const clock = makeScheduler();
-    const repeat = createKeyRepeat({ schedule: clock.schedule, delayMs: 40, intervalMs: 7 });
+    const repeat = createKeyRepeat({ schedule: clock.schedule });
+    const { field, keys } = makeField();
 
-    repeat.start("j", () => {});
-
-    expect(clock.armed()).toEqual([40]);
-    clock.runNext();
-    expect(clock.armed()).toEqual([7]);
+    walkCommandList(press({ key: "Tab" }), field, repeat);
     repeat.stop();
+    walkCommandList(press({ key: "Tab", shiftKey: true }), field, repeat);
+    repeat.stop();
+
+    expect(keys).toEqual(["ArrowDown", "ArrowUp"]);
+  });
+
+  test("a claimed key suppresses the browser's own default", () => {
+    const clock = makeScheduler();
+    const repeat = createKeyRepeat({ schedule: clock.schedule });
+    const { field } = makeField();
+
+    const event = press({ key: "Tab" });
+    walkCommandList(event, field, repeat);
+    repeat.stop();
+
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  // The OS keeps emitting keydowns while the key is held; only the timer may walk.
+  test("an OS repeat stays claimed but walks nothing", () => {
+    const clock = makeScheduler();
+    const repeat = createKeyRepeat({ schedule: clock.schedule });
+    const { field, keys } = makeField();
+
+    walkCommandList(press({ key: "Tab" }), field, repeat);
+    const held = press({ key: "Tab", repeat: true });
+    walkCommandList(held, field, repeat);
+    repeat.stop();
+
+    expect(keys).toEqual(["ArrowDown"]);
+    expect(held.defaultPrevented).toBe(true);
+  });
+
+  // This function's own re-dispatch comes back through it on the way to the
+  // primitive. Claiming it again would loop.
+  test("the walk's own untrusted arrow passes through unclaimed", () => {
+    const clock = makeScheduler();
+    const repeat = createKeyRepeat({ schedule: clock.schedule });
+    const { field, keys } = makeField();
+
+    const synthetic = press({ key: "ArrowDown" });
+    walkCommandList(synthetic, field, repeat);
+
+    expect(synthetic.defaultPrevented).toBe(false);
+    expect(keys).toEqual([]);
+    expect(clock.armed()).toEqual([]);
+  });
+
+  // ⌘ and ⌥ are the primitive's own first/last and group jumps.
+  test("a modified arrow passes through unclaimed", () => {
+    const clock = makeScheduler();
+    const repeat = createKeyRepeat({ schedule: clock.schedule });
+    const { field } = makeField();
+
+    const event = press({ key: "ArrowDown", metaKey: true });
+    walkCommandList(event, field, repeat);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(clock.armed()).toEqual([]);
+  });
+
+  test("nothing is claimed while the panel has no field", () => {
+    const clock = makeScheduler();
+    const repeat = createKeyRepeat({ schedule: clock.schedule });
+
+    const event = press({ key: "Tab" });
+    walkCommandList(event, null, repeat);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(clock.armed()).toEqual([]);
   });
 });

@@ -9,8 +9,8 @@
 // not stop the browser emitting repeats, so a handler that does not bail on
 // `e.repeat` lets the native repeat and this timer drive the list at once, and
 // every hold double-steps. The bail belongs on the REAL keydown, before any
-// translation — a synthetic KeyboardEvent never carries `repeat`, so a key
-// re-dispatched as an arrow always arrives looking like a first press.
+// translation — the arrow a surface re-dispatches does not copy `repeat` off the
+// press it came from, so by then a held key looks like a first press.
 //
 // The move itself is the caller's closure, which is what lets one helper serve
 // surfaces that dispatch differently: PlanBreadcrumbs re-dispatches onto
@@ -22,6 +22,11 @@
 // breadcrumbs bar to another crumb's menu replaces the whole content node — and a
 // missed keyup is a run that never stops. A window `blur` ends it too: a window
 // that loses focus mid-hold never delivers the keyup at all.
+//
+// `walkCommandList` at the bottom is the one claim that IS shared rather than
+// per-surface: the bar's `/` filter panel and the ToC popup are the same bits-ui
+// `Command` over the same query field, so the keys they walk with and how those
+// reach the primitive are one piece of logic, not two copies of one.
 
 /** Quiet window between the first move and the run, in milliseconds. */
 export const KEY_REPEAT_DELAY_MS = 250;
@@ -37,10 +42,6 @@ export interface KeyRepeatDeps {
    * tests drive the delay and the run deterministically. Defaults to setTimeout.
    */
   schedule?: (fn: () => void, ms: number) => () => void;
-  /** Overrides {@link KEY_REPEAT_DELAY_MS}. */
-  delayMs?: number;
-  /** Overrides {@link KEY_REPEAT_INTERVAL_MS}. */
-  intervalMs?: number;
 }
 
 export interface KeyRepeat {
@@ -68,8 +69,6 @@ const defaultSchedule = (fn: () => void, ms: number) => {
 
 export function createKeyRepeat(deps: KeyRepeatDeps = {}): KeyRepeat {
   const schedule = deps.schedule ?? defaultSchedule;
-  const delayMs = deps.delayMs ?? KEY_REPEAT_DELAY_MS;
-  const intervalMs = deps.intervalMs ?? KEY_REPEAT_INTERVAL_MS;
 
   // The hold in flight, undefined when nothing is held. It is an OBJECT rather than
   // a boolean because its identity is what the run checks itself against: `step()`
@@ -114,13 +113,70 @@ export function createKeyRepeat(deps: KeyRepeatDeps = {}): KeyRepeat {
     const tick = (): void => {
       step();
       if (live !== hold) return;
-      cancelTimer = schedule(tick, intervalMs);
+      cancelTimer = schedule(tick, KEY_REPEAT_INTERVAL_MS);
     };
 
     step();
     if (live !== hold) return;
-    cancelTimer = schedule(tick, delayMs);
+    cancelTimer = schedule(tick, KEY_REPEAT_DELAY_MS);
   }
 
   return { start, stop };
+}
+
+/** The keys a bits-ui `Command` list walks with here, mapped onto the arrow each
+ * one means. The arrows map to THEMSELVES, which buys nothing about where the walk
+ * goes — the primitive would do the same — and everything about the cadence it goes
+ * at: a key claimed here repeats on the app's timer, one left to the primitive
+ * repeats on the OS's. Left and right are deliberately absent, since focus sits in a
+ * text field where they move the caret. */
+const COMMAND_ARROWS: Record<string, string> = {
+  ArrowDown: "ArrowDown",
+  ArrowUp: "ArrowUp",
+};
+
+/**
+ * Claim a `Command` list's walk keys on its Root's `onkeydown`, and hand the walk to
+ * `repeat` so a held key traverses on the app's cadence.
+ *
+ * Shared by the plan's two command-backed heading surfaces — the breadcrumbs bar's
+ * `/` filter panel and the ToC popup — which had the same handler twice before
+ * EXC-1122 gave them a second thing to agree about. `field` is the panel's query
+ * input, and `null` while it is unmounted.
+ *
+ * Re-dispatching an arrow rather than writing the selection is the load-bearing
+ * choice. bits-ui scrolls a selection into view from its OWN keydown path, so a
+ * hand-rolled walk would step the reviewer onto rows below the fold without ever
+ * bringing them into sight. It goes out from the FIELD because that is where the
+ * keypress really landed, and the primitive listens for it on the root the event
+ * bubbles to. With no matches the arrow lands on an empty item set and the key goes
+ * quiet — still preferable to the default, which steps focus out of a panel that is
+ * portalled to the body with nothing tabbable after it.
+ *
+ * Three things pass through unclaimed, each for its own reason: a modified key,
+ * because bits-ui reads ⌘ and ⌥ off its own arrow handling (first/last row,
+ * previous/next group) and swallowing them would delete two behaviours; an untrusted
+ * arrow, because that is this function's own re-dispatch on its way to the
+ * primitive, and answering it again would loop; and a key this list does not walk
+ * with. A held key's OS repeats are claimed but not walked — `preventDefault` keeps
+ * the browser's own Tab move suppressed for as long as the key is down.
+ */
+export function walkCommandList(
+  e: KeyboardEvent,
+  field: HTMLInputElement | null,
+  repeat: KeyRepeat,
+): void {
+  if (e.ctrlKey || e.altKey || e.metaKey || field === null) return;
+  // Tab sits beside the map rather than in it: the map is keyed on the arrow a key
+  // means, and Tab's direction rides the shift modifier instead.
+  const arrow = e.key === "Tab" ? (e.shiftKey ? "ArrowUp" : "ArrowDown") : COMMAND_ARROWS[e.key];
+  if (arrow === undefined) return;
+  if (arrow === e.key && !e.isTrusted) return;
+  e.preventDefault();
+  if (e.repeat) return;
+  repeat.start(e.key, () =>
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", { key: arrow, bubbles: true, cancelable: true }),
+    ),
+  );
 }

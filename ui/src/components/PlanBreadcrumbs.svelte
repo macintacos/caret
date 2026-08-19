@@ -70,7 +70,7 @@
     headingTrail,
     visibleDepths,
   } from "$lib/headingTrail.ts";
-  import { createKeyRepeat } from "$lib/keyRepeat.ts";
+  import { createKeyRepeat, walkCommandList } from "$lib/keyRepeat.ts";
   import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
   import type { TocHeading } from "$lib/toc.ts";
 
@@ -451,57 +451,15 @@
   // already inside it.
   const emptyMessage = $derived(matches.length > 0 ? "" : "No headings match");
 
-  // The keys the filter's list walks with, mapped onto themselves for the reason
-  // MENU_ARROWS maps its own: the walk is the primitive's, the cadence is ours.
-  // Left and right are deliberately absent — the panel's focus sits in a text field,
-  // where they move the caret.
-  const FILTER_ARROWS: Record<string, string> = {
-    ArrowDown: "ArrowDown",
-    ArrowUp: "ArrowUp",
-  };
-
   // Tab walks the results instead of leaving them (EXC-1121), the same claim the
   // hierarchy menus make on the same key, and the arrows join it for the cadence
-  // (EXC-1122) exactly as they join MENU_ARROWS above. The primitive maps the arrows
-  // and the vim chords and ignores Tab, so untouched Tab fell through to the browser
-  // — and with nothing tabbable after a panel portalled to the body, that stepped off
-  // the end of the document.
-  //
-  // Re-dispatching an arrow rather than writing the selection is the load-bearing
-  // choice. bits-ui scrolls a selection into view from its OWN keydown path, so a
-  // hand-rolled walk would step the reviewer onto rows below the fold without ever
-  // bringing them into sight.
-  //
-  // The synthetic event is not the only way in: the vendored Command.Root exposes the
-  // primitive through `bind:api`, whose `updateSelectedByItem` wraps on `loop` and
-  // scrolls identically. This takes the dispatch anyway, to hold ONE shape across the
-  // plan's two heading surfaces — PlanToc.svelte walks its own list this way, and a
-  // second spelling here would make the next bits-ui change something to find twice.
-  //
-  // Dispatched from the field because that is where the keypress really landed, and
-  // the primitive listens for it on the root the event bubbles to. With no matches
-  // the arrow lands on an empty item set and the key goes quiet — still preferable to
-  // letting the default step the reviewer off the end of the document.
-  //
-  // Bare keys only, and here that is load-bearing rather than tidiness: bits-ui reads
-  // ⌘ and ⌥ off its own arrow handling (first/last row, previous/next group), so
-  // claiming a modified arrow would delete two behaviours.
-  function onFilterKeydown(e: KeyboardEvent): void {
-    if (e.ctrlKey || e.altKey || e.metaKey) return;
-    const field = queryEl;
-    if (field === null) return;
-    const arrow = e.key === "Tab" ? (e.shiftKey ? "ArrowUp" : "ArrowDown") : FILTER_ARROWS[e.key];
-    if (arrow === undefined) return;
-    // The walk's own re-dispatch, on its way to the primitive. See onMenuKeydown.
-    if (arrow === e.key && !e.isTrusted) return;
-    e.preventDefault();
-    if (e.repeat) return;
-    repeat.start(e.key, () =>
-      field.dispatchEvent(
-        new KeyboardEvent("keydown", { key: arrow, bubbles: true, cancelable: true }),
-      ),
-    );
-  }
+  // (EXC-1122) exactly as they join MENU_ARROWS above. The claim itself is
+  // walkCommandList's: this panel and the ToC popup are the same primitive over the
+  // same kind of field, so the keys they walk with live in one place rather than
+  // twice. What was surface-specific here is now only WHY it had to be claimed —
+  // untouched, Tab fell through to the browser, and with nothing tabbable after a
+  // panel portalled to the body, that stepped off the end of the document.
+  const onFilterKeydown = (e: KeyboardEvent) => walkCommandList(e, queryEl, repeat);
 
   // Put the hierarchy back with the bar still open: shut the panel, then re-open
   // the menu the filter was summoned from, with the same programmatic click `b`
@@ -520,6 +478,13 @@
   // it: a menu always reopens on its hierarchy, so a query that survived would only
   // reappear on the next `/` over a plan that has since scrolled.
   function closeFilter(): void {
+    // Every close the BAR performs — Escape back to the hierarchy, a pick — routes
+    // through here, and bits-ui reports none of them: onOpenChange runs from the
+    // primitive's own box setter, which a parent write to `filtering` never reaches
+    // (PlanToc.svelte's openPopup says the same thing about its own flag). So this is
+    // where a run in flight has to be cancelled; the popover's onOpenChange below
+    // catches only the closes the primitive itself performs.
+    repeat.stop();
     filtering = false;
     query = "";
     filterOrigin = null;
