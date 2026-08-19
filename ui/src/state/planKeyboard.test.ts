@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test } from "bun:test";
 
 import { createPlanKeyboard, type PlanKeyboardStore } from "@/state/planKeyboard.svelte.ts";
 import type { CursorMotion } from "$lib/diffview/lineCursor.ts";
+import type { SoundEvent } from "$lib/sound.ts";
 
 // A plan whose lines carry known "alpha" matches: line 3 has two, line 5 has one
 // (the same fixture DiffPlanView.test.ts uses to prove the "1/3" counter). Split on
@@ -45,6 +46,7 @@ function build(
   const jumped: number[] = [];
   const composerOpens: Array<{ startLine: number; endLine: number }> = [];
   const scheduled: Array<{ fn: () => void; handle: number }> = [];
+  const sounds: SoundEvent[] = [];
   let nextHandle = 1;
   let focused = 0;
   let blurred = 0;
@@ -77,6 +79,7 @@ function build(
       const i = scheduled.findIndex((s) => s.handle === (h as unknown as number));
       if (i >= 0) scheduled.splice(i, 1);
     },
+    sound: (e) => sounds.push(e),
   });
 
   return {
@@ -84,6 +87,7 @@ function build(
     followed,
     jumped,
     composerOpens,
+    sounds,
     focusCount: () => focused,
     blurCount: () => blurred,
     pendingTimers: () => scheduled.length,
@@ -498,5 +502,128 @@ describe("clearSelectionOrCursor", () => {
     const h = build(store, { text: CURSOR_PLAN });
     h.keyboard.clearSelectionOrCursor();
     expect(store.cursorLine).toBe(5);
+  });
+});
+
+// Every cue sits inside the transition it names, so PlanSearch's ‹ › ✕ buttons —
+// which route through stepSearch/closeSearch — sound identically to n/N/Esc with
+// no play written at either call site. The no-op branches stay silent: nothing
+// happened, so nothing is announced.
+describe("sound events (EXC-1126)", () => {
+  test("openSearch sounds the HUD opening", () => {
+    const h = build(store, { text: PLAN });
+    h.keyboard.openSearch();
+    expect(h.sounds).toEqual(["searchOpened"]);
+  });
+
+  test("commitSearch sounds the commit", () => {
+    store.searchQuery = "alpha";
+    const h = build(store, { text: PLAN, reading: 1 });
+    h.keyboard.commitSearch();
+    expect(h.sounds).toEqual(["searchCommitted"]);
+  });
+
+  test("commitSearch with no matches commits nothing and says nothing", () => {
+    store.searchQuery = "zzz";
+    const h = build(store, { text: PLAN, reading: 1 });
+    h.keyboard.commitSearch();
+    expect(h.sounds).toEqual([]);
+  });
+
+  test("closeSearch sounds at once, not when the deferred teardown fires", () => {
+    store.searchOpen = true;
+    store.searchQuery = "alpha";
+    const h = build(store, { text: PLAN, hints: true });
+    h.keyboard.closeSearch();
+    expect(h.sounds).toEqual(["searchClosed"]);
+    h.runTimers();
+    expect(h.sounds).toEqual(["searchClosed"]);
+  });
+
+  test("stepSearch sounds each step it lands", () => {
+    store.searchQuery = "alpha";
+    store.searchOpen = true;
+    store.searchCommitted = true;
+    store.searchIndex = 0;
+    const h = build(store, { text: PLAN });
+    h.keyboard.stepSearch(1);
+    h.keyboard.stepSearch(1);
+    expect(h.sounds).toEqual(["searchStepped", "searchStepped"]);
+  });
+
+  test("stepSearch over an open search with no matches is silent", () => {
+    store.searchQuery = "zzz";
+    store.searchOpen = true;
+    store.searchCommitted = true;
+    const h = build(store, { text: PLAN });
+    h.keyboard.stepSearch(1);
+    expect(h.sounds).toEqual([]);
+  });
+
+  test("resuming a remembered query sounds the step it lands on", () => {
+    store.lastQuery = "alpha";
+    const h = build(store, { text: PLAN, reading: 3 });
+    h.keyboard.stepSearch(1);
+    expect(h.sounds).toEqual(["searchStepped"]);
+  });
+
+  test("resuming with nothing remembered is silent", () => {
+    const h = build(store, { text: PLAN });
+    h.keyboard.stepSearch(1);
+    expect(h.sounds).toEqual([]);
+  });
+
+  test("resuming a query the new content no longer matches lands nowhere, silently", () => {
+    store.lastQuery = "alpha";
+    const h = build(store, { text: "# Beta\n\nbody one\n", reading: 3 });
+    h.keyboard.stepSearch(1);
+    expect(h.sounds).toEqual([]);
+  });
+
+  test("visual mode sounds its entry and its exit", () => {
+    const h = build(store, { text: CURSOR_PLAN, reading: 3 });
+    h.keyboard.enterVisualMode();
+    expect(h.sounds).toEqual(["visualEntered"]);
+    h.keyboard.enterVisualMode();
+    expect(h.sounds).toEqual(["visualEntered", "visualExited"]);
+  });
+
+  test("Esc over an open search takes the close branch's cue", () => {
+    store.searchOpen = true;
+    store.visualAnchor = 3;
+    const h = build(store, { text: PLAN, hints: false });
+    h.keyboard.clearSelectionOrCursor();
+    expect(h.sounds).toEqual(["searchClosed"]);
+  });
+
+  test("Esc over a visual selection takes the exit branch's cue", () => {
+    store.visualAnchor = 3;
+    const h = build(store, { text: CURSOR_PLAN });
+    h.keyboard.clearSelectionOrCursor();
+    expect(h.sounds).toEqual(["visualExited"]);
+  });
+
+  test("Esc that clears neither is silent", () => {
+    store.cursorLine = 5;
+    const h = build(store, { text: CURSOR_PLAN });
+    h.keyboard.clearSelectionOrCursor();
+    expect(h.sounds).toEqual([]);
+  });
+
+  test("commenting a visual selection leaves the cue to the composer it opens", () => {
+    store.visualAnchor = 6;
+    store.cursorLine = 2;
+    const h = build(store, { text: CURSOR_PLAN });
+    h.keyboard.commentCursorLine();
+    expect(h.sounds).toEqual([]);
+  });
+
+  test("a content switch tears everything down silently — the reviewer dismissed nothing", () => {
+    store.searchOpen = true;
+    store.searchQuery = "alpha";
+    store.visualAnchor = 3;
+    const h = build(store, { text: PLAN });
+    h.keyboard.clearForContentSwitch();
+    expect(h.sounds).toEqual([]);
   });
 });

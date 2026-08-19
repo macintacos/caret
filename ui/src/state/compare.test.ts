@@ -4,11 +4,13 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import type { PlanVersion } from "@core/lib/types";
 import { type CompareStore, createCompare } from "@/state/compare.svelte.ts";
 import type { DiffIndicators, DiffStyle } from "$lib/diffview/types.ts";
+import type { SoundEvent } from "$lib/sound.ts";
 
 let written: DiffStyle[];
 let prefValue: DiffStyle;
 let writtenIndicators: DiffIndicators[];
 let indicatorsPrefValue: DiffIndicators;
+let sounds: SoundEvent[];
 
 function makeStore(over: Partial<CompareStore> = {}): CompareStore {
   return {
@@ -27,6 +29,7 @@ function build(store: CompareStore) {
     writePref: (s) => written.push(s),
     readIndicatorsPref: () => indicatorsPrefValue,
     writeIndicatorsPref: (i) => writtenIndicators.push(i),
+    sound: (e) => sounds.push(e),
   });
 }
 
@@ -45,6 +48,7 @@ beforeEach(() => {
   prefValue = "split";
   writtenIndicators = [];
   indicatorsPrefValue = "bars";
+  sounds = [];
 });
 
 describe("init", () => {
@@ -176,5 +180,52 @@ describe("syncVersions", () => {
     compare.setTarget(1);
     expect(compare.planFor(vs, store.baseVersion)).toBe("plan v3");
     expect(compare.planFor(vs, store.targetVersion)).toBe("plan v1");
+  });
+});
+
+// The cue belongs to the toggle itself, so the header button and the keyboard
+// binding cannot drift apart — and only a real flip sounds, the same
+// change-guard polling's setConnected carries for the same reason.
+describe("sound events (EXC-1126)", () => {
+  test("entering compare mode sounds the toggle", () => {
+    const compare = build(makeStore());
+    compare.setComparing(true);
+    expect(sounds).toEqual(["compareToggled"]);
+  });
+
+  test("leaving compare mode sounds it again", () => {
+    const compare = build(makeStore({ comparing: true }));
+    compare.setComparing(false);
+    expect(sounds).toEqual(["compareToggled"]);
+  });
+
+  test("re-asserting the flag it already holds is silent", () => {
+    const compare = build(makeStore());
+    compare.setComparing(false);
+    compare.setComparing(true);
+    compare.setComparing(true);
+    expect(sounds).toEqual(["compareToggled"]);
+  });
+
+  test("syncVersions dropping compare mode is silent — nobody toggled anything", () => {
+    const store = makeStore();
+    const compare = build(store);
+    compare.init(versions(3));
+    compare.setComparing(true);
+    sounds.length = 0;
+    compare.syncVersions(versions(1));
+    expect(store.comparing).toBe(false);
+    expect(sounds).toEqual([]);
+  });
+
+  test("the dep is optional — a compare with no sound still toggles", () => {
+    const store = makeStore();
+    createCompare(store, {
+      readPref: () => prefValue,
+      writePref: (s) => written.push(s),
+      readIndicatorsPref: () => indicatorsPrefValue,
+      writeIndicatorsPref: (i) => writtenIndicators.push(i),
+    }).setComparing(true);
+    expect(store.comparing).toBe(true);
   });
 });

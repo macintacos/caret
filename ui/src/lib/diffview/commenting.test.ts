@@ -9,6 +9,7 @@ import {
   rangeLabel,
   scratchKey,
 } from "$lib/diffview/commenting.ts";
+import type { SoundEvent } from "$lib/sound.ts";
 
 // The source-view gutter commenting controller is a pure state machine over the
 // @pierre/diffs gutter utility: a SelectedLineRange opens it, submit/cancel
@@ -18,14 +19,20 @@ import {
 // transitions in isolation.
 
 let created: CreatedAnchor[];
+let sounds: SoundEvent[];
 
 function build() {
   created = [];
-  return createSourceCommenting({ onCreate: (a) => created.push(a) });
+  sounds = [];
+  return createSourceCommenting({
+    onCreate: (a) => created.push(a),
+    sound: (e) => sounds.push(e),
+  });
 }
 
 beforeEach(() => {
   created = [];
+  sounds = [];
 });
 
 describe("composer open/close state", () => {
@@ -482,6 +489,64 @@ describe("notifies on state change", () => {
     c.open({ start: 2, end: 2 });
     c.cancel();
     expect(ticks).toBe(4);
+  });
+});
+
+// The cues belong to the ACTIONS, so every path that opens the composer — the
+// gutter drag, a line click, the `c` binding — sounds the same one without a
+// caller writing it. resume() is deliberately not one of them: picking a Resume
+// marker back up is a different affordance from initiating a comment, which is
+// why the cue sits in open() rather than in the shared openAt.
+describe("sound events (EXC-1126)", () => {
+  test("open sounds the composer opening", () => {
+    const c = build();
+    c.open({ start: 3, end: 5 });
+    expect(sounds).toEqual(["commentOpen"]);
+  });
+
+  test("resume is silent", () => {
+    const c = build();
+    c.open({ start: 3, end: 3 });
+    c.cancel("kept for later");
+    sounds.length = 0;
+    c.resume(scratchKey(3, 3));
+    expect(sounds).toEqual([]);
+  });
+
+  test("discardOpen with text throws away something, and sounds like it", () => {
+    const c = build();
+    c.open({ start: 3, end: 3 });
+    sounds.length = 0;
+    c.discardOpen("half a thought");
+    expect(sounds).toEqual(["commentDiscarded"]);
+  });
+
+  test("discardOpen with whitespace-only text merely drops the composer", () => {
+    const c = build();
+    c.open({ start: 3, end: 3 });
+    sounds.length = 0;
+    c.discardOpen("   ");
+    expect(sounds).toEqual(["commentDropped"]);
+  });
+
+  test("discardOpen with no text at all drops the composer", () => {
+    const c = build();
+    c.open({ start: 3, end: 3 });
+    sounds.length = 0;
+    c.discardOpen();
+    expect(sounds).toEqual(["commentDropped"]);
+  });
+
+  test("discardOpen while closed is silent", () => {
+    const c = build();
+    c.discardOpen("typed into nothing");
+    expect(sounds).toEqual([]);
+  });
+
+  test("the dep is optional — a controller with no sound still opens", () => {
+    const c = createSourceCommenting({ onCreate: () => {} });
+    c.open({ start: 1, end: 1 });
+    expect(c.pending()).toEqual({ startLine: 1, endLine: 1 });
   });
 });
 

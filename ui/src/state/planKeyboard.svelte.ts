@@ -21,6 +21,7 @@ import {
   type SearchMatch,
   stepIndex,
 } from "$lib/diffview/planSearch.ts";
+import type { SoundEvent } from "$lib/sound.ts";
 
 /** Reactive fields the host component owns and the factory mutates. App/DiffPlanView
  * supplies a `$state`-backed literal; tests pass a plain object. */
@@ -76,6 +77,8 @@ export interface PlanKeyboardDeps {
   setTimer?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
   /** Cancel a scheduled teardown; defaults to clearTimeout. */
   clearTimer?: (handle: ReturnType<typeof setTimeout>) => void;
+  /** Play a moment's cue. Optional so a test drives the factory silently. */
+  sound?: (event: SoundEvent) => void;
 }
 
 export interface PlanKeyboard {
@@ -200,10 +203,12 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
   }
 
   // Move the line cursor to the match at searchIndex and scroll it into view.
-  function revealMatch(): void {
+  // Reports whether it landed on one, so a step that found nothing stays silent.
+  function revealMatch(): boolean {
     const m = matches()[store.searchIndex];
-    if (m == null) return;
+    if (m == null) return false;
     reveal(m.line);
+    return true;
   }
 
   // Dismiss the pill. Blur now so focus returns to the plan and the cursor/highlights stay
@@ -211,6 +216,9 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
   // so keep the pill mounted for one --dur-exit playing its collapse animation, then reset;
   // with hints off there's no chip, so reset immediately. Shared by the Esc chain.
   function closeSearch(): void {
+    // The dismissal is the moment, so it sounds here rather than at the deferred
+    // teardown — and the Esc chain and the pill's ✕ inherit it by routing through.
+    deps.sound?.("searchClosed");
     deps.blur();
     if (!deps.hintsShown()) {
       resetSearch();
@@ -256,11 +264,13 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
       // Pressing V again exits, as vim's V does, keeping the cursor placed.
       if (store.visualAnchor != null) {
         store.visualAnchor = null;
+        deps.sound?.("visualExited");
         return;
       }
       const anchor = seedLine();
       reveal(anchor);
       store.visualAnchor = anchor;
+      deps.sound?.("visualEntered");
     },
 
     clearSelectionOrCursor() {
@@ -271,7 +281,10 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
         closeSearch();
         return;
       }
-      if (store.visualAnchor != null) store.visualAnchor = null;
+      if (store.visualAnchor != null) {
+        store.visualAnchor = null;
+        deps.sound?.("visualExited");
+      }
     },
 
     openSearch() {
@@ -281,6 +294,7 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
       store.searchQuery = store.lastQuery;
       store.searchIndex = -1;
       deps.focusField();
+      deps.sound?.("searchOpened");
     },
 
     closeSearch,
@@ -293,6 +307,7 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
       revealMatch();
       store.searchCommitted = true;
       deps.blur();
+      deps.sound?.("searchCommitted");
     },
 
     stepSearch(delta) {
@@ -305,13 +320,13 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
         store.searchOpen = true;
         store.searchCommitted = true;
         store.searchIndex = matchStepFromLine(matches(), seedLine(), delta);
-        revealMatch();
+        if (revealMatch()) deps.sound?.("searchStepped");
         return;
       }
       const ms = matches();
       if (ms.length === 0) return;
       store.searchIndex = stepIndex(ms.length, store.searchIndex, delta);
-      revealMatch();
+      if (revealMatch()) deps.sound?.("searchStepped");
     },
 
     retrackToNearest() {
