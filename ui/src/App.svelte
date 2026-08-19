@@ -138,6 +138,22 @@
     sound.play("modalOpen");
     showHelp = true;
   }
+  // Two actions each reachable from a key and from a control, so each is one named
+  // function both bind to and the cue lives inside it — the pair cannot drift onto
+  // different sounds, because there is no second place to write one (EXC-1126).
+  //
+  // switchPlan is the reviewer choosing another plan, which selection.selectReview
+  // alone is not: that is also the funnel for a deep link, mergeReviews' re-select
+  // and afterResolve's auto-advance, none of which the reviewer asked for. So the
+  // cue sits out here rather than inside it.
+  function switchPlan(id: string): void {
+    sound.play("planSwitched");
+    selection.selectReview(id);
+  }
+  function toggleComments(): void {
+    sound.play("commentsToggled");
+    showComments = !showComments;
+  }
   // First-run onboarding (EXC-781): opens once for a brand-new user whose
   // notification permission is still undecided. Guarded on Notification support
   // so a browser without the API never shows a modal that can't enable anything.
@@ -219,6 +235,7 @@
       pendingText = commenting.pendingText();
       scratches = commenting.scratches();
     },
+    sound: sound.play,
   });
   // Persist the retained scratches through autosave in a scheduled $effect rather than
   // synchronously inside onChange, so the write is never re-entrant with the controller
@@ -488,9 +505,7 @@
       reg("actions.reject", { run: onReject, enabled: canAct }),
       reg("actions.settings", { run: openSettings }),
       reg("actions.toggleComments", {
-        run: () => {
-          showComments = !showComments;
-        },
+        run: toggleComments,
         enabled: () => active != null,
       }),
     ];
@@ -629,7 +644,7 @@
     {pendingCount}
     unread={selection.unread}
     arrivals={selection.arrivals}
-    onSelect={selection.selectReview}
+    onSelect={switchPlan}
     {onApprove}
     onRequestChanges={() => (showDialog = true)}
     {onReject}
@@ -724,7 +739,7 @@
     reviewVersion={active?.version ?? 1}
     connected={selection.connected}
     commentsOpen={showComments}
-    onToggleComments={() => (showComments = !showComments)}
+    onToggleComments={toggleComments}
     onOpenHelp={openHelp}
     {showShortcutHints}
   />

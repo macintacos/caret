@@ -210,6 +210,7 @@
     writePref: writeDiffStyle,
     readIndicatorsPref: readDiffIndicators,
     writeIndicatorsPref: writeDiffIndicators,
+    sound: sound.play,
   });
 
   // Seed the default pair + persisted layout when the active review changes, and
@@ -984,6 +985,7 @@
     focusField: focusSearchField,
     blur: () => (document.activeElement as HTMLElement | null)?.blur(),
     hintsShown: () => showShortcutHints,
+    sound: sound.play,
   });
 
   // The live visual selection, ascending — mirrored into SourceView's amber band through
@@ -1638,7 +1640,7 @@
                 onInput={(text) => (liveText = text)}
                 onSubmit={(comment) => commenting.submit(comment)}
                 onKeep={(text) => commenting.cancel(text)}
-                onDiscard={() => commenting.discardOpen()}
+                onDiscard={() => commenting.discardOpen(liveText)}
               />
             </div>
           {/key}

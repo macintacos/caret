@@ -130,6 +130,31 @@ describe("DiffPlanView contents popup", () => {
   });
 });
 
+/** Mount the view with a composer open on line 2 seeded with `text`, over a
+ * controller whose injected sound dep records what the view asks it to play. The
+ * controller is opened AFTER the mount, since the view's contentKey effect reseeds
+ * it on the way in and would drop an earlier open. Returns the recorder and a getter
+ * for the composer's Discard button, found by label — it wears the chip classes
+ * rather than a name of its own. */
+async function openComposer(text: string) {
+  const sounds: string[] = [];
+  const commenting = createSourceCommenting({
+    onCreate: () => {},
+    sound: (event) => sounds.push(event),
+  });
+  const { target } = render(
+    DiffPlanView,
+    props({ commenting, pending: { startLine: 2, endLine: 2 }, pendingText: text }),
+  );
+  const find = () =>
+    [...target.querySelectorAll<HTMLButtonElement>("button")].find(
+      (b) => b.textContent?.trim() === "Discard",
+    );
+  await until(() => find() !== undefined);
+  commenting.open({ start: 2, end: 2 });
+  return { sounds, discard: () => find() as HTMLButtonElement };
+}
+
 describe("DiffPlanView gutter composer", () => {
   // The gutter `+` reveal, line-offset positioning, and the persisted create are
   // real-browser behavior covered by the Playwright e2e (diff-surface.e2e.ts).
@@ -139,6 +164,24 @@ describe("DiffPlanView gutter composer", () => {
     const { target } = render(DiffPlanView, props());
     await until(() => shadow(target)?.textContent?.includes("hello world") ?? false);
     expect(target.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  // Discard hands the controller the composer's live text, which is what picks the
+  // cue apart: words thrown away are discarded, an empty box is merely dropped. The
+  // controller is a prop, so its injected sound dep is the seam that observes it —
+  // the singleton the other surfaces read has none.
+  test("discarding an empty composer drops it rather than discarding it", async () => {
+    const { sounds, discard } = await openComposer("");
+    discard().click();
+    expect(sounds).toEqual(["commentOpen", "commentDropped"]);
+  });
+
+  test("discarding a composer holding text reports it as a discard", async () => {
+    const { sounds, discard } = await openComposer("a draft");
+    discard().click(); // routes through the confirmation, per EXC-749
+    await until(() => document.querySelector(".confirm") !== null);
+    document.querySelector<HTMLButtonElement>(".confirm")?.click();
+    expect(sounds).toEqual(["commentOpen", "commentDiscarded"]);
   });
 });
 
