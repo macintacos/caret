@@ -1326,11 +1326,13 @@ const CARET_OVERRIDES = `
      little enough that the pair reads as adjacent. It is a floor as much as a choice —
      the row still has to hold the dot below.
 
-     ONE column, where this once needed both. The row track is the taller of the gutter
-     cell and the content row, so shrinking the content row alone used to change nothing;
-     what frees it is that the gutter cell no longer holds any in-flow content of its own
-     (see below), so it contributes no height and stretches to whatever this sets. */
-  [data-content] > [data-table-card] > [data-line][data-table-rule] {
+     Both columns or neither. The row track is the taller of the gutter cell and the
+     content row, and the gutter cell still holds its line number — hidden, but in flow,
+     because the dot below is positioned on that number's own box — so a declaration that
+     reached only the content row would resolve to the number's line box and change
+     nothing on screen. */
+  [data-content] > [data-table-card] > [data-line][data-table-rule],
+  [data-gutter] [data-table-card-gutter] > :nth-child(2 of [data-column-number]) {
     line-height: 0.4;
   }
   /* The gutter half: no number, a dot. A line number is an address a reader takes to a
@@ -1348,29 +1350,50 @@ const CARET_OVERRIDES = `
      stands exactly where a number stood and is the same mark, so it takes the same ink
      the numbers around it do, hover and selection states included.
 
-     Centred in the CONTENT box, which is where the digits are — the cell's padding is
-     lopsided (the gutter's own inset on one side, the divider's on the other), so
-     centring in the border box would set the dot visibly left of the column it replaces.
+     ON THE NUMBER'S OWN BOX, which is the only thing that puts it under the numbers
+     rather than merely near them. The library sizes every number to the widest one in
+     the file and right-aligns the digits inside that, so the column's centre is the
+     centre of the LONGEST line number: in a file that runs past a thousand lines, every
+     three-digit number sits half a digit right of it, and a dot centred on the column
+     reads visibly off the stack it belongs to. Taking the box back to its own digits
+     (min-width) and stretching it to the row (height, from the row's top rather than
+     from the text baseline it would otherwise sit on) makes the box exactly the one this
+     line's number occupied, so the dot lands on the numbers above and below to the pixel.
+
+     The glyphs are hidden with visibility rather than display, because the box is now
+     what positions the dot and display would take it away — and with a ::before to carry
+     the paint, since visibility hides an element's background along with its text. That
+     pseudo is free here: the one EXC-865 spends is on the CELL, one level up.
 
      The cell is reached positionally because the gutter carries no per-line marker and
      adding one would cost a query per repaint. It is exact rather than a guess about the
      DOM — "of [data-column-number]" counts only the line cells, skipping the buffer a
      comment inserts, and the second line of a table is its delimiter by GFM's grammar. */
-  [data-gutter] [data-table-card-gutter] > :nth-child(2 of [data-column-number]) {
-    /* closest-side, so the disc is inscribed in the box below rather than reaching its
-       corners — a farthest-corner circle is clipped square by its own painting area and
-       the "dot" comes out a tiny block. */
-    background-image: radial-gradient(circle closest-side, currentColor 100%, transparent 100%);
-    background-origin: content-box;
-    background-position: center;
-    background-repeat: no-repeat;
-    background-size: 0.3em 0.3em;
-  }
   [data-gutter]
     [data-table-card-gutter]
     > :nth-child(2 of [data-column-number])
     > [data-line-number-content] {
-    display: none;
+    visibility: hidden;
+    position: relative;
+    min-width: 0;
+    height: 100%;
+    vertical-align: top;
+  }
+  [data-gutter]
+    [data-table-card-gutter]
+    > :nth-child(2 of [data-column-number])
+    > [data-line-number-content]::before {
+    content: "";
+    visibility: visible;
+    position: absolute;
+    inset: 0;
+    /* closest-side, so the disc is inscribed in the box below rather than reaching its
+       corners — a farthest-corner circle is clipped square by its own painting area and
+       the "dot" comes out a tiny block. */
+    background-image: radial-gradient(circle closest-side, currentColor 100%, transparent 100%);
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 0.3em 0.3em;
   }
   /* The hover "+" is a fixed size and its row is not, so it is centred on the row rather
      than hung from the top of it. On every other line the two are the same height and

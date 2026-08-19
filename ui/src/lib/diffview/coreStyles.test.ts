@@ -1465,19 +1465,19 @@ describe("tables (EXC-864)", () => {
   const tightRule =
     [
       ...overrideDecls.matchAll(
-        /\[data-content\]\s*>\s*\[data-table-card\]\s*>\s*\[data-line\]\[data-table-rule\]\s*\{[^}]*\}/g,
+        /\[data-content\][^{}]*\[data-line\]\[data-table-rule\][^{}]*\{[^}]*\}/g,
       ),
     ]
       .map((m) => m[0])
       .find((r) => r.includes("line-height:")) ?? "";
   // The gutter's three, which rulesFor cannot reach — it anchors on [data-content].
-  const dotRule =
-    overrideDecls.match(
-      /\[data-table-card-gutter\][^{}]*:nth-child\(2 of \[data-column-number\]\)\s*\{[^}]*\}/,
-    )?.[0] ?? "";
   const numberRule =
     overrideDecls.match(
       /:nth-child\(2 of \[data-column-number\]\)\s*>\s*\[data-line-number-content\]\s*\{[^}]*\}/,
+    )?.[0] ?? "";
+  const dotRule =
+    overrideDecls.match(
+      /:nth-child\(2 of \[data-column-number\]\)\s*>\s*\[data-line-number-content\]::before\s*\{[^}]*\}/,
     )?.[0] ?? "";
   const slotRule =
     overrideDecls.match(/\[data-gutter\]\s*\[data-gutter-utility-slot\]\s*\{[^}]*\}/)?.[0] ?? "";
@@ -1643,35 +1643,49 @@ describe("tables (EXC-864)", () => {
     // The row draws one hairline and was a full text line tall, so it set half a line of
     // air above that hairline and half below — the gap under a header the eye reads as
     // padding. line-height rather than a height, so the row still tracks the type scale;
-    // a fraction of a line rather than one, which is only possible because the gutter's
-    // half of the row gave up its digits (below).
+    // a fraction of a line rather than one, which the gutter's half of the row can only
+    // follow because its digits are gone (below).
     expect(tightRule).toMatch(/line-height:\s*0?\.\d+/);
     expect(tightRule).not.toContain("font-size");
     expect(tightRule).not.toContain("height: 0;");
+    // Both columns in one rule. The row track is the taller of the gutter cell and the
+    // content row, and the gutter still holds its number — hidden, but in flow — so a
+    // declaration reaching only the content row would resolve to the number's line box
+    // and change nothing on screen.
+    expect(tightRule).toContain("[data-table-card] > [data-line][data-table-rule]");
+    expect(tightRule).toMatch(/:nth-child\(2 of \[data-column-number\]\)/);
   });
 
-  test("replaces the delimiter's line number with a painted dot", () => {
+  test("replaces the delimiter's line number with a dot on that number's own box", () => {
     // A line number is an address, and the delimiter is the one line of a table that says
     // nothing — numbering it spent a full line of rhythm on an address for nothing, and
     // the row is now far too short to set a digit in. The dot still says a line is there,
     // which stays true: the comment anchors rest on it.
-    expect(numberRule).toMatch(/display:\s*none/);
+    //
+    // visibility rather than display, because the number's BOX is what places the dot:
+    // the library sizes every number to the widest in the file and right-aligns the
+    // digits inside it, so a dot centred on the column lands off the numbers themselves
+    // as soon as a file runs past a power of ten. min-width takes the box back to this
+    // number's own digits; height and vertical-align take it to the row rather than to
+    // the text baseline it would otherwise sit on.
+    expect(numberRule).toMatch(/visibility:\s*hidden/);
+    expect(numberRule).not.toMatch(/display:\s*none/);
+    expect(numberRule).toMatch(/min-width:\s*0/);
+    expect(numberRule).toMatch(/height:\s*100%/);
+    expect(numberRule).toMatch(/vertical-align:\s*top/);
     // Painted, not swapped. Replacing the number's TEXT would be a DOM write on every
-    // repaint — the childList churn tables.ts exists to avoid — and ::before is spoken
-    // for on these cells by EXC-865's seam strip.
+    // repaint — the childList churn tables.ts exists to avoid. The paint needs a pseudo
+    // of its own because visibility takes an element's background along with its text;
+    // this one is free, where the ::before EXC-865 spends is on the CELL a level up.
+    expect(dotRule).toMatch(/visibility:\s*visible/);
     expect(dotRule).toMatch(/background-image:\s*radial-gradient\(/);
-    expect(overrideDecls).not.toMatch(
-      /:nth-child\(2 of \[data-column-number\]\)[^{]*::(?:before|after)/,
-    );
+    expect(dotRule).toMatch(/inset:\s*0/);
     // Round, not square: a farthest-corner circle is clipped by its own painting area and
     // the dot comes out a tiny block.
     expect(dotRule).toContain("circle closest-side");
     // The gutter's own ink, the same the numbers around it take, including their hover
     // and selection states — not a token of its own to drift from them.
     expect(dotRule).toContain("currentColor");
-    // Centred where the digits are. The cell's padding is lopsided, so the default
-    // border-box positioning area would set the dot visibly left of its own column.
-    expect(dotRule).toMatch(/background-origin:\s*content-box/);
     expect(dotRule).toMatch(/background-position:\s*center/);
     // Both halves reach the cell positionally, and both count LINE cells rather than
     // children — which is what steps over the buffer a comment inserts ahead of it. Bare

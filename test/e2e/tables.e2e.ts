@@ -142,7 +142,13 @@ const MALFORMED_ROW = "| 1 | 2 | 3 |";
 
 /** The seed plan's inline-markup table verbatim (scripts/tasks/dev/fake-plan.md), which
  * is where this was first seen: every cell is padded out to 25 characters so the source
- * aligns under `[a linked cell](#links)`, and that link renders as three words. */
+ * aligns under `[a linked cell](#links)`, and that link renders as three words.
+ *
+ * The trailing prose is load-bearing for a second claim. It carries the plan past ten
+ * lines, so the gutter sizes its numbers to two digits while the table's own lines are
+ * still one — the condition under which a delimiter dot centred on the number COLUMN
+ * lands visibly off the numbers themselves. Without it the two coincide and the
+ * alignment case below would pass on a table it cannot distinguish. */
 const LINK_PADDED = `# Padded
 
 | Cell kind | Content                 |
@@ -152,6 +158,10 @@ const LINK_PADDED = `# Padded
 | code      | \`a code cell\`           |
 | link      | [a linked cell](#links) |
 | reference | \`mise.toml\`             |
+
+Trailing prose, one paragraph.
+
+And a second, so the plan runs past ten lines.
 `;
 
 /** The three tables on the page, by their header row's text. */
@@ -600,12 +610,13 @@ test("the delimiter row is a dot and a hairline, not a numbered line", async ({ 
   // which is what lets the height go, and the header closes on the rule from above while
   // the first body row closes on it from below.
   //
-  // Browser-only three times over. Whether shrinking the CONTENT row alone actually
-  // shortens the track depends on the gutter cell contributing no height once its number
-  // is out of flow, which only a real grid answers. The gutter cell is reached
+  // Browser-only four times over. Whether shrinking both halves of the row actually
+  // shortens the track is a question only a real grid answers. The gutter cell is reached
   // positionally, so that it lands on the delimiter's own cell rather than on the row
-  // above is a claim about the live DOM. And the hover "+" is a fixed size overflowing a
-  // row several times shorter than itself, so where it ends up is a layout answer.
+  // above is a claim about the live DOM. The hover "+" is a fixed size overflowing a row
+  // several times shorter than itself, so where it ends up is a layout answer. And the
+  // dot has to land ON the numbers above and below rather than merely near them — which
+  // is a claim about two boxes the cascade sizes, not about a declaration.
   await open(page, daemon, LINK_PADDED);
   await carded(page, 1);
   const read = () =>
@@ -619,11 +630,24 @@ test("the delimiter row is a dot and a hairline, not a numbered line", async ({ 
         sh?.querySelector(
           `[data-gutter] [data-table-card-gutter] > [data-column-number="${n}"]`,
         ) as HTMLElement;
-      const numberOf = (n: number) => {
-        const span = cellFor(n).querySelector("[data-line-number-content]") as HTMLElement;
-        return { display: getComputedStyle(span).display, text: (span.textContent ?? "").trim() };
+      const spanFor = (n: number) =>
+        cellFor(n).querySelector("[data-line-number-content]") as HTMLElement;
+      // A Range over the number's text measures the DIGITS, where the element's own box
+      // measures the column: the library sizes every number to the widest in the file and
+      // right-aligns the digits inside that, so on a file past ten lines the two differ.
+      // What the dot has to line up with is the digits.
+      const digits = (n: number) => {
+        const range = document.createRange();
+        range.selectNodeContents(spanFor(n));
+        const b = range.getBoundingClientRect();
+        return { cx: (b.left + b.right) / 2, cy: (b.top + b.bottom) / 2, w: b.width };
       };
-      const dot = getComputedStyle(cellFor(line));
+      const numberOf = (n: number) => ({
+        visibility: getComputedStyle(spanFor(n)).visibility,
+        text: (spanFor(n).textContent ?? "").trim(),
+      });
+      const own = spanFor(line).getBoundingClientRect();
+      const dot = getComputedStyle(spanFor(line), "::before");
       return {
         line,
         ruleHeight: rule.getBoundingClientRect().height,
@@ -635,10 +659,14 @@ test("the delimiter row is a dot and a hairline, not a numbered line", async ({ 
         // The lines either side still carry theirs: one line lost its address, not the
         // numbering.
         neighbours: [numberOf(line - 1), numberOf(line + 1)],
+        // The dot is painted over the hidden number's box and centred in it, so that box
+        // IS the dot's position.
+        at: { cx: (own.left + own.right) / 2, cy: (own.top + own.bottom) / 2, w: own.width },
+        want: [digits(line - 1), digits(line + 1)],
         dot: {
+          visibility: dot.visibility,
           image: dot.backgroundImage,
           position: dot.backgroundPosition,
-          origin: dot.backgroundOrigin,
         },
       };
     });
@@ -647,23 +675,46 @@ test("the delimiter row is a dot and a hairline, not a numbered line", async ({ 
   // Barely a line: a fraction of a body row rather than the whole of one.
   expect(before.ruleHeight).toBeLessThan(before.bodyHeight / 2);
   expect(before.ruleHeight).toBeGreaterThan(0);
-  // Both halves landed on the same short track — the gutter cell no longer holds it open.
+  // Both halves landed on the same short track.
   expect(before.gutterHeight).toBeCloseTo(before.ruleHeight, 1);
-  // The number is gone and a dot stands where it stood, painted rather than swapped in:
-  // a text change here would be a DOM write on every repaint.
-  expect(before.number.display).toBe("none");
+  // The digits are gone but their box is not — it is what places the dot — so this is
+  // visibility rather than display, and the paint rides a pseudo because visibility takes
+  // an element's background with its text.
+  expect(before.number.visibility).toBe("hidden");
+  expect(before.dot.visibility).toBe("visible");
   expect(before.dot.image).toContain("radial-gradient");
   // currentColor resolved to the gutter's own ink rather than to nothing — the disc's
   // stop, not the surrounding transparent one the gradient also carries.
   expect(before.dot.image).toMatch(/rgb\(\d+, \d+, \d+\) 100%/);
-  // Centred where the digits are, which is the content box — the cell's padding is
-  // lopsided, so the border box would put the dot left of the column it replaces.
-  expect(before.dot.origin).toBe("content-box");
   expect(before.dot.position).toBe("50% 50%");
   for (const neighbour of before.neighbours) {
-    expect(neighbour.display).not.toBe("none");
+    expect(neighbour.visibility).not.toBe("hidden");
     expect(neighbour.text).not.toBe("");
   }
+
+  // THE ALIGNMENT. The dot sits on the same axis as the numbers above and below, and on
+  // the midpoint between them. A pixel of tolerance rather than none: the row above is
+  // the card's first, so its track carries the frame's top border and its number sits
+  // half a pixel higher than the rhythm alone would put it.
+  const [above, below] = before.want;
+  expect(Math.abs(before.at.cx - (above!.cx + below!.cx) / 2)).toBeLessThanOrEqual(1);
+  expect(Math.abs(before.at.cy - (above!.cy + below!.cy) / 2)).toBeLessThanOrEqual(1);
+  // Not vacuous: this plan runs past ten lines, so the number COLUMN is two digits wide
+  // while these lines are one, and a dot centred on the column instead of on the digits
+  // would miss by half a character. The delimiter's box has been taken back to its own
+  // digits' width, which is what closes that gap.
+  expect(before.at.w).toBeCloseTo(above!.w, 0);
+  expect(before.at.w).toBeLessThan(
+    Number.parseFloat(
+      await page.evaluate(() => {
+        const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+        const other = sh?.querySelector(
+          "[data-gutter] [data-column-number] [data-line-number-content]",
+        ) as HTMLElement;
+        return getComputedStyle(other).minWidth;
+      }),
+    ),
+  );
 
   // The hover affordance is centred ON that row rather than hung from the top of it:
   // it is several times the row's height, so anchored at the top it drops out of the
@@ -690,11 +741,12 @@ test("the delimiter row is a dot and a hairline, not a numbered line", async ({ 
   await head.click();
   await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
   const after = await read();
-  expect(after.number.display).toBe("none");
+  expect(after.number.visibility).toBe("hidden");
   expect(after.dot.image).toBe(before.dot.image);
-  expect(after.neighbours[0]?.display).not.toBe("none");
+  expect(after.neighbours[0]?.visibility).not.toBe("hidden");
   expect(after.ruleHeight).toBeCloseTo(before.ruleHeight, 1);
 });
+
 test("a column is as wide as what it shows, not as wide as the source", async ({
   page,
   daemon,
