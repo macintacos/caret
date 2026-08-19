@@ -52,6 +52,7 @@
     headingTree,
   } from "$lib/headingTrail.ts";
   import type { IconName } from "$lib/icons.ts";
+  import { createKeyRepeat, walkCommandList } from "$lib/keyRepeat.ts";
   import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
   import { headingMatcher, type TocHeading } from "$lib/toc.ts";
 
@@ -79,6 +80,23 @@
   let open = $state(false);
   let query = $state("");
   let queryEl = $state<HTMLInputElement | null>(null);
+
+  // Hold-to-repeat for the walk keys (EXC-1122): a held key moves once, pauses,
+  // then runs at the app's own cadence rather than the OS's. The lifecycle and the
+  // reason it cannot be left to the OS are in $lib/keyRepeat.ts.
+  const repeat = createKeyRepeat();
+
+  // Nothing left running if the popup is unmounted mid-hold — compare mode drops
+  // both of its entry points while it is open.
+  $effect(() => repeat.stop);
+
+  // Tab walks the list instead of leaving it (EXC-1102), and the arrows join it for
+  // the cadence (EXC-1122). The claim itself is walkCommandList's, shared with the
+  // breadcrumbs bar's filter panel — the same primitive over the same kind of field.
+  // What was specific to this surface is only WHY Tab had to be claimed: the popover
+  // traps focus with a single tabbable inside, so untouched the key moved focus out
+  // of the field and straight back to it, doing nothing at all.
+  const onWalkKeydown = (e: KeyboardEvent) => walkCommandList(e, queryEl, repeat);
 
   // The command's own selected row, seeded to the heading being read on the open
   // edge (below) so the popup opens looking at where the reviewer already is.
@@ -227,6 +245,11 @@
   // Take the reviewer to a heading and leave. A command row does not dismiss its
   // host the way a menu item does, so the pick closes the popup itself.
   function jump(line: number): void {
+    // A run in flight goes with the popup (EXC-1122). It has to be cancelled here
+    // rather than left to the popover's onOpenChange, which bits-ui runs from its OWN
+    // box setter — a programmatic write to `open` reaches none of it, the same gap
+    // openPopup above documents for the seeding.
+    repeat.stop();
     leaving = true;
     open = false;
     onJump(line);
@@ -306,6 +329,10 @@
     // The trigger's half of the seeding above; openPopup covers every other
     // caller, since this fires only for the primitive's own opens.
     if (opening) seed();
+    // A popup dismissed mid-hold takes the run with it (EXC-1122): a timer still
+    // firing arrows at a field that is gone leaves nothing to walk and everything
+    // to leak.
+    else repeat.stop();
   }}
 >
   <Popover.Trigger>
@@ -366,33 +393,17 @@
          never, so every breadcrumb group would go `hidden` too.
          Filtering is `groupedHeadingMatches`' job; the command's job here is the
          listbox semantics and the roving selection. -->
+    <!-- `loop` wraps the walk at both ends (EXC-1122). The command defaults it OFF
+         where menu content defaults it on (bits-ui command.svelte vs.
+         menu-content.svelte), so this list stopped dead where the breadcrumbs bar's
+         two views both wrapped. It wraps EVERY one of the command's navigation keys,
+         not only Tab — the arrows go with it, which is the point: Tab wrapping while
+         the arrows stopped in the same list would read as a bug. -->
     <Command.Root
       shouldFilter={false}
+      loop
       bind:value={selected}
-      onkeydown={(e) => {
-        // Tab walks the list instead of leaving it (EXC-1102). The primitive maps
-        // the arrows and the vim chords and ignores Tab, and the popover traps
-        // focus with a single tabbable inside — so untouched, Tab moved focus out
-        // of the field and straight back to it, doing nothing at all.
-        //
-        // Re-dispatching an arrow rather than writing `selected` is the load-bearing
-        // choice. bits-ui scrolls a selection into view from its OWN keydown path;
-        // assigning the bound value only does that on the command's initial mount
-        // (see `selected` above), so a hand-rolled walk would step the reviewer onto
-        // rows below the fold without ever bringing them into sight. `#next`/`#prev`
-        // are private, so the handler is the only door in. Dispatched from the field
-        // because that is where the keypress really landed, and the primitive listens
-        // for it on the root the event bubbles to.
-        if (e.key !== "Tab" || queryEl === null) return;
-        e.preventDefault();
-        queryEl.dispatchEvent(
-          new KeyboardEvent("keydown", {
-            key: e.shiftKey ? "ArrowUp" : "ArrowDown",
-            bubbles: true,
-            cancelable: true,
-          }),
-        );
-      }}
+      onkeydown={onWalkKeydown}
     >
       <Command.Input
         bind:ref={queryEl}

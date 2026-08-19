@@ -23,6 +23,7 @@ import { fileURLToPath } from "node:url";
 
 import { test as base, expect, type Page } from "@playwright/test";
 
+import { KEY_REPEAT_DELAY_MS } from "@ui/src/lib/keyRepeat.ts";
 import { waitForHealth } from "@/daemon/client.ts";
 import type { ClientReview, DraftBody, PlanInput, RouteResult } from "@/lib/types.ts";
 import { RUMDL_VERSION } from "@/plan/rumdl.ts";
@@ -367,6 +368,52 @@ export async function waitForTwoPollTicks(page: Page): Promise<void> {
   await page.waitForResponse(
     (res) => new URL(res.url()).pathname === "/api/reviews" && ++seen >= 2,
   );
+}
+
+/**
+ * Wait past the delay the app arms before a held key starts repeating (EXC-1122).
+ *
+ * The honest form of the same shape `waitPastSafeModeGrace` uses, on the same
+ * discriminator browser-testing.md § Timing discipline draws: the number is
+ * `KEY_REPEAT_DELAY_MS`, imported from the module that holds it, and it is read off
+ * `performance.now()` — the clock the app arms it on. A run still going would have
+ * ticked several times inside the window, so the wait is what turns "the walk stopped"
+ * into a claim rather than a snapshot. A whole delay rather than one interval, so the
+ * margin does not depend on the cadence.
+ *
+ * Here rather than in either spec because the plan's two heading surfaces both hold
+ * keys, and a second copy of the justification is how the two drift.
+ */
+export async function pastKeyRepeatDelay(page: Page): Promise<void> {
+  const deadline = (await page.evaluate(() => performance.now())) + KEY_REPEAT_DELAY_MS;
+  await page.waitForFunction((until) => performance.now() > until, deadline);
+}
+
+/**
+ * Poll a held walk until it has been seen on `count` distinct rows.
+ *
+ * The SET is the assertion, not the row the walk is on: these lists wrap, so the walk
+ * is somewhere different by the time any single read lands, while the set only grows.
+ * It is also what proves a traversal rather than one move — reaching three distinct
+ * rows takes at least two steps past the one the press itself made. `read` returns the
+ * row the surface is on, or `""` when it is between rows or on none.
+ *
+ * Sampled on a fixed short interval rather than Playwright's backing-off default,
+ * which climbs to a second between reads and would spend most of the per-test budget
+ * watching a walk that is already several rows on.
+ */
+export async function walkVisits(read: () => Promise<string>, count: number): Promise<void> {
+  const seen = new Set<string>();
+  await expect
+    .poll(
+      async () => {
+        const row = await read();
+        if (row !== "") seen.add(row);
+        return seen.size;
+      },
+      { intervals: [50] },
+    )
+    .toBeGreaterThanOrEqual(count);
 }
 
 /**

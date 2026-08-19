@@ -190,18 +190,24 @@ the tuning target. They predate the rule; a sixth needs an argument of the same 
 **A `waitForFunction` on the clock is a fixed sleep unless the app holds the same
 deadline.** The suite writes
 `await page.waitForFunction((t) => performance.now() > t + N, t0)` in eleven places and
-they are not all the same thing. `waitPastSafeModeGrace`
-(`test/e2e/support/fixtures.ts:347`) is an honest wait: `ui/src/lib/safeMode.ts` arms a
-300ms grace window at mount, and the helper captures `t0` *after* mount is asserted then
-waits to `t0 + 350` on the same `performance.now()` clock the guard reads — so it cannot
-race a slow hydrate, and the window's expiry has no DOM signal to poll. The other ten are
-sleeps wearing that costume: "give the pointer pipeline a beat, then assert nothing
+they are not all the same thing. Two are **honest waits**, and both live in `fixtures.ts`
+rather than in a spec, which is the shape to copy: the justification is written once
+beside the helper instead of restated at each call site. `waitPastSafeModeGrace` is the
+first — `ui/src/lib/safeMode.ts` arms a 300ms grace window at mount, and the helper
+captures `t0` *after* mount is asserted then waits to `t0 + 350` on the same
+`performance.now()` clock the guard reads, so it cannot race a slow hydrate and the
+window's expiry has no DOM signal to poll. `pastKeyRepeatDelay` is the second (EXC-1122):
+`ui/src/lib/keyRepeat.ts` arms `KEY_REPEAT_DELAY_MS` before a held key starts repeating,
+the helper **imports that constant** rather than retyping the number, and a run that had
+not stopped would have ticked several times inside the window — which is what turns "the
+walk stopped on release" into a claim rather than a snapshot. The other nine are sleeps
+wearing the same costume: "give the pointer pipeline a beat, then assert nothing
 appeared", where the number names nothing in the app. **The discriminator is whether code
 in `ui/` holds a deadline on that clock at that number.** If it does, the wait is honest.
 If it does not, you have written `page.waitForTimeout` with extra steps — reach for
-`waitForTwoPollTicks` (`fixtures.ts:365`) or a `page.waitForResponse` on the event that
-must not happen, both of which say what they are waiting for. The ten are a standing
-finding, not a licence to add an eleventh.
+`waitForTwoPollTicks` or a `page.waitForResponse` on the event that must not happen, both
+of which say what they are waiting for. The nine are a standing finding, not a licence to
+add a tenth.
 
 **Adjusting the numbers.** The assertion budget is ~3x Playwright's default, tracking the
 measured contention factor; the per-test budget is 2x, the point at which the throttle

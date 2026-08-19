@@ -138,19 +138,41 @@ function selectedLabels(): string[] {
  * `defaultPrevented` — dispatchEvent leaves the same object it was handed. The key
  * is dispatched at the FIELD, which is where focus sits, so it reaches the command
  * root the way a real keypress does: by bubbling. */
-function pressTab(flush: () => void, { shift = false } = {}): KeyboardEvent {
+function pressTab(flush: () => void, { shift = false, repeat = false } = {}): KeyboardEvent {
   const el = field();
   if (el === null) throw new Error("filter field not mounted");
   const event = new KeyboardEvent("keydown", {
     key: "Tab",
     shiftKey: shift,
+    repeat,
     bubbles: true,
     cancelable: true,
   });
   el.dispatchEvent(event);
+  releaseKey("Tab");
   flush();
   return event;
 }
+
+/** Press an arrow on the filter field and settle. A synthetic arrow is untrusted, so
+ * the component's own handler lets it past — which is what makes this a question
+ * about the primitive's `loop` rather than about the app's claim on the key. */
+function pressArrow(flush: () => void, key: "ArrowUp" | "ArrowDown"): void {
+  const el = field();
+  if (el === null) throw new Error("filter field not mounted");
+  el.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  releaseKey(key);
+  flush();
+}
+
+/** Let a pressed key go, on `window`, where the popup's hold-to-repeat listens.
+ *
+ * Every press above is a PRESS, so each one ends here. A keydown with no keyup leaves
+ * a real 250ms run armed (EXC-1122) that outlives the test and walks a panel a later
+ * one is asserting against — which is exactly what a browser never does, since a
+ * press always ends. */
+const releaseKey = (key: string) =>
+  window.dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true }));
 
 /** Open the popup and wait for its portalled content. The flush BEFORE the click
  * is load-bearing: render() leaves the mount's effects pending, and a click landing
@@ -953,6 +975,90 @@ describe("PlanToc entry points", () => {
     await flushUntil(flush, () => options().some((o) => o.hasAttribute("data-selected")));
 
     const event = pressTab(flush);
+    expect(event.defaultPrevented).toBe(true);
+    await close(target, flush);
+  });
+
+  // The command defaults `loop` OFF where menu content defaults it on (bits-ui
+  // command.svelte vs. menu-content.svelte), so until EXC-1122 set the prop this
+  // list stopped dead at its ends while the breadcrumbs bar's two views both
+  // wrapped. Setting it wraps every one of the command's navigation keys, not only
+  // the Tab below — which is the point: Tab wrapping while the arrows stopped in
+  // the same list would read as a bug.
+  test("the Tab walk wraps at both ends of the list", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    await flushUntil(flush, () => options().some((o) => o.hasAttribute("data-selected")));
+    expect(selectedLabels()).toEqual(["Details"]);
+
+    // Forwards off the last row and back to the first.
+    pressTab(flush);
+    await flushUntil(flush, () => selectedLabels()[0] === "Verification");
+    pressTab(flush);
+    await flushUntil(flush, () => selectedLabels()[0] === "Overview");
+    expect(selectedLabels()).toEqual(["Overview"]);
+
+    // And backwards off the first row to the last.
+    pressTab(flush, { shift: true });
+    await flushUntil(flush, () => selectedLabels()[0] === "Verification");
+    expect(selectedLabels()).toEqual(["Verification"]);
+    await close(target, flush);
+  });
+
+  // The arrows wrap on the same prop, which is the half of it that matters: `loop`
+  // is set for the list, not for one key, and Tab wrapping while the arrows stopped
+  // dead in the same list would read as a bug.
+  test("the arrows wrap at both ends of the list", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    await flushUntil(flush, () => options().some((o) => o.hasAttribute("data-selected")));
+    expect(selectedLabels()).toEqual(["Details"]);
+
+    pressArrow(flush, "ArrowUp");
+    await flushUntil(flush, () => selectedLabels()[0] === "Approach");
+    pressArrow(flush, "ArrowUp");
+    await flushUntil(flush, () => selectedLabels()[0] === "Overview");
+    pressArrow(flush, "ArrowUp");
+    await flushUntil(flush, () => selectedLabels()[0] === "Verification");
+    expect(selectedLabels()).toEqual(["Verification"]);
+
+    pressArrow(flush, "ArrowDown");
+    await flushUntil(flush, () => selectedLabels()[0] === "Overview");
+    expect(selectedLabels()).toEqual(["Overview"]);
+    await close(target, flush);
+  });
+
+  // EXC-1122: while a key is held the OS keeps emitting keydowns, and preventDefault
+  // does not stop it — so a held Tab would be walked by the native repeat AND by the
+  // hold-to-repeat timer, at two different rates, and every hold would double-step.
+  // The repeat is dropped here; the timer owns the cadence.
+  test("an OS repeat of a held Tab walks no further", async () => {
+    const { target, flush } = render(PlanToc, {
+      headings: HEADINGS,
+      activeLine: 9,
+      onJump: () => {},
+    });
+    await open(target, flush);
+    await flushUntil(flush, () => options().some((o) => o.hasAttribute("data-selected")));
+    expect(selectedLabels()).toEqual(["Details"]);
+
+    // A press, then its repeat — the order a held key really arrives in. The OS
+    // emits no repeat without a press before it, so a bare repeat would be driving
+    // a state the browser never produces.
+    pressTab(flush);
+    await flushUntil(flush, () => selectedLabels()[0] === "Verification");
+    const event = pressTab(flush, { repeat: true });
+    expect(selectedLabels()).toEqual(["Verification"]);
+    // Still claimed while held, so the browser's own tab move stays suppressed for
+    // as long as the key is down rather than only on its first press.
     expect(event.defaultPrevented).toBe(true);
     await close(target, flush);
   });
