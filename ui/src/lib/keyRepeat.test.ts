@@ -196,11 +196,11 @@ describe("createKeyRepeat", () => {
 
 describe("walkCommandList", () => {
   /** A stand-in for the panel's query field, recording what the walk dispatches at
-   * it. A real element rather than a stub: the claim is that bits-ui receives a
-   * bubbling keydown, and only a node can carry one. */
+   * it. A real element rather than a stub, because the claim is that bits-ui receives
+   * a keydown and only a node can carry one — but deliberately never appended, since
+   * the suites share one document and a field left in it outlives the test. */
   function makeField() {
     const field = document.createElement("input");
-    document.body.append(field);
     const keys: string[] = [];
     field.addEventListener("keydown", (e) => keys.push(e.key));
     return { field, keys };

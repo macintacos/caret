@@ -39,6 +39,15 @@ function crumbs(target: HTMLElement): HTMLElement[] {
   return [...target.querySelectorAll<HTMLElement>("button.crumb")];
 }
 
+/** Let a pressed key go, on `window`, where the bar's hold-to-repeat listens.
+ *
+ * Every press below is a PRESS, so each one ends here. A keydown with no keyup
+ * leaves a real 250ms run armed (EXC-1122) that outlives the test and walks a panel
+ * a later one is asserting against — which is exactly what a browser never does,
+ * since a press always ends. */
+const releaseKey = (key: string) =>
+  window.dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true }));
+
 /** The portalled menu rows, in order. bits-ui teleports menu content to
  * document.body after an effect + timer flush, so callers poll with flushUntil. */
 function menuRows(): HTMLElement[] {
@@ -300,6 +309,7 @@ describe("PlanBreadcrumbs menus", () => {
     pressJ(false);
     flush();
     pressJ(true);
+    releaseKey("j");
     flush();
     document.removeEventListener("keydown", spy);
 
@@ -449,6 +459,7 @@ describe("PlanBreadcrumbs filter", () => {
       cancelable: true,
     });
     field.dispatchEvent(event);
+    releaseKey("Tab");
     flush();
     return event;
   }

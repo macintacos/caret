@@ -149,6 +149,7 @@ function pressTab(flush: () => void, { shift = false, repeat = false } = {}): Ke
     cancelable: true,
   });
   el.dispatchEvent(event);
+  releaseKey("Tab");
   flush();
   return event;
 }
@@ -160,8 +161,18 @@ function pressArrow(flush: () => void, key: "ArrowUp" | "ArrowDown"): void {
   const el = field();
   if (el === null) throw new Error("filter field not mounted");
   el.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  releaseKey(key);
   flush();
 }
+
+/** Let a pressed key go, on `window`, where the popup's hold-to-repeat listens.
+ *
+ * Every press above is a PRESS, so each one ends here. A keydown with no keyup leaves
+ * a real 250ms run armed (EXC-1122) that outlives the test and walks a panel a later
+ * one is asserting against — which is exactly what a browser never does, since a
+ * press always ends. */
+const releaseKey = (key: string) =>
+  window.dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true }));
 
 /** Open the popup and wait for its portalled content. The flush BEFORE the click
  * is load-bearing: render() leaves the mount's effects pending, and a click landing
