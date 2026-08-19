@@ -397,14 +397,16 @@ test("a table's columns line up down its length, ragged source and all", async (
     expect(new Set(lefts).size, `column ${column} lefts: ${lefts.join(", ")}`).toBe(1);
   }
 
-  // The delimiter row is a source line like any other: it keeps a full-height row track
-  // and its own gutter number, because the comment anchors rest on it. Its height is
-  // read against a prose row rather than merely asserted positive — a row collapsed to
-  // the rule it paints would still be "greater than zero".
+  // The delimiter row is a source line like any other: it keeps a row track of its own
+  // and its own gutter number, because the comment anchors rest on it. It is SHORTER
+  // than a prose row — it is set without leading, which is what closes the gap under a
+  // header — and the two columns agree on how much shorter, which is the claim the
+  // "keeps its number and loses its leading" case below owns in full.
   const rule = await rowHeights(page, await lineOf(page, A_RULE));
   const prose = await rowHeights(page, await lineOf(page, PROSE_ABOVE));
   expect(rule.number).toBe(rule.row);
-  expect(rule.row).toBe(prose.row);
+  expect(rule.row).toBeGreaterThan(0);
+  expect(rule.row).toBeLessThan(prose.row);
 
   // And what the reader sees in place of the dashes: the glyphs transparent, one
   // full-width hairline painted across the row. Resolved across the shadow boundary —
@@ -547,23 +549,97 @@ test("no pipe glyph paints, and the rules stand where the pipes did", async ({ p
     expect(cells.some(match), `no ${name}`).toBe(true);
   }
 
-  // And the frame the edges were handed to: one border, on the card, with corners.
+  // And the frame the edges were handed to: one border, on the card, with corners that
+  // the rows inside it leave alone. Every row of the surface paints an opaque background,
+  // so the end rows have to be rounded to the same radius or they cover the arc and the
+  // frame reads as a rectangle with a bite out of each corner.
   const frame = await page.evaluate(() => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
     const card = sh?.querySelector("[data-content] > [data-table-card]") as HTMLElement;
     const cs = getComputedStyle(card);
+    const corners = (el: Element) => {
+      const s = getComputedStyle(el);
+      return [
+        s.borderTopLeftRadius,
+        s.borderTopRightRadius,
+        s.borderBottomRightRadius,
+        s.borderBottomLeftRadius,
+      ];
+    };
     return {
       width: cs.borderTopWidth,
       color: cs.borderTopColor,
       radius: cs.borderTopLeftRadius,
       // Every side, so a table never reads as rules stopping in mid-air.
       sides: [cs.borderTopStyle, cs.borderRightStyle, cs.borderBottomStyle, cs.borderLeftStyle],
+      opaqueRow: getComputedStyle(card.children[1] as Element).backgroundColor,
+      head: corners(card.firstElementChild as Element),
+      foot: corners(card.lastElementChild as Element),
+      middle: corners(card.children[1] as Element),
     };
   });
   expect(frame.sides).toEqual(["solid", "solid", "solid", "solid"]);
   expect(frame.width).toBe("1px");
   expect(frame.color).not.toBe("rgba(0, 0, 0, 0)");
   expect(Number.parseFloat(frame.radius)).toBeGreaterThan(0);
+  // The premise: a row really does paint over what is under it. Were the rows
+  // transparent, the rounding below would be dead weight rather than the fix.
+  expect(frame.opaqueRow).not.toBe("rgba(0, 0, 0, 0)");
+  const flat = "0px";
+  expect(frame.head).toEqual([frame.radius, frame.radius, flat, flat]);
+  expect(frame.foot).toEqual([flat, flat, frame.radius, frame.radius]);
+  // And only the ends: an interior row meets no corner, so rounding one would cut a
+  // notch out of the middle of the table.
+  expect(frame.middle).toEqual([flat, flat, flat, flat]);
+});
+
+test("the delimiter row keeps its number and loses its leading", async ({ page, daemon }) => {
+  // The row draws the header separator and is a full text line tall, which put half a
+  // line of air above that separator and half below — a gap under the header wider than
+  // the header's own row. It now stands at one character's height instead.
+  //
+  // Browser-only twice over. The row track is the TALLER of the gutter cell and the
+  // content row, so whether the sheet's two halves resolve to the same short height is a
+  // question only a real grid answers — and the gutter's half is reached positionally,
+  // so that it lands on the delimiter's own cell rather than on the row above or on a
+  // comment's buffer is likewise a claim about the live DOM.
+  await open(page, daemon, LINK_PADDED);
+  await carded(page, 1);
+  const geom = await page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const card = sh?.querySelector("[data-content] > [data-table-card]") as HTMLElement;
+    const rows = [...card.querySelectorAll(":scope > [data-line]")] as HTMLElement[];
+    const rule = rows.find((r) => r.hasAttribute("data-table-rule")) as HTMLElement;
+    const body = rows.filter((r) => r !== rule);
+    const ruleLine = rule.getAttribute("data-line") ?? "";
+    const gutter = sh?.querySelector(
+      `[data-gutter] [data-table-card-gutter] > [data-column-number="${ruleLine}"]`,
+    ) as HTMLElement;
+    const ink = document.createRange();
+    ink.selectNodeContents(gutter);
+    const heights = body.map((r) => r.getBoundingClientRect().height);
+    return {
+      ruleLine,
+      ruleHeight: rule.getBoundingClientRect().height,
+      gutterHeight: gutter.getBoundingClientRect().height,
+      bodyHeight: Math.min(...heights),
+      fontSize: Number.parseFloat(getComputedStyle(rule).fontSize),
+      // The number is still drawn: a shorter row must not mean an invisible one, which
+      // is what shrinking the type rather than the leading would have cost.
+      numberInk: ink.getBoundingClientRect().height,
+      numberText: (gutter.textContent ?? "").trim(),
+    };
+  });
+  // One character tall rather than one line: shorter than a body row, and no shorter than
+  // the type it is set in.
+  expect(geom.ruleHeight).toBeLessThan(geom.bodyHeight);
+  expect(geom.ruleHeight).toBeGreaterThanOrEqual(geom.fontSize);
+  // Both halves landed on the same track, which is the whole point of the pair: the
+  // gutter cell the positional selector picked is the delimiter's own, and it came down
+  // with the row rather than holding the track open at the old height.
+  expect(geom.numberText).toBe(geom.ruleLine);
+  expect(geom.gutterHeight).toBeCloseTo(geom.ruleHeight, 1);
+  expect(geom.numberInk).toBeGreaterThan(0);
 });
 
 test("a column is as wide as what it shows, not as wide as the source", async ({

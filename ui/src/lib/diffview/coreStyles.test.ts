@@ -1454,6 +1454,17 @@ describe("tables (EXC-864)", () => {
   const ruleInk = rulesFor(String.raw`\[data-line\]\[data-table-rule\][^{}]*`).find((r) =>
     r.includes("color:"),
   );
+  const headRow =
+    overrideDecls.match(
+      /\[data-content\]\s*>\s*\[data-table-card\]\s*>\s*:first-child\s*\{[^}]*\}/,
+    )?.[0] ?? "";
+  const footRow =
+    overrideDecls.match(
+      /\[data-content\]\s*>\s*\[data-table-card\]\s*>\s*:last-child\s*\{[^}]*\}/,
+    )?.[0] ?? "";
+  const tightRule = rulesFor(String.raw`\[data-column-number\]\)`).find((r) =>
+    r.includes("line-height:"),
+  );
 
   test("every rule this suite reads is present", () => {
     for (const [name, rule] of Object.entries({
@@ -1465,6 +1476,9 @@ describe("tables (EXC-864)", () => {
       dividerRule,
       ruleRow,
       ruleInk,
+      headRow,
+      footRow,
+      tightRule,
     })) {
       expect(rule, `${name} did not match`).toBeTruthy();
     }
@@ -1567,13 +1581,17 @@ describe("tables (EXC-864)", () => {
     expect(ruleInk).toMatch(/\[data-line\]\[data-table-rule\] \*/);
   });
 
-  test("declares the rule ink once, softened, and spends it everywhere", () => {
+  test("declares the rule ink once, softened per scheme, and spends it everywhere", () => {
     // The frame, the dividers and the header rule are one mark in three places; a tuned
     // number written out three times is three numbers waiting to drift apart. It is
-    // --ink-soft softened toward the surface — theme.test.ts owns how far that can go
-    // before the 3:1 floor bites; this pins only that the sheet spends what it chose.
+    // --ink-soft softened toward the surface, by more on a dark palette than on a light
+    // one — light ink on a dark ground reads heavier at the same ratio, and a light
+    // palette has no room to give anyway. theme.test.ts owns how far each can go before
+    // the 3:1 floor bites; this pins only that the sheet spends what it chose, and that
+    // it asks the platform which scheme is live rather than guessing from a selector the
+    // shadow boundary would put out of reach.
     expect(cardRule).toMatch(
-      /--table-rule:\s*color-mix\(in srgb, var\(--ink-soft\), var\(--paper-sunk\) 15%\)/,
+      /--table-rule:\s*light-dark\(\s*color-mix\(in srgb, var\(--ink-soft\), var\(--paper-sunk\) 15%\),\s*color-mix\(in srgb, var\(--ink-soft\), var\(--paper-sunk\) 30%\),?\s*\)/,
     );
     for (const rule of [dividerRule, ruleRow]) {
       expect(rule).toContain("var(--table-rule)");
@@ -1582,6 +1600,43 @@ describe("tables (EXC-864)", () => {
     }
     // One declaration, nowhere else.
     expect(overrideDecls.match(/--table-rule:/g)).toHaveLength(1);
+  });
+
+  test("rounds the end rows so they stop painting over the frame's corners", () => {
+    // Every row of the surface carries an opaque background, so a square first and last
+    // row cover the arc the card's border draws around them and the frame reads as a
+    // rounded rectangle with a bite out of each corner. The same radius, so the row's
+    // edge follows the border rather than crossing it.
+    expect(headRow).toMatch(/border-top-left-radius:\s*var\(--radius\)/);
+    expect(headRow).toMatch(/border-top-right-radius:\s*var\(--radius\)/);
+    expect(footRow).toMatch(/border-bottom-left-radius:\s*var\(--radius\)/);
+    expect(footRow).toMatch(/border-bottom-right-radius:\s*var\(--radius\)/);
+    // Not by clipping. overflow on the card would round the corners in one declaration
+    // and make the card a scroll container, which is the one thing it must never be —
+    // the same reason the sizing test above refuses it.
+    for (const rule of [headRow, footRow]) expect(rule).not.toContain("overflow");
+    // The last CHILD, not the last row: an annotation row is the bottom of the card
+    // whenever someone comments on the table's final line.
+    expect(footRow).not.toContain("[data-line]:last-child");
+  });
+
+  test("takes the leading off the delimiter row, in both columns at once", () => {
+    // The row draws one hairline and is a full text line tall, so it sets half a line of
+    // air above that hairline and half below — the gap under a header the eye reads as
+    // padding. Dropping the LEADING takes it to one character's height; dropping the font
+    // size would take the gutter number with it, and the number is the reason the row is
+    // still a row at all.
+    expect(tightRule).toMatch(/line-height:\s*1\b/);
+    expect(tightRule).not.toContain("font-size");
+    // Both halves in one rule. The row track is the taller of the gutter cell and the
+    // content row, so a declaration that reached only one of them would resolve to the
+    // other's height and change nothing on screen.
+    expect(tightRule).toContain("[data-table-card] > [data-line][data-table-rule]");
+    expect(tightRule).toContain("[data-table-card-gutter] >");
+    // The gutter has no per-line marker, so its half is positional — and counts LINE
+    // cells rather than children, which is what steps over the buffer a comment inserts
+    // ahead of it. Bare :nth-child(2) would shrink that buffer instead.
+    expect(tightRule).toMatch(/:nth-child\(2 of \[data-column-number\]\)/);
   });
 
   test("declares the header weight here rather than through shiki", () => {

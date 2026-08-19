@@ -533,10 +533,16 @@ test("a vendor palette resolves every decoration's paint", async ({ daemon, page
       inkFaint: probe("--ink-faint"),
       // A table's rules do not paint --ink-soft neat: at full strength a table read as a
       // cage, so the sheet softens the ink toward the surface (one --table-rule
-      // declaration on the card). Resolved here the same way the tokens above are, so
-      // this stays a claim about the DERIVED value reaching the sheet rather than a hex
-      // transcribed into this file.
-      tableInk: probe("color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 15%)"),
+      // declaration on the card), by more on a dark palette than on a light one. Written
+      // as the sheet writes it, light-dark() and all, so this resolves through the same
+      // arm the live scheme picks rather than assuming which palette is up. Resolved here
+      // the same way the tokens above are, so it stays a claim about the DERIVED value
+      // reaching the sheet rather than a hex transcribed into this file.
+      tableInk: probe(
+        `light-dark(
+           color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 15%),
+           color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 30%))`,
+      ),
       chip: pick('[data-content] [data-line] [data-md~="code"]', (el) => {
         return getComputedStyle(el).backgroundImage;
       }),

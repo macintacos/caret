@@ -1113,9 +1113,35 @@ const CARET_OVERRIDES = `
        under pressure — which is the "grows until every column is visible" behaviour. */
     justify-self: start;
     margin-inline: var(--caret-card-inset);
-    --table-rule: color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 15%);
+    --table-rule: light-dark(
+      color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 15%),
+      color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 30%)
+    );
     border: 1px solid var(--table-rule);
     border-radius: var(--radius);
+  }
+  /* The frame's corners, taken back from the rows. Every row of the surface carries an
+     opaque background of its own, so the first and last row of a card paint their square
+     corners straight over the arc the border draws around them and the frame reads as a
+     rounded rectangle with a bite out of each corner. Rounding the two end rows to the
+     same radius clears the arc. The 1px border makes the row's arc a hair wider than the
+     border's inner one; the sliver that leaves is the card's own background, which is
+     nothing, so what shows through is the surface the row was painting anyway.
+
+     overflow: hidden on the card would do this in one declaration and is refused: it
+     would make the card a scroll container, which is the one thing a table's card must
+     never be (see the sizing note above, and the test that pins it).
+
+     :first-child / :last-child rather than the rows by name. The last child is an
+     annotation row whenever someone comments on the table's final line, and it is then
+     the row whose corners meet the frame. */
+  [data-content] > [data-table-card] > :first-child {
+    border-top-left-radius: var(--radius);
+    border-top-right-radius: var(--radius);
+  }
+  [data-content] > [data-table-card] > :last-child {
+    border-bottom-left-radius: var(--radius);
+    border-bottom-right-radius: var(--radius);
   }
   /* The library gives every row a 1ch inline padding. On a subgrid that padding insets
      the row's OWN tracks from the card's, so the cells stop filling the columns they
@@ -1210,15 +1236,24 @@ const CARET_OVERRIDES = `
      The edge is an attribute the pass writes rather than a :has() probe, because this
      selector runs on every cell of every table on every repaint.
 
-     --table-rule, declared once on the card, is --ink-soft softened 15% toward the
-     surface — never --rule or --rule-strong. The glyph these replace is transparent, so
-     the rules are the only thing left saying where one column ends and the next begins,
-     which is WCAG 1.4.11's own test for a graphical object required to understand the
-     content; 15% is the most that clears its 3:1 floor on every palette, and it is
-     catppuccin-latte's widest row band that binds. Mixed in sRGB rather than the lab the
-     rest of this sheet uses, deliberately: the margin there is 0.19 of a ratio point, too
-     thin to absorb the difference between the space theme.test.ts measures in and the
-     space the browser paints in. doc/agents/svelte-rules.md § chips carries the ranges. */
+     --table-rule, declared once on the card, is --ink-soft softened toward the surface —
+     never --rule or --rule-strong. The glyph these replace is transparent, so the rules
+     are the only thing left saying where one column ends and the next begins, which is
+     WCAG 1.4.11's own test for a graphical object required to understand the content.
+
+     The softening is split by scheme because the two schemes are held by two different
+     limits: on a LIGHT palette the floor binds and 15% is the most that clears it, while
+     on a DARK one the eye binds long before the floor does — light ink on a dark ground
+     reads heavier at the same ratio — so 30% is a design choice with the floor merely
+     respected. doc/agents/svelte-rules.md § chips carries both ranges, and carries them
+     alone; a measured number restated here is a number that drifts.
+
+     light-dark() rather than a scheme-keyed selector, which the shadow boundary puts out
+     of reach anyway: paintTheme writes color-scheme along with the tokens, and it
+     inherits through the host, so one declaration covers both. Mixed in sRGB rather than
+     the lab the rest of this sheet uses, deliberately: the light margin is a fifth of a
+     ratio point, too thin to absorb the difference between the space theme.test.ts
+     measures in and the space the browser paints in. */
   [data-content]
     > [data-table-card]
     [data-table-cell]:not(:first-child):is(
@@ -1277,6 +1312,26 @@ const CARET_OVERRIDES = `
   [data-content] [data-line][data-table-rule],
   [data-content] [data-line][data-table-rule] * {
     color: transparent;
+  }
+  /* And the row that carries it loses its LEADING, which is where the air under a header
+     was coming from. The delimiter is a full text line of the source that draws a single
+     hairline, so at the surrounding line height it sets half a line of space above that
+     hairline and half below — more space under the header than the header's own row
+     occupies. Dropping the leading takes the row to the height of one character: the rule
+     closes on the header above it and on the first body row below, and the row is
+     otherwise untouched — it keeps its line, its number and its comment anchor. The font
+     size is deliberately not what shrinks; a digit's ink is shorter than the em box it
+     sits in, so the gutter number still draws every pixel it had.
+
+     Both columns or neither: the row track is the taller of the gutter cell and the
+     content row, so shrinking one of them alone changes nothing. The gutter's half is
+     reached positionally because that side carries no per-line marker and adding one
+     would cost a query per repaint. It is exact rather than a guess about the DOM —
+     "of [data-column-number]" counts only the line cells, skipping the buffer a comment
+     inserts, and the second line of a table is its delimiter by GFM's grammar. */
+  [data-content] > [data-table-card] > [data-line][data-table-rule],
+  [data-gutter] [data-table-card-gutter] > :nth-child(2 of [data-column-number]) {
+    line-height: 1;
   }
 
   /* A comment anchored to a table line. Its row rides inside the table's card so it lands
