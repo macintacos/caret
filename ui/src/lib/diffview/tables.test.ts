@@ -1,9 +1,17 @@
+import "@ui/test-setup.ts";
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { type CodeBlockRange, codeBlockRanges } from "$lib/diffview/codeBlocks.ts";
-import { tableRanges } from "$lib/diffview/tables.ts";
+import { CELL_ATTR } from "$lib/diffview/rowTokens.ts";
+import {
+  syncTableCards,
+  TABLE_CARD_ATTR,
+  TABLE_GUTTER_CARD_ATTR,
+  type TableRange,
+  tableRanges,
+} from "$lib/diffview/tables.ts";
 
 // tableRanges classifies which lines of a rendered plan form a GFM table, and
 // where each row's cells sit on its line, so the source view can restructure
@@ -180,4 +188,307 @@ describe("the seed plan's tables", () => {
   test("respects the alignment markers the showcase writes", () => {
     expect(found.map((t) => t.align)).toContainEqual(["left", "center", "right"]);
   });
+});
+
+// syncTableCards is the DOM half: it moves a table's rows into one card, groups each
+// row's tokens into cells, and mirrors the card in the gutter so @pierre/diffs'
+// selection walk still finds the two columns balanced. These cases pin which rows are
+// carded, which tokens are celled, where the column rules are marked to be drawn, and
+// that a settled pass mutates nothing. The rendered result is covered by
+// test/e2e/tables.e2e.ts.
+
+/** A stand-in for the library's rendered grid: a gutter cell and a one-token
+ * content row per line, the shape @pierre/diffs paints before any pass runs. */
+function build(text: string): { root: HTMLElement; ranges: TableRange[] } {
+  const root = document.createElement("div");
+  const gutter = document.createElement("div");
+  gutter.setAttribute("data-gutter", "");
+  const content = document.createElement("div");
+  content.setAttribute("data-content", "");
+  text.split("\n").forEach((line, i) => {
+    const cell = document.createElement("div");
+    cell.setAttribute("data-column-number", String(i + 1));
+    cell.textContent = String(i + 1);
+    gutter.appendChild(cell);
+    const row = document.createElement("div");
+    row.setAttribute("data-line", String(i + 1));
+    const token = document.createElement("span");
+    token.textContent = line;
+    row.appendChild(token);
+    content.appendChild(row);
+  });
+  root.append(gutter, content);
+  return { root, ranges: tableRanges(text, NO_CODE) };
+}
+
+/** Every cell of a row, as its text. */
+function cellTexts(root: HTMLElement, line: number): string[] {
+  const row = root.querySelector(`[data-line="${line}"]`);
+  return [...(row?.querySelectorAll(`:scope > [${CELL_ATTR}]`) ?? [])].map(
+    (c) => c.textContent ?? "",
+  );
+}
+
+/** Every cell of a row, as the edges it declares carry a pipe. */
+function cellEdges(root: HTMLElement, line: number): (string | null)[] {
+  const row = root.querySelector(`[data-line="${line}"]`);
+  return [...(row?.querySelectorAll(`:scope > [${CELL_ATTR}]`) ?? [])].map((c) =>
+    c.getAttribute("data-table-edge"),
+  );
+}
+
+/** The library's annotation row for `line` plus its gutter buffer, placed where
+ * FileRenderer places them: immediately after that line's own cell in each column.
+ * A comment on a mid-table line therefore lands INSIDE the run of rows the card
+ * takes, which is the case EXC-865 exists for. */
+function openComment(root: HTMLElement, line: number): void {
+  const row = root.querySelector(`[data-content] [data-line="${line}"]`);
+  const annotation = document.createElement("div");
+  annotation.setAttribute("data-line-annotation", `0,${line}`);
+  row?.parentElement?.insertBefore(annotation, row.nextSibling);
+  const number = root.querySelector(`[data-gutter] [data-column-number="${line}"]`);
+  const buffer = document.createElement("div");
+  buffer.setAttribute("data-gutter-buffer", "annotation");
+  number?.parentElement?.insertBefore(buffer, number.nextSibling);
+}
+
+/** A column's children as their keying attribute, or `annotation` for the rows the
+ * library interleaves — the shape both columns must agree on. */
+function slotOrder(parent: Element | null | undefined, attr: string): string[] {
+  return [...(parent?.children ?? [])].map((el) => el.getAttribute(attr) ?? "annotation");
+}
+
+const SIMPLE = ["prose", "| a | b |", "| - | - |", "| 1 | 2 |"].join("\n");
+
+/** Two body rows, so a comment can sit in the MIDDLE of the table rather than
+ * only after its last row (where the card's own boundary would hide the bug). */
+const TWO_BODY = ["prose", "| a | b |", "| - | - |", "| 1 | 2 |", "| 3 | 4 |"].join("\n");
+
+test("wraps a table's rows in one card keyed by its first line", () => {
+  const { root, ranges } = build(SIMPLE);
+  syncTableCards(root, ranges);
+  const card = root.querySelector(`[data-content] > [${TABLE_CARD_ATTR}="2"]`);
+  expect(card?.querySelectorAll(":scope > [data-line]")).toHaveLength(3);
+  // The prose line is untouched and stays a direct child.
+  expect(root.querySelector('[data-content] > [data-line="1"]')).not.toBeNull();
+});
+
+test("spans the card across its rows' tracks and names its column count", () => {
+  const { root, ranges } = build(SIMPLE);
+  syncTableCards(root, ranges);
+  const card = root.querySelector<HTMLElement>(`[${TABLE_CARD_ATTR}="2"]`);
+  expect(card?.style.gridRow).toBe("span 3");
+  expect(card?.style.getPropertyValue("--table-columns")).toBe("2");
+});
+
+test("groups each row's tokens into cells that tile the line", () => {
+  const { root, ranges } = build(SIMPLE);
+  syncTableCards(root, ranges);
+  expect(cellTexts(root, 2)).toEqual(["| a ", "| b |"]);
+  expect(cellTexts(root, 4)).toEqual(["| 1 ", "| 2 |"]);
+});
+
+test("gives each pipe its own element, so the sheet can hide it", () => {
+  const { root, ranges } = build(SIMPLE);
+  syncTableCards(root, ranges);
+  const row = root.querySelector('[data-line="2"]');
+  expect([...(row?.querySelectorAll("[data-table-pipe]") ?? [])].map((p) => p.textContent)).toEqual(
+    ["|", "|", "|"],
+  );
+});
+
+test("marks the edges where a cell's own pipes sit, which is where the rules go", () => {
+  const { root, ranges } = build(SIMPLE);
+  syncTableCards(root, ranges);
+  // `| a ` opens on a pipe; `| b |` opens and closes on one, so it draws the divider
+  // before it AND the table's right-hand rule.
+  expect(cellEdges(root, 2)).toEqual(["start", "both"]);
+});
+
+test("marks no edge on a cell with no pipe of its own", () => {
+  // GFM makes the leading pipe optional. The first cell of such a row has no
+  // character at column 0 for a rule to stand in for, so it must draw none — a
+  // rule there would be the one mark on the table that is not in the source.
+  const { root, ranges } = build(["a | b", "- | -", "1 | 2"].join("\n"));
+  syncTableCards(root, ranges);
+  expect(cellTexts(root, 1)).toEqual(["a ", "| b"]);
+  expect(cellEdges(root, 1)).toEqual([null, "start"]);
+});
+
+test("tags the header row and the delimiter row", () => {
+  const { root, ranges } = build(SIMPLE);
+  syncTableCards(root, ranges);
+  expect(root.querySelector('[data-line="2"]')?.hasAttribute("data-table-head")).toBe(true);
+  expect(root.querySelector('[data-line="3"]')?.hasAttribute("data-table-rule")).toBe(true);
+  expect(root.querySelector('[data-line="4"]')?.hasAttribute("data-table-head")).toBe(false);
+});
+
+test("puts each column's alignment on every row's cell", () => {
+  const { root, ranges } = build(["| a | b | c |", "| :- | :-: | -: |"].join("\n"));
+  syncTableCards(root, ranges);
+  const row = root.querySelector('[data-line="1"]');
+  expect(
+    [...(row?.querySelectorAll(`[${CELL_ATTR}]`) ?? [])].map((c) =>
+      c.getAttribute("data-table-align"),
+    ),
+  ).toEqual(["left", "center", "right"]);
+});
+
+test("mirrors the card in the gutter so the two columns keep matching counts", () => {
+  const { root, ranges } = build(SIMPLE);
+  syncTableCards(root, ranges);
+  const gutter = root.querySelector("[data-gutter]");
+  const content = root.querySelector("[data-content]");
+  expect(gutter?.children).toHaveLength(content?.children.length ?? -1);
+  expect(gutter?.querySelector(`[${TABLE_GUTTER_CARD_ATTR}="2"]`)?.children).toHaveLength(3);
+});
+
+test("leaves the gutter flat when one of its cells is missing", () => {
+  // A partial mirror is the very divergence the mirror exists to prevent: half a
+  // gutter card is worse than none, because renderSelection THROWS on unequal child
+  // counts and takes drag selection down for the whole view.
+  const { root, ranges } = build(SIMPLE);
+  root.querySelector('[data-gutter] [data-column-number="3"]')?.remove();
+  syncTableCards(root, ranges);
+  expect(root.querySelector(`[${TABLE_GUTTER_CARD_ATTR}]`)).toBeNull();
+});
+
+test("carries a mid-table comment's row into the card, in place", () => {
+  const { root, ranges } = build(TWO_BODY);
+  // A repaint rebuilds the column flat and re-emits the annotation row, so the pass
+  // always meets this case unwrapped — which is why the card takes the whole run of
+  // children between its first and last row rather than the rows alone.
+  openComment(root, 4);
+  syncTableCards(root, ranges);
+  const card = root.querySelector(`[data-content] > [${TABLE_CARD_ATTR}="2"]`);
+  expect(slotOrder(card, "data-line")).toEqual(["2", "3", "4", "annotation", "5"]);
+  expect(root.querySelector(`[data-content] > [data-line-annotation]`)).toBeNull();
+});
+
+test("carries the comment's gutter buffer into the mirror at the same index", () => {
+  const { root, ranges } = build(TWO_BODY);
+  openComment(root, 4);
+  syncTableCards(root, ranges);
+  const mirror = root.querySelector(`[${TABLE_GUTTER_CARD_ATTR}="2"]`);
+  expect(slotOrder(mirror, "data-column-number")).toEqual(["2", "3", "4", "annotation", "5"]);
+});
+
+test("carries a comment on the table's LAST row into the card too", () => {
+  // Left outside, it would still land in the right place — but it would be drawn at the
+  // uncarded width, so two comments on one table would not match.
+  const { root, ranges } = build(TWO_BODY);
+  openComment(root, 5);
+  syncTableCards(root, ranges);
+  const card = root.querySelector(`[data-content] > [${TABLE_CARD_ATTR}="2"]`);
+  expect(slotOrder(card, "data-line")).toEqual(["2", "3", "4", "5", "annotation"]);
+  const mirror = root.querySelector(`[${TABLE_GUTTER_CARD_ATTR}="2"]`);
+  expect(slotOrder(mirror, "data-column-number")).toEqual(["2", "3", "4", "5", "annotation"]);
+});
+
+test("re-cards a table whose card no longer spans what it holds", () => {
+  // grid-row is what maps the card's children onto the parent's row tracks, so a card
+  // holding the right rows at the wrong span draws the table a track short.
+  const { root, ranges } = build(TWO_BODY);
+  syncTableCards(root, ranges);
+  const card = root.querySelector<HTMLElement>(`[${TABLE_CARD_ATTR}="2"]`);
+  card?.appendChild(document.createElement("div"));
+  syncTableCards(root, ranges);
+  expect(root.querySelector<HTMLElement>(`[${TABLE_CARD_ATTR}="2"]`)?.style.gridRow).toBe("span 4");
+});
+
+test("keeps the two columns matching with a mid-table comment open", () => {
+  const { root, ranges } = build(TWO_BODY);
+  openComment(root, 4);
+  syncTableCards(root, ranges);
+  const gutter = root.querySelector("[data-gutter]");
+  const content = root.querySelector("[data-content]");
+  expect(gutter?.children).toHaveLength(content?.children.length ?? -1);
+});
+
+test("keeps the two columns matching when the table is malformed", () => {
+  // A ragged body row ends the table early, so the range covers fewer lines than the
+  // pipes on the page suggest. Whatever it covers, the columns must still agree —
+  // this is the failure that takes drag selection down for the WHOLE view, not just
+  // for the table.
+  const { root, ranges } = build(
+    ["| a | b |", "| - | - |", "| 1 | 2 |", "| 3 | 4 | 5 |", "| 6 | 7 |"].join("\n"),
+  );
+  syncTableCards(root, ranges);
+  const gutter = root.querySelector("[data-gutter]");
+  const content = root.querySelector("[data-content]");
+  expect(gutter?.children).toHaveLength(content?.children.length ?? -1);
+  // The ragged row and everything after it stay plain source rows.
+  expect(cellTexts(root, 4)).toEqual([]);
+  expect(cellTexts(root, 5)).toEqual([]);
+});
+
+test("cards nothing at all when the delimiter row's column count disagrees", () => {
+  const { root, ranges } = build(["| a | b |", "| - | - | - |", "| 1 | 2 |"].join("\n"));
+  syncTableCards(root, ranges);
+  expect(root.querySelector(`[${TABLE_CARD_ATTR}]`)).toBeNull();
+  expect(root.querySelector(`[${CELL_ATTR}]`)).toBeNull();
+  const gutter = root.querySelector("[data-gutter]");
+  const content = root.querySelector("[data-content]");
+  expect(gutter?.children).toHaveLength(content?.children.length ?? -1);
+});
+
+test("returns a carded comment's row to its column when the table is retired", () => {
+  const { root, ranges } = build(TWO_BODY);
+  openComment(root, 4);
+  syncTableCards(root, ranges);
+  syncTableCards(root, []);
+  expect(slotOrder(root.querySelector("[data-content]"), "data-line")).toEqual([
+    "1",
+    "2",
+    "3",
+    "4",
+    "annotation",
+    "5",
+  ]);
+});
+
+test("mutates nothing on a settled pass with a comment open", () => {
+  const { root, ranges } = build(TWO_BODY);
+  openComment(root, 4);
+  syncTableCards(root, ranges);
+  const settled = root.innerHTML;
+  syncTableCards(root, ranges);
+  expect(root.innerHTML).toBe(settled);
+});
+
+test("mutates nothing on a settled pass", () => {
+  const { root, ranges } = build(SIMPLE);
+  syncTableCards(root, ranges);
+  const settled = root.innerHTML;
+  syncTableCards(root, ranges);
+  expect(root.innerHTML).toBe(settled);
+});
+
+test("unwraps and un-cells a table that is no longer one", () => {
+  const { root, ranges } = build(SIMPLE);
+  syncTableCards(root, ranges);
+  syncTableCards(root, []);
+  expect(root.querySelector(`[${TABLE_CARD_ATTR}]`)).toBeNull();
+  expect(root.querySelector(`[${TABLE_GUTTER_CARD_ATTR}]`)).toBeNull();
+  expect(root.querySelector(`[${CELL_ATTR}]`)).toBeNull();
+  expect(root.querySelectorAll("[data-content] > [data-line]")).toHaveLength(4);
+  expect(root.querySelector('[data-line="2"]')?.textContent).toBe("| a | b |");
+});
+
+test("leaves a row alone when the painted text is not the line it parsed", () => {
+  const { root, ranges } = build(SIMPLE);
+  // A repaint mid-flight: the library has replaced the row with different content.
+  const row = root.querySelector('[data-line="4"]');
+  if (row !== null) row.textContent = "still painting";
+  syncTableCards(root, ranges);
+  expect(row?.querySelector(`[${CELL_ATTR}]`)).toBeNull();
+  // Its siblings are celled regardless, so one unpainted row cannot stall the table.
+  expect(cellTexts(root, 2)).toEqual(["| a ", "| b |"]);
+});
+
+test("is a no-op for a plan with no tables", () => {
+  const { root, ranges } = build("just prose\nmore prose");
+  const before = root.innerHTML;
+  syncTableCards(root, ranges);
+  expect(root.innerHTML).toBe(before);
 });

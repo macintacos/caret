@@ -27,6 +27,16 @@
 // shape tagCursorRow and paintSearchHighlights already use.
 
 import { CARD_ATTR, GUTTER_CARD_ATTR } from "$lib/diffview/codeBlockScroll.ts";
+import { TABLE_CARD_ATTR, TABLE_GUTTER_CARD_ATTR } from "$lib/diffview/tables.ts";
+
+/** The card kinds that hide rows from renderSelection, each as its content/gutter
+ * attribute pair. Two kinds and not one: a card is a card to this pass whatever made
+ * it, and the pairs are what tie a content card to its own mirror — matching them by
+ * key across kinds would band a table's rows from a code block's range. */
+const CARD_KINDS: [content: string, gutter: string][] = [
+  [CARD_ATTR, GUTTER_CARD_ATTR],
+  [TABLE_CARD_ATTR, TABLE_GUTTER_CARD_ATTR],
+];
 
 /** An ascending, inclusive, 1-based line range. Ascending is this module's contract,
  * not its callers' — the library reports a gutter drag in gesture order, so SourceView
@@ -108,16 +118,18 @@ export function paintCardSelection(root: ParentNode | null, range: SelectedLines
   const content = root?.querySelector("[data-content]");
   const gutter = root?.querySelector("[data-gutter]");
   if (content == null || gutter == null) return;
-  for (const card of content.querySelectorAll(`:scope > [${CARD_ATTR}]`)) {
-    const key = card.getAttribute(CARD_ATTR) ?? "";
-    const mirror = gutter.querySelector(`:scope > [${GUTTER_CARD_ATTR}="${key}"]`);
-    if (mirror === null) continue;
-    const rows = [...card.children];
-    const cells = [...mirror.children];
-    if (rows.length !== cells.length) continue;
-    for (const [i, [inContent, inGutter]] of markers(rows, range).entries()) {
-      mark(rows[i], inContent);
-      mark(cells[i], inGutter);
+  for (const [cardAttr, gutterAttr] of CARD_KINDS) {
+    for (const card of content.querySelectorAll(`:scope > [${cardAttr}]`)) {
+      const key = card.getAttribute(cardAttr) ?? "";
+      const mirror = gutter.querySelector(`:scope > [${gutterAttr}="${key}"]`);
+      if (mirror === null) continue;
+      const rows = [...card.children];
+      const cells = [...mirror.children];
+      if (rows.length !== cells.length) continue;
+      for (const [i, [inContent, inGutter]] of markers(rows, range).entries()) {
+        mark(rows[i], inContent);
+        mark(cells[i], inGutter);
+      }
     }
   }
 }
