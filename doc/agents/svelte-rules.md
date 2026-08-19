@@ -228,15 +228,16 @@ stays green under any invocation.
   that character's meaning — which is WCAG 1.4.11's own test for a graphical object
   required to understand the content. It therefore owes that clause's 3:1 floor and spends
   `--ink-soft`: the task-list checkbox (EXC-860), the list bullet (EXC-861), the
-  blockquote level bar (EXC-863) and the thematic break (EXC-862), all in
-  `diffview/coreStyles.ts`. There is a **third case, and it is open**: a decoration that
-  replaces nothing because it was never in the source at all. The file and folder glyphs
-  (EXC-687 / EXC-918) are the instance — they are added beside a fully legible path, which
-  is why they sit on `--ink-faint` today, but the file-vs-directory distinction is carried
-  by the glyph alone and by nothing else in the row, so 1.4.11 arguably binds them too.
-  They predate this epic and EXC-871 did not re-tint them; an ADDED indicator carrying
-  information no surviving character carries owes the same floor, and closing that is its
-  own change. Do not read the two-way split above as covering it.
+  blockquote level bar (EXC-863), the thematic break (EXC-862) and a table's column rules
+  and header rule (EXC-864), all in `diffview/coreStyles.ts`. There is a
+  **third case, and it is open**: a decoration that replaces nothing because it was never
+  in the source at all. The file and folder glyphs (EXC-687 / EXC-918) are the instance —
+  they are added beside a fully legible path, which is why they sit on `--ink-faint`
+  today, but the file-vs-directory distinction is carried by the glyph alone and by
+  nothing else in the row, so 1.4.11 arguably binds them too. They predate this epic and
+  EXC-871 did not re-tint them; an ADDED indicator carrying information no surviving
+  character carries owes the same floor, and closing that is its own change. Do not read
+  the two-way split above as covering it.
   **The floor binds on the surface the decoration actually renders on**, and that is the
   trap the rule exists to close. `theme.test.ts`'s ink-ramp case measures `--paper` and
   `--paper-raised`, the two chrome surfaces, while the diff view binds `--diffs-bg` to

@@ -451,7 +451,7 @@ describe("every theme", () => {
   // to transparent and draws in the column it vacated. Nothing legible survives beside one,
   // so each is the only thing carrying what its marker used to say — which is precisely
   // WCAG 1.4.11's test for a graphical object required to understand the content, and puts
-  // all three under its 3:1 floor. The ink-ramp case above cannot speak to them: it measures
+  // all five under its 3:1 floor. The ink-ramp case above cannot speak to them: it measures
   // --paper and --paper-raised, the two CHROME surfaces, while a marker renders on the diff
   // surface (--diffs-bg is --paper-sunk, styles/diffview.css) and on the 2-8% ink mixes the
   // row bands lay over it.
@@ -466,16 +466,18 @@ describe("every theme", () => {
   // correctly — re-tinting a shared token is not one ticket's call. EXC-871 made it across
   // the whole epic and the list is now closed by a rule rather than by inspection: a marker
   // whose glyph SURVIVES is supplementary and stays on --ink-faint (the fence markers, the
-  // ** / _ emphasis markers, an ordered item's number, the table pipes and the delimiter
-  // row's dashes), and only a marker that has been replaced appears below. The thematic
-  // break is the fourth member and is measured separately, one test down, because its paint
-  // can carry an alpha suffix that has to composite before it is measured.
+  // ** / _ emphasis markers, an ordered item's number), and only a marker that has been
+  // replaced appears below. EXC-864 moved the table pipes and the delimiter row's dashes
+  // across that line — both went transparent — so the column rules and the header rule
+  // painted where they stood are measured here too. The thematic break is measured
+  // separately, one test down, because its paint can carry an alpha suffix that has to
+  // composite before it is measured.
   //
-  // One assertion rather than one per member: all three draw in the same token, so a
-  // per-marker loop would run the identical arithmetic three times for a longer message.
-  // Which SELECTORS spend it is coreStyles.test.ts's job — it pins the four this epic drew
-  // by name. Neither file can catch a FIFTH replacement marker shipped on --ink-faint; that
-  // gap is real and named here rather than papered over.
+  // One assertion rather than one per member: all five draw in the same token, so a
+  // per-marker loop would run the identical arithmetic five times for a longer message.
+  // Which SELECTORS spend it is coreStyles.test.ts's job — it pins the six this epic drew
+  // by name. Neither file can catch a SEVENTH replacement marker shipped on --ink-faint;
+  // that gap is real and named here rather than papered over.
   test("keeps every replacement marker above the non-text floor on every palette", () => {
     const MARKER_INK = "--ink-soft" as const;
     for (const [id, theme] of themeEntries()) {
