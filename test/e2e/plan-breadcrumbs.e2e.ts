@@ -28,9 +28,15 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { expect, motionToken, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import {
+  expect,
+  motionToken,
+  pastKeyRepeatDelay,
+  test,
+  waitPastSafeModeGrace,
+  walkVisits,
+} from "@test/e2e/support/fixtures.ts";
 import { jumpToHeading, PLAN_SURFACE } from "@test/e2e/support/source-view.ts";
-import { KEY_REPEAT_DELAY_MS } from "@ui/src/lib/keyRepeat.ts";
 
 // Each section must be taller than the viewport, so scrolling to a later one
 // genuinely changes which heading is being read rather than leaving the whole plan
@@ -470,41 +476,6 @@ const focusedRow = (page: Page) =>
     return el?.getAttribute("role") === "menuitem" ? (el.textContent?.trim() ?? "") : "";
   });
 
-/** Poll a held walk until it has been seen on `count` distinct rows.
- *
- * The SET is the assertion, not the row the walk is on: these lists wrap, so the walk
- * is somewhere different by the time any single read lands, while the set only grows.
- * It is also what proves the traversal rather than one move — reaching three distinct
- * rows takes at least two steps past the one the press itself made.
- *
- * Sampled on a fixed short interval rather than Playwright's backing-off default,
- * which climbs to a second between reads and would spend most of the per-test budget
- * watching a walk that is already several rows on. */
-async function walkVisits(read: () => Promise<string>, count: number): Promise<void> {
-  const seen = new Set<string>();
-  await expect
-    .poll(
-      async () => {
-        const row = await read();
-        if (row !== "") seen.add(row);
-        return seen.size;
-      },
-      { intervals: [50] },
-    )
-    .toBeGreaterThanOrEqual(count);
-}
-
-/** Wait past the delay the app arms before a run, on the clock the app arms it on.
- *
- * An honest wait rather than a sleep, on browser-testing.md § Timing discipline's own
- * discriminator: KEY_REPEAT_DELAY_MS is imported from the module that holds it, and a
- * run still going would have ticked several times inside the window. It is a whole
- * delay rather than one interval so the margin does not depend on the cadence. */
-async function pastRepeatDelay(page: Page): Promise<void> {
-  const deadline = (await page.evaluate(() => performance.now())) + KEY_REPEAT_DELAY_MS;
-  await page.waitForFunction((until) => performance.now() > until, deadline);
-}
-
 test("holding a walk key keeps traversing until it is released", async ({ daemon, page }) => {
   await daemon.seed({ plan: NESTED_PLAN });
   await page.goto("/");
@@ -526,7 +497,7 @@ test("holding a walk key keeps traversing until it is released", async ({ daemon
   // run would have ticked in has passed.
   const stopped = await focusedRow(page);
   expect(stopped).not.toBe("");
-  await pastRepeatDelay(page);
+  await pastKeyRepeatDelay(page);
   expect(await focusedRow(page)).toBe(stopped);
 });
 
@@ -559,8 +530,43 @@ test("a held arrow traverses on the app's cadence rather than the OS's", async (
 
   const stopped = await focusedRow(page);
   expect(stopped).not.toBe("");
-  await pastRepeatDelay(page);
+  await pastKeyRepeatDelay(page);
   expect(await focusedRow(page)).toBe(stopped);
+});
+
+test("a held ArrowRight descends the hierarchy at the same cadence", async ({ daemon, page }) => {
+  // ArrowRight is the one walk key bits-ui answers on the SUB-TRIGGER rather than
+  // on the menu content, in the target phase and with a preventDefault of its own —
+  // so onMenuKeydown never sees it and the hold has to be claimed a level down, in
+  // onRowKeydown, where the handler still runs ahead of the primitive's. Nothing but
+  // a real press can exercise that: a synthetic arrow is untrusted and returns at
+  // the guard, which is exactly what keeps the walk's own re-dispatch working.
+  await daemon.seed({ plan: DEEP_PLAN });
+  await page.goto("/");
+
+  await jumpTo(page, "Echo");
+  const menu = page.locator(MENU);
+  await page.locator(CRUMB).first().click();
+  await expect(menu.getByRole("menuitem")).toHaveText(["Alpha"]);
+
+  // Onto the row that nests the level below, which is where the claim lives.
+  await page.keyboard.press("j");
+  await expect(page.locator("[data-slot='dropdown-menu-sub-trigger']").first()).toBeFocused();
+
+  // One press opens exactly one level: the claim did not double-drive the trigger.
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator(SUBMENU)).toHaveCount(1);
+  await expect(page.locator(SUBMENU).getByRole("menuitem", { name: "Bravo" })).toBeFocused();
+
+  // And held, it keeps descending — the trail runs five deep, so there is somewhere
+  // to go — then settles once the run is released.
+  await page.keyboard.down("ArrowRight");
+  await expect.poll(() => page.locator(SUBMENU).count(), { intervals: [50] }).toBeGreaterThan(1);
+  await page.keyboard.up("ArrowRight");
+
+  const depth = await page.locator(SUBMENU).count();
+  await pastKeyRepeatDelay(page);
+  expect(await page.locator(SUBMENU).count()).toBe(depth);
 });
 
 // EXC-957: the menus recurse the whole heading tree, so the bar reaches any
@@ -758,7 +764,7 @@ test("holding h walks out to the top of the trail and settles there", async ({ d
   // Settled at the top: one menu, on the outermost crumb, and still there once the
   // window a run would have ticked in has passed. The plan never moved either — the
   // walk browses, only Enter travels.
-  await pastRepeatDelay(page);
+  await pastKeyRepeatDelay(page);
   await expect(menu).toHaveCount(1);
   await expect(menu.getByRole("menuitem")).toHaveText(["Alpha"]);
   await expect(page.locator(CRUMB).first()).toHaveAttribute("aria-expanded", "true");
@@ -1219,7 +1225,7 @@ test("holding Tab keeps walking the filter's results until it is released", asyn
 
   const stopped = await selected();
   expect(stopped).not.toBe("");
-  await pastRepeatDelay(page);
+  await pastKeyRepeatDelay(page);
   expect(await selected()).toBe(stopped);
 
   // And the panel is still the reviewer's: a held Tab neither dismissed it nor let

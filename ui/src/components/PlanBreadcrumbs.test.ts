@@ -822,11 +822,13 @@ describe("PlanBreadcrumbs filter", () => {
     await flushUntil(flush, () => selectedLabels().length > 0);
     expect(selectedLabels()).toEqual(["Overview"]);
 
+    // A press, then its repeat — the order a held key really arrives in. The OS
+    // emits no repeat without a press before it, so a bare repeat would be driving
+    // a state the browser never produces.
+    pressTab(flush);
+    await flushUntil(flush, () => selectedLabels()[0] === "Approach");
     const event = pressTab(flush, { repeat: true });
-    // Spun rather than settled: this asserts an ABSENCE, so the walk is given the
-    // same room a real one gets before the row is read back.
-    await flushUntil(flush, () => false, 5);
-    expect(selectedLabels()).toEqual(["Overview"]);
+    expect(selectedLabels()).toEqual(["Approach"]);
     // Still claimed while held, so the browser's own tab move stays suppressed for
     // as long as the key is down rather than only on its first press.
     expect(event.defaultPrevented).toBe(true);

@@ -314,10 +314,16 @@
     const open = cells.findIndex((cell) => cell.querySelector('[aria-expanded="true"]') !== null);
     const previous = cells[open - 1]?.querySelector<HTMLButtonElement>("button");
     if (open < 1 || previous === undefined || previous === null) return false;
-    swapping = true;
-    cells[open]?.querySelector<HTMLButtonElement>("button")?.click();
-    previous.click();
-    swapping = false;
+    // `finally` rather than a plain reset: a throw out of either bits-ui handler
+    // would latch the flag and leave the menu's close permanently unable to cancel
+    // a run, which is a silent downgrade rather than a visible failure.
+    try {
+      swapping = true;
+      cells[open]?.querySelector<HTMLButtonElement>("button")?.click();
+      previous.click();
+    } finally {
+      swapping = false;
+    }
     return true;
   }
 
