@@ -6,13 +6,18 @@
 // scroll position measured with getBoundingClientRect, and the sibling menus are
 // bits-ui popovers whose open/close, portalling, and submenu reveal are real
 // interaction semantics — both e2e concerns per browser-testing.md. The `/`
-// filter is a second panel — a `command` in a `popover` — whose keyboard walk is a
-// roving SELECTION rather than moving focus, and whose narration attributes a screen
-// reader reads off the live DOM; all of it real-browser too. The bar's pure trail
-// logic, and the filter panel's structure and ARIA, are unit-tested in
+// filter is a second panel — a `command` in a `popover` — whose narration attributes
+// a screen reader reads off the live DOM; real-browser too.
+//
+// The filter's keyboard walk is the one thing split across both layers, deliberately.
+// Where it lands — the roving SELECTION, which is DOM state rather than focus — a
+// mount can see, so it is unit-tested. What only a browser can show is the rest: a
+// real keypress reaching the primitive, the browser's own tab move being suppressed,
+// and the newly selected row being scrolled into the list's box. Those are here. The
+// bar's pure trail logic and the filter panel's structure and ARIA are likewise in
 // ui/src/components/PlanBreadcrumbs.test.ts.
 
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { jumpToHeading, PLAN_SURFACE } from "@test/e2e/support/source-view.ts";
@@ -72,6 +77,26 @@ const DEEP_PLAN = [
   "",
 ].join("\n\n");
 
+// More headings than the filter panel's list can show at once, which is what makes
+// "the walk brought the row into view" a claim about scrolling rather than about a
+// list that already showed everything. Only the COUNT matters, so the sections carry
+// the same filler as the fixtures above rather than anything of their own.
+//
+// That count is sized against the vendored command-list's `max-h-72` (18rem), which
+// these thirteen rows overflow by about four. Raise that height and this fixture has
+// to grow with it — never relax the out-of-view half of the assertion, which is the
+// only thing proving the list scrolls at all. The ToC popup's TALL_PLAN carries the
+// same warning, having already been caught by it once.
+const LONG_PLAN = [
+  "# Alpha",
+  filler("Alpha"),
+  ...Array.from({ length: 12 }, (_, i) => [
+    `## Section ${i + 1}`,
+    filler(`Section ${i + 1}`),
+  ]).flat(),
+  "",
+].join("\n\n");
+
 const BAR = ".plan-breadcrumbs";
 const CRUMB = `${BAR} button.crumb`;
 // The crumbs the row is actually showing. A level it cannot hold stays in the
@@ -89,11 +114,28 @@ const SUBMENU = "[data-slot='dropdown-menu-sub-content']";
 const FILTER = ".plan-crumb-filter";
 const filterPanel = (page: Page) => page.locator(FILTER);
 const results = (page: Page) => filterPanel(page).getByRole("option");
+const resultsList = (page: Page) =>
+  filterPanel(page).getByRole("listbox", { name: "Matching headings" });
 const queryField = (page: Page) =>
   filterPanel(page).getByRole("combobox", { name: "Filter headings" });
 /** The row the roving selection is on. bits-ui marks it `data-selected`; the reader
  * is told about it through the field's aria-activedescendant, asserted below. */
 const walkedTo = (page: Page) => results(page).and(page.locator("[data-selected]"));
+
+/** Whether `row` sits inside the results list's visible box — the claim a unit mount
+ * cannot make, since happy-dom lays nothing out.
+ *
+ * Throws rather than returning false when either box is unmeasurable: one caller
+ * asserts this is FALSE, to prove the list really scrolls, and a false-on-null would
+ * let "not measurable" pass as "correctly out of view". `expect.poll` fails on a throw
+ * exactly as it should. The one-pixel tolerance absorbs sub-pixel layout rounding,
+ * which would otherwise red a row correctly scrolled flush against an edge. */
+async function isWithinResults(page: Page, row: Locator): Promise<boolean> {
+  const rowBox = await row.boundingBox();
+  const listBox = await resultsList(page).boundingBox();
+  if (rowBox === null || listBox === null) throw new Error("row or list has no bounding box");
+  return rowBox.y >= listBox.y - 1 && rowBox.y + rowBox.height <= listBox.y + listBox.height + 1;
+}
 
 /** Where the plan is parked. Several specs below assert that walking the menus
  * moves nothing until the reviewer commits to a heading. */
@@ -312,6 +354,80 @@ test("j and k walk a nested submenu, not the plan behind it", async ({ daemon, p
   await expect(page.locator(".diffview [data-content] [data-caret-cursor]")).toHaveText(
     "### Charlie",
   );
+});
+
+// EXC-1121: Tab walks the open list too, and stays on the level it is on. Left to
+// bits-ui the key closes the whole menu and moves focus to the next tabbable after
+// the root trigger, which is the least obvious thing it could do from inside an open
+// list. Real focus movement through the primitive's roving group, so it lives here.
+
+test("Tab and Shift+Tab walk the open menu, wrapping at its ends", async ({ daemon, page }) => {
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+
+  await jumpTo(page, "Charlie");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
+
+  const menu = page.locator(MENU);
+  await page.locator(CRUMB).nth(1).click();
+  await expect(menu.getByRole("menuitem")).toHaveText(["Bravo", "Delta", "Foxtrot"]);
+
+  await page.keyboard.press("Tab");
+  await expect(menu.getByRole("menuitem", { name: "Bravo" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(menu.getByRole("menuitem", { name: "Delta" })).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(menu.getByRole("menuitem", { name: "Bravo" })).toBeFocused();
+
+  // Past the last row and back to the first, and the same in reverse. The menus
+  // take this from the primitive's own `loop`, which defaults on.
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  await expect(menu.getByRole("menuitem", { name: "Foxtrot" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(menu.getByRole("menuitem", { name: "Bravo" })).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(menu.getByRole("menuitem", { name: "Foxtrot" })).toBeFocused();
+
+  // The menu is still the one that was open, on the crumb it was opened from: Tab
+  // neither dismissed it, nor opened a submenu, nor stepped the bar to another
+  // trigger.
+  await expect(menu).toHaveCount(1);
+  await expect(page.locator(SUBMENU)).toHaveCount(0);
+  await expect(page.locator(CRUMB).nth(1)).toHaveAttribute("aria-expanded", "true");
+});
+
+test("Tab walks a submenu without stepping out of it", async ({ daemon, page }) => {
+  // A submenu's content has its own roving group and its own copy of the handler,
+  // so the walk has to keep working one level in — and `Tab` was never one of
+  // bits-ui's SUB_OPEN_KEYS or SUB_CLOSE_KEYS, so it cannot cross the boundary in
+  // either direction.
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+
+  await jumpTo(page, "Charlie");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
+
+  await page.locator(CRUMB).first().click();
+  await page.keyboard.press("j");
+  await page.keyboard.press("ArrowRight");
+
+  const submenu = page.locator(SUBMENU);
+  await expect(submenu.getByRole("menuitem", { name: "Bravo" })).toBeFocused();
+
+  await page.keyboard.press("Tab");
+  await expect(submenu.getByRole("menuitem", { name: "Delta" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(submenu.getByRole("menuitem", { name: "Foxtrot" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(submenu.getByRole("menuitem", { name: "Bravo" })).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(submenu.getByRole("menuitem", { name: "Foxtrot" })).toBeFocused();
+
+  // One submenu, still open, with the level above it still standing: nothing was
+  // entered and nothing was closed.
+  await expect(submenu).toHaveCount(1);
+  await expect(page.locator(MENU)).toHaveCount(1);
 });
 
 // EXC-957: the menus recurse the whole heading tree, so the bar reaches any
@@ -552,11 +668,11 @@ test("the trail elides once the row cannot hold it, and the marker opens what it
 });
 
 // The bar's flat `/` filter (EXC-948, EXC-1098): a `command` inside a `popover`.
-// All of it is real browser behaviour — the key claim against the plan's own search,
-// the swap between the two panels, the roving walk through a set that changes under
-// it, the narration a screen reader reads off the live DOM, and Escape's step back
-// to the hierarchy — so it lives here rather than in the component unit, which pins
-// the panel's structure and ARIA instead.
+// What sits here is real browser behaviour — the key claim against the plan's own
+// search, the swap between the two panels, the roving walk through a set that changes
+// under it, the narration a screen reader reads off the live DOM, and Escape's step
+// back to the hierarchy. The component unit pins the panel's structure and ARIA, and
+// the half of the Tab walk a mount can see (see the file header).
 //
 // The arrows walk the results and `j`/`k` are ordinary query text, which is the one
 // place this panel's keyboard differs from the bar's own menus. A combobox keeps
@@ -739,15 +855,12 @@ test("Escape restores the hierarchical menu without leaving the bar", async ({ d
   await expect(page.locator(CRUMB).last()).toBeFocused();
 });
 
-test("Tab leaves the filter rather than being swallowed by the query field", async ({
-  daemon,
-  page,
-}) => {
-  // Two ways to get this wrong, and the landing site catches the second. Swallowing
-  // Tab strands a keyboard user inside the panel; letting the browser's own default
-  // run from a panel portalled to the END of the body walks them off the document
-  // instead, since nothing is tabbable after it. Both leave the reviewer stuck, and
-  // only asserting where focus LANDS tells them apart.
+test("Tab walks the filter's results without leaving the panel", async ({ daemon, page }) => {
+  // EXC-1121 supersedes the Tab-leaves-the-bar behaviour EXC-1098 pinned: the key
+  // now walks this list the way it walks the hierarchy menus. Left to the browser it
+  // would step off the END OF THE DOCUMENT, since the panel is portalled to the body
+  // and nothing is tabbable after it — so "focus never moved" is half the claim and
+  // "the selection did" is the other half.
   await daemon.seed({ plan: NESTED_PLAN });
   await page.goto("/");
   await expect(page.locator(`${CRUMB}.current`)).toBeVisible();
@@ -756,11 +869,48 @@ test("Tab leaves the filter rather than being swallowed by the query field", asy
   await page.keyboard.press("b");
   await page.keyboard.press("/");
   await expect(queryField(page)).toBeFocused();
+  await expect(walkedTo(page)).toHaveText("Alpha");
 
   await page.keyboard.press("Tab");
-  await expect(filterPanel(page)).toHaveCount(0);
-  // The next control in the row, which is where Tab out of the bar has always gone.
-  await expect(page.locator(".control-row .cwd")).toBeFocused();
+  await expect(walkedTo(page)).toHaveText("Bravo Alpha");
+  await page.keyboard.press("Tab");
+  await expect(walkedTo(page)).toHaveText("Charlie Bravo");
+  await page.keyboard.press("Shift+Tab");
+  await expect(walkedTo(page)).toHaveText("Bravo Alpha");
+
+  // The panel is still standing and the field still has focus, which is what the
+  // narration depends on.
+  await expect(filterPanel(page)).toHaveCount(1);
+  await expect(queryField(page)).toBeFocused();
+});
+
+test("the Tab walk wraps, and brings the row it lands on into view", async ({ daemon, page }) => {
+  // `loop` on the command is what wraps here — it defaults OFF, where the menus'
+  // own `loop` defaults on. And wrapping backwards off the first row is the cheapest
+  // gesture that also proves the scroll: it lands on the last row of a list taller
+  // than its box, which the re-dispatched arrow brings into sight and a hand-written
+  // selection would not.
+  await daemon.seed({ plan: LONG_PLAN });
+  await page.goto("/");
+  await expect(page.locator(`${CRUMB}.current`)).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  await page.keyboard.press("b");
+  await page.keyboard.press("/");
+  await expect(queryField(page)).toBeFocused();
+  await expect(walkedTo(page)).toHaveText("Alpha");
+
+  const last = results(page).last();
+  await expect(last).toHaveText("Section 12 Alpha");
+  expect(await isWithinResults(page, last)).toBe(false);
+
+  await page.keyboard.press("Shift+Tab");
+  await expect(walkedTo(page)).toHaveText("Section 12 Alpha");
+  await expect.poll(() => isWithinResults(page, last)).toBe(true);
+
+  // And forwards off the last row comes back to the first.
+  await page.keyboard.press("Tab");
+  await expect(walkedTo(page)).toHaveText("Alpha");
 });
 
 test("a click outside dismisses the filter and leaves the plan where it was", async ({
