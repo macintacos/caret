@@ -51,7 +51,8 @@ export interface RefHintAnchor {
 }
 
 // Descendant, not child: an over-wide fenced block is re-parented into a card
-// (codeBlockScroll.ts), the same shape tagFileRefTokens reads rows with.
+// (codeBlockScroll.ts) and a table into one of its own (tables.ts) — the same
+// shape tagFileRefTokens reads rows with.
 const rowAt = (root: ShadowRoot, line: number): Element | null =>
   root.querySelector(`[data-content] [data-line="${line}"]`);
 

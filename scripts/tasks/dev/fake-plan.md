@@ -269,6 +269,14 @@ Column alignment — left, center, right:
 | Footnotes      | unsupported |         0% |
 | Task lists     |   partial   |        50% |
 
+A table whose last column carries prose long enough to wrap inside its own column, while the two beside it keep their natural width:
+
+| Step | Owner | Notes |
+| ---- | ----- | ----- |
+| 1 | avery | Drain the queue before the cutover, then hold the relay closed until the health probe has reported two consecutive green intervals. |
+| 2 | blair | Short. |
+| 3 | casey | Roll back by re-opening the relay and replaying the parked batch — the parser refactor changed the on-disk shape, so the replay has to run through the new decoder rather than the one that wrote them. |
+
 A deliberately **wide** table to exercise horizontal scrolling / overflow handling:
 
 | id  | name              | language | lines |  added | removed | owner | reviewed | merged | tags                      |

@@ -228,15 +228,16 @@ stays green under any invocation.
   that character's meaning — which is WCAG 1.4.11's own test for a graphical object
   required to understand the content. It therefore owes that clause's 3:1 floor and spends
   `--ink-soft`: the task-list checkbox (EXC-860), the list bullet (EXC-861), the
-  blockquote level bar (EXC-863) and the thematic break (EXC-862), all in
-  `diffview/coreStyles.ts`. There is a **third case, and it is open**: a decoration that
-  replaces nothing because it was never in the source at all. The file and folder glyphs
-  (EXC-687 / EXC-918) are the instance — they are added beside a fully legible path, which
-  is why they sit on `--ink-faint` today, but the file-vs-directory distinction is carried
-  by the glyph alone and by nothing else in the row, so 1.4.11 arguably binds them too.
-  They predate this epic and EXC-871 did not re-tint them; an ADDED indicator carrying
-  information no surviving character carries owes the same floor, and closing that is its
-  own change. Do not read the two-way split above as covering it.
+  blockquote level bar (EXC-863), the thematic break (EXC-862) and a table's column rules
+  and header rule (EXC-864), all in `diffview/coreStyles.ts`. There is a
+  **third case, and it is open**: a decoration that replaces nothing because it was never
+  in the source at all. The file and folder glyphs (EXC-687 / EXC-918) are the instance —
+  they are added beside a fully legible path, which is why they sit on `--ink-faint`
+  today, but the file-vs-directory distinction is carried by the glyph alone and by
+  nothing else in the row, so 1.4.11 arguably binds them too. They predate this epic and
+  EXC-871 did not re-tint them; an ADDED indicator carrying information no surviving
+  character carries owes the same floor, and closing that is its own change. Do not read
+  the two-way split above as covering it.
   **The floor binds on the surface the decoration actually renders on**, and that is the
   trap the rule exists to close. `theme.test.ts`'s ink-ramp case measures `--paper` and
   `--paper-raised`, the two chrome surfaces, while the diff view binds `--diffs-bg` to
@@ -244,13 +245,22 @@ stays green under any invocation.
   `--ink-faint` measures 2.63–5.81 there and **fails 3:1** on catppuccin-latte (2.66–2.99)
   and github-light (2.63–3.07); `--ink-soft` measures 4.21–9.26 and clears everywhere.
   `theme.test.ts` pins the replacement family against exactly that ground and reds naming
-  the palette if a member is stepped back down. **`--rule` and `--rule-strong` are
-  chrome-surface tokens and are spent nowhere on the diff body.** At 10% and 16% ink over
-  those grounds they measure 1.15–1.37 and 1.24–1.64 — against the 1.05 this epic calls
-  indistinguishable, which is a line in the DOM and not on the screen.
-  `coreStyles.test.ts` asserts no DECLARATION in the sheet names either token (the
-  comments still name them, deliberately, which is why that assertion scans the
-  comment-stripped body). **These four ranges are stated here and nowhere else** — the
+  the palette if a member is stepped back down.
+  **One member does not spend the token neat.** A table's frame, column dividers and
+  header rule (EXC-864) are one mark, and `--ink-soft` at full strength drew a cage rather
+  than a table — 7.70 on caret-dark's widest band is TEXT contrast for a mark that only
+  says where a column ends — so `--table-rule` mixes it toward `--paper-sunk` before
+  painting, through a `light-dark()` whose two arms answer to two different limits. On a
+  **light** palette the floor binds: 15% is the most that clears 3:1 on all three,
+  measuring 3.19–4.51 with catppuccin-latte binding. On a **dark** one the eye binds first
+  — light ink on a dark ground reads heavier at the same ratio — so 30% is a design choice
+  and the floor is merely respected, measuring 3.39–4.33 with github-dark tightest.
+  **`--rule` and `--rule-strong` are chrome-surface tokens and are spent nowhere on the
+  diff body.** At 10% and 16% ink over those grounds they measure 1.15–1.37 and 1.24–1.64
+  — against the 1.05 this epic calls indistinguishable, which is a line in the DOM and not
+  on the screen. `coreStyles.test.ts` asserts no DECLARATION in the sheet names either
+  token (the comments still name them, deliberately, which is why that assertion scans the
+  comment-stripped body). **These six ranges are stated here and nowhere else** — the
   sheet's own comments point at this paragraph rather than restating them, because six
   copies of a measured number drift apart and three of them already had. It is painted as
   a **background layer** rather than as a `::before`, which clears both traps in the

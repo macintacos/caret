@@ -3,6 +3,7 @@ import { expect, test } from "bun:test";
 
 import { paintCardSelection } from "$lib/diffview/cardSelection.ts";
 import { CARD_ATTR, GUTTER_CARD_ATTR } from "$lib/diffview/codeBlockScroll.ts";
+import { TABLE_CARD_ATTR, TABLE_GUTTER_CARD_ATTR } from "$lib/diffview/tables.ts";
 
 // paintCardSelection re-applies the library's own [data-selected-line] marks to the
 // rows a card hides from it. @pierre/diffs' renderSelection walks [data-content]'s
@@ -11,17 +12,22 @@ import { CARD_ATTR, GUTTER_CARD_ATTR } from "$lib/diffview/codeBlockScroll.ts";
 // PAINTS is layout, and lives in test/e2e/diff-surface.e2e.ts.
 
 /** The library's grid for `total` lines, with `carded` (1-based, inclusive) moved into
- * a card and mirrored into the gutter — the shape codeBlockScroll.ts leaves behind. */
-function build(total: number, carded: { start: number; end: number }): HTMLElement {
+ * a card and mirrored into the gutter — the shape codeBlockScroll.ts leaves behind,
+ * or tables.ts's when `kind` names the table pair. */
+function build(
+  total: number,
+  carded: { start: number; end: number },
+  kind: [content: string, gutter: string] = [CARD_ATTR, GUTTER_CARD_ATTR],
+): HTMLElement {
   const root = document.createElement("div");
   const gutter = document.createElement("div");
   gutter.setAttribute("data-gutter", "");
   const content = document.createElement("div");
   content.setAttribute("data-content", "");
   const card = document.createElement("div");
-  card.setAttribute(CARD_ATTR, String(carded.start));
+  card.setAttribute(kind[0], String(carded.start));
   const mirror = document.createElement("div");
-  mirror.setAttribute(GUTTER_CARD_ATTR, String(carded.start));
+  mirror.setAttribute(kind[1], String(carded.start));
   for (let line = 1; line <= total; line++) {
     const row = document.createElement("div");
     row.setAttribute("data-line", String(line));
@@ -65,6 +71,14 @@ function selected(root: HTMLElement): string[] {
 
 test("bands every carded row of a range that lies wholly inside a card", () => {
   const root = build(8, { start: 3, end: 7 });
+  paintCardSelection(root, { start: 4, end: 6 });
+  expect(selected(root)).toEqual(["4=first", "5=", "6=last", "4=first", "5=", "6=last"]);
+});
+
+test("bands a table's card too — a card is a card whatever wrapped it", () => {
+  // tables.ts cards a table unconditionally, so its rows are hidden from
+  // renderSelection exactly as an overflowing fenced block's are.
+  const root = build(8, { start: 3, end: 7 }, [TABLE_CARD_ATTR, TABLE_GUTTER_CARD_ATTR]);
   paintCardSelection(root, { start: 4, end: 6 });
   expect(selected(root)).toEqual(["4=first", "5=", "6=last", "4=first", "5=", "6=last"]);
 });

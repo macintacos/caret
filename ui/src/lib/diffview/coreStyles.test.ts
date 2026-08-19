@@ -238,11 +238,12 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
   // (cardSelection.ts owns that), and two of the three things that then paint the band
   // had to change shape to reach it — which is what these pin.
   test("carries the band across the seam from the gutter side for a carded row", () => {
-    // A carded row cannot pull left across the seam: its card is an overflow-x: auto
-    // scroll container, so anything painted outside that box is clipped. The strip is
-    // painted from the gutter cell instead, which nothing clips.
+    // A code card is an overflow-x: auto scroll container, so a row inside one cannot
+    // pull left across the seam — anything painted outside that box is clipped. The
+    // strip is painted from the gutter cell instead, which nothing clips and which
+    // BOTH card kinds share (EXC-864's table card is the second).
     const extension = overrideDecls.match(
-      /\[data-gutter\]\s+\[data-code-card-gutter\]\s*>\s*\[data-column-number\]:is\([^)]*\)::before\s*\{([^}]*)\}/,
+      /\[data-gutter\]\s+:is\(\[data-table-card-gutter\],\s*\[data-code-card-gutter\]\)\s*>\s*\[data-column-number\]:is\([^)]*\)::before\s*\{([^}]*)\}/,
     );
     expect(extension).not.toBeNull();
     // Its width is exactly the two insets it has to cover, both named rather than
@@ -1427,5 +1428,338 @@ describe("thematic breaks (EXC-862)", () => {
     expect(ruleRule).not.toMatch(
       /(?:^|[;{])\s*(?:margin|padding|height|min-height|line-height|border)[a-z-]*\s*:/,
     );
+  });
+});
+
+// EXC-864: a GFM table renders as a real column-aligned table — a framed subgrid card
+// whose rows take its column tracks, with the source pipes taken to transparent and the
+// column rules painted in the space they vacate. What this suite pins is that trade
+// rather than the layout: which glyphs go, what replaces them, what ink that owes, what
+// is allowed to size a column, and that the card does NOT scroll. The boxes those
+// declarations produce are test/e2e/tables.e2e.ts's.
+describe("tables (EXC-864)", () => {
+  const cardRule =
+    overrideDecls.match(/\[data-content\]\s*>\s*\[data-table-card\]\s*\{[^}]*\}/)?.[0] ?? "";
+  const rowRule =
+    overrideDecls.match(
+      /\[data-content\]\s*>\s*\[data-table-card\]\s*>\s*\[data-line\]\s*\{[^}]*\}/,
+    )?.[0] ?? "";
+  const cellRule = rulesFor(String.raw`\[data-table-cell\]`).find((r) => r.includes("max-width:"));
+  const inertRule = rulesFor(String.raw`\[data-table-inert\]`)[0];
+  const pipeRule = rulesFor(String.raw`\[data-table-pipe\]`)[0];
+  // Two rules key off the same "this cell opens with a pipe" selector: the divider it
+  // paints, and the hanging indent it owes.
+  const edgeRules = rulesFor(String.raw`\[data-table-edge="both"\]\s*\)`);
+  const dividerRule = edgeRules.find((r) => r.includes("background-image:"));
+  const hangRule = edgeRules.find((r) => r.includes("text-indent:"));
+  const ruleRow = rulesFor(String.raw`\[data-line\]\[data-table-rule\]`).find((r) =>
+    r.includes("background-image:"),
+  );
+  const ruleInk = rulesFor(String.raw`\[data-line\]\[data-table-rule\][^{}]*`).find((r) =>
+    r.includes("color:"),
+  );
+  const headRow =
+    overrideDecls.match(
+      /\[data-content\]\s*>\s*\[data-table-card\]\s*>\s*:first-child\s*\{[^}]*\}/,
+    )?.[0] ?? "";
+  const footRow =
+    overrideDecls.match(
+      /\[data-content\]\s*>\s*\[data-table-card\]\s*>\s*:last-child\s*\{[^}]*\}/,
+    )?.[0] ?? "";
+  const tightRule =
+    [
+      ...overrideDecls.matchAll(
+        /\[data-content\][^{}]*\[data-line\]\[data-table-rule\][^{}]*\{[^}]*\}/g,
+      ),
+    ]
+      .map((m) => m[0])
+      .find((r) => r.includes("line-height:")) ?? "";
+  // The gutter's three, which rulesFor cannot reach — it anchors on [data-content].
+  const numberRule =
+    overrideDecls.match(
+      /:nth-child\(2 of \[data-column-number\]\)\s*>\s*\[data-line-number-content\]\s*\{[^}]*\}/,
+    )?.[0] ?? "";
+  const dotRule =
+    overrideDecls.match(
+      /:nth-child\(2 of \[data-column-number\]\)\s*>\s*\[data-line-number-content\]::before\s*\{[^}]*\}/,
+    )?.[0] ?? "";
+  const slotRule =
+    overrideDecls.match(/\[data-gutter\]\s*\[data-gutter-utility-slot\]\s*\{[^}]*\}/)?.[0] ?? "";
+  const slotOverride =
+    overrideDecls.match(
+      /:nth-child\(2 of \[data-column-number\]\)\s*>\s*\[data-gutter-utility-slot\]\s*\{[^}]*\}/,
+    )?.[0] ?? "";
+
+  test("every rule this suite reads is present", () => {
+    for (const [name, rule] of Object.entries({
+      cardRule,
+      rowRule,
+      cellRule,
+      inertRule,
+      pipeRule,
+      dividerRule,
+      ruleRow,
+      ruleInk,
+      headRow,
+      footRow,
+      tightRule,
+      dotRule,
+      numberRule,
+      slotRule,
+      slotOverride,
+      hangRule,
+    })) {
+      expect(rule, `${name} did not match`).toBeTruthy();
+    }
+  });
+
+  test("grows the card until the whole table is visible rather than scrolling it", () => {
+    // The one place this card parts company with the code card: a fenced block earns a
+    // panel with its own scroll box, where a table's value is being comparable at a
+    // glance. A max-width or an overflow here would hide the last columns behind a
+    // scrollbar, which is what the issue asks not to happen.
+    expect(cardRule).not.toContain("max-width");
+    expect(cardRule).not.toContain("overflow");
+    expect(overrideDecls).not.toMatch(/\[data-table-card\][^{]*::-webkit-scrollbar/);
+  });
+
+  test("takes its rows from the parent, declares its own columns, and shrinks to them", () => {
+    // Subgrid rows are what keep the gutter numbers aligned as a wrapped cell grows its
+    // track. justify-self is what makes the frame below hug the TABLE: a stretched card
+    // would box the whole content column instead.
+    expect(cardRule).toMatch(/grid-template-rows:\s*subgrid/);
+    expect(cardRule).toMatch(
+      /grid-template-columns:\s*repeat\(var\(--table-columns[^)]*\), max-content\)/,
+    );
+    expect(cardRule).toMatch(/justify-self:\s*start/);
+  });
+
+  test("frames the table, with corners", () => {
+    // Markdown has no syntax for a table's outer edge, so this is the one mark here with
+    // no character behind it — without it the column rules stop in mid-air.
+    expect(cardRule).toMatch(/border:\s*1px solid var\(--table-rule\)/);
+    expect(cardRule).toMatch(/border-radius:\s*var\(--radius\)/);
+  });
+
+  test("zeroes the row padding so the subgrid tracks are the card's", () => {
+    // The library pads every row 1ch inline, which on a subgrid insets the row's own
+    // tracks from the card's — the cells stop filling the columns they define, and the
+    // header rule (a percentage of the row) stops matching the frame.
+    expect(rowRule).toMatch(/grid-template-columns:\s*subgrid/);
+    expect(rowRule).toMatch(/padding-inline:\s*0/);
+  });
+
+  test("caps the CELL, not the track, so one prose column wraps and the rest do not", () => {
+    // A max-content track never shrinks under space pressure, so the cap riding the cell
+    // resolves each track to min(its content, the cap). Capping the tracks instead lets
+    // the grid squeeze every column at once, which is the reflow this avoids.
+    expect(cellRule).toMatch(/max-width:\s*64ch/);
+    expect(cellRule).toMatch(/white-space:\s*pre-wrap/);
+  });
+
+  test("hangs a wrapped cell's continuation lines under its own first line", () => {
+    // A cell's text does not start at the cell's edge: the source puts a pipe and a space
+    // before it. Continuation lines starting at the edge therefore sat two characters
+    // left of every line above them, and ran through the column rule painted half a
+    // character in.
+    //
+    // The padding and the indent are one mechanism and have to match: the padding moves
+    // every line right, the indent pulls the first one back, so the pipe stays on its own
+    // character column and the track is the width it always was.
+    expect(hangRule).toMatch(/padding-inline-start:\s*2ch/);
+    expect(hangRule).toMatch(/text-indent:\s*-2ch/);
+    // Keyed on the edge attribute, which IS "this cell opens with a pipe" — a table
+    // written without outer pipes has a first cell whose text starts at the edge, and it
+    // must indent nothing. Not :not(:first-child), which is the DIVIDER's question.
+    expect(hangRule).toContain('[data-table-edge="start"]');
+    expect(hangRule).not.toContain(":not(:first-child)");
+  });
+
+  test("keeps the source's own alignment padding out of the column's width", () => {
+    // An author pads every cell out to the widest thing typed in the column, which is a
+    // fact about the SOURCE — and a lie the moment the display text is shorter, as a
+    // collapsed link's is. Zero-size rather than hidden, so the characters stay in the
+    // layout tree where selectionCopy.ts and the search Ranges still find them.
+    expect(inertRule).toMatch(/font-size:\s*0/);
+    expect(inertRule).not.toMatch(/display:\s*none/);
+    expect(inertRule).not.toMatch(/visibility:\s*hidden/);
+  });
+
+  test("aligns a wrapped cell's continuation lines with its column", () => {
+    // text-align on the cell rather than its tokens: a token-level rule would only ever
+    // reach the first visual line of a wrapped cell.
+    for (const value of ["left", "center", "right"] as const) {
+      const rule = rulesFor(String.raw`\[data-table-align="${value}"\]`)[0];
+      expect(rule).toMatch(new RegExp(String.raw`text-align:\s*${value}`));
+    }
+  });
+
+  test("hides the pipes and paints the rules on the cell instead", () => {
+    // The glyph does not fill its line box, so a column of pipes reads as a dotted stack
+    // and disappears entirely below a wrapped cell's first line. The rule rides the cell
+    // box, which is full height whatever the row does.
+    expect(pipeRule).toMatch(/color:\s*transparent/);
+    expect(dividerRule).toMatch(/background-image:\s*linear-gradient\(/);
+    expect(dividerRule).toMatch(/background-size:\s*1px\s+100%/);
+    expect(dividerRule).toMatch(/background-position:\s*0\.5ch/);
+  });
+
+  test("draws the dividers BETWEEN columns and leaves the edges to the frame", () => {
+    // A cell draws its own pipe, so the first cell of a row would draw the table's left
+    // edge and the last its right — half a character inside the frame, which reads as a
+    // doubled line. There is no inline-end layer at all, and :first-child drops the
+    // leading one.
+    expect(dividerRule).toContain(":not(:first-child)");
+    expect(overrideDecls).not.toMatch(/\[data-table-edge[^{]*\{[^}]*calc\(100% - 0\.5ch\)/);
+  });
+
+  test("replaces the delimiter row's markers with one full-width rule", () => {
+    // Paint, never a node: tables.ts settles a celled row by counting its cells, so a
+    // pass that appended a rule here would rebuild the row on every repaint and never
+    // adopt it. A plain 100% spans the frame's inner width exactly, which is what
+    // zeroing the row padding above buys.
+    expect(ruleRow).toMatch(/background-image:\s*linear-gradient\(/);
+    expect(ruleRow).toMatch(/background-size:\s*100%\s+1px/);
+    expect(ruleRow).not.toContain("background-origin");
+    expect(overrideDecls).not.toMatch(/\[data-table-rule\][^{]*::(?:before|after)/);
+    expect(ruleInk).toMatch(/color:\s*transparent/);
+    // Descendant, not the thematic break's child combinator: a celled row's tokens sit
+    // one level further down, inside the cells.
+    expect(ruleInk).toMatch(/\[data-line\]\[data-table-rule\] \*/);
+  });
+
+  test("declares the rule ink once, softened per scheme, and spends it everywhere", () => {
+    // The frame, the dividers and the header rule are one mark in three places; a tuned
+    // number written out three times is three numbers waiting to drift apart. It is
+    // --ink-soft softened toward the surface, by more on a dark palette than on a light
+    // one — light ink on a dark ground reads heavier at the same ratio, and a light
+    // palette has no room to give anyway. theme.test.ts owns how far each can go before
+    // the 3:1 floor bites; this pins only that the sheet spends what it chose, and that
+    // it asks the platform which scheme is live rather than guessing from a selector the
+    // shadow boundary would put out of reach.
+    expect(cardRule).toMatch(
+      /--table-rule:\s*light-dark\(\s*color-mix\(in srgb, var\(--ink-soft\), var\(--paper-sunk\) 15%\),\s*color-mix\(in srgb, var\(--ink-soft\), var\(--paper-sunk\) 30%\),?\s*\)/,
+    );
+    for (const rule of [dividerRule, ruleRow]) {
+      expect(rule).toContain("var(--table-rule)");
+      expect(rule).not.toContain("--ink-faint");
+      expect(rule).not.toContain("--rule");
+    }
+    // One declaration, nowhere else.
+    expect(overrideDecls.match(/--table-rule:/g)).toHaveLength(1);
+  });
+
+  test("rounds the end rows so they stop painting over the frame's corners", () => {
+    // Every row of the surface carries an opaque background, so a square first and last
+    // row cover the arc the card's border draws around them and the frame reads as a
+    // rounded rectangle with a bite out of each corner. The same radius, so the row's
+    // edge follows the border rather than crossing it.
+    expect(headRow).toMatch(/border-top-left-radius:\s*var\(--radius\)/);
+    expect(headRow).toMatch(/border-top-right-radius:\s*var\(--radius\)/);
+    expect(footRow).toMatch(/border-bottom-left-radius:\s*var\(--radius\)/);
+    expect(footRow).toMatch(/border-bottom-right-radius:\s*var\(--radius\)/);
+    // Not by clipping. overflow on the card would round the corners in one declaration
+    // and make the card a scroll container, which is the one thing it must never be —
+    // the same reason the sizing test above refuses it.
+    for (const rule of [headRow, footRow]) expect(rule).not.toContain("overflow");
+    // The last CHILD, not the last row: an annotation row is the bottom of the card
+    // whenever someone comments on the table's final line.
+    expect(footRow).not.toContain("[data-line]:last-child");
+  });
+
+  test("takes the delimiter row down to a fraction of a line", () => {
+    // The row draws one hairline and was a full text line tall, so it set half a line of
+    // air above that hairline and half below — the gap under a header the eye reads as
+    // padding. line-height rather than a height, so the row still tracks the type scale;
+    // a fraction of a line rather than one, which the gutter's half of the row can only
+    // follow because its digits are gone (below).
+    expect(tightRule).toMatch(/line-height:\s*0?\.\d+/);
+    expect(tightRule).not.toContain("font-size");
+    expect(tightRule).not.toContain("height: 0;");
+    // Both columns in one rule. The row track is the taller of the gutter cell and the
+    // content row, and the gutter still holds its number — hidden, but in flow — so a
+    // declaration reaching only the content row would resolve to the number's line box
+    // and change nothing on screen.
+    expect(tightRule).toContain("[data-table-card] > [data-line][data-table-rule]");
+    expect(tightRule).toMatch(/:nth-child\(2 of \[data-column-number\]\)/);
+  });
+
+  test("replaces the delimiter's line number with a dot on that number's own box", () => {
+    // A line number is an address, and the delimiter is the one line of a table that says
+    // nothing — numbering it spent a full line of rhythm on an address for nothing, and
+    // the row is now far too short to set a digit in. The dot still says a line is there,
+    // which stays true: the comment anchors rest on it.
+    //
+    // visibility rather than display, because the number's BOX is what places the dot:
+    // the library sizes every number to the widest in the file and right-aligns the
+    // digits inside it, so a dot centred on the column lands off the numbers themselves
+    // as soon as a file runs past a power of ten. min-width takes the box back to this
+    // number's own digits; height and vertical-align take it to the row rather than to
+    // the text baseline it would otherwise sit on.
+    expect(numberRule).toMatch(/visibility:\s*hidden/);
+    expect(numberRule).not.toMatch(/display:\s*none/);
+    expect(numberRule).toMatch(/min-width:\s*0/);
+    expect(numberRule).toMatch(/height:\s*100%/);
+    expect(numberRule).toMatch(/vertical-align:\s*top/);
+    // Painted, not swapped. Replacing the number's TEXT would be a DOM write on every
+    // repaint — the childList churn tables.ts exists to avoid. The paint needs a pseudo
+    // of its own because visibility takes an element's background along with its text;
+    // this one is free, where the ::before EXC-865 spends is on the CELL a level up.
+    expect(dotRule).toMatch(/visibility:\s*visible/);
+    expect(dotRule).toMatch(/background-image:\s*radial-gradient\(/);
+    expect(dotRule).toMatch(/inset:\s*0/);
+    // Round, not square: a farthest-corner circle is clipped by its own painting area and
+    // the dot comes out a tiny block.
+    expect(dotRule).toContain("circle closest-side");
+    // The gutter's own ink, the same the numbers around it take, including their hover
+    // and selection states — not a token of its own to drift from them.
+    expect(dotRule).toContain("currentColor");
+    expect(dotRule).toMatch(/background-position:\s*center/);
+    // Both halves reach the cell positionally, and both count LINE cells rather than
+    // children — which is what steps over the buffer a comment inserts ahead of it. Bare
+    // :nth-child(2) would dot that buffer instead.
+    for (const rule of [dotRule, numberRule]) {
+      expect(rule).toMatch(/:nth-child\(2 of \[data-column-number\]\)/);
+    }
+  });
+
+  test("centres the hover affordance on one line of its row, not on the whole row", () => {
+    // The "+" is a fixed size and a row is not, so it is centred rather than hung from
+    // the top. What it is centred ON is one line: a row grows when a cell wraps or an
+    // image lands on it and its number does not, so a button centred on the box sits a
+    // full line below the address it belongs to. The library stretches the slot over the
+    // whole cell, so the clamp is what takes it back to a line.
+    expect(slotRule).toMatch(/align-items:\s*center/);
+    expect(slotRule).toMatch(/max-height:\s*1lh/);
+    // A max rather than a height, because a row can be shorter than a line too — an
+    // over-constrained absolute box keeps its top edge, so this only trims from below.
+    expect(slotRule).not.toMatch(/[^-]height:\s*1lh/);
+    // Stated for every row, because that is the rule; the one exception is scoped and
+    // says why it is one.
+    expect(slotRule).not.toContain("[data-table-card-gutter]");
+    expect(slotOverride).toMatch(/max-height:\s*none/);
+    expect(slotOverride).toMatch(/:nth-child\(2 of \[data-column-number\]\)/);
+  });
+
+  test("declares the header weight here rather than through shiki", () => {
+    // @pierre/diffs carries a theme's fontStyle into an invalid font-weight:
+    // light-dark(...) and drops it, so every token renders at one weight (EXC-867).
+    expect(rulesFor(String.raw`\[data-line\]\[data-table-head\]`)[0]).toMatch(
+      /font-weight:\s*bold/,
+    );
+  });
+
+  test("keeps a comment inside the card from widening the table", () => {
+    // A spanning grid item contributes its own max-content to every track it covers, and
+    // a composer's is large enough to stretch a narrow table the moment someone comments.
+    // container-type on the card would say this directly and cannot be used: its layout
+    // containment stops the subgrid contributing the comment's height, collapsing the
+    // thread to one line.
+    const annotation =
+      overrideDecls.match(
+        /\[data-content\]\s*>\s*\[data-table-card\]\s*>\s*\[data-line-annotation\]\s*\{[^}]*\}/,
+      )?.[0] ?? "";
+    expect(annotation).toMatch(/contain:\s*inline-size/);
+    expect(cardRule).not.toContain("container-type");
   });
 });

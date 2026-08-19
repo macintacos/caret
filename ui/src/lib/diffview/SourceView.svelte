@@ -24,6 +24,7 @@
   import { paintCardSelection, type SelectedLines } from "$lib/diffview/cardSelection.ts";
   import { selectionIn, selectionText } from "$lib/diffview/selectionCopy.ts";
   import { tagThematicBreakRows, thematicBreakLines } from "$lib/diffview/thematicBreaks.ts";
+  import { type TableRange, syncTableCards, tableRanges } from "$lib/diffview/tables.ts";
   import { preloadFenceLanguages, scanFenceLanguages } from "$lib/diffview/languages.ts";
   import { registerCaretDiffThemes } from "$lib/diffview/theme.ts";
   import {
@@ -451,6 +452,17 @@
     return breaksMemo.breaks;
   });
 
+  // The GFM tables (EXC-864), memoized on the same rendered text and for the same
+  // reason: a fresh array each poll tick would re-arm the observer effect below.
+  // Derived from codeRanges so a table written inside a fence stays code.
+  let tablesMemo: { text: string; tables: TableRange[] } | undefined;
+  const tableSpans = $derived.by(() => {
+    if (tablesMemo?.text !== doc.text) {
+      tablesMemo = { text: doc.text, tables: tableRanges(doc.text, codeRanges) };
+    }
+    return tablesMemo.tables;
+  });
+
   // The keyboard cursor's line (EXC-788). Mirrored into a plain (non-reactive)
   // let so the repaint observer's tag() below re-applies the cursor tag after a
   // library row rewrite WITHOUT re-arming the observer on every cursor move —
@@ -527,6 +539,8 @@
     const inlineSpans = inline;
     // And the thematic breaks (EXC-862), memoized on the same text.
     const breaks = thematicBreaks;
+    // And the tables (EXC-864), likewise.
+    const tables = tableSpans;
     // And the images (EXC-870), snapshotted the same way. Memoized by the parent
     // alongside the link layer, so this too stays a stable reference.
     const imageSpans = images;
@@ -546,6 +560,11 @@
       // depends on nothing else here, so its position costs no frame either way.
       tagThematicBreakRows(root, breaks);
       syncCodeBlockCards(root, ranges);
+      // Card each table and group its rows' tokens into cells (EXC-864). BEFORE the
+      // inline pass, which walks a row through tokenChildren: it has to see the
+      // celled row so both passes partition the same column space. Idempotent for
+      // the same reason as the card pass above.
+      syncTableCards(root, tables);
       // Split each row's tokens on the inline-run and file-reference boundaries and
       // tag them (EXC-867). This MUST precede tagFileRefTokens: it produces the
       // partition that pass walks, and the cut at a reference's own columns is what
@@ -564,7 +583,7 @@
       // Draw the plan's images onto their rows (EXC-870). Ordered last because
       // it is the only pass here that ADDS a node rather than tagging or
       // splitting one — not because the token passes above would break on it.
-      // They walk a row's direct children accumulating text length, and an
+      // They walk a row through tokenChildren accumulating text length, and an
       // appended <img> holds no characters at the end of the line, so either
       // order is safe. Idempotent, so a settled row costs one comparison rather
       // than an observer loop, and always run so a populated→empty transition

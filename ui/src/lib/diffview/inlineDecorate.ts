@@ -5,11 +5,13 @@
 // it. Everything downstream — the emphasis ink, the pills, the checkbox and
 // blockquote decorations — is then one CSS rule against an attribute.
 //
-// The refining itself is rowTokens.ts's splitTokens, which carries the split-only
-// rule and its reasoning. What matters here is that it only ever refines, so every
-// boundary shiki drew survives and every column tagTokenAt (fileRefTag.ts),
-// tagLanguageToken and tagFenceToken (codeBlocks.ts) look for is still a token
-// boundary.
+// The refining itself is rowTokens.ts's splitTokens, which is shared with the
+// table pass and carries the split-only rule and its reasoning. What matters here
+// is that it only ever refines, so every boundary shiki drew survives and every
+// column tagTokenAt (fileRefTag.ts), tagLanguageToken and tagFenceToken
+// (codeBlocks.ts) look for is still a token boundary. The same module's
+// tokenChildren is how a row's tokens are reached, which is one level down for a
+// table row (EXC-864) and the row's own children for every other.
 //
 // Pill grouping follows inlineSpans.ts's abutting-elements contract. A pill is
 // drawn per ELEMENT, not per run, so consecutive runs are grouped — but the
@@ -65,7 +67,7 @@
 
 import type { FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 import type { ColumnRange, InlineSpan, InlineSpanMap } from "$lib/diffview/inlineSpans.ts";
-import { splitTokens } from "$lib/diffview/rowTokens.ts";
+import { splitTokens, tokenChildren } from "$lib/diffview/rowTokens.ts";
 
 // The inline-markup attributes that ride in the `data-md` token list, which is
 // emitted in this array's order. A token list rather than an attribute per member so CSS
@@ -151,7 +153,7 @@ function tagRow(
   cited: readonly ColumnRange[],
 ) {
   let col = 0;
-  for (const child of [...row.children]) {
+  for (const child of tokenChildren(row)) {
     const start = col;
     col += child.textContent?.length ?? 0;
     if (col === start) continue;
@@ -233,9 +235,9 @@ export function decorateInlineRuns(
   // any emphasis, inline code, link, checkbox or quote marker, so it names most
   // of a prose document, and a per-line lookup would walk the whole subtree
   // hundreds of times on every repaint. Descendant, not child: an overflowing
-  // code block's rows get moved into a scroll card (codeBlockScroll.ts), so they
-  // are no longer direct children of [data-content]. Same shape as
-  // tagCodeBlockRows.
+  // code block's rows get moved into a scroll card (codeBlockScroll.ts) and a
+  // table's rows into a table card (tables.ts), so either way they are no longer
+  // direct children of [data-content]. Same shape as tagCodeBlockRows.
   const rows = new Map<number, Element>();
   for (const row of root.querySelectorAll("[data-content] [data-line]")) {
     const line = Number(row.getAttribute("data-line"));
