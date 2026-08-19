@@ -67,11 +67,18 @@ fails silently, with no error the page can catch. On macOS, check in order:
 
 ## Sound
 
-caret plays a short synthesized cue at the moments worth hearing — a plan arriving, being
-revised in place, or expiring; the daemon dropping or coming back; a verdict going out; a
-comment posted; a toast firing; the file preview opening or closing; Settings or the
+caret plays a short synthesized cue at the moments worth hearing. News that arrives on its
+own: a plan arriving, being revised in place, or expiring; the daemon dropping or coming
+back; a verdict going out; a comment posted; a toast firing. Moments you cause while
+reading a plan: starting a comment, and discarding or dropping one; the contents popup or
+a breadcrumb menu opening; the search HUD opening, committing, stepping between matches,
+and closing; entering or leaving visual line-select; switching plans; comparing versions;
+showing or hiding the comments panel; the file preview opening or closing; Settings or the
 shortcuts help opening; a theme change; and copy-code. None is longer than a fraction of a
 second, and none is attached to scrolling, hovering, or pointer movement.
+
+A moment sounds the same however you reach it — the keyboard shortcut and the button play
+one cue, because the cue belongs to the action rather than to the key or the click.
 
 **Settings → Sound** holds the switch that silences all of it, plus a **Volume** slider
 for how loud the rest play. Sound defaults **on** at a deliberately low 25%; the slider

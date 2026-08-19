@@ -142,7 +142,7 @@ async function openComposer(text: string) {
     onCreate: () => {},
     sound: (event) => sounds.push(event),
   });
-  const { target } = render(
+  const { target, flush } = render(
     DiffPlanView,
     props({ commenting, pending: { startLine: 2, endLine: 2 }, pendingText: text }),
   );
@@ -151,6 +151,9 @@ async function openComposer(text: string) {
       (b) => b.textContent?.trim() === "Discard",
     );
   await until(() => find() !== undefined);
+  // render() does not flush, and the text case clicks open a ConfirmPopover — the
+  // overlay case the mount harness says to flush for.
+  flush();
   commenting.open({ start: 2, end: 2 });
   return { sounds, discard: () => find() as HTMLButtonElement };
 }

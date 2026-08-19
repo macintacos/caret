@@ -218,7 +218,10 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
   function closeSearch(): void {
     // The dismissal is the moment, so it sounds here rather than at the deferred
     // teardown — and the Esc chain and the pill's ✕ inherit it by routing through.
-    deps.sound?.("searchClosed");
+    // Silent while already collapsing: the pill stays open for one --dur-exit, and
+    // Esc is a two-stage idiom elsewhere in the plan view, so a second press inside
+    // that window is the same dismissal rather than another one.
+    if (!store.searchClosing) deps.sound?.("searchClosed");
     deps.blur();
     if (!deps.hintsShown()) {
       resetSearch();

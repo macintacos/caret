@@ -14,7 +14,7 @@
 // already funnel through one function, so sounding there is what makes the two
 // paths physically unable to drift apart — there is no second place to write it.
 // Where that function is a plain factory the play arrives as an injected
-// `sound?: (event) => void` dep, the shape polling.svelte.ts already uses; where
+// `sound?: (event) => void` dep, the shape alerts.ts already uses; where
 // it is a component with no such seam, the surface reads the singleton directly.
 //
 // The enabled/volume preferences are read PER CALL rather than mirrored into
@@ -108,9 +108,11 @@ export const SOUND_MAP: Partial<Record<SoundEvent, SoundName>> = {
   // The plan's two navigation surfaces opening, by whichever path.
   contentsOpen: "scan",
   breadcrumbOpen: "page",
-  // Reading the plan differently: against another version, or another plan.
+  // Reading the plan differently: against another version, against another plan,
+  // or with the comments panel in or out.
   compareToggled: "toggle",
   planSwitched: "page",
+  commentsToggled: "toggle",
   // The search HUD's four moments, and visual line-select's two.
   searchOpened: "scan",
   searchCommitted: "ready",
@@ -118,7 +120,6 @@ export const SOUND_MAP: Partial<Record<SoundEvent, SoundName>> = {
   searchStepped: "tick",
   visualEntered: "press",
   visualExited: "release",
-  commentsToggled: "toggle",
 };
 
 /** The sound cuelume synthesizes to unlock its AudioContext, kept out of
@@ -215,7 +216,8 @@ export function createSound(deps: SoundDeps = {}): Sound {
   };
 }
 
-/** The app-wide sound service. App.svelte injects `sound.play` into the alert
- * queue and the review selection and arms `sound.unlock()`; the surfaces with no
- * such seam (the file preview, the code-copy button) call it directly. */
+/** The app-wide sound service. App.svelte arms `sound.unlock()` and injects
+ * `sound.play` into every factory that takes a `sound` dep; the surfaces with no
+ * factory seam to inject through read it directly. Which surfaces those are is
+ * deliberately not listed — a roster of consumers goes stale on every addition. */
 export const sound = createSound();

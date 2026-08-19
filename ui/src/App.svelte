@@ -138,21 +138,16 @@
     sound.play("modalOpen");
     showHelp = true;
   }
-  // Two actions each reachable from a key and from a control, so each is one named
-  // function both bind to and the cue lives inside it — the pair cannot drift onto
-  // different sounds, because there is no second place to write one (EXC-1126).
-  //
-  // switchPlan is the reviewer choosing another plan, which selection.selectReview
-  // alone is not: that is also the funnel for a deep link, mergeReviews' re-select
-  // and afterResolve's auto-advance, none of which the reviewer asked for. So the
-  // cue sits out here rather than inside it.
-  function switchPlan(id: string): void {
-    sound.play("planSwitched");
-    selection.selectReview(id);
+  // The comment panel's visibility has one writer, so every route to it sounds the
+  // same: the C shortcut and the status-strip tally through toggleComments, the
+  // panel's own ✕ and Escape through setComments(false) (EXC-1126). Sounded on the
+  // flip only, the guard setComparing and setConnected use for the same reason.
+  function setComments(visible: boolean): void {
+    if (visible !== showComments) sound.play("commentsToggled");
+    showComments = visible;
   }
   function toggleComments(): void {
-    sound.play("commentsToggled");
-    showComments = !showComments;
+    setComments(!showComments);
   }
   // First-run onboarding (EXC-781): opens once for a brand-new user whose
   // notification permission is still undecided. Guarded on Notification support
@@ -219,6 +214,16 @@
 
   // ----- State modules -----
   const selection = createReviewSelection(selStore, { onSound: sound.play });
+  // The reviewer picking another plan from the switcher, which selectReview alone is
+  // not: that is also the funnel for a deep link, mergeReviews' re-select, and
+  // afterResolve's auto-advance, none of which the reviewer asked for. The plan
+  // notifier's click (createPlanNotifier below) is reviewer-initiated but sits out
+  // too — the plan it jumps to already sounded its own arrival. Sounded only on a
+  // real move, since the switcher lists the active plan as a pickable row.
+  function switchPlan(id: string): void {
+    if (id !== selection.activeId) sound.play("planSwitched");
+    selection.selectReview(id);
+  }
   const autosave = createAutosave(work, () => selection.activeId, {
     onOffline: () => selection.setConnected(false),
   });
@@ -755,7 +760,7 @@
   {comments}
   activeId={autosave.focusedAnnotation}
   onReveal={revealComment}
-  onClose={() => (showComments = false)}
+  onClose={() => setComments(false)}
   compare={compareRange !== null}
   title={commentsTitle}
   {showShortcutHints}

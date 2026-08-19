@@ -117,8 +117,8 @@ export function createCompare(store: CompareStore, deps: CompareDeps): Compare {
 
     setComparing(comparing) {
       // Sound the flip only: a re-assert of the flag already held is not a toggle,
-      // and syncVersions' own `comparing = false` is not one either — which is why
-      // it writes the store directly rather than routing through here.
+      // and syncVersions' own `comparing = false` is not one either — it writes the
+      // store directly, so it never reaches here.
       if (comparing !== store.comparing) deps.sound?.("compareToggled");
       store.comparing = comparing;
     },
