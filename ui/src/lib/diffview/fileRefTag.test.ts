@@ -3,6 +3,7 @@ import { beforeEach, expect, test } from "bun:test";
 
 import type { FileRefSpan, FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 import { tagFileRefTokens } from "$lib/diffview/fileRefTag.ts";
+import { CELL_ATTR } from "$lib/diffview/rowTokens.ts";
 
 // tagFileRefTokens marks the token span that begins each resolved file reference
 // with data-file-ref, so the override sheet can render the file icon before it.
@@ -123,6 +124,32 @@ test("is a no-op for a line whose row is not rendered", () => {
     tagFileRefTokens(host, map([[9, [{ startCol: 0, endCol: 7, path: "gone.ts" }]]])),
   ).not.toThrow();
   expect(tagged(host)).toEqual([]);
+});
+
+// EXC-864: a table row groups its tokens into cell elements, so the pass has to
+// reach the token one level down.
+function celledRow(line: number, cells: string[][]): HTMLElement {
+  const el = document.createElement("div");
+  el.setAttribute("data-line", String(line));
+  for (const tokens of cells) {
+    const cell = document.createElement("span");
+    cell.setAttribute(CELL_ATTR, "");
+    for (const t of tokens) {
+      const span = document.createElement("span");
+      span.textContent = t;
+      cell.appendChild(span);
+    }
+    el.appendChild(cell);
+  }
+  return el;
+}
+
+test("tags a reference whose token sits inside a table cell", () => {
+  //                     | a | src/x.ts |
+  // columns             0    4 6      14
+  host = root(celledRow(1, [["| a "], ["| ", "src/x.ts", " |"]]));
+  tagFileRefTokens(host, map([[1, [{ startCol: 6, endCol: 14, path: "src/x.ts" }]]]));
+  expect(tagged(host)).toEqual(["src/x.ts"]);
 });
 
 // An over-wide fenced block is re-parented into a scroll card, so the pass has to

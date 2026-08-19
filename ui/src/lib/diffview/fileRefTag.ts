@@ -9,6 +9,7 @@
 
 import type { FileRefKind } from "@core/lib/types";
 import type { FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
+import { tokenChildren } from "$lib/diffview/rowTokens.ts";
 
 const FILE_REF_ATTR = "data-file-ref";
 
@@ -35,7 +36,8 @@ export function tagFileRefTokens(root: ParentNode, spanMap: FileRefSpanMap): voi
 
 /** The row's token that BEGINS at `startCol` and stays within `endCol`, or null
  * when none does. Tokens partition the line, so a running length locates the
- * boundary.
+ * boundary — and tokenChildren is what makes that partition the same sequence
+ * whether the row is ordinary or has been split into table cells.
  *
  * Both bounds are required so a decoration never lands on a coarse token that
  * spans more than the path: one merely CONTAINING the reference starts too
@@ -49,7 +51,7 @@ export function tagFileRefTokens(root: ParentNode, spanMap: FileRefSpanMap): voi
  * emits every token as a span element, hence the HTMLElement result. */
 export function refTokenAt(rowEl: Element, startCol: number, endCol: number): HTMLElement | null {
   let col = 0;
-  for (const token of rowEl.children) {
+  for (const token of tokenChildren(rowEl)) {
     const len = token.textContent?.length ?? 0;
     if (col === startCol) return col + len <= endCol ? (token as HTMLElement) : null;
     if (col > startCol) return null;

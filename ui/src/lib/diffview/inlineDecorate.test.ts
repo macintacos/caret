@@ -6,6 +6,7 @@ import { tagFileRefTokens } from "$lib/diffview/fileRefTag.ts";
 import { decorateInlineRuns } from "$lib/diffview/inlineDecorate.ts";
 import type { InlineSpan, InlineSpanMap } from "$lib/diffview/inlineSpans.ts";
 import { buildLinkLayer } from "$lib/diffview/links.ts";
+import { CELL_ATTR, tokenChildren } from "$lib/diffview/rowTokens.ts";
 
 // decorateInlineRuns splits a row's shiki tokens at every inline-run boundary
 // and tags each resulting child with the run covering it, so the override sheet
@@ -555,6 +556,46 @@ test("moves the tags when the same line's runs change", () => {
   expect(pieces(host).map((p) => p.md)).toEqual(["italic", null]);
   decorateInlineRuns(host, spanMap([[1, [{ startCol: 3, endCol: 6, code: true }]]]), new Map());
   expect(pieces(host).map((p) => p.md)).toEqual([null, "code"]);
+});
+
+// EXC-864: a table row groups its tokens into cell elements, so "the row's tokens"
+// sits one level down for those rows. The pass reaches them through
+// tokenChildren, and everything else about the tagging is unchanged.
+function celledRow(line: number, cells: string[][]): HTMLElement {
+  const el = document.createElement("div");
+  el.setAttribute("data-line", String(line));
+  for (const tokens of cells) {
+    const cell = document.createElement("span");
+    cell.setAttribute(CELL_ATTR, "");
+    for (const t of tokens) {
+      const span = document.createElement("span");
+      span.textContent = t;
+      cell.appendChild(span);
+    }
+    el.appendChild(cell);
+  }
+  return el;
+}
+
+test("tags a run whose tokens sit inside table cells", () => {
+  //                     | | **a** |
+  // columns             0 2 4    9 11
+  host = root(celledRow(1, [["| "], ["| ", "**", "a", "**", " |"]]));
+  decorateInlineRuns(host, spanMap([[1, [{ startCol: 4, endCol: 9, bold: true }]]]), new Map());
+  const rowEl = host.querySelector('[data-line="1"]') as Element;
+  expect(
+    tokenChildren(rowEl).map((child) => ({
+      text: child.textContent ?? "",
+      md: child.getAttribute("data-md"),
+    })),
+  ).toEqual([
+    { text: "| ", md: null },
+    { text: "| ", md: null },
+    { text: "**", md: "bold" },
+    { text: "a", md: "bold" },
+    { text: "**", md: "bold" },
+    { text: " |", md: null },
+  ]);
 });
 
 // EXC-863: the whole-line half of the quote seam. Subduing a quote is a property
