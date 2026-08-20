@@ -14,6 +14,7 @@
 
 import type { PlanVersion } from "@core/lib/types";
 import type { DiffIndicators, DiffStyle } from "$lib/diffview/types.ts";
+import type { SoundEvent } from "$lib/sound.ts";
 
 /** Reactive fields the host component owns and the factory mutates through
  * getters. Base is the reference version (default: the current version) and
@@ -42,6 +43,8 @@ export interface CompareDeps {
   readIndicatorsPref: () => DiffIndicators;
   /** Persist the chosen gutter-indicators preference. */
   writeIndicatorsPref: (indicators: DiffIndicators) => void;
+  /** Play a moment's cue. Optional so a test drives the factory silently. */
+  sound?: (event: SoundEvent) => void;
 }
 
 export interface Compare {
@@ -113,6 +116,10 @@ export function createCompare(store: CompareStore, deps: CompareDeps): Compare {
     },
 
     setComparing(comparing) {
+      // Sound the flip only: a re-assert of the flag already held is not a toggle,
+      // and syncVersions' own `comparing = false` is not one either — it writes the
+      // store directly, so it never reaches here.
+      if (comparing !== store.comparing) deps.sound?.("compareToggled");
       store.comparing = comparing;
     },
 

@@ -72,6 +72,7 @@
   } from "$lib/headingTrail.ts";
   import { createKeyRepeat, walkCommandList } from "$lib/keyRepeat.ts";
   import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
+  import { sound } from "$lib/sound.ts";
   import type { TocHeading } from "$lib/toc.ts";
 
   interface Props {
@@ -292,11 +293,14 @@
   }
 
   // Whether the bar is swapping one crumb's menu for another's rather than being
-  // dismissed. The two are the same event from the menu's side — a close — and the
-  // hold-to-repeat cancel below has to tell them apart: `h` shuts the open menu on
-  // its way to the next crumb, so reading that as a dismissal would end a held `h`
-  // after a single step. Set only around the pair of clicks that perform the swap,
-  // both synchronous, so nothing else can observe it raised.
+  // dismissed and opened afresh. A swap is indistinguishable from either from the
+  // menu's side, and both arms of the menu snippet's onOpenChange have to tell them
+  // apart: `h` shuts the open menu on its way to the next crumb, so reading the close
+  // as a dismissal would end a held `h` after a single step, and reading the re-open
+  // as a fresh one would sound the bar's cue on every step of that hold. Set only
+  // around the pair of clicks that perform the swap, both synchronous — bits-ui runs
+  // onOpenChange from its box setter, inside the click — so nothing else can observe
+  // it raised.
   let swapping = false;
 
   // Move the open menu one crumb outward, if there is one and no submenu is open
@@ -712,7 +716,17 @@
 {#snippet menu(nodes: HeadingNode[], trigger: Snippet<[Record<string, unknown>]>)}
   <DropdownMenu.Root
     onOpenChange={(open) => {
-      if (open) filtering = false;
+      if (open) {
+        filtering = false;
+        // The bar's cue, sounded from the open itself rather than from either caller
+        // (EXC-1126) — a pointer click and openTrail's synthesized one both arrive
+        // here, so `b` and the mouse cannot drift onto different sounds. Read off the
+        // singleton, the carve-out sound.ts names for a surface with no factory seam.
+        // The walk's swap is exempt for the same reason the cancel below is: `h`
+        // re-opens on the neighbouring crumb as the second half of one move, so
+        // sounding it would fire the cue on every step of a held key.
+        if (!swapping) sound.play("breadcrumbOpen");
+      }
       // A menu shut mid-hold takes the run with it (EXC-1122). Without this the
       // timer keeps firing arrows at whatever holds focus next — and ArrowDown on a
       // closed crumb's trigger is how bits-ui OPENS it, so the menu would reappear

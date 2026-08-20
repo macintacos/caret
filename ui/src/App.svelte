@@ -138,6 +138,17 @@
     sound.play("modalOpen");
     showHelp = true;
   }
+  // The comment panel's visibility has one writer, so every route to it sounds the
+  // same: the C shortcut and the status-strip tally through toggleComments, the
+  // panel's own ✕ and Escape through setComments(false) (EXC-1126). Sounded on the
+  // flip only, the guard setComparing and setConnected use for the same reason.
+  function setComments(visible: boolean): void {
+    if (visible !== showComments) sound.play("commentsToggled");
+    showComments = visible;
+  }
+  function toggleComments(): void {
+    setComments(!showComments);
+  }
   // First-run onboarding (EXC-781): opens once for a brand-new user whose
   // notification permission is still undecided. Guarded on Notification support
   // so a browser without the API never shows a modal that can't enable anything.
@@ -203,6 +214,16 @@
 
   // ----- State modules -----
   const selection = createReviewSelection(selStore, { onSound: sound.play });
+  // The reviewer picking another plan from the switcher, which selectReview alone is
+  // not: that is also the funnel for a deep link, mergeReviews' re-select, and
+  // afterResolve's auto-advance, none of which the reviewer asked for. The plan
+  // notifier's click (createPlanNotifier below) is reviewer-initiated but sits out
+  // too — the plan it jumps to already sounded its own arrival. Sounded only on a
+  // real move, since the switcher lists the active plan as a pickable row.
+  function switchPlan(id: string): void {
+    if (id !== selection.activeId) sound.play("planSwitched");
+    selection.selectReview(id);
+  }
   const autosave = createAutosave(work, () => selection.activeId, {
     onOffline: () => selection.setConnected(false),
   });
@@ -219,6 +240,7 @@
       pendingText = commenting.pendingText();
       scratches = commenting.scratches();
     },
+    sound: sound.play,
   });
   // Persist the retained scratches through autosave in a scheduled $effect rather than
   // synchronously inside onChange, so the write is never re-entrant with the controller
@@ -488,9 +510,7 @@
       reg("actions.reject", { run: onReject, enabled: canAct }),
       reg("actions.settings", { run: openSettings }),
       reg("actions.toggleComments", {
-        run: () => {
-          showComments = !showComments;
-        },
+        run: toggleComments,
         enabled: () => active != null,
       }),
     ];
@@ -629,7 +649,7 @@
     {pendingCount}
     unread={selection.unread}
     arrivals={selection.arrivals}
-    onSelect={selection.selectReview}
+    onSelect={switchPlan}
     {onApprove}
     onRequestChanges={() => (showDialog = true)}
     {onReject}
@@ -724,7 +744,7 @@
     reviewVersion={active?.version ?? 1}
     connected={selection.connected}
     commentsOpen={showComments}
-    onToggleComments={() => (showComments = !showComments)}
+    onToggleComments={toggleComments}
     onOpenHelp={openHelp}
     {showShortcutHints}
   />
@@ -740,7 +760,7 @@
   {comments}
   activeId={autosave.focusedAnnotation}
   onReveal={revealComment}
-  onClose={() => (showComments = false)}
+  onClose={() => setComments(false)}
   compare={compareRange !== null}
   title={commentsTitle}
   {showShortcutHints}

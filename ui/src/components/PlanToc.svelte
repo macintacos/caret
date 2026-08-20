@@ -54,6 +54,7 @@
   import type { IconName } from "$lib/icons.ts";
   import { createKeyRepeat, walkCommandList } from "$lib/keyRepeat.ts";
   import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
+  import { sound } from "$lib/sound.ts";
   import { headingMatcher, type TocHeading } from "$lib/toc.ts";
 
   import Icon from "@/components/Icon.svelte";
@@ -184,6 +185,12 @@
   function seed(): void {
     query = "";
     selected = activeLine === null ? "" : String(activeLine);
+    // The popup's cue, sounded from the open itself rather than from either caller
+    // (EXC-1126) — the trigger's onOpenChange and openPopup below both land here, so
+    // the `\` key and the click cannot drift onto different sounds. The singleton
+    // rather than an injected dep: a component has no factory seam to thread one
+    // through, the carve-out sound.ts names and CodeCopyButton already takes.
+    sound.play("contentsOpen");
   }
 
   // The whole open, for callers outside the primitive. bits-ui runs onOpenChange

@@ -23,6 +23,7 @@
 // added; its line marker reads "Resume", an action, not the "Draft" state.
 
 import type { PersistedScratch } from "@core/lib/types";
+import type { SoundEvent } from "$lib/sound.ts";
 
 /** The 1-based, inclusive line anchor a submit produces. */
 export interface CreatedAnchor {
@@ -86,6 +87,8 @@ export interface SourceCommentingDeps {
   /** Notify the host that the composer's open/closed state changed, so it can
    * re-render. Optional. */
   onChange?(): void;
+  /** Play a moment's cue. Optional so a test drives the factory silently. */
+  sound?: (event: SoundEvent) => void;
 }
 
 export interface SourceCommenting {
@@ -107,8 +110,10 @@ export interface SourceCommenting {
   /** Dismiss the open composer, dropping its text without retaining a scratch —
    * the composer's explicit Discard (button or Esc). A scratch consumed on
    * open()/resume() was already moved into the open composer, so nothing is left
-   * behind. No-op when closed. */
-  discardOpen(): void;
+   * behind. `text` is what is being thrown away, and only the cue reads it: a
+   * composer holding words is discarded, an empty one is merely dropped. No-op
+   * when closed. */
+  discardOpen(text?: string): void;
   /** The pending composer target, or undefined when closed. */
   pending(): PendingComposer | undefined;
   /** The text to seed the open composer with (from a consumed/resumed scratch),
@@ -183,6 +188,7 @@ export function createSourceCommenting(deps: SourceCommentingDeps): SourceCommen
   return {
     open(range) {
       openAt(normalizeRange(range));
+      deps.sound?.("commentOpen");
     },
     submit(text) {
       if (open == null) return;
@@ -209,8 +215,9 @@ export function createSourceCommenting(deps: SourceCommentingDeps): SourceCommen
       }
       close();
     },
-    discardOpen() {
+    discardOpen(text) {
       if (open == null) return;
+      deps.sound?.(text?.trim() ? "commentDiscarded" : "commentDropped");
       close();
     },
     pending() {
