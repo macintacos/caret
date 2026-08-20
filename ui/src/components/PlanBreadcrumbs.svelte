@@ -282,11 +282,18 @@
       // Re-asked every tick rather than once, because a held key walks out through
       // the trail and eventually runs out of crumbs — at which point the arrow it
       // falls through to is what closes a submenu, or does nothing at the top.
-      if (stepsOut && openPreviousCrumb()) return;
-      // Dispatched at whatever holds focus NOW rather than at the element the press
-      // arrived on: a held key walks into submenus and across crumbs, so the target
-      // moves under the run.
-      document.activeElement?.dispatchEvent(
+      //
+      // bits-ui closes a submenu only on a key that fires INSIDE its own content, and
+      // a submenu opened by HOVER leaves focus on the parent row that spawned it — so
+      // the close is aimed at the submenu rather than at whatever holds focus, which
+      // is also what makes a level-2 submenu close instead of the level-1 one holding
+      // focus behind it (EXC-1127).
+      const sub = stepsOut ? openSubmenu() : null;
+      if (stepsOut && sub === null && openPreviousCrumb()) return;
+      // Otherwise dispatched at whatever holds focus NOW rather than at the element
+      // the press arrived on: a held key walks into submenus and across crumbs, so
+      // the target moves under the run.
+      (sub ?? document.activeElement)?.dispatchEvent(
         new KeyboardEvent("keydown", { key: arrow, bubbles: true, cancelable: true }),
       );
     });
@@ -303,13 +310,26 @@
   // it raised.
   let swapping = false;
 
-  // Move the open menu one crumb outward, if there is one and no submenu is open
-  // beneath it. Both steps are the programmatic click openTrail uses — the first
-  // toggles the open trigger shut, the second opens its neighbour — so focus
-  // lands in the new menu exactly as `b` leaves it. Returns whether it moved, so
-  // the caller can fall through to the arrow when it did not.
+  // The submenu standing open, whichever way it was opened — the caller's answer to
+  // "is there something to close before stepping out a crumb". Portalled since
+  // EXC-957, so every level is a body-level sibling in mount order and the last open
+  // one is the innermost. `data-state` is what excludes a panel still running its
+  // exit animation: the node lingers for the animation's 150ms, and a held key ticks
+  // every 60ms, so a presence-only test would read a closed submenu as open and stall
+  // a hold for two or three ticks.
+  function openSubmenu(): HTMLElement | null {
+    const subs = document.querySelectorAll<HTMLElement>(
+      "[data-slot='dropdown-menu-sub-content'][data-state='open']",
+    );
+    return subs[subs.length - 1] ?? null;
+  }
+
+  // Move the open menu one crumb outward, if there is one. Both steps are the
+  // programmatic click openTrail uses — the first toggles the open trigger shut, the
+  // second opens its neighbour — so focus lands in the new menu exactly as `b` leaves
+  // it. Returns whether it moved, so the caller can fall through to the arrow when it
+  // did not.
   function openPreviousCrumb(): boolean {
-    if (document.activeElement?.closest("[data-slot='dropdown-menu-sub-content']")) return false;
     const cells = [
       ...(barEl?.querySelectorAll<HTMLElement>(
         ".crumb-item:not(.elided), .crumb-marker:not(.elided)",

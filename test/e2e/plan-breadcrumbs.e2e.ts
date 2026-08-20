@@ -691,6 +691,36 @@ test("ArrowLeft walks the trail exactly as h does", async ({ daemon, page }) => 
   expect(await scrollTop(page)).toBe(parked);
 });
 
+test("a submenu opened by hover still closes on its own, without stepping out a crumb", async ({
+  daemon,
+  page,
+}) => {
+  // The guard used to ask where focus was, and hover leaves it on the parent row
+  // that spawned the submenu — so the walk read "nothing open" and jumped out a
+  // whole crumb instead of closing the submenu standing in front of it (EXC-1127).
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+
+  await jumpTo(page, "Charlie");
+  await page.locator(CRUMB).nth(1).click();
+  const menu = page.locator(MENU);
+  await menu.getByRole("menuitem", { name: "Bravo" }).hover();
+  const submenu = page.locator(SUBMENU);
+  await expect(submenu.getByRole("menuitem")).toHaveText(["Charlie"]);
+
+  // Only the submenu goes: the crumb walk fires when nothing is left to close.
+  await page.keyboard.press("ArrowLeft");
+  await expect(submenu).toHaveCount(0);
+  await expect(menu.getByRole("menuitem")).toHaveText(["Bravo", "Delta", "Foxtrot"]);
+
+  // `h` is the same code path and was broken here first — it maps onto ArrowLeft.
+  await menu.getByRole("menuitem", { name: "Bravo" }).hover();
+  await expect(submenu.getByRole("menuitem")).toHaveText(["Charlie"]);
+  await page.keyboard.press("h");
+  await expect(submenu).toHaveCount(0);
+  await expect(menu.getByRole("menuitem")).toHaveText(["Bravo", "Delta", "Foxtrot"]);
+});
+
 test("a second Escape leaves the bar with nothing focused", async ({ daemon, page }) => {
   // Escape steps out one layer at a time: the menu, then the bar itself. Only the
   // second half is new — `onMenuKeydown` rides on portalled menu content, so the
