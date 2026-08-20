@@ -695,30 +695,64 @@ test("a submenu opened by hover still closes on its own, without stepping out a 
   daemon,
   page,
 }) => {
-  // The guard used to ask where focus was, and hover leaves it on the parent row
-  // that spawned the submenu — so the walk read "nothing open" and jumped out a
-  // whole crumb instead of closing the submenu standing in front of it (EXC-1127).
+  // Hover leaves focus on the parent row that spawned the submenu, so a walk asking
+  // where focus sits reads "nothing open" and jumps out a whole crumb instead of
+  // closing the submenu standing in front of it (EXC-1127).
   await daemon.seed({ plan: NESTED_PLAN });
   await page.goto("/");
 
   await jumpTo(page, "Charlie");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
+
   await page.locator(CRUMB).nth(1).click();
   const menu = page.locator(MENU);
   await menu.getByRole("menuitem", { name: "Bravo" }).hover();
   const submenu = page.locator(SUBMENU);
   await expect(submenu.getByRole("menuitem")).toHaveText(["Charlie"]);
 
-  // Only the submenu goes: the crumb walk fires when nothing is left to close.
+  // Only the submenu goes: the crumb walk fires when nothing is left to close. The
+  // primitive hands focus back to the trigger, which is what keeps the next tick of a
+  // hold reaching a handler at all — onMenuKeydown rides on menu content.
   await page.keyboard.press("ArrowLeft");
   await expect(submenu).toHaveCount(0);
   await expect(menu.getByRole("menuitem")).toHaveText(["Bravo", "Delta", "Foxtrot"]);
+  await expect(menu.getByRole("menuitem", { name: "Bravo" })).toBeFocused();
 
-  // `h` is the same code path and was broken here first — it maps onto ArrowLeft.
+  // `h` maps onto ArrowLeft — one code path, driven through both keys a reviewer
+  // might reach for.
   await menu.getByRole("menuitem", { name: "Bravo" }).hover();
   await expect(submenu.getByRole("menuitem")).toHaveText(["Charlie"]);
   await page.keyboard.press("h");
   await expect(submenu).toHaveCount(0);
   await expect(menu.getByRole("menuitem")).toHaveText(["Bravo", "Delta", "Foxtrot"]);
+});
+
+test("a hovered level-2 submenu closes without taking the level above it", async ({
+  daemon,
+  page,
+}) => {
+  // The close is aimed at the DEEPEST open submenu, not at the focused one: hovering
+  // a row of a level-1 submenu opens level 2 and leaves focus in level 1, so aiming
+  // at focus would shut level 1 and take level 2 down with it — two levels for one
+  // press (EXC-1127).
+  await daemon.seed({ plan: NESTED_PLAN });
+  await page.goto("/");
+
+  await jumpTo(page, "Charlie");
+  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
+
+  await page.locator(CRUMB).first().click();
+  await page.keyboard.press("j");
+  await page.keyboard.press("l");
+  const branches = page.locator(SUBMENU).first();
+  await expect(branches.getByRole("menuitem")).toHaveText(["Bravo", "Delta", "Foxtrot"]);
+
+  await branches.getByRole("menuitem", { name: "Delta" }).hover();
+  await expect(page.locator(SUBMENU)).toHaveCount(2);
+
+  await page.keyboard.press("ArrowLeft");
+  await expect(page.locator(SUBMENU)).toHaveCount(1);
+  await expect(branches.getByRole("menuitem")).toHaveText(["Bravo", "Delta", "Foxtrot"]);
 });
 
 test("a second Escape leaves the bar with nothing focused", async ({ daemon, page }) => {
