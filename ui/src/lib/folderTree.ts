@@ -1,6 +1,7 @@
 // Everything the folder popover (EXC-918) knows that is not a rune: the path
-// arithmetic, the card's per-level bookkeeping, and what a dismissed card leaves
-// behind for the next time it is opened (EXC-1138). All of it is kept out of the
+// arithmetic, the card's per-level bookkeeping, what a dismissed card leaves
+// behind for the next time it is opened (EXC-1138), and what a re-read of the
+// levels it has open makes of that (EXC-1139). All of it is kept out of the
 // component so it is unit-testable without a tree, a shadow root, or a daemon.
 //
 // Two coordinate systems meet here and are easy to confuse. @pierre/trees is
@@ -436,11 +437,11 @@ export function refreshCard(
  * A plain `Map` and never `localStorage`: the memory is session-lived by
  * construction, so a reload starts the reader fresh.
  *
- * **Nothing invalidates a record within a review.** A directory that changes
- * while its card is closed is not re-read for the life of that review — which is
- * a real change from "every open refetches", in an app whose whole subject is an
+ * **Nothing invalidates a record on its own.** A directory that changes while
+ * its card is closed is not re-read for the life of that review — which is a
+ * real change from "every open refetches", in an app whose whole subject is an
  * agent writing files. It is the deliberate shape: staleness is the reader's
- * call, and the explicit refresh that acts on it is EXC-1139.
+ * call, and the card's refresh control is where they make it (`refreshCard`).
  */
 export interface FolderMemory {
   read(reviewId: string, path: string): FolderCardMemory | undefined;
