@@ -393,16 +393,22 @@
     return active.size > 0 ? active : undefined;
   });
 
-  // The file reference whose preview is open (opened by clicking its token —
-  // EXC-687/EXC-840), plus the token itself, which the reveal effect below
-  // measures so the clicked filename stays visible beside the drawer. The
-  // preview stays put once open; it closes on Escape (the dismissal effect below)
-  // or on the pane's own close button, and a directory reference opened beside it
-  // leaves it alone (EXC-1129). Compare mode hides the lane without clearing this
-  // — the dismissal effect carries the matching guard.
-  let filePreview = $state<
-    { path: string; line?: number; endLine?: number; token: HTMLElement } | undefined
-  >();
+  // The file the preview is open on, plus the token it was opened from, which the
+  // reveal effect below measures so the clicked filename stays visible beside the
+  // drawer. The preview stays put once open; it closes on Escape (the dismissal
+  // effect below) or on the pane's own close button, and a directory reference
+  // opened beside it leaves it alone (EXC-1129). Compare mode hides the lane
+  // without clearing this — the dismissal effect carries the matching guard.
+  //
+  // `token` is optional because there are now two openers. A plan reference
+  // (EXC-687, click-opened since EXC-840) has one, and the excerpt is worth
+  // nothing if the filename it came from is behind the lane. A file row in the
+  // folder card (EXC-1137) has none, and there is nothing to reveal: the row is in
+  // a viewport-fixed card that steps clear of the lane itself. So the tokenless
+  // open is a missing field rather than a synthesized element — the reveal effect
+  // already skips what it cannot measure.
+  type OpenFile = { path: string; line?: number; endLine?: number; token?: HTMLElement };
+  let filePreview = $state<OpenFile | undefined>();
 
   // Dismissal plays the lane's wipe in reverse before the drawer leaves, so the
   // pane slides shut with the excerpt still in it instead of blinking out. The
@@ -433,12 +439,12 @@
     }, CLOSE_ANIM_MS);
   }
 
-  function openFilePreview(ref: FileRefSpan, tokenElement: HTMLElement): void {
+  function openFilePreview(next: OpenFile): void {
     // Reopening mid-collapse: drop the pending unmount so the lane wipes back
     // open on the same instance rather than being torn out from under it.
     cancelDrawerClose();
     sound.play("filePreviewOpen");
-    filePreview = { path: ref.path, line: ref.line, endLine: ref.endLine, token: tokenElement };
+    filePreview = next;
   }
 
   // The directory reference whose tree is open (EXC-918), plus the clicked
@@ -476,7 +482,7 @@
       folderTree = { path: ref.path, rect: tokenElement.getBoundingClientRect() };
       return;
     }
-    openFilePreview(ref, tokenElement);
+    openFilePreview({ path: ref.path, line: ref.line, endLine: ref.endLine, token: tokenElement });
   }
 
   $effect(() => () => cancelDrawerClose());
@@ -1740,12 +1746,15 @@
      the preview is. -->
 {#if !showDiff && folderTree}
   {@const openDir = folderTree}
+  <!-- A file row opens the SAME lane a filename reference opens (EXC-1137). The
+       card converted the row's tree-relative path already. -->
   <FolderTree
     reviewId={reviewId}
     path={openDir.path}
     anchor={openDir.rect}
     memory={folderCards}
     {showShortcutHints}
+    onOpenFile={(path) => openFilePreview({ path })}
   />
 {/if}
 

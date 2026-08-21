@@ -7,18 +7,22 @@
 // The card coexists with the file preview's docked lane (EXC-1129) rather than
 // evicting it, which makes it usable as a navigation aid: the rules that keep
 // that safe live here too — which clicks the card's capture-phase handler lets
-// through, and which of the two capture-phase Escape handlers owns the key.
+// through, and which of the two capture-phase Escape handlers owns the key. It
+// is also what makes a file row an opener rather than a label (EXC-1137):
+// activating one opens that file in the lane and leaves the card standing.
 //
 // Everything here needs a real browser. The tree is @pierre/trees mounted
 // through its web-components entry, so every row lives behind a custom element's
 // own shadow root and is virtualized against a layout happy-dom does not do —
-// and the affordances under test (a level arriving on expand, a file row doing
-// nothing, Escape and outside-click dismissal, a click inside NOT dismissing,
-// two capture-phase handlers dividing one keypress) are real hit-testing and
-// real key handling. The pure halves stay units: the path arithmetic and card
-// placement math in folderTree.test.ts, the card's own loading / empty / error /
-// elision framing in FolderTree.test.ts. Where the card LANDS relative to the
-// open lane is geometry over both surfaces, so it belongs to file-drawer.e2e.ts.
+// and the affordances under test (a level arriving on expand, a file row opening
+// its file while a directory row only expands, arrow keys moving focus without
+// opening anything, Escape and outside-click dismissal, a click inside NOT
+// dismissing, two capture-phase handlers dividing one keypress) are real
+// hit-testing and real key handling. The pure halves stay units: the path
+// arithmetic and card placement math in folderTree.test.ts, the card's own
+// loading / empty / error / elision framing in FolderTree.test.ts. Where the card
+// LANDS relative to the open lane is geometry over both surfaces, so it belongs
+// to file-drawer.e2e.ts — including where a card-OPENED lane leaves it.
 //
 // The daemon is a real subprocess reading the local filesystem, so each test
 // writes a synthetic project dir and seeds a review whose cwd points at it. The
@@ -246,30 +250,95 @@ test("the tree can be entered and walked from the keyboard", async ({ daemon, pa
   }
 });
 
-test("clicking a file row does nothing", async ({ daemon, page }) => {
-  // Files are inert by design: the card is for navigating a directory's shape,
-  // and a file row is a leaf of that shape, not a link. So a click opens no
-  // excerpt preview, dismisses nothing, and leaves the tree exactly as it was.
+/** Open the card on `src` against a NESTED project, with no lane standing. */
+async function openCard(daemon: Daemon, page: Page, dir: string): Promise<void> {
+  await daemon.seed({ cwd: dir, plan: "# Refs\n\nThe tree under `src` matters.\n" });
+  await page.goto("/");
+  await planSurface(page);
+  await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(1);
+  await page.locator('[data-file-ref="directory"]').click();
+  await expect(page.locator(card)).toBeVisible();
+}
+
+test("clicking a file row opens that file in the excerpt lane", async ({ daemon, page }) => {
+  // The card is a place the reader navigates FROM (EXC-1137): a file row opens
+  // its file in the same lane a filename reference opens. The path asserted is
+  // the CWD-relative one — the row's own path is "cache.ts", relative to the
+  // directory the card is rooted at, so `src/cache.ts` is the conversion landing.
   const proj = await makeProject(NESTED);
   try {
-    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nThe tree under `src` matters.\n" });
-    await page.goto("/");
-    await planSurface(page);
-    await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(1);
-    await page.locator('[data-file-ref="directory"]').click();
-    await expect(page.locator(card)).toBeVisible();
+    await openCard(daemon, page, proj.dir);
     await expect(page.locator(rows)).toHaveCount(2);
 
     await page.locator(row("cache.ts")).click();
 
-    // No positive event to await, so give the click pipeline a beat before
-    // asserting nothing happened — a bare toHaveCount(0) would pass on its first
-    // poll and so would race the very state change it rules out.
-    const t0 = await page.evaluate(() => performance.now());
-    await page.waitForFunction((t) => performance.now() > t + 300, t0);
-    await expect(page.locator("[data-file-preview]")).toHaveCount(0);
+    await expect(page.locator(preview)).toBeVisible();
+    await expect(page.locator(`${preview} .fp-path`)).toHaveText("src/cache.ts");
+    // A tree row carries no `:line`, so the excerpt is framed on the file's head
+    // rather than on a range the row never named.
+    await expect(page.locator(`${preview} .fp-row`).first().locator(".fp-lnum")).toHaveText("1");
+
+    // Not a one-shot picker: the card stays open, with its tree intact, so the
+    // next file is one more click.
     await expect(page.locator(card)).toBeVisible();
     await expect(page.locator(rows)).toHaveCount(2);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("clicking a directory row expands it and opens nothing", async ({ daemon, page }) => {
+  // The half of the activation rule that says which rows are openers. A directory
+  // row's click is the library's own expand and nothing else — the card must not
+  // turn every row into a link on the way to making file rows one.
+  const proj = await makeProject(NESTED);
+  try {
+    await openCard(daemon, page, proj.dir);
+
+    await page.locator(row("lib/")).click();
+    await expect(page.locator(row("lib/"))).toHaveAttribute("aria-expanded", "true");
+    // The level arriving is a network round trip, and a preview would have mounted
+    // synchronously off the same click — so this ordering is what makes the
+    // negative below a claim, with no timing beat of its own to add.
+    await expect(page.locator(row("lib/util.ts"))).toBeVisible();
+    await expect(page.locator(preview)).toHaveCount(0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("arrow keys move the focus ring without opening, Enter opens", async ({ daemon, page }) => {
+  // Why the library's `onSelectionChange` is the wrong hook: it fires on focus
+  // movement, so a walk down the tree would open one preview per keystroke. Only
+  // an activation opens — and the keyboard's activation is the row <button>'s own,
+  // which the card takes as an ordinary click rather than handling any key itself.
+  const proj = await makeProject(NESTED);
+  try {
+    await openCard(daemon, page, proj.dir);
+
+    // `lib/` is first, `cache.ts` second: one step down lands the ring on a FILE
+    // row, which is the row a focus-driven opener would have opened. The focus
+    // attribute landing IS that opener's trigger, so awaiting it orders the
+    // negative below without a timing beat.
+    //
+    // Three waits before the key, each load-bearing. The tab stop is the
+    // library's own signal that `focusFirstItem` has run — it happens in the
+    // effect that mounts the tree, so a key pressed before it lands goes nowhere.
+    // `toBeFocused` confirms the DOM caught up with the model. And focusing can
+    // re-arm Safe Mode, whose grace window turns the very next keystroke into a
+    // swallowed one — 2s of eaten input, which reads exactly like a ring that
+    // refused to move.
+    await expect(page.locator(row("lib/"))).toHaveAttribute("tabindex", "0");
+    await page.locator(row("lib/")).focus();
+    await expect(page.locator(row("lib/"))).toBeFocused();
+    await waitPastSafeModeGrace(page);
+    await page.keyboard.press("ArrowDown");
+    await expect(page.locator(row("cache.ts"))).toHaveAttribute("data-item-focused", "true");
+    await expect(page.locator(preview)).toHaveCount(0);
+
+    await page.keyboard.press("Enter");
+    await expect(page.locator(preview)).toBeVisible();
+    await expect(page.locator(`${preview} .fp-path`)).toHaveText("src/cache.ts");
   } finally {
     await proj.cleanup();
   }
@@ -450,6 +519,34 @@ test("with both open, Escape closes the card first and the lane second", async (
     await openBoth(page);
     // Deterministic presses rather than retried ones: a retry would re-press
     // after the card closed and take the lane with it, hiding the ordering.
+    await waitPastSafeModeGrace(page);
+
+    await page.keyboard.press("Escape");
+    await expect(page.locator(card)).toHaveCount(0);
+    await expect(page.locator(lane)).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(page.locator(lane)).toHaveCount(0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("a lane opened from the card yields Escape to the card just the same", async ({
+  daemon,
+  page,
+}) => {
+  // Escape's meaning must not depend on how the lane was opened. Opening from a
+  // row (EXC-1137) is the one path that leaves the card standing over a lane it
+  // created, so it is the path where an order keyed on anything other than "is a
+  // card open" would diverge — and the two surfaces would close on one press.
+  const proj = await makeProject(NESTED);
+  try {
+    await openCard(daemon, page, proj.dir);
+
+    await page.locator(row("cache.ts")).click();
+    await expect(page.locator(preview)).toBeVisible();
+    await settleDrawer(page);
     await waitPastSafeModeGrace(page);
 
     await page.keyboard.press("Escape");

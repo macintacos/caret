@@ -5,8 +5,10 @@
 // its size per edge, and that a second filename swaps its contents in place.
 // Since EXC-1129 the folder card can sit open beside the lane, so where the card
 // LANDS is this spec's too: it is geometry between the two surfaces, measured
-// against the lane's own rect, and the helpers for that already live here. The
-// coexistence RULES — click routing, Escape order — stay in folder-refs.e2e.ts.
+// against the lane's own rect, and the helpers for that already live here — which
+// now includes where a lane opened FROM the card leaves it (EXC-1137). The
+// coexistence RULES — click routing, Escape order, what a row click opens — stay
+// in folder-refs.e2e.ts.
 //
 // All of it is layout a browser decides (doc/agents/browser-testing.md): the
 // docking edge comes from a live matchMedia subscription, the sizes from real
@@ -531,8 +533,19 @@ test("the lane wipes out again when the preview is dismissed", async ({ daemon, 
 // holds the referenced file too, so one plan carries both kinds of reference.
 // The file is cited FIRST so `openPreview`'s "first reference" is the one that
 // opens the lane; the directory below it is what the card then opens on.
-const COEXIST = { "src/cache.ts": CACHE_TS, "src/lib/util.ts": "export {};\n" };
-const COEXIST_PLAN = "# Refs\n\nEdit `src/cache.ts`, which lives under `src`.\n";
+const COEXIST = {
+  "src/cache.ts": CACHE_TS,
+  "src/other.ts": OTHER_TS,
+  "src/lib/util.ts": "export {};\n",
+};
+// The directory token sits well right of the margin on purpose: the card is
+// anchored on it, so a token near the left edge would put the card clear of the
+// lane without anything having to move it, and the EXC-1137 tests below would
+// pass vacuously. They assert the overlap exists before asserting it was
+// resolved, so a line that grew long enough to wrap the token back to the margin
+// fails loudly rather than going quiet.
+const COEXIST_PLAN =
+  "# Refs\n\nEdit `src/cache.ts` and `src/other.ts`, both of which live under `src`.\n";
 
 /**
  * Open the excerpt lane, let it settle, then open the folder card beside it.
@@ -540,10 +553,21 @@ const COEXIST_PLAN = "# Refs\n\nEdit `src/cache.ts`, which lives under `src`.\n"
  * This order is the load-bearing half: placement is computed once, at open, so a
  * card is placed against whatever lane is standing at that instant and a lane
  * opened afterwards deliberately does not move it. Only this order asserts the
- * narrowed bounds; the reverse is the accepted overlap.
+ * narrowed bounds; the reverse is the accepted overlap — except when the card's
+ * own file row is what opened the lane (EXC-1137), which is the one re-placement
+ * and is covered by its own tests below.
  */
 async function openLaneThenCard(page: Page): Promise<void> {
   await openPreview(page);
+  await page.locator('[data-file-ref="directory"]').click();
+  await expect(page.locator("[data-folder-tree]")).toBeVisible();
+}
+
+/** Open the folder card with NO lane standing — the starting state for the
+ * EXC-1137 re-placement tests, where the row click is what opens the lane. */
+async function openCardAlone(page: Page): Promise<void> {
+  await planSurface(page);
+  await expect.poll(() => fileRefCount(page)).toBeGreaterThan(0);
   await page.locator('[data-file-ref="directory"]').click();
   await expect(page.locator("[data-folder-tree]")).toBeVisible();
 }
@@ -592,6 +616,155 @@ test("at a narrow width the card is placed clear of the bottom-docked lane", asy
     const drawer = (await laneGeometry(page))?.drawer;
     expect(drawer).toBeTruthy();
     expect((await cardRect(page)).bottom).toBeLessThanOrEqual(drawer!.top);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+// EXC-1137: the one exception to placement-once. A file row opened from the card
+// is the reader asking for the lane, so the card steps out of the box it just
+// created rather than sitting under it. The lane is measured mid-wipe here — it
+// is opening as the card re-places — which is why the card reads its settled
+// edge rather than its rect.
+test("a lane opened from a file row pushes the card clear of it", async ({ daemon, page }) => {
+  const proj = await makeProject(COEXIST);
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: COEXIST_PLAN });
+    await page.setViewportSize(WIDE);
+    await page.goto("/");
+    await openCardAlone(page);
+
+    // The card is where a lane would land: without the re-place it would be sat
+    // under one. Asserted rather than assumed, so the test cannot go vacuous if
+    // the plan text or the card's width ever changes.
+    const before = await cardRect(page);
+    await page.locator('[data-folder-tree] [data-item-path="other.ts"]').click();
+    await expect(page.locator("[data-file-preview] .fp-path")).toHaveText("src/other.ts");
+    // `.fp-path` paints the PROP, so it resolves in the lane's loading state, a
+    // few ms into the wipe — every rect below would be read off a lane still a
+    // sliver of its settled width. The app measures mid-wipe on purpose (that is
+    // what `laneEdge` is for); the assertion must not.
+    await settleDrawer(page);
+
+    const drawer = (await laneGeometry(page))?.drawer;
+    expect(drawer).toBeTruthy();
+    expect(before.right).toBeGreaterThan(drawer!.left);
+    expect((await cardRect(page)).right).toBeLessThanOrEqual(drawer!.left);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("at a narrow width the row-opened lane pushes the card clear of the bottom dock", async ({
+  daemon,
+  page,
+}) => {
+  // The more interesting half of the re-place: `cardBounds` shortens the box's
+  // HEIGHT for a bottom dock, which is the dimension `anchorCard` can respond to
+  // by flipping the card above its anchor rather than merely sliding it. The right
+  // dock only narrows width, where the clamp slides.
+  const proj = await makeProject(COEXIST);
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: COEXIST_PLAN });
+    await page.setViewportSize(NARROW);
+    await page.goto("/");
+    await openCardAlone(page);
+
+    const before = await cardRect(page);
+    await page.locator('[data-folder-tree] [data-item-path="other.ts"]').click();
+    await expect(page.locator("[data-file-preview] .fp-path")).toHaveText("src/other.ts");
+    await settleDrawer(page);
+
+    const drawer = (await laneGeometry(page))?.drawer;
+    expect(drawer).toBeTruthy();
+    expect(before.bottom).toBeGreaterThan(drawer!.top);
+    expect((await cardRect(page)).bottom).toBeLessThanOrEqual(drawer!.top);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("a lane the reader opened from the plan leaves the card where it is", async ({
+  daemon,
+  page,
+}) => {
+  // The other side of the rule, and the case that makes the re-place imperative
+  // rather than reactive. The card is placed with no lane standing; a lane then
+  // opens from the PLAN, which deliberately does not move it (EXC-1129's accepted
+  // overlap). A row clicked now is not a closed-to-open transition, so the card
+  // stays put — overlapping — rather than tidying up after a lane it did not open.
+  //
+  // Opening the lane FIRST would make this vacuous: the card would already be
+  // placed against that lane, so a re-place would recompute the same two numbers
+  // and the test would pass with the guard deleted.
+  const proj = await makeProject(COEXIST);
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: COEXIST_PLAN });
+    await page.setViewportSize(WIDE);
+    await page.goto("/");
+    await openCardAlone(page);
+
+    await page.locator("[data-file-ref]").first().click();
+    await expect(page.locator("[data-file-drawer]")).toBeVisible();
+    await settleDrawer(page);
+
+    const before = await cardRect(page);
+    const drawer = (await laneGeometry(page))?.drawer;
+    expect(drawer).toBeTruthy();
+    // The overlap is what a re-place would resolve, so its presence is what makes
+    // "the card did not move" a claim rather than a coincidence.
+    expect(before.right).toBeGreaterThan(drawer!.left);
+
+    await page.locator('[data-folder-tree] [data-item-path="other.ts"]').click();
+    // The lane swapped contents, so the click did act — a card that did not move
+    // because nothing happened would be a different, and passing, test.
+    await expect(page.locator("[data-file-preview] .fp-path")).toHaveText("src/other.ts");
+    await settleDrawer(page);
+
+    const after = await cardRect(page);
+    expect(after.top).toBe(before.top);
+    expect(after.left).toBe(before.left);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("a row clicked during the lane's closing wipe still pushes the card clear", async ({
+  daemon,
+  page,
+}) => {
+  // The lane stays mounted for the length of its closing wipe, so "is a lane
+  // open?" asked inside that window has two answers: an element is there, and it
+  // is leaving. This click re-opens it — cancelling the pending unmount, so the
+  // lane comes straight back at full size — which makes it the closed-to-open
+  // transition that owes the card a re-place. Reading the element's presence
+  // alone would answer "already open" and skip it, leaving the card under a lane
+  // it never measured.
+  const proj = await makeProject(COEXIST);
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: COEXIST_PLAN });
+    await page.setViewportSize(WIDE);
+    await page.goto("/");
+    await openCardAlone(page);
+
+    // A lane opened from the PLAN, which correctly does not move the card
+    // (EXC-1129) — so the card is still placed against the whole viewport.
+    await page.locator("[data-file-ref]").first().click();
+    await expect(page.locator("[data-file-drawer]")).toBeVisible();
+    await settleDrawer(page);
+    const before = await cardRect(page);
+
+    // Dismiss, and click a row without waiting out the wipe.
+    await page.locator(".fp-close").click();
+    await expect(page.locator("[data-file-drawer][data-file-drawer-closing]")).toBeVisible();
+    await page.locator('[data-folder-tree] [data-item-path="other.ts"]').click();
+    await expect(page.locator("[data-file-preview] .fp-path")).toHaveText("src/other.ts");
+    await settleDrawer(page);
+
+    const drawer = (await laneGeometry(page))?.drawer;
+    expect(drawer).toBeTruthy();
+    expect(before.right).toBeGreaterThan(drawer!.left);
+    expect((await cardRect(page)).right).toBeLessThanOrEqual(drawer!.left);
   } finally {
     await proj.cleanup();
   }

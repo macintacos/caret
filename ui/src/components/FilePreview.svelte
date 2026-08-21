@@ -1,9 +1,11 @@
 <script lang="ts">
   // The filename preview (EXC-687, click-opened since EXC-840): an in-flow panel
   // filling the drawer lane docked to the plan surface, showing a
-  // syntax-highlighted excerpt of the file a plan references. Shown only for
-  // references the daemon confirmed are real files (DiffPlanView gates it on the
-  // resolved set), so it never promises a preview it can't deliver. The excerpt
+  // syntax-highlighted excerpt of a file the review points at — a filename the
+  // plan references, or a file row in the folder card (EXC-1137). Either way the
+  // daemon has already said the path is a real file (DiffPlanView gates the
+  // reference on the resolved set; the card's rows come from a served directory
+  // listing), so it never promises a preview it can't deliver. The excerpt
   // frames the lines the reference cites — one line, or the whole `:start-end`
   // span (EXC-938), every one of them washed — else the file's head, and
   // scrolling near either end of it grows the region that way (EXC-969), one
