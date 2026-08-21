@@ -167,6 +167,17 @@ test("a card too large for the narrowed bounds still lands inside the real viewp
 const MID_WIPE_RIGHT = { top: 60, right: 1000, bottom: 800, left: 996 };
 const MID_WIPE_BOTTOM = { top: 796, right: 1000, bottom: 800, left: 0 };
 
+test("a settled lane's inner edge is the edge it already draws at", () => {
+  // The EXC-1129 path, unchanged: with the wipe finished the rect's own left edge
+  // and `right - size` are the same number, so nothing about the pre-existing
+  // directory-reference placement moved.
+  expect(laneEdge("right", { top: 60, right: 1000, bottom: 800, left: 640 }, 360)).toEqual({
+    edge: "right",
+    top: 60,
+    left: 640,
+  });
+});
+
 test("a right-docked lane's inner edge is its right edge less its settled width", () => {
   expect(laneEdge("right", MID_WIPE_RIGHT, 360)).toEqual({ edge: "right", top: 60, left: 640 });
 });

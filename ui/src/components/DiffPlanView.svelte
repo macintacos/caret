@@ -400,12 +400,13 @@
   // opened beside it leaves it alone (EXC-1129). Compare mode hides the lane
   // without clearing this — the dismissal effect carries the matching guard.
   //
-  // `token` is optional because there are now two openers (EXC-1137). A plan
-  // reference has one, and the excerpt is worth nothing if the filename it came
-  // from is behind the lane. A file row in the folder card has none, and there is
-  // nothing to reveal: the row is in a viewport-fixed card that steps clear of the
-  // lane itself. So the tokenless open is a missing field rather than a
-  // synthesized element — the reveal effect already skips what it cannot measure.
+  // `token` is optional because there are now two openers. A plan reference
+  // (EXC-687, click-opened since EXC-840) has one, and the excerpt is worth
+  // nothing if the filename it came from is behind the lane. A file row in the
+  // folder card (EXC-1137) has none, and there is nothing to reveal: the row is in
+  // a viewport-fixed card that steps clear of the lane itself. So the tokenless
+  // open is a missing field rather than a synthesized element — the reveal effect
+  // already skips what it cannot measure.
   type OpenFile = { path: string; line?: number; endLine?: number; token?: HTMLElement };
   let filePreview = $state<OpenFile | undefined>();
 
@@ -438,12 +439,12 @@
     }, CLOSE_ANIM_MS);
   }
 
-  function openFilePreview(open: OpenFile): void {
+  function openFilePreview(next: OpenFile): void {
     // Reopening mid-collapse: drop the pending unmount so the lane wipes back
     // open on the same instance rather than being torn out from under it.
     cancelDrawerClose();
     sound.play("filePreviewOpen");
-    filePreview = open;
+    filePreview = next;
   }
 
   // The directory reference whose tree is open (EXC-918), plus the clicked
@@ -1745,9 +1746,8 @@
      the preview is. -->
 {#if !showDiff && folderTree}
   {@const openDir = folderTree}
-  <!-- A file row opens the SAME lane a filename reference opens (EXC-1137), with
-       no line: a tree row carries no `:line`, so the excerpt is framed on the
-       file's head. The card converted the row's tree-relative path already. -->
+  <!-- A file row opens the SAME lane a filename reference opens (EXC-1137). The
+       card converted the row's tree-relative path already. -->
   <FolderTree
     reviewId={reviewId}
     path={openDir.path}

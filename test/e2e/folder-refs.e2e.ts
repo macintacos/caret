@@ -260,19 +260,6 @@ async function openCard(daemon: Daemon, page: Page, dir: string): Promise<void> 
   await expect(page.locator(card)).toBeVisible();
 }
 
-/**
- * Settle, then assert no preview opened.
- *
- * There is no positive event to await when the claim is that nothing happened, so
- * a bare `toHaveCount(0)` would pass on its first poll and race the very state
- * change it rules out. The beat is what makes the negative a claim.
- */
-async function expectNoPreview(page: Page): Promise<void> {
-  const t0 = await page.evaluate(() => performance.now());
-  await page.waitForFunction((t) => performance.now() > t + 300, t0);
-  await expect(page.locator(preview)).toHaveCount(0);
-}
-
 test("clicking a file row opens that file in the excerpt lane", async ({ daemon, page }) => {
   // The card is a place the reader navigates FROM (EXC-1137): a file row opens
   // its file in the same lane a filename reference opens. The path asserted is
@@ -310,9 +297,11 @@ test("clicking a directory row expands it and opens nothing", async ({ daemon, p
 
     await page.locator(row("lib/")).click();
     await expect(page.locator(row("lib/"))).toHaveAttribute("aria-expanded", "true");
+    // The level arriving is a network round trip, and a preview would have mounted
+    // synchronously off the same click — so this ordering is what makes the
+    // negative below a claim, with no timing beat of its own to add.
     await expect(page.locator(row("lib/util.ts"))).toBeVisible();
-
-    await expectNoPreview(page);
+    await expect(page.locator(preview)).toHaveCount(0);
   } finally {
     await proj.cleanup();
   }
@@ -321,18 +310,20 @@ test("clicking a directory row expands it and opens nothing", async ({ daemon, p
 test("arrow keys move the focus ring without opening, Enter opens", async ({ daemon, page }) => {
   // Why the library's `onSelectionChange` is the wrong hook: it fires on focus
   // movement, so a walk down the tree would open one preview per keystroke. Only
-  // an explicit activation opens, and Enter is one — the library leaves it
-  // unhandled with search off, so it reaches the card unclaimed.
+  // an activation opens — and the keyboard's activation is the row <button>'s own,
+  // which the card takes as an ordinary click rather than handling any key itself.
   const proj = await makeProject(NESTED);
   try {
     await openCard(daemon, page, proj.dir);
 
     // `lib/` is first, `cache.ts` second: one step down lands the ring on a FILE
-    // row, which is the row a focus-driven opener would have opened.
+    // row, which is the row a focus-driven opener would have opened. The focus
+    // attribute landing IS that opener's trigger, so awaiting it orders the
+    // negative below without a timing beat.
     await page.locator(row("lib/")).focus();
     await page.keyboard.press("ArrowDown");
     await expect(page.locator(row("cache.ts"))).toHaveAttribute("data-item-focused", "true");
-    await expectNoPreview(page);
+    await expect(page.locator(preview)).toHaveCount(0);
 
     await page.keyboard.press("Enter");
     await expect(page.locator(preview)).toBeVisible();

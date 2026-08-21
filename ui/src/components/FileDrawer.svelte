@@ -94,12 +94,20 @@
   }
 </script>
 
-<!-- The edge rides the attribute's VALUE rather than only its presence: FolderTree
-     reads it to place the folder card clear of the lane (EXC-1129). Every
-     `[data-file-drawer]` selector still matches. -->
+<!-- Three things FolderTree reads off this element to place the folder card clear
+     of the lane, all deliberate contract rather than incidental markup:
+     the edge rides the attribute's VALUE rather than only its presence (EXC-1129,
+     and every `[data-file-drawer]` selector still matches); `--fd-size` is the
+     lane's SETTLED size, which is what the card measures against while the lane is
+     still wiping open (EXC-1137); and the closing flag rides a data attribute
+     beside them rather than the `fd-closing` style class, so the card is reading a
+     stated contract and not a CSS hook that could be renamed for style reasons. A
+     lane playing its closing wipe is a lane on its way out, and the card treats it
+     as no lane at all. -->
 <aside
   bind:this={root}
   data-file-drawer={edge}
+  data-file-drawer-closing={closing ? "" : undefined}
   aria-label="File preview"
   class:fd-bottom={edge === "bottom"}
   class:fd-closing={closing}

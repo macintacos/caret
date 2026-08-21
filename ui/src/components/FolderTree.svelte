@@ -5,8 +5,9 @@
   // way a file's `:line` gives one, so FilePreview's deliberate no-scroll peek
   // does not carry over — the value here is navigating the directory's shape, so
   // the card is interactive by design. Folders expand; files open (EXC-1137) —
-  // activating a file row opens that file in the excerpt lane, so the card is a
-  // place the reader navigates FROM rather than a shape they read and leave.
+  // activating a file row, by pointer or from the keyboard, opens that file in the
+  // excerpt lane, so the card is a place the reader navigates FROM rather than a
+  // shape they read and leave.
   //
   // Expansion is lazy, one level per open folder, because a plan is entitled to
   // cite `node_modules/` and one level of that is already thousands of rows. The
@@ -171,9 +172,17 @@
    * fire today, but nothing local would say so if that changed. The rect is put
    * through `laneEdge` rather than used raw, because a lane opened FROM this card
    * is measured while it is still wiping in.
+   *
+   * A lane playing its CLOSING wipe is no lane, which is what the `:not()` buys.
+   * It stays mounted for the length of that wipe, so a row clicked inside that
+   * window would otherwise read a lane that is already leaving — and skip the
+   * re-place on the very closed-to-open transition it exists to catch, since
+   * reopening cancels the pending unmount and the lane comes straight back.
    */
   function openLane(): { edge: DrawerEdge; top: number; left: number } | undefined {
-    const el = document.querySelector<HTMLElement>("[data-file-drawer]");
+    const el = document.querySelector<HTMLElement>(
+      "[data-file-drawer]:not([data-file-drawer-closing])",
+    );
     if (el === null) return undefined;
     const edge: DrawerEdge = el.dataset.fileDrawer === "right" ? "right" : "bottom";
     const settled = Number.parseFloat(el.style.getPropertyValue("--fd-size"));
@@ -230,19 +239,18 @@
    * Open a file row in the excerpt lane (EXC-1137), converting the row's
    * tree-relative path into the cwd-relative one the excerpt route wants.
    *
-   * Driven off real activation — a click, or Enter on the focused row — rather
-   * than the library's `onSelectionChange`, which is its only selection hook and
-   * fires on focus movement too: an arrow-key walk down the tree would open one
-   * preview per keystroke. The library claims the arrow keys and leaves Enter
-   * unhandled with search off, so both activations reach the host by bubbling out
-   * of the shadow root.
+   * Driven off real ACTIVATION rather than the library's `onSelectionChange`,
+   * which is its only selection hook and fires on focus movement too: an
+   * arrow-key walk down the tree would open one preview per keystroke.
    */
   function openRow(treePath: string): void {
     const el = card;
     // Sampled BEFORE the open, because the answer changes as a result of it. Only
-    // a click that OPENS the lane re-places the card, and then only because the
-    // reader asked for the lane that is about to land on it; a lane already open
-    // was part of the bounds this card was placed against.
+    // the closed-to-open transition THIS click causes earns a re-place, because
+    // it is the reader asking for the lane that is about to land on the card. A
+    // lane already standing is left to placement-once whether or not the card
+    // overlaps it — that overlap is EXC-1129's accepted cost, and a lane the
+    // reader opened from the plan is not this click's to tidy up after.
     const laneWasOpen = openLane() !== undefined;
     onOpenFile(cwdPath(rootPath, treePath));
     if (laneWasOpen || el === null) return;
@@ -409,26 +417,22 @@
     // is the retry the memory promises it. Harmless either way, so it is not
     // worth a branch to say which case is which.
     syncExpansions(owner);
-    // Activation is listened for on the container rather than wired through the
-    // library, which offers no activation callback at all — only `onSelectionChange`
-    // (see `openRow`). A row click carries no `stopPropagation`, so it reaches
-    // here; a directory click reaches here too and `fileRowPath` returns null for
-    // it, leaving the library's own expand/collapse to be the whole of what it did.
+    // One click listener is the WHOLE activation surface, pointer and keyboard
+    // alike: every row the library renders is a real <button>, so Enter and Space
+    // on a focused row are the button's own native activation and arrive here as
+    // an ordinary click. That is why there is no key handling of our own — and
+    // why the two routes cannot drift, since the library's `handleRowClick` runs
+    // for both and its selection follows either way. A directory click reaches
+    // here too, and `fileRowPath` returns null for it, leaving the library's
+    // expand/collapse as the whole of what that click did.
     const onRowClick = (e: MouseEvent) => {
+      // A modified click is the library's range/toggle SELECTION gesture
+      // (`computeFileTreeRowClickPlan`), not an activation, so it opens nothing.
+      if (e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
       const treePath = fileRowPath(e);
       if (treePath !== null) openRow(treePath);
     };
-    const onRowKey = (e: KeyboardEvent) => {
-      if (e.key !== "Enter") return;
-      const treePath = fileRowPath(e);
-      if (treePath === null) return;
-      // Claimed only once a file row answered, so Enter anywhere else in the card
-      // is still whatever the browser makes of it.
-      e.preventDefault();
-      openRow(treePath);
-    };
     container.addEventListener("click", onRowClick);
-    container.addEventListener("keydown", onRowKey);
     return () => {
       filed.memory.write(
         filed.reviewId,
@@ -446,7 +450,6 @@
       );
       scroller?.removeEventListener("scroll", onScroll);
       container.removeEventListener("click", onRowClick);
-      container.removeEventListener("keydown", onRowKey);
       unsubscribe();
       owner.cleanUp();
       if (tree === owner) tree = undefined;
