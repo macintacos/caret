@@ -504,8 +504,14 @@
   // is open. Every other click is a click away from the card: it closes,
   // and is swallowed so dismissing never also opens a line comment.
   const CARD_EXEMPT = "[data-folder-tree], [data-file-drawer], [data-file-ref], [data-ref-hint]";
+  //
+  // Gated on `showDiff` as well as the state, matching the card's own render
+  // condition below and the lane's effect further down: compare mode takes the
+  // card off screen while leaving `folderTree` set, and both handlers here
+  // swallow what they act on — so left registered they would eat one Escape and
+  // one click from the compare view the reader is actually looking at.
   $effect(() => {
-    if (folderTree === undefined) return;
+    if (showDiff || folderTree === undefined) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       folderTree = undefined;

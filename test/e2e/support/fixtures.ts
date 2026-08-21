@@ -56,8 +56,12 @@ export interface Daemon {
   resolve(id: string, behavior: "allow" | "deny", feedback?: string): Promise<void>;
   /** Seed a review with `count` versions under one session: post v1, deny it,
    * then post each revision (which threads onto the rejected review), leaving the
-   * review pending at v`count`. Returns the review id. */
-  seedVersions(count: number, plans: string[]): Promise<string>;
+   * review pending at v`count`. Returns the review id.
+   *
+   * `cwd` defaults to the same throwaway path `seed` uses. Pass a real project
+   * dir when the spec needs the plan's references to RESOLVE — that is the only
+   * way a spec gets a multi-version review and a working reference in one review. */
+  seedVersions(count: number, plans: string[], cwd?: string): Promise<string>;
   /** Push a new version onto an existing review while a page is open: deny the
    * current review (so the daemon appends) and post `plan` onto its session. The
    * open UI sees the new version arrive — the live counterpart to seedVersions,
@@ -279,7 +283,7 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
           });
           if (!res.ok) throw new Error(`resolve failed: POST /resolve → ${res.status}`);
         },
-        async seedVersions(count: number, plans: string[]) {
+        async seedVersions(count: number, plans: string[], cwd = "/tmp/caret-e2e") {
           // One session threads the revisions: post v1, then for each later
           // version deny the pending review (so the daemon will append) and post
           // the next plan onto the same session. Leaves the review pending at the
@@ -291,7 +295,7 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
             const res = await fetch(`${url}/api/reviews`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ sessionId, cwd: "/tmp/caret-e2e", plan: plans[v] }),
+              body: JSON.stringify({ sessionId, cwd, plan: plans[v] }),
             });
             if (!res.ok) throw new Error(`seedVersions failed: POST /api/reviews → ${res.status}`);
             id = ((await res.json()) as RouteResult).id;

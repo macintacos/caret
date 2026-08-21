@@ -32,7 +32,7 @@ import type { Page } from "@playwright/test";
 import { makeProject, settleDrawer } from "@test/e2e/support/file-refs.ts";
 import type { Daemon } from "@test/e2e/support/fixtures.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
-import { planSurface } from "@test/e2e/support/source-view.ts";
+import { PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
 import { MAX_DIR_ENTRIES } from "@/plan/directory.ts";
 
 /** A project whose `src` holds one file and one nested directory, so a card
@@ -319,6 +319,46 @@ test("Escape closes the card", async ({ daemon, page }) => {
       await page.keyboard.press("Escape");
       await expect(page.locator(card)).toHaveCount(0, { timeout: 500 });
     }).toPass();
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("compare mode leaves the card's key and click handlers behind with it", async ({
+  daemon,
+  page,
+}) => {
+  // The card renders on `!showDiff`, so compare mode takes it off screen while the
+  // reference that opened it is still in state. Its dismissal handlers are
+  // capture-phase listeners on window that `preventDefault` and swallow, so left
+  // registered they eat one Escape and one click from the compare view the reader
+  // is actually looking at — with no visible cause, which is the hardest kind of
+  // bug to report. The lane's own effect carries the matching `showDiff` guard.
+  //
+  // Read through the card's survival: a swallowed Escape also CLEARS the card, so
+  // a card still standing on the way back is the same claim as a key that reached
+  // the compare view. That matches the lane, which likewise survives a round trip.
+  const proj = await makeProject(NESTED);
+  const plan = (n: number) => `# Refs v${n}\n\nThe tree under \`src\` matters.\n`;
+  try {
+    await daemon.seedVersions(2, [plan(1), plan(2)], proj.dir);
+    await page.goto("/");
+    await planSurface(page);
+    await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(1);
+    await page.locator('[data-file-ref="directory"]').click();
+    await expect(page.locator(card)).toBeVisible();
+    await waitPastSafeModeGrace(page);
+
+    // `d` toggles compare, which unrenders the card without clearing its state.
+    await page.keyboard.press("d");
+    await expect(page.locator(card)).toHaveCount(0);
+
+    // Neither press belongs to the card: it is not on screen to receive them.
+    await page.keyboard.press("Escape");
+    await page.locator(PLAN_SURFACE).click();
+
+    await page.keyboard.press("d");
+    await expect(page.locator(card)).toBeVisible();
   } finally {
     await proj.cleanup();
   }
