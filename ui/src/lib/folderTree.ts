@@ -188,7 +188,8 @@ export interface Levels {
   /** Mark a level the daemon refused. Terminal for this card: `claim` will not
    * offer it again, because the route answers a permanent refusal (a descent
    * past its depth guard) with the same 404 as a transient one. Reopening the
-   * card is the retry. */
+   * card is the retry, as is a refresh — both go through `reset`, which clears
+   * this. */
   fail(treePath: string): void;
   /** The row's note, or null when it has nothing to add. */
   note(row: LevelRow): LevelNote | null;
@@ -367,8 +368,7 @@ export function captureCard(card: {
   };
 }
 
-/** What the ROOT level's cap dropped, which is the header's line. The root's key
- * is `""`, the same spelling `record` files it under. */
+/** The root's key is `""`, the same spelling `record` files it under. */
 function rootElision(levels: LevelsSnapshot): number {
   return levels.elided.find(([key]) => key === "")?.[1] ?? 0;
 }
@@ -381,7 +381,8 @@ function rootElision(levels: LevelsSnapshot): number {
  * `answers` are `[treePath, listing]` pairs for the levels the card had OPEN —
  * its own root first, then each expanded directory, PARENTS BEFORE CHILDREN.
  * The caller gets that ordering for free by reading the open set off the tree's
- * visible rows, which the library reports in tree order.
+ * visible rows, which the library reports in tree order. Either spelling of a
+ * directory is accepted; the fold reduces each one the way `record` does.
  *
  * Three rules make it total against a working copy that moved underneath the
  * reader, and each is one of the issue's own criteria:
@@ -390,10 +391,12 @@ function rootElision(levels: LevelsSnapshot): number {
  *   The daemon answers each open level independently, so a level under a
  *   directory that has since gone can still come back; folding it in would
  *   leave paths the library has to invent a parent for.
- * - `expanded` keeps only the directories whose level actually came back, so a
- *   folder that vanished — or whose re-read the daemon refused — returns shut
- *   rather than open with nothing under it. Shutting it is also what makes
- *   clicking it the retry.
+ * - `expanded` keeps the directories the refresh can honestly show as open: the
+ *   ones whose level came back, plus the ones the daemon declines to enumerate,
+ *   which never enter `loaded` because nothing ever enumerated them. A folder
+ *   that vanished — or whose re-read the daemon refused — returns shut rather
+ *   than open with nothing under it, which is also what makes clicking it the
+ *   retry.
  * - `topPath` survives only while its row does, and otherwise degrades to the
  *   top of the list — the same quiet miss `captureCard` documents for a card
  *   whose scroller was never found.
@@ -404,17 +407,18 @@ export function refreshCard(
 ): FolderCardMemory {
   const levels = createLevels();
   const known = new Set<string>();
-  for (const [treePath, listing] of answers) {
+  for (const [answered, listing] of answers) {
+    const treePath = treeKey(answered);
     if (treePath !== "" && !known.has(`${treePath}/`)) continue;
     for (const path of levels.record(treePath, listing)) known.add(path);
   }
   const snapshot = levels.snapshot();
-  const loaded = new Set(snapshot.loaded);
+  const mayStayOpen = new Set([...snapshot.loaded, ...snapshot.skipped]);
   return {
     rootPath: before.rootPath,
     elided: rootElision(snapshot),
     levels: snapshot,
-    expanded: before.expanded.filter((path) => loaded.has(treeKey(path))),
+    expanded: before.expanded.filter((path) => mayStayOpen.has(treeKey(path))),
     topPath: before.topPath !== undefined && known.has(before.topPath) ? before.topPath : undefined,
   };
 }

@@ -333,6 +333,9 @@ function gatedServe(): { dirCalls: () => number; open: () => void; cap: LogCaptu
 }
 
 const refreshControl = (el: HTMLElement) => el.querySelector<HTMLButtonElement>(".ft-refresh");
+/** What the header's live region currently says; `""` when it has nothing to
+ * report, since the region itself is always mounted. */
+const stale = (el: HTMLElement) => el.querySelector(".ft-stale")?.textContent;
 
 test("offers a named control for re-reading the folder", async () => {
   // A real button rather than a click handler on a glyph: the reader who opened
@@ -410,8 +413,9 @@ test("keeps the tree it has when a refresh cannot be read", async () => {
   await until(() => refreshControl(target) !== null);
 
   refreshControl(target)?.click();
-  await until(() => target.querySelector(".ft-stale") !== null);
-  expect(target.querySelector(".ft-stale")?.textContent).toBe("couldn't refresh");
+  // The live region is mounted from the start with empty text — see the markup's
+  // own note — so what changes here is what it says, not whether it is there.
+  expect(await until(() => stale(target) === "couldn't refresh")).toBe(true);
   expect(target.querySelector(".ft-tree")).not.toBeNull();
 });
 
@@ -435,7 +439,67 @@ test("stops saying a refresh failed once one succeeds", async () => {
   await until(() => refreshControl(target) !== null);
 
   refreshControl(target)?.click();
-  expect(await until(() => target.querySelector(".ft-stale") !== null)).toBe(true);
+  expect(await until(() => stale(target) === "couldn't refresh")).toBe(true);
   refreshControl(target)?.click();
-  expect(await until(() => target.querySelector(".ft-stale") === null)).toBe(true);
+  expect(await until(() => stale(target) === "")).toBe(true);
+});
+
+test("files the tree it re-read, not the one it replaced", async () => {
+  // The whole reason `Levels.reset` mutates rather than rebinding: the tree
+  // effect captured that instance when it mounted, so a refresh that swapped the
+  // variable would leave the teardown filing the card as it was BEFORE the
+  // refresh — and reopening would restore a tree the reader had already replaced.
+  let dirCalls = 0;
+  cap = logCapture((url) => {
+    if (!url.includes("/dir?")) return Promise.resolve(new Response(null, { status: 204 }));
+    dirCalls += 1;
+    // The refreshed level reports an elision the first one did not, which is the
+    // card's own signal that the refresh LANDED — `dirCalls` only says the
+    // request went out, and unmounting on that files the card mid-flight.
+    const entries =
+      dirCalls === 1 ? [{ name: "before.ts", kind: "file" }] : [{ name: "after.ts", kind: "file" }];
+    return Promise.resolve(
+      new Response(JSON.stringify({ path: "src/lib", entries, total: dirCalls === 1 ? 1 : 5 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+  });
+  const memory = createFolderMemory();
+  const target = document.createElement("div");
+  document.body.appendChild(target);
+  const instance = mount(FolderTree, { target, props: props({ memory }) });
+  await until(() => target.querySelector(".ft-refresh") !== null);
+
+  target.querySelector<HTMLButtonElement>(".ft-refresh")?.click();
+  expect(await until(() => target.querySelector(".ft-elided") !== null)).toBe(true);
+  unmount(instance);
+  flushSync();
+  target.remove();
+
+  expect(memory.read(ID, "src/lib")?.levels.paths).toEqual(["after.ts"]);
+});
+
+test("says an emptied folder is empty without taking the control away", async () => {
+  // A refresh that finds the folder gone empty must not paint a blank card — and
+  // must not remove the one affordance that could bring it back.
+  let dirCalls = 0;
+  cap = logCapture((url) => {
+    if (!url.includes("/dir?")) return Promise.resolve(new Response(null, { status: 204 }));
+    dirCalls += 1;
+    const entries = dirCalls === 1 ? [{ name: "a.ts", kind: "file" }] : [];
+    return Promise.resolve(
+      new Response(JSON.stringify({ path: "src/lib", entries, total: entries.length }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+  });
+  const { target } = render(FolderTree, props());
+  await until(() => refreshControl(target) !== null);
+
+  refreshControl(target)?.click();
+  expect(await until(() => state(target) === "empty")).toBe(true);
+  expect(target.textContent).toContain("This folder is empty.");
+  expect(refreshControl(target)).not.toBeNull();
 });

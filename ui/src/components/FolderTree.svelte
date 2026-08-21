@@ -88,8 +88,11 @@
     | { kind: "error" }
     | { kind: "empty" }
     /** `elided` is what the daemon's cap dropped from the ROOT level; a nested
-     * level reports its own on its row. */
-    | { kind: "ready"; elided: number };
+     * level reports its own on its row. `empty` is a card that HAS a tree and
+     * nothing to put in it — a refresh that found the folder emptied, or a
+     * reopen of one. It keeps the tree mounted, and with it the refresh control,
+     * where the `empty` state above would take both away. */
+    | { kind: "ready"; elided: number; empty: boolean };
   let view = $state.raw<State>({ kind: "loading" });
   /** What the tree is built from, and the signal to mount it: one level's worth
    * of paths on a first open, every cached level's plus the memory they came
@@ -144,7 +147,11 @@
       // flashing "Loading…" over a tree it already has.
       rootPath = remembered.rootPath;
       levels = createLevels(remembered.levels);
-      view = { kind: "ready", elided: remembered.elided };
+      view = {
+        kind: "ready",
+        elided: remembered.elided,
+        empty: remembered.levels.paths.length === 0,
+      };
       build = { paths: [...remembered.levels.paths], from: remembered };
       return;
     }
@@ -161,7 +168,7 @@
           view = { kind: "empty" };
           return;
         }
-        view = { kind: "ready", elided: listing.total - listing.entries.length };
+        view = { kind: "ready", elided: listing.total - listing.entries.length, empty: false };
         build = { paths };
       } catch {
         if (!cancelled) view = { kind: "error" };
@@ -356,12 +363,11 @@
    * mutates the instance the mount effect captured, so the memory this card
    * files on the way out is the tree the reader is actually looking at.
    *
-   * A refresh never changes the card's STATE, only what is in its tree: a folder
-   * that came back empty leaves an empty tree rather than flipping to the
-   * `empty` message, which would unmount the tree and take this control with it
-   * — leaving that reference stuck on "This folder is empty." for the life of
-   * the review. The first open keeps its message; only the refresh is carved
-   * out.
+   * A refresh never leaves the `ready` state, even when the folder came back
+   * empty — it says so through `ready`'s own `empty` instead. The `empty` state
+   * is for a card that never had a tree, and flipping into it here would unmount
+   * this control out from under the reader in the same gesture they used it,
+   * leaving them nothing to press when the folder fills again.
    */
   async function refresh(): Promise<void> {
     const owner = tree;
@@ -375,11 +381,16 @@
       scrollTop,
       itemHeight: owner.getItemHeight(),
     });
+    // A directory the daemon declines to enumerate is left out: asking again
+    // buys a second refusal, and `refreshCard` keeps it open on the strength of
+    // its parent's listing alone.
+    const skipped = new Set(before.levels.skipped);
+    const open = ["", ...before.expanded.map(treeKey).filter((p) => !skipped.has(p))];
     // Together rather than one level at a time: they are independent reads, and
     // the fold is what imposes order. Each catches its own refusal, so one
     // directory the daemon will not read does not take the refresh with it.
     const answers = await Promise.all(
-      ["", ...before.expanded.map(treeKey)].map(async (treePath) => {
+      open.map(async (treePath) => {
         try {
           const listing = await getDirListing(reviewId, path, cwdPath(rootPath, treePath));
           return [treePath, listing] as const;
@@ -402,7 +413,7 @@
     }
     const next = refreshCard(before, answers.filter((a) => a !== undefined));
     levels.reset(next.levels);
-    view = { kind: "ready", elided: next.elided };
+    view = { kind: "ready", elided: next.elided, empty: next.levels.paths.length === 0 };
     owner.resetPaths(next.levels.paths, { initialExpandedPaths: next.expanded });
     // No `focusFirstItem` here, and `focus: false` on the scroll, unlike the
     // mount below: the reader pressed a button, so focus stays on that button
@@ -481,7 +492,10 @@
     owner.render({ containerWrapper: container });
     // Follow the offset as the reader moves it, rather than reading it back at
     // teardown — see `scrollTop`'s own declaration for why that is the only
-    // workable direction.
+    // workable direction. The assignment RESETS the previous mount's value, and
+    // has to: `scrollTop` outlives any one tree now, so a card that went ready →
+    // loading → ready would otherwise hand the next refresh an offset measured
+    // against a tree that is gone.
     scrollTop = 0;
     const scroller = scrollerOf(owner);
     const onScroll = () => {
@@ -553,7 +567,7 @@
 
 <div
   class="folder-tree"
-  class:ft-open={view.kind === "ready"}
+  class:ft-open={view.kind === "ready" && !view.empty}
   data-folder-tree
   bind:this={card}
   style:top="{placed?.top ?? 0}px"
@@ -570,11 +584,14 @@
              can. -->
         <span class="ft-elided">{view.elided} more not shown</span>
       {/if}
-      {#if refreshFailed}
-        <!-- The tree the refresh failed to replace is still standing, so this
-             says the card is stale rather than the card emptying itself. -->
-        <span class="ft-stale" role="status">couldn't refresh</span>
-      {/if}
+      <!-- The tree the refresh failed to replace is still standing, so this says
+           the card is stale rather than the card emptying itself. Mounted
+           unconditionally, with only its TEXT switched — a live region has to be
+           idle in the DOM before the change it announces, and one inserted with
+           its content already in it is skipped by some AT outright. Same shape
+           and same reason as PlanToc.svelte's `.toc-empty`. Empty it draws
+           nothing, and cancels the flex gap it would otherwise leave behind. -->
+      <span class="ft-stale" role="status">{refreshFailed ? "couldn't refresh" : ""}</span>
       {#if view.kind === "ready"}
         <!-- Only where there is a cached tree to re-read: the first level is the
              reference effect's, and reopening a card that never got one is its
@@ -586,6 +603,7 @@
           class="ft-refresh"
           aria-label="Re-read this folder"
           aria-disabled={refreshing}
+          aria-busy={refreshing}
           onclick={refresh}
         >
           {#if refreshing}
@@ -601,18 +619,22 @@
     </span>
   </div>
   {#if view.kind === "ready"}
-    <div class="ft-tree" bind:this={host}></div>
-  {:else if view.kind === "empty"}
-    <div class="ft-message" data-folder-state="empty">This folder is empty.</div>
-  {:else if view.kind === "error"}
-    <div class="ft-message" data-folder-state="error">Couldn't read this folder.</div>
-  {:else}
+    <!-- Kept in the DOM even with nothing in it, so the tree object survives and
+         the header's refresh control stays live; the lane is hidden rather than
+         unmounted because unmounting it is what would destroy the tree. -->
+    <div class="ft-tree" class:ft-tree-empty={view.empty} bind:this={host}></div>
+  {/if}
+  {#if view.kind === "loading"}
     <!-- Decorative: the "Loading…" beside it is the accessible message, so the
          spinner's default role="status" + aria-label would say it twice. Nothing
          announces the wait; spinner.svelte records why a region cannot here. -->
     <div class="ft-message" data-folder-state="loading">
       <Spinner size={12} aria-hidden="true" />Loading…
     </div>
+  {:else if view.kind === "error"}
+    <div class="ft-message" data-folder-state="error">Couldn't read this folder.</div>
+  {:else if view.kind === "empty" || view.empty}
+    <div class="ft-message" data-folder-state="empty">This folder is empty.</div>
   {/if}
 </div>
 
@@ -646,9 +668,10 @@
      and the way out pushed right — so the two reference surfaces read as one
      family rather than two designs. */
   .ft-header {
+    --ft-header-gap: 0.45rem;
     display: flex;
     align-items: baseline;
-    gap: 0.45rem;
+    gap: var(--ft-header-gap);
     padding: 0.3rem 0.6rem;
     border-bottom: 1px solid var(--rule);
     font-family: var(--font-mono);
@@ -676,13 +699,19 @@
   .ft-header-end {
     display: flex;
     align-items: baseline;
-    gap: 0.45rem;
+    gap: var(--ft-header-gap);
     margin-left: auto;
   }
   .ft-elided,
   .ft-stale {
     color: var(--ink-faint);
     white-space: nowrap;
+  }
+  /* The live region is always mounted, so with no failure to report it has to
+     give back the flex gap it would otherwise hold open. `display: none` would
+     reintroduce the very insertion the unconditional mount avoids. */
+  .ft-stale:empty {
+    margin-inline-end: calc(-1 * var(--ft-header-gap));
   }
   /* The same button idiom FilePreview's header uses (.fp-close): a real control
      at header scale, carrying the 24px pointer target WCAG 2.2 SC 2.5.8 asks for
@@ -697,6 +726,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: 11px;
+    height: 11px;
     padding: 0;
     border: none;
     background: none;
@@ -708,7 +739,8 @@
     position: absolute;
     inset: -7px;
   }
-  .ft-refresh:hover {
+  .ft-refresh:hover,
+  .ft-refresh:focus-visible {
     color: var(--ink);
   }
   /* The vendored 24px glyph carries stroke-width 2, which at 11px renders under
@@ -740,6 +772,12 @@
     flex: 1;
     min-height: 0;
     display: flex;
+  }
+  /* The lane, not the tree: `display: none` leaves the element — and so the
+     FileTree bound to it — in place, which is what lets the card go empty and
+     come back through one `resetPaths` rather than a remount. */
+  .ft-tree-empty {
+    display: none;
   }
   /* The @pierre/trees palette bridge, the same single-rule shape app.css uses for
      --diffs-*: every value is a caret token, never a literal. Custom properties

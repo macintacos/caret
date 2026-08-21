@@ -598,3 +598,31 @@ test("has nothing left to show for a folder that is now empty", () => {
   expect(card.levels.paths).toEqual([]);
   expect(card.expanded).toEqual([]);
 });
+
+test("takes a directory in the tree's own spelling", () => {
+  // Every path the card holds — `expanded`, and each row's own — carries the
+  // trailing slash. `record` reduces it and the orphan check has to agree, or a
+  // caller that passes the tree's spelling loses every level below the root and
+  // is told nothing about it.
+  const card = refreshCard(openCard(), [
+    answer("", listing([dir("lib")])),
+    answer("lib/", listing([file("util.ts")])),
+  ]);
+  expect(card.levels.paths).toEqual(["lib/", "lib/util.ts"]);
+});
+
+test("keeps a folder the daemon declines to enumerate open", () => {
+  // A skipped directory never enters `loaded` — nothing enumerated it — so
+  // filtering the expansion on `loaded` alone would shut the one kind of open
+  // folder a refresh has nothing new to say about, and lose its note with it.
+  const before = captureCard({
+    rootPath: "src",
+    levels: served(),
+    rows: [dirRow("dist/")],
+    ...scroll,
+  });
+  const card = refreshCard(before, [
+    answer("", listing([{ name: "dist", kind: "directory", skipped: true }])),
+  ]);
+  expect(card.expanded).toEqual(["dist/"]);
+});
