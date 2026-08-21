@@ -299,3 +299,143 @@ test("a restored card asks again for a level the daemon refused", async () => {
   await until(() => serve.dirCalls() === 1);
   expect(serve.dirCalls()).toBe(1);
 });
+
+// Refreshing a cached tree (EXC-1139). The cache above has no invalidation, so
+// the card needs a way to re-read a working copy an agent is still editing.
+// What a mount answers here is the control's own framing and the requests it
+// makes; that the expansion and the scroll survive the repaint is the real
+// tree's business, and lives in test/e2e/folder-refs.e2e.ts.
+
+/** Serve one level, count every `/dir` request, and hold every request AFTER
+ * the first until `open()` — which is the card's own first level served and a
+ * refresh left in flight. */
+function gatedServe(): { dirCalls: () => number; open: () => void; cap: LogCapture } {
+  let dirCalls = 0;
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const listing: DirListing = {
+    path: "src/lib",
+    entries: [{ name: "a.ts", kind: "file" }],
+    total: 1,
+  };
+  const capture = logCapture(async (url) => {
+    if (!url.includes("/dir?")) return new Response(null, { status: 204 });
+    dirCalls += 1;
+    if (dirCalls > 1) await gate;
+    return new Response(JSON.stringify(listing), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  });
+  return { dirCalls: () => dirCalls, open: release, cap: capture };
+}
+
+const refreshControl = (el: HTMLElement) => el.querySelector<HTMLButtonElement>(".ft-refresh");
+
+test("offers a named control for re-reading the folder", async () => {
+  // A real button rather than a click handler on a glyph: the reader who opened
+  // this card from the keyboard has to be able to reach it from there too.
+  cap = serveListing({ path: "src/lib", entries: [{ name: "a.ts", kind: "file" }], total: 1 });
+  const { target } = render(FolderTree, props());
+  await until(() => refreshControl(target) !== null);
+  const control = refreshControl(target);
+  expect(control?.tagName).toBe("BUTTON");
+  expect(control?.getAttribute("aria-label")).toBe("Re-read this folder");
+});
+
+test("offers nothing to refresh on a card that has no tree", async () => {
+  // The reference effect owns the first fetch, and a card that never got a level
+  // has no cached tree to re-read — reopening it is its retry.
+  cap = logCapture((url) =>
+    Promise.resolve(new Response(null, { status: url.includes("/dir?") ? 404 : 204 })),
+  );
+  const { target } = render(FolderTree, props());
+  await until(() => state(target) === "error");
+  expect(refreshControl(target)).toBeNull();
+});
+
+test("re-reads the level the card is showing", async () => {
+  const serve = gatedServe();
+  cap = serve.cap;
+  const { target } = render(FolderTree, props());
+  await until(() => refreshControl(target) !== null);
+  expect(serve.dirCalls()).toBe(1);
+
+  refreshControl(target)?.click();
+  expect(await until(() => serve.dirCalls() === 2)).toBe(true);
+  serve.open();
+});
+
+test("does not stack a second round of requests on the first", async () => {
+  const serve = gatedServe();
+  cap = serve.cap;
+  const { target } = render(FolderTree, props());
+  await until(() => refreshControl(target) !== null);
+
+  refreshControl(target)?.click();
+  expect(await until(() => refreshControl(target)?.getAttribute("aria-disabled") === "true")).toBe(
+    true,
+  );
+  refreshControl(target)?.click();
+  expect(serve.dirCalls()).toBe(2);
+
+  serve.open();
+  expect(await until(() => refreshControl(target)?.getAttribute("aria-disabled") === "false")).toBe(
+    true,
+  );
+});
+
+test("keeps the tree it has when a refresh cannot be read", async () => {
+  // Emptying the card would cost the reader everything they had open in exchange
+  // for a request that failed — so the stale tree stands and the header says it
+  // is stale.
+  let dirCalls = 0;
+  cap = logCapture((url) => {
+    if (!url.includes("/dir?")) return Promise.resolve(new Response(null, { status: 204 }));
+    dirCalls += 1;
+    if (dirCalls > 1) return Promise.resolve(new Response(null, { status: 404 }));
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({ path: "src/lib", entries: [{ name: "a.ts", kind: "file" }], total: 1 }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+  });
+  const { target } = render(FolderTree, props());
+  await until(() => refreshControl(target) !== null);
+
+  refreshControl(target)?.click();
+  await until(() => target.querySelector(".ft-stale") !== null);
+  expect(target.querySelector(".ft-stale")?.textContent).toBe("couldn't refresh");
+  expect(target.querySelector(".ft-tree")).not.toBeNull();
+});
+
+test("stops saying a refresh failed once one succeeds", async () => {
+  let dirCalls = 0;
+  cap = logCapture((url) => {
+    if (!url.includes("/dir?")) return Promise.resolve(new Response(null, { status: 204 }));
+    dirCalls += 1;
+    if (dirCalls === 2) return Promise.resolve(new Response(null, { status: 404 }));
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({ path: "src/lib", entries: [{ name: "a.ts", kind: "file" }], total: 1 }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+  });
+  const { target } = render(FolderTree, props());
+  await until(() => refreshControl(target) !== null);
+
+  refreshControl(target)?.click();
+  expect(await until(() => target.querySelector(".ft-stale") !== null)).toBe(true);
+  refreshControl(target)?.click();
+  expect(await until(() => target.querySelector(".ft-stale") === null)).toBe(true);
+});

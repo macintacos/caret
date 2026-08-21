@@ -37,6 +37,7 @@ under the ISC license.
 | `monitor` | [ui/src/icons/monitor.svg](ui/src/icons/monitor.svg) | [monitor.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/monitor.svg) |
 | `moon` | [ui/src/icons/moon.svg](ui/src/icons/moon.svg) | [moon.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/moon.svg) |
 | `panel-left` | [ui/src/icons/panel-left.svg](ui/src/icons/panel-left.svg) | [panel-left.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/panel-left.svg) |
+| `refresh-cw` | [ui/src/icons/refresh-cw.svg](ui/src/icons/refresh-cw.svg) | [refresh-cw.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/refresh-cw.svg) |
 | `search` | [ui/src/icons/search.svg](ui/src/icons/search.svg) | [search.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/search.svg) |
 | `settings` | [ui/src/icons/settings.svg](ui/src/icons/settings.svg) | [settings.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/settings.svg) |
 | `square` | [ui/src/icons/square.svg](ui/src/icons/square.svg) | [square.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/square.svg) |
