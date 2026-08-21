@@ -320,7 +320,15 @@ test("arrow keys move the focus ring without opening, Enter opens", async ({ dae
     // row, which is the row a focus-driven opener would have opened. The focus
     // attribute landing IS that opener's trigger, so awaiting it orders the
     // negative below without a timing beat.
+    //
+    // Both waits before the key are load-bearing, not belt-and-braces. The tab
+    // stop is the library's own signal that `focusFirstItem` has run — which
+    // happens in the same effect that mounts the tree, so pressing before it
+    // lands sends the key nowhere and the ring never moves. `toBeFocused` then
+    // confirms the DOM caught up with the model.
+    await expect(page.locator(row("lib/"))).toHaveAttribute("tabindex", "0");
     await page.locator(row("lib/")).focus();
+    await expect(page.locator(row("lib/"))).toBeFocused();
     await page.keyboard.press("ArrowDown");
     await expect(page.locator(row("cache.ts"))).toHaveAttribute("data-item-focused", "true");
     await expect(page.locator(preview)).toHaveCount(0);
