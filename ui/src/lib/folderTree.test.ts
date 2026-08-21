@@ -9,6 +9,7 @@ import {
   createLevels,
   cwdPath,
   type LevelRow,
+  laneEdge,
   levelPaths,
   treeKey,
 } from "$lib/folderTree.ts";
@@ -156,6 +157,38 @@ test("a card too large for the narrowed bounds still lands inside the real viewp
   // lane rather than hanging off-screen where its header is out of reach.
   const bounds = cardBounds(VIEWPORT, { edge: "right", top: 0, left: 300 });
   expect(anchorCard({ top: 100, bottom: 120, left: 200 }, CARD, bounds, 16).left).toBe(16);
+});
+
+// What `cardBounds` is handed, and the reason it is arithmetic rather than a
+// rect: opening a file from the card (EXC-1137) is measured WHILE the lane is
+// wiping open, where its rect still reads a sliver and would narrow nothing.
+// The docked edge is the surface's own and does not move, so the settled inner
+// edge is that one less the size the lane is animating toward.
+const MID_WIPE_RIGHT = { top: 60, right: 1000, bottom: 800, left: 996 };
+const MID_WIPE_BOTTOM = { top: 796, right: 1000, bottom: 800, left: 0 };
+
+test("a right-docked lane's inner edge is its right edge less its settled width", () => {
+  expect(laneEdge("right", MID_WIPE_RIGHT, 360)).toEqual({ edge: "right", top: 60, left: 640 });
+});
+
+test("a bottom-docked lane's inner edge is its bottom edge less its settled height", () => {
+  expect(laneEdge("bottom", MID_WIPE_BOTTOM, 300)).toEqual({ edge: "bottom", top: 500, left: 0 });
+});
+
+test("without a settled size, the lane is taken at the extent it currently draws", () => {
+  // The size comes from FileDrawer's own inline `--fd-size`. Nothing local would
+  // say so if that were ever dropped, so the fallback degrades to measuring the
+  // rect — right for a settled lane, and never NaN.
+  expect(laneEdge("right", MID_WIPE_RIGHT, Number.NaN)).toEqual({
+    edge: "right",
+    top: 60,
+    left: 996,
+  });
+  expect(laneEdge("bottom", MID_WIPE_BOTTOM, Number.NaN)).toEqual({
+    edge: "bottom",
+    top: 796,
+    left: 0,
+  });
 });
 
 // The card's per-level bookkeeping. This is where the decisions live — what is

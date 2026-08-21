@@ -67,6 +67,34 @@ const ANCHOR_GAP = 6;
 export const CARD_MARGIN = 12;
 
 /**
+ * The open preview lane as `cardBounds` wants it: its docked edge, and the inner
+ * edge the card must stay clear of, in viewport coordinates.
+ *
+ * Arithmetic rather than the lane's own rect because the rect lies while the
+ * lane is opening. FileDrawer wipes in from `width: 0` over `--dur-enter`, so a
+ * lane measured in that window reports a sliver and narrows nothing — which is
+ * exactly the instant a file opened FROM the card (EXC-1137) is measured at. Its
+ * DOCKED edge is the flex surface's own and does not move through the wipe (the
+ * same invariant FileDrawer's own drag math leans on), so the settled inner edge
+ * is that edge less the size the lane is animating toward.
+ *
+ * `settledSize` is FileDrawer's inline `--fd-size`, which it always sets;
+ * non-finite falls back to the rect's own extent, which is right for a settled
+ * lane and is what the card measured before this existed.
+ */
+export function laneEdge(
+  edge: DrawerEdge,
+  rect: { top: number; right: number; bottom: number; left: number },
+  settledSize: number,
+): { edge: DrawerEdge; top: number; left: number } {
+  const drawn = edge === "right" ? rect.right - rect.left : rect.bottom - rect.top;
+  const size = Number.isFinite(settledSize) ? settledSize : drawn;
+  return edge === "right"
+    ? { edge, top: rect.top, left: rect.right - size }
+    : { edge, top: rect.bottom - size, left: rect.left };
+}
+
+/**
  * The box the card must stay inside: the viewport, less the docked preview lane
  * (EXC-1129).
  *
