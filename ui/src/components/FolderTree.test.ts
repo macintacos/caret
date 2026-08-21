@@ -8,7 +8,7 @@ import { until } from "@test/support/poll.ts";
 import { type LogCapture, logCapture } from "@ui/test-helpers.ts";
 import { render } from "@ui/test-mount.ts";
 import FolderTree from "@/components/FolderTree.svelte";
-import { folderMemory } from "$lib/folderTree.ts";
+import { createFolderMemory, type FolderMemory } from "$lib/folderTree.ts";
 
 // The folder popover (EXC-918). What a mount can honestly answer here is the
 // card's own framing: the header it puts around a reference, the request it
@@ -35,11 +35,22 @@ function serveListing(listing: DirListing): LogCapture {
   });
 }
 
-function props(over: Partial<{ path: string; showShortcutHints: boolean }> = {}) {
+function props(
+  over: Partial<{
+    path: string;
+    reviewId: string;
+    memory: FolderMemory;
+    showShortcutHints: boolean;
+  }> = {},
+) {
   return {
-    reviewId: ID,
+    reviewId: over.reviewId ?? ID,
     path: over.path ?? "src/lib",
     anchor: { top: 100, bottom: 120, left: 40 },
+    // A fresh instance per card unless a case deliberately shares one — which is
+    // exactly how DiffPlanView uses it, and what keeps one case's card from
+    // restoring into the next one's mount (EXC-1138).
+    memory: over.memory ?? createFolderMemory(),
     ...(over.showShortcutHints === undefined ? {} : { showShortcutHints: over.showShortcutHints }),
   };
 }
@@ -48,9 +59,6 @@ let cap: LogCapture | undefined;
 afterEach(() => {
   cap?.restore();
   cap = undefined;
-  // The card's memory is one per document (EXC-1138), so a card left behind by
-  // one case would restore into the next one's mount.
-  folderMemory.clear();
 });
 
 const state = (el: HTMLElement) =>
@@ -195,8 +203,10 @@ function countingServe(): { dirCalls: () => number; cap: LogCapture } {
   return { dirCalls: () => dirCalls, cap: capture };
 }
 
-/** Mount a card, wait for its level, then dismiss it — which is what files its
- * memory. Returns the container so a caller can assert on the mounted card. */
+/** Mount a card into `memory`, wait for its level, then dismiss it — which is
+ * what files the card. Mounted by hand rather than through `render()` because
+ * the filing happens at unmount, which the shared harness performs in afterEach,
+ * after the assertions. */
 async function openThenDismiss(over: Parameters<typeof props>[0] = {}): Promise<void> {
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -213,10 +223,11 @@ test("reopening a folder reference asks the daemon for nothing", async () => {
   // reassembling itself as each level settles.
   const serve = countingServe();
   cap = serve.cap;
-  await openThenDismiss();
+  const memory = createFolderMemory();
+  await openThenDismiss({ memory });
   expect(serve.dirCalls()).toBe(1);
 
-  const { target } = render(FolderTree, props());
+  const { target } = render(FolderTree, props({ memory }));
   await until(() => target.querySelector(".ft-tree") !== null);
   expect(serve.dirCalls()).toBe(1);
 });
@@ -224,23 +235,64 @@ test("reopening a folder reference asks the daemon for nothing", async () => {
 test("a second folder reference in the same review is fetched on its own", async () => {
   const serve = countingServe();
   cap = serve.cap;
-  await openThenDismiss();
+  const memory = createFolderMemory();
+  await openThenDismiss({ memory });
 
-  const { target } = render(FolderTree, props({ path: "src/other" }));
+  const { target } = render(FolderTree, props({ memory, path: "src/other" }));
   await until(() => target.querySelector(".ft-tree") !== null);
   expect(serve.dirCalls()).toBe(2);
 });
 
 test("never restores one review's card over another's", async () => {
-  // A cached tree belongs to one review's cwd, and the 2s poll can swap the
-  // review under a reader who left a card open.
+  // The instance is replaced on a review switch, so this can only happen through
+  // a mis-wired swap — which the review half of the key is there to survive.
   const serve = countingServe();
   cap = serve.cap;
-  await openThenDismiss();
+  const memory = createFolderMemory();
+  await openThenDismiss({ memory });
 
-  const target = document.createElement("div");
-  document.body.appendChild(target);
-  mount(FolderTree, { target, props: { ...props(), reviewId: "r2" } });
+  const { target } = render(FolderTree, props({ memory, reviewId: "r2" }));
   await until(() => target.querySelector(".ft-tree") !== null);
   expect(serve.dirCalls()).toBe(2);
+});
+
+test("a review switch leaves the incoming card nothing to restore", async () => {
+  // DiffPlanView discards the whole instance rather than emptying one in place,
+  // because the outgoing card files ITS memory on the way out — after the switch
+  // has already run. That write lands in the instance nobody holds any more.
+  const serve = countingServe();
+  cap = serve.cap;
+  const before = createFolderMemory();
+  await openThenDismiss({ memory: before });
+
+  const { target } = render(FolderTree, props({ memory: createFolderMemory() }));
+  await until(() => target.querySelector(".ft-tree") !== null);
+  expect(serve.dirCalls()).toBe(2);
+});
+
+test("a restored card asks again for a level the daemon refused", async () => {
+  // The other half of leaving `failed` out of the snapshot. A refusal is
+  // terminal for a card and reopening is its documented retry — but the tree is
+  // restored with that directory already EXPANDED, and the library's
+  // `subscribe` deliberately swallows its initial snapshot, so nothing walks the
+  // rows unless the card does it itself. Without that walk the folder comes back
+  // open, empty, and permanently unasked-for.
+  const serve = countingServe();
+  cap = serve.cap;
+  const memory = createFolderMemory();
+  memory.write(ID, "src/lib", {
+    rootPath: "src/lib",
+    elided: 0,
+    // The root arrived; `deep`'s level never did, so it is absent from `loaded`
+    // exactly as `fail()` leaves it.
+    levels: { paths: ["deep/", "a.ts"], loaded: [""], skipped: [], elided: [] },
+    expanded: ["deep/"],
+    topPath: undefined,
+  });
+
+  const { target } = render(FolderTree, props({ memory }));
+  await until(() => target.querySelector(".ft-tree") !== null);
+  // Not the root — that came from memory. This is `deep`, re-asked for.
+  await until(() => serve.dirCalls() === 1);
+  expect(serve.dirCalls()).toBe(1);
 });

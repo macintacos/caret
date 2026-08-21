@@ -40,7 +40,7 @@
     createLevels,
     cwdPath,
     type FolderCardMemory,
-    folderMemory,
+    type FolderMemory,
     type Levels,
   } from "$lib/folderTree.ts";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
@@ -58,11 +58,16 @@
      * this. A detached element would measure all zeros and park the card in the
      * viewport's corner. */
     anchor: { top: number; bottom: number; left: number };
+    /** Where a dismissed card is filed and a reopened one comes back from
+     * (EXC-1138). Owned by DiffPlanView, which replaces it on a review switch —
+     * so a card that was open across one is filed into an instance nothing
+     * references any more, rather than lingering in a shared map. */
+    memory: FolderMemory;
     /** Whether the shortcut-hint affordances are shown (EXC-826); gates the
      * header's "esc to close" chip. Escape closes the card regardless. */
     showShortcutHints?: boolean;
   }
-  let { reviewId, path, anchor, showShortcutHints = true }: Props = $props();
+  let { reviewId, path, anchor, memory, showShortcutHints = true }: Props = $props();
 
   type State =
     | { kind: "loading" }
@@ -72,19 +77,21 @@
      * level reports its own on its row. */
     | { kind: "ready"; elided: number };
   let view = $state.raw<State>({ kind: "loading" });
-  // The tree paths the tree is built from, which is also the signal to mount it.
-  // One level's worth on a first open, every cached level's on a restore.
-  let initialPaths = $state.raw<string[] | undefined>();
+  /** What the tree is built from, and the signal to mount it: one level's worth
+   * of paths on a first open, every cached level's plus the memory they came
+   * back from on a reopen. ONE value rather than a paths field and a separate
+   * `restored` flag, so the tree effect cannot read half of a reference — it
+   * would otherwise be correct only by the convention that these two effects run
+   * in declaration order. */
+  let build = $state.raw<{ paths: string[]; from?: FolderCardMemory } | undefined>();
 
-  // The per-level bookkeeping (folderTree.ts), the daemon's own canonical path
-  // for the card's root — which every deeper request is built from — and the
-  // memory this reference was reopened from, if it was.
+  // The per-level bookkeeping (folderTree.ts) and the daemon's own canonical
+  // path for the card's root, which every deeper request is built from.
   // Deliberately NOT reactive: the row decoration closes over `levels` and the
   // library re-reads it on every render, and every write below is followed by
   // something that repaints.
   let levels: Levels = createLevels();
   let rootPath = "";
-  let restored: FolderCardMemory | undefined;
   let tree: FileTree | undefined;
 
   // Open on the referenced directory's immediate children, collapsed, in one
@@ -96,8 +103,7 @@
     const id = reviewId;
     const root = path;
     let cancelled = false;
-    const remembered = folderMemory.read(id, root);
-    restored = remembered;
+    const remembered = memory.read(id, root);
     if (remembered !== undefined) {
       // Synchronous by design: the card is `ready` with its whole path set
       // before this effect returns, so it paints in one frame rather than
@@ -105,11 +111,11 @@
       rootPath = remembered.rootPath;
       levels = createLevels(remembered.levels);
       view = { kind: "ready", elided: remembered.elided };
-      initialPaths = [...remembered.levels.paths];
+      build = { paths: [...remembered.levels.paths], from: remembered };
       return;
     }
     view = { kind: "loading" };
-    initialPaths = undefined;
+    build = undefined;
     levels = createLevels();
     void (async () => {
       try {
@@ -122,7 +128,7 @@
           return;
         }
         view = { kind: "ready", elided: listing.total - listing.entries.length };
-        initialPaths = paths;
+        build = { paths };
       } catch {
         if (!cancelled) view = { kind: "error" };
       }
@@ -239,18 +245,19 @@
   }
 
   /**
-   * The virtualized scroller's offset, or 0 when it cannot be read.
+   * The element the library scrolls, or null when it cannot be found.
    *
-   * @pierre/trees exposes no scroll getter, so the only place a scroll position
-   * lives is the element the library scrolls — inside the tree's own (open)
-   * shadow root, marked with the attribute its stylesheet selects on. A miss is
-   * not a failure: the card comes back with its expansion intact, at the top.
+   * @pierre/trees exposes no scroll getter, so this element inside the tree's
+   * own (open) shadow root is the only place a scroll position lives. It is
+   * marked with the attribute the library's own stylesheet selects on, which is
+   * as close to a contract as the library offers here. A miss is not a failure:
+   * the card comes back with its expansion intact, at the top.
    */
-  function scrollTopOf(owner: FileTree): number {
+  function scrollerOf(owner: FileTree): HTMLElement | null {
     const el = owner
       .getFileTreeContainer()
       ?.shadowRoot?.querySelector("[data-file-tree-virtualized-scroll]");
-    return el instanceof HTMLElement ? el.scrollTop : 0;
+    return el instanceof HTMLElement ? el : null;
   }
 
   // Mount the tree once its container exists and its paths have arrived — one
@@ -260,21 +267,24 @@
   // DISMISSAL instead is the memory this teardown files (EXC-1138).
   $effect(() => {
     const container = host;
-    const paths = initialPaths;
-    if (container === null || paths === undefined) return;
-    // The card this tree is FOR, read untracked so it stays out of this effect's
-    // dependency set. The effect above replaces all four the instant the
-    // reference changes, and it runs first — so a teardown reading them live
-    // would file this card's memory under the next card's reference.
-    const filed = untrack(() => ({ reviewId, path, rootPath, levels }));
-    const from = restored;
+    const built = build;
+    if (container === null || built === undefined) return;
+    // The card this tree is FOR, captured as VALUES because the effect above
+    // replaces `rootPath` and `levels` — and a review switch replaces `memory` —
+    // the instant the reference changes, and both run before this effect's
+    // teardown. A teardown reading them live would file this card's memory under
+    // the next card's reference, or into the next review's. `reviewId` and
+    // `path` are the reactive pair here, so the read is untracked to keep them
+    // out of this effect's dependency set as well.
+    const filed = untrack(() => ({ memory, reviewId, path, rootPath, levels }));
+    const from = built.from;
     const owner = new FileTree({
-      paths,
+      paths: built.paths,
       initialExpansion: "closed",
       // The reader's own expansion, applied at CONSTRUCTION rather than as a
       // run of lazy adds — which is what makes a reopened card paint whole in
       // one frame instead of unfolding itself.
-      ...(from === undefined ? {} : { initialExpandedPaths: from.expanded }),
+      initialExpandedPaths: from?.expanded,
       // A row at caret's own density rather than the library's roomier 30px
       // default, so a level reads as a listing beside the plan's mono text.
       itemHeight: 22,
@@ -301,21 +311,44 @@
     // this creates a real <file-tree-container> with its own shadow root — the
     // same container-managed posture @pierre/diffs has.
     owner.render({ containerWrapper: container });
+    // Follow the offset as the reader moves it, rather than reading it back at
+    // teardown. Svelte detaches an effect's DOM BEFORE running its teardown, and
+    // a detached element's `scrollTop` is spec'd to read 0 — so a card read at
+    // that point would report the top however far the reader had scrolled, and
+    // every reopen would land there.
+    let scrollTop = 0;
+    const scroller = scrollerOf(owner);
+    const onScroll = () => {
+      scrollTop = scroller?.scrollTop ?? 0;
+    };
+    // Attached before the scroll below, so a restore's own `scrollToPath` is
+    // recorded too — reopening a card and dismissing it again keeps the place
+    // rather than resetting it to the top.
+    scroller?.addEventListener("scroll", onScroll, { passive: true });
     // Every element the library renders is tabIndex -1, so without this the card
     // is reachable only by pointer: the reader who opened it with a click could
     // not then walk it with the arrow keys. Focusing the first row hands the
     // library's own key handling somewhere to start. Escape still closes the
     // card from here — DiffPlanView listens on `window`, in the capture phase.
     //
-    // A reopened card starts where the reader left off instead, which is the
-    // same gesture aimed at a different row: `scrollToPath` focuses its target
-    // as well as scrolling to it, so the arrow keys resume from the row that was
-    // under the reader's eye rather than from the top of the list.
-    if (from?.topPath === undefined) owner.focusFirstItem();
-    else owner.scrollToPath(from.topPath, { offset: "top" });
+    // Unconditional, and the reopen's own scroll rides on top of it rather than
+    // replacing it: `scrollToPath` focuses its target too, so the arrow keys
+    // resume from the row that was under the reader's eye — but it early-returns
+    // on a path it cannot resolve to a visible row, and a card left with no
+    // focused row at all is the keyboard-dead one this call exists to prevent.
+    owner.focusFirstItem();
+    if (from?.topPath !== undefined) owner.scrollToPath(from.topPath, { offset: "top" });
     const unsubscribe = owner.subscribe(() => syncExpansions(owner));
+    // The library's `subscribe` deliberately swallows its initial snapshot, so
+    // the walk above will not run until the reader touches the tree. On a first
+    // open that is exactly right — nothing is expanded, so there is nothing to
+    // claim. On a REOPEN it is not: a directory whose level was refused or still
+    // in flight comes back expanded and absent from the snapshot, and this walk
+    // is the retry the memory promises it. Harmless either way, so it is not
+    // worth a branch to say which case is which.
+    syncExpansions(owner);
     return () => {
-      folderMemory.write(
+      filed.memory.write(
         filed.reviewId,
         filed.path,
         captureCard({
@@ -325,10 +358,11 @@
           // inclusive, and "visible" is every row no collapsed parent hides —
           // not just the ones the virtualizer has painted.
           rows: owner.getVisibleRows(0, Math.max(0, owner.getVisibleCount() - 1)),
-          scrollTop: scrollTopOf(owner),
+          scrollTop,
           itemHeight: owner.getItemHeight(),
         }),
       );
+      scroller?.removeEventListener("scroll", onScroll);
       unsubscribe();
       owner.cleanUp();
       if (tree === owner) tree = undefined;

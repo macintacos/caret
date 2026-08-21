@@ -377,19 +377,21 @@ test("remembers the row the reader had at the top of the list", () => {
   expect(card.topPath).toBe("c.ts");
 });
 
-test("remembers the first row when the list was never scrolled", () => {
+test("remembers the first row for an offset of zero", () => {
+  // Which is both "never scrolled" and the card's one degrade: a card that never
+  // found its scroller inside the library's shadow root reports 0, and the
+  // reader gets their expansion back at the top rather than nothing back at all.
   const rows = [fileRow("a.ts"), fileRow("b.ts")];
   expect(captureCard({ rootPath: "src", levels: served(), rows, ...scroll }).topPath).toBe("a.ts");
 });
 
-test("remembers no row at all when the scroller could not be measured", () => {
-  // The scroll element lives inside the library's shadow root; a miss reports
-  // a zero item height, and the card comes back at the top rather than nowhere.
-  const rows = [fileRow("a.ts")];
+test("remembers no row at all for a row height it cannot divide by", () => {
+  // Not reachable from the card — `getItemHeight()` returns the row height it
+  // was configured with — but the arithmetic is total rather than trusting that.
   const card = captureCard({
     rootPath: "src",
     levels: served(),
-    rows,
+    rows: [fileRow("a.ts")],
     scrollTop: 44,
     itemHeight: 0,
   });
@@ -397,7 +399,10 @@ test("remembers no row at all when the scroller could not be measured", () => {
 });
 
 // The registry. Session-lived, in memory, and keyed on the pair — a cached tree
-// belongs to one review's cwd and must never be restored over another.
+// belongs to one review's cwd and must never be restored over another. Dropping
+// one review's cards is the OWNER's job rather than a method here: DiffPlanView
+// discards the whole instance, which is what also takes the outgoing card's own
+// late write with it.
 
 const memoryOf = (rootPath: string) =>
   captureCard({ rootPath, levels: served(), rows: [], ...scroll });
@@ -420,9 +425,8 @@ test("has nothing for a reference nobody has opened", () => {
   expect(createFolderMemory().read("r1", "src")).toBeUndefined();
 });
 
-test("drops everything when the review changes", () => {
-  const memory = createFolderMemory();
-  memory.write("r1", "src", memoryOf("src"));
-  memory.clear();
-  expect(memory.read("r1", "src")).toBeUndefined();
+test("a fresh instance carries nothing over from the last one", () => {
+  const before = createFolderMemory();
+  before.write("r1", "src", memoryOf("src"));
+  expect(createFolderMemory().read("r1", "src")).toBeUndefined();
 });

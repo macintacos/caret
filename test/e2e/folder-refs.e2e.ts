@@ -81,6 +81,20 @@ async function openBoth(page: Page): Promise<void> {
   await expect(page.locator(preview)).toBeVisible();
 }
 
+/**
+ * Press Escape until the card is gone.
+ *
+ * Retried because Safe Mode swallows keystrokes for a short window right after
+ * the view gains focus, so one immediate press can be eaten — the same shape the
+ * file preview's Escape spec uses.
+ */
+async function dismissCard(page: Page): Promise<void> {
+  await expect(async () => {
+    await page.keyboard.press("Escape");
+    await expect(page.locator(card)).toHaveCount(0, { timeout: 500 });
+  }).toPass();
+}
+
 test("a directory reference draws a folder glyph and a file reference a file one", async ({
   daemon,
   page,
@@ -312,13 +326,7 @@ test("Escape closes the card", async ({ daemon, page }) => {
     await page.locator('[data-file-ref="directory"]').click();
     await expect(page.locator(card)).toBeVisible();
 
-    // Retried, like the file preview's Escape spec: right after the view gains
-    // focus, Safe Mode swallows keystrokes for a short window, so one immediate
-    // press can be eaten.
-    await expect(async () => {
-      await page.keyboard.press("Escape");
-      await expect(page.locator(card)).toHaveCount(0, { timeout: 500 });
-    }).toPass();
+    await dismissCard(page);
   } finally {
     await proj.cleanup();
   }
@@ -705,15 +713,6 @@ test("an empty directory says so rather than opening a blank card", async ({ dae
 // snapshot round-trip and the top-row arithmetic in folderTree.test.ts, and the
 // request a restored card does NOT make in FolderTree.test.ts.
 
-/** Press Escape until the card is gone. Safe Mode swallows keystrokes for a
- * short window right after the view gains focus, so one press can be eaten. */
-async function dismissCard(page: Page): Promise<void> {
-  await expect(async () => {
-    await page.keyboard.press("Escape");
-    await expect(page.locator(card)).toHaveCount(0, { timeout: 500 });
-  }).toPass();
-}
-
 test("reopening a folder reference brings back the folders that were open", async ({
   daemon,
   page,
@@ -792,6 +791,50 @@ test("two folder references in one review each keep their own state", async ({ d
     await inner.click();
     await expect(page.locator(row("deep/"))).toHaveAttribute("aria-expanded", "true");
     await expect(page.locator(row("deep/leaf.ts"))).toBeVisible();
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("reopening a folder reference comes back to the same place in the list", async ({
+  daemon,
+  page,
+}) => {
+  // The scroll half of the restore, and it can only be pinned here. The offset
+  // lives on an element inside @pierre/trees' own shadow root, virtualized
+  // against a layout happy-dom does not do — and the card is read while it is
+  // still attached, which a unit that injects `scrollTop` as a literal cannot
+  // tell apart from one that reads it too late and gets 0.
+  const proj = await makeProject(
+    Object.fromEntries(
+      Array.from({ length: 40 }, (_, i) => [
+        `wide/f${String(i).padStart(3, "0")}.ts`,
+        "export {};\n",
+      ]),
+    ),
+  );
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nEverything sits in `wide`.\n" });
+    await page.goto("/");
+    await planSurface(page);
+    await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(1);
+    await page.locator('[data-file-ref="directory"]').click();
+    await expect(page.locator(card)).toBeVisible();
+
+    // Ten rows down, at the 22px row the card sets — an exact multiple, so the
+    // row-granular restore has an unambiguous answer to come back to.
+    const scroller = page.locator(`${card} [data-file-tree-virtualized-scroll]`);
+    await scroller.evaluate((el) => {
+      el.scrollTop = 220;
+    });
+    await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBe(220);
+
+    await dismissCard(page);
+    await page.locator('[data-file-ref="directory"]').click();
+    await expect(page.locator(card)).toBeVisible();
+
+    // Back on the row the reader was on, rather than at the top of the list.
+    await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBe(220);
   } finally {
     await proj.cleanup();
   }
