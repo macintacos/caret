@@ -68,9 +68,12 @@ export const CARD_MARGIN = 12;
  * The box the card must stay inside: the viewport, less the docked preview lane
  * (EXC-1129).
  *
- * The lane is a full-edge strip, so "clear of the lane" is exactly the viewport
- * narrowed — a right dock caps the width at the lane's left edge, a bottom dock
- * caps the height at its top. That means `anchorCard` needs no new concept: its
+ * The lane is a full-edge strip of the plan surface, so "clear of the lane" is
+ * exactly the viewport narrowed — a right dock caps the width at the lane's left
+ * edge, a bottom dock caps the height at its top. Narrowing the whole viewport
+ * that way is exact where the card can actually land and merely conservative
+ * above the surface, which is a band no plan token anchors into. That means
+ * `anchorCard` needs no new concept: its
  * third argument already means "the box to stay inside", and this is that box
  * with one dimension short. Containment still wins over clearing when the two
  * conflict, because `anchorCard`'s margin floors put a card too large for the

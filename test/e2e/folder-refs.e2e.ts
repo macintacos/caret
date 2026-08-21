@@ -27,6 +27,8 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
+import type { Page } from "@playwright/test";
+
 import { makeProject, settleDrawer } from "@test/e2e/support/file-refs.ts";
 import type { Daemon } from "@test/e2e/support/fixtures.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
@@ -54,11 +56,7 @@ const BOTH_REFS =
 
 /** Seed BOTH_REFS against a NESTED project and wait until both tokens resolved,
  * so a click below lands on a tagged reference rather than plain prose. */
-async function seedBothRefs(
-  daemon: Daemon,
-  page: import("@playwright/test").Page,
-  dir: string,
-): Promise<void> {
+async function seedBothRefs(daemon: Daemon, page: Page, dir: string): Promise<void> {
   await daemon.seed({ cwd: dir, plan: BOTH_REFS });
   await page.goto("/");
   await planSurface(page);
@@ -74,7 +72,7 @@ async function seedBothRefs(
  * closing wipe, so asserting straight after the card opens would pass against the
  * very behaviour these tests exist to forbid.
  */
-async function openBoth(page: import("@playwright/test").Page): Promise<void> {
+async function openBoth(page: Page): Promise<void> {
   await page.locator('[data-file-ref=""]').click();
   await expect(page.locator(preview)).toBeVisible();
   await page.locator('[data-file-ref="directory"]').click();
@@ -334,7 +332,18 @@ test("a directory reference opens the card beside an open preview", async ({ dae
   const proj = await makeProject(NESTED);
   try {
     await seedBothRefs(daemon, page, proj.dir);
-    await openBoth(page);
+
+    await page.locator('[data-file-ref=""]').click();
+    await expect(page.locator(preview)).toBeVisible();
+
+    await page.locator('[data-file-ref="directory"]').click();
+    await expect(page.locator(card)).toBeVisible();
+    // Settled before the lane is asserted: an evicted lane stays visible for the
+    // length of its closing wipe, so a bare check would pass against the old
+    // behaviour. `openBoth` below carries the same guard for the tests that only
+    // need the state, not the claim.
+    await settleDrawer(page);
+    await expect(page.locator(preview)).toBeVisible();
   } finally {
     await proj.cleanup();
   }
@@ -406,10 +415,13 @@ test("with both open, Escape closes the card first and the lane second", async (
   }
 });
 
-test("with both open, plan prose still dismisses only the card, and still swallows", async ({
-  daemon,
-  page,
-}) => {
+test("with both open, plan prose dismisses only the card", async ({ daemon, page }) => {
+  // Only the lane half is asserted here. Plan prose matches nothing on
+  // CARD_EXEMPT, so it falls through the same swallow branch it always did —
+  // which the outside-click test above already pins, and which coexistence never
+  // put at risk. Re-asserting it would need a wait on an event that must not
+  // happen, and the honest form of that is not a clock the app holds no deadline
+  // on (doc/agents/browser-testing.md § Timing discipline).
   const proj = await makeProject(NESTED);
   try {
     await seedBothRefs(daemon, page, proj.dir);
@@ -419,9 +431,6 @@ test("with both open, plan prose still dismisses only the card, and still swallo
     await page.locator(".diffview").getByText("Just some plain prose here.").click();
     await expect(page.locator(card)).toHaveCount(0);
     await expect(page.locator(preview)).toBeVisible();
-    const t0 = await page.evaluate(() => performance.now());
-    await page.waitForFunction((t) => performance.now() > t + 300, t0);
-    await expect(page.getByRole("dialog", { name: "Add a comment" })).toHaveCount(0);
   } finally {
     await proj.cleanup();
   }

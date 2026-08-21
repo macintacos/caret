@@ -443,9 +443,9 @@
   // The directory reference whose tree is open (EXC-918), plus the clicked
   // token's box. A viewport-fixed card rather than the file preview's lane: a
   // folder has no `:line` to bound it, so the surface is one to navigate rather
-  // than to peek at, and it is dismissed by the next click or Escape rather than
-  // sized and lived in. It can stand open BESIDE the lane (EXC-1129) all the same,
-  // and is placed clear of it.
+  // than to peek at, and it is dismissed by the next click AWAY from it, or by
+  // Escape, rather than sized and lived in. It can stand open BESIDE the lane
+  // (EXC-1129) all the same, and is placed clear of it.
   //
   // The RECT rather than the element: the card places itself once and never
   // tracks the token, and the plan surface it belongs to is torn out whenever
@@ -497,11 +497,11 @@
   // One exemption list, and everything on it means the same thing: this click
   // belongs to a surface the reader is still using, so the card neither closes nor
   // swallows it and it does its own job on the FIRST press. That covers the card
-  // itself, the excerpt lane it now coexists with (EXC-1129) — where the close
-  // circle is the click that would otherwise cost two — and the two openers, a
-  // reference token and the hint badge that teaches it (EXC-1061), which stay on
-  // the list because swallowing them would make the affordance dead for as long as
-  // a card is open. Every other click is a click away from the card: it closes,
+  // itself, the excerpt lane it coexists with (EXC-1129) — where the close circle
+  // is the click that would otherwise cost two — and the two openers, a reference
+  // token and the hint badge that teaches it (EXC-1061), which are on the list
+  // because swallowing them would make the affordance dead for as long as a card
+  // is open. Every other click is a click away from the card: it closes,
   // and is swallowed so dismissing never also opens a line comment.
   const CARD_EXEMPT = "[data-folder-tree], [data-file-drawer], [data-file-ref], [data-ref-hint]";
   $effect(() => {
@@ -528,14 +528,14 @@
 
   // Escape dismissal (EXC-840), in the CAPTURE phase so it runs before the plan's
   // own handlers. It is the keyboard half of a pair with the pane's close circle.
-  // A click OUTSIDE the lane deliberately does nothing here (EXC-1067) — the preview is a
-  // docked lane rather than a popover, so it takes layout space beside the plan
-  // instead of covering it and there is no "outside" in the modal sense to click
-  // away from. The reader works in the plan with the excerpt beside them, and every
-  // click they spend there does its own job on the first press. The folder card's
-  // effect above keeps its outside-click dismissal: that surface IS viewport-fixed
-  // over the plan, so the divergence tracks the two surfaces' shapes rather than
-  // being drift.
+  // A click OUTSIDE the lane deliberately does nothing here (EXC-1067) — the
+  // preview is a docked lane rather than a popover, so it takes layout space
+  // beside the plan instead of covering it and there is no "outside" in the modal
+  // sense to click away from. The reader works in the plan with the excerpt beside
+  // them, and every click they spend there does its own job on the first press.
+  // The folder card's effect above keeps its outside-click dismissal: that surface
+  // IS viewport-fixed over the plan, so the divergence tracks the two surfaces'
+  // shapes rather than being drift.
   //
   // Gated on `showDiff` to match the pane's own render condition below, not just on
   // the state: compare mode hides the lane while leaving `filePreview` set, and an

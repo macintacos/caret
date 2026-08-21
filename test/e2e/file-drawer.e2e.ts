@@ -13,6 +13,8 @@
 // rects, and the drag from real pointer events. The clamping math itself stays a
 // unit (ui/src/lib/fileDrawer.test.ts).
 
+import type { Page } from "@playwright/test";
+
 import { fileRefCount, makeProject, settleDrawer } from "@test/e2e/support/file-refs.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
@@ -31,7 +33,7 @@ const OTHER_TS = Array.from(
 
 /** Viewport rects of the surface, the plan pane, and the drawer — the three the
  * docking assertions compare. Drawer is null when none is open. */
-function laneGeometry(page: import("@playwright/test").Page): Promise<{
+function laneGeometry(page: Page): Promise<{
   surface: DOMRect;
   pane: DOMRect;
   drawer: DOMRect | null;
@@ -50,7 +52,7 @@ function laneGeometry(page: import("@playwright/test").Page): Promise<{
 
 /** Open the preview for the first resolved reference in the plan, and wait out
  * the lane's opening wipe so every rect below is measured at its settled size. */
-async function openPreview(page: import("@playwright/test").Page): Promise<void> {
+async function openPreview(page: Page): Promise<void> {
   await planSurface(page);
   await expect.poll(() => fileRefCount(page)).toBeGreaterThan(0);
   await page.locator("[data-file-ref]").first().click();
@@ -532,18 +534,30 @@ test("the lane wipes out again when the preview is dismissed", async ({ daemon, 
 const COEXIST = { "src/cache.ts": CACHE_TS, "src/lib/util.ts": "export {};\n" };
 const COEXIST_PLAN = "# Refs\n\nEdit `src/cache.ts`, which lives under `src`.\n";
 
-/** Open the excerpt lane, let it settle, then open the folder card beside it —
- * so the card is placed against a lane already at its final size. */
-async function openBoth(page: import("@playwright/test").Page): Promise<void> {
+/**
+ * Open the excerpt lane, let it settle, then open the folder card beside it.
+ *
+ * This order is the load-bearing half: placement is computed once, at open, so a
+ * card is placed against whatever lane is standing at that instant and a lane
+ * opened afterwards deliberately does not move it. Only this order asserts the
+ * narrowed bounds; the reverse is the accepted overlap.
+ */
+async function openLaneThenCard(page: Page): Promise<void> {
   await openPreview(page);
   await page.locator('[data-file-ref="directory"]').click();
   await expect(page.locator("[data-folder-tree]")).toBeVisible();
 }
 
-const cardRect = (page: import("@playwright/test").Page): Promise<DOMRect> =>
-  page
-    .locator("[data-folder-tree]")
-    .evaluate((el) => el.getBoundingClientRect().toJSON() as DOMRect);
+/** The card's settled viewport box. `toBeVisible` resolves as soon as the card is
+ * placed, while `ft-in` is still carrying it up its last 4px — so the rise is
+ * awaited before measuring rather than left to sit inside CARD_MARGIN's slack. */
+async function cardRect(page: Page): Promise<DOMRect> {
+  const el = page.locator("[data-folder-tree]");
+  await el.evaluate(async (node) => {
+    await Promise.all(node.getAnimations().map((a) => a.finished.catch(() => undefined)));
+  });
+  return el.evaluate((node) => node.getBoundingClientRect().toJSON() as DOMRect);
+}
 
 test("at a wide width the card is placed clear of the right-docked lane", async ({
   daemon,
@@ -554,10 +568,10 @@ test("at a wide width the card is placed clear of the right-docked lane", async 
     await daemon.seed({ cwd: proj.dir, plan: COEXIST_PLAN });
     await page.setViewportSize(WIDE);
     await page.goto("/");
-    await openBoth(page);
+    await openLaneThenCard(page);
 
     const drawer = (await laneGeometry(page))?.drawer;
-    expect(drawer).not.toBeNull();
+    expect(drawer).toBeTruthy();
     expect((await cardRect(page)).right).toBeLessThanOrEqual(drawer!.left);
   } finally {
     await proj.cleanup();
@@ -573,10 +587,10 @@ test("at a narrow width the card is placed clear of the bottom-docked lane", asy
     await daemon.seed({ cwd: proj.dir, plan: COEXIST_PLAN });
     await page.setViewportSize(NARROW);
     await page.goto("/");
-    await openBoth(page);
+    await openLaneThenCard(page);
 
     const drawer = (await laneGeometry(page))?.drawer;
-    expect(drawer).not.toBeNull();
+    expect(drawer).toBeTruthy();
     expect((await cardRect(page)).bottom).toBeLessThanOrEqual(drawer!.top);
   } finally {
     await proj.cleanup();

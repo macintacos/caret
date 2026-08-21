@@ -124,16 +124,30 @@
   // `tick()` would ever wait for — would flip against a height five times too
   // small and hang a full-size card off the bottom of the viewport. It stays put
   // afterwards: the reader dismisses this card rather than scrolling with it.
+  /**
+   * The open preview lane's dock and box, or undefined when none is open.
+   *
+   * Measured out of the DOM rather than taken as a prop because the placement
+   * effect below is already reading the card's own settled rect at one instant,
+   * and the lane's has to be read at that same instant to agree with it — a prop
+   * would carry whatever rect the parent last happened to measure.
+   *
+   * The dock is read as a total ternary rather than asserted: the attribute's
+   * value comes from a typed prop one component away, so the fallback can never
+   * fire today, but nothing local would say so if that changed.
+   */
+  function openLane(): { edge: DrawerEdge; top: number; left: number } | undefined {
+    const el = document.querySelector<HTMLElement>("[data-file-drawer]");
+    if (el === null) return undefined;
+    const { top, left } = el.getBoundingClientRect();
+    return { edge: el.dataset.fileDrawer === "right" ? "right" : "bottom", top, left };
+  }
+
   //
-  // The open preview lane narrows the box the card is placed inside (EXC-1129),
-  // and it is MEASURED here rather than passed down as a prop: the effect is
-  // already reading the card's own settled rect at this instant, and the lane's
-  // has to be read at that same instant to agree with it — a prop would carry a
-  // rect captured whenever the parent last happened to measure. Reading a sibling
-  // surface out of the DOM is the same shape modalStack's `topmostDialogContent`
-  // takes, and for the same reason. A lane that opens AFTER the card is placed
-  // does not re-place it: placement is computed once, at open, and moving a card
-  // the reader is already reading would cost more than the overlap.
+  // The lane narrows the box the card is placed inside (EXC-1129). A lane that
+  // opens AFTER the card is placed does not re-place it: placement is computed
+  // once, at open, and moving a card the reader is already reading would cost
+  // more than the overlap.
   $effect(() => {
     const el = card;
     const box = anchor;
@@ -141,17 +155,10 @@
     void tick().then(() => {
       if (card !== el) return;
       const self = el.getBoundingClientRect();
-      const laneEl = document.querySelector<HTMLElement>("[data-file-drawer]");
-      const laneRect = laneEl?.getBoundingClientRect();
       placed = anchorCard(
         box,
         { width: self.width, height: self.height },
-        cardBounds(
-          { width: window.innerWidth, height: window.innerHeight },
-          laneEl === null || laneRect === undefined
-            ? undefined
-            : { edge: laneEl.dataset.fileDrawer as DrawerEdge, top: laneRect.top, left: laneRect.left },
-        ),
+        cardBounds({ width: window.innerWidth, height: window.innerHeight }, openLane()),
         CARD_MARGIN,
       );
     });

@@ -57,6 +57,12 @@ describe("FileDrawer lane", () => {
       children,
     });
     expect(lane(bottom.target).classList.contains("fd-bottom")).toBe(true);
+
+    // The attribute's VALUE is load-bearing, not just its presence: FolderTree
+    // reads it to pick which dimension the card's bounds are narrowed on
+    // (EXC-1129). Dropped, every right dock would silently take bottom bounds.
+    expect(lane(right.target).dataset.fileDrawer).toBe("right");
+    expect(lane(bottom.target).dataset.fileDrawer).toBe("bottom");
   });
 
   test("marks the lane while it plays its closing wipe, and not before", () => {
