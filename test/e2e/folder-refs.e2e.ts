@@ -4,14 +4,21 @@
 // children collapsed, each deeper level fetched only when the reader opens the
 // folder above it.
 //
+// The card coexists with the file preview's docked lane (EXC-1129) rather than
+// evicting it, which makes it usable as a navigation aid: the rules that keep
+// that safe live here too — which clicks the card's capture-phase handler lets
+// through, and which of the two capture-phase Escape handlers owns the key.
+//
 // Everything here needs a real browser. The tree is @pierre/trees mounted
 // through its web-components entry, so every row lives behind a custom element's
 // own shadow root and is virtualized against a layout happy-dom does not do —
 // and the affordances under test (a level arriving on expand, a file row doing
-// nothing, Escape and outside-click dismissal, a click inside NOT dismissing)
-// are real hit-testing and real key handling. The pure halves stay units: the
-// path arithmetic and card placement in folderTree.test.ts, the card's own
-// loading / empty / error / elision framing in FolderTree.test.ts.
+// nothing, Escape and outside-click dismissal, a click inside NOT dismissing,
+// two capture-phase handlers dividing one keypress) are real hit-testing and
+// real key handling. The pure halves stay units: the path arithmetic and card
+// placement math in folderTree.test.ts, the card's own loading / empty / error /
+// elision framing in FolderTree.test.ts. Where the card LANDS relative to the
+// open lane is geometry over both surfaces, so it belongs to file-drawer.e2e.ts.
 //
 // The daemon is a real subprocess reading the local filesystem, so each test
 // writes a synthetic project dir and seeds a review whose cwd points at it. The
@@ -20,8 +27,11 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
-import { makeProject } from "@test/e2e/support/file-refs.ts";
-import { expect, test } from "@test/e2e/support/fixtures.ts";
+import type { Page } from "@playwright/test";
+
+import { makeProject, settleDrawer } from "@test/e2e/support/file-refs.ts";
+import type { Daemon } from "@test/e2e/support/fixtures.ts";
+import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 import { MAX_DIR_ENTRIES } from "@/plan/directory.ts";
 
@@ -36,6 +46,40 @@ const NESTED = {
 const card = "[data-folder-tree]";
 const rows = `${card} [data-type="item"]`;
 const row = (path: string) => `${card} [data-item-path="${path}"]`;
+const preview = "[data-file-preview]";
+const lane = "[data-file-drawer]";
+
+/** A plan citing both a directory and a file under it — the shape the coexistence
+ * tests below need, and the one a reader following a plan actually meets. */
+const BOTH_REFS =
+  "# Refs\n\nThe tree under `src` matters, and `src/cache.ts` holds it.\n\nJust some plain prose here.\n";
+
+/** Seed BOTH_REFS against a NESTED project and wait until both tokens resolved,
+ * so a click below lands on a tagged reference rather than plain prose. */
+async function seedBothRefs(daemon: Daemon, page: Page, dir: string): Promise<void> {
+  await daemon.seed({ cwd: dir, plan: BOTH_REFS });
+  await page.goto("/");
+  await planSurface(page);
+  await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(1);
+  await expect(page.locator('[data-file-ref=""]')).toHaveCount(1);
+}
+
+/**
+ * Open the excerpt lane, then the folder card, and leave both standing.
+ *
+ * `settleDrawer` before the second assertion is what makes this a claim rather
+ * than a snapshot: a lane being evicted is still visible for the length of its
+ * closing wipe, so asserting straight after the card opens would pass against the
+ * very behaviour these tests exist to forbid.
+ */
+async function openBoth(page: Page): Promise<void> {
+  await page.locator('[data-file-ref=""]').click();
+  await expect(page.locator(preview)).toBeVisible();
+  await page.locator('[data-file-ref="directory"]').click();
+  await expect(page.locator(card)).toBeVisible();
+  await settleDrawer(page);
+  await expect(page.locator(preview)).toBeVisible();
+}
 
 test("a directory reference draws a folder glyph and a file reference a file one", async ({
   daemon,
@@ -280,6 +324,139 @@ test("Escape closes the card", async ({ daemon, page }) => {
   }
 });
 
+// EXC-1129. The card and the excerpt lane used to evict one another, so following
+// a plan that cites a folder and the files under it cost the reader whichever
+// surface they were already using — and the card was unusable as the navigation
+// aid it exists to be. The tests below are the contract that replaced it.
+test("a directory reference opens the card beside an open preview", async ({ daemon, page }) => {
+  const proj = await makeProject(NESTED);
+  try {
+    await seedBothRefs(daemon, page, proj.dir);
+
+    await page.locator('[data-file-ref=""]').click();
+    await expect(page.locator(preview)).toBeVisible();
+
+    await page.locator('[data-file-ref="directory"]').click();
+    await expect(page.locator(card)).toBeVisible();
+    // Settled before the lane is asserted: an evicted lane stays visible for the
+    // length of its closing wipe, so a bare check would pass against the old
+    // behaviour. `openBoth` below carries the same guard for the tests that only
+    // need the state, not the claim.
+    await settleDrawer(page);
+    await expect(page.locator(preview)).toBeVisible();
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("a file reference opens the preview beside an open card", async ({ daemon, page }) => {
+  // The reverse direction, and the one that only holds because the card's own
+  // click handler lets a reference token through WITHOUT dismissing the card.
+  const proj = await makeProject(NESTED);
+  try {
+    await seedBothRefs(daemon, page, proj.dir);
+
+    await page.locator('[data-file-ref="directory"]').click();
+    await expect(page.locator(card)).toBeVisible();
+
+    await page.locator('[data-file-ref=""]').click();
+    await expect(page.locator(preview)).toBeVisible();
+    await expect(page.locator(card)).toBeVisible();
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("with both open, the preview's close circle closes it on the first press", async ({
+  daemon,
+  page,
+}) => {
+  // The lane is a coexisting surface, not the "outside" the card is dismissed by,
+  // so a click in it is neither swallowed nor a dismissal — which is what makes
+  // the close circle work on one press rather than two.
+  const proj = await makeProject(NESTED);
+  try {
+    await seedBothRefs(daemon, page, proj.dir);
+
+    await openBoth(page);
+
+    await page.locator(".fp-close").click();
+    await expect(page.locator(preview)).toHaveCount(0);
+    await expect(page.locator(card)).toBeVisible();
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("with both open, Escape closes the card first and the lane second", async ({
+  daemon,
+  page,
+}) => {
+  // Both dismissals are capture-phase keydown listeners on window, where
+  // stopPropagation says nothing to a sibling — so precedence is state, not
+  // ordering: the lane does not listen at all while a card is stacked over it.
+  const proj = await makeProject(NESTED);
+  try {
+    await seedBothRefs(daemon, page, proj.dir);
+
+    await openBoth(page);
+    // Deterministic presses rather than retried ones: a retry would re-press
+    // after the card closed and take the lane with it, hiding the ordering.
+    await waitPastSafeModeGrace(page);
+
+    await page.keyboard.press("Escape");
+    await expect(page.locator(card)).toHaveCount(0);
+    await expect(page.locator(lane)).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(page.locator(lane)).toHaveCount(0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("with both open, plan prose dismisses only the card", async ({ daemon, page }) => {
+  // Only the lane half is asserted here. Plan prose matches nothing on
+  // CARD_EXEMPT, so it falls through the same swallow branch it always did —
+  // which the outside-click test above already pins, and which coexistence never
+  // put at risk. Re-asserting it would need a wait on an event that must not
+  // happen, and the honest form of that is not a clock the app holds no deadline
+  // on (doc/agents/browser-testing.md § Timing discipline).
+  const proj = await makeProject(NESTED);
+  try {
+    await seedBothRefs(daemon, page, proj.dir);
+
+    await openBoth(page);
+
+    await page.locator(".diffview").getByText("Just some plain prose here.").click();
+    await expect(page.locator(card)).toHaveCount(0);
+    await expect(page.locator(preview)).toBeVisible();
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("with both open, the plan's own line cursor still moves", async ({ daemon, page }) => {
+  // The card swallows outside CLICKS; it was never entitled to the plan's keys.
+  // With a second surface now able to sit open indefinitely, that stays true.
+  const cursor = page.locator(".diffview [data-content] [data-line][data-caret-cursor]");
+  const proj = await makeProject(NESTED);
+  try {
+    await seedBothRefs(daemon, page, proj.dir);
+
+    await openBoth(page);
+    await waitPastSafeModeGrace(page);
+
+    await page.keyboard.press("j");
+    await expect(cursor).toHaveCount(1);
+    const start = Number(await cursor.getAttribute("data-line"));
+    await page.keyboard.press("j");
+    await expect(cursor).toHaveAttribute("data-line", String(start + 1));
+  } finally {
+    await proj.cleanup();
+  }
+});
+
 test("a skipped directory is a row, and opening it reports that it is not listed", async ({
   daemon,
   page,
@@ -380,11 +557,11 @@ test("a linked directory opens the tree and a linked file opens the preview", as
     await expect(page.locator(card)).toBeVisible();
     await expect(page.locator(row("util.ts"))).toBeVisible();
 
-    // The file link on the same plan opens the excerpt instead, and the card
-    // gives way to it — one click, because a reference click is let through.
+    // The file link on the same plan opens the excerpt beside it — one click,
+    // because a reference click is let through, and the card stays (EXC-1129).
     await page.locator('[data-file-ref=""]').click();
-    await expect(page.locator("[data-file-preview]")).toBeVisible();
-    await expect(page.locator(card)).toHaveCount(0);
+    await expect(page.locator(preview)).toBeVisible();
+    await expect(page.locator(card)).toBeVisible();
   } finally {
     await proj.cleanup();
   }

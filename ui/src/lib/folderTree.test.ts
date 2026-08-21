@@ -3,6 +3,7 @@ import { expect, test } from "bun:test";
 import type { DirEntry, DirListing } from "@core/lib/types";
 import {
   anchorCard,
+  cardBounds,
   createLevels,
   cwdPath,
   type LevelRow,
@@ -124,6 +125,35 @@ test("parks the card at the top margin when it fits neither below nor above", ()
   expect(
     anchorCard({ top: 150, bottom: 170, left: 20 }, CARD, { width: 1000, height: 260 }, 16).top,
   ).toBe(16);
+});
+
+// The box the card is placed inside (EXC-1129). The preview lane can now sit open
+// beside the card, and a card placed against the whole viewport would land under
+// it — so the lane narrows the box `anchorCard` already clamps to.
+test("with no lane open, the card's bounds are the whole viewport", () => {
+  expect(cardBounds(VIEWPORT, undefined)).toEqual(VIEWPORT);
+});
+
+test("a right-docked lane caps the bounds at its left edge", () => {
+  expect(cardBounds(VIEWPORT, { edge: "right", top: 0, left: 640 })).toEqual({
+    width: 640,
+    height: 800,
+  });
+});
+
+test("a bottom-docked lane caps the bounds at its top edge", () => {
+  expect(cardBounds(VIEWPORT, { edge: "bottom", top: 500, left: 0 })).toEqual({
+    width: 1000,
+    height: 500,
+  });
+});
+
+test("a card too large for the narrowed bounds still lands inside the real viewport", () => {
+  // Containment wins over clearing the lane: `anchorCard`'s margin floors put a
+  // card wider than the box back at the viewport's own margin, overlapping the
+  // lane rather than hanging off-screen where its header is out of reach.
+  const bounds = cardBounds(VIEWPORT, { edge: "right", top: 0, left: 300 });
+  expect(anchorCard({ top: 100, bottom: 120, left: 200 }, CARD, bounds, 16).left).toBe(16);
 });
 
 // The card's per-level bookkeeping. This is where the decisions live — what is

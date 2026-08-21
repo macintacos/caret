@@ -94,9 +94,12 @@
   }
 </script>
 
+<!-- The edge rides the attribute's VALUE rather than only its presence: FolderTree
+     reads it to place the folder card clear of the lane (EXC-1129). Every
+     `[data-file-drawer]` selector still matches. -->
 <aside
   bind:this={root}
-  data-file-drawer
+  data-file-drawer={edge}
   aria-label="File preview"
   class:fd-bottom={edge === "bottom"}
   class:fd-closing={closing}

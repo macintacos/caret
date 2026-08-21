@@ -31,9 +31,11 @@
   } from "@pierre/trees";
 
   import { getDirListing } from "$lib/api.ts";
+  import type { DrawerEdge } from "$lib/fileDrawer.ts";
   import {
     anchorCard,
     CARD_MARGIN,
+    cardBounds,
     createLevels,
     cwdPath,
     type Levels,
@@ -122,6 +124,30 @@
   // `tick()` would ever wait for — would flip against a height five times too
   // small and hang a full-size card off the bottom of the viewport. It stays put
   // afterwards: the reader dismisses this card rather than scrolling with it.
+  /**
+   * The open preview lane's dock and box, or undefined when none is open.
+   *
+   * Measured out of the DOM rather than taken as a prop because the placement
+   * effect below is already reading the card's own settled rect at one instant,
+   * and the lane's has to be read at that same instant to agree with it — a prop
+   * would carry whatever rect the parent last happened to measure.
+   *
+   * The dock is read as a total ternary rather than asserted: the attribute's
+   * value comes from a typed prop one component away, so the fallback can never
+   * fire today, but nothing local would say so if that changed.
+   */
+  function openLane(): { edge: DrawerEdge; top: number; left: number } | undefined {
+    const el = document.querySelector<HTMLElement>("[data-file-drawer]");
+    if (el === null) return undefined;
+    const { top, left } = el.getBoundingClientRect();
+    return { edge: el.dataset.fileDrawer === "right" ? "right" : "bottom", top, left };
+  }
+
+  //
+  // The lane narrows the box the card is placed inside (EXC-1129). A lane that
+  // opens AFTER the card is placed does not re-place it: placement is computed
+  // once, at open, and moving a card the reader is already reading would cost
+  // more than the overlap.
   $effect(() => {
     const el = card;
     const box = anchor;
@@ -132,7 +158,7 @@
       placed = anchorCard(
         box,
         { width: self.width, height: self.height },
-        { width: window.innerWidth, height: window.innerHeight },
+        cardBounds({ width: window.innerWidth, height: window.innerHeight }, openLane()),
         CARD_MARGIN,
       );
     });

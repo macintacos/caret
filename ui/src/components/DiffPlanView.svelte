@@ -395,10 +395,10 @@
   // The file reference whose preview is open (opened by clicking its token —
   // EXC-687/EXC-840), plus the token itself, which the reveal effect below
   // measures so the clicked filename stays visible beside the drawer. The
-  // preview stays put once open; it closes on Escape (the dismissal effect
-  // below), on the pane's own close button, and when a directory reference takes
-  // its place. Compare mode hides the lane without clearing this — the dismissal
-  // effect carries the matching guard.
+  // preview stays put once open; it closes on Escape (the dismissal effect below)
+  // or on the pane's own close button, and a directory reference opened beside it
+  // leaves it alone (EXC-1129). Compare mode hides the lane without clearing this
+  // — the dismissal effect carries the matching guard.
   let filePreview = $state<
     { path: string; line?: number; endLine?: number; token: HTMLElement } | undefined
   >();
@@ -443,7 +443,9 @@
   // The directory reference whose tree is open (EXC-918), plus the clicked
   // token's box. A viewport-fixed card rather than the file preview's lane: a
   // folder has no `:line` to bound it, so the surface is one to navigate rather
-  // than to peek at, and it is dismissed rather than lived beside.
+  // than to peek at, and it is dismissed by the next click AWAY from it, or by
+  // Escape, rather than sized and lived in. It can stand open BESIDE the lane
+  // (EXC-1129) all the same, and is placed clear of it.
   //
   // The RECT rather than the element: the card places itself once and never
   // tracks the token, and the plan surface it belongs to is torn out whenever
@@ -453,10 +455,12 @@
 
   // One reference click, two surfaces. The daemon said which this is (EXC-916),
   // so the branch is on the kind the span carries rather than on the path's shape
-  // — the whole point of resolving server-side. Opening either dismisses the
-  // other: the card's own effect below still swallows the clicks it dismisses on,
-  // so a card left open beside a preview would put that swallow back over a lane
-  // whose whole point is that clicks in the plan reach the plan.
+  // — the whole point of resolving server-side. The two are PEERS (EXC-1129):
+  // opening either leaves the other standing, so following a plan that cites a
+  // folder and the files under it never costs the reader the surface they were
+  // already using. What makes that safe is two rules below — the card's click
+  // handler treats the lane as a coexisting surface rather than as "outside", and
+  // the lane yields Escape to the card stacked over it.
   function openFileRef(ref: FileRefSpan, tokenElement: HTMLElement): void {
     // The one funnel every reference open passes through — the token click, the
     // badge's own activation, and any keyboard opener a later change adds — so
@@ -468,11 +472,9 @@
       refHints = refHints.filter((h) => h.kind !== ref.kind);
     }
     if (ref.kind === "directory") {
-      dismissFilePreview();
       folderTree = { path: ref.path, rect: tokenElement.getBoundingClientRect() };
       return;
     }
-    folderTree = undefined;
     openFilePreview(ref, tokenElement);
   }
 
@@ -492,14 +494,16 @@
   // plan's own handlers. `composedPath` is what makes this work over a surface
   // behind a shadow root — a click on a tree row still carries the card.
   //
-  // A click on another reference is let through UNSWALLOWED: the card closes, and
-  // that same click reaches the token handler, which opens whichever surface the
-  // reference it landed on calls for. Any other outside click is swallowed, so
-  // dismissing the card never also opens a line comment.
-  //
-  // The hint badge (EXC-1061) is let through on the same terms and for the same
-  // reason — it opens a reference too, so swallowing its click would make the
-  // affordance it exists to teach dead for as long as a card is open.
+  // One exemption list, and everything on it means the same thing: this click
+  // belongs to a surface the reader is still using, so the card neither closes nor
+  // swallows it and it does its own job on the FIRST press. That covers the card
+  // itself, the excerpt lane it coexists with (EXC-1129) — where the close circle
+  // is the click that would otherwise cost two — and the two openers, a reference
+  // token and the hint badge that teaches it (EXC-1061), which are on the list
+  // because swallowing them would make the affordance dead for as long as a card
+  // is open. Every other click is a click away from the card: it closes,
+  // and is swallowed so dismissing never also opens a line comment.
+  const CARD_EXEMPT = "[data-folder-tree], [data-file-drawer], [data-file-ref], [data-ref-hint]";
   $effect(() => {
     if (folderTree === undefined) return;
     const onKey = (e: KeyboardEvent) => {
@@ -509,11 +513,8 @@
       e.stopPropagation();
     };
     const onClick = (e: MouseEvent) => {
-      const path = e.composedPath();
-      if (path.some((n) => n instanceof Element && n.matches("[data-folder-tree]"))) return;
+      if (e.composedPath().some((n) => n instanceof Element && n.matches(CARD_EXEMPT))) return;
       folderTree = undefined;
-      if (path.some((n) => n instanceof Element && n.matches("[data-file-ref], [data-ref-hint]")))
-        return;
       e.preventDefault();
       e.stopImmediatePropagation();
     };
@@ -526,23 +527,29 @@
   });
 
   // Escape dismissal (EXC-840), in the CAPTURE phase so it runs before the plan's
-  // own handlers. It is the keyboard half of a pair with the pane's close circle;
-  // `openFileRef` dismisses too when the reader opens a directory instead. A click
-  // OUTSIDE the lane deliberately does nothing here (EXC-1067) — the preview is a
-  // docked lane rather than a popover, so it takes layout space beside the plan
-  // instead of covering it and there is no "outside" in the modal sense to click
-  // away from. The reader works in the plan with the excerpt beside them, and every
-  // click they spend there does its own job on the first press. The folder card's
-  // effect above keeps its outside-click dismissal: that surface IS viewport-fixed
-  // over the plan, so the divergence tracks the two surfaces' shapes rather than
-  // being drift.
+  // own handlers. It is the keyboard half of a pair with the pane's close circle.
+  // A click OUTSIDE the lane deliberately does nothing here (EXC-1067) — the
+  // preview is a docked lane rather than a popover, so it takes layout space
+  // beside the plan instead of covering it and there is no "outside" in the modal
+  // sense to click away from. The reader works in the plan with the excerpt beside
+  // them, and every click they spend there does its own job on the first press.
+  // The folder card's effect above keeps its outside-click dismissal: that surface
+  // IS viewport-fixed over the plan, so the divergence tracks the two surfaces'
+  // shapes rather than being drift.
   //
   // Gated on `showDiff` to match the pane's own render condition below, not just on
   // the state: compare mode hides the lane while leaving `filePreview` set, and an
   // unrendered pane's handler would swallow Escape from whatever the reader is
   // actually looking at.
+  //
+  // Gated on the card too (EXC-1129), which is what gives the two coexisting
+  // surfaces an Escape ORDER. Both handlers are capture-phase listeners on the same
+  // window, where `stopPropagation` says nothing to a sibling — so one press would
+  // close both. Precedence is therefore state rather than a listener race: the card
+  // is stacked above the lane, so while one is open the lane simply does not listen.
+  // Closing it re-runs this effect, and the next Escape reaches the lane.
   $effect(() => {
-    if (showDiff || filePreview === undefined) return;
+    if (showDiff || filePreview === undefined || folderTree !== undefined) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || drawerClosing) return;
       dismissFilePreview();
