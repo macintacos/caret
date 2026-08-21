@@ -10,7 +10,10 @@
 // never dismisses it (EXC-840 dropped EXC-799's hover-intent tracker), and
 // neither does clicking outside it (EXC-1067) — it docks beside the plan rather
 // than covering it, so a click in the plan does its own job while the excerpt
-// stays open. It closes on Escape or on the header's close circle. Reading past the
+// stays open. It closes on Escape or on the header's close circle, and a folder
+// reference opened beside it leaves it alone (EXC-1129); the coexistence rules
+// themselves — click routing, Escape order, card placement — are folder-refs'
+// and file-drawer's. Reading past the
 // opening window costs no click either: scrolling near an end of the code region
 // loads the next chunk toward it (EXC-969), which needs real layout and so lives
 // here — as does reaching the same ends from the keyboard (EXC-972), which needs
@@ -342,11 +345,15 @@ test("routes a click to the excerpt preview or the folder tree, by kind", async 
     await expect(page.locator("[data-file-preview]")).toBeVisible();
     await expect(page.locator("[data-folder-tree]")).toHaveCount(0);
 
-    // …and the directory opens the tree, dismissing the preview rather than
-    // stacking a second reference surface on top of it.
+    // …and the directory opens the tree BESIDE it (EXC-1129). The two reference
+    // surfaces are peers: following a plan that cites a folder and the files under
+    // it never costs the reader whichever surface they were already using. Settled
+    // before the second assertion — an evicted lane is still visible for the
+    // length of its closing wipe, which would pass against the old behaviour.
     await page.locator(".diffview").getByText("src/lib/", { exact: true }).click();
     await expect(page.locator("[data-folder-tree]")).toBeVisible();
-    await expect(page.locator("[data-file-preview]")).toHaveCount(0);
+    await settleDrawer(page);
+    await expect(page.locator("[data-file-preview]")).toBeVisible();
   } finally {
     await proj.cleanup();
   }
