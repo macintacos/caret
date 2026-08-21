@@ -548,11 +548,11 @@ test("a linked directory opens the tree and a linked file opens the preview", as
     await expect(page.locator(card)).toBeVisible();
     await expect(page.locator(row("util.ts"))).toBeVisible();
 
-    // The file link on the same plan opens the excerpt instead, and the card
-    // gives way to it — one click, because a reference click is let through.
+    // The file link on the same plan opens the excerpt beside it — one click,
+    // because a reference click is let through, and the card stays (EXC-1129).
     await page.locator('[data-file-ref=""]').click();
-    await expect(page.locator("[data-file-preview]")).toBeVisible();
-    await expect(page.locator(card)).toHaveCount(0);
+    await expect(page.locator(preview)).toBeVisible();
+    await expect(page.locator(card)).toBeVisible();
   } finally {
     await proj.cleanup();
   }
