@@ -55,6 +55,7 @@
   } from "$lib/diffview/refHint.ts";
   import { resolveFileRefs } from "$lib/api.ts";
   import { shortCwd } from "$lib/cwd.ts";
+  import { createFolderMemory } from "$lib/folderTree.ts";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { buildLinkLayer } from "$lib/diffview/links.ts";
   import { readDiffStyle, writeDiffStyle } from "$lib/diffStylePref.ts";
@@ -480,13 +481,26 @@
 
   $effect(() => () => cancelDrawerClose());
 
-  // A review switch drops the open card. Its contents belong to the previous
-  // review's cwd, and the 2s poll can swap the review under a reader who left
-  // one open — so without this the card sits over a different plan describing a
-  // directory tree that has nothing to do with it.
+  // Where the folder cards of THIS review are remembered (EXC-1138). Held here
+  // rather than as a module singleton so a review switch can discard the whole
+  // instance below.
+  let folderCards = $state.raw(createFolderMemory());
+
+  // A review switch drops the open card, and every card the reader has been in.
+  // Their contents belong to the previous review's cwd, and the 2s poll can swap
+  // the review under a reader who left one open — so without this the card sits
+  // over a different plan describing a directory tree that has nothing to do
+  // with it.
+  //
+  // A fresh instance rather than a map emptied in place: the card this effect
+  // dismisses files ITS memory on the way out, after the effect has already run.
+  // The outgoing card holds the OLD instance, so that write lands somewhere
+  // nothing references any more instead of surviving the switch it was meant to
+  // be dropped by.
   $effect(() => {
     void reviewId;
     folderTree = undefined;
+    folderCards = createFolderMemory();
   });
 
   // The folder card's dismissal, mirroring the file preview's below: Escape, or a
@@ -1726,7 +1740,13 @@
      the preview is. -->
 {#if !showDiff && folderTree}
   {@const openDir = folderTree}
-  <FolderTree reviewId={reviewId} path={openDir.path} anchor={openDir.rect} {showShortcutHints} />
+  <FolderTree
+    reviewId={reviewId}
+    path={openDir.path}
+    anchor={openDir.rect}
+    memory={folderCards}
+    {showShortcutHints}
+  />
 {/if}
 
 {#if legacyAnnotations.length > 0}

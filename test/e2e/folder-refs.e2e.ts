@@ -81,6 +81,20 @@ async function openBoth(page: Page): Promise<void> {
   await expect(page.locator(preview)).toBeVisible();
 }
 
+/**
+ * Press Escape until the card is gone.
+ *
+ * Retried because Safe Mode swallows keystrokes for a short window right after
+ * the view gains focus, so one immediate press can be eaten — the same shape the
+ * file preview's Escape spec uses.
+ */
+async function dismissCard(page: Page): Promise<void> {
+  await expect(async () => {
+    await page.keyboard.press("Escape");
+    await expect(page.locator(card)).toHaveCount(0, { timeout: 500 });
+  }).toPass();
+}
+
 test("a directory reference draws a folder glyph and a file reference a file one", async ({
   daemon,
   page,
@@ -312,13 +326,7 @@ test("Escape closes the card", async ({ daemon, page }) => {
     await page.locator('[data-file-ref="directory"]').click();
     await expect(page.locator(card)).toBeVisible();
 
-    // Retried, like the file preview's Escape spec: right after the view gains
-    // focus, Safe Mode swallows keystrokes for a short window, so one immediate
-    // press can be eaten.
-    await expect(async () => {
-      await page.keyboard.press("Escape");
-      await expect(page.locator(card)).toHaveCount(0, { timeout: 500 });
-    }).toPass();
+    await dismissCard(page);
   } finally {
     await proj.cleanup();
   }
@@ -693,6 +701,140 @@ test("an empty directory says so rather than opening a blank card", async ({ dae
     await expect(page.locator(`${card} [data-folder-state="empty"]`)).toContainText(
       "This folder is empty.",
     );
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+// Reopening a card the reader has already been in (EXC-1138). Which folders come
+// back open is the tree's own model behind the shadow root, and it is restored
+// through a construction-time expansion set rather than by replaying clicks — so
+// only a real tree can say whether it worked. The pure halves stay units: the
+// snapshot round-trip and the top-row arithmetic in folderTree.test.ts, and the
+// request a restored card does NOT make in FolderTree.test.ts.
+
+test("reopening a folder reference brings back the folders that were open", async ({
+  daemon,
+  page,
+}) => {
+  const proj = await makeProject(NESTED);
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nThe tree under `src` matters.\n" });
+    await page.goto("/");
+    await planSurface(page);
+    await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(1);
+
+    await page.locator('[data-file-ref="directory"]').click();
+    await expect(page.locator(card)).toBeVisible();
+    await page.locator(row("lib/")).click();
+    await expect(page.locator(row("lib/deep/"))).toBeVisible();
+    await page.locator(row("lib/deep/")).click();
+    await expect(page.locator(row("lib/deep/leaf.ts"))).toBeVisible();
+
+    await dismissCard(page);
+
+    // Count only what the REOPEN asks for. A restored card is constructed from
+    // the levels it was already served, so the answer is none — the assertions
+    // below would otherwise pass just as well against a card that refetched
+    // every level and happened to settle before they ran.
+    let dirRequests = 0;
+    page.on("request", (req) => {
+      if (req.url().includes("/dir?")) dirRequests += 1;
+    });
+
+    await page.locator('[data-file-ref="directory"]').click();
+    await expect(page.locator(card)).toBeVisible();
+    await expect(page.locator(row("lib/"))).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator(row("lib/deep/"))).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator(row("lib/deep/leaf.ts"))).toBeVisible();
+    expect(dirRequests).toBe(0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("two folder references in one review each keep their own state", async ({ daemon, page }) => {
+  // The memory is keyed on the pair, so opening the second reference must not
+  // hand it the first one's tree — nor cost the first one its own.
+  const proj = await makeProject(NESTED);
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Refs\n\nThe tree under `src` matters, and so does `src/lib`.\n",
+    });
+    await page.goto("/");
+    await planSurface(page);
+    await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(2);
+    const outer = page.locator('[data-file-ref="directory"]').first();
+    const inner = page.locator('[data-file-ref="directory"]').last();
+
+    await outer.click();
+    await page.locator(row("lib/")).click();
+    await expect(page.locator(row("lib/util.ts"))).toBeVisible();
+    await dismissCard(page);
+
+    // A card rooted one level down: its own rows, with nothing carried over
+    // from the reference above it.
+    await inner.click();
+    await expect(page.locator(`${card} .ft-path`)).toHaveText("src/lib");
+    await expect(page.locator(row("deep/"))).toHaveAttribute("aria-expanded", "false");
+    await page.locator(row("deep/")).click();
+    await expect(page.locator(row("deep/leaf.ts"))).toBeVisible();
+    await dismissCard(page);
+
+    // Each comes back as the reader left it.
+    await outer.click();
+    await expect(page.locator(row("lib/"))).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator(row("lib/deep/"))).toHaveAttribute("aria-expanded", "false");
+    await dismissCard(page);
+
+    await inner.click();
+    await expect(page.locator(row("deep/"))).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator(row("deep/leaf.ts"))).toBeVisible();
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("reopening a folder reference comes back to the same place in the list", async ({
+  daemon,
+  page,
+}) => {
+  // The scroll half of the restore, and it can only be pinned here. The offset
+  // lives on an element inside @pierre/trees' own shadow root, virtualized
+  // against a layout happy-dom does not do — and the card is read while it is
+  // still attached, which a unit that injects `scrollTop` as a literal cannot
+  // tell apart from one that reads it too late and gets 0.
+  const proj = await makeProject(
+    Object.fromEntries(
+      Array.from({ length: 40 }, (_, i) => [
+        `wide/f${String(i).padStart(3, "0")}.ts`,
+        "export {};\n",
+      ]),
+    ),
+  );
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nEverything sits in `wide`.\n" });
+    await page.goto("/");
+    await planSurface(page);
+    await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(1);
+    await page.locator('[data-file-ref="directory"]').click();
+    await expect(page.locator(card)).toBeVisible();
+
+    // Ten rows down, at the 22px row the card sets — an exact multiple, so the
+    // row-granular restore has an unambiguous answer to come back to.
+    const scroller = page.locator(`${card} [data-file-tree-virtualized-scroll]`);
+    await scroller.evaluate((el) => {
+      el.scrollTop = 220;
+    });
+    await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBe(220);
+
+    await dismissCard(page);
+    await page.locator('[data-file-ref="directory"]').click();
+    await expect(page.locator(card)).toBeVisible();
+
+    // Back on the row the reader was on, rather than at the top of the list.
+    await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBe(220);
   } finally {
     await proj.cleanup();
   }

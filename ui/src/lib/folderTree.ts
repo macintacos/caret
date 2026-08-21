@@ -1,5 +1,7 @@
-// Path arithmetic for the folder popover (EXC-918), kept out of the component so
-// it is unit-testable without a tree, a shadow root, or a daemon.
+// Everything the folder popover (EXC-918) knows that is not a rune: the path
+// arithmetic, the card's per-level bookkeeping, and what a dismissed card leaves
+// behind for the next time it is opened (EXC-1138). All of it is kept out of the
+// component so it is unit-testable without a tree, a shadow root, or a daemon.
 //
 // Two coordinate systems meet here and are easy to confuse. @pierre/trees is
 // path-first and models the popover's tree ROOTED AT the referenced directory, so
@@ -161,14 +163,39 @@ export interface Levels {
   fail(treePath: string): void;
   /** The row's note, or null when it has nothing to add. */
   note(row: LevelRow): LevelNote | null;
+  /** Everything the daemon actually answered, in a shape that outlives the card
+   * (§ LevelsSnapshot). */
+  snapshot(): LevelsSnapshot;
 }
 
-export function createLevels(): Levels {
-  const loaded = new Set<string>();
+/**
+ * One card's served state, flattened so it can be handed back to
+ * `createLevels` after the card that accumulated it is gone.
+ *
+ * It carries `loaded`, `skipped` and `elided` — what the daemon answered — and
+ * `paths`, the tree paths those levels produced, which is the set a restored
+ * card is CONSTRUCTED from rather than adding one level at a time.
+ *
+ * `failed` and `pending` are deliberately absent, for the same reason in both
+ * cases: the level never arrived. A refusal is terminal for a card and
+ * reopening is its documented retry, so caching one would take that retry away;
+ * a level still in flight has nothing to cache and finishes loading after the
+ * restore.
+ */
+export interface LevelsSnapshot {
+  paths: readonly string[];
+  loaded: readonly string[];
+  skipped: readonly string[];
+  elided: readonly (readonly [string, number])[];
+}
+
+export function createLevels(snapshot?: LevelsSnapshot): Levels {
+  const paths: string[] = [...(snapshot?.paths ?? [])];
+  const loaded = new Set<string>(snapshot?.loaded);
   const pending = new Set<string>();
-  const skipped = new Set<string>();
+  const skipped = new Set<string>(snapshot?.skipped);
   const failed = new Set<string>();
-  const elided = new Map<string, number>();
+  const elided = new Map<string, number>(snapshot?.elided);
 
   const join = (parent: string, name: string) => (parent === "" ? name : `${parent}/${name}`);
 
@@ -195,7 +222,9 @@ export function createLevels(): Levels {
       // exactly what it dropped.
       const dropped = listing.total - listing.entries.length;
       if (dropped > 0) elided.set(key, dropped);
-      return levelPaths(key, listing.entries);
+      const added = levelPaths(key, listing.entries);
+      paths.push(...added);
+      return added;
     },
     fail(treePath) {
       const key = treeKey(treePath);
@@ -216,6 +245,109 @@ export function createLevels(): Levels {
       if (failed.has(key)) return { text: "couldn't load" };
       const dropped = elided.get(key);
       return dropped === undefined ? null : { text: `+${dropped} more` };
+    },
+    snapshot() {
+      return {
+        paths: [...paths],
+        loaded: [...loaded],
+        skipped: [...skipped],
+        elided: [...elided],
+      };
+    },
+  };
+}
+
+/**
+ * What a dismissed card leaves behind, so reopening the same reference puts the
+ * reader back where they were rather than at a collapsed root.
+ *
+ * Session-lived and in memory only — see `createFolderMemory`.
+ */
+export interface FolderCardMemory {
+  /** The daemon's own path for the card's root (`DirListing.path`), which every
+   * deeper request is built from. */
+  rootPath: string;
+  /** What the ROOT level's cap dropped, which is the header's line. A nested
+   * level reports its own on its row, out of `levels`. */
+  elided: number;
+  levels: LevelsSnapshot;
+  /** The open directories, spelled exactly as the tree reported them — the
+   * library normalizes the trailing slash on the way back in. */
+  expanded: readonly string[];
+  /** The row that was at the top of the list, or undefined when the card had no
+   * rows at all. */
+  topPath: string | undefined;
+}
+
+/**
+ * One live card reduced to what survives it: the levels it was served, the
+ * folders the reader had open, and the row they had at the top.
+ *
+ * The top row is row-granular because it has to be. @pierre/trees exposes no
+ * scroll offset — only `scrollToPath(path, { offset })` — so the anchor is a
+ * path, recovered here from the scroller's own pixels.
+ *
+ * There is one way for that to be wrong and it degrades quietly: a card whose
+ * scroller the component never found reports `scrollTop: 0`, which names the
+ * first row and brings the card back at the top with its expansion intact. The
+ * arithmetic's own guards are for shapes the component cannot produce today
+ * (`getItemHeight()` is the configured row height, always) and cost nothing.
+ */
+export function captureCard(card: {
+  rootPath: string;
+  levels: Levels;
+  rows: readonly LevelRow[];
+  scrollTop: number;
+  itemHeight: number;
+}): FolderCardMemory {
+  const levels = card.levels.snapshot();
+  return {
+    rootPath: card.rootPath,
+    elided: levels.elided.find(([key]) => key === "")?.[1] ?? 0,
+    levels,
+    expanded: card.rows.filter((r) => r.kind === "directory" && r.isExpanded).map((r) => r.path),
+    topPath: card.rows[Math.max(0, Math.floor(card.scrollTop / card.itemHeight))]?.path,
+  };
+}
+
+/**
+ * Every folder card the reader has been in, keyed on the pair (review, folder
+ * reference) — two references in one review each keep their own state.
+ *
+ * One instance belongs to one review, because a cached tree belongs to one
+ * review's cwd and the 2s poll can swap the review under a reader who left a
+ * card open. DiffPlanView owns the instance and REPLACES it on a switch, which
+ * is what makes the drop total rather than nearly so: dismissing the open card
+ * is what files its memory, and that happens after the switch has already run —
+ * a map merely emptied in place would be handed the outgoing card a moment
+ * later, whereas a discarded instance takes that write with it.
+ *
+ * The review still rides the key, so the seam between the two components cannot
+ * produce a wrong restore even if the swap were ever mis-wired.
+ *
+ * A plain `Map` and never `localStorage`: the memory is session-lived by
+ * construction, so a reload starts the reader fresh.
+ *
+ * **Nothing invalidates a record within a review.** A directory that changes
+ * while its card is closed is not re-read for the life of that review — which is
+ * a real change from "every open refetches", in an app whose whole subject is an
+ * agent writing files. It is the deliberate shape: staleness is the reader's
+ * call, and the explicit refresh that acts on it is EXC-1139.
+ */
+export interface FolderMemory {
+  read(reviewId: string, path: string): FolderCardMemory | undefined;
+  write(reviewId: string, path: string, card: FolderCardMemory): void;
+}
+
+export function createFolderMemory(): FolderMemory {
+  const cards = new Map<string, FolderCardMemory>();
+  // A space, because `newReviewId` is base64url and so cannot contain one — the
+  // first space in a key is therefore always the separator, whatever the path.
+  const key = (reviewId: string, path: string) => `${reviewId} ${path}`;
+  return {
+    read: (reviewId, path) => cards.get(key(reviewId, path)),
+    write(reviewId, path, card) {
+      cards.set(key(reviewId, path), card);
     },
   };
 }
