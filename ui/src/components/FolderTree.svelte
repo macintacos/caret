@@ -22,7 +22,7 @@
   //
   // Dismissal is DiffPlanView's (Escape, or a click outside the card); a click
   // inside is left alone so the tree can be navigated.
-  import { tick } from "svelte";
+  import { tick, untrack } from "svelte";
   import { FileTree } from "@pierre/trees";
   import "@pierre/trees/web-components";
   import type {
@@ -34,10 +34,13 @@
   import type { DrawerEdge } from "$lib/fileDrawer.ts";
   import {
     anchorCard,
+    captureCard,
     CARD_MARGIN,
     cardBounds,
     createLevels,
     cwdPath,
+    type FolderCardMemory,
+    folderMemory,
     type Levels,
   } from "$lib/folderTree.ts";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
@@ -69,28 +72,44 @@
      * level reports its own on its row. */
     | { kind: "ready"; elided: number };
   let view = $state.raw<State>({ kind: "loading" });
-  // The root level's tree paths, which is also the signal to mount the tree.
-  let rootPaths = $state.raw<string[] | undefined>();
+  // The tree paths the tree is built from, which is also the signal to mount it.
+  // One level's worth on a first open, every cached level's on a restore.
+  let initialPaths = $state.raw<string[] | undefined>();
 
-  // The per-level bookkeeping (folderTree.ts), and the daemon's own canonical
-  // path for the card's root, which every deeper request is built from.
+  // The per-level bookkeeping (folderTree.ts), the daemon's own canonical path
+  // for the card's root — which every deeper request is built from — and the
+  // memory this reference was reopened from, if it was.
   // Deliberately NOT reactive: the row decoration closes over `levels` and the
   // library re-reads it on every render, and every write below is followed by
   // something that repaints.
   let levels: Levels = createLevels();
   let rootPath = "";
+  let restored: FolderCardMemory | undefined;
   let tree: FileTree | undefined;
 
   // Open on the referenced directory's immediate children, collapsed, in one
-  // round trip. Re-runs when the reference changes — DiffPlanView reuses this
-  // instance for a newly-clicked folder — dropping everything the previous one
-  // accumulated.
+  // round trip — unless this reference has been open before, in which case the
+  // whole tree comes back from memory with no round trip at all (EXC-1138).
+  // Re-runs when the reference changes — DiffPlanView reuses this instance for a
+  // newly-clicked folder — dropping everything the previous one accumulated.
   $effect(() => {
     const id = reviewId;
     const root = path;
     let cancelled = false;
+    const remembered = folderMemory.read(id, root);
+    restored = remembered;
+    if (remembered !== undefined) {
+      // Synchronous by design: the card is `ready` with its whole path set
+      // before this effect returns, so it paints in one frame rather than
+      // flashing "Loading…" over a tree it already has.
+      rootPath = remembered.rootPath;
+      levels = createLevels(remembered.levels);
+      view = { kind: "ready", elided: remembered.elided };
+      initialPaths = [...remembered.levels.paths];
+      return;
+    }
     view = { kind: "loading" };
-    rootPaths = undefined;
+    initialPaths = undefined;
     levels = createLevels();
     void (async () => {
       try {
@@ -103,7 +122,7 @@
           return;
         }
         view = { kind: "ready", elided: listing.total - listing.entries.length };
-        rootPaths = paths;
+        initialPaths = paths;
       } catch {
         if (!cancelled) view = { kind: "error" };
       }
@@ -219,16 +238,43 @@
     for (const treePath of levels.claim(rows)) void loadLevel(owner, treePath);
   }
 
-  // Mount the tree once its container exists and the first level has arrived.
-  // Rebuilt from scratch when the reference changes — the model is the level, so
-  // there is no state worth carrying between two different directories.
+  /**
+   * The virtualized scroller's offset, or 0 when it cannot be read.
+   *
+   * @pierre/trees exposes no scroll getter, so the only place a scroll position
+   * lives is the element the library scrolls — inside the tree's own (open)
+   * shadow root, marked with the attribute its stylesheet selects on. A miss is
+   * not a failure: the card comes back with its expansion intact, at the top.
+   */
+  function scrollTopOf(owner: FileTree): number {
+    const el = owner
+      .getFileTreeContainer()
+      ?.shadowRoot?.querySelector("[data-file-tree-virtualized-scroll]");
+    return el instanceof HTMLElement ? el.scrollTop : 0;
+  }
+
+  // Mount the tree once its container exists and its paths have arrived — one
+  // level on a first open, every cached level on a restore.
+  //
+  // Rebuilt from scratch when the reference changes; what carries across a
+  // DISMISSAL instead is the memory this teardown files (EXC-1138).
   $effect(() => {
     const container = host;
-    const paths = rootPaths;
+    const paths = initialPaths;
     if (container === null || paths === undefined) return;
+    // The card this tree is FOR, read untracked so it stays out of this effect's
+    // dependency set. The effect above replaces all four the instant the
+    // reference changes, and it runs first — so a teardown reading them live
+    // would file this card's memory under the next card's reference.
+    const filed = untrack(() => ({ reviewId, path, rootPath, levels }));
+    const from = restored;
     const owner = new FileTree({
       paths,
       initialExpansion: "closed",
+      // The reader's own expansion, applied at CONSTRUCTION rather than as a
+      // run of lazy adds — which is what makes a reopened card paint whole in
+      // one frame instead of unfolding itself.
+      ...(from === undefined ? {} : { initialExpandedPaths: from.expanded }),
       // A row at caret's own density rather than the library's roomier 30px
       // default, so a level reads as a listing beside the plan's mono text.
       itemHeight: 22,
@@ -260,9 +306,29 @@
     // not then walk it with the arrow keys. Focusing the first row hands the
     // library's own key handling somewhere to start. Escape still closes the
     // card from here — DiffPlanView listens on `window`, in the capture phase.
-    owner.focusFirstItem();
+    //
+    // A reopened card starts where the reader left off instead, which is the
+    // same gesture aimed at a different row: `scrollToPath` focuses its target
+    // as well as scrolling to it, so the arrow keys resume from the row that was
+    // under the reader's eye rather than from the top of the list.
+    if (from?.topPath === undefined) owner.focusFirstItem();
+    else owner.scrollToPath(from.topPath, { offset: "top" });
     const unsubscribe = owner.subscribe(() => syncExpansions(owner));
     return () => {
+      folderMemory.write(
+        filed.reviewId,
+        filed.path,
+        captureCard({
+          rootPath: filed.rootPath,
+          levels: filed.levels,
+          // `getVisibleCount() - 1` because the library's range end is
+          // inclusive, and "visible" is every row no collapsed parent hides —
+          // not just the ones the virtualizer has painted.
+          rows: owner.getVisibleRows(0, Math.max(0, owner.getVisibleCount() - 1)),
+          scrollTop: scrollTopOf(owner),
+          itemHeight: owner.getItemHeight(),
+        }),
+      );
       unsubscribe();
       owner.cleanUp();
       if (tree === owner) tree = undefined;

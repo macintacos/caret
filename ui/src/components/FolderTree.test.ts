@@ -1,11 +1,14 @@
 import "@ui/test-mount.ts";
 import { afterEach, expect, test } from "bun:test";
 
+import { flushSync, mount, unmount } from "svelte";
+
 import type { DirListing } from "@core/lib/types";
 import { until } from "@test/support/poll.ts";
 import { type LogCapture, logCapture } from "@ui/test-helpers.ts";
 import { render } from "@ui/test-mount.ts";
 import FolderTree from "@/components/FolderTree.svelte";
+import { folderMemory } from "$lib/folderTree.ts";
 
 // The folder popover (EXC-918). What a mount can honestly answer here is the
 // card's own framing: the header it puts around a reference, the request it
@@ -45,6 +48,9 @@ let cap: LogCapture | undefined;
 afterEach(() => {
   cap?.restore();
   cap = undefined;
+  // The card's memory is one per document (EXC-1138), so a card left behind by
+  // one case would restore into the next one's mount.
+  folderMemory.clear();
 });
 
 const state = (el: HTMLElement) =>
@@ -156,4 +162,85 @@ test("omits the esc hint when shortcut hints are off", async () => {
   const { target } = render(FolderTree, props({ showShortcutHints: false }));
   await until(() => state(target) === "empty");
   expect(target.querySelector(".ft-hint")).toBeNull();
+});
+
+// Reopening a card the reader has already been in (EXC-1138). Which folders come
+// back open and where the list sits are the tree's own state, behind the shadow
+// root — those are e2e. What a mount answers here is the half that decides
+// whether a restore happened at all: the request the card does NOT make.
+
+/** Serve one two-entry level and count every `/dir` request. Mounted by hand
+ * rather than through `render()` because the memory is filed at unmount, which
+ * the shared harness performs in afterEach — after the assertions. */
+function countingServe(): { dirCalls: () => number; cap: LogCapture } {
+  let dirCalls = 0;
+  const listing: DirListing = {
+    path: "src/lib",
+    entries: [
+      { name: "deep", kind: "directory" },
+      { name: "a.ts", kind: "file" },
+    ],
+    total: 2,
+  };
+  const capture = logCapture((url) => {
+    if (!url.includes("/dir?")) return Promise.resolve(new Response(null, { status: 204 }));
+    dirCalls += 1;
+    return Promise.resolve(
+      new Response(JSON.stringify(listing), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+  });
+  return { dirCalls: () => dirCalls, cap: capture };
+}
+
+/** Mount a card, wait for its level, then dismiss it — which is what files its
+ * memory. Returns the container so a caller can assert on the mounted card. */
+async function openThenDismiss(over: Parameters<typeof props>[0] = {}): Promise<void> {
+  const target = document.createElement("div");
+  document.body.appendChild(target);
+  const instance = mount(FolderTree, { target, props: props(over) });
+  await until(() => target.querySelector(".ft-tree") !== null);
+  unmount(instance);
+  flushSync();
+  target.remove();
+}
+
+test("reopening a folder reference asks the daemon for nothing", async () => {
+  // The whole point of caching the served levels: a restored card is
+  // constructed from them in one frame rather than refetching the root and
+  // reassembling itself as each level settles.
+  const serve = countingServe();
+  cap = serve.cap;
+  await openThenDismiss();
+  expect(serve.dirCalls()).toBe(1);
+
+  const { target } = render(FolderTree, props());
+  await until(() => target.querySelector(".ft-tree") !== null);
+  expect(serve.dirCalls()).toBe(1);
+});
+
+test("a second folder reference in the same review is fetched on its own", async () => {
+  const serve = countingServe();
+  cap = serve.cap;
+  await openThenDismiss();
+
+  const { target } = render(FolderTree, props({ path: "src/other" }));
+  await until(() => target.querySelector(".ft-tree") !== null);
+  expect(serve.dirCalls()).toBe(2);
+});
+
+test("never restores one review's card over another's", async () => {
+  // A cached tree belongs to one review's cwd, and the 2s poll can swap the
+  // review under a reader who left a card open.
+  const serve = countingServe();
+  cap = serve.cap;
+  await openThenDismiss();
+
+  const target = document.createElement("div");
+  document.body.appendChild(target);
+  mount(FolderTree, { target, props: { ...props(), reviewId: "r2" } });
+  await until(() => target.querySelector(".ft-tree") !== null);
+  expect(serve.dirCalls()).toBe(2);
 });
