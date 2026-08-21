@@ -31,6 +31,7 @@
   import type {
     FileTreeRowDecoration,
     FileTreeRowDecorationContext,
+    FileTreeVisibleRow,
   } from "@pierre/trees";
 
   import { getDirListing } from "$lib/api.ts";
@@ -46,7 +47,10 @@
     type FolderMemory,
     laneEdge,
     type Levels,
+    refreshCard,
+    treeKey,
   } from "$lib/folderTree.ts";
+  import Icon from "@/components/Icon.svelte";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { Spinner } from "$lib/components/ui/spinner/index.js";
 
@@ -84,8 +88,11 @@
     | { kind: "error" }
     | { kind: "empty" }
     /** `elided` is what the daemon's cap dropped from the ROOT level; a nested
-     * level reports its own on its row. */
-    | { kind: "ready"; elided: number };
+     * level reports its own on its row. `empty` is a card that HAS a tree and
+     * nothing to put in it — a refresh that found the folder emptied, or a
+     * reopen of one. It keeps the tree mounted, and with it the refresh control,
+     * where the `empty` state above would take both away. */
+    | { kind: "ready"; elided: number; empty: boolean };
   let view = $state.raw<State>({ kind: "loading" });
   /** What the tree is built from, and the signal to mount it: one level's worth
    * of paths on a first open, every cached level's plus the memory they came
@@ -94,6 +101,13 @@
    * would otherwise be correct only by the convention that these two effects run
    * in declaration order. */
   let build = $state.raw<{ paths: string[]; from?: FolderCardMemory } | undefined>();
+  /** Whether a refresh is in flight, which is both the spinner in the header and
+   * the guard that stops a second press stacking another round of requests. */
+  let refreshing = $state(false);
+  /** Whether the last refresh could not be read. The tree it failed to replace
+   * is still standing, so the header says the card is stale rather than the card
+   * emptying itself. */
+  let refreshFailed = $state(false);
 
   // The per-level bookkeeping (folderTree.ts) and the daemon's own canonical
   // path for the card's root, which every deeper request is built from.
@@ -103,6 +117,14 @@
   let levels: Levels = createLevels();
   let rootPath = "";
   let tree: FileTree | undefined;
+  /** Where the reader has the tree scrolled to, followed as they move it.
+   *
+   * Component-level rather than local to the mount effect because a refresh
+   * needs it too — and reading it back at teardown is not an option: svelte
+   * detaches an effect's DOM BEFORE running its teardown, and a detached
+   * element's `scrollTop` is spec'd to read 0.
+   */
+  let scrollTop = 0;
 
   // Open on the referenced directory's immediate children, collapsed, in one
   // round trip — unless this reference has been open before, in which case the
@@ -113,6 +135,11 @@
     const id = reviewId;
     const root = path;
     let cancelled = false;
+    // A card reused for another reference inherits none of the previous one's
+    // refresh: an in-flight one bails on the tree it no longer owns, and a
+    // failure belongs to the folder it happened in.
+    refreshing = false;
+    refreshFailed = false;
     const remembered = memory.read(id, root);
     if (remembered !== undefined) {
       // Synchronous by design: the card is `ready` with its whole path set
@@ -120,7 +147,11 @@
       // flashing "Loading…" over a tree it already has.
       rootPath = remembered.rootPath;
       levels = createLevels(remembered.levels);
-      view = { kind: "ready", elided: remembered.elided };
+      view = {
+        kind: "ready",
+        elided: remembered.elided,
+        empty: remembered.levels.paths.length === 0,
+      };
       build = { paths: [...remembered.levels.paths], from: remembered };
       return;
     }
@@ -137,7 +168,7 @@
           view = { kind: "empty" };
           return;
         }
-        view = { kind: "ready", elided: listing.total - listing.entries.length };
+        view = { kind: "ready", elided: listing.total - listing.entries.length, empty: false };
         build = { paths };
       } catch {
         if (!cancelled) view = { kind: "error" };
@@ -303,15 +334,93 @@
     owner.render({});
   }
 
+  /** Every row no collapsed parent hides — not just the ones the virtualizer has
+   * painted. `getVisibleCount() - 1` because the library's range end is
+   * inclusive. */
+  function visibleRows(owner: FileTree): readonly FileTreeVisibleRow[] {
+    return owner.getVisibleRows(0, Math.max(0, owner.getVisibleCount() - 1));
+  }
+
   // Every expanded directory whose level nobody has asked for asks for it.
   // Driven off the model rather than off a click so a row expanded from the
   // keyboard loads exactly as one expanded by pointer does — the card focuses
   // its first row on open, so arrow keys reach the library's own key handling.
-  //
-  // `getVisibleCount() - 1` because the library's range end is inclusive.
   function syncExpansions(owner: FileTree): void {
-    const rows = owner.getVisibleRows(0, Math.max(0, owner.getVisibleCount() - 1));
-    for (const treePath of levels.claim(rows)) void loadLevel(owner, treePath);
+    for (const treePath of levels.claim(visibleRows(owner))) void loadLevel(owner, treePath);
+  }
+
+  /**
+   * Re-read every level the card has OPEN and repaint in place (EXC-1139).
+   *
+   * Nothing invalidates the cache on its own: a review runs while an agent edits
+   * the working copy, and when to stop trusting the tree is the reader's call
+   * rather than the card's. This is that call, and the only thing that makes it.
+   *
+   * `resetPaths` rather than a remount, because the library's reset re-enters
+   * exactly the state a restored card is constructed in — the tree's own
+   * `initialExpansion: "closed"` plus an explicit expansion set — so the card
+   * keeps one construction site instead of growing a second. And `levels.reset`
+   * mutates the instance the mount effect captured, so the memory this card
+   * files on the way out is the tree the reader is actually looking at.
+   *
+   * A refresh never leaves the `ready` state, even when the folder came back
+   * empty — it says so through `ready`'s own `empty` instead. The `empty` state
+   * is for a card that never had a tree, and flipping into it here would unmount
+   * this control out from under the reader in the same gesture they used it,
+   * leaving them nothing to press when the folder fills again.
+   */
+  async function refresh(): Promise<void> {
+    const owner = tree;
+    if (owner === undefined || refreshing) return;
+    refreshing = true;
+    refreshFailed = false;
+    const before = captureCard({
+      rootPath,
+      levels,
+      rows: visibleRows(owner),
+      scrollTop,
+      itemHeight: owner.getItemHeight(),
+    });
+    // A directory the daemon declines to enumerate is left out: asking again
+    // buys a second refusal, and `refreshCard` keeps it open on the strength of
+    // its parent's listing alone.
+    const skipped = new Set(before.levels.skipped);
+    const open = ["", ...before.expanded.map(treeKey).filter((p) => !skipped.has(p))];
+    // Together rather than one level at a time: they are independent reads, and
+    // the fold is what imposes order. Each catches its own refusal, so one
+    // directory the daemon will not read does not take the refresh with it.
+    const answers = await Promise.all(
+      open.map(async (treePath) => {
+        try {
+          const listing = await getDirListing(reviewId, path, cwdPath(rootPath, treePath));
+          return [treePath, listing] as const;
+        } catch {
+          return undefined;
+        }
+      }),
+    );
+    // The reference changed under the refresh, so this card is gone and neither
+    // its flags nor its tree are this call's to touch — the effect that replaced
+    // it has already cleared both.
+    if (owner !== tree) return;
+    refreshing = false;
+    // The root is always the first answer, and the only one whose refusal means
+    // the REFRESH failed. Any other is a directory the reader can no longer
+    // open, which `refreshCard` shuts rather than treating as an error.
+    if (answers[0] === undefined) {
+      refreshFailed = true;
+      return;
+    }
+    const next = refreshCard(before, answers.filter((a) => a !== undefined));
+    levels.reset(next.levels);
+    view = { kind: "ready", elided: next.elided, empty: next.levels.paths.length === 0 };
+    owner.resetPaths(next.levels.paths, { initialExpandedPaths: next.expanded });
+    // No `focusFirstItem` here, and `focus: false` on the scroll, unlike the
+    // mount below: the reader pressed a button, so focus stays on that button
+    // rather than being yanked into the tree it just repainted.
+    if (next.topPath !== undefined) {
+      owner.scrollToPath(next.topPath, { offset: "top", focus: false });
+    }
   }
 
   /**
@@ -382,11 +491,12 @@
     // same container-managed posture @pierre/diffs has.
     owner.render({ containerWrapper: container });
     // Follow the offset as the reader moves it, rather than reading it back at
-    // teardown. Svelte detaches an effect's DOM BEFORE running its teardown, and
-    // a detached element's `scrollTop` is spec'd to read 0 — so a card read at
-    // that point would report the top however far the reader had scrolled, and
-    // every reopen would land there.
-    let scrollTop = 0;
+    // teardown — see `scrollTop`'s own declaration for why that is the only
+    // workable direction. The assignment RESETS the previous mount's value, and
+    // has to: `scrollTop` outlives any one tree now, so a card that went ready →
+    // loading → ready would otherwise hand the next refresh an offset measured
+    // against a tree that is gone.
+    scrollTop = 0;
     const scroller = scrollerOf(owner);
     const onScroll = () => {
       scrollTop = scroller?.scrollTop ?? 0;
@@ -440,10 +550,7 @@
         captureCard({
           rootPath: filed.rootPath,
           levels: filed.levels,
-          // `getVisibleCount() - 1` because the library's range end is
-          // inclusive, and "visible" is every row no collapsed parent hides —
-          // not just the ones the virtualizer has painted.
-          rows: owner.getVisibleRows(0, Math.max(0, owner.getVisibleCount() - 1)),
+          rows: visibleRows(owner),
           scrollTop,
           itemHeight: owner.getItemHeight(),
         }),
@@ -460,7 +567,7 @@
 
 <div
   class="folder-tree"
-  class:ft-open={view.kind === "ready"}
+  class:ft-open={view.kind === "ready" && !view.empty}
   data-folder-tree
   bind:this={card}
   style:top="{placed?.top ?? 0}px"
@@ -477,24 +584,57 @@
              can. -->
         <span class="ft-elided">{view.elided} more not shown</span>
       {/if}
+      <!-- The tree the refresh failed to replace is still standing, so this says
+           the card is stale rather than the card emptying itself. Mounted
+           unconditionally, with only its TEXT switched — a live region has to be
+           idle in the DOM before the change it announces, and one inserted with
+           its content already in it is skipped by some AT outright. Same shape
+           and same reason as PlanToc.svelte's `.toc-empty`. Empty it draws
+           nothing, and cancels the flex gap it would otherwise leave behind. -->
+      <span class="ft-stale" role="status">{refreshFailed ? "couldn't refresh" : ""}</span>
+      {#if view.kind === "ready"}
+        <!-- Only where there is a cached tree to re-read: the first level is the
+             reference effect's, and reopening a card that never got one is its
+             own retry. aria-disabled rather than disabled while a refresh is in
+             flight, so the reader who pressed it from the keyboard keeps focus
+             on it instead of being dropped to the body. -->
+        <button
+          type="button"
+          class="ft-refresh"
+          aria-label="Re-read this folder"
+          aria-disabled={refreshing}
+          aria-busy={refreshing}
+          onclick={refresh}
+        >
+          {#if refreshing}
+            <Spinner size={11} aria-hidden="true" />
+          {:else}
+            <Icon name="refresh-cw" size={11} />
+          {/if}
+        </button>
+      {/if}
       {#if showShortcutHints}
         <span class="ft-hint"><Kbd class="kbd-sm">esc</Kbd> to close</span>
       {/if}
     </span>
   </div>
   {#if view.kind === "ready"}
-    <div class="ft-tree" bind:this={host}></div>
-  {:else if view.kind === "empty"}
-    <div class="ft-message" data-folder-state="empty">This folder is empty.</div>
-  {:else if view.kind === "error"}
-    <div class="ft-message" data-folder-state="error">Couldn't read this folder.</div>
-  {:else}
+    <!-- Kept in the DOM even with nothing in it, so the tree object survives and
+         the header's refresh control stays live; the lane is hidden rather than
+         unmounted because unmounting it is what would destroy the tree. -->
+    <div class="ft-tree" class:ft-tree-empty={view.empty} bind:this={host}></div>
+  {/if}
+  {#if view.kind === "loading"}
     <!-- Decorative: the "Loading…" beside it is the accessible message, so the
          spinner's default role="status" + aria-label would say it twice. Nothing
          announces the wait; spinner.svelte records why a region cannot here. -->
     <div class="ft-message" data-folder-state="loading">
       <Spinner size={12} aria-hidden="true" />Loading…
     </div>
+  {:else if view.kind === "error"}
+    <div class="ft-message" data-folder-state="error">Couldn't read this folder.</div>
+  {:else if view.kind === "empty" || view.empty}
+    <div class="ft-message" data-folder-state="empty">This folder is empty.</div>
   {/if}
 </div>
 
@@ -528,9 +668,10 @@
      and the way out pushed right — so the two reference surfaces read as one
      family rather than two designs. */
   .ft-header {
+    --ft-header-gap: 0.45rem;
     display: flex;
     align-items: baseline;
-    gap: 0.45rem;
+    gap: var(--ft-header-gap);
     padding: 0.3rem 0.6rem;
     border-bottom: 1px solid var(--rule);
     font-family: var(--font-mono);
@@ -558,12 +699,54 @@
   .ft-header-end {
     display: flex;
     align-items: baseline;
-    gap: 0.45rem;
+    gap: var(--ft-header-gap);
     margin-left: auto;
   }
-  .ft-elided {
+  .ft-elided,
+  .ft-stale {
     color: var(--ink-faint);
     white-space: nowrap;
+  }
+  /* The live region is always mounted, so with no failure to report it has to
+     give back the flex gap it would otherwise hold open. `display: none` would
+     reintroduce the very insertion the unconditional mount avoids. */
+  .ft-stale:empty {
+    margin-inline-end: calc(-1 * var(--ft-header-gap));
+  }
+  /* The same button idiom FilePreview's header uses (.fp-close): a real control
+     at header scale, carrying the 24px pointer target WCAG 2.2 SC 2.5.8 asks for
+     as an invisible inset rather than a bigger glyph. It takes no tint of its
+     own — this is not a way out of the card — so it sits in the header's faint
+     ink and comes up to full ink under the pointer. The focus ring is the app's
+     global `button:focus-visible` in styles/base.css. */
+  .ft-refresh {
+    position: relative;
+    flex: 0 0 auto;
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 11px;
+    height: 11px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--ink-faint);
+    transition: color var(--dur-micro) var(--ease-out);
+  }
+  .ft-refresh::after {
+    content: "";
+    position: absolute;
+    inset: -7px;
+  }
+  .ft-refresh:hover,
+  .ft-refresh:focus-visible {
+    color: var(--ink);
+  }
+  /* The vendored 24px glyph carries stroke-width 2, which at 11px renders under
+     one device pixel and smudges rather than reading as a pair of arrows. */
+  .ft-refresh :global(svg) {
+    stroke-width: 2.5;
   }
   .ft-hint {
     display: inline-flex;
@@ -589,6 +772,12 @@
     flex: 1;
     min-height: 0;
     display: flex;
+  }
+  /* The lane, not the tree: `display: none` leaves the element — and so the
+     FileTree bound to it — in place, which is what lets the card go empty and
+     come back through one `resetPaths` rather than a remount. */
+  .ft-tree-empty {
+    display: none;
   }
   /* The @pierre/trees palette bridge, the same single-rule shape app.css uses for
      --diffs-*: every value is a caret token, never a literal. Custom properties

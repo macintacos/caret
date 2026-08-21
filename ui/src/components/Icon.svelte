@@ -32,6 +32,7 @@
   import monitor from "@/icons/monitor.svg?raw";
   import moon from "@/icons/moon.svg?raw";
   import panelLeft from "@/icons/panel-left.svg?raw";
+  import refreshCw from "@/icons/refresh-cw.svg?raw";
   import search from "@/icons/search.svg?raw";
   import settings from "@/icons/settings.svg?raw";
   import square from "@/icons/square.svg?raw";
@@ -71,6 +72,7 @@
     monitor,
     moon,
     "panel-left": panelLeft,
+    "refresh-cw": refreshCw,
     search,
     settings,
     square,
