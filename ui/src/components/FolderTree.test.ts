@@ -15,7 +15,7 @@ import { createFolderMemory, type FolderMemory } from "$lib/folderTree.ts";
 // makes for the first level, and the three states that are a line of text
 // (loading, empty, error). The tree itself is @pierre/trees behind a shadow root
 // and virtualizes against a layout happy-dom does not do, so expanding a level,
-// files being inert, and the dismissal gestures are e2e — see
+// opening a file row, and the dismissal gestures are e2e — see
 // test/e2e/folder-refs.e2e.ts and doc/agents/browser-testing.md.
 
 const ID = "r1";
@@ -51,6 +51,9 @@ function props(
     // exactly how DiffPlanView uses it, and what keeps one case's card from
     // restoring into the next one's mount (EXC-1138).
     memory: over.memory ?? createFolderMemory(),
+    // Never fires here: opening a file row is a click on a virtualized row behind
+    // a shadow root, so it is e2e (test/e2e/folder-refs.e2e.ts).
+    onOpenFile: () => {},
     ...(over.showShortcutHints === undefined ? {} : { showShortcutHints: over.showShortcutHints }),
   };
 }

@@ -4,7 +4,9 @@
   // rooted at that path as the prose wrote it. A folder has no natural bound the
   // way a file's `:line` gives one, so FilePreview's deliberate no-scroll peek
   // does not carry over — the value here is navigating the directory's shape, so
-  // the card is interactive by design. Folders expand; files are inert.
+  // the card is interactive by design. Folders expand; files open (EXC-1137) —
+  // activating a file row opens that file in the excerpt lane, so the card is a
+  // place the reader navigates FROM rather than a shape they read and leave.
   //
   // Expansion is lazy, one level per open folder, because a plan is entitled to
   // cite `node_modules/` and one level of that is already thousands of rows. The
@@ -41,6 +43,7 @@
     cwdPath,
     type FolderCardMemory,
     type FolderMemory,
+    laneEdge,
     type Levels,
   } from "$lib/folderTree.ts";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
@@ -66,8 +69,14 @@
     /** Whether the shortcut-hint affordances are shown (EXC-826); gates the
      * header's "esc to close" chip. Escape closes the card regardless. */
     showShortcutHints?: boolean;
+    /** Open a file row in the excerpt lane (EXC-1137). The path is already
+     * cwd-relative — the tree's own paths are relative to the referenced
+     * directory, and the conversion is this card's to make because only it holds
+     * the root the daemon reported. No line: a tree row carries no `:line`, so
+     * the excerpt is framed on the file's head. */
+    onOpenFile: (cwdRelativePath: string) => void;
   }
-  let { reviewId, path, anchor, memory, showShortcutHints = true }: Props = $props();
+  let { reviewId, path, anchor, memory, showShortcutHints = true, onOpenFile }: Props = $props();
 
   type State =
     | { kind: "loading" }
@@ -159,35 +168,88 @@
    *
    * The dock is read as a total ternary rather than asserted: the attribute's
    * value comes from a typed prop one component away, so the fallback can never
-   * fire today, but nothing local would say so if that changed.
+   * fire today, but nothing local would say so if that changed. The rect is put
+   * through `laneEdge` rather than used raw, because a lane opened FROM this card
+   * is measured while it is still wiping in.
    */
   function openLane(): { edge: DrawerEdge; top: number; left: number } | undefined {
     const el = document.querySelector<HTMLElement>("[data-file-drawer]");
     if (el === null) return undefined;
-    const { top, left } = el.getBoundingClientRect();
-    return { edge: el.dataset.fileDrawer === "right" ? "right" : "bottom", top, left };
+    const edge: DrawerEdge = el.dataset.fileDrawer === "right" ? "right" : "bottom";
+    const settled = Number.parseFloat(el.style.getPropertyValue("--fd-size"));
+    return laneEdge(edge, el.getBoundingClientRect(), settled);
+  }
+
+  /** Put the card at `box`, sized as it currently measures and inside the
+   * viewport less whatever lane is open at this instant. */
+  function place(el: HTMLElement, box: { top: number; bottom: number; left: number }): void {
+    const self = el.getBoundingClientRect();
+    placed = anchorCard(
+      box,
+      { width: self.width, height: self.height },
+      cardBounds({ width: window.innerWidth, height: window.innerHeight }, openLane()),
+      CARD_MARGIN,
+    );
   }
 
   //
   // The lane narrows the box the card is placed inside (EXC-1129). A lane that
   // opens AFTER the card is placed does not re-place it: placement is computed
   // once, at open, and moving a card the reader is already reading would cost
-  // more than the overlap.
+  // more than the overlap. `openRow` below is the one exception, and it re-places
+  // by calling `place` directly rather than by joining this dependency set — the
+  // once-at-open contract has to keep holding for every other way a lane opens.
   $effect(() => {
     const el = card;
     const box = anchor;
     if (el === null || view.kind === "loading") return;
     void tick().then(() => {
-      if (card !== el) return;
-      const self = el.getBoundingClientRect();
-      placed = anchorCard(
-        box,
-        { width: self.width, height: self.height },
-        cardBounds({ width: window.innerWidth, height: window.innerHeight }, openLane()),
-        CARD_MARGIN,
-      );
+      if (card === el) place(el, box);
     });
   });
+
+  /**
+   * The tree-relative path of the file row an event came from, or null for
+   * anything else — a directory row, the chevron on one, or the empty lane below
+   * the last row.
+   *
+   * `composedPath` because every row lives inside `<file-tree-container>`'s shadow
+   * root, so `e.target` retargets to the custom element and the row is only
+   * reachable through the composed path. `data-item-path` / `data-item-type` are
+   * the library's own row attributes.
+   */
+  function fileRowPath(e: Event): string | null {
+    const rowEl = e
+      .composedPath()
+      .find((n): n is Element => n instanceof Element && n.matches('[data-type="item"]'));
+    if (rowEl === undefined || rowEl.getAttribute("data-item-type") !== "file") return null;
+    return rowEl.getAttribute("data-item-path");
+  }
+
+  /**
+   * Open a file row in the excerpt lane (EXC-1137), converting the row's
+   * tree-relative path into the cwd-relative one the excerpt route wants.
+   *
+   * Driven off real activation — a click, or Enter on the focused row — rather
+   * than the library's `onSelectionChange`, which is its only selection hook and
+   * fires on focus movement too: an arrow-key walk down the tree would open one
+   * preview per keystroke. The library claims the arrow keys and leaves Enter
+   * unhandled with search off, so both activations reach the host by bubbling out
+   * of the shadow root.
+   */
+  function openRow(treePath: string): void {
+    const el = card;
+    // Sampled BEFORE the open, because the answer changes as a result of it. Only
+    // a click that OPENS the lane re-places the card, and then only because the
+    // reader asked for the lane that is about to land on it; a lane already open
+    // was part of the bounds this card was placed against.
+    const laneWasOpen = openLane() !== undefined;
+    onOpenFile(cwdPath(rootPath, treePath));
+    if (laneWasOpen || el === null) return;
+    void tick().then(() => {
+      if (card === el) place(el, anchor);
+    });
+  }
 
   // Kill the library's own transitions under reduced motion. They live inside its
   // shadow root, which the global `#app` rule in styles/base.css cannot reach, and
@@ -347,6 +409,26 @@
     // is the retry the memory promises it. Harmless either way, so it is not
     // worth a branch to say which case is which.
     syncExpansions(owner);
+    // Activation is listened for on the container rather than wired through the
+    // library, which offers no activation callback at all — only `onSelectionChange`
+    // (see `openRow`). A row click carries no `stopPropagation`, so it reaches
+    // here; a directory click reaches here too and `fileRowPath` returns null for
+    // it, leaving the library's own expand/collapse to be the whole of what it did.
+    const onRowClick = (e: MouseEvent) => {
+      const treePath = fileRowPath(e);
+      if (treePath !== null) openRow(treePath);
+    };
+    const onRowKey = (e: KeyboardEvent) => {
+      if (e.key !== "Enter") return;
+      const treePath = fileRowPath(e);
+      if (treePath === null) return;
+      // Claimed only once a file row answered, so Enter anywhere else in the card
+      // is still whatever the browser makes of it.
+      e.preventDefault();
+      openRow(treePath);
+    };
+    container.addEventListener("click", onRowClick);
+    container.addEventListener("keydown", onRowKey);
     return () => {
       filed.memory.write(
         filed.reviewId,
@@ -363,6 +445,8 @@
         }),
       );
       scroller?.removeEventListener("scroll", onScroll);
+      container.removeEventListener("click", onRowClick);
+      container.removeEventListener("keydown", onRowKey);
       unsubscribe();
       owner.cleanUp();
       if (tree === owner) tree = undefined;
