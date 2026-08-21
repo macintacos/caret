@@ -8,9 +8,11 @@ import {
   createFolderMemory,
   createLevels,
   cwdPath,
+  type FolderCardMemory,
   type LevelRow,
   laneEdge,
   levelPaths,
+  refreshCard,
   treeKey,
 } from "$lib/folderTree.ts";
 
@@ -473,4 +475,126 @@ test("a fresh instance carries nothing over from the last one", () => {
   const before = createFolderMemory();
   before.write("r1", "src", memoryOf("src"));
   expect(createFolderMemory().read("r1", "src")).toBeUndefined();
+});
+
+// The refresh seam (EXC-1139). The cache EXC-1138 added has no invalidation, so
+// a card can drift from a working copy an agent is still editing. Refreshing
+// re-reads the levels the reader has OPEN and folds the answers into the
+// bookkeeping the card is already holding — which is why `reset` mutates an
+// instance rather than handing back a new one: the card's tree effect captured
+// that object, and a refresh that rebound the variable would leave its teardown
+// filing the pre-refresh card.
+
+test("a reset instance asks again for a level it had already been served", () => {
+  const levels = served();
+  levels.reset();
+  expect(levels.claim([dirRow("lib/")])).toEqual(["lib"]);
+});
+
+test("a reset instance is not still waiting on a level that was in flight", () => {
+  // A refresh re-asks for everything the reader has open, so a request from
+  // before it has nothing left to say — and one still pending would block the
+  // re-claim for the rest of the card's life.
+  const levels = createLevels();
+  levels.claim([dirRow("lib/")]);
+  levels.reset();
+  expect(levels.claim([dirRow("lib/")])).toEqual(["lib"]);
+});
+
+test("a reset instance reports the level it was just handed, not the one before", () => {
+  const levels = createLevels();
+  levels.record("wide", listing([file("a.ts")], 9));
+  const reread = createLevels();
+  reread.record("wide", listing([file("a.ts"), file("b.ts")], 4));
+  levels.reset(reread.snapshot());
+  expect(levels.note(dirRow("wide/"))).toEqual({ text: "+2 more" });
+});
+
+/** The card a refresh starts from: the root and `lib/` served, `lib/` open, and
+ * `lib/util.ts` the row under the reader's eye. */
+function openCard(): FolderCardMemory {
+  return captureCard({
+    rootPath: "src",
+    levels: served(),
+    rows: [dirRow("lib/"), fileRow("lib/util.ts"), fileRow("cache.ts")],
+    scrollTop: 22,
+    itemHeight: 22,
+  });
+}
+
+const answer = (treePath: string, served: DirListing) => [treePath, served] as const;
+
+test("carries the paths the refresh was answered with", () => {
+  const card = refreshCard(openCard(), [
+    answer("", listing([dir("lib"), file("cache.ts")])),
+    answer("lib", listing([file("util.ts"), file("new.ts")])),
+  ]);
+  expect(card.levels.paths).toEqual(["lib/", "cache.ts", "lib/util.ts", "lib/new.ts"]);
+});
+
+test("drops a row the refresh no longer found", () => {
+  const card = refreshCard(openCard(), [
+    answer("", listing([dir("lib")])),
+    answer("lib", listing([file("util.ts")])),
+  ]);
+  expect(card.levels.paths).toEqual(["lib/", "lib/util.ts"]);
+});
+
+test("takes a whole subtree with the directory that vanished above it", () => {
+  // The daemon answers each open level independently, so a level under a
+  // directory the refresh no longer found can still come back. Folding it in
+  // would leave paths the library has to invent a parent for.
+  const card = refreshCard(openCard(), [
+    answer("", listing([file("cache.ts")])),
+    answer("lib", listing([file("util.ts")])),
+  ]);
+  expect(card.levels.paths).toEqual(["cache.ts"]);
+});
+
+test("keeps a folder open when its level came back", () => {
+  const card = refreshCard(openCard(), [
+    answer("", listing([dir("lib")])),
+    answer("lib", listing([file("util.ts")])),
+  ]);
+  expect(card.expanded).toEqual(["lib/"]);
+});
+
+test("collapses a folder whose level did not come back", () => {
+  // A directory the refresh could not read is left in the tree but shut: an open
+  // row with nothing under it claims to have been enumerated when it has not,
+  // and shutting it is also what makes clicking it the retry.
+  const card = refreshCard(openCard(), [answer("", listing([dir("lib")]))]);
+  expect(card.expanded).toEqual([]);
+});
+
+test("comes back to the row the reader was on", () => {
+  const card = refreshCard(openCard(), [
+    answer("", listing([dir("lib"), file("cache.ts")])),
+    answer("lib", listing([file("util.ts")])),
+  ]);
+  expect(card.topPath).toBe("lib/util.ts");
+});
+
+test("comes back to the top when the row the reader was on is gone", () => {
+  const card = refreshCard(openCard(), [
+    answer("", listing([dir("lib"), file("cache.ts")])),
+    answer("lib", listing([file("other.ts")])),
+  ]);
+  expect(card.topPath).toBeUndefined();
+});
+
+test("reports what the refreshed root level elided, not what the old one did", () => {
+  const card = refreshCard(openCard(), [answer("", listing([file("cache.ts")], 9))]);
+  expect(card.elided).toBe(8);
+});
+
+test("keeps the daemon's own path for the card's root", () => {
+  const card = refreshCard(openCard(), [answer("", listing([file("cache.ts")]))]);
+  expect(card.rootPath).toBe("src");
+});
+
+test("has nothing left to show for a folder that is now empty", () => {
+  const card = refreshCard(openCard(), [answer("", listing([]))]);
+  expect(card.levels.paths).toEqual([]);
+  expect(card.expanded).toEqual([]);
 });

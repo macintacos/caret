@@ -194,6 +194,21 @@ export interface Levels {
   /** Everything the daemon actually answered, in a shape that outlives the card
    * (§ LevelsSnapshot). */
   snapshot(): LevelsSnapshot;
+  /**
+   * Re-seed this instance from `snapshot`, discarding what it held — what a
+   * refresh does with the levels it just re-read (EXC-1139).
+   *
+   * In place, and that is the whole point of the method existing: the card's
+   * tree effect captures its `Levels` BY VALUE, so its teardown cannot file this
+   * card's memory under the next card's reference. A refresh that rebound the
+   * variable instead would leave that teardown filing the pre-refresh card, and
+   * the cache would disagree with the tree the reader is looking at.
+   *
+   * `pending` and `failed` start empty, exactly as construction leaves them: a
+   * refresh re-asks for every level the reader has open, so a request from
+   * before it has nothing left to say.
+   */
+  reset(snapshot?: LevelsSnapshot): void;
 }
 
 /**
@@ -218,16 +233,29 @@ export interface LevelsSnapshot {
 }
 
 export function createLevels(snapshot?: LevelsSnapshot): Levels {
-  const paths: string[] = [...(snapshot?.paths ?? [])];
-  const loaded = new Set<string>(snapshot?.loaded);
-  const pending = new Set<string>();
-  const skipped = new Set<string>(snapshot?.skipped);
-  const failed = new Set<string>();
-  const elided = new Map<string, number>(snapshot?.elided);
+  let paths: string[];
+  let loaded: Set<string>;
+  let pending: Set<string>;
+  let skipped: Set<string>;
+  let failed: Set<string>;
+  let elided: Map<string, number>;
+
+  // One seeding path for both entry points, so a reset instance is
+  // indistinguishable from one constructed with the same snapshot.
+  function seed(from?: LevelsSnapshot): void {
+    paths = [...(from?.paths ?? [])];
+    loaded = new Set(from?.loaded);
+    pending = new Set();
+    skipped = new Set(from?.skipped);
+    failed = new Set();
+    elided = new Map(from?.elided);
+  }
+  seed(snapshot);
 
   const join = (parent: string, name: string) => (parent === "" ? name : `${parent}/${name}`);
 
   return {
+    reset: seed,
     claim(rows) {
       const claimed: string[] = [];
       for (const row of rows) {
@@ -331,10 +359,62 @@ export function captureCard(card: {
   const levels = card.levels.snapshot();
   return {
     rootPath: card.rootPath,
-    elided: levels.elided.find(([key]) => key === "")?.[1] ?? 0,
+    elided: rootElision(levels),
     levels,
     expanded: card.rows.filter((r) => r.kind === "directory" && r.isExpanded).map((r) => r.path),
     topPath: card.rows[Math.max(0, Math.floor(card.scrollTop / card.itemHeight))]?.path,
+  };
+}
+
+/** What the ROOT level's cap dropped, which is the header's line. The root's key
+ * is `""`, the same spelling `record` files it under. */
+function rootElision(levels: LevelsSnapshot): number {
+  return levels.elided.find(([key]) => key === "")?.[1] ?? 0;
+}
+
+/**
+ * What a refresh's answers make of the card (EXC-1139): the re-read levels
+ * folded into one snapshot, with the reader's expansion and their place in the
+ * list carried across.
+ *
+ * `answers` are `[treePath, listing]` pairs for the levels the card had OPEN —
+ * its own root first, then each expanded directory, PARENTS BEFORE CHILDREN.
+ * The caller gets that ordering for free by reading the open set off the tree's
+ * visible rows, which the library reports in tree order.
+ *
+ * Three rules make it total against a working copy that moved underneath the
+ * reader, and each is one of the issue's own criteria:
+ *
+ * - A level whose directory is not among the paths recorded so far is dropped.
+ *   The daemon answers each open level independently, so a level under a
+ *   directory that has since gone can still come back; folding it in would
+ *   leave paths the library has to invent a parent for.
+ * - `expanded` keeps only the directories whose level actually came back, so a
+ *   folder that vanished — or whose re-read the daemon refused — returns shut
+ *   rather than open with nothing under it. Shutting it is also what makes
+ *   clicking it the retry.
+ * - `topPath` survives only while its row does, and otherwise degrades to the
+ *   top of the list — the same quiet miss `captureCard` documents for a card
+ *   whose scroller was never found.
+ */
+export function refreshCard(
+  before: FolderCardMemory,
+  answers: Iterable<readonly [treePath: string, listing: DirListing]>,
+): FolderCardMemory {
+  const levels = createLevels();
+  const known = new Set<string>();
+  for (const [treePath, listing] of answers) {
+    if (treePath !== "" && !known.has(`${treePath}/`)) continue;
+    for (const path of levels.record(treePath, listing)) known.add(path);
+  }
+  const snapshot = levels.snapshot();
+  const loaded = new Set(snapshot.loaded);
+  return {
+    rootPath: before.rootPath,
+    elided: rootElision(snapshot),
+    levels: snapshot,
+    expanded: before.expanded.filter((path) => loaded.has(treeKey(path))),
+    topPath: before.topPath !== undefined && known.has(before.topPath) ? before.topPath : undefined,
   };
 }
 
