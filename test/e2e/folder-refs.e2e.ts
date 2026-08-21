@@ -28,7 +28,7 @@
 // writes a synthetic project dir and seeds a review whose cwd points at it. The
 // content is throwaway, non-identifying scaffolding — never a real plan.
 
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { Page } from "@playwright/test";
@@ -932,6 +932,151 @@ test("reopening a folder reference comes back to the same place in the list", as
 
     // Back on the row the reader was on, rather than at the top of the list.
     await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBe(220);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+// Refreshing a cached tree (EXC-1139). Once levels are cached, a dismiss and
+// reopen no longer re-reads the filesystem — and a caret review runs while an
+// agent edits the working copy. Only a real browser can say whether the repaint
+// keeps what the reader had: the expansion set survives a `resetPaths` in the
+// library's own model, the scroll offset lives on an element inside its shadow
+// root, and a directory can only actually be deleted underneath a daemon that
+// is really reading a disk. The pure halves stay units — what the answers make
+// of the card in folderTree.test.ts, and the control's framing and requests in
+// FolderTree.test.ts.
+
+const refreshControl = `${card} .ft-refresh`;
+
+test("refreshing a folder card keeps the folders that were open", async ({ daemon, page }) => {
+  const proj = await makeProject(NESTED);
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nThe tree under `src` matters.\n" });
+    await page.goto("/");
+    await planSurface(page);
+    await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(1);
+
+    await page.locator('[data-file-ref="directory"]').click();
+    await expect(page.locator(card)).toBeVisible();
+    await page.locator(row("lib/")).click();
+    await expect(page.locator(row("lib/deep/"))).toBeVisible();
+    await page.locator(row("lib/deep/")).click();
+    await expect(page.locator(row("lib/deep/leaf.ts"))).toBeVisible();
+
+    // Count only what the REFRESH asks for. Three levels are open — the card's
+    // own root, `lib/` and `lib/deep/` — and re-reading is the whole point, so
+    // the assertions below would pass just as well against a control that
+    // repainted the cache without touching the daemon.
+    let dirRequests = 0;
+    page.on("request", (req) => {
+      if (req.url().includes("/dir?")) dirRequests += 1;
+    });
+
+    await page.locator(refreshControl).click();
+    await expect.poll(() => dirRequests).toBe(3);
+    await expect(page.locator(row("lib/"))).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator(row("lib/deep/"))).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator(row("lib/deep/leaf.ts"))).toBeVisible();
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("refreshing a folder card comes back to the same place in the list", async ({
+  daemon,
+  page,
+}) => {
+  // A refresh that scrolled the reader back to the top would undo the issue
+  // before this one as surely as one that collapsed the tree.
+  const proj = await makeProject(
+    Object.fromEntries(
+      Array.from({ length: 40 }, (_, i) => [
+        `wide/f${String(i).padStart(3, "0")}.ts`,
+        "export {};\n",
+      ]),
+    ),
+  );
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nEverything sits in `wide`.\n" });
+    await page.goto("/");
+    await planSurface(page);
+    await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(1);
+    await page.locator('[data-file-ref="directory"]').click();
+    await expect(page.locator(card)).toBeVisible();
+
+    // Ten rows down, at the 22px row the card sets — an exact multiple, so the
+    // row-granular restore has an unambiguous answer to come back to.
+    const scroller = page.locator(`${card} [data-file-tree-virtualized-scroll]`);
+    await scroller.evaluate((el) => {
+      el.scrollTop = 220;
+    });
+    await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBe(220);
+
+    await page.locator(refreshControl).click();
+    await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBe(220);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("a directory that has gone leaves the card instead of standing open and empty", async ({
+  daemon,
+  page,
+}) => {
+  const proj = await makeProject(NESTED);
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nThe tree under `src` matters.\n" });
+    await page.goto("/");
+    await planSurface(page);
+    await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(1);
+
+    await page.locator('[data-file-ref="directory"]').click();
+    await page.locator(row("lib/")).click();
+    await expect(page.locator(row("lib/deep/"))).toBeVisible();
+    await page.locator(row("lib/deep/")).click();
+    await expect(page.locator(row("lib/deep/leaf.ts"))).toBeVisible();
+
+    // The agent the reader is reviewing deletes the directory they have open.
+    await rm(join(proj.dir, "src/lib/deep"), { recursive: true, force: true });
+
+    await page.locator(refreshControl).click();
+    await expect(page.locator(row("lib/deep/"))).toHaveCount(0);
+    await expect(page.locator(row("lib/"))).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator(row("lib/util.ts"))).toBeVisible();
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("the refresh control keeps focus when it is pressed from the keyboard", async ({
+  daemon,
+  page,
+}) => {
+  // The card focuses a tree row on open and a restore scrolls to one, so the
+  // refresh is the one repaint that must NOT move focus: it is the only one the
+  // reader asked for by pressing something.
+  const proj = await makeProject(NESTED);
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nThe tree under `src` matters.\n" });
+    await page.goto("/");
+    await planSurface(page);
+    await expect(page.locator('[data-file-ref="directory"]')).toHaveCount(1);
+    await page.locator('[data-file-ref="directory"]').click();
+    await expect(page.locator(card)).toBeVisible();
+
+    await writeFile(join(proj.dir, "src/added.ts"), "export {};\n");
+    // Past safe mode's grace before any keypress: the guard swallows keystrokes
+    // inside it, in the capture phase, so an Enter sent earlier never reaches the
+    // control at all.
+    await waitPastSafeModeGrace(page);
+    await page.locator(refreshControl).focus();
+    await page.keyboard.press("Enter");
+
+    await expect(page.locator(row("added.ts"))).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => document.activeElement?.className ?? ""))
+      .toContain("ft-refresh");
   } finally {
     await proj.cleanup();
   }
