@@ -96,7 +96,7 @@
 
 <aside
   bind:this={root}
-  data-file-drawer
+  data-file-drawer={edge}
   aria-label="File preview"
   class:fd-bottom={edge === "bottom"}
   class:fd-closing={closing}

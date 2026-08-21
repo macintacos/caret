@@ -9,6 +9,7 @@
 // level; `cwdPath` converts a row back into the second to ask for the next one.
 
 import type { DirEntry, DirListing } from "@core/lib/types";
+import type { DrawerEdge } from "$lib/fileDrawer.ts";
 
 /**
  * A path the tree reported, reduced to the single spelling this module and the
@@ -64,29 +65,52 @@ const ANCHOR_GAP = 6;
 export const CARD_MARGIN = 12;
 
 /**
- * Where the viewport-fixed card sits when opened from `anchor`: hanging below it
- * when there is room, flipped above when there is not, and always inside the
- * viewport by `margin`. Measured once, at open — the card is dismissed by the
- * next click or Escape, so it does not track the plan scrolling underneath it.
+ * The box the card must stay inside: the viewport, less the docked preview lane
+ * (EXC-1129).
  *
- * The top clamp is what covers a viewport too short for the card either way: the
- * flip lands at the margin and the tree pages inside itself, rather than the card
- * starting off-screen with its header out of reach.
+ * The lane is a full-edge strip, so "clear of the lane" is exactly the viewport
+ * narrowed — a right dock caps the width at the lane's left edge, a bottom dock
+ * caps the height at its top. That means `anchorCard` needs no new concept: its
+ * third argument already means "the box to stay inside", and this is that box
+ * with one dimension short. Containment still wins over clearing when the two
+ * conflict, because `anchorCard`'s margin floors put a card too large for the
+ * narrowed box back at the real viewport's margin rather than off-screen.
+ */
+export function cardBounds(
+  viewport: { width: number; height: number },
+  lane: { edge: DrawerEdge; top: number; left: number } | undefined,
+): { width: number; height: number } {
+  if (lane === undefined) return viewport;
+  return lane.edge === "right"
+    ? { width: lane.left, height: viewport.height }
+    : { width: viewport.width, height: lane.top };
+}
+
+/**
+ * Where the viewport-fixed card sits when opened from `anchor`: hanging below it
+ * when there is room, flipped above when there is not, and always inside `bounds`
+ * by `margin`. Measured once, at open — the card is dismissed by the next click
+ * or Escape, so it does not track the plan scrolling underneath it.
+ *
+ * `bounds` is the viewport, or the viewport less an open preview lane per
+ * `cardBounds`. The top clamp is what covers a box too short for the card either
+ * way: the flip lands at the margin and the tree pages inside itself, rather than
+ * the card starting off-screen with its header out of reach.
  */
 export function anchorCard(
   anchor: { top: number; bottom: number; left: number },
   card: { width: number; height: number },
-  viewport: { width: number; height: number },
+  bounds: { width: number; height: number },
   margin: number,
 ): { top: number; left: number } {
   const below = anchor.bottom + ANCHOR_GAP;
   const top =
-    below + card.height + margin <= viewport.height
+    below + card.height + margin <= bounds.height
       ? below
       : Math.max(margin, anchor.top - ANCHOR_GAP - card.height);
   const left = Math.min(
     Math.max(margin, anchor.left),
-    Math.max(margin, viewport.width - card.width - margin),
+    Math.max(margin, bounds.width - card.width - margin),
   );
   return { top, left };
 }

@@ -31,9 +31,11 @@
   } from "@pierre/trees";
 
   import { getDirListing } from "$lib/api.ts";
+  import type { DrawerEdge } from "$lib/fileDrawer.ts";
   import {
     anchorCard,
     CARD_MARGIN,
+    cardBounds,
     createLevels,
     cwdPath,
     type Levels,
@@ -122,6 +124,16 @@
   // `tick()` would ever wait for — would flip against a height five times too
   // small and hang a full-size card off the bottom of the viewport. It stays put
   // afterwards: the reader dismisses this card rather than scrolling with it.
+  //
+  // The open preview lane narrows the box the card is placed inside (EXC-1129),
+  // and it is MEASURED here rather than passed down as a prop: the effect is
+  // already reading the card's own settled rect at this instant, and the lane's
+  // has to be read at that same instant to agree with it — a prop would carry a
+  // rect captured whenever the parent last happened to measure. Reading a sibling
+  // surface out of the DOM is the same shape modalStack's `topmostDialogContent`
+  // takes, and for the same reason. A lane that opens AFTER the card is placed
+  // does not re-place it: placement is computed once, at open, and moving a card
+  // the reader is already reading would cost more than the overlap.
   $effect(() => {
     const el = card;
     const box = anchor;
@@ -129,10 +141,17 @@
     void tick().then(() => {
       if (card !== el) return;
       const self = el.getBoundingClientRect();
+      const laneEl = document.querySelector<HTMLElement>("[data-file-drawer]");
+      const laneRect = laneEl?.getBoundingClientRect();
       placed = anchorCard(
         box,
         { width: self.width, height: self.height },
-        { width: window.innerWidth, height: window.innerHeight },
+        cardBounds(
+          { width: window.innerWidth, height: window.innerHeight },
+          laneEl === null || laneRect === undefined
+            ? undefined
+            : { edge: laneEl.dataset.fileDrawer as DrawerEdge, top: laneRect.top, left: laneRect.left },
+        ),
         CARD_MARGIN,
       );
     });

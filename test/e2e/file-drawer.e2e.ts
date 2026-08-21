@@ -527,8 +527,10 @@ test("the lane wipes out again when the preview is dismissed", async ({ daemon, 
 // EXC-1129: the card is placed against the viewport LESS the open lane, so the
 // two surfaces the reader is using at once never overlap. A project whose `src`
 // holds the referenced file too, so one plan carries both kinds of reference.
+// The file is cited FIRST so `openPreview`'s "first reference" is the one that
+// opens the lane; the directory below it is what the card then opens on.
 const COEXIST = { "src/cache.ts": CACHE_TS, "src/lib/util.ts": "export {};\n" };
-const COEXIST_PLAN = "# Refs\n\nThe tree under `src` matters, and `src/cache.ts` holds it.\n";
+const COEXIST_PLAN = "# Refs\n\nEdit `src/cache.ts`, which lives under `src`.\n";
 
 /** Open the excerpt lane, let it settle, then open the folder card beside it —
  * so the card is placed against a lane already at its final size. */
