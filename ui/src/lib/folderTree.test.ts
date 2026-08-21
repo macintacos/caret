@@ -3,7 +3,9 @@ import { expect, test } from "bun:test";
 import type { DirEntry, DirListing } from "@core/lib/types";
 import {
   anchorCard,
+  captureCard,
   cardBounds,
+  createFolderMemory,
   createLevels,
   cwdPath,
   type LevelRow,
@@ -263,4 +265,164 @@ test("keys a skipped child off its parent, so a row's own path finds it", () => 
   const levels = createLevels();
   levels.record("lib/", listing([{ name: ".git", kind: "directory", skipped: true }]));
   expect(levels.note(dirRow("lib/.git/"))).toEqual({ text: "not listed" });
+});
+
+// The rehydration seam (EXC-1138). A dismissed card leaves its served state
+// behind so reopening the same reference rebuilds the tree it had rather than
+// refetching it a level at a time. What may be carried is exactly what the
+// daemon actually answered: a level it refused, or one still in flight, is left
+// out so the reopened card asks again.
+
+/** A `Levels` that has served the root and one level under it, which is the
+ * smallest card worth remembering. */
+function served(): ReturnType<typeof createLevels> {
+  const levels = createLevels();
+  levels.record(
+    "",
+    listing([
+      { name: "lib", kind: "directory" },
+      { name: "cache.ts", kind: "file" },
+    ]),
+  );
+  levels.record("lib", listing([{ name: "util.ts", kind: "file" }]));
+  return levels;
+}
+
+test("carries every served path, in the order the levels arrived", () => {
+  // The restored card is CONSTRUCTED from these rather than adding them one
+  // level at a time, so the whole set has to survive — not just the root's.
+  expect(served().snapshot().paths).toEqual(["lib/", "cache.ts", "lib/util.ts"]);
+});
+
+test("a rehydrated card asks for nothing it has already been served", () => {
+  const levels = createLevels(served().snapshot());
+  expect(levels.claim([dirRow("lib/")])).toEqual([]);
+});
+
+test("a rehydrated card still asks for a level nobody has opened", () => {
+  const levels = createLevels(served().snapshot());
+  expect(levels.claim([dirRow("lib/deep/")])).toEqual(["lib/deep"]);
+});
+
+test("a rehydrated card keeps what the daemon declined to enumerate", () => {
+  const levels = createLevels();
+  levels.record("", listing([{ name: "dist", kind: "directory", skipped: true }]));
+  const rehydrated = createLevels(levels.snapshot());
+  expect(rehydrated.note(dirRow("dist/"))).toEqual({ text: "not listed" });
+  expect(rehydrated.claim([dirRow("dist/")])).toEqual([]);
+});
+
+test("a rehydrated card keeps what a capped level elided", () => {
+  const levels = createLevels();
+  levels.record("wide", listing([{ name: "a.ts", kind: "file" }], 9));
+  expect(createLevels(levels.snapshot()).note(dirRow("wide/"))).toEqual({ text: "+8 more" });
+});
+
+test("a refused level is not carried, so the reopened card retries it", () => {
+  // `fail` is terminal for a card, and reopening is its documented retry. A
+  // cached refusal would take that retry away for the rest of the session.
+  const levels = createLevels();
+  levels.fail("deep");
+  const rehydrated = createLevels(levels.snapshot());
+  expect(rehydrated.note(dirRow("deep/"))).toBeNull();
+  expect(rehydrated.claim([dirRow("deep/")])).toEqual(["deep"]);
+});
+
+test("a level still in flight is not carried, so the reopened card asks again", () => {
+  const levels = createLevels();
+  levels.claim([dirRow("lib/")]);
+  expect(createLevels(levels.snapshot()).claim([dirRow("lib/")])).toEqual(["lib"]);
+});
+
+// What a live tree contributes on top of the served levels: which folders the
+// reader had open, and which row they had at the top. The library exposes no
+// scroll offset, so the second is recovered from the scroller's own pixels and
+// is row-granular by construction.
+
+const scroll = { scrollTop: 0, itemHeight: 22 };
+
+test("remembers the directories that were open and nothing else", () => {
+  const card = captureCard({
+    rootPath: "src",
+    levels: served(),
+    rows: [dirRow("lib/"), dirRow("dist/", false), fileRow("cache.ts")],
+    ...scroll,
+  });
+  expect(card.expanded).toEqual(["lib/"]);
+});
+
+test("remembers the daemon's own path for the card's root", () => {
+  // Every deeper request is built from it, so a restored card that lost it
+  // would address the next level relative to nothing.
+  expect(captureCard({ rootPath: "src", levels: served(), rows: [], ...scroll }).rootPath).toBe(
+    "src",
+  );
+});
+
+test("remembers what the root level's cap dropped, for the header", () => {
+  const levels = createLevels();
+  levels.record("", listing([{ name: "a.ts", kind: "file" }], 12));
+  expect(captureCard({ rootPath: "src", levels, rows: [], ...scroll }).elided).toBe(11);
+});
+
+test("remembers the row the reader had at the top of the list", () => {
+  const rows = [fileRow("a.ts"), fileRow("b.ts"), fileRow("c.ts")];
+  const card = captureCard({
+    rootPath: "src",
+    levels: served(),
+    rows,
+    scrollTop: 45,
+    itemHeight: 22,
+  });
+  expect(card.topPath).toBe("c.ts");
+});
+
+test("remembers the first row when the list was never scrolled", () => {
+  const rows = [fileRow("a.ts"), fileRow("b.ts")];
+  expect(captureCard({ rootPath: "src", levels: served(), rows, ...scroll }).topPath).toBe("a.ts");
+});
+
+test("remembers no row at all when the scroller could not be measured", () => {
+  // The scroll element lives inside the library's shadow root; a miss reports
+  // a zero item height, and the card comes back at the top rather than nowhere.
+  const rows = [fileRow("a.ts")];
+  const card = captureCard({
+    rootPath: "src",
+    levels: served(),
+    rows,
+    scrollTop: 44,
+    itemHeight: 0,
+  });
+  expect(card.topPath).toBeUndefined();
+});
+
+// The registry. Session-lived, in memory, and keyed on the pair — a cached tree
+// belongs to one review's cwd and must never be restored over another.
+
+const memoryOf = (rootPath: string) =>
+  captureCard({ rootPath, levels: served(), rows: [], ...scroll });
+
+test("keeps two folder references in one review apart", () => {
+  const memory = createFolderMemory();
+  memory.write("r1", "src", memoryOf("src"));
+  memory.write("r1", "doc", memoryOf("doc"));
+  expect(memory.read("r1", "src")?.rootPath).toBe("src");
+  expect(memory.read("r1", "doc")?.rootPath).toBe("doc");
+});
+
+test("never hands one review's card to another", () => {
+  const memory = createFolderMemory();
+  memory.write("r1", "src", memoryOf("src"));
+  expect(memory.read("r2", "src")).toBeUndefined();
+});
+
+test("has nothing for a reference nobody has opened", () => {
+  expect(createFolderMemory().read("r1", "src")).toBeUndefined();
+});
+
+test("drops everything when the review changes", () => {
+  const memory = createFolderMemory();
+  memory.write("r1", "src", memoryOf("src"));
+  memory.clear();
+  expect(memory.read("r1", "src")).toBeUndefined();
 });
