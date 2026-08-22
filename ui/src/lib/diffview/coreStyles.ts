@@ -1119,7 +1119,20 @@ const CARET_OVERRIDES = `
     --table-rule: color-mix(in lab, var(--paper-sunk), var(--ink) 12%);
     background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
     border-radius: var(--radius);
-    box-shadow: var(--shadow-card);
+    /* A contact shadow, NOT --shadow-card. The shared token is built for chrome that
+       genuinely floats — popovers, alerts, the composer — and its far layer is a 30px
+       blur. This card is inline in dense body text and inset only --caret-card-inset
+       (0.75rem) from the gutter lane, so a blur wider than that inset spills into the
+       lane, and on a palette whose sunk surface is light enough to darken (catppuccin
+       mocha is the one that showed it) the spill reads as a soot halo rather than as a
+       lift. Sampling only caret-dark and caret-light hides this: their surfaces are near
+       enough to black that the same shadow resolves to nothing at all.
+
+       2px of blur, under the card's own bottom edge, is all a panel this size can carry.
+       The alpha splits by scheme because the same black reads much heavier over a light
+       ground than over a dark one; the geometry does not, so there is one shape here and
+       one number that moves. */
+    box-shadow: 0 1px 2px light-dark(rgb(0 0 0 / 0.07), rgb(0 0 0 / 0.28));
   }
   /* The library paints every line with its own --diffs-bg, so clear it inside the card for
      the panel fill to show through — the code card's companion rule, for the same reason.

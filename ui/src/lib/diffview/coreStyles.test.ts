@@ -1563,7 +1563,17 @@ describe("tables (EXC-864)", () => {
     expect(codeFill).toBeTruthy();
     expect(cardRule).toContain(`background-color: ${codeFill};`);
     expect(cardRule).toMatch(/border-radius:\s*var\(--radius\)/);
-    expect(cardRule).toMatch(/box-shadow:\s*[^;]+;/);
+    // A contact shadow rather than --shadow-card: the shared token's far layer is a 30px
+    // blur, wider than the card's own --caret-card-inset, so it spills into the gutter
+    // lane and reads as a halo on any palette whose sunk surface is light enough to
+    // darken. Pinned as "blur no wider than the inset" rather than as a literal, since
+    // what must hold is the relationship.
+    const blur = Number.parseFloat(
+      cardRule.match(/box-shadow:\s*\S+\s+\S+\s+([\d.]+)px/)?.[1] ?? "",
+    );
+    expect(blur).toBeGreaterThan(0);
+    expect(blur).toBeLessThan(12);
+    expect(cardRule).not.toContain("--shadow-card");
     expect(cardRule).not.toMatch(/border:\s*1px/);
   });
 
