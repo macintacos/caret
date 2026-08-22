@@ -6,7 +6,7 @@
     },
     {
       "path": "../doc/agents/rumdl-rules.md",
-      "description": "Read only when the diff touches a rumdl invocation or scripts/tasks/dev/fake-plan.md, the fixture that must stay un-rumdl'd."
+      "description": "Read only when the diff touches a rumdl invocation or scripts/tasks/dev/fake-plan.md."
     }
   ]
 }

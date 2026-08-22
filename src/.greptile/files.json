@@ -17,8 +17,12 @@
       "description": "Read only when the diff adds a config.toml key or a CARET_* environment variable."
     },
     {
+      "path": "../doc/agents/rumdl-rules.md",
+      "description": "Read only when the diff touches src/plan/rumdl.ts — the pinned rumdl version, its checksums, and the plan-formatting config."
+    },
+    {
       "path": "../doc/agents/opencode-integration.md",
-      "description": "Read only when the diff touches src/adapters/opencode/ — the OpenCode adapter, its plugin, or its install path."
+      "description": "Read only when the diff touches src/adapters/opencode/ or src/commands/install/ — the OpenCode adapter and its install path."
     }
   ]
 }

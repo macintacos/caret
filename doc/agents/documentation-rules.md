@@ -29,6 +29,7 @@ digraph caret_docs_router {
     "Edit CLAUDE.md" [shape=box];
     "Edit a doc/agents/*.md rule file" [shape=box];
     "Edit doc/README.md" [shape=box];
+    "Edit .greptile/rules.md" [shape=box];
 
     "Changing documentation" -> "Which doc does the change affect?";
     "Which doc does the change affect?" -> "Edit README.md" [label="user-facing front door: what caret is, install, basic usage, pointers onward"];
@@ -40,6 +41,7 @@ digraph caret_docs_router {
     "Which doc does the change affect?" -> "Edit CLAUDE.md" [label="the code-change routing index, plus the CodeGraph / verifying-changes prose"];
     "Which doc does the change affect?" -> "Edit a doc/agents/*.md rule file" [label="a rule-of-the-road for a code area (architecture, logging, TS, Svelte, shadcn, testing, icons, settings, dependencies, OpenCode, rumdl)"];
     "Which doc does the change affect?" -> "Edit doc/README.md" [label="the router for the doc/ directory: which page answers a given reader's question"];
+    "Which doc does the change affect?" -> "Edit .greptile/rules.md" [label="how the PR reviewer reviews: its stance, priorities, and what it should not comment on"];
 }
 ```
 
@@ -77,6 +79,11 @@ digraph caret_docs_router {
   wants to do to the page that answers it, across the four reference pages, `doc/agents/`,
   and the two repo-root docs (`README.md` and `CONTRIBUTING.md`). How to edit it:
   [`references/doc-readme.md`](references/doc-readme.md).
+- **`.greptile/rules.md`** (repo root) — the stance handed to the Greptile PR reviewer:
+  its priority order, its blast-radius mandate, and why `CLAUDE.md` is background rather
+  than review criteria. The `files.json` files beside it, and in each subtree's own
+  `.greptile/` folder, route the reviewer to the `doc/agents/*.md` that governs it. Edit
+  this file when reviews come back mis-pitched.
 
 ## Audience, stated at the top of every new doc
 
@@ -109,8 +116,9 @@ Documentation drifts when the map and the docs are edited in separate changes. S
 3. **its pointer file** under [`references/`](references/) — for a `doc/agents/*.md` rule
    file that is the shared [`references/agent-rules.md`](references/agent-rules.md), whose
    area list you extend rather than adding a new pointer, and
-4. **its `.greptile/files.json` entry** — for a `doc/agents/*.md` rule file, the
-   `files.json` in the `.greptile/` folder of whichever subtree it governs, so the PR
-   reviewer keeps reaching it.
+4. **its `.greptile/files.json` entries** — for a `doc/agents/*.md` rule file, one entry
+   per subtree it governs (`src/`, `ui/`, `test/`, `scripts/`, `doc/`, `opencode/`), or a
+   `scope`d entry in the repo-root `.greptile/files.json` if it governs repo-root files,
+   so the PR reviewer keeps reaching it. Several rule files span more than one subtree.
 
 A doc that exists without a place on this map is a doc no one will find.
