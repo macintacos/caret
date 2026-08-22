@@ -1320,7 +1320,7 @@ const CARET_OVERRIDES = `
      by a fixed amount cannot do the second half: light ink on a dark ground reads heavier
      at the same ratio, so the old declaration needed a light-dark() carrying two different
      numbers to land in one place, and it still drifted apart palette by palette. Stated
-     the other way round, one number does it — --paper-sunk stepped 16% toward --ink lands
+     the other way round, one number does it — --paper-sunk stepped 12% toward --ink lands
      in the same place on all nine, because the operands do the scheme-flipping themselves.
      That is exactly the idiom the card fill above and the row bands in styles/diffview.css
      already use, so this rejoins a vocabulary rather than keeping a private one, and
@@ -1328,13 +1328,13 @@ const CARET_OVERRIDES = `
 
      WHAT THIS GAVE UP, STATED PLAINLY. EXC-864 held these to WCAG 1.4.11's 3:1 floor,
      because the pipes go transparent and the rule is then the only thing saying where a
-     column ends. At 16% it measures about 1.15–1.4 and no longer clears that. The call was
-     made knowingly on the strength of what the original argument understated: the columns
-     are ALSO carried by the layout — max-content tracks holding the source's own spacing —
-     so a faint divider makes the reading quieter rather than ambiguous, and a table drawn
-     with no vertical rules at all is a normal rendering. That reasoning does NOT extend to
-     the header's ink, which is text and keeps a measured floor. theme.test.ts pins what
-     replaced the old floor: visible on every palette, and evenly spread across them.
+     column ends. At 12% it no longer clears that. The call was made knowingly on the
+     strength of what the original argument understated: the columns are ALSO carried by
+     the layout — max-content tracks holding the source's own spacing — so a faint divider
+     makes the reading quieter rather than ambiguous, and a table drawn with no vertical
+     rules at all is a normal rendering. That reasoning does NOT extend to the header's
+     ink, which is text and keeps a measured floor. theme.test.ts pins what replaced the
+     old floor: visible on every palette, and evenly spread across them.
      doc/agents/svelte-rules.md § chips carries the range, and carries it alone; a measured
      number restated here is a number that drifts.
 

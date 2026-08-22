@@ -572,7 +572,7 @@ describe("every theme", () => {
   //   property the design call actually asked for and the one the OLD mechanism could not
   //   hold: --ink-soft softened by a fixed amount lands in two different places on a light
   //   and a dark palette, which is why it needed a light-dark() with two different numbers.
-  //   Stating the colour the other way round — --paper-sunk stepped 16% toward --ink —
+  //   Stating the colour the other way round — --paper-sunk stepped 12% toward --ink —
   //   makes one number land in the same place everywhere, because the operands flip with
   //   the scheme. Reintroduce a per-scheme arm and the spread widens and this reds.
   //

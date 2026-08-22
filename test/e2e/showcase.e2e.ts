@@ -532,7 +532,7 @@ test("a vendor palette resolves every decoration's paint", async ({ daemon, page
       inkSoft: probe("--ink-soft"),
       inkFaint: probe("--ink-faint"),
       // A table's rules are not an ink at all: EXC-1136 restated them as one step off the
-      // SURFACE — --paper-sunk 16% toward --ink, the same idiom as the card fill and the
+      // SURFACE — --paper-sunk 12% toward --ink, the same idiom as the card fill and the
       // row bands — so one number reads the same on every palette without a light-dark().
       // Written as the sheet writes it, and resolved here the same way the tokens above
       // are, so it stays a claim about the DERIVED value reaching the sheet rather than a
