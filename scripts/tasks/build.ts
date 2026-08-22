@@ -14,7 +14,7 @@
 
 import { mkdirSync, rmSync } from "node:fs";
 
-import { execAndExit, runForward } from "@/tasks/lib/exec.ts";
+import { execAndExit, lastDisplayLine, runCapture, runForward } from "@/tasks/lib/exec.ts";
 
 // --- the generated first-paint palette ---------------------------------------
 // ui/src/styles/palette.generated.css is emitted from THEMES["caret-dark"] and
@@ -88,9 +88,16 @@ export function buildBinCompileCommand(commit: string): string[] {
 /** Read HEAD's commit sha, throwing if git fails (e.g. not a checkout) so the
  * build aborts loudly instead of baking an empty commit into the binary. */
 async function headCommit(): Promise<string> {
-  const proc = Bun.spawn(["git", "rev-parse", "HEAD"], { stdout: "pipe", stderr: "inherit" });
-  const [out, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
-  if (code !== 0) throw new Error("git rev-parse HEAD failed");
+  // git's diagnostics are piped, not inherited: the umbrella build renders a live
+  // progress line, and anything written straight to stderr would land on top of it.
+  // They ride along in the thrown error instead.
+  const proc = Bun.spawn(["git", "rev-parse", "HEAD"], { stdout: "pipe", stderr: "pipe" });
+  const [out, err, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  if (code !== 0) throw new Error(`git rev-parse HEAD failed: ${err.trim()}`);
   return out.trim();
 }
 
@@ -122,6 +129,29 @@ export async function buildBinArtifacts(run: typeof runForward = runForward): Pr
   const ui = await ensureUi(run);
   if (ui !== 0) return ui;
   return await compileBin(run);
+}
+
+/** Build the UI then the binary with every child's output captured instead of
+ * inherited, resolving the exit code alongside the full combined log. `onLine`
+ * receives each chunk's last displayable line so a caller can show progress.
+ * The spawner is injectable for the same reason buildBinArtifacts' is. */
+export async function buildBinArtifactsQuietly(
+  onLine: (line: string) => void,
+  spawn: typeof runCapture = runCapture,
+): Promise<{ code: number; output: string }> {
+  const chunks: string[] = [];
+  const run: typeof runForward = (cmd, opts) =>
+    spawn(
+      cmd,
+      (chunk) => {
+        chunks.push(chunk);
+        const line = lastDisplayLine(chunk);
+        if (line) onLine(line);
+      },
+      opts,
+    );
+  const code = await buildBinArtifacts(run);
+  return { code, output: chunks.join("") };
 }
 
 export async function runBuildBin(): Promise<never> {

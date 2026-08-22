@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import type { JsonArgs } from "@scripts/preflight.ts";
 import {
   buildBinArtifacts,
+  buildBinArtifactsQuietly,
   buildBinCompileCommand,
   buildBundleCommand,
   buildInstallCommand,
@@ -599,6 +600,45 @@ describe("build bin: UI-first ordering + skip", () => {
     const cpAt = calls.findIndex((c) => c.cmd[0] === "cp");
     expect(rmAt).toBeGreaterThanOrEqual(0);
     expect(cpAt).toBeGreaterThan(rmAt);
+  });
+});
+
+// The quiet twin the bare `mise run build` umbrella renders behind a progress
+// line: same chain, same ordering, but every child's output is captured rather
+// than inherited so the log can be replayed only when the build fails.
+describe("buildBinArtifactsQuietly: capture and dump-on-failure", () => {
+  /** A runCapture stand-in that emits one line per child and fails whichever
+   * commands `fails` selects, so a whole quiet build runs without spawning Vite. */
+  function capturingSpawn(fails: (cmd: string[]) => boolean = () => false) {
+    const calls: string[][] = [];
+    const spawn = async (cmd: string[], sink: (chunk: string) => void): Promise<number> => {
+      calls.push(cmd);
+      sink(`[${cmd[0]}] working\n[${cmd[0]}] done\n`);
+      return fails(cmd) ? 1 : 0;
+    };
+    return { calls, spawn };
+  }
+
+  test("captures every child's output in order and reports each chunk's last line", async () => {
+    const { calls, spawn } = capturingSpawn();
+    const lines: string[] = [];
+    const { code, output } = await buildBinArtifactsQuietly((line) => lines.push(line), spawn);
+    expect(code).toBe(0);
+    // Every child ran, and its text landed in the capture in spawn order.
+    expect(output).toContain("[bunx] working");
+    expect(output).toContain("[bun] working");
+    expect(output.indexOf("[bunx]")).toBeLessThan(output.indexOf("[bun]"));
+    // The progress callback sees the last displayable line of each chunk, never
+    // the whole chunk — that is the single line a spinner can show.
+    expect(lines).toEqual(calls.map((cmd) => `[${cmd[0]}] done`));
+  });
+
+  test("stops at the failing child and keeps its output for the caller to dump", async () => {
+    const { calls, spawn } = capturingSpawn((cmd) => cmd.includes("vite"));
+    const { code, output } = await buildBinArtifactsQuietly(() => {}, spawn);
+    expect(code).toBe(1);
+    expect(output).toContain("[bunx] working"); // the failing child's log survives
+    expect(calls.some((cmd) => cmd.includes("--compile"))).toBe(false); // compile never ran
   });
 });
 
