@@ -1314,12 +1314,21 @@ const CARET_OVERRIDES = `
      the comment anchors all resolve against; an appended node would have tables.ts rebuild
      the row on every repaint and never adopt it.
 
-     Two rows are excluded and neither is a body row: the head row, because the delimiter
-     row directly below it already draws that separator and a second one a pixel away reads
-     as a doubled line, and the delimiter row itself, because it IS one. */
+     Three rows are excluded. The head row, because the delimiter row directly below it
+     already draws that separator and a second one a pixel away reads as a doubled line;
+     the delimiter row itself, because it IS one; and the card's LAST child, whose hairline
+     would sit a pixel above the panel's own bottom edge and read as the frame this change
+     just removed — the card's top edge has no matching line, so the pair read as a border
+     that lost half of itself rather than as the last of a series of separators. The
+     reference idiom omits that final rule for the same reason.
+
+     :last-child rather than the last body row by name, which also makes the exclusion
+     self-correcting: open a comment on the table's final line and the annotation row
+     becomes the bottom of the card, at which point the body row above it is an interior
+     row again and correctly rules. */
   [data-content]
     > [data-table-card]
-    > [data-line]:not([data-table-head], [data-table-rule]) {
+    > [data-line]:not([data-table-head], [data-table-rule]):not(:last-child) {
     background-image: linear-gradient(var(--table-rule), var(--table-rule));
     background-repeat: no-repeat;
     background-size: 100% 1px;

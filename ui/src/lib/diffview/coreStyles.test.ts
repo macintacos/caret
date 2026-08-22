@@ -1817,6 +1817,12 @@ describe("tables (EXC-864)", () => {
     // separator, and the delimiter row because it IS one.
     expect(hairlineRule).toContain("[data-table-head]");
     expect(hairlineRule).toContain("[data-table-rule]");
+    // And the card's LAST child, whose hairline would land a pixel above the panel's own
+    // bottom edge and read as the frame this change removed — asymmetric, since the top
+    // edge has no matching line. :last-child rather than the last body row by name: when
+    // a comment opens on the table's final line the annotation row becomes the bottom of
+    // the card, and the body row above it is then an interior row that should rule again.
+    expect(hairlineRule).toContain(":not(:last-child)");
   });
 
   test("adds the new marks as paint and nothing else", () => {
