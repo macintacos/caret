@@ -1444,6 +1444,11 @@ describe("tables (EXC-864)", () => {
     overrideDecls.match(
       /\[data-content\]\s*>\s*\[data-table-card\]\s*>\s*\[data-line\]\s*\{[^}]*\}/,
     )?.[0] ?? "";
+  // The card's own fill only shows through once the library's per-row --diffs-bg is
+  // cleared, which this rule does for every row that is not carrying a band.
+  const transparentRow = rulesFor(
+    String.raw`>\s*\[data-table-card\]\s*>\s*\[data-line\]:not\([^{}]*\)`,
+  ).find((r) => r.includes("background-color:"));
   const cellRule = rulesFor(String.raw`\[data-table-cell\]`).find((r) => r.includes("max-width:"));
   const inertRule = rulesFor(String.raw`\[data-table-inert\]`)[0];
   const pipeRule = rulesFor(String.raw`\[data-table-pipe\]`)[0];
@@ -1494,6 +1499,7 @@ describe("tables (EXC-864)", () => {
     for (const [name, rule] of Object.entries({
       cardRule,
       rowRule,
+      transparentRow,
       cellRule,
       inertRule,
       pipeRule,
@@ -1525,8 +1531,8 @@ describe("tables (EXC-864)", () => {
 
   test("takes its rows from the parent, declares its own columns, and shrinks to them", () => {
     // Subgrid rows are what keep the gutter numbers aligned as a wrapped cell grows its
-    // track. justify-self is what makes the frame below hug the TABLE: a stretched card
-    // would box the whole content column instead.
+    // track. justify-self is what makes the panel below hug the TABLE: a stretched card
+    // would panel the whole reading column instead.
     expect(cardRule).toMatch(/grid-template-rows:\s*subgrid/);
     expect(cardRule).toMatch(
       /grid-template-columns:\s*repeat\(var\(--table-columns[^)]*\), max-content\)/,
@@ -1534,11 +1540,34 @@ describe("tables (EXC-864)", () => {
     expect(cardRule).toMatch(/justify-self:\s*start/);
   });
 
-  test("frames the table, with corners", () => {
-    // Markdown has no syntax for a table's outer edge, so this is the one mark here with
-    // no character behind it — without it the column rules stop in mid-air.
-    expect(cardRule).toMatch(/border:\s*1px solid var\(--table-rule\)/);
+  test("is a surface, on the code card's fill, and no longer a frame", () => {
+    // EXC-1136 traded the outline for a panel. The fill is the code card's own, quoted
+    // rather than re-tuned: a table and a fenced block are the two cards on this page,
+    // and two panel colours a shade apart read as a mistake rather than as two kinds of
+    // block. The elevation is what says "floating"; the frame it replaces is gone
+    // outright, so the column rules now stop against the panel's edge instead of a line.
+    const codeCard =
+      overrideDecls.match(/\[data-content\]\s*>\s*\[data-code-card\]\s*\{[^}]*\}/)?.[0] ?? "";
+    const codeFill = codeCard.match(/background-color:\s*([^;]+);/)?.[1];
+    expect(codeFill).toBeTruthy();
+    expect(cardRule).toContain(`background-color: ${codeFill};`);
     expect(cardRule).toMatch(/border-radius:\s*var\(--radius\)/);
+    expect(cardRule).toMatch(/box-shadow:\s*[^;]+;/);
+    expect(cardRule).not.toMatch(/border:\s*1px/);
+  });
+
+  test("clears the library's row fill inside the card, banded rows excepted", () => {
+    // @pierre/diffs paints every row its own opaque --diffs-bg, so without this the rows
+    // tile straight over the panel and the fill above never reaches the screen — the same
+    // companion the code card carries.
+    expect(transparentRow).toMatch(/background-color:\s*transparent/);
+    // The three banded states are carved OUT rather than re-tuned on top: a hovered,
+    // cursored or drag-selected row inside a table keeps exactly the band it painted
+    // before this card had a fill, so there is no second tuned number to keep in step
+    // with the first. Shorten this list and the band silently vanishes.
+    for (const state of ["[data-selected-line]", "[data-hovered]", "[data-caret-cursor]"]) {
+      expect(transparentRow).toContain(state);
+    }
   });
 
   test("zeroes the row padding so the subgrid tracks are the card's", () => {
@@ -1649,11 +1678,12 @@ describe("tables (EXC-864)", () => {
     expect(overrideDecls.match(/--table-rule:/g)).toHaveLength(1);
   });
 
-  test("rounds the end rows so they stop painting over the frame's corners", () => {
-    // Every row of the surface carries an opaque background, so a square first and last
-    // row cover the arc the card's border draws around them and the frame reads as a
-    // rounded rectangle with a bite out of each corner. The same radius, so the row's
-    // edge follows the border rather than crossing it.
+  test("rounds the end rows so they stop painting over the card's corners", () => {
+    // The rule survives the frame it was written for. A BANDED end row is still opaque —
+    // the transparent rule above steps aside for it — so a selected or cursored first row
+    // paints its square corners straight over the card's own arc and the panel reads as a
+    // rounded rectangle with a bite out of the corner. The same radius, so the row's edge
+    // follows the card's rather than crossing it.
     expect(headRow).toMatch(/border-top-left-radius:\s*var\(--radius\)/);
     expect(headRow).toMatch(/border-top-right-radius:\s*var\(--radius\)/);
     expect(footRow).toMatch(/border-bottom-left-radius:\s*var\(--radius\)/);

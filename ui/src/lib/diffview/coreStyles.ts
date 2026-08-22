@@ -1087,33 +1087,32 @@ const CARET_OVERRIDES = `
      between. A cell measures its own box, so a cell that opens with a pipe spends two of
      those characters on the pipe and the space after it.
 
-     No fill and no padding. The table sits on the bare diff surface rather than in a
-     panel: a fenced block is a different mode of reading and earns its own surface, where
-     a table is prose-adjacent data. And a cell needs no padding because the source already
-     carries it — a written cell has its own spaces, so the breathing room inside one is
-     text the author typed. The chip family's no-padding rule (EXC-867, EXC-869) lands
-     here free.
+     No padding. A cell needs none because the source already carries it — a written cell
+     has its own spaces, so the breathing room inside one is text the author typed. The
+     chip family's no-padding rule (EXC-867, EXC-869) lands here free.
 
-     THE FRAME IS THE ONE MARK HERE WITH NO CHARACTER BEHIND IT. Every other decoration in
-     this sheet stands in for something the author typed; markdown has no syntax for a
-     table's outer edge, so the border is drawn because a table without one reads as a
-     stack of rules that stop in mid-air rather than as a table. It is the third case
-     doc/agents/svelte-rules.md § chips leaves open — a decoration that replaces nothing —
-     and it takes the same ink and weight as the rules it closes off, because a frame a
-     shade off from the dividers it meets reads as a mistake rather than as a choice.
+     A SURFACE RATHER THAN AN OUTLINE (EXC-1136). The card took the frame's job away from
+     the frame: it spends the code card's own fill and a lift, and draws no border at all.
+     Two reasons it is the code card's fill quoted rather than a table-specific one. The
+     literal one is that these are the two cards on the page, and two panel colours a shade
+     apart read as a mistake rather than as two kinds of block. The other is what the frame
+     was for — markdown has no syntax for a table's outer edge, and without SOMETHING there
+     the column rules stop in mid-air — and a filled, lifted panel says where the table ends
+     more plainly than a hairline did, without spending ink on a mark no character stands
+     behind.
 
-     --table-rule is declared HERE, on the card, and nowhere else. The frame, the column
-     dividers and the header rule are one mark in three places; a tuned number written out
-     three times is three numbers waiting to drift apart. */
+     --table-rule is declared HERE, on the card, and nowhere else. The column dividers, the
+     delimiter rule and the row hairlines are one mark in three places; a tuned number
+     written out three times is three numbers waiting to drift apart. */
   [data-content] > [data-table-card] {
     grid-column: 1 / -1;
     display: grid;
     grid-template-rows: subgrid;
     grid-template-columns: repeat(var(--table-columns, 1), max-content);
     /* The card shrinks to its tracks rather than stretching across the content column,
-       which it has to do now that it draws a frame: a border on a stretched card would
-       box the column the table sits in rather than the table. It is still free to grow
-       PAST the column when the tracks are wider than it — max-content never shrinks
+       which it has to do now that it is filled: a panel on a stretched card would surface
+       the whole reading column rather than the table sitting in it. It is still free to
+       grow PAST the column when the tracks are wider than it — max-content never shrinks
        under pressure — which is the "grows until every column is visible" behaviour. */
     justify-self: start;
     margin-inline: var(--caret-card-inset);
@@ -1121,16 +1120,30 @@ const CARET_OVERRIDES = `
       color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 15%),
       color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 30%)
     );
-    border: 1px solid var(--table-rule);
+    background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
     border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
   }
-  /* The frame's corners, taken back from the rows. Every row of the surface carries an
-     opaque background of its own, so the first and last row of a card paint their square
-     corners straight over the arc the border draws around them and the frame reads as a
-     rounded rectangle with a bite out of each corner. Rounding the two end rows to the
-     same radius clears the arc. The 1px border makes the row's arc a hair wider than the
-     border's inner one; the sliver that leaves is the card's own background, which is
-     nothing, so what shows through is the surface the row was painting anyway.
+  /* The library paints every line with its own --diffs-bg, so clear it inside the card for
+     the panel fill to show through — the code card's companion rule, for the same reason.
+
+     Where this one parts company with the code card's: the banded states are carved OUT of
+     the selector rather than cleared and re-painted a step brighter afterwards. The code
+     card had to re-tune them because its own transparent rule killed them first; a table's
+     rows never lose theirs, so a hovered, cursored or drag-selected row inside a card keeps
+     exactly the band it painted before the card had a fill, and there is no second tuned
+     number to hold in step with the first. Shorten this list and the band goes silently. */
+  [data-content]
+    > [data-table-card]
+    > [data-line]:not([data-selected-line], [data-hovered], [data-caret-cursor]) {
+    background-color: transparent;
+  }
+  /* The card's corners, taken back from the rows. The rule outlives the frame it was
+     written for, because a BANDED row is still opaque — the transparent rule above steps
+     aside for exactly those three states — so a selected or cursored first row paints its
+     square corners straight over the card's own arc and the panel reads as a rounded
+     rectangle with a bite out of the corner. Rounding the two end rows to the same radius
+     clears it.
 
      overflow: hidden on the card would do this in one declaration and is refused: it
      would make the card a scroll container, which is the one thing a table's card must
@@ -1138,7 +1151,7 @@ const CARET_OVERRIDES = `
 
      :first-child / :last-child rather than the rows by name. The last child is an
      annotation row whenever someone comments on the table's final line, and it is then
-     the row whose corners meet the frame. */
+     the row whose corners meet the card's. */
   [data-content] > [data-table-card] > :first-child {
     border-top-left-radius: var(--radius);
     border-top-right-radius: var(--radius);
