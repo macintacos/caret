@@ -1117,8 +1117,8 @@ const CARET_OVERRIDES = `
     justify-self: start;
     margin-inline: var(--caret-card-inset);
     --table-rule: light-dark(
-      color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 15%),
-      color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 30%)
+      color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 18%),
+      color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 35%)
     );
     background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
     border-radius: var(--radius);
@@ -1280,18 +1280,21 @@ const CARET_OVERRIDES = `
      are the only thing left saying where one column ends and the next begins, which is
      WCAG 1.4.11's own test for a graphical object required to understand the content.
 
-     The softening is split by scheme because the two schemes are held by two different
-     limits: on a LIGHT palette the floor binds and 15% is the most that clears it, while
-     on a DARK one the eye binds long before the floor does — light ink on a dark ground
-     reads heavier at the same ratio — so 30% is a design choice with the floor merely
-     respected. doc/agents/svelte-rules.md § chips carries both ranges, and carries them
-     alone; a measured number restated here is a number that drifts.
+     The softening is split by scheme because a dark palette can take more of it: light ink
+     on a dark ground reads heavier at the same ratio, so it takes a bigger mix to land in
+     the same place. BOTH ARMS SIT ON THE 3:1 FLOOR — 18% and 35% are the most either
+     scheme clears it with, and one point further on either reds theme.test.ts naming the
+     palette that broke. EXC-1136 spent what headroom the original 15%/30% had, on a review
+     call that the rules read too strong against the card's new fill; there is none left,
+     so "softer still" is a request for a different mechanism rather than a bigger number.
+     doc/agents/svelte-rules.md § chips carries both ranges, and carries them alone; a
+     measured number restated here is a number that drifts.
 
      light-dark() rather than a scheme-keyed selector, which the shadow boundary puts out
      of reach anyway: paintTheme writes color-scheme along with the tokens, and it
      inherits through the host, so one declaration covers both. Mixed in sRGB rather than
-     the lab the rest of this sheet uses, deliberately: the light margin is a fifth of a
-     ratio point, too thin to absorb the difference between the space theme.test.ts
+     the lab the rest of this sheet uses, deliberately: both margins are now hundredths of
+     a ratio point, far too thin to absorb the difference between the space theme.test.ts
      measures in and the space the browser paints in. */
   [data-content]
     > [data-table-card]

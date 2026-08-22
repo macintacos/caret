@@ -1679,7 +1679,7 @@ describe("tables (EXC-864)", () => {
     // it asks the platform which scheme is live rather than guessing from a selector the
     // shadow boundary would put out of reach.
     expect(cardRule).toMatch(
-      /--table-rule:\s*light-dark\(\s*color-mix\(in srgb, var\(--ink-soft\), var\(--paper-sunk\) 15%\),\s*color-mix\(in srgb, var\(--ink-soft\), var\(--paper-sunk\) 30%\),?\s*\)/,
+      /--table-rule:\s*light-dark\(\s*color-mix\(in srgb, var\(--ink-soft\), var\(--paper-sunk\) 18%\),\s*color-mix\(in srgb, var\(--ink-soft\), var\(--paper-sunk\) 35%\),?\s*\)/,
     );
     for (const rule of [dividerRule, ruleRow, hairlineRule]) {
       expect(rule).toContain("var(--table-rule)");

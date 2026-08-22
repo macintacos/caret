@@ -251,14 +251,20 @@ stays green under any invocation.
   drew a cage rather than a table — 7.70 on caret-dark's widest band is TEXT contrast for
   a mark that only says where a column ends — so `--table-rule` mixes it toward
   `--paper-sunk` before painting, through a `light-dark()` whose two arms answer to two
-  different limits. On a **light** palette the floor binds: 15% is the most that clears
-  3:1 on all three, measuring 3.19–4.51 with catppuccin-latte binding. On a **dark** one
-  the eye binds first — light ink on a dark ground reads heavier at the same ratio — so
-  30% is a design choice and the floor is merely respected, measuring 3.39–4.33 with
-  github-dark tightest. The card's **frame** spent this token too until EXC-1136 replaced
-  it with a fill and a lift; the **row hairlines** it added in the same change are what
-  the token now buys in its place, and they are this paragraph's own third case — a
-  decoration that replaces no source character, since markdown has no syntax for a
+  different limits. **Both arms now sit on the floor**, and that is the whole remaining
+  margin. On a **light** palette 18% is the most that clears 3:1, measuring 3.02–4.93 with
+  catppuccin-latte binding; on a **dark** one it takes 35% to land in the same place —
+  light ink on a dark ground reads heavier at the same ratio — measuring 3.02–4.73 with
+  github-dark tightest. One point further on either arm reds `theme.test.ts` naming the
+  palette that broke. EXC-1136 spent the headroom the original 15%/30% left, on a review
+  call that the rules read too strong against the card's fill; a future "softer still" is
+  a request for a different mechanism, not a bigger number. Note which ground binds: the
+  widest ROW BAND, not the card's resting fill — a rule inside a table still has to be
+  legible on a hovered or selected row, and measuring only the resting panel would flatter
+  these numbers by about a point. The card's **frame** spent this token too until EXC-1136
+  replaced it with a fill and a lift; the **row hairlines** it added in the same change
+  are what the token now buys in its place, and they are this paragraph's own third case —
+  a decoration that replaces no source character, since markdown has no syntax for a
   boundary between two body rows. Where the file and folder glyphs leave that case open,
   the hairline settles it by construction rather than by argument: it spends
   `--table-rule`, which the two arms above already hold at 3:1, so it clears the floor

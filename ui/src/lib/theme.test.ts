@@ -539,10 +539,11 @@ describe("every theme", () => {
     }
   });
 
-  // EXC-864's table rules — the frame, the column dividers and the header rule — are one
-  // mark declared once as --table-rule (diffview/coreStyles.ts). They are a replacement
-  // decoration: the pipes and the delimiter row's dashes go transparent and these are
-  // drawn where they stood, so the 3:1 floor binds exactly as it does for the break above.
+  // The table's rules — the column dividers, the delimiter rule and the row hairlines —
+  // are one mark declared once as --table-rule (diffview/coreStyles.ts). They are a
+  // replacement decoration: the pipes and the delimiter row's dashes go transparent and
+  // these are drawn where they stood, so the 3:1 floor binds exactly as it does for the
+  // break above.
   //
   // What makes this its own case is that the rules do NOT paint --ink-soft neat, and do
   // not soften it by the same amount in both schemes. Drawn at full strength a table read
@@ -551,19 +552,24 @@ describe("every theme", () => {
   // mixes it toward the surface, through a light-dark() whose two arms are what SOFTEN
   // holds here.
   //
-  // The two numbers are set by two different limits, and only one of them is this file's.
-  // On a light palette the FLOOR binds: 15% is the most that clears it on all three, and
-  // catppuccin-latte's widest band binds at 3.19 — raise the light arm to 0.2 and this
-  // reds naming that palette. On a dark palette the EYE binds first and 30% is a design
-  // choice, so what this measures there is only that the choice stayed legal; the tightest
-  // is github-dark at 3.39, and the same test reds at around 0.4.
+  // BOTH ARMS NOW SIT ON THE FLOOR, and that is the whole margin: 18% and 35% are the most
+  // either scheme clears 3:1 with, measuring 3.02 on catppuccin-latte and 3.02 on
+  // github-dark. One point further on either — 19% or 36% — and this reds naming that
+  // palette. EXC-1136 spent the headroom the earlier 15%/30% left, on a review call that
+  // the rules read too strong against the card's fill; there is none left to spend, so a
+  // future "softer still" is a request for a different mechanism, not a bigger number.
+  //
+  // The binding ground is the WIDEST row band rather than the card's own fill: a rule
+  // inside a table still has to be legible on a hovered, cursored or selected row, and
+  // that band is a heavier ground than the resting panel. Measuring only the resting case
+  // would flatter these numbers by about a point.
   //
   // Mixed in sRGB here AND in the sheet, which is the one place this file's usual
   // "lab and sRGB differ by well under the headroom" note does not hold: the light
   // headroom is 0.19 of a ratio point, so the two spaces have to be the same one or the
   // pin stops measuring what ships.
   test("keeps a table's rules above the non-text floor once softened", () => {
-    const SOFTEN = { light: 0.15, dark: 0.3 } as const;
+    const SOFTEN = { light: 0.18, dark: 0.35 } as const;
     for (const [id, theme] of themeEntries()) {
       const sunk = theme.tokens["--paper-sunk"];
       const soften = SOFTEN[theme.scheme];

@@ -665,8 +665,8 @@ test("no pipe glyph paints, and the rules stand where the pipes did", async ({ p
       inkSoft: probe("--ink-soft"),
       ruleInk: probe(
         `light-dark(
-           color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 15%),
-           color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 30%))`,
+           color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 18%),
+           color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 35%))`,
       ),
       rows: [...card.querySelectorAll(":scope > [data-line]")].map((row) => {
         const s = getComputedStyle(row);

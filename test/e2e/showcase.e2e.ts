@@ -540,8 +540,8 @@ test("a vendor palette resolves every decoration's paint", async ({ daemon, page
       // reaching the sheet rather than a hex transcribed into this file.
       tableInk: probe(
         `light-dark(
-           color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 15%),
-           color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 30%))`,
+           color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 18%),
+           color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 35%))`,
       ),
       chip: pick('[data-content] [data-line] [data-md~="code"]', (el) => {
         return getComputedStyle(el).backgroundImage;
