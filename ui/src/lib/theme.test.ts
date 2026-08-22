@@ -96,6 +96,16 @@ function banded(bg: string, ink: string, pct: number): string {
  * and the widest band, which is the darkest ground any decoration sits on. */
 const ROW_BANDS = [0, 0.02, 0.08] as const;
 
+/** The table card's own fill (EXC-1136), quoted from the code card:
+ * `color-mix(in lab, var(--paper-sunk), var(--ink) 6%)`. A table's marks are drawn on
+ * THIS rather than on the bare surface, so it joins the grounds they are measured over. */
+const TABLE_CARD_FILL = 0.06;
+
+/** The grounds a table's rules are drawn on: every row band, plus the card fill they now
+ * sit on. 6% falls inside the row bands' own bracket, so it never binds — it is here so
+ * the pin measures the surface that ships rather than one the table left behind. */
+const TABLE_GROUNDS = [...ROW_BANDS, TABLE_CARD_FILL] as const;
+
 const themeEntries = () => Object.entries(THEMES) as [ThemeId, (typeof THEMES)[ThemeId]][];
 
 describe("THEMES", () => {
@@ -560,13 +570,35 @@ describe("every theme", () => {
       // color-mix(in srgb, var(--ink-soft), var(--paper-sunk) N%) — banded() is that
       // same channel-wise mix, read the other way round.
       const painted = banded(theme.tokens["--ink-soft"], sunk, soften);
-      for (const pct of ROW_BANDS) {
+      for (const pct of TABLE_GROUNDS) {
         const ground = banded(sunk, theme.tokens["--ink"], pct);
         expect(
           contrast(painted, ground),
           `${id} table rule --ink-soft softened ${soften * 100}% on --paper-sunk banded ${pct * 100}%`,
         ).toBeGreaterThanOrEqual(3);
       }
+    }
+  });
+
+  // EXC-1136 subdued the table header from bold --ink to plain --ink-soft, on the card's
+  // own fill. The ink is spent neat — only the GROUND is new — which is what separates
+  // this from the rules case above.
+  //
+  // THE FLOOR HERE IS 3:1 AND THAT IS A DELIBERATE, NARROW EXEMPTION. A header cell is
+  // text, so 1.4.3's 4.5:1 would ordinarily bind, and the ink-ramp case further up holds
+  // --ink-soft to exactly that on the two CHROME surfaces. On this ground it does not
+  // clear it everywhere: catppuccin-latte binds at 4.34, 0.16 short, and it is the only
+  // one that misses. EXC-1136 named 3:1 for this ink and that is what ships, on the
+  // reasoning that the row is uppercase, short, and sits directly above body copy at full
+  // --ink. Soften the ink at all and latte drops below 4 — measure before touching it.
+  // doc/agents/svelte-rules.md § chips carries the range and the rest of the argument.
+  test("keeps a table header above the non-text floor on the card's own fill", () => {
+    for (const [id, theme] of themeEntries()) {
+      const ground = banded(theme.tokens["--paper-sunk"], theme.tokens["--ink"], TABLE_CARD_FILL);
+      expect(
+        contrast(theme.tokens["--ink-soft"], ground),
+        `${id} table header --ink-soft on --paper-sunk banded ${TABLE_CARD_FILL * 100}%`,
+      ).toBeGreaterThanOrEqual(3);
     }
   });
 
