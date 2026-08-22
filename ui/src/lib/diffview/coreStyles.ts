@@ -1087,50 +1087,73 @@ const CARET_OVERRIDES = `
      between. A cell measures its own box, so a cell that opens with a pipe spends two of
      those characters on the pipe and the space after it.
 
-     No fill and no padding. The table sits on the bare diff surface rather than in a
-     panel: a fenced block is a different mode of reading and earns its own surface, where
-     a table is prose-adjacent data. And a cell needs no padding because the source already
-     carries it — a written cell has its own spaces, so the breathing room inside one is
-     text the author typed. The chip family's no-padding rule (EXC-867, EXC-869) lands
-     here free.
+     No padding. A cell needs none because the source already carries it — a written cell
+     has its own spaces, so the breathing room inside one is text the author typed. The
+     chip family's no-padding rule (EXC-867, EXC-869) lands here free.
 
-     THE FRAME IS THE ONE MARK HERE WITH NO CHARACTER BEHIND IT. Every other decoration in
-     this sheet stands in for something the author typed; markdown has no syntax for a
-     table's outer edge, so the border is drawn because a table without one reads as a
-     stack of rules that stop in mid-air rather than as a table. It is the third case
-     doc/agents/svelte-rules.md § chips leaves open — a decoration that replaces nothing —
-     and it takes the same ink and weight as the rules it closes off, because a frame a
-     shade off from the dividers it meets reads as a mistake rather than as a choice.
+     A SURFACE RATHER THAN AN OUTLINE (EXC-1136). The card took the frame's job away from
+     the frame: it spends the code card's own fill and a lift, and draws no border at all.
+     Two reasons it is the code card's fill quoted rather than a table-specific one. The
+     literal one is that these are the two cards on the page, and two panel colours a shade
+     apart read as a mistake rather than as two kinds of block. The other is what the frame
+     was for — markdown has no syntax for a table's outer edge, and without SOMETHING there
+     the column rules stop in mid-air — and a filled, lifted panel says where the table ends
+     more plainly than a hairline did, without spending ink on a mark no character stands
+     behind.
 
-     --table-rule is declared HERE, on the card, and nowhere else. The frame, the column
-     dividers and the header rule are one mark in three places; a tuned number written out
-     three times is three numbers waiting to drift apart. */
+     --table-rule is declared HERE, on the card, and nowhere else. The column dividers, the
+     delimiter rule and the row hairlines are one mark in three places; a tuned number
+     written out three times is three numbers waiting to drift apart. */
   [data-content] > [data-table-card] {
     grid-column: 1 / -1;
     display: grid;
     grid-template-rows: subgrid;
     grid-template-columns: repeat(var(--table-columns, 1), max-content);
     /* The card shrinks to its tracks rather than stretching across the content column,
-       which it has to do now that it draws a frame: a border on a stretched card would
-       box the column the table sits in rather than the table. It is still free to grow
-       PAST the column when the tracks are wider than it — max-content never shrinks
+       which it has to do now that it is filled: a panel on a stretched card would surface
+       the whole reading column rather than the table sitting in it. It is still free to
+       grow PAST the column when the tracks are wider than it — max-content never shrinks
        under pressure — which is the "grows until every column is visible" behaviour. */
     justify-self: start;
     margin-inline: var(--caret-card-inset);
-    --table-rule: light-dark(
-      color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 15%),
-      color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 30%)
-    );
-    border: 1px solid var(--table-rule);
+    --table-rule: color-mix(in lab, var(--paper-sunk), var(--ink) 12%);
+    background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
     border-radius: var(--radius);
+    /* A contact shadow, NOT --shadow-card. The shared token is built for chrome that
+       genuinely floats — popovers, alerts, the composer — and its far layer is a 30px
+       blur. This card is inline in dense body text and inset only --caret-card-inset
+       (0.75rem) from the gutter lane, so a blur wider than that inset spills into the
+       lane, and on a palette whose sunk surface is light enough to darken (catppuccin
+       mocha is the one that showed it) the spill reads as a soot halo rather than as a
+       lift. Sampling only caret-dark and caret-light hides this: their surfaces are near
+       enough to black that the same shadow resolves to nothing at all.
+
+       2px of blur, under the card's own bottom edge, is all a panel this size can carry.
+       The alpha splits by scheme because the same black reads much heavier over a light
+       ground than over a dark one; the geometry does not, so there is one shape here and
+       one number that moves. */
+    box-shadow: 0 1px 2px light-dark(rgb(0 0 0 / 0.07), rgb(0 0 0 / 0.28));
   }
-  /* The frame's corners, taken back from the rows. Every row of the surface carries an
-     opaque background of its own, so the first and last row of a card paint their square
-     corners straight over the arc the border draws around them and the frame reads as a
-     rounded rectangle with a bite out of each corner. Rounding the two end rows to the
-     same radius clears the arc. The 1px border makes the row's arc a hair wider than the
-     border's inner one; the sliver that leaves is the card's own background, which is
-     nothing, so what shows through is the surface the row was painting anyway.
+  /* The library paints every line with its own --diffs-bg, so clear it inside the card for
+     the panel fill to show through — the code card's companion rule, for the same reason.
+
+     Where this one parts company with the code card's: the banded states are carved OUT of
+     the selector rather than cleared and re-painted a step brighter afterwards. The code
+     card had to re-tune them because its own transparent rule killed them first; a table's
+     rows never lose theirs, so a hovered, cursored or drag-selected row inside a card keeps
+     exactly the band it painted before the card had a fill, and there is no second tuned
+     number to hold in step with the first. Shorten this list and the band goes silently. */
+  [data-content]
+    > [data-table-card]
+    > [data-line]:not([data-selected-line], [data-hovered], [data-caret-cursor]) {
+    background-color: transparent;
+  }
+  /* The card's corners, taken back from the rows. The rule outlives the frame it was
+     written for, because a BANDED row is still opaque — the transparent rule above steps
+     aside for exactly those three states — so a selected or cursored first row paints its
+     square corners straight over the card's own arc and the panel reads as a rounded
+     rectangle with a bite out of the corner. Rounding the two end rows to the same radius
+     clears it.
 
      overflow: hidden on the card would do this in one declaration and is refused: it
      would make the card a scroll container, which is the one thing a table's card must
@@ -1138,7 +1161,7 @@ const CARET_OVERRIDES = `
 
      :first-child / :last-child rather than the rows by name. The last child is an
      annotation row whenever someone comments on the table's final line, and it is then
-     the row whose corners meet the frame. */
+     the row whose corners meet the card's. */
   [data-content] > [data-table-card] > :first-child {
     border-top-left-radius: var(--radius);
     border-top-right-radius: var(--radius);
@@ -1146,6 +1169,31 @@ const CARET_OVERRIDES = `
   [data-content] > [data-table-card] > :last-child {
     border-bottom-left-radius: var(--radius);
     border-bottom-right-radius: var(--radius);
+  }
+  /* A sliver of air inside the card's top and bottom edges, so the header and the last row
+     are not set hard against them. Two pixels, which is the whole intent — a card this
+     dense reads as sloppy if its text touches the fill's edge and as a different component
+     if the gap grows into panel padding.
+
+     ON THE END ROWS, AND ON THEIR GUTTER CELLS, rather than on the card. Padding the card
+     is the obvious move and is wrong twice over: the card is a row subgrid, so insetting
+     its content box takes its tracks out of register with the parent's, and the gutter
+     mirror is a SEPARATE subgrid that would not have been inset with it — the line numbers
+     would slide against their rows by exactly this much. Padding the rows grows the shared
+     parent track instead, which both subgrids then take, and pairing each row with its
+     gutter cell keeps the number on the same baseline as the text beside it. The code card
+     pads its first and last rows for the same reason (EXC-729, above).
+
+     :first-child / :last-child, matching the rounding above, so a comment opening on the
+     table's final line hands the bottom padding to the annotation row that is now the
+     card's edge. */
+  [data-content] > [data-table-card] > :first-child,
+  [data-gutter] [data-table-card-gutter] > :first-child {
+    padding-block-start: 0.125rem;
+  }
+  [data-content] > [data-table-card] > :last-child,
+  [data-gutter] [data-table-card-gutter] > :last-child {
+    padding-block-end: 0.125rem;
   }
   /* The library gives every row a 1ch inline padding. On a subgrid that padding insets
      the row's OWN tracks from the card's, so the cells stop filling the columns they
@@ -1262,24 +1310,38 @@ const CARET_OVERRIDES = `
      The edge is an attribute the pass writes rather than a :has() probe, because this
      selector runs on every cell of every table on every repaint.
 
-     --table-rule, declared once on the card, is --ink-soft softened toward the surface —
-     never --rule or --rule-strong. The glyph these replace is transparent, so the rules
-     are the only thing left saying where one column ends and the next begins, which is
-     WCAG 1.4.11's own test for a graphical object required to understand the content.
+     --table-rule, declared once on the card, is the SURFACE stepped toward the ink — never
+     --ink-soft softened toward the surface, which is what it was until EXC-1136's review
+     pass, and never --rule or --rule-strong, which are chrome-surface tokens.
 
-     The softening is split by scheme because the two schemes are held by two different
-     limits: on a LIGHT palette the floor binds and 15% is the most that clears it, while
-     on a DARK one the eye binds long before the floor does — light ink on a dark ground
-     reads heavier at the same ratio — so 30% is a design choice with the floor merely
-     respected. doc/agents/svelte-rules.md § chips carries both ranges, and carries them
-     alone; a measured number restated here is a number that drifts.
+     Two things changed at once there, and the second is the reason for the first. The
+     design call was that these rules read as a deliberately low-contrast style — much
+     closer to the surface than to the ink — and the same on every palette. An ink softened
+     by a fixed amount cannot do the second half: light ink on a dark ground reads heavier
+     at the same ratio, so the old declaration needed a light-dark() carrying two different
+     numbers to land in one place, and it still drifted apart palette by palette. Stated
+     the other way round, one number does it — --paper-sunk stepped 12% toward --ink lands
+     in the same place on all nine, because the operands do the scheme-flipping themselves.
+     That is exactly the idiom the card fill above and the row bands in styles/diffview.css
+     already use, so this rejoins a vocabulary rather than keeping a private one, and
+     light-dark() drops out of the declaration entirely.
 
-     light-dark() rather than a scheme-keyed selector, which the shadow boundary puts out
-     of reach anyway: paintTheme writes color-scheme along with the tokens, and it
-     inherits through the host, so one declaration covers both. Mixed in sRGB rather than
-     the lab the rest of this sheet uses, deliberately: the light margin is a fifth of a
-     ratio point, too thin to absorb the difference between the space theme.test.ts
-     measures in and the space the browser paints in. */
+     WHAT THIS GAVE UP, STATED PLAINLY. EXC-864 held these to WCAG 1.4.11's 3:1 floor,
+     because the pipes go transparent and the rule is then the only thing saying where a
+     column ends. At 12% it no longer clears that. The call was made knowingly on the
+     strength of what the original argument understated: the columns are ALSO carried by
+     the layout — max-content tracks holding the source's own spacing — so a faint divider
+     makes the reading quieter rather than ambiguous, and a table drawn with no vertical
+     rules at all is a normal rendering. That reasoning does NOT extend to the header's
+     ink, which is text and keeps a measured floor. theme.test.ts pins what replaced the
+     old floor: visible on every palette, and evenly spread across them.
+     doc/agents/svelte-rules.md § chips carries the range, and carries it alone; a measured
+     number restated here is a number that drifts.
+
+     Mixed in lab, like every other surface step on this view. The sRGB the old declaration
+     used was there to match theme.test.ts's arithmetic to hundredths of a ratio point when
+     both arms sat on the floor; nothing sits on a floor now, and the margins are wide
+     enough that the two spaces cannot disagree about them. */
   [data-content]
     > [data-table-card]
     [data-table-cell]:not(:first-child):is(
@@ -1292,12 +1354,65 @@ const CARET_OVERRIDES = `
     background-position: 0.5ch 0;
   }
 
-  /* The header row is bold, and the weight is declared HERE rather than routed through
-     shiki's fontStyle — @pierre/diffs carries that into an invalid font-weight:
-     light-dark(...) and drops it, so every token renders at one weight whatever the theme
-     says (EXC-867's standing upstream finding). */
-  [data-content] [data-line][data-table-head] {
-    font-weight: bold;
+  /* A hairline under every body row (EXC-1136). Nothing separated one row of data from the
+     next: the card had a frame, the columns had dividers and the header had its rule, and
+     between two body rows there was air. This is the delimiter row's own paint shape moved
+     from the row's centre to its bottom edge — a background LAYER, for the same reason the
+     delimiter's is one. A border here would satisfy a loose reading of "paint only" and
+     still move the box model that the search ranges, the drag ranges, the vim motions and
+     the comment anchors all resolve against; an appended node would have tables.ts rebuild
+     the row on every repaint and never adopt it.
+
+     Three rows are excluded. The head row, because the delimiter row directly below it
+     already draws that separator and a second one a pixel away reads as a doubled line;
+     the delimiter row itself, because it IS one; and the card's LAST child, whose hairline
+     would sit a pixel above the panel's own bottom edge and read as the frame this change
+     just removed — the card's top edge has no matching line, so the pair read as a border
+     that lost half of itself rather than as the last of a series of separators. The
+     reference idiom omits that final rule for the same reason.
+
+     :last-child rather than the last body row by name, which also makes the exclusion
+     self-correcting: open a comment on the table's final line and the annotation row
+     becomes the bottom of the card, at which point the body row above it is an interior
+     row again and correctly rules. */
+  [data-content]
+    > [data-table-card]
+    > [data-line]:not([data-table-head], [data-table-rule]):not(:last-child) {
+    background-image: linear-gradient(var(--table-rule), var(--table-rule));
+    background-repeat: no-repeat;
+    background-size: 100% 1px;
+    background-position: bottom;
+  }
+
+  /* THE HEADER IS A CAP, NOT A SHOUT (EXC-1136). It was bold because it had to hold its own
+     against a frame; the card's fill carries the table's edge now, so the header's job is
+     back to labelling its columns. Uppercase and a step back into --ink-soft say that more
+     quietly than weight did.
+
+     On a monospace face uppercase costs the grid nothing — every glyph carries the same
+     advance width as the lowercase it replaces — and text-transform is a rendering-time
+     transform that never reaches textContent, so a copied table still yields the source
+     header. No font-size and no letter-spacing for the same grid reason turned the other
+     way: the column dividers paint 0.5ch INSIDE each cell, so a header set on a different
+     advance width would land its divider segment on a different x than every row below it.
+
+     The weight declaration this replaces was here rather than routed through shiki's
+     fontStyle, because @pierre/diffs carries that into an invalid font-weight:
+     light-dark(...) and drops it (EXC-867's standing upstream finding). The ink below has
+     the same problem and takes the same route out. */
+  [data-content] > [data-table-card] > [data-line][data-table-head] {
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  /* The tokens too — shiki inks each one, so the row's own color never reaches them. The
+     pipes are excluded BY NAME: this arm scores 0,5,0, which outranks the 0,3,0 rule that
+     took them to transparent, and without the exclusion the header would be the one row
+     that still shows the picket fence EXC-864 removed. */
+  [data-content]
+    > [data-table-card]
+    > [data-line][data-table-head]
+    :not([data-table-pipe]) {
+    color: var(--ink-soft);
   }
 
   /* The delimiter row keeps its line AND its gutter number: one source line is one table
@@ -1314,7 +1429,7 @@ const CARET_OVERRIDES = `
      height to the character: the gutter numbers are one per row, and a rule that changed
      the vertical rhythm would read as drift long before it read as a separator.
 
-     A plain 100% spans exactly the frame's inner width, which is the whole reason the
+     A plain 100% spans exactly the card's width, which is the whole reason the
      row's inline padding is zeroed above. The break needs background-origin: content-box
      to survive the seam pull; a carded row is never pulled — the pull is a direct-child
      rule, and EXC-865's gutter-side ::before covers this case instead — so the default

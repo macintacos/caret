@@ -1444,6 +1444,19 @@ describe("tables (EXC-864)", () => {
     overrideDecls.match(
       /\[data-content\]\s*>\s*\[data-table-card\]\s*>\s*\[data-line\]\s*\{[^}]*\}/,
     )?.[0] ?? "";
+  // The card's own fill only shows through once the library's per-row --diffs-bg is
+  // cleared, which this rule does for every row that is not carrying a band.
+  const cardRows = rulesFor(String.raw`>\s*\[data-table-card\]\s*>\s*\[data-line\]:not\([^{}]*\)`);
+  const transparentRow = cardRows.find((r) => r.includes("background-color:"));
+  // The hairline under every body row — the same selector shape, a different exclusion
+  // list and a background LAYER rather than a fill.
+  const hairlineRule = cardRows.find((r) => r.includes("background-image:"));
+  const headCap = rulesFor(String.raw`\[data-line\]\[data-table-head\]`).find((r) =>
+    r.includes("text-transform:"),
+  );
+  const headTokens = rulesFor(String.raw`\[data-line\]\[data-table-head\][^{}]*`).find((r) =>
+    r.includes("data-table-pipe"),
+  );
   const cellRule = rulesFor(String.raw`\[data-table-cell\]`).find((r) => r.includes("max-width:"));
   const inertRule = rulesFor(String.raw`\[data-table-inert\]`)[0];
   const pipeRule = rulesFor(String.raw`\[data-table-pipe\]`)[0];
@@ -1494,6 +1507,10 @@ describe("tables (EXC-864)", () => {
     for (const [name, rule] of Object.entries({
       cardRule,
       rowRule,
+      transparentRow,
+      hairlineRule,
+      headCap,
+      headTokens,
       cellRule,
       inertRule,
       pipeRule,
@@ -1525,8 +1542,8 @@ describe("tables (EXC-864)", () => {
 
   test("takes its rows from the parent, declares its own columns, and shrinks to them", () => {
     // Subgrid rows are what keep the gutter numbers aligned as a wrapped cell grows its
-    // track. justify-self is what makes the frame below hug the TABLE: a stretched card
-    // would box the whole content column instead.
+    // track. justify-self is what makes the panel below hug the TABLE: a stretched card
+    // would panel the whole reading column instead.
     expect(cardRule).toMatch(/grid-template-rows:\s*subgrid/);
     expect(cardRule).toMatch(
       /grid-template-columns:\s*repeat\(var\(--table-columns[^)]*\), max-content\)/,
@@ -1534,11 +1551,44 @@ describe("tables (EXC-864)", () => {
     expect(cardRule).toMatch(/justify-self:\s*start/);
   });
 
-  test("frames the table, with corners", () => {
-    // Markdown has no syntax for a table's outer edge, so this is the one mark here with
-    // no character behind it — without it the column rules stop in mid-air.
-    expect(cardRule).toMatch(/border:\s*1px solid var\(--table-rule\)/);
+  test("is a surface, on the code card's fill, and no longer a frame", () => {
+    // EXC-1136 traded the outline for a panel. The fill is the code card's own, quoted
+    // rather than re-tuned: a table and a fenced block are the two cards on this page,
+    // and two panel colours a shade apart read as a mistake rather than as two kinds of
+    // block. The elevation is what says "floating"; the frame it replaces is gone
+    // outright, so the column rules now stop against the panel's edge instead of a line.
+    const codeCard =
+      overrideDecls.match(/\[data-content\]\s*>\s*\[data-code-card\]\s*\{[^}]*\}/)?.[0] ?? "";
+    const codeFill = codeCard.match(/background-color:\s*([^;]+);/)?.[1];
+    expect(codeFill).toBeTruthy();
+    expect(cardRule).toContain(`background-color: ${codeFill};`);
     expect(cardRule).toMatch(/border-radius:\s*var\(--radius\)/);
+    // A contact shadow rather than --shadow-card: the shared token's far layer is a 30px
+    // blur, wider than the card's own --caret-card-inset, so it spills into the gutter
+    // lane and reads as a halo on any palette whose sunk surface is light enough to
+    // darken. Pinned as "blur no wider than the inset" rather than as a literal, since
+    // what must hold is the relationship.
+    const blur = Number.parseFloat(
+      cardRule.match(/box-shadow:\s*\S+\s+\S+\s+([\d.]+)px/)?.[1] ?? "",
+    );
+    expect(blur).toBeGreaterThan(0);
+    expect(blur).toBeLessThan(12);
+    expect(cardRule).not.toContain("--shadow-card");
+    expect(cardRule).not.toMatch(/border:\s*1px/);
+  });
+
+  test("clears the library's row fill inside the card, banded rows excepted", () => {
+    // @pierre/diffs paints every row its own opaque --diffs-bg, so without this the rows
+    // tile straight over the panel and the fill above never reaches the screen — the same
+    // companion the code card carries.
+    expect(transparentRow).toMatch(/background-color:\s*transparent/);
+    // The three banded states are carved OUT rather than re-tuned on top: a hovered,
+    // cursored or drag-selected row inside a table keeps exactly the band it painted
+    // before this card had a fill, so there is no second tuned number to keep in step
+    // with the first. Shorten this list and the band silently vanishes.
+    for (const state of ["[data-selected-line]", "[data-hovered]", "[data-caret-cursor]"]) {
+      expect(transparentRow).toContain(state);
+    }
   });
 
   test("zeroes the row padding so the subgrid tracks are the card's", () => {
@@ -1628,19 +1678,25 @@ describe("tables (EXC-864)", () => {
     expect(ruleInk).toMatch(/\[data-line\]\[data-table-rule\] \*/);
   });
 
-  test("declares the rule ink once, softened per scheme, and spends it everywhere", () => {
-    // The frame, the dividers and the header rule are one mark in three places; a tuned
-    // number written out three times is three numbers waiting to drift apart. It is
-    // --ink-soft softened toward the surface, by more on a dark palette than on a light
-    // one — light ink on a dark ground reads heavier at the same ratio, and a light
-    // palette has no room to give anyway. theme.test.ts owns how far each can go before
-    // the 3:1 floor bites; this pins only that the sheet spends what it chose, and that
-    // it asks the platform which scheme is live rather than guessing from a selector the
-    // shadow boundary would put out of reach.
+  test("declares the rule ink once, as one step off the surface, and spends it everywhere", () => {
+    // The column dividers, the delimiter rule and the row hairlines are one mark in three
+    // places; a tuned number written out three times is three numbers waiting to drift
+    // apart. (The frame was the fourth until EXC-1136 removed it.)
+    //
+    // ONE STEP OFF THE SURFACE, NOT AN INK SOFTENED TOWARD IT. Until EXC-1136's review
+    // pass this was --ink-soft mixed toward --paper-sunk through a light-dark() whose two
+    // arms carried different numbers, because an ink softened by the same amount lands in
+    // two different places on a light and a dark palette. Stated the other way round —
+    // --paper-sunk stepped toward --ink — one number lands in the SAME place on all nine,
+    // because the operands do the scheme-flipping themselves. That is the same idiom the
+    // card fill above and the row bands in styles/diffview.css already use, and it is why
+    // light-dark() is gone from this declaration rather than merely retuned.
     expect(cardRule).toMatch(
-      /--table-rule:\s*light-dark\(\s*color-mix\(in srgb, var\(--ink-soft\), var\(--paper-sunk\) 15%\),\s*color-mix\(in srgb, var\(--ink-soft\), var\(--paper-sunk\) 30%\),?\s*\)/,
+      /--table-rule:\s*color-mix\(in lab, var\(--paper-sunk\), var\(--ink\) 12%\)/,
     );
-    for (const rule of [dividerRule, ruleRow]) {
+    // Not light-dark(): a per-scheme arm here would be the old mechanism creeping back.
+    expect(cardRule).not.toMatch(/--table-rule:[^;]*light-dark/);
+    for (const rule of [dividerRule, ruleRow, hairlineRule]) {
       expect(rule).toContain("var(--table-rule)");
       expect(rule).not.toContain("--ink-faint");
       expect(rule).not.toContain("--rule");
@@ -1649,11 +1705,12 @@ describe("tables (EXC-864)", () => {
     expect(overrideDecls.match(/--table-rule:/g)).toHaveLength(1);
   });
 
-  test("rounds the end rows so they stop painting over the frame's corners", () => {
-    // Every row of the surface carries an opaque background, so a square first and last
-    // row cover the arc the card's border draws around them and the frame reads as a
-    // rounded rectangle with a bite out of each corner. The same radius, so the row's
-    // edge follows the border rather than crossing it.
+  test("rounds the end rows so they stop painting over the card's corners", () => {
+    // The rule survives the frame it was written for. A BANDED end row is still opaque —
+    // the transparent rule above steps aside for it — so a selected or cursored first row
+    // paints its square corners straight over the card's own arc and the panel reads as a
+    // rounded rectangle with a bite out of the corner. The same radius, so the row's edge
+    // follows the card's rather than crossing it.
     expect(headRow).toMatch(/border-top-left-radius:\s*var\(--radius\)/);
     expect(headRow).toMatch(/border-top-right-radius:\s*var\(--radius\)/);
     expect(footRow).toMatch(/border-bottom-left-radius:\s*var\(--radius\)/);
@@ -1665,6 +1722,32 @@ describe("tables (EXC-864)", () => {
     // The last CHILD, not the last row: an annotation row is the bottom of the card
     // whenever someone comments on the table's final line.
     expect(footRow).not.toContain("[data-line]:last-child");
+  });
+
+  test("insets the card's first and last rows, in both columns", () => {
+    // Two pixels of air inside the card's top and bottom edges. It rides the END ROWS
+    // rather than the card because the card is a row subgrid: padding its content box
+    // takes its tracks out of register with the parent's, and the gutter mirror is a
+    // separate subgrid that would not move with it.
+    const pad = (edge: "start" | "end", child: "first" | "last") =>
+      overrideDecls.match(
+        new RegExp(
+          String.raw`\[data-table-card\]\s*>\s*:${child}-child,[^{}]*\{[^}]*padding-block-${edge}:[^;]+;`,
+        ),
+      )?.[0] ?? "";
+    for (const [edge, child] of [
+      ["start", "first"],
+      ["end", "last"],
+    ] as const) {
+      const rule = pad(edge, child);
+      expect(rule, `${child}-child ${edge} padding`).toBeTruthy();
+      // Both columns in one rule, which is the whole point: a content row padded alone
+      // grows the shared track and slides the gutter number against its own text.
+      expect(rule).toContain("[data-gutter]");
+      expect(rule).toContain("[data-table-card-gutter]");
+    }
+    // Never on the card itself — that is the subgrid trap this rule exists to avoid.
+    expect(cardRule).not.toContain("padding");
   });
 
   test("takes the delimiter row down to a fraction of a line", () => {
@@ -1741,12 +1824,55 @@ describe("tables (EXC-864)", () => {
     expect(slotOverride).toMatch(/:nth-child\(2 of \[data-column-number\]\)/);
   });
 
-  test("declares the header weight here rather than through shiki", () => {
-    // @pierre/diffs carries a theme's fontStyle into an invalid font-weight:
-    // light-dark(...) and drops it, so every token renders at one weight (EXC-867).
-    expect(rulesFor(String.raw`\[data-line\]\[data-table-head\]`)[0]).toMatch(
-      /font-weight:\s*bold/,
-    );
+  test("caps the header in subdued small-caps rather than shouting it in bold", () => {
+    // EXC-1136: a filled card carries the table's edge now, so the header no longer has to
+    // out-weigh a frame to read as a header. Uppercase plus a step back in the ink says
+    // "these are labels" more quietly than bold did.
+    expect(headCap).toMatch(/text-transform:\s*uppercase/);
+    expect(headCap).toMatch(/color:\s*var\(--ink-soft\)/);
+    expect(headCap).not.toContain("font-weight");
+    // No font-size and no letter-spacing, both for the same reason: the column dividers
+    // paint 0.5ch INSIDE each cell, so a header set on a different advance width would
+    // land its divider segment on a different x than every body row's.
+    for (const rule of [headCap, headTokens]) {
+      expect(rule).not.toContain("font-size");
+      expect(rule).not.toContain("letter-spacing");
+    }
+    // The tokens too — shiki inks each one, and the row's own color never reaches them.
+    // The pipes are excluded BY NAME: this arm scores 0,5,0 and would otherwise outrank
+    // the 0,3,0 rule that took them to transparent, resurrecting the picket fence EXC-864
+    // removed.
+    expect(headTokens).toMatch(/color:\s*var\(--ink-soft\)/);
+    expect(headTokens).toContain(":not([data-table-pipe])");
+  });
+
+  test("rules a hairline under every body row, and only under those", () => {
+    // The delimiter row's paint shape moved from the row's centre to its bottom edge — a
+    // background layer, never a border: tables.ts settles a celled row by COUNTING its
+    // cells, and nothing here may move the box model the search ranges, drag ranges, vim
+    // motions and comment anchors all resolve against.
+    expect(hairlineRule).toMatch(/background-image:\s*linear-gradient\(/);
+    expect(hairlineRule).toMatch(/background-size:\s*100%\s+1px/);
+    expect(hairlineRule).toMatch(/background-position:\s*bottom/);
+    // The head row is excluded because the delimiter row below it already draws that
+    // separator, and the delimiter row because it IS one.
+    expect(hairlineRule).toContain("[data-table-head]");
+    expect(hairlineRule).toContain("[data-table-rule]");
+    // And the card's LAST child, whose hairline would land a pixel above the panel's own
+    // bottom edge and read as the frame this change removed — asymmetric, since the top
+    // edge has no matching line. :last-child rather than the last body row by name: when
+    // a comment opens on the table's final line the annotation row becomes the bottom of
+    // the card, and the body row above it is then an interior row that should rule again.
+    expect(hairlineRule).toContain(":not(:last-child)");
+  });
+
+  test("adds the new marks as paint and nothing else", () => {
+    // Every mark this card gained is a background layer or an ink. A border, a padding or
+    // a margin on any of them would shift the monospace grid — which is the one thing the
+    // whole table treatment is built not to do.
+    for (const rule of [hairlineRule, headCap, headTokens]) {
+      expect(rule).not.toMatch(/(?:^|[\s;{])(?:border|padding|margin)[-:]/);
+    }
   });
 
   test("keeps a comment inside the card from widening the table", () => {

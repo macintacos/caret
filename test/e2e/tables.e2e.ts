@@ -541,9 +541,10 @@ test("no pipe glyph paints, and the rules stand where the pipes did", async ({ p
   expect([...new Set(pipes.map((p) => p.color))]).toEqual(["rgba(0, 0, 0, 0)"]);
 
   // A divider on every cell that opens a column, and none on the cell that opens the
-  // ROW — a table's outer edges belong to the frame, and a rule half a character inside
-  // it would read as a doubled line. Table B is written with no outer pipes, so its
-  // first column has no character for a rule to stand in for either way.
+  // ROW — a table's outer edges belong to the card, whose own edge closes them off, and a
+  // rule half a character inside it would read as a doubled line. Table B is written with
+  // no outer pipes, so its first column has no character for a rule to stand in for
+  // either way.
   const cells = await page.evaluate(() => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
     return [...(sh?.querySelectorAll("[data-content] [data-table-cell]") ?? [])].map((cell) => ({
@@ -573,14 +574,23 @@ test("no pipe glyph paints, and the rules stand where the pipes did", async ({ p
     expect(cells.some(match), `no ${name}`).toBe(true);
   }
 
-  // And the frame the edges were handed to: one border, on the card, with corners that
-  // the rows inside it leave alone. Every row of the surface paints an opaque background,
-  // so the end rows have to be rounded to the same radius or they cover the arc and the
-  // frame reads as a rectangle with a bite out of each corner.
-  const frame = await page.evaluate(() => {
+  // And what the edges were handed to (EXC-1136): not a frame any more but a surface —
+  // the code card's own fill, a radius and a lift, with no border on any side. The rows
+  // inside give up the library's opaque per-row fill so that panel reaches the screen,
+  // and the corner rounding on the end rows survives for the banded case, where a row IS
+  // opaque again and would otherwise paint its square corner over the card's arc.
+  const surface = await page.evaluate(() => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
     const card = sh?.querySelector("[data-content] > [data-table-card]") as HTMLElement;
     const cs = getComputedStyle(card);
+    // The panel fill the sheet asks for, resolved here rather than transcribed — this
+    // plan carries no fenced block to read the code card's own off, and coreStyles.test.ts
+    // already pins that the two cards name one colour.
+    const probe = document.createElement("span");
+    probe.style.backgroundColor = "color-mix(in lab, var(--paper-sunk), var(--ink) 6%)";
+    sh?.appendChild(probe);
+    const panel = getComputedStyle(probe).backgroundColor;
+    probe.remove();
     const corners = (el: Element) => {
       const s = getComputedStyle(el);
       return [
@@ -591,30 +601,126 @@ test("no pipe glyph paints, and the rules stand where the pipes did", async ({ p
       ];
     };
     return {
-      width: cs.borderTopWidth,
-      color: cs.borderTopColor,
-      radius: cs.borderTopLeftRadius,
-      // Every side, so a table never reads as rules stopping in mid-air.
+      widths: [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth, cs.borderLeftWidth],
       sides: [cs.borderTopStyle, cs.borderRightStyle, cs.borderBottomStyle, cs.borderLeftStyle],
-      opaqueRow: getComputedStyle(card.children[1] as Element).backgroundColor,
+      fill: cs.backgroundColor,
+      panel,
+      shadow: cs.boxShadow,
+      radius: cs.borderTopLeftRadius,
+      interiorRow: getComputedStyle(card.children[1] as Element).backgroundColor,
       head: corners(card.firstElementChild as Element),
       foot: corners(card.lastElementChild as Element),
       middle: corners(card.children[1] as Element),
     };
   });
-  expect(frame.sides).toEqual(["solid", "solid", "solid", "solid"]);
-  expect(frame.width).toBe("1px");
-  expect(frame.color).not.toBe("rgba(0, 0, 0, 0)");
-  expect(Number.parseFloat(frame.radius)).toBeGreaterThan(0);
-  // The premise: a row really does paint over what is under it. Were the rows
-  // transparent, the rounding below would be dead weight rather than the fix.
-  expect(frame.opaqueRow).not.toBe("rgba(0, 0, 0, 0)");
+  // No border left anywhere. `none` on a side reports 0px regardless of the declared
+  // width, so both halves are checked — a `border-style: none` with a live width would
+  // pass the style check alone and still be a frame waiting to be re-enabled.
+  expect(surface.sides).toEqual(["none", "none", "none", "none"]);
+  expect(surface.widths).toEqual(["0px", "0px", "0px", "0px"]);
+  // The panel fill really reaches the card: the color-mix resolved across the shadow
+  // boundary rather than falling back to nothing. Non-transparent, so this cannot pass by
+  // both sides being unset.
+  expect(surface.fill).not.toBe("rgba(0, 0, 0, 0)");
+  expect(surface.fill).toBe(surface.panel);
+  // And it floats.
+  expect(surface.shadow).not.toBe("none");
+  expect(Number.parseFloat(surface.radius)).toBeGreaterThan(0);
+  // The premise of the whole trade: an unbanded row no longer paints over the card, so
+  // the fill above is what the reader actually sees behind the table's text.
+  expect(surface.interiorRow).toBe("rgba(0, 0, 0, 0)");
   const flat = "0px";
-  expect(frame.head).toEqual([frame.radius, frame.radius, flat, flat]);
-  expect(frame.foot).toEqual([flat, flat, frame.radius, frame.radius]);
+  expect(surface.head).toEqual([surface.radius, surface.radius, flat, flat]);
+  expect(surface.foot).toEqual([flat, flat, surface.radius, surface.radius]);
   // And only the ends: an interior row meets no corner, so rounding one would cut a
   // notch out of the middle of the table.
-  expect(frame.middle).toEqual([flat, flat, flat, flat]);
+  expect(surface.middle).toEqual([flat, flat, flat, flat]);
+
+  // The hairline under every body row, and the two rows that must not have one: the head
+  // row, whose separator is the delimiter row directly below it, and the delimiter row
+  // itself, which IS one. Plus the header cap the same change put above them.
+  //
+  // The two inks are resolved by painting them onto a throwaway span rather than read off
+  // the custom property, which for an untyped --* would hand back the color-mix() source
+  // text instead of the colour it resolves to. --table-rule is written out as the sheet
+  // writes it for that reason: what is being claimed is that the DERIVED value reaches the
+  // row, not that a hex transcribed into this file still matches.
+  const marks = await page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const card = sh?.querySelector("[data-content] > [data-table-card]") as HTMLElement;
+    const probe = (value: string) => {
+      const el = document.createElement("span");
+      el.style.color = value.startsWith("--") ? `var(${value})` : value;
+      sh?.appendChild(el);
+      const resolved = getComputedStyle(el).color;
+      el.remove();
+      return resolved;
+    };
+    const head = card.querySelector(":scope > [data-line][data-table-head]") as HTMLElement;
+    const tokens = [...head.querySelectorAll("[data-table-cell] *")];
+    const colorsOf = (match: (el: Element) => boolean) => [
+      ...new Set(tokens.filter(match).map((t) => getComputedStyle(t).color)),
+    ];
+    return {
+      inkSoft: probe("--ink-soft"),
+      ruleInk: probe("color-mix(in lab, var(--paper-sunk), var(--ink) 12%)"),
+      rows: [...card.querySelectorAll(":scope > [data-line]")].map((row) => {
+        const s = getComputedStyle(row);
+        return {
+          head: row.hasAttribute("data-table-head"),
+          delimiter: row.hasAttribute("data-table-rule"),
+          last: row === card.lastElementChild,
+          image: s.backgroundImage,
+          size: s.backgroundSize,
+          position: s.backgroundPosition,
+          edges: [s.borderTopWidth, s.borderBottomWidth],
+        };
+      }),
+      header: {
+        transform: getComputedStyle(head).textTransform,
+        color: getComputedStyle(head).color,
+        pipes: colorsOf((t) => t.hasAttribute("data-table-pipe")),
+        inked: colorsOf(
+          (t) => !t.hasAttribute("data-table-pipe") && (t.textContent ?? "").trim() !== "",
+        ),
+      },
+    };
+  });
+
+  // A background LAYER on every INTERIOR body row — a border here would move the
+  // monospace grid the whole table treatment is built around.
+  const body = marks.rows.filter((r) => !r.head && !r.delimiter && !r.last);
+  expect(body.length).toBeGreaterThan(1);
+  for (const row of body) {
+    expect(row.image).toContain(marks.ruleInk);
+    expect(row.size).toBe("100% 1px");
+    // Bottom edge, where the delimiter row's identical layer sits at the centre.
+    expect(row.position).toBe("50% 100%");
+    expect(row.edges).toEqual(["0px", "0px"]);
+  }
+  const delimiter = marks.rows.find((r) => r.delimiter);
+  expect(delimiter?.position).toBe("50% 50%");
+  // And the head row draws no separator of its own: the delimiter below it is the one.
+  expect(marks.rows.find((r) => r.head)?.image).toBe("none");
+  // Nor does the card's last row. Its hairline would land a pixel above the panel's own
+  // bottom edge, where it reads as half a frame — the card's top has no matching line.
+  // This table's last row is a body row, so the case is really exercised.
+  const last = marks.rows.at(-1);
+  expect(last?.head).toBe(false);
+  expect(last?.delimiter).toBe(false);
+  expect(last?.image).toBe("none");
+
+  // The header is a cap: uppercase, on --ink-soft, with the pipes still gone. The
+  // transform is a rendering-time one, so the copy spec further down still reads the
+  // source's own case back out of this row.
+  expect(marks.header.transform).toBe("uppercase");
+  expect(marks.header.color).toBe(marks.inkSoft);
+  // Every inked token takes the header's ink rather than shiki's — one colour, not a
+  // per-token spread.
+  expect(marks.header.inked).toEqual([marks.inkSoft]);
+  // And the :not([data-table-pipe]) exclusion held: the 0,5,0 arm would otherwise have
+  // outranked the rule that hid them and put the picket fence back.
+  expect(marks.header.pipes).toEqual(["rgba(0, 0, 0, 0)"]);
 });
 
 test("the delimiter row is a dot and a hairline, not a numbered line", async ({ page, daemon }) => {
