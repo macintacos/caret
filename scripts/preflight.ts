@@ -46,6 +46,8 @@ import { $ } from "bun";
 
 import { Listr, type ListrTask } from "listr2";
 
+import { lastDisplayLine } from "@/tasks/lib/exec.ts";
+
 export interface SpawnOutcome {
   exitCode: number;
   output: string;
@@ -585,12 +587,6 @@ export function buildErrorReport(message: string): PreflightErrorReport {
   return { event: "error", schemaVersion: SCHEMA_VERSION, message };
 }
 
-// ANSI escape sequences (color, cursor control). Children can emit them even
-// when piped — e.g. vite's clear-line progress — and a leaked cursor-control
-// code would break the plain line-per-event contract of the non-TTY fallback,
-// so display lines are stripped (buffered failure output stays raw).
-const ANSI_ESCAPES = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, "g");
-
 /** A registry of detached child process groups, killable as whole subtrees. */
 export interface ProcessGroupController {
   /** Spawn `cmd` as its own process-group leader and track it. */
@@ -699,11 +695,7 @@ function makeSpawnMiseTask(controller: ProcessGroupController): SpawnTask {
         stream.on("data", (chunk: Buffer) => {
           const text = decoder.decode(chunk, { stream: true });
           chunks.push(text);
-          const last = text
-            .split("\n")
-            .map((line) => line.replace(ANSI_ESCAPES, "").trim())
-            .filter(Boolean)
-            .at(-1);
+          const last = lastDisplayLine(text);
           if (last) onLine(last);
         });
         stream.on("end", () => {

@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import type { JsonArgs } from "@scripts/preflight.ts";
 import {
   buildBinArtifacts,
+  buildBinArtifactsQuietly,
   buildBinCompileCommand,
   buildBundleCommand,
   buildInstallCommand,
@@ -599,6 +600,75 @@ describe("build bin: UI-first ordering + skip", () => {
     const cpAt = calls.findIndex((c) => c.cmd[0] === "cp");
     expect(rmAt).toBeGreaterThanOrEqual(0);
     expect(cpAt).toBeGreaterThan(rmAt);
+  });
+});
+
+// The quiet twin the bare `mise run build` umbrella renders behind a progress
+// line: same chain, same ordering, but every child's output is captured rather
+// than inherited so the log can be replayed only when the build fails.
+describe("buildBinArtifactsQuietly: capture and dump-on-failure", () => {
+  /** A runCapture stand-in that emits one line per child and fails whichever
+   * commands `fails` selects, so a whole quiet build runs without spawning Vite. */
+  function capturingSpawn(fails: (cmd: string[]) => boolean = () => false) {
+    const calls: Array<{ cmd: string[]; opts?: { cwd?: string } }> = [];
+    const spawn = async (
+      cmd: string[],
+      sink: (chunk: string) => void,
+      opts: { cwd?: string } = {},
+    ): Promise<number> => {
+      calls.push({ cmd, opts });
+      sink(`[${cmd[0]}] working\n[${cmd[0]}] done\n`);
+      return fails(cmd) ? 1 : 0;
+    };
+    return { calls, spawn };
+  }
+
+  test("captures every child's output in order and reports each chunk's last line", async () => {
+    const { calls, spawn } = capturingSpawn();
+    const lines: string[] = [];
+    const { code, output } = await buildBinArtifactsQuietly((line) => lines.push(line), spawn);
+    expect(code).toBe(0);
+    // Every child ran, and its text landed in the capture in spawn order.
+    expect(output).toContain("[bunx] working");
+    expect(output).toContain("[bun] working");
+    expect(output.indexOf("[bunx]")).toBeLessThan(output.indexOf("[bun]"));
+    // The progress callback sees the last displayable line of each chunk, never
+    // the whole chunk — that is the single line a spinner can show.
+    expect(lines).toEqual(calls.map(({ cmd }) => `[${cmd[0]}] done`));
+  });
+
+  // The adapter must forward `opts`, not just `cmd` and the sink: ensureUi runs
+  // `bunx vite build` with cwd "ui". Drop the forwarding and every other assertion
+  // here still passes while the quiet build silently builds from the repo root.
+  test("forwards each child's exec options, so the UI still builds from ui/", async () => {
+    const { calls, spawn } = capturingSpawn();
+    await buildBinArtifactsQuietly(() => {}, spawn);
+    expect(calls[0]?.cmd).toEqual(["bunx", "vite", "build"]);
+    expect(calls[0]?.opts?.cwd).toBe("ui");
+  });
+
+  // A build step can fail by THROWING rather than by exiting non-zero — headCommit's
+  // git failure, or a spawn that can't start at all. listr2 under `exitOnError: false`
+  // collects a task's throw rather than rethrowing it, so a throw escaping this
+  // function would be reported as a successful build with no binary.
+  test("turns a thrown build step into a non-zero code and text to dump", async () => {
+    const boom = async (cmd: string[], sink: (chunk: string) => void): Promise<number> => {
+      sink("[bunx] working\n");
+      if (cmd.includes("--compile")) throw new Error("git rev-parse HEAD failed: not a repository");
+      return 0;
+    };
+    const { code, output } = await buildBinArtifactsQuietly(() => {}, boom);
+    expect(code).not.toBe(0);
+    expect(output).toContain("not a repository"); // the throw's own text
+    expect(output).toContain("[bunx] working"); // and everything captured before it
+  });
+
+  test("stops at the failing child and keeps its output for the caller to dump", async () => {
+    const { calls, spawn } = capturingSpawn((cmd) => cmd.includes("vite"));
+    const { code, output } = await buildBinArtifactsQuietly(() => {}, spawn);
+    expect(code).toBe(1);
+    expect(output).toContain("[bunx] working"); // the failing child's log survives
+    expect(calls.some(({ cmd }) => cmd.includes("--compile"))).toBe(false); // compile never ran
   });
 });
 

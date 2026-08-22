@@ -14,7 +14,9 @@
 
 import { mkdirSync, rmSync } from "node:fs";
 
-import { execAndExit, runForward } from "@/tasks/lib/exec.ts";
+import { Listr } from "listr2";
+
+import { execAndExit, lastDisplayLine, runCapture, runForward } from "@/tasks/lib/exec.ts";
 
 // --- the generated first-paint palette ---------------------------------------
 // ui/src/styles/palette.generated.css is emitted from THEMES["caret-dark"] and
@@ -88,9 +90,16 @@ export function buildBinCompileCommand(commit: string): string[] {
 /** Read HEAD's commit sha, throwing if git fails (e.g. not a checkout) so the
  * build aborts loudly instead of baking an empty commit into the binary. */
 async function headCommit(): Promise<string> {
-  const proc = Bun.spawn(["git", "rev-parse", "HEAD"], { stdout: "pipe", stderr: "inherit" });
-  const [out, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
-  if (code !== 0) throw new Error("git rev-parse HEAD failed");
+  // git's diagnostics are piped, not inherited: the umbrella build renders a live
+  // progress line, and anything written straight to stderr would land on top of it.
+  // They ride along in the thrown error instead.
+  const proc = Bun.spawn(["git", "rev-parse", "HEAD"], { stdout: "pipe", stderr: "pipe" });
+  const [out, err, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  if (code !== 0) throw new Error(`git rev-parse HEAD failed: ${err.trim()}`);
   return out.trim();
 }
 
@@ -122,6 +131,40 @@ export async function buildBinArtifacts(run: typeof runForward = runForward): Pr
   const ui = await ensureUi(run);
   if (ui !== 0) return ui;
   return await compileBin(run);
+}
+
+/** Build the UI then the binary with every child's output captured instead of
+ * inherited, resolving the exit code alongside the full combined log. `onLine`
+ * receives each chunk's last displayable line so a caller can show progress.
+ * The spawner is injectable for the same reason buildBinArtifacts' is. */
+export async function buildBinArtifactsQuietly(
+  onLine: (line: string) => void,
+  spawn: typeof runCapture = runCapture,
+): Promise<{ code: number; output: string }> {
+  const chunks: string[] = [];
+  const run: typeof runForward = (cmd, opts) =>
+    spawn(
+      cmd,
+      (chunk) => {
+        chunks.push(chunk);
+        const line = lastDisplayLine(chunk);
+        if (line) onLine(line);
+      },
+      opts,
+    );
+  try {
+    const code = await buildBinArtifacts(run);
+    return { code, output: chunks.join("") };
+  } catch (err) {
+    // Never throws. A build step can fail by throwing rather than by exiting
+    // non-zero — headCommit's git failure, or a spawn that can't start — and the
+    // caller renders this behind a listr2 task, which under `exitOnError: false`
+    // resolves instead of rethrowing. A throw escaping here would therefore be
+    // reported as a successful build. The stack goes into the dumped log so an
+    // unexpected one is still diagnosable.
+    chunks.push(`${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
+    return { code: 1, output: chunks.join("") };
+  }
 }
 
 export async function runBuildBin(): Promise<never> {
@@ -190,9 +233,50 @@ export function buildInstallCommand(opts: BuildOptions): string[] | null {
   return opts.install ? ["bin/caret", "install", "--from-local"] : null;
 }
 
+/** Run the quiet build under a single listr2 progress line, resolving its exit code
+ * and captured log. The task's throw is how listr2 is told to render the line red;
+ * the outcome travels in the returned value, never in that throw. */
+async function buildUnderProgressLine(): Promise<{ code: number; output: string }> {
+  let result: { code: number; output: string } | undefined;
+  const listr = new Listr(
+    [
+      {
+        title: "building caret",
+        task: async (_ctx, task) => {
+          result = await buildBinArtifactsQuietly((line) => {
+            task.output = line;
+          });
+          if (result.code !== 0) throw new Error("caret build failed — full log below");
+        },
+      },
+    ],
+    {
+      exitOnError: false,
+      // listr2's own SIGINT handler calls process.exit(127) before the vite/bun
+      // children see anything; Ctrl-C must reach them through the foreground
+      // process group, as it does today.
+      registerSignalListeners: false,
+      // Non-TTY (CI, a pipe) falls back to line-per-event, so a piped build
+      // still reports progress instead of going silent.
+      fallbackRenderer: "verbose",
+    },
+  );
+  await listr.run();
+  // `exitOnError: false` makes listr2 collect a task's throw rather than rethrow it,
+  // so a task that died before assigning leaves `result` unset. That is a failed
+  // build, not a silent success — listr2 has already rendered the error on the line.
+  return result ?? { code: 1, output: "" };
+}
+
 export async function runBuild(opts: BuildOptions): Promise<never> {
-  const code = await buildBinArtifacts();
-  if (code !== 0) process.exit(code);
+  const { code, output } = await buildUnderProgressLine();
+  if (code !== 0) {
+    // Await the flush: process.exit() truncates a piped write at the pipe buffer —
+    // the same 64KB cliff scripts/preflight.ts documents — and the failing tail is
+    // exactly the part that would be lost.
+    await new Promise<void>((resolve) => process.stderr.write(output, () => resolve()));
+    process.exit(code);
+  }
   console.log("caret build complete: bin/caret-native (run via the bin/caret shim)");
   const install = buildInstallCommand(opts);
   if (install === null) process.exit(0);

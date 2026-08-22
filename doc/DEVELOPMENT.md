@@ -48,8 +48,8 @@ Prerequisites are [`git`](https://git-scm.com) and [mise](https://mise.jdx.dev);
 
 ```sh
 mise run setup      # install pinned tools + JS deps + the generated palette + e2e Chromium + register git hooks
-mise run build      # build the UI (Vite multi-asset) then the binary (bun build --compile, embeds the UI)
-mise run build ui   # just the Svelte UI (Vite -> ui/dist); also `build bin` / `build bundle`
+mise run build      # build the UI (Vite multi-asset) then the binary; one progress line, log only on failure
+mise run build ui   # just the Svelte UI (Vite -> ui/dist), verbose; also `build bin` / `build bundle`
 mise run dev        # dev console: isolated daemon + three fake plans + Vite UI
 mise run caret      # caret's own CLI from src/cli.ts, e.g. `mise run caret discovery`
 mise run test       # bun test (unit); `mise run test unit` is the same target
@@ -305,8 +305,11 @@ rendering is covered by `ui/src/lib/diffview/codeBlocks.test.ts` instead.
 
 ### `mise run build --install`
 
-The install loop: it swaps your agents over to this checkout. After building, it runs
-`bin/caret install --from-local`, which:
+The install loop: it swaps your agents over to this checkout. The build phase renders as a
+single progress line and its full log prints only if the build fails, so the interactive
+install prompt gets a clean terminal — run `mise run build bin` when you want to watch the
+UI build and compile go by. After building, it runs `bin/caret install --from-local`,
+which:
 
 1. Reuses the fresh `bin/caret-native` + `bin/ui` — never rebuilding them. A missing
    artifact is an error telling you to run `mise run build`.
@@ -390,10 +393,11 @@ forwarder sets `#MISE raw_args=true` so mise hands every argument — including 
 
 Task modules are siblings of the CLI in `scripts/tasks/`, named after their group; the
 table above names the two that are not. Code shared across tasks lives in
-`scripts/tasks/lib/`: `exec.ts` (the `runForward` / `execAndExit` spawn helpers),
-`signals.ts` (the cleanup-on-exit/signal wiring the supervising tasks share), and
-`smoke-probe.ts` (the over-the-wire UI probe both smoke targets run). Every subcommand's
-parsing contract is unit-tested in `test/scripts/tasks-cli.test.ts`.
+`scripts/tasks/lib/`: `exec.ts` (the `runForward` / `execAndExit` spawn helpers, plus
+`runCapture` / `lastDisplayLine` for the quiet umbrella build), `signals.ts` (the
+cleanup-on-exit/signal wiring the supervising tasks share), and `smoke-probe.ts` (the
+over-the-wire UI probe both smoke targets run). Every subcommand's parsing contract is
+unit-tested in `test/scripts/tasks-cli.test.ts`.
 
 Two groups diverge from the plain-module shape. `release` keeps its own JSON-on-stdout
 error discipline — Commander help and errors to stderr, a typed JSON result per action —
