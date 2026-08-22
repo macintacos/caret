@@ -252,9 +252,22 @@ export function openDaemonStderr(s: Settings): number | "ignore" {
   }
 }
 
-export function spawnDaemon(s: Settings): void {
+/** The working directory the detached daemon is pinned to. The daemon is a
+ * machine-wide singleton that outlives whatever project directory happened to
+ * start it, and an inherited cwd is a directory it has no business holding: an
+ * exec worktree torn down after its PR merged left daemons unable to
+ * `Bun.spawn` anything at all — absolute paths included — because posix_spawn
+ * needs a live cwd (EXC-1155). Root is chosen because it cannot be unlinked and
+ * needs no `ensureStateDir` first; nothing resolves against it either way, since
+ * every caret path is absolute from `stateDir()`. */
+export const DAEMON_CWD = "/";
+
+/** Spawn the detached daemon. `spawn` is injected so the cwd pin above stays
+ * assertable without starting a real daemon. */
+export function spawnDaemon(s: Settings, spawn: typeof Bun.spawn = Bun.spawn): void {
   const out = openDaemonStderr(s);
-  Bun.spawn(daemonCommand(), {
+  spawn(daemonCommand(), {
+    cwd: DAEMON_CWD,
     stdio: ["ignore", out, out],
     detached: true,
     env: process.env,
