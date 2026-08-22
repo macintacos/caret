@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 #MISE description="Build the UI then the binary (bare); or a ui/bin/bundle target"
 #MISE raw_args=true
+# Suppresses mise's own `[build] $ …` command echo, so the umbrella build's
+# progress line is the first thing on the terminal. The task's stdout is untouched.
+#MISE quiet=true
 # Fresh-clone guard (scripts/bootstrap.sh); `|| exit 1` is its caller contract.
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/../../scripts/bootstrap.sh" || exit 1

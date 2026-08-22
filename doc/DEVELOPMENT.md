@@ -305,8 +305,11 @@ rendering is covered by `ui/src/lib/diffview/codeBlocks.test.ts` instead.
 
 ### `mise run build --install`
 
-The install loop: it swaps your agents over to this checkout. After building, it runs
-`bin/caret install --from-local`, which:
+The install loop: it swaps your agents over to this checkout. The build phase renders as a
+single progress line and its full log prints only if the build fails, so the interactive
+install prompt gets a clean terminal — run `mise run build bin` when you want to watch the
+UI build and compile go by. After building, it runs `bin/caret install --from-local`,
+which:
 
 1. Reuses the fresh `bin/caret-native` + `bin/ui` — never rebuilding them. A missing
    artifact is an error telling you to run `mise run build`.

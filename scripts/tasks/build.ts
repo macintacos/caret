@@ -14,6 +14,8 @@
 
 import { mkdirSync, rmSync } from "node:fs";
 
+import { Listr } from "listr2";
+
 import { execAndExit, lastDisplayLine, runCapture, runForward } from "@/tasks/lib/exec.ts";
 
 // --- the generated first-paint palette ---------------------------------------
@@ -221,8 +223,35 @@ export function buildInstallCommand(opts: BuildOptions): string[] | null {
 }
 
 export async function runBuild(opts: BuildOptions): Promise<never> {
-  const code = await buildBinArtifacts();
-  if (code !== 0) process.exit(code);
+  let result = { code: 0, output: "" };
+  const listr = new Listr(
+    [
+      {
+        title: "building caret",
+        task: async (_ctx, task) => {
+          result = await buildBinArtifactsQuietly((line) => {
+            task.output = line;
+          });
+          if (result.code !== 0) throw new Error("build failed");
+        },
+      },
+    ],
+    {
+      exitOnError: false,
+      // listr2's own SIGINT handler calls process.exit(127) before the vite/bun
+      // children see anything; Ctrl-C must reach them through the foreground
+      // process group, as it does today.
+      registerSignalListeners: false,
+      // Non-TTY (CI, a pipe) falls back to line-per-event, so a piped build
+      // still reports progress instead of going silent.
+      fallbackRenderer: "verbose",
+    },
+  );
+  await listr.run();
+  if (result.code !== 0) {
+    process.stderr.write(result.output);
+    process.exit(result.code);
+  }
   console.log("caret build complete: bin/caret-native (run via the bin/caret shim)");
   const install = buildInstallCommand(opts);
   if (install === null) process.exit(0);

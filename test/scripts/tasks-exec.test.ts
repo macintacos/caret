@@ -43,11 +43,16 @@ describe("runCapture", () => {
   // stderr, so an empty probe stdout proves the grandchild's `out` never leaked,
   // and a stderr holding only the report proves the same for its `err`.
   test("writes nothing to this process's stdio", async () => {
+    // Resolved from this file rather than written relative to a cwd the probe
+    // does not inherit — `bun -e` has no importer path of its own to resolve from.
+    const execModule = Bun.fileURLToPath(
+      new URL("../../scripts/tasks/lib/exec.ts", import.meta.url),
+    );
     const probe = Bun.spawn(
       [
         "bun",
         "-e",
-        `import { runCapture } from "./scripts/tasks/lib/exec.ts";
+        `import { runCapture } from ${JSON.stringify(execModule)};
          const code = await runCapture(["bun", "-e", "console.log('out'); console.error('err')"], () => {});
          process.stderr.write("probe:" + code);`,
       ],
