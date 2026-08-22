@@ -1668,19 +1668,24 @@ describe("tables (EXC-864)", () => {
     expect(ruleInk).toMatch(/\[data-line\]\[data-table-rule\] \*/);
   });
 
-  test("declares the rule ink once, softened per scheme, and spends it everywhere", () => {
+  test("declares the rule ink once, as one step off the surface, and spends it everywhere", () => {
     // The column dividers, the delimiter rule and the row hairlines are one mark in three
     // places; a tuned number written out three times is three numbers waiting to drift
-    // apart. (The frame was the fourth until EXC-1136 removed it.) It is
-    // --ink-soft softened toward the surface, by more on a dark palette than on a light
-    // one — light ink on a dark ground reads heavier at the same ratio, and a light
-    // palette has no room to give anyway. theme.test.ts owns how far each can go before
-    // the 3:1 floor bites; this pins only that the sheet spends what it chose, and that
-    // it asks the platform which scheme is live rather than guessing from a selector the
-    // shadow boundary would put out of reach.
+    // apart. (The frame was the fourth until EXC-1136 removed it.)
+    //
+    // ONE STEP OFF THE SURFACE, NOT AN INK SOFTENED TOWARD IT. Until EXC-1136's review
+    // pass this was --ink-soft mixed toward --paper-sunk through a light-dark() whose two
+    // arms carried different numbers, because an ink softened by the same amount lands in
+    // two different places on a light and a dark palette. Stated the other way round —
+    // --paper-sunk stepped toward --ink — one number lands in the SAME place on all nine,
+    // because the operands do the scheme-flipping themselves. That is the same idiom the
+    // card fill above and the row bands in styles/diffview.css already use, and it is why
+    // light-dark() is gone from this declaration rather than merely retuned.
     expect(cardRule).toMatch(
-      /--table-rule:\s*light-dark\(\s*color-mix\(in srgb, var\(--ink-soft\), var\(--paper-sunk\) 18%\),\s*color-mix\(in srgb, var\(--ink-soft\), var\(--paper-sunk\) 35%\),?\s*\)/,
+      /--table-rule:\s*color-mix\(in lab, var\(--paper-sunk\), var\(--ink\) 16%\)/,
     );
+    // Not light-dark(): a per-scheme arm here would be the old mechanism creeping back.
+    expect(cardRule).not.toMatch(/--table-rule:[^;]*light-dark/);
     for (const rule of [dividerRule, ruleRow, hairlineRule]) {
       expect(rule).toContain("var(--table-rule)");
       expect(rule).not.toContain("--ink-faint");

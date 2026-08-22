@@ -1116,10 +1116,7 @@ const CARET_OVERRIDES = `
        under pressure — which is the "grows until every column is visible" behaviour. */
     justify-self: start;
     margin-inline: var(--caret-card-inset);
-    --table-rule: light-dark(
-      color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 18%),
-      color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 35%)
-    );
+    --table-rule: color-mix(in lab, var(--paper-sunk), var(--ink) 16%);
     background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
     border-radius: var(--radius);
     box-shadow: var(--shadow-card);
@@ -1275,27 +1272,38 @@ const CARET_OVERRIDES = `
      The edge is an attribute the pass writes rather than a :has() probe, because this
      selector runs on every cell of every table on every repaint.
 
-     --table-rule, declared once on the card, is --ink-soft softened toward the surface —
-     never --rule or --rule-strong. The glyph these replace is transparent, so the rules
-     are the only thing left saying where one column ends and the next begins, which is
-     WCAG 1.4.11's own test for a graphical object required to understand the content.
+     --table-rule, declared once on the card, is the SURFACE stepped toward the ink — never
+     --ink-soft softened toward the surface, which is what it was until EXC-1136's review
+     pass, and never --rule or --rule-strong, which are chrome-surface tokens.
 
-     The softening is split by scheme because a dark palette can take more of it: light ink
-     on a dark ground reads heavier at the same ratio, so it takes a bigger mix to land in
-     the same place. BOTH ARMS SIT ON THE 3:1 FLOOR — 18% and 35% are the most either
-     scheme clears it with, and one point further on either reds theme.test.ts naming the
-     palette that broke. EXC-1136 spent what headroom the original 15%/30% had, on a review
-     call that the rules read too strong against the card's new fill; there is none left,
-     so "softer still" is a request for a different mechanism rather than a bigger number.
-     doc/agents/svelte-rules.md § chips carries both ranges, and carries them alone; a
-     measured number restated here is a number that drifts.
+     Two things changed at once there, and the second is the reason for the first. The
+     design call was that these rules read as a deliberately low-contrast style — much
+     closer to the surface than to the ink — and the same on every palette. An ink softened
+     by a fixed amount cannot do the second half: light ink on a dark ground reads heavier
+     at the same ratio, so the old declaration needed a light-dark() carrying two different
+     numbers to land in one place, and it still drifted apart palette by palette. Stated
+     the other way round, one number does it — --paper-sunk stepped 16% toward --ink lands
+     in the same place on all nine, because the operands do the scheme-flipping themselves.
+     That is exactly the idiom the card fill above and the row bands in styles/diffview.css
+     already use, so this rejoins a vocabulary rather than keeping a private one, and
+     light-dark() drops out of the declaration entirely.
 
-     light-dark() rather than a scheme-keyed selector, which the shadow boundary puts out
-     of reach anyway: paintTheme writes color-scheme along with the tokens, and it
-     inherits through the host, so one declaration covers both. Mixed in sRGB rather than
-     the lab the rest of this sheet uses, deliberately: both margins are now hundredths of
-     a ratio point, far too thin to absorb the difference between the space theme.test.ts
-     measures in and the space the browser paints in. */
+     WHAT THIS GAVE UP, STATED PLAINLY. EXC-864 held these to WCAG 1.4.11's 3:1 floor,
+     because the pipes go transparent and the rule is then the only thing saying where a
+     column ends. At 16% it measures about 1.15–1.4 and no longer clears that. The call was
+     made knowingly on the strength of what the original argument understated: the columns
+     are ALSO carried by the layout — max-content tracks holding the source's own spacing —
+     so a faint divider makes the reading quieter rather than ambiguous, and a table drawn
+     with no vertical rules at all is a normal rendering. That reasoning does NOT extend to
+     the header's ink, which is text and keeps a measured floor. theme.test.ts pins what
+     replaced the old floor: visible on every palette, and evenly spread across them.
+     doc/agents/svelte-rules.md § chips carries the range, and carries it alone; a measured
+     number restated here is a number that drifts.
+
+     Mixed in lab, like every other surface step on this view. The sRGB the old declaration
+     used was there to match theme.test.ts's arithmetic to hundredths of a ratio point when
+     both arms sat on the floor; nothing sits on a floor now, and the margins are wide
+     enough that the two spaces cannot disagree about them. */
   [data-content]
     > [data-table-card]
     [data-table-cell]:not(:first-child):is(

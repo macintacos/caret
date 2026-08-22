@@ -101,10 +101,14 @@ const ROW_BANDS = [0, 0.02, 0.08] as const;
  * THIS rather than on the bare surface, so it joins the grounds they are measured over. */
 const TABLE_CARD_FILL = 0.06;
 
-/** The grounds a table's rules are drawn on: every row band, plus the card fill they now
- * sit on. 6% falls inside the row bands' own bracket, so it never binds — it is here so
- * the pin measures the surface that ships rather than one the table left behind. */
-const TABLE_GROUNDS = [...ROW_BANDS, TABLE_CARD_FILL] as const;
+/** The grounds a table's rules are drawn on, which since EXC-1136 are NOT the row bands
+ * verbatim. A carded table never sits on bare --paper-sunk: an unbanded row is cleared to
+ * transparent and shows the card's own fill, and a banded one paints its band in place of
+ * it. So the bare surface drops out and the fill takes its place, leaving the resting
+ * panel and the two banded cases a row can be in. Keeping the 0 would measure a ground
+ * that only exists outside the card, and it is the LIGHTEST one — so it would quietly set
+ * the top of the spread the rules case checks. */
+const TABLE_GROUNDS = [0.02, TABLE_CARD_FILL, 0.08] as const;
 
 const themeEntries = () => Object.entries(THEMES) as [ThemeId, (typeof THEMES)[ThemeId]][];
 
@@ -540,50 +544,57 @@ describe("every theme", () => {
   });
 
   // The table's rules — the column dividers, the delimiter rule and the row hairlines —
-  // are one mark declared once as --table-rule (diffview/coreStyles.ts). They are a
-  // replacement decoration: the pipes and the delimiter row's dashes go transparent and
-  // these are drawn where they stood, so the 3:1 floor binds exactly as it does for the
-  // break above.
+  // are one mark declared once as --table-rule (diffview/coreStyles.ts).
   //
-  // What makes this its own case is that the rules do NOT paint --ink-soft neat, and do
-  // not soften it by the same amount in both schemes. Drawn at full strength a table read
-  // as a cage — --ink-soft is 7.70 against caret-dark's widest row band, which is text
-  // contrast for something that is only supposed to say "column ends here" — so the sheet
-  // mixes it toward the surface, through a light-dark() whose two arms are what SOFTEN
-  // holds here.
+  // THIS CASE DELIBERATELY DOES NOT MEASURE 3:1, AND THAT IS THE POINT OF READING IT.
+  // EXC-864 held these rules to 1.4.11's non-text floor on the argument that they are a
+  // replacement decoration: the pipes go transparent, so the rule is the only thing left
+  // saying where a column ends. EXC-1136's review pass overrode that on an explicit design
+  // call — the rules are to read as a low-contrast style, closer to the surface than to
+  // the ink, consistently on every palette. What survives the override is the reason the
+  // argument was never quite airtight: a table's columns are ALSO carried by the layout,
+  // since the cells are max-content tracks with the source's own spacing between them, so
+  // a faint divider degrades the reading rather than removing it. A table with no vertical
+  // rules at all is a normal, legible rendering; one with unreadable TEXT is not, which is
+  // why the header case below still measures a real floor.
   //
-  // BOTH ARMS NOW SIT ON THE FLOOR, and that is the whole margin: 18% and 35% are the most
-  // either scheme clears 3:1 with, measuring 3.02 on catppuccin-latte and 3.02 on
-  // github-dark. One point further on either — 19% or 36% — and this reds naming that
-  // palette. EXC-1136 spent the headroom the earlier 15%/30% left, on a review call that
-  // the rules read too strong against the card's fill; there is none left to spend, so a
-  // future "softer still" is a request for a different mechanism, not a bigger number.
+  // So what is pinned here is the style itself, in two halves:
   //
-  // The binding ground is the WIDEST row band rather than the card's own fill: a rule
-  // inside a table still has to be legible on a hovered, cursored or selected row, and
-  // that band is a heavier ground than the resting panel. Measuring only the resting case
-  // would flatter these numbers by about a point.
+  //   VISIBLE — every palette clears 1.1 against the heaviest ground a rule sits on. The
+  //   epic calls 1.05 "a line in the DOM and not on the screen" (doc/agents/svelte-rules.md
+  //   § chips, on --rule / --rule-strong); this keeps a real margin over that, so "low
+  //   contrast" cannot decay into "absent" without reddening.
   //
-  // Mixed in sRGB here AND in the sheet, which is the one place this file's usual
-  // "lab and sRGB differ by well under the headroom" note does not hold: the light
-  // headroom is 0.19 of a ratio point, so the two spaces have to be the same one or the
-  // pin stops measuring what ships.
-  test("keeps a table's rules above the non-text floor once softened", () => {
-    const SOFTEN = { light: 0.18, dark: 0.35 } as const;
+  //   CONSISTENT — the spread across the nine stays inside a narrow band. That is the
+  //   property the design call actually asked for and the one the OLD mechanism could not
+  //   hold: --ink-soft softened by a fixed amount lands in two different places on a light
+  //   and a dark palette, which is why it needed a light-dark() with two different numbers.
+  //   Stating the colour the other way round — --paper-sunk stepped 16% toward --ink —
+  //   makes one number land in the same place everywhere, because the operands flip with
+  //   the scheme. Reintroduce a per-scheme arm and the spread widens and this reds.
+  //
+  // The heaviest ground is the widest ROW BAND, not the card's resting fill: a rule inside
+  // a table still has to be findable on a hovered, cursored or selected row.
+  test("keeps a table's rules a faint, evenly-spread step off the surface", () => {
+    const STEP = 0.16;
+    const seen: number[] = [];
     for (const [id, theme] of themeEntries()) {
       const sunk = theme.tokens["--paper-sunk"];
-      const soften = SOFTEN[theme.scheme];
-      // color-mix(in srgb, var(--ink-soft), var(--paper-sunk) N%) — banded() is that
-      // same channel-wise mix, read the other way round.
-      const painted = banded(theme.tokens["--ink-soft"], sunk, soften);
+      const ink = theme.tokens["--ink"];
+      // color-mix(in lab, var(--paper-sunk), var(--ink) 16%) — banded() is that same mix.
+      const painted = banded(sunk, ink, STEP);
       for (const pct of TABLE_GROUNDS) {
-        const ground = banded(sunk, theme.tokens["--ink"], pct);
+        const ratio = contrast(painted, banded(sunk, ink, pct));
+        seen.push(ratio);
         expect(
-          contrast(painted, ground),
-          `${id} table rule --ink-soft softened ${soften * 100}% on --paper-sunk banded ${pct * 100}%`,
-        ).toBeGreaterThanOrEqual(3);
+          ratio,
+          `${id} table rule stepped ${STEP * 100}% on --paper-sunk banded ${pct * 100}%`,
+        ).toBeGreaterThan(1.1);
       }
     }
+    // One number, one look. A palette landing well outside the others means the mechanism
+    // stopped being scheme-symmetric, whatever each individual ratio says.
+    expect(Math.max(...seen)).toBeLessThan(1.6);
   });
 
   // EXC-1136 subdued the table header from bold --ink to plain --ink-soft, on the card's

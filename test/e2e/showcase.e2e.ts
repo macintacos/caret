@@ -531,18 +531,13 @@ test("a vendor palette resolves every decoration's paint", async ({ daemon, page
     return {
       inkSoft: probe("--ink-soft"),
       inkFaint: probe("--ink-faint"),
-      // A table's rules do not paint --ink-soft neat: at full strength a table read as a
-      // cage, so the sheet softens the ink toward the surface (one --table-rule
-      // declaration on the card), by more on a dark palette than on a light one. Written
-      // as the sheet writes it, light-dark() and all, so this resolves through the same
-      // arm the live scheme picks rather than assuming which palette is up. Resolved here
-      // the same way the tokens above are, so it stays a claim about the DERIVED value
-      // reaching the sheet rather than a hex transcribed into this file.
-      tableInk: probe(
-        `light-dark(
-           color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 18%),
-           color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 35%))`,
-      ),
+      // A table's rules are not an ink at all: EXC-1136 restated them as one step off the
+      // SURFACE — --paper-sunk 16% toward --ink, the same idiom as the card fill and the
+      // row bands — so one number reads the same on every palette without a light-dark().
+      // Written as the sheet writes it, and resolved here the same way the tokens above
+      // are, so it stays a claim about the DERIVED value reaching the sheet rather than a
+      // hex transcribed into this file.
+      tableInk: probe("color-mix(in lab, var(--paper-sunk), var(--ink) 16%)"),
       chip: pick('[data-content] [data-line] [data-md~="code"]', (el) => {
         return getComputedStyle(el).backgroundImage;
       }),
@@ -583,9 +578,11 @@ test("a vendor palette resolves every decoration's paint", async ({ daemon, page
   expect(paint.quoteBar).toBe(paint.inkSoft);
   expect(paint.checkbox).toBe(paint.inkSoft);
   expect(paint.rule).toContain(paint.inkSoft);
-  // The table's two rules are one mark and spend one ink, softened off --ink-soft rather
-  // than off a token of their own — so they track a flavour bump with everything else.
+  // The table's two rules are one mark and spend one colour, stepped off --paper-sunk
+  // rather than taken from a token of their own — so they track a flavour bump with
+  // everything else, and stay well clear of the ink ramp they used to be softened from.
   expect(paint.tableInk).not.toBe(paint.inkSoft);
+  expect(paint.tableInk).not.toBe(paint.inkFaint);
   expect(paint.tableRule).toContain(paint.tableInk);
   expect(paint.tableColumn).toContain(paint.tableInk);
 

@@ -641,10 +641,10 @@ test("no pipe glyph paints, and the rules stand where the pipes did", async ({ p
   // itself, which IS one. Plus the header cap the same change put above them.
   //
   // The two inks are resolved by painting them onto a throwaway span rather than read off
-  // the custom property, which for an untyped --* would hand back the light-dark() source
-  // text instead of the colour the live scheme picked. --table-rule is written out as the
-  // sheet writes it for that reason: what is being claimed is that the DERIVED value
-  // reaches the row, not that a hex transcribed into this file still matches.
+  // the custom property, which for an untyped --* would hand back the color-mix() source
+  // text instead of the colour it resolves to. --table-rule is written out as the sheet
+  // writes it for that reason: what is being claimed is that the DERIVED value reaches the
+  // row, not that a hex transcribed into this file still matches.
   const marks = await page.evaluate(() => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
     const card = sh?.querySelector("[data-content] > [data-table-card]") as HTMLElement;
@@ -663,11 +663,7 @@ test("no pipe glyph paints, and the rules stand where the pipes did", async ({ p
     ];
     return {
       inkSoft: probe("--ink-soft"),
-      ruleInk: probe(
-        `light-dark(
-           color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 18%),
-           color-mix(in srgb, var(--ink-soft), var(--paper-sunk) 35%))`,
-      ),
+      ruleInk: probe("color-mix(in lab, var(--paper-sunk), var(--ink) 16%)"),
       rows: [...card.querySelectorAll(":scope > [data-line]")].map((row) => {
         const s = getComputedStyle(row);
         return {

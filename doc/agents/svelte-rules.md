@@ -245,58 +245,72 @@ stays green under any invocation.
   `--ink-faint` measures 2.63–5.81 there and **fails 3:1** on catppuccin-latte (2.66–2.99)
   and github-light (2.63–3.07); `--ink-soft` measures 4.21–9.26 and clears everywhere.
   `theme.test.ts` pins the replacement family against exactly that ground and reds naming
-  the palette if a member is stepped back down.
-  **One member does not spend the token neat.** A table's column dividers, delimiter rule
-  and row hairlines (EXC-864, EXC-1136) are one mark, and `--ink-soft` at full strength
-  drew a cage rather than a table — 7.70 on caret-dark's widest band is TEXT contrast for
-  a mark that only says where a column ends — so `--table-rule` mixes it toward
-  `--paper-sunk` before painting, through a `light-dark()` whose two arms answer to two
-  different limits. **Both arms now sit on the floor**, and that is the whole remaining
-  margin. On a **light** palette 18% is the most that clears 3:1, measuring 3.02–4.93 with
-  catppuccin-latte binding; on a **dark** one it takes 35% to land in the same place —
-  light ink on a dark ground reads heavier at the same ratio — measuring 3.02–4.73 with
-  github-dark tightest. One point further on either arm reds `theme.test.ts` naming the
-  palette that broke. EXC-1136 spent the headroom the original 15%/30% left, on a review
-  call that the rules read too strong against the card's fill; a future "softer still" is
-  a request for a different mechanism, not a bigger number. Note which ground binds: the
-  widest ROW BAND, not the card's resting fill — a rule inside a table still has to be
-  legible on a hovered or selected row, and measuring only the resting panel would flatter
-  these numbers by about a point. The card's **frame** spent this token too until EXC-1136
-  replaced it with a fill and a lift; the **row hairlines** it added in the same change
-  are what the token now buys in its place, and they are this paragraph's own third case —
-  a decoration that replaces no source character, since markdown has no syntax for a
-  boundary between two body rows. Where the file and folder glyphs leave that case open,
-  the hairline settles it by construction rather than by argument: it spends
-  `--table-rule`, which the two arms above already hold at 3:1, so it clears the floor
-  whether or not 1.4.11 is judged to bind on a mark that displaced nothing. **That card's
-  header ink is a second, separate spend, and it carries the one knowing exemption in this
-  section.** EXC-1136 subdued the header from bold `--ink` to plain `--ink-soft` on the
-  card's own 6% fill, where it measures **4.34–8.06** — so on catppuccin-latte, and there
-  alone, a row of real text sits 0.16 under 1.4.3's 4.5:1. It ships at the 3:1 floor the
-  issue named, on the reasoning that the row is uppercase, directly above body copy at
-  full `--ink`, and short. Soften that ink any further and latte drops below 4;
-  `theme.test.ts` pins the 3:1 and carries the same warning. **`--rule` and
-  `--rule-strong` are chrome-surface tokens and are spent nowhere on the diff body.** At
-  10% and 16% ink over those grounds they measure 1.15–1.37 and 1.24–1.64 — against the
-  1.05 this epic calls indistinguishable, which is a line in the DOM and not on the
-  screen. `coreStyles.test.ts` asserts no DECLARATION in the sheet names either token (the
-  comments still name them, deliberately, which is why that assertion scans the
-  comment-stripped body). **These seven ranges are stated here and nowhere else** — the
-  sheet's own comments point at this paragraph rather than restating them, because seven
-  copies of a measured number drift apart and three of them already had. It is painted as
-  a **background layer** rather than as a `::before`, which clears both traps in the
-  bullet below at once — paint is not content, so there is no node for a settle check to
-  count and no per-token glyph to suppress. The quoted line's ink is subdued with opacity
-  rather than a tint, which is what lets the chips inside a quote keep their treatment
-  instead of being overpainted by it — and because opacity composites at paint time, no
-  token assertion can see it. `QUOTE_SUBDUE` in `diffview/coreStyles.ts` is therefore
-  exported and pinned by `theme.test.ts` against every palette: `--ink` on `--paper-sunk`
-  ranges from 6:1 to 19:1 across the nine, so the flattest ink ramp sets how far any of
-  them may fade. Any future paint-time effect on body copy owes the same pin. A decoration
-  that indicates **state** owes one thing more: tell the states apart by SHAPE, not by hue
-  or by an opacity step, which fails outright for a colour-blind reader whatever a
-  contrast ratio says. The task-list checkbox is the worked example — an empty ballot box
-  against a ticked one, on one ink, so it needs no subdue constant.
+  the palette if a member is stepped back down. **One member left the ink ramp altogether,
+  and it is the one exception to the two-way split above.** A table's column dividers,
+  delimiter rule and row hairlines (EXC-864, EXC-1136) are one mark, spending
+  `--table-rule` — which since EXC-1136 is not an ink at all but
+  **the surface stepped toward it**,
+  `color-mix(in lab, var(--paper-sunk), var(--ink) 16%)`, the same idiom as the table
+  card's own fill and the row bands in `styles/diffview.css`. It measures **1.15–1.40**
+  across the nine, against the three grounds a carded table actually has (the card fill,
+  and the two banded states a row can be in — never bare `--paper-sunk`, which a card
+  covers). **That is below 1.4.11's 3:1, deliberately, and it is the only replacement
+  decoration that does not clear it.** EXC-864 originally held it there on the argument
+  that the pipes go transparent and the rule is then the sole carrier of a column
+  boundary; EXC-1136 overrode that on an explicit design call for a low-contrast style, on
+  the strength of what the original argument understated — the columns are **also**
+  carried by the layout, since the cells are max-content tracks holding the source's own
+  spacing, so a faint divider makes the reading quieter rather than ambiguous. A table
+  with no vertical rules at all is a normal rendering. Do **not** read this as a general
+  licence: it turns on a redundant carrier existing, and the epic's other replacement
+  markers have none. The header's ink in the same card is text, has no such redundancy,
+  and keeps a measured floor (below).
+  **What replaced the floor is a two-part pin in `theme.test.ts`** — *visible* (every
+  palette clears 1.1, against the 1.05 this section calls a line in the DOM and not on the
+  screen) and *evenly spread* (the whole range stays under 1.6). The second half is the
+  one that matters mechanically: an ink softened by a fixed amount lands in two different
+  places on a light and a dark palette, which is why the old declaration needed a
+  `light-dark()` with two different numbers and still drifted; stating the colour as a
+  step off the surface makes one number land in the same place everywhere, because the
+  operands flip with the scheme. Reintroduce a per-scheme arm and the spread widens and
+  the pin reds. The card's **frame** spent this token too until EXC-1136 replaced it with
+  a fill and a lift; the **row hairlines** it added in the same change are what the token
+  now buys in its place, and they are this paragraph's own third case — a decoration that
+  replaces no source character, since markdown has no syntax for a boundary between two
+  body rows. They are the case's least troubling instance rather than a resolution of it:
+  nothing was displaced, so there is no vacated meaning for them to be the sole carrier
+  of, and 1.4.11's argument for binding them is weaker than for the dividers it shares a
+  token with — which is why the exemption above reaching them costs less than it looks.
+  The file and folder glyphs, which DO carry information no surviving character carries,
+  are still open and are not covered by any of this. **That card's header ink is a second,
+  separate spend, and it carries the one knowing exemption in this section.** EXC-1136
+  subdued the header from bold `--ink` to plain `--ink-soft` on the card's own 6% fill,
+  where it measures **4.34–8.06** — so on catppuccin-latte, and there alone, a row of real
+  text sits 0.16 under 1.4.3's 4.5:1. It ships at the 3:1 floor the issue named, on the
+  reasoning that the row is uppercase, directly above body copy at full `--ink`, and
+  short. Soften that ink any further and latte drops below 4; `theme.test.ts` pins the 3:1
+  and carries the same warning. **`--rule` and `--rule-strong` are chrome-surface tokens
+  and are spent nowhere on the diff body.** At 10% and 16% ink over those grounds they
+  measure 1.15–1.37 and 1.24–1.64 — against the 1.05 this epic calls indistinguishable,
+  which is a line in the DOM and not on the screen. `coreStyles.test.ts` asserts no
+  DECLARATION in the sheet names either token (the comments still name them, deliberately,
+  which is why that assertion scans the comment-stripped body).
+  **These six ranges are stated here and nowhere else** — the sheet's own comments point
+  at this paragraph rather than restating them, because six copies of a measured number
+  drift apart and three of them already had. It is painted as a **background layer**
+  rather than as a `::before`, which clears both traps in the bullet below at once — paint
+  is not content, so there is no node for a settle check to count and no per-token glyph
+  to suppress. The quoted line's ink is subdued with opacity rather than a tint, which is
+  what lets the chips inside a quote keep their treatment instead of being overpainted by
+  it — and because opacity composites at paint time, no token assertion can see it.
+  `QUOTE_SUBDUE` in `diffview/coreStyles.ts` is therefore exported and pinned by
+  `theme.test.ts` against every palette: `--ink` on `--paper-sunk` ranges from 6:1 to 19:1
+  across the nine, so the flattest ink ramp sets how far any of them may fade. Any future
+  paint-time effect on body copy owes the same pin. A decoration that indicates **state**
+  owes one thing more: tell the states apart by SHAPE, not by hue or by an opacity step,
+  which fails outright for a colour-blind reader whatever a contrast ratio says. The
+  task-list checkbox is the worked example — an empty ballot box against a ticked one, on
+  one ink, so it needs no subdue constant.
 - **An overdrawn glyph belongs on the run's FIRST token, not on every tagged one.**
   `inlineDecorate.ts` tags every shiki token a run covers, and shiki does not always hand
   a multi-character run over as one token — an uppercase `[X]` comes back cut into three.
