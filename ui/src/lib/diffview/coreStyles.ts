@@ -1305,12 +1305,56 @@ const CARET_OVERRIDES = `
     background-position: 0.5ch 0;
   }
 
-  /* The header row is bold, and the weight is declared HERE rather than routed through
-     shiki's fontStyle — @pierre/diffs carries that into an invalid font-weight:
-     light-dark(...) and drops it, so every token renders at one weight whatever the theme
-     says (EXC-867's standing upstream finding). */
-  [data-content] [data-line][data-table-head] {
-    font-weight: bold;
+  /* A hairline under every body row (EXC-1136). Nothing separated one row of data from the
+     next: the card had a frame, the columns had dividers and the header had its rule, and
+     between two body rows there was air. This is the delimiter row's own paint shape moved
+     from the row's centre to its bottom edge — a background LAYER, for the same reason the
+     delimiter's is one. A border here would satisfy a loose reading of "paint only" and
+     still move the box model that the search ranges, the drag ranges, the vim motions and
+     the comment anchors all resolve against; an appended node would have tables.ts rebuild
+     the row on every repaint and never adopt it.
+
+     Two rows are excluded and neither is a body row: the head row, because the delimiter
+     row directly below it already draws that separator and a second one a pixel away reads
+     as a doubled line, and the delimiter row itself, because it IS one. */
+  [data-content]
+    > [data-table-card]
+    > [data-line]:not([data-table-head], [data-table-rule]) {
+    background-image: linear-gradient(var(--table-rule), var(--table-rule));
+    background-repeat: no-repeat;
+    background-size: 100% 1px;
+    background-position: bottom;
+  }
+
+  /* THE HEADER IS A CAP, NOT A SHOUT (EXC-1136). It was bold because it had to hold its own
+     against a frame; the card's fill carries the table's edge now, so the header's job is
+     back to labelling its columns. Uppercase and a step back into --ink-soft say that more
+     quietly than weight did.
+
+     On a monospace face uppercase costs the grid nothing — every glyph carries the same
+     advance width as the lowercase it replaces — and text-transform is a rendering-time
+     transform that never reaches textContent, so a copied table still yields the source
+     header. No font-size and no letter-spacing for the same grid reason turned the other
+     way: the column dividers paint 0.5ch INSIDE each cell, so a header set on a different
+     advance width would land its divider segment on a different x than every row below it.
+
+     The weight declaration this replaces was here rather than routed through shiki's
+     fontStyle, because @pierre/diffs carries that into an invalid font-weight:
+     light-dark(...) and drops it (EXC-867's standing upstream finding). The ink below has
+     the same problem and takes the same route out. */
+  [data-content] > [data-table-card] > [data-line][data-table-head] {
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  /* The tokens too — shiki inks each one, so the row's own color never reaches them. The
+     pipes are excluded BY NAME: this arm scores 0,5,0, which outranks the 0,3,0 rule that
+     took them to transparent, and without the exclusion the header would be the one row
+     that still shows the picket fence EXC-864 removed. */
+  [data-content]
+    > [data-table-card]
+    > [data-line][data-table-head]
+    :not([data-table-pipe]) {
+    color: var(--ink-soft);
   }
 
   /* The delimiter row keeps its line AND its gutter number: one source line is one table
@@ -1327,7 +1371,7 @@ const CARET_OVERRIDES = `
      height to the character: the gutter numbers are one per row, and a rule that changed
      the vertical rhythm would read as drift long before it read as a separator.
 
-     A plain 100% spans exactly the frame's inner width, which is the whole reason the
+     A plain 100% spans exactly the card's width, which is the whole reason the
      row's inline padding is zeroed above. The break needs background-origin: content-box
      to survive the seam pull; a carded row is never pulled — the pull is a direct-child
      rule, and EXC-865's gutter-side ::before covers this case instead — so the default

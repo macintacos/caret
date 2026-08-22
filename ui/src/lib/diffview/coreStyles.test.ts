@@ -1446,9 +1446,17 @@ describe("tables (EXC-864)", () => {
     )?.[0] ?? "";
   // The card's own fill only shows through once the library's per-row --diffs-bg is
   // cleared, which this rule does for every row that is not carrying a band.
-  const transparentRow = rulesFor(
-    String.raw`>\s*\[data-table-card\]\s*>\s*\[data-line\]:not\([^{}]*\)`,
-  ).find((r) => r.includes("background-color:"));
+  const cardRows = rulesFor(String.raw`>\s*\[data-table-card\]\s*>\s*\[data-line\]:not\([^{}]*\)`);
+  const transparentRow = cardRows.find((r) => r.includes("background-color:"));
+  // The hairline under every body row — the same selector shape, a different exclusion
+  // list and a background LAYER rather than a fill.
+  const hairlineRule = cardRows.find((r) => r.includes("background-image:"));
+  const headCap = rulesFor(String.raw`\[data-line\]\[data-table-head\]`).find((r) =>
+    r.includes("text-transform:"),
+  );
+  const headTokens = rulesFor(String.raw`\[data-line\]\[data-table-head\][^{}]*`).find((r) =>
+    r.includes("data-table-pipe"),
+  );
   const cellRule = rulesFor(String.raw`\[data-table-cell\]`).find((r) => r.includes("max-width:"));
   const inertRule = rulesFor(String.raw`\[data-table-inert\]`)[0];
   const pipeRule = rulesFor(String.raw`\[data-table-pipe\]`)[0];
@@ -1500,6 +1508,9 @@ describe("tables (EXC-864)", () => {
       cardRule,
       rowRule,
       transparentRow,
+      hairlineRule,
+      headCap,
+      headTokens,
       cellRule,
       inertRule,
       pipeRule,
@@ -1658,8 +1669,9 @@ describe("tables (EXC-864)", () => {
   });
 
   test("declares the rule ink once, softened per scheme, and spends it everywhere", () => {
-    // The frame, the dividers and the header rule are one mark in three places; a tuned
-    // number written out three times is three numbers waiting to drift apart. It is
+    // The column dividers, the delimiter rule and the row hairlines are one mark in three
+    // places; a tuned number written out three times is three numbers waiting to drift
+    // apart. (The frame was the fourth until EXC-1136 removed it.) It is
     // --ink-soft softened toward the surface, by more on a dark palette than on a light
     // one — light ink on a dark ground reads heavier at the same ratio, and a light
     // palette has no room to give anyway. theme.test.ts owns how far each can go before
@@ -1669,7 +1681,7 @@ describe("tables (EXC-864)", () => {
     expect(cardRule).toMatch(
       /--table-rule:\s*light-dark\(\s*color-mix\(in srgb, var\(--ink-soft\), var\(--paper-sunk\) 15%\),\s*color-mix\(in srgb, var\(--ink-soft\), var\(--paper-sunk\) 30%\),?\s*\)/,
     );
-    for (const rule of [dividerRule, ruleRow]) {
+    for (const rule of [dividerRule, ruleRow, hairlineRule]) {
       expect(rule).toContain("var(--table-rule)");
       expect(rule).not.toContain("--ink-faint");
       expect(rule).not.toContain("--rule");
@@ -1771,12 +1783,49 @@ describe("tables (EXC-864)", () => {
     expect(slotOverride).toMatch(/:nth-child\(2 of \[data-column-number\]\)/);
   });
 
-  test("declares the header weight here rather than through shiki", () => {
-    // @pierre/diffs carries a theme's fontStyle into an invalid font-weight:
-    // light-dark(...) and drops it, so every token renders at one weight (EXC-867).
-    expect(rulesFor(String.raw`\[data-line\]\[data-table-head\]`)[0]).toMatch(
-      /font-weight:\s*bold/,
-    );
+  test("caps the header in subdued small-caps rather than shouting it in bold", () => {
+    // EXC-1136: a filled card carries the table's edge now, so the header no longer has to
+    // out-weigh a frame to read as a header. Uppercase plus a step back in the ink says
+    // "these are labels" more quietly than bold did.
+    expect(headCap).toMatch(/text-transform:\s*uppercase/);
+    expect(headCap).toMatch(/color:\s*var\(--ink-soft\)/);
+    expect(headCap).not.toContain("font-weight");
+    // No font-size and no letter-spacing, both for the same reason: the column dividers
+    // paint 0.5ch INSIDE each cell, so a header set on a different advance width would
+    // land its divider segment on a different x than every body row's.
+    for (const rule of [headCap, headTokens]) {
+      expect(rule).not.toContain("font-size");
+      expect(rule).not.toContain("letter-spacing");
+    }
+    // The tokens too — shiki inks each one, and the row's own color never reaches them.
+    // The pipes are excluded BY NAME: this arm scores 0,5,0 and would otherwise outrank
+    // the 0,3,0 rule that took them to transparent, resurrecting the picket fence EXC-864
+    // removed.
+    expect(headTokens).toMatch(/color:\s*var\(--ink-soft\)/);
+    expect(headTokens).toContain(":not([data-table-pipe])");
+  });
+
+  test("rules a hairline under every body row, and only under those", () => {
+    // The delimiter row's paint shape moved from the row's centre to its bottom edge — a
+    // background layer, never a border: tables.ts settles a celled row by COUNTING its
+    // cells, and nothing here may move the box model the search ranges, drag ranges, vim
+    // motions and comment anchors all resolve against.
+    expect(hairlineRule).toMatch(/background-image:\s*linear-gradient\(/);
+    expect(hairlineRule).toMatch(/background-size:\s*100%\s+1px/);
+    expect(hairlineRule).toMatch(/background-position:\s*bottom/);
+    // The head row is excluded because the delimiter row below it already draws that
+    // separator, and the delimiter row because it IS one.
+    expect(hairlineRule).toContain("[data-table-head]");
+    expect(hairlineRule).toContain("[data-table-rule]");
+  });
+
+  test("adds the new marks as paint and nothing else", () => {
+    // Every mark this card gained is a background layer or an ink. A border, a padding or
+    // a margin on any of them would shift the monospace grid — which is the one thing the
+    // whole table treatment is built not to do.
+    for (const rule of [hairlineRule, headCap, headTokens]) {
+      expect(rule).not.toMatch(/(?:^|[\s;{])(?:border|padding|margin)[-:]/);
+    }
   });
 
   test("keeps a comment inside the card from widening the table", () => {
