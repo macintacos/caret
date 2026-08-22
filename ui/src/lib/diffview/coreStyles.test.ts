@@ -1682,7 +1682,7 @@ describe("tables (EXC-864)", () => {
     // card fill above and the row bands in styles/diffview.css already use, and it is why
     // light-dark() is gone from this declaration rather than merely retuned.
     expect(cardRule).toMatch(
-      /--table-rule:\s*color-mix\(in lab, var\(--paper-sunk\), var\(--ink\) 16%\)/,
+      /--table-rule:\s*color-mix\(in lab, var\(--paper-sunk\), var\(--ink\) 12%\)/,
     );
     // Not light-dark(): a per-scheme arm here would be the old mechanism creeping back.
     expect(cardRule).not.toMatch(/--table-rule:[^;]*light-dark/);
@@ -1712,6 +1712,32 @@ describe("tables (EXC-864)", () => {
     // The last CHILD, not the last row: an annotation row is the bottom of the card
     // whenever someone comments on the table's final line.
     expect(footRow).not.toContain("[data-line]:last-child");
+  });
+
+  test("insets the card's first and last rows, in both columns", () => {
+    // Two pixels of air inside the card's top and bottom edges. It rides the END ROWS
+    // rather than the card because the card is a row subgrid: padding its content box
+    // takes its tracks out of register with the parent's, and the gutter mirror is a
+    // separate subgrid that would not move with it.
+    const pad = (edge: "start" | "end", child: "first" | "last") =>
+      overrideDecls.match(
+        new RegExp(
+          String.raw`\[data-table-card\]\s*>\s*:${child}-child,[^{}]*\{[^}]*padding-block-${edge}:[^;]+;`,
+        ),
+      )?.[0] ?? "";
+    for (const [edge, child] of [
+      ["start", "first"],
+      ["end", "last"],
+    ] as const) {
+      const rule = pad(edge, child);
+      expect(rule, `${child}-child ${edge} padding`).toBeTruthy();
+      // Both columns in one rule, which is the whole point: a content row padded alone
+      // grows the shared track and slides the gutter number against its own text.
+      expect(rule).toContain("[data-gutter]");
+      expect(rule).toContain("[data-table-card-gutter]");
+    }
+    // Never on the card itself — that is the subgrid trap this rule exists to avoid.
+    expect(cardRule).not.toContain("padding");
   });
 
   test("takes the delimiter row down to a fraction of a line", () => {

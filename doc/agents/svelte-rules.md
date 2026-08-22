@@ -250,13 +250,15 @@ stays green under any invocation.
   delimiter rule and row hairlines (EXC-864, EXC-1136) are one mark, spending
   `--table-rule` — which since EXC-1136 is not an ink at all but
   **the surface stepped toward it**,
-  `color-mix(in lab, var(--paper-sunk), var(--ink) 16%)`, the same idiom as the table
-  card's own fill and the row bands in `styles/diffview.css`. It measures **1.15–1.40**
+  `color-mix(in lab, var(--paper-sunk), var(--ink) 12%)`, the same idiom as the table
+  card's own fill and the row bands in `styles/diffview.css`. It measures **1.05–1.37**
   across the nine, against the three grounds a carded table actually has (the card fill,
   and the two banded states a row can be in — never bare `--paper-sunk`, which a card
-  covers). **That is below 1.4.11's 3:1, deliberately, and it is the only replacement
-  decoration that does not clear it.** EXC-864 originally held it there on the argument
-  that the pipes go transparent and the rule is then the sole carrier of a column
+  covers). The bottom of that range is real: on the lightest palettes a divider under a
+  hovered row is at the edge of perceptible, which is the look this was tuned to and not a
+  defect to fix. **That is below 1.4.11's 3:1, deliberately, and it is the only
+  replacement decoration that does not clear it.** EXC-864 originally held it there on the
+  argument that the pipes go transparent and the rule is then the sole carrier of a column
   boundary; EXC-1136 overrode that on an explicit design call for a low-contrast style, on
   the strength of what the original argument understated — the columns are **also**
   carried by the layout, since the cells are max-content tracks holding the source's own
@@ -265,28 +267,29 @@ stays green under any invocation.
   licence: it turns on a redundant carrier existing, and the epic's other replacement
   markers have none. The header's ink in the same card is text, has no such redundancy,
   and keeps a measured floor (below).
-  **What replaced the floor is a two-part pin in `theme.test.ts`** — *visible* (every
-  palette clears 1.1, against the 1.05 this section calls a line in the DOM and not on the
-  screen) and *evenly spread* (the whole range stays under 1.6). The second half is the
-  one that matters mechanically: an ink softened by a fixed amount lands in two different
-  places on a light and a dark palette, which is why the old declaration needed a
-  `light-dark()` with two different numbers and still drifted; stating the colour as a
-  step off the surface makes one number land in the same place everywhere, because the
-  operands flip with the scheme. Reintroduce a per-scheme arm and the spread widens and
-  the pin reds. The card's **frame** spent this token too until EXC-1136 replaced it with
-  a fill and a lift; the **row hairlines** it added in the same change are what the token
-  now buys in its place, and they are this paragraph's own third case — a decoration that
-  replaces no source character, since markdown has no syntax for a boundary between two
-  body rows. They are the case's least troubling instance rather than a resolution of it:
-  nothing was displaced, so there is no vacated meaning for them to be the sole carrier
-  of, and 1.4.11's argument for binding them is weaker than for the dividers it shares a
-  token with — which is why the exemption above reaching them costs less than it looks.
-  The file and folder glyphs, which DO carry information no surviving character carries,
-  are still open and are not covered by any of this. **That card's header ink is a second,
-  separate spend, and it carries the one knowing exemption in this section.** EXC-1136
-  subdued the header from bold `--ink` to plain `--ink-soft` on the card's own 6% fill,
-  where it measures **4.34–8.06** — so on catppuccin-latte, and there alone, a row of real
-  text sits 0.16 under 1.4.3's 4.5:1. It ships at the 3:1 floor the issue named, on the
+  **What replaced the floor is a two-part pin in `theme.test.ts`** — *present* (no palette
+  resolves the rule to its own ground, a low bar on purpose, since the edge of perceptible
+  is the intent here and only "literally the same colour" is a bug) and *evenly spread*
+  (the whole range stays under 1.45). The second half is the one that matters
+  mechanically: an ink softened by a fixed amount lands in two different places on a light
+  and a dark palette, which is why the old declaration needed a `light-dark()` with two
+  different numbers and still drifted; stating the colour as a step off the surface makes
+  one number land in the same place everywhere, because the operands flip with the scheme.
+  Reintroduce a per-scheme arm and the spread widens and the pin reds. The card's
+  **frame** spent this token too until EXC-1136 replaced it with a fill and a lift; the
+  **row hairlines** it added in the same change are what the token now buys in its place,
+  and they are this paragraph's own third case — a decoration that replaces no source
+  character, since markdown has no syntax for a boundary between two body rows. They are
+  the case's least troubling instance rather than a resolution of it: nothing was
+  displaced, so there is no vacated meaning for them to be the sole carrier of, and
+  1.4.11's argument for binding them is weaker than for the dividers it shares a token
+  with — which is why the exemption above reaching them costs less than it looks. The file
+  and folder glyphs, which DO carry information no surviving character carries, are still
+  open and are not covered by any of this. **That card's header ink is a second, separate
+  spend, and it carries the one knowing exemption in this section.** EXC-1136 subdued the
+  header from bold `--ink` to plain `--ink-soft` on the card's own 6% fill, where it
+  measures **4.34–8.06** — so on catppuccin-latte, and there alone, a row of real text
+  sits 0.16 under 1.4.3's 4.5:1. It ships at the 3:1 floor the issue named, on the
   reasoning that the row is uppercase, directly above body copy at full `--ink`, and
   short. Soften that ink any further and latte drops below 4; `theme.test.ts` pins the 3:1
   and carries the same warning. **`--rule` and `--rule-strong` are chrome-surface tokens

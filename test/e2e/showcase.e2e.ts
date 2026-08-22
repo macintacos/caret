@@ -537,7 +537,7 @@ test("a vendor palette resolves every decoration's paint", async ({ daemon, page
       // Written as the sheet writes it, and resolved here the same way the tokens above
       // are, so it stays a claim about the DERIVED value reaching the sheet rather than a
       // hex transcribed into this file.
-      tableInk: probe("color-mix(in lab, var(--paper-sunk), var(--ink) 16%)"),
+      tableInk: probe("color-mix(in lab, var(--paper-sunk), var(--ink) 12%)"),
       chip: pick('[data-content] [data-line] [data-md~="code"]', (el) => {
         return getComputedStyle(el).backgroundImage;
       }),

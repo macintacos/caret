@@ -663,7 +663,7 @@ test("no pipe glyph paints, and the rules stand where the pipes did", async ({ p
     ];
     return {
       inkSoft: probe("--ink-soft"),
-      ruleInk: probe("color-mix(in lab, var(--paper-sunk), var(--ink) 16%)"),
+      ruleInk: probe("color-mix(in lab, var(--paper-sunk), var(--ink) 12%)"),
       rows: [...card.querySelectorAll(":scope > [data-line]")].map((row) => {
         const s = getComputedStyle(row);
         return {

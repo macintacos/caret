@@ -1116,7 +1116,7 @@ const CARET_OVERRIDES = `
        under pressure — which is the "grows until every column is visible" behaviour. */
     justify-self: start;
     margin-inline: var(--caret-card-inset);
-    --table-rule: color-mix(in lab, var(--paper-sunk), var(--ink) 16%);
+    --table-rule: color-mix(in lab, var(--paper-sunk), var(--ink) 12%);
     background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
     border-radius: var(--radius);
     box-shadow: var(--shadow-card);
@@ -1156,6 +1156,31 @@ const CARET_OVERRIDES = `
   [data-content] > [data-table-card] > :last-child {
     border-bottom-left-radius: var(--radius);
     border-bottom-right-radius: var(--radius);
+  }
+  /* A sliver of air inside the card's top and bottom edges, so the header and the last row
+     are not set hard against them. Two pixels, which is the whole intent — a card this
+     dense reads as sloppy if its text touches the fill's edge and as a different component
+     if the gap grows into panel padding.
+
+     ON THE END ROWS, AND ON THEIR GUTTER CELLS, rather than on the card. Padding the card
+     is the obvious move and is wrong twice over: the card is a row subgrid, so insetting
+     its content box takes its tracks out of register with the parent's, and the gutter
+     mirror is a SEPARATE subgrid that would not have been inset with it — the line numbers
+     would slide against their rows by exactly this much. Padding the rows grows the shared
+     parent track instead, which both subgrids then take, and pairing each row with its
+     gutter cell keeps the number on the same baseline as the text beside it. The code card
+     pads its first and last rows for the same reason (EXC-729, above).
+
+     :first-child / :last-child, matching the rounding above, so a comment opening on the
+     table's final line hands the bottom padding to the annotation row that is now the
+     card's edge. */
+  [data-content] > [data-table-card] > :first-child,
+  [data-gutter] [data-table-card-gutter] > :first-child {
+    padding-block-start: 0.125rem;
+  }
+  [data-content] > [data-table-card] > :last-child,
+  [data-gutter] [data-table-card-gutter] > :last-child {
+    padding-block-end: 0.125rem;
   }
   /* The library gives every row a 1ch inline padding. On a subgrid that padding insets
      the row's OWN tracks from the card's, so the cells stop filling the columns they
