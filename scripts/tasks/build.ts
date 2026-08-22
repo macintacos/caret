@@ -152,8 +152,19 @@ export async function buildBinArtifactsQuietly(
       },
       opts,
     );
-  const code = await buildBinArtifacts(run);
-  return { code, output: chunks.join("") };
+  try {
+    const code = await buildBinArtifacts(run);
+    return { code, output: chunks.join("") };
+  } catch (err) {
+    // Never throws. A build step can fail by throwing rather than by exiting
+    // non-zero — headCommit's git failure, or a spawn that can't start — and the
+    // caller renders this behind a listr2 task, which under `exitOnError: false`
+    // resolves instead of rethrowing. A throw escaping here would therefore be
+    // reported as a successful build. The stack goes into the dumped log so an
+    // unexpected one is still diagnosable.
+    chunks.push(`${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
+    return { code: 1, output: chunks.join("") };
+  }
 }
 
 export async function runBuildBin(): Promise<never> {
@@ -222,8 +233,11 @@ export function buildInstallCommand(opts: BuildOptions): string[] | null {
   return opts.install ? ["bin/caret", "install", "--from-local"] : null;
 }
 
-export async function runBuild(opts: BuildOptions): Promise<never> {
-  let result = { code: 0, output: "" };
+/** Run the quiet build under a single listr2 progress line, resolving its exit code
+ * and captured log. The task's throw is how listr2 is told to render the line red;
+ * the outcome travels in the returned value, never in that throw. */
+async function buildUnderProgressLine(): Promise<{ code: number; output: string }> {
+  let result: { code: number; output: string } | undefined;
   const listr = new Listr(
     [
       {
@@ -232,7 +246,7 @@ export async function runBuild(opts: BuildOptions): Promise<never> {
           result = await buildBinArtifactsQuietly((line) => {
             task.output = line;
           });
-          if (result.code !== 0) throw new Error("build failed");
+          if (result.code !== 0) throw new Error("caret build failed — full log below");
         },
       },
     ],
@@ -248,9 +262,20 @@ export async function runBuild(opts: BuildOptions): Promise<never> {
     },
   );
   await listr.run();
-  if (result.code !== 0) {
-    process.stderr.write(result.output);
-    process.exit(result.code);
+  // `exitOnError: false` makes listr2 collect a task's throw rather than rethrow it,
+  // so a task that died before assigning leaves `result` unset. That is a failed
+  // build, not a silent success — listr2 has already rendered the error on the line.
+  return result ?? { code: 1, output: "" };
+}
+
+export async function runBuild(opts: BuildOptions): Promise<never> {
+  const { code, output } = await buildUnderProgressLine();
+  if (code !== 0) {
+    // Await the flush: process.exit() truncates a piped write at the pipe buffer —
+    // the same 64KB cliff scripts/preflight.ts documents — and the failing tail is
+    // exactly the part that would be lost.
+    await new Promise<void>((resolve) => process.stderr.write(output, () => resolve()));
+    process.exit(code);
   }
   console.log("caret build complete: bin/caret-native (run via the bin/caret shim)");
   const install = buildInstallCommand(opts);

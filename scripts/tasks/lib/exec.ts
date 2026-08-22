@@ -1,8 +1,10 @@
-// Shared child-process helper for the tasks CLI: spawn a command inheriting
-// this process's stdio and resolve its exit code. Every task run function that
-// shells out to a tool (vite, hk, bun, playwright, mise, the compiled binary)
-// goes through here, so the "spawn, inherit, propagate exit code" semantics live
-// in one place. The child env is passed explicitly: Bun.spawn snapshots
+// Shared child-process helpers for the tasks CLI: `runForward` spawns a command
+// inheriting this process's stdio, `runCapture` pipes both streams into a sink so
+// a caller can render its own progress instead, and `lastDisplayLine` reduces a
+// captured chunk to the one line such a display shows. Every task run function
+// that shells out to a tool (vite, hk, bun, playwright, mise, the compiled
+// binary) spawns through one of the two, so the "spawn, propagate exit code"
+// semantics live in one place. The child env is passed explicitly: Bun.spawn snapshots
 // process.env at startup and ignores later mutations, so a run function that sets
 // overrides must hand them to `env` rather than mutating process.env.
 
