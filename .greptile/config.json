@@ -1,0 +1,17 @@
+{
+  "strictness": 2,
+  "commentTypes": ["logic", "style"],
+  "statusCheck": false,
+  "triggerOnUpdates": true,
+  "triggerOnDrafts": false,
+  "excludeAuthors": ["dependabot[bot]", "renovate[bot]", "github-actions[bot]"],
+  "ignorePatterns": "dist/\nui/dist/\nnode_modules/\nbun.lock\nmise.lock\nTHIRD_PARTY_LICENSES.md",
+  "rules": [
+    {
+      "id": "agents-doc-greptile-wiring",
+      "rule": "A PR that adds, splits, renames, or deletes a file under doc/agents/ must update the .greptile/ wiring in the same PR: every files.json entry pointing at a moved or removed file, and a new entry in the .greptile/ folder for whichever subtree a new file governs. Flag the PR when a doc/agents/*.md path is added, renamed, or deleted and no files.json changed alongside it.",
+      "severity": "high",
+      "scope": ["doc/agents/**", ".greptile/**", "**/.greptile/**"]
+    }
+  ]
+}

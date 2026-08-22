@@ -1,0 +1,12 @@
+{
+  "files": [
+    {
+      "path": "../doc/agents/opencode-integration.md",
+      "description": "Read for any change to the OpenCode plugin — the plugin-shaped integration model and its export surface."
+    },
+    {
+      "path": "../doc/agents/typescript-rules.md",
+      "description": "Read for TypeScript module shape — dependency injection, file-split seams, zod boundaries, helpers, and the @/ import aliases."
+    }
+  ]
+}

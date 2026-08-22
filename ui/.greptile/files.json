@@ -1,0 +1,32 @@
+{
+  "files": [
+    {
+      "path": "../doc/agents/svelte-rules.md",
+      "description": "Read for any Svelte UI change — components, runes, state factories, and CSS tokens."
+    },
+    {
+      "path": "../doc/agents/shadcn-rules.md",
+      "description": "Read when the diff composes UI from shadcn-svelte components — the compose-first norm, the token bridge, the icon swap, and what stays custom."
+    },
+    {
+      "path": "../doc/agents/icon-rules.md",
+      "description": "Read only when the diff adds or works with a vendored icon."
+    },
+    {
+      "path": "../doc/agents/typescript-rules.md",
+      "description": "Read for TypeScript module shape — dependency injection, file-split seams, zod boundaries, helpers, and the @/ import aliases."
+    },
+    {
+      "path": "../doc/agents/architecture-rules.md",
+      "description": "Read when the diff adds or changes a @core/* import — the node-free invariant a shared module owes the browser bundle."
+    },
+    {
+      "path": "../doc/agents/logging-rules.md",
+      "description": "Read when the diff touches ui/src/lib/log.ts — the uiLog batch path and the censor list a new redaction key must reach."
+    },
+    {
+      "path": "../doc/agents/browser-testing.md",
+      "description": "Read when the diff tests browser behavior — the e2e versus unit split, and the e2e harness."
+    }
+  ]
+}

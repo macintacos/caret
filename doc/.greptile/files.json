@@ -1,0 +1,8 @@
+{
+  "files": [
+    {
+      "path": "../doc/agents/documentation-rules.md",
+      "description": "Read for any documentation change — which doc to update (README, the doc/ reference pages, CONTRIBUTING, the doc/ router, or the doc map itself) and what a doc change must update alongside it."
+    }
+  ]
+}

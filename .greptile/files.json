@@ -1,0 +1,19 @@
+{
+  "files": [
+    {
+      "path": "doc/agents/documentation-rules.md",
+      "description": "Read when the diff touches README.md, CONTRIBUTING.md, CLAUDE.md, or the .greptile/ wiring — which doc owns which content, and what a doc change must update alongside it.",
+      "scope": ["README.md", "CONTRIBUTING.md", "CLAUDE.md", ".greptile/**"]
+    },
+    {
+      "path": "doc/agents/dependency-rules.md",
+      "description": "Read when the diff adds, moves, removes, or pins a dependency in package.json or ui/package.json.",
+      "scope": ["package.json", "ui/package.json"]
+    },
+    {
+      "path": "doc/agents/rumdl-rules.md",
+      "description": "Read when the diff touches rumdl's version or any of its configs and invocations — .rumdl.toml, hk.pkl, mise.toml.",
+      "scope": [".rumdl.toml", "hk.pkl", "mise.toml"]
+    }
+  ]
+}
