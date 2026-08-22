@@ -108,6 +108,9 @@ Documentation drifts when the map and the docs are edited in separate changes. S
    and
 3. **its pointer file** under [`references/`](references/) — for a `doc/agents/*.md` rule
    file that is the shared [`references/agent-rules.md`](references/agent-rules.md), whose
-   area list you extend rather than adding a new pointer.
+   area list you extend rather than adding a new pointer, and
+4. **its `.greptile/files.json` entry** — for a `doc/agents/*.md` rule file, the
+   `files.json` in the `.greptile/` folder of whichever subtree it governs, so the PR
+   reviewer keeps reaching it.
 
 A doc that exists without a place on this map is a doc no one will find.
