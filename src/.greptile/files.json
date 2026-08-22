@@ -1,0 +1,24 @@
+{
+  "files": [
+    {
+      "path": "../doc/agents/architecture-rules.md",
+      "description": "Read when the diff touches the core/adapter boundary, daemon routing, or the shared @core modules."
+    },
+    {
+      "path": "../doc/agents/typescript-rules.md",
+      "description": "Read for TypeScript module shape — dependency injection, file-split seams, zod boundaries, helpers, and the @/ import aliases."
+    },
+    {
+      "path": "../doc/agents/logging-rules.md",
+      "description": "Read when the diff logs anything — levels, message style, and redaction."
+    },
+    {
+      "path": "../doc/agents/settings-rules.md",
+      "description": "Read only when the diff adds a config.toml key or a CARET_* environment variable."
+    },
+    {
+      "path": "../doc/agents/opencode-integration.md",
+      "description": "Read only when the diff touches src/adapters/opencode/ — the OpenCode adapter, its plugin, or its install path."
+    }
+  ]
+}

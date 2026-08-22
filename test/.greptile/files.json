@@ -1,0 +1,16 @@
+{
+  "files": [
+    {
+      "path": "../doc/agents/test-layout.md",
+      "description": "Read to place a backend test suite — where a given suite belongs under test/."
+    },
+    {
+      "path": "../doc/agents/browser-testing.md",
+      "description": "Read when the diff tests browser behavior — the e2e versus unit split, and the e2e harness."
+    },
+    {
+      "path": "../doc/agents/typescript-rules.md",
+      "description": "Read for TypeScript module shape — dependency injection, file-split seams, zod boundaries, helpers, and the @/ import aliases."
+    }
+  ]
+}
