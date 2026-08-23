@@ -87,11 +87,31 @@ const CARET_OVERRIDES = `
      border-right on a gutter cell (2px, its --diffs-gap-style default, which caret
      never overrides). The band extension is positioned from the cell's PADDING box, so
      without adding the border back it lands 2px short of the card and leaves a
-     surface-coloured hairline in the seam it exists to fill. */
+     surface-coloured hairline in the seam it exists to fill.
+
+     --caret-card-lift is the elevation those same indented surfaces float on: the table
+     card (EXC-1136) and both of the fenced block's paint paths (EXC-1145). It is a
+     contact shadow and deliberately NOT --shadow-card. The shared token is built for
+     chrome that genuinely floats — popovers, alerts, the composer — and its far layer is
+     a 30px blur; these cards are inline in dense body text and inset only
+     --caret-card-inset from the gutter lane, so a blur wider than that inset spills into
+     the lane, and on a palette whose sunk surface is light enough to darken (catppuccin
+     mocha is the one that showed it) the spill reads as a soot halo rather than as a
+     lift. Sampling only caret-dark and caret-light hides this: their surfaces are near
+     enough to black that the same shadow resolves to nothing at all. 2px of blur, under
+     the card's own bottom edge, is all a panel this size can carry. The alpha splits by
+     scheme because the same black reads much heavier over a light ground than over a dark
+     one; the geometry does not, so there is one shape here and one number that moves.
+
+     It is a token for the same reason --table-rule is one a level down: a tuned number
+     written out four times is four numbers waiting to drift apart — and here the four
+     sites are the two cards a reader sees side by side, so drift between them is exactly
+     the "two elevation languages on one page" the shared value exists to prevent. */
   :host {
     --caret-card-inset: 0.75rem;
     --caret-read-max: 720px;
     --caret-gutter-divider: 2px;
+    --caret-card-lift: 0 1px 2px light-dark(rgb(0 0 0 / 0.07), rgb(0 0 0 / 0.28));
   }
   /* The chip family's breathing room, stated once for every member that has any: the
      inline-markup pills (EXC-867/868/859) and the file reference (EXC-687/880). Two
@@ -1119,20 +1139,10 @@ const CARET_OVERRIDES = `
     --table-rule: color-mix(in lab, var(--paper-sunk), var(--ink) 12%);
     background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
     border-radius: var(--radius);
-    /* A contact shadow, NOT --shadow-card. The shared token is built for chrome that
-       genuinely floats — popovers, alerts, the composer — and its far layer is a 30px
-       blur. This card is inline in dense body text and inset only --caret-card-inset
-       (0.75rem) from the gutter lane, so a blur wider than that inset spills into the
-       lane, and on a palette whose sunk surface is light enough to darken (catppuccin
-       mocha is the one that showed it) the spill reads as a soot halo rather than as a
-       lift. Sampling only caret-dark and caret-light hides this: their surfaces are near
-       enough to black that the same shadow resolves to nothing at all.
-
-       2px of blur, under the card's own bottom edge, is all a panel this size can carry.
-       The alpha splits by scheme because the same black reads much heavier over a light
-       ground than over a dark one; the geometry does not, so there is one shape here and
-       one number that moves. */
-    box-shadow: 0 1px 2px light-dark(rgb(0 0 0 / 0.07), rgb(0 0 0 / 0.28));
+    /* A contact shadow, NOT --shadow-card — see --caret-card-lift's note on :host, where
+       the value and the reasoning for it live. The code card spends the same token, so
+       the two cards on a page float at one height. */
+    box-shadow: var(--caret-card-lift);
   }
   /* The library paints every line with its own --diffs-bg, so clear it inside the card for
      the panel fill to show through — the code card's companion rule, for the same reason.

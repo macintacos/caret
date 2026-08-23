@@ -1567,13 +1567,15 @@ describe("tables (EXC-864)", () => {
     // blur, wider than the card's own --caret-card-inset, so it spills into the gutter
     // lane and reads as a halo on any palette whose sunk surface is light enough to
     // darken. Pinned as "blur no wider than the inset" rather than as a literal, since
-    // what must hold is the relationship.
-    const blur = Number.parseFloat(
-      cardRule.match(/box-shadow:\s*\S+\s+\S+\s+([\d.]+)px/)?.[1] ?? "",
-    );
+    // what must hold is the relationship. The value itself moved to --caret-card-lift on
+    // :host (EXC-1145) once the code card's two paint paths came to spend it too, so the
+    // card is pinned to the token and the relationship is pinned where the number lives.
+    expect(cardRule).toMatch(/box-shadow:\s*var\(--caret-card-lift\)/);
+    const lift = overrideDecls.match(/--caret-card-lift:\s*([^;]+);/)?.[1] ?? "";
+    const blur = Number.parseFloat(lift.match(/^\S+\s+\S+\s+([\d.]+)px/)?.[1] ?? "");
     expect(blur).toBeGreaterThan(0);
     expect(blur).toBeLessThan(12);
-    expect(cardRule).not.toContain("--shadow-card");
+    expect(lift).not.toContain("--shadow-card");
     expect(cardRule).not.toMatch(/border:\s*1px/);
   });
 
