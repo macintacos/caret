@@ -11,9 +11,9 @@ the wrong layer.
 
 - **`rules.md`** — repo-wide prose describing how the reviewer should *think*. Use it for
   anything unscopable (a rule about findings themselves) or carrying no useful severity.
-- **`config.json`'s `rules[]`** — a scoped, positive detector with an `id`, a `severity`,
-  and a `scope` glob, phrased "Flag the PR when …". Use it when the rule names a condition
-  a specific set of paths can be checked against.
+- **`config.json`'s `rules[]`** — a scoped, positive detector with an `id`, a `rule`
+  phrased "Flag the PR when …", a `severity`, and a `scope` array of globs. Use it when
+  the rule names a condition a specific set of paths can be checked against.
 
 Writing a section:
 
