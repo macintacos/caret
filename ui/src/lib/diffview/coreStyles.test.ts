@@ -1114,15 +1114,33 @@ describe("the fenced code-block scroll card (EXC-729)", () => {
 
   test("carries the same panel look as the per-row card so both read identically", () => {
     // A fitting block keeps the per-row card path; a scrolling block uses this wrapper. They
-    // share the fill, inset, rounding and — since EXC-1145 — elevation, so the two paths are
+    // share the fill, inset, rounding and elevation (EXC-1145), so the two paths are
     // visually indistinguishable.
     expect(cardBody).toMatch(
       /background-color:\s*color-mix\(in lab, var\(--paper-sunk\), var\(--ink\) \d+%\)/,
     );
     expect(cardBody).toContain("margin-inline:");
     expect(cardBody).toMatch(/border-radius:\s*var\(--radius\)/);
-    expect(cardBody).toMatch(/box-shadow:\s*var\(--caret-card-lift\)/);
-    expect(fittingRowBody).toMatch(/box-shadow:\s*var\(--caret-card-lift\)/);
+  });
+
+  test("every box-shadow on a carded code or table surface carries the lift (EXC-1145)", () => {
+    // box-shadow does not cascade additively, so ANY rule that out-ranks the base row rule
+    // and declares one erases the elevation. The banded-row rule is that trap today; the
+    // next such rule — a change tint if the plan surface ever stops being single-version, a
+    // focus ring, a drag affordance — would take the lift out silently. Pinning the whole
+    // SET rather than three named selectors is what makes a fifth rule opt in or argue here.
+    const shadowed = [...overrideDecls.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+      .map((rule) => ({ selector: rule[1] ?? "", body: rule[2] ?? "" }))
+      .filter(
+        ({ selector, body }) =>
+          /\[data-code-line\]|\[data-code-card\]|\[data-table-card\]/.test(selector) &&
+          body.includes("box-shadow:"),
+      );
+    // The two cards, the fitting row, and the row's banded state.
+    expect(shadowed).toHaveLength(4);
+    for (const { selector, body } of shadowed) {
+      expect(body, selector.trim().replace(/\s+/g, " ")).toContain("var(--caret-card-lift)");
+    }
   });
 
   test("floats at the table card's height, not one of its own (EXC-1145)", () => {
@@ -1596,9 +1614,9 @@ describe("tables (EXC-864)", () => {
     // blur, wider than the card's own --caret-card-inset, so it spills into the gutter
     // lane and reads as a halo on any palette whose sunk surface is light enough to
     // darken. Pinned as "blur no wider than the inset" rather than as a literal, since
-    // what must hold is the relationship. The value itself moved to --caret-card-lift on
-    // :host (EXC-1145) once the code card's two paint paths came to spend it too, so the
-    // card is pinned to the token and the relationship is pinned where the number lives.
+    // what must hold is the relationship. The value lives on --caret-card-lift at :host,
+    // shared with the code card's two paint paths (EXC-1145), so the card is pinned to the
+    // token and the relationship is pinned where the number lives.
     expect(cardRule).toMatch(/box-shadow:\s*var\(--caret-card-lift\)/);
     const lift = overrideDecls.match(/--caret-card-lift:\s*([^;]+);/)?.[1] ?? "";
     const blur = Number.parseFloat(lift.match(/^\S+\s+\S+\s+([\d.]+)px/)?.[1] ?? "");

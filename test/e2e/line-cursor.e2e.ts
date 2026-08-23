@@ -18,7 +18,7 @@
 import type { Page } from "@playwright/test";
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
-import { PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
+import { PLAN_SURFACE, planSurface, SEAM_STRIP } from "@test/e2e/support/source-view.ts";
 
 // Tall enough that G and the half-page jump actually scroll, with three headings
 // so ]]/[[ have distinct targets.
@@ -273,12 +273,6 @@ test("holding j keeps the cursor on-screen and follows it, never yanking it to t
   // at the top: the view scrolls WITH the cursor instead of jumping it upward.
   expect(await relTop(page)).toBeGreaterThan(0.4);
 });
-
-// The seam-fill strip, as Chromium serializes it: a shadow layer pulled left by the two
-// insets, with no blur and no spread. Matching the negative offset rather than "not none"
-// is what keeps this pointed at the strip — since EXC-1145 every code row carries a lift
-// as well, so a resting row's box-shadow is no longer the empty string's stand-in.
-const SEAM_STRIP = /-[\d.]+px 0px 0px 0px/;
 
 test("the focused-line cursor band paints the code row, not just its gutter", async ({
   daemon,

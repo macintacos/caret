@@ -25,6 +25,18 @@ import { expect, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 export const PLAN_SURFACE = ".diff-plan";
 
 /**
+ * A banded code row's gutter→content seam-fill strip, as Chromium serializes it: a shadow
+ * layer pulled left by the two insets, with no blur and no spread.
+ *
+ * Matching the strip's own negative offset is what keeps a "this row is banded" assertion
+ * pointed at the strip. Every code row carries the `--caret-card-lift` contact shadow
+ * (EXC-1145), so the presence of a box-shadow no longer separates a banded row from a
+ * resting one — and a length or "not none" comparison would pass on any second layer at
+ * all. Two specs make that claim, so the pattern lives here rather than in either.
+ */
+export const SEAM_STRIP = /-[\d.]+px 0px 0px 0px/;
+
+/**
  * Resolve once the seeded plan has rendered.
  *
  * Nearly every spec opens by waiting for the plan before it does anything else, so

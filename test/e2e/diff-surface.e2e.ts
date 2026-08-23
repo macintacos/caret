@@ -32,6 +32,7 @@ import {
   planSurface,
   revealGutterPlus,
   rowHeights,
+  SEAM_STRIP,
   settledMutations,
 } from "@test/e2e/support/source-view.ts";
 
@@ -875,10 +876,14 @@ Closing prose below both blocks.
 `;
 
 // The three surfaces, read from the live cascade. The two cards are boxes, so they are read
-// whole; a fitting block is rows, so its fill and lift come off a row and its rounding off
-// the block's own first row — an interior row meets no corner and rounds nothing, exactly as
-// an interior table row does not. The direct-child combinator is what separates the fitting
-// block from the overflowing one: the latter's rows moved inside the card.
+// whole; a fitting block is rows, so its fill and lift come off an INTERIOR row and its
+// rounding off the block's own first row. Interior matters: codeBlocks.ts tags every row of
+// a block data-code-line, fences included, and the first is also data-code-start — so the
+// unqualified selector would resolve to the same opening-fence row both reads want to tell
+// apart, and a regression that narrowed the lift to the two end rows (the ones already
+// carrying bespoke rounding and padding, so the tempting place to scope it) would pass. The
+// direct-child combinator is what separates the fitting block from the overflowing one: the
+// latter's rows moved inside the card.
 async function cardFamily(page: Page) {
   return page.evaluate(() => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
@@ -888,7 +893,9 @@ async function cardFamily(page: Page) {
       const s = getComputedStyle(el);
       return { shadow: s.boxShadow, fill: s.backgroundColor, radius: s.borderTopLeftRadius };
     };
-    const fittingRow = at("[data-content] > [data-line][data-code-line]");
+    const fittingRow = at(
+      "[data-content] > [data-line][data-code-line]:not([data-code-start]):not([data-code-end])",
+    );
     return {
       table: read(at("[data-content] > [data-table-card]")),
       card: read(at("[data-content] > [data-code-card]")),
@@ -915,17 +922,22 @@ test("the table card and both of the code block's paint paths float as one famil
   await planSurface(page);
   await expect(page.getByText("Closing prose below both blocks.")).toBeVisible();
 
-  // Precondition: all three surfaces are on the page. Without the card the overflow path
-  // would be absent and the family claim would cover two thirds of itself.
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          document.querySelector(".diffview")?.shadowRoot?.querySelectorAll("[data-code-card]")
-            .length ?? 0,
-      ),
-    )
-    .toBeGreaterThan(0);
+  // The gutter still labels the overflowing block one number per row (EXC-729's mirror), so
+  // a paint change cannot quietly cost the block its line numbers — the acceptance criterion
+  // the issue names, on the one fixture that carries a carded block AND a table.
+  const gutter = await gridCounts(page);
+  expect(gutter.rows).toBeGreaterThan(0);
+  expect(gutter.numbers).toBe(gutter.rows);
+
+  // Precondition: all three surfaces are on the page, and the code rows the loop reads are
+  // the ones the fitting fence owns. Without the card the overflow path would be absent and
+  // the family claim would cover two thirds of itself; these counts are also the barrier the
+  // loop re-asserts after each scheme flip.
+  const codeCards = page.locator(".diffview [data-content] > [data-code-card]");
+  const codeRows = page.locator(".diffview [data-content] > [data-line][data-code-line]");
+  await expect(codeCards).toHaveCount(1);
+  const fittingRowCount = await codeRows.count();
+  expect(fittingRowCount).toBeGreaterThan(2);
 
   // The scheme flips below are the point of this test, and caret runs every appearance
   // change as a whole-page wipe (EXC-730) — document.startViewTransition replaces the live
@@ -939,11 +951,14 @@ test("the table card and both of the code block's paint paths float as one famil
   for (const scheme of ["dark", "light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     await expect(page.locator("html")).toHaveAttribute("data-theme", scheme);
-    // Let the re-theme finish before reading or hovering anything. A scheme flip re-forces
-    // the highlighter and rebuilds the view's rows, and the library sets data-hovered off
-    // its own pointermove — so a pointer parked before the rebuild lands on a row that no
-    // longer exists, and never fires again because it has not moved.
-    await settledMutations(page);
+    // Wait for the re-theme's own output, not for a quiet period. A scheme flip re-forces the
+    // highlighter (DiffPlanView's readerOptions are reactive on themeId), which re-syncs the
+    // view and re-runs the tagging pass — so the rows below are torn down and rebuilt. The
+    // library sets data-hovered off its own pointermove, so a pointer parked before that
+    // rebuild lands on a row that no longer exists and never fires again. These two counts
+    // are what the pass restores, so they are what says it finished.
+    await expect(codeCards).toHaveCount(1);
+    await expect(codeRows).toHaveCount(fittingRowCount);
 
     const family = await cardFamily(page);
     expect(family.table, "table card").not.toBeNull();
@@ -966,6 +981,9 @@ test("the table card and both of the code block's paint paths float as one famil
     expect(Number.parseFloat(table.radius)).toBeGreaterThan(0);
     expect(card.radius, scheme).toBe(table.radius);
     expect(family.fittingRadius, scheme).toBe(table.radius);
+    // The rounding hangs off the block's END rows only, so the interior row read above meets
+    // no corner — the same shape an interior table row has.
+    expect(fitting.radius, scheme).toBe("0px");
 
     // A hovered fitting row keeps the lift. Its band rule sets box-shadow to paint the
     // gutter→content seam strip and outranks the base row rule, and box-shadow does not
@@ -979,8 +997,12 @@ test("the table card and both of the code block's paint paths float as one famil
     ).toHaveCount(1);
     const hovered = (await cardFamily(page)).fitting as NonNullable<typeof family.fitting>;
     expect(hovered.shadow, scheme).toContain(fitting.shadow);
-    expect(hovered.shadow.length, scheme).toBeGreaterThan(fitting.shadow.length);
+    expect(hovered.shadow, scheme).toMatch(SEAM_STRIP);
+
+    // Un-hover, and prove it took: the next iteration's resting read depends on it, and
+    // without this a stuck hover fails as an elevation mismatch instead of naming itself.
     await page.mouse.move(0, 0);
+    await expect(page.locator(".diffview [data-hovered]")).toHaveCount(0);
 
     seen.push(table.shadow);
   }

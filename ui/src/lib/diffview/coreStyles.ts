@@ -72,7 +72,8 @@ const CARET_OVERRIDES = `
      together, so they share one named value rather than coupled literals. */
   :host { --caret-seam: 20px; }
   [data-content] { padding-inline-start: var(--caret-seam); }
-  /* Three more of the same kind, one level down (EXC-865).
+  /* Three more of the same kind, one level down (EXC-865). A fourth, the lift those
+     surfaces float on, follows in its own block below.
 
      --caret-card-inset is how far the content column's own indented surfaces sit in
      from it — the fenced-code row and the code card both spend it — and
@@ -87,30 +88,33 @@ const CARET_OVERRIDES = `
      border-right on a gutter cell (2px, its --diffs-gap-style default, which caret
      never overrides). The band extension is positioned from the cell's PADDING box, so
      without adding the border back it lands 2px short of the card and leaves a
-     surface-coloured hairline in the seam it exists to fill.
-
-     --caret-card-lift is the elevation those same indented surfaces float on: the table
-     card (EXC-1136) and both of the fenced block's paint paths (EXC-1145). It is a
-     contact shadow and deliberately NOT --shadow-card. The shared token is built for
-     chrome that genuinely floats — popovers, alerts, the composer — and its far layer is
-     a 30px blur; these cards are inline in dense body text and inset only
-     --caret-card-inset from the gutter lane, so a blur wider than that inset spills into
-     the lane, and on a palette whose sunk surface is light enough to darken (catppuccin
-     mocha is the one that showed it) the spill reads as a soot halo rather than as a
-     lift. Sampling only caret-dark and caret-light hides this: their surfaces are near
-     enough to black that the same shadow resolves to nothing at all. 2px of blur, under
-     the card's own bottom edge, is all a panel this size can carry. The alpha splits by
-     scheme because the same black reads much heavier over a light ground than over a dark
-     one; the geometry does not, so there is one shape here and one number that moves.
-
-     It is a token for the same reason --table-rule is one a level down: a tuned number
-     written out four times is four numbers waiting to drift apart — and here the four
-     sites are the two cards a reader sees side by side, so drift between them is exactly
-     the "two elevation languages on one page" the shared value exists to prevent. */
+     surface-coloured hairline in the seam it exists to fill. */
   :host {
     --caret-card-inset: 0.75rem;
     --caret-read-max: 720px;
     --caret-gutter-divider: 2px;
+  }
+  /* The elevation those same indented surfaces float on (EXC-1136, EXC-1145): the table
+     card, and both of the fenced block's paint paths.
+
+     A contact shadow, deliberately NOT --shadow-card. The shared token is built for
+     chrome that genuinely floats — popovers, alerts, the composer — and its far layer
+     blurs 24–30px depending on scheme; these cards are inline in dense body text and
+     inset only --caret-card-inset from the gutter lane, so a blur wider than that inset
+     spills into the lane, and on a palette whose sunk surface is light enough to darken
+     (catppuccin mocha is the one that showed it) the spill reads as a soot halo rather
+     than as a lift. Sampling only caret-dark and caret-light hides this: their surfaces
+     are near enough to black that the same shadow resolves to nothing at all. 2px of
+     blur, under the card's own bottom edge, is all a panel this size can carry. The
+     alpha splits by scheme because the same black reads much heavier over a light ground
+     than over a dark one; the geometry does not, so there is one shape here and one
+     number that moves.
+
+     It is a token for the same reason --table-rule is one a level down: a tuned number
+     restated per rule is one number per rule waiting to drift apart. Here the sites span
+     the two cards a reader sees side by side, so drift between them is exactly the "two
+     elevation languages on one page" the shared value exists to prevent. */
+  :host {
     --caret-card-lift: 0 1px 2px light-dark(rgb(0 0 0 / 0.07), rgb(0 0 0 / 0.28));
   }
   /* The chip family's breathing room, stated once for every member that has any: the
@@ -246,16 +250,19 @@ const CARET_OVERRIDES = `
        card element at all — every row paints its own fill and end-row rounding — so there is
        no box to hang one shadow on, and the lift goes on every row instead. That renders the
        SAME picture, because an outer box-shadow is drawn only outside the element's own
-       border box: for 0 1px 2px, the top lobe's rect starts 1px inside the row and its 2px
-       fade tails to ~0 at the row's own top edge, so nothing escapes upward and no hairline
-       appears between rows; the bottom lobe lands under the next sibling's opaque fill (and,
-       at the last row, under the following prose row — --diffs-bg is var(--paper-sunk) and
-       every content row is opaque); only the side lobes reach open ground, in the
-       --caret-card-inset gutter lane, where they read as one continuous lift down the
-       block's edges. That side lobe is what a reader sees on the table card too.
+       border box: for 0 1px 2px, the top lobe's rect starts 1px inside the row, so what
+       escapes upward is the fade's far tail, two orders below the row band's own step — no
+       hairline reads between rows; the bottom lobe lands under the next sibling's opaque
+       fill (and, at the last row, under the following prose row — --diffs-bg is
+       var(--paper-sunk) and every content row is opaque), which is equally true of the card
+       path, so neither path shows a bottom lobe except where a block ends the document;
+       only the side lobes reach open ground, in the --caret-card-inset gutter lane, where
+       they read as one continuous lift down the block's edges. That side lobe is what a
+       reader sees on the table card too.
 
-       A selected row keeps the :not() carve-out and so has no lift, exactly as it has no
-       fill and no rounding — the amber band owns that row. */
+       A selected row's :not() carve-out takes the lift with the fill and the rounding — the
+       amber band owns that row. The banded-row rule far below restates this value:
+       box-shadow does not cascade additively, so both sites move together. */
     box-shadow: var(--caret-card-lift);
     /* EXC-729: the library renders source lines white-space: pre (never wrapping), so a line
        wider than the capped card would break out of the panel background. An overflowing block
