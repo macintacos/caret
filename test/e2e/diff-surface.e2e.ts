@@ -839,6 +839,160 @@ test("a drag selection still highlights when the plan has an overflowing code-bl
   expect(pageErrors.filter((m) => /renderSelection|children dont match/.test(m))).toEqual([]);
 });
 
+// EXC-1145: the two cards a rendered plan puts in front of a reader — the table's
+// (EXC-1136) and the fenced block's — must float at the same height, or the page reads as
+// two elevation languages rather than as one family. The block has TWO paint paths to the
+// table's one: an overflowing block is a single [data-code-card] box that takes the shadow
+// the way the table card does, while a FITTING block gets no card element at all and every
+// row carries the lift itself. Only an engine can say those two produce the same picture,
+// and only an engine resolves light-dark() at all — so this plan carries a table, a fitting
+// fence and an overflowing fence together, and the probe runs under both schemes.
+//
+// The sheet's own declarations are pinned in coreStyles.test.ts; what is claimed here is
+// that they reach the screen as one elevation.
+const CARD_FAMILY_PLAN = `# Card family
+
+| Component | Status |
+| --- | --- |
+| cache | warm |
+| queue | cold |
+
+A fitting fence, whose rows never earn a card:
+
+\`\`\`text
+fits inside the panel
+so does this one
+\`\`\`
+
+An overflowing fence, which codeBlockScroll.ts wraps in one:
+
+\`\`\`text
+${"const veryLongIdentifierThatRunsWellPastThePanelWidthToForceHorizontalOverflow = ".repeat(8)}0;
+short tail line
+\`\`\`
+
+Closing prose below both blocks.
+`;
+
+// The three surfaces, read from the live cascade. The two cards are boxes, so they are read
+// whole; a fitting block is rows, so its fill and lift come off a row and its rounding off
+// the block's own first row — an interior row meets no corner and rounds nothing, exactly as
+// an interior table row does not. The direct-child combinator is what separates the fitting
+// block from the overflowing one: the latter's rows moved inside the card.
+async function cardFamily(page: Page) {
+  return page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
+    const at = (selector: string) => sh?.querySelector(selector) as HTMLElement | null;
+    const read = (el: HTMLElement | null) => {
+      if (!el) return null;
+      const s = getComputedStyle(el);
+      return { shadow: s.boxShadow, fill: s.backgroundColor, radius: s.borderTopLeftRadius };
+    };
+    const fittingRow = at("[data-content] > [data-line][data-code-line]");
+    return {
+      table: read(at("[data-content] > [data-table-card]")),
+      card: read(at("[data-content] > [data-code-card]")),
+      fitting: read(fittingRow),
+      fittingRadius: read(at("[data-content] > [data-line][data-code-start]"))?.radius ?? null,
+      fittingLine: Number(fittingRow?.getAttribute("data-line") ?? Number.NaN),
+      // The row's OWN centre, not the view's: a code row is inset and capped at
+      // --caret-read-max, so on a wide viewport the view's horizontal centre lands past the
+      // row's right edge and a pointermove there hits the container instead. (A prose row
+      // spans the content column, which is why the hover tests above can use the view's.)
+      fittingCentreX: fittingRow
+        ? fittingRow.getBoundingClientRect().x + fittingRow.getBoundingClientRect().width / 2
+        : Number.NaN,
+    };
+  });
+}
+
+test("the table card and both of the code block's paint paths float as one family", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: CARD_FAMILY_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect(page.getByText("Closing prose below both blocks.")).toBeVisible();
+
+  // Precondition: all three surfaces are on the page. Without the card the overflow path
+  // would be absent and the family claim would cover two thirds of itself.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document.querySelector(".diffview")?.shadowRoot?.querySelectorAll("[data-code-card]")
+            .length ?? 0,
+      ),
+    )
+    .toBeGreaterThan(0);
+
+  // The scheme flips below are the point of this test, and caret runs every appearance
+  // change as a whole-page wipe (EXC-730) — document.startViewTransition replaces the live
+  // page with root-level snapshots for 0.45s, which no pointer can reach through and no
+  // mutation observer can see. withWipe() degrades to an instant swap under reduced motion,
+  // so asking for it here is the supported way to flip a scheme without the wipe in front
+  // of it. The wipe has its own coverage; what is under test here is what it wipes TO.
+  await page.emulateMedia({ reducedMotion: "reduce" });
+
+  const seen: string[] = [];
+  for (const scheme of ["dark", "light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", scheme);
+    // Let the re-theme finish before reading or hovering anything. A scheme flip re-forces
+    // the highlighter and rebuilds the view's rows, and the library sets data-hovered off
+    // its own pointermove — so a pointer parked before the rebuild lands on a row that no
+    // longer exists, and never fires again because it has not moved.
+    await settledMutations(page);
+
+    const family = await cardFamily(page);
+    expect(family.table, "table card").not.toBeNull();
+    expect(family.card, "code card").not.toBeNull();
+    expect(family.fitting, "fitting code row").not.toBeNull();
+    const table = family.table as NonNullable<typeof family.table>;
+    const card = family.card as NonNullable<typeof family.card>;
+    const fitting = family.fitting as NonNullable<typeof family.fitting>;
+
+    // One elevation across all three. Non-"none" first, so this cannot pass by all three
+    // having no shadow at all.
+    expect(table.shadow, scheme).not.toBe("none");
+    expect(card.shadow, scheme).toBe(table.shadow);
+    expect(fitting.shadow, scheme).toBe(table.shadow);
+
+    // And the rest of the panel look the elevation joins: one fill, one radius.
+    expect(table.fill, scheme).not.toBe("rgba(0, 0, 0, 0)");
+    expect(card.fill, scheme).toBe(table.fill);
+    expect(fitting.fill, scheme).toBe(table.fill);
+    expect(Number.parseFloat(table.radius)).toBeGreaterThan(0);
+    expect(card.radius, scheme).toBe(table.radius);
+    expect(family.fittingRadius, scheme).toBe(table.radius);
+
+    // A hovered fitting row keeps the lift. Its band rule sets box-shadow to paint the
+    // gutter→content seam strip and outranks the base row rule, and box-shadow does not
+    // cascade additively — so without the lift restated there the row would silently drop
+    // to flat under the pointer. The resting value must still be a substring: same lift,
+    // with the seam strip in front of it.
+    const y = await lineCenterY(page, family.fittingLine);
+    await page.mouse.move(family.fittingCentreX, y);
+    await expect(
+      page.locator(`.diffview [data-content] [data-line="${family.fittingLine}"][data-hovered]`),
+    ).toHaveCount(1);
+    const hovered = (await cardFamily(page)).fitting as NonNullable<typeof family.fitting>;
+    expect(hovered.shadow, scheme).toContain(fitting.shadow);
+    expect(hovered.shadow.length, scheme).toBeGreaterThan(fitting.shadow.length);
+    await page.mouse.move(0, 0);
+
+    seen.push(table.shadow);
+  }
+
+  // light-dark() actually resolved, in both directions. The lift's alpha splits by scheme
+  // (the same black reads much heavier over a light ground), so a value that never moved
+  // would mean the function fell back rather than resolving — and the round trip back to
+  // dark proves the first reading was not a one-way stamp.
+  expect(seen[1]).not.toBe(seen[0]);
+  expect(seen[2]).toBe(seen[0]);
+});
+
 // A plan with a fenced code block: heading (1), blank (2), prose (3), blank (4),
 // opening fence (5), two code lines (6–7), closing fence (8), blank (9), prose (10).
 const CODE_PLAN = `# Code Plan
