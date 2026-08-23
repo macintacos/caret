@@ -56,13 +56,14 @@ right.
 ## Trace before you flag
 
 An unfounded finding costs the author a round of reading to disprove, so confirm the
-precondition a finding rests on actually holds on the path the code takes.
+precondition a finding rests on holds on the path the code actually takes.
 
-Resource leaks are the recurring case. Before flagging one, trace the execution path to
-confirm a leakable resource — subprocess, file handle, socket — is live at the point the
-early-exit branch fires. If the timed-out or rejected branch could only have reached an
-async acquisition step, not yet having spawned or opened anything, there is nothing to
-reclaim and the concern is unfounded.
+Resource leaks are the recurring case. Before flagging one, trace the path and ask who
+owns the resource — subprocess, file handle, socket — once the early-exit branch fires. A
+branch that exits before the acquiring call was ever made has nothing to reclaim, and the
+concern is unfounded. But losing a `Promise.race` does not cancel the work it raced: the
+abandoned continuation runs on and still acquires, so ask what reaps the handle that
+arrives afterwards. If nothing does, the leak is real — write it.
 
 ## Where the rules live
 
