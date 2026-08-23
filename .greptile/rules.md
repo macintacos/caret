@@ -53,6 +53,17 @@ ordering, unused variables, missing semicolons, line length, markdown style, or 
 class canonicity. Review what a tool cannot: intent, structure, and whether the change is
 right.
 
+## Trace before you flag
+
+An unfounded finding costs the author a round of reading to disprove, so confirm the
+precondition a finding rests on actually holds on the path the code takes.
+
+Resource leaks are the recurring case. Before flagging one, trace the execution path to
+confirm a leakable resource — subprocess, file handle, socket — is live at the point the
+early-exit branch fires. If the timed-out or rejected branch could only have reached an
+async acquisition step, not yet having spawned or opened anything, there is nothing to
+reclaim and the concern is unfounded.
+
 ## Where the rules live
 
 The rules of the road for this codebase live in `doc/agents/*.md`, one file per area, and
