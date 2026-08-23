@@ -1,11 +1,17 @@
 import { afterEach, expect, test } from "bun:test";
-import { closeSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 
 import { setupTempStateDir } from "@test/support/env.ts";
 import { ndjsonRecords } from "@test/support/ndjson.ts";
 import { daemonStderrLogFile, ensureLogsDir, logArchiveDir, logFile } from "@/config/paths.ts";
 import { DEFAULTS } from "@/config/settings.ts";
-import { ensureDaemon, openDaemonStderr, retireDaemon } from "@/daemon/lifecycle.ts";
+import {
+  DAEMON_CWD,
+  ensureDaemon,
+  openDaemonStderr,
+  retireDaemon,
+  spawnDaemon,
+} from "@/daemon/lifecycle.ts";
 import { setLogLevel } from "@/lib/log.ts";
 
 // Point the state dir at a throwaway temp dir so the debug-level instrumentation
@@ -454,4 +460,50 @@ test("openDaemonStderr rotates an oversized stderr log before reopening it", () 
   expect(readdirSync(logArchiveDir())).toEqual([
     expect.stringMatching(/^daemon-stderr-.*\.log\.gz$/),
   ]);
+});
+
+// ---- daemon cwd (EXC-1155) ----
+
+// A Bun process whose cwd has been unlinked cannot posix_spawn anything at all,
+// absolute paths included — the failure that stranded daemons started inside an
+// exec worktree later torn down with its PR. Run in a subprocess because it
+// chdir()s into a directory it then deletes. Only the positive direction is
+// asserted: that the *unset*-cwd spawn fails is a Bun behaviour unconfirmed off
+// macOS, while an explicit live cwd surviving is the contract DAEMON_CWD buys.
+const DEAD_CWD_PROBE = `
+const { existsSync, mkdtempSync, rmSync } = require("node:fs");
+const { tmpdir } = require("node:os");
+const { join } = require("node:path");
+const dir = mkdtempSync(join(tmpdir(), "caret-dead-cwd-"));
+process.chdir(dir);
+rmSync(dir, { recursive: true, force: true });
+// Fail loudly rather than passing vacuously if the cwd outlived the unlink.
+if (existsSync(dir)) process.exit(3);
+const proc = Bun.spawn([process.execPath, "--version"], { cwd: process.argv[1], stdout: "ignore" });
+process.exit(await proc.exited);
+`;
+
+test("a spawn from DAEMON_CWD survives the spawning process losing its own cwd", async () => {
+  const probe = Bun.spawn([process.execPath, "-e", DEAD_CWD_PROBE, DAEMON_CWD], {
+    stdio: ["ignore", "ignore", "ignore"],
+  });
+  expect(await probe.exited).toBe(0);
+});
+
+test("spawnDaemon pins the daemon's cwd to DAEMON_CWD", () => {
+  const calls: Array<{ cwd?: string; stdio?: unknown[] }> = [];
+  const spawn = ((_argv: string[], opts: { cwd?: string; stdio?: unknown[] }) => {
+    calls.push(opts);
+    return { unref: () => {} };
+  }) as unknown as typeof Bun.spawn;
+
+  spawnDaemon(DEFAULTS, spawn);
+
+  expect(calls).toHaveLength(1);
+  expect(calls[0]?.cwd).toBe(DAEMON_CWD);
+  // The pin only buys anything if that directory outlives every project dir.
+  expect(existsSync(DAEMON_CWD)).toBe(true);
+  // openDaemonStderr handed the fake a real fd, as the sibling tests above do.
+  const out = calls[0]?.stdio?.[1];
+  if (typeof out === "number") closeSync(out);
 });

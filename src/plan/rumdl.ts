@@ -171,14 +171,34 @@ async function installedVersion(bin: string): Promise<string | null> {
   }
 }
 
-// Coalesces concurrent installs: the first caller kicks the download off, callers
-// arriving while it is in flight await the same promise instead of racing a second
-// fetch (they would all still see the old binary, since downloadRumdl only renames
-// the new one into place at the end). Cleared once it settles — the binary is on
-// disk by then, so the version check below is the gate from that point on, and a
-// transient failure (offline, GitHub rate-limit) retries on the next call rather
-// than poisoning every later one for the life of the daemon.
-let inFlightInstall: Promise<string> | undefined;
+/** How long a failed acquisition suppresses the next install attempt. */
+export const RUMDL_RETRY_COOLDOWN_MS = 10 * 60_000;
+
+/** The mutable acquisition state `ensureRumdl` owns.
+ *
+ * `inFlight` coalesces concurrent installs: the first caller kicks the download
+ * off, callers arriving while it is in flight await the same promise instead of
+ * racing a second fetch (they would all still see the old binary, since
+ * downloadRumdl only renames the new one into place at the end). Cleared once it
+ * settles — the binary is on disk by then, so the version check is the gate from
+ * that point on.
+ *
+ * A failure instead sets `cooldownUntil` (EXC-1155): while acquisition is broken
+ * — offline, GitHub rate-limit, a spawn the daemon cannot perform — retrying per
+ * call re-fetches ~5 MB on the critical path of every plan and throws anyway. A
+ * window rather than a permanent memo, so a transient failure still recovers
+ * without restarting the daemon; it gates only the install, so a cached binary
+ * reporting RUMDL_VERSION stays reusable throughout.
+ *
+ * Injectable because bun shares module state across every test file in a run: a
+ * suite drives a fresh window rather than inheriting one an unrelated file left
+ * behind. */
+export interface RumdlAcquisition {
+  inFlight?: Promise<string>;
+  cooldownUntil: number;
+}
+
+const acquisition: RumdlAcquisition = { cooldownUntil: 0 };
 
 /** Ensure rumdl (binary + config) is present under caret's state dir, and is the
  * version caret pinned. Returns the resolved paths plus whether this call
@@ -193,10 +213,19 @@ let inFlightInstall: Promise<string> | undefined;
  * out of that thesis: it is taken only when it too reports `RUMDL_VERSION`, and
  * anything else there falls through to the pinned acquisition below.
  *
+ * A rejected install opens a `RUMDL_RETRY_COOLDOWN_MS` window: calls inside it
+ * reject with "install on cooldown after a recent failure" without re-attempting
+ * the download, so this can now reject having never called `install`. The window
+ * gates only the install — an override or cached binary reporting
+ * `RUMDL_VERSION` still returns normally throughout. `now` and `state` are
+ * injected so a suite can drive that window without sleeping through it.
+ *
  * The config is written idempotently on every call so it always tracks the
  * current state dir. */
 export async function ensureRumdl(
   install: RumdlInstaller = installPinnedRumdl,
+  now: () => number = Date.now,
+  state: RumdlAcquisition = acquisition,
 ): Promise<{ bin: string; config: string; installed: boolean }> {
   ensureStateDir(rumdlDir());
   const config = rumdlConfig();
@@ -210,10 +239,23 @@ export async function ensureRumdl(
   const bin = rumdlBin();
   if ((await installedVersion(bin)) === RUMDL_VERSION) return { bin, config, installed: false };
 
-  inFlightInstall ??= install(bin).finally(() => {
-    inFlightInstall = undefined;
-  });
-  return { bin: await inFlightInstall, config, installed: true };
+  if (now() < state.cooldownUntil) {
+    throw new Error("rumdl: install on cooldown after a recent failure");
+  }
+  if (!state.inFlight) {
+    state.inFlight = install(bin)
+      .catch((err) => {
+        state.cooldownUntil = now() + RUMDL_RETRY_COOLDOWN_MS;
+        throw err;
+      })
+      .finally(() => {
+        state.inFlight = undefined;
+      });
+  }
+  // Read the slot before awaiting it: `.finally` clears it once the install
+  // settles, so a re-read after the await would yield undefined.
+  const pending = state.inFlight;
+  return { bin: await pending, config, installed: true };
 }
 
 /** The default `doFormat` for formatPlanMarkdown: reflow `text` through rumdl's
