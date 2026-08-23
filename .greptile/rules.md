@@ -53,6 +53,18 @@ ordering, unused variables, missing semicolons, line length, markdown style, or 
 class canonicity. Review what a tool cannot: intent, structure, and whether the change is
 right.
 
+## Trace before you flag
+
+An unfounded finding costs the author a round of reading to disprove, so confirm the
+precondition a finding rests on holds on the path the code actually takes.
+
+Resource leaks are the recurring case. Before flagging one, trace the path and ask who
+owns the resource — subprocess, file handle, socket — once the early-exit branch fires. A
+branch that exits before the acquiring call was ever made has nothing to reclaim, and the
+concern is unfounded. But losing a `Promise.race` does not cancel the work it raced: the
+abandoned continuation runs on and still acquires, so ask what reaps the handle that
+arrives afterwards. If nothing does, the leak is real — write it.
+
 ## Where the rules live
 
 The rules of the road for this codebase live in `doc/agents/*.md`, one file per area, and
