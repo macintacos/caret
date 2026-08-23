@@ -242,6 +242,21 @@ const CARET_OVERRIDES = `
     max-width: var(--caret-read-max);
     padding-inline-start: 2ch;
     padding-inline-end: 0.75rem;
+    /* EXC-1145: the same lift the overflowing block's card carries. A fitting block gets no
+       card element at all — every row paints its own fill and end-row rounding — so there is
+       no box to hang one shadow on, and the lift goes on every row instead. That renders the
+       SAME picture, because an outer box-shadow is drawn only outside the element's own
+       border box: for 0 1px 2px, the top lobe's rect starts 1px inside the row and its 2px
+       fade tails to ~0 at the row's own top edge, so nothing escapes upward and no hairline
+       appears between rows; the bottom lobe lands under the next sibling's opaque fill (and,
+       at the last row, under the following prose row — --diffs-bg is var(--paper-sunk) and
+       every content row is opaque); only the side lobes reach open ground, in the
+       --caret-card-inset gutter lane, where they read as one continuous lift down the
+       block's edges. That side lobe is what a reader sees on the table card too.
+
+       A selected row keeps the :not() carve-out and so has no lift, exactly as it has no
+       fill and no rounding — the amber band owns that row. */
+    box-shadow: var(--caret-card-lift);
     /* EXC-729: the library renders source lines white-space: pre (never wrapping), so a line
        wider than the capped card would break out of the panel background. An overflowing block
        is wrapped in a scroll card (codeBlockScroll.ts + the [data-code-card] rules below) that
@@ -1014,6 +1029,10 @@ const CARET_OVERRIDES = `
     margin-inline: var(--caret-card-inset);
     background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
     border-radius: var(--radius);
+    /* EXC-1145: the table card's elevation, quoted from the shared token. An element's
+       OUTER shadow is not clipped by its own overflow, so the scroll container above is
+       irrelevant here — the lift paints outside the card either way. */
+    box-shadow: var(--caret-card-lift);
   }
   /* The library paints every line with its own --diffs-bg, so clear it inside the card for
      the darker panel fill to show through; keep the code's 2ch inset and end padding. A
@@ -1637,8 +1656,14 @@ const CARET_OVERRIDES = `
      Fitting-block rows only ([data-content] > …); an overflowing block's card owns
      its own inset. Yields to the amber selection via the shared :not guard. */
   [data-content] > [data-line][data-code-line]:is([data-hovered], [data-caret-cursor]):not([data-selected-line]) {
-    box-shadow: calc(-1 * (var(--caret-seam) + var(--caret-card-inset))) 0 0 0
-      color-mix(in lab, var(--paper-sunk), var(--ink) 9%);
+    /* The lift (EXC-1145) is restated here because this rule outranks the base row rule and
+       box-shadow does not cascade additively — without it a hovered code row silently drops
+       its elevation. The seam strip stays FIRST so it paints over the lift's 1px left lobe:
+       on a banded row the block's left edge should read as band, not as shadow. */
+    box-shadow:
+      calc(-1 * (var(--caret-seam) + var(--caret-card-inset))) 0 0 0
+        color-mix(in lab, var(--paper-sunk), var(--ink) 9%),
+      var(--caret-card-lift);
   }
 
   /* EXC-664: the drag-to-comment selection reads as ONE continuous amber band

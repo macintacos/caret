@@ -1091,6 +1091,10 @@ describe("the task-list checkbox (EXC-860)", () => {
 describe("the fenced code-block scroll card (EXC-729)", () => {
   const cardBody =
     overrideDecls.match(/\[data-content\]\s*>\s*\[data-code-card\]\s*\{[^}]*\}/)?.[0] ?? "";
+  const fittingRowBody =
+    overrideDecls.match(
+      /\[data-content\]\s*>\s*\[data-line\]\[data-code-line\]:not\(\[data-selected-line\]\)\s*\{[^}]*\}/,
+    )?.[0] ?? "";
 
   test("wraps the block in a single subgrid horizontal scroll container", () => {
     expect(cardBody).toMatch(/display:\s*grid/);
@@ -1110,12 +1114,41 @@ describe("the fenced code-block scroll card (EXC-729)", () => {
 
   test("carries the same panel look as the per-row card so both read identically", () => {
     // A fitting block keeps the per-row card path; a scrolling block uses this wrapper. They
-    // share the fill, inset, and rounding so the two paths are visually indistinguishable.
+    // share the fill, inset, rounding and — since EXC-1145 — elevation, so the two paths are
+    // visually indistinguishable.
     expect(cardBody).toMatch(
       /background-color:\s*color-mix\(in lab, var\(--paper-sunk\), var\(--ink\) \d+%\)/,
     );
     expect(cardBody).toContain("margin-inline:");
     expect(cardBody).toMatch(/border-radius:\s*var\(--radius\)/);
+    expect(cardBody).toMatch(/box-shadow:\s*var\(--caret-card-lift\)/);
+    expect(fittingRowBody).toMatch(/box-shadow:\s*var\(--caret-card-lift\)/);
+  });
+
+  test("floats at the table card's height, not one of its own (EXC-1145)", () => {
+    // The two cards on a rendered plan are the table's and this one. Asserted as equality
+    // against the table card's own declaration rather than as a literal: two elevations a
+    // hair apart read as a mistake, which is the whole reason both spend one token.
+    const tableCard =
+      overrideDecls.match(/\[data-content\]\s*>\s*\[data-table-card\]\s*\{[^}]*\}/)?.[0] ?? "";
+    const lift = (rule: string) => rule.match(/box-shadow:\s*([^;]+);/)?.[1];
+    expect(lift(tableCard)).toBeTruthy();
+    expect(lift(cardBody)).toBe(lift(tableCard));
+  });
+
+  test("keeps the lift on a hovered or cursored fitting row (EXC-1145)", () => {
+    // The band rule sets box-shadow to paint the gutter→content seam strip, and it outranks
+    // the base row rule. box-shadow does not cascade additively, so without the lift restated
+    // here a hovered code row silently drops it. Seam strip first: on a banded row the
+    // block's left edge should read as band, not as shadow.
+    const bandedRowBody =
+      overrideDecls.match(
+        /\[data-content\]\s*>\s*\[data-line\]\[data-code-line\]:is\(\[data-hovered\], \[data-caret-cursor\]\):not\(\[data-selected-line\]\)\s*\{[^}]*\}/,
+      )?.[0] ?? "";
+    const shadow = bandedRowBody.match(/box-shadow:\s*([^;]+);/)?.[1] ?? "";
+    expect(shadow).toContain("calc(");
+    expect(shadow).toContain("var(--caret-card-lift)");
+    expect(shadow.indexOf("calc(")).toBeLessThan(shadow.indexOf("var(--caret-card-lift)"));
   });
 
   test("clips a not-yet-wrapped row so it can't break out before the card wraps it", () => {
@@ -1123,12 +1156,8 @@ describe("the fenced code-block scroll card (EXC-729)", () => {
     // block (or if the script never runs): the over-wide line clips at the card's right edge
     // instead of spilling over the surface. Inline axis only, so the block stays visible and
     // the EXC-692 fence-glyph nudges are not shaved.
-    const rowBody =
-      overrideDecls.match(
-        /\[data-content\]\s*>\s*\[data-line\]\[data-code-line\]:not\(\[data-selected-line\]\)\s*\{[^}]*\}/,
-      )?.[0] ?? "";
-    expect(rowBody).toMatch(/overflow-x:\s*clip/);
-    expect(rowBody).not.toMatch(/overflow-x:\s*(?:auto|scroll)/);
+    expect(fittingRowBody).toMatch(/overflow-x:\s*clip/);
+    expect(fittingRowBody).not.toMatch(/overflow-x:\s*(?:auto|scroll)/);
   });
 });
 
