@@ -114,8 +114,8 @@ test("a format that outruns its budget returns the raw text with one warn", asyn
 
 test("a format that finishes inside its budget returns formatted text and logs nothing", async () => {
   const { recs, log } = recordingLog();
-  const prompt = async (text: string) => `${text}formatted\n`;
-  const out = await formatPlanMarkdown(LONG_PROSE, log, prompt, 20);
+  const quick = async (text: string) => `${text}formatted\n`;
+  const out = await formatPlanMarkdown(LONG_PROSE, log, quick, 20);
   expect(out).toBe(`${LONG_PROSE}formatted\n`);
   expect(recs).toEqual([]);
 });

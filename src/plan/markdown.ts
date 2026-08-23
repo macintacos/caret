@@ -3,8 +3,8 @@
 // the canonical representation that display, line anchors, and feedback all
 // reference, so stored versions are never reformatted afterward. Formatting is
 // best-effort and bounded: oversized, unparseable, or over-budget input is
-// stored raw with one warn — a plan is never lost to, or delayed by, the
-// formatter.
+// stored raw with one warn — a plan is never lost to the formatter, and never
+// held by it past FORMAT_BUDGET_MS.
 //
 // The formatter is rumdl (src/plan/rumdl.ts), downloaded into caret's state dir
 // on first use: it reflows prose to caret's 90-col MD013 convention, leaves
@@ -19,13 +19,20 @@ import { rumdlFormatPlan } from "@/plan/rumdl.ts";
 /** Inputs above this byte count skip formatting and are stored raw. */
 export const MAX_FORMAT_BYTES = 1024 * 1024;
 
-/** A format that outruns this deadline is abandoned and the input stored raw. */
+/** A format that outruns this deadline is abandoned and the input stored raw.
+ * A backstop, not a target: a typical plan reflows in ~50ms and an input at
+ * MAX_FORMAT_BYTES in ~0.6s, so the budget is roughly 3x the worst legal input.
+ * It exists for an acquisition that has to download rumdl first, not for
+ * formatting itself — tighten it against those numbers, not against a guess. */
 export const FORMAT_BUDGET_MS = 2000;
 
 /**
  * Formats plan markdown into its canonical stored form (rumdl's 90-col reflow).
- * Never throws and never blocks past `budgetMs`: oversized, unparseable, or
- * over-budget input comes back unchanged, with a single warn on `log`.
+ * Never throws and never blocks past `budgetMs` (default FORMAT_BUDGET_MS):
+ * oversized, unparseable, or over-budget input comes back unchanged, with a
+ * single warn on `log`. The deadline bounds the caller, not the work — an
+ * abandoned format runs on in the background, which is what lets a first plan
+ * that waited on a download store raw while every plan after it formats.
  * `doFormat` is injectable so tests can pin the failure envelope
  * deterministically.
  */

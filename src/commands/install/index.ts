@@ -215,7 +215,10 @@ async function prewarmStep(repoDir: string, deps: InstallDeps, ui: InstallUI): P
  * caret's own path, replacing an older binary a previous caret left there, so plans are
  * always reflowed by the rumdl caret expects. Doing it here is what keeps the first plan
  * off the download latency — the daemon would otherwise fetch it mid-review — so a
- * failure is a warning, not a failed install: that lazy path still covers it.
+ * failure is a warning, not a failed install: the lazy path still keeps the plan from
+ * being lost, storing it raw while acquisition is unavailable. It does not retry straight
+ * away, though — a failed install cools the daemon's own acquisition down for
+ * RUMDL_RETRY_COOLDOWN_MS before it tries again.
  * Uninstalls skip it (nothing is being set up), and dry-run only says it would run. */
 async function rumdlStep(
   opts: { uninstall: boolean; dryRun: boolean },
@@ -240,7 +243,9 @@ async function rumdlStep(
         `rumdl ${RUMDL_VERSION} ${installed ? "installed" : "already present"} at ${bin}`,
     );
   } catch (e) {
-    ui.warn(`Could not install rumdl (${errorMessage(e)}) — caret will retry on your first plan.`);
+    ui.warn(
+      `Could not install rumdl (${errorMessage(e)}) — plans are stored unformatted until it installs.`,
+    );
   }
 }
 

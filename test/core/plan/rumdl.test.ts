@@ -19,6 +19,7 @@ import {
   ensureRumdl,
   RUMDL_RETRY_COOLDOWN_MS,
   RUMDL_VERSION,
+  type RumdlAcquisition,
   rumdlAsset,
   rumdlFormatPlan,
 } from "@/plan/rumdl.ts";
@@ -216,22 +217,22 @@ test("ensureRumdl ignores a rumdl on PATH and installs to caret's own location",
 
 // --- Failed-acquisition cooldown (EXC-1155) ---------------------------------
 // A broken acquisition costs a ~5 MB download per plan if every call retries it.
+// Each case injects its own acquisition state: bun shares module state across
+// every test file in a run, so the process-wide one can already hold a real-clock
+// cooldown set by any suite that formatted a plan without rumdl available.
 
-/** The origin of one test's fake timeline, far past any cooldown an earlier test
- * left in ensureRumdl's module state — so each case reads its own clock only. */
-let lastClockOrigin = 0;
-function clockOrigin(): number {
-  lastClockOrigin += 10 * RUMDL_RETRY_COOLDOWN_MS;
-  return lastClockOrigin;
+/** A fresh acquisition state and a stopped clock, so a case reads only its own. */
+function freshAcquisition(): { state: RumdlAcquisition; t0: number } {
+  return { state: { cooldownUntil: 0 }, t0: 1_000 };
 }
 
 test("ensureRumdl refuses to reinstall during the cooldown after a failed install", async () => {
   await withoutOverride(async () => {
     const { calls, install } = failingInstaller();
-    const t0 = clockOrigin();
+    const { state, t0 } = freshAcquisition();
 
-    await expect(ensureRumdl(install, () => t0)).rejects.toThrow(/download failed/);
-    await expect(ensureRumdl(install, () => t0)).rejects.toThrow(/cooldown/);
+    await expect(ensureRumdl(install, () => t0, state)).rejects.toThrow(/download failed/);
+    await expect(ensureRumdl(install, () => t0, state)).rejects.toThrow(/cooldown/);
 
     expect(calls).toEqual([rumdlBin()]);
   });
@@ -240,12 +241,12 @@ test("ensureRumdl refuses to reinstall during the cooldown after a failed instal
 test("ensureRumdl retries the install once the cooldown has expired", async () => {
   await withoutOverride(async () => {
     const { calls, install } = failingInstaller();
-    const t0 = clockOrigin();
+    const { state, t0 } = freshAcquisition();
 
-    await expect(ensureRumdl(install, () => t0)).rejects.toThrow(/download failed/);
-    await expect(ensureRumdl(install, () => t0 + RUMDL_RETRY_COOLDOWN_MS + 1)).rejects.toThrow(
-      /download failed/,
-    );
+    await expect(ensureRumdl(install, () => t0, state)).rejects.toThrow(/download failed/);
+    await expect(
+      ensureRumdl(install, () => t0 + RUMDL_RETRY_COOLDOWN_MS + 1, state),
+    ).rejects.toThrow(/download failed/);
 
     expect(calls).toEqual([rumdlBin(), rumdlBin()]);
   });
@@ -254,14 +255,36 @@ test("ensureRumdl retries the install once the cooldown has expired", async () =
 test("ensureRumdl still reuses a pinned cached binary while the cooldown is active", async () => {
   await withoutOverride(async () => {
     const { install } = failingInstaller();
-    const t0 = clockOrigin();
-    await expect(ensureRumdl(install, () => t0)).rejects.toThrow(/download failed/);
+    const { state, t0 } = freshAcquisition();
+    await expect(ensureRumdl(install, () => t0, state)).rejects.toThrow(/download failed/);
 
     await fakeRumdlAt(rumdlBin(), RUMDL_VERSION);
-    const { bin, installed } = await ensureRumdl(install, () => t0);
+    const { bin, installed } = await ensureRumdl(install, () => t0, state);
 
     expect(installed).toBe(false);
     expect(bin).toBe(rumdlBin());
+  });
+});
+
+// The .catch that opens the cooldown sits inside the coalescing chain, so what a
+// second caller already awaiting the install sees is the interesting case: the
+// installer's own error, not the cooldown, which only gates arrivals after settle.
+test("a failed install rejects both coalesced callers before any sees the cooldown", async () => {
+  await withoutOverride(async () => {
+    const { calls, install } = failingInstaller();
+    const { state, t0 } = freshAcquisition();
+
+    const both = await Promise.allSettled([
+      ensureRumdl(install, () => t0, state),
+      ensureRumdl(install, () => t0, state),
+    ]);
+
+    expect(both.map((r) => r.status)).toEqual(["rejected", "rejected"]);
+    for (const r of both) {
+      expect(String((r as PromiseRejectedResult).reason)).toMatch(/download failed/);
+    }
+    expect(calls).toEqual([rumdlBin()]);
+    await expect(ensureRumdl(install, () => t0, state)).rejects.toThrow(/cooldown/);
   });
 });
 

@@ -208,9 +208,15 @@ How that plays out:
   that won't run, is replaced.
 - **Install warms it; the first plan is the fallback.** `caret install` runs that check at
   install time so the first plan doesn't pay the download, and a failure there is a
-  warning rather than a failed install — the first plan retries.
+  warning rather than a failed install — a later plan retries.
+- **A failed acquisition backs off for ten minutes.** Retrying every plan would re-fetch
+  several megabytes on the path that creates your review and fail again anyway, so a
+  failed download suppresses the next attempt for ten minutes; plans submitted inside that
+  window are stored unformatted. Fix the cause (connectivity, a rate limit) and the next
+  attempt after the window succeeds — or run `caret install` to retry immediately.
 - **Formatting never loses a plan.** If a plan can't be formatted (rumdl missing, offline,
-  or an unsupported platform), caret stores it unchanged and logs one warning.
+  an unsupported platform, or formatting outran its two-second budget), caret stores it
+  unchanged and logs one warning.
 - **`CARET_RUMDL_BIN` opts out of the download, not the pin.** Point it at a rumdl of your
   own and caret uses that instead of downloading — but only when it reports the pinned
   version too; anything else falls back to the download.

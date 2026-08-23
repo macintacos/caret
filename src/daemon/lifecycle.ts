@@ -258,11 +258,14 @@ export function openDaemonStderr(s: Settings): number | "ignore" {
  * exec worktree torn down after its PR merged left daemons unable to
  * `Bun.spawn` anything at all — absolute paths included — because posix_spawn
  * needs a live cwd (EXC-1155). Root is chosen because it cannot be unlinked and
- * needs no `ensureStateDir` first; nothing resolves against it either way, since
- * every caret path is absolute from `stateDir()`. */
+ * needs no `ensureStateDir` first. Nothing meaningful resolves against it: every
+ * caret path is absolute from `stateDir()`, and the one path arriving from
+ * outside — the agent's `planFilePath` — is absolute by that contract and
+ * guarded to an existing `.md` file before any write. */
 export const DAEMON_CWD = "/";
 
-/** Spawn the detached daemon. `spawn` is injected so the cwd pin above stays
+/** Spawn the detached daemon, pinned to `DAEMON_CWD` and with stdout/stderr
+ * redirected to daemon-stderr.log. `spawn` is injected so the cwd pin stays
  * assertable without starting a real daemon. */
 export function spawnDaemon(s: Settings, spawn: typeof Bun.spawn = Bun.spawn): void {
   const out = openDaemonStderr(s);

@@ -471,12 +471,14 @@ test("openDaemonStderr rotates an oversized stderr log before reopening it", () 
 // asserted: that the *unset*-cwd spawn fails is a Bun behaviour unconfirmed off
 // macOS, while an explicit live cwd surviving is the contract DAEMON_CWD buys.
 const DEAD_CWD_PROBE = `
-const { mkdtempSync, rmSync } = require("node:fs");
+const { existsSync, mkdtempSync, rmSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const dir = mkdtempSync(join(tmpdir(), "caret-dead-cwd-"));
 process.chdir(dir);
 rmSync(dir, { recursive: true, force: true });
+// Fail loudly rather than passing vacuously if the cwd outlived the unlink.
+if (existsSync(dir)) process.exit(3);
 const proc = Bun.spawn([process.execPath, "--version"], { cwd: process.argv[1], stdout: "ignore" });
 process.exit(await proc.exited);
 `;
