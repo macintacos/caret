@@ -17,6 +17,7 @@ import { rumdlBin } from "@/config/paths.ts";
 import {
   downloadRumdl,
   ensureRumdl,
+  RUMDL_RETRY_COOLDOWN_MS,
   RUMDL_VERSION,
   rumdlAsset,
   rumdlFormatPlan,
@@ -138,6 +139,19 @@ function recordingInstaller(): { calls: string[]; install: (p: string) => Promis
   };
 }
 
+/** An installer that always fails, and records where it was asked to install —
+ * the offline/rate-limited acquisition the cooldown exists for. */
+function failingInstaller(): { calls: string[]; install: (p: string) => Promise<string> } {
+  const calls: string[] = [];
+  return {
+    calls,
+    install: async (p) => {
+      calls.push(p);
+      throw new Error("rumdl: download failed (offline)");
+    },
+  };
+}
+
 test("ensureRumdl replaces a cached binary that is not the pinned version", async () => {
   await withoutOverride(async () => {
     await fakeRumdlAt(rumdlBin(), "0.2.30");
@@ -197,6 +211,57 @@ test("ensureRumdl ignores a rumdl on PATH and installs to caret's own location",
     } finally {
       process.env.PATH = prevPath;
     }
+  });
+});
+
+// --- Failed-acquisition cooldown (EXC-1155) ---------------------------------
+// A broken acquisition costs a ~5 MB download per plan if every call retries it.
+
+/** The origin of one test's fake timeline, far past any cooldown an earlier test
+ * left in ensureRumdl's module state — so each case reads its own clock only. */
+let lastClockOrigin = 0;
+function clockOrigin(): number {
+  lastClockOrigin += 10 * RUMDL_RETRY_COOLDOWN_MS;
+  return lastClockOrigin;
+}
+
+test("ensureRumdl refuses to reinstall during the cooldown after a failed install", async () => {
+  await withoutOverride(async () => {
+    const { calls, install } = failingInstaller();
+    const t0 = clockOrigin();
+
+    await expect(ensureRumdl(install, () => t0)).rejects.toThrow(/download failed/);
+    await expect(ensureRumdl(install, () => t0)).rejects.toThrow(/cooldown/);
+
+    expect(calls).toEqual([rumdlBin()]);
+  });
+});
+
+test("ensureRumdl retries the install once the cooldown has expired", async () => {
+  await withoutOverride(async () => {
+    const { calls, install } = failingInstaller();
+    const t0 = clockOrigin();
+
+    await expect(ensureRumdl(install, () => t0)).rejects.toThrow(/download failed/);
+    await expect(ensureRumdl(install, () => t0 + RUMDL_RETRY_COOLDOWN_MS + 1)).rejects.toThrow(
+      /download failed/,
+    );
+
+    expect(calls).toEqual([rumdlBin(), rumdlBin()]);
+  });
+});
+
+test("ensureRumdl still reuses a pinned cached binary while the cooldown is active", async () => {
+  await withoutOverride(async () => {
+    const { install } = failingInstaller();
+    const t0 = clockOrigin();
+    await expect(ensureRumdl(install, () => t0)).rejects.toThrow(/download failed/);
+
+    await fakeRumdlAt(rumdlBin(), RUMDL_VERSION);
+    const { bin, installed } = await ensureRumdl(install, () => t0);
+
+    expect(installed).toBe(false);
+    expect(bin).toBe(rumdlBin());
   });
 });
 

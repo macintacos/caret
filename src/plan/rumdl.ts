@@ -171,14 +171,23 @@ async function installedVersion(bin: string): Promise<string | null> {
   }
 }
 
+/** How long a failed acquisition suppresses the next install attempt. */
+export const RUMDL_RETRY_COOLDOWN_MS = 10 * 60_000;
+
 // Coalesces concurrent installs: the first caller kicks the download off, callers
 // arriving while it is in flight await the same promise instead of racing a second
 // fetch (they would all still see the old binary, since downloadRumdl only renames
 // the new one into place at the end). Cleared once it settles — the binary is on
-// disk by then, so the version check below is the gate from that point on, and a
-// transient failure (offline, GitHub rate-limit) retries on the next call rather
-// than poisoning every later one for the life of the daemon.
+// disk by then, so the version check below is the gate from that point on.
+//
+// A failure instead opens a RUMDL_RETRY_COOLDOWN_MS window (EXC-1155): while
+// acquisition is broken — offline, GitHub rate-limit, a spawn the daemon cannot
+// perform — retrying per call re-fetches ~5 MB on the critical path of every plan
+// and throws anyway. A window rather than a permanent memo, so a transient failure
+// still recovers without restarting the daemon; it gates only the install, so a
+// cached binary reporting RUMDL_VERSION stays reusable throughout.
 let inFlightInstall: Promise<string> | undefined;
+let installCooldownUntil = 0;
 
 /** Ensure rumdl (binary + config) is present under caret's state dir, and is the
  * version caret pinned. Returns the resolved paths plus whether this call
@@ -197,6 +206,7 @@ let inFlightInstall: Promise<string> | undefined;
  * current state dir. */
 export async function ensureRumdl(
   install: RumdlInstaller = installPinnedRumdl,
+  now: () => number = Date.now,
 ): Promise<{ bin: string; config: string; installed: boolean }> {
   ensureStateDir(rumdlDir());
   const config = rumdlConfig();
@@ -210,9 +220,17 @@ export async function ensureRumdl(
   const bin = rumdlBin();
   if ((await installedVersion(bin)) === RUMDL_VERSION) return { bin, config, installed: false };
 
-  inFlightInstall ??= install(bin).finally(() => {
-    inFlightInstall = undefined;
-  });
+  if (now() < installCooldownUntil) {
+    throw new Error("rumdl: install on cooldown after a recent failure");
+  }
+  inFlightInstall ??= install(bin)
+    .catch((err) => {
+      installCooldownUntil = now() + RUMDL_RETRY_COOLDOWN_MS;
+      throw err;
+    })
+    .finally(() => {
+      inFlightInstall = undefined;
+    });
   return { bin: await inFlightInstall, config, installed: true };
 }
 
