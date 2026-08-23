@@ -96,3 +96,26 @@ test("a non-Error throw still falls back cleanly", async () => {
   expect(recs).toHaveLength(1);
   expect(recs[0]?.extra).toEqual({ reason: "string failure" });
 });
+
+test("a format that outruns its budget returns the raw text with one warn", async () => {
+  const { recs, log } = recordingLog();
+  const never = () => new Promise<string>(() => {});
+  const out = await formatPlanMarkdown(LONG_PROSE, log, never, 20);
+  expect(out).toBe(LONG_PROSE);
+  expect(recs).toEqual([
+    {
+      level: "warn",
+      step: "review",
+      msg: "plan format failed, storing raw",
+      extra: { reason: expect.stringMatching(/exceeded 20ms/) },
+    },
+  ]);
+});
+
+test("a format that finishes inside its budget returns formatted text and logs nothing", async () => {
+  const { recs, log } = recordingLog();
+  const prompt = async (text: string) => `${text}formatted\n`;
+  const out = await formatPlanMarkdown(LONG_PROSE, log, prompt, 20);
+  expect(out).toBe(`${LONG_PROSE}formatted\n`);
+  expect(recs).toEqual([]);
+});
