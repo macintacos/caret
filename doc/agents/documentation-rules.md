@@ -83,7 +83,8 @@ digraph caret_docs_router {
   its priority order, its blast-radius mandate, and why `CLAUDE.md` is background rather
   than review criteria. The `files.json` files beside it, and in each subtree's own
   `.greptile/` folder, route the reviewer to the `doc/agents/*.md` that governs it. Edit
-  this file when reviews come back mis-pitched.
+  this file when reviews come back mis-pitched. How to edit it:
+  [`references/greptile-rules.md`](references/greptile-rules.md).
 
 ## Audience, stated at the top of every new doc
 
