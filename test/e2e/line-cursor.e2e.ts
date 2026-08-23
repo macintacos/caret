@@ -274,6 +274,12 @@ test("holding j keeps the cursor on-screen and follows it, never yanking it to t
   expect(await relTop(page)).toBeGreaterThan(0.4);
 });
 
+// The seam-fill strip, as Chromium serializes it: a shadow layer pulled left by the two
+// insets, with no blur and no spread. Matching the negative offset rather than "not none"
+// is what keeps this pointed at the strip — since EXC-1145 every code row carries a lift
+// as well, so a resting row's box-shadow is no longer the empty string's stand-in.
+const SEAM_STRIP = /-[\d.]+px 0px 0px 0px/;
+
 test("the focused-line cursor band paints the code row, not just its gutter", async ({
   daemon,
   page,
@@ -326,13 +332,18 @@ test("the focused-line cursor band paints the code row, not just its gutter", as
 
   // …and the gutter→content SEAM between them is filled (a left box-shadow paints
   // the strip the panel inset would otherwise leave dark), so the band reads
-  // continuous across the join like a non-code row — a plain code row has none.
+  // continuous across the join like a non-code row — a plain code row has no strip.
   const shadowOf = (line: number) =>
     page
       .locator(`.diffview [data-content] [data-line="${line}"]`)
       .evaluate((el) => getComputedStyle(el).boxShadow);
-  expect(await shadowOf(onCode)).not.toBe("none");
-  expect(await shadowOf(other)).toBe("none");
+  const banded = await shadowOf(onCode);
+  const plain = await shadowOf(other);
+  expect(banded).toMatch(SEAM_STRIP);
+  expect(plain).not.toMatch(SEAM_STRIP);
+  // The strip is IN FRONT OF the lift both code rows carry, not instead of it: this
+  // rule's box-shadow replaces the base row's outright (EXC-1145).
+  expect(banded).toContain(plain);
 });
 
 test("hovering a code row bands both columns, consistent with the cursor", async ({
@@ -372,9 +383,13 @@ test("hovering a code row bands both columns, consistent with the cursor", async
   expect(gutterBg).toBe(contentBg);
 
   // The gutter→content seam is filled the same way it is for the cursor (a left
-  // box-shadow), so the hovered code row's band is continuous across the join.
+  // box-shadow), so the hovered code row's band is continuous across the join — and
+  // the lift stays under it, as above.
   const shadowOf = (sel: string) =>
     page.locator(sel).evaluate((el) => getComputedStyle(el).boxShadow);
-  expect(await shadowOf(`.diffview [data-content] [data-line="${hovered}"]`)).not.toBe("none");
-  expect(await shadowOf(`.diffview [data-content] [data-line="${plain}"]`)).toBe("none");
+  const bandedShadow = await shadowOf(`.diffview [data-content] [data-line="${hovered}"]`);
+  const plainShadow = await shadowOf(`.diffview [data-content] [data-line="${plain}"]`);
+  expect(bandedShadow).toMatch(SEAM_STRIP);
+  expect(plainShadow).not.toMatch(SEAM_STRIP);
+  expect(bandedShadow).toContain(plainShadow);
 });
