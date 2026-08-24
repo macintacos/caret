@@ -100,7 +100,7 @@
     background: var(--paper-raised);
     border: 1px solid var(--rule);
     border-radius: var(--radius);
-    box-shadow: var(--shadow-card);
+    box-shadow: var(--shadow-chip);
     cursor: pointer;
     z-index: 4;
     /* Fades in with the block hover (the button only mounts while hovered). */

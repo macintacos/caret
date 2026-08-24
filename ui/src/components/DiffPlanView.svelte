@@ -1908,7 +1908,10 @@
 
   /* The "/ to search" discovery chip (EXC-832): the collapsed state of the search pill,
      wearing the same sheer --paper-veil surface so `/` reads as expanding this chip
-     into the field. Shown only with the Show Hints setting on; fades in on mount. */
+     into the field. Shown only with the Show Hints setting on; fades in on mount.
+     On the chip-scale --shadow-chip, not the panel-scale --shadow-card, which at this
+     size casts a plume wider than the chip; the pill it expands into rides the same
+     one so the two read as one surface growing. */
   .search-hint {
     display: inline-flex;
     align-items: center;
@@ -1916,7 +1919,7 @@
     padding: 0.35rem 0.6rem;
     background: var(--paper-veil);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-card);
+    box-shadow: var(--shadow-chip);
     color: var(--ink-soft);
     font-size: var(--text-sm);
     white-space: nowrap;
@@ -1972,7 +1975,8 @@
      counts. Amber-accented to tie it to the selection band the reviewer is
      dragging. The `.metric` atom (global) gives it tabular digits so the range
      doesn't reflow as it grows. pointer-events:none keeps it out of the drag's
-     pointer capture. */
+     pointer capture. On the chip-scale --shadow-chip — a readout this small is
+     shorter than --shadow-card's own blur. */
   .drag-readout {
     position: absolute;
     top: 0.4rem;
@@ -1984,7 +1988,7 @@
     color: var(--accent-ink);
     background: var(--accent);
     border-radius: var(--radius);
-    box-shadow: var(--shadow-card);
+    box-shadow: var(--shadow-chip);
     pointer-events: none;
     animation: readout-in var(--dur-micro) var(--ease-out);
   }
@@ -1993,7 +1997,8 @@
      sticky at the bottom of the viewport so each reads as ambient guidance rather
      than blocking the surface it describes, in quiet paper-raised chrome — a nudge,
      not the amber action affordance. The visual-hint's inline Kbd keycaps flow in
-     the sentence, picking up the chip's ink-soft colour. */
+     the sentence, picking up the chip's ink-soft colour, and both ride the
+     chip-scale --shadow-chip. */
   .drag-hint,
   .visual-hint {
     position: sticky;
@@ -2008,7 +2013,7 @@
     background: var(--paper-raised);
     border: 1px solid var(--rule-strong);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-card);
+    box-shadow: var(--shadow-chip);
     animation: readout-in var(--dur-micro) var(--ease-out);
   }
 

@@ -129,7 +129,7 @@ function showTooltip(tokenElement: HTMLElement, href: string): void {
     "background: var(--diffs-link-tooltip-bg)",
     "color: var(--diffs-link-tooltip-fg)",
     "border: 1px solid var(--diffs-link-tooltip-border)",
-    "box-shadow: var(--shadow-card)",
+    "box-shadow: var(--shadow-chip)",
     "font-family: var(--font-mono)",
     "font-size: var(--text-2xs)",
     "line-height: var(--leading-snug)",

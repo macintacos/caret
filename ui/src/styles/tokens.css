@@ -104,4 +104,31 @@
      (the review count, version pills, the build tag). */
   --radius: 6px;
   --radius-lg: 10px;
+
+  /* Chip-scale elevation, for the small floating chrome --shadow-card is too big
+     for. The palette's shadow is sized for a panel — its far layer offsets 8–10px
+     and blurs 24–30px depending on scheme — so under a chip barely 30px tall it
+     casts a plume wider than the chip itself, which reads as soot rather than as
+     a lift (catppuccin mocha and github-dark are where it shows; caret-dark and
+     caret-light are near enough to black that the same shadow resolves to
+     nothing, which is why sampling only those two hides it). This one stays
+     inside the chip's own footprint.
+
+     Hand-written rather than emitted per palette, and for the same reason
+     --caret-card-lift is (see lib/diffview/coreStyles.ts, the shadow-DOM half of
+     this idea): the geometry is fixed, and only the alpha moves — the same black
+     reads much heavier over a light ground than over a dark one — so one
+     light-dark() covers all nine.
+
+     Who wears it: the plan view's "/ to search" chip and the search pill it grows
+     into, the drag readout and the drag / visual-select hints, the code block's
+     copy button, and the link-hover tooltip (which reaches it by inheritance
+     through the diff view's shadow boundary). The dividing line is the surface's
+     own height — every one of those is shorter than the blur --shadow-card was
+     casting under it. Panels stay on --shadow-card: the toasts, the confirm
+     popover, the folder card, the comment navigator, the composer, the annotation
+     card, the theme preview. */
+  --shadow-chip:
+    0 1px 2px light-dark(rgb(0 0 0 / 0.07), rgb(0 0 0 / 0.3)),
+    0 2px 6px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.22));
 }

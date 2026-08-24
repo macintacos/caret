@@ -148,8 +148,9 @@
 
 <style>
   /* The HUD pill: the sheer --paper-veil surface, so the plan reads faintly through
-     it — a HUD, not a modal — lifted with the shared card shadow and the larger chip
-     radius. The controls row sits on top; the current-of-total counter sits below it,
+     it — a HUD, not a modal — lifted on the chip-scale --shadow-chip (the same one the
+     "/ to search" chip wears, so the two read as one surface growing) and the larger
+     chip radius. The controls row sits on top; the current-of-total counter sits below it,
      right-aligned to the pill's edge, so a changing total never reflows the row's
      width. On open it expands from the top-right
      corner — where the "/ to search" chip sat (DiffPlanView's dock) — so `/` reads as
@@ -161,7 +162,7 @@
     padding: 0.3rem 0.4rem;
     background: var(--paper-veil);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-card);
+    box-shadow: var(--shadow-chip);
     transform-origin: top right;
     animation: search-expand var(--dur-enter) var(--ease-out);
   }
