@@ -5,7 +5,7 @@
 // the editor engine means replacing this file and the component together; the
 // composer, the annotation-card edit field, and the saved-comment render path
 // stay untouched.
-import { closeCompletion } from "@codemirror/autocomplete";
+import { closeCompletion, completionStatus, startCompletion } from "@codemirror/autocomplete";
 import {
   defaultKeymap,
   history,
@@ -287,6 +287,27 @@ const theme = EditorView.theme({
   },
 });
 
+/**
+ * Re-arms completion after a deletion.
+ *
+ * autocomplete only ARMS a source on `input.type` (`getUpdateType`); a
+ * `delete.backward` carries no activating bit, so a source that answered null
+ * once stays Inactive through every backspace and the list never comes back. That
+ * would be an obscure corner for a source with a fixed word list, but a
+ * subsequence match is permissive enough that the way a reviewer reaches zero
+ * matches is a typo — and backspace is the reflex correction, after which the
+ * feature would be silently dead for the rest of that token.
+ *
+ * Deferred out of the update: `startCompletion` dispatches, and dispatching from
+ * inside an update listener is what CodeMirror refuses. Cheap because it does
+ * nothing unless a deletion left the completion state genuinely inactive.
+ */
+const reopenAfterDelete = EditorView.updateListener.of((update) => {
+  if (!update.docChanged || completionStatus(update.state) !== null) return;
+  if (!update.transactions.some((tr) => tr.isUserEvent("delete"))) return;
+  queueMicrotask(() => startCompletion(update.view));
+});
+
 // One indent level. Four spaces so a list nest (indentMore, which reads this
 // facet) and the "just enter four spaces" fallback below are the same width.
 const INDENT_UNIT = "    ";
@@ -403,6 +424,7 @@ export function markdownExtensions(opts: MarkdownEditorOptions): Extension[] {
     // precedence rather than by position here. Empty without a review context or a
     // registered source.
     ...reviewCompletion(opts.reviewContext, opts.completionSources),
+    reopenAfterDelete,
     // Tab indent/outdent, before the default keymap (which leaves Tab unbound).
     indentKeymap,
     keymap.of([...defaultKeymap, ...historyKeymap]),

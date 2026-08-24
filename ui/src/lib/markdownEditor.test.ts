@@ -6,6 +6,7 @@ import { EditorSelection, EditorState } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 
 import {
+  backspaceIn as backspace,
   mountEditor,
   completionListPainted as painted,
   typeInto as type,
@@ -176,6 +177,38 @@ describe("Escape with a live completion list", () => {
 
       pressEscape(view);
       expect(cancels).toBe(1);
+    } finally {
+      dispose();
+    }
+  });
+
+  // Backspace after over-typing. A source that finds nothing returns null, which
+  // leaves it in autocomplete's Inactive state — and autocomplete only ARMS a
+  // source on `input.type`, so deleting never brings it back on its own.
+  // Subsequence matching is permissive, so the way a reviewer reaches zero
+  // matches is a typo, and backspace is the reflex correction; without the
+  // re-arm the completion is silently dead for the rest of that token.
+  test("backspacing off a typo reopens the list", async () => {
+    const source: CompletionSource = async (ctx) => {
+      const trigger = ctx.matchBefore(/@[^\s@]*/);
+      if (trigger === null) return null;
+      // The shipped file source's shape: nothing matched is a null result.
+      if (trigger.text.includes("z")) return null;
+      return { from: trigger.from, filter: false, options: [{ label: "alpha.ts" }] };
+    };
+    const { view, dispose } = mount(source, () => {});
+    try {
+      type(view, "@a");
+      await settle(400);
+      expect(painted(view)).toBe(true);
+
+      type(view, "z");
+      await settle(400);
+      expect(painted(view)).toBe(false);
+
+      backspace(view);
+      await settle(400);
+      expect(painted(view)).toBe(true);
     } finally {
       dispose();
     }

@@ -19,7 +19,7 @@ const REVIEW: ReviewContext = { reviewId: "rev-1", cwd: "/w/caret", adapter: "cl
 /** A search that records what it was asked and answers with `answer`. */
 function fakeSearch(
   seen: Array<{ reviewId: string; query: string }>,
-  answer: FileSearchResponse = { paths: [], truncated: false },
+  answer: FileSearchResponse = { paths: [], stoppedAt: null },
 ): SearchFiles {
   return (reviewId, query) => {
     seen.push({ reviewId, query });
@@ -40,7 +40,7 @@ function complete(
 
 describe("createFileCompletion", () => {
   test("an @ opens a list of the files the daemon matched", async () => {
-    const search = fakeSearch([], { paths: ["src/app.ts", "src/lib/foo.ts"], truncated: false });
+    const search = fakeSearch([], { paths: ["src/app.ts", "src/lib/foo.ts"], stoppedAt: null });
     const result = await complete("see @", search);
     expect(result?.options.map((o) => o.label)).toEqual(["src/app.ts", "src/lib/foo.ts"]);
   });
@@ -59,7 +59,7 @@ describe("createFileCompletion", () => {
   });
 
   test("the completed range starts at the @, so choosing a row replaces the trigger", async () => {
-    const search = fakeSearch([], { paths: ["src/app.ts"], truncated: false });
+    const search = fakeSearch([], { paths: ["src/app.ts"], stoppedAt: null });
     const result = await complete("see @srlb", search);
     expect(result?.from).toBe("see ".length);
     // Nothing overrides `apply`: CodeMirror replaces the whole completed range
@@ -68,7 +68,7 @@ describe("createFileCompletion", () => {
   });
 
   test("the daemon is the only thing that decides a match", async () => {
-    const search = fakeSearch([], { paths: ["src/lib/foo.ts"], truncated: false });
+    const search = fakeSearch([], { paths: ["src/lib/foo.ts"], stoppedAt: null });
     // CodeMirror's own matcher refuses a two-character pattern that is neither a
     // prefix, a word start, nor an adjacent run — so filtering on top of the
     // daemon would drop rows it had already matched.
@@ -77,8 +77,8 @@ describe("createFileCompletion", () => {
     expect(result?.options.map((o) => o.label)).toEqual(["src/lib/foo.ts"]);
   });
 
-  test("a truncated answer says so above the rows", async () => {
-    const search = fakeSearch([], { paths: ["a.ts", "b.ts"], truncated: true });
+  test("the result cap says so, and says narrowing reaches the rest", async () => {
+    const search = fakeSearch([], { paths: ["a.ts", "b.ts"], stoppedAt: "results" });
     const result = await complete("@", search);
     const sections = new Set(result?.options.map((o) => o.section));
     expect(sections.size).toBe(1);
@@ -86,9 +86,27 @@ describe("createFileCompletion", () => {
     expect(String([...sections][0])).toContain("keep typing");
   });
 
+  test("the scan cap never tells the reviewer to keep typing", async () => {
+    // Narrowing cannot extend a walk that gave up — the next query gives up in
+    // the same place — so the one remedy that works for the result cap is the
+    // one thing this header must not promise.
+    const search = fakeSearch([], { paths: ["a.ts", "b.ts"], stoppedAt: "scan" });
+    const header = String((await complete("@", search))?.options[0]?.section);
+    expect(header).toContain("2");
+    expect(header).not.toContain("keep typing");
+  });
+
   test("a complete answer carries no header", async () => {
-    const search = fakeSearch([], { paths: ["a.ts"], truncated: false });
+    const search = fakeSearch([], { paths: ["a.ts"], stoppedAt: null });
     expect((await complete("@", search))?.options.every((o) => o.section === undefined)).toBe(true);
+  });
+
+  test("a review with no working directory never asks", async () => {
+    // `cwd` is optional on both adapters' hook payloads and defaults to "", and
+    // such a review can only ever 404 — once per debounced keystroke.
+    const seen: Array<{ reviewId: string; query: string }> = [];
+    expect(await complete("@src", fakeSearch(seen), { reviewId: "rev-1", cwd: "" })).toBeNull();
+    expect(seen).toEqual([]);
   });
 
   test("a search that finds nothing leaves no list open", async () => {
@@ -121,7 +139,7 @@ describe("createFileCompletion", () => {
 
   test("completion needs no adapter, so every agent gets it", async () => {
     const seen: Array<{ reviewId: string; query: string }> = [];
-    const search = fakeSearch(seen, { paths: ["a.ts"], truncated: false });
+    const search = fakeSearch(seen, { paths: ["a.ts"], stoppedAt: null });
     // The codex adapter never sets `adapter`; nothing here reads it.
     const result = await complete("@a", search, { reviewId: "rev-1", cwd: "/w/caret" });
     expect(result?.options.map((o) => o.label)).toEqual(["a.ts"]);

@@ -38,7 +38,6 @@ import {
   type DraftBody,
   type FileRefKind,
   type FileRefsResponse,
-  type FileSearchResponse,
   type HealthIdentity,
   type PlanInput,
   type ResolveBody,
@@ -634,9 +633,9 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     log.debug("request", "file search answered", {
       reviewId: id,
       returned: result.paths.length,
-      truncated: result.truncated,
+      stoppedAt: result.stoppedAt,
     });
-    return Response.json(result satisfies FileSearchResponse);
+    return Response.json(result);
   }
 
   // GET /api/reviews/:id/decision — the hook's long-poll for a decision.

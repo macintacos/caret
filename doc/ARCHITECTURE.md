@@ -278,7 +278,7 @@ go in front of a human the same way.
 src/                tool-agnostic core, grouped by domain; the CLI entrypoint (cli.ts) and discovery report (discovery.ts) sit at the root
 src/daemon/         the loopback HTTP daemon — request server, body validation, origin/CSRF/liveness guards, lifecycle, and client
 src/review/         plan-review orchestration and the revision-threading state machine, with their store and decision/reconcile helpers
-src/plan/           plan handling — the on-disk canonical plan, file-ref excerpts, fenced-block validation, and markdown reflow
+src/plan/           plan handling — the on-disk canonical plan, file-ref excerpts, cwd-rooted file search, fenced-block validation, and markdown reflow
 src/redact/         log redaction — the browser-safe key walk and the node-side home-path scrub
 src/ui/             the daemon's bridge to the embedded Svelte UI — asset resolution and the log endpoint
 src/config/         settings, preferences, resolved paths, and shared constants

@@ -138,15 +138,23 @@ export async function searchFiles(id: string, query: string): Promise<FileSearch
       }),
     );
     // Defensive against a 2xx whose body is missing a field, for the same reason
-    // resolveFileRefs is: the caller maps over `paths` and reads `truncated`.
-    return { paths: body.paths ?? [], truncated: body.truncated === true };
+    // resolveFileRefs is: the caller maps over `paths` and branches on `stoppedAt`.
+    return {
+      paths: body.paths ?? [],
+      stoppedAt: body.stoppedAt === "results" || body.stoppedAt === "scan" ? body.stoppedAt : null,
+    };
   } catch (err) {
-    uiLog.warn("request", `file search failed: ${shortId(id)}`, {
+    // `debug`, not `warn`, and deliberately so: this fires once per debounced
+    // keystroke, and a review whose cwd is gone fails every one of them. A `warn`
+    // per character is the per-iteration noise logging-rules.md forbids, in the
+    // same timeline /caret:debug reads. The daemon logs this exchange at debug
+    // too, and the once-per-render resolveFileRefs is what `warn` is sized for.
+    uiLog.debug("request", `file search failed: ${shortId(id)}`, {
       reviewId: id,
       queryChars: query.length,
       reason: String(err),
     });
-    return { paths: [], truncated: false };
+    return { paths: [], stoppedAt: null };
   }
 }
 

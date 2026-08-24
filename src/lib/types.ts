@@ -295,20 +295,30 @@ export interface DirListing {
   total: number;
 }
 
+/**
+ * Which of the search's two caps ended it early.
+ *
+ * The distinction is what the UI has to say out loud, because the remedy differs:
+ * `"results"` means more matches exist and narrowing the query reaches them,
+ * while `"scan"` means the walk gave up before the end of the tree — narrowing
+ * does NOT reach the rest, since the next query gives up in the same place. One
+ * flag for both would put a remedy that cannot work in front of the reviewer.
+ */
+export type SearchStop = "results" | "scan";
+
 /** Response of POST /api/reviews/:id/file-search — the files under the review's
  * cwd whose path subsequence-matches the query, for the feedback editors' `@`
  * completion (EXC-1175).
  *
- * Only paths cross this boundary, never file contents. `truncated` says the
- * search stopped on one of its caps rather than at the end of the tree, so the
- * list can say it is showing part of the answer rather than implying it is
- * showing all of it. */
+ * Only paths cross this boundary, never file contents. */
 export interface FileSearchResponse {
   /** Matching paths relative to the review's cwd, shallowest first and in name
    * order within a level. */
   paths: string[];
-  /** True when a cap ended the search with matches left unreported. */
-  truncated: boolean;
+  /** Which cap ended the search, or null when it reached the end of the tree.
+   * Deliberately carries no total, unlike `DirListing.total`: the walk stopped,
+   * so there is nothing enumerated left to count. */
+  stoppedAt: SearchStop | null;
 }
 
 /** A bounded, line-aware read excerpt of a plan-referenced file, served by GET

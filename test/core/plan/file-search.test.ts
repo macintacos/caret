@@ -33,7 +33,7 @@ test("an empty query offers every file, shallowest first", async () => {
   write("src/lib/util.ts");
   expect(await searchFiles(cwd, "")).toEqual({
     paths: ["readme.md", "src/app.ts", "src/lib/util.ts"],
-    truncated: false,
+    stoppedAt: null,
   });
 });
 
@@ -64,7 +64,7 @@ test("matching folds case in both directions", async () => {
 
 test("a query whose characters are out of order matches nothing", async () => {
   write("src/lib/foo.ts");
-  expect(await searchFiles(cwd, "foosrc")).toEqual({ paths: [], truncated: false });
+  expect(await searchFiles(cwd, "foosrc")).toEqual({ paths: [], stoppedAt: null });
 });
 
 test("the skip set and dotted directories are never descended", async () => {
@@ -116,14 +116,14 @@ test("the result cap truncates and says so", async () => {
   }
   const found = await searchFiles(cwd, "");
   expect(found?.paths).toHaveLength(SEARCH_BUDGET.results);
-  expect(found?.truncated).toBe(true);
+  expect(found?.stoppedAt).toBe("results");
   // The cap keeps the ordering's head, so the reader sees the list's start.
   expect(found?.paths[0]).toBe("f0000.ts");
 });
 
-test("a result set exactly at the cap is not called truncated", async () => {
+test("a result set exactly at the cap is not reported as stopped", async () => {
   for (let i = 0; i < SEARCH_BUDGET.results; i++) write(`f${String(i).padStart(4, "0")}.ts`);
-  expect((await searchFiles(cwd, ""))?.truncated).toBe(false);
+  expect((await searchFiles(cwd, ""))?.stoppedAt).toBeNull();
 });
 
 test("the dirent budget stops a walk that would otherwise sweep the tree", async () => {
@@ -131,12 +131,12 @@ test("the dirent budget stops a walk that would otherwise sweep the tree", async
   // A query matching nothing is the expensive case the budget exists for: it
   // cannot stop early on results, so only the scan bound ends it.
   const found = await searchFiles(cwd, "zzzz", { dirents: 5, results: 50 });
-  expect(found).toEqual({ paths: [], truncated: true });
+  expect(found).toEqual({ paths: [], stoppedAt: "scan" });
 });
 
-test("a walk inside the dirent budget is not called truncated", async () => {
+test("a walk inside the dirent budget is not reported as stopped", async () => {
   write("only.ts");
-  expect((await searchFiles(cwd, "zzzz", { dirents: 5, results: 50 }))?.truncated).toBe(false);
+  expect((await searchFiles(cwd, "zzzz", { dirents: 5, results: 50 }))?.stoppedAt).toBeNull();
 });
 
 test("a query longer than the cap is cut rather than matched in full", async () => {

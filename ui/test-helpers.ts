@@ -111,6 +111,17 @@ export function typeInto(view: EditorView, text: string): void {
   });
 }
 
+/** Delete the character before the cursor, as a `delete.backward` user event —
+ * the transaction a real Backspace produces, and the one completion re-arming
+ * keys off. */
+export function backspaceIn(view: EditorView): void {
+  view.dispatch({
+    changes: { from: view.state.doc.length - 1, to: view.state.doc.length },
+    selection: { anchor: view.state.doc.length - 1 },
+    userEvent: "delete.backward",
+  });
+}
+
 /** Whether a completion list is PAINTED — the DOM is the ground truth, exactly as
  * production's `completionListOpen` reads it. */
 export function completionListPainted(view: EditorView): boolean {

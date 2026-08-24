@@ -60,8 +60,10 @@ export const FileRefsBodySchema = z
 // in a feedback editor, asking which files under the review's cwd match it. A
 // non-string query — or a body that is not an object at all — degrades to the
 // empty query, which lists rather than rejects; that is the leniency the schemas
-// above keep, and here it also means a garbled body can only ever ask for LESS
-// than a deliberate one.
+// above keep, and here it also means a garbled body can only ever cost LESS work
+// than a deliberate one: the empty query matches immediately and trips the result
+// cap after ~51 files, whereas a query that matches NOTHING is what spends the
+// whole dirent budget.
 //
 // No `.max()` on the string, for the reason FileRefsBodySchema records: a
 // field-level constraint trips the outer `.catch` and degrades the whole body.

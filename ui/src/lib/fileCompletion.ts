@@ -9,7 +9,7 @@
 
 import type { Completion, CompletionResult, CompletionSource } from "@codemirror/autocomplete";
 
-import type { FileSearchResponse } from "@core/lib/types";
+import type { FileSearchResponse, SearchStop } from "@core/lib/types";
 import { searchFiles } from "$lib/api.ts";
 import type { ReviewCompletionSource } from "$lib/editorCompletion.ts";
 
@@ -31,13 +31,21 @@ function atWordBoundary(before: string): boolean {
 }
 
 /**
- * What the list says when the daemon stopped at a cap: how much of the answer is
- * on screen, and the one thing the reviewer can do about it. Rendered by
- * CodeMirror as a header above the rows, so it is a statement rather than a
- * selectable row that would insert nothing.
+ * What the list says when the search stopped short: how many rows are on screen,
+ * and — only where it is true — that narrowing reaches the rest. Rendered by
+ * CodeMirror as a header above the rows, so it is a statement ABOUT the list
+ * rather than a selectable row that would insert nothing.
+ *
+ * The two causes get different sentences because the remedy differs. Against the
+ * result cap more matches exist and a longer query reaches them; against the scan
+ * cap the walk gave up before the end of the tree, and the next query gives up in
+ * the same place — so "keep typing" would send the reviewer after something
+ * typing cannot reach.
  */
-function truncationHeader(shown: number): string {
-  return `First ${shown} matches — keep typing to narrow`;
+function stoppedHeader(shown: number, stoppedAt: SearchStop): string {
+  return stoppedAt === "results"
+    ? `First ${shown} matches — keep typing to narrow`
+    : `First ${shown} matches — this tree is larger than the search reaches`;
 }
 
 /**
@@ -56,10 +64,20 @@ export function createFileCompletion(search: SearchFiles): ReviewCompletionSourc
         return null;
       }
 
-      const { paths, truncated } = await search(review.reviewId, trigger.text.slice(1));
+      // A review whose cwd never arrived (the field is optional on both adapters'
+      // hook payloads, and `routeIncomingPlan` defaults it to "") can only ever
+      // 404. Asking anyway would spend a request and a log record per keystroke
+      // on a permanently known answer.
+      if (review.cwd === "") return null;
+
+      const { paths, stoppedAt } = await search(review.reviewId, trigger.text.slice(1));
+      // Nothing matched is not an error and gets no list — the editor behaves
+      // exactly as it did before completion existed. That covers the walk giving
+      // up empty too: CodeMirror paints nothing for an option-free result, so the
+      // only way to say so would be a row that is not a file.
       if (paths.length === 0) return null;
 
-      const section = truncated ? truncationHeader(paths.length) : undefined;
+      const section = stoppedAt === null ? undefined : stoppedHeader(paths.length, stoppedAt);
       const options: Completion[] = paths.map((path) => ({ label: path, section }));
       return {
         // The range starts at the `@` itself, so CodeMirror's default apply

@@ -58,7 +58,7 @@ test("file-search answers with the matching paths and a truncation flag", async 
   write("src/lib/foo.ts");
   write("src/lib/bar.ts");
   const id = await d.seed({ cwd });
-  expect(await found(id, "srlbfoo")).toEqual({ paths: ["src/lib/foo.ts"], truncated: false });
+  expect(await found(id, "srlbfoo")).toEqual({ paths: ["src/lib/foo.ts"], stoppedAt: null });
 });
 
 test("file-search roots candidates at the review's own cwd", async () => {
@@ -76,20 +76,20 @@ test("file-search roots candidates at the review's own cwd", async () => {
   }
 });
 
-test("file-search reports truncation when the result cap stops it", async () => {
+test("file-search names the cap that stopped it", async () => {
   for (let i = 0; i < SEARCH_BUDGET.results + 3; i++) {
     write(`f${String(i).padStart(4, "0")}.ts`);
   }
   const id = await d.seed({ cwd });
   const body = await found(id, "");
   expect(body.paths).toHaveLength(SEARCH_BUDGET.results);
-  expect(body.truncated).toBe(true);
+  expect(body.stoppedAt).toBe("results");
 });
 
 test("file-search treats the request body as untrusted and degrades to a bare listing", async () => {
   write("a.ts");
   const id = await d.seed({ cwd });
-  const bare = { paths: ["a.ts"], truncated: false };
+  const bare = { paths: ["a.ts"], stoppedAt: null };
   // Every one of these is a body the schema has to survive without rejecting —
   // the same degrade-don't-reject posture the sibling routes keep.
   expect(await found(id, "")).toEqual(bare);
@@ -138,7 +138,7 @@ test("file-search logs counts at debug level and never a query or a path", async
     const requests = recs.filter((r) => r.step === "request");
     expect(requests).toHaveLength(1);
     expect(requests[0]?.level).toBe("debug");
-    expect(requests[0]?.extra).toMatchObject({ reviewId: id, returned: 0, truncated: false });
+    expect(requests[0]?.extra).toMatchObject({ reviewId: id, returned: 0, stoppedAt: null });
     expectNeverLogsBody(recs, ["top-secret-filename.ts", "confidential-query"]);
   } finally {
     logged.stop();
