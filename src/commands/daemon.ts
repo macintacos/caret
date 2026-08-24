@@ -96,6 +96,10 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
       // The active adapter's id, published on /api/health so the UI can adapt to
       // the environment (EXC-791).
       source: adapter.id,
+      // The active adapter's skill enumeration, served by
+      // GET /api/reviews/:id/skills so the feedback editors can complete `/` names
+      // from the reviewing agent's own skills (EXC-1176).
+      listSkills: adapter.listSkills,
       // Daemon self-diagnostics for the settings Advanced pane (EXC-842). Reads
       // live settings (settings().current() hot-reloads a config edit) and the
       // CARET_* env overrides in effect; buildDiagnostics scrubs the settings dump.

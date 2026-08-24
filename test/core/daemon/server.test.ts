@@ -1947,3 +1947,52 @@ describe("cmux unread marks", () => {
     expect(res.status).toBe(403);
   });
 });
+
+// GET /api/reviews/:id/skills — the names the reviewing agent can reach, for the
+// feedback editors' `/` completion (EXC-1176). The enumeration itself belongs to
+// the active adapter, so the capability arrives as an injected dep and this suite
+// never reaches into src/adapters/ (test-layout: no agent vocabulary in core).
+describe("skills route", () => {
+  const SKILLS = [
+    { name: "git", origin: "user" },
+    { name: "superpowers:brainstorming", origin: "plugin" },
+  ];
+
+  test("serves the active adapter's skills for the review's cwd", async () => {
+    const seen: string[] = [];
+    await boot({
+      listSkills: async (cwd: string) => {
+        seen.push(cwd);
+        return SKILLS;
+      },
+    });
+    const id = await d.seed({ cwd: "/w/caret" });
+    const res = await fetch(`${base}/api/reviews/${id}/skills`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(SKILLS);
+    // The review's own cwd, so a second review elsewhere gets its own project skills.
+    expect(seen).toEqual(["/w/caret"]);
+  });
+
+  test("404s when the daemon wires no skill capability", async () => {
+    await boot();
+    const id = await d.seed();
+    expect((await fetch(`${base}/api/reviews/${id}/skills`)).status).toBe(404);
+  });
+
+  test("404s for an unknown review id", async () => {
+    await boot({ listSkills: async () => SKILLS });
+    expect((await fetch(`${base}/api/reviews/does-not-exist/skills`)).status).toBe(404);
+  });
+
+  test("logs the count and never the names", async () => {
+    const { recs, log } = recordingLog();
+    await boot({ listSkills: async () => SKILLS, log });
+    const id = await d.seed();
+    await fetch(`${base}/api/reviews/${id}/skills`);
+    const record = recs.find((r) => r.msg.includes("skills"));
+    expect(record?.extra).toMatchObject({ count: 2 });
+    // The names are the reviewer's own config; only the count reaches the log.
+    expect(JSON.stringify(recs)).not.toContain("brainstorming");
+  });
+});
