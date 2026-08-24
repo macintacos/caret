@@ -13,6 +13,7 @@ import type {
   HealthIdentity,
   PersistedScratch,
   ResolveBody,
+  SkillRef,
 } from "@core/lib/types";
 import { shortId, uiLog } from "$lib/log.ts";
 
@@ -151,6 +152,26 @@ export async function getFileExcerpt(
 export async function getDirListing(id: string, root: string, path: string): Promise<DirListing> {
   const params = new URLSearchParams({ root, path });
   return json(await fetch(`/api/reviews/${encodeURIComponent(id)}/dir?${params}`));
+}
+
+/** The skill names the agent reviewing this review can reach, for the feedback
+ * editors' `/` completion (EXC-1176) — the daemon holds the filesystem, so it is
+ * the only thing that can enumerate them. Reference only: caret never executes a
+ * completed skill.
+ *
+ * Non-essential, like `resolveFileRefs`: any failure degrades to no completion
+ * rather than throwing, so the editor behaves exactly as it did before completion
+ * existed. A 404 is one such failure — a daemon that wires no skill capability. */
+export async function getSkills(id: string): Promise<SkillRef[]> {
+  try {
+    return await json<SkillRef[]>(await fetch(`/api/reviews/${encodeURIComponent(id)}/skills`));
+  } catch (err) {
+    uiLog.warn("request", `skills fetch failed: ${shortId(id)}`, {
+      reviewId: id,
+      reason: String(err),
+    });
+    return [];
+  }
 }
 
 /** Autosaves the reviewer's working draft: inline annotations, the review-scoped
