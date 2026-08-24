@@ -1091,6 +1091,10 @@ describe("the task-list checkbox (EXC-860)", () => {
 describe("the fenced code-block scroll card (EXC-729)", () => {
   const cardBody =
     overrideDecls.match(/\[data-content\]\s*>\s*\[data-code-card\]\s*\{[^}]*\}/)?.[0] ?? "";
+  const fittingRowBody =
+    overrideDecls.match(
+      /\[data-content\]\s*>\s*\[data-line\]\[data-code-line\]:not\(\[data-selected-line\]\)\s*\{[^}]*\}/,
+    )?.[0] ?? "";
 
   test("wraps the block in a single subgrid horizontal scroll container", () => {
     expect(cardBody).toMatch(/display:\s*grid/);
@@ -1110,7 +1114,8 @@ describe("the fenced code-block scroll card (EXC-729)", () => {
 
   test("carries the same panel look as the per-row card so both read identically", () => {
     // A fitting block keeps the per-row card path; a scrolling block uses this wrapper. They
-    // share the fill, inset, and rounding so the two paths are visually indistinguishable.
+    // share the fill, inset, rounding and elevation (EXC-1145), so the two paths are
+    // visually indistinguishable.
     expect(cardBody).toMatch(
       /background-color:\s*color-mix\(in lab, var\(--paper-sunk\), var\(--ink\) \d+%\)/,
     );
@@ -1118,17 +1123,59 @@ describe("the fenced code-block scroll card (EXC-729)", () => {
     expect(cardBody).toMatch(/border-radius:\s*var\(--radius\)/);
   });
 
+  test("every box-shadow on a carded code or table surface carries the lift (EXC-1145)", () => {
+    // box-shadow does not cascade additively, so ANY rule that out-ranks the base row rule
+    // and declares one erases the elevation. The banded-row rule is that trap today; the
+    // next such rule — a change tint if the plan surface ever stops being single-version, a
+    // focus ring, a drag affordance — would take the lift out silently. Pinning the whole
+    // SET rather than three named selectors is what makes a fifth rule opt in or argue here.
+    const shadowed = [...overrideDecls.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+      .map((rule) => ({ selector: rule[1] ?? "", body: rule[2] ?? "" }))
+      .filter(
+        ({ selector, body }) =>
+          /\[data-code-line\]|\[data-code-card\]|\[data-table-card\]/.test(selector) &&
+          body.includes("box-shadow:"),
+      );
+    // The two cards, the fitting row, and the row's banded state.
+    expect(shadowed).toHaveLength(4);
+    for (const { selector, body } of shadowed) {
+      expect(body, selector.trim().replace(/\s+/g, " ")).toContain("var(--caret-card-lift)");
+    }
+  });
+
+  test("floats at the table card's height, not one of its own (EXC-1145)", () => {
+    // The two cards on a rendered plan are the table's and this one. Asserted as equality
+    // against the table card's own declaration rather than as a literal: two elevations a
+    // hair apart read as a mistake, which is the whole reason both spend one token.
+    const tableCard =
+      overrideDecls.match(/\[data-content\]\s*>\s*\[data-table-card\]\s*\{[^}]*\}/)?.[0] ?? "";
+    const lift = (rule: string) => rule.match(/box-shadow:\s*([^;]+);/)?.[1];
+    expect(lift(tableCard)).toBeTruthy();
+    expect(lift(cardBody)).toBe(lift(tableCard));
+  });
+
+  test("keeps the lift on a hovered or cursored fitting row (EXC-1145)", () => {
+    // The band rule sets box-shadow to paint the gutter→content seam strip, and it outranks
+    // the base row rule. box-shadow does not cascade additively, so without the lift restated
+    // here a hovered code row silently drops it. Seam strip first: on a banded row the
+    // block's left edge should read as band, not as shadow.
+    const bandedRowBody =
+      overrideDecls.match(
+        /\[data-content\]\s*>\s*\[data-line\]\[data-code-line\]:is\(\[data-hovered\], \[data-caret-cursor\]\):not\(\[data-selected-line\]\)\s*\{[^}]*\}/,
+      )?.[0] ?? "";
+    const shadow = bandedRowBody.match(/box-shadow:\s*([^;]+);/)?.[1] ?? "";
+    expect(shadow).toContain("calc(");
+    expect(shadow).toContain("var(--caret-card-lift)");
+    expect(shadow.indexOf("calc(")).toBeLessThan(shadow.indexOf("var(--caret-card-lift)"));
+  });
+
   test("clips a not-yet-wrapped row so it can't break out before the card wraps it", () => {
     // The per-row rule is the graceful floor for the frame before codeBlockScroll.ts wraps the
     // block (or if the script never runs): the over-wide line clips at the card's right edge
     // instead of spilling over the surface. Inline axis only, so the block stays visible and
     // the EXC-692 fence-glyph nudges are not shaved.
-    const rowBody =
-      overrideDecls.match(
-        /\[data-content\]\s*>\s*\[data-line\]\[data-code-line\]:not\(\[data-selected-line\]\)\s*\{[^}]*\}/,
-      )?.[0] ?? "";
-    expect(rowBody).toMatch(/overflow-x:\s*clip/);
-    expect(rowBody).not.toMatch(/overflow-x:\s*(?:auto|scroll)/);
+    expect(fittingRowBody).toMatch(/overflow-x:\s*clip/);
+    expect(fittingRowBody).not.toMatch(/overflow-x:\s*(?:auto|scroll)/);
   });
 });
 
@@ -1567,13 +1614,15 @@ describe("tables (EXC-864)", () => {
     // blur, wider than the card's own --caret-card-inset, so it spills into the gutter
     // lane and reads as a halo on any palette whose sunk surface is light enough to
     // darken. Pinned as "blur no wider than the inset" rather than as a literal, since
-    // what must hold is the relationship.
-    const blur = Number.parseFloat(
-      cardRule.match(/box-shadow:\s*\S+\s+\S+\s+([\d.]+)px/)?.[1] ?? "",
-    );
+    // what must hold is the relationship. The value lives on --caret-card-lift at :host,
+    // shared with the code card's two paint paths (EXC-1145), so the card is pinned to the
+    // token and the relationship is pinned where the number lives.
+    expect(cardRule).toMatch(/box-shadow:\s*var\(--caret-card-lift\)/);
+    const lift = overrideDecls.match(/--caret-card-lift:\s*([^;]+);/)?.[1] ?? "";
+    const blur = Number.parseFloat(lift.match(/^\S+\s+\S+\s+([\d.]+)px/)?.[1] ?? "");
     expect(blur).toBeGreaterThan(0);
     expect(blur).toBeLessThan(12);
-    expect(cardRule).not.toContain("--shadow-card");
+    expect(lift).not.toContain("--shadow-card");
     expect(cardRule).not.toMatch(/border:\s*1px/);
   });
 

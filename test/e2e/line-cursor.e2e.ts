@@ -18,7 +18,7 @@
 import type { Page } from "@playwright/test";
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
-import { PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
+import { PLAN_SURFACE, planSurface, SEAM_STRIP } from "@test/e2e/support/source-view.ts";
 
 // Tall enough that G and the half-page jump actually scroll, with three headings
 // so ]]/[[ have distinct targets.
@@ -326,13 +326,18 @@ test("the focused-line cursor band paints the code row, not just its gutter", as
 
   // …and the gutter→content SEAM between them is filled (a left box-shadow paints
   // the strip the panel inset would otherwise leave dark), so the band reads
-  // continuous across the join like a non-code row — a plain code row has none.
+  // continuous across the join like a non-code row — a plain code row has no strip.
   const shadowOf = (line: number) =>
     page
       .locator(`.diffview [data-content] [data-line="${line}"]`)
       .evaluate((el) => getComputedStyle(el).boxShadow);
-  expect(await shadowOf(onCode)).not.toBe("none");
-  expect(await shadowOf(other)).toBe("none");
+  const banded = await shadowOf(onCode);
+  const plain = await shadowOf(other);
+  expect(banded).toMatch(SEAM_STRIP);
+  expect(plain).not.toMatch(SEAM_STRIP);
+  // The strip is IN FRONT OF the lift both code rows carry, not instead of it: this
+  // rule's box-shadow replaces the base row's outright (EXC-1145).
+  expect(banded).toContain(plain);
 });
 
 test("hovering a code row bands both columns, consistent with the cursor", async ({
@@ -372,9 +377,13 @@ test("hovering a code row bands both columns, consistent with the cursor", async
   expect(gutterBg).toBe(contentBg);
 
   // The gutter→content seam is filled the same way it is for the cursor (a left
-  // box-shadow), so the hovered code row's band is continuous across the join.
+  // box-shadow), so the hovered code row's band is continuous across the join — and
+  // the lift stays under it, as above.
   const shadowOf = (sel: string) =>
     page.locator(sel).evaluate((el) => getComputedStyle(el).boxShadow);
-  expect(await shadowOf(`.diffview [data-content] [data-line="${hovered}"]`)).not.toBe("none");
-  expect(await shadowOf(`.diffview [data-content] [data-line="${plain}"]`)).toBe("none");
+  const bandedShadow = await shadowOf(`.diffview [data-content] [data-line="${hovered}"]`);
+  const plainShadow = await shadowOf(`.diffview [data-content] [data-line="${plain}"]`);
+  expect(bandedShadow).toMatch(SEAM_STRIP);
+  expect(plainShadow).not.toMatch(SEAM_STRIP);
+  expect(bandedShadow).toContain(plainShadow);
 });
