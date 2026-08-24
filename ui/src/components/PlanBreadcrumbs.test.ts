@@ -339,9 +339,15 @@ describe("PlanBreadcrumbs menus", () => {
       crumbs(target)[depth]?.closest(".crumb-item")?.classList.add("crumb-leaving");
     }
 
-    document.body
-      .querySelector("[data-slot='dropdown-menu-content']")
-      ?.dispatchEvent(new KeyboardEvent("keydown", { key: "h", bubbles: true, cancelable: true }));
+    // Pinned rather than optional-chained, unlike the walk test above: this one asserts that
+    // NOTHING moved, which a dispatch that silently went nowhere satisfies just as well. And
+    // an unmounted portal is reachable — flushUntil gives up rather than throwing, and a click
+    // on an unsettled graph flips aria-expanded while the content never arrives (openCrumb).
+    const content = document.body.querySelector("[data-slot='dropdown-menu-content']");
+    expect(content).not.toBeNull();
+    content?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "h", bubbles: true, cancelable: true }),
+    );
     releaseKey("h");
     flush();
 
