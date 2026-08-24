@@ -177,3 +177,38 @@ describe("MarkdownEditor focus", () => {
     }
   });
 });
+
+describe("MarkdownEditor review context", () => {
+  // The completion seam ships with an empty source registry, so review context
+  // must be inert here: the surfaces that carry it look and behave exactly as the
+  // surfaces that don't. What is inert today is what the `@` and `/` sources plug
+  // into, so this is the regression net for that landing loudly.
+  const REVIEW = { reviewId: "rev-1", cwd: "/w/caret", adapter: "claude" };
+
+  test("mounts, seeds, and reports its value with review context present", () => {
+    const seen: string[] = [];
+    const { target, flush } = render(MarkdownEditor, {
+      value: "seed",
+      reviewContext: REVIEW,
+      onInput: (t: string) => seen.push(t),
+    });
+    flush();
+    expect(target.querySelector(".cm-content")?.textContent).toContain("seed");
+    expect(seen[0]).toBe("seed");
+  });
+
+  test("still routes both chords with review context present", () => {
+    let submits = 0;
+    let cancels = 0;
+    const { target, flush } = render(MarkdownEditor, {
+      reviewContext: REVIEW,
+      onSubmitChord: () => submits++,
+      onCancelChord: () => cancels++,
+      onInput: () => {},
+    });
+    flush();
+    dispatchKey(target, "Enter", { metaKey: true });
+    dispatchKey(target, "Escape");
+    expect([submits, cancels]).toEqual([1, 1]);
+  });
+});

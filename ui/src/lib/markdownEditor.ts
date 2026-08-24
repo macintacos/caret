@@ -5,6 +5,7 @@
 // the editor engine means replacing this file and the component together; the
 // composer, the annotation-card edit field, and the saved-comment render path
 // stay untouched.
+import { closeCompletion, completionStatus } from "@codemirror/autocomplete";
 import {
   defaultKeymap,
   history,
@@ -26,6 +27,7 @@ import {
 } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 
+import { type ReviewContext, reviewCompletion } from "$lib/editorCompletion.ts";
 import { isCancelKey, isSubmitChord } from "$lib/keys.ts";
 
 export interface MarkdownEditorOptions {
@@ -40,6 +42,9 @@ export interface MarkdownEditorOptions {
   onSubmitChord?: () => void;
   /** Esc. */
   onCancelChord?: () => void;
+  /** The review this editor composes feedback for. Absent for a surface mounted
+   * outside one, which then gets no completion at all. */
+  reviewContext?: ReviewContext;
 }
 
 // The markdown grammar tags structure (strong/emphasis/heading/link) and the
@@ -218,6 +223,19 @@ export function cursorInList(state: EditorState): boolean {
   return state.selection.ranges.some((range) => LIST_LINE.test(state.doc.lineAt(range.head).text));
 }
 
+/** What the editor's chord layer does with a keydown: submit, dismiss an open
+ * completion list, cancel the editor, or nothing (leaving the key to the rest of
+ * the stack). Escape is the interesting case — an open list owns it, and the
+ * surrounding dialog owns it otherwise. Exported for unit tests. */
+export function chordAction(
+  e: KeyboardEvent,
+  completionOpen: boolean,
+): "submit" | "closeCompletion" | "cancel" | null {
+  if (isSubmitChord(e)) return "submit";
+  if (!isCancelKey(e)) return null;
+  return completionOpen ? "closeCompletion" : "cancel";
+}
+
 // Tab indents (indentMore, using the four-space indentUnit) when there is a
 // selection — every line the selection touches shifts one level right, so
 // highlighting several lines and pressing Tab indents them all — or when an empty
@@ -260,21 +278,27 @@ export function markdownExtensions(opts: MarkdownEditorOptions): Extension[] {
     // Chords first, so Esc/⌘-Enter are intercepted before default keys.
     Prec.highest(
       EditorView.domEventHandlers({
-        keydown: (e) => {
-          if (isSubmitChord(e)) {
-            e.preventDefault();
-            opts.onSubmitChord?.();
-            return true;
+        keydown: (e, view) => {
+          const action = chordAction(e, completionStatus(view.state) === "active");
+          if (action === null) return false;
+          e.preventDefault();
+          if (action === "submit") opts.onSubmitChord?.();
+          else if (action === "cancel") opts.onCancelChord?.();
+          else {
+            // The dialogs around this editor listen for Escape on `document` and
+            // do NOT check defaultPrevented (bits-ui's escape layer), so a
+            // preventDefault alone would dismiss the list AND the dialog under it.
+            e.stopPropagation();
+            closeCompletion(view);
           }
-          if (isCancelKey(e)) {
-            e.preventDefault();
-            opts.onCancelChord?.();
-            return true;
-          }
-          return false;
+          return true;
         },
       }),
     ),
+    // Completion, after the chords so an open list never steals them, and before
+    // the keymaps below so it claims ArrowUp/ArrowDown/Enter first. Empty without
+    // a review context or a registered source.
+    ...reviewCompletion(opts.reviewContext),
     // Tab indent/outdent, before the default keymap (which leaves Tab unbound).
     indentKeymap,
     keymap.of([...defaultKeymap, ...historyKeymap]),

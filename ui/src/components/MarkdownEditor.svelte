@@ -11,6 +11,7 @@
   import { EditorState } from "@codemirror/state";
   import { EditorView } from "@codemirror/view";
   import { untrack } from "svelte";
+  import type { ReviewContext } from "$lib/editorCompletion.ts";
   import { markdownExtensions } from "$lib/markdownEditor.ts";
 
   interface Props {
@@ -34,6 +35,12 @@
     onSubmitChord?: () => void;
     /** Esc. */
     onCancelChord?: () => void;
+    /** The review this editor composes feedback for, so reference completion can
+     * resolve against it (files under its cwd, skills for its adapter). Every
+     * feedback surface passes it; omitted, the editor simply offers no completion.
+     * ponytail: seeded once at mount like the rest of the config — a review switch
+     * remounts the surfaces that host this editor. */
+    reviewContext?: ReviewContext;
   }
   let {
     value = "",
@@ -44,6 +51,7 @@
     onInput,
     onSubmitChord,
     onCancelChord,
+    reviewContext,
   }: Props = $props();
 
   let host = $state<HTMLDivElement | undefined>();
@@ -73,6 +81,7 @@
           onInput: (text) => onInput?.(text),
           onSubmitChord: () => onSubmitChord?.(),
           onCancelChord: () => onCancelChord?.(),
+          reviewContext: untrack(() => reviewContext),
         }),
       }),
     });
