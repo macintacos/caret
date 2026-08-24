@@ -295,3 +295,18 @@ export async function jumpToHeading(page: Page, heading: string): Promise<void> 
   await page.keyboard.press("Enter");
   await expect(page.locator("[data-slot='dropdown-menu-content']")).toHaveCount(0);
 }
+
+/** Open the gutter composer on `line` and return its editor, focused. Two specs
+ * compose feedback against a seeded project (file-completion, ref-chips) and both
+ * need exactly this preamble, so it lives here rather than being copied — the
+ * dialog's accessible name and the field's are production's own strings, and a
+ * spec-side copy is a second place for them to drift. */
+export async function composer(page: Page, line = 3): Promise<Locator> {
+  await (await revealGutterPlus(page, line)).click();
+  const dialog = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(dialog).toBeVisible();
+  const input = dialog.getByRole("textbox", { name: "Comment" });
+  await input.click();
+  await expect(input).toBeFocused();
+  return input;
+}
