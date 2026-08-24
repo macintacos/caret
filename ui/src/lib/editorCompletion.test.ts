@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 
 import type { CompletionSource } from "@codemirror/autocomplete";
 
+import { fileCompletion } from "$lib/fileCompletion.ts";
+
 import {
+  COMPLETION_SOURCES,
   type ReviewCompletionSource,
   type ReviewContext,
   reviewCompletion,
@@ -39,11 +42,15 @@ describe("reviewCompletion", () => {
     expect(reviewCompletion(CONTEXT, [recordingSource(seen)]).length).toBeGreaterThan(0);
   });
 
-  test("the module registry has sources, so the production path installs completion", () => {
-    // The production call path: markdownExtensions passes no sources, so this reads
-    // the module registry. Pinned because an empty registry means every feedback
-    // editor silently offers nothing — the failure mode a registration mistake
-    // produces, and one no other test in this file would catch.
+  test("the module registry is what the production call path installs", () => {
+    // markdownExtensions passes no sources, so this reads the module registry.
+    // Pinned because a registry that loses an entry means every feedback editor
+    // silently offers less than it should — the failure a registration mistake
+    // produces, and one no other test in this file would catch. The count is part
+    // of the pin: `skillCompletion()` is called per registration, so it has no
+    // stable identity to match on the way `fileCompletion` does.
+    expect(COMPLETION_SOURCES).toContain(fileCompletion);
+    expect(COMPLETION_SOURCES).toHaveLength(2); // file references, and skills
     expect(reviewCompletion(CONTEXT).length).toBeGreaterThan(0);
   });
 
