@@ -295,6 +295,22 @@ export interface DirListing {
   total: number;
 }
 
+/** Response of POST /api/reviews/:id/file-search — the files under the review's
+ * cwd whose path subsequence-matches the query, for the feedback editors' `@`
+ * completion (EXC-1175).
+ *
+ * Only paths cross this boundary, never file contents. `truncated` says the
+ * search stopped on one of its caps rather than at the end of the tree, so the
+ * list can say it is showing part of the answer rather than implying it is
+ * showing all of it. */
+export interface FileSearchResponse {
+  /** Matching paths relative to the review's cwd, shallowest first and in name
+   * order within a level. */
+  paths: string[];
+  /** True when a cap ended the search with matches left unreported. */
+  truncated: boolean;
+}
+
 /** A bounded, line-aware read excerpt of a plan-referenced file, served by GET
  * /api/reviews/:id/file for the hover preview (EXC-687). */
 export interface FileExcerpt {
