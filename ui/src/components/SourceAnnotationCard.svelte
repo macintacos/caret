@@ -25,6 +25,7 @@
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { commentState } from "$lib/commentState.ts";
+  import type { ReviewContext } from "$lib/editorCompletion.ts";
   import { renderMarkdown } from "$lib/markdown.ts";
   import ConfirmPopover from "@/components/ConfirmPopover.svelte";
   import Icon from "@/components/Icon.svelte";
@@ -37,8 +38,10 @@
     onFocus: (id: string) => void;
     onEdit: (id: string, comment: string) => void;
     onDelete: (id: string) => void;
+    /** The review being commented on, forwarded to the edit-mode composer. */
+    reviewContext?: ReviewContext;
   }
-  let { annotation, focused, onFocus, onEdit, onDelete }: Props = $props();
+  let { annotation, focused, onFocus, onEdit, onDelete, reviewContext }: Props = $props();
 
   // UI-only expand state, owned per card so several comments on one line can be
   // open at once (EXC-765): focusing or expanding one never collapses a sibling.
@@ -138,6 +141,7 @@
       startLine={annotation.startLine}
       endLine={annotation.endLine}
       initial={annotation.comment}
+      {reviewContext}
       onSubmit={saveEdit}
       onDiscard={cancelEdit}
     />

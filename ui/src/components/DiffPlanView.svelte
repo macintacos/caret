@@ -54,6 +54,7 @@
     syncRefHints,
   } from "$lib/diffview/refHint.ts";
   import { resolveFileRefs } from "$lib/api.ts";
+  import type { ReviewContext } from "$lib/editorCompletion.ts";
   import { shortCwd } from "$lib/cwd.ts";
   import { createFolderMemory } from "$lib/folderTree.ts";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
@@ -158,6 +159,11 @@
      * open diff reflows the moment those settings change (they live here, not in a
      * mirror App can resync). */
     settingsRev?: number;
+    /** The review the comment editors compose against, forwarded to every composer
+     * this view hosts — the gutter one and each annotation card's edit field. App
+     * builds it, because the adapter id comes from the health probe rather than the
+     * review record. */
+    reviewContext?: ReviewContext;
   }
 
   let {
@@ -177,6 +183,7 @@
     themeId,
     showShortcutHints = true,
     settingsRev = 0,
+    reviewContext,
   }: Props = $props();
 
   // Line-anchored annotations render inline in the source view's per-line
@@ -1649,6 +1656,7 @@
               onFocus={onFocusAnnotation}
               onEdit={onEditAnnotation}
               onDelete={onDeleteAnnotation}
+              {reviewContext}
             />
           </div>
         {/each}
@@ -1670,6 +1678,7 @@
                 startLine={pending.startLine}
                 endLine={pending.endLine}
                 initial={pendingText}
+                {reviewContext}
                 onInput={(text) => (liveText = text)}
                 onSubmit={(comment) => commenting.submit(comment)}
                 onKeep={(text) => commenting.cancel(text)}

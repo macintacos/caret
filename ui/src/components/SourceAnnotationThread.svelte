@@ -15,6 +15,7 @@
   import type { LineAnnotation } from "@core/lib/types";
   import { Card } from "$lib/components/ui/card/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
+  import type { ReviewContext } from "$lib/editorCompletion.ts";
   import SourceAnnotationCard from "@/components/SourceAnnotationCard.svelte";
 
   interface Props {
@@ -25,8 +26,17 @@
     onFocus: (id: string) => void;
     onEdit: (id: string, comment: string) => void;
     onDelete: (id: string) => void;
+    /** The review being commented on, forwarded to each card's edit composer. */
+    reviewContext?: ReviewContext;
   }
-  let { annotations, focusedAnnotation, onFocus, onEdit, onDelete }: Props = $props();
+  let {
+    annotations,
+    focusedAnnotation,
+    onFocus,
+    onEdit,
+    onDelete,
+    reviewContext,
+  }: Props = $props();
 
   const threaded = $derived(annotations.length > 1);
 </script>
@@ -48,6 +58,7 @@
           {onFocus}
           {onEdit}
           {onDelete}
+          {reviewContext}
         />
       </div>
     {/each}
@@ -59,6 +70,7 @@
     {onFocus}
     {onEdit}
     {onDelete}
+    {reviewContext}
   />
 {/if}
 

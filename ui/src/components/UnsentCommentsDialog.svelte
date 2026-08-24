@@ -3,6 +3,7 @@
   import type { IconName } from "$lib/icons.ts";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
+  import type { ReviewContext } from "$lib/editorCompletion.ts";
   import { isSubmitChord } from "$lib/keys.ts";
   import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
   import Icon from "@/components/Icon.svelte";
@@ -41,6 +42,9 @@
     onConfirm: (notes: string) => void;
     onRequestChanges: () => void;
     onCancel: () => void;
+    /** The review being resolved, forwarded to the notes editor so reference
+     * completion resolves against it. Only meaningful when showNotes. */
+    reviewContext?: ReviewContext;
   }
   let {
     open,
@@ -54,6 +58,7 @@
     onConfirm,
     onRequestChanges,
     onCancel,
+    reviewContext,
   }: Props = $props();
 
   // The optional reviewer note (EXC-791), local to the dialog and handed to
@@ -137,6 +142,7 @@
         value={notes}
         placeholder="Anything the agent should fold into the work — no re-planning needed."
         ariaLabel="Notes for the agent"
+        {reviewContext}
         onInput={(t) => (notes = t)}
         onSubmitChord={() => onConfirm(notes)}
         onCancelChord={onCancel}

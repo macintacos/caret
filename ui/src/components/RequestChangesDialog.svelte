@@ -10,6 +10,7 @@
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { type ComposerScratch, rangeLabel } from "$lib/diffview/commenting.ts";
+  import type { ReviewContext } from "$lib/editorCompletion.ts";
   import { formatFeedback, pendingInline, pendingLineCount, sourceLines } from "$lib/feedback.ts";
   import { isSubmitChord } from "$lib/keys.ts";
   import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
@@ -47,6 +48,9 @@
     // "Mark as draft": demote a committed line comment into the unsent-scratch
     // section. Only line-anchored comments can demote (a scratch is line-ranged).
     onDraftAnnotation: (annotation: LineAnnotation) => void;
+    // The review being sent back, forwarded to the general-comment editor so
+    // reference completion resolves against it.
+    reviewContext?: ReviewContext;
   }
   let {
     open,
@@ -62,6 +66,7 @@
     onDiscardScratch,
     onDiscardAnnotation,
     onDraftAnnotation,
+    reviewContext,
   }: Props = $props();
 
   // Live preview of exactly what the agent will receive.
@@ -145,6 +150,7 @@
         placeholder="Describe the overall changes you want…"
         ariaLabel="General comment"
         ariaRequired={generalRequired}
+        {reviewContext}
         autofocus
         onInput={onGeneralCommentInput}
         onSubmitChord={submit}
