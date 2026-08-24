@@ -318,16 +318,26 @@ describe("PlanBreadcrumbs menus", () => {
     expect(keys.filter((k) => k === "ArrowDown")).toEqual(["ArrowDown"]);
   });
 
-  // EXC-1128: a level inside its ~140ms outro is not on the trail any more, so the
-  // cross-crumb walk steps PAST it — the same levels measure() already counts.
-  test("the crumb walk steps past a level still playing its exit", async () => {
+  // EXC-1128: a level inside its ~140ms outro is off the trail, so a walk anchored on one
+  // does not step — least of all onto the level leaving beside it. The trail's {#each} is
+  // keyed on depth, so a shortening trail destroys a SUFFIX of the blocks: the levels going
+  // are always the trailing ones, which is the arrangement staged here. The class goes on by
+  // hand because happy-dom expands no `animation` shorthand, so crumbOut() reads a duration
+  // of 0 and a real outro never survives a tick.
+  //
+  // A unit test rather than an e2e spec (browser-testing.md): the claim is about which cells
+  // a DOM query returns, and the hazard is unreachable in a real browser while bits-ui's
+  // `preventScroll` keeps the trail from re-rooting under an open menu.
+  test("the crumb walk does not step onto a level still playing its exit", async () => {
     const { target, flush } = render(PlanBreadcrumbs, {
       headings: DEEP,
       activeLine: 7,
       onJump: () => {},
     });
-    await openCrumb(target, 2, flush);
-    crumbs(target)[1]?.closest(".crumb-item")?.classList.add("crumb-leaving");
+    await openCrumb(target, 3, flush);
+    for (const depth of [2, 3]) {
+      crumbs(target)[depth]?.closest(".crumb-item")?.classList.add("crumb-leaving");
+    }
 
     document.body
       .querySelector("[data-slot='dropdown-menu-content']")
@@ -335,9 +345,10 @@ describe("PlanBreadcrumbs menus", () => {
     releaseKey("h");
     flush();
 
-    // "Two" is leaving, so the step lands on "One" rather than on a node about to go.
+    // The open menu is on a leaving level, so there is no live cell to step back from and
+    // the walk stays put. Unguarded it stepped to "Three" — a node about to be removed.
     const open = crumbs(target).findIndex((c) => c.getAttribute("aria-expanded") === "true");
-    expect(open).toBe(0);
+    expect(open).toBe(3);
   });
 });
 
