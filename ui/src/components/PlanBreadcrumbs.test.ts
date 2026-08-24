@@ -317,6 +317,28 @@ describe("PlanBreadcrumbs menus", () => {
     expect(keys.filter((k) => k === "j")).toHaveLength(2);
     expect(keys.filter((k) => k === "ArrowDown")).toEqual(["ArrowDown"]);
   });
+
+  // EXC-1128: a level inside its ~140ms outro is not on the trail any more, so the
+  // cross-crumb walk steps PAST it — the same levels measure() already counts.
+  test("the crumb walk steps past a level still playing its exit", async () => {
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: DEEP,
+      activeLine: 7,
+      onJump: () => {},
+    });
+    await openCrumb(target, 2, flush);
+    crumbs(target)[1]?.closest(".crumb-item")?.classList.add("crumb-leaving");
+
+    document.body
+      .querySelector("[data-slot='dropdown-menu-content']")
+      ?.dispatchEvent(new KeyboardEvent("keydown", { key: "h", bubbles: true, cancelable: true }));
+    releaseKey("h");
+    flush();
+
+    // "Two" is leaving, so the step lands on "One" rather than on a node about to go.
+    const open = crumbs(target).findIndex((c) => c.getAttribute("aria-expanded") === "true");
+    expect(open).toBe(0);
+  });
 });
 
 // EXC-947: the bar's keyboard surface. Only the wiring a mounted component can show

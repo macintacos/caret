@@ -338,10 +338,16 @@
   //
   // Says nothing about submenus: a caller stepping the trail asks deepestOpenSubmenu()
   // first, so a panel standing open is closed before the trail moves (EXC-1127).
+  //
+  // The cells are the levels currently ON the trail, which is the claim measure() makes
+  // too: a level inside its --dur-exit outro is already gone, so `:not(.crumb-leaving)`
+  // keeps the walk from stepping onto one and clicking a trigger whose node is about to
+  // be removed. The marker half needs no such guard — it is rendered without
+  // `out:crumbOut`, so it never carries the class.
   function openPreviousCrumb(): boolean {
     const cells = [
       ...(barEl?.querySelectorAll<HTMLElement>(
-        ".crumb-item:not(.elided), .crumb-marker:not(.elided)",
+        ".crumb-item:not(.elided):not(.crumb-leaving), .crumb-marker:not(.elided)",
       ) ?? []),
     ];
     const open = cells.findIndex((cell) => cell.querySelector('[aria-expanded="true"]') !== null);
