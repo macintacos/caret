@@ -39,6 +39,14 @@ describe("reviewCompletion", () => {
     expect(reviewCompletion(CONTEXT, [recordingSource(seen)]).length).toBeGreaterThan(0);
   });
 
+  test("registers no source yet, so this change installs no completion", () => {
+    // The production call path: markdownExtensions passes no sources, so this reads
+    // the module registry. It is empty on purpose — EXC-1174 ships the seam, not a
+    // feature. The first sibling to register a source updates this line; that is
+    // the point of pinning it.
+    expect(reviewCompletion(CONTEXT)).toEqual([]);
+  });
+
   test("binds each source to the review the editor belongs to", () => {
     const seen: ReviewContext[] = [];
     reviewCompletion(CONTEXT, [recordingSource(seen), recordingSource(seen)]);

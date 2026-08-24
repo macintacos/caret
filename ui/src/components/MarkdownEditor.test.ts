@@ -179,10 +179,11 @@ describe("MarkdownEditor focus", () => {
 });
 
 describe("MarkdownEditor review context", () => {
-  // The completion seam ships with an empty source registry, so review context
-  // must be inert here: the surfaces that carry it look and behave exactly as the
-  // surfaces that don't. What is inert today is what the `@` and `/` sources plug
-  // into, so this is the regression net for that landing loudly.
+  // The completion seam ships with an empty source registry, so review context is
+  // inert at this level: these prove the prop does not disturb mount, seeding, or
+  // the chords — not anything about completion, which no mount can reach while the
+  // registry is empty. The Escape-with-a-painted-list contract is pinned where it
+  // can be driven for real, in lib/markdownEditor.test.ts.
   const REVIEW = { reviewId: "rev-1", cwd: "/w/caret", adapter: "claude" };
 
   test("mounts, seeds, and reports its value with review context present", () => {

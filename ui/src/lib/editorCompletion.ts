@@ -4,14 +4,15 @@
 // markdownEditor.ts rather than inside it: that module owns the editor's styling
 // and key handling, this one owns the registry two independent features add
 // themselves to, so they never edit the same lines.
-import { autocompletion, type CompletionSource, completionKeymap } from "@codemirror/autocomplete";
+import { autocompletion, type CompletionSource } from "@codemirror/autocomplete";
 import type { Extension } from "@codemirror/state";
-import { keymap } from "@codemirror/view";
 
 /**
- * The review a feedback editor is composing against. Every reference-completion
- * source needs all three: the id names the review, `cwd` roots a file lookup,
- * and `adapter` scopes a skill lookup to the environment the plan came from.
+ * The review a feedback editor is composing against. The three fields EXC-390
+ * specified for its sources: the id names the review, `cwd` names the working
+ * directory a file lookup would root at, and `adapter` the environment a skill
+ * lookup would be scoped to. Which of them a given source actually reads is that
+ * source's business.
  */
 export interface ReviewContext {
   reviewId: string;
@@ -42,13 +43,15 @@ const COMPLETION_SOURCES: readonly ReviewCompletionSource[] = [];
  * with — so an editor mounted without review context behaves exactly as it did
  * before completion existed.
  *
- * `defaultKeymap: false` is deliberate. autocompletion()'s own keymap installs at
- * `Prec.highest`, the same precedence as the editor's submit/cancel chord handler,
- * leaving the two ordered only by their position in the extension array. Binding
- * the completion keys at default precedence instead makes the chord handler
- * unambiguously outrank them (see markdownEditor.ts § chordAction), and placing
- * this ahead of the indent and default keymaps still lets an open list claim
- * ArrowUp/ArrowDown/Enter before cursor motion and newline insertion do.
+ * autocompletion()'s stock keymap is kept. It installs at `Prec.highest`, which is
+ * what lets an open list claim ArrowUp/ArrowDown/Enter ahead of the editor's indent
+ * and default keymaps — a guarantee of precedence rather than of array position.
+ * It does not contend with the editor's submit/cancel chords: those ride a
+ * `Prec.highest` domEventHandlers plugin, and every keymap — however high its own
+ * precedence — is dispatched by a single `Prec.default` view plugin, because a
+ * facet's `enables` extension is flattened at `Prec.default` regardless of what
+ * pulled it in. The chord handler is therefore always earlier in the handler array,
+ * and `runHandlers` stops at the first handler that returns true.
  *
  * @param review - The review the editor belongs to, or undefined for a surface
  *   mounted outside one.
@@ -60,8 +63,5 @@ export function reviewCompletion(
   sources: readonly ReviewCompletionSource[] = COMPLETION_SOURCES,
 ): Extension[] {
   if (review === undefined || sources.length === 0) return [];
-  return [
-    autocompletion({ override: sources.map((source) => source(review)), defaultKeymap: false }),
-    keymap.of(completionKeymap),
-  ];
+  return [autocompletion({ override: sources.map((source) => source(review)) })];
 }

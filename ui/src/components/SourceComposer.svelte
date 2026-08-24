@@ -18,8 +18,8 @@
   import { Card } from "$lib/components/ui/card/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { rangeLabel } from "$lib/diffview/commenting.ts";
-  import type { ReviewContext } from "$lib/editorCompletion.ts";
   import { revealCard } from "$lib/diffview/scroll.ts";
+  import type { ReviewContext } from "$lib/editorCompletion.ts";
   import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
   import ConfirmPopover from "@/components/ConfirmPopover.svelte";
   import Icon from "@/components/Icon.svelte";

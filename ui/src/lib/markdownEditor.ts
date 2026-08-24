@@ -5,7 +5,7 @@
 // the editor engine means replacing this file and the component together; the
 // composer, the annotation-card edit field, and the saved-comment render path
 // stay untouched.
-import { closeCompletion, completionStatus } from "@codemirror/autocomplete";
+import { closeCompletion } from "@codemirror/autocomplete";
 import {
   defaultKeymap,
   history,
@@ -27,7 +27,11 @@ import {
 } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 
-import { type ReviewContext, reviewCompletion } from "$lib/editorCompletion.ts";
+import {
+  type ReviewCompletionSource,
+  type ReviewContext,
+  reviewCompletion,
+} from "$lib/editorCompletion.ts";
 import { isCancelKey, isSubmitChord } from "$lib/keys.ts";
 
 export interface MarkdownEditorOptions {
@@ -45,6 +49,10 @@ export interface MarkdownEditorOptions {
   /** The review this editor composes feedback for. Absent for a surface mounted
    * outside one, which then gets no completion at all. */
   reviewContext?: ReviewContext;
+  /** The completion sources to offer, defaulting to the module registry. Injected
+   * so a unit can open a real list — the Escape contract below is about what a
+   * painted list does, which no amount of pure-function testing reaches. */
+  completionSources?: readonly ReviewCompletionSource[];
 }
 
 // The markdown grammar tags structure (strong/emphasis/heading/link) and the
@@ -223,10 +231,26 @@ export function cursorInList(state: EditorState): boolean {
   return state.selection.ranges.some((range) => LIST_LINE.test(state.doc.lineAt(range.head).text));
 }
 
+/** Whether a completion list is PAINTED, which is the only thing Escape should
+ * key off. Deliberately not `completionStatus(state) === "active"`: while a source
+ * re-queries, autocomplete keeps the previous list on screen (dimmed, `disabled`)
+ * and reports "pending" for that whole window, so the status test hands Escape to
+ * the surrounding dialog with a list still visible — and a source that re-queries
+ * per keystroke re-enters that window on every character. No exported accessor
+ * distinguishes the two (`currentCompletions` and friends all gate on
+ * `!open.disabled`), so the DOM is the ground truth. It is reachable because this
+ * stack configures no `tooltips({ parent })`, which leaves CodeMirror mounting
+ * tooltips into `view.dom`. */
+function completionListOpen(view: EditorView): boolean {
+  return view.dom.querySelector(".cm-tooltip-autocomplete") !== null;
+}
+
 /** What the editor's chord layer does with a keydown: submit, dismiss an open
  * completion list, cancel the editor, or nothing (leaving the key to the rest of
- * the stack). Escape is the interesting case — an open list owns it, and the
- * surrounding dialog owns it otherwise. Exported for unit tests. */
+ * the stack). Escape is the interesting case — a list that is on screen owns it,
+ * and the surrounding dialog owns it otherwise. `completionOpen` means *painted*,
+ * not "the completion state machine is active"; see `completionListOpen`.
+ * Exported for unit tests. */
 export function chordAction(
   e: KeyboardEvent,
   completionOpen: boolean,
@@ -275,11 +299,17 @@ export function markdownExtensions(opts: MarkdownEditorOptions): Extension[] {
       ...(opts.ariaLabel ? { "aria-label": opts.ariaLabel } : {}),
       ...(opts.ariaRequired !== undefined ? { "aria-required": String(opts.ariaRequired) } : {}),
     }),
-    // Chords first, so Esc/⌘-Enter are intercepted before default keys.
+    // Chords first, so Esc/⌘-Enter are intercepted before every key binding. This
+    // outranks the keymaps unconditionally, including autocomplete's own
+    // `Prec.highest` one: a keymap's precedence orders it against other keymaps,
+    // but the dispatcher that runs them all is a single `Prec.default` view plugin
+    // (@codemirror/view), and a facet's `enables` extension is flattened at
+    // `Prec.default` whatever pulled it in (@codemirror/state). A `Prec.highest`
+    // domEventHandlers plugin is therefore always earlier in the handler array.
     Prec.highest(
       EditorView.domEventHandlers({
         keydown: (e, view) => {
-          const action = chordAction(e, completionStatus(view.state) === "active");
+          const action = chordAction(e, completionListOpen(view));
           if (action === null) return false;
           e.preventDefault();
           if (action === "submit") opts.onSubmitChord?.();
@@ -295,10 +325,11 @@ export function markdownExtensions(opts: MarkdownEditorOptions): Extension[] {
         },
       }),
     ),
-    // Completion, after the chords so an open list never steals them, and before
-    // the keymaps below so it claims ArrowUp/ArrowDown/Enter first. Empty without
-    // a review context or a registered source.
-    ...reviewCompletion(opts.reviewContext),
+    // Completion. Its own keymap is `Prec.highest`, so an open list claims
+    // ArrowUp/ArrowDown/Enter ahead of the indent and default keymaps below by
+    // precedence rather than by position here. Empty without a review context or a
+    // registered source.
+    ...reviewCompletion(opts.reviewContext, opts.completionSources),
     // Tab indent/outdent, before the default keymap (which leaves Tab unbound).
     indentKeymap,
     keymap.of([...defaultKeymap, ...historyKeymap]),

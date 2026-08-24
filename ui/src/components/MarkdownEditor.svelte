@@ -38,8 +38,13 @@
     /** The review this editor composes feedback for, so reference completion can
      * resolve against it (files under its cwd, skills for its adapter). Every
      * feedback surface passes it; omitted, the editor simply offers no completion.
-     * ponytail: seeded once at mount like the rest of the config — a review switch
-     * remounts the surfaces that host this editor. */
+     * ponytail: a mount-time seed like the rest of the config, so a host that
+     * outlives a review switch would keep the old context. DiffPlanView is exactly
+     * such a host — App keeps it mounted across a switch on purpose — but the
+     * editors under it are not: the gutter composer goes because the contentKey
+     * effect reseeds the commenting controller, which clears `open` and unmounts
+     * `{#if pending}`, and the dialogs go when they close. Upgrade to a live value
+     * — a CM Compartment — if a host ever survives a switch with its editor open. */
     reviewContext?: ReviewContext;
   }
   let {
