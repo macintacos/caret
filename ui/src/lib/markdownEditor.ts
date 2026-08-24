@@ -378,6 +378,12 @@ const indentKeymap = keymap.of([
 
 /** The extension stack for a comment-composer markdown editor. */
 export function markdownExtensions(opts: MarkdownEditorOptions): Extension[] {
+  // Empty for a surface with no review or no registered source, and the re-arm
+  // rides along with it rather than being installed unconditionally: an editor
+  // that offers no completion has nothing to re-arm, and a listener on every
+  // update of every editor is not free.
+  const completion = reviewCompletion(opts.reviewContext, opts.completionSources);
+  const completionStack = completion.length === 0 ? [] : [...completion, reopenAfterDelete];
   return [
     history(),
     // codeLanguages: the full @codemirror/language-data set (~140 languages),
@@ -423,8 +429,7 @@ export function markdownExtensions(opts: MarkdownEditorOptions): Extension[] {
     // ArrowUp/ArrowDown/Enter ahead of the indent and default keymaps below by
     // precedence rather than by position here. Empty without a review context or a
     // registered source.
-    ...reviewCompletion(opts.reviewContext, opts.completionSources),
-    reopenAfterDelete,
+    ...completionStack,
     // Tab indent/outdent, before the default keymap (which leaves Tab unbound).
     indentKeymap,
     keymap.of([...defaultKeymap, ...historyKeymap]),
