@@ -21,7 +21,7 @@ import type { AgentAdapter, InstallProbe } from "@/adapters/adapter.ts";
 import { APPROVE_VARIANTS } from "@/adapters/codex/approve.ts";
 import { fatalDenyLine, toHookOutput } from "@/adapters/codex/feedback.ts";
 import { readCodexInstallState } from "@/adapters/codex/install.ts";
-import type { Decision, PlanInput } from "@/lib/types.ts";
+import type { Decision, PlanInput, SkillRef } from "@/lib/types.ts";
 
 /** The shape of the PermissionRequest hook stdin Codex is modeled to pipe to
  * `caret review`. PROVISIONAL (EXC-532): the field names are docs-based, not
@@ -60,5 +60,13 @@ export const codexAdapter: AgentAdapter = {
 
   readInstallState(): InstallProbe {
     return readCodexInstallState();
+  },
+
+  // Codex contributes nothing to the reviewer's `/` completion: it has no skill or
+  // command directory caret can enumerate. The empty list is what keeps the editor
+  // silent on a codex review rather than painting an empty popup — filling it in
+  // later is this module's business alone, not the UI's.
+  listSkills(): Promise<SkillRef[]> {
+    return Promise.resolve([]);
   },
 };

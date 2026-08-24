@@ -312,6 +312,24 @@ export interface FileExcerpt {
   totalLines: number;
 }
 
+/** One skill the reviewing agent can reach, offered by the feedback editors' `/`
+ * completion so a reviewer cites a name the agent will actually recognize
+ * (EXC-1176). Reference only — caret never executes a completed skill.
+ *
+ * Names only: a skill's own file contents never cross into the UI, so there is
+ * deliberately no description field. Served by GET /api/reviews/:id/skills. */
+export interface SkillRef {
+  /** The name to insert after `/`, in the exact form the agent must see — a
+   * plugin skill carries its `plugin:` namespace, so the insertion identifies
+   * exactly one skill. */
+  name: string;
+  /** Where it came from ("user" / "project" / "plugin" for Claude Code,
+   * "command" for OpenCode), shown beside the name so two sources offering the
+   * same bare name are told apart rather than one silently winning. Adapter
+   * vocabulary the UI renders verbatim. */
+  origin: string;
+}
+
 /** Body of POST /api/reviews/:id/resolve. */
 export interface ResolveBody {
   behavior: Behavior;

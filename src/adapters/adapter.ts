@@ -4,7 +4,7 @@
 // hands it raw hook stdin and gets back a core `PlanInput`. The dependency runs
 // one way: an adapter imports core types, never the reverse.
 
-import type { ApproveVariant, Decision, PlanInput } from "@/lib/types.ts";
+import type { ApproveVariant, Decision, PlanInput, SkillRef } from "@/lib/types.ts";
 
 export type { ApproveVariant };
 
@@ -67,4 +67,17 @@ export interface AgentAdapter {
 
   /** Probe the agent tool's local install for the discovery report. */
   readInstallState(): InstallProbe;
+
+  /**
+   * The skills this agent can reach for a review rooted at `cwd` — the names a
+   * reviewer may cite in feedback, offered by the UI's `/` completion (EXC-1176).
+   * Reference only: caret never executes one.
+   *
+   * Reads the reviewer's own well-known directories and nothing the agent under
+   * review controls, and yields NAMES only — never a skill's file contents. An
+   * agent with nothing to enumerate returns an empty list, which is what makes the
+   * `/` completion silently inert there. Never throws: an unreadable directory
+   * contributes nothing.
+   */
+  listSkills(cwd: string): Promise<SkillRef[]>;
 }
