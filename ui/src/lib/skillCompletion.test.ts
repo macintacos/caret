@@ -14,7 +14,7 @@ import {
   until,
 } from "@ui/test-helpers.ts";
 
-import { skillCompletion } from "./skillCompletion.ts";
+import { createSkillCache, skillCompletion } from "./skillCompletion.ts";
 
 // The `/` source is what turns the EXC-1174 seam into a feature, so these drive a
 // REAL EditorView with the source installed rather than calling it as a function:
@@ -335,5 +335,47 @@ describe("skillCompletion per-review caching", () => {
       a.dispose();
       b.dispose();
     }
+  });
+});
+
+// createSkillCache is the enumeration itself, lifted out of the `/` source's
+// closure so the editor's chip recognizer (lib/editorRefs.ts, EXC-1177) reads the
+// same one — a review's plugin tree is walked once however many surfaces ask
+// about it. The source's own caching behaviour is pinned above, through a real
+// view; these drive the cache directly.
+describe("createSkillCache", () => {
+  test("asks once per review, however many callers ask", async () => {
+    const asked: string[] = [];
+    const cache = createSkillCache(async (id) => {
+      asked.push(id);
+      return SKILLS;
+    });
+    const id = reviewId();
+    expect(await Promise.all([cache(id), cache(id), cache(id)])).toEqual([SKILLS, SKILLS, SKILLS]);
+    expect(asked).toEqual([id]);
+  });
+
+  test("keeps each review's own list", async () => {
+    const lists: Record<string, SkillRef[]> = {
+      a: [{ name: "git", origin: "user" }],
+      b: [{ name: "caret:demo", origin: "command" }],
+    };
+    const cache = createSkillCache(async (id) => lists[id] ?? []);
+    expect(await cache("a")).toEqual(lists.a as SkillRef[]);
+    expect(await cache("b")).toEqual(lists.b as SkillRef[]);
+  });
+
+  test("answers a rejected fetch with an empty list and retries the next ask", async () => {
+    // Only a SUCCESSFUL enumeration is cached: a daemon that was restarting must
+    // not disable recognition for the rest of the tab's life.
+    let attempt = 0;
+    const cache = createSkillCache(async () => {
+      attempt++;
+      if (attempt === 1) throw new Error("daemon restarting");
+      return SKILLS;
+    });
+    const id = reviewId();
+    expect(await cache(id)).toEqual([]);
+    expect(await cache(id)).toEqual(SKILLS);
   });
 });

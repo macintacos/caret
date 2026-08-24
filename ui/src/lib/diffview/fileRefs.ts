@@ -137,36 +137,61 @@ export function classify(raw: string): { path: string; line?: number; endLine?: 
   return { path, line, endLine };
 }
 
+/** One path-shaped run found in a piece of text: where it sits (0-based,
+ * half-open, into the text it was found in) and what `classify` made of it. */
+export interface PathCandidate {
+  start: number;
+  end: number;
+  path: string;
+  line?: number;
+  endLine?: number;
+}
+
+/** The path-shaped runs in `text`, URLs masked out and `classify` applied.
+ *
+ * The tokenizer half of the "one definition of path-shaped" rule `classify`
+ * states: `scanLine` applies it to an inline-code interior, and the feedback
+ * editors' chip scan (`$lib/editorRefs.ts`) applies it to a line of prose, so
+ * neither surface can drift on what a run is. Offsets are relative to `text`; a
+ * caller scanning a fragment adds its own base. */
+export function pathCandidates(text: string): PathCandidate[] {
+  const urlRanges = [...text.matchAll(URL_RE)].map((m) => ({
+    start: m.index,
+    end: m.index + m[0].length,
+  }));
+  const found: PathCandidate[] = [];
+  for (const m of text.matchAll(CANDIDATE_RE)) {
+    const raw = m[0];
+    const start = m.index;
+    const end = start + raw.length;
+    if (urlRanges.some((r) => start < r.end && end > r.start)) continue;
+    const ref = classify(raw);
+    if (ref === null) continue;
+    found.push({ start, end, path: ref.path, line: ref.line, endLine: ref.endLine });
+  }
+  return found;
+}
+
 function scanLine(source: string): FileRefSpan[] {
   const spans: FileRefSpan[] = [];
   for (const code of source.matchAll(INLINE_CODE)) {
     const interior = code[2] ?? "";
     // Whitespace is a property of the SPAN and never of a candidate, since
     // CANDIDATE_RE cannot match across one — so this aborts the whole interior
-    // rather than masking a range out of it the way the URL exclusion below
-    // does. Trimmed first: CommonMark strips a code span's one padding space
-    // either side, so ` foo.ts ` is a single token (EXC-1065).
+    // rather than masking a range out of it the way pathCandidates' URL
+    // exclusion does. Trimmed first: CommonMark strips a code span's one padding
+    // space either side, so ` foo.ts ` is a single token (EXC-1065).
     if (/\s/.test(interior.trim())) continue;
     // Column of the interior's first character in the display line (past the
     // opening backticks), so span columns are absolute.
     const base = code.index + (code[1]?.length ?? 0);
-    const urlRanges = [...interior.matchAll(URL_RE)].map((m) => ({
-      start: m.index,
-      end: m.index + m[0].length,
-    }));
-    for (const m of interior.matchAll(CANDIDATE_RE)) {
-      const raw = m[0];
-      const localStart = m.index;
-      const localEnd = localStart + raw.length;
-      if (urlRanges.some((r) => localStart < r.end && localEnd > r.start)) continue;
-      const ref = classify(raw);
-      if (ref === null) continue;
+    for (const c of pathCandidates(interior)) {
       spans.push({
-        startCol: base + localStart,
-        endCol: base + localEnd,
-        path: ref.path,
-        line: ref.line,
-        endLine: ref.endLine,
+        startCol: base + c.start,
+        endCol: base + c.end,
+        path: c.path,
+        line: c.line,
+        endLine: c.endLine,
       });
     }
   }
