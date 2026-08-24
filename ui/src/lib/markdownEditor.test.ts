@@ -214,3 +214,121 @@ describe("Escape with a live completion list", () => {
     }
   });
 });
+
+// The chip layer's decoration half. What lib/editorRefs.ts decides is WHICH runs
+// are recognized (pinned in editorRefs.test.ts, with its own injected gates);
+// what this pins is that the editor turns that decision into marks over the right
+// text and nothing else — and that a chip is presentation only, so the value the
+// host reads back is the literal markdown either way.
+describe("reference chips", () => {
+  /** A timer these cases step by hand, so the resolve happens where the test says
+   * rather than 250ms after it. */
+  function fakeTimers() {
+    let queued: (() => void) | undefined;
+    return {
+      set(fn: () => void) {
+        queued = fn;
+        return 1;
+      },
+      clear() {
+        queued = undefined;
+      },
+      fire() {
+        const run = queued;
+        queued = undefined;
+        run?.();
+      },
+    };
+  }
+
+  const drain = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+
+  /** Mount an editor over `doc` whose daemon resolves exactly `onDisk`. */
+  function mountChips(doc: string, onDisk: string[], skills: string[] = []) {
+    const timers = fakeTimers();
+    let value = "";
+    const editor = mountEditor({
+      placeholder: "",
+      ariaLabel: "Comment",
+      reviewContext: { reviewId: "rev-1", cwd: "/w/caret", adapter: "claude" },
+      completionSources: [],
+      onInput: (text) => {
+        value = text;
+      },
+      refDeps: {
+        timers,
+        resolvePaths: async (_id, paths) =>
+          Object.fromEntries(paths.filter((p) => onDisk.includes(p)).map((p) => [p, "file"])),
+        lookupSkills: async () => skills.map((name) => ({ name, origin: "user" })),
+      },
+    });
+    editor.view.dispatch({ changes: { from: 0, insert: doc }, userEvent: "input.type" });
+    return {
+      ...editor,
+      timers,
+      value: () => value,
+      chips: () => [...editor.view.dom.querySelectorAll(".cm-md-ref")].map((el) => el.textContent),
+    };
+  }
+
+  test("a resolved path is chipped and its unresolved neighbour is not", async () => {
+    const editor = mountChips("rework src/a.ts, not src/gone.ts", ["src/a.ts"]);
+    try {
+      editor.timers.fire();
+      await drain();
+      expect(editor.chips()).toEqual(["src/a.ts"]);
+    } finally {
+      editor.dispose();
+    }
+  });
+
+  test("a known skill is chipped and an invented one is not", async () => {
+    const editor = mountChips("run /git, never /nope", [], ["git"]);
+    try {
+      editor.timers.fire();
+      await drain();
+      expect(editor.chips()).toEqual(["/git"]);
+    } finally {
+      editor.dispose();
+    }
+  });
+
+  test("a codespan is chipped whole, backticks included — one span, one chip", async () => {
+    const editor = mountChips("see `Makefile` now", ["Makefile"]);
+    try {
+      editor.timers.fire();
+      await drain();
+      expect(editor.chips()).toEqual(["`Makefile`"]);
+    } finally {
+      editor.dispose();
+    }
+  });
+
+  test("chips change nothing about the value the host reads back", async () => {
+    const editor = mountChips("rework src/a.ts", ["src/a.ts"]);
+    try {
+      editor.timers.fire();
+      await drain();
+      expect(editor.chips()).toEqual(["src/a.ts"]);
+      expect(editor.value()).toBe("rework src/a.ts");
+    } finally {
+      editor.dispose();
+    }
+  });
+
+  test("editing a chipped reference until it no longer resolves drops the chip", async () => {
+    const editor = mountChips("rework src/a.ts", ["src/a.ts"]);
+    try {
+      editor.timers.fire();
+      await drain();
+      expect(editor.chips()).toEqual(["src/a.ts"]);
+
+      type(editor.view, "x");
+      editor.timers.fire();
+      await drain();
+      expect(editor.chips()).toEqual([]);
+    } finally {
+      editor.dispose();
+    }
+  });
+});
