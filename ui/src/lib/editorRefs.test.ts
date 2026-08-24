@@ -6,9 +6,10 @@ import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
 import type { FileRefKind, SkillRef } from "@core/lib/types";
+import { drainMicrotasks as drain, fakeTimers } from "@ui/test-helpers.ts";
 import type { ReviewContext } from "$lib/editorCompletion.ts";
 
-import { recognizedRefs, refRecognition, scanRefTokens, type Timers } from "./editorRefs.ts";
+import { recognizedRefs, refKey, refRecognition, scanRefTokens } from "./editorRefs.ts";
 
 // The chip layer's two halves, tested apart. scanRefTokens is pure: given a
 // document it says which runs are REFERENCE-SHAPED and where a chip over each
@@ -26,19 +27,23 @@ function stateOf(doc: string): EditorState {
   return EditorState.create({ doc, extensions: [markdown()] });
 }
 
-/** `[key, chipped text]` for every run the scan found, which is what every case
- * below actually asserts: what will be asked about, and what would wear the chip. */
+/** `[refKey, chipped text]` for every run the scan found — what will be asked
+ * about, which gate will be asked, and what would wear the chip. The kind is in
+ * the key because the two namespaces overlap and which one claimed a run is part
+ * of what these cases pin. */
 function scanned(doc: string): [string, string][] {
-  return scanRefTokens(stateOf(doc)).map((t) => [t.key, doc.slice(t.from, t.to)]);
+  return scanRefTokens(stateOf(doc)).map((t) => [refKey(t), doc.slice(t.from, t.to)]);
 }
 
 describe("scanRefTokens — what counts as a reference in prose", () => {
   test("a path carrying a separator is a candidate", () => {
-    expect(scanned("rework src/lib/foo.ts today")).toEqual([["src/lib/foo.ts", "src/lib/foo.ts"]]);
+    expect(scanned("rework src/lib/foo.ts today")).toEqual([
+      ["path:src/lib/foo.ts", "src/lib/foo.ts"],
+    ]);
   });
 
   test("a bare filename with an extension is a candidate", () => {
-    expect(scanned("see README.md")).toEqual([["README.md", "README.md"]]);
+    expect(scanned("see README.md")).toEqual([["path:README.md", "README.md"]]);
   });
 
   test("a bare word is NOT a candidate, however real a directory of that name is", () => {
@@ -49,7 +54,29 @@ describe("scanRefTokens — what counts as a reference in prose", () => {
   });
 
   test("a cited line rides inside the chip but not inside the key", () => {
-    expect(scanned("break at src/a.ts:42")).toEqual([["src/a.ts", "src/a.ts:42"]]);
+    expect(scanned("break at src/a.ts:42")).toEqual([["path:src/a.ts", "src/a.ts:42"]]);
+  });
+
+  // Every case above ends its document on the reference itself. A reviewer does
+  // not: the most ordinary place to write a path is the end of a sentence, and
+  // both token classes admit `.`, so the stop lands inside the run unless it is
+  // trimmed off both the key and the chip.
+  test("a full stop ends the sentence rather than the path", () => {
+    expect(scanned("please fix src/lib/foo.ts.")).toEqual([
+      ["path:src/lib/foo.ts", "src/lib/foo.ts"],
+    ]);
+  });
+
+  test("a full stop ends the sentence rather than the skill", () => {
+    expect(scanned("then run /git.")).toEqual([["skill:/git", "/git"]]);
+  });
+
+  test("a colon after a skill introduces the next clause", () => {
+    expect(scanned("run /git: it fixes this")).toEqual([["skill:/git", "/git"]]);
+  });
+
+  test("a bare slash names no skill", () => {
+    expect(scanned("either / or")).toEqual([]);
   });
 
   test("a URL is not a reference, tail and all", () => {
@@ -58,16 +85,16 @@ describe("scanRefTokens — what counts as a reference in prose", () => {
 
   test("a skill after whitespace is a candidate, namespace and all", () => {
     expect(scanned("try /superpowers:brainstorming first")).toEqual([
-      ["/superpowers:brainstorming", "/superpowers:brainstorming"],
+      ["skill:/superpowers:brainstorming", "/superpowers:brainstorming"],
     ]);
   });
 
   test("a skill opening the document is a candidate", () => {
-    expect(scanned("/git it")).toEqual([["/git", "/git"]]);
+    expect(scanned("/git it")).toEqual([["skill:/git", "/git"]]);
   });
 
   test("a path's interior slash never reads as a skill", () => {
-    expect(scanned("rework src/lib/foo.ts")).toEqual([["src/lib/foo.ts", "src/lib/foo.ts"]]);
+    expect(scanned("rework src/lib/foo.ts")).toEqual([["path:src/lib/foo.ts", "src/lib/foo.ts"]]);
   });
 });
 
@@ -75,11 +102,26 @@ describe("scanRefTokens — code", () => {
   test("a single-token codespan needs no separator, and the chip covers the backticks", () => {
     // Backticks are the author saying "this is a path" — the same licence
     // buildFileRefLayer reads them as — so the prose clause is dropped inside one.
-    expect(scanned("see `Makefile` now")).toEqual([["Makefile", "`Makefile`"]]);
+    expect(scanned("see `Makefile` now")).toEqual([["path:Makefile", "`Makefile`"]]);
   });
 
   test("a codespan holding whitespace is a command, not a path", () => {
     expect(scanned("run `bun test` first")).toEqual([]);
+  });
+
+  test("an indented code block is skipped too", () => {
+    expect(scanned("prose\n\n    src/lib/foo.ts\n")).toEqual([]);
+  });
+
+  test("masking a codespan does not manufacture a skill boundary after it", () => {
+    // Blanked with spaces, the `/deploy` here would read as whitespace-preceded
+    // and be offered to the SKILL gate at a boundary the reviewer never typed.
+    // It stays a path candidate, which the daemon then refuses for being
+    // absolute — so it never chips either way.
+    expect(scanned("see `foo.ts`/deploy")).toEqual([
+      ["path:foo.ts", "`foo.ts`"],
+      ["path:/deploy", "/deploy"],
+    ]);
   });
 
   test("a fenced block is skipped entirely", () => {
@@ -88,26 +130,6 @@ describe("scanRefTokens — code", () => {
 });
 
 // ---------------------------------------------------------------------------
-
-/** A timer a test steps by hand: nothing fires until `fire()` is called. */
-function fakeTimers(): Timers & { fire: () => void; pending: () => number } {
-  let queued: (() => void) | undefined;
-  return {
-    set(fn) {
-      queued = fn;
-      return 1;
-    },
-    clear() {
-      queued = undefined;
-    },
-    fire() {
-      const run = queued;
-      queued = undefined;
-      run?.();
-    },
-    pending: () => (queued === undefined ? 0 : 1),
-  };
-}
 
 /** A `resolveFileRefs` double whose answers are handed back on demand, so a test
  * can settle two in-flight requests in whichever order it wants to prove. */
@@ -126,13 +148,13 @@ function deferredResolver() {
   };
 }
 
-function mount(deps: Parameters<typeof refRecognition>[1], doc = "") {
+function mount(deps: Parameters<typeof refRecognition>[1], doc = "", review = REVIEW) {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const view = new EditorView({
     parent: host,
     root: document,
-    state: EditorState.create({ doc, extensions: [markdown(), refRecognition(REVIEW, deps)] }),
+    state: EditorState.create({ doc, extensions: [markdown(), refRecognition(review, deps)] }),
   });
   return {
     view,
@@ -148,18 +170,12 @@ function mount(deps: Parameters<typeof refRecognition>[1], doc = "") {
 
 const SKILLS: SkillRef[] = [{ name: "git", origin: "user" }];
 
-/** Let the settled promises behind a resolve run to the dispatch. One macrotask
- * turn drains the whole microtask chain, and every promise in these cases is
- * already settled or settled by hand — so this is a queue drain, not a sleep
- * waiting for something that might not have happened yet. */
-const drain = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
-
 describe("refRecognition", () => {
   test("recognizes the paths the daemon resolved and the skills the agent has", async () => {
     const timers = fakeTimers();
     const editor = mount(
       {
-        timers,
+        ...timers,
         resolvePaths: async () => ({ "src/a.ts": "file" }),
         lookupSkills: async () => SKILLS,
       },
@@ -168,7 +184,7 @@ describe("refRecognition", () => {
     try {
       timers.fire();
       await drain();
-      expect(editor.known()).toEqual(["/git", "src/a.ts"]);
+      expect(editor.known()).toEqual(["path:src/a.ts", "skill:/git"]);
     } finally {
       editor.dispose();
     }
@@ -177,36 +193,24 @@ describe("refRecognition", () => {
   test("asks nothing of a review whose cwd never arrived", async () => {
     const timers = fakeTimers();
     const asked: string[][] = [];
-    const host = document.createElement("div");
-    document.body.appendChild(host);
-    const view = new EditorView({
-      parent: host,
-      root: document,
-      state: EditorState.create({
-        doc: "rework src/a.ts",
-        extensions: [
-          markdown(),
-          refRecognition(
-            { reviewId: "rev-1", cwd: "" },
-            {
-              timers,
-              resolvePaths: async (_id, paths) => {
-                asked.push(paths);
-                return {};
-              },
-              lookupSkills: async () => [],
-            },
-          ),
-        ],
-      }),
-    });
+    const editor = mount(
+      {
+        ...timers,
+        resolvePaths: async (_id, paths) => {
+          asked.push(paths);
+          return {};
+        },
+        lookupSkills: async () => [],
+      },
+      "rework src/a.ts",
+      { reviewId: "rev-1", cwd: "" },
+    );
     try {
       timers.fire();
       await drain();
       expect(asked).toEqual([]);
     } finally {
-      view.destroy();
-      host.remove();
+      editor.dispose();
     }
   });
 
@@ -218,7 +222,7 @@ describe("refRecognition", () => {
     const timers = fakeTimers();
     const resolver = deferredResolver();
     const editor = mount({
-      timers,
+      ...timers,
       resolvePaths: resolver.resolvePaths,
       lookupSkills: async () => [],
     });
@@ -240,7 +244,7 @@ describe("refRecognition", () => {
     const timers = fakeTimers();
     const resolver = deferredResolver();
     const editor = mount(
-      { timers, resolvePaths: resolver.resolvePaths, lookupSkills: async () => [] },
+      { ...timers, resolvePaths: resolver.resolvePaths, lookupSkills: async () => [] },
       "a.ts",
     );
     try {
@@ -253,17 +257,60 @@ describe("refRecognition", () => {
 
       resolver.settle(1, { "b.ts": "file" });
       await drain();
-      expect(editor.known()).toEqual(["b.ts"]);
+      expect(editor.known()).toEqual(["path:b.ts"]);
 
       // The older request lands late, claiming a.ts resolves. It is dropped —
       // an absence, so there is nothing to poll toward and the drain is the
       // whole assertion's setup.
       resolver.settle(0, { "a.ts": "file" });
       await drain();
-      expect(editor.known()).toEqual(["b.ts"]);
+      expect(editor.known()).toEqual(["path:b.ts"]);
     } finally {
       editor.dispose();
     }
+  });
+
+  test("drops an answer that lands after the view is gone", async () => {
+    // The generation bump in destroy() is the only thing between a late resolve
+    // and a dispatch into a destroyed view, so it needs a case that could break
+    // it (typescript-rules.md § Test-assertion discipline).
+    const timers = fakeTimers();
+    const resolver = deferredResolver();
+    const editor = mount(
+      { ...timers, resolvePaths: resolver.resolvePaths, lookupSkills: async () => [] },
+      "a.ts",
+    );
+    timers.fire();
+    await drain();
+    editor.dispose();
+    resolver.settle(0, { "a.ts": "file" });
+    await drain(); // the dispatch would throw on a destroyed view if it happened
+  });
+
+  test("a path and a skill spelled the same do not grant each other a chip", async () => {
+    // `classify("/git")` accepts, so a `/git` codespan is a PATH candidate spelled
+    // exactly like the skill. Keyed on the string alone, the skill's existence
+    // would chip a codespan the filesystem never answered for.
+    const timers = fakeTimers();
+    const editor = mount(
+      {
+        ...timers,
+        resolvePaths: async () => ({}),
+        lookupSkills: async () => SKILLS,
+      },
+      "run /git over `/git`",
+    );
+    try {
+      timers.fire();
+      await drain();
+      expect(editor.known()).toEqual(["skill:/git"]);
+    } finally {
+      editor.dispose();
+    }
+  });
+
+  test("refKey separates the two namespaces", () => {
+    expect(refKey({ kind: "skill", key: "/git" })).not.toBe(refKey({ kind: "path", key: "/git" }));
   });
 
   test("a reference edited until it no longer resolves stops being recognized", async () => {
@@ -271,7 +318,7 @@ describe("refRecognition", () => {
     const onDisk: Record<string, FileRefKind> = { "src/a.ts": "file" };
     const editor = mount(
       {
-        timers,
+        ...timers,
         resolvePaths: async (_id, paths) =>
           Object.fromEntries(
             paths.filter((p) => onDisk[p]).map((p) => [p, onDisk[p] as FileRefKind]),
@@ -283,7 +330,7 @@ describe("refRecognition", () => {
     try {
       timers.fire();
       await drain();
-      expect(editor.known()).toEqual(["src/a.ts"]);
+      expect(editor.known()).toEqual(["path:src/a.ts"]);
 
       editor.edit("x");
       timers.fire();

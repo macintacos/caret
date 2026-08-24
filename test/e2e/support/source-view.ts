@@ -301,8 +301,8 @@ export async function jumpToHeading(page: Page, heading: string): Promise<void> 
  * need exactly this preamble, so it lives here rather than being copied — the
  * dialog's accessible name and the field's are production's own strings, and a
  * spec-side copy is a second place for them to drift. */
-export async function composer(page: Page, line = 3): Promise<Locator> {
-  await (await revealGutterPlus(page, line)).click();
+export async function composer(page: Page): Promise<Locator> {
+  await (await revealGutterPlus(page, 3)).click();
   const dialog = page.getByRole("dialog", { name: "Add a comment" });
   await expect(dialog).toBeVisible();
   const input = dialog.getByRole("textbox", { name: "Comment" });

@@ -4,12 +4,12 @@
 // itself when the plan came back from the agent, which is too late to fix.
 //
 // This needs a real browser and a real daemon, and neither is visible from the
-// test body. The chip is a CodeMirror mark styled by `.float-chip` from the
-// document's own stylesheet, painted into content the diffs library slot-projects
-// into its shadow root — so whether the atom actually reaches it is a question
-// only a rendered page answers. Underneath that, recognition IS the filesystem:
-// the daemon is a subprocess reading a real project off disk, which is what no
-// prop can stand in for. And the last two cases are the criteria a mounted
+// test body. The chip is a CodeMirror mark tinted with `--chip-ref`, a token
+// declared on the document root, painted into content the diffs library
+// slot-projects into its shadow root — so whether the token actually reaches it
+// is a question only a rendered page answers. Underneath that, recognition IS
+// the filesystem: the daemon is a subprocess reading a real project off disk,
+// which is what no prop can stand in for. And the last two cases are the criteria a mounted
 // component cannot reach at all — that a chip does not break a drag-selection
 // across it, or the caret walking through it.
 //
@@ -64,20 +64,28 @@ test("a path that resolves is chipped and one that does not stays prose", async 
   });
 });
 
-test("the chip wears the shared atom's fill rather than the editor's background", async ({
+test("the chip is tinted by a token that reaches it, not by the editor's ground", async ({
   daemon,
   page,
 }) => {
-  // `.float-chip` lives in the document's stylesheet and the editor's content is
+  // `--chip-ref` is declared on the document root and the editor's content is
   // slot-projected into the diffs library's shadow root. A class-name assertion
-  // would pass whether or not the rule reached it; a painted fill would not.
+  // would pass whether or not the token reached it; a painted fill would not —
+  // and neither would a fill that came out equal to the surface under it, which
+  // is the failure mode a bare "not transparent" check cannot see.
   await withProject(daemon, page, async () => {
     await composer(page);
     await page.keyboard.type("see readme.md");
     await expect(chips(page)).toHaveCount(1);
-    const fill = await chips(page).evaluate((el) => getComputedStyle(el).backgroundColor);
-    expect(fill).not.toBe("rgba(0, 0, 0, 0)");
-    expect(fill).not.toBe("transparent");
+    const painted = await chips(page).evaluate((el) => ({
+      chip: getComputedStyle(el).backgroundColor,
+      ground: getComputedStyle(el.closest(".cm-content") as HTMLElement).backgroundColor,
+    }));
+    expect(painted.chip).not.toBe(painted.ground);
+    // An alpha tint composites onto whatever is behind it, so what has to be
+    // non-zero is the alpha itself.
+    const alpha = Number(/rgba?\([^)]*?,\s*([\d.]+)\)$/.exec(painted.chip)?.[1] ?? "1");
+    expect(alpha).toBeGreaterThan(0);
   });
 });
 

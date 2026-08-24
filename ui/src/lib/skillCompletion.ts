@@ -57,7 +57,8 @@ export type SkillLookup = (reviewId: string) => Promise<SkillRef[]>;
  *
  * @param fetchSkills - How to enumerate a review's skills; defaults to the daemon
  *   round trip and is injectable so a unit drives a known list. `null` reports a
- *   transient failure, and the source MAY also reject.
+ *   transient failure, and unlike the `SkillLookup` this returns, it MAY reject —
+ *   wrapping it is exactly what makes the lookup never reject.
  */
 export function createSkillCache(
   fetchSkills: (id: string) => Promise<SkillRef[] | null> = getSkills,

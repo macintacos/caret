@@ -151,9 +151,10 @@ export interface PathCandidate {
  *
  * The tokenizer half of the "one definition of path-shaped" rule `classify`
  * states: `scanLine` applies it to an inline-code interior, and the feedback
- * editors' chip scan (`$lib/editorRefs.ts`) applies it to a line of prose, so
- * neither surface can drift on what a run is. Offsets are relative to `text`; a
- * caller scanning a fragment adds its own base. */
+ * editors' chip scan (`$lib/editorRefs.ts`) applies it to the document's prose
+ * with code spans and fences masked out — so neither surface can drift on what a
+ * run is. Offsets are relative to `text`; a caller scanning a fragment adds its
+ * own base. */
 export function pathCandidates(text: string): PathCandidate[] {
   const urlRanges = [...text.matchAll(URL_RE)].map((m) => ({
     start: m.index,

@@ -36,6 +36,7 @@ import {
 import {
   type RefRecognitionDeps,
   recognizedRefs,
+  refKey,
   refRecognition,
   scanRefTokens,
 } from "$lib/editorRefs.ts";
@@ -138,20 +139,40 @@ const codeBlockLine = Decoration.line({ class: "cm-md-codeblock" });
 const codeBlockOpen = Decoration.line({ class: "cm-md-codeblock cm-md-codeblock-open" });
 const codeBlockClose = Decoration.line({ class: "cm-md-codeblock cm-md-codeblock-close" });
 
-// A reference caret can actually resolve (EXC-1177). It wears the shared
-// `.float-chip` atom itself rather than a copy of its fill, so the composing side
-// and the chrome retint together; `.cm-md-ref` below adds only the geometry.
-const refChipDeco = Decoration.mark({ class: "float-chip cm-md-ref" });
+// A reference caret can actually resolve (EXC-1177), tinted with `--chip-ref` —
+// the same token the rendered plan spends on a resolved path
+// (diffview/coreStyles.ts). One reference reads the same on the side that
+// composes it and the side that renders it, which is the whole point of bringing
+// the treatment across. See `.cm-md-ref` in the theme for the geometry.
+const refChipDeco = Decoration.mark({ class: "cm-md-ref" });
 
 function buildCodeDecorations(view: EditorView): DecorationSet {
   const decos: Range<Decoration>[] = [];
+  // Chips ride this same pass rather than a sibling plugin: one decoration
+  // mechanism, so the code marks and the reference marks are always built from
+  // one view of the document. Empty on an editor with no review, where
+  // refRecognition contributes no field at all.
+  const recognized = view.state.field(recognizedRefs, false);
+  const chips =
+    recognized === undefined || recognized.size === 0
+      ? []
+      : scanRefTokens(view.state).filter((token) => recognized.has(refKey(token)));
+  // A codespan that IS a chip gives up its own pill. Two marks over one range
+  // nest, so their fills composite, their inline padding stacks and their 0.92em
+  // font sizes multiply — which reads as two chips that failed to line up rather
+  // than as one. The rendered-plan side settles the same collision the same way
+  // (svelte-rules.md § CSS-token discipline, on `data-md-cite`).
+  const chipped = new Set(chips.map((token) => `${token.from}:${token.to}`));
+
   for (const { from, to } of view.visibleRanges) {
     syntaxTree(view.state).iterate({
       from,
       to,
       enter: (node) => {
         if (node.name === "InlineCode") {
-          decos.push(inlineCodeDeco.range(node.from, node.to));
+          if (!chipped.has(`${node.from}:${node.to}`)) {
+            decos.push(inlineCodeDeco.range(node.from, node.to));
+          }
           return false;
         }
         if (node.name === "FencedCode") {
@@ -168,22 +189,9 @@ function buildCodeDecorations(view: EditorView): DecorationSet {
       },
     });
   }
-  // Chips ride this same pass rather than a sibling plugin: one decoration
-  // mechanism, so the code marks and the reference marks are always built from
-  // one view of the document. Absent on an editor with no review, where
-  // refRecognition contributes no field and the lookup below is skipped whole.
-  const recognized = view.state.field(recognizedRefs, false);
-  if (recognized !== undefined && recognized.size > 0) {
-    // Two references inside one codespan collapse onto the same range, and one
-    // chip is what that should paint — the rendered-plan side collapses the same
-    // collision the same way.
-    const painted = new Set<string>();
-    for (const token of scanRefTokens(view.state)) {
-      const range = `${token.from}:${token.to}`;
-      if (!recognized.has(token.key) || painted.has(range)) continue;
-      painted.add(range);
-      decos.push(refChipDeco.range(token.from, token.to));
-    }
+  for (const range of chipped) {
+    const [from, to] = range.split(":").map(Number) as [number, number];
+    decos.push(refChipDeco.range(from, to));
   }
   return Decoration.set(decos, true);
 }
@@ -253,20 +261,29 @@ const theme = EditorView.theme({
     borderBottomRightRadius: "var(--radius)",
     paddingBottom: "0.2em",
   },
-  // A recognized reference. Geometry only — the fill is `.float-chip`'s, so the
-  // atom stays the one place the chip surface is declared and a palette change
-  // reaches the composing side for free. Mono at the inline-code pill's own scale
-  // because a reference is an identifier the reviewer is citing, the same
-  // reservation every other caret surface makes for one; a shade more inline
-  // padding than `.cm-md-code`, which has its backticks to bound it where a bare
-  // path in prose has nothing. No transition: the mark is a fresh element each
-  // time the recognized set moves, so there is no from-state to animate out of,
-  // and a pill fading in under the cursor mid-sentence is a distraction rather
-  // than an affordance.
+  // A recognized reference. `--chip-ref` is the content-chip family's reference
+  // member, already spent on a resolved path in the rendered plan
+  // (diffview/coreStyles.ts) — so the composing side and the reading side tint
+  // one reference identically, and theme.test.ts's existing pins on that token
+  // (its hue distance from --chip-link, its saturation floor against
+  // --chip-code) cover this surface for free. It is an alpha tint rather than a
+  // lightness step, which is what lets it read on --paper here and on the code
+  // panel's own ground there. Deliberately NOT the neutral --chip: that token is
+  // declared for chrome controls, and a run of the reviewer's own markdown is
+  // content.
+  //
+  // Mono at the inline-code pill's own scale, because a reference is an
+  // identifier the reviewer is citing — the same reservation every other caret
+  // surface makes for one, and what keeps a path chipped in prose reading like
+  // the same path chipped inside backticks. No transition: the mark is a fresh
+  // element each time the recognized set moves, so there is no from-state to
+  // animate out of, and a pill fading in under the cursor mid-sentence is a
+  // distraction rather than an affordance.
   ".cm-md-ref": {
     fontFamily: "var(--font-mono)",
     fontSize: "0.92em",
     color: "var(--ink)",
+    backgroundColor: "var(--chip-ref)",
     borderRadius: "3px",
     padding: "0.05em 0.2em",
   },

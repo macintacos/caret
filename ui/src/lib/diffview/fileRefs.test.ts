@@ -252,8 +252,9 @@ describe("classify", () => {
 // pathCandidates is the tokenizer half of the scan: the maximal path-shaped runs
 // in one piece of text, with URLs masked and classify() applied. It is shared —
 // scanLine below applies it to an inline-code interior, and the editor's chip
-// scan (lib/editorRefs.ts, EXC-1177) applies it to a prose line — so what counts
-// as a path-shaped run has one definition rather than one per surface.
+// scan (lib/editorRefs.ts, EXC-1177) applies it to the document's prose with code
+// masked out — so what counts as a path-shaped run has one definition rather than
+// one per surface.
 describe("pathCandidates", () => {
   test("offsets each run into the text it was given", () => {
     // Every word clears the plausibility floor — the floor is deliberately low
