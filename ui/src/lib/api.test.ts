@@ -1,7 +1,7 @@
 import "@ui/test-setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import type { Annotation, DirListing, FileExcerpt, ResolveBody } from "@core/lib/types";
+import type { Annotation, DirListing, FileExcerpt, ResolveBody, SkillRef } from "@core/lib/types";
 import { type LogCapture, logCapture } from "@ui/test-helpers.ts";
 import {
   getApproveMode,
@@ -10,6 +10,7 @@ import {
   getFileExcerpt,
   getHealth,
   getReview,
+  getSkills,
   HttpError,
   markSeen,
   putDraft,
@@ -441,5 +442,42 @@ describe("markSeen", () => {
   test("swallows a network failure (never throws)", async () => {
     respond = () => Promise.reject(new Error("offline"));
     expect(await markSeen(ID)).toBeUndefined();
+  });
+});
+
+describe("getSkills", () => {
+  const skills: SkillRef[] = [
+    { name: "git", origin: "user" },
+    { name: "superpowers:brainstorming", origin: "plugin" },
+  ];
+
+  test("returns the reviewing agent's skills", async () => {
+    respond = () => Promise.resolve(jsonResponse(skills));
+    expect(await getSkills(ID)).toEqual(skills);
+  });
+
+  test("asks the review's own skills route, with the id encoded", async () => {
+    let seenUrl = "";
+    respond = (url) => {
+      seenUrl = url;
+      return Promise.resolve(jsonResponse(skills));
+    };
+    await getSkills("a b/c");
+    expect(seenUrl).toBe("/api/reviews/a%20b%2Fc/skills");
+  });
+
+  test("degrades to no skills on a 404 — the unwired-daemon case", async () => {
+    // A daemon that wires no skill capability 404s the route (the e2e fixture
+    // daemon does exactly this). The editor must behave as it did before
+    // completion existed, so this returns rather than throws.
+    respond = () => Promise.resolve(new Response(null, { status: 404 }));
+    expect(await getSkills(ID)).toEqual([]);
+    await flush();
+    expect(cap.events().some((r) => r.level === "warn" && r.step === "request")).toBe(true);
+  });
+
+  test("degrades to no skills when the request never lands", async () => {
+    respond = () => Promise.reject(new Error("offline"));
+    expect(await getSkills(ID)).toEqual([]);
   });
 });

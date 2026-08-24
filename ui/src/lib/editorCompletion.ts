@@ -65,5 +65,9 @@ export function reviewCompletion(
   sources: readonly ReviewCompletionSource[] = COMPLETION_SOURCES,
 ): Extension[] {
   if (review === undefined || sources.length === 0) return [];
-  return [autocompletion({ override: sources.map((source) => source(review)) })];
+  // `icons: false` drops the per-type gutter CodeMirror renders for EVERY option,
+  // whether or not the option declares a `type` — an empty box of indent, and a
+  // stock emoji when it isn't empty. Neither source names a type, so the column
+  // buys nothing.
+  return [autocompletion({ icons: false, override: sources.map((source) => source(review)) })];
 }

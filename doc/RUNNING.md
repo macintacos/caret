@@ -90,6 +90,23 @@ already at the level you just set.
 > have never clicked stays silent for its first cue. Desktop notifications cover that case
 > — see above.
 
+## Citing a skill in feedback
+
+Type `/` at the start of a word in any feedback editor — the gutter composer, an
+annotation card, the Request changes dialog — and caret offers the skills the agent
+reviewing this plan can actually reach, filtering as you keep typing. Choosing one inserts
+the name in the exact form that agent needs to see, so a plugin skill arrives namespaced
+(`/superpowers:brainstorming`) rather than ambiguous. Each row shows where its skill came
+from, which is what tells two sources offering the same bare name apart. Escape dismisses
+the list without closing the dialog around it, and a `/` inside ordinary prose — a path
+like `src/lib/api.ts` — is left alone.
+
+This is a **reference** aid: the name becomes part of the feedback the agent reads, and
+caret never runs the skill itself. Which skills appear depends on the agent — Claude Code
+contributes your own, the reviewed project's, and each enabled plugin's; OpenCode
+contributes its commands; codex contributes none, so nothing opens there. The list is read
+once when the review opens, so a skill you add mid-review shows up after a reload.
+
 ## Unread plans
 
 While you read one plan, another can arrive — or the one you read earlier can come back

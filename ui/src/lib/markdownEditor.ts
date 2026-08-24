@@ -219,6 +219,11 @@ const theme = EditorView.theme({
   // paper, a hairline rule, chip-scale lift. Reachable from here because the stack
   // configures no `tooltips({ parent })`, so CodeMirror mounts tooltips into
   // `view.dom` (the same fact `completionListOpen` below relies on).
+  //
+  // Every selector repeats `.cm-tooltip.cm-tooltip-autocomplete`, matching the
+  // doubled class the base theme nests its own list rules under. Dropping the
+  // first class loses on specificity — not on order — so the rule silently does
+  // nothing however late it mounts.
   ".cm-tooltip.cm-tooltip-autocomplete": {
     backgroundColor: "var(--paper-raised)",
     color: "var(--ink)",
@@ -229,38 +234,37 @@ const theme = EditorView.theme({
   },
   // Mono, because every row is an identifier the reviewer is citing rather than
   // UI chrome — the same reservation the rendered-code and metadata surfaces make.
-  ".cm-tooltip-autocomplete > ul": {
+  ".cm-tooltip.cm-tooltip-autocomplete > ul": {
     fontFamily: "var(--font-mono)",
     fontSize: "var(--text-sm)",
     maxHeight: "14rem",
   },
-  // A namespaced skill name can outrun the panel, which CodeMirror sizes to the
-  // editor rather than the viewport. Ellipsis rather than a hard cut, so a clipped
-  // row reads as truncated instead of broken.
-  ".cm-tooltip-autocomplete > ul > li": {
+  // A flex row so the NAME is what truncates when a namespaced skill outruns the
+  // panel. In source order the origin comes last, so the stock block layout clips
+  // exactly the field that exists to tell two same-named skills apart.
+  ".cm-tooltip.cm-tooltip-autocomplete > ul > li": {
+    display: "flex",
+    alignItems: "baseline",
     padding: "0.15rem 0.5rem",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
+  ".cm-completionLabel": { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" },
   // The accent's wash, not the accent: amber itself stays reserved for the
   // wordmark and the primary action.
-  ".cm-tooltip-autocomplete > ul > li[aria-selected]": {
+  ".cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]": {
     backgroundColor: "var(--accent-wash)",
     color: "var(--ink)",
   },
   // Near-monochrome means emphasis is weight, not colour — and the stock
   // underline on the matched span is noise at this size.
   ".cm-completionMatchedText": { textDecoration: "none", fontWeight: "600" },
-  // Where a name came from is metadata about it, so it recedes.
+  // Where a name came from is metadata about it, so it recedes — but it never
+  // shrinks away, which is the point of `flex: none` beside the truncating label.
   ".cm-completionDetail": {
     color: "var(--ink-faint)",
     fontStyle: "normal",
+    flex: "none",
     marginLeft: "0.75rem",
   },
-  // CodeMirror's stock per-type emoji is the one thing in the widget that is
-  // loudly not caret's.
-  ".cm-completionIcon": { display: "none" },
 });
 
 // One indent level. Four spaces so a list nest (indentMore, which reads this

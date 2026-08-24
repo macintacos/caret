@@ -23,9 +23,10 @@ afterEach(async () => {
   await rm(tmp, { recursive: true, force: true });
 });
 
-/** Write a command file at `commands/<rel>` under the temp config dir. */
-async function seedCommand(rel: string): Promise<void> {
-  const path = join(tmp, "opencode", "commands", rel);
+/** Write a command file at `<dir>/<rel>` under the temp config dir, defaulting to
+ * the canonical plural command dir. */
+async function seedCommand(rel: string, dir = "commands"): Promise<void> {
+  const path = join(tmp, "opencode", dir, rel);
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, "# a command\n");
 }
@@ -59,4 +60,15 @@ test("sorts by name, so the list is the same on every machine", async () => {
   await seedCommand("zebra.md");
   await seedCommand("alpha.md");
   expect((await readOpencodeCommands()).map((s) => s.name)).toEqual(["alpha", "zebra"]);
+});
+
+test("offers a command from the legacy singular dir, which OpenCode still loads", async () => {
+  await seedCommand("legacy.md", "command");
+  expect(await readOpencodeCommands()).toEqual([{ name: "legacy", origin: "command" }]);
+});
+
+test("offers a name once when both command dirs hold it", async () => {
+  await seedCommand("review.md");
+  await seedCommand("review.md", "command");
+  expect(await readOpencodeCommands()).toEqual([{ name: "review", origin: "command" }]);
 });

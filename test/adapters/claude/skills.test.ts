@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { readClaudeSkills } from "@/adapters/claude/skills.ts";
 
@@ -38,7 +38,6 @@ function userRoot(): string {
 async function seedProject(names: string[]): Promise<string> {
   const cwd = join(tmp, "project");
   for (const name of names) await seedSkill(join(cwd, ".claude", "skills"), name);
-  await mkdir(cwd, { recursive: true });
   return cwd;
 }
 
@@ -47,7 +46,11 @@ async function seedProject(names: string[]): Promise<string> {
  * `plugins` maps `<plugin>@<marketplace>` to its skill names; `enabled` is the
  * subset listed as `true` in settings.json.
  */
-async function seedPlugins(plugins: Record<string, string[]>, enabled: string[]): Promise<void> {
+async function seedPlugins(
+  plugins: Record<string, string[]>,
+  enabled: string[],
+  settingsPath = join(tmp, "claude", "settings.json"),
+): Promise<void> {
   const dir = join(tmp, "claude");
   const registry: Record<string, Array<{ installPath: string; version: string }>> = {};
   for (const [key, names] of Object.entries(plugins)) {
@@ -60,8 +63,9 @@ async function seedPlugins(plugins: Record<string, string[]>, enabled: string[])
     join(dir, "plugins", "installed_plugins.json"),
     JSON.stringify({ plugins: registry }),
   );
+  await mkdir(dirname(settingsPath), { recursive: true });
   await writeFile(
-    join(dir, "settings.json"),
+    settingsPath,
     JSON.stringify({ enabledPlugins: Object.fromEntries(enabled.map((k) => [k, true])) }),
   );
 }
@@ -154,4 +158,34 @@ test("survives a malformed registry, contributing no plugin skills", async () =>
   await mkdir(join(dir, "plugins"), { recursive: true });
   await writeFile(join(dir, "plugins", "installed_plugins.json"), "{ not json");
   expect(await readClaudeSkills(join(tmp, "nowhere"))).toEqual([{ name: "git", origin: "user" }]);
+});
+
+test("follows a symlinked skill directory, the ordinary dotfiles layout", async () => {
+  // A skill deployed by `ln -s` reports as a symlink rather than a directory, and
+  // Claude Code loads it fine — so a directory-type filter would silently drop it.
+  const real = join(tmp, "dotfiles", "my-skill");
+  await mkdir(real, { recursive: true });
+  await writeFile(join(real, "SKILL.md"), "---\nname: x\n---\n");
+  await mkdir(userRoot(), { recursive: true });
+  await symlink(real, join(userRoot(), "my-skill"));
+  expect(await readClaudeSkills(join(tmp, "nowhere"))).toEqual([
+    { name: "my-skill", origin: "user" },
+  ]);
+});
+
+test("honours a plugin enabled at the project settings layer", async () => {
+  const cwd = join(tmp, "project");
+  await seedPlugins(
+    { "superpowers@official": ["brainstorming"] },
+    ["superpowers@official"],
+    join(cwd, ".claude", "settings.json"),
+  );
+  // The user layer says nothing about this plugin; the reviewed project enables it.
+  expect((await readClaudeSkills(cwd)).map((s) => s.name)).toEqual(["superpowers:brainstorming"]);
+});
+
+test("lets a project layer disable what no layer enabled, leaving the list empty", async () => {
+  const cwd = join(tmp, "project");
+  await seedPlugins({ "superpowers@official": ["brainstorming"] }, []);
+  expect(await readClaudeSkills(cwd)).toEqual([]);
 });

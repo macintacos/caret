@@ -942,6 +942,7 @@ describe("read-confidentiality posture", () => {
     // Short heartbeat so the /decision long-poll returns its 204 promptly.
     await boot({
       heartbeatMs: 30,
+      listSkills: async () => [{ name: "git", origin: "user" }],
       diagnostics: () => ({
         system: { platform: "linux", arch: "x64", runtime: "bun 1.3.14" },
         uptimeMs: 0,
@@ -969,6 +970,7 @@ describe("read-confidentiality posture", () => {
             body: JSON.stringify({ paths: [] }),
           }),
       ],
+      ["GET /api/reviews/:id/skills", () => fetch(`${base}/api/reviews/${id}/skills`)],
       ["GET /api/prefs", () => fetch(`${base}/api/prefs`)],
       ["GET /api/diagnostics", () => fetch(`${base}/api/diagnostics`)],
       ["GET / (index)", () => fetch(`${base}/`)],

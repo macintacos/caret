@@ -7,11 +7,14 @@
 //
 // The list is captured ONCE PER REVIEW rather than re-fetched per keystroke: the
 // daemon's walk crosses the plugin tree, which is far too much work to repeat on
-// every character, and it is stateless, so the snapshot lives here. The promise is
-// memoised by review id — not per editor — because a review has many feedback
-// surfaces (the gutter composer, each annotation card, the dialogs) and they
-// should share one fetch. The deliberate consequence: a skill added mid-review is
-// not offered until the tab reloads.
+// every character, and it is stateless, so the snapshot lives here. The cache is
+// keyed by review id because a review has many feedback surfaces (the gutter
+// composer, each annotation card, the dialogs) and they should share one fetch;
+// it lives in the factory's closure rather than at module scope because
+// editorCompletion.ts builds the source once for the whole app, so the closure is
+// already shared by every editor — and a test can then build its own. The
+// deliberate consequence: a skill added mid-review is not offered until the tab
+// reloads.
 
 import type { Completion, CompletionContext, CompletionResult } from "@codemirror/autocomplete";
 
@@ -20,32 +23,18 @@ import { getSkills } from "$lib/api.ts";
 import type { ReviewCompletionSource } from "$lib/editorCompletion.ts";
 
 /** `/` plus the characters a skill name may carry: word characters, the `:` that
- * namespaces a plugin skill, and the `.`/`-` that appear in ordinary skill names.
+ * namespaces a plugin skill, the `.`/`-` of ordinary names, and `/` itself —
+ * OpenCode names a nested command by its path (`team/deploy`), so without the
+ * slash the list would die on the second segment of a name it had just offered.
  * Doubles as `validFor`, so CodeMirror keeps filtering the same list while the
  * reviewer types rather than re-querying per character. */
-const SKILL_TOKEN = /\/[\w:.-]*/;
+const SKILL_TOKEN = /\/[\w:.\-/]*/;
 
-/** One in-flight-or-settled fetch per review id, shared by every editor open on
- * that review. Keyed rather than per-source because each editor builds its own
- * source instance. */
-const BY_REVIEW = new Map<string, Promise<SkillRef[]>>();
-
-function skillsFor(
-  reviewId: string,
-  fetchSkills: (id: string) => Promise<SkillRef[]>,
-): Promise<SkillRef[]> {
-  const cached = BY_REVIEW.get(reviewId);
-  if (cached) return cached;
-  // Never rejects: a failed enumeration is "no completion", the same as an agent
-  // with no skills, so the editor behaves as it did before completion existed.
-  const pending = fetchSkills(reviewId).catch(() => []);
-  BY_REVIEW.set(reviewId, pending);
-  return pending;
-}
-
-/** Whether `/` at `at` opens a completion rather than sitting inside prose. A
- * slash is only a trigger at a word boundary, which is what keeps `src/lib` and
- * `./lib` from leaving a list open over the text. */
+/** Whether the `/` at `at` opens a completion rather than sitting inside prose.
+ * Only after whitespace, or at the start of the document — narrower than a word
+ * boundary, and deliberately so: it is what keeps `src/lib` and `./lib` from
+ * leaving a list open over the text. `matchBefore` anchors its match at the
+ * cursor, so a multi-segment path is tested at its FIRST slash, not its last. */
 function atWordBoundary(context: CompletionContext, at: number): boolean {
   if (at === 0) return true;
   return /\s/.test(context.state.sliceDoc(at - 1, at));
@@ -67,11 +56,32 @@ function toOption(skill: SkillRef): Completion {
 export function skillCompletion(
   fetchSkills: (id: string) => Promise<SkillRef[]> = getSkills,
 ): ReviewCompletionSource {
+  /** One in-flight-or-settled fetch per review id, shared by every editor on that
+   * review. Only SUCCESSES are kept: a failure drops its entry so the next `/`
+   * retries, rather than disabling completion for the rest of the tab's life over
+   * a daemon that was restarting. The cost of that choice is bounded but real —
+   * an empty result returns null, so CodeMirror re-queries, and a daemon that
+   * stays down is re-asked once per keystroke of the token being typed. */
+  const byReview = new Map<string, Promise<SkillRef[]>>();
+
+  function skillsFor(reviewId: string): Promise<SkillRef[]> {
+    const cached = byReview.get(reviewId);
+    if (cached) return cached;
+    // Never rejects: a failed enumeration is "no completion", the same as an agent
+    // with no skills, so the editor behaves as it did before completion existed.
+    const pending = fetchSkills(reviewId).catch(() => {
+      byReview.delete(reviewId);
+      return [];
+    });
+    byReview.set(reviewId, pending);
+    return pending;
+  }
+
   return (review) =>
     async (context: CompletionContext): Promise<CompletionResult | null> => {
       const match = context.matchBefore(SKILL_TOKEN);
       if (!match || !atWordBoundary(context, match.from)) return null;
-      const skills = await skillsFor(review.reviewId, fetchSkills);
+      const skills = await skillsFor(review.reviewId);
       // An agent with nothing to offer — codex today — returns null rather than an
       // empty result, so no popup paints at all.
       if (skills.length === 0) return null;

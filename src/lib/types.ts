@@ -323,10 +323,10 @@ export interface SkillRef {
    * plugin skill carries its `plugin:` namespace, so the insertion identifies
    * exactly one skill. */
   name: string;
-  /** Where it came from ("user" / "project" / "plugin" for Claude Code,
-   * "command" for OpenCode), shown beside the name so two sources offering the
-   * same bare name are told apart rather than one silently winning. Adapter
-   * vocabulary the UI renders verbatim. */
+  /** An opaque, adapter-supplied label for where the name came from, shown beside
+   * it so two sources offering the same bare name are told apart rather than one
+   * silently winning. The core transports it without interpreting it and the UI
+   * renders it verbatim; which labels exist is each adapter's own business. */
   origin: string;
 }
 
