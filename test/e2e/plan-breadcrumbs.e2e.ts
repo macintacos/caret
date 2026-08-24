@@ -1639,8 +1639,9 @@ test("a level that comes back mid-exit leaves no hole where its chevron was", as
   expect(holes).toEqual([]);
 
   // And the mechanism, so a regression is named at its cause: the class crumbOut() adds must
-  // not outlive the transition it belongs to. It is the crumbs' own guard too — measure()
-  // reads `.crumb-item:not(.crumb-leaving)`, so one stuck here drops that level out of the
-  // widths the elision is computed from, for as long as the node lives.
+  // not outlive the transition it belongs to. It is the crumbs' own guard too — both measure()
+  // and openPreviousCrumb() read `.crumb-item:not(.crumb-leaving)`, so one stuck here drops
+  // that level out of the widths the elision is computed from AND out of the cross-crumb
+  // walk's reach, for as long as the node lives.
   await expect(page.locator(`${BAR} .crumb-leaving`)).toHaveCount(0);
 });

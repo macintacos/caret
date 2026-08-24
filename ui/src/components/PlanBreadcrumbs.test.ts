@@ -317,6 +317,45 @@ describe("PlanBreadcrumbs menus", () => {
     expect(keys.filter((k) => k === "j")).toHaveLength(2);
     expect(keys.filter((k) => k === "ArrowDown")).toEqual(["ArrowDown"]);
   });
+
+  // EXC-1128: a level inside its ~140ms outro is off the trail, so a walk anchored on one
+  // does not step — least of all onto the level leaving beside it. The trail's {#each} is
+  // keyed on depth, so a shortening trail destroys a SUFFIX of the blocks: the levels going
+  // are always the trailing ones, which is the arrangement staged here. The class goes on by
+  // hand because happy-dom expands no `animation` shorthand, so crumbOut() reads a duration
+  // of 0 and a real outro never survives a tick.
+  //
+  // A unit test rather than an e2e spec (browser-testing.md): the claim is about which cells
+  // a DOM query returns, and the hazard is unreachable in a real browser while bits-ui's
+  // `preventScroll` keeps the trail from re-rooting under an open menu.
+  test("the crumb walk does not step onto a level still playing its exit", async () => {
+    const { target, flush } = render(PlanBreadcrumbs, {
+      headings: DEEP,
+      activeLine: 7,
+      onJump: () => {},
+    });
+    await openCrumb(target, 3, flush);
+    for (const depth of [2, 3]) {
+      crumbs(target)[depth]?.closest(".crumb-item")?.classList.add("crumb-leaving");
+    }
+
+    // Pinned rather than optional-chained, unlike the walk test above: this one asserts that
+    // NOTHING moved, which a dispatch that silently went nowhere satisfies just as well. And
+    // an unmounted portal is reachable — flushUntil gives up rather than throwing, and a click
+    // on an unsettled graph flips aria-expanded while the content never arrives (openCrumb).
+    const content = document.body.querySelector("[data-slot='dropdown-menu-content']");
+    expect(content).not.toBeNull();
+    content?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "h", bubbles: true, cancelable: true }),
+    );
+    releaseKey("h");
+    flush();
+
+    // The open menu is on a leaving level, so there is no live cell to step back from and
+    // the walk stays put. Unguarded it stepped to "Three" — a node about to be removed.
+    const open = crumbs(target).findIndex((c) => c.getAttribute("aria-expanded") === "true");
+    expect(open).toBe(3);
+  });
 });
 
 // EXC-947: the bar's keyboard surface. Only the wiring a mounted component can show
