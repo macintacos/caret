@@ -212,6 +212,55 @@ const theme = EditorView.theme({
     borderBottomRightRadius: "var(--radius)",
     paddingBottom: "0.2em",
   },
+  // The completion list. @codemirror/autocomplete ships a stock light-mode
+  // tooltip: a near-white panel that inherits the editor's own text colour, so
+  // under a dark scheme every unselected row is white on white. These rules paint
+  // it from caret's tokens instead, as the small floating chrome it is — raised
+  // paper, a hairline rule, chip-scale lift. Reachable from here because the stack
+  // configures no `tooltips({ parent })`, so CodeMirror mounts tooltips into
+  // `view.dom` (the same fact `completionListOpen` below relies on).
+  ".cm-tooltip.cm-tooltip-autocomplete": {
+    backgroundColor: "var(--paper-raised)",
+    color: "var(--ink)",
+    border: "1px solid var(--rule)",
+    borderRadius: "var(--radius)",
+    boxShadow: "var(--shadow-chip)",
+    overflow: "hidden",
+  },
+  // Mono, because every row is an identifier the reviewer is citing rather than
+  // UI chrome — the same reservation the rendered-code and metadata surfaces make.
+  ".cm-tooltip-autocomplete > ul": {
+    fontFamily: "var(--font-mono)",
+    fontSize: "var(--text-sm)",
+    maxHeight: "14rem",
+  },
+  // A namespaced skill name can outrun the panel, which CodeMirror sizes to the
+  // editor rather than the viewport. Ellipsis rather than a hard cut, so a clipped
+  // row reads as truncated instead of broken.
+  ".cm-tooltip-autocomplete > ul > li": {
+    padding: "0.15rem 0.5rem",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  // The accent's wash, not the accent: amber itself stays reserved for the
+  // wordmark and the primary action.
+  ".cm-tooltip-autocomplete > ul > li[aria-selected]": {
+    backgroundColor: "var(--accent-wash)",
+    color: "var(--ink)",
+  },
+  // Near-monochrome means emphasis is weight, not colour — and the stock
+  // underline on the matched span is noise at this size.
+  ".cm-completionMatchedText": { textDecoration: "none", fontWeight: "600" },
+  // Where a name came from is metadata about it, so it recedes.
+  ".cm-completionDetail": {
+    color: "var(--ink-faint)",
+    fontStyle: "normal",
+    marginLeft: "0.75rem",
+  },
+  // CodeMirror's stock per-type emoji is the one thing in the widget that is
+  // loudly not caret's.
+  ".cm-completionIcon": { display: "none" },
 });
 
 // One indent level. Four spaces so a list nest (indentMore, which reads this

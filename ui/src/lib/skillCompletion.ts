@@ -55,7 +55,7 @@ function toOption(skill: SkillRef): Completion {
   // The label carries the leading `/` because `from` sits at the slash: it is both
   // what CodeMirror filters the reviewer's typing against and what gets inserted,
   // so a plugin skill inserts its namespaced `/plugin:skill` form.
-  return { label: `/${skill.name}`, detail: skill.origin, type: "keyword" };
+  return { label: `/${skill.name}`, detail: skill.origin };
 }
 
 /**
