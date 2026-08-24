@@ -69,6 +69,8 @@ function subsequence(haystack: string, needle: string): boolean {
   return i === needle.length;
 }
 
+const GIT_DIR = ".git";
+
 const under = (dir: string, name: string): string => (dir === "" ? name : `${dir}/${name}`);
 
 /**
@@ -113,6 +115,11 @@ export async function searchFiles(
         done = true;
         break;
       }
+      // By name rather than by kind, because `.git` has two of them: a directory
+      // in a plain checkout, which the dotted rule below already refuses, and a
+      // FILE in a linked worktree, which it does not. Skipping the name makes
+      // the two layouts offer the same list.
+      if (entry.name === GIT_DIR) continue;
       if (entry.isFile()) files.push(entry.name);
       else if (entry.isDirectory() && !SKIP_DIRS.has(entry.name) && !entry.name.startsWith(".")) {
         dirs.push(entry.name);

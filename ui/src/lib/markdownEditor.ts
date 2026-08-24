@@ -265,6 +265,26 @@ const theme = EditorView.theme({
     flex: "none",
     marginLeft: "0.75rem",
   },
+  // The stale twin of the selected row. `cm-tooltip-autocomplete-disabled` is
+  // toggled onto the SAME element while a source re-queries, and both these
+  // sources re-query per keystroke against the daemon, so a dimmed stale list is
+  // the common case rather than an edge — without its own arm it would paint
+  // identically to a live one. Same length as the rule above, so it wins while
+  // both classes are present by sitting after it, not by accident.
+  ".cm-tooltip.cm-tooltip-autocomplete-disabled > ul > li[aria-selected]": {
+    backgroundColor: "var(--chip)",
+    color: "var(--ink-soft)",
+  },
+  // What the list says when a search stopped short of the whole answer (EXC-1175).
+  // Receded and set in the prose face: a statement ABOUT the list, not a row in it.
+  ".cm-tooltip.cm-tooltip-autocomplete > ul > completion-section": {
+    fontFamily: "var(--font-sans)",
+    fontSize: "var(--text-xs)",
+    color: "var(--ink-faint)",
+    borderBottom: "1px solid var(--rule)",
+    padding: "0.3rem 0.5rem",
+    opacity: 1,
+  },
 });
 
 // One indent level. Four spaces so a list nest (indentMore, which reads this

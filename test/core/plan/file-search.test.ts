@@ -83,6 +83,15 @@ test("a dotted file is still offered — only dotted directories are skipped", a
   expect((await searchFiles(cwd, "gitignore"))?.paths).toEqual([".gitignore"]);
 });
 
+test("a worktree's .git file is skipped, so both checkout layouts offer the same list", async () => {
+  // In a linked worktree `.git` is a FILE pointing at the common dir, so the
+  // dotted-DIRECTORY rule above misses it and it would sit second in the list
+  // of every bare `@`. Nobody cites it either way.
+  write(".git", "gitdir: /elsewhere/.bare/worktrees/x\n");
+  write(".gitignore");
+  expect((await searchFiles(cwd, ""))?.paths).toEqual([".gitignore"]);
+});
+
 test("a symlink is never a row, so nothing outside the cwd can be offered", async () => {
   const outside = mkdtempSync(join(tmpdir(), "caret-search-outside-"));
   try {
