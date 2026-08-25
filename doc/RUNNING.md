@@ -90,22 +90,48 @@ already at the level you just set.
 > have never clicked stays silent for its first cue. Desktop notifications cover that case
 > — see above.
 
-## Citing a skill in feedback
+## Completing a name in feedback
 
-Type `/` at the start of a word in any feedback editor — the gutter composer, an
-annotation card, the Request changes dialog — and caret offers the skills the agent
-reviewing this plan can actually reach, filtering as you keep typing. Choosing one inserts
-the name in the exact form that agent needs to see, so a plugin skill arrives namespaced
+Two characters open a list in any feedback editor — the gutter composer, an annotation
+card, the Request changes dialog.
+
+Type `/` at the start of a word and caret offers the skills the agent reviewing this plan
+can actually reach, filtering as you keep typing. Choosing one inserts the name in the
+exact form that agent needs to see, so a plugin skill arrives namespaced
 (`/superpowers:brainstorming`) rather than ambiguous. Each row shows where its skill came
-from, which is what tells two sources offering the same bare name apart. Escape dismisses
-the list without closing the dialog around it, and a `/` inside ordinary prose — a path
-like `src/lib/api.ts` — is left alone.
+from, which is what tells two sources offering the same bare name apart.
 
-This is a **reference** aid: the name becomes part of the feedback the agent reads, and
-caret never runs the skill itself. Which skills appear depends on the agent — Claude Code
-contributes your own, the reviewed project's, and each enabled plugin's; OpenCode
-contributes its commands; codex contributes none, so nothing opens there. The list is read
-once when the review opens, so a skill you add mid-review shows up after a reload.
+Type `@` and caret offers the files under the working directory the plan was written in,
+matched loosely — `@srlbfoo` finds `src/lib/foo.ts`, and each row picks out the characters
+your query matched. Choosing one leaves the cwd-relative path behind as ordinary text, so
+the reference still resolves when the agent picks the plan up in some later session. Type
+`:42` after the name and the line rides along with it. In a project too large to search to
+the end, the list says how much of the answer it is showing.
+
+Escape dismisses either list without closing the dialog around it, and a `/` inside
+ordinary prose — a path like `src/lib/api.ts` — is left alone.
+
+The `/` list is a **reference** aid: the name becomes part of the feedback the agent
+reads, and caret never runs the skill itself. Which skills appear depends on the agent —
+Claude Code contributes your own, the reviewed project's, and each enabled plugin's;
+OpenCode contributes its commands; codex contributes none, so nothing opens there. The
+list is read once when the review opens, so a skill you add mid-review shows up after a
+reload.
+
+### Seeing what you are about to cite
+
+With a list open, `ctrl+space` opens a panel beside it showing more about the highlighted
+row: a skill's own description, or the opening lines of a file. The panel follows the
+arrow keys, so choosing between `src/lib/api.ts` and `src/lib/api.test.ts`, or between
+`brainstorming` and `linear-plan`, no longer means leaving the editor to find out which is
+which. A `:42` after a filename moves the preview to that line and marks it.
+
+A second `ctrl+space` closes the panel, and it stays closed until you ask again. A skill
+that describes itself nowhere, and a file caret cannot read, each say so in a sentence and
+leave the list working.
+
+The top of the list names the shortcut. Turning **Settings → Shortcut hints** off takes
+that line away; the shortcut keeps working.
 
 ## References caret recognizes
 
