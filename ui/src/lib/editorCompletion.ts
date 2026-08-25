@@ -4,9 +4,11 @@
 // markdownEditor.ts rather than inside it: that module owns the editor's styling
 // and key handling, this one owns the registry two independent features add
 // themselves to, so they never edit the same lines.
-import { autocompletion, type CompletionSource } from "@codemirror/autocomplete";
-import type { Extension } from "@codemirror/state";
+import { autocompletion, type CompletionSource, startCompletion } from "@codemirror/autocomplete";
+import { type Extension, Prec } from "@codemirror/state";
+import { type EditorView, keymap } from "@codemirror/view";
 
+import { type PreviewToggle, previewToggle } from "$lib/completionPreview.ts";
 import { fileCompletion } from "$lib/fileCompletion.ts";
 import { skillCompletion } from "$lib/skillCompletion.ts";
 
@@ -43,6 +45,51 @@ export const COMPLETION_SOURCES: readonly ReviewCompletionSource[] = [
   skillCompletion(),
 ];
 
+/** Whether a completion list is PAINTED, which is the only thing Escape and the
+ * preview toggle should key off. Deliberately not `completionStatus(state) ===
+ * "active"`: while a source re-queries, autocomplete keeps the previous list on
+ * screen (dimmed, `disabled`) and reports "pending" for that whole window, so the
+ * status test hands Escape to the surrounding dialog with a list still visible —
+ * and a source that re-queries per keystroke re-enters that window on every
+ * character. No exported accessor distinguishes the two (`currentCompletions` and
+ * friends all gate on `!open.disabled`), so the DOM is the ground truth. It is
+ * reachable because the editor's stack configures no `tooltips({ parent })`, which
+ * leaves CodeMirror mounting tooltips into `view.dom`. */
+export function completionListOpen(view: EditorView): boolean {
+  return view.dom.querySelector(".cm-tooltip-autocomplete") !== null;
+}
+
+/**
+ * Ctrl+Space over a painted completion list opens the preview panel beside it,
+ * and a second one closes it (EXC-1186).
+ *
+ * The flip is followed by `startCompletion`, and that is the whole mechanism: the
+ * panel is a row's `Completion.info`, and `CompletionTooltip.updateSel`
+ * re-evaluates that only when the selected `<li>` element changes — so flipping
+ * the toggle on its own would leave the panel exactly as it was.
+ * `startCompletionEffect` forces every source back to Pending and re-queries, and
+ * the sources read the toggle as they answer.
+ *
+ * With NO list painted this declines the key, leaving autocomplete's own
+ * `Ctrl-Space` binding to open one — exactly what it did before the preview
+ * existed. There is nothing to preview until there is a highlighted row.
+ */
+function previewKeymap(toggle: PreviewToggle): Extension {
+  return Prec.highest(
+    keymap.of([
+      {
+        key: "Ctrl-Space",
+        run: (view) => {
+          if (!completionListOpen(view)) return false;
+          toggle.toggle();
+          startCompletion(view);
+          return true;
+        },
+      },
+    ]),
+  );
+}
+
 /**
  * The autocomplete half of the editor's extension stack, or nothing at all when
  * there is no review to complete against and nothing registered to complete
@@ -63,15 +110,25 @@ export const COMPLETION_SOURCES: readonly ReviewCompletionSource[] = [
  *   mounted outside one.
  * @param sources - The registered sources; defaults to the module registry and is
  *   injectable so a unit can compose against a source of its own.
+ * @param toggle - Whether the preview panel is open, defaulting to the app's own.
+ *   Injected, a unit drives both states without touching it.
  */
 export function reviewCompletion(
   review: ReviewContext | undefined,
   sources: readonly ReviewCompletionSource[] = COMPLETION_SOURCES,
+  toggle: PreviewToggle = previewToggle,
 ): Extension[] {
   if (review === undefined || sources.length === 0) return [];
-  // `icons: false` drops the per-type gutter CodeMirror renders for EVERY option,
-  // whether or not the option declares a `type` — an empty box of indent, and a
-  // stock emoji when it isn't empty. Neither source names a type, so the column
-  // buys nothing.
-  return [autocompletion({ icons: false, override: sources.map((source) => source(review)) })];
+  return [
+    // Ahead of autocompletion()'s own keymap, which binds `Ctrl-Space` too. Both
+    // flatten to `Prec.highest`, so precedence cannot separate them and array
+    // position is what decides: `runHandlers` walks the handlers in order and
+    // stops at the first that returns true.
+    previewKeymap(toggle),
+    // `icons: false` drops the per-type gutter CodeMirror renders for EVERY option,
+    // whether or not the option declares a `type` — an empty box of indent, and a
+    // stock emoji when it isn't empty. Neither source names a type, so the column
+    // buys nothing.
+    autocompletion({ icons: false, override: sources.map((source) => source(review)) }),
+  ];
 }

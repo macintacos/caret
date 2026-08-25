@@ -4,19 +4,42 @@
 // reference is text, so the completion inserts text and no decoration, no mark,
 // and no widget.
 //
+// A `:42` typed after the filename is part of the reference rather than part of
+// the query (EXC-1186): the daemon is asked for the path half, the citation rides
+// along into what gets inserted, and the Ctrl+Space preview panel opens on that
+// line rather than on the file's head.
+//
 // It registers against the seam in editorCompletion.ts and owns nothing else
 // there, so it and the skill source can land in either order.
 
 import type { Completion, CompletionResult, CompletionSource } from "@codemirror/autocomplete";
 
-import type { FileSearchResponse, SearchStop } from "@core/lib/types";
-import { searchFiles } from "$lib/api.ts";
+import type { FileExcerpt, FileSearchResponse, SearchStop } from "@core/lib/types";
+import { getFileExcerpt, HttpError, searchFiles } from "$lib/api.ts";
+import {
+  type PreviewToggle,
+  previewPanel,
+  previewToggle,
+  renderExcerptLines,
+} from "$lib/completionPreview.ts";
+import { classify } from "$lib/diffview/fileRefs.ts";
 import type { ReviewCompletionSource } from "$lib/editorCompletion.ts";
 
 /** Asking the daemon which files under a review's cwd match a query. Never
  * rejects — `api.ts` degrades a failed request to no matches, which is what
  * lets this source treat "nothing came back" as its only failure mode. */
 export type SearchFiles = (reviewId: string, query: string) => Promise<FileSearchResponse>;
+
+/** Reading a window of one of the review's files, for the preview panel. Unlike
+ * `SearchFiles` this DOES reject: `api.ts` throws an HttpError on a non-2xx, and
+ * telling a file too large to send from any other refusal is exactly what the
+ * panel needs it to do. */
+export type GetFileExcerpt = (
+  reviewId: string,
+  path: string,
+  line?: number,
+  range?: { start: number; end: number },
+) => Promise<FileExcerpt>;
 
 // The trigger: an `@` and everything up to the cursor that is neither
 // whitespace nor another `@`. Whitespace ends it, so a reviewer who types `@`
@@ -46,6 +69,29 @@ function stoppedHeader(shown: number, stoppedAt: SearchStop): string {
   return stoppedAt === "results"
     ? `First ${shown} matches — keep typing to narrow`
     : `First ${shown} matches — this tree is larger than the search reaches`;
+}
+
+/**
+ * The trigger's text split into what the daemon should be asked for and the line
+ * the reviewer cited after it, if any (EXC-1186).
+ *
+ * `classify` does the parsing: it is the codebase's one definition of
+ * "path-shaped", and it already reads every spelling of a line reference a plan
+ * writes — `:42`, `:L42`, `#L42`, and a `:42-50` range. A second notion of what a
+ * line suffix looks like here would let what the editor completes and what the
+ * source view links drift apart on the same text. A run it refuses — nothing with
+ * a letter in its last segment, so a bare `@42` — is still a legitimate thing to
+ * search for, and falls back to the query as typed.
+ *
+ * `suffix` is what the citation adds to the inserted path, empty when there was
+ * none; `line` is the line the preview panel centres on. A range keeps both its
+ * ends, because the reviewer typed both.
+ */
+function splitCitedLine(typed: string): { query: string; line?: number; suffix: string } {
+  const cited = classify(typed);
+  if (cited === null || cited.line === undefined) return { query: typed, suffix: "" };
+  const end = cited.endLine === undefined ? "" : `-${cited.endLine}`;
+  return { query: cited.path, line: cited.line, suffix: `:${cited.line}${end}` };
 }
 
 /**
@@ -92,13 +138,87 @@ export function subsequenceRanges(label: string, query: string): number[] {
 }
 
 /**
+ * The window the panel asks for: a file's first twenty lines, or the twenty
+ * around a cited line — nine above it and ten below, because a reader carries on
+ * downward from the line they named. Both ends are clamped by the daemon, so a
+ * line past the end of a file comes back as that file's tail rather than as an
+ * error.
+ */
+function previewWindow(line: number | undefined): { start: number; end: number } {
+  if (line === undefined) return { start: 1, end: 20 };
+  return { start: Math.max(1, line - 9), end: line + 10 };
+}
+
+/**
+ * What the panel says when the read failed.
+ *
+ * Every failure is an ordinary answer rendered as a plain sentence: the list stays
+ * open, every other row still works, and nothing throws into CodeMirror. The two
+ * are told apart because the remedies differ — nothing the reviewer can do makes a
+ * file small enough to send, while a file that could not be read may simply have
+ * moved since the plan named it.
+ */
+function previewFailure(err: unknown): string {
+  return err instanceof HttpError && err.status === 413
+    ? "This file is too large to preview."
+    : "This file could not be read.";
+}
+
+/**
+ * The preview panel for one row: the file's lines around whatever the reviewer
+ * cited, or a sentence saying why they are not there.
+ *
+ * Handed back synchronously with an empty body that the read fills in when it
+ * lands — `updateSel`'s async branch skips the `aria-describedby` wiring its sync
+ * branch does, so a row that awaited its answer would go undescribed and the panel
+ * would arrive late. `destroy`, which CodeMirror calls the moment the selection
+ * moves, cancels that write: a read landing after the reviewer has arrowed on
+ * fills an element that is no longer on screen.
+ */
+function filePreview(
+  excerpt: GetFileExcerpt,
+  reviewId: string,
+  line: number | undefined,
+): (option: Completion) => { dom: HTMLElement; destroy: () => void } {
+  return (option) => {
+    const { dom, body } = previewPanel(option.label);
+    let live = true;
+    // The window is stated outright, so the centring `line` parameter is left
+    // unset — `start`/`end` win over it at the route anyway.
+    excerpt(reviewId, option.label, undefined, previewWindow(line)).then(
+      (found) => {
+        if (live) renderExcerptLines(body, found, line);
+      },
+      (err: unknown) => {
+        if (live) body.textContent = previewFailure(err);
+      },
+    );
+    return {
+      dom,
+      destroy: () => {
+        live = false;
+      },
+    };
+  };
+}
+
+/**
  * A completion source offering the files under `review.cwd`, asking `search` for
  * the matches.
  *
- * The factory over an injected search is what lets a unit drive the source with
- * no daemon and no network; `fileCompletion` below is the production binding.
+ * The factory over injected effects is what lets a unit drive the source with no
+ * daemon and no network; `fileCompletion` below is the production binding.
+ *
+ * @param search - How to ask which files match a query.
+ * @param excerpt - How to read the lines the preview panel shows.
+ * @param toggle - Whether the reviewer has the panel open. Injected, a unit gets
+ *   one of its own, so its state can neither be read from nor leak into the app's.
  */
-export function createFileCompletion(search: SearchFiles): ReviewCompletionSource {
+export function createFileCompletion(
+  search: SearchFiles,
+  excerpt: GetFileExcerpt = getFileExcerpt,
+  toggle: PreviewToggle = previewToggle,
+): ReviewCompletionSource {
   return (review): CompletionSource =>
     async (context): Promise<CompletionResult | null> => {
       const trigger = context.matchBefore(TRIGGER);
@@ -113,7 +233,7 @@ export function createFileCompletion(search: SearchFiles): ReviewCompletionSourc
       // on a permanently known answer.
       if (review.cwd === "") return null;
 
-      const query = trigger.text.slice(1);
+      const { query, line, suffix } = splitCitedLine(trigger.text.slice(1));
       const { paths, stoppedAt } = await search(review.reviewId, query);
       // Nothing matched is not an error and gets no list — the editor behaves
       // exactly as it did before completion existed. That covers the walk giving
@@ -122,7 +242,21 @@ export function createFileCompletion(search: SearchFiles): ReviewCompletionSourc
       if (paths.length === 0) return null;
 
       const section = stoppedAt === null ? undefined : stoppedHeader(paths.length, stoppedAt);
-      const options: Completion[] = paths.map((path) => ({ label: path, section }));
+      // The toggle is read HERE, at query time, and not by the panel at render
+      // time: `updateSel` re-evaluates `info` only when the selected element
+      // changes, so a panel that asked would never be asked again — see
+      // completionPreview.ts.
+      const info = toggle.on() ? filePreview(excerpt, review.reviewId, line) : undefined;
+      const options: Completion[] = paths.map((path) => ({
+        label: path,
+        section,
+        info,
+        // The label stays the bare path, so the list still reads as paths; the
+        // cited line rides in on the insertion instead. Undefined where nothing
+        // was cited, which CodeMirror reads exactly as an absent `apply`: its
+        // default replaces the range with the label.
+        apply: suffix === "" ? undefined : `${path}${suffix}`,
+      }));
       return {
         // The range starts at the `@` itself, so CodeMirror's default apply
         // carries the trigger away with the query and leaves only the path. A

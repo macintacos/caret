@@ -29,6 +29,7 @@ import {
 import { tags } from "@lezer/highlight";
 
 import {
+  completionListOpen,
   type ReviewCompletionSource,
   type ReviewContext,
   reviewCompletion,
@@ -293,7 +294,7 @@ const theme = EditorView.theme({
   // it from caret's tokens instead, as the small floating chrome it is — raised
   // paper, a hairline rule, chip-scale lift. Reachable from here because the stack
   // configures no `tooltips({ parent })`, so CodeMirror mounts tooltips into
-  // `view.dom` (the same fact `completionListOpen` below relies on).
+  // `view.dom` (the same fact `completionListOpen` relies on).
   //
   // Every selector repeats `.cm-tooltip.cm-tooltip-autocomplete`, matching the
   // doubled class the base theme nests its own list rules under. Dropping the
@@ -414,26 +415,12 @@ export function cursorInList(state: EditorState): boolean {
   return state.selection.ranges.some((range) => LIST_LINE.test(state.doc.lineAt(range.head).text));
 }
 
-/** Whether a completion list is PAINTED, which is the only thing Escape should
- * key off. Deliberately not `completionStatus(state) === "active"`: while a source
- * re-queries, autocomplete keeps the previous list on screen (dimmed, `disabled`)
- * and reports "pending" for that whole window, so the status test hands Escape to
- * the surrounding dialog with a list still visible — and a source that re-queries
- * per keystroke re-enters that window on every character. No exported accessor
- * distinguishes the two (`currentCompletions` and friends all gate on
- * `!open.disabled`), so the DOM is the ground truth. It is reachable because this
- * stack configures no `tooltips({ parent })`, which leaves CodeMirror mounting
- * tooltips into `view.dom`. */
-function completionListOpen(view: EditorView): boolean {
-  return view.dom.querySelector(".cm-tooltip-autocomplete") !== null;
-}
-
 /** What the editor's chord layer does with a keydown: submit, dismiss an open
  * completion list, cancel the editor, or nothing (leaving the key to the rest of
  * the stack). Escape is the interesting case — a list that is on screen owns it,
  * and the surrounding dialog owns it otherwise. `completionOpen` means *painted*,
- * not "the completion state machine is active"; see `completionListOpen`.
- * Exported for unit tests. */
+ * not "the completion state machine is active"; see `completionListOpen` in
+ * editorCompletion.ts. Exported for unit tests. */
 export function chordAction(
   e: KeyboardEvent,
   completionOpen: boolean,

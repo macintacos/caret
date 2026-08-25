@@ -1,7 +1,12 @@
+import "@ui/test-setup.ts";
 import { describe, expect, test } from "bun:test";
 
 import type { CompletionSource } from "@codemirror/autocomplete";
+import { EditorState } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
 
+import { completionListPainted as painted, typeInto, until } from "@ui/test-helpers.ts";
+import { createPreviewToggle, type PreviewToggle } from "$lib/completionPreview.ts";
 import { fileCompletion } from "$lib/fileCompletion.ts";
 
 import {
@@ -58,5 +63,97 @@ describe("reviewCompletion", () => {
     const seen: ReviewContext[] = [];
     reviewCompletion(CONTEXT, [recordingSource(seen), recordingSource(seen)]);
     expect(seen).toEqual([CONTEXT, CONTEXT]);
+  });
+});
+
+// The Ctrl+Space preview binding (EXC-1186). What it decides — whether a list is
+// painted — is only knowable from a real view, and the flip has to be followed by
+// a re-query for the panel to repaint at all, so this drives a live EditorView
+// over the extensions `reviewCompletion` returns rather than asserting on a
+// command in isolation.
+describe("Ctrl+Space over the completion list", () => {
+  /** A source that always offers a row, and counts how often it was asked. */
+  function countingSource(calls: { n: number }): CompletionSource {
+    return (ctx) => {
+      calls.n++;
+      return { from: ctx.pos, options: [{ label: "alpha.ts" }] };
+    };
+  }
+
+  function mountList(toggle: PreviewToggle, source: CompletionSource) {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const view = new EditorView({
+      parent: host,
+      root: document,
+      state: EditorState.create({
+        doc: "",
+        extensions: reviewCompletion(CONTEXT, [() => source], toggle),
+      }),
+    });
+    return {
+      view,
+      dispose: () => {
+        view.destroy();
+        host.remove();
+      },
+    };
+  }
+
+  const ctrlSpace = (view: EditorView) =>
+    view.contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", { key: " ", ctrlKey: true, bubbles: true, cancelable: true }),
+    );
+
+  test("opens the preview over a painted list, and closes it again", async () => {
+    const toggle = createPreviewToggle();
+    const { view, dispose } = mountList(toggle, countingSource({ n: 0 }));
+    try {
+      typeInto(view, "@a");
+      expect(await until(() => painted(view))).toBe(true);
+
+      ctrlSpace(view);
+      expect(toggle.on()).toBe(true);
+
+      ctrlSpace(view);
+      expect(toggle.on()).toBe(false);
+    } finally {
+      dispose();
+    }
+  });
+
+  test("re-queries the sources, which is the only way the panel repaints", async () => {
+    // CompletionTooltip.updateSel re-evaluates a row's `info` only when the
+    // selected element changes, so flipping the toggle alone would leave the
+    // panel exactly as it was.
+    const calls = { n: 0 };
+    const toggle = createPreviewToggle();
+    const { view, dispose } = mountList(toggle, countingSource(calls));
+    try {
+      typeInto(view, "@a");
+      expect(await until(() => painted(view))).toBe(true);
+      const before = calls.n;
+
+      ctrlSpace(view);
+      expect(toggle.on()).toBe(true);
+      expect(await until(() => calls.n > before)).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
+
+  test("with no list painted it leaves the key to autocomplete's own binding", async () => {
+    // Which opens a list, exactly as it did before the preview existed.
+    const toggle = createPreviewToggle();
+    const { view, dispose } = mountList(toggle, countingSource({ n: 0 }));
+    try {
+      expect(painted(view)).toBe(false);
+
+      ctrlSpace(view);
+      expect(await until(() => painted(view))).toBe(true);
+      expect(toggle.on()).toBe(false);
+    } finally {
+      dispose();
+    }
   });
 });
