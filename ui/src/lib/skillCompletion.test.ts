@@ -23,12 +23,14 @@ import type { PreviewToggle } from "$lib/completionPreview.ts";
 
 import { createSkillCache, type DescribeSkill, skillCompletion } from "./skillCompletion.ts";
 
-// The `/` source is what turns the EXC-1174 seam into a feature, so these drive a
-// REAL EditorView with the source installed rather than calling it as a function:
-// what matters is whether a list paints, what it inserts, and — the criterion a
-// pure call can't reach — that an ordinary path in prose leaves no list sitting
-// open over the text. The live-view scaffolding is shared with
-// markdownEditor.test.ts (ui/test-helpers.ts).
+// The `/` source is what turns the EXC-1174 seam into a feature, so the
+// triggering and insertion cases drive a REAL EditorView with the source
+// installed rather than calling it as a function: what matters there is whether a
+// list paints, what it inserts, and — the criterion a pure call can't reach —
+// that an ordinary path in prose leaves no list sitting open over the text. The
+// live-view scaffolding is shared with markdownEditor.test.ts
+// (ui/test-helpers.ts). The preview-panel block at the foot of the file is pure
+// and says so where it sits.
 
 const SKILLS: SkillRef[] = [
   { name: "git", origin: "user" },

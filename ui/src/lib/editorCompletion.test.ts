@@ -11,6 +11,7 @@ import { fileCompletion } from "$lib/fileCompletion.ts";
 
 import {
   COMPLETION_SOURCES,
+  type CompletionDeps,
   type ReviewCompletionSource,
   type ReviewContext,
   reviewCompletion,
@@ -28,6 +29,27 @@ function recordingSource(seen: ReviewContext[]): ReviewCompletionSource {
   return (review) => {
     seen.push(review);
     return (() => null) satisfies CompletionSource;
+  };
+}
+
+/** A live editor over one source and the given deps, in a detached host. */
+function mountWith(source: CompletionSource, deps: CompletionDeps) {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const view = new EditorView({
+    parent: host,
+    root: document,
+    state: EditorState.create({
+      doc: "",
+      extensions: reviewCompletion(CONTEXT, [() => source], deps),
+    }),
+  });
+  return {
+    view,
+    dispose: () => {
+      view.destroy();
+      host.remove();
+    },
   };
 }
 
@@ -81,23 +103,7 @@ describe("Ctrl+Space over the completion list", () => {
   }
 
   function mountList(toggle: PreviewToggle, source: CompletionSource) {
-    const host = document.createElement("div");
-    document.body.appendChild(host);
-    const view = new EditorView({
-      parent: host,
-      root: document,
-      state: EditorState.create({
-        doc: "",
-        extensions: reviewCompletion(CONTEXT, [() => source], toggle),
-      }),
-    });
-    return {
-      view,
-      dispose: () => {
-        view.destroy();
-        host.remove();
-      },
-    };
+    return mountWith(source, { toggle });
   }
 
   const ctrlSpace = (view: EditorView) =>
@@ -155,5 +161,53 @@ describe("Ctrl+Space over the completion list", () => {
     } finally {
       dispose();
     }
+  });
+});
+
+// The hint strip above the list is a CLASS on the tooltip, not a row in it — the
+// theme draws the sentence from a `::before`. So what there is to assert is which
+// classes land, under each combination of the shortcut-hints preference and the
+// panel's own state; that they read as a strip at all is CSS, and the e2e spec is
+// where a real browser confirms it.
+describe("the completion tooltip's hint class", () => {
+  function alwaysOffers(): CompletionSource {
+    return (ctx) => ({ from: ctx.pos, options: [{ label: "alpha.ts" }] });
+  }
+
+  const fixedToggle = (on: boolean): PreviewToggle => ({ on: () => on, toggle: () => {} });
+
+  /** Paint a list and read the classes off the tooltip CodeMirror mounted. */
+  async function classesWith(deps: CompletionDeps): Promise<string[]> {
+    const { view, dispose } = mountWith(alwaysOffers(), deps);
+    try {
+      typeInto(view, "@a");
+      expect(await until(() => painted(view))).toBe(true);
+      const tooltip = view.dom.querySelector(".cm-tooltip-autocomplete");
+      return [...(tooltip?.classList ?? [])];
+    } finally {
+      dispose();
+    }
+  }
+
+  test("hints on, panel shut: the strip says the shortcut exists", async () => {
+    const classes = await classesWith({ toggle: fixedToggle(false), showHints: () => true });
+    expect(classes).toContain("caret-completion-hint");
+    expect(classes).not.toContain("caret-preview-open");
+  });
+
+  test("hints on, panel open: the strip names the closing gesture instead", async () => {
+    const classes = await classesWith({ toggle: fixedToggle(true), showHints: () => true });
+    expect(classes).toContain("caret-completion-hint");
+    expect(classes).toContain("caret-preview-open");
+  });
+
+  test("hints off: no strip, whether or not the panel is open", async () => {
+    // The preference hides the affordance, never the shortcut — Ctrl+Space keeps
+    // working, which is what the keymap above is pinned on separately.
+    const shut = await classesWith({ toggle: fixedToggle(false), showHints: () => false });
+    const open = await classesWith({ toggle: fixedToggle(true), showHints: () => false });
+    expect(shut).not.toContain("caret-completion-hint");
+    expect(open).not.toContain("caret-completion-hint");
+    expect(open).not.toContain("caret-preview-open");
   });
 });

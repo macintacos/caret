@@ -375,6 +375,106 @@ const theme = EditorView.theme({
     padding: "0.3rem 0.5rem",
     opacity: 1,
   },
+  // That the preview panel exists at all (EXC-1186). Same treatment as the
+  // stopped-search header above — receded, prose face, a rule under it — because
+  // it is the same kind of thing: a statement ABOUT the list rather than a row in
+  // it. It sits OUTSIDE the `<ul>`, so it stays put while the rows scroll under it.
+  //
+  // Drawn from a class on the tooltip rather than as a section: a section belongs
+  // to a group of rows, and both sources would then have to know about the
+  // shortcut-hints preference for this feature's sake. `tooltipClass` is asked on
+  // every view update, so the sentence tracks both the preference and the panel's
+  // own state with no re-query (see editorCompletion.ts).
+  ".cm-tooltip.cm-tooltip-autocomplete.caret-completion-hint::before": {
+    content: '"ctrl+space to preview"',
+    display: "block",
+    fontFamily: "var(--font-sans)",
+    fontSize: "var(--text-xs)",
+    color: "var(--ink-faint)",
+    borderBottom: "1px solid var(--rule)",
+    padding: "0.3rem 0.5rem",
+  },
+  // With the panel open the shortcut is how you put it away, so the strip names
+  // that instead. "the preview" rather than a bare "close", because Escape
+  // already closes the LIST and two hints reading `to close` would not say which.
+  // Wins by carrying one more class, not by sitting later.
+  ".cm-tooltip.cm-tooltip-autocomplete.caret-completion-hint.caret-preview-open::before": {
+    content: '"ctrl+space to close the preview"',
+  },
+  // The preview panel itself (EXC-1186). CodeMirror mounts and POSITIONS this —
+  // its base theme anchors it left/right of the list and flips it on viewport
+  // overflow — so there is no geometry here, only caret's own chrome: the same
+  // raised paper, hairline rule, radius and chip lift the list beside it wears, so
+  // the two read as one object rather than as a panel from another application.
+  //
+  // `padding: 0` replaces the base's own, because the strips inside run edge to
+  // edge, and `overflow: hidden` is what keeps them inside the radius. The base's
+  // `pre-line` is dropped here and re-stated per part below: prose and source
+  // lines want different answers, and only the source lines want indentation kept.
+  ".cm-tooltip.cm-completionInfo": {
+    padding: "0",
+    backgroundColor: "var(--paper-raised)",
+    color: "var(--ink)",
+    border: "1px solid var(--rule)",
+    borderRadius: "var(--radius)",
+    boxShadow: "var(--shadow-chip)",
+    overflow: "hidden",
+    whiteSpace: "normal",
+  },
+  // What is being previewed: a path, or a `/name`. Mono at the hint strip's own
+  // scale — it is an identifier, the same reservation the rows themselves make —
+  // and receded, because it repeats the row the reviewer is already on. Truncates
+  // rather than wrapping, so the panel's height is the excerpt's business alone.
+  ".cm-tooltip.cm-completionInfo .caret-preview-title": {
+    fontFamily: "var(--font-mono)",
+    fontSize: "var(--text-xs)",
+    color: "var(--ink-soft)",
+    borderBottom: "1px solid var(--rule)",
+    padding: "0.3rem 0.5rem",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  // The answer. Capped just under the list's own 14rem so the two end together,
+  // and scrollable in both axes — a source line is not wrapped, so a long one
+  // scrolls rather than reflowing the panel. Prose by default (a skill's
+  // description is prose); `pre-line` keeps the line breaks a `|` block scalar
+  // wrote without honouring its indentation.
+  ".cm-tooltip.cm-completionInfo .caret-preview-body": {
+    maxHeight: "12rem",
+    overflow: "auto",
+    padding: "0.3rem 0.5rem",
+    fontFamily: "var(--font-sans)",
+    fontSize: "var(--text-sm)",
+    lineHeight: "var(--leading-snug)",
+    whiteSpace: "pre-line",
+  },
+  // A file's lines are source, so they take the mono face and keep their
+  // whitespace exactly. Set directly on the row rather than left to inherit from
+  // the body, which is prose.
+  ".cm-tooltip.cm-completionInfo .caret-preview-line": {
+    fontFamily: "var(--font-mono)",
+    fontSize: "var(--text-xs)",
+    whiteSpace: "pre",
+  },
+  // The line the reviewer cited. `--accent-wash` is the same wash the selected row
+  // wears, deliberately: "the row you are on" and "the line you asked about" are
+  // one gesture answering itself, and the accent itself stays reserved for the
+  // wordmark and the primary action.
+  ".cm-tooltip.cm-completionInfo .caret-preview-marked": {
+    backgroundColor: "var(--accent-wash)",
+  },
+  // The gutter. Faint and tabular so the numbers form a column the eye skips
+  // rather than reads — a supplementary decoration beside a fully legible line,
+  // which is what puts it on `--ink-faint` rather than a step up.
+  ".cm-tooltip.cm-completionInfo .caret-preview-lineno": {
+    display: "inline-block",
+    minWidth: "2.5em",
+    marginRight: "0.6em",
+    textAlign: "right",
+    color: "var(--ink-faint)",
+    fontVariantNumeric: "tabular-nums",
+  },
 });
 
 /**

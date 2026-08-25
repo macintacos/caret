@@ -10,6 +10,7 @@ import { type EditorView, keymap } from "@codemirror/view";
 
 import { type PreviewToggle, previewToggle } from "$lib/completionPreview.ts";
 import { fileCompletion } from "$lib/fileCompletion.ts";
+import { readShortcutHints } from "$lib/shortcutHintsPref.ts";
 import { skillCompletion } from "$lib/skillCompletion.ts";
 
 /**
@@ -91,6 +92,45 @@ function previewKeymap(toggle: PreviewToggle): Extension {
 }
 
 /**
+ * The classes the completion tooltip wears, which is what draws the hint strip
+ * above the list — the theme puts the sentence in a `::before` on the tooltip
+ * itself (see markdownEditor.ts).
+ *
+ * A class rather than a section, and that is the whole reason the strip can say
+ * two different things. A section is a property of a GROUP OF ROWS, so routing
+ * the hint through one would make both sources depend on the shortcut-hints
+ * preference for a third feature's benefit — and `fileCompletion` already spends
+ * its section slot on the "First N matches" header. `tooltipClass` is re-evaluated
+ * on every view update, so this live-tracks both the preference and the toggle
+ * with no re-query, and lives entirely in this module.
+ *
+ * The preference hides the AFFORDANCE, never the shortcut: Ctrl+Space keeps
+ * working with the strip gone, exactly as every other hint in the chrome does.
+ */
+function hintClass(showHints: () => boolean, toggle: PreviewToggle): () => string {
+  return () => {
+    if (!showHints()) return "";
+    return toggle.on() ? "caret-completion-hint caret-preview-open" : "caret-completion-hint";
+  };
+}
+
+/**
+ * The effects the completion stack reads that are neither the review nor the
+ * sources: whether the preview panel is open, and whether the reviewer wants
+ * shortcut hints shown at all. Each has a production default; a unit overrides
+ * the one its case is about, the same shape `RefRecognitionDeps` sits in.
+ */
+export interface CompletionDeps {
+  /** Whether the preview panel is open, defaulting to the app's own toggle.
+   * Injected, a unit drives both states without touching it. */
+  toggle?: PreviewToggle;
+  /** Whether the shortcut-hint affordances are shown, defaulting to the real
+   * preference read. A thunk rather than a boolean because `tooltipClass` is
+   * asked on every view update, so a toggle in Settings is picked up live. */
+  showHints?: () => boolean;
+}
+
+/**
  * The autocomplete half of the editor's extension stack, or nothing at all when
  * there is no review to complete against and nothing registered to complete
  * with — so an editor mounted without review context behaves exactly as it did
@@ -110,25 +150,30 @@ function previewKeymap(toggle: PreviewToggle): Extension {
  *   mounted outside one.
  * @param sources - The registered sources; defaults to the module registry and is
  *   injectable so a unit can compose against a source of its own.
- * @param toggle - Whether the preview panel is open, defaulting to the app's own.
- *   Injected, a unit drives both states without touching it.
+ * @param deps - The preview toggle and the shortcut-hints read, each defaulting
+ *   to the app's own.
  */
 export function reviewCompletion(
   review: ReviewContext | undefined,
   sources: readonly ReviewCompletionSource[] = COMPLETION_SOURCES,
-  toggle: PreviewToggle = previewToggle,
+  deps: CompletionDeps = {},
 ): Extension[] {
   if (review === undefined || sources.length === 0) return [];
+  const { toggle = previewToggle, showHints = readShortcutHints } = deps;
   return [
     // Ahead of autocompletion()'s own keymap, which binds `Ctrl-Space` too. Both
     // flatten to `Prec.highest`, so precedence cannot separate them and array
     // position is what decides: `runHandlers` walks the handlers in order and
     // stops at the first that returns true.
     previewKeymap(toggle),
-    // `icons: false` drops the per-type gutter CodeMirror renders for EVERY option,
-    // whether or not the option declares a `type` — an empty box of indent, and a
-    // stock emoji when it isn't empty. Neither source names a type, so the column
-    // buys nothing.
-    autocompletion({ icons: false, override: sources.map((source) => source(review)) }),
+    autocompletion({
+      // `icons: false` drops the per-type gutter CodeMirror renders for EVERY
+      // option, whether or not the option declares a `type` — an empty box of
+      // indent, and a stock emoji when it isn't empty. Neither source names a
+      // type, so the column buys nothing.
+      icons: false,
+      tooltipClass: hintClass(showHints, toggle),
+      override: sources.map((source) => source(review)),
+    }),
   ];
 }
