@@ -20,11 +20,11 @@
 // its own through. The deliberate consequence: a skill added mid-review is not
 // offered until the tab reloads.
 
-import type { Completion, CompletionContext, CompletionResult } from "@codemirror/autocomplete";
+import type { CompletionContext, CompletionResult } from "@codemirror/autocomplete";
 
 import type { SkillRef } from "@core/lib/types";
 import { getSkillDescription, getSkills } from "$lib/api.ts";
-import { type PreviewToggle, previewPanel, previewToggle } from "$lib/completionPreview.ts";
+import type { PreviewableCompletion, RowPreview } from "$lib/completionPreview.ts";
 import type { ReviewCompletionSource } from "$lib/editorCompletion.ts";
 
 /** `/` plus the characters a skill name may carry: word characters, the `:` that
@@ -47,11 +47,11 @@ function atWordBoundary(context: CompletionContext, at: number): boolean {
   return /\s/.test(context.state.sliceDoc(at - 1, at));
 }
 
-function toOption(skill: SkillRef, info: Completion["info"]): Completion {
+function toOption(skill: SkillRef, preview: RowPreview): PreviewableCompletion {
   // The label carries the leading `/` because `from` sits at the slash: it is both
   // what CodeMirror filters the reviewer's typing against and what gets inserted,
   // so a plugin skill inserts its namespaced `/plugin:skill` form.
-  return { label: `/${skill.name}`, detail: skill.origin, info };
+  return { label: `/${skill.name}`, detail: skill.origin, preview };
 }
 
 /** Asking what one skill does. Never rejects — `api.ts` degrades every failure to
@@ -65,37 +65,28 @@ export type DescribeSkill = (reviewId: string, skill: SkillRef) => Promise<strin
 const NO_DESCRIPTION = "No description.";
 
 /**
- * The preview panel for one skill row: its own description, or the sentence
- * above.
- *
- * Handed back SYNCHRONOUSLY with an empty body the read fills in when it lands —
- * `updateSel`'s async branch skips the `aria-describedby` wiring its sync branch
- * does, so a row that awaited its answer would go undescribed to a screen reader
- * and the panel would arrive late. `destroy`, which CodeMirror calls the moment
- * the selection moves, cancels that write: a read landing after the reviewer has
- * arrowed on would fill an element no longer on screen.
+ * What one skill row shows in the preview panel: its own description, or the
+ * sentence above.
  *
  * The lookup key is the SkillRef rather than the label: `origin` is what tells
  * two roots offering one bare name apart, and the label's leading `/` is an
- * insertion detail no route knows about.
+ * insertion detail no route knows about. That pair is the `key` too, so arrowing
+ * away and back re-uses the answer rather than asking again.
+ *
+ * The abort signal is what keeps a slow read from writing into a body the
+ * reviewer has already arrowed away from.
  */
-function skillPreview(
-  describe: DescribeSkill,
-  reviewId: string,
-  skill: SkillRef,
-): (option: Completion) => { dom: HTMLElement; destroy: () => void } {
-  return (option) => {
-    const { dom, body } = previewPanel(option.label);
-    let live = true;
-    void describe(reviewId, skill).then((description) => {
-      if (live) body.textContent = description ?? NO_DESCRIPTION;
-    });
-    return {
-      dom,
-      destroy: () => {
-        live = false;
-      },
-    };
+function skillPreview(describe: DescribeSkill, reviewId: string, skill: SkillRef): RowPreview {
+  return {
+    title: `/${skill.name}`,
+    key: `${skill.origin}:${skill.name}`,
+    fill: async (body, signal) => {
+      const description = await describe(reviewId, skill);
+      // The panel drops a staging element the reviewer has arrowed away from, but
+      // it costs nothing to stop here and it is the contract's own instruction.
+      if (signal.aborted) return;
+      body.textContent = description ?? NO_DESCRIPTION;
+    },
   };
 }
 
@@ -162,15 +153,12 @@ export const skillsFor: SkillLookup = createSkillCache();
  *   transient failure, and the source MAY also reject.
  * @param describe - How to read one skill's own description for the preview
  *   panel. Deliberately NOT cached the way the enumeration is: it is one small
- *   read per highlighted row, and CodeMirror destroys the panel on every
- *   selection change, so a cache would save a request and repaint anyway.
- * @param toggle - Whether the reviewer has the panel open. Injected, a unit gets
- *   one of its own, so its state can neither be read from nor leak into the app's.
+ *   read per highlighted row, and the panel already re-uses an answer whose
+ *   `RowPreview.key` has not changed, which covers arrowing away and back.
  */
 export function skillCompletion(
   fetchSkills?: (id: string) => Promise<SkillRef[] | null>,
   describe: DescribeSkill = getSkillDescription,
-  toggle: PreviewToggle = previewToggle,
 ): ReviewCompletionSource {
   const lookup = fetchSkills === undefined ? skillsFor : createSkillCache(fetchSkills);
 
@@ -182,13 +170,13 @@ export function skillCompletion(
       // An agent with nothing to offer — codex today — returns null rather than an
       // empty result, so no popup paints at all.
       if (skills.length === 0) return null;
-      // The toggle is read HERE, at query time, and not by the panel at render
-      // time: `updateSel` re-evaluates `info` only when the selected element
-      // changes, so a panel that asked would never be asked again — see
-      // completionPreview.ts. Each row gets its own, because each names a
-      // different skill.
+      // Every row carries its preview whatever the toggle says. Whether one is
+      // SHOWN is the panel's own decision, read at render time (see
+      // completionPreview.ts) — deciding it here would tie the answer to whatever
+      // the toggle said when the query ran, and only a re-query could change it
+      // back. Each row gets its own, because each names a different skill.
       const options = skills.map((skill) =>
-        toOption(skill, toggle.on() ? skillPreview(describe, review.reviewId, skill) : undefined),
+        toOption(skill, skillPreview(describe, review.reviewId, skill)),
       );
       return { from: match.from, options, validFor: SKILL_TOKEN };
     };

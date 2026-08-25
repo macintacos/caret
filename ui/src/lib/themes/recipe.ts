@@ -1,8 +1,8 @@
 // The shared shape every palette is mapped through (EXC-752), caret's own two
 // (./caret.ts) included: name the thirteen colors a palette actually decides, and
-// the twelve that are always derived (the two rules, the accent wash, the two marks,
-// the orphan mark, the five chip tints, the shadow) come out consistent for every
-// theme instead of being re-typed once per palette.
+// the thirteen that are always derived (the two rules, the accent wash, the two
+// marks, the orphan mark, the six chip tints, the shadow) come out consistent for
+// every theme instead of being re-typed once per palette.
 //
 // The alpha suffixes and the two shadows are caret-dark's and caret-light's own
 // values, so a vendor theme's hairlines and highlight marks sit at exactly the
@@ -70,6 +70,8 @@ export interface PaletteInput {
   chipLinkHue?: string;
   /** The hue `--chip-ref` rides. Defaults to `ok`. */
   chipRefHue?: string;
+  /** The hue `--chip-skill` rides. Defaults to `attention`. */
+  chipSkillHue?: string;
 
   /** The shiki theme this palette highlights code with: the vendor's own published
    * one (EXC-896), or — for caret's pair — the theme authored for it under the same
@@ -136,6 +138,15 @@ export function paletteTheme(input: PaletteInput): Theme {
     "--chip-code": `${input.chipCodeHue ?? input.neutral}${alpha.chip}`,
     "--chip-link": `${input.chipLinkHue ?? input.accentBright}${alpha.chip}`,
     "--chip-ref": `${input.chipRefHue ?? input.ok}${alpha.chip}`,
+    // The one hue-carrying chip that is neither of the pair above. A skill chip
+    // and a path chip share a sentence in the feedback editors (EXC-1186), so
+    // this has to separate from `--chip-ref` the way a link does — and
+    // `attention` is what is left once `accent` stays reserved for selection and
+    // `danger` stays semantic. It is the hue the note above warns sits close to
+    // `accentBright` in some vendor palettes: that costs a link and a SKILL some
+    // distance, which no surface pairs, while the pairing that exists here — a
+    // skill against a reference — is the one theme.test.ts pins.
+    "--chip-skill": `${input.chipSkillHue ?? input.attention}${alpha.chip}`,
     "--ok": input.ok,
     "--danger": input.danger,
     "--attention": input.attention,

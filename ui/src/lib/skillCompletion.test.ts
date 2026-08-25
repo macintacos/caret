@@ -19,7 +19,7 @@ import {
   typeInto as type,
   until,
 } from "@ui/test-helpers.ts";
-import type { PreviewToggle } from "$lib/completionPreview.ts";
+import type { PreviewableCompletion, RowPreview } from "$lib/completionPreview.ts";
 
 import { createSkillCache, type DescribeSkill, skillCompletion } from "./skillCompletion.ts";
 
@@ -172,7 +172,10 @@ describe("skillCompletion insertion", () => {
       view.contentDOM.dispatchEvent(
         new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
       );
-      expect(view.state.doc.toString()).toBe("/superpowers:brainstorming");
+      // …and the space after it: a citation is a word in a sentence, so Enter
+      // leaves the cursor ready for the next one rather than flush against the
+      // name, where the next character would extend the reference.
+      expect(view.state.doc.toString()).toBe("/superpowers:brainstorming ");
     } finally {
       dispose();
     }
@@ -389,16 +392,14 @@ describe("createSkillCache", () => {
   });
 });
 
-// The Ctrl+Space preview panel over a `/` row (EXC-1186). Unlike the triggering
-// and insertion cases above, what a row carries is pure — whether it has an
-// `info` at all, what the panel is asked for, and what it says when the skill
-// describes itself nowhere — so a bare EditorState drives it, the same shape
-// fileCompletion.test.ts uses for its half. What the panel LOOKS like beside the
-// list is CSS, and that a keypress opens it at all is real-browser behaviour.
-describe("the preview panel", () => {
-  const OPEN: PreviewToggle = { on: () => true, toggle: () => {} };
-  const SHUT: PreviewToggle = { on: () => false, toggle: () => {} };
-
+// The Ctrl+Space preview over a `/` row (EXC-1186). Unlike the triggering and
+// insertion cases above, what a row carries is pure — what the panel would be
+// asked for, what it would be titled, and what it says when the skill describes
+// itself nowhere — so a bare EditorState drives it, the same shape
+// fileCompletion.test.ts uses for its half. Where the panel is DRAWN, and that a
+// keypress opens it at all, is the panel's own business
+// (completionPreview.test.ts) and the browser's (test/e2e/).
+describe("the row preview", () => {
   /** A description lookup that records what it was asked. Never rejects, exactly
    * as `api.ts`'s does — every failure there is already a null. */
   function fakeDescribe(
@@ -415,13 +416,12 @@ describe("the preview panel", () => {
   function complete(
     doc: string,
     describe: DescribeSkill,
-    toggle: PreviewToggle,
+    skills: SkillRef[] = SKILLS,
   ): Promise<CompletionResult | null> {
     const state = EditorState.create({ doc });
     const source = skillCompletion(
-      async () => SKILLS,
+      async () => skills,
       describe,
-      toggle,
     )({
       reviewId: "rev-1",
       cwd: "/w/caret",
@@ -429,42 +429,44 @@ describe("the preview panel", () => {
     return Promise.resolve(source(new CompletionContext(state, doc.length, false)));
   }
 
-  /** The row for `label`, its panel opened. */
-  function openPreview(
-    result: CompletionResult | null,
-    label: string,
-  ): { dom: HTMLElement; destroy: () => void } {
-    const option = result?.options.find((o) => o.label === label);
-    if (option === undefined) throw new Error(`expected a row for ${label}`);
-    const info = option.info;
-    if (typeof info !== "function") throw new Error("expected the row to carry a preview");
-    const panel = info(option);
-    if (panel === null || !("dom" in panel)) throw new Error("expected a panel, synchronously");
-    return panel as { dom: HTMLElement; destroy: () => void };
+  /** The preview the row for `label` carries. */
+  function previewOf(result: CompletionResult | null, label: string): RowPreview {
+    const option = result?.options.find((o) => o.label === label) as
+      | PreviewableCompletion
+      | undefined;
+    if (option?.preview === undefined) throw new Error(`expected a preview for ${label}`);
+    return option.preview;
   }
 
-  /** …and settled, which is when the read it started has written into it. */
-  async function panelFor(result: CompletionResult | null, label: string): Promise<HTMLElement> {
-    const { dom } = openPreview(result, label);
+  /** A throwaway body filled from that row's preview, and settled — which is when
+   * the read it started has written into it. */
+  async function bodyFor(result: CompletionResult | null, label: string): Promise<HTMLElement> {
+    const body = document.createElement("div");
+    await previewOf(result, label).fill(body, new AbortController().signal);
     await drainMicrotasks();
-    return dom;
+    return body;
   }
 
-  test("a shut panel leaves every row without one, and asks nothing", async () => {
+  test("nothing is asked until the panel asks — a query alone describes no skill", async () => {
+    // The toggle is not the source's business: every row carries a preview, and
+    // the panel decides whether to draw one. Reading here would ask about every
+    // skill in the list on every `/` keystroke.
     const seen: Array<[string, SkillRef]> = [];
-    const result = await complete("/", fakeDescribe(seen), SHUT);
-    expect(result?.options.every((o) => o.info === undefined)).toBe(true);
+    const result = await complete("/", fakeDescribe(seen));
+    expect(result?.options.every((o) => (o as PreviewableCompletion).preview !== undefined)).toBe(
+      true,
+    );
     expect(seen).toEqual([]);
   });
 
-  test("an open panel shows the highlighted skill's own description", async () => {
-    const result = await complete("/", fakeDescribe([], "Plan before writing"), OPEN);
-    expect((await panelFor(result, "/git")).textContent).toContain("Plan before writing");
+  test("the panel shows the highlighted skill's own description", async () => {
+    const result = await complete("/", fakeDescribe([], "Plan before writing"));
+    expect((await bodyFor(result, "/git")).textContent).toContain("Plan before writing");
   });
 
-  test("the panel is titled with the name it describes", async () => {
-    const result = await complete("/", fakeDescribe([]), OPEN);
-    expect((await panelFor(result, "/git")).textContent).toContain("/git");
+  test("the preview is titled with the name it describes", async () => {
+    const result = await complete("/", fakeDescribe([]));
+    expect(previewOf(result, "/git").title).toBe("/git");
   });
 
   test("each row asks about its own name and origin, not its label", async () => {
@@ -473,16 +475,29 @@ describe("the preview panel", () => {
     // tells two roots offering one bare name apart — keyed on the name alone, one
     // of them would be described twice.
     const seen: Array<[string, SkillRef]> = [];
-    const result = await complete("/", fakeDescribe(seen), OPEN);
-    await panelFor(result, "/superpowers:brainstorming");
+    const result = await complete("/", fakeDescribe(seen));
+    await bodyFor(result, "/superpowers:brainstorming");
     expect(seen).toEqual([["rev-1", { name: "superpowers:brainstorming", origin: "plugin" }]]);
+  });
+
+  test("two roots offering one bare name get keys the panel can tell apart", async () => {
+    // The key is what decides whether arrowing between rows refetches. These two
+    // share a label deliberately — keyed on that, the second row would look like
+    // the first to the panel and show the first's description.
+    const result = await complete("/", fakeDescribe([]), [
+      { name: "deploy", origin: "user" },
+      { name: "deploy", origin: "project" },
+    ]);
+    const keys = (result?.options ?? []).map((o) => (o as PreviewableCompletion).preview?.key);
+    expect(keys).toHaveLength(2);
+    expect(new Set(keys).size).toBe(2);
   });
 
   test("a skill that describes itself nowhere says so, plainly", async () => {
     // Null is the ordinary answer for a skill with no description AND for every
     // failure behind it, so this one sentence is the whole no-answer state.
-    const result = await complete("/", fakeDescribe([], null), OPEN);
-    expect((await panelFor(result, "/git")).textContent).toContain("No description");
+    const result = await complete("/", fakeDescribe([], null));
+    expect((await bodyFor(result, "/git")).textContent).toContain("No description");
   });
 
   test("a read landing after the reviewer arrowed on writes nothing", async () => {
@@ -491,13 +506,16 @@ describe("the preview panel", () => {
       new Promise((resolve) => {
         land = resolve;
       });
-    const result = await complete("/", describe, OPEN);
-    const panel = openPreview(result, "/git");
-    // CodeMirror destroys the panel the moment the selection moves, and the read
-    // it started is still in flight — its element is no longer on screen.
-    panel.destroy();
+    const result = await complete("/", describe);
+    const body = document.createElement("div");
+    // The panel aborts the row's read the moment the selection moves, and the
+    // read it started is still in flight — its element is off screen.
+    const controller = new AbortController();
+    const filling = previewOf(result, "/git").fill(body, controller.signal);
+    controller.abort();
     land("Plan before writing");
+    await filling;
     await drainMicrotasks();
-    expect(panel.dom.textContent).not.toContain("Plan before writing");
+    expect(body.textContent).not.toContain("Plan before writing");
   });
 });

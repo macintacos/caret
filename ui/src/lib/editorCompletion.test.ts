@@ -1,11 +1,20 @@
 import "@ui/test-setup.ts";
 import { describe, expect, test } from "bun:test";
 
-import type { CompletionSource } from "@codemirror/autocomplete";
+import {
+  type CompletionSource,
+  completionStatus,
+  selectedCompletionIndex,
+} from "@codemirror/autocomplete";
 import { EditorState } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
+import { EditorView, keymap } from "@codemirror/view";
 
-import { completionListPainted as painted, typeInto, until } from "@ui/test-helpers.ts";
+import {
+  allowCompletionAccept,
+  completionListPainted as painted,
+  typeInto,
+  until,
+} from "@ui/test-helpers.ts";
 import { createPreviewToggle, type PreviewToggle } from "$lib/completionPreview.ts";
 import { fileCompletion } from "$lib/fileCompletion.ts";
 
@@ -88,35 +97,45 @@ describe("reviewCompletion", () => {
   });
 });
 
-// The Ctrl+Space preview binding (EXC-1186). What it decides — whether a list is
-// painted — is only knowable from a real view, and the flip has to be followed by
-// a re-query for the panel to repaint at all, so this drives a live EditorView
-// over the extensions `reviewCompletion` returns rather than asserting on a
-// command in isolation.
-describe("Ctrl+Space over the completion list", () => {
-  /** A source that always offers a row, and counts how often it was asked. */
+// The chords a painted list claims (EXC-1186). Whether a list is painted is only
+// knowable from a real view, and every one of these bindings is gated on it, so
+// this drives a live EditorView over the extensions `reviewCompletion` returns
+// rather than asserting on a command in isolation.
+describe("the chords a painted completion list claims", () => {
+  /** A source that always offers two rows, and counts how often it was asked. */
   function countingSource(calls: { n: number }): CompletionSource {
     return (ctx) => {
       calls.n++;
-      return { from: ctx.pos, options: [{ label: "alpha.ts" }] };
+      return { from: ctx.pos, options: [{ label: "alpha.ts" }, { label: "beta.ts" }] };
     };
   }
 
   function mountList(toggle: PreviewToggle, source: CompletionSource) {
-    return mountWith(source, { toggle });
+    return mountWith(source, { toggle, showHints: () => false });
   }
 
-  const ctrlSpace = (view: EditorView) =>
+  const press = (view: EditorView, init: KeyboardEventInit) =>
     view.contentDOM.dispatchEvent(
-      new KeyboardEvent("keydown", { key: " ", ctrlKey: true, bubbles: true, cancelable: true }),
+      new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }),
     );
+  const ctrlSpace = (view: EditorView) => press(view, { key: " ", ctrlKey: true });
+  const tab = (view: EditorView) => press(view, { key: "Tab" });
+  const shiftTab = (view: EditorView) => press(view, { key: "Tab", shiftKey: true });
+  const enter = (view: EditorView) => press(view, { key: "Enter" });
 
-  test("opens the preview over a painted list, and closes it again", async () => {
+  /** Paint a list and wait out both gates every one of these chords is behind. */
+  async function listReady(view: EditorView): Promise<void> {
+    typeInto(view, "@a");
+    expect(await until(() => painted(view))).toBe(true);
+    expect(await until(() => completionStatus(view.state) === "active")).toBe(true);
+    await allowCompletionAccept();
+  }
+
+  test("Ctrl+Space opens the preview over a painted list, and closes it again", async () => {
     const toggle = createPreviewToggle();
     const { view, dispose } = mountList(toggle, countingSource({ n: 0 }));
     try {
-      typeInto(view, "@a");
-      expect(await until(() => painted(view))).toBe(true);
+      await listReady(view);
 
       ctrlSpace(view);
       expect(toggle.on()).toBe(true);
@@ -128,27 +147,28 @@ describe("Ctrl+Space over the completion list", () => {
     }
   });
 
-  test("re-queries the sources, which is the only way the panel repaints", async () => {
-    // CompletionTooltip.updateSel re-evaluates a row's `info` only when the
-    // selected element changes, so flipping the toggle alone would leave the
-    // panel exactly as it was.
+  test("Ctrl+Space re-queries nothing, so the list the reviewer is reading stands", async () => {
+    // The window reads the toggle when it renders, so there is nothing to re-run.
+    // A re-query would restart the list at its first row and throw away the row
+    // the reviewer asked about — the whole reason the window is caret's own.
     const calls = { n: 0 };
     const toggle = createPreviewToggle();
     const { view, dispose } = mountList(toggle, countingSource(calls));
     try {
-      typeInto(view, "@a");
-      expect(await until(() => painted(view))).toBe(true);
+      await listReady(view);
       const before = calls.n;
+      const row = selectedCompletionIndex(view.state);
 
       ctrlSpace(view);
       expect(toggle.on()).toBe(true);
-      expect(await until(() => calls.n > before)).toBe(true);
+      expect(calls.n).toBe(before);
+      expect(selectedCompletionIndex(view.state)).toBe(row);
     } finally {
       dispose();
     }
   });
 
-  test("with no list painted it leaves the key to autocomplete's own binding", async () => {
+  test("with no list painted Ctrl+Space is left to autocomplete's own binding", async () => {
     // Which opens a list, exactly as it did before the preview existed.
     const toggle = createPreviewToggle();
     const { view, dispose } = mountList(toggle, countingSource({ n: 0 }));
@@ -162,52 +182,118 @@ describe("Ctrl+Space over the completion list", () => {
       dispose();
     }
   });
+
+  test("Tab walks down the list and Shift+Tab walks back up", async () => {
+    const { view, dispose } = mountList(createPreviewToggle(), countingSource({ n: 0 }));
+    try {
+      await listReady(view);
+      expect(selectedCompletionIndex(view.state)).toBe(0);
+
+      tab(view);
+      expect(selectedCompletionIndex(view.state)).toBe(1);
+
+      shiftTab(view);
+      expect(selectedCompletionIndex(view.state)).toBe(0);
+    } finally {
+      dispose();
+    }
+  });
+
+  test("with no list painted Tab is left to the rest of the stack", async () => {
+    // Which is where the editor's own indent lives — capturing Tab
+    // unconditionally would put four spaces in a reviewer's list instead.
+    let reached = false;
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const view = new EditorView({
+      parent: host,
+      root: document,
+      state: EditorState.create({
+        doc: "",
+        extensions: [
+          reviewCompletion(CONTEXT, [() => countingSource({ n: 0 })], {
+            toggle: createPreviewToggle(),
+            showHints: () => false,
+          }),
+          keymap.of([
+            {
+              key: "Tab",
+              run: () => {
+                reached = true;
+                return true;
+              },
+            },
+          ]),
+        ],
+      }),
+    });
+    try {
+      expect(painted(view)).toBe(false);
+      tab(view);
+      expect(reached).toBe(true);
+    } finally {
+      view.destroy();
+      host.remove();
+    }
+  });
+
+  test("Enter accepts the highlighted row and leaves a space after it", async () => {
+    // A citation is a word in a sentence: without the space the cursor sits flush
+    // against the name, where the next character extends the reference instead of
+    // following it.
+    const { view, dispose } = mountList(createPreviewToggle(), countingSource({ n: 0 }));
+    try {
+      await listReady(view);
+      enter(view);
+      expect(view.state.doc.toString()).toBe("@aalpha.ts ");
+      expect(view.state.selection.main.head).toBe(view.state.doc.length);
+    } finally {
+      dispose();
+    }
+  });
+
+  test("with no list painted Enter is left alone", async () => {
+    const { view, dispose } = mountList(createPreviewToggle(), countingSource({ n: 0 }));
+    try {
+      expect(painted(view)).toBe(false);
+      enter(view);
+      // Nothing was accepted and no space was inserted; what Enter does then is
+      // the editor's own business, not this stack's.
+      expect(view.state.doc.toString()).toBe("");
+    } finally {
+      dispose();
+    }
+  });
 });
 
-// The hint strip above the list is a CLASS on the tooltip, not a row in it — the
-// theme draws the sentence from a `::before`. So what there is to assert is which
-// classes land, under each combination of the shortcut-hints preference and the
-// panel's own state; that they read as a strip at all is CSS, and the e2e spec is
-// where a real browser confirms it.
-describe("the completion tooltip's hint class", () => {
+// The hint strip is drawn by the preview plugin (completionPreview.ts), which owns
+// its markup and its two sentences. What belongs here is narrower: that
+// `reviewCompletion` hands the plugin the deps it was given, so the preference and
+// the toggle reach it at all.
+describe("the shortcut-hint wiring", () => {
   function alwaysOffers(): CompletionSource {
     return (ctx) => ({ from: ctx.pos, options: [{ label: "alpha.ts" }] });
   }
 
-  const fixedToggle = (on: boolean): PreviewToggle => ({ on: () => on, toggle: () => {} });
-
-  /** Paint a list and read the classes off the tooltip CodeMirror mounted. */
-  async function classesWith(deps: CompletionDeps): Promise<string[]> {
+  /** Paint a list and report whether the strip is above it. */
+  async function stripWith(deps: CompletionDeps): Promise<boolean> {
     const { view, dispose } = mountWith(alwaysOffers(), deps);
     try {
       typeInto(view, "@a");
       expect(await until(() => painted(view))).toBe(true);
-      const tooltip = view.dom.querySelector(".cm-tooltip-autocomplete");
-      return [...(tooltip?.classList ?? [])];
+      return await until(() => view.dom.querySelector(".caret-completion-hint") !== null);
     } finally {
       dispose();
     }
   }
 
-  test("hints on, panel shut: the strip says the shortcut exists", async () => {
-    const classes = await classesWith({ toggle: fixedToggle(false), showHints: () => true });
-    expect(classes).toContain("caret-completion-hint");
-    expect(classes).not.toContain("caret-preview-open");
+  test("hints on: the strip is drawn above the list", async () => {
+    expect(await stripWith({ toggle: createPreviewToggle(), showHints: () => true })).toBe(true);
   });
 
-  test("hints on, panel open: the strip names the closing gesture instead", async () => {
-    const classes = await classesWith({ toggle: fixedToggle(true), showHints: () => true });
-    expect(classes).toContain("caret-completion-hint");
-    expect(classes).toContain("caret-preview-open");
-  });
-
-  test("hints off: no strip, whether or not the panel is open", async () => {
-    // The preference hides the affordance, never the shortcut — Ctrl+Space keeps
-    // working, which is what the keymap above is pinned on separately.
-    const shut = await classesWith({ toggle: fixedToggle(false), showHints: () => false });
-    const open = await classesWith({ toggle: fixedToggle(true), showHints: () => false });
-    expect(shut).not.toContain("caret-completion-hint");
-    expect(open).not.toContain("caret-completion-hint");
-    expect(open).not.toContain("caret-preview-open");
+  test("hints off: no strip, and the shortcut keeps working", async () => {
+    // The preference hides the affordance, never the shortcut — which the
+    // Ctrl+Space cases above pin separately.
+    expect(await stripWith({ toggle: createPreviewToggle(), showHints: () => false })).toBe(false);
   });
 });

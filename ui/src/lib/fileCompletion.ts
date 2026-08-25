@@ -12,17 +12,18 @@
 // It registers against the seam in editorCompletion.ts and owns nothing else
 // there, so it and the skill source can land in either order.
 
-import type { Completion, CompletionResult, CompletionSource } from "@codemirror/autocomplete";
+import type { CompletionResult, CompletionSource } from "@codemirror/autocomplete";
 
 import type { FileExcerpt, FileSearchResponse, SearchStop } from "@core/lib/types";
+import { appearance } from "@/state/appearance.svelte.ts";
 import { getFileExcerpt, HttpError, searchFiles } from "$lib/api.ts";
 import {
-  type PreviewToggle,
-  previewPanel,
-  previewToggle,
+  type PreviewableCompletion,
+  type RowPreview,
   renderExcerptLines,
 } from "$lib/completionPreview.ts";
 import { classify } from "$lib/diffview/fileRefs.ts";
+import { highlightChunk } from "$lib/diffview/highlight.ts";
 import type { ReviewCompletionSource } from "$lib/editorCompletion.ts";
 
 /** Asking the daemon which files under a review's cwd match a query. Never
@@ -30,7 +31,8 @@ import type { ReviewCompletionSource } from "$lib/editorCompletion.ts";
  * lets this source treat "nothing came back" as its only failure mode. */
 export type SearchFiles = (reviewId: string, query: string) => Promise<FileSearchResponse>;
 
-/** Reading a window of one of the review's files, for the preview panel. Unlike
+/** Reading a range of lines from one of the review's files, for the preview
+ * panel. Unlike
  * `SearchFiles` this DOES reject: `api.ts` throws an HttpError on a non-2xx, and
  * telling a file too large to send from any other refusal is exactly what the
  * panel needs it to do. */
@@ -154,7 +156,7 @@ export function subsequenceRanges(label: string, query: string): number[] {
 }
 
 /**
- * The window the panel asks for: a file's first twenty lines, or the twenty
+ * The range of lines the panel asks for: a file's first twenty lines, or the twenty
  * around a cited line — nine above it and ten below, because a reader carries on
  * downward from the line they named. Both ends are clamped by the daemon, so a
  * line past the end of a file comes back as that file's tail rather than as an
@@ -181,40 +183,78 @@ function previewFailure(err: unknown): string {
 }
 
 /**
- * The preview panel for one row: the file's lines around whatever the reviewer
- * cited, or a sentence saying why they are not there.
+ * What one row shows in the preview panel: the file's lines around whatever the
+ * reviewer cited, or a sentence saying why they are not there.
  *
- * Handed back synchronously with an empty body that the read fills in when it
- * lands — `updateSel`'s async branch skips the `aria-describedby` wiring its sync
- * branch does, so a row that awaited its answer would go undescribed and the panel
- * would arrive late. `destroy`, which CodeMirror calls the moment the selection
- * moves, cancels that write: a read landing after the reviewer has arrowed on
- * fills an element that is no longer on screen.
+ * The `key` is the path and the cited line together, which is what the answer
+ * actually depends on — so narrowing a query that leaves this row highlighted
+ * re-uses the lines already on screen instead of blanking and refetching them per
+ * keystroke, while typing the `2` of `:42` does move the excerpt.
+ *
+ * The abort signal is what keeps a slow read from writing into a body the
+ * reviewer has already arrowed away from — the excerpt and the colour both.
  */
+/**
+ * Colours an excerpt already on screen, in place.
+ *
+ * A second pass rather than part of the fill, and deliberately: the panel waits
+ * on `fill` before showing anything, and shiki's first call loads a grammar off
+ * disk — so highlighting inside it would hold the reviewer at the loading bars
+ * for a read that has already landed, and a slow grammar would time the whole
+ * answer out. The lines go up plain and gain their colour when it arrives, which
+ * is the order the plan view's own preview takes (components/FilePreview.svelte).
+ *
+ * Never throws: `highlightChunk` degrades every failure — an unknown grammar, a
+ * line too long to tokenize — to no rows at all, and no rows leaves the plain
+ * text exactly where it is. The counts are checked because the line numbers are
+ * the excerpt's and the markup is shiki's; a disagreement would colour lines with
+ * their neighbours' tokens.
+ */
+async function paintHighlight(
+  body: HTMLElement,
+  excerpt: FileExcerpt,
+  signal: AbortSignal,
+): Promise<void> {
+  const { rows } = await highlightChunk(
+    excerpt.lines.join("\n"),
+    excerpt.language,
+    appearance.themeId,
+  );
+  if (signal.aborted || rows.length !== excerpt.lines.length) return;
+  const spans = body.querySelectorAll(".caret-preview-code");
+  if (spans.length !== rows.length) return;
+  spans.forEach((span, i) => {
+    span.innerHTML = rows[i] as string;
+  });
+}
+
 function filePreview(
   excerpt: GetFileExcerpt,
   reviewId: string,
+  path: string,
   line: number | undefined,
-): (option: Completion) => { dom: HTMLElement; destroy: () => void } {
-  return (option) => {
-    const { dom, body } = previewPanel(option.label);
-    let live = true;
-    // The window is stated outright, so the centring `line` parameter is left
-    // unset — `start`/`end` win over it at the route anyway.
-    excerpt(reviewId, option.label, undefined, previewWindow(line)).then(
-      (found) => {
-        if (live) renderExcerptLines(body, found, line);
-      },
-      (err: unknown) => {
-        if (live) body.textContent = previewFailure(err);
-      },
-    );
-    return {
-      dom,
-      destroy: () => {
-        live = false;
-      },
-    };
+): RowPreview {
+  return {
+    title: path,
+    key: `${path}:${line ?? ""}`,
+    fill: async (body, signal) => {
+      let found: FileExcerpt;
+      try {
+        // The range is stated outright, so the centring `line` parameter is left
+        // unset — `start`/`end` win over it at the route anyway.
+        found = await excerpt(reviewId, path, undefined, previewWindow(line));
+      } catch (err) {
+        // Resolved rather than rejected: this IS the answer, and the panel's own
+        // "no information found" would say less than the sentence below does.
+        if (!signal.aborted) body.textContent = previewFailure(err);
+        return;
+      }
+      if (signal.aborted) return;
+      renderExcerptLines(body, found, line);
+      // Not awaited: the lines are the answer, and the colour catches up into the
+      // panel the caller is about to mount them in.
+      void paintHighlight(body, found, signal);
+    },
   };
 }
 
@@ -227,13 +267,10 @@ function filePreview(
  *
  * @param search - How to ask which files match a query.
  * @param excerpt - How to read the lines the preview panel shows.
- * @param toggle - Whether the reviewer has the panel open. Injected, a unit gets
- *   one of its own, so its state can neither be read from nor leak into the app's.
  */
 export function createFileCompletion(
   search: SearchFiles,
   excerpt: GetFileExcerpt = getFileExcerpt,
-  toggle: PreviewToggle = previewToggle,
 ): ReviewCompletionSource {
   return (review): CompletionSource =>
     async (context): Promise<CompletionResult | null> => {
@@ -258,25 +295,26 @@ export function createFileCompletion(
       if (paths.length === 0) return null;
 
       const section = stoppedAt === null ? undefined : stoppedHeader(paths.length, stoppedAt);
-      // The toggle is read HERE, at query time, and not by the panel at render
-      // time: `updateSel` re-evaluates `info` only when the selected element
-      // changes, so a panel that asked would never be asked again — see
-      // completionPreview.ts.
-      const info = toggle.on() ? filePreview(excerpt, review.reviewId, line) : undefined;
-      const options: Completion[] = paths.map((path) => ({
+      // Every row carries its preview whatever the toggle says. Whether one is
+      // SHOWN is the panel's own decision, read at render time (see
+      // completionPreview.ts) — deciding it here would tie the answer to whatever
+      // the toggle happened to say when the query ran, and only a re-query could
+      // change it back.
+      const options: PreviewableCompletion[] = paths.map((path) => ({
         label: path,
         section,
-        info,
-        // The label stays the bare path, so the list still reads as paths; the
-        // cited line rides in on the insertion instead. Undefined where nothing
-        // was cited, which CodeMirror reads exactly as an absent `apply`: its
-        // default replaces the range with the label.
-        apply: suffix === "" ? undefined : `${path}${suffix}`,
+        preview: filePreview(excerpt, review.reviewId, path, line),
+        // The label stays the bare path, so the list still reads as paths, and
+        // the insertion puts the `@` back in front of it: the trigger is part of
+        // the reference the reviewer is writing, and the chip in the composer is
+        // drawn over `@path` as one run. The cited line rides along on the same
+        // string.
+        apply: `@${path}${suffix}`,
       }));
       return {
-        // The range starts at the `@` itself, so CodeMirror's default apply
-        // carries the trigger away with the query and leaves only the path. A
-        // `@src/lib/foo.ts` in the resulting plan would resolve to nothing.
+        // The range starts at the `@` itself, so the whole reference — trigger
+        // included — is what `apply` replaces, rather than leaving the typed `@`
+        // to sit in front of a second one.
         from: trigger.from,
         // The daemon already matched, by subsequence over the whole path.
         // Re-filtering here would drop rows it accepted: CodeMirror's matcher

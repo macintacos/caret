@@ -140,12 +140,15 @@ const codeBlockLine = Decoration.line({ class: "cm-md-codeblock" });
 const codeBlockOpen = Decoration.line({ class: "cm-md-codeblock cm-md-codeblock-open" });
 const codeBlockClose = Decoration.line({ class: "cm-md-codeblock cm-md-codeblock-close" });
 
-// A reference caret can actually resolve (EXC-1177), tinted with `--chip-ref` —
-// the same token the rendered plan spends on a resolved path
-// (diffview/coreStyles.ts). One reference reads the same on the side that
-// composes it and the side that renders it, which is the whole point of bringing
-// the treatment across. See `.cm-md-ref` in the theme for the geometry.
-const refChipDeco = Decoration.mark({ class: "cm-md-ref" });
+// A reference caret can actually resolve (EXC-1177). The geometry is shared and
+// lives on `.cm-md-ref` in the theme; the tint is per KIND, because a comment
+// routinely carries both and two identical pills make the reviewer read the text
+// to tell which is which. A path keeps `--chip-ref` — the token the rendered plan
+// already spends on a resolved path (diffview/coreStyles.ts), so one reference
+// reads the same on the side that composes it and the side that renders it — and
+// a skill takes `--chip-skill`, which exists for exactly this pairing.
+const pathChipDeco = Decoration.mark({ class: "cm-md-ref cm-md-ref-path" });
+const skillChipDeco = Decoration.mark({ class: "cm-md-ref cm-md-ref-skill" });
 
 function buildCodeDecorations(view: EditorView): DecorationSet {
   const decos: Range<Decoration>[] = [];
@@ -163,7 +166,7 @@ function buildCodeDecorations(view: EditorView): DecorationSet {
   // font sizes multiply — which reads as two chips that failed to line up rather
   // than as one. The rendered-plan side settles the same collision the same way
   // (svelte-rules.md § CSS-token discipline, on `data-md-cite`).
-  const chipped = new Set(chips.map((token) => `${token.from}:${token.to}`));
+  const chipped = new Map(chips.map((token) => [`${token.from}:${token.to}`, token.kind] as const));
 
   for (const { from, to } of view.visibleRanges) {
     syntaxTree(view.state).iterate({
@@ -190,9 +193,9 @@ function buildCodeDecorations(view: EditorView): DecorationSet {
       },
     });
   }
-  for (const range of chipped) {
+  for (const [range, kind] of chipped) {
     const [from, to] = range.split(":").map(Number) as [number, number];
-    decos.push(refChipDeco.range(from, to));
+    decos.push((kind === "skill" ? skillChipDeco : pathChipDeco).range(from, to));
   }
   return Decoration.set(decos, true);
 }
@@ -262,16 +265,7 @@ const theme = EditorView.theme({
     borderBottomRightRadius: "var(--radius)",
     paddingBottom: "0.2em",
   },
-  // A recognized reference. `--chip-ref` is the content-chip family's reference
-  // member, already spent on a resolved path in the rendered plan
-  // (diffview/coreStyles.ts) — so the composing side and the reading side tint
-  // one reference identically, and theme.test.ts's existing pins on that token
-  // (its hue distance from --chip-link, its saturation floor against
-  // --chip-code) cover this surface for free. It is an alpha tint rather than a
-  // lightness step, which is what lets it read on --paper here and on the code
-  // panel's own ground there. Deliberately NOT the neutral --chip: that token is
-  // declared for chrome controls, and a run of the reviewer's own markdown is
-  // content.
+  // A recognized reference: the geometry both kinds share.
   //
   // Mono at the inline-code pill's own scale, because a reference is an
   // identifier the reviewer is citing — the same reservation every other caret
@@ -280,13 +274,41 @@ const theme = EditorView.theme({
   // element each time the recognized set moves, so there is no from-state to
   // animate out of, and a pill fading in under the cursor mid-sentence is a
   // distraction rather than an affordance.
+  // Roomier than the inline-code pill it sits beside, because a chip carries one
+  // character more than it looks like it does: the `@` the completion inserted is
+  // inside the pill (editorRefs.ts § withSigil), and a sigil pressed against the
+  // fill's left edge reads as a chip that started in the wrong place. The vertical
+  // padding rises with it so the box stays a pill rather than a band; `em` keeps
+  // both proportional to the 0.92em face.
   ".cm-md-ref": {
     fontFamily: "var(--font-mono)",
     fontSize: "0.92em",
     color: "var(--ink)",
+    borderRadius: "4px",
+    padding: "0.12em 0.32em",
+  },
+  // A resolved path. `--chip-ref` is the content-chip family's reference member,
+  // already spent on a resolved path in the rendered plan
+  // (diffview/coreStyles.ts) — so the composing side and the reading side tint
+  // one reference identically, and theme.test.ts's existing pins on that token
+  // (its hue distance from --chip-link, its saturation floor against
+  // --chip-code) cover this surface for free. It is an alpha tint rather than a
+  // lightness step, which is what lets it read on --paper here and on the code
+  // panel's own ground there. Deliberately NOT the neutral --chip: that token is
+  // declared for chrome controls, and a run of the reviewer's own markdown is
+  // content.
+  ".cm-md-ref-path": {
     backgroundColor: "var(--chip-ref)",
-    borderRadius: "3px",
-    padding: "0.05em 0.2em",
+  },
+  // A skill the reviewing agent can reach. Its own tint, because the two kinds
+  // sit side by side in one sentence and a chip's whole job is to say at a glance
+  // what caret made of a run — which it cannot do if `@src/app.ts` and
+  // `/brainstorming` wear the same pill. `--chip-skill` rides the `attention`
+  // hue, the palette's one colour that is neither the accent (selection) nor
+  // semantic (ok/danger), which is what keeps it a full hue-step from the path's
+  // green in every theme; theme.test.ts pins that distance.
+  ".cm-md-ref-skill": {
+    backgroundColor: "var(--chip-skill)",
   },
   // The completion list. @codemirror/autocomplete ships a stock light-mode
   // tooltip: a near-white panel that inherits the editor's own text colour, so
@@ -376,113 +398,25 @@ const theme = EditorView.theme({
     padding: "0.3rem 0.5rem",
     opacity: 1,
   },
-  // That the preview panel exists at all (EXC-1186). Same treatment as the
+  // That the preview window exists at all (EXC-1186). Same treatment as the
   // stopped-search header above — receded, prose face, a rule under it — because
   // it is the same kind of thing: a statement ABOUT the list rather than a row in
   // it. It sits OUTSIDE the `<ul>`, so it stays put while the rows scroll under it.
   //
-  // Drawn from a class on the tooltip rather than as a section: a section belongs
-  // to a group of rows, and both sources would then have to know about the
-  // shortcut-hints preference for this feature's sake. `tooltipClass` is asked on
-  // every view update, so the sentence tracks both the preference and the panel's
-  // own state with no re-query (see editorCompletion.ts).
-  ".cm-tooltip.cm-tooltip-autocomplete.caret-completion-hint::before": {
-    content: '"ctrl+space to preview"',
-    display: "block",
+  // A real element rather than generated content, and that is what lets the chord
+  // wear the chrome's own keycaps: `::before` can draw a sentence but not a
+  // `<kbd>`, so the strip used to be the one shortcut hint in the UI that looked
+  // nothing like the others. completionPreview.ts builds it, from the caps the
+  // shortcut registry holds for `editor.previewCompletion`.
+  ".cm-tooltip.cm-tooltip-autocomplete .caret-completion-hint": {
+    display: "flex",
+    alignItems: "center",
+    gap: "0.25rem",
     fontFamily: "var(--font-sans)",
     fontSize: "var(--text-xs)",
     color: "var(--ink-faint)",
     borderBottom: "1px solid var(--rule)",
     padding: "0.3rem 0.5rem",
-  },
-  // With the panel open the shortcut is how you put it away, so the strip names
-  // that instead. "the preview" rather than a bare "close", because Escape
-  // already closes the LIST and two hints reading `to close` would not say which.
-  // Wins by carrying one more class, not by sitting later.
-  ".cm-tooltip.cm-tooltip-autocomplete.caret-completion-hint.caret-preview-open::before": {
-    content: '"ctrl+space to close the preview"',
-  },
-  // The preview panel itself (EXC-1186). CodeMirror mounts and POSITIONS this —
-  // its base theme anchors it left/right of the list and flips it on viewport
-  // overflow — so there is no geometry here, only caret's own chrome: the same
-  // raised paper, hairline rule, radius and chip lift the list beside it wears, so
-  // the two read as one object rather than as a panel from another application.
-  //
-  // `padding: 0` replaces the base's own, because the strips inside run edge to
-  // edge, and `overflow: hidden` is what keeps them inside the radius. The base's
-  // `pre-line` is dropped here and re-stated per part below: prose and source
-  // lines want different answers, and only the source lines want indentation kept.
-  ".cm-tooltip.cm-completionInfo": {
-    padding: "0",
-    backgroundColor: "var(--paper-raised)",
-    color: "var(--ink)",
-    border: "1px solid var(--rule)",
-    borderRadius: "var(--radius)",
-    boxShadow: "var(--shadow-chip)",
-    overflow: "hidden",
-    whiteSpace: "normal",
-  },
-  // What is being previewed: a path, or a `/name`. Mono at the hint strip's own
-  // scale — it is an identifier, the same reservation the rows themselves make —
-  // and receded, because it repeats the row the reviewer is already on. Truncates
-  // rather than wrapping, so the panel's height is the excerpt's business alone.
-  ".cm-tooltip.cm-completionInfo .caret-preview-title": {
-    fontFamily: "var(--font-mono)",
-    fontSize: "var(--text-xs)",
-    color: "var(--ink-soft)",
-    borderBottom: "1px solid var(--rule)",
-    padding: "0.3rem 0.5rem",
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  },
-  // The answer. Capped just under the list's own 14rem so the two end together,
-  // and scrollable in both axes — a source line is not wrapped, so a long one
-  // scrolls rather than reflowing the panel. Prose by default (a skill's
-  // description is prose); `pre-line` keeps the line breaks a `|` block scalar
-  // wrote without honouring its indentation.
-  ".cm-tooltip.cm-completionInfo .caret-preview-body": {
-    maxHeight: "12rem",
-    overflow: "auto",
-    padding: "0.3rem 0.5rem",
-    fontFamily: "var(--font-sans)",
-    fontSize: "var(--text-sm)",
-    lineHeight: "var(--leading-snug)",
-    whiteSpace: "pre-line",
-  },
-  // What the panel says ABOUT the excerpt rather than in it: that the cited line
-  // is past the end of the file. Prose, so it inherits the body's face and only
-  // steps down in colour — soft enough to read as a caption over the lines, not
-  // faint enough to be missed by a reviewer wondering where their line went.
-  ".cm-tooltip.cm-completionInfo .caret-preview-note": {
-    marginBottom: "0.35rem",
-    color: "var(--ink-soft)",
-  },
-  // A file's lines are source, so they take the mono face and keep their
-  // whitespace exactly. Set directly on the row rather than left to inherit from
-  // the body, which is prose.
-  ".cm-tooltip.cm-completionInfo .caret-preview-line": {
-    fontFamily: "var(--font-mono)",
-    fontSize: "var(--text-xs)",
-    whiteSpace: "pre",
-  },
-  // The line the reviewer cited. `--accent-wash` is the same wash the selected row
-  // wears, deliberately: "the row you are on" and "the line you asked about" are
-  // one gesture answering itself, and the accent itself stays reserved for the
-  // wordmark and the primary action.
-  ".cm-tooltip.cm-completionInfo .caret-preview-marked": {
-    backgroundColor: "var(--accent-wash)",
-  },
-  // The gutter. Faint and tabular so the numbers form a column the eye skips
-  // rather than reads — a supplementary decoration beside a fully legible line,
-  // which is what puts it on `--ink-faint` rather than a step up.
-  ".cm-tooltip.cm-completionInfo .caret-preview-lineno": {
-    display: "inline-block",
-    minWidth: "2.5em",
-    marginRight: "0.6em",
-    textAlign: "right",
-    color: "var(--ink-faint)",
-    fontVariantNumeric: "tabular-nums",
   },
 });
 

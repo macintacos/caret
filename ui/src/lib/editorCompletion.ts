@@ -4,11 +4,16 @@
 // markdownEditor.ts rather than inside it: that module owns the editor's styling
 // and key handling, this one owns the registry two independent features add
 // themselves to, so they never edit the same lines.
-import { autocompletion, type CompletionSource, startCompletion } from "@codemirror/autocomplete";
+import {
+  acceptCompletion,
+  autocompletion,
+  type CompletionSource,
+  moveCompletionSelection,
+} from "@codemirror/autocomplete";
 import { type Extension, Prec } from "@codemirror/state";
 import { type EditorView, keymap } from "@codemirror/view";
 
-import { type PreviewToggle, previewToggle } from "$lib/completionPreview.ts";
+import { completionPreview, type PreviewToggle, previewToggle } from "$lib/completionPreview.ts";
 import { fileCompletion } from "$lib/fileCompletion.ts";
 import { readShortcutHints } from "$lib/shortcutHintsPref.ts";
 import { skillCompletion } from "$lib/skillCompletion.ts";
@@ -61,57 +66,60 @@ export function completionListOpen(view: EditorView): boolean {
 }
 
 /**
- * Ctrl+Space over a painted completion list opens the preview panel beside it,
- * and a second one closes it (EXC-1186).
+ * The chords a painted completion list claims, ahead of everything else.
  *
- * The flip is followed by `startCompletion`, and that is the whole mechanism: the
- * panel is a row's `Completion.info`, and `CompletionTooltip.updateSel`
- * re-evaluates that only when the selected `<li>` element changes — so flipping
- * the toggle on its own would leave the panel exactly as it was.
- * `startCompletionEffect` forces every source back to Pending and re-queries, and
- * the sources read the toggle as they answer.
+ * Every one of them declines the key when no list is painted, so the editor
+ * behaves exactly as it did before completion existed: Tab still indents, Enter
+ * still breaks a line, and Ctrl+Space still falls through to autocomplete's own
+ * binding, which opens a list where there was none.
  *
- * With NO list painted this declines the key, leaving autocomplete's own
- * `Ctrl-Space` binding to open one — exactly what it did before the preview
- * existed. There is nothing to preview until there is a highlighted row.
+ * Why each is here rather than left to autocomplete's stock keymap:
+ *
+ *   * **Ctrl+Space** is caret's own, and flips the preview toggle. Nothing else:
+ *     the panel reads the toggle when it renders (completionPreview.ts), so the
+ *     list is left exactly where the reviewer had arrowed it to.
+ *   * **Tab / Shift-Tab** walk the list. The stock keymap binds only the arrows,
+ *     and the editor's own Tab indents — so without an earlier claim, Tab over an
+ *     open list would insert four spaces into the query.
+ *   * **Enter** accepts and then types the space the reviewer would type next. A
+ *     reference is a word in a sentence, and the stock `acceptCompletion` leaves
+ *     the cursor flush against the name, where the next character would extend the
+ *     reference rather than follow it.
  */
-function previewKeymap(toggle: PreviewToggle): Extension {
+function completionChords(toggle: PreviewToggle): Extension {
+  const overList =
+    (run: (view: EditorView) => boolean) =>
+    (view: EditorView): boolean =>
+      completionListOpen(view) && run(view);
   return Prec.highest(
     keymap.of([
       {
         key: "Ctrl-Space",
-        run: (view) => {
-          if (!completionListOpen(view)) return false;
+        run: overList((view) => {
           toggle.toggle();
-          startCompletion(view);
+          // The panel is drawn by a view plugin, and a key handler that changes
+          // no state produces no view update — so the flip on its own would
+          // repaint nothing. An empty transaction is the smallest thing that runs
+          // the update cycle: no changes and no selection, so the document is
+          // untouched, `onInput` (gated on `docChanged`) never fires, and
+          // autocomplete's own state — the reviewer's place in the list included
+          // — is carried through unchanged.
+          view.dispatch({});
           return true;
-        },
+        }),
+      },
+      { key: "Tab", run: overList(moveCompletionSelection(true)) },
+      { key: "Shift-Tab", run: overList(moveCompletionSelection(false)) },
+      {
+        key: "Enter",
+        run: overList((view) => {
+          if (!acceptCompletion(view)) return false;
+          view.dispatch(view.state.replaceSelection(" "));
+          return true;
+        }),
       },
     ]),
   );
-}
-
-/**
- * The classes the completion tooltip wears, which is what draws the hint strip
- * above the list — the theme puts the sentence in a `::before` on the tooltip
- * itself (see markdownEditor.ts).
- *
- * A class rather than a section, and that is the whole reason the strip can say
- * two different things. A section is a property of a GROUP OF ROWS, so routing
- * the hint through one would make both sources depend on the shortcut-hints
- * preference for a third feature's benefit — and `fileCompletion` already spends
- * its section slot on the "First N matches" header. `tooltipClass` is re-evaluated
- * on every view update, so this live-tracks both the preference and the toggle
- * with no re-query, and lives entirely in this module.
- *
- * The preference hides the AFFORDANCE, never the shortcut: Ctrl+Space keeps
- * working with the strip gone, exactly as every other hint in the chrome does.
- */
-function hintClass(showHints: () => boolean, toggle: PreviewToggle): () => string {
-  return () => {
-    if (!showHints()) return "";
-    return toggle.on() ? "caret-completion-hint caret-preview-open" : "caret-completion-hint";
-  };
 }
 
 /**
@@ -125,8 +133,8 @@ export interface CompletionDeps {
    * Injected, a unit drives both states without touching it. */
   toggle?: PreviewToggle;
   /** Whether the shortcut-hint affordances are shown, defaulting to the real
-   * preference read. A thunk rather than a boolean because `tooltipClass` is
-   * asked on every view update, so a toggle in Settings is picked up live. */
+   * preference read. A thunk rather than a boolean because the hint strip is
+   * redrawn on every view update, so a toggle in Settings is picked up live. */
   showHints?: () => boolean;
 }
 
@@ -136,10 +144,11 @@ export interface CompletionDeps {
  * with — so an editor mounted without review context behaves exactly as it did
  * before completion existed.
  *
- * autocompletion()'s stock keymap is kept. It installs at `Prec.highest`, which is
- * what lets an open list claim ArrowUp/ArrowDown/Enter ahead of the editor's indent
- * and default keymaps — a guarantee of precedence rather than of array position.
- * It does not contend with the editor's submit/cancel chords: those ride a
+ * autocompletion()'s stock keymap is kept, and `completionChords` sits in front of
+ * it. Both install at `Prec.highest`, which is what lets an open list claim its
+ * keys ahead of the editor's indent and default keymaps — a guarantee of
+ * precedence rather than of array position.
+ * Neither contends with the editor's submit/cancel chords: those ride a
  * `Prec.highest` domEventHandlers plugin, and every keymap — however high its own
  * precedence — is dispatched by a single `Prec.default` view plugin, because a
  * facet's `enables` extension is flattened at `Prec.default` regardless of what
@@ -161,19 +170,19 @@ export function reviewCompletion(
   if (review === undefined || sources.length === 0) return [];
   const { toggle = previewToggle, showHints = readShortcutHints } = deps;
   return [
-    // Ahead of autocompletion()'s own keymap, which binds `Ctrl-Space` too. Both
-    // flatten to `Prec.highest`, so precedence cannot separate them and array
-    // position is what decides: `runHandlers` walks the handlers in order and
-    // stops at the first that returns true.
-    previewKeymap(toggle),
+    // Ahead of autocompletion()'s own keymap, which binds `Ctrl-Space` and `Enter`
+    // too. Both flatten to `Prec.highest`, so precedence cannot separate them and
+    // array position is what decides: `runHandlers` walks the handlers in order
+    // and stops at the first that returns true.
+    completionChords(toggle),
     autocompletion({
       // `icons: false` drops the per-type gutter CodeMirror renders for EVERY
       // option, whether or not the option declares a `type` — an empty box of
       // indent, and a stock emoji when it isn't empty. Neither source names a
       // type, so the column buys nothing.
       icons: false,
-      tooltipClass: hintClass(showHints, toggle),
       override: sources.map((source) => source(review)),
     }),
+    completionPreview(toggle, showHints),
   ];
 }

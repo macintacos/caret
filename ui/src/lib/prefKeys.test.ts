@@ -8,6 +8,7 @@ import { join } from "node:path";
 // boot; here it is explicit. A new pref module added without an import here surfaces
 // as a scanned key missing from knownPrefKeys() below — which is the point.
 import "$lib/appearance.ts";
+import "$lib/completionPreviewPref.ts";
 import { knownPrefKeys } from "$lib/definePref.ts";
 import "$lib/diffIndicatorsPref.ts";
 import "$lib/diffStylePref.ts";

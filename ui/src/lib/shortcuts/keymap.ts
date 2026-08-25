@@ -8,6 +8,7 @@
 
 import {
   ariaKeyshortcuts,
+  keyCaps,
   type ShortcutEntry,
   type ShortcutScope,
 } from "$lib/shortcuts/registry.ts";
@@ -231,4 +232,12 @@ export function bind(
  * Every advertising button resolves its hint through here (EXC-876). */
 export function ariaKeyshortcutsFor(id: string): string {
   return ariaKeyshortcuts(reservedEntry(id).keys);
+}
+
+/** The caps a hint draws for the shortcut `id` — one array per chord, one glyph per
+ * key — resolved through the same reservation `ariaKeyshortcutsFor` reads, so what a
+ * hint SHOWS and what the dispatcher fires on cannot drift apart. The sibling of
+ * `ariaKeyshortcutsFor` for a surface that draws keycaps rather than an attribute. */
+export function keyCapsFor(id: string): string[][] {
+  return keyCaps(reservedEntry(id).keys);
 }

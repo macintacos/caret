@@ -103,13 +103,15 @@ from, which is what tells two sources offering the same bare name apart.
 
 Type `@` and caret offers the files under the working directory the plan was written in,
 matched loosely — `@srlbfoo` finds `src/lib/foo.ts`, and each row picks out the characters
-your query matched. Choosing one leaves the cwd-relative path behind as ordinary text, so
-the reference still resolves when the agent picks the plan up in some later session. Type
-`:42` after the name and the line rides along with it. In a project too large to search to
-the end, the list says how much of the answer it is showing.
+your query matched. Choosing one leaves `@` and the cwd-relative path behind as ordinary
+text, so the reference still resolves when the agent picks the plan up in some later
+session. Type `:42` after the name and the line rides along with it. In a project too
+large to search to the end, the list says how much of the answer it is showing.
 
-Escape dismisses either list without closing the dialog around it, and a `/` inside
-ordinary prose — a path like `src/lib/api.ts` — is left alone.
+Either list is walked with the arrow keys or with `tab` and `shift+tab`, and `enter` takes
+the highlighted row and leaves a space after it, ready for the next word. Escape dismisses
+the list without closing the dialog around it, and a `/` inside ordinary prose — a path
+like `src/lib/api.ts` — is left alone.
 
 The `/` list is a **reference** aid: the name becomes part of the feedback the agent
 reads, and caret never runs the skill itself. Which skills appear depends on the agent —
@@ -121,15 +123,22 @@ reload.
 ### Seeing what you are about to cite
 
 With a list open, `ctrl+space` opens a panel beside it showing more about the highlighted
-row: a skill's own description, or the opening lines of a file. The panel follows the
-arrow keys, so choosing between `src/lib/api.ts` and `src/lib/api.test.ts`, or between
-`brainstorming` and `linear-plan`, does not mean leaving the editor to find out which is
-which. A `:42` after a filename moves the preview to that line and marks it; a line past
-the end of the file says where the file ends.
+row: a skill's own description, or the opening lines of a file, syntax-coloured in the
+theme you are reading in. It sits to the right of the list, or to its left when the
+right-hand edge is close, or stacked with it in a window too narrow to hold both side by
+side. Stacked, the list moves to whichever side of the line you are typing on has the room
+and the panel takes the far side of it, so the two stay together and on screen rather than
+the panel ending up at the top of the window on its own. It follows the arrow keys, so
+choosing between `src/lib/api.ts` and `src/lib/api.test.ts`, or between `brainstorming`
+and `linear-plan`, does not mean leaving the editor to find out which is which. A `:42`
+after a filename moves the preview to that line and marks it; a line past the end of the
+file says where the file ends.
 
-A second `ctrl+space` closes the panel, and it stays closed until you ask again. A skill
-that describes itself nowhere, and a file caret cannot read, each say so in a sentence and
-leave the list working.
+Opening the panel leaves the row you were on where it was, so you can walk the list and
+ask about whatever you land on. A second `ctrl+space` closes it. Whichever way you leave
+it is remembered: turn it on and the next list you open — in this review or after a reload
+— opens with it. A skill that describes itself nowhere, and a file caret cannot read, each
+say so in a sentence and leave the list working.
 
 The top of the list names the shortcut. Turning **Settings → Shortcut hints** off takes
 that line away; the shortcut keeps working.
@@ -145,6 +154,11 @@ A `/name` is checked against the skills the reviewing agent really has, the same
 completes from. A path is checked against the working directory the plan was written in,
 the same one `@` completes from — and either one re-checks as you edit, so correcting a
 typo brings the chip back.
+
+The two kinds are tinted differently — a file or folder green, a skill blue — so a comment
+carrying both says at a glance which is which without your having to read them. A path you
+completed with `@` wears its `@` inside the chip: the sigil is part of the reference, and
+part of what the agent reads.
 
 In prose a path has to carry a `/` or a `.` before caret looks it up, which is what keeps
 an ordinary word like `test` from wearing a chip next to a `test/` directory. Wrapping a
