@@ -86,12 +86,32 @@ test("an @ opens the files under the review's working directory", async ({ daemo
   });
 });
 
-test("typing narrows the list by subsequence, not by prefix", async ({ daemon, page }) => {
+test("typing narrows by subsequence, and each row shows which characters matched", async ({
+  daemon,
+  page,
+}) => {
   await withProject(daemon, page, PROJECT, async () => {
     await composer(page);
     await page.keyboard.type("@srlbfoo");
     // Not one of these characters starts the path or any of its segments.
     await expect(rowsIn(page)).toHaveText(["src/lib/foo.ts"]);
+
+    // Which is exactly why the row has to SAY what matched: nothing about
+    // `src/lib/foo.ts` looks like `srlbfoo` until the seven characters are picked
+    // out of it. `filter: false` switches CodeMirror's own match ranges off along
+    // with its filtering — it hands each option `getMatch ? getMatch(option) : []`
+    // — so before the source supplied `getMatch`, this locator found nothing.
+    const matched = rowsIn(page).locator(".cm-completionMatchedText");
+    expect((await matched.allTextContents()).join("")).toBe("srlbfoo");
+
+    // And that the emphasis is VISIBLE, which the DOM above does not say. It is a
+    // CodeMirror `theme()` spec, the one class of rule no colour gate in this repo
+    // covers, and one has already shipped inert twice in this epic by losing on
+    // specificity to the base theme's doubled class. Reading the value back off
+    // the live element is the only thing that proves the rule applies at all.
+    const wash = await matched.first().evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(wash).not.toBe("rgba(0, 0, 0, 0)");
+    expect(wash).not.toBe("transparent");
   });
 });
 

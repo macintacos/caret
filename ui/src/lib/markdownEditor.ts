@@ -254,9 +254,23 @@ const theme = EditorView.theme({
     backgroundColor: "var(--accent-wash)",
     color: "var(--ink)",
   },
-  // Near-monochrome means emphasis is weight, not colour — and the stock
-  // underline on the matched span is noise at this size.
-  ".cm-completionMatchedText": { textDecoration: "none", fontWeight: "600" },
+  // What the reviewer's own typing matched. Weight alone carried this while the
+  // only source filtered by prefix, where the match is a leading run; a
+  // subsequence match over a path is single characters scattered the length of
+  // the row (`srlbfoo` against `src/lib/foo.ts`), and bolding seven lone glyphs
+  // in a mono face at this size reads as noise rather than as a signal.
+  //
+  // `--mark` is the token for it rather than a new one: its documented job is a
+  // marked region of the document — plan-search hits — and this is the same job
+  // in a list, the characters a query matched. It is a translucent wash for
+  // exactly this reason, so it composites over the selected row's `--accent-wash`
+  // instead of fighting it, and the stock underline stays off as noise at this
+  // size.
+  ".cm-completionMatchedText": {
+    textDecoration: "none",
+    fontWeight: "600",
+    backgroundColor: "var(--mark)",
+  },
   // Where a name came from is metadata about it, so it recedes — but it never
   // shrinks away, which is the point of `flex: none` beside the truncating label.
   ".cm-completionDetail": {

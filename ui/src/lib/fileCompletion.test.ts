@@ -5,7 +5,7 @@ import { EditorState } from "@codemirror/state";
 
 import type { FileSearchResponse } from "@core/lib/types";
 import type { ReviewContext } from "$lib/editorCompletion.ts";
-import { createFileCompletion, type SearchFiles } from "$lib/fileCompletion.ts";
+import { createFileCompletion, type SearchFiles, subsequenceRanges } from "$lib/fileCompletion.ts";
 
 // The `@` file-reference source (EXC-1175). Everything it decides is pure —
 // whether the text before the cursor is a trigger, what query that trigger
@@ -137,11 +137,81 @@ describe("createFileCompletion", () => {
     expect(seen).toEqual([]);
   });
 
+  test("the list says which characters the query matched", async () => {
+    const search = fakeSearch([], { paths: ["src/lib/foo.ts"], stoppedAt: null });
+    const result = await complete("@srlbfoo", search);
+    // `filter: false` turns off CodeMirror's own match ranges along with its
+    // filtering — it passes `getMatch ? getMatch(option) : []` — so without this
+    // the row renders with no emphasised span anywhere in it.
+    const option = result?.options[0];
+    if (option === undefined) throw new Error("expected a row to read the ranges off");
+    const ranges = result?.getMatch?.(option) ?? [];
+    expect(ranges.length).toBeGreaterThan(0);
+    // Read the ranges back off the label: what is emphasised must be exactly what
+    // the reviewer typed, in order. An off-by-one paints the neighbours instead
+    // and this is the assertion that catches it.
+    const label = "src/lib/foo.ts";
+    const emphasised: string[] = [];
+    for (let i = 0; i < ranges.length; i += 2)
+      emphasised.push(label.slice(ranges[i], ranges[i + 1]));
+    expect(emphasised.join("")).toBe("srlbfoo");
+  });
+
   test("completion needs no adapter, so every agent gets it", async () => {
     const seen: Array<{ reviewId: string; query: string }> = [];
     const search = fakeSearch(seen, { paths: ["a.ts"], stoppedAt: null });
     // The codex adapter never sets `adapter`; nothing here reads it.
     const result = await complete("@a", search, { reviewId: "rev-1", cwd: "/w/caret" });
     expect(result?.options.map((o) => o.label)).toEqual(["a.ts"]);
+  });
+});
+
+describe("subsequenceRanges", () => {
+  /** The emphasised substrings, which is what the ranges mean on screen. */
+  function emphasised(label: string, query: string): string[] {
+    const ranges = subsequenceRanges(label, query);
+    const out: string[] = [];
+    for (let i = 0; i < ranges.length; i += 2) out.push(label.slice(ranges[i], ranges[i + 1]));
+    return out;
+  }
+
+  test("a scattered subsequence emphasises exactly the characters typed", () => {
+    expect(emphasised("src/lib/foo.ts", "srlbfoo")).toEqual(["sr", "l", "b", "foo"]);
+  });
+
+  test("adjacent hits merge into one run rather than abutting spans", () => {
+    // Three separate [n, n+1] pairs would render as three <span>s in a row —
+    // the same characters, but a background wash would seam between them.
+    expect(subsequenceRanges("src/lib/foo.ts", "src")).toEqual([0, 3]);
+  });
+
+  test("matching folds case, because the daemon matched lowercased", () => {
+    expect(emphasised("README.md", "rm")).toEqual(["R", "M"]);
+  });
+
+  test("an empty query emphasises nothing", () => {
+    expect(subsequenceRanges("src/app.ts", "")).toEqual([]);
+  });
+
+  test("a query the label does not carry in order emphasises nothing", () => {
+    // Unreachable from the source — the daemon already matched — so the contract
+    // is that it degrades to no emphasis rather than to a wrong one.
+    expect(subsequenceRanges("src/app.ts", "zz")).toEqual([]);
+    expect(subsequenceRanges("src/app.ts", "pa")).toEqual([]);
+  });
+
+  test("every range is a valid slice of the label", () => {
+    const label = "ui/src/lib/markdownEditor.ts";
+    const ranges = subsequenceRanges(label, "uimded");
+    expect(ranges.length % 2).toBe(0);
+    for (let i = 0; i < ranges.length; i += 2) {
+      // `?? -1` rather than a non-null assertion: a missing entry fails the first
+      // expectation instead of being asserted away.
+      const from = ranges[i] ?? -1;
+      const to = ranges[i + 1] ?? -1;
+      expect(from).toBeGreaterThanOrEqual(0);
+      expect(from).toBeLessThan(to);
+      expect(to).toBeLessThanOrEqual(label.length);
+    }
   });
 });

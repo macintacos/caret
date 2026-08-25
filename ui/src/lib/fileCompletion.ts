@@ -49,6 +49,49 @@ function stoppedHeader(shown: number, stoppedAt: SearchStop): string {
 }
 
 /**
+ * Where `query` matched inside `label`, as the flat `[from, to, from, to, …]`
+ * pairs CodeMirror's `getMatch` contract asks for.
+ *
+ * Mirrors the daemon's own matcher (`src/plan/file-search.ts`): greedy, leftmost,
+ * case-insensitive, in order. Recomputing it here rather than having the route
+ * return positions keeps that answer a plain list of paths, and the emphasis then
+ * says exactly why a row is in the list, because it consumes the query the same
+ * way the walk did.
+ *
+ * Adjacent hits merge into one range, so `@src` reads as one emphasised run
+ * rather than three abutting spans.
+ *
+ * Characters are folded one at a time rather than over a pre-lowercased string.
+ * The daemon lowercases the whole path, but the handful of characters whose
+ * lowercase form is longer than one UTF-16 unit would shift every index after
+ * them and paint the emphasis over the wrong characters. Such a path is still
+ * offered and still insertable — it only loses its emphasis, which is why the
+ * unmatched case returns `[]` rather than throwing.
+ */
+export function subsequenceRanges(label: string, query: string): number[] {
+  // The needle is folded whole, exactly as the daemon folds it, so the characters
+  // compared here are the ones that matched there. Only the LABEL is folded per
+  // character, because only its indices are handed back.
+  const needle = query.toLowerCase();
+  const ranges: number[] = [];
+  let i = 0;
+  // The exclusive end of the range most recently pushed. Tracked alongside rather
+  // than read back off `ranges`, which keeps the abutment test a plain number
+  // comparison instead of an indexed read.
+  let lastEnd = -1;
+  for (let h = 0; h < label.length && i < needle.length; h++) {
+    if (label.charAt(h).toLowerCase() !== needle.charAt(i)) continue;
+    if (lastEnd === h) ranges[ranges.length - 1] = h + 1;
+    else ranges.push(h, h + 1);
+    lastEnd = h + 1;
+    i++;
+  }
+  // A query this label does not carry in order has no honest emphasis. The daemon
+  // matched it, so this is only reachable through the case-folding corner above.
+  return i === needle.length ? ranges : [];
+}
+
+/**
  * A completion source offering the files under `review.cwd`, asking `search` for
  * the matches.
  *
@@ -70,7 +113,8 @@ export function createFileCompletion(search: SearchFiles): ReviewCompletionSourc
       // on a permanently known answer.
       if (review.cwd === "") return null;
 
-      const { paths, stoppedAt } = await search(review.reviewId, trigger.text.slice(1));
+      const query = trigger.text.slice(1);
+      const { paths, stoppedAt } = await search(review.reviewId, query);
       // Nothing matched is not an error and gets no list — the editor behaves
       // exactly as it did before completion existed. That covers the walk giving
       // up empty too: CodeMirror paints nothing for an option-free result, so the
@@ -90,6 +134,12 @@ export function createFileCompletion(search: SearchFiles): ReviewCompletionSourc
         // start, nor an adjacent run, so `@oo` would lose `src/lib/foo.ts`.
         // One authority for what matches, and it is the one that walked the tree.
         filter: false,
+        // …which is also why this has to be supplied. Turning the filter off
+        // turns off the match ranges with it: CodeMirror hands each option
+        // `getMatch ? getMatch(option) : []`, and the empty array renders a label
+        // with no emphasised span anywhere in it. Without this the `@` list is the
+        // one place in the editor that never shows why a row is a match.
+        getMatch: (option) => subsequenceRanges(option.label, query),
         options,
       };
     };
