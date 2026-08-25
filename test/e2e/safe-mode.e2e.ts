@@ -17,7 +17,7 @@
 // own — which is why this spec is deliberately one test rather than a re-run of
 // the unit's twelve.
 
-import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
 test("a keystroke right after refocus triggers safe mode, which then releases", async ({
@@ -27,6 +27,16 @@ test("a keystroke right after refocus triggers safe mode, which then releases", 
   await daemon.seed();
   await page.goto("/");
   await planSurface(page);
+
+  // Spend the keyboard handover BEFORE the window this test is about is open.
+  // The first key press after a navigation waits for the renderer to start
+  // taking keys at all (fixtures.ts § awaitKeyboardReady) and proves it with a
+  // keystroke of its own; left until the press below, both would land inside the
+  // 300ms window rather than before it, and the guard would see the probe rather
+  // than the `a`. Past the mount grace first, so the warming press cannot arm the
+  // very guard this test means to arm deliberately.
+  await waitPastSafeModeGrace(page);
+  await page.keyboard.press("Shift");
 
   // Re-open the grace window, then type inside it.
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
