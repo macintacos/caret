@@ -180,6 +180,22 @@ function worthAsking(path: string): boolean {
   return path.includes("/") || path.includes(".");
 }
 
+/** `from`, moved back over the `@` the reviewer completed with.
+ *
+ * `CANDIDATE_RE` does not admit `@`, so a run the `@` source inserted is offered
+ * starting one character INSIDE the reference it wrote. The sigil is part of that
+ * reference — it is what the insertion puts back (fileCompletion.ts) and what the
+ * agent reads — so a chip that begins after it leaves the one character saying
+ * "this is a reference" outside the pill.
+ *
+ * Only a BOUNDARY `@` moves the range, which is the same test the source itself
+ * applies: `someone@host.com` is an address, and its `.com` tail is the candidate,
+ * not a reference the reviewer completed. */
+function withSigil(text: string, from: number): number {
+  if (from === 0 || text[from - 1] !== "@") return from;
+  return from === 1 || /\s/.test(text[from - 2] as string) ? from - 1 : from;
+}
+
 /**
  * The reference-shaped runs in `state`'s document, in document order.
  *
@@ -230,7 +246,7 @@ export function scanRefTokens(state: EditorState): RefToken[] {
     const { run, to } = withoutTrailingStop(prose, c.start, c.end);
     const ref = classify(run);
     if (ref === null || !worthAsking(ref.path)) continue;
-    tokens.push({ from: c.start, to, key: ref.path, kind: "path" });
+    tokens.push({ from: withSigil(prose, c.start), to, key: ref.path, kind: "path" });
   }
 
   return tokens.sort((a, b) => a.from - b.from);
