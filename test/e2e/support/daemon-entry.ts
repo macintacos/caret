@@ -75,9 +75,11 @@ const server = createServer({
   // the pane's block text is deterministic across machines (advanced.e2e.ts
   // asserts these exact values — keep the two in sync). The port lives in the
   // settings graph, not the bound OS port, mirroring how the pane narrows it.
-  // `listSkills` is deliberately NOT wired, so GET /api/reviews/:id/skills 404s
-  // here: the production capability enumerates the developer's real ~/.claude, and
-  // a spec must never read it. A spec that needs the route stubs its own.
+  // `listSkills` and `readSkillDescription` are deliberately NOT wired, so
+  // GET /api/reviews/:id/skills and its /skill-description sibling both 404 here:
+  // the production capabilities enumerate and then OPEN files under the
+  // developer's real ~/.claude, and a spec must never read those. A spec that
+  // needs either route stubs its own.
   buildId: "e2e-build",
   commit: "e2ecommit0000000",
   diagnostics: () => ({

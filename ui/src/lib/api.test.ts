@@ -10,6 +10,7 @@ import {
   getFileExcerpt,
   getHealth,
   getReview,
+  getSkillDescription,
   getSkills,
   HttpError,
   markSeen,
@@ -539,5 +540,63 @@ describe("getSkills", () => {
     expect(await getSkills(ID)).toBeNull();
     await flush();
     expect(cap.events().some((r) => r.level === "warn" && r.step === "request")).toBe(true);
+  });
+});
+
+describe("getSkillDescription", () => {
+  test("returns the description the daemon read for that skill", async () => {
+    respond = () => Promise.resolve(jsonResponse({ description: "Plan before writing" }));
+    expect(await getSkillDescription(ID, "brainstorming", "user")).toBe("Plan before writing");
+  });
+
+  test("asks the review's own route, with the id and the row encoded", async () => {
+    let seenUrl = "";
+    respond = (url) => {
+      seenUrl = url;
+      return Promise.resolve(jsonResponse({ description: null }));
+    };
+    await getSkillDescription("a b/c", "team/deploy", "command");
+    expect(seenUrl).toBe(
+      "/api/reviews/a%20b%2Fc/skill-description?name=team%2Fdeploy&origin=command",
+    );
+  });
+
+  test("a skill with no description reads as no description, not as a failure", async () => {
+    respond = () => Promise.resolve(jsonResponse({ description: null }));
+    expect(await getSkillDescription(ID, "git", "user")).toBeNull();
+    await flush();
+    // Nothing went wrong, so nothing is logged: the panel simply says the skill
+    // describes itself nowhere.
+    expect(cap.events().some((r) => r.step === "request")).toBe(false);
+  });
+
+  test("degrades to no description on a 404 — the unwired-daemon case", async () => {
+    // A daemon that wires no description capability 404s the route (the e2e
+    // fixture daemon does exactly this), and the panel must say "no description"
+    // rather than surface an error.
+    respond = () => Promise.resolve(new Response(null, { status: 404 }));
+    expect(await getSkillDescription(ID, "git", "user")).toBeNull();
+    await flush();
+    // `debug`, not `warn`: this fires once per highlighted row, which is the
+    // cadence searchFiles documents the level for.
+    expect(cap.events().some((r) => r.level === "debug" && r.step === "request")).toBe(true);
+  });
+
+  test("degrades to no description when the request never lands", async () => {
+    respond = () => Promise.reject(new Error("offline"));
+    expect(await getSkillDescription(ID, "git", "user")).toBeNull();
+  });
+
+  test("degrades to no description on a 2xx whose body is missing the field", async () => {
+    respond = () => Promise.resolve(jsonResponse({}));
+    expect(await getSkillDescription(ID, "git", "user")).toBeNull();
+  });
+
+  test("never logs the name or the description", async () => {
+    respond = () => Promise.resolve(new Response(null, { status: 500 }));
+    await getSkillDescription(ID, "laundry", "user");
+    await flush();
+    // Both are the reviewer's own configuration; only the failure reaches the log.
+    expect(JSON.stringify(cap.events())).not.toContain("laundry");
   });
 });

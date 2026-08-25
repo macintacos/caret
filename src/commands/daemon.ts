@@ -100,6 +100,11 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
       // GET /api/reviews/:id/skills so the feedback editors can complete `/` names
       // from the reviewing agent's own skills (EXC-1176).
       listSkills: (cwd) => adapter.listSkills(cwd),
+      // The same adapter, one route over: what the skill the reviewer highlighted
+      // in that list actually does, served by
+      // GET /api/reviews/:id/skill-description for the Ctrl+Space preview panel
+      // (EXC-1186).
+      readSkillDescription: (cwd, name, origin) => adapter.readSkillDescription(cwd, name, origin),
       // Daemon self-diagnostics for the settings Advanced pane (EXC-842). Reads
       // live settings (settings().current() hot-reloads a config edit) and the
       // CARET_* env overrides in effect; buildDiagnostics scrubs the settings dump.

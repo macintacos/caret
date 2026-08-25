@@ -5,6 +5,11 @@
 // lines. Reference only — caret does not execute a completed skill, and nothing
 // here suggests it will.
 //
+// The list offers NAMES. What a highlighted name means is a second, separate
+// question, asked only when the reviewer opens the Ctrl+Space preview panel over
+// it (EXC-1186): one round trip per highlighted row, carrying back that skill's
+// own `description` and nothing else from its file.
+//
 // The list is captured ONCE PER REVIEW rather than re-fetched per keystroke: the
 // daemon's walk crosses the plugin tree, which is far too much work to repeat on
 // every character, and it is stateless, so the snapshot lives here. `skillsFor`
@@ -18,7 +23,8 @@
 import type { Completion, CompletionContext, CompletionResult } from "@codemirror/autocomplete";
 
 import type { SkillRef } from "@core/lib/types";
-import { getSkills } from "$lib/api.ts";
+import { getSkillDescription, getSkills } from "$lib/api.ts";
+import { type PreviewToggle, previewPanel, previewToggle } from "$lib/completionPreview.ts";
 import type { ReviewCompletionSource } from "$lib/editorCompletion.ts";
 
 /** `/` plus the characters a skill name may carry: word characters, the `:` that
@@ -41,11 +47,60 @@ function atWordBoundary(context: CompletionContext, at: number): boolean {
   return /\s/.test(context.state.sliceDoc(at - 1, at));
 }
 
-function toOption(skill: SkillRef): Completion {
+function toOption(skill: SkillRef, info: Completion["info"]): Completion {
   // The label carries the leading `/` because `from` sits at the slash: it is both
   // what CodeMirror filters the reviewer's typing against and what gets inserted,
   // so a plugin skill inserts its namespaced `/plugin:skill` form.
-  return { label: `/${skill.name}`, detail: skill.origin };
+  return { label: `/${skill.name}`, detail: skill.origin, info };
+}
+
+/** Asking what one skill does. Never rejects — `api.ts` degrades every failure to
+ * null, which is the same answer a skill that describes itself nowhere gives, and
+ * the panel has one thing to say for both. */
+export type DescribeSkill = (
+  reviewId: string,
+  name: string,
+  origin: string,
+) => Promise<string | null>;
+
+/** What the panel says for a null. Not an error state: plenty of skills carry no
+ * `description`, and the reviewer asked what this one is rather than asking
+ * caret to prove it could read the file. */
+const NO_DESCRIPTION = "No description.";
+
+/**
+ * The preview panel for one skill row: its own description, or the sentence
+ * above.
+ *
+ * Handed back SYNCHRONOUSLY with an empty body the read fills in when it lands —
+ * `updateSel`'s async branch skips the `aria-describedby` wiring its sync branch
+ * does, so a row that awaited its answer would go undescribed to a screen reader
+ * and the panel would arrive late. `destroy`, which CodeMirror calls the moment
+ * the selection moves, cancels that write: a read landing after the reviewer has
+ * arrowed on would fill an element no longer on screen.
+ *
+ * The lookup key is the SkillRef rather than the label: `origin` is what tells
+ * two roots offering one bare name apart, and the label's leading `/` is an
+ * insertion detail no route knows about.
+ */
+function skillPreview(
+  describe: DescribeSkill,
+  reviewId: string,
+  skill: SkillRef,
+): (option: Completion) => { dom: HTMLElement; destroy: () => void } {
+  return (option) => {
+    const { dom, body } = previewPanel(option.label);
+    let live = true;
+    void describe(reviewId, skill.name, skill.origin).then((description) => {
+      if (live) body.textContent = description ?? NO_DESCRIPTION;
+    });
+    return {
+      dom,
+      destroy: () => {
+        live = false;
+      },
+    };
+  };
 }
 
 /** A review's skills, however they are obtained. Never rejects — a failed
@@ -109,9 +164,17 @@ export const skillsFor: SkillLookup = createSkillCache();
  *   reads the shared `skillsFor`; injected, it gets a cache of its own, so a
  *   unit's list can neither answer from nor leak into the app's. `null` reports a
  *   transient failure, and the source MAY also reject.
+ * @param describe - How to read one skill's own description for the preview
+ *   panel. Deliberately NOT cached the way the enumeration is: it is one small
+ *   read per highlighted row, and CodeMirror destroys the panel on every
+ *   selection change, so a cache would save a request and repaint anyway.
+ * @param toggle - Whether the reviewer has the panel open. Injected, a unit gets
+ *   one of its own, so its state can neither be read from nor leak into the app's.
  */
 export function skillCompletion(
   fetchSkills?: (id: string) => Promise<SkillRef[] | null>,
+  describe: DescribeSkill = getSkillDescription,
+  toggle: PreviewToggle = previewToggle,
 ): ReviewCompletionSource {
   const lookup = fetchSkills === undefined ? skillsFor : createSkillCache(fetchSkills);
 
@@ -123,6 +186,14 @@ export function skillCompletion(
       // An agent with nothing to offer — codex today — returns null rather than an
       // empty result, so no popup paints at all.
       if (skills.length === 0) return null;
-      return { from: match.from, options: skills.map(toOption), validFor: SKILL_TOKEN };
+      // The toggle is read HERE, at query time, and not by the panel at render
+      // time: `updateSel` re-evaluates `info` only when the selected element
+      // changes, so a panel that asked would never be asked again — see
+      // completionPreview.ts. Each row gets its own, because each names a
+      // different skill.
+      const options = skills.map((skill) =>
+        toOption(skill, toggle.on() ? skillPreview(describe, review.reviewId, skill) : undefined),
+      );
+      return { from: match.from, options, validFor: SKILL_TOKEN };
     };
 }

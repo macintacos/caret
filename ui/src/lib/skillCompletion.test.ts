@@ -1,20 +1,27 @@
 import "@ui/test-setup.ts";
 import { describe, expect, test } from "bun:test";
 
-import { completionStatus } from "@codemirror/autocomplete";
+import {
+  CompletionContext,
+  type CompletionResult,
+  completionStatus,
+} from "@codemirror/autocomplete";
+import { EditorState } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 
 import type { SkillRef } from "@core/lib/types";
 import {
   allowCompletionAccept,
+  drainMicrotasks,
   mountEditor,
   completionListPainted as painted,
   settleCompletion,
   typeInto as type,
   until,
 } from "@ui/test-helpers.ts";
+import type { PreviewToggle } from "$lib/completionPreview.ts";
 
-import { createSkillCache, skillCompletion } from "./skillCompletion.ts";
+import { createSkillCache, type DescribeSkill, skillCompletion } from "./skillCompletion.ts";
 
 // The `/` source is what turns the EXC-1174 seam into a feature, so these drive a
 // REAL EditorView with the source installed rather than calling it as a function:
@@ -377,5 +384,118 @@ describe("createSkillCache", () => {
     const id = reviewId();
     expect(await cache(id)).toEqual([]);
     expect(await cache(id)).toEqual(SKILLS);
+  });
+});
+
+// The Ctrl+Space preview panel over a `/` row (EXC-1186). Unlike the triggering
+// and insertion cases above, what a row carries is pure — whether it has an
+// `info` at all, what the panel is asked for, and what it says when the skill
+// describes itself nowhere — so a bare EditorState drives it, the same shape
+// fileCompletion.test.ts uses for its half. What the panel LOOKS like beside the
+// list is CSS, and that a keypress opens it at all is real-browser behaviour.
+describe("the preview panel", () => {
+  const OPEN: PreviewToggle = { on: () => true, toggle: () => {} };
+  const SHUT: PreviewToggle = { on: () => false, toggle: () => {} };
+
+  /** A description lookup that records what it was asked. Never rejects, exactly
+   * as `api.ts`'s does — every failure there is already a null. */
+  function fakeDescribe(
+    seen: Array<[string, string, string]>,
+    answer: string | null = "Plan before writing",
+  ): DescribeSkill {
+    return (id, name, origin) => {
+      seen.push([id, name, origin]);
+      return Promise.resolve(answer);
+    };
+  }
+
+  /** Run a `/` source over `doc` with the cursor at its end. */
+  function complete(
+    doc: string,
+    describe: DescribeSkill,
+    toggle: PreviewToggle,
+  ): Promise<CompletionResult | null> {
+    const state = EditorState.create({ doc });
+    const source = skillCompletion(
+      async () => SKILLS,
+      describe,
+      toggle,
+    )({
+      reviewId: "rev-1",
+      cwd: "/w/caret",
+    });
+    return Promise.resolve(source(new CompletionContext(state, doc.length, false)));
+  }
+
+  /** The row for `label`, its panel opened. */
+  function openPreview(
+    result: CompletionResult | null,
+    label: string,
+  ): { dom: HTMLElement; destroy: () => void } {
+    const option = result?.options.find((o) => o.label === label);
+    if (option === undefined) throw new Error(`expected a row for ${label}`);
+    const info = option.info;
+    if (typeof info !== "function") throw new Error("expected the row to carry a preview");
+    const panel = info(option);
+    if (panel === null || !("dom" in panel)) throw new Error("expected a panel, synchronously");
+    return panel as { dom: HTMLElement; destroy: () => void };
+  }
+
+  /** …and settled, which is when the read it started has written into it. */
+  async function panelFor(result: CompletionResult | null, label: string): Promise<HTMLElement> {
+    const { dom } = openPreview(result, label);
+    await drainMicrotasks();
+    return dom;
+  }
+
+  test("a shut panel leaves every row without one, and asks nothing", async () => {
+    const seen: Array<[string, string, string]> = [];
+    const result = await complete("/", fakeDescribe(seen), SHUT);
+    expect(result?.options.every((o) => o.info === undefined)).toBe(true);
+    expect(seen).toEqual([]);
+  });
+
+  test("an open panel shows the highlighted skill's own description", async () => {
+    const result = await complete("/", fakeDescribe([], "Plan before writing"), OPEN);
+    expect((await panelFor(result, "/git")).textContent).toContain("Plan before writing");
+  });
+
+  test("the panel is titled with the name it describes", async () => {
+    const result = await complete("/", fakeDescribe([]), OPEN);
+    expect((await panelFor(result, "/git")).textContent).toContain("/git");
+  });
+
+  test("each row asks about its own name and origin, not its label", async () => {
+    // The label carries the leading `/` because that is what gets inserted; the
+    // lookup key is the row itself. The origin travels with it because it is what
+    // tells two roots offering one bare name apart — keyed on the name alone, one
+    // of them would be described twice.
+    const seen: Array<[string, string, string]> = [];
+    const result = await complete("/", fakeDescribe(seen), OPEN);
+    await panelFor(result, "/superpowers:brainstorming");
+    expect(seen).toEqual([["rev-1", "superpowers:brainstorming", "plugin"]]);
+  });
+
+  test("a skill that describes itself nowhere says so, plainly", async () => {
+    // Null is the ordinary answer for a skill with no description AND for every
+    // failure behind it, so this one sentence is the whole no-answer state.
+    const result = await complete("/", fakeDescribe([], null), OPEN);
+    expect((await panelFor(result, "/git")).textContent).toContain("No description");
+  });
+
+  test("a read landing after the reviewer arrowed on writes nothing", async () => {
+    let land: (description: string | null) => void = () => {};
+    const describe: DescribeSkill = () =>
+      new Promise((resolve) => {
+        land = resolve;
+      });
+    const result = await complete("/", describe, OPEN);
+    const panel = openPreview(result, "/git");
+    // CodeMirror destroys the panel the moment the selection moves, and the read
+    // it started is still in flight — its element is no longer on screen.
+    panel.destroy();
+    land("Plan before writing");
+    await drainMicrotasks();
+    expect(panel.dom.textContent).not.toContain("Plan before writing");
   });
 });

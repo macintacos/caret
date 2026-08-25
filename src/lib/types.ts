@@ -342,8 +342,11 @@ export interface FileExcerpt {
  * completion so a reviewer cites a name the agent will actually recognize
  * (EXC-1176). Reference only — caret never executes a completed skill.
  *
- * Names only: a skill's own file contents never cross into the UI, so there is
- * deliberately no description field. Served by GET /api/reviews/:id/skills. */
+ * Names only, and deliberately no description field: the list is enumerated for
+ * every `/` keystroke, so carrying one would open every skill's file to show one.
+ * A highlighted row's description is a second round trip
+ * (`SkillDescriptionResponse`), made only when the reviewer opens the preview
+ * panel over it. Served by GET /api/reviews/:id/skills. */
 export interface SkillRef {
   /** The name to insert after `/`, in the exact form the agent must see — a
    * plugin skill carries its `plugin:` namespace, so the insertion identifies
@@ -354,6 +357,18 @@ export interface SkillRef {
    * silently winning. The core transports it without interpreting it and the UI
    * renders it verbatim; which labels exist is each adapter's own business. */
   origin: string;
+}
+
+/** Body of GET /api/reviews/:id/skill-description — one enumerated skill's own
+ * description, for the preview panel the `/` completion opens over the
+ * highlighted name (EXC-1186).
+ *
+ * `null` is an ordinary answer rather than a failure: the skill says nothing
+ * about itself, or names no file any root answers to. The field is present
+ * either way, so the panel has one shape to render and the route keeps its 404
+ * for the two things that really are absent — the review, and the capability. */
+export interface SkillDescriptionResponse {
+  description: string | null;
 }
 
 /** Body of POST /api/reviews/:id/resolve. */
