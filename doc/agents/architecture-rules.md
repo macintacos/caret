@@ -19,12 +19,14 @@ slots in without touching core internals; blur it and agent vocabulary leaks eve
   id to its adapter and resolves the active one (by explicit id, then `CARET_AGENT`, then
   the default). `src/adapters/claude/` is the reference implementation and the default;
   `src/adapters/codex/` is a second (default-off, provisional) adapter that proves the
-  seam. An adapter owns six surfaces: `parseHookInput` (raw hook stdin → core
+  seam. An adapter owns seven surfaces: `parseHookInput` (raw hook stdin → core
   `PlanInput`), `emitDecision` (core `Decision` → the tool's stdout wire shape),
   `fatalDenyLine` (a dependency-free last-resort deny line for the CLI's fatal handler),
   `approveVariants` (the post-approval options it offers), `readInstallState` (the
-  discovery install probe), and `listSkills` (the skill names the reviewer's `/`
-  completion offers — names only, never a skill's contents).
+  discovery install probe), `listSkills` (the skill names the reviewer's `/` completion
+  offers — names only, never a skill's contents), and `readSkillDescription` (one named
+  skill's own description, read on demand for the preview panel that completion opens —
+  that description, never the rest of the skill's file).
 
 ## The dependency law (grep-enforceable)
 

@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { readClaudeSkills } from "@/adapters/claude/skills.ts";
+import { readClaudeSkillDescription, readClaudeSkills } from "@/adapters/claude/skills.ts";
 
 // The Claude skill enumerator reads three roots: the user's own skills dir, the
 // reviewed project's, and each ENABLED plugin's. Point CLAUDE_CONFIG_DIR at a
@@ -23,10 +23,12 @@ afterEach(async () => {
   await rm(tmp, { recursive: true, force: true });
 });
 
-/** Write `<root>/<name>/SKILL.md` — the shape that makes a directory a skill. */
-async function seedSkill(root: string, name: string): Promise<void> {
+/** Write `<root>/<name>/SKILL.md` — the shape that makes a directory a skill.
+ * `description`, when given, is the frontmatter key the preview panel reads. */
+async function seedSkill(root: string, name: string, description?: string): Promise<void> {
   await mkdir(join(root, name), { recursive: true });
-  await writeFile(join(root, name, "SKILL.md"), "---\nname: x\n---\n");
+  const front = description === undefined ? "" : `description: ${description}\n`;
+  await writeFile(join(root, name, "SKILL.md"), `---\nname: x\n${front}---\n`);
 }
 
 /** The user skills root under the temp config dir. */
@@ -35,9 +37,11 @@ function userRoot(): string {
 }
 
 /** A project cwd whose `.claude/skills/` root is seeded with `names`. */
-async function seedProject(names: string[]): Promise<string> {
+async function seedProject(names: string[], description?: string): Promise<string> {
   const cwd = join(tmp, "project");
-  for (const name of names) await seedSkill(join(cwd, ".claude", "skills"), name);
+  for (const name of names) {
+    await seedSkill(join(cwd, ".claude", "skills"), name, description);
+  }
   return cwd;
 }
 
@@ -50,12 +54,13 @@ async function seedPlugins(
   plugins: Record<string, string[]>,
   enabled: string[],
   settingsPath = join(tmp, "claude", "settings.json"),
+  description?: string,
 ): Promise<void> {
   const dir = join(tmp, "claude");
   const registry: Record<string, Array<{ installPath: string; version: string }>> = {};
   for (const [key, names] of Object.entries(plugins)) {
     const installPath = join(dir, "plugins", "cache", key.replace("@", "-"), "1.0.0");
-    for (const name of names) await seedSkill(join(installPath, "skills"), name);
+    for (const name of names) await seedSkill(join(installPath, "skills"), name, description);
     registry[key] = [{ installPath, version: "1.0.0" }];
   }
   await mkdir(join(dir, "plugins"), { recursive: true });
@@ -253,4 +258,79 @@ test("prefers the install scoped to the review cwd over an earlier user-scoped o
     { tag: "sp-here", skill: "project-copy", scope: "project", projectPath: cwd },
   ]);
   expect((await readClaudeSkills(cwd)).map((s) => s.name)).toEqual(["superpowers:project-copy"]);
+});
+
+// --- the description preview (EXC-1186) ---
+//
+// A second, on-demand route beside the enumeration above: the reviewer highlights
+// one name in the `/` list and asks for that skill's own description, so exactly
+// one SKILL.md is opened. `origin` is what disambiguates two roots offering the
+// same bare name — the enumeration deliberately shows both rows.
+
+test("reads a user skill's description", async () => {
+  await seedSkill(userRoot(), "linear-plan", "Plan a Linear issue");
+  expect(await readClaudeSkillDescription(join(tmp, "nowhere"), "linear-plan", "user")).toBe(
+    "Plan a Linear issue",
+  );
+});
+
+test("reads a project skill's description", async () => {
+  const cwd = await seedProject(["release-caret"], "Cut a caret release");
+  expect(await readClaudeSkillDescription(cwd, "release-caret", "project")).toBe(
+    "Cut a caret release",
+  );
+});
+
+test("reads a plugin skill's description through its namespaced name", async () => {
+  await seedPlugins(
+    { "superpowers@official": ["brainstorming"] },
+    ["superpowers@official"],
+    undefined,
+    "Explore intent before building",
+  );
+  const cwd = join(tmp, "nowhere");
+  expect(await readClaudeSkillDescription(cwd, "superpowers:brainstorming", "plugin")).toBe(
+    "Explore intent before building",
+  );
+});
+
+test("tells apart two roots offering one bare name, by origin", async () => {
+  await seedSkill(userRoot(), "deploy", "The user's own deploy");
+  const cwd = await seedProject(["deploy"], "The project's deploy");
+  expect(await readClaudeSkillDescription(cwd, "deploy", "user")).toBe("The user's own deploy");
+  expect(await readClaudeSkillDescription(cwd, "deploy", "project")).toBe("The project's deploy");
+});
+
+test("yields null for a skill whose frontmatter carries no description", async () => {
+  await seedSkill(userRoot(), "git");
+  expect(await readClaudeSkillDescription(join(tmp, "nowhere"), "git", "user")).toBeNull();
+});
+
+test("yields null for a skill that does not exist", async () => {
+  expect(await readClaudeSkillDescription(join(tmp, "nowhere"), "nope", "user")).toBeNull();
+});
+
+test("yields null for an origin no root answers to", async () => {
+  await seedSkill(userRoot(), "git", "Git operations");
+  expect(await readClaudeSkillDescription(join(tmp, "nowhere"), "git", "command")).toBeNull();
+});
+
+test("yields null for a plugin that is installed but not enabled", async () => {
+  await seedPlugins({ "chrome@official": ["driving"] }, [], undefined, "Drive a browser");
+  expect(
+    await readClaudeSkillDescription(join(tmp, "nowhere"), "chrome:driving", "plugin"),
+  ).toBeNull();
+});
+
+test("yields null for a plugin name no registry entry matches", async () => {
+  expect(
+    await readClaudeSkillDescription(join(tmp, "nowhere"), "ghost:skill", "plugin"),
+  ).toBeNull();
+});
+
+test("refuses a name that climbs out of the skills root", async () => {
+  // `name` arrives from the browser. A skill dir sits one level above the root,
+  // holding a description a `..` would otherwise reach.
+  await seedSkill(join(tmp, "claude"), "escapee", "Not reachable from the skills root");
+  expect(await readClaudeSkillDescription(join(tmp, "nowhere"), "../escapee", "user")).toBeNull();
 });

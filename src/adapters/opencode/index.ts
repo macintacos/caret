@@ -11,7 +11,10 @@ import type { AgentAdapter, InstallProbe } from "@/adapters/adapter.ts";
 import { APPROVE_VARIANTS } from "@/adapters/opencode/approve.ts";
 import { fatalDenyLine, toWireDecision } from "@/adapters/opencode/feedback.ts";
 import { readOpencodeInstallState } from "@/adapters/opencode/install.ts";
-import { readOpencodeCommands } from "@/adapters/opencode/skills.ts";
+import {
+  readOpencodeCommandDescription,
+  readOpencodeCommands,
+} from "@/adapters/opencode/skills.ts";
 import type { Decision, PlanInput, SkillRef } from "@/lib/types.ts";
 
 /** The caret-defined review envelope the OpenCode plugin pipes to `caret review`.
@@ -62,5 +65,12 @@ export const opencodeAdapter: AgentAdapter = {
   // review's cwd plays no part, so this drops the parameter the interface offers.
   listSkills(): Promise<SkillRef[]> {
     return readOpencodeCommands();
+  },
+
+  // Config-dir-rooted for the same reason, and one command dir answers to one
+  // origin — so this drops both parameters the interface offers but this adapter
+  // does not read.
+  readSkillDescription(_cwd: string, name: string): Promise<string | null> {
+    return readOpencodeCommandDescription(name);
   },
 };

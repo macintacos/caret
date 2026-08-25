@@ -4,8 +4,18 @@
 // from that root" rather than throwing, so the editor behaves exactly as it did
 // before completion existed when a directory is unreadable.
 //
-// Only directory NAMES are read. A skill's own `SKILL.md` is never opened (its
-// existence is the whole test), so nothing a skill author wrote reaches the UI.
+// The enumeration reads directory NAMES only: a skill's `SKILL.md` is probed for
+// existence and never opened, so nothing a skill author wrote reaches the UI on
+// that route.
+//
+// `readClaudeSkillDescription` is a SECOND, on-demand route beside it, and it
+// DOES open one skill's SKILL.md to read that skill's own `description`
+// (EXC-1186). The privacy question is a different one: enumerating is caret
+// deciding what to read, while this is the reviewer pointing at one name in the
+// `/` list and asking what it is. One file is opened per ask, only its
+// frontmatter `description` crosses to the UI, and its body never does — which is
+// why it stays a separate call rather than a field on the list, where every `/`
+// keystroke would open every skill's file.
 //
 // SCOPE: Claude's SKILLS, not everything its `/` menu lists. Slash commands
 // (`~/.claude/commands/*.md`, and a plugin's `commands/` — caret's own
@@ -33,6 +43,7 @@ import {
   userSettingsFile,
 } from "@/adapters/claude/paths.ts";
 import { readJsonFile } from "@/lib/json-file.ts";
+import { readDescriptionUnder } from "@/lib/skill-doc.ts";
 import type { SkillRef } from "@/lib/types.ts";
 
 /** The file whose presence makes a directory a skill. */
@@ -146,8 +157,10 @@ function pickInstallPath(installs: PluginInstall[], cwd: string): string | undef
 }
 
 /** Each enabled plugin's bare name paired with its install directory, sorted by
- * name. Empty when the registry is absent or unparseable. */
-async function enabledPlugins(cwd: string): Promise<Array<[string, string]>> {
+ * name. Empty when the registry is absent or unparseable. Exported because the
+ * description reader resolves a plugin skill through the same resolution — one
+ * registry answer, not two. */
+export async function enabledPlugins(cwd: string): Promise<Array<[string, string]>> {
   const [registry, enabled] = await Promise.all([
     readJsonFile(installedPluginsFile()) as Promise<InstalledPlugins | null>,
     enabledPluginKeys(cwd),
@@ -195,4 +208,47 @@ export async function readClaudeSkills(cwd: string): Promise<SkillRef[]> {
     ...project.map((name): SkillRef => ({ name, origin: "project" })),
     ...pluginSkills.flat(),
   ];
+}
+
+/** The skills root for `origin`, and the path of a skill's document under it —
+ * or null for an origin no root answers to. A plugin's root is its own install
+ * dir, so its namespaced `<plugin>:<rest>` name is split here: the plugin half
+ * picks the root and the rest names the skill inside it. */
+async function skillDocLocation(
+  cwd: string,
+  name: string,
+  origin: string,
+): Promise<{ root: string; relative: string } | null> {
+  const under = (root: string, skill: string) => ({ root, relative: join(skill, SKILL_FILE) });
+  if (origin === "user") return under(join(claudeConfigDir(), "skills"), name);
+  if (origin === "project") return under(join(cwd, ".claude", "skills"), name);
+  if (origin !== "plugin") return null;
+  const at = name.indexOf(":");
+  if (at === -1) return null; // a plugin skill is always namespaced.
+  const plugin = name.slice(0, at);
+  const hit = (await enabledPlugins(cwd)).find(([key]) => key === plugin);
+  // An unknown or disabled plugin has no root to read: the `/` list never offered
+  // that name, so this is a stale or invented one either way.
+  return hit === undefined ? null : under(join(hit[1], "skills"), name.slice(at + 1));
+}
+
+/**
+ * One skill's own `description`, for the completion preview panel — null when the
+ * skill has none, which is an ordinary answer rather than an error.
+ *
+ * `origin` comes back from `readClaudeSkills` alongside the name and is what
+ * identifies WHICH skill is meant: two roots may offer the same bare name and the
+ * list deliberately shows both rows, so the name alone would describe one of them
+ * twice.
+ *
+ * Never throws, and never reads outside the root the origin picked — `name`
+ * arrives from the browser, and `readDescriptionUnder` decides containment.
+ */
+export async function readClaudeSkillDescription(
+  cwd: string,
+  name: string,
+  origin: string,
+): Promise<string | null> {
+  const at = await skillDocLocation(cwd, name, origin);
+  return at === null ? null : readDescriptionUnder(at.root, at.relative);
 }

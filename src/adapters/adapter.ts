@@ -80,4 +80,23 @@ export interface AgentAdapter {
    * contributes nothing.
    */
   listSkills(cwd: string): Promise<SkillRef[]>;
+
+  /**
+   * One enumerated skill's own description, for the preview panel the `/`
+   * completion opens over the highlighted name (EXC-1186). A second, on-demand
+   * route beside `listSkills` rather than a field on it: the list names skills,
+   * this reads one, so a `/` keystroke never pays to open every skill's file.
+   *
+   * `name` and `origin` are a row of `listSkills` handed straight back. `origin`
+   * is what says WHICH skill is meant — two roots may offer the same bare name
+   * and the list deliberately shows both rows, so the name alone would describe
+   * one of them twice.
+   *
+   * Reads the reviewer's own well-known directories and nothing the agent under
+   * review controls, and yields only that skill's own description — never the
+   * rest of its file. A skill with no description is null, an ordinary answer the
+   * UI renders as "no description"; so is a name no root answers to. Never
+   * throws.
+   */
+  readSkillDescription(cwd: string, name: string, origin: string): Promise<string | null>;
 }
