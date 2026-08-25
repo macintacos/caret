@@ -191,6 +191,15 @@ describe("EDITOR_SHORTCUTS", () => {
     ).toEqual([...EDITOR_SHORTCUTS.map((e) => e.id)].sort());
   });
 
+  test("the completion-preview chord reserves Ctrl+Space and renders it as a cap", () => {
+    // The list's hint strip is CSS generated content, so this reservation is the
+    // only place the chord is written down as data — for the `?` modal, and for
+    // the collision guard a later ticket claiming a key reads.
+    const preview = EDITOR_SHORTCUTS.find((e) => e.id === "editor.previewCompletion");
+    if (!preview) throw new Error("the completion-preview chord is missing");
+    expect(keyCaps(preview.keys)).toEqual([["Ctrl", "Space"]]);
+  });
+
   test("the submit chord renders as ⌘↵ caps and cancel as Esc", () => {
     const submit = EDITOR_SHORTCUTS.find((e) => e.id === "editor.submit");
     const cancel = EDITOR_SHORTCUTS.find((e) => e.id === "editor.cancel");

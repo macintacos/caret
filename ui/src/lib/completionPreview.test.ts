@@ -58,7 +58,7 @@ describe("previewPanel", () => {
     expect(body.textContent).toBe("");
   });
 
-  test("the class names phase 5's theme hangs off are what it builds", () => {
+  test("the class names the theme hangs off are what it builds", () => {
     // Pinned because the CSS lives in markdownEditor.ts's theme block: a rename
     // here silently unstyles the panel rather than failing anything.
     const { dom, body } = previewPanel("x");
@@ -123,5 +123,19 @@ describe("renderExcerptLines", () => {
     renderExcerptLines(body, EXCERPT, 4000);
     expect(body.querySelectorAll(".caret-preview-line")).toHaveLength(4);
     expect(body.querySelectorAll(".caret-preview-marked")).toHaveLength(0);
+  });
+
+  test("a line past the end of the file says so, rather than showing a tail unexplained", () => {
+    const body = document.createElement("div");
+    renderExcerptLines(body, EXCERPT, 4000);
+    expect(body.querySelector(".caret-preview-note")?.textContent).toBe(
+      "This file ends at line 900.",
+    );
+  });
+
+  test("a line the file does reach adds no note", () => {
+    const body = document.createElement("div");
+    renderExcerptLines(body, EXCERPT, 42);
+    expect(body.querySelector(".caret-preview-note")).toBeNull();
   });
 });

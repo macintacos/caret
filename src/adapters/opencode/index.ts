@@ -67,10 +67,10 @@ export const opencodeAdapter: AgentAdapter = {
     return readOpencodeCommands();
   },
 
-  // Config-dir-rooted for the same reason, and one command dir answers to one
-  // origin — so this drops both parameters the interface offers but this adapter
-  // does not read.
-  readSkillDescription(_cwd: string, name: string): Promise<string | null> {
-    return readOpencodeCommandDescription(name);
+  // Config-dir-rooted for the same reason, so the cwd goes unread here too. Every
+  // command carries the one origin this adapter has, which is why only the name
+  // travels on from the row.
+  readSkillDescription(_cwd: string, skill: SkillRef): Promise<string | null> {
+    return readOpencodeCommandDescription(skill.name);
   },
 };

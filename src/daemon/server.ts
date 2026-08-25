@@ -132,7 +132,7 @@ export interface CreateServerOptions {
    * opens one. Omitted (default) → the route 404s, and the e2e fixture daemon
    * leaves it unwired for the reason it leaves `listSkills` unwired. runDaemon
    * wires the active adapter's `readSkillDescription`. */
-  readSkillDescription?: (cwd: string, name: string, origin: string) => Promise<string | null>;
+  readSkillDescription?: (cwd: string, skill: SkillRef) => Promise<string | null>;
   /** A thunk returning the daemon self-diagnostics served by GET /api/diagnostics
    * (EXC-842): system/runtime identity, uptime, the live parsed settings, and the
    * config path + env overrides. Omitted (default) → the route 404s, so existing
@@ -180,9 +180,7 @@ interface ResolvedOptions {
   approveVariants: readonly ApproveVariant[] | undefined;
   source: string | undefined;
   listSkills: ((cwd: string) => Promise<SkillRef[]>) | undefined;
-  readSkillDescription:
-    | ((cwd: string, name: string, origin: string) => Promise<string | null>)
-    | undefined;
+  readSkillDescription: ((cwd: string, skill: SkillRef) => Promise<string | null>) | undefined;
   diagnostics: (() => DaemonDiagnostics) | undefined;
   markPaneRead: (pane: CmuxPane) => void;
   log: CaretLogger;
@@ -632,9 +630,13 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // on it: the list names skills, this opens one, so a `/` keystroke never pays
   // to read every skill's file.
   //
-  // `name` and `origin` are a row of /skills handed straight back — the origin is
-  // what says WHICH skill is meant, since two roots may offer the same bare name
-  // and the list deliberately shows both. Reading is the adapter's, so this is a
+  // The two query parameters are a row of /skills handed straight back, and the
+  // handler puts them back together as the `SkillRef` the adapter takes — the
+  // origin is what says WHICH skill is meant, since two roots may offer the same
+  // bare name and the list deliberately shows both. A row that never arrived is
+  // two empty strings, which no root answers to and the adapter reports as null.
+  //
+  // Reading is the adapter's, so this is a
   // thin pass-through of an injected capability, 404 when none is wired, exactly
   // as /skills is. A skill with no description is a 200 carrying null: the panel
   // renders that, and a 404 would make it read as a missing route instead.
@@ -646,11 +648,10 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     const r = store.get(id);
     if (!r) return notFound();
     const params = new URL(req.url).searchParams;
-    const description = await cfg.readSkillDescription(
-      r.cwd,
-      params.get("name") ?? "",
-      params.get("origin") ?? "",
-    );
+    const description = await cfg.readSkillDescription(r.cwd, {
+      name: params.get("name") ?? "",
+      origin: params.get("origin") ?? "",
+    });
     log.debug("request", "skill description read", { reviewId: id, found: description !== null });
     return Response.json({ description } satisfies SkillDescriptionResponse);
   }

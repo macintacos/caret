@@ -112,7 +112,7 @@ test("an @ opens the files under the review's working directory", async ({ daemo
     // `::before`, so this is also the assertion that the theme rule drawing it
     // applies at all — nothing else in the suite would notice it losing on
     // specificity to the base theme.
-    expect(await hintText(page)).toContain("ctrl+space");
+    await expect.poll(() => hintText(page)).toContain("ctrl+space");
     // Nothing is previewed until it is asked for.
     await expect(page.locator(panel)).toHaveCount(0);
   });
@@ -229,7 +229,7 @@ test("ctrl+space previews the highlighted file, and follows the arrow keys", asy
     await expect(page.locator(panel)).toContainText("const beta = 0;");
 
     // And the strip now names the way back out.
-    expect(await hintText(page)).toContain("close");
+    await expect.poll(() => hintText(page)).toContain("close");
 
     await page.keyboard.press("Control+Space");
     await expect(page.locator(panel)).toHaveCount(0);
@@ -270,11 +270,11 @@ test("turning shortcut hints off takes the strip away and leaves the shortcut", 
     await composer(page);
     await page.keyboard.type("@src/lib/alpha");
     await expect(rowsIn(page)).toHaveText(["src/lib/alpha.ts"]);
-    expect(await hintText(page)).toBe("none");
+    await expect.poll(() => hintText(page)).toBe("none");
 
     // The preference hides the affordance, never the shortcut.
     await page.keyboard.press("Control+Space");
     await expect(page.locator(panel)).toBeVisible();
-    expect(await hintText(page)).toBe("none");
+    await expect.poll(() => hintText(page)).toBe("none");
   });
 });

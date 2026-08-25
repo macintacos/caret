@@ -123,8 +123,9 @@ reload.
 With a list open, `ctrl+space` opens a panel beside it showing more about the highlighted
 row: a skill's own description, or the opening lines of a file. The panel follows the
 arrow keys, so choosing between `src/lib/api.ts` and `src/lib/api.test.ts`, or between
-`brainstorming` and `linear-plan`, no longer means leaving the editor to find out which is
-which. A `:42` after a filename moves the preview to that line and marks it.
+`brainstorming` and `linear-plan`, does not mean leaving the editor to find out which is
+which. A `:42` after a filename moves the preview to that line and marks it; a line past
+the end of the file says where the file ends.
 
 A second `ctrl+space` closes the panel, and it stays closed until you ask again. A skill
 that describes itself nowhere, and a file caret cannot read, each say so in a sentence and

@@ -116,6 +116,14 @@ function settingsLayers(cwd: string): string[] {
   ];
 }
 
+/** Where each origin's skills live. Named because both routes over this file —
+ * the enumeration and the description reader — must agree about them: a root
+ * spelled differently in the two places would answer null for every skill of that
+ * origin, silently and only in the preview panel. */
+const userSkillsRoot = (): string => join(claudeConfigDir(), "skills");
+const projectSkillsRoot = (cwd: string): string => join(cwd, ".claude", "skills");
+const pluginSkillsRoot = (install: string): string => join(install, "skills");
+
 /** Every plugin key the merged settings layers mark enabled. */
 async function enabledPluginKeys(cwd: string): Promise<Set<string>> {
   const layers = (await Promise.all(
@@ -157,10 +165,8 @@ function pickInstallPath(installs: PluginInstall[], cwd: string): string | undef
 }
 
 /** Each enabled plugin's bare name paired with its install directory, sorted by
- * name. Empty when the registry is absent or unparseable. Exported because the
- * description reader resolves a plugin skill through the same resolution — one
- * registry answer, not two. */
-export async function enabledPlugins(cwd: string): Promise<Array<[string, string]>> {
+ * name. Empty when the registry is absent or unparseable. */
+async function enabledPlugins(cwd: string): Promise<Array<[string, string]>> {
   const [registry, enabled] = await Promise.all([
     readJsonFile(installedPluginsFile()) as Promise<InstalledPlugins | null>,
     enabledPluginKeys(cwd),
@@ -192,13 +198,13 @@ export async function enabledPlugins(cwd: string): Promise<Array<[string, string
  */
 export async function readClaudeSkills(cwd: string): Promise<SkillRef[]> {
   const [user, project, plugins] = await Promise.all([
-    skillNamesUnder(join(claudeConfigDir(), "skills")),
-    skillNamesUnder(join(cwd, ".claude", "skills")),
+    skillNamesUnder(userSkillsRoot()),
+    skillNamesUnder(projectSkillsRoot(cwd)),
     enabledPlugins(cwd),
   ]);
   const pluginSkills = await Promise.all(
     plugins.map(async ([plugin, dir]) =>
-      (await skillNamesUnder(join(dir, "skills"))).map(
+      (await skillNamesUnder(pluginSkillsRoot(dir))).map(
         (name): SkillRef => ({ name: `${plugin}:${name}`, origin: "plugin" }),
       ),
     ),
@@ -210,45 +216,42 @@ export async function readClaudeSkills(cwd: string): Promise<SkillRef[]> {
   ];
 }
 
-/** The skills root for `origin`, and the path of a skill's document under it —
- * or null for an origin no root answers to. A plugin's root is its own install
- * dir, so its namespaced `<plugin>:<rest>` name is split here: the plugin half
- * picks the root and the rest names the skill inside it. */
+/** The skills root a `SkillRef` belongs to, and the path of its document under
+ * that root — or null for an origin no root answers to. A plugin's root is its own
+ * install dir, so its namespaced `<plugin>:<rest>` name is split here: the plugin
+ * half picks the root and the rest names the skill inside it. */
 async function skillDocLocation(
   cwd: string,
-  name: string,
-  origin: string,
+  skill: SkillRef,
 ): Promise<{ root: string; relative: string } | null> {
-  const under = (root: string, skill: string) => ({ root, relative: join(skill, SKILL_FILE) });
-  if (origin === "user") return under(join(claudeConfigDir(), "skills"), name);
-  if (origin === "project") return under(join(cwd, ".claude", "skills"), name);
-  if (origin !== "plugin") return null;
-  const at = name.indexOf(":");
+  const under = (root: string, name: string) => ({ root, relative: join(name, SKILL_FILE) });
+  if (skill.origin === "user") return under(userSkillsRoot(), skill.name);
+  if (skill.origin === "project") return under(projectSkillsRoot(cwd), skill.name);
+  if (skill.origin !== "plugin") return null;
+  const at = skill.name.indexOf(":");
   if (at === -1) return null; // a plugin skill is always namespaced.
-  const plugin = name.slice(0, at);
+  const plugin = skill.name.slice(0, at);
   const hit = (await enabledPlugins(cwd)).find(([key]) => key === plugin);
   // An unknown or disabled plugin has no root to read: the `/` list never offered
   // that name, so this is a stale or invented one either way.
-  return hit === undefined ? null : under(join(hit[1], "skills"), name.slice(at + 1));
+  return hit === undefined ? null : under(pluginSkillsRoot(hit[1]), skill.name.slice(at + 1));
 }
 
 /**
  * One skill's own `description`, for the completion preview panel — null when the
  * skill has none, which is an ordinary answer rather than an error.
  *
- * `origin` comes back from `readClaudeSkills` alongside the name and is what
- * identifies WHICH skill is meant: two roots may offer the same bare name and the
- * list deliberately shows both rows, so the name alone would describe one of them
- * twice.
+ * Takes the whole `SkillRef` because its `origin` is what says WHICH skill is
+ * meant: two roots may offer the same bare name and the list deliberately shows
+ * both rows, so the name alone would describe one of them twice.
  *
- * Never throws, and never reads outside the root the origin picked — `name`
+ * Never throws, and never reads outside the root the origin picked — the name
  * arrives from the browser, and `readDescriptionUnder` decides containment.
  */
 export async function readClaudeSkillDescription(
   cwd: string,
-  name: string,
-  origin: string,
+  skill: SkillRef,
 ): Promise<string | null> {
-  const at = await skillDocLocation(cwd, name, origin);
+  const at = await skillDocLocation(cwd, skill);
   return at === null ? null : readDescriptionUnder(at.root, at.relative);
 }

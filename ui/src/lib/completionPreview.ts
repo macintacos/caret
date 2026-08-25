@@ -1,7 +1,12 @@
-// The half of the Ctrl+Space completion preview that neither source owns
-// (EXC-1186): the toggle that says whether a list is previewing, and the panel
-// shell each source fills with its own answer — a skill's description, or a
-// file's lines.
+// The Ctrl+Space completion preview's own module (EXC-1186): the toggle that says
+// whether a list is previewing, the panel shell each source fills with its own
+// answer — a skill's description, or a file's lines — and the renderer for the
+// lines themselves.
+//
+// The toggle and the shell are shared by both sources; the line renderer has only
+// the file one, and lives here anyway. Every `caret-preview-*` element is built in
+// this file and painted by one theme block in markdownEditor.ts, so the class
+// names have exactly two sites to stay in step across rather than three.
 //
 // The toggle is read by the SOURCES at query time rather than by the panel at
 // render time, and that is forced by how the panel repaints.
@@ -78,12 +83,20 @@ export function previewPanel(title: string): { dom: HTMLElement; body: HTMLEleme
  * `startLine`, with the row for `mark` — the line the reviewer cited — flagged
  * for the theme to pick out.
  *
- * A `mark` the excerpt does not reach simply marks nothing. That is the ordinary
- * answer for a line past the end of the file: the daemon clamps such a window to
- * the file's tail, so what comes back is a real excerpt that happens not to
- * contain the cited line, and drawing it un-marked says exactly that.
+ * A `mark` past the end of the file gets a sentence of its own above the lines.
+ * The daemon clamps such a window to the file's tail, so what comes back is a
+ * real excerpt that simply does not contain the cited line — and a tail drawn
+ * with nothing marked and nothing said reads as a preview that went to the wrong
+ * place. Saying where the file ends is the ordinary answer the reviewer can act
+ * on, and the list keeps working either way.
  */
 export function renderExcerptLines(body: HTMLElement, excerpt: FileExcerpt, mark?: number): void {
+  if (mark !== undefined && mark > excerpt.totalLines) {
+    const note = document.createElement("div");
+    note.className = "caret-preview-note";
+    note.textContent = `This file ends at line ${excerpt.totalLines}.`;
+    body.append(note);
+  }
   excerpt.lines.forEach((text, offset) => {
     const number = excerpt.startLine + offset;
     const row = document.createElement("div");

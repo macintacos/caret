@@ -111,13 +111,14 @@ completion fires.
 
 Skills reach the reviewer by two routes, not one. The enumeration only names them; a
 second, on-demand route answers what a named skill actually does. When the reviewer
-highlights an entry in the `/` list and opens the preview panel, the adapter's
-`readSkillDescription` opens that one skill's file and returns the `description` from its
-frontmatter — nothing else from the file crosses. The split is what keeps the list cheap:
-folding the description into `listSkills` would open every skill's file on every `/`
-keystroke, to show one. A skill with no description comes back empty and the panel says
-so, which is an ordinary answer rather than an error. On a decision the adapter maps the
-chosen variant to a session `setMode` permission and emits the resulting
+highlights an entry in the `/` list and opens the preview panel,
+`GET /api/reviews/:id/skill-description` asks the adapter's `readSkillDescription` to open
+that one skill's file and return the `description` from its frontmatter — nothing else
+from the file crosses. The split is what keeps the list cheap: folding the description
+into `listSkills` would open every skill's file on every `/` keystroke, to show one. A
+skill with no description comes back empty and the panel says so, which is an ordinary
+answer rather than an error. On a decision the adapter maps the chosen variant to a
+session `setMode` permission and emits the resulting
 [PermissionRequest decision](https://code.claude.com/docs/en/hooks) on stdout:
 
 ```jsonc

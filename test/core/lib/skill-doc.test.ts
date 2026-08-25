@@ -63,9 +63,33 @@ test("keeps the line breaks of a `|-` block scalar", async () => {
   expect(await readDescriptionUnder(root, "a/doc.md")).toBe("First line\nSecond line");
 });
 
+test("reads a block scalar whose introducer carries a chomp indicator", async () => {
+  // `|+`, `>+` and the indentation-indicator forms are as legal as `|` and `|-`,
+  // and they differ only in trailing newlines. Read as their plain forms rather
+  // than falling through to the scalar branch, which would render the introducer
+  // itself as the description.
+  await seed("a/doc.md", "---\ndescription: |+\n  First line\n  Second line\n---\n");
+  expect(await readDescriptionUnder(root, "a/doc.md")).toBe("First line\nSecond line");
+});
+
 test("ends a block scalar at the next key, not at the end of the block", async () => {
   await seed("a/doc.md", "---\ndescription: >\n  Use when planning\nname: a\n---\n");
   expect(await readDescriptionUnder(root, "a/doc.md")).toBe("Use when planning");
+});
+
+test("reads a description whose file has CRLF line endings", async () => {
+  // Not a Windows-only shape: any skill whose file was authored or committed with
+  // CRLF arrives this way on macOS too, and a checkout with `core.autocrlf=true`
+  // turns every cloned plugin skill into this case at once. The fences already
+  // tolerate the `\r`, so without this the block is found and then read as empty
+  // — a skill that has a description reported as having none.
+  await seed("a/doc.md", "---\r\ndescription: Use when planning\r\n---\r\n");
+  expect(await readDescriptionUnder(root, "a/doc.md")).toBe("Use when planning");
+});
+
+test("reads a CRLF block scalar", async () => {
+  await seed("a/doc.md", "---\r\ndescription: |\r\n  First line\r\n  Second line\r\n---\r\n");
+  expect(await readDescriptionUnder(root, "a/doc.md")).toBe("First line\nSecond line");
 });
 
 test("reads only the frontmatter, never a `description:` in the body", async () => {
@@ -114,8 +138,19 @@ test("yields null when the target is unreadable, rather than throwing", async ()
   expect(reached).toBe(true);
 });
 
-test("yields null for a binary blob rather than throwing", async () => {
-  await seed("a/doc.md", "\u0000\u0001binary");
+test("yields null for binary bytes inside a real fence, rather than throwing", async () => {
+  // The fence opens for real, so the parser runs over the bytes instead of
+  // bailing at the first line — which is the only way this pins anything about
+  // the bytes themselves.
+  await seed("a/doc.md", "---\n\u0000\u0001binary\n---\n");
+  expect(await readDescriptionUnder(root, "a/doc.md")).toBeNull();
+});
+
+test("yields null for a document too large to be a skill doc", async () => {
+  // The frontmatter sits in the first lines, so nothing past the ceiling has an
+  // answer worth decoding the rest of the file for — and this path runs once per
+  // highlighted row, on a name that arrived from the browser.
+  await seed("a/doc.md", `---\ndescription: Huge\n---\n${"x".repeat(1024 * 1024)}`);
   expect(await readDescriptionUnder(root, "a/doc.md")).toBeNull();
 });
 

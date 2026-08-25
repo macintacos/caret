@@ -248,6 +248,34 @@ describe("a cited line", () => {
     expect(seen).toEqual([{ reviewId: "rev-1", query: "src/app" }]);
   });
 
+  test("a half-typed citation still asks for the path half", async () => {
+    // The keystrokes between the colon and the number it belongs to sit on this
+    // feature's own happy path. Sent as typed, the daemon would be asked for a `:`
+    // no path carries, find nothing, and the list would vanish and come back.
+    const seen: Array<{ reviewId: string; query: string }> = [];
+    await complete("@src/app.ts:", fakeSearch(seen));
+    expect(seen).toEqual([{ reviewId: "rev-1", query: "src/app.ts" }]);
+  });
+
+  test("every spelling of a half-typed citation is trimmed the same way", async () => {
+    const asked: string[] = [];
+    for (const typed of ["@src/app.ts:L", "@src/app.ts#", "@src/app.ts#L", "@src/app.ts:42-"]) {
+      const seen: Array<{ reviewId: string; query: string }> = [];
+      await complete(typed, fakeSearch(seen));
+      asked.push(seen[0]?.query ?? "");
+    }
+    expect(asked).toEqual(["src/app.ts", "src/app.ts", "src/app.ts", "src/app.ts"]);
+  });
+
+  test("a half-typed citation cites no line, so the row inserts the bare path", async () => {
+    // No `apply` override is how a row says "insert the label": the trailing `:`
+    // sits inside the replaced range, so choosing here lands `src/app.ts` rather
+    // than a path with a dangling colon on it.
+    const result = await complete("@src/app.ts:", found("src/app.ts"));
+    expect(result?.options[0]?.label).toBe("src/app.ts");
+    expect(result?.options[0]?.apply).toBeUndefined();
+  });
+
   test("a query that is not path-shaped at all is searched as typed", async () => {
     // `classify` refuses a run with no letter in its last segment. It is still a
     // legitimate thing to search for — the daemon matches by subsequence.

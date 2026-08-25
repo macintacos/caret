@@ -104,7 +104,7 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
       // in that list actually does, served by
       // GET /api/reviews/:id/skill-description for the Ctrl+Space preview panel
       // (EXC-1186).
-      readSkillDescription: (cwd, name, origin) => adapter.readSkillDescription(cwd, name, origin),
+      readSkillDescription: (cwd, skill) => adapter.readSkillDescription(cwd, skill),
       // Daemon self-diagnostics for the settings Advanced pane (EXC-842). Reads
       // live settings (settings().current() hot-reloads a config edit) and the
       // CARET_* env overrides in effect; buildDiagnostics scrubs the settings dump.

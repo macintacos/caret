@@ -71,6 +71,11 @@ function stoppedHeader(shown: number, stoppedAt: SearchStop): string {
     : `First ${shown} matches — this tree is larger than the search reaches`;
 }
 
+/** A line reference begun and not finished: one of `classify`'s own separators
+ * (`:`, `:L`, `#L`, `:#L`), plus whatever digits and range dash have been typed
+ * after it. Anchored to the end, so it only ever trims a trailing run. */
+const PARTIAL_CITATION = /(?::?#L?|:L?)\d*(?:[-–,]L?\d*)?$/;
+
 /**
  * The trigger's text split into what the daemon should be asked for and the line
  * the reviewer cited after it, if any (EXC-1186).
@@ -85,11 +90,22 @@ function stoppedHeader(shown: number, stoppedAt: SearchStop): string {
  *
  * `suffix` is what the citation adds to the inserted path, empty when there was
  * none; `line` is the line the preview panel centres on. A range keeps both its
- * ends, because the reviewer typed both.
+ * ends, because the reviewer typed both. A column is dropped — the excerpt route
+ * has no notion of one — and a reversed range comes back in order, because
+ * `classify` normalises it for every consumer.
+ *
+ * A citation the reviewer has STARTED — `api.ts:`, `api.ts#L`, `api.ts:42-` — is
+ * a path plus an intention, and cites no line yet. Its opening is trimmed off the
+ * query rather than searched: the daemon matches by subsequence over paths, no
+ * path carries a `:`, so asking as typed would empty the list for exactly the
+ * keystrokes between the colon and the number it belongs to — on this feature's
+ * own happy path.
  */
 function splitCitedLine(typed: string): { query: string; line?: number; suffix: string } {
   const cited = classify(typed);
-  if (cited === null || cited.line === undefined) return { query: typed, suffix: "" };
+  if (cited === null || cited.line === undefined) {
+    return { query: typed.replace(PARTIAL_CITATION, ""), suffix: "" };
+  }
   const end = cited.endLine === undefined ? "" : `-${cited.endLine}`;
   return { query: cited.path, line: cited.line, suffix: `:${cited.line}${end}` };
 }

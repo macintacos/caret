@@ -53,9 +53,9 @@ async function seedProject(names: string[], description?: string): Promise<strin
 async function seedPlugins(
   plugins: Record<string, string[]>,
   enabled: string[],
-  settingsPath = join(tmp, "claude", "settings.json"),
-  description?: string,
+  opts: { settingsPath?: string; description?: string } = {},
 ): Promise<void> {
+  const { settingsPath = join(tmp, "claude", "settings.json"), description } = opts;
   const dir = join(tmp, "claude");
   const registry: Record<string, Array<{ installPath: string; version: string }>> = {};
   for (const [key, names] of Object.entries(plugins)) {
@@ -210,11 +210,9 @@ test("follows a symlinked skill directory, the ordinary dotfiles layout", async 
 
 test("honours a plugin enabled at the project settings layer", async () => {
   const cwd = join(tmp, "project");
-  await seedPlugins(
-    { "superpowers@official": ["brainstorming"] },
-    ["superpowers@official"],
-    join(cwd, ".claude", "settings.json"),
-  );
+  await seedPlugins({ "superpowers@official": ["brainstorming"] }, ["superpowers@official"], {
+    settingsPath: join(cwd, ".claude", "settings.json"),
+  });
   // The user layer says nothing about this plugin; the reviewed project enables it.
   expect((await readClaudeSkills(cwd)).map((s) => s.name)).toEqual(["superpowers:brainstorming"]);
 });
@@ -269,62 +267,75 @@ test("prefers the install scoped to the review cwd over an earlier user-scoped o
 
 test("reads a user skill's description", async () => {
   await seedSkill(userRoot(), "linear-plan", "Plan a Linear issue");
-  expect(await readClaudeSkillDescription(join(tmp, "nowhere"), "linear-plan", "user")).toBe(
-    "Plan a Linear issue",
-  );
+  expect(
+    await readClaudeSkillDescription(join(tmp, "nowhere"), { name: "linear-plan", origin: "user" }),
+  ).toBe("Plan a Linear issue");
 });
 
 test("reads a project skill's description", async () => {
   const cwd = await seedProject(["release-caret"], "Cut a caret release");
-  expect(await readClaudeSkillDescription(cwd, "release-caret", "project")).toBe(
+  expect(await readClaudeSkillDescription(cwd, { name: "release-caret", origin: "project" })).toBe(
     "Cut a caret release",
   );
 });
 
 test("reads a plugin skill's description through its namespaced name", async () => {
-  await seedPlugins(
-    { "superpowers@official": ["brainstorming"] },
-    ["superpowers@official"],
-    undefined,
-    "Explore intent before building",
-  );
+  await seedPlugins({ "superpowers@official": ["brainstorming"] }, ["superpowers@official"], {
+    description: "Explore intent before building",
+  });
   const cwd = join(tmp, "nowhere");
-  expect(await readClaudeSkillDescription(cwd, "superpowers:brainstorming", "plugin")).toBe(
-    "Explore intent before building",
-  );
+  expect(
+    await readClaudeSkillDescription(cwd, { name: "superpowers:brainstorming", origin: "plugin" }),
+  ).toBe("Explore intent before building");
 });
 
 test("tells apart two roots offering one bare name, by origin", async () => {
   await seedSkill(userRoot(), "deploy", "The user's own deploy");
   const cwd = await seedProject(["deploy"], "The project's deploy");
-  expect(await readClaudeSkillDescription(cwd, "deploy", "user")).toBe("The user's own deploy");
-  expect(await readClaudeSkillDescription(cwd, "deploy", "project")).toBe("The project's deploy");
+  expect(await readClaudeSkillDescription(cwd, { name: "deploy", origin: "user" })).toBe(
+    "The user's own deploy",
+  );
+  expect(await readClaudeSkillDescription(cwd, { name: "deploy", origin: "project" })).toBe(
+    "The project's deploy",
+  );
 });
 
 test("yields null for a skill whose frontmatter carries no description", async () => {
   await seedSkill(userRoot(), "git");
-  expect(await readClaudeSkillDescription(join(tmp, "nowhere"), "git", "user")).toBeNull();
+  expect(
+    await readClaudeSkillDescription(join(tmp, "nowhere"), { name: "git", origin: "user" }),
+  ).toBeNull();
 });
 
 test("yields null for a skill that does not exist", async () => {
-  expect(await readClaudeSkillDescription(join(tmp, "nowhere"), "nope", "user")).toBeNull();
+  expect(
+    await readClaudeSkillDescription(join(tmp, "nowhere"), { name: "nope", origin: "user" }),
+  ).toBeNull();
 });
 
 test("yields null for an origin no root answers to", async () => {
   await seedSkill(userRoot(), "git", "Git operations");
-  expect(await readClaudeSkillDescription(join(tmp, "nowhere"), "git", "command")).toBeNull();
+  expect(
+    await readClaudeSkillDescription(join(tmp, "nowhere"), { name: "git", origin: "command" }),
+  ).toBeNull();
 });
 
 test("yields null for a plugin that is installed but not enabled", async () => {
-  await seedPlugins({ "chrome@official": ["driving"] }, [], undefined, "Drive a browser");
+  await seedPlugins({ "chrome@official": ["driving"] }, [], { description: "Drive a browser" });
   expect(
-    await readClaudeSkillDescription(join(tmp, "nowhere"), "chrome:driving", "plugin"),
+    await readClaudeSkillDescription(join(tmp, "nowhere"), {
+      name: "chrome:driving",
+      origin: "plugin",
+    }),
   ).toBeNull();
 });
 
 test("yields null for a plugin name no registry entry matches", async () => {
   expect(
-    await readClaudeSkillDescription(join(tmp, "nowhere"), "ghost:skill", "plugin"),
+    await readClaudeSkillDescription(join(tmp, "nowhere"), {
+      name: "ghost:skill",
+      origin: "plugin",
+    }),
   ).toBeNull();
 });
 
@@ -332,5 +343,7 @@ test("refuses a name that climbs out of the skills root", async () => {
   // `name` arrives from the browser. A skill dir sits one level above the root,
   // holding a description a `..` would otherwise reach.
   await seedSkill(join(tmp, "claude"), "escapee", "Not reachable from the skills root");
-  expect(await readClaudeSkillDescription(join(tmp, "nowhere"), "../escapee", "user")).toBeNull();
+  expect(
+    await readClaudeSkillDescription(join(tmp, "nowhere"), { name: "../escapee", origin: "user" }),
+  ).toBeNull();
 });

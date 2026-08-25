@@ -76,7 +76,7 @@ export function logCapture(
 // extension stack, because what they assert — whether a list is painted, and who
 // owns Escape while it is — is not reachable by calling a source as a function.
 // Shared here rather than copied: `.cm-tooltip-autocomplete` is production's own
-// selector (markdownEditor.ts's completionListOpen keys on it), so a test-side
+// selector (editorCompletion.ts's completionListOpen keys on it), so a test-side
 // copy of that literal is a second place for it to drift.
 
 /** Mount a MarkdownEditor extension stack over a throwaway host. `dispose`

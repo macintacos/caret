@@ -70,7 +70,7 @@ export const claudeAdapter: AgentAdapter = {
     return readClaudeSkills(cwd);
   },
 
-  readSkillDescription(cwd: string, name: string, origin: string): Promise<string | null> {
-    return readClaudeSkillDescription(cwd, name, origin);
+  readSkillDescription(cwd: string, skill: SkillRef): Promise<string | null> {
+    return readClaudeSkillDescription(cwd, skill);
   },
 };

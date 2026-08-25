@@ -294,7 +294,8 @@ const theme = EditorView.theme({
   // it from caret's tokens instead, as the small floating chrome it is — raised
   // paper, a hairline rule, chip-scale lift. Reachable from here because the stack
   // configures no `tooltips({ parent })`, so CodeMirror mounts tooltips into
-  // `view.dom` (the same fact `completionListOpen` relies on).
+  // `view.dom` (the same fact `completionListOpen` in editorCompletion.ts relies
+  // on).
   //
   // Every selector repeats `.cm-tooltip.cm-tooltip-autocomplete`, matching the
   // doubled class the base theme nests its own list rules under. Dropping the
@@ -448,6 +449,14 @@ const theme = EditorView.theme({
     fontSize: "var(--text-sm)",
     lineHeight: "var(--leading-snug)",
     whiteSpace: "pre-line",
+  },
+  // What the panel says ABOUT the excerpt rather than in it: that the cited line
+  // is past the end of the file. Prose, so it inherits the body's face and only
+  // steps down in colour — soft enough to read as a caption over the lines, not
+  // faint enough to be missed by a reviewer wondering where their line went.
+  ".cm-tooltip.cm-completionInfo .caret-preview-note": {
+    marginBottom: "0.35rem",
+    color: "var(--ink-soft)",
   },
   // A file's lines are source, so they take the mono face and keep their
   // whitespace exactly. Set directly on the row rather than left to inherit from

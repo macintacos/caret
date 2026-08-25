@@ -402,11 +402,11 @@ describe("the preview panel", () => {
   /** A description lookup that records what it was asked. Never rejects, exactly
    * as `api.ts`'s does — every failure there is already a null. */
   function fakeDescribe(
-    seen: Array<[string, string, string]>,
+    seen: Array<[string, SkillRef]>,
     answer: string | null = "Plan before writing",
   ): DescribeSkill {
-    return (id, name, origin) => {
-      seen.push([id, name, origin]);
+    return (id, skill) => {
+      seen.push([id, skill]);
       return Promise.resolve(answer);
     };
   }
@@ -451,7 +451,7 @@ describe("the preview panel", () => {
   }
 
   test("a shut panel leaves every row without one, and asks nothing", async () => {
-    const seen: Array<[string, string, string]> = [];
+    const seen: Array<[string, SkillRef]> = [];
     const result = await complete("/", fakeDescribe(seen), SHUT);
     expect(result?.options.every((o) => o.info === undefined)).toBe(true);
     expect(seen).toEqual([]);
@@ -472,10 +472,10 @@ describe("the preview panel", () => {
     // lookup key is the row itself. The origin travels with it because it is what
     // tells two roots offering one bare name apart — keyed on the name alone, one
     // of them would be described twice.
-    const seen: Array<[string, string, string]> = [];
+    const seen: Array<[string, SkillRef]> = [];
     const result = await complete("/", fakeDescribe(seen), OPEN);
     await panelFor(result, "/superpowers:brainstorming");
-    expect(seen).toEqual([["rev-1", "superpowers:brainstorming", "plugin"]]);
+    expect(seen).toEqual([["rev-1", { name: "superpowers:brainstorming", origin: "plugin" }]]);
   });
 
   test("a skill that describes itself nowhere says so, plainly", async () => {

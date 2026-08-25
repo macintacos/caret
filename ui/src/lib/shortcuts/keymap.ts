@@ -12,9 +12,11 @@ import {
   type ShortcutScope,
 } from "$lib/shortcuts/registry.ts";
 
-/** The existing editor chords, surfaced read-only in the help modal (EXC-786).
- * No `run`: markdownEditor.ts owns ⌘/Ctrl+Enter and Esc on the focused editor,
- * so the global dispatcher must not fire them. */
+/** The editor's own chords, surfaced read-only in the help modal (EXC-786).
+ * No `run`: the composer owns them on the focused editor — ⌘/Ctrl+Enter and Esc
+ * in markdownEditor.ts, Ctrl+Space in editorCompletion.ts — so the global
+ * dispatcher must not fire them. Declared here anyway, because this table is
+ * what the help modal lists and what the collision guard reads. */
 export const EDITOR_SHORTCUTS: ShortcutEntry[] = [
   {
     id: "editor.submit",
@@ -27,6 +29,17 @@ export const EDITOR_SHORTCUTS: ShortcutEntry[] = [
     keys: [{ key: "Escape", cap: "Esc" }],
     group: "editor",
     label: "Cancel editing",
+  },
+  {
+    // EXC-1186: toggles the preview panel beside an open `@`/`/` completion list.
+    // Live only while that list is painted, which is why it is a CodeMirror
+    // binding rather than a `run` here — but reserving it is what keeps the key
+    // claimed against a later ticket and listed in the `?` modal, where a chord
+    // that only announces itself in the list's own hint strip would not appear.
+    id: "editor.previewCompletion",
+    keys: [{ key: " ", mods: ["ctrl"] }],
+    group: "editor",
+    label: "Preview highlighted completion",
   },
 ];
 

@@ -57,11 +57,7 @@ function toOption(skill: SkillRef, info: Completion["info"]): Completion {
 /** Asking what one skill does. Never rejects — `api.ts` degrades every failure to
  * null, which is the same answer a skill that describes itself nowhere gives, and
  * the panel has one thing to say for both. */
-export type DescribeSkill = (
-  reviewId: string,
-  name: string,
-  origin: string,
-) => Promise<string | null>;
+export type DescribeSkill = (reviewId: string, skill: SkillRef) => Promise<string | null>;
 
 /** What the panel says for a null. Not an error state: plenty of skills carry no
  * `description`, and the reviewer asked what this one is rather than asking
@@ -91,7 +87,7 @@ function skillPreview(
   return (option) => {
     const { dom, body } = previewPanel(option.label);
     let live = true;
-    void describe(reviewId, skill.name, skill.origin).then((description) => {
+    void describe(reviewId, skill).then((description) => {
       if (live) body.textContent = description ?? NO_DESCRIPTION;
     });
     return {

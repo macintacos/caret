@@ -223,9 +223,9 @@ export async function getSkills(id: string): Promise<SkillRef[] | null> {
 }
 
 /** What one skill the reviewer highlighted in the `/` list actually does, for the
- * Ctrl+Space preview panel (EXC-1186). `name` and `origin` are that row handed
- * straight back — the origin is what says which skill is meant, since two roots
- * may offer the same bare name and the list deliberately shows both.
+ * Ctrl+Space preview panel (EXC-1186). `skill` is that row handed straight back,
+ * whole — the origin is what says which skill is meant, since two roots may offer
+ * the same bare name and the list deliberately shows both.
  *
  * Null covers both "this skill describes itself nowhere" and every failure,
  * because the panel has one thing to render either way. Non-essential in exactly
@@ -236,12 +236,8 @@ export async function getSkills(id: string): Promise<SkillRef[] | null> {
  * fires once per highlighted row, so a `warn` per arrow key is the per-iteration
  * noise logging-rules.md forbids. A description that simply is not there is not a
  * failure at all and is logged nowhere. */
-export async function getSkillDescription(
-  id: string,
-  name: string,
-  origin: string,
-): Promise<string | null> {
-  const params = new URLSearchParams({ name, origin });
+export async function getSkillDescription(id: string, skill: SkillRef): Promise<string | null> {
+  const params = new URLSearchParams({ name: skill.name, origin: skill.origin });
   try {
     const body = await json<SkillDescriptionResponse>(
       await fetch(`/api/reviews/${encodeURIComponent(id)}/skill-description?${params}`),

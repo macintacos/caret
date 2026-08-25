@@ -17,11 +17,11 @@
 // `command/foo.md` is a live `/foo`. On a name collision the canonical dir wins,
 // matching caret's own write preference.
 
-import { access, readdir } from "node:fs/promises";
-import { join, sep } from "node:path";
+import { readdir } from "node:fs/promises";
+import { sep } from "node:path";
 
 import { commandDirs, opencodeConfigDir } from "@/adapters/opencode/paths.ts";
-import { readDescriptionUnder } from "@/lib/skill-doc.ts";
+import { containedFile, descriptionOf } from "@/lib/skill-doc.ts";
 import type { SkillRef } from "@/lib/types.ts";
 
 /** The command names under one dir: each `.md` file's path minus the extension,
@@ -54,14 +54,6 @@ export async function readOpencodeCommands(): Promise<SkillRef[]> {
   return [...names].sort().map((name): SkillRef => ({ name, origin: "command" }));
 }
 
-/** Whether `path` is there at all, following symlinks. */
-async function exists(path: string): Promise<boolean> {
-  return access(path).then(
-    () => true,
-    () => false,
-  );
-}
-
 /**
  * One command's own `description`, for the completion preview panel — null when
  * the command has none, which is an ordinary answer rather than an error.
@@ -72,15 +64,18 @@ async function exists(path: string): Promise<boolean> {
  * legacy file describe it. That is `readOpencodeCommands`' collision preference,
  * applied to the same question one route over.
  *
- * Never throws, and never reads outside the dir it picked. Each command dir is its
- * own containment root, which is what makes a `../` safe in a name that arrived
- * from the browser — and a nested command legitimately carries a `/`, so one is
- * ordinary input here rather than a hypothetical.
+ * Never throws, and never touches anything outside the dir it picked. Each command
+ * dir is its own containment root, which is what makes a `../` safe in a name that
+ * arrived from the browser — and a nested command legitimately carries a `/`, so
+ * one is ordinary input here rather than a hypothetical. The search for the file
+ * IS the contained resolve (`containedFile`), so the untrusted name is resolved
+ * once, under the one rule, rather than joined raw to probe and checked only after.
  */
 export async function readOpencodeCommandDescription(name: string): Promise<string | null> {
   const relative = `${name}.md`;
   for (const dir of commandDirs(opencodeConfigDir())) {
-    if (await exists(join(dir, relative))) return readDescriptionUnder(dir, relative);
+    const abs = await containedFile(dir, relative);
+    if (abs !== null) return descriptionOf(abs);
   }
   return null;
 }

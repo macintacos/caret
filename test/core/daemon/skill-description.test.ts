@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { type BootOptions, bootDaemon, type TestDaemon } from "@test/support/daemon.ts";
 import { recordingLog } from "@test/support/recording-log.ts";
-import type { SkillDescriptionResponse } from "@/lib/types.ts";
+import type { SkillDescriptionResponse, SkillRef } from "@/lib/types.ts";
 
 // GET /api/reviews/:id/skill-description backs the Ctrl+Space preview panel over
 // the `/` completion list (EXC-1186): the browser holds no filesystem, so the
@@ -39,10 +39,10 @@ function ask(id: string, name: string, origin: string): Promise<Response> {
 }
 
 test("serves the description the adapter read, for that name and origin", async () => {
-  const seen: Array<[string, string, string]> = [];
+  const seen: Array<[string, SkillRef]> = [];
   await boot({
-    readSkillDescription: async (cwd: string, name: string, origin: string) => {
-      seen.push([cwd, name, origin]);
+    readSkillDescription: async (cwd: string, skill: SkillRef) => {
+      seen.push([cwd, skill]);
       return "Plan a change before writing it";
     },
   });
@@ -54,7 +54,7 @@ test("serves the description the adapter read, for that name and origin", async 
   } satisfies SkillDescriptionResponse);
   // The review's own cwd, and the row's own origin — which is what tells two
   // roots offering the same bare name apart.
-  expect(seen).toEqual([["/w/caret", "brainstorming", "user"]]);
+  expect(seen).toEqual([["/w/caret", { name: "brainstorming", origin: "user" }]]);
 });
 
 test("a skill with no description answers null, not a failure", async () => {
@@ -82,10 +82,10 @@ test("404s for an unknown review id", async () => {
 });
 
 test("a request naming no skill still answers rather than erroring", async () => {
-  const seen: string[] = [];
+  const seen: SkillRef[] = [];
   await boot({
-    readSkillDescription: async (_cwd: string, name: string) => {
-      seen.push(name);
+    readSkillDescription: async (_cwd: string, skill: SkillRef) => {
+      seen.push(skill);
       return null;
     },
   });
@@ -93,7 +93,9 @@ test("a request naming no skill still answers rather than erroring", async () =>
   const res = await fetch(`${d.url}/api/reviews/${id}/skill-description`);
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ description: null } satisfies SkillDescriptionResponse);
-  expect(seen).toEqual([""]);
+  // Two empty strings rather than a missing row: no root answers to them, so the
+  // adapter reports null and the panel says the skill describes itself nowhere.
+  expect(seen).toEqual([{ name: "", origin: "" }]);
 });
 
 test("logs that the route answered, and never the description", async () => {
