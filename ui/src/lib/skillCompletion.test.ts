@@ -265,6 +265,57 @@ describe("skillCompletion per-review caching", () => {
     }
   });
 
+  test("re-fetches after a null snapshot rather than keeping the failed answer", async () => {
+    // `null` is how the daemon round trip reports a transient failure — offline, a
+    // 5xx, a restart. Caching it would disable completion for the tab's life over
+    // one unlucky keystroke, so the entry is dropped and the next `/` asks again.
+    let attempt = 0;
+    const source = skillCompletion(async () => {
+      attempt++;
+      return attempt === 1 ? null : SKILLS;
+    });
+    const id = reviewId();
+    const first = mount(source, id);
+    try {
+      type(first.view, "/");
+      await settleCompletion();
+      expect(painted(first.view)).toBe(false);
+    } finally {
+      first.dispose();
+    }
+    const second = mount(source, id);
+    try {
+      type(second.view, "/");
+      expect(await until(() => painted(second.view))).toBe(true);
+    } finally {
+      second.dispose();
+    }
+  });
+
+  test("keeps a genuinely empty snapshot, so an agent with no skills is asked once", async () => {
+    // The codex case, and the cost the cache exists to avoid: an empty list is a
+    // real answer, so it is cached like any other rather than re-asked per `/`.
+    let asked = 0;
+    const source = skillCompletion(async () => {
+      asked++;
+      return [];
+    });
+    const id = reviewId();
+    const a = mount(source, id);
+    const b = mount(source, id);
+    try {
+      type(a.view, "/");
+      await settleCompletion();
+      type(b.view, "/");
+      await settleCompletion();
+      expect(painted(a.view)).toBe(false);
+      expect(asked).toBe(1);
+    } finally {
+      a.dispose();
+      b.dispose();
+    }
+  });
+
   test("two reviews each complete from their own agent's skills", async () => {
     const lists: Record<string, SkillRef[]> = {};
     const first = reviewId();

@@ -466,18 +466,23 @@ describe("getSkills", () => {
     expect(seenUrl).toBe("/api/reviews/a%20b%2Fc/skills");
   });
 
-  test("degrades to no skills on a 404 — the unwired-daemon case", async () => {
+  test("answers a 404 with no skills — the unwired-daemon case", async () => {
     // A daemon that wires no skill capability 404s the route (the e2e fixture
-    // daemon does exactly this). The editor must behave as it did before
-    // completion existed, so this returns rather than throws.
+    // daemon does exactly this). That is a settled answer, not a failure: the
+    // empty list is the caller's to keep, and it records at `debug` like any
+    // other ordinary answer.
     respond = () => Promise.resolve(new Response(null, { status: 404 }));
     expect(await getSkills(ID)).toEqual([]);
     await flush();
-    expect(cap.events().some((r) => r.level === "warn" && r.step === "request")).toBe(true);
+    expect(cap.events().some((r) => r.level === "debug" && r.step === "request")).toBe(true);
   });
 
-  test("degrades to no skills when the request never lands", async () => {
+  test("answers null when the request never lands, so the caller retries", async () => {
+    // Offline, a 5xx, a daemon mid-restart: transient, and distinct from the 404
+    // above — null is what tells the caller not to keep this answer.
     respond = () => Promise.reject(new Error("offline"));
-    expect(await getSkills(ID)).toEqual([]);
+    expect(await getSkills(ID)).toBeNull();
+    await flush();
+    expect(cap.events().some((r) => r.level === "warn" && r.step === "request")).toBe(true);
   });
 });

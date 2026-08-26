@@ -51,17 +51,19 @@ function toOption(skill: SkillRef): Completion {
  * The `/` source, bound to a review by the seam's factory contract.
  *
  * @param fetchSkills - How to enumerate a review's skills; defaults to the daemon
- *   round trip and is injectable so a unit drives a known list.
+ *   round trip and is injectable so a unit drives a known list. `null` reports a
+ *   transient failure, and the source MAY also reject.
  */
 export function skillCompletion(
-  fetchSkills: (id: string) => Promise<SkillRef[]> = getSkills,
+  fetchSkills: (id: string) => Promise<SkillRef[] | null> = getSkills,
 ): ReviewCompletionSource {
   /** One in-flight-or-settled fetch per review id, shared by every editor on that
-   * review. Only SUCCESSES are kept: a failure drops its entry so the next `/`
-   * retries, rather than disabling completion for the rest of the tab's life over
-   * a daemon that was restarting. The cost of that choice is bounded but real —
-   * an empty result returns null, so CodeMirror re-queries, and a daemon that
-   * stays down is re-asked once per keystroke of the token being typed. */
+   * review. Only ANSWERS are kept: an empty list is one — the agent has no skills
+   * — and stays cached, while a failure (a `null`, or a rejection from an injected
+   * source) drops its entry so the next `/` asks again rather than disabling
+   * completion for the rest of the tab's life over a daemon that was restarting.
+   * The cost of that choice is bounded but real: a daemon that stays down is
+   * re-asked once per keystroke of the token being typed. */
   const byReview = new Map<string, Promise<SkillRef[]>>();
 
   function skillsFor(reviewId: string): Promise<SkillRef[]> {
@@ -69,10 +71,18 @@ export function skillCompletion(
     if (cached) return cached;
     // Never rejects: a failed enumeration is "no completion", the same as an agent
     // with no skills, so the editor behaves as it did before completion existed.
-    const pending = fetchSkills(reviewId).catch(() => {
-      byReview.delete(reviewId);
-      return [];
-    });
+    const pending = fetchSkills(reviewId)
+      .then((skills) => {
+        if (skills === null) {
+          byReview.delete(reviewId);
+          return [];
+        }
+        return skills;
+      })
+      .catch(() => {
+        byReview.delete(reviewId);
+        return [];
+      });
     byReview.set(reviewId, pending);
     return pending;
   }

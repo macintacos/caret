@@ -159,18 +159,28 @@ export async function getDirListing(id: string, root: string, path: string): Pro
  * the only thing that can enumerate them. Reference only: caret never executes a
  * completed skill.
  *
- * Non-essential, like `resolveFileRefs`: any failure degrades to no completion
- * rather than throwing, so the editor behaves exactly as it did before completion
- * existed. A 404 is one such failure — a daemon that wires no skill capability. */
-export async function getSkills(id: string): Promise<SkillRef[]> {
+ * Non-essential, like `resolveFileRefs`: nothing here throws, so the editor
+ * behaves exactly as it did before completion existed. The two ways of having no
+ * skills are kept apart, because only one of them is worth asking again:
+ *
+ * - **A 404 answers `[]`** — a daemon that wires no skill capability at all (the
+ *   e2e fixture daemon 404s this route deliberately). That is a settled answer,
+ *   so the caller may cache it; re-asking would mean a round trip per keystroke.
+ * - **Anything else answers `null`** — offline, a 5xx, a daemon mid-restart. The
+ *   answer is unknown rather than empty, so the caller drops it and retries. */
+export async function getSkills(id: string): Promise<SkillRef[] | null> {
   try {
     return await json<SkillRef[]>(await fetch(`/api/reviews/${encodeURIComponent(id)}/skills`));
   } catch (err) {
+    if (err instanceof HttpError && err.status === 404) {
+      uiLog.debug("request", `skills route unwired: ${shortId(id)}`, { reviewId: id });
+      return [];
+    }
     uiLog.warn("request", `skills fetch failed: ${shortId(id)}`, {
       reviewId: id,
       reason: String(err),
     });
-    return [];
+    return null;
   }
 }
 
