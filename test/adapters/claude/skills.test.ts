@@ -70,6 +70,36 @@ async function seedPlugins(
   );
 }
 
+/** One install of a plugin, as the registry lists it: `tag` names its cache
+ * directory and `skill` is the single skill it offers, so the name that comes
+ * back identifies which install was picked. `scope`/`projectPath` are written
+ * through verbatim — that pair is what the reachability preference reads. */
+interface InstallSpec {
+  tag: string;
+  skill: string;
+  scope?: string;
+  projectPath?: string;
+}
+
+/** Seed one ENABLED plugin whose registry entry lists SEVERAL installs, in the
+ * given order — the shape `seedPlugins` above flattens to a single entry. */
+async function seedPluginInstalls(key: string, installs: InstallSpec[]): Promise<void> {
+  const dir = join(tmp, "claude");
+  const entries = await Promise.all(
+    installs.map(async ({ tag, skill, ...rest }) => {
+      const installPath = join(dir, "plugins", "cache", tag);
+      await seedSkill(join(installPath, "skills"), skill);
+      return { installPath, version: "1.0.0", ...rest };
+    }),
+  );
+  await mkdir(join(dir, "plugins"), { recursive: true });
+  await writeFile(
+    join(dir, "plugins", "installed_plugins.json"),
+    JSON.stringify({ plugins: { [key]: entries } }),
+  );
+  await writeFile(join(dir, "settings.json"), JSON.stringify({ enabledPlugins: { [key]: true } }));
+}
+
 test("yields nothing when no root exists, rather than throwing", async () => {
   expect(await readClaudeSkills(join(tmp, "nowhere"))).toEqual([]);
 });
@@ -188,4 +218,39 @@ test("lets a project layer disable what no layer enabled, leaving the list empty
   const cwd = join(tmp, "project");
   await seedPlugins({ "superpowers@official": ["brainstorming"] }, []);
   expect(await readClaudeSkills(cwd)).toEqual([]);
+});
+
+test("skips an install scoped to another project in favour of the user-scoped one", async () => {
+  // Registry order puts a foreign project's install first. Claude Code would not
+  // load it for a review of this cwd, so neither may the completion list.
+  const cwd = join(tmp, "project");
+  await seedPluginInstalls("superpowers@official", [
+    { tag: "sp-elsewhere", skill: "elsewhere", scope: "project", projectPath: join(tmp, "other") },
+    { tag: "sp-user", skill: "brainstorming", scope: "user" },
+  ]);
+  expect((await readClaudeSkills(cwd)).map((s) => s.name)).toEqual(["superpowers:brainstorming"]);
+});
+
+test("keeps a plugin whose only install names another project, rather than dropping it", async () => {
+  // caret cannot canonicalize the two paths the way Claude Code does, and its own
+  // reviews run in worktrees, so "not provably reachable" must never mean "drop".
+  const cwd = join(tmp, "project");
+  await seedPluginInstalls("superpowers@official", [
+    {
+      tag: "sp-elsewhere",
+      skill: "brainstorming",
+      scope: "project",
+      projectPath: join(tmp, "other"),
+    },
+  ]);
+  expect((await readClaudeSkills(cwd)).map((s) => s.name)).toEqual(["superpowers:brainstorming"]);
+});
+
+test("prefers the install scoped to the review cwd over an earlier user-scoped one", async () => {
+  const cwd = join(tmp, "project");
+  await seedPluginInstalls("superpowers@official", [
+    { tag: "sp-user", skill: "user-copy", scope: "user" },
+    { tag: "sp-here", skill: "project-copy", scope: "project", projectPath: cwd },
+  ]);
+  expect((await readClaudeSkills(cwd)).map((s) => s.name)).toEqual(["superpowers:project-copy"]);
 });

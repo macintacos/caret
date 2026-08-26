@@ -38,10 +38,20 @@ import type { SkillRef } from "@/lib/types.ts";
 /** The file whose presence makes a directory a skill. */
 const SKILL_FILE = "SKILL.md";
 
-/** One registry entry per install of a plugin, as `installed_plugins.json`
- * records them. Only `installPath` is read; the rest of each entry is Claude's. */
+/** One install of a plugin, as `installed_plugins.json` records it. Three fields
+ * are read — where the install lives, the scope it was installed at
+ * (`managed`/`user`/`project`/`local`), and, for the project-shaped scopes, the
+ * directory it was installed against. All stay `unknown` and are narrowed at use:
+ * this is someone else's JSON. The rest of each entry is Claude's. */
+interface PluginInstall {
+  installPath?: unknown;
+  scope?: unknown;
+  projectPath?: unknown;
+}
+
+/** One registry entry per plugin, holding every install of it. */
 interface InstalledPlugins {
-  plugins?: Record<string, Array<{ installPath?: unknown }> | undefined>;
+  plugins?: Record<string, PluginInstall[] | undefined>;
 }
 
 /** The `enabledPlugins` map from a settings file — the only key read. */
@@ -105,15 +115,38 @@ async function enabledPluginKeys(cwd: string): Promise<Set<string>> {
   return new Set(Object.keys(merged).filter((key) => merged[key] === true));
 }
 
-/** Each enabled plugin's bare name paired with its install directory, sorted by
- * name. Empty when the registry is absent or unparseable.
+/** The install directory a session in `cwd` would load this plugin from.
  *
- * The registry records an ARRAY of installs per plugin — a plugin can be
- * installed at user scope and again at project scope, each entry carrying its own
- * `scope` and, when project-scoped, a `projectPath`. The first is taken because
- * `enabledPlugins` is keyed by plugin, not by install, so the layers above have
- * already decided *whether* the plugin is live and cannot say *which* install is
- * meant; picking any other entry would be a guess. */
+ * The registry records an ARRAY of installs per plugin — the same plugin can be
+ * installed at user scope and again against a particular project. `enabledPlugins`
+ * is keyed by plugin rather than by install, so the settings layers decide only
+ * *whether* the plugin is live; which install is meant comes from the entries
+ * themselves. Claude Code answers that by REACHABILITY: a `user` or `managed`
+ * install is reachable from anywhere, a project-shaped one only from the directory
+ * it names. Preferred here, most specific first: an install whose `projectPath` is
+ * exactly this cwd, then a user/managed one.
+ *
+ * The last resort is the first install with a usable path, reachable or not.
+ * Claude Code canonicalizes both paths before comparing and caret cannot, and
+ * caret's own reviews run inside git worktrees — a plugin installed against
+ * `…/trunk` while the review sits in `…/EXC-1176+…` fails an equality test that
+ * Claude Code passes. Falling back rather than dropping keeps this preference from
+ * ever offering FEWER skills than registry order did; it only stops preferring a
+ * foreign project's install when a reachable one exists. */
+function pickInstallPath(installs: PluginInstall[], cwd: string): string | undefined {
+  const usable = installs.filter(
+    (install): install is PluginInstall & { installPath: string } =>
+      typeof install.installPath === "string",
+  );
+  const here = usable.find((install) => install.projectPath === cwd);
+  const anywhere = usable.find(
+    (install) => install.scope === "user" || install.scope === "managed",
+  );
+  return (here ?? anywhere ?? usable[0])?.installPath;
+}
+
+/** Each enabled plugin's bare name paired with its install directory, sorted by
+ * name. Empty when the registry is absent or unparseable. */
 async function enabledPlugins(cwd: string): Promise<Array<[string, string]>> {
   const [registry, enabled] = await Promise.all([
     readJsonFile(installedPluginsFile()) as Promise<InstalledPlugins | null>,
@@ -122,8 +155,8 @@ async function enabledPlugins(cwd: string): Promise<Array<[string, string]>> {
   const out: Array<[string, string]> = [];
   for (const [key, installs] of Object.entries(registry?.plugins ?? {})) {
     if (!enabled.has(key)) continue;
-    const installPath = installs?.[0]?.installPath;
-    if (typeof installPath !== "string") continue;
+    const installPath = pickInstallPath(installs ?? [], cwd);
+    if (installPath === undefined) continue;
     // The registry key is `<plugin>@<marketplace>`; the `/` menu names a skill by
     // the plugin half alone (`/superpowers:brainstorming`).
     out.push([key.split("@")[0] ?? key, installPath]);
