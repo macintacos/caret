@@ -60,6 +60,17 @@ export interface SearchBudget {
  * slicing — basename hit first, then shortest path — if the short-query case
  * proves to matter; that is a scoring design of its own and belongs to EXC-390
  * rather than here.
+ *
+ * ponytail: `dirents` caps what the walk EXAMINES, not what a single `readdir`
+ * materializes — a directory holding far more than this is read whole before
+ * `partition` sees one entry of it. Nothing here avoids that today: on Bun
+ * 1.3.14 `opendir` and `opendirSync` slurp too, and pulling five entries out of
+ * a 60,000-entry directory costs what pulling all 60,000 does. Measured at 274
+ * bytes and 0.38us per entry, so a pathological half-million-entry directory
+ * costs roughly 130MB and 190ms of the keystroke it lands on — a hiccup rather
+ * than a failure, which is why it stays a documented ceiling rather than a
+ * behaviour change. Re-measure under EXC-1156, the Bun 1.4 upgrade: an
+ * incremental directory reader is what would make this cap literal.
  */
 export const SEARCH_BUDGET: SearchBudget = { dirents: 20_000, results: 50 };
 
