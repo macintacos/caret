@@ -43,8 +43,11 @@
      * such a host — App keeps it mounted across a switch on purpose — but the
      * editors under it are not: the gutter composer goes because the contentKey
      * effect reseeds the commenting controller, which clears `open` and unmounts
-     * `{#if pending}`, and the dialogs go when they close. Upgrade to a live value
-     * — a CM Compartment — if a host ever survives a switch with its editor open. */
+     * `{#if pending}`, the dialogs go when they close, and an annotation card is
+     * keyed on its comment's id, so a switch landing a different comment on the
+     * same line builds a new card rather than reusing the open one. Upgrade to a
+     * live value — a CM Compartment — if a host ever survives a switch with its
+     * editor open. */
     reviewContext?: ReviewContext;
   }
   let {

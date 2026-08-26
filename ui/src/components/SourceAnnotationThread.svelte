@@ -64,14 +64,23 @@
     {/each}
   </Card>
 {:else if annotations[0]}
-  <SourceAnnotationCard
-    annotation={annotations[0]}
-    focused={annotations[0].id === focusedAnnotation}
-    {onFocus}
-    {onEdit}
-    {onDelete}
-    {reviewContext}
-  />
+  <!-- Keyed on the comment's id for the same reason the stacked branch keys its
+       each — a card seeds its editor once at mount. The row this renders into is
+       keyed on the LINE number (DiffPlanView), so a review switch that lands a
+       different single comment on the same line arrives here as a changed prop on
+       the same slot; without the key the card instance is reused, and an open edit
+       field keeps the previous review's text and review context while onEdit saves
+       under the new comment's id. -->
+  {#key annotations[0].id}
+    <SourceAnnotationCard
+      annotation={annotations[0]}
+      focused={annotations[0].id === focusedAnnotation}
+      {onFocus}
+      {onEdit}
+      {onDelete}
+      {reviewContext}
+    />
+  {/key}
 {/if}
 
 <style>
