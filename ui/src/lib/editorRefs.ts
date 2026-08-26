@@ -8,8 +8,8 @@
 // it is worth asking about; whether it exists is answered by the same two gates
 // the completion sources use — resolveFileRefs() for a path, the shared
 // per-review enumeration for a skill. Nothing here guesses, and nothing here
-// surfaces a failure: a gate that cannot answer leaves the run plain, which is
-// exactly how the editor behaved before chips existed.
+// surfaces a failure: a gate that cannot answer leaves the run plain, the same
+// as a run it was never asked about.
 //
 // Presentation only. The recognized set is a set of STRINGS the decoration pass
 // looks runs up in, so the document is never rewritten and what reaches the
@@ -274,7 +274,7 @@ function same(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
 /**
  * Keeps `recognizedRefs` current for the review an editor composes against, or
  * contributes nothing at all when there is no review — so a surface mounted
- * outside one behaves exactly as it did before chips existed.
+ * outside one renders every run as plain prose.
  *
  * The plugin declares no decorations: it is the lifecycle host for the resolve,
  * and the one decoration mechanism stays `codeHighlighter` in markdownEditor.ts.
