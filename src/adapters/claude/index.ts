@@ -6,7 +6,8 @@ import type { AgentAdapter, InstallProbe } from "@/adapters/adapter.ts";
 import { APPROVE_VARIANTS } from "@/adapters/claude/approve.ts";
 import { fatalDenyLine, toHookOutput } from "@/adapters/claude/feedback.ts";
 import { readClaudeInstallState } from "@/adapters/claude/install.ts";
-import type { Decision, PlanInput } from "@/lib/types.ts";
+import { readClaudeSkills } from "@/adapters/claude/skills.ts";
+import type { Decision, PlanInput, SkillRef } from "@/lib/types.ts";
 
 /** The shape of the PermissionRequest/ExitPlanMode hook stdin Claude Code pipes
  * to `caret review`. Every field is optional: a payload missing any of them
@@ -63,5 +64,9 @@ export const claudeAdapter: AgentAdapter = {
 
   readInstallState(): InstallProbe {
     return readClaudeInstallState();
+  },
+
+  listSkills(cwd: string): Promise<SkillRef[]> {
+    return readClaudeSkills(cwd);
   },
 };

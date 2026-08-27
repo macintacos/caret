@@ -27,6 +27,7 @@ function expectAdapterShape(a: AgentAdapter): void {
   expect(typeof a.emitDecision).toBe("function");
   expect(typeof a.fatalDenyLine).toBe("function");
   expect(typeof a.readInstallState).toBe("function");
+  expect(typeof a.listSkills).toBe("function");
 }
 
 // Each adapter self-declares its id, and it must match the registry key it is

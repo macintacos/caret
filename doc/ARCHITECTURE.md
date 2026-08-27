@@ -101,8 +101,14 @@ gates: any failure is silent, so a stalled reconcile can't block the agent.
 The reviewer's approve choice is an opaque variant id the core stores and the UI renders;
 the Claude adapter declares its variants (`default` / `acceptEdits` / `auto`) and rides
 them to the UI over `GET /api/health`, so the approve split-button reflects the active
-adapter's capabilities rather than hard-coded mode names. On a decision the adapter maps
-the chosen variant to a session `setMode` permission and emits the resulting
+adapter's capabilities rather than hard-coded mode names. The adapter's skill enumeration
+rides the same pattern one route over: `listSkills` walks the agent's own well-known
+directories and the daemon serves the result on `GET /api/reviews/:id/skills`, which is
+where the feedback editors' `/` completion reads the names a reviewer can cite. Both are
+the same rule — a capability reaches the browser over the wire, never by importing an
+adapter — so an agent that enumerates nothing simply yields an empty list and no
+completion fires. On a decision the adapter maps the chosen variant to a session `setMode`
+permission and emits the resulting
 [PermissionRequest decision](https://code.claude.com/docs/en/hooks) on stdout:
 
 ```jsonc

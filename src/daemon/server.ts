@@ -41,6 +41,7 @@ import {
   type PlanInput,
   type ResolveBody,
   type RouteResult,
+  type SkillRef,
   toClientReview,
 } from "@/lib/types.ts";
 import { listDirectory } from "@/plan/directory.ts";
@@ -114,6 +115,13 @@ export interface CreateServerOptions {
    * /api/health as `source` so the UI can adapt to the environment — e.g. an
    * OpenCode session (EXC-791). Omitted (default) drops the field from the body. */
   source?: string;
+  /** Enumerate the skills the active adapter's agent can reach for a review rooted
+   * at `cwd`, served by GET /api/reviews/:id/skills (EXC-1176) so the feedback
+   * editors can complete `/` names. Omitted (default) → the route 404s, so a
+   * daemon that wires no adapter capability is unaffected; the e2e fixture daemon
+   * deliberately leaves it unwired rather than enumerating the developer's own
+   * skills. runDaemon wires the active adapter's `listSkills`. */
+  listSkills?: (cwd: string) => Promise<SkillRef[]>;
   /** A thunk returning the daemon self-diagnostics served by GET /api/diagnostics
    * (EXC-842): system/runtime identity, uptime, the live parsed settings, and the
    * config path + env overrides. Omitted (default) → the route 404s, so existing
@@ -160,6 +168,7 @@ interface ResolvedOptions {
   instanceId: string | undefined;
   approveVariants: readonly ApproveVariant[] | undefined;
   source: string | undefined;
+  listSkills: ((cwd: string) => Promise<SkillRef[]>) | undefined;
   diagnostics: (() => DaemonDiagnostics) | undefined;
   markPaneRead: (pane: CmuxPane) => void;
   log: CaretLogger;
@@ -181,6 +190,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     instanceId: opts.instanceId,
     approveVariants: opts.approveVariants,
     source: opts.source,
+    listSkills: opts.listSkills,
     diagnostics: opts.diagnostics,
     markPaneRead: opts.markPaneRead ?? ((pane) => clearCmuxMark(pane, { log: opts.log })),
     log: opts.log ?? noopLogger,
@@ -189,15 +199,15 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
 
 // A request matched to one of the :id sub-routes, with the review id decoded and
 // the optional sub-path (/decision, /resolve, /draft, /expire, /seen, /file-refs,
-// /file, /dir) split out. /file-refs precedes /file in the alternation so the
-// longer literal wins rather than /file matching its prefix.
+// /file, /dir, /skills) split out. /file-refs precedes /file in the alternation so
+// the longer literal wins rather than /file matching its prefix.
 interface IdRoute {
   id: string;
   sub: string | undefined;
 }
 
 const ID_ROUTE_RE =
-  /^\/api\/reviews\/([^/]+)(\/decision|\/resolve|\/draft|\/expire|\/seen|\/file-refs|\/file|\/dir)?$/;
+  /^\/api\/reviews\/([^/]+)(\/decision|\/resolve|\/draft|\/expire|\/seen|\/file-refs|\/file|\/dir|\/skills)?$/;
 
 /** Match an /api/reviews/:id[/sub] path, decoding the id; null for any other path. */
 function matchIdRoute(path: string): IdRoute | null {
@@ -573,6 +583,27 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return Response.json(listing);
   }
 
+  // GET /api/reviews/:id/skills — the skill names the reviewing agent can reach,
+  // for the feedback editors' `/` completion (EXC-1176). Reference only: caret
+  // never executes one. Enumeration belongs to the active adapter, so this route
+  // is a thin pass-through of an injected capability — 404 when none is wired, the
+  // same posture /api/diagnostics takes for an absent optional capability.
+  //
+  // Stateless on purpose: nothing is cached here, because the browser fetches once
+  // per review (see ui/src/lib/skillCompletion.ts). A skill added mid-review is
+  // therefore not offered until the tab reloads, which is the deliberate trade for
+  // having no cache to invalidate.
+  //
+  // Counts only reach the log: the names are the reviewer's own configuration.
+  async function handleSkills(id: string): Promise<Response> {
+    if (!cfg.listSkills) return notFound();
+    const r = store.get(id);
+    if (!r) return notFound();
+    const skills = await cfg.listSkills(r.cwd);
+    log.debug("request", "skills listed", { reviewId: id, count: skills.length });
+    return Response.json(skills);
+  }
+
   // GET /api/reviews/:id/decision — the hook's long-poll for a decision.
   async function handleDecision(id: string): Promise<Response> {
     // A decision may already be recorded: in memory (a deny keeps the review) or
@@ -760,6 +791,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       if (method === "GET" && !sub) return handleGetReview(id);
       if (method === "GET" && sub === "/file") return handleFileExcerpt(req, id);
       if (method === "GET" && sub === "/dir") return handleDirListing(req, id);
+      if (method === "GET" && sub === "/skills") return handleSkills(id);
       if (method === "POST" && sub === "/file-refs") return handleFileRefs(req, id);
       if (method === "GET" && sub === "/decision") return handleDecision(id);
       if (method === "PUT" && sub === "/draft") return handleDraft(req, id);

@@ -1,7 +1,7 @@
 import "@ui/test-setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import type { Annotation, DirListing, FileExcerpt, ResolveBody } from "@core/lib/types";
+import type { Annotation, DirListing, FileExcerpt, ResolveBody, SkillRef } from "@core/lib/types";
 import { type LogCapture, logCapture } from "@ui/test-helpers.ts";
 import {
   getApproveMode,
@@ -10,6 +10,7 @@ import {
   getFileExcerpt,
   getHealth,
   getReview,
+  getSkills,
   HttpError,
   markSeen,
   putDraft,
@@ -441,5 +442,47 @@ describe("markSeen", () => {
   test("swallows a network failure (never throws)", async () => {
     respond = () => Promise.reject(new Error("offline"));
     expect(await markSeen(ID)).toBeUndefined();
+  });
+});
+
+describe("getSkills", () => {
+  const skills: SkillRef[] = [
+    { name: "git", origin: "user" },
+    { name: "superpowers:brainstorming", origin: "plugin" },
+  ];
+
+  test("returns the reviewing agent's skills", async () => {
+    respond = () => Promise.resolve(jsonResponse(skills));
+    expect(await getSkills(ID)).toEqual(skills);
+  });
+
+  test("asks the review's own skills route, with the id encoded", async () => {
+    let seenUrl = "";
+    respond = (url) => {
+      seenUrl = url;
+      return Promise.resolve(jsonResponse(skills));
+    };
+    await getSkills("a b/c");
+    expect(seenUrl).toBe("/api/reviews/a%20b%2Fc/skills");
+  });
+
+  test("answers a 404 with no skills — the unwired-daemon case", async () => {
+    // A daemon that wires no skill capability 404s the route (the e2e fixture
+    // daemon does exactly this). That is a settled answer, not a failure: the
+    // empty list is the caller's to keep, and it records at `debug` like any
+    // other ordinary answer.
+    respond = () => Promise.resolve(new Response(null, { status: 404 }));
+    expect(await getSkills(ID)).toEqual([]);
+    await flush();
+    expect(cap.events().some((r) => r.level === "debug" && r.step === "request")).toBe(true);
+  });
+
+  test("answers null when the request never lands, so the caller retries", async () => {
+    // Offline, a 5xx, a daemon mid-restart: transient, and distinct from the 404
+    // above — null is what tells the caller not to keep this answer.
+    respond = () => Promise.reject(new Error("offline"));
+    expect(await getSkills(ID)).toBeNull();
+    await flush();
+    expect(cap.events().some((r) => r.level === "warn" && r.step === "request")).toBe(true);
   });
 });

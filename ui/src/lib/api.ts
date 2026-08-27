@@ -13,6 +13,7 @@ import type {
   HealthIdentity,
   PersistedScratch,
   ResolveBody,
+  SkillRef,
 } from "@core/lib/types";
 import { shortId, uiLog } from "$lib/log.ts";
 
@@ -151,6 +152,36 @@ export async function getFileExcerpt(
 export async function getDirListing(id: string, root: string, path: string): Promise<DirListing> {
   const params = new URLSearchParams({ root, path });
   return json(await fetch(`/api/reviews/${encodeURIComponent(id)}/dir?${params}`));
+}
+
+/** The skill names the agent reviewing this review can reach, for the feedback
+ * editors' `/` completion (EXC-1176) — the daemon holds the filesystem, so it is
+ * the only thing that can enumerate them. Reference only: caret never executes a
+ * completed skill.
+ *
+ * Non-essential, like `resolveFileRefs`: nothing here throws, so the editor
+ * behaves exactly as it did before completion existed. The two ways of having no
+ * skills are kept apart, because only one of them is worth asking again:
+ *
+ * - **A 404 answers `[]`** — a daemon that wires no skill capability at all (the
+ *   e2e fixture daemon 404s this route deliberately). That is a settled answer,
+ *   so the caller may cache it; re-asking would mean a round trip per keystroke.
+ * - **Anything else answers `null`** — offline, a 5xx, a daemon mid-restart. The
+ *   answer is unknown rather than empty, so the caller drops it and retries. */
+export async function getSkills(id: string): Promise<SkillRef[] | null> {
+  try {
+    return await json<SkillRef[]>(await fetch(`/api/reviews/${encodeURIComponent(id)}/skills`));
+  } catch (err) {
+    if (err instanceof HttpError && err.status === 404) {
+      uiLog.debug("request", `skills route unwired: ${shortId(id)}`, { reviewId: id });
+      return [];
+    }
+    uiLog.warn("request", `skills fetch failed: ${shortId(id)}`, {
+      reviewId: id,
+      reason: String(err),
+    });
+    return null;
+  }
 }
 
 /** Autosaves the reviewer's working draft: inline annotations, the review-scoped

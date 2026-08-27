@@ -179,11 +179,11 @@ describe("MarkdownEditor focus", () => {
 });
 
 describe("MarkdownEditor review context", () => {
-  // The completion seam ships with an empty source registry, so review context is
-  // inert at this level: these prove the prop does not disturb mount, seeding, or
-  // the chords — not anything about completion, which no mount can reach while the
-  // registry is empty. The Escape-with-a-painted-list contract is pinned where it
-  // can be driven for real, in lib/markdownEditor.test.ts.
+  // These prove the prop does not disturb mount, seeding, or the chords — nothing
+  // about completion, which needs a trigger character none of them types. What the
+  // registered sources actually offer is pinned where each can be driven for real:
+  // lib/skillCompletion.test.ts for the `/` list, lib/markdownEditor.test.ts for
+  // the Escape-with-a-painted-list contract.
   const REVIEW = { reviewId: "rev-1", cwd: "/w/caret", adapter: "claude" };
 
   test("mounts, seeds, and reports its value with review context present", () => {

@@ -3,9 +3,15 @@ import { describe, expect, test } from "bun:test";
 
 import { type CompletionSource, completionStatus } from "@codemirror/autocomplete";
 import { EditorSelection, EditorState } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
+import type { EditorView } from "@codemirror/view";
 
-import { chordAction, cursorInList, markdownExtensions } from "./markdownEditor.ts";
+import {
+  mountEditor,
+  completionListPainted as painted,
+  typeInto as type,
+} from "@ui/test-helpers.ts";
+
+import { chordAction, cursorInList } from "./markdownEditor.ts";
 
 // cursorInList drives the Tab key: on a list line Tab nests the item, elsewhere
 // it inserts four spaces. It reads only the cursor's line, so a bare EditorState
@@ -83,39 +89,16 @@ describe("Escape with a live completion list", () => {
   const REVIEW = { reviewId: "rev-1", cwd: "/w/caret", adapter: "claude" };
 
   function mount(source: CompletionSource, onCancelChord: () => void) {
-    const host = document.createElement("div");
-    document.body.appendChild(host);
-    const view = new EditorView({
-      parent: host,
-      root: document,
-      state: EditorState.create({
-        doc: "",
-        extensions: markdownExtensions({
-          placeholder: "",
-          ariaLabel: "Comment",
-          onCancelChord,
-          reviewContext: REVIEW,
-          completionSources: [() => source],
-        }),
-      }),
+    return mountEditor({
+      placeholder: "",
+      ariaLabel: "Comment",
+      onCancelChord,
+      reviewContext: REVIEW,
+      completionSources: [() => source],
     });
-    return {
-      view,
-      dispose: () => {
-        view.destroy();
-        host.remove();
-      },
-    };
   }
 
-  const type = (view: EditorView, text: string) =>
-    view.dispatch({
-      changes: { from: view.state.doc.length, insert: text },
-      selection: { anchor: view.state.doc.length + text.length },
-      userEvent: "input.type",
-    });
   const settle = (ms: number) => new Promise((r) => setTimeout(r, ms));
-  const painted = (view: EditorView) => view.dom.querySelector(".cm-tooltip-autocomplete") !== null;
   const pressEscape = (view: EditorView) =>
     view.contentDOM.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),

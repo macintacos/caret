@@ -4,16 +4,9 @@
 // always render the install-state section. Reads ONLY caret's own entries —
 // never any other settings key (privacy).
 
-import { homedir } from "node:os";
-import { join } from "node:path";
-
 import type { InstallProbe } from "@/adapters/adapter.ts";
+import { installedPluginsFile, userSettingsFile } from "@/adapters/claude/paths.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
-
-/** The Claude Code config dir: CLAUDE_CONFIG_DIR override, else ~/.claude. */
-function claudeConfigDir(): string {
-  return process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
-}
 
 /** caret's id in Claude Code's plugin registry: `<plugin>@<marketplace>`, both
  * "caret" per src/commands/install/claude.ts. */
@@ -25,11 +18,10 @@ const PLUGIN_ID = "caret@caret";
  * inside the plugin's own hooks.json, so a user-settings hook means a MANUAL
  * entry; false when settings parse but hold none, "unknown" when unreadable. */
 export function readClaudeInstallState(): InstallProbe {
-  const dir = claudeConfigDir();
   return {
-    pluginVersion: readPluginVersion(join(dir, "plugins", "installed_plugins.json")),
-    pluginEnabled: readPluginEnabled(join(dir, "settings.json")),
-    hookInUserSettings: readHookInUserSettings(join(dir, "settings.json")),
+    pluginVersion: readPluginVersion(installedPluginsFile()),
+    pluginEnabled: readPluginEnabled(userSettingsFile()),
+    hookInUserSettings: readHookInUserSettings(userSettingsFile()),
   };
 }
 

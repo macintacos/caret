@@ -104,3 +104,9 @@ test("fatalDenyLine is a dependency-free deny wire line", () => {
     },
   });
 });
+
+test("listSkills contributes nothing, so no completion fires on a codex review", async () => {
+  // Codex has no skill or command directory caret can enumerate. An empty list is
+  // the whole contract: the editor's `/` source returns null and no popup paints.
+  expect(await codexAdapter.listSkills("/w/caret")).toEqual([]);
+});

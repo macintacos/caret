@@ -11,7 +11,8 @@ import type { AgentAdapter, InstallProbe } from "@/adapters/adapter.ts";
 import { APPROVE_VARIANTS } from "@/adapters/opencode/approve.ts";
 import { fatalDenyLine, toWireDecision } from "@/adapters/opencode/feedback.ts";
 import { readOpencodeInstallState } from "@/adapters/opencode/install.ts";
-import type { Decision, PlanInput } from "@/lib/types.ts";
+import { readOpencodeCommands } from "@/adapters/opencode/skills.ts";
+import type { Decision, PlanInput, SkillRef } from "@/lib/types.ts";
 
 /** The caret-defined review envelope the OpenCode plugin pipes to `caret review`.
  * Mirrors the snake_case session/cwd convention the Claude/Codex parsers use so the
@@ -55,5 +56,11 @@ export const opencodeAdapter: AgentAdapter = {
 
   readInstallState(): InstallProbe {
     return readOpencodeInstallState();
+  },
+
+  // OpenCode's `/` menu is its commands, and they are config-dir-rooted — the
+  // review's cwd plays no part, so this drops the parameter the interface offers.
+  listSkills(): Promise<SkillRef[]> {
+    return readOpencodeCommands();
   },
 };

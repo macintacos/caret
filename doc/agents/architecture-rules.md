@@ -19,11 +19,12 @@ slots in without touching core internals; blur it and agent vocabulary leaks eve
   id to its adapter and resolves the active one (by explicit id, then `CARET_AGENT`, then
   the default). `src/adapters/claude/` is the reference implementation and the default;
   `src/adapters/codex/` is a second (default-off, provisional) adapter that proves the
-  seam. An adapter owns five surfaces: `parseHookInput` (raw hook stdin → core
+  seam. An adapter owns six surfaces: `parseHookInput` (raw hook stdin → core
   `PlanInput`), `emitDecision` (core `Decision` → the tool's stdout wire shape),
   `fatalDenyLine` (a dependency-free last-resort deny line for the CLI's fatal handler),
-  `approveVariants` (the post-approval options it offers), and `readInstallState` (the
-  discovery install probe).
+  `approveVariants` (the post-approval options it offers), `readInstallState` (the
+  discovery install probe), and `listSkills` (the skill names the reviewer's `/`
+  completion offers — names only, never a skill's contents).
 
 ## The dependency law (grep-enforceable)
 
@@ -48,7 +49,10 @@ an adapter.
   **over the wire**, not by import. The pattern: the daemon publishes the active adapter's
   `approveVariants` in `GET /api/health`, and the UI renders its approve split-button from
   that wire field (`ui/src/lib/approve.ts`), falling back to a built-in set when the field
-  is absent.
+  is absent. `listSkills` rides the same pattern one route over — the daemon serves the
+  active adapter's skill names on `GET /api/reviews/:id/skills` and the feedback editors'
+  `/` completion reads them from there (`ui/src/lib/skillCompletion.ts`), so an adapter
+  that enumerates nothing simply leaves the list empty and no completion fires.
 
 ## Where agent vocabulary lives
 
@@ -61,10 +65,10 @@ adapter maps a token to a tool permission (`setModeFor` in
 
 **Adding a new agent tool:** create `src/adapters/<tool>/`, implement `AgentAdapter`
 (declare its own approve variants with their ids/labels, parse its hook shape, render its
-decision wire format and its `fatalDenyLine`, probe its install), add one `REGISTRY` entry
-in `src/adapters/index.ts` keyed by the tool id, and add its `test/adapters/<tool>/`
-suite. You touch `src/adapters/` and the registry — never core internals, store records,
-the daemon's routing, or `test/core/`.
+decision wire format and its `fatalDenyLine`, probe its install, enumerate its skills),
+add one `REGISTRY` entry in `src/adapters/index.ts` keyed by the tool id, and add its
+`test/adapters/<tool>/` suite. You touch `src/adapters/` and the registry — never core
+internals, store records, the daemon's routing, or `test/core/`.
 
 `src/adapters/codex/` is the worked second example: the OpenAI Codex CLI's
 PermissionRequest hook is ~1:1 with Claude's (one JSON object on stdin, a

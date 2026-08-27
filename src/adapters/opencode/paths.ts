@@ -86,6 +86,13 @@ export function commandDir(configDir: string): string {
   return join(configDir, COMMAND_DIRNAME);
 }
 
+/** Both command dirs OpenCode loads from, canonical first. caret only ever WRITES the
+ * plural, but OpenCode registers commands out of either, so anything reading "what can
+ * this agent reach" has to look in both. */
+export function commandDirs(configDir: string): string[] {
+  return [commandDir(configDir), join(configDir, LEGACY_COMMAND_DIRNAME)];
+}
+
 /** The filename caret's plugin file carries in a pre-array-install config dir. */
 const LEGACY_PLUGIN_FILENAME = "caret.ts";
 
@@ -94,8 +101,10 @@ const LEGACY_PLUGIN_DIRNAMES = ["plugins", "plugin"] as const;
 
 /** The singular command dir OpenCode still scans for backwards compatibility, and that
  * caret deployed into before `COMMAND_DIRNAME`. Its `caret:`-namespaced files still
- * register commands, pointed at a binary path nothing writes any more. */
-const LEGACY_COMMAND_DIRNAME = "command";
+ * register commands, pointed at a binary path nothing writes any more. Exported because
+ * the skill enumerator has to offer what OpenCode can actually reach, which includes a
+ * user's own file here. */
+export const LEGACY_COMMAND_DIRNAME = "command";
 
 /** Every file-deploy-era artifact still on disk under `configDir`: caret's plugin file in
  * either plugin dir, plus any `caret:`-namespaced command file in the singular command

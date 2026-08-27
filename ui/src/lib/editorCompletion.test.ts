@@ -39,12 +39,12 @@ describe("reviewCompletion", () => {
     expect(reviewCompletion(CONTEXT, [recordingSource(seen)]).length).toBeGreaterThan(0);
   });
 
-  test("registers no source yet, so this change installs no completion", () => {
+  test("the module registry has sources, so the production path installs completion", () => {
     // The production call path: markdownExtensions passes no sources, so this reads
-    // the module registry. It is empty on purpose — EXC-1174 ships the seam, not a
-    // feature. The first sibling to register a source updates this line; that is
-    // the point of pinning it.
-    expect(reviewCompletion(CONTEXT)).toEqual([]);
+    // the module registry. Pinned because an empty registry means every feedback
+    // editor silently offers nothing — the failure mode a registration mistake
+    // produces, and one no other test in this file would catch.
+    expect(reviewCompletion(CONTEXT).length).toBeGreaterThan(0);
   });
 
   test("binds each source to the review the editor belongs to", () => {

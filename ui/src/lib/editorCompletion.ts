@@ -7,6 +7,8 @@
 import { autocompletion, type CompletionSource } from "@codemirror/autocomplete";
 import type { Extension } from "@codemirror/state";
 
+import { skillCompletion } from "$lib/skillCompletion.ts";
+
 /**
  * The review a feedback editor is composing against. The three fields EXC-390
  * specified for its sources: the id names the review, `cwd` names the working
@@ -35,7 +37,7 @@ export type ReviewCompletionSource = (review: ReviewContext) => CompletionSource
 // array literal rather than a runtime `register()` registry: the set is static
 // and known at build time, so there is no mount ordering to get wrong and nothing
 // for the bundler to mis-shake.
-const COMPLETION_SOURCES: readonly ReviewCompletionSource[] = [];
+const COMPLETION_SOURCES: readonly ReviewCompletionSource[] = [skillCompletion()];
 
 /**
  * The autocomplete half of the editor's extension stack, or nothing at all when
@@ -63,5 +65,9 @@ export function reviewCompletion(
   sources: readonly ReviewCompletionSource[] = COMPLETION_SOURCES,
 ): Extension[] {
   if (review === undefined || sources.length === 0) return [];
-  return [autocompletion({ override: sources.map((source) => source(review)) })];
+  // `icons: false` drops the per-type gutter CodeMirror renders for EVERY option,
+  // whether or not the option declares a `type` — an empty box of indent, and a
+  // stock emoji when it isn't empty. Neither source names a type, so the column
+  // buys nothing.
+  return [autocompletion({ icons: false, override: sources.map((source) => source(review)) })];
 }
