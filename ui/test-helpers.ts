@@ -166,3 +166,46 @@ export async function settleCompletion(): Promise<void> {
 export async function allowCompletionAccept(): Promise<void> {
   await new Promise((r) => setTimeout(r, COMPLETION_INTERACTION_MS + 25));
 }
+
+// ---------------------------------------------------------------------------
+// Driving the reference-chip resolve window (editorRefs.test.ts,
+// markdownEditor.test.ts). Both suites step the same debounce and drain the same
+// promise chain, so the pair lives here rather than in two copies.
+
+/** A `RefRecognitionDeps` timer pair a test steps by hand: nothing fires until
+ * `fire()` is called, and `pending()` says whether anything is armed — which is
+ * how "a burst of typing arms one resolve, not one per keystroke" is asserted
+ * without a clock. */
+export function fakeTimers(): {
+  setTimer: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
+  clearTimer: (handle: ReturnType<typeof setTimeout>) => void;
+  fire: () => void;
+  pending: () => number;
+} {
+  let queued: (() => void) | undefined;
+  return {
+    setTimer(fn) {
+      queued = fn;
+      // The handle is never dereferenced — clearTimer below drops the closure
+      // rather than looking one up — so any Timeout-shaped value will do.
+      return 1 as unknown as ReturnType<typeof setTimeout>;
+    },
+    clearTimer() {
+      queued = undefined;
+    },
+    fire() {
+      const run = queued;
+      queued = undefined;
+      run?.();
+    },
+    pending: () => (queued === undefined ? 0 : 1),
+  };
+}
+
+/** Let the settled promises behind a resolve run through to its dispatch. One
+ * macrotask turn drains the whole microtask chain, and every promise these cases
+ * hand the recognizer is already settled or settled by hand — so this is a queue
+ * drain, not a sleep waiting for something that may not have happened. */
+export function drainMicrotasks(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}

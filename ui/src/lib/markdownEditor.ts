@@ -24,6 +24,7 @@ import {
   keymap,
   placeholder,
   ViewPlugin,
+  type ViewUpdate,
 } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 
@@ -32,6 +33,13 @@ import {
   type ReviewContext,
   reviewCompletion,
 } from "$lib/editorCompletion.ts";
+import {
+  type RefRecognitionDeps,
+  recognizedRefs,
+  refKey,
+  refRecognition,
+  scanRefTokens,
+} from "$lib/editorRefs.ts";
 import { isCancelKey, isSubmitChord } from "$lib/keys.ts";
 
 export interface MarkdownEditorOptions {
@@ -53,6 +61,11 @@ export interface MarkdownEditorOptions {
    * so a unit can open a real list — the Escape contract below is about what a
    * painted list does, which no amount of pure-function testing reaches. */
   completionSources?: readonly ReviewCompletionSource[];
+  /** The gates and timer chip recognition runs on, defaulting to the daemon and
+   * a real clock. Injected for the same reason as `completionSources`: what a
+   * chip does is a property of the painted editor, and driving the resolve
+   * window beats sleeping through it. */
+  refDeps?: RefRecognitionDeps;
 }
 
 // The markdown grammar tags structure (strong/emphasis/heading/link) and the
@@ -126,15 +139,40 @@ const codeBlockLine = Decoration.line({ class: "cm-md-codeblock" });
 const codeBlockOpen = Decoration.line({ class: "cm-md-codeblock cm-md-codeblock-open" });
 const codeBlockClose = Decoration.line({ class: "cm-md-codeblock cm-md-codeblock-close" });
 
+// A reference caret can actually resolve (EXC-1177), tinted with `--chip-ref` —
+// the same token the rendered plan spends on a resolved path
+// (diffview/coreStyles.ts). One reference reads the same on the side that
+// composes it and the side that renders it, which is the whole point of bringing
+// the treatment across. See `.cm-md-ref` in the theme for the geometry.
+const refChipDeco = Decoration.mark({ class: "cm-md-ref" });
+
 function buildCodeDecorations(view: EditorView): DecorationSet {
   const decos: Range<Decoration>[] = [];
+  // Chips ride this same pass rather than a sibling plugin: one decoration
+  // mechanism, so the code marks and the reference marks are always built from
+  // one view of the document. Empty on an editor with no review, where
+  // refRecognition contributes no field at all.
+  const recognized = view.state.field(recognizedRefs, false);
+  const chips =
+    recognized === undefined || recognized.size === 0
+      ? []
+      : scanRefTokens(view.state).filter((token) => recognized.has(refKey(token)));
+  // A codespan that IS a chip gives up its own pill. Two marks over one range
+  // nest, so their fills composite, their inline padding stacks and their 0.92em
+  // font sizes multiply — which reads as two chips that failed to line up rather
+  // than as one. The rendered-plan side settles the same collision the same way
+  // (svelte-rules.md § CSS-token discipline, on `data-md-cite`).
+  const chipped = new Set(chips.map((token) => `${token.from}:${token.to}`));
+
   for (const { from, to } of view.visibleRanges) {
     syntaxTree(view.state).iterate({
       from,
       to,
       enter: (node) => {
         if (node.name === "InlineCode") {
-          decos.push(inlineCodeDeco.range(node.from, node.to));
+          if (!chipped.has(`${node.from}:${node.to}`)) {
+            decos.push(inlineCodeDeco.range(node.from, node.to));
+          }
           return false;
         }
         if (node.name === "FencedCode") {
@@ -151,6 +189,10 @@ function buildCodeDecorations(view: EditorView): DecorationSet {
       },
     });
   }
+  for (const range of chipped) {
+    const [from, to] = range.split(":").map(Number) as [number, number];
+    decos.push(refChipDeco.range(from, to));
+  }
   return Decoration.set(decos, true);
 }
 const codeHighlighter = ViewPlugin.fromClass(
@@ -159,8 +201,15 @@ const codeHighlighter = ViewPlugin.fromClass(
     constructor(view: EditorView) {
       this.decorations = buildCodeDecorations(view);
     }
-    update(u: { view: EditorView; docChanged: boolean; viewportChanged: boolean }) {
-      if (u.docChanged || u.viewportChanged) this.decorations = buildCodeDecorations(u.view);
+    update(u: ViewUpdate) {
+      // The recognized set is replaced wholesale, so an identity check is the
+      // whole staleness test — and refRecognition skips a dispatch that would
+      // change nothing, so this never rebuilds for an answer that did not move.
+      const refsChanged =
+        u.state.field(recognizedRefs, false) !== u.startState.field(recognizedRefs, false);
+      if (u.docChanged || u.viewportChanged || refsChanged) {
+        this.decorations = buildCodeDecorations(u.view);
+      }
     }
   },
   { decorations: (v) => v.decorations },
@@ -211,6 +260,32 @@ const theme = EditorView.theme({
     borderBottomLeftRadius: "var(--radius)",
     borderBottomRightRadius: "var(--radius)",
     paddingBottom: "0.2em",
+  },
+  // A recognized reference. `--chip-ref` is the content-chip family's reference
+  // member, already spent on a resolved path in the rendered plan
+  // (diffview/coreStyles.ts) — so the composing side and the reading side tint
+  // one reference identically, and theme.test.ts's existing pins on that token
+  // (its hue distance from --chip-link, its saturation floor against
+  // --chip-code) cover this surface for free. It is an alpha tint rather than a
+  // lightness step, which is what lets it read on --paper here and on the code
+  // panel's own ground there. Deliberately NOT the neutral --chip: that token is
+  // declared for chrome controls, and a run of the reviewer's own markdown is
+  // content.
+  //
+  // Mono at the inline-code pill's own scale, because a reference is an
+  // identifier the reviewer is citing — the same reservation every other caret
+  // surface makes for one, and what keeps a path chipped in prose reading like
+  // the same path chipped inside backticks. No transition: the mark is a fresh
+  // element each time the recognized set moves, so there is no from-state to
+  // animate out of, and a pill fading in under the cursor mid-sentence is a
+  // distraction rather than an affordance.
+  ".cm-md-ref": {
+    fontFamily: "var(--font-mono)",
+    fontSize: "0.92em",
+    color: "var(--ink)",
+    backgroundColor: "var(--chip-ref)",
+    borderRadius: "3px",
+    padding: "0.05em 0.2em",
   },
   // The completion list. @codemirror/autocomplete ships a stock light-mode
   // tooltip: a near-white panel that inherits the editor's own text colour, so
@@ -406,6 +481,9 @@ export function markdownExtensions(opts: MarkdownEditorOptions): Extension[] {
     markdown({ codeLanguages: languages }),
     syntaxHighlighting(highlightStyle),
     codeHighlighter,
+    // What codeHighlighter reads to chip a reference. Contributes nothing —
+    // not even the state field — for a surface mounted outside a review.
+    refRecognition(opts.reviewContext, opts.refDeps),
     EditorView.lineWrapping,
     indentUnit.of(INDENT_UNIT),
     placeholder(opts.placeholder),

@@ -172,18 +172,27 @@ stays green under any invocation.
   not be. Reach for this precedent only where a hue is the affordance; a control that
   merely wants to look important is neutral. `theme.test.ts` asserts every `ColorToken`
   has at least one `var()` reader under `ui/src`, so a token can't stay declared for
-  nobody — and every content chip clears that floor, all in `diffview/coreStyles.ts`:
-  `--chip-ref` fills the resting file-reference chip, and `--chip-bold` / `--chip-italic`
-  / `--chip-code` / `--chip-link` the four inline chips, each through its own `--md-*`
-  layer variable. (The fence markers took `--chip-code` too until they lost their chip: a
-  chip tints a span of CONTENT, and a fence row is all marker and no content, so the tint
-  drew an empty pill inside the code panel.) That suite also holds `--chip-link` and
-  `--chip-ref` at least 60 degrees of hue apart in every palette; check that pin rather
-  than your eye when adding one, and read the comment above it for why that pair and not
-  another. A third pin measures something else for a different pair: `--chip-ref` sits
-  above a shared saturation floor and `--chip-code` below it, since those two render side
-  by side and a near-neutral's hue angle carries no design intent to compare against. Read
-  that test's comment before choosing `chipCodeHue` or `chipRefHue`.
+  nobody — and every content chip clears that floor, nearly all in
+  `diffview/coreStyles.ts`: `--chip-ref` fills the resting file-reference chip, and
+  `--chip-bold` / `--chip-italic` / `--chip-code` / `--chip-link` the four inline chips,
+  each through its own `--md-*` layer variable.
+  **`--chip-ref` has a second reader, and it is the one exception to "all in coreStyles"**:
+  the feedback editors tint a recognized reference with it too (`.cm-md-ref` in
+  `lib/markdownEditor.ts`, EXC-1177), so one reference reads the same on the side that
+  composes it and the side that renders it. It is deliberately not the neutral `--chip`
+  there — that token is declared for a chrome control, and a run of the reviewer's own
+  markdown is content — and the alpha tint is what lets the same token sit on the editor's
+  `--paper` and on the code panel's ground without a second value. A recognized codespan
+  gives up its own `.cm-md-code` pill for the same reason `data-md-cite` collapses below:
+  one range, one chip. (The fence markers took `--chip-code` too until they lost their
+  chip: a chip tints a span of CONTENT, and a fence row is all marker and no content, so
+  the tint drew an empty pill inside the code panel.) That suite also holds `--chip-link`
+  and `--chip-ref` at least 60 degrees of hue apart in every palette; check that pin
+  rather than your eye when adding one, and read the comment above it for why that pair
+  and not another. A third pin measures something else for a different pair: `--chip-ref`
+  sits above a shared saturation floor and `--chip-code` below it, since those two render
+  side by side and a near-neutral's hue angle carries no design intent to compare against.
+  Read that test's comment before choosing `chipCodeHue` or `chipRefHue`.
   **`--chip-link` marks link SYNTAX, not clickability.** Five shapes wear it and are not
   followable — an internal anchor, an unresolvable path, a fragment target, a bare-word
   target, and an image — and that is the contract rather than a gap (EXC-871 settled it).

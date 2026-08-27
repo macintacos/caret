@@ -6,6 +6,7 @@ import {
   type FileRefSpan,
   type FileRefSpanMap,
   mergeFileRefSpans,
+  pathCandidates,
 } from "$lib/diffview/fileRefs.ts";
 
 // buildFileRefLayer is one of two detection sources for the filename-reference
@@ -245,6 +246,45 @@ describe("classify", () => {
     ["punctuation with no name", "--"],
   ])("rejects %s — no letter to make it a plausible path", (_name, raw) => {
     expect(classify(raw)).toBeNull();
+  });
+});
+
+// pathCandidates is the tokenizer half of the scan: the maximal path-shaped runs
+// in one piece of text, with URLs masked and classify() applied. It is shared —
+// scanLine below applies it to an inline-code interior, and the editor's chip
+// scan (lib/editorRefs.ts, EXC-1177) applies it to the document's prose with code
+// masked out — so what counts as a path-shaped run has one definition rather than
+// one per surface.
+describe("pathCandidates", () => {
+  test("offsets each run into the text it was given", () => {
+    // Every word clears the plausibility floor — the floor is deliberately low
+    // and the filesystem is the real gate — so the run of interest is picked out
+    // by its offsets rather than by being the only one.
+    expect(pathCandidates("see a/b.md now")).toContainEqual({
+      start: 4,
+      end: 10,
+      path: "a/b.md",
+      line: undefined,
+      endLine: undefined,
+    });
+  });
+
+  test("carries a trailing range into the run's end, so the whole reference is one candidate", () => {
+    expect(pathCandidates("a/b.md:42-50")).toEqual([
+      { start: 0, end: 12, path: "a/b.md", line: 42, endLine: 50 },
+    ]);
+  });
+
+  test("masks a URL, so its path-shaped tail is never a candidate", () => {
+    expect(pathCandidates("https://example.com/app.ts")).toEqual([]);
+  });
+
+  test("drops a run with no letter in its last segment", () => {
+    expect(pathCandidates("3.14")).toEqual([]);
+  });
+
+  test("finds every run in the text", () => {
+    expect(pathCandidates("a.ts and b.ts").map((c) => c.path)).toEqual(["a.ts", "and", "b.ts"]);
   });
 });
 

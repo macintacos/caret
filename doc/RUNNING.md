@@ -107,6 +107,26 @@ contributes your own, the reviewed project's, and each enabled plugin's; OpenCod
 contributes its commands; codex contributes none, so nothing opens there. The list is read
 once when the review opens, so a skill you add mid-review shows up after a reload.
 
+## References caret recognizes
+
+A reference caret can actually resolve wears a soft chip as you type it; one it cannot
+stays plain text. That is the signal, not an error — a chip that never appears is how you
+catch a misremembered skill name or a path that does not exist, while you can still fix
+it. Without it the mistake surfaces only when the plan comes back from the agent.
+
+A `/name` is checked against the skills the reviewing agent really has, the same list `/`
+completes from. A path is checked against the working directory the plan was written in,
+the same one `@` completes from — and either one re-checks as you edit, so correcting a
+typo brings the chip back.
+
+In prose a path has to carry a `/` or a `.` before caret looks it up, which is what keeps
+an ordinary word like `test` from wearing a chip next to a `test/` directory. Wrapping a
+name in backticks says "this is a path" outright, so a bare `Makefile` at the top of the
+project is recognized that way and not otherwise.
+
+The chip is presentation only. What the agent receives is the literal text you typed,
+whether or not anything wore one.
+
 ## Unread plans
 
 While you read one plan, another can arrive — or the one you read earlier can come back

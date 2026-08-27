@@ -7,6 +7,8 @@ import type { EditorView } from "@codemirror/view";
 
 import {
   backspaceIn as backspace,
+  drainMicrotasks as drain,
+  fakeTimers,
   mountEditor,
   completionListPainted as painted,
   typeInto as type,
@@ -211,6 +213,127 @@ describe("Escape with a live completion list", () => {
       expect(painted(view)).toBe(true);
     } finally {
       dispose();
+    }
+  });
+});
+
+// The chip layer's decoration half. What lib/editorRefs.ts decides is WHICH runs
+// are recognized (pinned in editorRefs.test.ts, with its own injected gates);
+// what this pins is that the editor turns that decision into marks over the right
+// text and nothing else — and that a chip is presentation only, so the value the
+// host reads back is the literal markdown either way.
+describe("reference chips", () => {
+  /** Mount an editor over `doc` whose daemon resolves exactly `onDisk`. */
+  function mountChips(doc: string, onDisk: string[], skills: string[] = []) {
+    const timers = fakeTimers();
+    let value = "";
+    const editor = mountEditor({
+      placeholder: "",
+      ariaLabel: "Comment",
+      reviewContext: { reviewId: "rev-1", cwd: "/w/caret", adapter: "claude" },
+      completionSources: [],
+      onInput: (text) => {
+        value = text;
+      },
+      refDeps: {
+        ...timers,
+        resolvePaths: async (_id, paths) =>
+          Object.fromEntries(paths.filter((p) => onDisk.includes(p)).map((p) => [p, "file"])),
+        lookupSkills: async () => skills.map((name) => ({ name, origin: "user" })),
+      },
+    });
+    type(editor.view, doc);
+    return {
+      ...editor,
+      timers,
+      value: () => value,
+      chips: () => [...editor.view.dom.querySelectorAll(".cm-md-ref")].map((el) => el.textContent),
+      /** Whether any chip also carries the inline-code pill. Two marks over one
+       * range nest, so their fills composite and their font sizes multiply — the
+       * collision `buildCodeDecorations` exists to prevent. */
+      chipWrapsCodePill: () =>
+        [...editor.view.dom.querySelectorAll(".cm-md-ref")].some(
+          (el) => el.querySelector(".cm-md-code") !== null || el.closest(".cm-md-code") !== null,
+        ),
+    };
+  }
+
+  test("a resolved path is chipped and its unresolved neighbour is not", async () => {
+    const editor = mountChips("rework src/a.ts, not src/gone.ts", ["src/a.ts"]);
+    try {
+      editor.timers.fire();
+      await drain();
+      expect(editor.chips()).toEqual(["src/a.ts"]);
+    } finally {
+      editor.dispose();
+    }
+  });
+
+  test("a known skill is chipped and an invented one is not", async () => {
+    const editor = mountChips("run /git, never /nope", [], ["git"]);
+    try {
+      editor.timers.fire();
+      await drain();
+      expect(editor.chips()).toEqual(["/git"]);
+    } finally {
+      editor.dispose();
+    }
+  });
+
+  test("a codespan is chipped whole, backticks included — one span, one chip", async () => {
+    const editor = mountChips("see `Makefile` now", ["Makefile"]);
+    try {
+      editor.timers.fire();
+      await drain();
+      expect(editor.chips()).toEqual(["`Makefile`"]);
+      // The codespan gives up its own pill rather than pairing with the chip:
+      // two marks over one range nest, so their fills composite, their padding
+      // stacks and their 0.92em multiplies — which reads as two chips that
+      // failed to line up. One range, one mark.
+      expect(editor.chipWrapsCodePill()).toBe(false);
+      expect(editor.view.dom.querySelectorAll(".cm-md-code")).toHaveLength(0);
+    } finally {
+      editor.dispose();
+    }
+  });
+
+  test("an unrecognized codespan keeps its own code pill", async () => {
+    const editor = mountChips("see `Makefile` now", []);
+    try {
+      editor.timers.fire();
+      await drain();
+      expect(editor.chips()).toEqual([]);
+      expect(editor.view.dom.querySelectorAll(".cm-md-code")).toHaveLength(1);
+    } finally {
+      editor.dispose();
+    }
+  });
+
+  test("chips change nothing about the value the host reads back", async () => {
+    const editor = mountChips("rework src/a.ts", ["src/a.ts"]);
+    try {
+      editor.timers.fire();
+      await drain();
+      expect(editor.chips()).toEqual(["src/a.ts"]);
+      expect(editor.value()).toBe("rework src/a.ts");
+    } finally {
+      editor.dispose();
+    }
+  });
+
+  test("editing a chipped reference until it no longer resolves drops the chip", async () => {
+    const editor = mountChips("rework src/a.ts", ["src/a.ts"]);
+    try {
+      editor.timers.fire();
+      await drain();
+      expect(editor.chips()).toEqual(["src/a.ts"]);
+
+      type(editor.view, "x");
+      editor.timers.fire();
+      await drain();
+      expect(editor.chips()).toEqual([]);
+    } finally {
+      editor.dispose();
     }
   });
 });

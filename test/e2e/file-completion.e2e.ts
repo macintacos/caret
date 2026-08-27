@@ -18,12 +18,12 @@
 // at it. The content is throwaway, non-identifying scaffolding — never a real
 // plan.
 
-import type { Locator, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 
 import { makeProject } from "@test/e2e/support/file-refs.ts";
 import type { Daemon } from "@test/e2e/support/fixtures.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
-import { planSurface, revealGutterPlus } from "@test/e2e/support/source-view.ts";
+import { composer, planSurface } from "@test/e2e/support/source-view.ts";
 
 /** A project with one obvious subsequence target and two near-misses beside it. */
 const PROJECT = {
@@ -56,17 +56,6 @@ async function withProject(
   } finally {
     await project.cleanup();
   }
-}
-
-/** Open the gutter composer on a line and return its editor, focused. */
-async function composer(page: Page): Promise<Locator> {
-  await (await revealGutterPlus(page, 3)).click();
-  const dialog = page.getByRole("dialog", { name: "Add a comment" });
-  await expect(dialog).toBeVisible();
-  const input = dialog.getByRole("textbox", { name: "Comment" });
-  await input.click();
-  await expect(input).toBeFocused();
-  return input;
 }
 
 test("an @ opens the files under the review's working directory", async ({ daemon, page }) => {
