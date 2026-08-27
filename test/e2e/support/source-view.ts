@@ -49,20 +49,31 @@ export async function planSurface(page: Page): Promise<Locator> {
   return plan;
 }
 
-/** The vertical center (viewport px) of a 1-based source line's row. Throws when
- * the line is not rendered, so a wrong line number fails here rather than as an
- * unrelated miss on whatever the resulting coordinates happened to hit. */
+/** The vertical center (viewport px) of a 1-based source line's row. Waits for the
+ * row, then fails with `source line N is not rendered` on timeout — so a wrong line
+ * number still fails here rather than as an unrelated miss on whatever the resulting
+ * coordinates happened to hit.
+ *
+ * Polled rather than read once, following `settledMutations` below: a bare
+ * `page.evaluate` feeding an assertion is a read with no retry, and the web-first
+ * assertions the suite otherwise leans on are what absorb a stalled host
+ * (browser-testing.md § Timeouts are budgets for the loaded host). Every caller today
+ * is incidentally guarded by a wait of its own, so this has never been observed to
+ * fire — but the guard is the caller's rather than the helper's, and a new call site
+ * inherits nothing. `expect.poll` inherits the config's assertion budget, so a genuinely
+ * wrong line number fails inside 15s rather than swallowing the 60s per-test one. */
 export async function lineCenterY(page: Page, line: number): Promise<number> {
-  const y = await page.evaluate((ln) => {
-    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-    const span = Array.from(sh?.querySelectorAll("[data-line-number-content]") ?? []).find(
-      (s) => (s.parentElement as HTMLElement)?.dataset.lineIndex === String(ln - 1),
-    );
-    const r = (span?.parentElement as HTMLElement)?.getBoundingClientRect();
-    return r ? r.y + r.height / 2 : null;
-  }, line);
-  if (y === null) throw new Error(`source line ${line} is not rendered`);
-  return y;
+  const read = () =>
+    page.evaluate((ln) => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+      const span = Array.from(sh?.querySelectorAll("[data-line-number-content]") ?? []).find(
+        (s) => (s.parentElement as HTMLElement)?.dataset.lineIndex === String(ln - 1),
+      );
+      const r = (span?.parentElement as HTMLElement)?.getBoundingClientRect();
+      return r ? r.y + r.height / 2 : null;
+    }, line);
+  await expect.poll(read, { message: `source line ${line} is not rendered` }).not.toBeNull();
+  return (await read()) as number;
 }
 
 /** A 1-based source line's content row and its gutter number cell, as heights
