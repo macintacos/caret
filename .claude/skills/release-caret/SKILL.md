@@ -270,6 +270,28 @@ release is live. After a real release (`--yes`), return the checkout to a clean,
 git switch trunk && git pull --ff-only
 ```
 
+### 3. Close the release's Linear ticket
+
+A Linear workflow automation (`botActor.type: "workflow"`, `creator: null`) mints an issue
+for the release PR — the one PR caret opens with no `EXC-` ref in its title or branch. It
+is born **In Progress**, titled `Bump caret … to <version> in … manifests`, labelled
+`chore`, and carrying the release PR as its only attachment, created in the same
+transaction. Which automation is not determinable from the API, and Linear's docs describe
+no such feature; what IS established is that it never closes itself. Across v0.11.0,
+v0.11.1 and v0.12.0 every one sat In Progress until a human noticed — 21h, 1d19h, 2d11h.
+Closing it is this skill's job.
+
+Find it by version and confirm it is the right one — its attachment URL must be the
+release PR `prepare` reported — then transition it:
+
+- `list_issues` with `query: "<version> manifests"`, then check the attachment matches
+  `prUrl`.
+- `save_issue` with that id and `state: "Done"`.
+
+The version gate already authorized this; do not prompt. If no such issue exists, say so
+and stop — do not close anything whose attachment is not the release PR. Skip this step
+entirely on a dry run, which opens no PR for Linear to see.
+
 ---
 
 ## Guardrails
@@ -283,6 +305,7 @@ git switch trunk && git pull --ff-only
   authorizes the entire remainder: `prepare --yes`, merging the PR
   (`gh pr merge --squash`), and `finalize --yes`, with no further prompts. A dry run skips
   `--yes` entirely and merges nothing. Stop only on a script or `gh` error.
+- Linear's auto-created release ticket is closed by Phase 2 step 3, never left open.
 - The script is safe to re-run after a partial failure — it detects an existing branch,
   PR, tag, or release and resumes or no-ops. If a run is interrupted, just invoke
   `/release-caret` again.
