@@ -297,7 +297,8 @@ test("picking a heading leaves the bar instead of parking a focus ring on the cr
   await page.locator(CRUMB).last().click();
   const menu = page.locator(MENU);
   await expect(menu).toBeVisible();
-  await menu.getByRole("menuitem", { name: "Delta" }).press("Enter");
+  await menu.getByRole("menuitem", { name: "Delta" }).focus();
+  await page.keyboard.press("Enter");
 
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Delta"]);
   await expect(menu).toHaveCount(0);

@@ -710,7 +710,8 @@ test("dismissing the composer clears the line-selection highlight", async ({ dae
 
   // Two-stage Escape: the first blurs the field into the card, the second
   // dismisses the (empty) composer.
-  await composerInput(composer).press("Escape");
+  await composerInput(composer).focus();
+  await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
   await expect(composer).toHaveCount(0);
 
@@ -1375,7 +1376,8 @@ test("dismissing an empty composer with Escape leaves no residue", async ({ daem
   await expect(composer).toBeVisible();
   // Two-stage Escape: the first blurs into the card, the second dismisses. An
   // empty box has nothing to keep, so dismissing leaves no residue.
-  await composerInput(composer).press("Escape");
+  await composerInput(composer).focus();
+  await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
 
   // The composer is gone, no scratch marker appears, and nothing was persisted.

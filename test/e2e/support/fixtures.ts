@@ -336,7 +336,148 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
   baseURL: async ({ daemon }, use) => {
     await use(daemon.url);
   },
+
+  // Wait out the keyboard handover before the first key of each navigation.
+  //
+  // Wrapping the keyboard rather than exporting a helper for specs to call,
+  // because the hazard is invisible at the call site and easy to forget: a
+  // dropped key raises nothing, and the spec fails later on whatever the
+  // keystroke should have produced. It equally cannot live in `planSurface` —
+  // three specs never call it, and `plan-breadcrumbs` is one of them while
+  // driving `j`/`k`/Tab throughout.
+  //
+  // Waiting HERE rather than in `goto` is what keeps it cheap. Nearly every
+  // navigation lands on a renderer that is not yet taking keys, but only ten of
+  // the fifty specs ever press one, and the rest would pay the whole handover to
+  // click and read. Deferring it to the first keystroke moved the suite from
+  // 4.9m back to its 2.3m baseline while covering 441 of the 444 key presses in
+  // it; the three that go through `locator.press` instead are written as
+  // `focus()` + `page.keyboard.press` so they come through here too.
+  page: async ({ page }, use) => {
+    let ready = false;
+    // Any main-frame navigation lands on a renderer whose keyboard has to be
+    // re-proven. Sub-frame navigations are irrelevant and must not reset it.
+    page.on("framenavigated", (frame) => {
+      if (frame === page.mainFrame()) ready = false;
+    });
+
+    const kb = page.keyboard;
+    const raw = {
+      press: kb.press.bind(kb),
+      type: kb.type.bind(kb),
+      down: kb.down.bind(kb),
+      up: kb.up.bind(kb),
+    };
+    const ensure = async () => {
+      if (ready) return;
+      // The probe presses through `raw.press`; going through the wrapper would
+      // recurse into this same check.
+      await awaitKeyboardReady(page, raw.press);
+      ready = true;
+    };
+
+    kb.press = async (key, options) => {
+      await ensure();
+      return raw.press(key, options);
+    };
+    kb.type = async (text, options) => {
+      await ensure();
+      return raw.type(text, options);
+    };
+    kb.down = async (key) => {
+      await ensure();
+      return raw.down(key);
+    };
+    kb.up = async (key) => {
+      await ensure();
+      return raw.up(key);
+    };
+
+    await use(page);
+  },
 });
+
+/**
+ * Resolve once this page's renderer actually receives key events.
+ *
+ * Playwright gives each test a fresh browser context, but Chromium tears the
+ * previous one down asynchronously and the OUTGOING renderer keeps keyboard
+ * focus while it does. Key events dispatched into that window reach nothing at
+ * all: `window`, `document` and element-level capture listeners all count zero,
+ * and so does a raw CDP `Input.dispatchKeyEvent` issued outside Playwright —
+ * while `Input.insertText` on the same page still inserts. The page is live and
+ * its `activeElement` is correct; only key ROUTING is dead, and it comes back on
+ * its own once the previous renderer is gone.
+ *
+ * What poisons a renderer is a preceding test having focused a CodeMirror
+ * editor. Plain navigation never does it — three consecutive loads still type
+ * fine. That is also why this looked like flakiness rather than a bug: a spec
+ * that never presses a key cannot notice, so the failure lands on whichever
+ * key-driven test happens to follow another one in the same worker, and
+ * `fullyParallel` reshuffles that with host load. A different unrelated spec
+ * goes red on each full-gate run and every one of them passes in isolation.
+ * Under `--workers=1` — which `CARET_E2E_WORKERS` exists to allow on a
+ * constrained host — it stops being intermittent and fails every run.
+ *
+ * This runs on the blank page each test opens on, BEFORE the app is loaded,
+ * because the condition is a property of the renderer rather than of any
+ * document: clearing it up front means no spec has to know the hazard exists.
+ * It is a wait, not a remedy — reload, `about:blank`, blurring, unmounting the
+ * editor, `bringToFront`, re-enabling focus emulation, the old headless shell
+ * and disabling renderer-process reuse were all tried and none of them shortens
+ * it; only the outgoing renderer going away does.
+ *
+ * Probed rather than slept through (browser-testing.md § waiting on a condition,
+ * not a clock). `Shift` is the probe because it produces no text and matches
+ * none of the chrome's single-key shortcuts, so pressing it against whatever
+ * holds focus changes nothing; the poll returns on the first press that lands,
+ * which on a healthy renderer is the first attempt.
+ *
+ * It is still a REAL keydown, which the safe-mode guard would eat like any other
+ * if it landed inside that guard's 300ms grace window (`ui/src/lib/safeMode.ts`
+ * exempts no key, modifiers included). It does not in practice — a spec has spent
+ * well past 300ms loading the plan before it presses anything, which is the same
+ * reason `waitPastSafeModeGrace` is needed only by specs that race the window on
+ * purpose. `safe-mode.e2e.ts` is the one spec that opens a grace window
+ * deliberately, and it warms the keyboard before doing so rather than letting
+ * this probe be the keystroke its guard sees.
+ */
+export async function awaitKeyboardReady(
+  page: Page,
+  press: (key: string) => Promise<void>,
+): Promise<void> {
+  // A tight loop rather than `toPass`, whose backoff climbs to a second and more
+  // between attempts — far past the handover, which clears in the low hundreds of
+  // milliseconds. Each attempt already costs three round trips, so the loop paces
+  // itself; the sleep only keeps a wedged renderer from spinning.
+  const deadline = Date.now() + 20_000;
+  for (;;) {
+    await page.evaluate(() => {
+      const probe = window as unknown as { __keyProbe: number };
+      probe.__keyProbe = 0;
+      window.addEventListener(
+        "keydown",
+        () => {
+          probe.__keyProbe += 1;
+        },
+        { capture: true, once: true },
+      );
+    });
+    await press("Shift");
+    const landed = await page.evaluate(
+      () => (window as unknown as { __keyProbe: number }).__keyProbe,
+    );
+    if (landed > 0) return;
+    if (Date.now() > deadline) {
+      throw new Error(
+        "caret e2e: this page never began receiving key events. Every keystroke the " +
+          "spec goes on to send would be dropped silently, so the run stops here " +
+          "rather than failing later on whatever the typing should have produced.",
+      );
+    }
+    await sleep(25);
+  }
+}
 
 /**
  * Wait until the safe-mode grace window that opened at app mount has passed.
