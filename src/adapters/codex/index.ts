@@ -69,4 +69,11 @@ export const codexAdapter: AgentAdapter = {
   listSkills(): Promise<SkillRef[]> {
     return Promise.resolve([]);
   },
+
+  // Nothing enumerated is nothing to describe: the `/` list is empty here, so no
+  // name can reach this, and null is what the panel would show anyway. Filling
+  // both in is this module's business alone, not the UI's.
+  readSkillDescription(): Promise<string | null> {
+    return Promise.resolve(null);
+  },
 };

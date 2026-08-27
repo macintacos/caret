@@ -14,6 +14,7 @@ import type {
   HealthIdentity,
   PersistedScratch,
   ResolveBody,
+  SkillDescriptionResponse,
   SkillRef,
 } from "@core/lib/types";
 import { shortId, uiLog } from "$lib/log.ts";
@@ -214,6 +215,38 @@ export async function getSkills(id: string): Promise<SkillRef[] | null> {
       return [];
     }
     uiLog.warn("request", `skills fetch failed: ${shortId(id)}`, {
+      reviewId: id,
+      reason: String(err),
+    });
+    return null;
+  }
+}
+
+/** What one skill the reviewer highlighted in the `/` list actually does, for the
+ * Ctrl+Space preview panel (EXC-1186). `skill` is that row handed straight back,
+ * whole — the origin is what says which skill is meant, since two roots may offer
+ * the same bare name and the list deliberately shows both.
+ *
+ * Null covers both "this skill describes itself nowhere" and every failure,
+ * because the panel has one thing to render either way. Non-essential in exactly
+ * the way `searchFiles` is: nothing throws, so the list keeps working when the
+ * read does not — a 404 from a daemon that wires no such capability included.
+ *
+ * `debug` rather than `warn`, and for the same reason `searchFiles` is: this
+ * fires once per highlighted row, so a `warn` per arrow key is the per-iteration
+ * noise logging-rules.md forbids. A description that simply is not there is not a
+ * failure at all and is logged nowhere. */
+export async function getSkillDescription(id: string, skill: SkillRef): Promise<string | null> {
+  const params = new URLSearchParams({ name: skill.name, origin: skill.origin });
+  try {
+    const body = await json<SkillDescriptionResponse>(
+      await fetch(`/api/reviews/${encodeURIComponent(id)}/skill-description?${params}`),
+    );
+    // Defensive against a 2xx whose body is missing the field, for the same
+    // reason `searchFiles` is: the caller renders this straight into the panel.
+    return body.description ?? null;
+  } catch (err) {
+    uiLog.debug("request", `skill description read failed: ${shortId(id)}`, {
       reviewId: id,
       reason: String(err),
     });

@@ -42,6 +42,7 @@ import {
   type PlanInput,
   type ResolveBody,
   type RouteResult,
+  type SkillDescriptionResponse,
   type SkillRef,
   toClientReview,
 } from "@/lib/types.ts";
@@ -124,6 +125,14 @@ export interface CreateServerOptions {
    * deliberately leaves it unwired rather than enumerating the developer's own
    * skills. runDaemon wires the active adapter's `listSkills`. */
   listSkills?: (cwd: string) => Promise<SkillRef[]>;
+  /** Read one enumerated skill's own description, served by
+   * GET /api/reviews/:id/skill-description (EXC-1186) so the `/` completion's
+   * preview panel can say what the highlighted name does. A second capability
+   * beside `listSkills` rather than a field on it: the list names skills, this
+   * opens one. Omitted (default) → the route 404s, and the e2e fixture daemon
+   * leaves it unwired for the reason it leaves `listSkills` unwired. runDaemon
+   * wires the active adapter's `readSkillDescription`. */
+  readSkillDescription?: (cwd: string, skill: SkillRef) => Promise<string | null>;
   /** A thunk returning the daemon self-diagnostics served by GET /api/diagnostics
    * (EXC-842): system/runtime identity, uptime, the live parsed settings, and the
    * config path + env overrides. Omitted (default) → the route 404s, so existing
@@ -171,6 +180,7 @@ interface ResolvedOptions {
   approveVariants: readonly ApproveVariant[] | undefined;
   source: string | undefined;
   listSkills: ((cwd: string) => Promise<SkillRef[]>) | undefined;
+  readSkillDescription: ((cwd: string, skill: SkillRef) => Promise<string | null>) | undefined;
   diagnostics: (() => DaemonDiagnostics) | undefined;
   markPaneRead: (pane: CmuxPane) => void;
   log: CaretLogger;
@@ -193,6 +203,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     approveVariants: opts.approveVariants,
     source: opts.source,
     listSkills: opts.listSkills,
+    readSkillDescription: opts.readSkillDescription,
     diagnostics: opts.diagnostics,
     markPaneRead: opts.markPaneRead ?? ((pane) => clearCmuxMark(pane, { log: opts.log })),
     log: opts.log ?? noopLogger,
@@ -201,18 +212,22 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
 
 // A request matched to one of the :id sub-routes, with the review id decoded and
 // the optional sub-path (/decision, /resolve, /draft, /expire, /seen, /file-refs,
-// /file-search, /file, /dir, /skills) split out. The trailing `$` is what keeps
-// /file from swallowing the /file-refs and /file-search prefixes: a /file match
-// cannot then reach end-of-input, so the engine backtracks into the longer
-// alternative. The order the literals appear in is therefore NOT load-bearing — a
-// route added in the wrong place still matches.
+// /file-search, /file, /dir, /skills, /skill-description) split out. The trailing
+// `$` is what keeps /file from swallowing the /file-refs and /file-search
+// prefixes: a /file match cannot then reach end-of-input, so the engine
+// backtracks into the longer alternative. The order the literals appear in is
+// therefore NOT load-bearing — a route added in the wrong place still matches,
+// which is why /skill-description sits after /skills rather than being wedged in
+// ahead of it. (Those two do not collide anyway — /skills needs an `s` where
+// /skill-description has a `-` — but relying on that would make the next such
+// pair a trap.)
 interface IdRoute {
   id: string;
   sub: string | undefined;
 }
 
 const ID_ROUTE_RE =
-  /^\/api\/reviews\/([^/]+)(\/decision|\/resolve|\/draft|\/expire|\/seen|\/file-refs|\/file-search|\/file|\/dir|\/skills)?$/;
+  /^\/api\/reviews\/([^/]+)(\/decision|\/resolve|\/draft|\/expire|\/seen|\/file-refs|\/file-search|\/file|\/dir|\/skills|\/skill-description)?$/;
 
 /** Match an /api/reviews/:id[/sub] path, decoding the id; null for any other path. */
 function matchIdRoute(path: string): IdRoute | null {
@@ -609,6 +624,38 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return Response.json(skills);
   }
 
+  // GET /api/reviews/:id/skill-description?name=&origin= — what one skill the
+  // reviewer highlighted in the `/` list actually does, for the Ctrl+Space
+  // preview panel (EXC-1186). A second route beside /skills rather than a field
+  // on it: the list names skills, this opens one, so a `/` keystroke never pays
+  // to read every skill's file.
+  //
+  // The two query parameters are a row of /skills handed straight back, and the
+  // handler puts them back together as the `SkillRef` the adapter takes — the
+  // origin is what says WHICH skill is meant, since two roots may offer the same
+  // bare name and the list deliberately shows both. A row that never arrived is
+  // two empty strings, which no root answers to and the adapter reports as null.
+  //
+  // Reading is the adapter's, so this is a
+  // thin pass-through of an injected capability, 404 when none is wired, exactly
+  // as /skills is. A skill with no description is a 200 carrying null: the panel
+  // renders that, and a 404 would make it read as a missing route instead.
+  //
+  // Neither the name nor the description reaches the log: both are the reviewer's
+  // own configuration, and a description is prose someone wrote.
+  async function handleSkillDescription(req: Request, id: string): Promise<Response> {
+    if (!cfg.readSkillDescription) return notFound();
+    const r = store.get(id);
+    if (!r) return notFound();
+    const params = new URL(req.url).searchParams;
+    const description = await cfg.readSkillDescription(r.cwd, {
+      name: params.get("name") ?? "",
+      origin: params.get("origin") ?? "",
+    });
+    log.debug("request", "skill description read", { reviewId: id, found: description !== null });
+    return Response.json({ description } satisfies SkillDescriptionResponse);
+  }
+
   // POST /api/reviews/:id/file-search — which files under this review's cwd
   // match what the reviewer has typed after an `@` in a feedback editor
   // (EXC-1175). The browser holds no filesystem, so the search happens here, and
@@ -826,6 +873,9 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       if (method === "GET" && sub === "/file") return handleFileExcerpt(req, id);
       if (method === "GET" && sub === "/dir") return handleDirListing(req, id);
       if (method === "GET" && sub === "/skills") return handleSkills(id);
+      if (method === "GET" && sub === "/skill-description") {
+        return handleSkillDescription(req, id);
+      }
       if (method === "POST" && sub === "/file-refs") return handleFileRefs(req, id);
       if (method === "POST" && sub === "/file-search") return handleFileSearch(req, id);
       if (method === "GET" && sub === "/decision") return handleDecision(id);

@@ -144,9 +144,11 @@ describe("Escape with a live completion list", () => {
   });
 
   test("an open list claims Enter ahead of the default keymap's newline", async () => {
-    // The one thing autocomplete's stock `Prec.highest` keymap buys, and the reason
-    // it is kept rather than rebound at a lower precedence: without it, Enter would
-    // reach defaultKeymap's insertNewlineAndIndent and split the line instead.
+    // What the `Prec.highest` completion keymaps buy, and the reason they sit
+    // there rather than at a lower precedence: without them, Enter would reach
+    // defaultKeymap's insertNewlineAndIndent and split the line instead.
+    // The trailing space is caret's own (editorCompletion.ts) — a citation is a
+    // word in a sentence, so Enter leaves the cursor ready for the next one.
     const source: CompletionSource = async (ctx) => ({
       from: ctx.state.doc.toString().lastIndexOf("@") + 1,
       options: [{ label: "alpha.ts" }],
@@ -160,7 +162,7 @@ describe("Escape with a live completion list", () => {
       view.contentDOM.dispatchEvent(
         new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
       );
-      expect(view.state.doc.toString()).toBe("@alpha.ts");
+      expect(view.state.doc.toString()).toBe("@alpha.ts ");
     } finally {
       dispose();
     }
@@ -264,6 +266,20 @@ describe("reference chips", () => {
       editor.timers.fire();
       await drain();
       expect(editor.chips()).toEqual(["src/a.ts"]);
+    } finally {
+      editor.dispose();
+    }
+  });
+
+  test("the `@` the completion inserted is inside the chip, not beside it", async () => {
+    // What the `@` source actually leaves behind is `@src/a.ts` (fileCompletion.ts
+    // § apply), so this is the shape a completed reference has in the composer —
+    // and the sigil belongs to the reference, not to the prose around it.
+    const editor = mountChips("rework @src/a.ts today", ["src/a.ts"]);
+    try {
+      editor.timers.fire();
+      await drain();
+      expect(editor.chips()).toEqual(["@src/a.ts"]);
     } finally {
       editor.dispose();
     }

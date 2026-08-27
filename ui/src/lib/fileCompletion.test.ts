@@ -1,11 +1,20 @@
+import "@ui/test-setup.ts";
 import { describe, expect, test } from "bun:test";
 
 import { CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
 import { EditorState } from "@codemirror/state";
 
-import type { FileSearchResponse } from "@core/lib/types";
+import type { FileExcerpt, FileSearchResponse } from "@core/lib/types";
+import { drainMicrotasks } from "@ui/test-helpers.ts";
+import { HttpError } from "$lib/api.ts";
+import type { PreviewableCompletion, RowPreview } from "$lib/completionPreview.ts";
 import type { ReviewContext } from "$lib/editorCompletion.ts";
-import { createFileCompletion, type SearchFiles, subsequenceRanges } from "$lib/fileCompletion.ts";
+import {
+  createFileCompletion,
+  type GetFileExcerpt,
+  type SearchFiles,
+  subsequenceRanges,
+} from "$lib/fileCompletion.ts";
 
 // The `@` file-reference source (EXC-1175). Everything it decides is pure —
 // whether the text before the cursor is a trigger, what query that trigger
@@ -58,13 +67,16 @@ describe("createFileCompletion", () => {
     expect(seen.map((s) => s.reviewId)).toEqual(["rev-1", "rev-2"]);
   });
 
-  test("the completed range starts at the @, so choosing a row replaces the trigger", async () => {
+  test("the completed range starts at the @, and the @ is put back with the path", async () => {
     const search = fakeSearch([], { paths: ["src/app.ts"], stoppedAt: null });
     const result = await complete("see @srlb", search);
     expect(result?.from).toBe("see ".length);
-    // Nothing overrides `apply`: CodeMirror replaces the whole completed range
-    // with the label, which is what carries the `@` away with the query.
-    expect(result?.options.every((o) => o.apply === undefined)).toBe(true);
+    // The label stays the bare path — that is what the list reads as — while
+    // `apply` writes the reference the reviewer is composing, trigger and all. The
+    // completed range covers the typed `@`, so this replaces it rather than
+    // landing a second one in front of it.
+    expect(result?.options.map((o) => o.apply)).toEqual(["@src/app.ts"]);
+    expect(result?.options.map((o) => o.label)).toEqual(["src/app.ts"]);
   });
 
   test("the daemon is the only thing that decides a match", async () => {
@@ -213,5 +225,292 @@ describe("subsequenceRanges", () => {
       expect(from).toBeLessThan(to);
       expect(to).toBeLessThanOrEqual(label.length);
     }
+  });
+});
+
+// A `:line` after the filename (EXC-1186). `classify` — the codebase's one
+// definition of "path-shaped" — splits it, so what the daemon is asked for and
+// what the reviewer sees emphasised are both the path half, and the line rides
+// along into what gets inserted.
+describe("a cited line", () => {
+  const found = (path: string) => fakeSearch([], { paths: [path], stoppedAt: null });
+
+  test("the daemon is asked for the path half", async () => {
+    const seen: Array<{ reviewId: string; query: string }> = [];
+    await complete("@src/app.ts:42", fakeSearch(seen));
+    expect(seen).toEqual([{ reviewId: "rev-1", query: "src/app.ts" }]);
+  });
+
+  test("a query citing no line reaches the daemon as typed", async () => {
+    const seen: Array<{ reviewId: string; query: string }> = [];
+    await complete("@src/app", fakeSearch(seen));
+    expect(seen).toEqual([{ reviewId: "rev-1", query: "src/app" }]);
+  });
+
+  test("a half-typed citation still asks for the path half", async () => {
+    // The keystrokes between the colon and the number it belongs to sit on this
+    // feature's own happy path. Sent as typed, the daemon would be asked for a `:`
+    // no path carries, find nothing, and the list would vanish and come back.
+    const seen: Array<{ reviewId: string; query: string }> = [];
+    await complete("@src/app.ts:", fakeSearch(seen));
+    expect(seen).toEqual([{ reviewId: "rev-1", query: "src/app.ts" }]);
+  });
+
+  test("every spelling of a half-typed citation is trimmed the same way", async () => {
+    const asked: string[] = [];
+    for (const typed of ["@src/app.ts:L", "@src/app.ts#", "@src/app.ts#L", "@src/app.ts:42-"]) {
+      const seen: Array<{ reviewId: string; query: string }> = [];
+      await complete(typed, fakeSearch(seen));
+      asked.push(seen[0]?.query ?? "");
+    }
+    expect(asked).toEqual(["src/app.ts", "src/app.ts", "src/app.ts", "src/app.ts"]);
+  });
+
+  test("a half-typed citation cites no line, so the row inserts the bare path", async () => {
+    // The trailing `:` sits inside the replaced range, so choosing here lands
+    // `@src/app.ts` rather than a path with a dangling colon on it.
+    const result = await complete("@src/app.ts:", found("src/app.ts"));
+    expect(result?.options[0]?.label).toBe("src/app.ts");
+    expect(result?.options[0]?.apply).toBe("@src/app.ts");
+  });
+
+  test("a query that is not path-shaped at all is searched as typed", async () => {
+    // `classify` refuses a run with no letter in its last segment. It is still a
+    // legitimate thing to search for — the daemon matches by subsequence.
+    const seen: Array<{ reviewId: string; query: string }> = [];
+    await complete("@42", fakeSearch(seen));
+    expect(seen).toEqual([{ reviewId: "rev-1", query: "42" }]);
+  });
+
+  test("the row reads as a bare path and inserts the line with it", async () => {
+    const result = await complete("@src/app.ts:42", found("src/app.ts"));
+    expect(result?.options[0]?.label).toBe("src/app.ts");
+    expect(result?.options[0]?.apply).toBe("@src/app.ts:42");
+  });
+
+  test("the #L spelling cites the same line", async () => {
+    // One definition of the suffix, so what a plan writes and what a reviewer
+    // types are read the same way.
+    const result = await complete("@src/app.ts#L42", found("src/app.ts"));
+    expect(result?.options[0]?.apply).toBe("@src/app.ts:42");
+  });
+
+  test("a cited range keeps both its ends", async () => {
+    const result = await complete("@src/app.ts:42-50", found("src/app.ts"));
+    expect(result?.options[0]?.apply).toBe("@src/app.ts:42-50");
+  });
+
+  test("the emphasis is read off the path half too", async () => {
+    // Without the split, `getMatch` would be handed "srap:42" — a query the label
+    // does not carry in order — and the row would render with no emphasis at all.
+    const result = await complete("@srap:42", found("src/app.ts"));
+    const option = result?.options[0];
+    if (option === undefined) throw new Error("expected a row to read the ranges off");
+    const ranges = result?.getMatch?.(option) ?? [];
+    const emphasised: string[] = [];
+    for (let i = 0; i < ranges.length; i += 2)
+      emphasised.push("src/app.ts".slice(ranges[i], ranges[i + 1]));
+    expect(emphasised).toEqual(["sr", "ap"]);
+  });
+});
+
+// The Ctrl+Space preview panel (EXC-1186). Everything the source decides about it
+// is still pure — whether a row carries an `info` at all, what window it asks the
+// daemon for, and what the panel says when the read fails — so the same bare
+// EditorState drives it. What the panel LOOKS like beside the list is CSS, and
+// that a keypress opens it at all is real-browser behaviour in the e2e spec.
+describe("the preview panel", () => {
+  const LINES = Array.from({ length: 20 }, (_, i) => `line ${33 + i}`);
+  const EXCERPT: FileExcerpt = {
+    path: "src/app.ts",
+    language: "typescript",
+    startLine: 33,
+    endLine: 52,
+    lines: LINES,
+    totalLines: 900,
+  };
+
+  interface ExcerptCall {
+    reviewId: string;
+    path: string;
+    line?: number;
+    range?: { start: number; end: number };
+  }
+
+  /** An excerpt read that records what it was asked and answers with `respond`. */
+  function fakeExcerpt(seen: ExcerptCall[], respond: () => Promise<FileExcerpt>): GetFileExcerpt {
+    return (reviewId, path, line, range) => {
+      seen.push({ reviewId, path, line, range });
+      return respond();
+    };
+  }
+
+  /** Run the source over `doc`. The preview toggle never reaches a source: every
+   * row carries its preview, and whether one is DRAWN is the panel's decision at
+   * render time (completionPreview.ts). */
+  function completePreviewing(
+    doc: string,
+    excerpt: GetFileExcerpt,
+    paths: string[] = ["src/app.ts"],
+  ): Promise<CompletionResult | null> {
+    const search = fakeSearch([], { paths, stoppedAt: null });
+    const state = EditorState.create({ doc });
+    const source = createFileCompletion(search, excerpt)(REVIEW);
+    return Promise.resolve(source(new CompletionContext(state, doc.length, false)));
+  }
+
+  /** The preview a row carries. */
+  function previewOf(result: CompletionResult | null, at = 0): RowPreview {
+    const option = result?.options[at] as PreviewableCompletion | undefined;
+    if (option?.preview === undefined) throw new Error("expected the row to carry a preview");
+    return option.preview;
+  }
+
+  /** Fill a throwaway body from the first row's preview, and let the read it
+   * started settle. The panel owns the real body — and stages this one for it —
+   * so what the source decides is what goes into one. */
+  async function bodyFor(result: CompletionResult | null): Promise<HTMLElement> {
+    const body = document.createElement("div");
+    await previewOf(result).fill(body, new AbortController().signal);
+    await drainMicrotasks();
+    return body;
+  }
+
+  test("nothing is read until the panel asks — a query alone touches no file", async () => {
+    // The toggle is not the source's business any more, so the read has to be
+    // deferred to `fill` or every keystroke would fetch an excerpt per row.
+    const seen: ExcerptCall[] = [];
+    const result = await completePreviewing(
+      "@src/app",
+      fakeExcerpt(seen, () => Promise.resolve(EXCERPT)),
+    );
+    expect(result?.options.every((o) => (o as PreviewableCompletion).preview !== undefined)).toBe(
+      true,
+    );
+    expect(seen).toEqual([]);
+  });
+
+  test("the preview is titled with the file it previews", async () => {
+    const result = await completePreviewing(
+      "@src/app",
+      fakeExcerpt([], () => Promise.resolve(EXCERPT)),
+    );
+    expect(previewOf(result).title).toBe("src/app.ts");
+  });
+
+  test("the key is the path and the cited line, so an unchanged row is not refetched", async () => {
+    // What the panel compares between updates. Two rows of one query differ by
+    // path; the same row across a narrowing query does not, which is what keeps the
+    // lines on screen instead of blanking per keystroke.
+    const excerpt = fakeExcerpt([], () => Promise.resolve(EXCERPT));
+    const twoRows = await completePreviewing("@src", excerpt, ["src/app.ts", "src/lib.ts"]);
+    expect(previewOf(twoRows, 0).key).not.toBe(previewOf(twoRows, 1).key);
+    const narrowed = await completePreviewing("@src/ap", excerpt);
+    expect(previewOf(narrowed).key).toBe(previewOf(twoRows, 0).key);
+  });
+
+  test("citing a different line changes the key, so the panel moves", async () => {
+    const excerpt = fakeExcerpt([], () => Promise.resolve(EXCERPT));
+    const at42 = await completePreviewing("@src/app.ts:42", excerpt);
+    const at43 = await completePreviewing("@src/app.ts:43", excerpt);
+    expect(previewOf(at42).key).not.toBe(previewOf(at43).key);
+  });
+
+  test("with no line cited it asks for the file's head", async () => {
+    const seen: ExcerptCall[] = [];
+    await bodyFor(
+      await completePreviewing(
+        "@src/app",
+        fakeExcerpt(seen, () => Promise.resolve(EXCERPT)),
+      ),
+    );
+    expect(seen).toEqual([
+      { reviewId: "rev-1", path: "src/app.ts", line: undefined, range: { start: 1, end: 20 } },
+    ]);
+  });
+
+  test("a cited line moves the panel onto it", async () => {
+    const seen: ExcerptCall[] = [];
+    await bodyFor(
+      await completePreviewing(
+        "@src/app.ts:42",
+        fakeExcerpt(seen, () => Promise.resolve(EXCERPT)),
+      ),
+    );
+    expect(seen[0]?.range).toEqual({ start: 33, end: 52 });
+  });
+
+  test("a line near the head never asks for a line before the first", async () => {
+    const seen: ExcerptCall[] = [];
+    await bodyFor(
+      await completePreviewing(
+        "@src/app.ts:3",
+        fakeExcerpt(seen, () => Promise.resolve(EXCERPT)),
+      ),
+    );
+    expect(seen[0]?.range).toEqual({ start: 1, end: 13 });
+  });
+
+  test("the body fills with numbered lines, the cited one marked", async () => {
+    const body = await bodyFor(
+      await completePreviewing(
+        "@src/app.ts:42",
+        fakeExcerpt([], () => Promise.resolve(EXCERPT)),
+      ),
+    );
+    expect(body.querySelectorAll(".caret-preview-line")).toHaveLength(20);
+    const marked = [...body.querySelectorAll(".caret-preview-marked")];
+    expect(marked).toHaveLength(1);
+    expect(marked[0]?.textContent).toBe("42line 42");
+  });
+
+  test("a file too large to preview says so, and the list keeps working", async () => {
+    const result = await completePreviewing(
+      "@src/app",
+      fakeExcerpt([], () => Promise.reject(new HttpError(413))),
+    );
+    const body = await bodyFor(result);
+    expect(body.textContent).toContain("too large");
+    expect(result?.options.map((o) => o.label)).toEqual(["src/app.ts"]);
+  });
+
+  test("any other refusal says it could not be read", async () => {
+    const body = await bodyFor(
+      await completePreviewing(
+        "@src/app",
+        fakeExcerpt([], () => Promise.reject(new HttpError(404))),
+      ),
+    );
+    expect(body.textContent).toContain("could not be read");
+    expect(body.textContent).not.toContain("too large");
+  });
+
+  test("a daemon that never answered says the same thing", async () => {
+    // Not an HttpError at all — the request never reached a status.
+    const body = await bodyFor(
+      await completePreviewing(
+        "@src/app",
+        fakeExcerpt([], () => Promise.reject(new TypeError("Failed to fetch"))),
+      ),
+    );
+    expect(body.textContent).toContain("could not be read");
+  });
+
+  test("arrowing off a row before its lines land writes nothing into the body", async () => {
+    // The panel aborts a row's read when the selection moves on; the read it
+    // started is already in flight, and the body it would fill is off screen.
+    let land = (_: FileExcerpt) => {};
+    const result = await completePreviewing(
+      "@src/app",
+      fakeExcerpt([], () => new Promise<FileExcerpt>((resolve) => (land = resolve))),
+    );
+    const body = document.createElement("div");
+    const controller = new AbortController();
+    const filling = previewOf(result).fill(body, controller.signal);
+    controller.abort();
+    land(EXCERPT);
+    await filling;
+    await drainMicrotasks();
+    expect(body.querySelectorAll(".caret-preview-line")).toHaveLength(0);
   });
 });

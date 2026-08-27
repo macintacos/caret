@@ -943,6 +943,7 @@ describe("read-confidentiality posture", () => {
     await boot({
       heartbeatMs: 30,
       listSkills: async () => [{ name: "git", origin: "user" }],
+      readSkillDescription: async () => "a description",
       diagnostics: () => ({
         system: { platform: "linux", arch: "x64", runtime: "bun 1.3.14" },
         uptimeMs: 0,
@@ -971,6 +972,10 @@ describe("read-confidentiality posture", () => {
           }),
       ],
       ["GET /api/reviews/:id/skills", () => fetch(`${base}/api/reviews/${id}/skills`)],
+      [
+        "GET /api/reviews/:id/skill-description",
+        () => fetch(`${base}/api/reviews/${id}/skill-description?name=git&origin=user`),
+      ],
       ["GET /api/prefs", () => fetch(`${base}/api/prefs`)],
       ["GET /api/diagnostics", () => fetch(`${base}/api/diagnostics`)],
       ["GET / (index)", () => fetch(`${base}/`)],

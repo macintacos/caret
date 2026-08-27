@@ -6,7 +6,7 @@ import type { AgentAdapter, InstallProbe } from "@/adapters/adapter.ts";
 import { APPROVE_VARIANTS } from "@/adapters/claude/approve.ts";
 import { fatalDenyLine, toHookOutput } from "@/adapters/claude/feedback.ts";
 import { readClaudeInstallState } from "@/adapters/claude/install.ts";
-import { readClaudeSkills } from "@/adapters/claude/skills.ts";
+import { readClaudeSkillDescription, readClaudeSkills } from "@/adapters/claude/skills.ts";
 import type { Decision, PlanInput, SkillRef } from "@/lib/types.ts";
 
 /** The shape of the PermissionRequest/ExitPlanMode hook stdin Claude Code pipes
@@ -68,5 +68,9 @@ export const claudeAdapter: AgentAdapter = {
 
   listSkills(cwd: string): Promise<SkillRef[]> {
     return readClaudeSkills(cwd);
+  },
+
+  readSkillDescription(cwd: string, skill: SkillRef): Promise<string | null> {
+    return readClaudeSkillDescription(cwd, skill);
   },
 };

@@ -29,6 +29,7 @@ import {
 import { tags } from "@lezer/highlight";
 
 import {
+  completionListOpen,
   type ReviewCompletionSource,
   type ReviewContext,
   reviewCompletion,
@@ -139,12 +140,15 @@ const codeBlockLine = Decoration.line({ class: "cm-md-codeblock" });
 const codeBlockOpen = Decoration.line({ class: "cm-md-codeblock cm-md-codeblock-open" });
 const codeBlockClose = Decoration.line({ class: "cm-md-codeblock cm-md-codeblock-close" });
 
-// A reference caret can actually resolve (EXC-1177), tinted with `--chip-ref` —
-// the same token the rendered plan spends on a resolved path
-// (diffview/coreStyles.ts). One reference reads the same on the side that
-// composes it and the side that renders it, which is the whole point of bringing
-// the treatment across. See `.cm-md-ref` in the theme for the geometry.
-const refChipDeco = Decoration.mark({ class: "cm-md-ref" });
+// A reference caret can actually resolve (EXC-1177). The geometry is shared and
+// lives on `.cm-md-ref` in the theme; the tint is per KIND, because a comment
+// routinely carries both and two identical pills make the reviewer read the text
+// to tell which is which. A path keeps `--chip-ref` — the token the rendered plan
+// already spends on a resolved path (diffview/coreStyles.ts), so one reference
+// reads the same on the side that composes it and the side that renders it — and
+// a skill takes `--chip-skill`, which exists for exactly this pairing.
+const pathChipDeco = Decoration.mark({ class: "cm-md-ref cm-md-ref-path" });
+const skillChipDeco = Decoration.mark({ class: "cm-md-ref cm-md-ref-skill" });
 
 function buildCodeDecorations(view: EditorView): DecorationSet {
   const decos: Range<Decoration>[] = [];
@@ -162,7 +166,7 @@ function buildCodeDecorations(view: EditorView): DecorationSet {
   // font sizes multiply — which reads as two chips that failed to line up rather
   // than as one. The rendered-plan side settles the same collision the same way
   // (svelte-rules.md § CSS-token discipline, on `data-md-cite`).
-  const chipped = new Set(chips.map((token) => `${token.from}:${token.to}`));
+  const chipped = new Map(chips.map((token) => [`${token.from}:${token.to}`, token.kind] as const));
 
   for (const { from, to } of view.visibleRanges) {
     syntaxTree(view.state).iterate({
@@ -189,9 +193,9 @@ function buildCodeDecorations(view: EditorView): DecorationSet {
       },
     });
   }
-  for (const range of chipped) {
+  for (const [range, kind] of chipped) {
     const [from, to] = range.split(":").map(Number) as [number, number];
-    decos.push(refChipDeco.range(from, to));
+    decos.push((kind === "skill" ? skillChipDeco : pathChipDeco).range(from, to));
   }
   return Decoration.set(decos, true);
 }
@@ -261,16 +265,7 @@ const theme = EditorView.theme({
     borderBottomRightRadius: "var(--radius)",
     paddingBottom: "0.2em",
   },
-  // A recognized reference. `--chip-ref` is the content-chip family's reference
-  // member, already spent on a resolved path in the rendered plan
-  // (diffview/coreStyles.ts) — so the composing side and the reading side tint
-  // one reference identically, and theme.test.ts's existing pins on that token
-  // (its hue distance from --chip-link, its saturation floor against
-  // --chip-code) cover this surface for free. It is an alpha tint rather than a
-  // lightness step, which is what lets it read on --paper here and on the code
-  // panel's own ground there. Deliberately NOT the neutral --chip: that token is
-  // declared for chrome controls, and a run of the reviewer's own markdown is
-  // content.
+  // A recognized reference: the geometry both kinds share.
   //
   // Mono at the inline-code pill's own scale, because a reference is an
   // identifier the reviewer is citing — the same reservation every other caret
@@ -279,13 +274,41 @@ const theme = EditorView.theme({
   // element each time the recognized set moves, so there is no from-state to
   // animate out of, and a pill fading in under the cursor mid-sentence is a
   // distraction rather than an affordance.
+  // Roomier than the inline-code pill it sits beside, because a chip carries one
+  // character more than it looks like it does: the `@` the completion inserted is
+  // inside the pill (editorRefs.ts § withSigil), and a sigil pressed against the
+  // fill's left edge reads as a chip that started in the wrong place. The vertical
+  // padding rises with it so the box stays a pill rather than a band; `em` keeps
+  // both proportional to the 0.92em face.
   ".cm-md-ref": {
     fontFamily: "var(--font-mono)",
     fontSize: "0.92em",
     color: "var(--ink)",
+    borderRadius: "4px",
+    padding: "0.12em 0.32em",
+  },
+  // A resolved path. `--chip-ref` is the content-chip family's reference member,
+  // already spent on a resolved path in the rendered plan
+  // (diffview/coreStyles.ts) — so the composing side and the reading side tint
+  // one reference identically, and theme.test.ts's existing pins on that token
+  // (its hue distance from --chip-link, its saturation floor against
+  // --chip-code) cover this surface for free. It is an alpha tint rather than a
+  // lightness step, which is what lets it read on --paper here and on the code
+  // panel's own ground there. Deliberately NOT the neutral --chip: that token is
+  // declared for chrome controls, and a run of the reviewer's own markdown is
+  // content.
+  ".cm-md-ref-path": {
     backgroundColor: "var(--chip-ref)",
-    borderRadius: "3px",
-    padding: "0.05em 0.2em",
+  },
+  // A skill the reviewing agent can reach. Its own tint, because the two kinds
+  // sit side by side in one sentence and a chip's whole job is to say at a glance
+  // what caret made of a run — which it cannot do if `@src/app.ts` and
+  // `/brainstorming` wear the same pill. `--chip-skill` rides the `attention`
+  // hue, the palette's one colour that is neither the accent (selection) nor
+  // semantic (ok/danger), which is what keeps it a full hue-step from the path's
+  // green in every theme; theme.test.ts pins that distance.
+  ".cm-md-ref-skill": {
+    backgroundColor: "var(--chip-skill)",
   },
   // The completion list. @codemirror/autocomplete ships a stock light-mode
   // tooltip: a near-white panel that inherits the editor's own text colour, so
@@ -293,7 +316,8 @@ const theme = EditorView.theme({
   // it from caret's tokens instead, as the small floating chrome it is — raised
   // paper, a hairline rule, chip-scale lift. Reachable from here because the stack
   // configures no `tooltips({ parent })`, so CodeMirror mounts tooltips into
-  // `view.dom` (the same fact `completionListOpen` below relies on).
+  // `view.dom` (the same fact `completionListOpen` in editorCompletion.ts relies
+  // on).
   //
   // Every selector repeats `.cm-tooltip.cm-tooltip-autocomplete`, matching the
   // doubled class the base theme nests its own list rules under. Dropping the
@@ -374,6 +398,26 @@ const theme = EditorView.theme({
     padding: "0.3rem 0.5rem",
     opacity: 1,
   },
+  // That the preview window exists at all (EXC-1186). Same treatment as the
+  // stopped-search header above — receded, prose face, a rule under it — because
+  // it is the same kind of thing: a statement ABOUT the list rather than a row in
+  // it. It sits OUTSIDE the `<ul>`, so it stays put while the rows scroll under it.
+  //
+  // A real element rather than generated content, and that is what lets the chord
+  // wear the chrome's own keycaps: `::before` can draw a sentence but not a
+  // `<kbd>`, so the strip used to be the one shortcut hint in the UI that looked
+  // nothing like the others. completionPreview.ts builds it, from the caps the
+  // shortcut registry holds for `editor.previewCompletion`.
+  ".cm-tooltip.cm-tooltip-autocomplete .caret-completion-hint": {
+    display: "flex",
+    alignItems: "center",
+    gap: "0.25rem",
+    fontFamily: "var(--font-sans)",
+    fontSize: "var(--text-xs)",
+    color: "var(--ink-faint)",
+    borderBottom: "1px solid var(--rule)",
+    padding: "0.3rem 0.5rem",
+  },
 });
 
 /**
@@ -414,26 +458,12 @@ export function cursorInList(state: EditorState): boolean {
   return state.selection.ranges.some((range) => LIST_LINE.test(state.doc.lineAt(range.head).text));
 }
 
-/** Whether a completion list is PAINTED, which is the only thing Escape should
- * key off. Deliberately not `completionStatus(state) === "active"`: while a source
- * re-queries, autocomplete keeps the previous list on screen (dimmed, `disabled`)
- * and reports "pending" for that whole window, so the status test hands Escape to
- * the surrounding dialog with a list still visible — and a source that re-queries
- * per keystroke re-enters that window on every character. No exported accessor
- * distinguishes the two (`currentCompletions` and friends all gate on
- * `!open.disabled`), so the DOM is the ground truth. It is reachable because this
- * stack configures no `tooltips({ parent })`, which leaves CodeMirror mounting
- * tooltips into `view.dom`. */
-function completionListOpen(view: EditorView): boolean {
-  return view.dom.querySelector(".cm-tooltip-autocomplete") !== null;
-}
-
 /** What the editor's chord layer does with a keydown: submit, dismiss an open
  * completion list, cancel the editor, or nothing (leaving the key to the rest of
  * the stack). Escape is the interesting case — a list that is on screen owns it,
  * and the surrounding dialog owns it otherwise. `completionOpen` means *painted*,
- * not "the completion state machine is active"; see `completionListOpen`.
- * Exported for unit tests. */
+ * not "the completion state machine is active"; see `completionListOpen` in
+ * editorCompletion.ts. Exported for unit tests. */
 export function chordAction(
   e: KeyboardEvent,
   completionOpen: boolean,

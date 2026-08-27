@@ -57,6 +57,29 @@ describe("scanRefTokens — what counts as a reference in prose", () => {
     expect(scanned("break at src/a.ts:42")).toEqual([["path:src/a.ts", "src/a.ts:42"]]);
   });
 
+  test("the `@` a reviewer completed with rides inside the chip", () => {
+    // The sigil is part of the reference the reviewer wrote — the `@` source
+    // inserts it (fileCompletion.ts) — so a chip that stops after it leaves the
+    // one character that says "this is a reference" sitting outside the pill.
+    expect(scanned("rework @src/lib/foo.ts today")).toEqual([
+      ["path:src/lib/foo.ts", "@src/lib/foo.ts"],
+    ]);
+  });
+
+  test("the `@` rides in with a cited line too", () => {
+    expect(scanned("break at @src/a.ts:42")).toEqual([["path:src/a.ts", "@src/a.ts:42"]]);
+  });
+
+  test("an `@` mid-word is left where it is", () => {
+    // Only a boundary `@` is the completion's sigil; `someone@host.com` is an
+    // address, and the same test keeps the `@` list from opening over one.
+    expect(scanned("mail someone@host.com now")).toEqual([["path:host.com", "host.com"]]);
+  });
+
+  test("an `@` opening the document still rides in", () => {
+    expect(scanned("@src/a.ts")).toEqual([["path:src/a.ts", "@src/a.ts"]]);
+  });
+
   // Every case above ends its document on the reference itself. A reviewer does
   // not: the most ordinary place to write a path is the end of a sentence, and
   // both token classes admit `.`, so the stop lands inside the run unless it is

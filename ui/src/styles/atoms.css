@@ -1,5 +1,6 @@
 /* Shared chrome atoms — .mono, the floating chip, .metric, .eyebrow, the count
-   chip, and the keycap. @imported by app.css after the base layer. */
+   chip, the keycap, and the completion preview panel. @imported by app.css after
+   the base layer. */
 
 /* ----- Shared atoms ----- */
 .mono {
@@ -139,4 +140,195 @@ button.float-chip[aria-expanded="true"]:not(:disabled) {
 }
 [data-theme="light"] [data-slot="kbd"] {
   background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+/* ----- The completion preview panel (EXC-1186) ----- */
+
+/* The accessory panel Ctrl+Space opens beside an open `@` / `/` completion list,
+   showing what the highlighted row actually is. Global CSS rather than a
+   CodeMirror theme() because lib/completionPreview.ts mounts it in <body>, not in
+   the editor — which is the point of it: two of the three editors that offer
+   completion sit in a dialog whose body scrolls, and `overflow-y: auto` forces
+   the other axis to clip, so a panel inside the list was cut away there entirely.
+   <body> also keeps it clear of the dialog's own centring transform, which would
+   otherwise become the containing block for a fixed child and clip it right back.
+
+   Fixed, and placed in viewport coordinates by the plugin: left/top/max-height
+   and the height are written per frame, so nothing here decides where it goes or
+   how big it is. The width IS decided here — the plugin reads it back to choose a
+   side, so one number governs both. z-index clears the shadcn dialog's own 50:
+   the panel belongs to an editor inside that dialog, so it has to sit over it.
+
+   Same raised paper, hairline rule, radius and chip lift as the completion list
+   beside it, so the two read as one object rather than as a panel from another
+   application. */
+.caret-preview {
+  position: fixed;
+  z-index: 60;
+  /* An open modal sets `pointer-events: none` on <body> to make everything
+     outside it inert, and the property inherits — so a panel mounted there
+     inherits it too, and its body could not be scrolled with a wheel from inside
+     a dialog. This is the dialog's own editor's affordance, not the page behind
+     it, so it opts back in the way the dialog's own content does. */
+  pointer-events: auto;
+  /* Wide enough that a source line of ordinary length arrives whole. A file's
+     lines are `white-space: pre` and never wrap, so every column short of the
+     line's own length is a column the reviewer has to scroll for — the one
+     dimension where the panel being generous costs nothing but the space it
+     takes. The max-width is what a stacked panel needs (placePreview drops it
+     below the list on a window too narrow to hold both side by side), where the
+     viewport rather than the list is what bounds it. */
+  width: 29rem;
+  max-width: calc(100vw - 1rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--paper-raised);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-chip);
+  /* The panel is sized to its content by the plugin, and a row change swaps one
+     answer for another of a different height — so without this it snaps between
+     the two, twice per arrow key (loading bars, then the answer). Height only:
+     the placement is re-decided per frame against a list that may itself have
+     moved, and animating left/top would drag the panel after it. */
+  transition: height 140ms var(--ease-out);
+}
+
+/* What is being previewed: a path, or a `/name`. Mono at the hint strip's own
+   scale — it is an identifier, the same reservation the completion rows
+   themselves make — and receded, because it repeats the row the reviewer is
+   already on. Truncates rather than wrapping, so the panel's height is the
+   answer's business alone. */
+.caret-preview-title {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--rule);
+  padding: 0.3rem 0.5rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The answer. Scrollable in both axes inside whatever height the plugin left it —
+   a source line is not wrapped, so a long one scrolls rather than reflowing the
+   window. Prose by default (a skill's description is prose); `pre-line` keeps the
+   line breaks a `|` block scalar wrote without honouring its indentation. */
+.caret-preview-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.3rem 0.5rem;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+  white-space: pre-line;
+}
+
+/* What the panel says ABOUT the excerpt rather than in it: that the cited line is
+   past the end of the file. Prose, so it keeps the body's face and only steps down
+   in colour — soft enough to read as a caption over the lines, not faint enough to
+   be missed by a reviewer wondering where their line went. */
+.caret-preview-note {
+  margin-bottom: 0.35rem;
+  color: var(--ink-soft);
+}
+
+/* A file's lines are source, so they take the mono face and keep their whitespace
+   exactly. Set on the row rather than left to inherit from the body, which is
+   prose. */
+.caret-preview-line {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: pre;
+}
+
+/* One line's source, and the element shiki's tokens are written into
+   (fileCompletion.ts § paintHighlight) — which is why it is a span of its own
+   rather than a bare text node beside the gutter. It carries no colour: until the
+   grammar lands the line inherits the body's --ink, and after it every token
+   carries shiki's own inline colour from the caret theme in effect. */
+.caret-preview-code {
+  white-space: pre;
+}
+
+/* The placeholder a pending answer sits behind. Three bars of the sunk paper,
+   pulsing — the shape of the text about to replace them, at the widths a first,
+   middle and last line tend to have, so the swap reads as the same block filling
+   in rather than as one thing replacing another.
+
+   The delay is the point of it. Every answer is a round trip, but a warm local
+   daemon returns inside a frame or two, and a spinner that flashes on every
+   arrow key is worse than the blank it replaced. The fade starts a beat in, so a
+   fast answer never shows it at all and only a read the reviewer is actually
+   waiting on ever paints. */
+.caret-preview-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.15rem 0;
+  opacity: 0;
+  animation: caret-preview-wait 1.4s var(--ease-out) 140ms infinite;
+}
+.caret-preview-loading > span {
+  height: 0.55rem;
+  border-radius: 3px;
+  background: var(--paper-sunk);
+}
+.caret-preview-loading > span:first-child {
+  width: 70%;
+}
+.caret-preview-loading > span:nth-child(2) {
+  width: 90%;
+}
+.caret-preview-loading > span:last-child {
+  width: 45%;
+}
+@keyframes caret-preview-wait {
+  0% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.35;
+  }
+}
+
+/* The panel is mounted in <body>, outside both #app and any [data-slot] subtree,
+   so base.css's reduced-motion sweep does not reach it — it needs its own. The
+   bars stay put at full opacity rather than vanishing: they are the only thing
+   saying a read is in flight. */
+@media (prefers-reduced-motion: reduce) {
+  .caret-preview {
+    transition: none;
+  }
+  .caret-preview-loading {
+    opacity: 1;
+    animation: none;
+  }
+}
+
+/* The line the reviewer cited. --accent-wash is the same wash the selected
+   completion row wears, deliberately: "the row you are on" and "the line you asked
+   about" are one gesture answering itself, and the accent itself stays reserved
+   for the wordmark and the primary action. */
+.caret-preview-marked {
+  background: var(--accent-wash);
+}
+
+/* The gutter. Faint and tabular so the numbers form a column the eye skips rather
+   than reads — a supplementary decoration beside a fully legible line, which is
+   what puts it on --ink-faint rather than a step up. */
+.caret-preview-lineno {
+  display: inline-block;
+  min-width: 2.5em;
+  margin-right: 0.6em;
+  text-align: right;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
 }

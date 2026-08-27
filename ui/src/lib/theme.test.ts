@@ -211,6 +211,7 @@ describe("THEMES", () => {
       "--chip-code": "#9a8c7e24",
       "--chip-link": "#ffb27724",
       "--chip-ref": "#4ed05624",
+      "--chip-skill": "#6ec4e424",
       "--ok": "#4ed056",
       "--danger": "#f65a6f",
       "--attention": "#3fbda9",
@@ -240,6 +241,7 @@ describe("THEMES", () => {
       "--chip-code": "#7a6f631c",
       "--chip-link": "#e06a241c",
       "--chip-ref": "#1d802a1c",
+      "--chip-skill": "#145d8f1c",
       "--ok": "#1d802a",
       "--danger": "#c11f30",
       "--attention": "#0a5f57",
@@ -673,6 +675,32 @@ describe("every theme", () => {
       expect(
         Math.min(separation, 360 - separation),
         `${id} --chip-link vs --chip-ref`,
+      ).toBeGreaterThanOrEqual(60);
+    }
+  });
+
+  // The composer's own pair (EXC-1186). A feedback comment routinely carries both a
+  // file chip and a skill chip in one sentence, and telling them apart at a glance is
+  // the whole reason the second tint exists — so this is the same floor and the same
+  // reasoning as the pin above, on the pairing that actually shares a surface.
+  //
+  // The recipe's default hue for --chip-skill is `attention`, which clears this
+  // comfortably in all seven vendor palettes (88 degrees at the tightest). caret's own
+  // two do NOT clear it that way — verdigris is about 46 degrees off carrot-top — so
+  // caret.ts routes them to woad instead, and they land near 72. Without that override
+  // this test is what fails, which is the point of pinning it.
+  //
+  // NOT pinned: --chip-skill against --chip-link. Catppuccin draws those about 15
+  // degrees apart, and no surface renders both — a link chip is the rendered plan's,
+  // a skill chip is the composer's.
+  test("keeps the skill chip at least 60 degrees from the file chip", () => {
+    for (const [id, theme] of themeEntries()) {
+      const separation = Math.abs(
+        hue(theme.tokens["--chip-skill"]) - hue(theme.tokens["--chip-ref"]),
+      );
+      expect(
+        Math.min(separation, 360 - separation),
+        `${id} --chip-skill vs --chip-ref`,
       ).toBeGreaterThanOrEqual(60);
     }
   });

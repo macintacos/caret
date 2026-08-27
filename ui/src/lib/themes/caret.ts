@@ -19,9 +19,11 @@ import type { Scheme, Theme, ThemeId } from "$lib/theme.ts";
 import { paletteTheme } from "$lib/themes/recipe.ts";
 
 /** Every color caret's own palettes name: the thirteen `PaletteInput` values, the three
- * hues the recipe's derived washes ride, and the syntax half only the highlighter
- * spends. Exported because caret's shiki themes (caret-shiki.ts) read the last
- * group out of it — nothing else in the UI reaches past `Theme.tokens`. */
+ * hues the recipe's derived washes ride, and the syntax half the highlighter spends.
+ * Exported because caret's shiki themes (caret-shiki.ts) read the last group out of
+ * it — nothing else in the UI reaches past `Theme.tokens`, with one stated exception:
+ * `caretTheme` below routes `type` to the skill chip's hue, because caret's semantic
+ * colors hold nothing far enough from `ok` to separate the composer's two chips. */
 export interface CaretPalette {
   // The three surfaces. Dark is kraft: the page darkest, the plan document a step up, the
   // chrome a step above that. Light is oat — a warm limestone rather than a cool grey, so
@@ -241,6 +243,14 @@ function caretTheme(
     ruleHue: p.ruleHue,
     washHue: p.washHue,
     markHue: p.markHue,
+    // The skill chip's hue, and the one place a syntax color reaches a token.
+    // The recipe's default is `attention`, which works for every vendor palette
+    // and not for these two: verdigris sits about 46 degrees off carrot-top, so a
+    // skill chip and a file chip would be one pill in the composer — the pairing
+    // EXC-1186 exists to separate. caret's semantic set has nothing else free
+    // (accent is selection, danger is semantic), and woad is the palette's stated
+    // cool anchor, a full 70+ degrees off the green. theme.test.ts pins it.
+    chipSkillHue: p.type,
   });
 }
 
