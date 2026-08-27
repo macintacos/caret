@@ -1432,6 +1432,27 @@ async function armBarMotion(page: Page): Promise<void> {
 const barMotion = (page: Page): Promise<BarMotion> =>
   page.evaluate(() => (window as Window & { __barMotion?: BarMotion }).__barMotion ?? []);
 
+/** The log, once it holds at least one start for each of `keyframes`.
+ *
+ * The gesture's own assertion — `toHaveText` on the trail — resolves on the DOM swap, and
+ * the engine dispatches the crumb's `animationstart` a beat AFTER that: measured at ~7ms
+ * on a contended host, which is enough for a log read on the heels of the text assertion
+ * to land before the event it is about to assert on (EXC-1193). Arming makes the log a
+ * recorded fact, but a recorded fact still has to be recorded before it is read.
+ *
+ * Polling for the positives is also what bounds the ABSENCE assertions: "no `crumb-out`
+ * fired" is a claim about a finished crossing only once the crossing has demonstrably
+ * started, and vacuously true on an empty log before it has. */
+async function barMotionAfter(page: Page, ...keyframes: string[]): Promise<BarMotion> {
+  await expect
+    .poll(async () => {
+      const log = await barMotion(page);
+      return keyframes.every((name) => named(log, name).length > 0);
+    })
+    .toBe(true);
+  return barMotion(page);
+}
+
 /** Matched by SUFFIX, never by equality: Svelte hashes a component's `@keyframes` names,
  * so what the engine reports is `svelte-<hash>-crumb-out` and the hash moves whenever the
  * component's CSS is edited. */
@@ -1454,7 +1475,7 @@ test("a level leaving the trail plays the exit, and its separator leaves with it
   await jumpTo(page, "Bravo");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo"]);
 
-  const log = await barMotion(page);
+  const log = await barMotionAfter(page, "crumb-out", "crumb-in");
   const leaving = named(log, "crumb-out");
   const arriving = named(log, "crumb-in");
   // The crumb AND the chevron that travelled in with it. A separator left hanging for a
@@ -1495,7 +1516,7 @@ test("walking to a sibling swaps the label without firing the exit", async ({ da
   await jumpTo(page, "Delta");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Delta"]);
 
-  const log = await barMotion(page);
+  const log = await barMotionAfter(page, "crumb-text-in");
   // No level was destroyed: the crumb kept its box, keyed on depth, and swapped its label.
   // An exit here would read as the trail shortening when it did not.
   expect(named(log, "crumb-out")).toEqual([]);
@@ -1523,7 +1544,7 @@ test("reduced motion collapses the exit rather than removing it", async ({ daemo
   await jumpTo(page, "Bravo");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo"]);
 
-  const leaving = named(await barMotion(page), "crumb-out");
+  const leaving = named(await barMotionAfter(page, "crumb-out"), "crumb-out");
   expect(leaving.length).toBeGreaterThan(0);
   for (const event of leaving) expect(event.duration).toBeLessThan(0.001);
 

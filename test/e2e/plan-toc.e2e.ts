@@ -1233,42 +1233,71 @@ test("the outline carries its motion on the list, never on its rows", async ({ d
   await expect(panel(page)).toHaveCount(0);
 });
 
-/** The row ramps the panel is carrying, and how many distinct elements they sit on.
+/** The row ramps that really STARTED since the last arming, and which element each sat on.
  *
- * `ramps` counts them regardless of play state, which is what makes it a claim about the
- * cascade rather than about the frame this read happened to catch: a finished CSSAnimation
- * stays in `getAnimations()` until its `animation-name` is removed or its element is, so
- * "the rule fired" survives the round-trip even under the gate's contention. `running` is
- * kept separate for the one question that really is about play state — whether it drains.
+ * Armed rather than sampled, because `toc-row-in` carries no fill-mode: a finished
+ * animation is no longer in effect, so `getAnimations()` drops it the moment its
+ * `--dur-micro` is up. That leaves a one-shot read valid only inside a 120ms WALL-CLOCK
+ * window, and the gate's contention routinely lands it outside — the ramps have gone by
+ * the time the read arrives and the count comes back 0 (EXC-1193, reproduced 4/4 at a 6x
+ * CPU throttle). An `animationstart` listener records the fact instead of having to catch
+ * the moment, which is the shape `armBarMotion` (plan-breadcrumbs.e2e.ts) already uses.
  *
- * `targets` is the backlog test proper. One ramp per element is the design; two live on
- * the same row would be generations stacking, which is the failure AC4 names. Comparing
- * the two counts says exactly that, where comparing `running` against the element count
- * could not — a single `animation-name` can host at most one CSS animation, so that bound
- * holds by construction and would pass over any implementation at all.
+ * The per-element identity is the backlog test proper: one start per element is the
+ * design, and two on the same row inside one crossing would be generations stacking,
+ * which is the failure AC4 names. Elements are identified by their seat in an
+ * arming-scoped array rather than by a marker attribute, so nothing is written back into
+ * the DOM under test.
  *
- * Filtered by keyframe name, so the vendored components' Tailwind `transition-all` — a
- * dozen colour and shadow transitions on the trigger and the field, none of them this
- * change's — and the panel's own zoom stay out of both numbers. */
-async function motionLoad(
-  page: Page,
-): Promise<{ ramps: number; targets: number; running: number }> {
-  return panel(page).evaluate((el) => {
-    const ramps = el
-      .getAnimations({ subtree: true })
-      .filter((a): a is CSSAnimation => a instanceof CSSAnimation)
-      .filter((a) => a.animationName.endsWith("toc-row-in"));
-    // `target` lives on KeyframeEffect, not on the AnimationEffect base — a CSSAnimation
-    // always carries the former, but the cast has to be explicit for the type checker.
-    const targetOf = (a: CSSAnimation): Element | null =>
-      a.effect instanceof KeyframeEffect ? a.effect.target : null;
-    return {
-      ramps: ramps.length,
-      targets: new Set(ramps.map(targetOf)).size,
-      running: ramps.filter((a) => a.playState === "running").length,
-    };
+ * `animationstart` bubbles, so one listener on the panel covers every row inside it, and
+ * the log is filtered by keyframe name on the way out — so the vendored components'
+ * Tailwind `transition-all` and the panel's own zoom stay out of it. */
+type TocMotion = { name: string; target: number }[];
+
+async function armTocMotion(page: Page): Promise<void> {
+  await panel(page).evaluate((el) => {
+    const w = window as Window & { __tocMotion?: TocMotion };
+    const log: TocMotion = [];
+    const seen: Element[] = [];
+    w.__tocMotion = log;
+    el.addEventListener("animationstart", (event) => {
+      const target = event.target as Element;
+      const seat = seen.indexOf(target);
+      log.push({
+        name: (event as AnimationEvent).animationName,
+        target: seat === -1 ? seen.push(target) - 1 : seat,
+      });
+    });
   });
 }
+
+/** The `toc-row-in` starts recorded since the last arming.
+ *
+ * Matched by SUFFIX, never by equality: Svelte hashes a component's `@keyframes` names,
+ * so what the engine reports is `svelte-<hash>-toc-row-in` and the hash moves whenever
+ * the component's CSS is edited. */
+async function tocMotion(page: Page): Promise<TocMotion> {
+  const log = await page.evaluate(
+    () => (window as Window & { __tocMotion?: TocMotion }).__tocMotion ?? [],
+  );
+  return log.filter((event) => event.name.endsWith("toc-row-in"));
+}
+
+/** The row ramps still PLAYING — the one question that really is about play state, and
+ * the one `getAnimations()` is the right tool for. A liveness claim is polled. */
+function runningRamps(page: Page): Promise<number> {
+  return panel(page).evaluate(
+    (el) =>
+      el
+        .getAnimations({ subtree: true })
+        .filter((a): a is CSSAnimation => a instanceof CSSAnimation)
+        .filter((a) => a.animationName.endsWith("toc-row-in"))
+        .filter((a) => a.playState === "running").length,
+  );
+}
+
+/** How many distinct elements a crossing's starts landed on. */
+const targetsIn = (log: TocMotion): number => new Set(log.map((event) => event.target)).size;
 
 test("typing fast queues no animation behind the reviewer", async ({ daemon, page }) => {
   // AC4, asserted as a ratio rather than as a ceiling, because the ceiling turned out to
@@ -1289,23 +1318,30 @@ test("typing fast queues no animation behind the reviewer", async ({ daemon, pag
   // Derived from the fixture rather than typed, so growing SECTIONS cannot quietly turn
   // this into a narrow query while the assertion stays green.
   const broad = SECTIONS.filter((s) => s.toLowerCase().includes("a")).length + 1;
+  await armTocMotion(page);
   await field(page).pressSequentially("a", { delay: 15 });
   await expect(options(page)).toHaveCount(broad);
-  const wide = await motionLoad(page);
   // The rule fired at all — this is the arm that reds if the row ramp is ever dropped.
-  expect(wide.ramps).toBeGreaterThan(0);
-  // And exactly one ramp per element it fired on. Two on one row is a stacked generation.
-  expect(wide.ramps).toBe(wide.targets);
+  // Polled rather than read once: the log is a recorded fact, so waiting for the first
+  // start can only ever confirm what the crossing really did.
+  await expect.poll(async () => (await tocMotion(page)).length).toBeGreaterThan(0);
+  // And exactly one start per element it fired on. Two on one row is a stacked generation.
+  const wide = await tocMotion(page);
+  expect(targetsIn(wide)).toBe(wide.length);
 
   // Then narrowing, fast enough that a per-keystroke retrigger would have several
-  // generations overlapping by the last character.
+  // generations overlapping by the last character. Re-armed, so the count below is this
+  // crossing's rather than both.
+  await armTocMotion(page);
   await field(page).pressSequentially("lpha", { delay: 15 });
   await expect(options(page)).toHaveCount(1);
-  const narrow = await motionLoad(page);
-  expect(narrow.ramps).toBe(narrow.targets);
 
-  // And it drains: nothing is left running once the reviewer stops.
-  await expect.poll(async () => (await motionLoad(page)).running).toBe(0);
+  // And it drains: nothing is left running once the reviewer stops. Asserted BEFORE the
+  // narrowing's log is read, which is what makes that read a complete record of the
+  // crossing rather than a slice of one still in flight.
+  await expect.poll(() => runningRamps(page)).toBe(0);
+  const narrow = await tocMotion(page);
+  expect(targetsIn(narrow)).toBe(narrow.length);
 
   await page.keyboard.press("Escape");
   await expect(panel(page)).toHaveCount(0);
