@@ -56,6 +56,21 @@ export const FileRefsBodySchema = z
   .object({ paths: z.array(z.string()).catch([]) })
   .catch({ paths: [] });
 
+// POST /api/reviews/:id/file-search: what the reviewer has typed after the `@`
+// in a feedback editor, asking which files under the review's cwd match it. A
+// non-string query — or a body that is not an object at all — degrades to the
+// empty query, which lists rather than rejects; that is the leniency the schemas
+// above keep, and here it also means a garbled body can only ever cost LESS work
+// than a deliberate one: the empty query matches immediately and trips the result
+// cap after ~51 files, whereas a query that matches NOTHING is what spends the
+// whole dirent budget.
+//
+// No `.max()` on the string, for the reason FileRefsBodySchema records: a
+// field-level constraint trips the outer `.catch` and degrades the whole body.
+// The length bound is MAX_SEARCH_QUERY_CHARS, applied inside `searchFiles`
+// where it is exercisable without a request.
+export const FileSearchBodySchema = z.object({ query: z.string().catch("") }).catch({ query: "" });
+
 const BehaviorSchema: z.ZodType<Behavior> = z.enum(["allow", "deny"]);
 
 // POST /api/reviews/:id/resolve. `behavior` falls back to "allow" unless the

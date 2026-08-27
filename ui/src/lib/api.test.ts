@@ -16,6 +16,7 @@ import {
   putDraft,
   resolveFileRefs,
   resolveReview,
+  searchFiles,
 } from "$lib/api.ts";
 import { flush } from "$lib/log.ts";
 
@@ -387,6 +388,48 @@ describe("getReview instrumentation", () => {
   });
 });
 
+describe("searchFiles", () => {
+  test("returns the daemon's matches and which cap stopped it", async () => {
+    respond = () => Promise.resolve(jsonResponse({ paths: ["src/foo.ts"], stoppedAt: "results" }));
+    expect(await searchFiles(ID, "srfoo")).toEqual({
+      paths: ["src/foo.ts"],
+      stoppedAt: "results",
+    });
+  });
+
+  test("posts the query to the review's file-search route", async () => {
+    let seen: { url: string; body: unknown } | undefined;
+    respond = (url, options) => {
+      seen = { url, body: JSON.parse(String(options?.body)) };
+      return Promise.resolve(jsonResponse({ paths: [], stoppedAt: null }));
+    };
+    await searchFiles(ID, "srlbfoo");
+    expect(seen?.url).toContain(`/api/reviews/${ID}/file-search`);
+    expect(seen?.body).toEqual({ query: "srlbfoo" });
+  });
+
+  test("degrades a failed request to no matches rather than throwing", async () => {
+    // fileCompletion.ts leans on this: it treats "nothing came back" as its only
+    // failure mode, so a rejection here would surface as an unhandled error in a
+    // completion query rather than as a closed list.
+    respond = () => Promise.reject(new Error("network down"));
+    expect(await searchFiles(ID, "a")).toEqual({ paths: [], stoppedAt: null });
+
+    respond = () => Promise.resolve(new Response(null, { status: 404 }));
+    expect(await searchFiles(ID, "a")).toEqual({ paths: [], stoppedAt: null });
+  });
+
+  test("coerces a 2xx body missing or mis-typing its fields", async () => {
+    // The defensive branch has no other way to run: a well-behaved daemon always
+    // sends both fields.
+    respond = () => Promise.resolve(jsonResponse({}));
+    expect(await searchFiles(ID, "a")).toEqual({ paths: [], stoppedAt: null });
+
+    respond = () => Promise.resolve(jsonResponse({ paths: ["a.ts"], stoppedAt: "nonsense" }));
+    expect(await searchFiles(ID, "a")).toEqual({ paths: ["a.ts"], stoppedAt: null });
+  });
+});
+
 describe("redaction — no body text reaches the wire", () => {
   test("feedback, quote, and comment text never appear in any /api/logs body", async () => {
     const FEEDBACK = "SENSITIVE-FEEDBACK-PHRASE";
@@ -419,6 +462,18 @@ describe("redaction — no body text reaches the wire", () => {
     expect(text).not.toContain(FEEDBACK);
     expect(text).not.toContain(QUOTE);
     expect(text).not.toContain(COMMENT);
+  });
+
+  test("a completion query never appears in any /api/logs body", async () => {
+    // The `@` query is reviewer-typed text on its way to becoming plan prose, so
+    // it is the same class as the bodies above — and searchFiles logs its own
+    // failures, which is the path that could carry it.
+    const QUERY = "SENSITIVE-QUERY-PHRASE";
+    respond = () => Promise.resolve(new Response(null, { status: 404 }));
+    await searchFiles(ID, QUERY);
+    flush();
+
+    expect(cap.text()).not.toContain(QUERY);
   });
 });
 

@@ -19,6 +19,7 @@ import {
 import {
   DraftBodySchema,
   FileRefsBodySchema,
+  FileSearchBodySchema,
   MAX_FILE_REFS,
   malformedLineAnchor,
   PlanInputSchema,
@@ -46,6 +47,7 @@ import {
 } from "@/lib/types.ts";
 import { listDirectory } from "@/plan/directory.ts";
 import { isFileTooLargeToPreview, readFileExcerpt, resolveInCwd } from "@/plan/excerpt.ts";
+import { searchFiles } from "@/plan/file-search.ts";
 import { createDecisions } from "@/review/decisions.ts";
 import type { Store } from "@/review/store.ts";
 import { routeIncomingPlan } from "@/review/threading.ts";
@@ -199,15 +201,18 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
 
 // A request matched to one of the :id sub-routes, with the review id decoded and
 // the optional sub-path (/decision, /resolve, /draft, /expire, /seen, /file-refs,
-// /file, /dir, /skills) split out. /file-refs precedes /file in the alternation so
-// the longer literal wins rather than /file matching its prefix.
+// /file-search, /file, /dir, /skills) split out. The trailing `$` is what keeps
+// /file from swallowing the /file-refs and /file-search prefixes: a /file match
+// cannot then reach end-of-input, so the engine backtracks into the longer
+// alternative. The order the literals appear in is therefore NOT load-bearing — a
+// route added in the wrong place still matches.
 interface IdRoute {
   id: string;
   sub: string | undefined;
 }
 
 const ID_ROUTE_RE =
-  /^\/api\/reviews\/([^/]+)(\/decision|\/resolve|\/draft|\/expire|\/seen|\/file-refs|\/file|\/dir|\/skills)?$/;
+  /^\/api\/reviews\/([^/]+)(\/decision|\/resolve|\/draft|\/expire|\/seen|\/file-refs|\/file-search|\/file|\/dir|\/skills)?$/;
 
 /** Match an /api/reviews/:id[/sub] path, decoding the id; null for any other path. */
 function matchIdRoute(path: string): IdRoute | null {
@@ -604,6 +609,35 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return Response.json(skills);
   }
 
+  // POST /api/reviews/:id/file-search — which files under this review's cwd
+  // match what the reviewer has typed after an `@` in a feedback editor
+  // (EXC-1175). The browser holds no filesystem, so the search happens here, and
+  // only path strings go back — never a byte of file content.
+  //
+  // POST rather than GET because the query is a request body: reviewer-typed
+  // text, untrusted like every other body here and parsed through a schema that
+  // degrades rather than rejects. It also puts the route behind the CSRF guard,
+  // which safe methods bypass. The work is bounded the way handleFileRefs bounds
+  // its own — by a cap that stops the WALK and not merely the result — and
+  // `searchFiles` owns both caps; a cwd that no longer resolves is the same
+  // single 404 the directory listing answers with.
+  //
+  // Counts only reach the log: the query is reviewer-typed text and the paths
+  // are the reader's project, so neither is ever a record's content.
+  async function handleFileSearch(req: Request, id: string): Promise<Response> {
+    const r = store.get(id);
+    if (!r) return notFound();
+    const { query } = await parseBody(req, FileSearchBodySchema);
+    const result = await searchFiles(r.cwd, query);
+    if (result === null) return notFound();
+    log.debug("request", "file search answered", {
+      reviewId: id,
+      returned: result.paths.length,
+      stoppedAt: result.stoppedAt,
+    });
+    return Response.json(result);
+  }
+
   // GET /api/reviews/:id/decision — the hook's long-poll for a decision.
   async function handleDecision(id: string): Promise<Response> {
     // A decision may already be recorded: in memory (a deny keeps the review) or
@@ -793,6 +827,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       if (method === "GET" && sub === "/dir") return handleDirListing(req, id);
       if (method === "GET" && sub === "/skills") return handleSkills(id);
       if (method === "POST" && sub === "/file-refs") return handleFileRefs(req, id);
+      if (method === "POST" && sub === "/file-search") return handleFileSearch(req, id);
       if (method === "GET" && sub === "/decision") return handleDecision(id);
       if (method === "PUT" && sub === "/draft") return handleDraft(req, id);
       if (method === "POST" && sub === "/resolve") return handleResolve(req, id);

@@ -10,6 +10,7 @@ import type {
   FileExcerpt,
   FileRefKind,
   FileRefsResponse,
+  FileSearchResponse,
   HealthIdentity,
   PersistedScratch,
   ResolveBody,
@@ -118,6 +119,42 @@ export async function resolveFileRefs(
       reason: String(err),
     });
     return {};
+  }
+}
+
+/** The files under the review's cwd whose path matches what the reviewer has
+ * typed after an `@` in a feedback editor (EXC-1175) — the daemon holds the
+ * filesystem, so it is the only thing that can answer. Non-essential in exactly
+ * the way `resolveFileRefs` is: a failed request degrades to no matches rather
+ * than throwing, so the editor keeps behaving as it did before completion
+ * existed and no error reaches the reviewer. */
+export async function searchFiles(id: string, query: string): Promise<FileSearchResponse> {
+  try {
+    const body = await json<FileSearchResponse>(
+      await fetch(`/api/reviews/${encodeURIComponent(id)}/file-search`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      }),
+    );
+    // Defensive against a 2xx whose body is missing a field, for the same reason
+    // resolveFileRefs is: the caller maps over `paths` and branches on `stoppedAt`.
+    return {
+      paths: body.paths ?? [],
+      stoppedAt: body.stoppedAt === "results" || body.stoppedAt === "scan" ? body.stoppedAt : null,
+    };
+  } catch (err) {
+    // `debug`, not `warn`, and deliberately so: this fires once per debounced
+    // keystroke, and a review whose cwd is gone fails every one of them. A `warn`
+    // per character is the per-iteration noise logging-rules.md forbids, in the
+    // same timeline /caret:debug reads. The daemon logs this exchange at debug
+    // too, and the once-per-render resolveFileRefs is what `warn` is sized for.
+    uiLog.debug("request", `file search failed: ${shortId(id)}`, {
+      reviewId: id,
+      queryChars: query.length,
+      reason: String(err),
+    });
+    return { paths: [], stoppedAt: null };
   }
 }
 

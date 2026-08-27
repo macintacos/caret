@@ -5,7 +5,7 @@
 // the editor engine means replacing this file and the component together; the
 // composer, the annotation-card edit field, and the saved-comment render path
 // stay untouched.
-import { closeCompletion } from "@codemirror/autocomplete";
+import { closeCompletion, completionStatus, startCompletion } from "@codemirror/autocomplete";
 import {
   defaultKeymap,
   history,
@@ -254,9 +254,23 @@ const theme = EditorView.theme({
     backgroundColor: "var(--accent-wash)",
     color: "var(--ink)",
   },
-  // Near-monochrome means emphasis is weight, not colour — and the stock
-  // underline on the matched span is noise at this size.
-  ".cm-completionMatchedText": { textDecoration: "none", fontWeight: "600" },
+  // What the reviewer's own typing matched. Weight alone carried this while the
+  // only source filtered by prefix, where the match is a leading run; a
+  // subsequence match over a path is single characters scattered the length of
+  // the row (`srlbfoo` against `src/lib/foo.ts`), and bolding seven lone glyphs
+  // in a mono face at this size reads as noise rather than as a signal.
+  //
+  // `--mark` is the token for it rather than a new one: its documented job is a
+  // marked region of the document — plan-search hits — and this is the same job
+  // in a list, the characters a query matched. It is a translucent wash for
+  // exactly this reason, so it composites over the selected row's `--accent-wash`
+  // instead of fighting it, and the stock underline stays off as noise at this
+  // size.
+  ".cm-completionMatchedText": {
+    textDecoration: "none",
+    fontWeight: "600",
+    backgroundColor: "var(--mark)",
+  },
   // Where a name came from is metadata about it, so it recedes — but it never
   // shrinks away, which is the point of `flex: none` beside the truncating label.
   ".cm-completionDetail": {
@@ -265,6 +279,47 @@ const theme = EditorView.theme({
     flex: "none",
     marginLeft: "0.75rem",
   },
+  // The stale twin of the selected row. `cm-tooltip-autocomplete-disabled` is
+  // toggled onto the SAME element while a source re-queries, and both these
+  // sources re-query per keystroke against the daemon, so a dimmed stale list is
+  // the common case rather than an edge — without its own arm it would paint
+  // identically to a live one. Same length as the rule above, so it wins while
+  // both classes are present by sitting after it, not by accident.
+  ".cm-tooltip.cm-tooltip-autocomplete-disabled > ul > li[aria-selected]": {
+    backgroundColor: "var(--chip)",
+    color: "var(--ink-soft)",
+  },
+  // What the list says when a search stopped short of the whole answer (EXC-1175).
+  // Receded and set in the prose face: a statement ABOUT the list, not a row in it.
+  ".cm-tooltip.cm-tooltip-autocomplete > ul > completion-section": {
+    fontFamily: "var(--font-sans)",
+    fontSize: "var(--text-xs)",
+    color: "var(--ink-faint)",
+    borderBottom: "1px solid var(--rule)",
+    padding: "0.3rem 0.5rem",
+    opacity: 1,
+  },
+});
+
+/**
+ * Re-arms completion after a deletion.
+ *
+ * autocomplete only ARMS a source on `input.type` (`getUpdateType`); a
+ * `delete.backward` carries no activating bit, so a source that answered null
+ * once stays Inactive through every backspace and the list never comes back. That
+ * would be an obscure corner for a source with a fixed word list, but a
+ * subsequence match is permissive enough that the way a reviewer reaches zero
+ * matches is a typo — and backspace is the reflex correction, after which the
+ * feature would be silently dead for the rest of that token.
+ *
+ * Deferred out of the update: `startCompletion` dispatches, and dispatching from
+ * inside an update listener is what CodeMirror refuses. Cheap because it does
+ * nothing unless a deletion left the completion state genuinely inactive.
+ */
+const reopenAfterDelete = EditorView.updateListener.of((update) => {
+  if (!update.docChanged || completionStatus(update.state) !== null) return;
+  if (!update.transactions.some((tr) => tr.isUserEvent("delete"))) return;
+  queueMicrotask(() => startCompletion(update.view));
 });
 
 // One indent level. Four spaces so a list nest (indentMore, which reads this
@@ -337,6 +392,12 @@ const indentKeymap = keymap.of([
 
 /** The extension stack for a comment-composer markdown editor. */
 export function markdownExtensions(opts: MarkdownEditorOptions): Extension[] {
+  // Empty for a surface with no review or no registered source, and the re-arm
+  // rides along with it rather than being installed unconditionally: an editor
+  // that offers no completion has nothing to re-arm, and a listener on every
+  // update of every editor is not free.
+  const completion = reviewCompletion(opts.reviewContext, opts.completionSources);
+  const completionStack = completion.length === 0 ? [] : [...completion, reopenAfterDelete];
   return [
     history(),
     // codeLanguages: the full @codemirror/language-data set (~140 languages),
@@ -382,7 +443,7 @@ export function markdownExtensions(opts: MarkdownEditorOptions): Extension[] {
     // ArrowUp/ArrowDown/Enter ahead of the indent and default keymaps below by
     // precedence rather than by position here. Empty without a review context or a
     // registered source.
-    ...reviewCompletion(opts.reviewContext, opts.completionSources),
+    ...completionStack,
     // Tab indent/outdent, before the default keymap (which leaves Tab unbound).
     indentKeymap,
     keymap.of([...defaultKeymap, ...historyKeymap]),
