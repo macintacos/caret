@@ -6,7 +6,7 @@
   "plugins": [
     {
       "name": "caret",
-      "version": "0.12.0",
+      "version": "0.13.0",
       "source": { "source": "npm", "package": "@macintacos/caret" },
       "description": "Review, annotate, and approve Claude Code plans in a local web UI.",
       "author": { "name": "macintacos" },
