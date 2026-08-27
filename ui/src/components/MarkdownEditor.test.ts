@@ -177,3 +177,39 @@ describe("MarkdownEditor focus", () => {
     }
   });
 });
+
+describe("MarkdownEditor review context", () => {
+  // The completion seam ships with an empty source registry, so review context is
+  // inert at this level: these prove the prop does not disturb mount, seeding, or
+  // the chords — not anything about completion, which no mount can reach while the
+  // registry is empty. The Escape-with-a-painted-list contract is pinned where it
+  // can be driven for real, in lib/markdownEditor.test.ts.
+  const REVIEW = { reviewId: "rev-1", cwd: "/w/caret", adapter: "claude" };
+
+  test("mounts, seeds, and reports its value with review context present", () => {
+    const seen: string[] = [];
+    const { target, flush } = render(MarkdownEditor, {
+      value: "seed",
+      reviewContext: REVIEW,
+      onInput: (t: string) => seen.push(t),
+    });
+    flush();
+    expect(target.querySelector(".cm-content")?.textContent).toContain("seed");
+    expect(seen[0]).toBe("seed");
+  });
+
+  test("still routes both chords with review context present", () => {
+    let submits = 0;
+    let cancels = 0;
+    const { target, flush } = render(MarkdownEditor, {
+      reviewContext: REVIEW,
+      onSubmitChord: () => submits++,
+      onCancelChord: () => cancels++,
+      onInput: () => {},
+    });
+    flush();
+    dispatchKey(target, "Enter", { metaKey: true });
+    dispatchKey(target, "Escape");
+    expect([submits, cancels]).toEqual([1, 1]);
+  });
+});

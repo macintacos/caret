@@ -19,6 +19,7 @@
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { rangeLabel } from "$lib/diffview/commenting.ts";
   import { revealCard } from "$lib/diffview/scroll.ts";
+  import type { ReviewContext } from "$lib/editorCompletion.ts";
   import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
   import ConfirmPopover from "@/components/ConfirmPopover.svelte";
   import Icon from "@/components/Icon.svelte";
@@ -51,6 +52,9 @@
      * if the composer is replaced (a new range opened) without an explicit
      * dismiss. Optional. */
     onInput?: (text: string) => void;
+    /** The review being commented on, forwarded to the editor so reference
+     * completion resolves against it. */
+    reviewContext?: ReviewContext;
   }
   let {
     startLine,
@@ -61,6 +65,7 @@
     onDiscard,
     onKeep,
     onInput,
+    reviewContext,
   }: Props = $props();
 
   // "edit" reuses this whole surface to revise a saved comment: same Card, same
@@ -157,6 +162,7 @@
     value={initial}
     placeholder={isEdit ? "" : "What should change here?"}
     ariaLabel={isEdit ? "Edit comment" : "Comment"}
+    {reviewContext}
     autofocus
     onInput={(text) => (comment = text)}
     onSubmitChord={submit}

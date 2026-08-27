@@ -287,6 +287,13 @@
   });
   const alerts = createAlerts(alertStore, { sound: sound.play });
   let active = $derived(selection.active);
+  // What every feedback editor needs to resolve a reference: the review it belongs
+  // to, the working directory a file lookup roots at, and the adapter a skill
+  // lookup is scoped to. Assembled here because only App holds all three — the
+  // adapter id arrives on the health probe, not on the review record.
+  let reviewContext = $derived(
+    active ? { reviewId: active.id, cwd: active.cwd, adapter: source } : undefined,
+  );
   // The variants the split-button renders: the declared set when present, else
   // the built-in fallback.
   let variants = $derived(approveVariants(declaredVariants));
@@ -697,6 +704,7 @@
       onFocusAnnotation={autosave.focusAnnotation}
       onExposeReveal={(r) => (revealLine = r)}
       onCompareChange={(r) => (compareRange = r)}
+      {reviewContext}
       {onCopyCwd}
       {showShortcutHints}
       {settingsRev}
@@ -782,6 +790,7 @@
       icon="check"
       kind="dialog"
       showNotes
+      {reviewContext}
       onConfirm={approveAnyway}
       onRequestChanges={divertToRequestChanges}
       onCancel={() => (pendingApproveMode = null)}
@@ -797,6 +806,7 @@
       items={guardItems}
       action="Reject"
       consequence="The agent will be told the plan was rejected and to wait for your next message."
+      {reviewContext}
       onConfirm={rejectAnyway}
       onRequestChanges={divertToRequestChanges}
       onCancel={() => (pendingReject = false)}
@@ -813,6 +823,7 @@
       generalComment={autosave.generalCommentDraft}
       planText={active?.currentPlan ?? ""}
       {scratches}
+      {reviewContext}
       onGeneralCommentInput={autosave.editGeneralComment}
       onSubmit={onRequestChanges}
       onSaveScratch={(key) => commenting.save(key)}

@@ -11,6 +11,7 @@
   import { EditorState } from "@codemirror/state";
   import { EditorView } from "@codemirror/view";
   import { untrack } from "svelte";
+  import type { ReviewContext } from "$lib/editorCompletion.ts";
   import { markdownExtensions } from "$lib/markdownEditor.ts";
 
   interface Props {
@@ -34,6 +35,20 @@
     onSubmitChord?: () => void;
     /** Esc. */
     onCancelChord?: () => void;
+    /** The review this editor composes feedback for, so reference completion can
+     * resolve against it (files under its cwd, skills for its adapter). Every
+     * feedback surface passes it; omitted, the editor simply offers no completion.
+     * ponytail: a mount-time seed like the rest of the config, so a host that
+     * outlives a review switch would keep the old context. DiffPlanView is exactly
+     * such a host — App keeps it mounted across a switch on purpose — but the
+     * editors under it are not: the gutter composer goes because the contentKey
+     * effect reseeds the commenting controller, which clears `open` and unmounts
+     * `{#if pending}`, the dialogs go when they close, and an annotation card is
+     * keyed on its comment's id, so a switch landing a different comment on the
+     * same line builds a new card rather than reusing the open one. Upgrade to a
+     * live value — a CM Compartment — if a host ever survives a switch with its
+     * editor open. */
+    reviewContext?: ReviewContext;
   }
   let {
     value = "",
@@ -44,6 +59,7 @@
     onInput,
     onSubmitChord,
     onCancelChord,
+    reviewContext,
   }: Props = $props();
 
   let host = $state<HTMLDivElement | undefined>();
@@ -73,6 +89,7 @@
           onInput: (text) => onInput?.(text),
           onSubmitChord: () => onSubmitChord?.(),
           onCancelChord: () => onCancelChord?.(),
+          reviewContext: untrack(() => reviewContext),
         }),
       }),
     });

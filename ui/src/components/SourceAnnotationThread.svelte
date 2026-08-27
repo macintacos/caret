@@ -15,6 +15,7 @@
   import type { LineAnnotation } from "@core/lib/types";
   import { Card } from "$lib/components/ui/card/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
+  import type { ReviewContext } from "$lib/editorCompletion.ts";
   import SourceAnnotationCard from "@/components/SourceAnnotationCard.svelte";
 
   interface Props {
@@ -25,8 +26,17 @@
     onFocus: (id: string) => void;
     onEdit: (id: string, comment: string) => void;
     onDelete: (id: string) => void;
+    /** The review being commented on, forwarded to each card's edit composer. */
+    reviewContext?: ReviewContext;
   }
-  let { annotations, focusedAnnotation, onFocus, onEdit, onDelete }: Props = $props();
+  let {
+    annotations,
+    focusedAnnotation,
+    onFocus,
+    onEdit,
+    onDelete,
+    reviewContext,
+  }: Props = $props();
 
   const threaded = $derived(annotations.length > 1);
 </script>
@@ -48,18 +58,29 @@
           {onFocus}
           {onEdit}
           {onDelete}
+          {reviewContext}
         />
       </div>
     {/each}
   </Card>
 {:else if annotations[0]}
-  <SourceAnnotationCard
-    annotation={annotations[0]}
-    focused={annotations[0].id === focusedAnnotation}
-    {onFocus}
-    {onEdit}
-    {onDelete}
-  />
+  <!-- Keyed on the comment's id for the same reason the stacked branch keys its
+       each — a card seeds its editor once at mount. The row this renders into is
+       keyed on the LINE number (DiffPlanView), so a review switch that lands a
+       different single comment on the same line arrives here as a changed prop on
+       the same slot; without the key the card instance is reused, and an open edit
+       field keeps the previous review's text and review context while onEdit saves
+       under the new comment's id. -->
+  {#key annotations[0].id}
+    <SourceAnnotationCard
+      annotation={annotations[0]}
+      focused={annotations[0].id === focusedAnnotation}
+      {onFocus}
+      {onEdit}
+      {onDelete}
+      {reviewContext}
+    />
+  {/key}
 {/if}
 
 <style>
