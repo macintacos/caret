@@ -35,9 +35,9 @@ export const MAX_LOG_MAX_SIZE = 256 * 1024 * 1024;
 
 /** The vanity host the hook opens the review UI under (EXC-426). Resolves to
  * loopback per RFC 6761 (mDNSResponder system-wide; Chrome/Firefox special-case
- * it internally), so the 127.0.0.1 bind needs no change. Shared here because
- * both the daemon's cross-origin guard (which allows it) and review
- * orchestration (which opens it) reference the one host. */
+ * it internally), so the 127.0.0.1 bind needs no change. Shared here because the
+ * daemon's Host and cross-origin guards (which allow it) and review
+ * orchestration (which opens it) all reference the one host. */
 export const VANITY_HOST = "caret.localhost";
 
 /**

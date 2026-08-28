@@ -8,7 +8,13 @@ import { type BootOptions, bootDaemon, type TestDaemon } from "@test/support/dae
 import { recordingLog } from "@test/support/recording-log.ts";
 import { expectNeverLogsBody } from "@test/support/redaction.ts";
 import { APPROVE_VARIANTS } from "@/adapters/claude/approve.ts";
-import { isClientLive, LIVE_CLIENT_WINDOW_MS } from "@/daemon/guards.ts";
+import { VANITY_HOST } from "@/config/constants.ts";
+import {
+  isClientLive,
+  isCrossOrigin,
+  isForeignHost,
+  LIVE_CLIENT_WINDOW_MS,
+} from "@/daemon/guards.ts";
 import { VERSION } from "@/lib/build-id.ts";
 import { createDaemonLogger } from "@/lib/log.ts";
 import { formatPlanMarkdown } from "@/plan/markdown.ts";
@@ -408,6 +414,33 @@ test("isClientLive: never-polled, fresh, and stale windows (EXC-559)", () => {
   expect(isClientLive(1_000_000, 1_000_000, 6000)).toBe(true); // just polled
   expect(isClientLive(1_000_000, 1_005_999, 6000)).toBe(true); // 5999ms < window
   expect(isClientLive(1_000_000, 1_006_000, 6000)).toBe(false); // 6000ms not < window
+});
+
+// The predicates are pure, so the cases the integration tests below structurally
+// cannot reach are exercised here directly (EXC-1203). `fetch` always sends a
+// Host, so a missing one is only reachable through a constructed Request; and
+// the Host gate now blocks GET too, which means dropping an entry from
+// OWN_HOSTNAMES bricks the UI for that address rather than costing a mutation —
+// so every accepted hostname is pinned positively, not just implied by `base`.
+test("isForeignHost: authority-exact, userinfo-proof, Host required (EXC-1203)", () => {
+  const req = (host?: string) =>
+    new Request("http://x/", host ? { headers: { Host: host } } : undefined);
+  for (const name of ["localhost", "127.0.0.1", VANITY_HOST]) {
+    expect(isForeignHost(req(`${name}:42718`), 42718)).toBe(false);
+  }
+  expect(isForeignHost(req("localhost:42719"), 42718)).toBe(true); // right host, wrong port
+  expect(isForeignHost(req("evil.com:42718"), 42718)).toBe(true);
+  expect(isForeignHost(req("localhost:42718@evil.com"), 42718)).toBe(true); // userinfo dodge
+  expect(isForeignHost(req("localhost:42718/api"), 42718)).toBe(true); // not an authority
+  expect(isForeignHost(req(), 42718)).toBe(true); // no Host at all
+});
+
+test("isCrossOrigin: scheme and authority both pinned (EXC-1203)", () => {
+  const req = (origin: string) => new Request("http://x/", { headers: { Origin: origin } });
+  expect(isCrossOrigin(req(`http://${VANITY_HOST}:42718`), 42718)).toBe(false);
+  expect(isCrossOrigin(req("http://localhost:3000"), 42718)).toBe(true); // a stranger's port
+  expect(isCrossOrigin(req("https://localhost:42718"), 42718)).toBe(true); // http: only
+  expect(isCrossOrigin(new Request("http://x/"), 42718)).toBe(false); // hook/CLI sends none
 });
 
 test("POST /api/reviews reports hasLiveClient=false when no UI has polled (EXC-559)", async () => {

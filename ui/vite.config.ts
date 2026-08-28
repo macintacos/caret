@@ -144,13 +144,14 @@ export default defineConfig({
       "/api": {
         target: DEV_API_TARGET,
         // The daemon gates on an exact Host and an exact Origin (EXC-1203), and
-        // the browser sends the Vite dev server's own (localhost:5173, or
-        // caret.localhost:5173 via the caret-vanity-url plugin above) for both.
-        // changeOrigin rewrites Host to the target's authority; http-proxy leaves
-        // Origin alone, so rewrite that too. Speaking the daemon's own origin is
-        // what keeps dev working WITHOUT widening the guard — the daemon still
-        // accepts exactly one authority. Overwriting unconditionally covers both
-        // dev origins with no branching.
+        // the browser sends the Vite dev server's own origin (caret.localhost via
+        // the caret-vanity-url plugin above) for both. changeOrigin rewrites Host
+        // to the target's authority; http-proxy leaves Origin alone, so rewrite
+        // that too. Speaking the daemon's own origin is what keeps dev working
+        // WITHOUT widening the guard — the daemon still accepts exactly one
+        // authority. What keeps this hop from laundering a foreign request is
+        // Vite's own `allowedHosts` default (loopback and `*.localhost` only);
+        // widening that — a tunnel host for a demo — re-opens both guards in dev.
         changeOrigin: true,
         configure: (proxy) => {
           proxy.on("proxyReq", (proxyReq) => proxyReq.setHeader("origin", DEV_API_TARGET));

@@ -897,27 +897,38 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return notFound();
   }
 
-  // `self` is the server Bun passes as fetch's second argument — narrowed to the
-  // one field this needs, the bound port, which only exists once Bun.serve below
-  // has returned.
-  async function handle(req: Request, self: { port?: number }): Promise<Response> {
+  // `self` is the server Bun passes as fetch's second argument; the guards need
+  // its bound port. Bun declares `readonly port: number | undefined` — undefined
+  // only for a unix-socket server, which this never is. Mirroring that union
+  // rather than writing `port?: number` keeps the field's existence a
+  // compile-time contract: an optional property would still typecheck against a
+  // Bun that dropped `port`, and every request would then 403 silently. `-1` is
+  // the fail-closed fallback — no authority can serialize a port to "-1", where
+  // `0` would match a `Host: localhost:0`.
+  async function handle(
+    req: Request,
+    self: { readonly port: number | undefined },
+  ): Promise<Response> {
     inFlight++;
     cancelIdle(); // any in-flight request defers an idle shutdown
     try {
-      const url = new URL(req.url);
-      const path = url.pathname;
-      const method = req.method;
-      // Bun types port optional (a unix-socket server has none); this daemon is
-      // always TCP, so the `?? 0` never fires — and if it somehow did, 0 matches
-      // no real authority and the guards below fail closed.
-      const port = self.port ?? 0;
+      const port = self.port ?? -1;
 
       // DNS-rebinding gate (EXC-1203): every method, ahead of the CSRF check. A
       // rebound page's Origin is already same-origin by the time it fires, so
       // the guard below structurally cannot see this attack.
+      //
+      // It also runs ahead of the URL parse below, and reads the raw header
+      // rather than `url.host`: Bun derives req.url FROM Host, so a missing or
+      // unparseable Host — cases this must reject — would throw out of the
+      // constructor into the catch-all and 500 instead.
       if (isForeignHost(req, port)) {
         return new Response("host not recognized", { status: 403 });
       }
+
+      const url = new URL(req.url);
+      const path = url.pathname;
+      const method = req.method;
 
       // Gate every non-safe (state-changing) method, not a fixed POST/PUT list,
       // so a future mutating verb is CSRF-protected by default. Safe methods

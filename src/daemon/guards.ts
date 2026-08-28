@@ -53,12 +53,17 @@ export function isClientLive(lastPollAt: number, now: number, windowMs: number):
 // pins every half: no CORS header is ever emitted, a cross-origin GET is allowed
 // through, a foreign Host is not, and neither is a stranger's localhost port.
 //
-// OUT OF SCOPE, on the record: the port is reachable by any *local* process, and
-// nothing here authenticates one. A same-uid process needs no exploit — it can
-// edit the plan files and CLAUDE.md directly — so auth would buy nothing against
-// the adversary this runs beside. The genuine exposure is cross-uid: a shared dev
-// box, a shared-netns container, a CI runner. caret accepts that limit rather
-// than closing it; revisit if caret is ever sized for a multi-user host.
+// One residual the port half does not cover: VANITY_HOST is in OWN_HOSTNAMES, and
+// browsers self-resolve `*.localhost` — but glibc does not, so on a Linux desktop
+// whose resolver answers `caret.localhost` (a search domain, a wildcard zone) an
+// attacker who controls that answer can serve a page from the vanity origin and
+// rebind it. Dropping the host would break EXC-426; Vite's dev server carries the
+// same residual, so this is noted rather than closed.
+//
+// OUT OF SCOPE, on the record: nothing here authenticates a *local* caller. A
+// same-uid process can already edit the plan files and CLAUDE.md directly; the
+// cross-uid case (a shared box, a shared netns, CI) is an accepted limit — see
+// doc/agents/architecture-rules.md § Daemon trust model.
 
 /** GET and HEAD are the safe (non-mutating) HTTP methods. The CSRF guard gates
  * only non-safe methods, so a future mutating verb (DELETE/PATCH) is guarded by
@@ -73,11 +78,16 @@ const OWN_HOSTNAMES: ReadonlySet<string> = new Set(["127.0.0.1", "localhost", VA
 
 /** Whether an authority ("host" or "host:port") names THIS daemon — one of its
  * hostnames AND its bound port. Parsed through URL so `localhost` and
- * `localhost:80` normalize alike, and so a userinfo dodge
- * (`localhost:42718@evil.com`) resolves to the hostname that actually applies. */
+ * `localhost:80` normalize alike ("80" is the default the `http://` parse prefix
+ * implies, so the two must change together), and so a userinfo dodge
+ * (`localhost:42718@evil.com`) resolves to the hostname that actually applies.
+ * The href round-trip rejects a value that parses but is not an authority:
+ * `localhost:<port>/api` would otherwise answer "yes, that's me" to a Host that
+ * Bun then prepends to the routed path. */
 function isOwnAuthority(authority: string, port: number): boolean {
   try {
     const u = new URL(`http://${authority}`);
+    if (u.href !== `http://${u.host}/`) return false;
     return OWN_HOSTNAMES.has(u.hostname) && (u.port || "80") === String(port);
   } catch {
     return false;
