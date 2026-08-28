@@ -20,6 +20,7 @@ import {
   awaitDismissArmed,
   expect,
   test,
+  waitForTwoPollTicks,
   waitPastSafeModeGrace,
 } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
@@ -117,12 +118,19 @@ test("a backdrop click does NOT dismiss the reject guard (deliberate verdict, EX
   await page.getByRole("button", { name: "Reject", exact: true }).click();
   const guard = page.getByRole("alertdialog");
   await expect(guard).toBeVisible();
+  // A NEGATIVE assertion, so an unarmed layer drops the click and the guard survives
+  // either way: here the helper is the precondition for testing anything, not the flake
+  // remedy it is at confirm-popover's three sites (EXC-1204).
   await awaitDismissArmed(guard);
 
   // Unlike the approve confirm (which dismisses on a click outside, EXC-791), a
   // reject is a deliberate verdict: an alertdialog whose backdrop does NOT dismiss.
   // The guard survives the outside click and still rejects — proof it stayed open.
   await page.mouse.click(5, 5);
+  // A dismissing guard needs 196-319ms to leave the DOM, so an assertion on the click's
+  // heels resolves inside that window and passes either way. Two poll ticks is a network
+  // event well past it, which is what makes the survival a claim rather than a snapshot.
+  await waitForTwoPollTicks(page);
   await expect(guard).toBeVisible();
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
   await guard.getByRole("button", { name: "Reject", exact: true }).click();

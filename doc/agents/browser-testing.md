@@ -264,6 +264,25 @@ that look identical from the failure text:
   same rule under the same guard with nothing to race (`plan-breadcrumbs.e2e.ts` "reduced
   motion collapses the exit").
 
+**An outside-dismiss assertion inherits its meaning from its direction**, and the bits-ui
+arming window `awaitDismissArmed` waits out reads as two different things across it. Where
+the assertion is POSITIVE — the `page.mouse.click(5, 5)` in `approve.e2e.ts`,
+`modal-exit.e2e.ts` and `plan-breadcrumbs.e2e.ts` — an unarmed layer drops the click and
+the spec REDS, so the helper is a flake remedy and belongs there when one is observed
+flaking; none has been. Where it is NEGATIVE — `reject.e2e.ts`'s "a backdrop click does
+NOT dismiss" — an unarmed layer PASSES it, so the helper is the precondition for the spec
+testing anything at all, and belongs there unconditionally (EXC-1204).
+
+**Arming is not itself a bound.** A dismissing guard needs 196–319ms to leave the DOM — a
+10ms interact-outside debounce (bits-ui 2.18.1, the file the helper's docblock pins), then
+the exit animation — while an auto-retrying assertion resolves on its first sample, ~0ms
+after the click. Armed but unbounded, the negative above still could not red at its own
+`toBeVisible()`: flipping the guard backdrop-dismissible reds it 8/10, always at the
+guard's own reject click, which reads as exactly the contention flake this section warns
+against. `waitForTwoPollTicks` past the window makes it 10/10 at the assertion that names
+the behaviour. An absence assertion is only worth what bounds it — `barMotionAfter` in the
+Late bullet, in a second guise.
+
 A structural gate for this is deliberately **not** added.
 `test/structure/e2e-conventions.test.ts` would have to tell a read that feeds an assertion
 from one that feeds a later action, which is a real static-analysis problem for a rule
@@ -308,7 +327,7 @@ Verdicts recorded against them, so a later red gate knows what was already looke
 | `file-drawer.e2e.ts` "a row clicked during the lane's closing wipe" | Red 4/4 at 20x: the wipe is a 140ms timer, too short to spend a driver round trip inside. Fixed. |
 | `plan-breadcrumbs.e2e.ts` "walking to a sibling" | Green through 60x, reds under oversubscription: a too-early log read, the direction the throttle cannot produce. Fixed. |
 | `plan-breadcrumbs.e2e.ts` "reduced motion collapses the exit" | A LOST `animationstart`, not a late one: at `0.01ms` the crumb often goes before the animation starts, so no listener anywhere sees it. Re-asserted off the cascade. Fixed. |
-| `confirm-popover.e2e.ts` "a click outside the dialog's discard bubble" | A REAL race, and the clearest case of the throttle's blind spot: it survives 90x, yet `--repeat-each 20` at ordinary parallelism reds it 1/20. The arming signal is bits-ui's rather than the DOM's, and the click is DROPPED rather than delayed — the mechanism is written out once at `awaitDismissArmed` (`test/e2e/support/fixtures.ts`), which is what waits it out, at all three of the file's outside-click sites (EXC-1200). Fixed. The same window sits under every other outside-dismiss in the suite, and what it does there depends on which way the assertion points. Where the assertion is POSITIVE — `approve.e2e.ts:107`, `modal-exit.e2e.ts:150`, `plan-breadcrumbs.e2e.ts:937` — an unarmed layer REDS the spec, so the helper is a flake remedy and belongs there when one is observed flaking; none has been. Where it is NEGATIVE — `reject.e2e.ts`'s "a backdrop click does NOT dismiss" — an unarmed layer PASSES it, so the helper is not a remedy but the precondition for the spec detecting anything at all, and belongs there unconditionally (EXC-1204). What it does NOT do is rescue the visibility assertion sitting on the heels of that click: flipping the guard backdrop-dismissible reds the spec 8/10, always at the guard's own reject click and never at that `toBeVisible()`, because a dismissing guard needs 196–319ms to leave the DOM (10ms `#handleInteractOutside` debounce, then the exit animation) while an auto-retrying assertion resolves on its first sample, ~0ms in. The residual 2/10 is the daemon round trip beating that same window. An absence assertion is only worth what bounds it — the `barMotionAfter` rule one section up, in a second guise. |
+| `confirm-popover.e2e.ts` "a click outside the dialog's discard bubble" | A REAL race, and the clearest case of the throttle's blind spot: it survives 90x, yet `--repeat-each 20` at ordinary parallelism reds it 1/20. The arming signal is bits-ui's rather than the DOM's, and the click is DROPPED rather than delayed — the mechanism is written out once at `awaitDismissArmed` (`test/e2e/support/fixtures.ts`), which is what waits it out, at all three of the file's outside-click sites (EXC-1200). Fixed. The same window sits under every other outside-dismiss in the suite; which way the assertion points decides what an unarmed layer does there, and what else that costs — the outside-dismiss note above. |
 | `lineCenterY` callers | No miss in two full oversubscribed suites; the rows are already there the instant `.diff-plan` turns visible. Polled anyway, because that guard is the caller's rather than the helper's. |
 | `ref-hint.e2e.ts` "the dev fake plan badges both kinds" | Survives 20x, reds under oversubscription at 40s+. Budget starvation. Standing. |
 
