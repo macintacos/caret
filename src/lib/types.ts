@@ -387,6 +387,14 @@ export interface PrefsPatch {
   updates?: { check: boolean };
 }
 
+/** Body of GET /api/prefs — the daemon-owned prefs the UI reads on load. Wider
+ * than PrefsPatch: `approveMode` is readable here and writable only by the resolve
+ * path. */
+export interface PrefsResponse {
+  approveMode: ApproveVariantId;
+  updates: { check: boolean };
+}
+
 /** Body of PUT /api/reviews/:id/draft (the reviewer's working-copy autosave).
  * Each field is independently optional so a draft-only write never wipes
  * annotations (and vice versa). */

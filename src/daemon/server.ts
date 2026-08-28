@@ -12,6 +12,7 @@ import {
   type ApproveModeSet,
   createPrefsWriter,
   readApproveMode,
+  readUpdatesCheck,
   writeApproveMode,
 } from "@/config/prefs.ts";
 import { DEFAULTS } from "@/config/settings.ts";
@@ -47,6 +48,7 @@ import {
   type FileRefsResponse,
   type HealthIdentity,
   type PlanInput,
+  type PrefsResponse,
   type ResolveBody,
   type RouteResult,
   type SkillDescriptionResponse,
@@ -527,10 +529,16 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   }
 
   // GET /api/prefs — machine-global UI prefs, read once on UI load (deliberately
-  // not part of the 2s /api/reviews poll). Fail-safe: returns "default" if
-  // unreadable.
+  // not part of the 2s /api/reviews poll). Both reads fail safe: "default" for an
+  // unreadable approve mode, and a check that stays on. `updates.check` rides along
+  // (EXC-1207) because the browser gates its update surfaces on it — this daemon's
+  // own verdict was decided once at boot and cannot reflect a later opt-out.
   async function handlePrefs(): Promise<Response> {
-    return Response.json({ approveMode: await readApproveMode(prefsPath, log, approveModeSet) });
+    const body: PrefsResponse = {
+      approveMode: await readApproveMode(prefsPath, log, approveModeSet),
+      updates: { check: await readUpdatesCheck(prefsPath) },
+    };
+    return Response.json(body);
   }
 
   // POST /api/prefs — the write half (EXC-1206). Unlike the daemon's other bodies

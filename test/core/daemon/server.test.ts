@@ -1625,7 +1625,28 @@ test("GET /api/prefs defaults to 'default' on a fresh daemon", async () => {
   await boot();
   const res = await fetch(`${base}/api/prefs`);
   expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ approveMode: "default" });
+  expect(await res.json()).toEqual({ approveMode: "default", updates: { check: true } });
+});
+
+// EXC-1207: the read half now carries `updates.check` too, because the browser gates
+// its update badges on it — a daemon that decided "behind" before the reviewer turned
+// checks off would otherwise keep serving that stale verdict for its whole life.
+test("GET /api/prefs serves the updates.check the prefs file holds", async () => {
+  writeFileSync(join(dir, "prefs.json"), JSON.stringify({ updates: { check: false } }));
+  await boot();
+  expect(await (await fetch(`${base}/api/prefs`)).json()).toMatchObject({
+    updates: { check: false },
+  });
+});
+
+test("GET /api/prefs serves updates.check true when the file names no updates key", async () => {
+  // Default-on and fail-safe, matching the daemon's own readUpdatesCheck: only an
+  // explicit `false` turns the check off.
+  writeFileSync(join(dir, "prefs.json"), JSON.stringify({ approveMode: "default" }));
+  await boot();
+  expect(await (await fetch(`${base}/api/prefs`)).json()).toMatchObject({
+    updates: { check: true },
+  });
 });
 
 // ---- POST /api/prefs (EXC-1206) ----
