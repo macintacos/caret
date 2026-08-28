@@ -215,6 +215,39 @@ Three details worth knowing:
 - If the `cmux` binary isn't on the daemon's PATH, the mark is left standing and one
   `warn` lands in the daemon log.
 
+## Update notices
+
+The daemon asks once a day whether a newer caret is out (see the README for what that call
+sends and how to turn it off in `prefs.json`). This is what you see when the answer is
+yes.
+
+A toast arrives on your next page load, and it names the version rather than just saying
+one exists. It waits until you read or dismiss it instead of fading, and it appears
+**once per version** — the same release never nags you twice, but a newer one gets its own
+notice. **View** on the toast opens **Settings → Updates**.
+
+While an update is waiting, a small mark sits on the settings button in the top bar and on
+the **Updates** row in the settings rail, so the notice is findable again after you
+dismiss it.
+
+The **Updates** pane says which version you are running, which is available, and the exact
+command that installs it — the command matches how *this* caret was installed, so a
+published install and a locally-built one are told apart for you. There is no update
+button: caret tells you what to run, and you run it.
+
+Two readings are not problems, and the pane says so rather than reading like a failure:
+
+- **Nothing to compare against.** A caret built locally carries a commit that isn't on
+  trunk, so there is nothing for GitHub to compare it to. On a development machine this is
+  the normal daily reading.
+- **Update checks are off** — either because caret is running from source, or because you
+  turned them off.
+
+The **Check for updates** switch in that pane is the same `updates.check` setting the
+README describes, without the file edit. Turning it off stops the toast and both marks
+immediately; the daemon reads the switch when it starts, so the check itself stops at its
+next restart.
+
 ## Logging & Debugging
 
 ### Where the logs live

@@ -290,14 +290,20 @@
     <!-- A pending update marks the gear (EXC-1207), because Settings is where the
          reviewer acts on it. The state rides the button's own accessible name — a dot a
          screen reader can't reach is not a notification — so the dot itself is
-         decorative, the same split NotifyBell makes. -->
+         decorative, the same split NotifyBell makes.
+
+         onclick WRAPS the callback rather than passing it by reference: bare, the click
+         would hand its MouseEvent to whatever optional parameter the callback happens to
+         declare, and this prop's `() => void` type would not catch it. App's openSettings
+         takes an optional category, so unwrapped this deep-links Settings to a category
+         named "[object MouseEvent]". Closed here so every caller inherits the fix. -->
     <Button
       variant="secondary"
       size="icon"
       class="settings float-chip"
       aria-label={updatePending ? "Settings — update available" : "Settings"}
       aria-keyshortcuts={ariaKeyshortcutsFor("actions.settings")}
-      onclick={onOpenSettings}
+      onclick={() => onOpenSettings()}
     >
       <span class="gear-stack">
         <Icon name="settings" size={16} />

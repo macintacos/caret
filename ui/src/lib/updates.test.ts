@@ -117,15 +117,46 @@ describe("updatePaneCopy", () => {
     }
   });
 
-  test("unknown surfaces the daemon's own reason and stays out of failure language", () => {
-    // The common developer case: a locally-built binary GitHub cannot compare. That is
-    // normal, not broken, so the copy reports it plainly and offers no command.
+  test("a `disabled` verdict read while the switch is back ON says the check resumes", () => {
+    // The daemon decides `disabled` once, at boot, and holds it for its whole life — so
+    // after the reviewer turns the switch back on, the verdict is stale. Telling them to
+    // "turn it back on" six pixels above a switch that already reads on is the one thing
+    // this copy must not do.
+    const off = updatePaneCopy(report({ kind: "unavailable", reason: "disabled" }), false);
+    const backOn = updatePaneCopy(report({ kind: "unavailable", reason: "disabled" }), true);
+    expect(off.detail).not.toBe(backOn.detail);
+    expect(backOn.detail.toLowerCase()).toContain("restart");
+    expect(off.detail.toLowerCase()).not.toContain("restart");
+  });
+
+  test("checkEnabled changes nothing for any other verdict", () => {
+    // It is a `disabled`-only correction, not a second axis through the whole mapping.
+    for (const status of [RELEASE, COMMIT, { kind: "current" } as UpdateStatus]) {
+      expect(updatePaneCopy(report(status), true)).toEqual(updatePaneCopy(report(status), false));
+    }
+  });
+
+  test("the uncomparable-build reason is framed as normal for a local build", () => {
+    // This is the DAILY reading on a developer's machine, not a rare failure: a local
+    // build bakes in an unpushed commit, GitHub's compare 404s, and the verdict settles
+    // here. The copy has to say that is normal rather than implying something broke.
     const copy = updatePaneCopy(
       report({ kind: "unknown", reason: "could not compare this build against trunk" }),
     );
-    expect(copy.detail).toContain("compare this build against trunk");
+    expect(copy.detail.toLowerCase()).toContain("locally");
     expect(copy.command).toBeNull();
     expect(`${copy.headline} ${copy.detail}`.toLowerCase()).not.toContain("error");
+    expect(`${copy.headline} ${copy.detail}`.toLowerCase()).not.toContain("fail");
+  });
+
+  test("any other unknown reason surfaces the daemon's own sentence", () => {
+    // Every reason but the compare one is a genuine "could not tell", and the daemon's
+    // own wording says which — flattening them all into one line would hide the case.
+    const copy = updatePaneCopy(
+      report({ kind: "unknown", reason: "could not reach npm for the published version" }),
+    );
+    expect(copy.detail).toContain("reach npm for the published version");
+    expect(copy.command).toBeNull();
   });
 
   test("every status kind yields a non-empty headline and detail", () => {

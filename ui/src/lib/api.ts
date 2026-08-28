@@ -64,13 +64,23 @@ export async function getDiagnostics(): Promise<DaemonDiagnostics> {
  * was decided at boot — so this is a plain load-time read, not a poll.
  *
  * Throws on failure, unlike this file's degrading readers: every update surface renders
- * this one value, so there is nothing to fall back to. A 404 is a daemon that wires no
- * update thunk at all — App leaves the report null and every surface stays quiet. */
+ * this one value, so there is nothing to fall back to. App leaves the report null either
+ * way and every surface stays quiet.
+ *
+ * The two failures are logged apart, the way getSkills keeps its own two apart, and for a
+ * sharper reason: this fires on EVERY page load, so a daemon that wires no update thunk
+ * would otherwise earn a `warn` per page view forever — the per-iteration noise
+ * logging-rules.md forbids. A 404 is that daemon and is unremarkable; anything else is a
+ * read that should have worked. */
 export async function getUpdate(): Promise<UpdateReport> {
   try {
     return await json(await fetch("/api/update"));
   } catch (err) {
-    uiLog.warn("request", "update report read failed", { reason: String(err) });
+    if (err instanceof HttpError && err.status === 404) {
+      uiLog.debug("request", "update route unwired");
+    } else {
+      uiLog.warn("request", "update report read failed", { reason: String(err) });
+    }
     throw err;
   }
 }

@@ -42,7 +42,23 @@ async function routeBehindRelease(page: Page): Promise<void> {
   );
 }
 
+/** Answer `GET /api/prefs` with the check turned OFF, leaving the POST half to reach the
+ * real daemon so a write still round-trips. */
+async function routeCheckOff(page: Page): Promise<void> {
+  await page.route("**/api/prefs", (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ approveMode: "default", updates: { check: false } }),
+        })
+      : route.fallback(),
+  );
+}
+
 const toast = (page: Page) => page.locator(".alert-item", { hasText: "Update available" });
+const markedGear = (page: Page) =>
+  page.getByRole("button", { name: "Settings — update available" });
 
 test("a pending update toasts on load and dots the settings gear", async ({ daemon, page }) => {
   await daemon.seed();
@@ -53,7 +69,7 @@ test("a pending update toasts on load and dots the settings gear", async ({ daem
   await expect(toast(page)).toBeVisible();
   await expect(toast(page)).toContainText(AVAILABLE);
   // The gear's state is announced, not only painted.
-  await expect(page.getByRole("button", { name: "Settings — update available" })).toBeVisible();
+  await expect(markedGear(page)).toBeVisible();
 });
 
 test("the toast's action opens Settings on the Updates pane, carrying the command", async ({
@@ -79,6 +95,49 @@ test("the toast's action opens Settings on the Updates pane, carrying the comman
   await expect(page.getByRole("switch", { name: "Check for updates" })).toBeVisible();
 });
 
+test("the opt-out silences a pending verdict — no toast, no marks", async ({ daemon, page }) => {
+  // The gate the whole design rests on. The daemon settles its verdict at boot and holds
+  // it for its whole life, so a reviewer who turns the check off is still SERVED
+  // `behind-release` — the browser is the only place that can honour the opt-out.
+  //
+  // This is also the regression guard for the load race: the two reads are settled
+  // together precisely so the verdict cannot arrive first and toast against the
+  // still-default gate, burning that version's once-per-version marker on the way past.
+  await daemon.seed();
+  await routeBehindRelease(page);
+  await routeCheckOff(page);
+  await page.goto("/");
+  await planSurface(page);
+
+  await expect(markedGear(page)).toHaveCount(0);
+  await expect(toast(page)).toHaveCount(0);
+
+  // The marker was not spent either: turning the check back on must still toast this
+  // version. Proven by reloading with the opt-out lifted.
+  await page.unroute("**/api/prefs");
+  await page.reload();
+  await planSurface(page);
+  await expect(toast(page)).toBeVisible();
+});
+
+test("flipping the toggle off clears the marks without a reload", async ({ daemon, page }) => {
+  await daemon.seed();
+  await routeBehindRelease(page);
+  await page.goto("/");
+  await planSurface(page);
+  await expect(markedGear(page)).toBeVisible();
+
+  await markedGear(page).click();
+  await page.locator("[data-category='Updates']").click();
+  await page.getByRole("switch", { name: "Check for updates" }).click();
+
+  // App mirrors the accepted write rather than re-reading a daemon-owned value, so the
+  // badges clear on the spot.
+  await expect(page.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
+  await expect(markedGear(page)).toHaveCount(0);
+  await expect(page.locator("[data-slot='sidebar-menu-badge']")).toHaveCount(0);
+});
+
 test("the fixture daemon answers the update route with a quiet verdict", async ({
   daemon,
   page,
@@ -99,7 +158,7 @@ test("the fixture daemon answers the update route with a quiet verdict", async (
   await expect(page.locator("[data-updates-pane] .update-placeholder")).toHaveCount(0);
   // And quiet: nothing pending, so no command and no mark on the gear.
   await expect(page.locator("[data-updates-pane] .update-command")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Settings — update available" })).toHaveCount(0);
+  await expect(markedGear(page)).toHaveCount(0);
 });
 
 test("a reload does not re-toast the same version", async ({ daemon, page }) => {
@@ -118,6 +177,6 @@ test("a reload does not re-toast the same version", async ({ daemon, page }) => 
   // nudge is spent. Asserting the mark first is what bounds the absence below: it proves
   // the report landed on this load, so a missing toast means suppressed rather than
   // not-yet-arrived.
-  await expect(page.getByRole("button", { name: "Settings — update available" })).toBeVisible();
+  await expect(markedGear(page)).toBeVisible();
   await expect(toast(page)).toHaveCount(0);
 });

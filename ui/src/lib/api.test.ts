@@ -693,12 +693,24 @@ describe("getUpdate", () => {
     expect(cap.events()).toHaveLength(0);
   });
 
-  test("a 404 warns at step request and rejects — a daemon wiring no update thunk", async () => {
-    // The route is optional daemon-side, like /api/diagnostics. App leaves the report
-    // null on this path and every update surface stays quiet.
+  test("a 404 is debug, not warn — this fires on every load", async () => {
+    // A daemon that wires no update thunk is unremarkable, and warning about it once per
+    // page view is the per-iteration noise logging-rules.md forbids.
     respond = () => Promise.resolve(new Response(null, { status: 404 }));
 
     await expect(getUpdate()).rejects.toThrow(HttpError);
+    flush();
+
+    expect(cap.events().some((r) => r.level === "warn")).toBe(false);
+    const debug = cap.events().find((r) => r.level === "debug");
+    expect(debug?.step).toBe("request");
+    expect(debug!.msg as string).toContain("update route unwired");
+  });
+
+  test("any other failure warns at step request and rejects", async () => {
+    respond = () => Promise.reject(new Error("offline"));
+
+    await expect(getUpdate()).rejects.toThrow("offline");
     flush();
 
     const warn = cap.events().find((r) => r.level === "warn");

@@ -7,6 +7,7 @@
   // theme, safe mode, the keyboard-shortcut dispatcher, and the UI-gone presence
   // beacon. The behaviors themselves live in $lib/* and @/state/*; this file only
   // holds them together and lays out the TopBar + DiffPlanView.
+  import { untrack } from "svelte";
   import { getHealth, getUpdate, getUpdatesCheck, markSeen } from "$lib/api.ts";
   import { approveVariants } from "$lib/approve.ts";
   import { createPlanNotifier } from "$lib/notify.ts";
@@ -49,6 +50,7 @@
     SETTINGS_REGISTRY,
     type StagedField,
     THEME_KEYS,
+    UPDATES_CATEGORY,
     UPDATES_CHECK_KEY,
   } from "$lib/settingsRegistry.ts";
   import { isUpdatePending, updateSignature, updateToast } from "$lib/updates.ts";
@@ -115,9 +117,9 @@
   // which exposes it as data-source.
   let source = $state<string | undefined>(undefined);
   // The daemon's cached update verdict (EXC-1207), read once on load. Null until it
-  // lands, and null for good when it can't be read — a daemon that wires no update
-  // thunk 404s the route, which is normal rather than exceptional (the e2e fixture
-  // daemon is one). Every update surface renders this one value.
+  // lands, and null for good when it can't be read — a daemon that wires no update thunk
+  // 404s the route, and every surface then simply stays quiet. Every update surface
+  // renders this one value.
   let updateReport = $state<UpdateReport | null>(null);
   // The reviewer's `updates.check` opt-out, mirrored here from the same load. It gates
   // the surfaces below in the BROWSER, which is load-bearing rather than belt-and-
@@ -419,16 +421,24 @@
   // network check is triggered by the UI — the daemon decided this at boot and the route
   // only reports it. No reactive reads, so this runs once. Both failures are quiet: the
   // report stays null (every surface then says nothing) and the opt-out fails safe to on.
+  //
+  // The two reads SETTLE TOGETHER, and the gate is assigned before the verdict. Fired as
+  // independent promises they race, and the race has a predictable loser: /api/update is a
+  // synchronous thunk read while /api/prefs awaits two file reads, so the verdict lands
+  // first essentially every time. With `updatesCheck` still at its optimistic default, a
+  // reviewer who had opted out would get the toast anyway — and it would spend that
+  // version's once-per-version marker on its way past, so the nudge would be lost for good
+  // if they ever turned checks back on. Settling first is what makes the gate atomic.
   $effect(() => {
-    void getUpdate()
-      .then((report) => (updateReport = report))
-      .catch(() => {});
-    void getUpdatesCheck().then((check) => {
-      updatesCheck = check;
-      // Seed the holder the Updates toggle's synchronous read() closes over, so the
-      // control opens showing what is actually on disk rather than the default.
-      seedUpdatesCheck(check);
-    });
+    void Promise.all([getUpdate().catch(() => null), getUpdatesCheck()]).then(
+      ([report, check]) => {
+        updatesCheck = check;
+        // Seed the holder the Updates toggle's synchronous read() closes over, so the
+        // control opens showing what is actually on disk rather than the default.
+        seedUpdatesCheck(check);
+        updateReport = report;
+      },
+    );
   });
 
   // The once-per-version nudge. Fires when the verdict resolves and the gate holds, and
@@ -437,25 +447,38 @@
   // its own. Persistent, because a nudge worth reading should not vanish in four seconds
   // and it can fire at most once per version so it cannot nag; silent, because a page
   // load should not chime.
+  //
+  // `toasted` is a plain local rather than the stored marker, and it is what keeps this
+  // effect from re-entering: `alerts.push` READS `alertStore.alerts` to append to it, so
+  // pushing from inside an effect makes the queue one of this effect's own dependencies.
+  // The stored marker cannot stand in, because it is allowed to fail — with storage
+  // blocked, `readToastedUpdate()` keeps answering null and the guard never holds, so the
+  // effect would push, invalidate itself, push again, and take the app down with
+  // `effect_update_depth_exceeded`. The push is untracked besides, so the queue is never a
+  // dependency in the first place (the ModalPresence idiom).
+  let toasted = false;
   $effect(() => {
-    if (!updatePending || !updateReport) return;
+    if (toasted || !updatePending || !updateReport) return;
     const signature = updateSignature(updateReport.status);
     const toast = updateToast(updateReport);
     if (!signature || !toast || readToastedUpdate() === signature) return;
+    toasted = true;
     writeToastedUpdate(signature);
-    const id = alerts.push({
-      ...toast,
-      persistent: true,
-      sound: null,
-      action: {
-        label: "View",
-        run: () => {
-          // Activating an alert does not dismiss it (state/alerts.ts), and leaving this
-          // one behind the dialog it just opened would strand it.
-          alerts.dismiss(id);
-          openSettings("Updates");
+    untrack(() => {
+      const id = alerts.push({
+        ...toast,
+        persistent: true,
+        sound: null,
+        action: {
+          label: "View",
+          run: () => {
+            // Activating an alert does not dismiss it (state/alerts.ts), and leaving this
+            // one behind the dialog it just opened would strand it.
+            alerts.dismiss(id);
+            openSettings(UPDATES_CATEGORY);
+          },
         },
-      },
+      });
     });
   });
 
@@ -733,9 +756,6 @@
 </script>
 
 <div class="shell">
-  <!-- onOpenSettings is WRAPPED rather than passed by reference: the gear's onclick
-       would otherwise hand its MouseEvent to openSettings's optional category
-       parameter, deep-linking Settings to a category named "[object MouseEvent]". -->
   <TopBar
     reviews={selection.reviews}
     {active}
@@ -751,7 +771,7 @@
     {onApprove}
     onRequestChanges={() => (showDialog = true)}
     {onReject}
-    onOpenSettings={() => openSettings()}
+    onOpenSettings={openSettings}
     {showShortcutHints}
     {updatePending}
   />
@@ -967,6 +987,7 @@
       initialCategory={settingsCategory}
       {updatePending}
       {updateReport}
+      {updatesCheck}
     />
   {/snippet}
 </ModalPresence>

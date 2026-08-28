@@ -19,10 +19,16 @@
   interface Props {
     /** The daemon's cached verdict, or null when it could not be read. */
     report: UpdateReport | null;
+    /** The LIVE `updates.check` value, which the verdict may already be stale against —
+     * the daemon settles `unavailable`/`disabled` at boot and holds it. It corrects that
+     * one arm's copy and nothing else: this pane reports the verdict whether or not the
+     * reviewer wants to be nagged about it, which is why the badges gate on the opt-out
+     * and the pane does not. */
+    checkEnabled?: boolean;
   }
-  let { report }: Props = $props();
+  let { report, checkEnabled = false }: Props = $props();
 
-  const copy = $derived(report ? updatePaneCopy(report) : null);
+  const copy = $derived(report ? updatePaneCopy(report, checkEnabled) : null);
   // The dot is the pane's one hued element, and it carries the verdict before the
   // sentence does. --attention is the novelty job ("worth a glance"), --ok the positive
   // semantic, and everything else stays on the neutral ink ramp. Amber is deliberately
@@ -54,8 +60,17 @@
              the sunk mono block the Advanced diagnostics already read as copyable text.
              It is a <code>, not a control: there is no copy button here, deliberately —
              the reader is at a terminal, and the Advanced pane's copy affordance is a
-             click away if one is ever wanted. -->
-        <code class="update-command">{copy.command}</code>
+             click away if one is ever wanted.
+
+             It scrolls (the release command overflows the pane), and Chrome and Safari
+             leave a plain `overflow: auto` element out of the tab order — so the region
+             role plus the tab stop ARE the keyboard reading affordance, exactly as
+             FilePreview's `.fp-code` carries them for the same reason (EXC-972). -->
+        <code
+          class="update-command"
+          role="region"
+          tabindex="0"
+          aria-label="Upgrade command">{copy.command}</code>
       {/if}
     {:else}
       <p class="update-placeholder">No update information is available from the daemon.</p>

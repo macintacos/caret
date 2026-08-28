@@ -282,6 +282,14 @@ describe("staged fields wrap existing pref modules", () => {
   // Both sweeps write EVERY staged field, and a daemon-backed one writes by POSTing —
   // so the suite answers /api/prefs rather than carrying an exclusion list, and covers
   // both kinds with one stub. `{ ok: true }` is what setPrefs parses on success.
+  //
+  // ORDERING, and it is load-bearing: daemonField's landed-value shadow is closure state
+  // on the module-level registry with no reset seam, so this sweep pins updatesCheck's
+  // read() to the swept value for the rest of the process — `seedUpdatesCheck` cannot
+  // reach past it, and the afterEach that restores the seed does not restore the shadow.
+  // Any case asserting a daemon field's read() must be declared ABOVE this describe, as
+  // the Updates suite is. Giving daemonField a reset seam is the durable fix and is the
+  // second daemon-backed field's problem, not this one's.
   let cap: LogCapture;
   beforeEach(() => {
     cap = logCapture(() =>

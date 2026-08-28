@@ -33,7 +33,7 @@ import {
   writeSoundVolume,
 } from "$lib/soundPref.ts";
 import { type Scheme, type ThemeId, themesForScheme } from "$lib/theme.ts";
-import { readUpdatesCheck } from "$lib/updatesPref.ts";
+import { seededUpdatesCheck } from "$lib/updatesPref.ts";
 
 /** One choice in a select or segmented control. `swatch` is an optional row of CSS
  * colors rendered as small dots beside the label — the theme options preview their
@@ -243,6 +243,11 @@ export const THEME_KEYS: readonly string[] = Object.values(THEME_FIELD);
  * opt-out — without re-spelling a literal the registry owns. */
 export const UPDATES_CHECK_KEY = "updatesCheck";
 
+/** The Updates category id, exported for the same reason the key above is: the update
+ * toast deep-links to this pane from another module, and a renamed category would
+ * otherwise degrade that link to "opens on Appearance" with nothing to fail on it. */
+export const UPDATES_CATEGORY = "Updates";
+
 const diffStyleOptions = [
   { value: "split", label: "Split" },
   { value: "unified", label: "Unified" },
@@ -373,11 +378,11 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
   // lands.
   daemonField<boolean>({
     key: UPDATES_CHECK_KEY,
-    category: "Updates",
+    category: UPDATES_CATEGORY,
     label: "Check for updates",
     description: "Ask GitHub once a day whether a newer caret is out.",
     control: { kind: "toggle" },
-    read: readUpdatesCheck,
+    read: seededUpdatesCheck,
     patch: (check) => ({ updates: { check } }),
   }),
   // The pane's verdict block is live and read-only, so — following the Advanced
@@ -386,7 +391,7 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
   {
     kind: "search",
     key: "updateStatus",
-    category: "Updates",
+    category: UPDATES_CATEGORY,
     label: "Update status",
     description: "Whether this caret is behind, and the command that takes the upgrade.",
   },
@@ -443,6 +448,6 @@ export const SETTINGS_CATEGORIES: readonly SettingCategory[] = [
   { id: "Appearance", blurb: "How the interface looks, including the diff view." },
   { id: "Sound", blurb: "Short cues when a plan arrives and a decision lands." },
   { id: "Notifications", blurb: "Desktop alerts when a new plan is ready for review." },
-  { id: "Updates", blurb: "Whether a newer caret is out, and how to install it." },
+  { id: UPDATES_CATEGORY, blurb: "Whether a newer caret is out, and how to install it." },
   { id: "Advanced", blurb: "Read-only details about this install. Click a block to copy it." },
 ];

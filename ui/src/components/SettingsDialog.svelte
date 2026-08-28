@@ -56,6 +56,7 @@
     settingLabelTarget,
     type StagedField,
     THEME_SECTION,
+    UPDATES_CATEGORY,
   } from "$lib/settingsRegistry.ts";
   import AdvancedPane from "@/components/AdvancedPane.svelte";
   import NotificationsPane from "@/components/NotificationsPane.svelte";
@@ -92,6 +93,9 @@
     /** The daemon's cached update verdict, rendered by the Updates pane. Null when it
      * could not be read; the pane degrades rather than erroring. */
     updateReport?: UpdateReport | null;
+    /** The live `updates.check` value. Only the pane's copy uses it, to correct the one
+     * verdict the daemon settles at boot and cannot revise (see UpdatesPane). */
+    updatesCheck?: boolean;
   }
   let {
     open,
@@ -103,6 +107,7 @@
     initialCategory,
     updatePending = false,
     updateReport = null,
+    updatesCheck = false,
   }: Props = $props();
 
   // EXC-849: while Settings owns the view, publish its own keyboard affordances into the
@@ -285,8 +290,8 @@
                        pointer-events:none, so it can't shadow the row's own click. The
                        row's accessible name is unchanged; the badge is decorative here
                        because the pane it points at states the same thing in words. -->
-                  {#if updatePending && cat.id === "Updates"}
-                    <Sidebar.MenuBadge class="update-badge" aria-hidden="true">
+                  {#if updatePending && cat.id === UPDATES_CATEGORY}
+                    <Sidebar.MenuBadge aria-hidden="true">
                       <span class="rail-dot"></span>
                     </Sidebar.MenuBadge>
                   {/if}
@@ -322,11 +327,11 @@
           {:else if selected.id === "Advanced"}
             <AdvancedPane {onCopyDiagnostic} />
           {:else}
-            {#if selected.id === "Updates"}
+            {#if selected.id === UPDATES_CATEGORY}
               <!-- Updates is the one category whose pane sits ABOVE its fields rather
                    than replacing them (EXC-1207): the verdict is read-only, but the
                    `updates.check` opt-out beneath it is an ordinary registry field. -->
-              <UpdatesPane report={updateReport} />
+              <UpdatesPane report={updateReport} checkEnabled={updatesCheck} />
             {/if}
             {#each paneSections as section, si (si)}
               {#if section.label === THEME_SECTION}

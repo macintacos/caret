@@ -44,8 +44,8 @@
           <span class="alert-message" id="alert-message-{a.id}">{a.message}</span>
           <!-- The activate affordance (EXC-1207), after the message so it reads as
                "here's the news, here's what to do about it" and before the dismiss
-               control. Out of context — a screen reader's button list — a bare
-               "Update" says nothing about which alert it acts on, so the message
+               control. Out of context — a screen reader's button list — a bare verb
+               like "View" says nothing about which alert it acts on, so the message
                describes it, the same job aria-label does for the icon-only dismiss. -->
           {#if a.action}
             <button
@@ -119,9 +119,9 @@
      control, and nesting interactive controls is an accessibility defect. It
      rides the card's variant color rather than the accent (which is spoken for
      by selection and brand), so the underline carries the whole affordance —
-     the carrot-fact link's reasoning, and the same explicit text-decoration-line
-     because Tailwind's preflight resets it to none. It self-starts so its hit
-     area is the label, not the card's full width. */
+     the carrot-fact link's reasoning, and the same explicit text-decoration-line,
+     since a <button> carries no underline of its own to inherit. It self-starts so
+     its hit area is the label, not the card's full width. */
   .alert-action {
     align-self: flex-start;
     margin-top: 0.2rem;

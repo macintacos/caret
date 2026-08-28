@@ -12,6 +12,12 @@
 
 import type { UpdateReport, UpdateStatus } from "@core/lib/types";
 
+/** The daemon's `unknown` reason for a build GitHub cannot compare against trunk —
+ * mirrored from NEEDS_COMPARE in src/daemon/update-check.ts, which is daemon-only and so
+ * cannot be imported here. The two are coupled by this constant alone: a drift costs the
+ * dedicated copy below and falls back to the generic arm, never a broken render. */
+const UNCOMPARABLE = "could not compare this build against trunk";
+
 /** Whether this verdict is worth showing the reviewer at all — the whole badge
  * condition. `current`, `unavailable`, and `unknown` are all quiet: only a caret that
  * is actually behind earns a dot. */
@@ -54,9 +60,18 @@ export function updateToast(report: UpdateReport): { title: string; message: str
  * The two non-verdicts read as ordinary states rather than as failures, which is the
  * point of keeping them apart. `unavailable` is the check being off, and its two reasons
  * say which off it is; `unknown` is the check having run without reaching an answer —
- * routinely a locally-built binary whose commit GitHub cannot compare, which is normal
- * for a developer and is reported as the daemon's own sentence rather than as an error. */
-export function updatePaneCopy(report: UpdateReport): {
+ * routinely a locally-built binary whose commit GitHub cannot compare, which is the DAILY
+ * reading on a developer's machine and is framed as normal rather than as a failure.
+ *
+ * `checkEnabled` is the live opt-out, and it corrects exactly one arm. The daemon decides
+ * `unavailable`/`disabled` once, at boot, and holds it for its whole life — so once the
+ * reviewer turns the switch back on, that verdict is stale, and the pane would otherwise
+ * tell them to turn on a switch already reading on six pixels below. Every other arm
+ * ignores it: the verdict is still true, and the opt-out only asked not to be nagged. */
+export function updatePaneCopy(
+  report: UpdateReport,
+  checkEnabled = false,
+): {
   headline: string;
   detail: string;
   command: string | null;
@@ -88,18 +103,31 @@ export function updatePaneCopy(report: UpdateReport): {
           }
         : {
             headline: "Update checks are off",
-            detail: "Turn them back on to hear about a new caret when one is out.",
+            detail: checkEnabled
+              ? "Restart the daemon to run the check — it reads this switch when it starts."
+              : "Turn them back on to hear about a new caret when one is out.",
             command: null,
           };
     case "unknown":
-      return {
-        headline: "No update information yet",
-        // The daemon's reasons are written as sentence fragments and carry nothing
-        // identifying (see update-check.ts), so they are shown as-is rather than
-        // flattened into one generic line that would hide which case this is.
-        detail: `${sentence(status.reason)}. ${running}`,
-        command: null,
-      };
+      // The one reason worth its own words, because on a developer's machine it is the
+      // normal daily reading rather than a fault: `mise run build --install` bakes an
+      // unpushed commit into the binary, GitHub's compare 404s, and the check settles
+      // here. Matched on the daemon's own sentence — see NEEDS_COMPARE in
+      // src/daemon/update-check.ts, the constant this string mirrors.
+      return status.reason === UNCOMPARABLE
+        ? {
+            headline: "Nothing to compare against",
+            detail: `This caret was built locally, so its commit isn't on trunk for GitHub to compare. ${running}`,
+            command: null,
+          }
+        : {
+            headline: "No update information yet",
+            // Every other reason is a genuine "could not tell", and the daemon's wording
+            // says which. Shown as-is rather than flattened into one line that would hide
+            // the case; the reasons carry nothing identifying (see update-check.ts).
+            detail: `${sentence(status.reason)}. ${running}`,
+            command: null,
+          };
   }
 }
 

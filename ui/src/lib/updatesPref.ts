@@ -45,8 +45,14 @@ export function writeToastedUpdate(signature: string): void {
 let updatesCheck = true;
 
 /** Whether the daemon's update check is on, as last seeded. Synchronous because the
- * settings registry's read() is. */
-export const readUpdatesCheck = (): boolean => updatesCheck;
+ * settings registry's read() is.
+ *
+ * Named for the seeding rather than for a read, and deliberately: the daemon exports a
+ * `readUpdatesCheck` too (src/config/prefs.ts) that actually opens prefs.json, while this
+ * one answers from a RAM cell that reports the optimistic default until App has seeded
+ * it. A caller reaching for this before the load fetch lands gets a confident guess, so
+ * the name says where the value comes from. */
+export const seededUpdatesCheck = (): boolean => updatesCheck;
 
 /** Seed the holder from the daemon's answer (App, on load). */
 export function seedUpdatesCheck(value: boolean): void {

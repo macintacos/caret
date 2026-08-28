@@ -15,6 +15,7 @@ Find the row that matches what you came here to do, then follow the link.
 | Turn caret's sounds off | [`RUNNING.md` § Sound](RUNNING.md#sound) |
 | Tell which plans arrived while you were reading another one | [`RUNNING.md` § Unread plans](RUNNING.md#unread-plans) |
 | Clear a cmux pane's unread mark from a review | [`RUNNING.md` § cmux unread marks](RUNNING.md#cmux-unread-marks) |
+| Find out what the mark on the settings button means, or stop update notices | [`RUNNING.md` § Update notices](RUNNING.md#update-notices) |
 | Find the logs, or scrub them before sharing | [`RUNNING.md` § Logging & Debugging](RUNNING.md#logging--debugging) |
 | Understand how caret works, and how it hooks into your agent | [`ARCHITECTURE.md` § How it works](ARCHITECTURE.md#how-it-works) |
 | Call the review tool from a skill of your own | [`ARCHITECTURE.md` § Calling the review tool from your own skill](ARCHITECTURE.md#calling-the-review-tool-from-your-own-skill) |

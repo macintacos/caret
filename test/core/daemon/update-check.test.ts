@@ -409,3 +409,24 @@ test("a bundle asks npm and nothing else", async () => {
   expect((await runUpdateCheck(d))?.kind).toBe("behind-release");
   expect(d.calls).toEqual(["npm"]);
 });
+
+// EXC-1207. The Updates pane gives the "cannot compare against trunk" reason its own copy
+// — that verdict is a developer's normal daily reading, not a fault — and matches on the
+// reason string. The browser cannot import this module (node-only), so `UNCOMPARABLE` in
+// ui/src/lib/updates.ts MIRRORS the constant here, and a mirror without a pin is a comment
+// rather than an invariant. Asserted by producing the verdict through the real code path
+// rather than by reading NEEDS_COMPARE, which is not exported.
+test("the uncomparable-build reason matches the string the Updates pane keys off", async () => {
+  const status = updateStatusFor({
+    kind: "binary",
+    version: "0.13.0",
+    commit: "abc1234",
+    npmLatest: null,
+    release: "0.13.0",
+    aheadBy: null,
+  });
+  expect(status).toEqual({
+    kind: "unknown",
+    reason: "could not compare this build against trunk",
+  });
+});

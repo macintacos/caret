@@ -4,7 +4,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { knownPrefKeys } from "$lib/definePref.ts";
 import {
   readToastedUpdate,
-  readUpdatesCheck,
+  seededUpdatesCheck,
   seedUpdatesCheck,
   UPDATE_TOASTED_KEY,
   writeToastedUpdate,
@@ -63,14 +63,14 @@ describe("the toasted-update marker", () => {
 
 describe("the seeded updates.check holder", () => {
   test("defaults on, so a load that never seeds behaves as the daemon's own default does", () => {
-    expect(readUpdatesCheck()).toBe(true);
+    expect(seededUpdatesCheck()).toBe(true);
   });
 
   test("reads back what App seeded from the daemon", () => {
     seedUpdatesCheck(false);
-    expect(readUpdatesCheck()).toBe(false);
+    expect(seededUpdatesCheck()).toBe(false);
     seedUpdatesCheck(true);
-    expect(readUpdatesCheck()).toBe(true);
+    expect(seededUpdatesCheck()).toBe(true);
   });
 
   test("holds no localStorage key of its own — the daemon owns the value", () => {
