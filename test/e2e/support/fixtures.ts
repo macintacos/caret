@@ -21,7 +21,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { test as base, expect, type Page } from "@playwright/test";
+import { test as base, expect, type Locator, type Page } from "@playwright/test";
 
 import { KEY_REPEAT_DELAY_MS } from "@ui/src/lib/keyRepeat.ts";
 import { waitForHealth } from "@/daemon/client.ts";
@@ -477,6 +477,68 @@ export async function awaitKeyboardReady(
     }
     await sleep(25);
   }
+}
+
+/** The one field of bits-ui's `DismissibleLayerState` this needs: the layer's own node. */
+type BitsLayer = { opts: { ref: { current: Element | null } } };
+type BitsLayerRegistry = { bitsDismissableLayers?: Map<BitsLayer, unknown> };
+
+/**
+ * Wait until `layer`'s bits-ui dismissible layer has armed its outside-click handler.
+ *
+ * A layer is not dismissible the moment it is on screen. `DismissibleLayerState` (bits-ui
+ * 2.18.1: node_modules/bits-ui/dist/bits/utilities/dismissible-layer/use-dismissable-layer.svelte.js)
+ * attaches its document `pointerdown`/`focusin` listeners inside `afterSleep(1, …)` once
+ * its `ref` is set — so both `toBeVisible()`, which resolves on paint, and the confirm
+ * button taking focus from `onOpenAutoFocus`, which runs on mount, land INSIDE that
+ * window. Neither proves a thing about dismissal; waiting on the focus was measured still
+ * red 3/40 (EXC-1200).
+ *
+ * The click is DROPPED rather than delayed, which is why nothing later recovers it, by
+ * whichever of two routes the call site has. With a layer beneath — a bubble inside the
+ * Request Changes dialog — that one is still top-most, and a pointerdown inside it (the
+ * dialog's own heading, say) is not outside anything. With nothing registered beneath —
+ * the composer and the annotation card, neither of which is a bits-ui layer — the map is
+ * empty and no document listener exists at all, so the pointerdown reaches nobody. Same
+ * lost gesture, shorter route.
+ *
+ * Membership in `globalThis.bitsDismissableLayers` is therefore the arming signal, and an
+ * exact one: bits-ui registers the layer there in the same synchronous callback that
+ * attaches the listeners. It proves the layer is ARMED, not that it is RESPONSIBLE —
+ * `isResponsibleLayer` runs `findLast` over the layers whose behaviour is `close` or
+ * `ignore` and falls back to the first when they all defer, which at these call sites
+ * lands on the bubble only because it is the last layer opened. The window measured
+ * 4–47ms locally, with the layer still unarmed after `toBeVisible()` in 3 runs of 30.
+ *
+ * Not a product bug: the window is a 1ms `setTimeout` that only host contention stretches
+ * this far, and a real reviewer's next click cannot land inside a window their own
+ * preceding click opened. It is the driver, arriving in microseconds, that gets there.
+ *
+ * Call it on the layer's own content element — the node bits-ui binds as `ref`, which for
+ * the discard bubble is the `role="alertdialog"` div `discardConfirm()` returns, not a
+ * descendant of it — and only once that element is on screen: `expect.poll` evaluates its
+ * callback OUTSIDE the try/catch that drives the retry, so an unresolvable locator fails
+ * on the first attempt against the per-test budget rather than polling against this one.
+ *
+ * `expect.poll` so the read inherits the assertion budget rather than the per-test one
+ * (doc/agents/browser-testing.md § Timing discipline, the "Polled" bullet).
+ */
+export async function awaitDismissArmed(layer: Locator): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        layer.evaluate((el) => {
+          const layers = (globalThis as unknown as BitsLayerRegistry).bitsDismissableLayers;
+          return layers !== undefined && [...layers.keys()].some((l) => l.opts.ref.current === el);
+        }),
+      {
+        message:
+          "bits-ui never registered this layer in globalThis.bitsDismissableLayers. Either " +
+          "the layer never opened, or bits-ui moved the internal this wait reads — re-check " +
+          "use-dismissable-layer.svelte.js against the docblock above (read at 2.18.1).",
+      },
+    )
+    .toBe(true);
 }
 
 /**

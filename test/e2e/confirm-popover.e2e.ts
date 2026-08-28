@@ -14,7 +14,12 @@
 // in ui/src/components/ConfirmPopover.test.ts, per doc/agents/browser-testing.md.
 
 import { discardConfirm, inlineRows } from "@test/e2e/support/chrome.ts";
-import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import {
+  awaitDismissArmed,
+  expect,
+  test,
+  waitPastSafeModeGrace,
+} from "@test/e2e/support/fixtures.ts";
 import { planSurface, revealGutterPlus } from "@test/e2e/support/source-view.ts";
 
 /** Open the gutter composer on `line` with `draft` typed into it. The composer only
@@ -67,6 +72,7 @@ test("a click outside the composer's discard bubble cancels rather than confirms
   const composer = await composerWithDraft(page, "still here");
   await composer.getByRole("button", { name: "Discard" }).click();
   await expect(discardConfirm(page)).toBeVisible();
+  await awaitDismissArmed(discardConfirm(page));
 
   // A click outside the bubble is a light dismiss, never a confirmation. The target
   // is the composer's own inert range label: clicking the plan behind it would also
@@ -257,6 +263,7 @@ test("a click outside the card's delete bubble keeps the comment", async ({ daem
   const card = page.locator("[data-annotation-card]");
   await card.getByRole("button", { name: "Discard" }).click();
   await expect(discardConfirm(page)).toBeVisible();
+  await awaitDismissArmed(discardConfirm(page));
 
   // A real pointerdown on the plan, placed BELOW the bubble's own box rather than on
   // a named element — the same gesture plan-toc.e2e.ts uses, and for the same reason:
@@ -293,6 +300,7 @@ test("a click outside the dialog's discard bubble keeps the comment and the dial
 
   await inlineRows(dialog).getByRole("button", { name: "Discard", exact: true }).click();
   await expect(discardConfirm(page)).toBeVisible();
+  await awaitDismissArmed(discardConfirm(page));
 
   // Inside the dialog but outside the bubble — the dialog's own title, which is
   // inert. The bubble is the topmost dismissible layer, so it takes the dismissal
