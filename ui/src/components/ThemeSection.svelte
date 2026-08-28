@@ -48,8 +48,9 @@
     fields: readonly StagedField[];
     /** The shell's reactive mirror of every field's persisted value. */
     values: Record<string, unknown>;
-    /** Apply a field's new value now (the shell persists + confirms with a toast). */
-    onApply: (field: StagedField, value: unknown) => void;
+    /** Apply a field's new value now (the shell persists + confirms with a toast).
+     * The shell's own `apply` owns the await; these call sites just hand it off. */
+    onApply: (field: StagedField, value: unknown) => void | Promise<void>;
   }
   let { fields, values, onApply }: Props = $props();
 

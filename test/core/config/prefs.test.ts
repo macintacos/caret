@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { recordingLog } from "@test/support/recording-log.ts";
 import {
   type ApproveModeSet,
+  createPrefsWriter,
   readApproveMode,
   readUpdatesCheck,
   writeApproveMode,
@@ -32,7 +33,7 @@ afterEach(async () => {
 
 test("write then read round-trips each recognized approve variant", async () => {
   for (const mode of ["default", "acceptEdits", "auto"] as const) {
-    await writeApproveMode(mode, file, undefined, SET);
+    await writeApproveMode(mode, createPrefsWriter(file), undefined, SET);
     expect(await readApproveMode(file, undefined, SET)).toBe(mode);
   }
 });
@@ -52,7 +53,7 @@ test("read of an id outside the declared set falls back to the default", async (
 });
 
 test("writing an id outside the declared set is a no-op (no file created)", async () => {
-  await writeApproveMode("bogus", file, undefined, SET);
+  await writeApproveMode("bogus", createPrefsWriter(file), undefined, SET);
   expect(await readApproveMode(file, undefined, SET)).toBe("default");
   // The guard short-circuits before any write, so the file never appears.
   await expect(readFile(file, "utf-8")).rejects.toThrow();
@@ -60,7 +61,7 @@ test("writing an id outside the declared set is a no-op (no file created)", asyn
 
 test("a written prefs file and its dir carry private modes (0600 / 0700)", async () => {
   // EXC-539: prefs.json shares the state dir with plan bodies; both stay private.
-  await writeApproveMode("acceptEdits", file, undefined, SET);
+  await writeApproveMode("acceptEdits", createPrefsWriter(file), undefined, SET);
   expect(statSync(file).mode & 0o777).toBe(0o600);
   expect(statSync(dir).mode & 0o777).toBe(0o700);
 });
@@ -68,9 +69,9 @@ test("a written prefs file and its dir carry private modes (0600 / 0700)", async
 test("defaults to a lone 'default' set when no recognized set is supplied", async () => {
   // With no set, only "default" is recognized and is the fallback — the bare
   // posture a daemon takes when its adapter declares no variants.
-  await writeApproveMode("default", file);
+  await writeApproveMode("default", createPrefsWriter(file));
   expect(await readApproveMode(file)).toBe("default");
-  await writeApproveMode("acceptEdits", file);
+  await writeApproveMode("acceptEdits", createPrefsWriter(file));
   expect(await readApproveMode(file)).toBe("default");
 });
 
@@ -108,7 +109,7 @@ test("an unrecognized stored value is logged at debug", async () => {
 
 test("writing an invalid mode is logged at warn", async () => {
   const { recs, log } = recordingLog();
-  await writeApproveMode("bogus", file, log);
+  await writeApproveMode("bogus", createPrefsWriter(file), log);
   // Stable contract: an invalid write is a warn-level "prefs" event — the
   // level (warn, not debug) is the behavior under test, not the exact prose.
   expect(recs).toHaveLength(1);
@@ -117,7 +118,7 @@ test("writing an invalid mode is logged at warn", async () => {
 
 test("a successful write is logged at debug with the mode", async () => {
   const { recs, log } = recordingLog();
-  await writeApproveMode("acceptEdits", file, log, SET);
+  await writeApproveMode("acceptEdits", createPrefsWriter(file), log, SET);
   // Stable contract: a debug-level "prefs" record naming the saved mode. The
   // mode (acceptEdits) is the load-bearing datum; match the prose loosely.
   expect(recs).toHaveLength(1);
@@ -164,7 +165,50 @@ test("saving an approve mode preserves the update-check opt-out", async () => {
   // whole-file write here would silently re-enable the daily check on their next
   // approval.
   await Bun.write(file, JSON.stringify({ updates: { check: false } }));
-  await writeApproveMode("acceptEdits", file, undefined, SET);
+  await writeApproveMode("acceptEdits", createPrefsWriter(file), undefined, SET);
   expect(await readApproveMode(file, undefined, SET)).toBe("acceptEdits");
   expect(await readUpdatesCheck(file)).toBe(false);
+});
+
+// ---- serialized writes (EXC-1206) ----
+//
+// Two writers now reach prefs.json — the resolve path's approve mode and the UI's
+// POST /api/prefs — so the read-modify-write is serialized through one PrefsWriter
+// rather than raced. These cases are what the chain buys: remove it and each merge
+// reads the pre-write file, so the later write drops the earlier one's key.
+
+test("merges issued together over one writer all land", async () => {
+  const writer = createPrefsWriter(file);
+  // Deliberately not awaited in turn: the second merge is issued while the first
+  // is still in flight, which is the interleave a bare read-modify-write loses.
+  await Promise.all([writer.merge({ approveMode: "auto" }), writer.merge({ theme: "dark" })]);
+  expect(JSON.parse(await readFile(file, "utf-8"))).toEqual({
+    approveMode: "auto",
+    theme: "dark",
+  });
+});
+
+test("an approve-mode save and an updates merge fired together both land", async () => {
+  // The two real writers, racing over the shared writer the daemon builds once.
+  const writer = createPrefsWriter(file);
+  await Promise.all([
+    writeApproveMode("auto", writer, undefined, SET),
+    writer.merge({ updates: { check: false } }),
+  ]);
+  expect(await readApproveMode(file, undefined, SET)).toBe("auto");
+  expect(await readUpdatesCheck(file)).toBe(false);
+});
+
+test("a failed merge rejects to its caller and leaves the writer usable", async () => {
+  // prefs.json nested under a regular FILE, so ensureStateDir's mkdir throws.
+  const blocker = join(dir, "blocked");
+  await Bun.write(blocker, "i am a file, not a directory");
+  const nested = join(blocker, "prefs.json");
+  const writer = createPrefsWriter(nested);
+  await expect(writer.merge({ approveMode: "auto" })).rejects.toThrow();
+  // Clear the blocker: the next merge on the SAME writer must still run, which it
+  // only does if the stored tail was caught rather than left rejected.
+  await rm(blocker);
+  await writer.merge({ approveMode: "auto" });
+  expect(await readApproveMode(nested, undefined, SET)).toBe("auto");
 });

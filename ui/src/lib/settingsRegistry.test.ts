@@ -1,9 +1,11 @@
 import "@ui/test-setup.ts";
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
+import { type LogCapture, logCapture } from "@ui/test-helpers.ts";
 import { THEME_MODES } from "$lib/appearance.ts";
 import { knownPrefKeys } from "$lib/definePref.ts";
 import {
+  daemonField,
   filterSettings,
   isStagedField,
   SETTINGS_CATEGORIES,
@@ -427,5 +429,61 @@ describe("filterSettings (EXC-845 settings search)", () => {
 
   test("a query that matches nothing returns an empty list", () => {
     expect(filterSettings(SETTINGS_REGISTRY, "zzz-no-such-setting")).toEqual([]);
+  });
+});
+
+// EXC-1206. A daemon-backed field is a StagedField like any other — same kind, same
+// controls, same rendering — differing only in where write() sends the value. The
+// registry has no such field yet (EXC-1207 registers the first one), so these drive
+// the constructor directly.
+describe("daemonField", () => {
+  const field = () =>
+    daemonField<boolean>({
+      key: "updatesCheck",
+      category: "Advanced",
+      label: "Check for updates",
+      description: "Ask GitHub once a day whether a newer caret is out.",
+      control: { kind: "toggle" },
+      read: () => true,
+      patch: (check) => ({ updates: { check } }),
+    });
+
+  // The shared fetch double (test-helpers.ts), so uiLog's own /api/logs batch is
+  // captured rather than answered by the per-test stub.
+  let respond: (url: string, options: RequestInit | undefined) => Promise<Response>;
+  let cap: LogCapture;
+
+  beforeEach(() => {
+    respond = () => Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    cap = logCapture((url, options) => respond(url, options));
+  });
+  afterEach(() => cap.restore());
+
+  test("POSTs the patch its patch fn returns, and stores nothing locally", async () => {
+    let seen: { url: string; options: RequestInit | undefined } | undefined;
+    respond = (url, options) => {
+      seen = { url, options };
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    };
+
+    await field().write(false);
+
+    expect(seen?.url).toBe("/api/prefs");
+    expect(JSON.parse(seen?.options?.body as string)).toEqual({ updates: { check: false } });
+    // The whole point of the kind: nothing lands in localStorage.
+    expect(storedKeys()).toEqual([]);
+  });
+
+  test("is a staged field, and `patch` never leaks onto it", () => {
+    const f = field();
+    expect(isStagedField(f)).toBe(true);
+    expect("patch" in f).toBe(false);
+  });
+
+  test("propagates a failed write to its caller", async () => {
+    respond = () => Promise.resolve(new Response(null, { status: 400 }));
+    // App's applySetting awaits this; a swallowed rejection would leave a control
+    // showing a value the daemon refused.
+    await expect(field().write(false)).rejects.toThrow();
   });
 });

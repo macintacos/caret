@@ -71,8 +71,11 @@
     onClosed?: () => void;
     /** The registry, grouped into categories/sections and rendered by control kind. */
     entries: readonly SettingEntry[];
-    /** Apply a setting's new value now (App: write + resync + confirming toast). */
-    onChange: (field: StagedField, value: unknown) => void;
+    /** Apply a setting's new value now (App: write + resync + confirming toast).
+     * May be async — a daemon-backed field's write is a round trip — but must not
+     * reject: App reports a failed write itself and returns, and this shell then
+     * re-reads the field, which is what snaps the control back. */
+    onChange: (field: StagedField, value: unknown) => void | Promise<void>;
     /** Dismiss (Escape / backdrop). App hides the modal. */
     onClose: () => void;
     /** Copy a diagnostics block's text (the Advanced pane, EXC-848): App writes the
@@ -139,8 +142,12 @@
     Object.fromEntries(entries.filter(isStagedField).map((f) => [f.key, f.read()])),
   );
 
-  function apply(field: StagedField, value: unknown): void {
-    onChange(field, value);
+  // Awaited: a daemon-backed field's write is a round trip (EXC-1206), so re-reading
+  // before it settles would re-seed the control from the pre-write value and leave it
+  // there. onChange is contracted not to REJECT — App catches the write failure and
+  // returns, which is exactly what turns this re-read into the snap-back.
+  async function apply(field: StagedField, value: unknown): Promise<void> {
+    await onChange(field, value);
     values = { ...values, [field.key]: field.read() };
   }
 

@@ -16,7 +16,9 @@
 // category's fields into labelled blocks within its pane (Diff view lives as a
 // section under Appearance).
 
+import type { PrefsPatch } from "@core/lib/types";
 import { appearance } from "@/state/appearance.svelte.ts";
+import { setPrefs } from "$lib/api.ts";
 import { THEME_MODES, type ThemeMode } from "$lib/appearance.ts";
 import { readDiffIndicators, writeDiffIndicators } from "$lib/diffIndicatorsPref.ts";
 import { readDiffStyle, writeDiffStyle } from "$lib/diffStylePref.ts";
@@ -81,9 +83,11 @@ export interface StagedField<V = unknown> extends SettingEntryBase {
   control: SettingControl;
   /** Current persisted value — the control's displayed value. */
   read: () => V;
-  /** Persist and apply a value, the moment the control changes. May throw to
-   * signal a save failure (App surfaces a persistent error toast). */
-  write: (value: V) => void;
+  /** Persist and apply a value, the moment the control changes. May throw — or,
+   * for a daemon-backed field, reject — to signal a save failure; that is the
+   * failure channel App surfaces as a persistent error toast, and the shell awaits
+   * it before re-reading, so a refused write snaps the control back. */
+  write: (value: V) => void | Promise<void>;
 }
 
 /** A live, read-only entry (Advanced diagnostics, Notifications): searchable but
@@ -102,6 +106,21 @@ export const isStagedField = (entry: SettingEntry): entry is StagedField => entr
  * the heterogeneous registry. */
 export function stagedField<V>(def: Omit<StagedField<V>, "kind">): StagedField {
   return { kind: "staged", ...def } as StagedField;
+}
+
+/** Define a field the DAEMON owns rather than the browser (EXC-1206): `patch` turns
+ * the control's value into a POST /api/prefs body, and that POST is the write. The
+ * result is an ordinary StagedField — same kind, same controls, same rendering — so
+ * a daemon-backed setting costs a constructor here rather than a third entry kind
+ * threaded through isStagedField and every pane. `read` still comes from the
+ * registrant: what a control displays and where its value is stored are separate
+ * questions, and only the second one moves. */
+export function daemonField<V>(
+  def: Omit<StagedField<V>, "kind" | "write"> & { patch: (value: V) => PrefsPatch },
+): StagedField {
+  // Destructured out so it never rides along on the field object.
+  const { patch, ...rest } = def;
+  return { kind: "staged", ...rest, write: (value: V) => setPrefs(patch(value)) } as StagedField;
 }
 
 // The label↔control wiring for a settings row (EXC-1112). Every pane that renders a

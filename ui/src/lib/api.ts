@@ -13,6 +13,7 @@ import type {
   FileSearchResponse,
   HealthIdentity,
   PersistedScratch,
+  PrefsPatch,
   ResolveBody,
   SkillDescriptionResponse,
   SkillRef,
@@ -67,6 +68,31 @@ export async function getApproveMode(): Promise<ApproveVariantId> {
   } catch (err) {
     uiLog.warn("prefs", "approve mode read failed", { reason: String(err) });
     throw err;
+  }
+}
+
+/** Write the daemon-owned prefs a settings control may change (EXC-1206).
+ *
+ * The one API function here that both throws AND writes its own message. It throws
+ * because a daemon-backed control must snap back and tell the reviewer why, and it
+ * declines `HttpError` because that message is `"HTTP 400"` — a status line, not
+ * something a person can act on. The two failures are worth telling apart: an
+ * unreachable daemon is something the reviewer can fix, a refused body is not. */
+export async function setPrefs(patch: PrefsPatch): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch("/api/prefs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+  } catch (err) {
+    uiLog.warn("prefs", "prefs save failed: unreachable", { reason: String(err) });
+    throw new Error("The caret daemon isn't reachable, so the change wasn't saved.");
+  }
+  if (!res.ok) {
+    uiLog.warn("prefs", "prefs save rejected", { status: res.status });
+    throw new Error(`The daemon wouldn't save the change (HTTP ${res.status}).`);
   }
 }
 

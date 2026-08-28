@@ -1076,6 +1076,15 @@ describe("read-confidentiality posture", () => {
         () => fetch(`${base}/api/reviews/${id}/skill-description?name=git&origin=user`),
       ],
       ["GET /api/prefs", () => fetch(`${base}/api/prefs`)],
+      [
+        "POST /api/prefs",
+        () =>
+          fetch(`${base}/api/prefs`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ updates: { check: true } }),
+          }),
+      ],
       ["GET /api/diagnostics", () => fetch(`${base}/api/diagnostics`)],
       ["GET /api/update", () => fetch(`${base}/api/update`)],
       ["GET / (index)", () => fetch(`${base}/`)],
@@ -1617,6 +1626,83 @@ test("GET /api/prefs defaults to 'default' on a fresh daemon", async () => {
   const res = await fetch(`${base}/api/prefs`);
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ approveMode: "default" });
+});
+
+// ---- POST /api/prefs (EXC-1206) ----
+//
+// The write half of the prefs route, and the one schema in the daemon that REJECTS
+// where its neighbours degrade: a loopback write endpoint into caret's state dir must
+// not become a general write primitive, so an unrecognized key is a 400 rather than a
+// stripped field. `approveMode` is deliberately not writable here — the resolve path
+// owns it.
+describe("POST /api/prefs", () => {
+  const prefsOnDisk = (): Record<string, unknown> =>
+    JSON.parse(readFileSync(join(dir, "prefs.json"), "utf-8"));
+
+  async function setPrefs(body: unknown): Promise<Response> {
+    return fetch(`${base}/api/prefs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  test("a valid patch answers 200 and lands on disk", async () => {
+    await boot();
+    const res = await setPrefs({ updates: { check: false } });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(prefsOnDisk()).toEqual({ updates: { check: false } });
+  });
+
+  test("a rejected body writes nothing and answers 400", async () => {
+    await boot();
+    for (const body of [
+      { nope: 1 }, // unknown top-level key
+      { updates: { check: false, extra: 1 } }, // unknown key under updates
+      { updates: { check: "no" } }, // wrong-typed value
+      { approveMode: "auto" }, // owned by the resolve path, not writable here
+      "not an object",
+    ]) {
+      const res = await setPrefs(body);
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBeTruthy();
+    }
+    // Not one of them created the file.
+    expect(existsSync(join(dir, "prefs.json"))).toBe(false);
+  });
+
+  test("a write preserves a sibling key it did not name", async () => {
+    // The merge, exercised through the route: the remembered approve mode is what a
+    // whole-file write here would erase.
+    await bootClaude();
+    const { id } = await newReview();
+    await resolve(id, { behavior: "allow", acceptMode: "auto" });
+    expect(await waitForPrefMode("auto")).toBe("auto");
+    expect((await setPrefs({ updates: { check: false } })).status).toBe(200);
+    expect(prefsOnDisk()).toEqual({ approveMode: "auto", updates: { check: false } });
+  });
+
+  test("is CSRF-guarded and Host-guarded like every other write (AC #2)", async () => {
+    // The guards run in handle() around every dispatch, so the route inherits them
+    // the moment it exists — this is the proof, not new behavior.
+    await boot();
+    const body = JSON.stringify({ updates: { check: false } });
+    const foreignOrigin = await fetch(`${base}/api/prefs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: "http://evil.com" },
+      body,
+    });
+    expect(foreignOrigin.status).toBe(403);
+    const foreignHost = await fetch(`${base}/api/prefs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Host: "evil.com" },
+      body,
+    });
+    expect(foreignHost.status).toBe(403);
+    // Neither reached the handler.
+    expect(existsSync(join(dir, "prefs.json"))).toBe(false);
+  });
 });
 
 test("an allow remembers the chosen acceptMode (incl. auto)", async () => {

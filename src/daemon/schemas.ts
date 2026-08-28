@@ -4,7 +4,7 @@
 
 import { z } from "zod";
 
-import type { Behavior, DraftBody, PlanInput, ResolveBody } from "@/lib/types.ts";
+import type { Behavior, DraftBody, PlanInput, PrefsPatch, ResolveBody } from "@/lib/types.ts";
 
 // Request-body schemas at the browser trust boundary. They are deliberately
 // lenient — a malformed body degrades to the schema's fallback rather than
@@ -86,6 +86,17 @@ export const ResolveBodySchema: z.ZodType<ResolveBody> = z
     acceptMode: z.string().optional().catch(undefined),
   })
   .catch({ behavior: "allow" });
+
+// POST /api/prefs — the ONE schema here that rejects where its neighbours degrade,
+// and deliberately so. The routes above historically tolerated junk, so validating
+// them must not tighten them; this route is new, and it writes into caret's state
+// dir over a loopback endpoint any local page can reach. Silently stripping an
+// unrecognized key would make it a general write primitive that answers 200 to a
+// body it did not honour — so `.strict()`, and the handler answers 400 (EXC-1206).
+// `approveMode` is absent from the accepted set on purpose: the resolve path owns it.
+export const PrefsPatchSchema: z.ZodType<PrefsPatch> = z
+  .object({ updates: z.object({ check: z.boolean() }).strict().optional() })
+  .strict();
 
 // PUT /api/reviews/:id/draft. Each field is independently optional; the handler
 // leaves an absent field untouched (`!= null`), so a draft-only write never
