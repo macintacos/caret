@@ -17,6 +17,7 @@ import {
 } from "@/daemon/guards.ts";
 import { VERSION } from "@/lib/build-id.ts";
 import { createDaemonLogger } from "@/lib/log.ts";
+import type { UpdateReport } from "@/lib/types.ts";
 import { formatPlanMarkdown } from "@/plan/markdown.ts";
 import type { Store } from "@/review/store.ts";
 import type { UiAssets } from "@/ui/assets.ts";
@@ -283,6 +284,27 @@ test("GET /api/diagnostics returns the injected diagnostics body", async () => {
 test("GET /api/diagnostics is 404 when the daemon wires no diagnostics thunk", async () => {
   await boot();
   const res = await fetch(`${base}/api/diagnostics`);
+  expect(res.status).toBe(404);
+});
+
+// ---- update report endpoint (EXC-1205) ----
+
+test("GET /api/update returns the injected update report", async () => {
+  const report: UpdateReport = {
+    install: "binary",
+    version: "0.13.0",
+    commit: "abc1234",
+    status: { kind: "behind-release", available: "0.14.0", command: "install --refresh" },
+  };
+  await boot({ updateReport: () => report });
+  const res = await fetch(`${base}/api/update`);
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual(report);
+});
+
+test("GET /api/update is 404 when the daemon wires no update thunk", async () => {
+  await boot();
+  const res = await fetch(`${base}/api/update`);
   expect(res.status).toBe(404);
 });
 
@@ -1021,6 +1043,12 @@ describe("read-confidentiality posture", () => {
         settings: {},
         config: { path: "/x/config.toml", exists: false, env: [] },
       }),
+      updateReport: () => ({
+        install: "binary" as const,
+        version: "0.13.0",
+        commit: "abc1234",
+        status: { kind: "current" as const },
+      }),
       assets: fakeAssets({
         "/index.html": '<!doctype html><html><body><div id="app"></div></body></html>',
         "/assets/index-AB12.js": "export const x = 1;\n",
@@ -1049,6 +1077,7 @@ describe("read-confidentiality posture", () => {
       ],
       ["GET /api/prefs", () => fetch(`${base}/api/prefs`)],
       ["GET /api/diagnostics", () => fetch(`${base}/api/diagnostics`)],
+      ["GET /api/update", () => fetch(`${base}/api/update`)],
       ["GET / (index)", () => fetch(`${base}/`)],
       ["GET /assets/* (asset)", () => fetch(`${base}/assets/index-AB12.js`)],
       [
@@ -1257,6 +1286,7 @@ describe("routing fallthrough", () => {
       ["GET", "/api/retire"],
       ["POST", "/api/health"],
       ["POST", "/api/diagnostics"], // /api/diagnostics is GET-only
+      ["POST", "/api/update"], // /api/update is GET-only
       ["DELETE", "/api/prefs"],
       ["PUT", `/api/reviews/${id}/resolve`], // /resolve is POST-only
       ["GET", `/api/reviews/${id}/resolve`],
