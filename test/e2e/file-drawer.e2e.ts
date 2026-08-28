@@ -754,10 +754,43 @@ test("a row clicked during the lane's closing wipe still pushes the card clear",
     await settleDrawer(page);
     const before = await cardRect(page);
 
-    // Dismiss, and click a row without waiting out the wipe.
-    await page.locator(".fp-close").click();
-    await expect(page.locator("[data-file-drawer][data-file-drawer-closing]")).toBeVisible();
-    await page.locator('[data-folder-tree] [data-item-path="other.ts"]').click();
+    // Dismiss, and click a row without waiting out the wipe. Both clicks and the check
+    // between them run in ONE page task, because the window they have to land in is
+    // 140ms of wall clock — DiffPlanView holds the lane with a `CLOSE_ANIM_MS` timer —
+    // and a driver round trip is not something this test can afford to spend inside it.
+    // Driven from here the whole handoff costs a millisecond or two at any host load;
+    // driven across the process boundary it overruns the window on a loaded one, and the
+    // closing state is simply gone by the time the assertion arrives (EXC-1193).
+    //
+    // `element.click()` rather than Playwright's: the tree's activation surface is a
+    // single `click` listener covering pointer and keyboard alike (FolderTree.svelte), so
+    // this reaches the same handler the real gesture does. What it gives up is
+    // actionability — `locator.evaluate` waits for the row to be ATTACHED and nothing
+    // more, so a regression that covered the row with the lane would go unnoticed here.
+    // The `toBeVisible` below buys that half back before the handle is taken.
+    const row = page.locator('[data-folder-tree] [data-item-path="other.ts"]');
+    await expect(row).toBeVisible();
+    const sawClosing = await row.evaluate(async (el) => {
+      const close = document.querySelector<HTMLElement>(".fp-close");
+      if (close === null) throw new Error("no .fp-close to dismiss the lane with");
+      close.click();
+      // Svelte flushes on a microtask, so the closing flag lands a tick after the click
+      // rather than synchronously with it. Bounded by the wall clock it actually owes —
+      // nested `setTimeout(…, 1)` clamps to 4ms past five levels, so a plain iteration
+      // count would outlive the very window this has to stay inside.
+      const deadline = performance.now() + 100;
+      let closing = false;
+      while (!closing && performance.now() < deadline) {
+        const lane = document.querySelector("[data-file-drawer]");
+        closing = lane?.matches("[data-file-drawer-closing]") ?? false;
+        if (!closing) await new Promise((resolve) => setTimeout(resolve, 1));
+      }
+      (el as HTMLElement).click();
+      return closing;
+    });
+    // Recorded rather than asserted against the live DOM: the lane really was mid-wipe
+    // when the row was clicked, which is the premise the rest of this test rests on.
+    expect(sawClosing, "the lane was mid-wipe when the row was clicked").toBe(true);
     await expect(page.locator("[data-file-preview] .fp-path")).toHaveText("src/other.ts");
     await settleDrawer(page);
 

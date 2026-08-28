@@ -1401,9 +1401,19 @@ test("compare mode drops the bar, which tracks no heading there", async ({ daemo
  *
  * Sampled at `animationstart` rather than at `animationend`, because the exit's whole
  * point is that its element is leaving: the end races the removal, while the start is
- * guaranteed to happen with the crumb still in the list. `animationstart` bubbles, so one
- * listener on the bar covers every crumb and separator inside it — and the menus a jump
- * opens are portalled to the body, so their own motion never lands in this log.
+ * dispatched with the crumb still animating.
+ *
+ * Listened for on each ELEMENT rather than once on the bar, which `animationstart`'s
+ * bubbling would otherwise allow. An event is dispatched to a node whether or not that
+ * node is still in the tree, but it only bubbles while it is — and under
+ * `prefers-reduced-motion` the guard collapses the exit to 0.01ms, so the crumb is
+ * routinely gone before the engine's dispatch step runs. Measured on the collapsed exit, a
+ * single bar listener saw 2 of the 6 starts a per-element one caught (EXC-1193). A
+ * `MutationObserver` arms each crumb and separator as it mounts, and a `WeakSet` keeps a
+ * re-added node from being armed twice and double-counting.
+ *
+ * The menus a jump opens are portalled to the body, outside the bar, so their own motion
+ * never reaches this log either way.
  *
  * Arming a recorder first and running the gesture into it is what makes "a departure is
  * animated too" falsifiable: strip the exit and the array comes back empty rather than
@@ -1412,12 +1422,13 @@ type BarMotion = { name: string; slot: string; duration: number; easing: string 
 
 async function armBarMotion(page: Page): Promise<void> {
   await page.locator(BAR).evaluate((bar) => {
-    const w = window as Window & { __barMotion?: BarMotion };
-    w.__barMotion = [];
-    bar.addEventListener("animationstart", (event) => {
+    const log: BarMotion = [];
+    (window as Window & { __barMotion?: BarMotion }).__barMotion = log;
+    const armed = new WeakSet<Element>();
+    const record = (event: Event) => {
       const target = event.target as HTMLElement;
       const style = getComputedStyle(target);
-      w.__barMotion?.push({
+      log.push({
         name: (event as AnimationEvent).animationName,
         slot: target.dataset.slot ?? "",
         // Both read as the animation BEGINS, the one moment the leaving cascade is live on
@@ -1425,12 +1436,51 @@ async function armBarMotion(page: Page): Promise<void> {
         duration: Number.parseFloat(style.animationDuration),
         easing: style.animationTimingFunction,
       });
-    });
+    };
+    const arm = (el: Element) => {
+      if (armed.has(el)) return;
+      armed.add(el);
+      el.addEventListener("animationstart", record);
+      for (const kid of Array.from(el.children)) arm(kid);
+    };
+    arm(bar);
+    new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of Array.from(record.addedNodes)) if (node instanceof Element) arm(node);
+      }
+    }).observe(bar, { childList: true, subtree: true });
   });
 }
 
 const barMotion = (page: Page): Promise<BarMotion> =>
   page.evaluate(() => (window as Window & { __barMotion?: BarMotion }).__barMotion ?? []);
+
+/** The log, once it holds at least one start for each of `keyframes`.
+ *
+ * The gesture's own assertion — `toHaveText` on the trail — resolves on the DOM swap, and
+ * the engine dispatches the crumb's `animationstart` a beat AFTER that: measured at ~7ms
+ * on a contended host, which is enough for a log read on the heels of the text assertion
+ * to land before the event it is about to assert on (EXC-1193). Arming makes the log a
+ * recorded fact, but a recorded fact still has to be recorded before it is read.
+ *
+ * Polling for the positives is also what bounds the ABSENCE assertions: "no `crumb-out`
+ * fired" is a claim about a finished crossing only once the crossing has demonstrably
+ * started, and vacuously true on an empty log before it has. */
+async function barMotionAfter(page: Page, ...keyframes: string[]): Promise<BarMotion> {
+  // Polled on the MISSING set rather than on a boolean, so a timeout names which keyframe
+  // never arrived. In a spec whose whole subject is which animations fired, `expected true,
+  // received false` is the one thing the failure must not say.
+  await expect
+    .poll(
+      async () => {
+        const log = await barMotion(page);
+        return keyframes.filter((name) => named(log, name).length === 0);
+      },
+      { message: "no animationstart recorded for" },
+    )
+    .toEqual([]);
+  return barMotion(page);
+}
 
 /** Matched by SUFFIX, never by equality: Svelte hashes a component's `@keyframes` names,
  * so what the engine reports is `svelte-<hash>-crumb-out` and the hash moves whenever the
@@ -1454,7 +1504,7 @@ test("a level leaving the trail plays the exit, and its separator leaves with it
   await jumpTo(page, "Bravo");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo"]);
 
-  const log = await barMotion(page);
+  const log = await barMotionAfter(page, "crumb-out", "crumb-in");
   const leaving = named(log, "crumb-out");
   const arriving = named(log, "crumb-in");
   // The crumb AND the chevron that travelled in with it. A separator left hanging for a
@@ -1495,7 +1545,7 @@ test("walking to a sibling swaps the label without firing the exit", async ({ da
   await jumpTo(page, "Delta");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Delta"]);
 
-  const log = await barMotion(page);
+  const log = await barMotionAfter(page, "crumb-text-in");
   // No level was destroyed: the crumb kept its box, keyed on depth, and swapped its label.
   // An exit here would read as the trail shortening when it did not.
   expect(named(log, "crumb-out")).toEqual([]);
@@ -1519,13 +1569,31 @@ test("reduced motion collapses the exit rather than removing it", async ({ daemo
   await jumpTo(page, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
 
-  await armBarMotion(page);
-  await jumpTo(page, "Bravo");
-  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo"]);
-
-  const leaving = named(await barMotion(page), "crumb-out");
-  expect(leaving.length).toBeGreaterThan(0);
-  for (const event of leaving) expect(event.duration).toBeLessThan(0.001);
+  // Read off the CASCADE rather than off a caught event, which is what makes this
+  // assertion possible at all under the preference. A departure cannot be observed here:
+  // the guard collapses the exit to 0.01ms and `crumbOut()` reads that same number back as
+  // its wait, so the crumb is routinely removed before the engine ever starts the
+  // animation — and an `animationstart` that never started reaches no listener, on the bar
+  // or on the node (EXC-1193). Applying the leaving class to a crumb that is staying puts
+  // the same rule under the same guard with nothing to race.
+  const exit = await page
+    .locator(CRUMB)
+    .first()
+    .evaluate((crumb) => {
+      crumb.classList.add("crumb-leaving");
+      const style = getComputedStyle(crumb);
+      const resolved = {
+        name: style.animationName,
+        duration: Number.parseFloat(style.animationDuration),
+      };
+      crumb.classList.remove("crumb-leaving");
+      return resolved;
+    });
+  // Collapsed, not deleted: the rule still resolves to `crumb-out` — `animation: none`
+  // would report "none" here — and its duration is under a millisecond.
+  expect(exit.name.endsWith("crumb-out")).toBe(true);
+  expect(exit.duration).toBeGreaterThan(0);
+  expect(exit.duration).toBeLessThan(0.001);
 
   // The vocabulary underneath is untouched — what changed is what the cascade computed on
   // the crumb. motionToken probes outside #app and carries no data-slot, so neither arm of

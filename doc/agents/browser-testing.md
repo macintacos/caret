@@ -209,6 +209,66 @@ If it does not, you have written `page.waitForTimeout` with extra steps — reac
 of which say what they are waiting for. The nine are a standing finding, not a licence to
 add a tenth.
 
+**A budget cannot save a read that never retries.** Every deadline above buys time for an
+assertion that is *polling*; a bare `page.evaluate` polls nothing. It runs once, and
+whatever the renderer happened to be holding at that instant is what the assertion gets —
+so the web-first assertions the suite leans on absorb a stalled host and an `evaluate`
+feeding an assertion does not.
+**An `evaluate` whose result is asserted is polled or recorded**, and the suite already
+carries one shape of each to copy:
+
+- **Polled** — `expect.poll` around the read, which inherits the assertion budget instead
+  of falling through to the per-test one. `settledMutations` and `lineCenterY`, both in
+  `test/e2e/support/source-view.ts`.
+- **Recorded** — an armed listener that logs the event as it happens, for a claim about
+  something that does not persist to be read back. `armBarMotion`
+  (`plan-breadcrumbs.e2e.ts`) and `armTocMotion` (`plan-toc.e2e.ts`).
+- **Driven in-page** — the answer when the window is shorter than a single driver round
+  trip, so neither of the above can be reached inside it: move the gesture *and* the read
+  into one `page.evaluate` and assert the recorded boolean out of process.
+  `file-drawer.e2e.ts`'s closing wipe is a 140ms `setTimeout` in `DiffPlanView`, and the
+  round trip is what overran it. The trade is that `element.click()` skips Playwright's
+  actionability checks and `locator.evaluate` waits only for attachment, so prove the
+  target visible before taking the handle, and bound any in-page spin by
+  `performance.now()` — a nested `setTimeout(…, 1)` clamps to 4ms past five levels, so an
+  iteration count silently means something four times longer than it reads.
+
+**`getAnimations()` is the trap worth naming.** It returns only animations still
+*in effect*, so one with no `fill-mode` leaves the list the moment it finishes: a sample
+is valid only inside that animation's own duration, and the duration is WALL CLOCK.
+`toc-row-in` is 120ms, which a contended host can spend on a single driver round trip —
+the read lands after the ramps have gone and the count comes back 0 (EXC-1193). Live
+animations are still exactly what `getAnimations()` is for; the split is by claim, not by
+API. "Does it drain" is liveness and is polled through it; "did it fire" is history and is
+recorded off `animationstart`.
+
+**An armed listener is not automatically safe either**, and it misses in two directions
+that look identical from the failure text:
+
+- **Late** — read before the event lands. The gesture's own assertion resolves on the DOM
+  swap and the engine dispatches `animationstart` a beat later, measured at ~7ms on a
+  contended host. Poll for the positive before reading; that bounds the *absence*
+  assertions in the same log too, which are otherwise vacuously true on an empty one
+  (`barMotionAfter`).
+- **Lost** — the event never reaches the listener, and polling cannot help because it is
+  not late, it is gone. Two distinct causes, and the cheaper one has a fix: an event
+  dispatched to a node already detached still runs *that node's own* listeners, it only
+  stops bubbling — so arming each element as it mounts recovers it where one listener on
+  the container does not. On the collapsed exit a container listener saw 2 of the 6 starts
+  a per-element one caught. Past that, under `prefers-reduced-motion` the guard collapses
+  an animation to `0.01ms` and the component reads that same number back as its removal
+  wait, so the element can be gone before the engine ever *starts* the animation — and an
+  animation that never started dispatches to nobody. There is no listener that fixes that
+  one. **Assert the cascade instead of the event**: apply the leaving class to an element
+  that is staying and read `animationName` / `animationDuration` off it, which puts the
+  same rule under the same guard with nothing to race (`plan-breadcrumbs.e2e.ts` "reduced
+  motion collapses the exit").
+
+A structural gate for this is deliberately **not** added.
+`test/structure/e2e-conventions.test.ts` would have to tell a read that feeds an assertion
+from one that feeds a later action, which is a real static-analysis problem for a rule
+with a handful of instances. It stays prose until a third kind of instance turns up.
+
 **Adjusting the numbers.** The assertion budget is ~3x Playwright's default, tracking the
 measured contention factor; the per-test budget is 2x, the point at which the throttle
 probe below turned red into green where 30s could not. Re-derive both the same way rather
@@ -230,6 +290,31 @@ the values live.
   survive 60x and fail 4/4 at 90x — then confirm the fix against the same rate. Probes
   like this are exploration and are **never committed**: write the finding down, delete
   the probe.
+
+**The two levers are not interchangeable, and a spec cleared by one is not cleared**
+(EXC-1193). CPU throttling scales the renderer uniformly, and Playwright's assertions and
+its `evaluate` calls are *both* renderer tasks — so it cannot reorder them. It finds a
+read that lands too LATE (anything scoped to a wall-clock window the driver has to hit
+inside) and is blind to one that lands too EARLY. Oversubscribed workers find both, plus
+plain budget starvation, but pick a different set each run. A spec that survives 120x has
+been cleared of the first kind only.
+
+Verdicts recorded against them, so a later red gate knows what was already looked at:
+
+| Spec | Verdict |
+| --- | --- |
+| `plan-toc.e2e.ts` "typing fast queues no animation" | Red 4/4 at 6x: an unpolled `getAnimations()` sample. Fixed. |
+| `settings.e2e.ts` "clicking a row's label" | Red 4/4 at 20x: an `Escape` with no menu to close reached the dialog and closed Settings, leaving every assertion after it racing a 140ms unmount. Fixed. |
+| `file-drawer.e2e.ts` "a row clicked during the lane's closing wipe" | Red 4/4 at 20x: the wipe is a 140ms timer, too short to spend a driver round trip inside. Fixed. |
+| `plan-breadcrumbs.e2e.ts` "walking to a sibling" | Green through 60x, reds under oversubscription: a too-early log read, the direction the throttle cannot produce. Fixed. |
+| `plan-breadcrumbs.e2e.ts` "reduced motion collapses the exit" | A LOST `animationstart`, not a late one: at `0.01ms` the crumb often goes before the animation starts, so no listener anywhere sees it. Re-asserted off the cascade. Fixed. |
+| `confirm-popover.e2e.ts` "a click outside the dialog's discard bubble" | A REAL race, and the clearest case of the throttle's blind spot: it survives 90x, yet `--repeat-each 20` at ordinary parallelism reds it 1/20 with the bubble resolving 34× over the full budget. The outside click lands mid-open — across 30 runs its `pointerdown` preceded the bubble's own `focusin` 26 times — but waiting for that focus does NOT fix it (3/40 still red), so the arming signal is something else again. Standing, unfixed. |
+| `lineCenterY` callers | No miss in two full oversubscribed suites; the rows are already there the instant `.diff-plan` turns visible. Polled anyway, because that guard is the caller's rather than the helper's. |
+| `ref-hint.e2e.ts` "the dev fake plan badges both kinds" | Survives 20x, reds under oversubscription at 40s+. Budget starvation. Standing. |
+
+`planSurface` is deliberately **not** made to wait for a laid-out row. Measured, the rows
+are present the moment the container becomes visible, so the wait would cost ~47 specs a
+round trip and change nothing.
 
 ### The unit lane holds the same rules, and one the e2e side does not
 
