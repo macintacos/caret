@@ -209,6 +209,49 @@ If it does not, you have written `page.waitForTimeout` with extra steps — reac
 of which say what they are waiting for. The nine are a standing finding, not a licence to
 add a tenth.
 
+**A budget cannot save a read that never retries.** Every deadline above buys time for an
+assertion that is *polling*; a bare `page.evaluate` polls nothing. It runs once, and
+whatever the renderer happened to be holding at that instant is what the assertion gets —
+so the web-first assertions the suite leans on absorb a stalled host and an `evaluate`
+feeding an assertion does not.
+**An `evaluate` whose result is asserted is polled or recorded**, and the suite already
+carries one shape of each to copy:
+
+- **Polled** — `expect.poll` around the read, which inherits the assertion budget instead
+  of falling through to the per-test one. `settledMutations` and `lineCenterY`, both in
+  `test/e2e/support/source-view.ts`.
+- **Recorded** — an armed listener that logs the event as it happens, for a claim about
+  something that does not persist to be read back. `armBarMotion`
+  (`plan-breadcrumbs.e2e.ts`) and `armTocMotion` (`plan-toc.e2e.ts`).
+
+**`getAnimations()` is the trap worth naming.** It returns only animations still
+*in effect*, so one with no `fill-mode` leaves the list the moment it finishes: a sample
+is valid only inside that animation's own duration, and the duration is WALL CLOCK.
+`toc-row-in` is 120ms, which a contended host can spend on a single driver round trip —
+the read lands after the ramps have gone and the count comes back 0 (EXC-1193). Live
+animations are still exactly what `getAnimations()` is for; the split is by claim, not by
+API. "Does it drain" is liveness and is polled through it; "did it fire" is history and is
+recorded off `animationstart`.
+
+**An armed listener is not automatically safe either**, and it misses in two directions
+that look identical from the failure text:
+
+- **Late** — read before the event lands. The gesture's own assertion resolves on the DOM
+  swap and the engine dispatches `animationstart` a beat later, measured at ~7ms on a
+  contended host. Poll for the positive before reading; that bounds the *absence*
+  assertions in the same log too, which are otherwise vacuously true on an empty one
+  (`barMotionAfter`).
+- **Lost** — the element is removed before the dispatch step runs, so the event fires on a
+  detached node and never bubbles to the listener at all. Under `prefers-reduced-motion`
+  an exit collapses to ~0ms and takes its element with it, which makes this real there:
+  measured absent both instantly and three seconds later. Polling cannot help an event
+  that is gone rather than late — read once and let it fail fast.
+
+A structural gate for this is deliberately **not** added.
+`test/structure/e2e-conventions.test.ts` would have to tell a read that feeds an assertion
+from one that feeds a later action, which is a real static-analysis problem for a rule
+with a handful of instances. It stays prose until a third kind of instance turns up.
+
 **Adjusting the numbers.** The assertion budget is ~3x Playwright's default, tracking the
 measured contention factor; the per-test budget is 2x, the point at which the throttle
 probe below turned red into green where 30s could not. Re-derive both the same way rather
@@ -230,6 +273,31 @@ the values live.
   survive 60x and fail 4/4 at 90x — then confirm the fix against the same rate. Probes
   like this are exploration and are **never committed**: write the finding down, delete
   the probe.
+
+**The two levers are not interchangeable, and a spec cleared by one is not cleared**
+(EXC-1193). CPU throttling scales the renderer uniformly, and Playwright's assertions and
+its `evaluate` calls are *both* renderer tasks — so it cannot reorder them. It finds a
+read that lands too LATE (anything scoped to a wall-clock window the driver has to hit
+inside) and is blind to one that lands too EARLY. Oversubscribed workers find both, plus
+plain budget starvation, but pick a different set each run. A spec that survives 120x has
+been cleared of the first kind only.
+
+Verdicts recorded against them, so a later red gate knows what was already looked at:
+
+| Spec | Verdict |
+| --- | --- |
+| `plan-toc.e2e.ts` "typing fast queues no animation" | Red 4/4 at 6x: an unpolled `getAnimations()` sample. Fixed. |
+| `settings.e2e.ts` "clicking a row's label" | Red 4/4 at 20x: an `Escape` with no menu to close reached the dialog and closed Settings, leaving every assertion after it racing a 140ms unmount. Fixed. |
+| `file-drawer.e2e.ts` "a row clicked during the lane's closing wipe" | Red at 20x: the wipe is a 140ms timer, too short to spend a driver round trip inside. Fixed. |
+| `plan-breadcrumbs.e2e.ts` "walking to a sibling" | Green through 60x, reds under oversubscription: a too-early log read, the direction the throttle cannot produce. Fixed. |
+| `plan-breadcrumbs.e2e.ts` "reduced motion collapses the exit" | A LOST `animationstart`, not a late one — no fix polling can give. Standing. |
+| `confirm-popover.e2e.ts` "a click outside the dialog's discard bubble" | Survives 90x; at 120x reds only on `locator.click` starvation. No structural race — the dismissable-layer hypothesis is not it. |
+| `lineCenterY` callers | No miss in two full oversubscribed suites; the rows are already there the instant `.diff-plan` turns visible. Polled anyway, because that guard is the caller's rather than the helper's. |
+| `ref-hint.e2e.ts` "the dev fake plan badges both kinds" | Survives 20x, reds under oversubscription at 40s+. Budget starvation. Standing. |
+
+`planSurface` is deliberately **not** made to wait for a laid-out row. Measured, the rows
+are present the moment the container becomes visible, so the wait would cost ~47 specs a
+round trip and change nothing.
 
 ### The unit lane holds the same rules, and one the e2e side does not
 
