@@ -14,9 +14,11 @@ import type {
   HealthIdentity,
   PersistedScratch,
   PrefsPatch,
+  PrefsResponse,
   ResolveBody,
   SkillDescriptionResponse,
   SkillRef,
+  UpdateReport,
 } from "@core/lib/types";
 import { shortId, uiLog } from "$lib/log.ts";
 
@@ -54,6 +56,40 @@ export async function getDiagnostics(): Promise<DaemonDiagnostics> {
   } catch (err) {
     uiLog.warn("request", "diagnostics probe failed", { reason: String(err) });
     throw err;
+  }
+}
+
+/** The cached update verdict (EXC-1207): whether this caret is behind, and the command
+ * that would take the upgrade. Reading it never makes the daemon call out — the verdict
+ * was decided at boot — so this is a plain load-time read, not a poll.
+ *
+ * Throws on failure, unlike this file's degrading readers: every update surface renders
+ * this one value, so there is nothing to fall back to. A 404 is expected rather than
+ * exceptional — a daemon that wires no update thunk (the e2e fixture) answers that way. */
+export async function getUpdate(): Promise<UpdateReport> {
+  try {
+    return await json(await fetch("/api/update"));
+  } catch (err) {
+    uiLog.warn("request", "update report read failed", { reason: String(err) });
+    throw err;
+  }
+}
+
+/** Whether the daemon's update check is on (EXC-1207) — the browser's copy of the
+ * `updates.check` opt-out, so flipping the Settings toggle silences the badges at once
+ * rather than after the daemon's next boot.
+ *
+ * A second GET of /api/prefs on load (the resolve state already makes one for
+ * approveMode). Threading a shared read through resolve.svelte.ts and its tests would
+ * cost a refactor to save one loopback request against a local daemon. Fails safe to on,
+ * matching the daemon's own read. */
+export async function getUpdatesCheck(): Promise<boolean> {
+  try {
+    const body = await json<PrefsResponse>(await fetch("/api/prefs"));
+    return body.updates?.check !== false;
+  } catch (err) {
+    uiLog.warn("prefs", "updates check read failed", { reason: String(err) });
+    return true;
   }
 }
 
