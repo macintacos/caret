@@ -16,6 +16,7 @@ import {
   stagedField,
   THEME_FIELD,
   THEME_SECTION,
+  UPDATES_CHECK_KEY,
 } from "$lib/settingsRegistry.ts";
 import {
   DEFAULT_SOUND_VOLUME,
@@ -25,6 +26,7 @@ import {
   writeSoundVolume,
 } from "$lib/soundPref.ts";
 import { THEME_IDS, THEMES, type ThemeId } from "$lib/theme.ts";
+import { seedUpdatesCheck } from "$lib/updatesPref.ts";
 
 afterEach(() => localStorage.clear());
 
@@ -241,19 +243,70 @@ describe("Advanced (search-only diagnostics pane, EXC-848)", () => {
   });
 });
 
+// EXC-1207. The registry's first daemon-backed field, plus the search-only entry that
+// makes the pane's read-only verdict block findable.
+describe("Updates (EXC-1207)", () => {
+  const toggle = () => staged.find((f) => f.key === UPDATES_CHECK_KEY);
+
+  // The seed is module state shared across this file, so restoring it keeps the
+  // default-on reading every other case assumes.
+  afterEach(() => seedUpdatesCheck(true));
+
+  test("Updates is a sidebar category with a blurb, ordered before Advanced", () => {
+    const ids = SETTINGS_CATEGORIES.map((c) => c.id);
+    expect(SETTINGS_CATEGORIES.find((c) => c.id === "Updates")?.blurb).toBeTruthy();
+    expect(ids.indexOf("Updates")).toBeLessThan(ids.indexOf("Advanced"));
+  });
+
+  test("contributes the update-check opt-out as a staged toggle", () => {
+    expect(toggle()?.category).toBe("Updates");
+    expect(toggle()?.control.kind).toBe("toggle");
+  });
+
+  test("the toggle reads the value seeded from the daemon", () => {
+    // daemonField shadows read() only once a write LANDS, so until one does the control
+    // shows what App seeded from GET /api/prefs at load.
+    seedUpdatesCheck(false);
+    expect(toggle()?.read()).toBe(false);
+  });
+
+  test("surfaces the read-only status block by label (findable in /-search)", () => {
+    const entry = SETTINGS_REGISTRY.find((e) => e.label === "Update status");
+    expect(entry?.category).toBe("Updates");
+    // The pane renders the live verdict; there is nothing here to persist.
+    expect(entry ? isStagedField(entry) : true).toBe(false);
+  });
+});
+
 describe("staged fields wrap existing pref modules", () => {
-  test("write persists and read reflects it (round-trips through the pref module)", () => {
+  // Both sweeps write EVERY staged field, and a daemon-backed one writes by POSTing —
+  // so the suite answers /api/prefs rather than carrying an exclusion list, and covers
+  // both kinds with one stub. `{ ok: true }` is what setPrefs parses on success.
+  let cap: LogCapture;
+  beforeEach(() => {
+    cap = logCapture(() =>
+      Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 })),
+    );
+  });
+  afterEach(() => cap.restore());
+
+  test("write persists and read reflects it (round-trips through the pref module)", async () => {
     for (const field of staged) {
       const value = sampleValue(field);
-      field.write(value);
+      // Awaited because a daemon field's write is the POST: its landed-value shadow —
+      // what read() answers with afterwards — is only set once that resolves.
+      await field.write(value);
       expect(field.read()).toEqual(value);
     }
   });
 
-  test("write only ever touches a key already registered in knownPrefKeys() — no new keys", () => {
+  test("write only ever touches a key already registered in knownPrefKeys() — no new keys", async () => {
     for (const field of staged) {
       localStorage.clear();
-      field.write(sampleValue(field));
+      await field.write(sampleValue(field));
+      // A daemon field stores nothing locally, so it clears this vacuously — which is
+      // the correct result for it, not a gap: owning no browser key is the whole point
+      // of the kind, and the daemonField suite below asserts that emptiness directly.
       for (const key of storedKeys()) {
         expect(knownPrefKeys()).toContain(key);
       }
@@ -434,8 +487,8 @@ describe("filterSettings (EXC-845 settings search)", () => {
 
 // EXC-1206. A daemon-backed field is a StagedField like any other — same kind, same
 // controls, same rendering — differing only in where write() sends the value. The
-// registry has no such field yet (EXC-1207 registers the first one), so these drive
-// the constructor directly.
+// registry's own updates toggle is one, but these drive the constructor directly so its
+// contract stays pinned whoever registers one.
 describe("daemonField", () => {
   const field = () =>
     daemonField<boolean>({
