@@ -308,7 +308,7 @@ Verdicts recorded against them, so a later red gate knows what was already looke
 | `file-drawer.e2e.ts` "a row clicked during the lane's closing wipe" | Red 4/4 at 20x: the wipe is a 140ms timer, too short to spend a driver round trip inside. Fixed. |
 | `plan-breadcrumbs.e2e.ts` "walking to a sibling" | Green through 60x, reds under oversubscription: a too-early log read, the direction the throttle cannot produce. Fixed. |
 | `plan-breadcrumbs.e2e.ts` "reduced motion collapses the exit" | A LOST `animationstart`, not a late one: at `0.01ms` the crumb often goes before the animation starts, so no listener anywhere sees it. Re-asserted off the cascade. Fixed. |
-| `confirm-popover.e2e.ts` "a click outside the dialog's discard bubble" | Survives 90x; at 120x reds only on `locator.click` starvation. No structural race — the dismissable-layer hypothesis is not it. |
+| `confirm-popover.e2e.ts` "a click outside the dialog's discard bubble" | A REAL race, and the clearest case of the throttle's blind spot: it survives 90x, yet `--repeat-each 20` at ordinary parallelism reds it 1/20 with the bubble resolving 34× over the full budget. The outside click lands mid-open — across 30 runs its `pointerdown` preceded the bubble's own `focusin` 26 times — but waiting for that focus does NOT fix it (3/40 still red), so the arming signal is something else again. Standing, unfixed. |
 | `lineCenterY` callers | No miss in two full oversubscribed suites; the rows are already there the instant `.diff-plan` turns visible. Polled anyway, because that guard is the caller's rather than the helper's. |
 | `ref-hint.e2e.ts` "the dev fake plan badges both kinds" | Survives 20x, reds under oversubscription at 40s+. Budget starvation. Standing. |
 
