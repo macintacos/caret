@@ -21,7 +21,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { test as base, expect, type Page } from "@playwright/test";
+import { test as base, expect, type Locator, type Page } from "@playwright/test";
 
 import { KEY_REPEAT_DELAY_MS } from "@ui/src/lib/keyRepeat.ts";
 import { waitForHealth } from "@/daemon/client.ts";
@@ -477,6 +477,48 @@ export async function awaitKeyboardReady(
     }
     await sleep(25);
   }
+}
+
+/**
+ * Wait until `layer`'s bits-ui dismissible layer has armed its outside-click handler.
+ *
+ * A layer is not dismissible the moment it is on screen. `DismissibleLayerState`
+ * (node_modules/bits-ui/dist/bits/utilities/dismissible-layer/use-dismissable-layer.svelte.js)
+ * attaches its document `pointerdown`/`focusin` listeners inside `afterSleep(1, …)` once
+ * its `ref` is set — so both `toBeVisible()`, which resolves on paint, and the confirm
+ * button taking focus from `onOpenAutoFocus`, which runs on mount, land INSIDE that
+ * window. Neither proves a thing about dismissal; waiting on the focus was measured still
+ * red 3/40 (EXC-1200).
+ *
+ * The click is DROPPED rather than delayed, which is why nothing later recovers it. The
+ * same callback also registers the layer in `globalThis.bitsDismissableLayers`, and
+ * `isResponsibleLayer` hands the interaction to the LAST-registered layer — so until this
+ * one lands there, the layer beneath it is still top-most, and a pointerdown inside that
+ * one (a dialog's own heading, say) is not outside anything. No layer dismisses, and the
+ * gesture is gone.
+ *
+ * Membership in that map is therefore the arming signal, and an exact one: bits-ui sets it
+ * in the same synchronous callback that attaches the listeners. The window measured
+ * 4–47ms locally, with the layer still unarmed after `toBeVisible()` in 3 runs of 30.
+ *
+ * `expect.poll` so the read inherits the assertion budget rather than the per-test one
+ * (doc/agents/browser-testing.md § Timing discipline, "polled `evaluate`").
+ */
+export async function awaitDismissArmed(layer: Locator): Promise<void> {
+  await expect
+    .poll(() =>
+      layer.evaluate((el) => {
+        const layers = (
+          globalThis as unknown as {
+            bitsDismissableLayers?: Map<{ opts: { ref: { current: Element | null } } }, unknown>;
+          }
+        ).bitsDismissableLayers;
+        return layers === undefined
+          ? false
+          : [...layers.keys()].some((l) => l.opts.ref.current === el);
+      }),
+    )
+    .toBe(true);
 }
 
 /**
