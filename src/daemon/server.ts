@@ -13,6 +13,7 @@ import { DEFAULTS } from "@/config/settings.ts";
 import {
   isClientLive,
   isCrossOrigin,
+  isForeignHost,
   isSafeMethod,
   LIVE_CLIENT_WINDOW_MS,
 } from "@/daemon/guards.ts";
@@ -896,10 +897,35 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return notFound();
   }
 
-  async function handle(req: Request): Promise<Response> {
+  // `self` is the server Bun passes as fetch's second argument; the guards need
+  // its bound port. Bun declares `readonly port: number | undefined` — undefined
+  // only for a unix-socket server, which this never is. Mirroring that union
+  // rather than writing `port?: number` keeps the field's existence a
+  // compile-time contract: an optional property would still typecheck against a
+  // Bun that dropped `port`, and every request would then 403 silently. `-1` is
+  // the fail-closed fallback — no authority can serialize a port to "-1", where
+  // `0` would match a `Host: localhost:0`.
+  async function handle(
+    req: Request,
+    self: { readonly port: number | undefined },
+  ): Promise<Response> {
     inFlight++;
     cancelIdle(); // any in-flight request defers an idle shutdown
     try {
+      const port = self.port ?? -1;
+
+      // DNS-rebinding gate (EXC-1203): every method, ahead of the CSRF check. A
+      // rebound page's Origin is already same-origin by the time it fires, so
+      // the guard below structurally cannot see this attack.
+      //
+      // It also runs ahead of the URL parse below, and reads the raw header
+      // rather than `url.host`: Bun derives req.url FROM Host, so a missing or
+      // unparseable Host — cases this must reject — would throw out of the
+      // constructor into the catch-all and 500 instead.
+      if (isForeignHost(req, port)) {
+        return new Response("host not recognized", { status: 403 });
+      }
+
       const url = new URL(req.url);
       const path = url.pathname;
       const method = req.method;
@@ -909,7 +935,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // (GET/HEAD) fall through — the browser's same-origin policy already
       // blocks a foreign page from reading the response (see the guard's
       // threat-model note above).
-      if (!isSafeMethod(method) && isCrossOrigin(req)) {
+      if (!isSafeMethod(method) && isCrossOrigin(req, port)) {
         return new Response("cross-origin request blocked", { status: 403 });
       }
 
