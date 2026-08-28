@@ -87,6 +87,26 @@ describe("TopBar render", () => {
     expect(target.querySelector(".settings")).not.toBeNull();
   });
 
+  // EXC-1207: a pending update marks the gear, because Settings is where the reviewer
+  // acts on it. The state rides the button's own accessible name rather than only being
+  // painted — a dot a screen reader can't reach is not a notification.
+  test("a pending update dots the settings gear and says so in its name", () => {
+    const { target } = render(TopBar, { ...baseProps, updatePending: true });
+    const gear = target.querySelector(".settings") as HTMLButtonElement;
+    expect(gear.getAttribute("aria-label")).toBe("Settings — update available");
+    const dot = gear.querySelector(".dot");
+    expect(dot).not.toBeNull();
+    // Decorative: the name already announces it, so announcing it twice is noise.
+    expect(dot?.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  test("no pending update leaves the gear unmarked and plainly named", () => {
+    const { target } = render(TopBar, baseProps);
+    const gear = target.querySelector(".settings") as HTMLButtonElement;
+    expect(gear.getAttribute("aria-label")).toBe("Settings");
+    expect(gear.querySelector(".dot")).toBeNull();
+  });
+
   test("the primary approve button reflects the remembered mode's label", () => {
     const { target } = render(TopBar, { ...baseProps, approveMode: "auto" });
     expect(target.querySelector(".split-primary")!.textContent).toContain("Approve & auto mode");
