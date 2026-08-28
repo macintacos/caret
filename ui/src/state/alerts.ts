@@ -15,11 +15,23 @@ import type { SoundEvent } from "$lib/sound.ts";
 
 export type AlertVariant = "default" | "success" | "destructive";
 
+/**
+ * An affordance that ACTS on an alert, rendered as a labelled button beside the
+ * message (EXC-1207: the update toast opens Settings on its Updates pane). It is
+ * a button of its own rather than a clickable card: the card already carries the
+ * dismiss control, and nesting interactive controls is an accessibility defect.
+ */
+export interface AlertAction {
+  label: string;
+  run: () => void;
+}
+
 export interface AlertItem {
   id: number;
   variant: AlertVariant;
   title?: string;
   message: string;
+  action?: AlertAction;
   /** True once dismissal has begun — drives the CSS exit animation before removal. */
   leaving: boolean;
 }
@@ -56,6 +68,7 @@ export interface Alerts {
     title?: string;
     message: string;
     persistent?: boolean;
+    action?: AlertAction;
     /** Override the cue the variant would play — `null` pushes silently. */
     sound?: SoundEvent | null;
   }): number;
@@ -103,6 +116,7 @@ export function createAlerts(store: AlertStore, deps: AlertDeps = {}): Alerts {
     title?: string;
     message: string;
     persistent?: boolean;
+    action?: AlertAction;
     sound?: SoundEvent | null;
   }): number {
     const id = nextId++;
@@ -114,6 +128,7 @@ export function createAlerts(store: AlertStore, deps: AlertDeps = {}): Alerts {
         variant,
         title: alert.title,
         message: alert.message,
+        action: alert.action,
         leaving: false,
       },
     ];

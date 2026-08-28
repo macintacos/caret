@@ -41,7 +41,19 @@
         {#if icon}<Icon name={icon} size={16} />{/if}
         <div class="alert-body">
           {#if a.title}<span class="alert-title">{a.title}</span>{/if}
-          <span class="alert-message">{a.message}</span>
+          <span class="alert-message" id="alert-message-{a.id}">{a.message}</span>
+          <!-- The activate affordance (EXC-1207), after the message so it reads as
+               "here's the news, here's what to do about it" and before the dismiss
+               control. Out of context — a screen reader's button list — a bare
+               "Update" says nothing about which alert it acts on, so the message
+               describes it, the same job aria-label does for the icon-only dismiss. -->
+          {#if a.action}
+            <button
+              type="button"
+              class="alert-action"
+              aria-describedby="alert-message-{a.id}"
+              onclick={a.action.run}>{a.action.label}</button>
+          {/if}
         </div>
         <button type="button" class="alert-dismiss" aria-label="Dismiss" onclick={() => onDismiss(a.id)}>
           <Icon name="x" size={14} />
@@ -102,6 +114,34 @@
     font-size: var(--text-sm);
     line-height: var(--leading-snug);
     overflow-wrap: anywhere;
+  }
+  /* A text button, not a clickable card: the card already holds the dismiss
+     control, and nesting interactive controls is an accessibility defect. It
+     rides the card's variant color rather than the accent (which is spoken for
+     by selection and brand), so the underline carries the whole affordance —
+     the carrot-fact link's reasoning, and the same explicit text-decoration-line
+     because Tailwind's preflight resets it to none. It self-starts so its hit
+     area is the label, not the card's full width. */
+  .alert-action {
+    align-self: flex-start;
+    margin-top: 0.2rem;
+    appearance: none;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: inherit;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    line-height: var(--leading-snug);
+    text-decoration-line: underline;
+    text-decoration-color: currentColor;
+    text-underline-offset: 0.2em;
+    opacity: 0.75;
+    transition: opacity var(--dur-micro) var(--ease-out);
+  }
+  .alert-action:hover {
+    opacity: 1;
   }
   /* Quiet dismiss affordance: the glyph rides the card's variant color at
      reduced opacity, brightening on hover. */
