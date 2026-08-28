@@ -7,7 +7,8 @@
   // theme, safe mode, the keyboard-shortcut dispatcher, and the UI-gone presence
   // beacon. The behaviors themselves live in $lib/* and @/state/*; this file only
   // holds them together and lays out the TopBar + DiffPlanView.
-  import { getHealth, markSeen } from "$lib/api.ts";
+  import { untrack } from "svelte";
+  import { getHealth, getUpdate, getUpdatesCheck, markSeen } from "$lib/api.ts";
   import { approveVariants } from "$lib/approve.ts";
   import { createPlanNotifier } from "$lib/notify.ts";
   import { installUiGoneBeacon } from "$lib/presence.ts";
@@ -45,10 +46,24 @@
     shouldShowOnboarding,
   } from "$lib/prefs.ts";
   import { readShortcutHints } from "$lib/shortcutHintsPref.ts";
-  import { SETTINGS_REGISTRY, type StagedField, THEME_KEYS } from "$lib/settingsRegistry.ts";
+  import {
+    SETTINGS_REGISTRY,
+    type StagedField,
+    THEME_KEYS,
+    UPDATES_CATEGORY,
+    UPDATES_CHECK_KEY,
+  } from "$lib/settingsRegistry.ts";
+  import { isUpdatePending, updateSignature, updateToast } from "$lib/updates.ts";
+  import { readToastedUpdate, seedUpdatesCheck, writeToastedUpdate } from "$lib/updatesPref.ts";
   import { type ComposerScratch, createSourceCommenting } from "$lib/diffview/commenting.ts";
   import type { DiffSide } from "$lib/diffview/types.ts";
-  import type { ApproveVariant, ApproveVariantId, Annotation, PersistedScratch } from "@core/lib/types";
+  import type {
+    ApproveVariant,
+    ApproveVariantId,
+    Annotation,
+    PersistedScratch,
+    UpdateReport,
+  } from "@core/lib/types";
 
   import * as Alert from "$lib/components/ui/alert/index.js";
   import AlertHost from "@/components/AlertHost.svelte";
@@ -101,6 +116,18 @@
   // probe lands or for a daemon that predates the field; passed to the TopBar,
   // which exposes it as data-source.
   let source = $state<string | undefined>(undefined);
+  // The daemon's cached update verdict (EXC-1207), read once on load. Null until it
+  // lands, and null for good when it can't be read — a daemon that wires no update thunk
+  // 404s the route, and every surface then simply stays quiet. Every update surface
+  // renders this one value.
+  let updateReport = $state<UpdateReport | null>(null);
+  // The reviewer's `updates.check` opt-out, mirrored here from the same load. It gates
+  // the surfaces below in the BROWSER, which is load-bearing rather than belt-and-
+  // braces: the daemon evaluates the switch when the check RUNS and then holds that
+  // verdict for its whole life, so a user who turns the check off against a long-lived
+  // daemon would still be served a stale `behind-release` on their next page load.
+  // Mirroring it here is also what makes the flip take effect with no round trip.
+  let updatesCheck = $state(true);
   let work = $state<{
     annotations: Annotation[];
     generalCommentDraft: string;
@@ -126,12 +153,18 @@
   let safeMode = $state(false);
 
   let showSettings = $state(false);
+  // Which category Settings opens on (EXC-1207). Undefined for every existing caller —
+  // the keyboard shortcut and the topbar gear land on Appearance as they always have —
+  // and set only by the update toast's deep link. The host mounts SettingsDialog per
+  // open (ModalPresence), so recording it before showing is what makes the seed apply.
+  let settingsCategory = $state<string | undefined>(undefined);
   // Settings and the shortcuts help are the two surfaces the reviewer summons over
   // a plan; each announces itself once, on the way in, since closing is their own
   // move. The verdict dialogs also open over a plan but sit this out — they belong
   // to the decision flow, which sounds through its own verdict cue.
-  function openSettings(): void {
+  function openSettings(category?: string): void {
     sound.play("modalOpen");
+    settingsCategory = category;
     showSettings = true;
   }
   function openHelp(): void {
@@ -195,6 +228,10 @@
       return;
     }
     showShortcutHints = readShortcutHints();
+    // The other reactive mirror (EXC-1207): the daemon owns this value, so there is no
+    // module to re-read it from — the accepted write IS the new truth. Mirroring it here
+    // is what clears the badges the instant the reviewer turns the check off.
+    if (field.key === UPDATES_CHECK_KEY) updatesCheck = value === true;
     settingsRev++;
     alerts.push({
       variant: "success",
@@ -300,6 +337,11 @@
   // The variants the split-button renders: the declared set when present, else
   // the built-in fallback.
   let variants = $derived(approveVariants(declaredVariants));
+  // Whether to mark the update surfaces (EXC-1207) — the browser-side gate described
+  // above, ANDed with the daemon's verdict.
+  let updatePending = $derived(
+    updatesCheck && !!updateReport && isUpdatePending(updateReport.status),
+  );
   // Everything a plain Approve would silently leave behind, as a preview list:
   // the general-comment draft first, then the non-blank committed inline comments,
   // then the retained-but-unsent composer scratches. The approve/reject guard
@@ -373,6 +415,72 @@
   // switch when the palette actually moves and staying silent under a pinned mode.
   // No reactive reads: runs once on mount, returns the disposer.
   $effect(() => appearance.watch());
+
+  // ----- Update verdict -----
+  // Read the daemon's CACHED verdict plus the reviewer's opt-out, once on mount. No
+  // network check is triggered by the UI — the daemon decided this at boot and the route
+  // only reports it. No reactive reads, so this runs once. Both failures are quiet: the
+  // report stays null (every surface then says nothing) and the opt-out fails safe to on.
+  //
+  // The two reads SETTLE TOGETHER, and the gate is assigned before the verdict. Fired as
+  // independent promises they race, and the race has a predictable loser: /api/update is a
+  // synchronous thunk read while /api/prefs awaits two file reads, so the verdict lands
+  // first essentially every time. With `updatesCheck` still at its optimistic default, a
+  // reviewer who had opted out would get the toast anyway — and it would spend that
+  // version's once-per-version marker on its way past, so the nudge would be lost for good
+  // if they ever turned checks back on. Settling first is what makes the gate atomic.
+  $effect(() => {
+    void Promise.all([getUpdate().catch(() => null), getUpdatesCheck()]).then(
+      ([report, check]) => {
+        updatesCheck = check;
+        // Seed the holder the Updates toggle's synchronous read() closes over, so the
+        // control opens showing what is actually on disk rather than the default.
+        seedUpdatesCheck(check);
+        updateReport = report;
+      },
+    );
+  });
+
+  // The once-per-version nudge. Fires when the verdict resolves and the gate holds, and
+  // only when this browser has not already toasted THIS signature — so a reviewer who
+  // dismissed it does not meet it again on every reload, and a newer version still gets
+  // its own. Persistent, because a nudge worth reading should not vanish in four seconds
+  // and it can fire at most once per version so it cannot nag; silent, because a page
+  // load should not chime.
+  //
+  // `toasted` is a plain local rather than the stored marker, and it is what keeps this
+  // effect from re-entering: `alerts.push` READS `alertStore.alerts` to append to it, so
+  // pushing from inside an effect makes the queue one of this effect's own dependencies.
+  // The stored marker cannot stand in, because it is allowed to fail — with storage
+  // blocked, `readToastedUpdate()` keeps answering null and the guard never holds, so the
+  // effect would push, invalidate itself, push again, and take the app down with
+  // `effect_update_depth_exceeded`. The push is untracked besides, so the queue is never a
+  // dependency in the first place (the ModalPresence idiom).
+  let toasted = false;
+  $effect(() => {
+    if (toasted || !updatePending || !updateReport) return;
+    const signature = updateSignature(updateReport.status);
+    const toast = updateToast(updateReport);
+    if (!signature || !toast || readToastedUpdate() === signature) return;
+    toasted = true;
+    writeToastedUpdate(signature);
+    untrack(() => {
+      const id = alerts.push({
+        ...toast,
+        persistent: true,
+        sound: null,
+        action: {
+          label: "View",
+          run: () => {
+            // Activating an alert does not dismiss it (state/alerts.ts), and leaving this
+            // one behind the dialog it just opened would strand it.
+            alerts.dismiss(id);
+            openSettings(UPDATES_CATEGORY);
+          },
+        },
+      });
+    });
+  });
 
   // ----- Polling -----
   // No reactive reads: runs once on mount, returns the poll's stop fn.
@@ -665,6 +773,7 @@
     {onReject}
     onOpenSettings={openSettings}
     {showShortcutHints}
+    {updatePending}
   />
 
   {#if selection.daemonChanged}
@@ -875,6 +984,10 @@
       onChange={applySetting}
       onClose={() => (showSettings = false)}
       onCopyDiagnostic={copyDiagnostics}
+      initialCategory={settingsCategory}
+      {updatePending}
+      {updateReport}
+      {updatesCheck}
     />
   {/snippet}
 </ModalPresence>

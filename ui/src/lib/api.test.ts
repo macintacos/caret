@@ -1,7 +1,14 @@
 import "@ui/test-setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import type { Annotation, DirListing, FileExcerpt, ResolveBody, SkillRef } from "@core/lib/types";
+import type {
+  Annotation,
+  DirListing,
+  FileExcerpt,
+  ResolveBody,
+  SkillRef,
+  UpdateReport,
+} from "@core/lib/types";
 import { type LogCapture, logCapture } from "@ui/test-helpers.ts";
 import {
   getApproveMode,
@@ -12,6 +19,8 @@ import {
   getReview,
   getSkillDescription,
   getSkills,
+  getUpdate,
+  getUpdatesCheck,
   HttpError,
   markSeen,
   putDraft,
@@ -660,5 +669,87 @@ describe("setPrefs", () => {
 
     // The daemon logs the write; a second UI line would only restate it.
     expect(cap.events()).toHaveLength(0);
+  });
+});
+
+// EXC-1207. The two load-time reads the update surfaces need. Both are shaped like
+// getDiagnostics — silent on success, a warn on failure — but they diverge on what a
+// failure means: the report is what every update surface renders and rethrows, while the
+// opt-out has a safe answer and never does.
+describe("getUpdate", () => {
+  const report: UpdateReport = {
+    install: "binary",
+    version: "1.4.0",
+    commit: "abc1234",
+    status: { kind: "behind-release", available: "1.5.0", command: "bunx …" },
+  };
+
+  test("returns the report on success and emits no record", async () => {
+    respond = () => Promise.resolve(jsonResponse(report));
+
+    expect(await getUpdate()).toEqual(report);
+    flush();
+
+    expect(cap.events()).toHaveLength(0);
+  });
+
+  test("a 404 is debug, not warn — this fires on every load", async () => {
+    // A daemon that wires no update thunk is unremarkable, and warning about it once per
+    // page view is the per-iteration noise logging-rules.md forbids.
+    respond = () => Promise.resolve(new Response(null, { status: 404 }));
+
+    await expect(getUpdate()).rejects.toThrow(HttpError);
+    flush();
+
+    expect(cap.events().some((r) => r.level === "warn")).toBe(false);
+    const debug = cap.events().find((r) => r.level === "debug");
+    expect(debug?.step).toBe("request");
+    expect(debug!.msg as string).toContain("update route unwired");
+  });
+
+  test("any other failure warns at step request and rejects", async () => {
+    respond = () => Promise.reject(new Error("offline"));
+
+    await expect(getUpdate()).rejects.toThrow("offline");
+    flush();
+
+    const warn = cap.events().find((r) => r.level === "warn");
+    expect(warn?.step).toBe("request");
+    expect(warn!.msg as string).toContain("update report");
+  });
+});
+
+describe("getUpdatesCheck", () => {
+  test("returns the daemon's updates.check", async () => {
+    respond = () =>
+      Promise.resolve(jsonResponse({ approveMode: "default", updates: { check: false } }));
+
+    expect(await getUpdatesCheck()).toBe(false);
+    flush();
+
+    expect(cap.events()).toHaveLength(0);
+  });
+
+  test("fails safe to on — an unreachable daemon must not silence the badges", async () => {
+    // Default-on matches the daemon's own read: only an explicit false turns it off.
+    for (const answer of [
+      () => Promise.reject(new Error("offline")),
+      () => Promise.resolve(new Response(null, { status: 500 })),
+      () => Promise.resolve(jsonResponse({ approveMode: "default" })),
+    ]) {
+      respond = answer;
+      expect(await getUpdatesCheck()).toBe(true);
+    }
+  });
+
+  test("a failed read warns at step prefs", async () => {
+    respond = () => Promise.reject(new Error("offline"));
+
+    await getUpdatesCheck();
+    flush();
+
+    const warn = cap.events().find((r) => r.level === "warn");
+    expect(warn?.step).toBe("prefs");
+    expect(warn!.msg as string).toContain("updates check read failed");
   });
 });

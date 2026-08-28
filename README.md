@@ -71,9 +71,12 @@ it.
 
 caret's daemon runs the same check for itself, at most once a day. The call is
 unauthenticated and sends nothing about you — just a request to npm or GitHub, depending
-on how caret was installed, for the newest published version. To turn it off, set
-`updates.check` to `false` in `prefs.json` (`~/.local/state/caret/prefs.json`, or under
-`$XDG_STATE_HOME/caret`):
+on how caret was installed, for the newest published version. When a newer caret is out,
+the review UI says so once: a toast on load, a mark on the settings button, and a
+**Settings → Updates** pane naming the version and the exact command to take it.
+
+Turn the check off from that same pane, or by setting `updates.check` to `false` in
+`prefs.json` (`~/.local/state/caret/prefs.json`, or under `$XDG_STATE_HOME/caret`):
 
 ```json
 { "updates": { "check": false } }

@@ -175,3 +175,33 @@ describe("createAlerts sound (EXC-1100)", () => {
     expect(store.alerts).toHaveLength(1);
   });
 });
+
+describe("createAlerts action (EXC-1207)", () => {
+  test("push carries an action onto the queued item", () => {
+    const store = makeStore();
+    const alerts = createAlerts(store, { schedule: makeScheduler().schedule });
+    const run = () => {};
+    alerts.push({ message: "caret 1.2.0 is available", action: { label: "Update", run } });
+    expect(store.alerts[0]?.action).toEqual({ label: "Update", run });
+  });
+
+  test("an alert pushed without one carries no action", () => {
+    const store = makeStore();
+    const alerts = createAlerts(store, { schedule: makeScheduler().schedule });
+    alerts.push({ message: "hi" });
+    expect(store.alerts[0]?.action).toBeUndefined();
+  });
+
+  test("an action changes neither the dwell nor the dismiss path", () => {
+    const store = makeStore();
+    const sched = makeScheduler();
+    const alerts = createAlerts(store, { schedule: sched.schedule });
+    alerts.push({ message: "hi", action: { label: "Update", run: () => {} } });
+    // Still one dwell timer armed, and it still runs the two-phase exit.
+    expect(sched.active()).toBe(1);
+    sched.runNext();
+    expect(store.alerts[0]?.leaving).toBe(true);
+    sched.runNext();
+    expect(store.alerts).toHaveLength(0);
+  });
+});

@@ -56,6 +56,7 @@
     settingLabelTarget,
     type StagedField,
     THEME_SECTION,
+    UPDATES_CATEGORY,
   } from "$lib/settingsRegistry.ts";
   import AdvancedPane from "@/components/AdvancedPane.svelte";
   import NotificationsPane from "@/components/NotificationsPane.svelte";
@@ -63,6 +64,8 @@
   import SettingSelect from "@/components/SettingSelect.svelte";
   import SettingSlider from "@/components/SettingSlider.svelte";
   import ThemeSection from "@/components/ThemeSection.svelte";
+  import UpdatesPane from "@/components/UpdatesPane.svelte";
+  import type { UpdateReport } from "@core/lib/types";
 
   interface Props {
     /** Controlled open — false while the dialog plays its exit. */
@@ -81,8 +84,31 @@
      * clipboard and fires the shared success alert. Defaults to a no-op so mounts
      * without the Advanced pane need not supply it. */
     onCopyDiagnostic?: (text: string) => void;
+    /** Which category to open on (EXC-1207). The host mounts this per open
+     * (ModalPresence), so the seed applies on every open — which is what makes the
+     * update toast's deep link work. Absent, the dialog opens where it always has. */
+    initialCategory?: string;
+    /** Whether an update is waiting, badging the Updates rail row (EXC-1207). */
+    updatePending?: boolean;
+    /** The daemon's cached update verdict, rendered by the Updates pane. Null when it
+     * could not be read; the pane degrades rather than erroring. */
+    updateReport?: UpdateReport | null;
+    /** The live `updates.check` value. Only the pane's copy uses it, to correct the one
+     * verdict the daemon settles at boot and cannot revise (see UpdatesPane). */
+    updatesCheck?: boolean;
   }
-  let { open, onClosed, entries, onChange, onClose, onCopyDiagnostic = () => {} }: Props = $props();
+  let {
+    open,
+    onClosed,
+    entries,
+    onChange,
+    onClose,
+    onCopyDiagnostic = () => {},
+    initialCategory,
+    updatePending = false,
+    updateReport = null,
+    updatesCheck = false,
+  }: Props = $props();
 
   // EXC-849: while Settings owns the view, publish its own keyboard affordances into the
   // shared registry. SETTINGS_SHORTCUTS is the settings-scoped reservation set from
@@ -115,7 +141,8 @@
     SETTINGS_CATEGORIES.filter((c) => filtered.some((e) => e.category === c.id)),
   );
 
-  let selectedId = $state(SETTINGS_CATEGORIES[0]?.id ?? "");
+  // svelte-ignore state_referenced_locally
+  let selectedId = $state(initialCategory ?? SETTINGS_CATEGORIES[0]?.id ?? "");
   const selected = $derived(categories.find((c) => c.id === selectedId) ?? categories[0]);
   const paneFields = $derived(staged.filter((f) => f.category === selected?.id));
 
@@ -258,6 +285,16 @@
                   >
                     <span class="nav-label">{cat.id}</span>
                   </Sidebar.MenuButton>
+                  <!-- The pending-update mark on the Updates row (EXC-1207). MenuBadge is
+                       what the shadcn sidebar composes for exactly this, and it is
+                       pointer-events:none, so it can't shadow the row's own click. The
+                       row's accessible name is unchanged; the badge is decorative here
+                       because the pane it points at states the same thing in words. -->
+                  {#if updatePending && cat.id === UPDATES_CATEGORY}
+                    <Sidebar.MenuBadge aria-hidden="true">
+                      <span class="rail-dot"></span>
+                    </Sidebar.MenuBadge>
+                  {/if}
                 </Sidebar.MenuItem>
               {/each}
             </Sidebar.Menu>
@@ -290,6 +327,12 @@
           {:else if selected.id === "Advanced"}
             <AdvancedPane {onCopyDiagnostic} />
           {:else}
+            {#if selected.id === UPDATES_CATEGORY}
+              <!-- Updates is the one category whose pane sits ABOVE its fields rather
+                   than replacing them (EXC-1207): the verdict is read-only, but the
+                   `updates.check` opt-out beneath it is an ordinary registry field. -->
+              <UpdatesPane report={updateReport} checkEnabled={updatesCheck} />
+            {/if}
             {#each paneSections as section, si (si)}
               {#if section.label === THEME_SECTION}
                 <!-- The theme controls render as one composite block rather than three
@@ -469,6 +512,18 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  /* The pending-update mark (EXC-1207): a bare disc rather than a count, because there
+     is nothing to tally — an update either waits or it does not. It wears --attention,
+     the novelty token the TopBar's pending counts already use, so the whole "worth a
+     glance" vocabulary stays one hue; amber is spent on the selected row beside it and
+     must not be spent twice. The badge box is shadcn's h-5 min-w-5, so the disc centres
+     in it rather than sizing it. */
+  .rail-dot {
+    width: 0.4375rem;
+    height: 0.4375rem;
+    border-radius: 50%;
+    background: var(--attention);
   }
   /* The esc hint, in the sidebar footer. */
   .nav-hint {

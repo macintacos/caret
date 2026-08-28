@@ -12,6 +12,7 @@ import {
   type ApproveModeSet,
   createPrefsWriter,
   readApproveMode,
+  readUpdatesCheck,
   writeApproveMode,
 } from "@/config/prefs.ts";
 import { DEFAULTS } from "@/config/settings.ts";
@@ -47,6 +48,7 @@ import {
   type FileRefsResponse,
   type HealthIdentity,
   type PlanInput,
+  type PrefsResponse,
   type ResolveBody,
   type RouteResult,
   type SkillDescriptionResponse,
@@ -149,9 +151,10 @@ export interface CreateServerOptions {
   diagnostics?: () => DaemonDiagnostics;
   /** A thunk returning whether the running caret is behind, served by GET /api/update
    * (EXC-1205): the install kind, the running version/commit, and the verdict. Omitted
-   * (default) → the route 404s, so a bare test daemon and the e2e fixture daemon are
-   * unaffected. runDaemon wires a thunk over a locally held status — reading it never
-   * triggers a network call. */
+   * (default) → the route 404s, so a bare test daemon is unaffected. runDaemon wires a
+   * thunk over a locally held status — reading it never triggers a network call. The e2e
+   * fixture daemon wires a synthetic one (EXC-1207): the UI reads this route on every
+   * load, so an unwired route there would 404 into every spec's page load. */
   updateReport?: () => UpdateReport;
   /** Clear the unread mark on the cmux pane a review was submitted from
    * (EXC-961). Defaults to the real spawn; injectable so tests assert on the
@@ -527,10 +530,20 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   }
 
   // GET /api/prefs — machine-global UI prefs, read once on UI load (deliberately
-  // not part of the 2s /api/reviews poll). Fail-safe: returns "default" if
-  // unreadable.
+  // not part of the 2s /api/reviews poll). Both reads fail safe: "default" for an
+  // unreadable approve mode, and a check that stays on. `updates.check` rides along
+  // (EXC-1207) because the browser gates its update surfaces on it — this daemon's
+  // own verdict was decided once at boot and cannot reflect a later opt-out.
   async function handlePrefs(): Promise<Response> {
-    return Response.json({ approveMode: await readApproveMode(prefsPath, log, approveModeSet) });
+    // Concurrent: the two readers open the same small file independently (they keep
+    // separate failure semantics — see prefs.ts), so overlapping them costs nothing and
+    // keeps the route one round trip rather than two sequential reads.
+    const [approveMode, check] = await Promise.all([
+      readApproveMode(prefsPath, log, approveModeSet),
+      readUpdatesCheck(prefsPath),
+    ]);
+    const body: PrefsResponse = { approveMode, updates: { check } };
+    return Response.json(body);
   }
 
   // POST /api/prefs — the write half (EXC-1206). Unlike the daemon's other bodies

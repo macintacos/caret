@@ -10,8 +10,8 @@
 // is no staged draft.
 //
 // Panes that show live, read-only information (Advanced diagnostics,
-// Notifications) contribute search-only entries: they appear in settings search
-// (EXC-845) but carry no read/write.
+// Notifications, the Updates verdict) contribute search-only entries: they appear
+// in settings search (EXC-845) but carry no read/write.
 //
 // `category` is the sidebar taxonomy (one nav row each); `section` sub-groups a
 // category's fields into labelled blocks within its pane (Diff view lives as a
@@ -33,6 +33,7 @@ import {
   writeSoundVolume,
 } from "$lib/soundPref.ts";
 import { type Scheme, type ThemeId, themesForScheme } from "$lib/theme.ts";
+import { seededUpdatesCheck } from "$lib/updatesPref.ts";
 
 /** One choice in a select or segmented control. `swatch` is an optional row of CSS
  * colors rendered as small dots beside the label — the theme options preview their
@@ -237,6 +238,16 @@ export const THEME_FIELD = {
  * field?" — App's applySetting, which gives a theme change its own sound. */
 export const THEME_KEYS: readonly string[] = Object.values(THEME_FIELD);
 
+/** The daemon-owned update-check key (EXC-1207), exported like THEME_KEYS so App can
+ * find the one field whose value it also mirrors — the update badges read the same
+ * opt-out — without re-spelling a literal the registry owns. */
+export const UPDATES_CHECK_KEY = "updatesCheck";
+
+/** The Updates category id, exported for the same reason the key above is: the update
+ * toast deep-links to this pane from another module, and a renamed category would
+ * otherwise degrade that link to "opens on Appearance" with nothing to fail on it. */
+export const UPDATES_CATEGORY = "Updates";
+
 const diffStyleOptions = [
   { value: "split", label: "Split" },
   { value: "unified", label: "Unified" },
@@ -360,6 +371,30 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     label: "Desktop notifications",
     description: "Get alerted when a new plan is ready for review; check the permission state.",
   },
+  // The update check (EXC-1207) — the registry's one daemon-owned field, since the
+  // check runs in the daemon and outlives any browser that flipped it. daemonField
+  // makes that difference a write destination and nothing else: the row renders as an
+  // ordinary toggle, and read() answers from what App seeded at load until a write
+  // lands.
+  daemonField<boolean>({
+    key: UPDATES_CHECK_KEY,
+    category: UPDATES_CATEGORY,
+    label: "Check for updates",
+    description: "Ask GitHub once a day whether a newer caret is out.",
+    control: { kind: "toggle" },
+    read: seededUpdatesCheck,
+    patch: (check) => ({ updates: { check } }),
+  }),
+  // The pane's verdict block is live and read-only, so — following the Advanced
+  // precedent — it contributes a search-only entry purely so /-search (EXC-845) can
+  // find it. UpdatesPane renders the status; nothing here persists.
+  {
+    kind: "search",
+    key: "updateStatus",
+    category: UPDATES_CATEGORY,
+    label: "Update status",
+    description: "Whether this caret is behind, and the command that takes the upgrade.",
+  },
   // Read-only install diagnostics (EXC-848): one search-only entry per block so
   // /-search (EXC-845) finds each, and — since the shell renders a category only
   // when it has ≥1 entry — so the Advanced nav row appears at all. AdvancedPane
@@ -405,12 +440,14 @@ export interface SettingCategory {
 /** The ordered sidebar taxonomy (EXC-843). The two-pane shell renders a nav item
  * per category that has at least one registry entry, in this order, and shows the
  * blurb beneath the pane title. Later panes append their categories here —
- * Sound (EXC-1100), Notifications (EXC-847), Advanced (EXC-848). Sound sits directly
- * before Notifications: both are how caret gets the reviewer's attention, so they read
- * as a pair. */
+ * Sound (EXC-1100), Notifications (EXC-847), Updates (EXC-1207), Advanced (EXC-848).
+ * Sound sits directly before Notifications: both are how caret gets the reviewer's
+ * attention, so they read as a pair. Updates sits directly before Advanced, the two
+ * install-level panes, and Advanced stays last. */
 export const SETTINGS_CATEGORIES: readonly SettingCategory[] = [
   { id: "Appearance", blurb: "How the interface looks, including the diff view." },
   { id: "Sound", blurb: "Short cues when a plan arrives and a decision lands." },
   { id: "Notifications", blurb: "Desktop alerts when a new plan is ready for review." },
+  { id: UPDATES_CATEGORY, blurb: "Whether a newer caret is out, and how to install it." },
   { id: "Advanced", blurb: "Read-only details about this install. Click a block to copy it." },
 ];

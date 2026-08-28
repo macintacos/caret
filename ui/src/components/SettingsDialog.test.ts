@@ -2,6 +2,7 @@ import "@ui/test-mount.ts";
 
 import { afterEach, describe, expect, test } from "bun:test";
 
+import type { UpdateReport } from "@core/lib/types";
 import { flushUntil, render } from "@ui/test-mount.ts";
 import SettingsDialog from "@/components/SettingsDialog.svelte";
 import { writeDiffStyle } from "$lib/diffStylePref.ts";
@@ -451,5 +452,73 @@ describe("SettingsDialog search (EXC-845)", () => {
     expect(has(".pane-empty")).toBe(true);
     expect(has("[data-category='Appearance']")).toBe(false);
     expect(has(`[data-field='${THEME_FIELD.light}']`)).toBe(false);
+  });
+});
+
+// EXC-1207. The three additions the update surface needs from the shell: an opening
+// category (so the toast can deep-link), a rail badge while an update is pending, and
+// the Updates pane rendered ABOVE the category's own toggle rather than in place of it.
+describe("SettingsDialog Updates category (EXC-1207)", () => {
+  const REPORT: UpdateReport = {
+    install: "binary",
+    version: "1.4.0",
+    commit: "abc1234",
+    status: { kind: "behind-release", available: "1.5.0", command: "bunx …" },
+  };
+
+  test("opens on Appearance by default", async () => {
+    const { flush } = render(SettingsDialog, props());
+    await flushUntil(flush, mounted);
+    expect(
+      document.body.querySelector("[data-category='Appearance']")?.getAttribute("aria-current"),
+    ).toBe("page");
+  });
+
+  test("initialCategory seeds the open pane — what makes the toast's deep link work", async () => {
+    // The host mounts this per open (ModalPresence), so the seed applies on every open.
+    const { flush } = render(SettingsDialog, props({ initialCategory: "Updates" }));
+    await flushUntil(flush, mounted);
+    expect(
+      document.body.querySelector("[data-category='Updates']")?.getAttribute("aria-current"),
+    ).toBe("page");
+    expect(has("[data-updates-pane]")).toBe(true);
+  });
+
+  test("the Updates pane renders above the category's own toggle, not instead of it", async () => {
+    // Unlike Notifications and Advanced, this pane does not replace the staged rows: the
+    // opt-out is an ordinary registry field and the shell still renders it.
+    const { flush } = render(SettingsDialog, props({ initialCategory: "Updates" }));
+    await flushUntil(flush, mounted);
+    const pane = document.body.querySelector("[data-updates-pane]");
+    const toggle = document.body.querySelector("[data-field='updatesCheck']");
+    expect(pane !== null).toBe(true);
+    expect(toggle !== null).toBe(true);
+    // DOCUMENT_POSITION_FOLLOWING: the toggle comes after the pane.
+    expect(!!(pane!.compareDocumentPosition(toggle!) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(
+      true,
+    );
+  });
+
+  test("the rail row carries a badge only while an update is pending", async () => {
+    const off = render(SettingsDialog, props({ updateReport: REPORT }));
+    await flushUntil(off.flush, mounted);
+    expect(has("[data-slot='sidebar-menu-badge']")).toBe(false);
+
+    // render() purges the previous mount's leaked portal nodes, so the second mount's
+    // queries see only its own content.
+    const on = render(SettingsDialog, props({ updateReport: REPORT, updatePending: true }));
+    await flushUntil(on.flush, mounted);
+    const badge = document.body.querySelector("[data-slot='sidebar-menu-badge']");
+    expect(badge !== null).toBe(true);
+    // It rides the Updates row, not some other category's.
+    expect(
+      badge?.closest("li")?.querySelector("[data-category]")?.getAttribute("data-category"),
+    ).toBe("Updates");
+  });
+
+  test("a null report still renders the pane, degraded", async () => {
+    const { flush } = render(SettingsDialog, props({ initialCategory: "Updates" }));
+    await flushUntil(flush, mounted);
+    expect(has("[data-updates-pane] .update-placeholder")).toBe(true);
   });
 });

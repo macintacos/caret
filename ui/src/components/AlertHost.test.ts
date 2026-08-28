@@ -66,3 +66,43 @@ describe("AlertHost", () => {
     expect(target.querySelector(".alert-item")?.classList.contains("leaving")).toBe(true);
   });
 });
+
+describe("AlertHost action (EXC-1207)", () => {
+  test("renders the action as a labelled button beside the message", () => {
+    const { target } = render(AlertHost, {
+      alerts: [
+        item({
+          id: 4,
+          message: "caret 1.2.0 is available",
+          action: { label: "Update", run: () => {} },
+        }),
+      ],
+      onDismiss: () => {},
+    });
+    const btn = target.querySelector<HTMLButtonElement>(".alert-action");
+    expect(btn?.textContent?.trim()).toBe("Update");
+    // Out of context — a screen reader's button list — "Update" alone says nothing
+    // about which alert it acts on, so the message is its description.
+    expect(btn?.getAttribute("aria-describedby")).toBe("alert-message-4");
+    expect(target.querySelector(".alert-message")?.id).toBe("alert-message-4");
+  });
+
+  test("renders no action button when the alert carries none", () => {
+    const { target } = render(AlertHost, {
+      alerts: [item({ id: 5, message: "no action here" })],
+      onDismiss: () => {},
+    });
+    expect(target.querySelector(".alert-action") === null).toBe(true);
+  });
+
+  test("clicking the action button runs it", () => {
+    const ran = capture<true>();
+    const { target } = render(AlertHost, {
+      alerts: [item({ id: 6, message: "x", action: { label: "Update", run: () => ran.cb(true) } })],
+      onDismiss: () => {},
+    });
+    expect(ran.last()).toBeUndefined();
+    target.querySelector<HTMLButtonElement>(".alert-action")?.click();
+    expect(ran.last()).toBe(true);
+  });
+});

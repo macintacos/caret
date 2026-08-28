@@ -18,6 +18,7 @@ import "$lib/fileDrawer.ts";
 import "$lib/prefs.ts";
 import "$lib/shortcutHintsPref.ts";
 import "$lib/soundPref.ts";
+import "$lib/updatesPref.ts";
 
 // This is the structural guard the three-place key sync used to lack: it scans the
 // source for every persisted caret.* localStorage key and asserts each one is

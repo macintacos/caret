@@ -59,6 +59,9 @@
     /** Whether the shortcut-hint key-cap hints are shown (EXC-826). When off, the
      * inline a/r caps hide; the shortcuts themselves still fire. */
     showShortcutHints: boolean;
+    /** Whether a newer caret is waiting (EXC-1207) — dots the settings gear and names
+     * the state in its accessible label. */
+    updatePending?: boolean;
   }
   let {
     reviews,
@@ -77,6 +80,7 @@
     onReject,
     onOpenSettings,
     showShortcutHints,
+    updatePending = false,
   }: Props = $props();
 </script>
 
@@ -283,15 +287,28 @@
        margin-left pushes it right. -->
   <div class="bell-slot">
     <NotifyBell />
+    <!-- A pending update marks the gear (EXC-1207), because Settings is where the
+         reviewer acts on it. The state rides the button's own accessible name — a dot a
+         screen reader can't reach is not a notification — so the dot itself is
+         decorative, the same split NotifyBell makes.
+
+         onclick WRAPS the callback rather than passing it by reference: bare, the click
+         would hand its MouseEvent to whatever optional parameter the callback happens to
+         declare, and this prop's `() => void` type would not catch it. App's openSettings
+         takes an optional category, so unwrapped this deep-links Settings to a category
+         named "[object MouseEvent]". Closed here so every caller inherits the fix. -->
     <Button
       variant="secondary"
       size="icon"
       class="settings float-chip"
-      aria-label="Settings"
+      aria-label={updatePending ? "Settings — update available" : "Settings"}
       aria-keyshortcuts={ariaKeyshortcutsFor("actions.settings")}
-      onclick={onOpenSettings}
+      onclick={() => onOpenSettings()}
     >
-      <Icon name="settings" size={16} />
+      <span class="gear-stack">
+        <Icon name="settings" size={16} />
+        {#if updatePending}<span class="dot" aria-hidden="true"></span>{/if}
+      </span>
     </Button>
   </div>
 </header>
@@ -489,6 +506,25 @@
       opacity: 1;
       transform: none;
     }
+  }
+  /* The pending-update mark on the gear (EXC-1207), following NotifyBell's dot: a small
+     filled disc pinned to the glyph's top-right, lifted off the strokes by a ring in the
+     topbar's own surface. It wears --attention, the same novelty token the pending counts
+     beside it use — amber stays reserved for the Approve primary. The stack is this
+     component's own element, so the scoped rules reach it (they would not pierce Button). */
+  .gear-stack {
+    position: relative;
+    display: inline-flex;
+  }
+  .gear-stack .dot {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--attention);
+    box-shadow: 0 0 0 1.5px var(--paper-raised);
   }
   /* Pending count pinned to the trigger's top-right corner, lifted off the
      ellipsis with a paper ring (the NotifyBell dot pattern). The hue is
