@@ -16,7 +16,12 @@
 // comments) in ui/src/state/resolve.test.ts.
 
 import { alerts } from "@test/e2e/support/chrome.ts";
-import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import {
+  awaitDismissArmed,
+  expect,
+  test,
+  waitPastSafeModeGrace,
+} from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
 test("rejecting resolves the review as a deny carrying the wait message", async ({
@@ -112,6 +117,7 @@ test("a backdrop click does NOT dismiss the reject guard (deliberate verdict, EX
   await page.getByRole("button", { name: "Reject", exact: true }).click();
   const guard = page.getByRole("alertdialog");
   await expect(guard).toBeVisible();
+  await awaitDismissArmed(guard);
 
   // Unlike the approve confirm (which dismisses on a click outside, EXC-791), a
   // reject is a deliberate verdict: an alertdialog whose backdrop does NOT dismiss.
