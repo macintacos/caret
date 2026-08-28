@@ -250,11 +250,19 @@ that look identical from the failure text:
   contended host. Poll for the positive before reading; that bounds the *absence*
   assertions in the same log too, which are otherwise vacuously true on an empty one
   (`barMotionAfter`).
-- **Lost** — the element is removed before the dispatch step runs, so the event fires on a
-  detached node and never bubbles to the listener at all. Under `prefers-reduced-motion`
-  an exit collapses to ~0ms and takes its element with it, which makes this real there:
-  measured absent both instantly and three seconds later. Polling cannot help an event
-  that is gone rather than late — read once and let it fail fast.
+- **Lost** — the event never reaches the listener, and polling cannot help because it is
+  not late, it is gone. Two distinct causes, and the cheaper one has a fix: an event
+  dispatched to a node already detached still runs *that node's own* listeners, it only
+  stops bubbling — so arming each element as it mounts recovers it where one listener on
+  the container does not. On the collapsed exit a container listener saw 2 of the 6 starts
+  a per-element one caught. Past that, under `prefers-reduced-motion` the guard collapses
+  an animation to `0.01ms` and the component reads that same number back as its removal
+  wait, so the element can be gone before the engine ever *starts* the animation — and an
+  animation that never started dispatches to nobody. There is no listener that fixes that
+  one. **Assert the cascade instead of the event**: apply the leaving class to an element
+  that is staying and read `animationName` / `animationDuration` off it, which puts the
+  same rule under the same guard with nothing to race (`plan-breadcrumbs.e2e.ts` "reduced
+  motion collapses the exit").
 
 A structural gate for this is deliberately **not** added.
 `test/structure/e2e-conventions.test.ts` would have to tell a read that feeds an assertion
@@ -299,7 +307,7 @@ Verdicts recorded against them, so a later red gate knows what was already looke
 | `settings.e2e.ts` "clicking a row's label" | Red 4/4 at 20x: an `Escape` with no menu to close reached the dialog and closed Settings, leaving every assertion after it racing a 140ms unmount. Fixed. |
 | `file-drawer.e2e.ts` "a row clicked during the lane's closing wipe" | Red 4/4 at 20x: the wipe is a 140ms timer, too short to spend a driver round trip inside. Fixed. |
 | `plan-breadcrumbs.e2e.ts` "walking to a sibling" | Green through 60x, reds under oversubscription: a too-early log read, the direction the throttle cannot produce. Fixed. |
-| `plan-breadcrumbs.e2e.ts` "reduced motion collapses the exit" | A LOST `animationstart`, not a late one — no fix polling can give. Standing. |
+| `plan-breadcrumbs.e2e.ts` "reduced motion collapses the exit" | A LOST `animationstart`, not a late one: at `0.01ms` the crumb often goes before the animation starts, so no listener anywhere sees it. Re-asserted off the cascade. Fixed. |
 | `confirm-popover.e2e.ts` "a click outside the dialog's discard bubble" | Survives 90x; at 120x reds only on `locator.click` starvation. No structural race — the dismissable-layer hypothesis is not it. |
 | `lineCenterY` callers | No miss in two full oversubscribed suites; the rows are already there the instant `.diff-plan` turns visible. Polled anyway, because that guard is the caller's rather than the helper's. |
 | `ref-hint.e2e.ts` "the dev fake plan badges both kinds" | Survives 20x, reds under oversubscription at 40s+. Budget starvation. Standing. |

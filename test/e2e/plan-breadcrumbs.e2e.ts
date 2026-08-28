@@ -1401,9 +1401,19 @@ test("compare mode drops the bar, which tracks no heading there", async ({ daemo
  *
  * Sampled at `animationstart` rather than at `animationend`, because the exit's whole
  * point is that its element is leaving: the end races the removal, while the start is
- * guaranteed to happen with the crumb still in the list. `animationstart` bubbles, so one
- * listener on the bar covers every crumb and separator inside it — and the menus a jump
- * opens are portalled to the body, so their own motion never lands in this log.
+ * dispatched with the crumb still animating.
+ *
+ * Listened for on each ELEMENT rather than once on the bar, which `animationstart`'s
+ * bubbling would otherwise allow. An event is dispatched to a node whether or not that
+ * node is still in the tree, but it only bubbles while it is — and under
+ * `prefers-reduced-motion` the guard collapses the exit to 0.01ms, so the crumb is
+ * routinely gone before the engine's dispatch step runs. Measured on the collapsed exit, a
+ * single bar listener saw 2 of the 6 starts a per-element one caught (EXC-1193). A
+ * `MutationObserver` arms each crumb and separator as it mounts, and a `WeakSet` keeps a
+ * re-added node from being armed twice and double-counting.
+ *
+ * The menus a jump opens are portalled to the body, outside the bar, so their own motion
+ * never reaches this log either way.
  *
  * Arming a recorder first and running the gesture into it is what makes "a departure is
  * animated too" falsifiable: strip the exit and the array comes back empty rather than
@@ -1412,12 +1422,13 @@ type BarMotion = { name: string; slot: string; duration: number; easing: string 
 
 async function armBarMotion(page: Page): Promise<void> {
   await page.locator(BAR).evaluate((bar) => {
-    const w = window as Window & { __barMotion?: BarMotion };
-    w.__barMotion = [];
-    bar.addEventListener("animationstart", (event) => {
+    const log: BarMotion = [];
+    (window as Window & { __barMotion?: BarMotion }).__barMotion = log;
+    const armed = new WeakSet<Element>();
+    const record = (event: Event) => {
       const target = event.target as HTMLElement;
       const style = getComputedStyle(target);
-      w.__barMotion?.push({
+      log.push({
         name: (event as AnimationEvent).animationName,
         slot: target.dataset.slot ?? "",
         // Both read as the animation BEGINS, the one moment the leaving cascade is live on
@@ -1425,7 +1436,19 @@ async function armBarMotion(page: Page): Promise<void> {
         duration: Number.parseFloat(style.animationDuration),
         easing: style.animationTimingFunction,
       });
-    });
+    };
+    const arm = (el: Element) => {
+      if (armed.has(el)) return;
+      armed.add(el);
+      el.addEventListener("animationstart", record);
+      for (const kid of Array.from(el.children)) arm(kid);
+    };
+    arm(bar);
+    new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of Array.from(record.addedNodes)) if (node instanceof Element) arm(node);
+      }
+    }).observe(bar, { childList: true, subtree: true });
   });
 }
 
@@ -1546,25 +1569,31 @@ test("reduced motion collapses the exit rather than removing it", async ({ daemo
   await jumpTo(page, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
 
-  await armBarMotion(page);
-  await jumpTo(page, "Bravo");
-  await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo"]);
-
-  // Read once rather than waited for, which is the opposite of the other two read sites
-  // and deliberate. Under the collapsed duration the crumb is removed all but immediately,
-  // so when the engine's animation-event dispatch loses that race the event fires on a node
-  // already detached from the bar and never reaches this listener at all — measured absent
-  // both instantly and three seconds later (EXC-1193). Waiting on an event that is lost
-  // rather than late buys nothing and spends the assertion budget.
-  //
-  // The cost of that is worth knowing: an empty log here is AMBIGUOUS. It is what a lost
-  // dispatch looks like and equally what deleting the exit rule would look like, so this
-  // arm can red without a regression and cannot prove one either. Closing it needs a
-  // listener on each crumb rather than on the bar — an event dispatched to a detached node
-  // still runs that node's own listeners, it only stops bubbling.
-  const leaving = named(await barMotion(page), "crumb-out");
-  expect(leaving.length).toBeGreaterThan(0);
-  for (const event of leaving) expect(event.duration).toBeLessThan(0.001);
+  // Read off the CASCADE rather than off a caught event, which is what makes this
+  // assertion possible at all under the preference. A departure cannot be observed here:
+  // the guard collapses the exit to 0.01ms and `crumbOut()` reads that same number back as
+  // its wait, so the crumb is routinely removed before the engine ever starts the
+  // animation — and an `animationstart` that never started reaches no listener, on the bar
+  // or on the node (EXC-1193). Applying the leaving class to a crumb that is staying puts
+  // the same rule under the same guard with nothing to race.
+  const exit = await page
+    .locator(CRUMB)
+    .first()
+    .evaluate((crumb) => {
+      crumb.classList.add("crumb-leaving");
+      const style = getComputedStyle(crumb);
+      const resolved = {
+        name: style.animationName,
+        duration: Number.parseFloat(style.animationDuration),
+      };
+      crumb.classList.remove("crumb-leaving");
+      return resolved;
+    });
+  // Collapsed, not deleted: the rule still resolves to `crumb-out` — `animation: none`
+  // would report "none" here — and its duration is under a millisecond.
+  expect(exit.name.endsWith("crumb-out")).toBe(true);
+  expect(exit.duration).toBeGreaterThan(0);
+  expect(exit.duration).toBeLessThan(0.001);
 
   // The vocabulary underneath is untouched — what changed is what the cascade computed on
   // the crumb. motionToken probes outside #app and carries no data-slot, so neither arm of
