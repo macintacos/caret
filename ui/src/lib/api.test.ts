@@ -694,8 +694,8 @@ describe("getUpdate", () => {
   });
 
   test("a 404 warns at step request and rejects — a daemon wiring no update thunk", async () => {
-    // Expected and normal: the e2e fixture daemon wires none, so specs unrelated to
-    // updates take this path on every load.
+    // The route is optional daemon-side, like /api/diagnostics. App leaves the report
+    // null on this path and every update surface stays quiet.
     respond = () => Promise.resolve(new Response(null, { status: 404 }));
 
     await expect(getUpdate()).rejects.toThrow(HttpError);

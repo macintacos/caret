@@ -64,8 +64,8 @@ export async function getDiagnostics(): Promise<DaemonDiagnostics> {
  * was decided at boot — so this is a plain load-time read, not a poll.
  *
  * Throws on failure, unlike this file's degrading readers: every update surface renders
- * this one value, so there is nothing to fall back to. A 404 is expected rather than
- * exceptional — a daemon that wires no update thunk (the e2e fixture) answers that way. */
+ * this one value, so there is nothing to fall back to. A 404 is a daemon that wires no
+ * update thunk at all — App leaves the report null and every surface stays quiet. */
 export async function getUpdate(): Promise<UpdateReport> {
   try {
     return await json(await fetch("/api/update"));

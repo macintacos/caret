@@ -82,6 +82,19 @@ const server = createServer({
   // needs either route stubs its own.
   buildId: "e2e-build",
   commit: "e2ecommit0000000",
+  // The update verdict (EXC-1207), synthetic for the same reason the identity above is.
+  // It is wired rather than left absent because App reads GET /api/update on EVERY load:
+  // an unwired route 404s, which would put a failed same-origin request into every spec's
+  // page load — exactly what assets.e2e.ts exists to catch. `unavailable`/`dev` is the
+  // honest verdict for a daemon running from source, and it is quiet, so no spec sees a
+  // toast or a badge it did not ask for. A spec that wants a real verdict routes
+  // **/api/update itself (updates.e2e.ts).
+  updateReport: () => ({
+    install: "dev",
+    version: "0.0.0-e2e",
+    commit: "e2ecommit0000000",
+    status: { kind: "unavailable", reason: "dev" },
+  }),
   diagnostics: () => ({
     system: { platform: "darwin", arch: "arm64", runtime: "bun 1.2.19" },
     uptimeMs: 2 * 3_600_000 + 14 * 60_000,

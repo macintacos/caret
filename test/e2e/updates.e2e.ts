@@ -9,10 +9,12 @@
 // aria-label are component units (`UpdatesPane.test.ts`, `SettingsDialog.test.ts`,
 // `TopBar.test.ts`).
 //
-// The e2e daemon (`test/e2e/support/daemon-entry.ts`) deliberately wires no update thunk,
-// so `/api/update` 404s there — which is itself the normal path every other spec takes.
-// Rather than adding a fifth boot delta for this one spec, it fulfils the route in the
-// page, the same technique `images.e2e.ts` and `file-refs.e2e.ts` already use.
+// The e2e daemon (`test/e2e/support/daemon-entry.ts`) answers `/api/update` with a quiet
+// synthetic verdict, alongside the synthetic build identity it already serves — App reads
+// that route on every load, so an unwired one would 404 into every other spec's page load
+// and red `assets.e2e.ts`. A spec that needs a verdict of its own therefore fulfils the
+// route in the page, the technique `images.e2e.ts` and `file-refs.e2e.ts` already use,
+// rather than the fixture staging one nothing else wants.
 
 import type { Page } from "@playwright/test";
 
@@ -22,8 +24,9 @@ import { planSurface } from "@test/e2e/support/source-view.ts";
 const AVAILABLE = "9.9.9";
 const COMMAND = "bunx --no-cache @macintacos/caret@latest install --refresh";
 
-/** Answer `GET /api/update` with a behind-release verdict. Installed before the page
- * loads so the app's one load-time read never escapes to the daemon's 404. */
+/** Answer `GET /api/update` with a behind-release verdict, overriding the fixture
+ * daemon's quiet one. Installed before the page loads, so the app's one load-time read
+ * sees it. */
 async function routeBehindRelease(page: Page): Promise<void> {
   await page.route("**/api/update", (route) =>
     route.fulfill({
@@ -74,6 +77,29 @@ test("the toast's action opens Settings on the Updates pane, carrying the comman
   await expect(page.locator("[data-updates-pane] .update-command")).toHaveText(COMMAND);
   // And the toggle sits beneath it — the pane does not replace the category's fields.
   await expect(page.getByRole("switch", { name: "Check for updates" })).toBeVisible();
+});
+
+test("the fixture daemon answers the update route with a quiet verdict", async ({
+  daemon,
+  page,
+}) => {
+  // No stub here, deliberately. App reads /api/update on EVERY load, so a route that
+  // 404s would put a failed same-origin request into every other spec's load — which is
+  // what `assets.e2e.ts` exists to catch. The fixture answers with the honest verdict for
+  // a from-source daemon, so the read succeeds and nothing is marked.
+  await daemon.seed();
+  await page.goto("/");
+  await planSurface(page);
+
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.locator("[data-category='Updates']").click();
+
+  // A real verdict, not the "could not be read" placeholder.
+  await expect(page.locator("[data-updates-pane] .update-headline")).toBeVisible();
+  await expect(page.locator("[data-updates-pane] .update-placeholder")).toHaveCount(0);
+  // And quiet: nothing pending, so no command and no mark on the gear.
+  await expect(page.locator("[data-updates-pane] .update-command")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Settings — update available" })).toHaveCount(0);
 });
 
 test("a reload does not re-toast the same version", async ({ daemon, page }) => {
