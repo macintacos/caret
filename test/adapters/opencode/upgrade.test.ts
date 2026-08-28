@@ -1,8 +1,9 @@
 // The OpenCode upgrade module (EXC-909): the pure "is this install stale?" decision
-// plus the three effects it needs — reading OpenCode's cached caret version, clearing
-// those cache dirs, and asking npm what `latest` resolves to. The decision is a table
-// over the verdict rules; the effects are driven against a temp dir and an injected
-// fetch, so nothing here touches the real cache or the network.
+// plus the two cache effects it needs — reading OpenCode's cached caret version and
+// clearing those cache dirs. The decision is a table over the verdict rules; the
+// effects are driven against a temp dir, so nothing here touches the real cache. The
+// published version the verdict compares against is read by `@/lib/upstream.ts` and
+// covered by its own suite.
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
@@ -12,9 +13,6 @@ import { join } from "node:path";
 
 import {
   clearCachedCaret,
-  type FetchLike,
-  isNewer,
-  publishedCaretVersion,
   readCachedCaretVersion,
   upgradeVerdict,
 } from "@/adapters/opencode/upgrade.ts";
@@ -38,31 +36,6 @@ function cacheDir(specifier: string, manifest: unknown): string {
   return dir;
 }
 const shim = (version: string) => ({ dependencies: { [PKG]: version } });
-
-/** A fetch stub: one canned response, and a record of how it was called. */
-function fetching(response: { ok: boolean; body: unknown }): {
-  fetchImpl: FetchLike;
-  urls: string[];
-  inits: { signal: AbortSignal }[];
-} {
-  const urls: string[] = [];
-  const inits: { signal: AbortSignal }[] = [];
-  return {
-    urls,
-    inits,
-    fetchImpl: async (url, init) => {
-      urls.push(url);
-      inits.push(init);
-      return {
-        ok: response.ok,
-        json: async () => {
-          if (response.body === undefined) throw new SyntaxError("malformed JSON");
-          return response.body;
-        },
-      };
-    },
-  };
-}
 
 test("no plugin entry is a fresh install, not a stale one", () => {
   expect(upgradeVerdict({ entry: null, cached: null, published: "0.8.1" })).toEqual({
@@ -157,7 +130,7 @@ test("an unparseable cached version is unknown, not silently current", () => {
   expect(v.kind === "unknown" && v.reason).toContain("workspace:*");
 });
 
-// --- the effects: reading the cache, clearing it, asking npm ---------------------
+// --- the effects: reading the cache, clearing it ---------------------------------
 
 test("the cached version comes from the first candidate whose shim manifest names caret", () => {
   const stale = cacheDir(`${PKG}@latest`, shim("0.2.0"));
@@ -195,39 +168,4 @@ test("clearing removes every cache dir that existed and reports exactly those", 
 test("clearing nothing is not an error and reports nothing", () => {
   expect(clearCachedCaret([join(tmp, "nope")])).toEqual([]);
   expect(clearCachedCaret([])).toEqual([]);
-});
-
-test("the published version comes from npm's latest dist-tag document", async () => {
-  const { fetchImpl, urls } = fetching({ ok: true, body: { version: "0.8.1" } });
-  expect(await publishedCaretVersion(fetchImpl)).toBe("0.8.1");
-  // npm's `latest`, not GitHub releases: it is what OpenCode actually re-resolves to.
-  expect(urls).toEqual([`https://registry.npmjs.org/${PKG}/latest`]);
-});
-
-test("the version check is bounded, so a blackholed registry can't stall an install", async () => {
-  const { fetchImpl, inits } = fetching({ ok: true, body: { version: "0.8.1" } });
-  await publishedCaretVersion(fetchImpl);
-  expect(inits[0]?.signal).toBeInstanceOf(AbortSignal);
-});
-
-test("a non-200, a malformed body, and a thrown request all degrade to null", async () => {
-  expect(await publishedCaretVersion(fetching({ ok: false, body: {} }).fetchImpl)).toBeNull();
-  expect(await publishedCaretVersion(fetching({ ok: true, body: undefined }).fetchImpl)).toBeNull();
-  expect(
-    await publishedCaretVersion(fetching({ ok: true, body: { version: 7 } }).fetchImpl),
-  ).toBeNull();
-  const offline: FetchLike = async () => {
-    throw new Error("getaddrinfo ENOTFOUND");
-  };
-  expect(await publishedCaretVersion(offline)).toBeNull();
-});
-
-test("isNewer compares semver triples, and refuses to guess on junk", () => {
-  expect(isNewer("0.8.1", "0.2.0")).toBe(true);
-  expect(isNewer("1.0.0", "0.9.9")).toBe(true);
-  expect(isNewer("0.8.1", "0.8.1")).toBe(false);
-  expect(isNewer("0.2.0", "0.8.1")).toBe(false);
-  expect(isNewer("v0.8.1", "0.2.0")).toBe(true);
-  expect(isNewer("latest", "0.2.0")).toBe(false);
-  expect(isNewer("0.8.1", "not-a-version")).toBe(false);
 });

@@ -4,7 +4,9 @@
 // bare entry stays frozen at install-day's version — `caret install --target opencode`
 // is a no-op on the array entry and therefore on the running version. This module is
 // what lets install say so: a pure verdict over (entry, cached, published), plus the
-// reads and the cache clear the install target performs on it.
+// cache reads and the cache clear the install target performs on it. The published
+// version itself, and the semver comparison the verdict turns on, are shared with the
+// daemon's own update check and live in `@/lib/upstream.ts` and `@/lib/semver.ts`.
 //
 // The two staleness kinds are unfrozen differently. A bare (or unparseable) specifier is
 // unfrozen by deleting its cache dir, so OpenCode re-resolves on next start. A pin
@@ -17,26 +19,7 @@ import { join } from "node:path";
 
 import { splitPluginSpecifier } from "@/adapters/opencode/config-plugin.ts";
 import { CARET_PACKAGE, existingOpencodeCachePackageDirs } from "@/adapters/opencode/paths.ts";
-
-/** npm's `latest` dist-tag document for caret. Deliberately npm rather than GitHub
- * releases (which the plugin's own update nudge checks): `latest` is what OpenCode
- * re-resolves to, so it is the only honest answer to "what would you get". A release
- * that tagged GitHub but failed to publish would make the GitHub number a promise caret
- * cannot keep. */
-const NPM_LATEST_URL = `https://registry.npmjs.org/${CARET_PACKAGE}/latest`;
-
-/** How long the version check waits on npm. Bounded for the same reason every daemon
- * fetch is (`src/daemon/client.ts`): the check runs behind a spinner mid-install, and a
- * blackholed connection would otherwise stall the whole command for the OS timeout. A
- * check that times out is just an `unknown` verdict. */
-const NPM_TIMEOUT_MS = 3_000;
-
-/** The slice of `fetch` the version check needs — narrowed so a test injects a plain
- * stub without reconstructing the whole `typeof fetch` surface. `fetch` satisfies it. */
-export type FetchLike = (
-  url: string,
-  init: { signal: AbortSignal },
-) => Promise<{ ok: boolean; json(): Promise<unknown> }>;
+import { isNewer, parseVersionTriple } from "@/lib/semver.ts";
 
 /** What install found when it compared the caret OpenCode would load against the one
  * npm publishes. `fresh` and `current` need no action; the two `stale-*` kinds each
@@ -48,34 +31,6 @@ export type UpgradeVerdict =
   | { kind: "stale-cache"; cached: string; published: string }
   | { kind: "stale-pin"; entry: string; pinned: string; published: string }
   | { kind: "unknown"; reason: string };
-
-/** Semver triple `[major, minor, patch]`, or null when `v` is not `X.Y.Z` (an optional
- * leading `v` is stripped; trailing prerelease/build metadata is ignored). */
-function parseVersionTriple(v: string): [number, number, number] | null {
-  const m = v
-    .trim()
-    .replace(/^v/, "")
-    .match(/^(\d+)\.(\d+)\.(\d+)/);
-  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
-}
-
-/** True when `latest` is a strictly higher semver than `current`; an unparseable version
- * on either side compares false, so the check never claims staleness it can't read.
- *
- * A deliberate twin of the same function in `opencode/caret.plugin.ts`: that file is
- * self-contained by contract (its only imports are node builtins and
- * `@opencode-ai/plugin`, so OpenCode can load it straight out of the package cache) and
- * therefore cannot import from `src/`. */
-export function isNewer(latest: string, current: string): boolean {
-  const a = parseVersionTriple(latest);
-  const b = parseVersionTriple(current);
-  if (!a || !b) return false;
-  const [a0, a1, a2] = a;
-  const [b0, b1, b2] = b;
-  if (a0 !== b0) return a0 > b0;
-  if (a1 !== b1) return a1 > b1;
-  return a2 > b2;
-}
 
 /** Decide whether the caret OpenCode would load is behind `published`.
  *
@@ -155,20 +110,4 @@ export function clearCachedCaret(
     cleared.push(d);
   }
   return cleared;
-}
-
-/** npm's `latest` version of caret, or null when the registry can't be reached, answers
- * non-200, or returns a document without a usable `version`. Best-effort by design: a
- * failed check becomes an `unknown` verdict that changes nothing — it never fails an
- * install. */
-export async function publishedCaretVersion(fetchImpl: FetchLike = fetch): Promise<string | null> {
-  try {
-    const res = await fetchImpl(NPM_LATEST_URL, { signal: AbortSignal.timeout(NPM_TIMEOUT_MS) });
-    if (!res.ok) return null;
-    const body = (await res.json()) as { version?: unknown } | null;
-    const v = body?.version;
-    return typeof v === "string" && v.length > 0 ? v : null;
-  } catch {
-    return null;
-  }
 }
