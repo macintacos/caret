@@ -7,6 +7,10 @@ import { defineConfig } from "vite";
 
 import { DEFAULT_PORT } from "../src/config/constants.ts";
 
+// The dev daemon the `/api` proxy below forwards to. Hoisted so the target and
+// the Origin the proxy rewrites to cannot drift apart.
+const DEV_API_TARGET = `http://localhost:${process.env.CARET_PORT ?? DEFAULT_PORT}`;
+
 // A standard multi-asset build: Vite emits dist/index.html plus content-hashed
 // dist/assets/* (JS + CSS). The binary embeds each asset by URL path via a
 // build-generated manifest, and the daemon serves them with per-path MIME and
@@ -137,7 +141,21 @@ export default defineConfig({
     // it as CARET_PORT before Vite starts (EXC-461), so the daemon and this
     // proxy can't diverge; the prod default keeps `vite build` working.
     proxy: {
-      "/api": `http://localhost:${process.env.CARET_PORT ?? DEFAULT_PORT}`,
+      "/api": {
+        target: DEV_API_TARGET,
+        // The daemon gates on an exact Host and an exact Origin (EXC-1203), and
+        // the browser sends the Vite dev server's own (localhost:5173, or
+        // caret.localhost:5173 via the caret-vanity-url plugin above) for both.
+        // changeOrigin rewrites Host to the target's authority; http-proxy leaves
+        // Origin alone, so rewrite that too. Speaking the daemon's own origin is
+        // what keeps dev working WITHOUT widening the guard — the daemon still
+        // accepts exactly one authority. Overwriting unconditionally covers both
+        // dev origins with no branching.
+        changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on("proxyReq", (proxyReq) => proxyReq.setHeader("origin", DEV_API_TARGET));
+        },
+      },
     },
   },
 });

@@ -13,6 +13,7 @@ import { DEFAULTS } from "@/config/settings.ts";
 import {
   isClientLive,
   isCrossOrigin,
+  isForeignHost,
   isSafeMethod,
   LIVE_CLIENT_WINDOW_MS,
 } from "@/daemon/guards.ts";
@@ -896,20 +897,34 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return notFound();
   }
 
-  async function handle(req: Request): Promise<Response> {
+  // `self` is the server Bun passes as fetch's second argument — narrowed to the
+  // one field this needs, the bound port, which only exists once Bun.serve below
+  // has returned.
+  async function handle(req: Request, self: { port?: number }): Promise<Response> {
     inFlight++;
     cancelIdle(); // any in-flight request defers an idle shutdown
     try {
       const url = new URL(req.url);
       const path = url.pathname;
       const method = req.method;
+      // Bun types port optional (a unix-socket server has none); this daemon is
+      // always TCP, so the `?? 0` never fires — and if it somehow did, 0 matches
+      // no real authority and the guards below fail closed.
+      const port = self.port ?? 0;
+
+      // DNS-rebinding gate (EXC-1203): every method, ahead of the CSRF check. A
+      // rebound page's Origin is already same-origin by the time it fires, so
+      // the guard below structurally cannot see this attack.
+      if (isForeignHost(req, port)) {
+        return new Response("host not recognized", { status: 403 });
+      }
 
       // Gate every non-safe (state-changing) method, not a fixed POST/PUT list,
       // so a future mutating verb is CSRF-protected by default. Safe methods
       // (GET/HEAD) fall through — the browser's same-origin policy already
       // blocks a foreign page from reading the response (see the guard's
       // threat-model note above).
-      if (!isSafeMethod(method) && isCrossOrigin(req)) {
+      if (!isSafeMethod(method) && isCrossOrigin(req, port)) {
         return new Response("cross-origin request blocked", { status: 403 });
       }
 

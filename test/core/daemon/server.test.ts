@@ -903,6 +903,44 @@ test("a cross-origin non-safe method is blocked even off the POST/PUT list (CSRF
   }
 });
 
+test("a foreign Host is rejected on every method (DNS rebinding, EXC-1203)", async () => {
+  // A page on evil.com whose DNS re-resolves to 127.0.0.1 becomes same-origin
+  // with the daemon, so its Origin and Sec-Fetch-Site clear the CSRF guard
+  // structurally. The only header still naming the attacker is Host, and the
+  // GET half is the load-bearing case: it is what a rebound page issues to read
+  // plan bodies, and a non-safe-method-only gate would let it through.
+  await boot();
+  const read = await fetch(`${base}/api/reviews`, { headers: { Host: "evil.com" } });
+  expect(read.status).toBe(403);
+  const write = await fetch(`${base}/api/reviews`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Host: "evil.com" },
+    body: JSON.stringify({ sessionId: "S", plan: "# x" }),
+  });
+  expect(write.status).toBe(403);
+});
+
+test("a Host on an allowed hostname but the wrong port is rejected (EXC-1203)", async () => {
+  // The check is authority-exact — an own hostname AND this daemon's bound port
+  // — not a hostname allowlist wearing a new name.
+  await boot();
+  const res = await fetch(`${base}/api/reviews`, { headers: { Host: "localhost:1" } });
+  expect(res.status).toBe(403);
+});
+
+test("an unrelated localhost port is not same-origin (EXC-1203)", async () => {
+  // Any other http://localhost:<port> — a Vite dev server, a locally-hosted
+  // app, a dev server a malicious npm package started — is a different origin.
+  // It cannot read the reply, but a write's side effect lands regardless.
+  await boot();
+  const res = await fetch(`${base}/api/reviews`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
+    body: JSON.stringify({ sessionId: "S", plan: "# x" }),
+  });
+  expect(res.status).toBe(403);
+});
+
 // ---- read-confidentiality posture (EXC-540) ----
 //
 // The daemon's read-confidentiality (a foreign page must not read plan bodies)

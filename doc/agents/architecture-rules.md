@@ -139,16 +139,35 @@ happens to have open.
   read-confidentiality block) asserts no route family ever emits an `Access-Control-*`
   header, so a future permissive-CORS "fix" fails loudly instead of silently exposing plan
   bodies. Never add a CORS-grant header.
-- **The CSRF guard gates only non-safe methods.** `isCrossOrigin(req)`
+- **The Host guard gates every method, safe ones included.** `isForeignHost(req, port)`
+  (`src/daemon/guards.ts`) rejects a request whose `Host` is not the daemon's own
+  authority. That asymmetry with the CSRF guard is the point: under DNS rebinding the
+  attacker's page *is* same-origin — loopback `Origin`, `Sec-Fetch-Site: same-origin` — so
+  the SOP the read posture rests on is already defeated and only `Host` still names
+  `evil.com`. A missing `Host` is rejected too.
+- **The CSRF guard gates only non-safe methods.** `isCrossOrigin(req, port)`
   (`src/daemon/guards.ts`) rejects a state-changing request from a foreign Origin; safe
   methods (GET/HEAD, via `isSafeMethod`) are let through, because the SOP already protects
   reads and a foreign GET can't exfiltrate the response. The guard tests the verb through
   `isSafeMethod`, not a POST/PUT allowlist, so a future mutating verb (DELETE/PATCH) is
-  CSRF-protected by default. A same-origin browser sends a loopback Origin (allowed) and a
-  hook/CLI sends no Origin (allowed); a foreign page's write is the only thing blocked.
+  CSRF-protected by default. A same-origin browser sends the daemon's own origin (allowed)
+  and a hook/CLI sends no Origin (allowed); a foreign page's write is the only thing
+  blocked.
+- **Both comparisons are authority-exact.** An allowed hostname (`127.0.0.1`, `localhost`,
+  `VANITY_HOST`) is not enough — the port must be the daemon's bound one, so a page on
+  some other `http://localhost:<port>` (a Vite dev server, a locally-hosted app, a dev
+  server a malicious npm package started) is foreign rather than "loopback, therefore us".
+  The Vite dev proxy therefore rewrites both `Host` and `Origin` to the daemon's own
+  origin (`ui/vite.config.ts`) instead of the guard being widened to accommodate it.
 - **No preflight handler exists or is needed.** A same-origin request sends no `OPTIONS`
   preflight, and a cross-origin preflight would be denied by the browser before any
   request body is sent (no advertised CORS headers).
+- **Cross-uid local callers are out of scope, deliberately** (EXC-1203). A same-uid
+  process can already edit the plan files and `CLAUDE.md` directly, so authenticating
+  local callers would buy nothing against the adversary caret runs beside. The genuine
+  exposure is a shared dev box, a shared-netns container, or a CI runner; caret accepts
+  that limit rather than closing it with a token. Revisit only if caret is ever sized for
+  a multi-user host.
 
 ## Related rules
 
