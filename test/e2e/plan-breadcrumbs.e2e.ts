@@ -1544,7 +1544,13 @@ test("reduced motion collapses the exit rather than removing it", async ({ daemo
   await jumpTo(page, "Bravo");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo"]);
 
-  const leaving = named(await barMotionAfter(page, "crumb-out"), "crumb-out");
+  // Read once rather than waited for, which is the opposite of the other three sites and
+  // deliberate. Under the collapsed duration the crumb is removed all but immediately, so
+  // when the engine's animation-event dispatch loses that race the event fires on a
+  // node already detached from the bar and never reaches this listener at all — measured
+  // as absent both instantly and three seconds later (EXC-1193). Waiting on an event that
+  // is lost rather than late buys nothing and spends the assertion budget.
+  const leaving = named(await barMotion(page), "crumb-out");
   expect(leaving.length).toBeGreaterThan(0);
   for (const event of leaving) expect(event.duration).toBeLessThan(0.001);
 
