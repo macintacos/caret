@@ -2047,7 +2047,7 @@ test("a real daemon logger censors a forged plan body on the wire path", async (
 
 test("a failed fire-and-forget prefs write is logged at warn", async () => {
   const { recs, log } = recordingLog();
-  // prefsPath nested under a regular FILE so writeApproveMode's mkdir fails.
+  // prefsPath nested under a regular FILE so the writer's ensureStateDir mkdir fails.
   const blocker = join(dir, "blocker");
   await Bun.write(blocker, "i am a file, not a directory");
   await bootClaude({ log, prefsPath: join(blocker, "prefs.json") });

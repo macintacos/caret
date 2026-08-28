@@ -3,8 +3,9 @@
 // wraps a browser-preference module and reads/writes through the key that module
 // owns, never one of its own — so a field over an existing pref (theme, shortcut
 // hints, diff style/indicators) leaves users' stored values untouched, and a field
-// over a new one (sound) registers its key there rather than here. Editing a
-// setting applies it immediately: the shell
+// over a new one (sound) registers its key there rather than here. The exception is a
+// daemonField (EXC-1206), which owns no browser key at all: its write is a POST to the
+// daemon. Editing a setting applies it immediately: the shell
 // calls write() the moment a control changes (App confirms with a toast); there
 // is no staged draft.
 //
@@ -112,15 +113,31 @@ export function stagedField<V>(def: Omit<StagedField<V>, "kind">): StagedField {
  * the control's value into a POST /api/prefs body, and that POST is the write. The
  * result is an ordinary StagedField — same kind, same controls, same rendering — so
  * a daemon-backed setting costs a constructor here rather than a third entry kind
- * threaded through isStagedField and every pane. `read` still comes from the
- * registrant: what a control displays and where its value is stored are separate
- * questions, and only the second one moves. */
+ * threaded through isStagedField and every pane.
+ *
+ * The constructor owns half of `read`, and that is what makes it usable. The shell
+ * re-reads a field the instant its write settles, and a daemon-owned value has no
+ * local source of truth to re-read — so the last value the daemon ACCEPTED shadows
+ * the registrant's `read`, which then only has to answer for the state before this
+ * session wrote anything (a value fetched at load, or a default). A refused write
+ * never reaches that shadow, which is what keeps the re-read a snap-back. */
 export function daemonField<V>(
   def: Omit<StagedField<V>, "kind" | "write"> & { patch: (value: V) => PrefsPatch },
 ): StagedField {
-  // Destructured out so it never rides along on the field object.
-  const { patch, ...rest } = def;
-  return { kind: "staged", ...rest, write: (value: V) => setPrefs(patch(value)) } as StagedField;
+  // `patch` destructured out so it never rides along on the field object.
+  const { patch, read, ...rest } = def;
+  // Boxed rather than a bare `V | undefined`, so a landed `false`/0/"" is still a
+  // landed value rather than falling through to the registrant's read.
+  let landed: { value: V } | undefined;
+  return {
+    kind: "staged",
+    ...rest,
+    read: () => (landed ? landed.value : read()),
+    write: async (value: V) => {
+      await setPrefs(patch(value));
+      landed = { value };
+    },
+  } as StagedField;
 }
 
 // The label↔control wiring for a settings row (EXC-1112). Every pane that renders a

@@ -541,12 +541,16 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     const parsed = PrefsPatchSchema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) {
       const error = parsed.error.issues[0]?.message ?? "invalid prefs patch";
-      log.debug("prefs", "prefs patch rejected");
+      // warn, and carrying the reason: a refusal is the recoverable oddity this route's
+      // strictness exists to produce, and the browser turns the body into a sentence
+      // that names no key — so the daemon log is the only place WHICH key was refused
+      // survives. Same posture as handleLogs' reject(). The reason is a zod message
+      // about a boolean field, so there is nothing identifying in it.
+      log.warn("prefs", "prefs patch rejected", { reason: error });
       return Response.json({ error }, { status: 400 });
     }
     await prefsWriter.merge(parsed.data);
-    // The values are boolean flags — nothing identifying to redact.
-    log.debug("prefs", "prefs saved", { keys: Object.keys(parsed.data) });
+    log.debug("prefs", "prefs saved");
     return Response.json({ ok: true });
   }
 

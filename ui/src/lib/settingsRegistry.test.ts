@@ -486,4 +486,22 @@ describe("daemonField", () => {
     // showing a value the daemon refused.
     await expect(field().write(false)).rejects.toThrow();
   });
+
+  // The Settings shell re-reads a field the instant its write settles, so a daemon-backed
+  // field whose read() cannot observe its own write would snap the control back on
+  // SUCCESS — the exact signal the snap-back exists to give a FAILURE.
+  test("read() reports a write the daemon accepted", async () => {
+    const f = field();
+    expect(f.read()).toBe(true);
+    await f.write(false);
+    expect(f.read()).toBe(false);
+  });
+
+  test("read() ignores a write the daemon refused", async () => {
+    respond = () => Promise.resolve(new Response(null, { status: 400 }));
+    const f = field();
+    await expect(f.write(false)).rejects.toThrow();
+    // Still the registrant's value: nothing landed, so there is nothing to report.
+    expect(f.read()).toBe(true);
+  });
 });

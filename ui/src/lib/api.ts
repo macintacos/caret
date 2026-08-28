@@ -73,26 +73,30 @@ export async function getApproveMode(): Promise<ApproveVariantId> {
 
 /** Write the daemon-owned prefs a settings control may change (EXC-1206).
  *
- * The one API function here that both throws AND writes its own message. It throws
- * because a daemon-backed control must snap back and tell the reviewer why, and it
- * declines `HttpError` because that message is `"HTTP 400"` — a status line, not
- * something a person can act on. The two failures are worth telling apart: an
- * unreachable daemon is something the reviewer can fix, a refused body is not. */
+ * The one API function here that rewrites its own failure message. A settings control
+ * renders whatever this throws in a persistent toast, and `HttpError`'s message is
+ * `"HTTP 400"` — a status line, not something a person can act on. The two failure
+ * classes stay apart because only one of them is the reviewer's to fix: an unreachable
+ * daemon they can start, a refused body they cannot. */
 export async function setPrefs(patch: PrefsPatch): Promise<void> {
-  let res: Response;
   try {
-    res = await fetch("/api/prefs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
-    });
+    await json<{ ok: true }>(
+      await fetch("/api/prefs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      }),
+    );
   } catch (err) {
-    uiLog.warn("prefs", "prefs save failed: unreachable", { reason: String(err) });
-    throw new Error("The caret daemon isn't reachable, so the change wasn't saved.");
-  }
-  if (!res.ok) {
-    uiLog.warn("prefs", "prefs save rejected", { status: res.status });
-    throw new Error(`The daemon wouldn't save the change (HTTP ${res.status}).`);
+    uiLog.warn("prefs", "prefs save failed", { reason: String(err) });
+    // The status rides in the sentence rather than being the whole of it, and `cause`
+    // keeps the HttpError for anyone who wants to branch on it.
+    throw new Error(
+      err instanceof HttpError
+        ? `The daemon couldn't save the change (HTTP ${err.status}).`
+        : "The caret daemon isn't reachable, so the change wasn't saved.",
+      { cause: err },
+    );
   }
 }
 

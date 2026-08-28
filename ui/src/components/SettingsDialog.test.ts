@@ -241,11 +241,8 @@ describe("SettingsDialog async apply (EXC-1206)", () => {
   let stored: string;
 
   /** A segmented field whose persisted value is `stored`, so the test decides when
-   * a write "lands" and whether it lands at all. Segmented rather than a select
-   * (whose menu never opens under happy-dom, see this file's header) or a toggle
-   * (bits-ui's Switch flips its own DOM, so it does not report what the shell
-   * holds) — the toggle group binds its value through a getter, so what it paints
-   * IS the shell's `values` entry. */
+   * a write "lands" and whether it lands at all. Segmented rather than a select,
+   * whose menu never opens under happy-dom (see this file's header). */
   const probe = () =>
     stagedField<string>({
       key: "probe",
@@ -272,6 +269,18 @@ describe("SettingsDialog async apply (EXC-1206)", () => {
   const pickB = () =>
     (document.body.querySelector("[data-setting-option='b']") as HTMLButtonElement).click();
 
+  /** Drain the promise chain a click starts, then repaint. Microtasks only — the
+   * control is already mounted, so `apply`'s await and the re-seed are the only things
+   * left to settle, and `flushUntil`'s real-timer turns would instead give bits-ui's
+   * leaked dismissible-layer timers a chance to fire against a destroyed component
+   * (hundreds of svelte `derived_inert` warnings, one per turn). */
+  async function settle(flush: () => void): Promise<void> {
+    for (let i = 0; i < 5; i++) {
+      await Promise.resolve();
+      flush();
+    }
+  }
+
   test("re-reads the field only after an async onChange settles", async () => {
     stored = "a";
     // Mirrors a daemon-backed write: the new value is not readable until the round
@@ -290,7 +299,7 @@ describe("SettingsDialog async apply (EXC-1206)", () => {
     await flushUntil(flush, mounted);
     expect(pressed()).toBe("a");
     pickB();
-    await flushUntil(flush, () => pressed() === "b");
+    await settle(flush);
     expect(pressed()).toBe("b");
   });
 
@@ -306,8 +315,68 @@ describe("SettingsDialog async apply (EXC-1206)", () => {
     await flushUntil(flush, mounted);
     pickB();
     // Give it every chance to move: the assertion is that it never does.
-    await flushUntil(flush, () => pressed() === "b", 5);
+    await settle(flush);
     expect(pressed()).toBe("a");
+  });
+
+  // The snap-back has to hold for a TOGGLE too — `updates.check`, the first
+  // daemon-backed setting (EXC-1207), is one. bits-ui's Switch keeps its own copy of
+  // `checked`, so a one-way prop lets a click flip the control while the shell still
+  // holds the old value: re-seeding `values` to the SAME value then pushes nothing
+  // back and the control lies about what is persisted.
+  test("a toggle whose write didn't land snaps back too", async () => {
+    const on = true;
+    const toggle = stagedField<boolean>({
+      key: "probeToggle",
+      category: "Appearance",
+      label: "Probe toggle",
+      description: "A toggle whose write the test drives.",
+      control: { kind: "toggle" },
+      read: () => on,
+      write: () => {},
+    });
+    const state = () =>
+      document.body.querySelector("#setting-probeToggle")?.getAttribute("data-state");
+
+    const { flush } = render(
+      SettingsDialog,
+      props({ entries: [toggle], onChange: () => Promise.resolve() }),
+    );
+    await flushUntil(flush, mounted);
+    expect(state()).toBe("checked");
+    (document.body.querySelector("#setting-probeToggle") as HTMLButtonElement).click();
+    await settle(flush);
+    expect(state()).toBe("checked");
+  });
+
+  test("a toggle whose write landed shows the new value", async () => {
+    let on = true;
+    const toggle = stagedField<boolean>({
+      key: "probeToggle",
+      category: "Appearance",
+      label: "Probe toggle",
+      description: "A toggle whose write the test drives.",
+      control: { kind: "toggle" },
+      read: () => on,
+      write: () => {},
+    });
+    const state = () =>
+      document.body.querySelector("#setting-probeToggle")?.getAttribute("data-state");
+
+    const { flush } = render(
+      SettingsDialog,
+      props({
+        entries: [toggle],
+        onChange: async (_f: StagedField, v: unknown) => {
+          await Promise.resolve();
+          on = v as boolean;
+        },
+      }),
+    );
+    await flushUntil(flush, mounted);
+    (document.body.querySelector("#setting-probeToggle") as HTMLButtonElement).click();
+    await settle(flush);
+    expect(state()).toBe("unchecked");
   });
 });
 

@@ -84,9 +84,13 @@ export interface PrefsWriter {
   merge(patch: object): Promise<void>;
 }
 
-/** Build the writer both prefs writers share. The queue is closure state rather
- * than a module global so a test can drive a fresh chain (and the daemon can hold
- * exactly one, over its own prefs path). */
+/** Build the single writer both prefs write paths share. The queue is closure state
+ * rather than a module global so a test can drive a fresh chain — and so the daemon
+ * can hold exactly one, over its own prefs path. That the daemon holds only one is
+ * what makes the serialization reach across both paths, and it is protected by
+ * inspection (`createServer` builds it once) rather than by a test: the two writes
+ * cannot be made to overlap deterministically from outside, since the resolve path's
+ * is fire-and-forget. */
 export function createPrefsWriter(file = prefsFile()): PrefsWriter {
   // The promise each merge queues behind. Stored already-caught, so one failed write
   // can't reject the next caller's hop; `merge` hands back the uncaught promise, so
