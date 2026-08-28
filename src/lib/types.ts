@@ -379,6 +379,14 @@ export interface ResolveBody {
   acceptMode?: ApproveVariantId;
 }
 
+/** Body of POST /api/prefs — the daemon-owned prefs the UI may write (EXC-1206).
+ * Deliberately narrow: `approveMode` is seeded by the resolve path and is not
+ * writable from here, and the schema rejects anything not named below rather than
+ * stripping it. */
+export interface PrefsPatch {
+  updates?: { check: boolean };
+}
+
 /** Body of PUT /api/reviews/:id/draft (the reviewer's working-copy autosave).
  * Each field is independently optional so a draft-only write never wipes
  * annotations (and vice versa). */

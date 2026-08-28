@@ -4,12 +4,13 @@
 
 import { z } from "zod";
 
-import type { Behavior, DraftBody, PlanInput, ResolveBody } from "@/lib/types.ts";
+import type { Behavior, DraftBody, PlanInput, PrefsPatch, ResolveBody } from "@/lib/types.ts";
 
-// Request-body schemas at the browser trust boundary. They are deliberately
-// lenient — a malformed body degrades to the schema's fallback rather than
-// rejecting, matching the cast-and-trust behavior they replace. The win is a
-// named boundary and per-field validation, not stricter rejection.
+// Request-body schemas at the browser trust boundary. The schemas over routes that
+// predate them are deliberately lenient — a malformed body degrades to the schema's
+// fallback rather than rejecting, matching the cast-and-trust behavior they replace.
+// The win there is a named boundary and per-field validation, not stricter rejection.
+// PrefsPatchSchema is the one exception and says below why it rejects instead.
 
 // POST /api/reviews: an incoming plan. Every field is optional and the whole
 // object falls back to {} on a non-object body, mirroring the `req.json()
@@ -86,6 +87,20 @@ export const ResolveBodySchema: z.ZodType<ResolveBody> = z
     acceptMode: z.string().optional().catch(undefined),
   })
   .catch({ behavior: "allow" });
+
+// POST /api/prefs — the ONE schema here that rejects where its neighbours degrade,
+// and deliberately so. The routes above historically tolerated junk, so validating
+// them must not tighten them; this route is new, and it writes into caret's state
+// dir over a loopback endpoint any local page can reach. Silently stripping an
+// unrecognized key would make it a general write primitive that answers 200 to a
+// body it did not honour — so `.strict()`, and the handler answers 400 (EXC-1206).
+// `approveMode` is absent from the accepted set on purpose: the resolve path owns it,
+// and `.strict()` applies at both levels so an unknown key UNDER `updates` is refused
+// like any other. An empty patch is deliberately a success: nothing was stripped and
+// nothing was misreported — the 200 is honest about having honoured every key sent.
+export const PrefsPatchSchema: z.ZodType<PrefsPatch> = z
+  .object({ updates: z.object({ check: z.boolean() }).strict().optional() })
+  .strict();
 
 // PUT /api/reviews/:id/draft. Each field is independently optional; the handler
 // leaves an absent field untouched (`!= null`), so a draft-only write never

@@ -18,6 +18,7 @@ import {
   resolveFileRefs,
   resolveReview,
   searchFiles,
+  setPrefs,
 } from "$lib/api.ts";
 import { flush } from "$lib/log.ts";
 
@@ -600,5 +601,64 @@ describe("getSkillDescription", () => {
     await flush();
     // Both are the reviewer's own configuration; only the failure reaches the log.
     expect(JSON.stringify(cap.events())).not.toContain("laundry");
+  });
+});
+
+// EXC-1206. The one write into daemon-owned prefs. Unlike this file's swallowing
+// readers it THROWS, because a settings control has to snap back and say why — so
+// the message is written for a person rather than being HttpError's "HTTP 400".
+describe("setPrefs", () => {
+  test("POSTs the patch as the request body", async () => {
+    let seen: { url: string; options: RequestInit | undefined } | undefined;
+    respond = (url, options) => {
+      seen = { url, options };
+      return Promise.resolve(jsonResponse({ ok: true }));
+    };
+
+    await setPrefs({ updates: { check: false } });
+
+    expect(seen?.url).toBe("/api/prefs");
+    expect(seen?.options?.method).toBe("POST");
+    expect(JSON.parse(seen?.options?.body as string)).toEqual({ updates: { check: false } });
+  });
+
+  test("rejects with a human message the reviewer can act on", async () => {
+    // A settings control renders this verbatim in a persistent error toast, so
+    // each failure must read as a sentence — never "HTTP 400" (AC #5).
+    for (const answer of [
+      () => Promise.resolve(new Response(null, { status: 400 })),
+      () => Promise.resolve(new Response(null, { status: 500 })),
+      () => Promise.reject(new Error("offline")),
+    ]) {
+      respond = answer;
+      let message = "";
+      await setPrefs({ updates: { check: false } }).catch((err: unknown) => {
+        message = err instanceof Error ? err.message : String(err);
+      });
+      expect(message).not.toBe("");
+      expect(message).not.toMatch(/^HTTP \d+$/);
+      // A sentence, not a status line.
+      expect(message.split(" ").length).toBeGreaterThan(2);
+    }
+  });
+
+  test("a rejected save warns at step prefs", async () => {
+    respond = () => Promise.resolve(new Response(null, { status: 400 }));
+
+    await expect(setPrefs({ updates: { check: false } })).rejects.toThrow();
+    await flush();
+
+    const warn = cap.events().find((r) => r.level === "warn");
+    expect(warn?.step).toBe("prefs");
+  });
+
+  test("a successful save emits no record", async () => {
+    respond = () => Promise.resolve(jsonResponse({ ok: true }));
+
+    await setPrefs({ updates: { check: false } });
+    await flush();
+
+    // The daemon logs the write; a second UI line would only restate it.
+    expect(cap.events()).toHaveLength(0);
   });
 });

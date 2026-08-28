@@ -174,13 +174,16 @@
   // diff-layout/marker prefs into its compare store so an open diff reflows live too
   // (those prefs live in the view's own store, not a mirror App can resync).
   let settingsRev = $state(0);
-  function applySetting(field: StagedField, value: unknown) {
+  async function applySetting(field: StagedField, value: unknown) {
     try {
-      field.write(value);
+      // Awaited: a daemon-backed field's write is a POST (EXC-1206), and a rejected
+      // promise is the only way it can report a refusal. The Settings shell awaits
+      // this in turn, so a failure re-reads the field and snaps the control back.
+      await field.write(value);
     } catch (err) {
-      // ponytail: the hint is the write's own message — localStorage prefs can't fail
-      // today, but a future daemon-backed setting throws a helpful one (e.g. "Start
-      // the caret daemon to change this"). Persistent so a failure isn't missed.
+      // The hint is the write's own message: a localStorage pref can't fail, while a
+      // daemon-backed one says why in a sentence ("The caret daemon isn't
+      // reachable…"). Persistent so a failure isn't missed.
       const hint =
         err instanceof Error && err.message ? err.message : "The change wasn't saved.";
       alerts.push({

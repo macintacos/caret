@@ -8,7 +8,12 @@ import { dirname } from "node:path";
 
 import { deriveIdleTimeoutSec } from "@/config/constants.ts";
 import { ensureStateDir, prefsFile } from "@/config/paths.ts";
-import { type ApproveModeSet, readApproveMode, writeApproveMode } from "@/config/prefs.ts";
+import {
+  type ApproveModeSet,
+  createPrefsWriter,
+  readApproveMode,
+  writeApproveMode,
+} from "@/config/prefs.ts";
 import { DEFAULTS } from "@/config/settings.ts";
 import {
   isClientLive,
@@ -24,6 +29,7 @@ import {
   MAX_FILE_REFS,
   malformedLineAnchor,
   PlanInputSchema,
+  PrefsPatchSchema,
   parseBody,
   ResolveBodySchema,
 } from "@/daemon/schemas.ts";
@@ -262,6 +268,11 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     approveVariants && approveVariants.length > 0
       ? { valid: approveVariants.map((v) => v.id), fallback: approveVariants[0]?.id ?? "default" }
       : { valid: ["default"], fallback: "default" };
+
+  // ONE writer for the two paths that write prefs.json — the resolve path's approve
+  // mode and POST /api/prefs. Sharing it is what serializes them: two writers would
+  // each hold their own queue and could still interleave a read-modify-write.
+  const prefsWriter = createPrefsWriter(prefsPath);
 
   // Wait for a decision but no longer than `ms` — resolves to null on timeout so
   // the handler can return a 204 heartbeat. The pending promise is left intact
@@ -520,6 +531,27 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // unreadable.
   async function handlePrefs(): Promise<Response> {
     return Response.json({ approveMode: await readApproveMode(prefsPath, log, approveModeSet) });
+  }
+
+  // POST /api/prefs — the write half (EXC-1206). Unlike the daemon's other bodies
+  // this one is REJECTED rather than degraded when it doesn't parse: see
+  // PrefsPatchSchema. The write merges, so a patch naming one key leaves the rest
+  // of prefs.json (the remembered approve mode) alone.
+  async function handleSetPrefs(req: Request): Promise<Response> {
+    const parsed = PrefsPatchSchema.safeParse(await req.json().catch(() => null));
+    if (!parsed.success) {
+      const error = parsed.error.issues[0]?.message ?? "invalid prefs patch";
+      // warn, and carrying the reason: a refusal is the recoverable oddity this route's
+      // strictness exists to produce, and the browser turns the body into a sentence
+      // that names no key — so the daemon log is the only place WHICH key was refused
+      // survives. Same posture as handleLogs' reject(). The reason is a zod message
+      // about a boolean field, so there is nothing identifying in it.
+      log.warn("prefs", "prefs patch rejected", { reason: error });
+      return Response.json({ error }, { status: 400 });
+    }
+    await prefsWriter.merge(parsed.data);
+    log.debug("prefs", "prefs saved");
+    return Response.json({ ok: true });
   }
 
   // GET /api/reviews/:id — one review as its client-facing shape.
@@ -818,7 +850,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // hook. A bare allow (no acceptMode) leaves prefs as-is; an id outside the
       // adapter-declared set is ignored by writeApproveMode.
       if (decision.acceptMode !== undefined && approveModeSet.valid.includes(decision.acceptMode)) {
-        void writeApproveMode(decision.acceptMode, prefsPath, log, approveModeSet).catch(() => {
+        void writeApproveMode(decision.acceptMode, prefsWriter, log, approveModeSet).catch(() => {
           // Recoverable: prefs only seed the UI's next default.
           log.warn("prefs", "approve mode write failed");
         });
@@ -886,6 +918,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     if (method === "POST" && path === "/api/ui/gone") return handleUiGone();
     if (method === "GET" && path === "/api/reviews") return handleListReviews();
     if (method === "GET" && path === "/api/prefs") return handlePrefs();
+    if (method === "POST" && path === "/api/prefs") return handleSetPrefs(req);
 
     const route = matchIdRoute(path);
     if (route) {

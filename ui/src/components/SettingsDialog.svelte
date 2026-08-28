@@ -71,8 +71,10 @@
     onClosed?: () => void;
     /** The registry, grouped into categories/sections and rendered by control kind. */
     entries: readonly SettingEntry[];
-    /** Apply a setting's new value now (App: write + resync + confirming toast). */
-    onChange: (field: StagedField, value: unknown) => void;
+    /** Apply a setting's new value now (App: write + resync + confirming toast).
+     * May be async — a daemon-backed field's write is a round trip (EXC-1206) — and
+     * the shell awaits it before re-reading the field. */
+    onChange: (field: StagedField, value: unknown) => void | Promise<void>;
     /** Dismiss (Escape / backdrop). App hides the modal. */
     onClose: () => void;
     /** Copy a diagnostics block's text (the Advanced pane, EXC-848): App writes the
@@ -139,9 +141,17 @@
     Object.fromEntries(entries.filter(isStagedField).map((f) => [f.key, f.read()])),
   );
 
-  function apply(field: StagedField, value: unknown): void {
-    onChange(field, value);
-    values = { ...values, [field.key]: field.read() };
+  // Awaited: a daemon-backed field's write is a round trip (EXC-1206), so re-reading
+  // before it settles would re-seed the control from the pre-write value and leave it
+  // there. `finally` rather than a bare await, so the re-read happens however onChange
+  // ends — on success it shows the new value, on a refusal it re-seeds from what is
+  // actually persisted, which is the snap-back.
+  async function apply(field: StagedField, value: unknown): Promise<void> {
+    try {
+      await onChange(field, value);
+    } finally {
+      values = { ...values, [field.key]: field.read() };
+    }
   }
 
   function focusContent(): void {
@@ -362,10 +372,15 @@
       onSelect={(v) => apply(field, v)}
     />
   {:else}
+    <!-- Bound through a getter/setter pair, not a one-way `checked` + onCheckedChange:
+         bits-ui's Switch keeps its own copy, so a plain prop lets a click flip the
+         control while the shell still holds the old value — and re-seeding `values` to
+         the same value pushes nothing back, so a write that never landed would leave
+         the switch showing a state that was never persisted. Same shape as
+         SettingSegmented's toggle group, for the same reason. -->
     <Switch
       id={settingControlId(field.key)}
-      checked={values[field.key] === true}
-      onCheckedChange={(v) => apply(field, v)}
+      bind:checked={() => values[field.key] === true, (v) => apply(field, v)}
     />
   {/if}
 {/snippet}

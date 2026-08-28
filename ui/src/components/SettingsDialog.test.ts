@@ -10,6 +10,7 @@ import {
   type StagedField,
   settingControlId,
   settingLabelId,
+  stagedField,
   THEME_FIELD,
 } from "$lib/settingsRegistry.ts";
 
@@ -228,6 +229,154 @@ describe("SettingsDialog immediate apply", () => {
     await flushUntil(flush, mounted);
     const label = document.body.querySelector("button#setting-diffStyle .trigger-label");
     expect(label?.textContent?.trim()).toBe("Unified");
+  });
+});
+
+// EXC-1206. A daemon-backed field's write is a round trip, so the shell AWAITS
+// onChange before re-reading the field — otherwise it would re-seed the control from
+// a value the daemon hasn't stored yet. Driven through a probe field with a
+// test-owned backing value: the registry's own fields all write synchronously, so
+// nothing in it can tell an awaited apply from a non-awaited one.
+describe("SettingsDialog async apply (EXC-1206)", () => {
+  let stored: string;
+
+  /** A segmented field whose persisted value is `stored`, so the test decides when
+   * a write "lands" and whether it lands at all. Segmented rather than a select,
+   * whose menu never opens under happy-dom (see this file's header). */
+  const probe = () =>
+    stagedField<string>({
+      key: "probe",
+      category: "Appearance",
+      label: "Probe",
+      description: "A field whose write the test drives.",
+      control: {
+        kind: "segmented",
+        options: [
+          { value: "a", label: "Ay" },
+          { value: "b", label: "Bee" },
+        ],
+      },
+      read: () => stored,
+      // Unused: the dialog calls onChange, and App owns the write.
+      write: () => {},
+    });
+
+  const pressed = () =>
+    document.body
+      .querySelector("[data-setting-option][data-state='on']")
+      ?.getAttribute("data-setting-option");
+
+  const pickB = () =>
+    (document.body.querySelector("[data-setting-option='b']") as HTMLButtonElement).click();
+
+  /** Drain the promise chain a click starts, then repaint. Microtasks only — the
+   * control is already mounted, so `apply`'s await and the re-seed are the only things
+   * left to settle, and `flushUntil`'s real-timer turns would instead give bits-ui's
+   * leaked dismissible-layer timers a chance to fire against a destroyed component
+   * (hundreds of svelte `derived_inert` warnings, one per turn). */
+  async function settle(flush: () => void): Promise<void> {
+    for (let i = 0; i < 5; i++) {
+      await Promise.resolve();
+      flush();
+    }
+  }
+
+  test("re-reads the field only after an async onChange settles", async () => {
+    stored = "a";
+    // Mirrors a daemon-backed write: the new value is not readable until the round
+    // trip resolves. Without the await, apply re-seeds from the PRE-write read and
+    // the control is stuck on the old segment with nothing left to re-seed it.
+    const { flush } = render(
+      SettingsDialog,
+      props({
+        entries: [probe()],
+        onChange: async (_f: StagedField, v: unknown) => {
+          await Promise.resolve();
+          stored = v as string;
+        },
+      }),
+    );
+    await flushUntil(flush, mounted);
+    expect(pressed()).toBe("a");
+    pickB();
+    await settle(flush);
+    expect(pressed()).toBe("b");
+  });
+
+  test("a write that didn't land snaps the control back", async () => {
+    stored = "a";
+    // App catches a failed write and returns (it raises its own error toast), so
+    // onChange resolves with `stored` untouched — and the re-read is what puts the
+    // control back on the value that is actually persisted.
+    const { flush } = render(
+      SettingsDialog,
+      props({ entries: [probe()], onChange: () => Promise.resolve() }),
+    );
+    await flushUntil(flush, mounted);
+    pickB();
+    // Give it every chance to move: the assertion is that it never does.
+    await settle(flush);
+    expect(pressed()).toBe("a");
+  });
+
+  // The snap-back has to hold for a TOGGLE too — `updates.check`, the first
+  // daemon-backed setting (EXC-1207), is one. bits-ui's Switch keeps its own copy of
+  // `checked`, so a one-way prop lets a click flip the control while the shell still
+  // holds the old value: re-seeding `values` to the SAME value then pushes nothing
+  // back and the control lies about what is persisted.
+  test("a toggle whose write didn't land snaps back too", async () => {
+    const on = true;
+    const toggle = stagedField<boolean>({
+      key: "probeToggle",
+      category: "Appearance",
+      label: "Probe toggle",
+      description: "A toggle whose write the test drives.",
+      control: { kind: "toggle" },
+      read: () => on,
+      write: () => {},
+    });
+    const state = () =>
+      document.body.querySelector("#setting-probeToggle")?.getAttribute("data-state");
+
+    const { flush } = render(
+      SettingsDialog,
+      props({ entries: [toggle], onChange: () => Promise.resolve() }),
+    );
+    await flushUntil(flush, mounted);
+    expect(state()).toBe("checked");
+    (document.body.querySelector("#setting-probeToggle") as HTMLButtonElement).click();
+    await settle(flush);
+    expect(state()).toBe("checked");
+  });
+
+  test("a toggle whose write landed shows the new value", async () => {
+    let on = true;
+    const toggle = stagedField<boolean>({
+      key: "probeToggle",
+      category: "Appearance",
+      label: "Probe toggle",
+      description: "A toggle whose write the test drives.",
+      control: { kind: "toggle" },
+      read: () => on,
+      write: () => {},
+    });
+    const state = () =>
+      document.body.querySelector("#setting-probeToggle")?.getAttribute("data-state");
+
+    const { flush } = render(
+      SettingsDialog,
+      props({
+        entries: [toggle],
+        onChange: async (_f: StagedField, v: unknown) => {
+          await Promise.resolve();
+          on = v as boolean;
+        },
+      }),
+    );
+    await flushUntil(flush, mounted);
+    (document.body.querySelector("#setting-probeToggle") as HTMLButtonElement).click();
+    await settle(flush);
+    expect(state()).toBe("unchecked");
   });
 });
 
