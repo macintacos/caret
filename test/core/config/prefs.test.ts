@@ -5,7 +5,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { recordingLog } from "@test/support/recording-log.ts";
-import { type ApproveModeSet, readApproveMode, writeApproveMode } from "@/config/prefs.ts";
+import {
+  type ApproveModeSet,
+  readApproveMode,
+  readUpdatesCheck,
+  writeApproveMode,
+} from "@/config/prefs.ts";
 
 let dir: string;
 let file: string;
@@ -118,4 +123,38 @@ test("a successful write is logged at debug with the mode", async () => {
   expect(recs).toHaveLength(1);
   expect(recs[0]).toMatchObject({ level: "debug", step: "prefs" });
   expect(recs[0]?.msg).toContain("acceptEdits");
+});
+
+// ---- the update-check opt-out (EXC-1205) ----
+//
+// `updates.check` is a kill switch, so only an explicit `false` turns the daemon's
+// daily check off. Every other reading — no file, no key, junk — leaves it on, which
+// is what keeps a corrupt prefs.json from silently disabling the feature.
+
+test("an absent prefs file leaves the update check on", async () => {
+  expect(await readUpdatesCheck(file)).toBe(true);
+});
+
+test("a prefs file without an updates key leaves the update check on", async () => {
+  await Bun.write(file, JSON.stringify({ approveMode: "default" }));
+  expect(await readUpdatesCheck(file)).toBe(true);
+});
+
+test("only an explicit false turns the update check off", async () => {
+  await Bun.write(file, JSON.stringify({ updates: { check: false } }));
+  expect(await readUpdatesCheck(file)).toBe(false);
+});
+
+test("an explicit true leaves the update check on", async () => {
+  await Bun.write(file, JSON.stringify({ updates: { check: true } }));
+  expect(await readUpdatesCheck(file)).toBe(true);
+});
+
+test("a junk updates value leaves the update check on rather than off", async () => {
+  for (const updates of [{ check: "no" }, { check: 0 }, "off", null, []]) {
+    await Bun.write(file, JSON.stringify({ updates }));
+    expect(await readUpdatesCheck(file)).toBe(true);
+  }
+  await Bun.write(file, "{ not valid json");
+  expect(await readUpdatesCheck(file)).toBe(true);
 });

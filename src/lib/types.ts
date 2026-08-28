@@ -466,6 +466,39 @@ export interface EnvOverride {
   value: string | null;
 }
 
+/**
+ * GET /api/update body — whether the running caret is behind, and what to do about
+ * it (EXC-1205). The envelope carries the identity of the caret that was judged; the
+ * verdict rides in `status`, so the three process constants are stated once instead
+ * of on every union member.
+ */
+export interface UpdateReport {
+  /** How this caret is running — buildKind(). Which upstream matters, and which
+   * upgrade command applies, both follow from it. */
+  install: "binary" | "bundle" | "dev";
+  /** The running version (VERSION) and the commit it was built from
+   * (currentCommit(), whose "unknown" means the build baked none). */
+  version: string;
+  commit: string;
+  status: UpdateStatus;
+}
+
+/**
+ * What the update check concluded. `unavailable` and `unknown` are deliberately
+ * distinct: the first means the check is deliberately off (a dev build, or the
+ * `updates.check` opt-out), the second means it ran and could not tell. A UI
+ * says nothing for the first and can offer a retry for the second.
+ *
+ * `command` rides on the wire rather than being derived client-side because the
+ * daemon is the only party that knows how this caret was installed.
+ */
+export type UpdateStatus =
+  | { kind: "unavailable"; reason: "dev" | "disabled" }
+  | { kind: "current" }
+  | { kind: "behind-release"; available: string; command: string }
+  | { kind: "behind-commit"; aheadBy: number; command: string }
+  | { kind: "unknown"; reason: string };
+
 /** Returns the current (latest) version of a review. */
 export function currentVersion(review: Review): PlanVersion {
   const v = review.versions[review.versions.length - 1];

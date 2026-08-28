@@ -1,14 +1,17 @@
 // Machine-global UI preferences, persisted as a single JSON file under stateDir.
-// Today it holds just the last-used approve-variant id — a last-write-wins value
-// the web UI reads on load to default the primary Approve button. The id is an
-// opaque token (ApproveVariantId): prefs never interpret it, they only gate it
-// against the adapter-declared set the caller passes in. Reads fail safe to the
-// default id; writes are fire-and-forget (never on the hook's decision path).
+// It holds the last-used approve-variant id — a last-write-wins value the web UI
+// reads on load to default the primary Approve button — and the `updates.check`
+// kill switch for the daemon's daily update check, which is read here and written
+// by hand. The approve id is an opaque token (ApproveVariantId): prefs never
+// interpret it, they only gate it against the adapter-declared set the caller
+// passes in. Every read fails safe — to the default id, and to a check that stays
+// on; writes are fire-and-forget (never on the hook's decision path).
 
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 import { ensureStateDir, prefsFile } from "@/config/paths.ts";
+import { readJsonFile } from "@/lib/json-file.ts";
 import { type CaretLogger, noopLogger } from "@/lib/log.ts";
 import type { ApproveVariantId } from "@/lib/types.ts";
 
@@ -53,6 +56,19 @@ export async function readApproveMode(
     );
     return set.fallback;
   }
+}
+
+/** Whether the daemon's daily update check is on (EXC-1205). Default-on: only an
+ * explicit `updates.check === false` turns it off, so a missing file, a missing key,
+ * and a junk value all read as `true` — a corrupt prefs.json must not silently
+ * disable the check.
+ *
+ * Unlike readApproveMode this needs no ENOENT-versus-other distinction — every
+ * failure means the same thing — so it rides the shared readJsonFile collapse rather
+ * than a bespoke try/catch. */
+export async function readUpdatesCheck(file = prefsFile()): Promise<boolean> {
+  const parsed = (await readJsonFile(file)) as { updates?: { check?: unknown } } | null;
+  return parsed?.updates?.check !== false;
 }
 
 /** Persist the remembered approve-variant id (last-write-wins; no per-id locking,

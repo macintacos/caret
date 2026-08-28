@@ -69,6 +69,16 @@ agent applies an update. In OpenCode, caret toasts you at startup when a newer r
 out; a plain `install` at a terminal runs its own check against npm and asks before taking
 it.
 
+caret's daemon runs the same check for itself, at most once a day, so the review UI can
+tell you when the caret you are running is behind. The call is unauthenticated and sends
+nothing about you — just a request to npm and GitHub for the newest published version. To
+turn it off, set `updates.check` to `false` in `prefs.json`
+(`~/.local/state/caret/prefs.json`, or under `$XDG_STATE_HOME/caret`):
+
+```json
+{ "updates": { "check": false } }
+```
+
 See [the OpenCode adapter](doc/ARCHITECTURE.md#the-opencode-adapter) for the by-hand
 equivalents, for pinning a version in OpenCode's `plugin` array, and for what each agent's
 install touches; [the Claude Code adapter](doc/ARCHITECTURE.md#the-claude-code-adapter)

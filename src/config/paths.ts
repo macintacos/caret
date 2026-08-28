@@ -73,6 +73,14 @@ export function prefsFile(): string {
   return `${stateDir()}/prefs.json`;
 }
 
+/** The daemon's update-check record: when it last asked whether a newer caret
+ * exists, and what it concluded (EXC-1205). A small machine-global marker beside
+ * prefs.json — the daemon dies on idle, so the verdict has to outlive the process
+ * that computed it. */
+export function updateCheckFile(): string {
+  return `${stateDir()}/update-check.json`;
+}
+
 /** Directory holding the live logs, their archive/, the rotation locks, and
  * `caret redact`'s *.redacted.log siblings — so the state dir's root stays
  * reviews, prefs, and the daemon lock (EXC-1068). */
