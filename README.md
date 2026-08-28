@@ -69,11 +69,11 @@ agent applies an update. In OpenCode, caret toasts you at startup when a newer r
 out; a plain `install` at a terminal runs its own check against npm and asks before taking
 it.
 
-caret's daemon runs the same check for itself, at most once a day, so the review UI can
-tell you when the caret you are running is behind. The call is unauthenticated and sends
-nothing about you — just a request to npm and GitHub for the newest published version. To
-turn it off, set `updates.check` to `false` in `prefs.json`
-(`~/.local/state/caret/prefs.json`, or under `$XDG_STATE_HOME/caret`):
+caret's daemon runs the same check for itself, at most once a day. The call is
+unauthenticated and sends nothing about you — just a request to npm or GitHub, depending
+on how caret was installed, for the newest published version. To turn it off, set
+`updates.check` to `false` in `prefs.json` (`~/.local/state/caret/prefs.json`, or under
+`$XDG_STATE_HOME/caret`):
 
 ```json
 { "updates": { "check": false } }

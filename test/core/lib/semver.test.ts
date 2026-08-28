@@ -1,6 +1,6 @@
-// Semver comparison for caret's own version numbers: the `X.Y.Z` triple parse and
-// the strictly-newer comparison every upgrade check decides on. Pure, so the whole
-// suite is a table over the two functions.
+// Semver comparison for caret's own version numbers: the strictly-newer comparison
+// every upgrade check decides on. Pure, so the suite is a table over `isNewer`, which
+// exercises the `X.Y.Z` triple parse through it.
 
 import { expect, test } from "bun:test";
 

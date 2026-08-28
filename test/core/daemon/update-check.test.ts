@@ -5,11 +5,13 @@
 // network, the filesystem, or a real 24-hour window.
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { statSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import {
+  fileUpdateCache,
   readCachedStatus,
   runUpdateCheck,
   type UpdateCache,
@@ -118,45 +120,69 @@ test("a binary with no baked commit is judged on the release alone", () => {
 
 const CURRENT: UpdateStatus = { kind: "current" };
 
-/** Write a cache record verbatim, so a test can plant a stale or malformed one. */
-async function plant(body: unknown): Promise<string> {
+/** Write a cache record verbatim, so a test can plant a stale or malformed one that
+ * the real reader then has to cope with. */
+async function plant(body: unknown): Promise<UpdateCache> {
   const file = join(tmp, "update-check.json");
   await Bun.write(file, typeof body === "string" ? body : JSON.stringify(body));
-  return file;
+  return fileUpdateCache(file);
 }
 
-test("a record written against the running build reads back as its status", async () => {
-  const file = await plant({
+test("a record written against the running build reads back as its status", () => {
+  const cache = memoryCache({
     checkedAt: 1,
     version: "0.13.0",
     commit: "abc1234",
     status: CURRENT,
   });
-  expect(readCachedStatus(file, "0.13.0", "abc1234")).toEqual(CURRENT);
+  expect(readCachedStatus(cache, "0.13.0", "abc1234")).toEqual(CURRENT);
 });
 
 test("a missing or unparseable record reads as unknown", async () => {
-  expect(readCachedStatus(join(tmp, "nope.json"), "0.13.0", "abc1234").kind).toBe("unknown");
+  expect(readCachedStatus(memoryCache(), "0.13.0", "abc1234").kind).toBe("unknown");
   expect(readCachedStatus(await plant("{ not json"), "0.13.0", "abc1234").kind).toBe("unknown");
   expect(readCachedStatus(await plant({ checkedAt: 1 }), "0.13.0", "abc1234").kind).toBe("unknown");
 });
 
-test("a record from a different version or commit reads as unknown, never as its status", async () => {
+test("a record from a different version or commit reads as unknown, never as its status", () => {
   // Its `available` number is a claim about a caret that is no longer running.
-  const file = await plant({
+  const stale = memoryCache({
     checkedAt: 1,
     version: "0.12.0",
     commit: "abc1234",
     status: { kind: "behind-release", available: "0.13.0", command: BUNX },
   });
-  expect(readCachedStatus(file, "0.13.0", "abc1234").kind).toBe("unknown");
-  const moved = await plant({
+  expect(readCachedStatus(stale, "0.13.0", "abc1234").kind).toBe("unknown");
+  const moved = memoryCache({
     checkedAt: 1,
     version: "0.13.0",
     commit: "def5678",
     status: CURRENT,
   });
   expect(readCachedStatus(moved, "0.13.0", "abc1234").kind).toBe("unknown");
+});
+
+test("the file-backed cache round-trips a record, privately", () => {
+  // The production write path — every other case injects memoryCache, so without this
+  // the real mkdir, mode, and JSON shape would never run.
+  const file = join(tmp, "nested", "update-check.json");
+  const cache = fileUpdateCache(file);
+  const behind: UpdateStatus = { kind: "behind-commit", aheadBy: 4, command: REBUILD };
+  cache.write({ checkedAt: 99, version: "0.13.0", commit: "abc1234", status: behind });
+  expect(readCachedStatus(cache, "0.13.0", "abc1234")).toEqual(behind);
+  // 0600 / 0700: the record shares the state dir with plan bodies (EXC-539).
+  expect(statSync(file).mode & 0o777).toBe(0o600);
+  expect(statSync(dirname(file)).mode & 0o777).toBe(0o700);
+});
+
+test("an unwritable path is swallowed, so a cache write can't disturb a boot", async () => {
+  // A path whose parent is a FILE — the mkdir fails, and the daemon must not notice.
+  await Bun.write(join(tmp, "blocker"), "not a directory");
+  const cache = fileUpdateCache(join(tmp, "blocker", "update-check.json"));
+  expect(() =>
+    cache.write({ checkedAt: 1, version: "0.13.0", commit: "abc1234", status: CURRENT }),
+  ).not.toThrow();
+  expect(readCachedStatus(cache, "0.13.0", "abc1234").kind).toBe("unknown");
 });
 
 // --- the throttled runner --------------------------------------------------------
@@ -295,10 +321,72 @@ test("a settled verdict is persisted against the running build", async () => {
   expect(readCachedStatus(await plant(cache.held), "0.13.0", "abc1234")).toEqual(behind);
 });
 
+test("a record orphaned mid-check reads back as no record at all", async () => {
+  // The up-front stamp lands, then the daemon dies before the gather settles (idle
+  // shutdown, SIGTERM, an EXC-406 retire). What it left behind must not read as a
+  // verdict — it would satisfy the throttle and be served for a day.
+  const cache = memoryCache();
+  const d = deps({
+    cache,
+    release: async () => {
+      expect(readCachedStatus(cache, "0.13.0", "abc1234")).toEqual(
+        readCachedStatus(memoryCache(), "0.13.0", "abc1234"),
+      );
+      return "0.13.0";
+    },
+  });
+  await runUpdateCheck(d);
+});
+
+test("a stamp from the future is treated as stale, not as a permanent throttle", async () => {
+  // An NTP correction, a restored backup, or a resumed VM can leave one behind; a
+  // plain `now - checkedAt < DAY` comparison would suppress every later check.
+  const cache = memoryCache({
+    checkedAt: 1_000_000 + 5 * DAY_MS,
+    version: "0.13.0",
+    commit: "abc1234",
+    status: CURRENT,
+  });
+  const d = deps({ cache });
+  expect((await runUpdateCheck(d))?.kind).toBe("current");
+  expect(d.calls).toEqual(["release", "compare"]);
+});
+
+test("a failure anywhere in the runner settles as unknown rather than rejecting", async () => {
+  // The daemon fires this without awaiting it, and its unhandledRejection handler
+  // exits the process — so "never rejects" is load-bearing, not a nicety.
+  const throwing = deps({
+    enabled: async () => {
+      throw new Error("prefs exploded");
+    },
+  });
+  expect((await runUpdateCheck(throwing))?.kind).toBe("unknown");
+  const badCache = deps({
+    cache: {
+      read: () => {
+        throw new Error("cache exploded");
+      },
+      write: () => {},
+    },
+  });
+  expect((await runUpdateCheck(badCache))?.kind).toBe("unknown");
+});
+
+test("a raw error string never reaches the wire as the unknown reason", async () => {
+  // `reason` is rendered by the UI, and an errno carries an absolute home path.
+  const d = deps({
+    enabled: async () => {
+      throw new Error("EACCES: permission denied, open '/Users/someone/.local/state/x'");
+    },
+  });
+  const status = await runUpdateCheck(d);
+  expect(status?.kind === "unknown" && status.reason).not.toContain("/Users/");
+});
+
 test("a binary already behind a release skips the compare call", async () => {
   const d = deps();
   d.answers.release = "0.14.0";
-  await runUpdateCheck(d);
+  expect((await runUpdateCheck(d))?.kind).toBe("behind-release");
   expect(d.calls).toEqual(["release"]);
 });
 

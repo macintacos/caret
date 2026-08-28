@@ -19,13 +19,14 @@
 // longer running — and a build change likewise bypasses the 24h throttle, because the
 // moment right after an upgrade or a rebuild is when the answer matters most.
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
+import { ensureStateDir } from "@/config/paths.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
 import type { CaretLogger } from "@/lib/log.ts";
 import { isNewer } from "@/lib/semver.ts";
-import { errorMessage, type UpdateStatus } from "@/lib/types.ts";
+import { type BuildKind, errorMessage, type UpdateStatus } from "@/lib/types.ts";
 
 /** At most one check per day, the ceiling the issue sets. Not a timer: the daemon
  * idle-shuts-down and respawns per review, so a boot-time throttled check already
@@ -41,10 +42,22 @@ const REFRESH_COMMAND = "bunx --no-cache @macintacos/caret@latest install --refr
  * name (doc/DEVELOPMENT.md); `mise build --install` does not exist. */
 const REBUILD_COMMAND = "mise run build --install";
 
+/** The `unknown` reason that means "ask GitHub how far trunk has moved and try again".
+ * `gather` matches on it to decide whether the compare call is worth making, which is
+ * what keeps the branch order stated once, in `updateStatusFor`. */
+const NEEDS_COMPARE = "could not compare this build against trunk";
+
+/** The verdict for a build no check has settled on yet. Shared by `readCachedStatus`
+ * and the up-front stamp so an orphaned record is indistinguishable from no record. */
+const NEVER_CHECKED: UpdateStatus = {
+  kind: "unknown",
+  reason: "no update check has run for this build yet",
+};
+
 /** The facts a verdict is decided over. Each upstream side is null when it could not be
  * read, and a branch that needs a null side yields `unknown` rather than guessing. */
 export interface UpdateFacts {
-  kind: "binary" | "bundle" | "dev";
+  kind: BuildKind;
   version: string;
   commit: string;
   /** npm's `latest` — what a published install would resolve to. */
@@ -74,7 +87,7 @@ export interface UpdateCache {
 /** Every effect runUpdateCheck performs, injected so the runner stays a function of its
  * deps (runDaemon wires the prod readers). */
 export interface UpdateCheckDeps {
-  kind: "binary" | "bundle" | "dev";
+  kind: BuildKind;
   version: string;
   commit: string;
   /** Whether the user has left the check on — `updates.check` in prefs.json. */
@@ -111,20 +124,24 @@ export function updateStatusFor(facts: UpdateFacts): UpdateStatus {
     return { kind: "behind-release", available: facts.release, command: REFRESH_COMMAND };
   }
   if (facts.commit === "unknown") return { kind: "current" };
-  if (facts.aheadBy === null) return unknown("could not compare this build against trunk");
+  if (facts.aheadBy === null) return unknown(NEEDS_COMPARE);
   return facts.aheadBy > 0
     ? { kind: "behind-commit", aheadBy: facts.aheadBy, command: REBUILD_COMMAND }
     : { kind: "current" };
 }
 
-/** The last persisted verdict, or `unknown` when nothing usable is cached — absent,
- * unparseable, or recorded against a different version or commit than the one running
- * now. Synchronous: the daemon seeds its reported status from this before it binds. */
-export function readCachedStatus(file: string, version: string, commit: string): UpdateStatus {
-  const rec = fileUpdateCache(file).read();
-  if (!rec || rec.version !== version || rec.commit !== commit) {
-    return unknown("no update check has run for this build yet");
-  }
+/** The last persisted verdict, or `NEVER_CHECKED` when nothing usable is cached —
+ * absent, unparseable, or recorded against a different version or commit than the one
+ * running now. Takes the cache seam rather than a path, so the daemon hands it the same
+ * cache the runner writes through, and so a test needs no filesystem. Synchronous: the
+ * daemon seeds its reported status from this before it binds. */
+export function readCachedStatus(
+  cache: UpdateCache,
+  version: string,
+  commit: string,
+): UpdateStatus {
+  const rec = cache.read();
+  if (!rec || rec.version !== version || rec.commit !== commit) return NEVER_CHECKED;
   return rec.status;
 }
 
@@ -143,23 +160,33 @@ export async function runUpdateCheck(deps: UpdateCheckDeps): Promise<UpdateStatu
     const sameBuild = prev?.version === deps.version && prev?.commit === deps.commit;
     // A build change runs regardless: a freshly-upgraded user would otherwise have no
     // verdict at all for up to a day, and the extra call is tied to a user action
-    // (running an install or a rebuild), not to a periodic path.
-    if (prev && sameBuild && now - prev.checkedAt < CHECK_INTERVAL_MS) return null;
+    // (running an install or a rebuild), not to a periodic path. `Math.abs` so a stamp
+    // from the future — an NTP correction, a restored backup, a resumed VM — reads as
+    // stale rather than throttling every later check indefinitely.
+    if (prev && sameBuild && Math.abs(now - prev.checkedAt) < CHECK_INTERVAL_MS) return null;
 
-    const settle = (status: UpdateStatus): UpdateStatus => {
+    const record = (status: UpdateStatus): void => {
       deps.cache.write({ checkedAt: now, version: deps.version, commit: deps.commit, status });
-      return status;
     };
     // Stamp up front so an offline or failed attempt still backs off a full day. The
     // status carried forward keeps the record whole: the previous verdict when it was
-    // about this same build, and `unknown` otherwise.
-    settle(prev && sameBuild ? prev.status : unknown("update check in progress"));
+    // about this same build, and NEVER_CHECKED otherwise — so a record orphaned by a
+    // shutdown mid-check reads back exactly like no record, which is the truth.
+    record(prev && sameBuild ? prev.status : NEVER_CHECKED);
 
-    const status = settle(await gather(deps));
-    deps.log.info("update", `update check: ${status.kind}`);
+    const status = await gather(deps);
+    record(status);
+    deps.log.info(
+      "update",
+      `update check: ${status.kind}`,
+      status.kind === "unknown" ? { detail: status.reason } : undefined,
+    );
     return status;
   } catch (err) {
-    return unknown(errorMessage(err));
+    // The reason reaches a UI, so it stays a sentence: a raw errno carries an absolute
+    // home path, which is identifying. The detail goes to the log instead.
+    deps.log.warn("update", "update check failed", { detail: errorMessage(err) });
+    return unknown("the update check failed");
   }
 }
 
@@ -170,19 +197,22 @@ export function fileUpdateCache(path: string): UpdateCache {
     read: () => asRecord(readJsonFileSync(path)),
     write: (entry) => {
       try {
-        mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+        // ensureStateDir, not a bare mkdir: mkdir's mode applies only on create, and
+        // this is a mkdir-of-stateDir site like any other (EXC-539).
+        ensureStateDir(dirname(path));
         // 0600: the record shares the state dir with plan bodies; keep it private too.
         writeFileSync(path, JSON.stringify(entry, null, 2), { mode: 0o600 });
       } catch {
-        // best-effort — a throttle-file write must never disrupt the daemon.
+        // best-effort, per the docstring above.
       }
     },
   };
 }
 
-/** Read only the upstream sides the install kind actually needs, short-circuiting a
- * compare the verdict would not consult: a binary that is already a release behind, one
- * whose release read failed, and one with no baked commit all decide without it. */
+/** Read only the upstream sides the verdict will actually consult. The verdict itself
+ * decides that: a first pass with no compare either settles outright or comes back
+ * asking for one, so the branch order lives in `updateStatusFor` alone and the two can
+ * never drift apart. */
 async function gather(deps: UpdateCheckDeps): Promise<UpdateStatus> {
   const base = { kind: deps.kind, version: deps.version, commit: deps.commit };
   if (deps.kind === "bundle") {
@@ -194,13 +224,15 @@ async function gather(deps: UpdateCheckDeps): Promise<UpdateStatus> {
     });
   }
   const release = await deps.release();
-  const decided = release === null || isNewer(release, deps.version) || deps.commit === "unknown";
-  const aheadBy = decided ? null : await deps.aheadBy(deps.commit);
+  const first = updateStatusFor({ ...base, npmLatest: null, release, aheadBy: null });
+  if (first.kind !== "unknown" || first.reason !== NEEDS_COMPARE) return first;
+  const aheadBy = await deps.aheadBy(deps.commit);
   return updateStatusFor({ ...base, npmLatest: null, release, aheadBy });
 }
 
-/** Narrow a parsed record, or null when it is not one. Every field is load-bearing —
- * a partial record can't answer whether it describes the running build. */
+/** Whether a parsed value has the four fields a record needs. It does NOT validate the
+ * status union — a record only survives `readCachedStatus` when its version and commit
+ * match the running build, which means this same build wrote it. */
 function asRecord(value: unknown): UpdateRecord | null {
   const r = value as Partial<UpdateRecord> | null;
   if (typeof r?.checkedAt !== "number") return null;

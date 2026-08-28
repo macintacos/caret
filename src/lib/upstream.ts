@@ -10,14 +10,20 @@
 
 import pkg from "../../package.json" with { type: "json" };
 
-/** npm's `latest` dist-tag document for caret. Deliberately npm rather than GitHub
- * releases for the "what would an install get" question: `latest` is what OpenCode
- * re-resolves to, so it is the only honest answer. A release that tagged GitHub but
- * failed to publish would make the GitHub number a promise caret cannot keep. */
+/** npm's `latest` dist-tag document for caret. For the "what would a published
+ * install resolve to" question this is deliberately npm rather than GitHub releases:
+ * `latest` is what an install actually re-resolves to, and a release that tagged
+ * GitHub but failed to publish would make the GitHub number a promise caret cannot
+ * keep. A compiled binary asks GitHub instead — see LATEST_RELEASE_URL. */
 const NPM_LATEST_URL = `https://registry.npmjs.org/${pkg.name}/latest`;
 
 /** GitHub's newest published release for caret — the answer for a compiled binary,
- * which npm never served. */
+ * which npm never served.
+ *
+ * A deliberate twin of the URL in `opencode/caret.plugin.ts`: that file is
+ * self-contained by contract (its only imports are node builtins and
+ * `@opencode-ai/plugin`, so OpenCode can load it straight out of the package cache)
+ * and therefore cannot import from `src/`. */
 const LATEST_RELEASE_URL = "https://api.github.com/repos/macintacos/caret/releases/latest";
 
 /** GitHub's commit comparison, `<commit>...trunk`: `ahead_by` is how many commits
@@ -86,9 +92,8 @@ export async function commitsAheadOfTrunk(
   commit: string,
   fetchImpl: FetchLike = fetch,
 ): Promise<number | null> {
-  const body = (await readJson(`${COMPARE_URL}/${commit}...trunk`, fetchImpl, GITHUB_HEADERS)) as {
-    ahead_by?: unknown;
-  } | null;
+  const url = `${COMPARE_URL}/${encodeURIComponent(commit)}...trunk`;
+  const body = (await readJson(url, fetchImpl, GITHUB_HEADERS)) as { ahead_by?: unknown } | null;
   const ahead = body?.ahead_by;
   return typeof ahead === "number" && Number.isFinite(ahead) ? ahead : null;
 }

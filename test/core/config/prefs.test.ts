@@ -158,3 +158,13 @@ test("a junk updates value leaves the update check on rather than off", async ()
   await Bun.write(file, "{ not valid json");
   expect(await readUpdatesCheck(file)).toBe(true);
 });
+
+test("saving an approve mode preserves the update-check opt-out", async () => {
+  // The README tells users to hand-edit `updates.check` into this file, so a
+  // whole-file write here would silently re-enable the daily check on their next
+  // approval.
+  await Bun.write(file, JSON.stringify({ updates: { check: false } }));
+  await writeApproveMode("acceptEdits", file, undefined, SET);
+  expect(await readApproveMode(file, undefined, SET)).toBe("acceptEdits");
+  expect(await readUpdatesCheck(file)).toBe(false);
+});

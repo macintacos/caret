@@ -79,7 +79,8 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   const commit = currentCommit();
   // Seeded from the last persisted verdict, so a daemon that respawns per review can
   // answer immediately; the background check below replaces it when it settles.
-  let updateStatus = readCachedStatus(updateCheckFile(), version, commit);
+  const updateCache = fileUpdateCache(updateCheckFile());
+  let updateStatus = readCachedStatus(updateCache, version, commit);
   const store = createStore(reviewsDir(), log);
   await store.rehydrate();
   const assets = await loadUiAssets();
@@ -188,13 +189,19 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
     commit,
     enabled: () => readUpdatesCheck(),
     now: Date.now,
-    cache: fileUpdateCache(updateCheckFile()),
+    cache: updateCache,
     npmLatest: publishedCaretVersion,
     release: latestReleaseTag,
     aheadBy: commitsAheadOfTrunk,
     log,
-  }).then((status) => {
-    if (status) updateStatus = status;
-  });
+  }).then(
+    (status) => {
+      if (status) updateStatus = status;
+    },
+    // runUpdateCheck settles every failure itself, so this arm should be unreachable —
+    // but an unhandled rejection here would hit the handler above and take a live
+    // daemon down with it, which is far too high a price for an update nudge.
+    (err) => log.error("update", err),
+  );
   // Bun.serve keeps the process alive; the daemon idle-auto-shuts-down.
 }

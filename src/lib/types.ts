@@ -467,18 +467,26 @@ export interface EnvOverride {
 }
 
 /**
+ * How a caret process is running, as `buildKind()` (src/lib/build-id.ts) reports it:
+ * a self-contained compiled binary, the npm run-from-source bundle, or `bun run` dev.
+ * Lives here rather than beside `buildKind()` because it rides the wire in
+ * `UpdateReport` and the browser reaches it through `@core`.
+ */
+export type BuildKind = "binary" | "bundle" | "dev";
+
+/**
  * GET /api/update body — whether the running caret is behind, and what to do about
  * it (EXC-1205). The envelope carries the identity of the caret that was judged; the
  * verdict rides in `status`, so the three process constants are stated once instead
  * of on every union member.
  */
 export interface UpdateReport {
-  /** How this caret is running — buildKind(). Which upstream matters, and which
-   * upgrade command applies, both follow from it. */
-  install: "binary" | "bundle" | "dev";
-  /** The running version (VERSION) and the commit it was built from
-   * (currentCommit(), whose "unknown" means the build baked none). */
+  /** How this caret is running. Which upstream matters, and which upgrade command
+   * applies, both follow from it. */
+  install: BuildKind;
+  /** The running version — `VERSION`. */
   version: string;
+  /** The commit this caret was built from; "unknown" when the build baked none. */
   commit: string;
   status: UpdateStatus;
 }
