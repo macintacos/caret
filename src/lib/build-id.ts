@@ -13,6 +13,7 @@
 
 import { createHash } from "node:crypto";
 
+import type { BuildKind } from "@/lib/types.ts";
 import { loadUiAssets, type UiAssets } from "@/ui/assets.ts";
 
 import pkg from "../../package.json" with { type: "json" };
@@ -36,9 +37,7 @@ export const IDENTITY = { service: "caret", version: VERSION } as const;
  * The daemon self-spawn vector (does the script path need re-passing?) and the
  * build fingerprint (which file identifies the build?) key off this; the
  * production-vs-dev signal below collapses "bundle" and "binary" together. */
-export function buildKind(
-  argv1: string | undefined = process.argv[1],
-): "binary" | "bundle" | "dev" {
+export function buildKind(argv1: string | undefined = process.argv[1]): BuildKind {
   if (argv1?.endsWith(".ts")) return "dev";
   if (argv1?.endsWith(".js")) return "bundle";
   return "binary";
@@ -94,7 +93,7 @@ export interface DaemonLock {
 export interface BuildIdDeps {
   /** The runtime shape (see buildKind): "binary" and "bundle" both fingerprint a
    * file via hashFile; "dev" falls back to the UI hash. */
-  kind: "binary" | "bundle" | "dev";
+  kind: BuildKind;
   /** Hash of the build's defining file — the compiled binary or the bundle
    * script — or null if it can't be read. */
   hashFile: () => Promise<string | null>;

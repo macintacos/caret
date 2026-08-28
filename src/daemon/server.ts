@@ -46,6 +46,7 @@ import {
   type SkillDescriptionResponse,
   type SkillRef,
   toClientReview,
+  type UpdateReport,
 } from "@/lib/types.ts";
 import { listDirectory } from "@/plan/directory.ts";
 import { isFileTooLargeToPreview, readFileExcerpt, resolveInCwd } from "@/plan/excerpt.ts";
@@ -140,6 +141,12 @@ export interface CreateServerOptions {
    * call sites/tests that don't wire it are unaffected. runDaemon wires the prod
    * thunk, which reads live settings so a config edit hot-reloads. */
   diagnostics?: () => DaemonDiagnostics;
+  /** A thunk returning whether the running caret is behind, served by GET /api/update
+   * (EXC-1205): the install kind, the running version/commit, and the verdict. Omitted
+   * (default) → the route 404s, so a bare test daemon and the e2e fixture daemon are
+   * unaffected. runDaemon wires a thunk over a locally held status — reading it never
+   * triggers a network call. */
+  updateReport?: () => UpdateReport;
   /** Clear the unread mark on the cmux pane a review was submitted from
    * (EXC-961). Defaults to the real spawn; injectable so tests assert on the
    * argv without spawning. Fire-and-forget — it never delays a response. */
@@ -183,6 +190,7 @@ interface ResolvedOptions {
   listSkills: ((cwd: string) => Promise<SkillRef[]>) | undefined;
   readSkillDescription: ((cwd: string, skill: SkillRef) => Promise<string | null>) | undefined;
   diagnostics: (() => DaemonDiagnostics) | undefined;
+  updateReport: (() => UpdateReport) | undefined;
   markPaneRead: (pane: CmuxPane) => void;
   log: CaretLogger;
 }
@@ -206,6 +214,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     listSkills: opts.listSkills,
     readSkillDescription: opts.readSkillDescription,
     diagnostics: opts.diagnostics,
+    updateReport: opts.updateReport,
     markPaneRead: opts.markPaneRead ?? ((pane) => clearCmuxMark(pane, { log: opts.log })),
     log: opts.log ?? noopLogger,
   };
@@ -366,6 +375,16 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   function handleDiagnostics(): Response {
     if (!cfg.diagnostics) return notFound();
     return Response.json(cfg.diagnostics());
+  }
+
+  // GET /api/update — whether the caret this daemon is, is behind (EXC-1205): the
+  // install kind, the running version/commit, and the verdict with the command that
+  // would take the upgrade. The thunk reads a verdict the daemon already holds, so
+  // serving this never makes a network call. With no thunk wired (default; e.g. a bare
+  // test daemon) the route 404s, like any absent optional capability.
+  function handleUpdate(): Response {
+    if (!cfg.updateReport) return notFound();
+    return Response.json(cfg.updateReport());
   }
 
   // POST /api/retire — graceful single-instance retire (EXC-406): a newer caret
@@ -859,6 +878,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   async function dispatch(req: Request, method: string, path: string): Promise<Response> {
     if (method === "GET" && path === "/api/health") return handleHealth();
     if (method === "GET" && path === "/api/diagnostics") return handleDiagnostics();
+    if (method === "GET" && path === "/api/update") return handleUpdate();
     if (method === "POST" && path === "/api/retire") return handleRetire();
     if (method === "GET" && (path === "/" || path === INDEX_PATH)) return handleIndex();
     if (method === "POST" && path === "/api/reviews") return handleCreateReview(req);

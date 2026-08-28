@@ -67,15 +67,24 @@ export function devConfigFile(): string {
   return `${configDir()}/config.dev.toml`;
 }
 
-/** Machine-global UI prefs (last-used approve mode). One shared file under
- * stateDir; last-write-wins. Separate from the per-review JSON in reviewsDir(). */
+/** Machine-global prefs: the last-used approve mode, and the `updates.check`
+ * opt-out the daemon reads. One shared file under stateDir; last-write-wins per
+ * key. Separate from the per-review JSON in reviewsDir(). */
 export function prefsFile(): string {
   return `${stateDir()}/prefs.json`;
 }
 
+/** The daemon's update-check record: when it last asked whether a newer caret
+ * exists, and what it concluded (EXC-1205). A small machine-global marker beside
+ * prefs.json — the daemon dies on idle, so the verdict has to outlive the process
+ * that computed it. */
+export function updateCheckFile(): string {
+  return `${stateDir()}/update-check.json`;
+}
+
 /** Directory holding the live logs, their archive/, the rotation locks, and
  * `caret redact`'s *.redacted.log siblings — so the state dir's root stays
- * reviews, prefs, and the daemon lock (EXC-1068). */
+ * reviews, prefs, the daemon lock, and the update-check record (EXC-1068). */
 export function logsDir(): string {
   return `${stateDir()}/logs`;
 }

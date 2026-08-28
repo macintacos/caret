@@ -52,7 +52,6 @@ import {
 } from "@/adapters/opencode/paths.ts";
 import {
   clearCachedCaret,
-  publishedCaretVersion,
   readCachedCaretVersion,
   type UpgradeVerdict,
   upgradeVerdict,
@@ -62,6 +61,7 @@ import { promptUpgrade, type StaleVerdict, upgradeVerdictLine } from "@/commands
 import type { InstallUI } from "@/commands/install/ui.ts";
 import { isTerminal, silentUI } from "@/commands/install/ui.ts";
 import { VERSION } from "@/lib/build-id.ts";
+import { publishedCaretVersion } from "@/lib/upstream.ts";
 
 /** Injection seam for tests: override the config dir and packaging so the target
  * can run against a temp dir without resolving the real caret root, and every effect

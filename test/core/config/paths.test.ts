@@ -17,6 +17,7 @@ import {
   logsDir,
   reviewsDir,
   stateDir,
+  updateCheckFile,
 } from "@/config/paths.ts";
 
 // The CARET_* accessor and invalidEnvVars tests live in settings.test.ts with
@@ -36,6 +37,12 @@ test("daemonLock resolves under stateDir and honors XDG_STATE_HOME", () => {
   withEnv({ XDG_STATE_HOME: "/tmp/caret-xdg-paths-test" }, () => {
     expect(daemonLock()).toBe(`${stateDir()}/daemon.lock`);
     expect(daemonLock()).toBe("/tmp/caret-xdg-paths-test/caret/daemon.lock");
+  });
+});
+
+test("updateCheckFile resolves under stateDir, beside prefs.json", () => {
+  withEnv({ XDG_STATE_HOME: "/tmp/caret-xdg-paths-test" }, () => {
+    expect(updateCheckFile()).toBe(`${stateDir()}/update-check.json`);
   });
 });
 

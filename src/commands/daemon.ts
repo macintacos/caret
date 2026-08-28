@@ -8,7 +8,8 @@ import { existsSync, unlinkSync } from "node:fs";
 
 import { selectAdapter } from "@/adapters/index.ts";
 import { warnInvalidEnvVars } from "@/commands/boot.ts";
-import { configFile, daemonLock, reviewsDir, stateDir } from "@/config/paths.ts";
+import { configFile, daemonLock, reviewsDir, stateDir, updateCheckFile } from "@/config/paths.ts";
+import { readUpdatesCheck } from "@/config/prefs.ts";
 import {
   envOverrides,
   getPort,
@@ -22,8 +23,10 @@ import {
 import { buildDiagnostics } from "@/daemon/diagnostics.ts";
 import { isAddrInUse } from "@/daemon/lifecycle.ts";
 import { type CaretServer, createServer } from "@/daemon/server.ts";
-import { currentBuildId, currentCommit } from "@/lib/build-id.ts";
+import { fileUpdateCache, readCachedStatus, runUpdateCheck } from "@/daemon/update-check.ts";
+import { buildKind, currentBuildId, currentCommit, VERSION } from "@/lib/build-id.ts";
 import { createDaemonLogger } from "@/lib/log.ts";
+import { commitsAheadOfTrunk, latestReleaseTag, publishedCaretVersion } from "@/lib/upstream.ts";
 import { createStore } from "@/review/store.ts";
 import { loadUiAssets } from "@/ui/assets.ts";
 
@@ -68,6 +71,16 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   // variants are published in /api/health so the UI renders its approve
   // split-button from the capability rather than baked-in tool mode names.
   const adapter = selectAdapter();
+  // The identity the update check judges, captured once: all three are process
+  // constants, and the check's cache record is keyed on the version and commit so a
+  // verdict about an older build is never reported against this one (EXC-1205).
+  const install = buildKind();
+  const version = VERSION;
+  const commit = currentCommit();
+  // Seeded from the last persisted verdict, so a daemon that respawns per review can
+  // answer immediately; the background check below replaces it when it settles.
+  const updateCache = fileUpdateCache(updateCheckFile());
+  let updateStatus = readCachedStatus(updateCache, version, commit);
   const store = createStore(reviewsDir(), log);
   await store.rehydrate();
   const assets = await loadUiAssets();
@@ -87,7 +100,7 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
       assets,
       lockPath: daemonLock(),
       buildId: await currentBuildId(),
-      commit: currentCommit(),
+      commit,
       // World + boot identity (EXC-461): stateDir is the world key (never
       // logged — identifying); the per-boot instanceId is the loggable handle.
       stateDir: stateDir(),
@@ -122,6 +135,9 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
           configExists: () => existsSync(cfg),
           envOverrides,
         }),
+      // Whether this caret is behind (EXC-1205). A thunk over a local the background
+      // check assigns, so GET /api/update never makes a network call of its own.
+      updateReport: () => ({ install, version, commit, status: updateStatus }),
       log,
     });
   } catch (e) {
@@ -163,5 +179,29 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
       // already removed by stop(), or never written — both fine.
     }
   });
+  // Ask — at most once a day, and never on a dev build or under the `updates.check`
+  // opt-out — whether a newer caret exists (EXC-1205). Fire-and-forget: nothing awaits
+  // it, so boot is never delayed, and runUpdateCheck never rejects. A null result is
+  // the throttle saying there is nothing new, so the seeded verdict stands.
+  void runUpdateCheck({
+    kind: install,
+    version,
+    commit,
+    enabled: () => readUpdatesCheck(),
+    now: Date.now,
+    cache: updateCache,
+    npmLatest: publishedCaretVersion,
+    release: latestReleaseTag,
+    aheadBy: commitsAheadOfTrunk,
+    log,
+  }).then(
+    (status) => {
+      if (status) updateStatus = status;
+    },
+    // runUpdateCheck settles every failure itself, so this arm should be unreachable —
+    // but an unhandled rejection here would hit the handler above and take a live
+    // daemon down with it, which is far too high a price for an update nudge.
+    (err) => log.error("update", err),
+  );
   // Bun.serve keeps the process alive; the daemon idle-auto-shuts-down.
 }

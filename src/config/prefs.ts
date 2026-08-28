@@ -1,14 +1,18 @@
-// Machine-global UI preferences, persisted as a single JSON file under stateDir.
-// Today it holds just the last-used approve-variant id — a last-write-wins value
-// the web UI reads on load to default the primary Approve button. The id is an
+// Machine-global preferences, persisted as a single JSON file under stateDir. It
+// holds the last-used approve-variant id — a last-write-wins value the web UI reads
+// on load to default the primary Approve button — and the `updates.check` kill
+// switch for the daemon's daily update check, which this module only reads (the user
+// sets it by editing prefs.json; EXC-1206 adds the write path). The approve id is an
 // opaque token (ApproveVariantId): prefs never interpret it, they only gate it
-// against the adapter-declared set the caller passes in. Reads fail safe to the
-// default id; writes are fire-and-forget (never on the hook's decision path).
+// against the adapter-declared set the caller passes in. Every read fails safe — to
+// the default id, and to a check that stays on; writes are fire-and-forget (never on
+// the hook's decision path) and merge, so one key's write never drops another's.
 
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 import { ensureStateDir, prefsFile } from "@/config/paths.ts";
+import { readJsonFile } from "@/lib/json-file.ts";
 import { type CaretLogger, noopLogger } from "@/lib/log.ts";
 import type { ApproveVariantId } from "@/lib/types.ts";
 
@@ -55,6 +59,19 @@ export async function readApproveMode(
   }
 }
 
+/** Whether the daemon's daily update check is on (EXC-1205). Default-on: only an
+ * explicit `updates.check === false` turns it off, so a missing file, a missing key,
+ * and a junk value all read as `true` — a corrupt prefs.json must not silently
+ * disable the check.
+ *
+ * Unlike readApproveMode this needs no ENOENT-versus-other distinction — every
+ * failure means the same thing — so it rides the shared readJsonFile collapse rather
+ * than a bespoke try/catch. */
+export async function readUpdatesCheck(file = prefsFile()): Promise<boolean> {
+  const parsed = (await readJsonFile(file)) as { updates?: { check?: unknown } } | null;
+  return parsed?.updates?.check !== false;
+}
+
 /** Persist the remembered approve-variant id (last-write-wins; no per-id locking,
  * per the issue's constraint). An id outside the declared set is ignored so a
  * malformed request can't corrupt the stored value. */
@@ -70,7 +87,13 @@ export async function writeApproveMode(
     return;
   }
   ensureStateDir(dirname(file));
+  // Merge rather than replace. prefs.json is no longer a one-key file: a whole-file
+  // write would erase the user's `updates.check` opt-out on their next approval,
+  // silently re-enabling a daily third-party call they turned off.
+  const existing = ((await readJsonFile(file)) as Record<string, unknown> | null) ?? {};
   // 0600: prefs.json shares the state dir with plan bodies; keep it private too.
-  await writeFile(file, JSON.stringify({ approveMode: mode }, null, 2), { mode: 0o600 });
+  await writeFile(file, JSON.stringify({ ...existing, approveMode: mode }, null, 2), {
+    mode: 0o600,
+  });
   log.debug("prefs", `approve mode saved: ${mode}`);
 }
