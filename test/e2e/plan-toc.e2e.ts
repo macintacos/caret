@@ -1245,9 +1245,16 @@ test("the outline carries its motion on the list, never on its rows", async ({ d
  *
  * The per-element identity is the backlog test proper: one start per element is the
  * design, and two on the same row inside one crossing would be generations stacking,
- * which is the failure AC4 names. Elements are identified by their seat in an
- * arming-scoped array rather than by a marker attribute, so nothing is written back into
- * the DOM under test.
+ * which is the failure AC4 names. A LIVE sample could never make that claim — an element
+ * hosts at most one animation per `animation-name`, so `getAnimations()` could only ever
+ * agree with itself — where a log records two starts on one element across a crossing.
+ * Elements are identified by their seat in an arming-scoped array rather than by a marker
+ * attribute, so nothing is written back into the DOM under test.
+ *
+ * The listener pushes into a CAPTURED array rather than through `window`, which is what
+ * makes re-arming safe: the stale listener a re-arm leaves attached goes on writing into
+ * its own log, where a `w.__tocRowMotion?.push(…)` in its place would double-count every
+ * event into the new one.
  *
  * `animationstart` bubbles, so one listener on the panel covers every row inside it, and
  * the log is filtered by keyframe name on the way out — so the vendored components'
@@ -1256,10 +1263,10 @@ type TocMotion = { name: string; target: number }[];
 
 async function armTocMotion(page: Page): Promise<void> {
   await panel(page).evaluate((el) => {
-    const w = window as Window & { __tocMotion?: TocMotion };
+    const w = window as Window & { __tocRowMotion?: TocMotion };
     const log: TocMotion = [];
     const seen: Element[] = [];
-    w.__tocMotion = log;
+    w.__tocRowMotion = log;
     el.addEventListener("animationstart", (event) => {
       const target = event.target as Element;
       const seat = seen.indexOf(target);
@@ -1278,15 +1285,15 @@ async function armTocMotion(page: Page): Promise<void> {
  * the component's CSS is edited. */
 async function tocMotion(page: Page): Promise<TocMotion> {
   const log = await page.evaluate(
-    () => (window as Window & { __tocMotion?: TocMotion }).__tocMotion ?? [],
+    () => (window as Window & { __tocRowMotion?: TocMotion }).__tocRowMotion ?? [],
   );
   return log.filter((event) => event.name.endsWith("toc-row-in"));
 }
 
 /** The row ramps still PLAYING — the one question that really is about play state, and
  * the one `getAnimations()` is the right tool for. A liveness claim is polled. */
-function runningRamps(page: Page): Promise<number> {
-  return panel(page).evaluate(
+const runningRamps = (page: Page): Promise<number> =>
+  panel(page).evaluate(
     (el) =>
       el
         .getAnimations({ subtree: true })
@@ -1294,7 +1301,6 @@ function runningRamps(page: Page): Promise<number> {
         .filter((a) => a.animationName.endsWith("toc-row-in"))
         .filter((a) => a.playState === "running").length,
   );
-}
 
 /** How many distinct elements a crossing's starts landed on. */
 const targetsIn = (log: TocMotion): number => new Set(log.map((event) => event.target)).size;
@@ -1330,18 +1336,21 @@ test("typing fast queues no animation behind the reviewer", async ({ daemon, pag
   expect(targetsIn(wide)).toBe(wide.length);
 
   // Then narrowing, fast enough that a per-keystroke retrigger would have several
-  // generations overlapping by the last character. Re-armed, so the count below is this
+  // generations overlapping by the last character. Re-armed, so the log below is this
   // crossing's rather than both.
   await armTocMotion(page);
   await field(page).pressSequentially("lpha", { delay: 15 });
   await expect(options(page)).toHaveCount(1);
 
-  // And it drains: nothing is left running once the reviewer stops. Asserted BEFORE the
-  // narrowing's log is read, which is what makes that read a complete record of the
-  // crossing rather than a slice of one still in flight.
+  // It drains: nothing is left running once the reviewer stops.
   await expect.poll(() => runningRamps(page)).toBe(0);
-  const narrow = await tocMotion(page);
-  expect(targetsIn(narrow)).toBe(narrow.length);
+
+  // And narrowing fired NOTHING. `a` → `alpha` only ever removes rows — bits-ui unmounts
+  // the filtered-out items and the survivors keep their boxes — so no row is mounted for
+  // the rule to fire on, and an empty log is the whole claim rather than a weaker version
+  // of the one above. A per-keystroke retrigger is the one thing that could put a start in
+  // here, which is exactly what AC4 forbids. Measured empty 4/4 unthrottled and 4/4 at 20x.
+  expect(await tocMotion(page)).toEqual([]);
 
   await page.keyboard.press("Escape");
   await expect(panel(page)).toHaveCount(0);

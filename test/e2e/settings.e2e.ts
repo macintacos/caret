@@ -429,13 +429,17 @@ test("clicking a row's label reaches its control, and names it", async ({ daemon
 
   // A menu trigger is a <button> too, so the label click lands on it. It FOCUSES the
   // trigger without opening the select — a forwarded label click carries no pointerdown,
-  // which is what bits-ui opens on, and the trigger stays `data-state="closed"` — so
-  // there is no menu here to dismiss and deliberately no Escape to dismiss it with. With
-  // nothing to consume it that key reaches the dialog's own dismissable layer and closes
-  // Settings, which leaves every assertion below racing the --dur-exit unmount: whichever
-  // ones land inside it pass and the rest fail "element(s) not found" (EXC-1193).
+  // which is what bits-ui opens on — so there is no menu here to dismiss and deliberately
+  // no Escape to dismiss it with. With nothing to consume it that key reaches the dialog's
+  // own dismissable layer and closes Settings out from under the assertions below
+  // (EXC-1193).
+  //
+  // The closed state is asserted rather than asserted-in-prose: were bits-ui ever to open
+  // on a forwarded click, every assertion below would still pass and this comment would go
+  // quietly false.
   await dialog.locator("#setting-diffStyle-label").click();
   await expect(dialog.locator("#setting-diffStyle")).toBeFocused();
+  await expect(dialog.locator("#setting-diffStyle")).toHaveAttribute("data-state", "closed");
 
   // The names come from the visible label rather than a parallel string. The theme rows
   // are the pair that could regress unseen: their IN USE badge sits inside the label, so

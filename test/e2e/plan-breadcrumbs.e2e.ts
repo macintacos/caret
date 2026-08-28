@@ -1444,12 +1444,18 @@ const barMotion = (page: Page): Promise<BarMotion> =>
  * fired" is a claim about a finished crossing only once the crossing has demonstrably
  * started, and vacuously true on an empty log before it has. */
 async function barMotionAfter(page: Page, ...keyframes: string[]): Promise<BarMotion> {
+  // Polled on the MISSING set rather than on a boolean, so a timeout names which keyframe
+  // never arrived. In a spec whose whole subject is which animations fired, `expected true,
+  // received false` is the one thing the failure must not say.
   await expect
-    .poll(async () => {
-      const log = await barMotion(page);
-      return keyframes.every((name) => named(log, name).length > 0);
-    })
-    .toBe(true);
+    .poll(
+      async () => {
+        const log = await barMotion(page);
+        return keyframes.filter((name) => named(log, name).length === 0);
+      },
+      { message: "no animationstart recorded for" },
+    )
+    .toEqual([]);
   return barMotion(page);
 }
 
@@ -1544,12 +1550,18 @@ test("reduced motion collapses the exit rather than removing it", async ({ daemo
   await jumpTo(page, "Bravo");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo"]);
 
-  // Read once rather than waited for, which is the opposite of the other three sites and
-  // deliberate. Under the collapsed duration the crumb is removed all but immediately, so
-  // when the engine's animation-event dispatch loses that race the event fires on a
-  // node already detached from the bar and never reaches this listener at all — measured
-  // as absent both instantly and three seconds later (EXC-1193). Waiting on an event that
-  // is lost rather than late buys nothing and spends the assertion budget.
+  // Read once rather than waited for, which is the opposite of the other two read sites
+  // and deliberate. Under the collapsed duration the crumb is removed all but immediately,
+  // so when the engine's animation-event dispatch loses that race the event fires on a node
+  // already detached from the bar and never reaches this listener at all — measured absent
+  // both instantly and three seconds later (EXC-1193). Waiting on an event that is lost
+  // rather than late buys nothing and spends the assertion budget.
+  //
+  // The cost of that is worth knowing: an empty log here is AMBIGUOUS. It is what a lost
+  // dispatch looks like and equally what deleting the exit rule would look like, so this
+  // arm can red without a regression and cannot prove one either. Closing it needs a
+  // listener on each crumb rather than on the bar — an event dispatched to a detached node
+  // still runs that node's own listeners, it only stops bubbling.
   const leaving = named(await barMotion(page), "crumb-out");
   expect(leaving.length).toBeGreaterThan(0);
   for (const event of leaving) expect(event.duration).toBeLessThan(0.001);

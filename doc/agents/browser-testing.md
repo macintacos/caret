@@ -223,6 +223,15 @@ carries one shape of each to copy:
 - **Recorded** — an armed listener that logs the event as it happens, for a claim about
   something that does not persist to be read back. `armBarMotion`
   (`plan-breadcrumbs.e2e.ts`) and `armTocMotion` (`plan-toc.e2e.ts`).
+- **Driven in-page** — the answer when the window is shorter than a single driver round
+  trip, so neither of the above can be reached inside it: move the gesture *and* the read
+  into one `page.evaluate` and assert the recorded boolean out of process.
+  `file-drawer.e2e.ts`'s closing wipe is a 140ms `setTimeout` in `DiffPlanView`, and the
+  round trip is what overran it. The trade is that `element.click()` skips Playwright's
+  actionability checks and `locator.evaluate` waits only for attachment, so prove the
+  target visible before taking the handle, and bound any in-page spin by
+  `performance.now()` — a nested `setTimeout(…, 1)` clamps to 4ms past five levels, so an
+  iteration count silently means something four times longer than it reads.
 
 **`getAnimations()` is the trap worth naming.** It returns only animations still
 *in effect*, so one with no `fill-mode` leaves the list the moment it finishes: a sample
@@ -288,7 +297,7 @@ Verdicts recorded against them, so a later red gate knows what was already looke
 | --- | --- |
 | `plan-toc.e2e.ts` "typing fast queues no animation" | Red 4/4 at 6x: an unpolled `getAnimations()` sample. Fixed. |
 | `settings.e2e.ts` "clicking a row's label" | Red 4/4 at 20x: an `Escape` with no menu to close reached the dialog and closed Settings, leaving every assertion after it racing a 140ms unmount. Fixed. |
-| `file-drawer.e2e.ts` "a row clicked during the lane's closing wipe" | Red at 20x: the wipe is a 140ms timer, too short to spend a driver round trip inside. Fixed. |
+| `file-drawer.e2e.ts` "a row clicked during the lane's closing wipe" | Red 4/4 at 20x: the wipe is a 140ms timer, too short to spend a driver round trip inside. Fixed. |
 | `plan-breadcrumbs.e2e.ts` "walking to a sibling" | Green through 60x, reds under oversubscription: a too-early log read, the direction the throttle cannot produce. Fixed. |
 | `plan-breadcrumbs.e2e.ts` "reduced motion collapses the exit" | A LOST `animationstart`, not a late one — no fix polling can give. Standing. |
 | `confirm-popover.e2e.ts` "a click outside the dialog's discard bubble" | Survives 90x; at 120x reds only on `locator.click` starvation. No structural race — the dismissable-layer hypothesis is not it. |

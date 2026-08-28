@@ -54,14 +54,19 @@ export async function planSurface(page: Page): Promise<Locator> {
  * number still fails here rather than as an unrelated miss on whatever the resulting
  * coordinates happened to hit.
  *
- * Polled rather than read once, following `settledMutations` below: a bare
- * `page.evaluate` feeding an assertion is a read with no retry, and the web-first
- * assertions the suite otherwise leans on are what absorb a stalled host
- * (browser-testing.md § Timeouts are budgets for the loaded host). Every caller today
- * is incidentally guarded by a wait of its own, so this has never been observed to
- * fire — but the guard is the caller's rather than the helper's, and a new call site
- * inherits nothing. `expect.poll` inherits the config's assertion budget, so a genuinely
- * wrong line number fails inside 15s rather than swallowing the 60s per-test one. */
+ * Polled rather than read once: a bare `page.evaluate` feeding an assertion is a read with
+ * no retry, and the web-first assertions the suite otherwise leans on are what absorb a
+ * stalled host (browser-testing.md § Timeouts are budgets for the loaded host). Every
+ * caller today is incidentally guarded by a wait of its own, but that guard is the
+ * caller's rather than the helper's, and a new call site inherits nothing. `expect.poll`
+ * inherits the config's assertion budget, so a genuinely wrong line number fails inside
+ * 15s rather than swallowing the 60s per-test one.
+ *
+ * The poll captures the value it proved rather than re-reading for it, which is where this
+ * departs from `settledMutations` below: there the second read is the point, since the
+ * count it wants is the settled one. Here a re-read could come back null on a row that has
+ * since gone, and null typed as a number reaches `page.mouse.move` as a coordinate — the
+ * miss this helper exists to fail loudly on. */
 export async function lineCenterY(page: Page, line: number): Promise<number> {
   const read = () =>
     page.evaluate((ln) => {
@@ -72,8 +77,19 @@ export async function lineCenterY(page: Page, line: number): Promise<number> {
       const r = (span?.parentElement as HTMLElement)?.getBoundingClientRect();
       return r ? r.y + r.height / 2 : null;
     }, line);
-  await expect.poll(read, { message: `source line ${line} is not rendered` }).not.toBeNull();
-  return (await read()) as number;
+  // Held on an object rather than in a local: control-flow analysis cannot see through
+  // `expect.poll`'s callback, so a local would still read as `null` at the return.
+  const last: { y: number | null } = { y: null };
+  await expect
+    .poll(
+      async () => {
+        last.y = await read();
+        return last.y;
+      },
+      { message: `source line ${line} is not rendered` },
+    )
+    .not.toBeNull();
+  return last.y as number;
 }
 
 /** A 1-based source line's content row and its gutter number cell, as heights
