@@ -30,8 +30,11 @@
 
 import { NEVER_IDLE_MS } from "@/config/constants.ts";
 import { prefsFile, reviewsDir } from "@/config/paths.ts";
+import { readUpdatesCheck } from "@/config/prefs.ts";
 import { createServer } from "@/daemon/server.ts";
+import { updateReportFor } from "@/daemon/update-check.ts";
 import { createDaemonLogger } from "@/lib/log.ts";
+import type { UpdateStatus } from "@/lib/types.ts";
 import { createStore } from "@/review/store.ts";
 import { loadUiAssets } from "@/ui/assets.ts";
 
@@ -60,6 +63,17 @@ const log = createDaemonLogger(() => "info", 2);
 const store = createStore(reviewsDir(), log);
 await store.rehydrate();
 
+/** The build verdict this daemon holds, staged by the fixture's `updateStatus` option.
+ * Unset or unparseable falls back to the from-source answer — the same default the
+ * fixture declares, so a direct `bunx playwright test` behaves like a full run. */
+const buildStatus: UpdateStatus = ((): UpdateStatus => {
+  try {
+    return JSON.parse(process.env.CARET_E2E_UPDATE_STATUS ?? "") as UpdateStatus;
+  } catch {
+    return { kind: "unavailable", reason: "dev" };
+  }
+})();
+
 const server = createServer({
   store,
   port: 0, // OS-assigned: parallel workers can never collide
@@ -85,16 +99,24 @@ const server = createServer({
   // The update verdict (EXC-1207), synthetic for the same reason the identity above is.
   // It is wired rather than left absent because App reads GET /api/update on EVERY load:
   // an unwired route 404s, which would put a failed same-origin request into every spec's
-  // page load — exactly what assets.e2e.ts exists to catch. `unavailable`/`dev` is the
-  // honest verdict for a daemon running from source, and it is quiet, so no spec sees a
-  // toast or a badge it did not ask for. A spec that wants a real verdict routes
-  // **/api/update itself (updates.e2e.ts).
-  updateReport: () => ({
-    install: "dev",
-    version: "0.0.0-e2e",
-    commit: "e2ecommit0000000",
-    status: { kind: "unavailable", reason: "dev" },
-  }),
+  // page load — exactly what assets.e2e.ts exists to catch.
+  //
+  // The BUILD verdict comes from the fixture (CARET_E2E_UPDATE_STATUS), defaulting to the
+  // honest quiet answer for a daemon running from source; the reviewer's `updates.check`
+  // is folded over it per request through the same updateReportFor production uses
+  // (EXC-1210), so a spec that flips the opt-out gets the daemon's real behaviour rather
+  // than a stub's.
+  //
+  // A staged verdict rides on the `install: "dev"` identity below, a pair the real check
+  // can never settle on — a dev build short-circuits before it compares anything. Inert:
+  // no UI arm reads `report.install`. If one ever does, stage the install kind beside the
+  // status rather than letting a spec assert an impossible build.
+  updateReport: async () =>
+    updateReportFor(
+      { install: "dev", version: "0.0.0-e2e", commit: "e2ecommit0000000" },
+      buildStatus,
+      await readUpdatesCheck(prefsFile()),
+    ),
   diagnostics: () => ({
     system: { platform: "darwin", arch: "arm64", runtime: "bun 1.2.19" },
     uptimeMs: 2 * 3_600_000 + 14 * 60_000,

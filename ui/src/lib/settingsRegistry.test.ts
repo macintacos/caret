@@ -265,7 +265,7 @@ describe("Updates (EXC-1207)", () => {
 
   test("the toggle reads the value seeded from the daemon", () => {
     // daemonField shadows read() only once a write LANDS, so until one does the control
-    // shows what App seeded from GET /api/prefs at load.
+    // shows what App seeded from GET /api/update's `checkEnabled` at load.
     seedUpdatesCheck(false);
     expect(toggle()?.read()).toBe(false);
   });

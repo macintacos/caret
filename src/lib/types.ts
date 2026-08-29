@@ -389,10 +389,10 @@ export interface PrefsPatch {
 
 /** Body of GET /api/prefs — the daemon-owned prefs the UI reads on load. Wider
  * than PrefsPatch: `approveMode` is readable here and writable only by the resolve
- * path. */
+ * path. `updates.check` is deliberately absent: it is writable through PrefsPatch but
+ * READ through GET /api/update, folded into the verdict it qualifies. */
 export interface PrefsResponse {
   approveMode: ApproveVariantId;
-  updates: { check: boolean };
 }
 
 /** Body of PUT /api/reviews/:id/draft (the reviewer's working-copy autosave).
@@ -504,6 +504,11 @@ export interface UpdateReport {
   version: string;
   /** The commit this caret was built from; "unknown" when the build baked none. */
   commit: string;
+  /** Whether the daily check is on (`updates.check`), read live per request. Stated
+   * explicitly rather than inferred from `status`, because a `dev` verdict outranks the
+   * switch (see updateReportFor) and so masks it entirely — this is the only place the
+   * switch's own value survives, and what the Settings toggle seeds itself from. */
+  checkEnabled: boolean;
   status: UpdateStatus;
 }
 

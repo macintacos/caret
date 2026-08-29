@@ -12,7 +12,8 @@ import {
 
 // EXC-1207. What this browser knows about updates before the next fetch: which update
 // signature it has already toasted (persisted), and the daemon-owned `updates.check`
-// App seeds from GET /api/prefs so the registry field's synchronous read() can answer.
+// App seeds from GET /api/update's `checkEnabled` so the registry field's synchronous
+// read() can answer.
 
 afterEach(() => {
   localStorage.clear();

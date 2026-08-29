@@ -10,7 +10,7 @@
 // `updates.check` owns no browser key at all — the daemon holds it. What lives here is
 // the synchronous holder the registry's daemon-backed field closes over in its read():
 // daemonField shadows read() only after a landed write, so read() still has to answer
-// for the value on disk at load, and App seeds it from GET /api/prefs.
+// for the value on disk at load, and App seeds it from GET /api/update's `checkEnabled`.
 
 import { registerPrefKey } from "$lib/definePref.ts";
 
@@ -40,7 +40,7 @@ export function writeToastedUpdate(signature: string): void {
   }
 }
 
-// Default-on, matching the daemon's own readUpdatesCheck: a load whose prefs fetch never
+// Default-on, matching the daemon's own readUpdatesCheck: a load whose update fetch never
 // lands behaves exactly as an un-opted-out install does.
 let updatesCheck = true;
 

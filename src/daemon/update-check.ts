@@ -26,7 +26,7 @@ import { ensureStateDir } from "@/config/paths.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
 import type { CaretLogger } from "@/lib/log.ts";
 import { isNewer } from "@/lib/semver.ts";
-import { type BuildKind, errorMessage, type UpdateStatus } from "@/lib/types.ts";
+import { type BuildKind, errorMessage, type UpdateReport, type UpdateStatus } from "@/lib/types.ts";
 
 /** At most one check per day, the ceiling the issue sets. Not a timer: the daemon
  * idle-shuts-down and respawns per review, so a boot-time throttled check already
@@ -53,6 +53,11 @@ const NEVER_CHECKED: UpdateStatus = {
   kind: "unknown",
   reason: "no update check has run for this build yet",
 };
+
+/** The verdict served while the reviewer has the check switched off. Not a verdict the
+ * daemon ever HOLDS — the held status is always about the build — but the one
+ * `updateReportFor` substitutes for it per request. */
+const DISABLED: UpdateStatus = { kind: "unavailable", reason: "disabled" };
 
 /** The facts a verdict is decided over. Each upstream side is null when it could not be
  * read, and a branch that needs a null side yields `unknown` rather than guessing. */
@@ -130,6 +135,24 @@ export function updateStatusFor(facts: UpdateFacts): UpdateStatus {
     : { kind: "current" };
 }
 
+/** The report GET /api/update serves: the held verdict when the check is on, and the
+ * `disabled` verdict when the reviewer has turned it off. Pure — the caller reads the
+ * live switch and hands the answer in — which is what lets the route reflect a flip the
+ * moment it lands, without the daemon re-deciding anything or reaching the network.
+ *
+ * A dev build is the one verdict the switch does not outrank. It has no upstream at all,
+ * so there is nothing for the opt-out to silence — and the `disabled` copy would tell a
+ * contributor to turn the check back on to hear about new carets, which on a build that
+ * short-circuits to `dev` before it ever reads the switch could never happen. */
+export function updateReportFor(
+  identity: Omit<UpdateReport, "status" | "checkEnabled">,
+  status: UpdateStatus,
+  checkEnabled: boolean,
+): UpdateReport {
+  const devBuild = status.kind === "unavailable" && status.reason === "dev";
+  return { ...identity, checkEnabled, status: checkEnabled || devBuild ? status : DISABLED };
+}
+
 /** The last persisted verdict, or `NEVER_CHECKED` when nothing usable is cached —
  * absent, unparseable, or recorded against a different version or commit than the one
  * running now. Takes the cache seam rather than a path, so the daemon hands it the same
@@ -146,14 +169,20 @@ export function readCachedStatus(
 }
 
 /** Gather and decide, honoring the 24h throttle. Resolves to the `unavailable` verdict
- * when the check is off (a dev build, or the user's opt-out) — a constant the caller
- * can report as-is — and to null when the throttle says there is nothing new to gather,
- * so the caller keeps the verdict it already has. Never rejects: every failure path
- * settles as an `unknown` verdict rather than destabilizing the daemon. */
+ * for a dev build — there is no upstream, and that is a fact about the build, so it is
+ * a verdict the daemon can hold. Resolves to null for the two "nothing new to gather,
+ * keep the verdict you have" causes: the reviewer's opt-out, and the throttle. Never
+ * rejects: every failure path settles as an `unknown` verdict rather than destabilizing
+ * the daemon.
+ *
+ * The opt-out yields null rather than `disabled` because the served report folds the
+ * LIVE switch in per request (`updateReportFor`); latching `disabled` into the held
+ * verdict would freeze it, since a later flip back on re-runs into the throttle and
+ * comes back null. */
 export async function runUpdateCheck(deps: UpdateCheckDeps): Promise<UpdateStatus | null> {
   if (deps.kind === "dev") return { kind: "unavailable", reason: "dev" };
   try {
-    if (!(await deps.enabled())) return { kind: "unavailable", reason: "disabled" };
+    if (!(await deps.enabled())) return null;
 
     const now = deps.now();
     const prev = deps.cache.read();

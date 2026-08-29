@@ -25,7 +25,14 @@ import { test as base, expect, type Locator, type Page } from "@playwright/test"
 
 import { KEY_REPEAT_DELAY_MS } from "@ui/src/lib/keyRepeat.ts";
 import { waitForHealth } from "@/daemon/client.ts";
-import type { ClientReview, DraftBody, PlanInput, RouteResult } from "@/lib/types.ts";
+import type {
+  ClientReview,
+  DraftBody,
+  PlanInput,
+  PrefsPatch,
+  RouteResult,
+  UpdateStatus,
+} from "@/lib/types.ts";
 import { RUMDL_VERSION } from "@/plan/rumdl.ts";
 
 import { FIXTURE_PLAN } from "./fixture-plan.ts";
@@ -54,6 +61,9 @@ export interface Daemon {
    * uses), so a spec can deny a review harness-side and thread a revision onto
    * it with the next seed. */
   resolve(id: string, behavior: "allow" | "deny", feedback?: string): Promise<void>;
+  /** POST /api/prefs — the same public route the Settings toggles write through, so a
+   * spec can stage a daemon-owned pref (the `updates.check` opt-out) harness-side. */
+  setPrefs(patch: PrefsPatch): Promise<void>;
   /** Seed a review with `count` versions under one session: post v1, deny it,
    * then post each revision (which threads onto the rejected review), leaving the
    * review pending at v`count`. Returns the review id.
@@ -89,6 +99,17 @@ export interface E2EOptions {
    * number and Playwright's per-test `timeout` is what fires.
    */
   bootTimeoutMs: number;
+  /**
+   * The BUILD verdict the fixture daemon holds — what `runUpdateCheck` would have
+   * settled on, before the reviewer's `updates.check` is folded in (EXC-1210). It
+   * reaches the daemon as a JSON env var, so a spec that wants a pending update stages
+   * it through `test.use({ updateStatus })` rather than stubbing `/api/update` in the
+   * page: the opt-out is the daemon's answer now, and a stub would test the stub.
+   *
+   * Defaults to the honest verdict for a daemon running from source, which is quiet —
+   * so no spec meets a toast or a badge it did not ask for.
+   */
+  updateStatus: UpdateStatus;
 }
 
 const DAEMON_ENTRY = fileURLToPath(new URL("./daemon-entry.ts", import.meta.url));
@@ -210,7 +231,8 @@ function pinnedRumdl(): string {
 
 export const test = base.extend<E2EOptions & { daemon: Daemon }>({
   bootTimeoutMs: [15_000, { option: true }],
-  daemon: async ({ bootTimeoutMs }, use) => {
+  updateStatus: [{ kind: "unavailable", reason: "dev" }, { option: true }],
+  daemon: async ({ bootTimeoutMs, updateStatus }, use) => {
     // Before mkdtemp so an unresolvable rumdl can't leak a state dir.
     const rumdl = pinnedRumdl();
     // Ephemeral, isolated state: the daemon's reviews/prefs/logs all live under
@@ -223,6 +245,7 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
         ...process.env,
         XDG_STATE_HOME: stateDir,
         CARET_RUMDL_BIN: rumdl,
+        CARET_E2E_UPDATE_STATUS: JSON.stringify(updateStatus),
       },
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -282,6 +305,14 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
             body: JSON.stringify({ behavior, ...(feedback === undefined ? {} : { feedback }) }),
           });
           if (!res.ok) throw new Error(`resolve failed: POST /resolve → ${res.status}`);
+        },
+        async setPrefs(patch: PrefsPatch) {
+          const res = await fetch(`${url}/api/prefs`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(patch),
+          });
+          if (!res.ok) throw new Error(`setPrefs failed: POST /api/prefs → ${res.status}`);
         },
         async seedVersions(count: number, plans: string[], cwd = "/tmp/caret-e2e") {
           // One session threads the revisions: post v1, then for each later

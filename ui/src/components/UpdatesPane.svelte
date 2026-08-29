@@ -17,18 +17,13 @@
   import { isUpdatePending, updatePaneCopy } from "$lib/updates.ts";
 
   interface Props {
-    /** The daemon's cached verdict, or null when it could not be read. */
+    /** The daemon's verdict, or null when it could not be read. Already reflects the
+     * reviewer's live `updates.check` (EXC-1210), so the pane renders it as handed over. */
     report: UpdateReport | null;
-    /** The LIVE `updates.check` value, which the verdict may already be stale against —
-     * the daemon settles `unavailable`/`disabled` at boot and holds it. It corrects that
-     * one arm's copy and nothing else: this pane reports the verdict whether or not the
-     * reviewer wants to be nagged about it, which is why the badges gate on the opt-out
-     * and the pane does not. */
-    checkEnabled?: boolean;
   }
-  let { report, checkEnabled = false }: Props = $props();
+  let { report }: Props = $props();
 
-  const copy = $derived(report ? updatePaneCopy(report, checkEnabled) : null);
+  const copy = $derived(report ? updatePaneCopy(report) : null);
   // The dot is the pane's one hued element, and it carries the verdict before the
   // sentence does. --attention is the novelty job ("worth a glance"), --ok the positive
   // semantic, and everything else stays on the neutral ink ramp. Amber is deliberately

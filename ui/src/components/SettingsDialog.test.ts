@@ -463,6 +463,7 @@ describe("SettingsDialog Updates category (EXC-1207)", () => {
     install: "binary",
     version: "1.4.0",
     commit: "abc1234",
+    checkEnabled: true,
     status: { kind: "behind-release", available: "1.5.0", command: "bunx …" },
   };
 
