@@ -294,12 +294,27 @@ test("GET /api/update returns the injected update report", async () => {
     install: "binary",
     version: "0.13.0",
     commit: "abc1234",
+    checkEnabled: true,
     status: { kind: "behind-release", available: "0.14.0", command: "install --refresh" },
   };
   await boot({ updateReport: () => report });
   const res = await fetch(`${base}/api/update`);
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual(report);
+});
+
+test("GET /api/update awaits an async thunk (EXC-1210)", async () => {
+  // The production thunk reads the live `updates.check` per request, so it is a promise;
+  // a handler that forgot to await it would serialize `{}`.
+  const report: UpdateReport = {
+    install: "binary",
+    version: "0.13.0",
+    commit: "abc1234",
+    checkEnabled: false,
+    status: { kind: "unavailable", reason: "disabled" },
+  };
+  await boot({ updateReport: async () => report });
+  expect(await (await fetch(`${base}/api/update`)).json()).toEqual(report);
 });
 
 test("GET /api/update is 404 when the daemon wires no update thunk", async () => {
@@ -1047,6 +1062,7 @@ describe("read-confidentiality posture", () => {
         install: "binary" as const,
         version: "0.13.0",
         commit: "abc1234",
+        checkEnabled: true,
         status: { kind: "current" as const },
       }),
       assets: fakeAssets({
@@ -1621,32 +1637,14 @@ test("a revision re-pends the review and clears the prior decision (no stale re-
   expect(res.status).toBe(204);
 });
 
+// The read half serves `approveMode` and nothing else: `updates.check` reaches the
+// browser on GET /api/update, folded into the verdict it qualifies (EXC-1210), so there
+// is exactly one read path for it rather than two that can drift.
 test("GET /api/prefs defaults to 'default' on a fresh daemon", async () => {
   await boot();
   const res = await fetch(`${base}/api/prefs`);
   expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ approveMode: "default", updates: { check: true } });
-});
-
-// EXC-1207: the read half now carries `updates.check` too, because the browser gates
-// its update badges on it — a daemon that decided "behind" before the reviewer turned
-// checks off would otherwise keep serving that stale verdict for its whole life.
-test("GET /api/prefs serves the updates.check the prefs file holds", async () => {
-  writeFileSync(join(dir, "prefs.json"), JSON.stringify({ updates: { check: false } }));
-  await boot();
-  expect(await (await fetch(`${base}/api/prefs`)).json()).toMatchObject({
-    updates: { check: false },
-  });
-});
-
-test("GET /api/prefs serves updates.check true when the file names no updates key", async () => {
-  // Default-on and fail-safe, matching the daemon's own readUpdatesCheck: only an
-  // explicit `false` turns the check off.
-  writeFileSync(join(dir, "prefs.json"), JSON.stringify({ approveMode: "default" }));
-  await boot();
-  expect(await (await fetch(`${base}/api/prefs`)).json()).toMatchObject({
-    updates: { check: true },
-  });
+  expect(await res.json()).toEqual({ approveMode: "default" });
 });
 
 // ---- POST /api/prefs (EXC-1206) ----
@@ -1674,6 +1672,21 @@ describe("POST /api/prefs", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
     expect(prefsOnDisk()).toEqual({ updates: { check: false } });
+  });
+
+  test("a landed flip-to-on re-runs the update check, and nothing else does (EXC-1210)", async () => {
+    // POST /api/prefs is the user action the 24h-throttle constraint names, so turning
+    // the check back on is allowed to spend a call — otherwise a reviewer who opted out
+    // months ago would wait a whole daemon lifetime for a verdict.
+    const enabled: number[] = [];
+    await boot({ onUpdatesEnabled: () => enabled.push(1) });
+    expect((await setPrefs({ updates: { check: false } })).status).toBe(200);
+    expect(enabled).toHaveLength(0);
+    expect((await setPrefs({ updates: { check: true } })).status).toBe(200);
+    expect(enabled).toHaveLength(1);
+    // A rejected patch never reaches the callback.
+    expect((await setPrefs({ updates: { check: "yes" } })).status).toBe(400);
+    expect(enabled).toHaveLength(1);
   });
 
   test("a rejected body writes nothing and answers 400", async () => {

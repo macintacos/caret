@@ -93,6 +93,7 @@ const server = createServer({
     install: "dev",
     version: "0.0.0-e2e",
     commit: "e2ecommit0000000",
+    checkEnabled: true,
     status: { kind: "unavailable", reason: "dev" },
   }),
   diagnostics: () => ({

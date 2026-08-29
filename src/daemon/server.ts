@@ -12,7 +12,6 @@ import {
   type ApproveModeSet,
   createPrefsWriter,
   readApproveMode,
-  readUpdatesCheck,
   writeApproveMode,
 } from "@/config/prefs.ts";
 import { DEFAULTS } from "@/config/settings.ts";
@@ -155,7 +154,13 @@ export interface CreateServerOptions {
    * thunk over a locally held status — reading it never triggers a network call. The e2e
    * fixture daemon wires a synthetic one (EXC-1207): the UI reads this route on every
    * load, so an unwired route there would 404 into every spec's page load. */
-  updateReport?: () => UpdateReport;
+  updateReport?: () => UpdateReport | Promise<UpdateReport>;
+  /** Called after a POST /api/prefs patch that turns `updates.check` back ON (EXC-1210).
+   * A user action is exactly what the 24h throttle's constraint permits a call for, so
+   * runDaemon wires it to the same check boot runs — without it, a reviewer who opted out
+   * long ago would wait a whole daemon lifetime for a verdict. Omitted (default) → the
+   * flip just lands, so a bare test daemon is unaffected. */
+  onUpdatesEnabled?: () => void;
   /** Clear the unread mark on the cmux pane a review was submitted from
    * (EXC-961). Defaults to the real spawn; injectable so tests assert on the
    * argv without spawning. Fire-and-forget — it never delays a response. */
@@ -199,7 +204,8 @@ interface ResolvedOptions {
   listSkills: ((cwd: string) => Promise<SkillRef[]>) | undefined;
   readSkillDescription: ((cwd: string, skill: SkillRef) => Promise<string | null>) | undefined;
   diagnostics: (() => DaemonDiagnostics) | undefined;
-  updateReport: (() => UpdateReport) | undefined;
+  updateReport: (() => UpdateReport | Promise<UpdateReport>) | undefined;
+  onUpdatesEnabled: (() => void) | undefined;
   markPaneRead: (pane: CmuxPane) => void;
   log: CaretLogger;
 }
@@ -224,6 +230,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     readSkillDescription: opts.readSkillDescription,
     diagnostics: opts.diagnostics,
     updateReport: opts.updateReport,
+    onUpdatesEnabled: opts.onUpdatesEnabled,
     markPaneRead: opts.markPaneRead ?? ((pane) => clearCmuxMark(pane, { log: opts.log })),
     log: opts.log ?? noopLogger,
   };
@@ -394,11 +401,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // GET /api/update — whether the caret this daemon is, is behind (EXC-1205): the
   // install kind, the running version/commit, and the verdict with the command that
   // would take the upgrade. The thunk reads a verdict the daemon already holds, so
-  // serving this never makes a network call. With no thunk wired (default; e.g. a bare
-  // test daemon) the route 404s, like any absent optional capability.
-  function handleUpdate(): Response {
+  // serving this never makes a network call — but it does fold in the LIVE `updates.check`
+  // (EXC-1210), a prefs.json read, which is why it may be async. With no thunk wired
+  // (default; e.g. a bare test daemon) the route 404s, like any absent optional capability.
+  async function handleUpdate(): Promise<Response> {
     if (!cfg.updateReport) return notFound();
-    return Response.json(cfg.updateReport());
+    return Response.json(await cfg.updateReport());
   }
 
   // POST /api/retire — graceful single-instance retire (EXC-406): a newer caret
@@ -530,19 +538,14 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   }
 
   // GET /api/prefs — machine-global UI prefs, read once on UI load (deliberately
-  // not part of the 2s /api/reviews poll). Both reads fail safe: "default" for an
-  // unreadable approve mode, and a check that stays on. `updates.check` rides along
-  // (EXC-1207) because the browser gates its update surfaces on it — this daemon's
-  // own verdict was decided once at boot and cannot reflect a later opt-out.
+  // not part of the 2s /api/reviews poll). Fails safe to "default" for an unreadable
+  // approve mode. `updates.check` is writable through the POST half but reaches the
+  // browser on GET /api/update instead (EXC-1210), folded into the verdict it qualifies,
+  // so the switch has exactly one read path rather than two that can drift.
   async function handlePrefs(): Promise<Response> {
-    // Concurrent: the two readers open the same small file independently (they keep
-    // separate failure semantics — see prefs.ts), so overlapping them costs nothing and
-    // keeps the route one round trip rather than two sequential reads.
-    const [approveMode, check] = await Promise.all([
-      readApproveMode(prefsPath, log, approveModeSet),
-      readUpdatesCheck(prefsPath),
-    ]);
-    const body: PrefsResponse = { approveMode, updates: { check } };
+    const body: PrefsResponse = {
+      approveMode: await readApproveMode(prefsPath, log, approveModeSet),
+    };
     return Response.json(body);
   }
 
@@ -564,6 +567,11 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     }
     await prefsWriter.merge(parsed.data);
     log.debug("prefs", "prefs saved");
+    // Turning the check back on is a user action, so it is allowed to spend a call
+    // (EXC-1210). The throttle still governs: a re-run inside the 24h window returns null
+    // and the already-held verdict is what gets served. No log line — runUpdateCheck logs
+    // its own verdict, and a second record restating it is per-iteration noise.
+    if (parsed.data.updates?.check === true) cfg.onUpdatesEnabled?.();
     return Response.json({ ok: true });
   }
 

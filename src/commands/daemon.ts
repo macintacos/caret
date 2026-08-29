@@ -23,7 +23,12 @@ import {
 import { buildDiagnostics } from "@/daemon/diagnostics.ts";
 import { isAddrInUse } from "@/daemon/lifecycle.ts";
 import { type CaretServer, createServer } from "@/daemon/server.ts";
-import { fileUpdateCache, readCachedStatus, runUpdateCheck } from "@/daemon/update-check.ts";
+import {
+  fileUpdateCache,
+  readCachedStatus,
+  runUpdateCheck,
+  updateReportFor,
+} from "@/daemon/update-check.ts";
 import { buildKind, currentBuildId, currentCommit, VERSION } from "@/lib/build-id.ts";
 import { createDaemonLogger } from "@/lib/log.ts";
 import { commitsAheadOfTrunk, latestReleaseTag, publishedCaretVersion } from "@/lib/upstream.ts";
@@ -136,8 +141,14 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
           envOverrides,
         }),
       // Whether this caret is behind (EXC-1205). A thunk over a local the background
-      // check assigns, so GET /api/update never makes a network call of its own.
-      updateReport: () => ({ install, version, commit, status: updateStatus }),
+      // check assigns, so GET /api/update never makes a network call of its own — it
+      // reads the live `updates.check` (a prefs.json read, not a call out) and folds it
+      // over the held verdict, so an opt-out takes effect without a restart (EXC-1210).
+      updateReport: async () =>
+        updateReportFor({ install, version, commit }, updateStatus, await readUpdatesCheck()),
+      // Turning the check back on re-runs it, so a reviewer who opted out long ago gets
+      // a real verdict on the spot rather than a daemon lifetime later.
+      onUpdatesEnabled: () => refreshUpdate(),
       log,
     });
   } catch (e) {
@@ -181,27 +192,31 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   });
   // Ask — at most once a day, and never on a dev build or under the `updates.check`
   // opt-out — whether a newer caret exists (EXC-1205). Fire-and-forget: nothing awaits
-  // it, so boot is never delayed, and runUpdateCheck never rejects. A null result is
-  // the throttle saying there is nothing new, so the seeded verdict stands.
-  void runUpdateCheck({
-    kind: install,
-    version,
-    commit,
-    enabled: () => readUpdatesCheck(),
-    now: Date.now,
-    cache: updateCache,
-    npmLatest: publishedCaretVersion,
-    release: latestReleaseTag,
-    aheadBy: commitsAheadOfTrunk,
-    log,
-  }).then(
-    (status) => {
-      if (status) updateStatus = status;
-    },
-    // runUpdateCheck settles every failure itself, so this arm should be unreachable —
-    // but an unhandled rejection here would hit the handler above and take a live
-    // daemon down with it, which is far too high a price for an update nudge.
-    (err) => log.error("update", err),
-  );
+  // it, so boot is never delayed, and runUpdateCheck never rejects. A null result is the
+  // throttle (or the opt-out) saying there is nothing new, so the seeded verdict stands.
+  // A function so boot and the flip-to-on above share one call site.
+  function refreshUpdate(): void {
+    void runUpdateCheck({
+      kind: install,
+      version,
+      commit,
+      enabled: () => readUpdatesCheck(),
+      now: Date.now,
+      cache: updateCache,
+      npmLatest: publishedCaretVersion,
+      release: latestReleaseTag,
+      aheadBy: commitsAheadOfTrunk,
+      log,
+    }).then(
+      (status) => {
+        if (status) updateStatus = status;
+      },
+      // runUpdateCheck settles every failure itself, so this arm should be unreachable —
+      // but an unhandled rejection here would hit the handler above and take a live
+      // daemon down with it, which is far too high a price for an update nudge.
+      (err) => log.error("update", err),
+    );
+  }
+  refreshUpdate();
   // Bun.serve keeps the process alive; the daemon idle-auto-shuts-down.
 }

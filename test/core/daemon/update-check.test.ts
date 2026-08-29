@@ -17,6 +17,7 @@ import {
   type UpdateCache,
   type UpdateCheckDeps,
   type UpdateRecord,
+  updateReportFor,
   updateStatusFor,
 } from "@/daemon/update-check.ts";
 import { noopLogger } from "@/lib/log.ts";
@@ -248,9 +249,12 @@ test("a dev daemon reports unavailable without reaching the network", async () =
   expect(d.calls).toEqual([]);
 });
 
-test("an opted-out daemon reports unavailable without reaching the network", async () => {
+test("an opted-out daemon gathers nothing, and holds no verdict of its own", async () => {
+  // null, exactly like the throttle: both mean "nothing new to gather, keep the verdict
+  // you have". Latching `disabled` here is what froze it — a later flip back on re-runs
+  // into the throttle, comes back null, and the frozen verdict would stand forever.
   const d = deps({ enabled: async () => false });
-  expect(await runUpdateCheck(d)).toEqual({ kind: "unavailable", reason: "disabled" });
+  expect(await runUpdateCheck(d)).toBeNull();
   expect(d.calls).toEqual([]);
 });
 
@@ -429,4 +433,38 @@ test("the uncomparable-build reason matches the string the Updates pane keys off
     kind: "unknown",
     reason: "could not compare this build against trunk",
   });
+});
+
+// --- the served report (EXC-1210) ----------------------------------------------------
+//
+// The daemon holds only BUILD verdicts; the opt-out is folded in per request, so
+// GET /api/update reflects the switch as it stands now rather than as it stood at boot.
+
+const IDENTITY = { install: "binary" as const, version: "0.13.0", commit: "abc1234" };
+
+test("with the check on, the held verdict rides through untouched", () => {
+  const behind: UpdateStatus = { kind: "behind-release", available: "0.14.0", command: BUNX };
+  expect(updateReportFor(IDENTITY, behind, true)).toEqual({
+    ...IDENTITY,
+    checkEnabled: true,
+    status: behind,
+  });
+});
+
+test("with the check off, every held verdict is served as disabled", () => {
+  // Including a pending one — that is the whole point: an opted-out reviewer is not
+  // nagged, and the daemon says so rather than the browser second-guessing a verdict it
+  // was handed. A `dev` build too: the switch outranks the reason the check was off.
+  const held: UpdateStatus[] = [
+    { kind: "behind-release", available: "0.14.0", command: BUNX },
+    { kind: "unavailable", reason: "dev" },
+    CURRENT,
+  ];
+  for (const status of held) {
+    expect(updateReportFor(IDENTITY, status, false)).toEqual({
+      ...IDENTITY,
+      checkEnabled: false,
+      status: { kind: "unavailable", reason: "disabled" },
+    });
+  }
 });
