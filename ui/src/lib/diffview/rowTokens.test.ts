@@ -103,6 +103,45 @@ describe("splitTokens", () => {
     }
   });
 
+  test("renumbers data-char so each piece reports its own start column", () => {
+    // data-char is POSITIONAL: the library reads a token's range back as
+    // [data-char, data-char + text.length). Carried over verbatim, every piece
+    // would claim the undivided token's start — so a piece past the first
+    // reports the right width in the wrong place, and a span sitting there is
+    // never resolved (EXC-1192: a mid-sentence reference decorated but not
+    // clickable).
+    const el = row("abcdef");
+    el.children[0]?.setAttribute("data-char", "0");
+    splitTokens(el, [2, 4]);
+    expect(tokenChildren(el).map((piece) => piece.getAttribute("data-char"))).toEqual([
+      "0",
+      "2",
+      "4",
+    ]);
+  });
+
+  test("renumbers data-char from the token's own start, not the row's", () => {
+    // The second token starts at column 3, so its interior cut is at 5 — the
+    // numbering is absolute across the row, which is the coordinate the span
+    // columns are in.
+    const el = row("abc", "defg");
+    el.children[1]?.setAttribute("data-char", "3");
+    splitTokens(el, [5]);
+    expect(tokenChildren(el).map((piece) => piece.getAttribute("data-char"))).toEqual([
+      null,
+      "3",
+      "5",
+    ]);
+  });
+
+  test("adds no data-char to a token that never carried one", () => {
+    const el = row("abcd");
+    splitTokens(el, [2]);
+    for (const piece of tokenChildren(el)) {
+      expect(piece.hasAttribute("data-char")).toBe(false);
+    }
+  });
+
   test("skips a token holding elements of its own", () => {
     const el = document.createElement("div");
     const outer = document.createElement("span");

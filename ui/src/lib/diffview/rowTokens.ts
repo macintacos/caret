@@ -15,6 +15,12 @@
  * module that built it. */
 export const CELL_ATTR = "data-table-cell";
 
+/** The library's own per-token start column (@pierre/diffs writes it when
+ * `useTokenTransformer` is on, and its InteractionManager reads a token's range
+ * back as `[data-char, data-char + textContent.length)`). Positional, so
+ * `splitTokens` has to rewrite it on every piece it cuts. */
+const CHAR_ATTR = "data-char";
+
 /**
  * A row's token elements in column order: its own children, or — when the row has
  * been split into table cells — the cells' children concatenated. Their text
@@ -61,9 +67,18 @@ export function splitTokens(row: Element, cuts: number[]): void {
       child.replaceWith(
         ...bounds.slice(0, -1).map((from, i) => {
           // cloneNode(false) carries the token's inline style and attributes, so
-          // the pieces are indistinguishable from the token they replace.
+          // the pieces are indistinguishable from the token they replace — with
+          // one exception that must NOT be carried over.
           const piece = child.cloneNode(false) as Element;
           piece.textContent = text.slice(from - col, (bounds[i + 1] ?? end) - col);
+          // data-char is the token's START COLUMN, and the library derives the
+          // token's whole range from it plus the element's own text length. A
+          // clone inheriting it verbatim makes every piece claim to begin where
+          // the undivided token did, so a piece past the first reports a range
+          // that is the right width in the wrong place — which is how a
+          // mid-sentence reference ended up decorated but not clickable, its
+          // token reported as ending exactly where its span begins (EXC-1192).
+          if (piece.hasAttribute(CHAR_ATTR)) piece.setAttribute(CHAR_ATTR, String(from));
           return piece;
         }),
       );
