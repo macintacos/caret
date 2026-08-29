@@ -790,6 +790,45 @@ test("a link whose label carries the range frames it like a bare citation", asyn
   }
 });
 
+// EXC-1192, the bare-label half. `[path:start-end](path)` carries no inline code,
+// so it reaches the preview by a different route than the backticked form: the
+// scan finds nothing, the merge has no anchor to collapse against, and the
+// citation survives only because the emission layer reads the label itself. The
+// pure half is `labelCitation` in `ui/src/lib/diffview/links.test.ts`. What needs
+// a browser is that this shape decorates and clicks at all — it collapses into
+// ordinary prose, which shiki emits as one coarse token, and only EXC-867's
+// decoration cut gives it an element of its own to carry the glyph.
+test("a bare-text label carrying a range frames it like a backticked one", async ({
+  daemon,
+  page,
+}) => {
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Refs\n\nThe key is built across [src/cache.ts:40-44](src/cache.ts) today.\n",
+    });
+    await page.goto("/");
+    await planSurface(page);
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+    await page.locator("[data-file-ref]").first().click();
+
+    const preview = page.locator("[data-file-preview]");
+    await expect(preview).toBeVisible();
+    await settleDrawer(page);
+
+    // The same window and the same five washed rows the backticked form opens —
+    // the two spellings of one citation must not frame differently.
+    await expect(preview.getByRole("status")).toHaveText(`lines 10–74 of ${CACHE_TS_LINES}`);
+    const band = await citedBandInRegion(page);
+    expect(band.lines).toEqual([40, 41, 42, 43, 44]);
+    expect(band.top).toBeGreaterThanOrEqual(0);
+    expect(band.bottom).toBeLessThanOrEqual(band.region);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
 test("the preview omits the esc-to-close hint when shortcut hints are off", async ({
   daemon,
   page,

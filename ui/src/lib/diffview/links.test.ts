@@ -278,6 +278,42 @@ describe("buildLinkLayer file-path targets", () => {
     expect(refs[0]?.target).toBeUndefined();
   });
 
+  test("a bare label's cited range survives a target that names no line", () => {
+    // `[a/b.md:5-9](a/b.md)`: no inline code, so the scan finds nothing and the
+    // merge has no anchor to recover the citation from — this layer is the only
+    // one that still sees the label. Without it the preview opens on the file's
+    // head with nothing washed (EXC-1192).
+    const ref = (buildLinkLayer("[a/b.md:5-9](a/b.md)").fileRefs.get(1) ?? [])[0];
+    expect(ref?.path).toBe("a/b.md");
+    expect(ref?.line).toBe(5);
+    expect(ref?.endLine).toBe(9);
+  });
+
+  test("a label naming a different path never lends the target its line", () => {
+    // `[x.ts:10](y/z.ts)`: the citation is about x.ts, so carrying it over would
+    // frame line 10 of a file the label never cited — the same rule
+    // mergeFileRefSpans applies to the backticked form.
+    const ref = (buildLinkLayer("[x.ts:10](y/z.ts)").fileRefs.get(1) ?? [])[0];
+    expect(ref?.path).toBe("y/z.ts");
+    expect(ref?.line).toBeUndefined();
+  });
+
+  test("a target that cites a line keeps it over a label that disagrees", () => {
+    // The label is consulted only where the target is silent, so a target saying
+    // 42 still wins outright.
+    const ref = (buildLinkLayer("[a/b.md:5-9](a/b.md:42)").fileRefs.get(1) ?? [])[0];
+    expect(ref?.line).toBe(42);
+    expect(ref?.endLine).toBeUndefined();
+  });
+
+  test("a label that merely mentions the path lends no citation", () => {
+    // `[a/b.md:5-9 and friends](a/b.md)` does not read as a citation of a/b.md —
+    // the label has to name the file and nothing else for its range to count.
+    const ref = (buildLinkLayer("[a/b.md:5-9 and friends](a/b.md)").fileRefs.get(1) ?? [])[0];
+    expect(ref?.path).toBe("a/b.md");
+    expect(ref?.line).toBeUndefined();
+  });
+
   test("a prose label keeps its text and carries the target for the hover tooltip", () => {
     const { text, fileRefs } = buildLinkLayer(
       "[the researcher agent](managed/agents/stacked_researcher.md)",
@@ -460,6 +496,21 @@ describe("buildLinkLayer backticked-path labels", () => {
   test("the emitted path is the link target, never the label", () => {
     const ref = (buildLinkLayer("[`a.ts`](b/c.ts)").fileRefs.get(1) ?? [])[0];
     expect(ref?.path).toBe("b/c.ts");
+  });
+
+  test("a range cited in inline code among prose is recovered by the merge", () => {
+    // `[see `a.ts:5-9` here](a.ts)`. The label as a whole is not a citation, so
+    // the emission layer lends nothing here — the inline-code scan finds the
+    // range and the merge takes it off that anchor. This is the shape that keeps
+    // BOTH mechanisms load-bearing: labelCitation covers a bare label the scan
+    // cannot see, the merge covers a citation buried in prose the emission layer
+    // will not read.
+    const layer = buildLinkLayer("[see `a.ts:5-9` here](a.ts)");
+    expect((layer.fileRefs.get(1) ?? [])[0]?.line).toBeUndefined();
+    const ref = (mergeFileRefSpans(buildFileRefLayer(layer.text), layer.fileRefs).get(1) ?? [])[0];
+    expect(ref?.path).toBe("a.ts");
+    expect(ref?.line).toBe(5);
+    expect(ref?.endLine).toBe(9);
   });
 
   // The double-glyph regression guard. This is the exact composition DiffPlanView

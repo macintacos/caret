@@ -222,6 +222,30 @@ function isCitablePath(path: string): boolean {
   return bare.includes("/") || hasKnownFileExtension(bare);
 }
 
+/** The line citation a link's LABEL carries, for a target that names none of its
+ * own — `[a/b.md:5-9](a/b.md)`. A bare label leaves no inline-code span for the
+ * scan to find, so mergeFileRefSpans has no anchor to recover the range from and
+ * this layer is the last one that can still see it (EXC-1192).
+ *
+ * Adopted only where the label names the target's own path and nothing else. A
+ * label citing a DIFFERENT file must not lend its line to the target —
+ * `[x.ts:10](y.ts)` never frames line 10 in y.ts — and one that merely mentions
+ * the path in passing is prose rather than a citation, which is what reading the
+ * WHOLE label through `classify` tests: anything around the path leaves a path
+ * that no longer matches. That narrowing is the same one mergeFileRefSpans
+ * applies to a backticked label; the two layers reach different shapes and agree
+ * on the rule. */
+function labelCitation(label: string, path: string): { line?: number; endLine?: number } {
+  const cited = classify(
+    label
+      .trim()
+      .replace(/^`+|`+$/g, "")
+      .trim(),
+  );
+  if (cited === null || cited.path !== path || cited.line === undefined) return {};
+  return { line: cited.line, endLine: cited.endLine };
+}
+
 // Builds the display line and its spans from one source line. `inCode` lines
 // (fenced) are returned verbatim with no spans.
 function transformLine(
@@ -309,7 +333,13 @@ function transformLine(
       // over its label instead.
       const ref = classify(url);
       if (ref === null) continue;
-      const file = isCitablePath(ref.path) ? { ...ref, target: url } : undefined;
+      // The target names the file; the label may be the only half that names the
+      // line. Consulted only where the target is silent, so a target that cites
+      // one still wins outright over a label that disagrees.
+      const cited = ref.line === undefined ? labelCitation(label, ref.path) : ref;
+      const file = isCitablePath(ref.path)
+        ? { path: ref.path, line: cited.line, endLine: cited.endLine, target: url }
+        : undefined;
       rewrites.push({ start, end, display: label, href: null, file });
       consumed.push({ start, end });
       continue;
