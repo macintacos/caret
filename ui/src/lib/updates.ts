@@ -61,17 +61,8 @@ export function updateToast(report: UpdateReport): { title: string; message: str
  * point of keeping them apart. `unavailable` is the check being off, and its two reasons
  * say which off it is; `unknown` is the check having run without reaching an answer —
  * routinely a locally-built binary whose commit GitHub cannot compare, which is the DAILY
- * reading on a developer's machine and is framed as normal rather than as a failure.
- *
- * `checkEnabled` is the live opt-out, and it corrects exactly one arm. The daemon decides
- * `unavailable`/`disabled` once, at boot, and holds it for its whole life — so once the
- * reviewer turns the switch back on, that verdict is stale, and the pane would otherwise
- * tell them to turn on a switch already reading on six pixels below. Every other arm
- * ignores it: the verdict is still true, and the opt-out only asked not to be nagged. */
-export function updatePaneCopy(
-  report: UpdateReport,
-  checkEnabled = false,
-): {
+ * reading on a developer's machine and is framed as normal rather than as a failure. */
+export function updatePaneCopy(report: UpdateReport): {
   headline: string;
   detail: string;
   command: string | null;
@@ -103,9 +94,7 @@ export function updatePaneCopy(
           }
         : {
             headline: "Update checks are off",
-            detail: checkEnabled
-              ? "Restart the daemon to run the check — it reads this switch when it starts."
-              : "Turn them back on to hear about a new caret when one is out.",
+            detail: "Turn them back on to hear about a new caret when one is out.",
             command: null,
           };
     case "unknown":

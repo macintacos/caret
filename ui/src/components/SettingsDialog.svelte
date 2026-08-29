@@ -93,9 +93,6 @@
     /** The daemon's cached update verdict, rendered by the Updates pane. Null when it
      * could not be read; the pane degrades rather than erroring. */
     updateReport?: UpdateReport | null;
-    /** The live `updates.check` value. Only the pane's copy uses it, to correct the one
-     * verdict the daemon settles at boot and cannot revise (see UpdatesPane). */
-    updatesCheck?: boolean;
   }
   let {
     open,
@@ -107,7 +104,6 @@
     initialCategory,
     updatePending = false,
     updateReport = null,
-    updatesCheck = false,
   }: Props = $props();
 
   // EXC-849: while Settings owns the view, publish its own keyboard affordances into the
@@ -331,7 +327,7 @@
               <!-- Updates is the one category whose pane sits ABOVE its fields rather
                    than replacing them (EXC-1207): the verdict is read-only, but the
                    `updates.check` opt-out beneath it is an ordinary registry field. -->
-              <UpdatesPane report={updateReport} checkEnabled={updatesCheck} />
+              <UpdatesPane report={updateReport} />
             {/if}
             {#each paneSections as section, si (si)}
               {#if section.label === THEME_SECTION}

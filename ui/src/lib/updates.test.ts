@@ -12,6 +12,7 @@ const report = (status: UpdateStatus, over: Partial<UpdateReport> = {}): UpdateR
   install: "binary",
   version: "1.4.0",
   commit: "abc1234",
+  checkEnabled: true,
   status,
   ...over,
 });
@@ -117,23 +118,13 @@ describe("updatePaneCopy", () => {
     }
   });
 
-  test("a `disabled` verdict read while the switch is back ON says the check resumes", () => {
-    // The daemon decides `disabled` once, at boot, and holds it for its whole life — so
-    // after the reviewer turns the switch back on, the verdict is stale. Telling them to
-    // "turn it back on" six pixels above a switch that already reads on is the one thing
-    // this copy must not do.
-    const off = updatePaneCopy(report({ kind: "unavailable", reason: "disabled" }), false);
-    const backOn = updatePaneCopy(report({ kind: "unavailable", reason: "disabled" }), true);
-    expect(off.detail).not.toBe(backOn.detail);
-    expect(backOn.detail.toLowerCase()).toContain("restart");
+  test("a `disabled` verdict never tells the reviewer to restart anything", () => {
+    // The daemon reads the switch per request (EXC-1210), so this verdict is only ever
+    // served while the switch really is off — the copy states that and says what turning
+    // it back on gets them, with no restart to prescribe.
+    const off = updatePaneCopy(report({ kind: "unavailable", reason: "disabled" }));
     expect(off.detail.toLowerCase()).not.toContain("restart");
-  });
-
-  test("checkEnabled changes nothing for any other verdict", () => {
-    // It is a `disabled`-only correction, not a second axis through the whole mapping.
-    for (const status of [RELEASE, COMMIT, { kind: "current" } as UpdateStatus]) {
-      expect(updatePaneCopy(report(status), true)).toEqual(updatePaneCopy(report(status), false));
-    }
+    expect(off.detail.toLowerCase()).toContain("turn them back on");
   });
 
   test("the uncomparable-build reason is framed as normal for a local build", () => {

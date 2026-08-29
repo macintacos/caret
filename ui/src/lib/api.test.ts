@@ -20,7 +20,6 @@ import {
   getSkillDescription,
   getSkills,
   getUpdate,
-  getUpdatesCheck,
   HttpError,
   markSeen,
   putDraft,
@@ -672,15 +671,15 @@ describe("setPrefs", () => {
   });
 });
 
-// EXC-1207. The two load-time reads the update surfaces need. Both are shaped like
-// getDiagnostics — silent on success, a warn on failure — but they diverge on what a
-// failure means: the report is what every update surface renders and rethrows, while the
-// opt-out has a safe answer and never does.
+// EXC-1207. The one load-time read every update surface renders. Shaped like
+// getDiagnostics — silent on success, a warn on failure — but it rethrows, because there
+// is no safe answer to substitute for a verdict.
 describe("getUpdate", () => {
   const report: UpdateReport = {
     install: "binary",
     version: "1.4.0",
     commit: "abc1234",
+    checkEnabled: true,
     status: { kind: "behind-release", available: "1.5.0", command: "bunx …" },
   };
 
@@ -716,40 +715,5 @@ describe("getUpdate", () => {
     const warn = cap.events().find((r) => r.level === "warn");
     expect(warn?.step).toBe("request");
     expect(warn!.msg as string).toContain("update report");
-  });
-});
-
-describe("getUpdatesCheck", () => {
-  test("returns the daemon's updates.check", async () => {
-    respond = () =>
-      Promise.resolve(jsonResponse({ approveMode: "default", updates: { check: false } }));
-
-    expect(await getUpdatesCheck()).toBe(false);
-    flush();
-
-    expect(cap.events()).toHaveLength(0);
-  });
-
-  test("fails safe to on — an unreachable daemon must not silence the badges", async () => {
-    // Default-on matches the daemon's own read: only an explicit false turns it off.
-    for (const answer of [
-      () => Promise.reject(new Error("offline")),
-      () => Promise.resolve(new Response(null, { status: 500 })),
-      () => Promise.resolve(jsonResponse({ approveMode: "default" })),
-    ]) {
-      respond = answer;
-      expect(await getUpdatesCheck()).toBe(true);
-    }
-  });
-
-  test("a failed read warns at step prefs", async () => {
-    respond = () => Promise.reject(new Error("offline"));
-
-    await getUpdatesCheck();
-    flush();
-
-    const warn = cap.events().find((r) => r.level === "warn");
-    expect(warn?.step).toBe("prefs");
-    expect(warn!.msg as string).toContain("updates check read failed");
   });
 });

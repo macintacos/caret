@@ -8,7 +8,7 @@
   // beacon. The behaviors themselves live in $lib/* and @/state/*; this file only
   // holds them together and lays out the TopBar + DiffPlanView.
   import { untrack } from "svelte";
-  import { getHealth, getUpdate, getUpdatesCheck, markSeen } from "$lib/api.ts";
+  import { getHealth, getUpdate, markSeen } from "$lib/api.ts";
   import { approveVariants } from "$lib/approve.ts";
   import { createPlanNotifier } from "$lib/notify.ts";
   import { installUiGoneBeacon } from "$lib/presence.ts";
@@ -116,18 +116,12 @@
   // probe lands or for a daemon that predates the field; passed to the TopBar,
   // which exposes it as data-source.
   let source = $state<string | undefined>(undefined);
-  // The daemon's cached update verdict (EXC-1207), read once on load. Null until it
-  // lands, and null for good when it can't be read — a daemon that wires no update thunk
-  // 404s the route, and every surface then simply stays quiet. Every update surface
-  // renders this one value.
+  // The daemon's update verdict (EXC-1207), read on load and re-read after the Updates
+  // toggle lands. Null until it arrives, and null for good when it can't be read — a
+  // daemon that wires no update thunk 404s the route, and every surface then simply stays
+  // quiet. The `updates.check` opt-out is already folded in daemon-side (EXC-1210), so
+  // this one value is every update surface's whole truth.
   let updateReport = $state<UpdateReport | null>(null);
-  // The reviewer's `updates.check` opt-out, mirrored here from the same load. It gates
-  // the surfaces below in the BROWSER, which is load-bearing rather than belt-and-
-  // braces: the daemon evaluates the switch when the check RUNS and then holds that
-  // verdict for its whole life, so a user who turns the check off against a long-lived
-  // daemon would still be served a stale `behind-release` on their next page load.
-  // Mirroring it here is also what makes the flip take effect with no round trip.
-  let updatesCheck = $state(true);
   let work = $state<{
     annotations: Annotation[];
     generalCommentDraft: string;
@@ -228,10 +222,13 @@
       return;
     }
     showShortcutHints = readShortcutHints();
-    // The other reactive mirror (EXC-1207): the daemon owns this value, so there is no
-    // module to re-read it from — the accepted write IS the new truth. Mirroring it here
-    // is what clears the badges the instant the reviewer turns the check off.
-    if (field.key === UPDATES_CHECK_KEY) updatesCheck = value === true;
+    // The daemon owns this one, and it folds the switch into the verdict it serves
+    // (EXC-1210) — so the way to learn what the write means is to re-read the route that
+    // owns it, exactly as the line above re-reads the shortcut hints. That is what clears
+    // the badges the instant the reviewer turns the check off.
+    if (field.key === UPDATES_CHECK_KEY) {
+      updateReport = await getUpdate().catch(() => null);
+    }
     settingsRev++;
     alerts.push({
       variant: "success",
@@ -337,11 +334,9 @@
   // The variants the split-button renders: the declared set when present, else
   // the built-in fallback.
   let variants = $derived(approveVariants(declaredVariants));
-  // Whether to mark the update surfaces (EXC-1207) — the browser-side gate described
-  // above, ANDed with the daemon's verdict.
-  let updatePending = $derived(
-    updatesCheck && !!updateReport && isUpdatePending(updateReport.status),
-  );
+  // Whether to mark the update surfaces (EXC-1207). The daemon's verdict alone: an
+  // opted-out reviewer is served `disabled`, which is not pending.
+  let updatePending = $derived(!!updateReport && isUpdatePending(updateReport.status));
   // Everything a plain Approve would silently leave behind, as a preview list:
   // the general-comment draft first, then the non-blank committed inline comments,
   // then the retained-but-unsent composer scratches. The approve/reject guard
@@ -417,28 +412,19 @@
   $effect(() => appearance.watch());
 
   // ----- Update verdict -----
-  // Read the daemon's CACHED verdict plus the reviewer's opt-out, once on mount. No
-  // network check is triggered by the UI — the daemon decided this at boot and the route
-  // only reports it. No reactive reads, so this runs once. Both failures are quiet: the
-  // report stays null (every surface then says nothing) and the opt-out fails safe to on.
-  //
-  // The two reads SETTLE TOGETHER, and the gate is assigned before the verdict. Fired as
-  // independent promises they race, and the race has a predictable loser: /api/update is a
-  // synchronous thunk read while /api/prefs awaits two file reads, so the verdict lands
-  // first essentially every time. With `updatesCheck` still at its optimistic default, a
-  // reviewer who had opted out would get the toast anyway — and it would spend that
-  // version's once-per-version marker on its way past, so the nudge would be lost for good
-  // if they ever turned checks back on. Settling first is what makes the gate atomic.
+  // Read the daemon's verdict once on mount. No network check is triggered by the UI —
+  // the daemon decided this against its own cache and the route only reports it, with the
+  // reviewer's live opt-out already folded in. No reactive reads, so this runs once. A
+  // failed read is quiet: the report stays null and every surface then says nothing.
   $effect(() => {
-    void Promise.all([getUpdate().catch(() => null), getUpdatesCheck()]).then(
-      ([report, check]) => {
-        updatesCheck = check;
+    void getUpdate()
+      .catch(() => null)
+      .then((report) => {
         // Seed the holder the Updates toggle's synchronous read() closes over, so the
         // control opens showing what is actually on disk rather than the default.
-        seedUpdatesCheck(check);
+        if (report) seedUpdatesCheck(report.checkEnabled);
         updateReport = report;
-      },
-    );
+      });
   });
 
   // The once-per-version nudge. Fires when the verdict resolves and the gate holds, and
@@ -987,7 +973,6 @@
       initialCategory={settingsCategory}
       {updatePending}
       {updateReport}
-      {updatesCheck}
     />
   {/snippet}
 </ModalPresence>

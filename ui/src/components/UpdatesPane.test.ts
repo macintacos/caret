@@ -18,6 +18,7 @@ const report = (status: UpdateStatus, version = "1.4.0"): UpdateReport => ({
   install: "binary",
   version,
   commit: "abc1234",
+  checkEnabled: true,
   status,
 });
 

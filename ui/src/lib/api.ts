@@ -14,7 +14,6 @@ import type {
   HealthIdentity,
   PersistedScratch,
   PrefsPatch,
-  PrefsResponse,
   ResolveBody,
   SkillDescriptionResponse,
   SkillRef,
@@ -82,24 +81,6 @@ export async function getUpdate(): Promise<UpdateReport> {
       uiLog.warn("request", "update report read failed", { reason: String(err) });
     }
     throw err;
-  }
-}
-
-/** Whether the daemon's update check is on (EXC-1207) — the browser's copy of the
- * `updates.check` opt-out, so flipping the Settings toggle silences the badges at once
- * rather than after the daemon's next boot.
- *
- * A second GET of /api/prefs on load (the resolve state already makes one for
- * approveMode). Threading a shared read through resolve.svelte.ts and its tests would
- * cost a refactor to save one loopback request against a local daemon. Fails safe to on,
- * matching the daemon's own read. */
-export async function getUpdatesCheck(): Promise<boolean> {
-  try {
-    const body = await json<PrefsResponse>(await fetch("/api/prefs"));
-    return body.updates?.check !== false;
-  } catch (err) {
-    uiLog.warn("prefs", "updates check read failed", { reason: String(err) });
-    return true;
   }
 }
 
