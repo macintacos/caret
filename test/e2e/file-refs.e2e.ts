@@ -723,6 +723,49 @@ test("clicking a range reference's end-line tail opens the preview", async ({ da
   }
 });
 
+// EXC-1192. A citation can arrive link-shaped — `` [`path:start-end`](path) `` —
+// where the label carries the range and the target names only the file. The two
+// halves are merged before the preview ever sees them, and taking the range from
+// the wrong half opens the excerpt on the file's head with nothing washed.
+// This belongs in the browser rather than beside the merge unit: `FilePreview`'s
+// component tests inject `line` and `endLine` straight in as props, so they are
+// blind by construction to anything that drops the citation upstream of the
+// component. The pure half — which span the merge takes the range from — is a
+// unit in `ui/src/lib/diffview/fileRefs.test.ts`; what needs a real browser is
+// that the range survives the whole plan-render → merge → click → preview path.
+test("a link whose label carries the range frames it like a bare citation", async ({
+  daemon,
+  page,
+}) => {
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Refs\n\nThe key is built across [`src/cache.ts:40-44`](src/cache.ts) today.\n",
+    });
+    await page.goto("/");
+    await planSurface(page);
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+    await page.locator("[data-file-ref]").first().click();
+
+    const preview = page.locator("[data-file-preview]");
+    await expect(preview).toBeVisible();
+    await settleDrawer(page);
+
+    // Same window the bare `src/cache.ts:40-44` citation opens — the link form
+    // must not degrade to the file's head.
+    await expect(preview.getByRole("status")).toHaveText(`lines 10–74 of ${CACHE_TS_LINES}`);
+
+    // …and the same five rows carry the wash, both band edges on screen.
+    const band = await citedBandInRegion(page);
+    expect(band?.lines).toEqual([40, 41, 42, 43, 44]);
+    expect(band?.top ?? -1).toBeGreaterThanOrEqual(0);
+    expect(band?.bottom ?? Infinity).toBeLessThanOrEqual(band?.region ?? 0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
 test("the preview omits the esc-to-close hint when shortcut hints are off", async ({
   daemon,
   page,
