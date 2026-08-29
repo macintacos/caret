@@ -1678,15 +1678,15 @@ describe("POST /api/prefs", () => {
     // POST /api/prefs is the user action the 24h-throttle constraint names, so turning
     // the check back on is allowed to spend a call — otherwise a reviewer who opted out
     // months ago would wait a whole daemon lifetime for a verdict.
-    const enabled: number[] = [];
-    await boot({ onUpdatesEnabled: () => enabled.push(1) });
+    let calls = 0;
+    await boot({ onUpdatesEnabled: () => calls++ });
     expect((await setPrefs({ updates: { check: false } })).status).toBe(200);
-    expect(enabled).toHaveLength(0);
+    expect(calls).toBe(0);
     expect((await setPrefs({ updates: { check: true } })).status).toBe(200);
-    expect(enabled).toHaveLength(1);
+    expect(calls).toBe(1);
     // A rejected patch never reaches the callback.
     expect((await setPrefs({ updates: { check: "yes" } })).status).toBe(400);
-    expect(enabled).toHaveLength(1);
+    expect(calls).toBe(1);
   });
 
   test("a rejected body writes nothing and answers 400", async () => {

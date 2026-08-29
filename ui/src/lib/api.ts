@@ -14,6 +14,7 @@ import type {
   HealthIdentity,
   PersistedScratch,
   PrefsPatch,
+  PrefsResponse,
   ResolveBody,
   SkillDescriptionResponse,
   SkillRef,
@@ -58,13 +59,16 @@ export async function getDiagnostics(): Promise<DaemonDiagnostics> {
   }
 }
 
-/** The cached update verdict (EXC-1207): whether this caret is behind, and the command
- * that would take the upgrade. Reading it never makes the daemon call out — the verdict
- * was decided at boot — so this is a plain load-time read, not a poll.
+/** The daemon's update verdict (EXC-1207): whether this caret is behind, the command that
+ * would take the upgrade, and the live `updates.check` folded in (EXC-1210). Reading it
+ * never makes the daemon call out — the held verdict is whatever the throttled background
+ * check last settled — so this is a cheap read, called on load and again whenever the
+ * Updates toggle lands.
  *
  * Throws on failure, unlike this file's degrading readers: every update surface renders
- * this one value, so there is nothing to fall back to. App leaves the report null either
- * way and every surface stays quiet.
+ * this one value, so there is nothing here to fall back to. App decides what a failure
+ * means by which call it was — null on load, so every surface stays quiet, and the
+ * last-known verdict on the toggle's re-read.
  *
  * The two failures are logged apart, the way getSkills keeps its own two apart, and for a
  * sharper reason: this fires on EVERY page load, so a daemon that wires no update thunk
@@ -88,9 +92,10 @@ export async function getUpdate(): Promise<UpdateReport> {
  * Deliberately not part of the 2s reviews poll. */
 export async function getApproveMode(): Promise<ApproveVariantId> {
   try {
-    const { approveMode } = await json<{ approveMode: ApproveVariantId }>(
-      await fetch("/api/prefs"),
-    );
+    // Typed as the wire contract rather than inline: this is the browser's only reader of
+    // GET /api/prefs, so it is the one place a daemon-side change to PrefsResponse can
+    // still be caught at compile time.
+    const { approveMode } = await json<PrefsResponse>(await fetch("/api/prefs"));
     return approveMode;
   } catch (err) {
     uiLog.warn("prefs", "approve mode read failed", { reason: String(err) });

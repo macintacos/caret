@@ -86,6 +86,33 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   // answer immediately; the background check below replaces it when it settles.
   const updateCache = fileUpdateCache(updateCheckFile());
   let updateStatus = readCachedStatus(updateCache, version, commit);
+  // Ask — at most once a day, and never on a dev build or under the `updates.check`
+  // opt-out — whether a newer caret exists (EXC-1205). Fire-and-forget: nothing awaits it,
+  // so neither boot nor a prefs write is delayed, and runUpdateCheck never rejects. A null
+  // result is the throttle (or the opt-out) saying there is nothing new, so the seeded
+  // verdict stands. Boot and the flip-to-on below share this one call site.
+  function refreshUpdate(): void {
+    void runUpdateCheck({
+      kind: install,
+      version,
+      commit,
+      enabled: () => readUpdatesCheck(),
+      now: Date.now,
+      cache: updateCache,
+      npmLatest: publishedCaretVersion,
+      release: latestReleaseTag,
+      aheadBy: commitsAheadOfTrunk,
+      log,
+    }).then(
+      (status) => {
+        if (status) updateStatus = status;
+      },
+      // runUpdateCheck settles every failure itself, so this arm should be unreachable —
+      // but an unhandled rejection here would hit the process handlers installed below and
+      // take a live daemon down with it, which is far too high a price for an update nudge.
+      (err) => log.error("update", err),
+    );
+  }
   const store = createStore(reviewsDir(), log);
   await store.rehydrate();
   const assets = await loadUiAssets();
@@ -148,7 +175,7 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
         updateReportFor({ install, version, commit }, updateStatus, await readUpdatesCheck()),
       // Turning the check back on re-runs it, so a reviewer who opted out long ago gets
       // a real verdict on the spot rather than a daemon lifetime later.
-      onUpdatesEnabled: () => refreshUpdate(),
+      onUpdatesEnabled: refreshUpdate,
       log,
     });
   } catch (e) {
@@ -190,33 +217,7 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
       // already removed by stop(), or never written — both fine.
     }
   });
-  // Ask — at most once a day, and never on a dev build or under the `updates.check`
-  // opt-out — whether a newer caret exists (EXC-1205). Fire-and-forget: nothing awaits
-  // it, so boot is never delayed, and runUpdateCheck never rejects. A null result is the
-  // throttle (or the opt-out) saying there is nothing new, so the seeded verdict stands.
-  // A function so boot and the flip-to-on above share one call site.
-  function refreshUpdate(): void {
-    void runUpdateCheck({
-      kind: install,
-      version,
-      commit,
-      enabled: () => readUpdatesCheck(),
-      now: Date.now,
-      cache: updateCache,
-      npmLatest: publishedCaretVersion,
-      release: latestReleaseTag,
-      aheadBy: commitsAheadOfTrunk,
-      log,
-    }).then(
-      (status) => {
-        if (status) updateStatus = status;
-      },
-      // runUpdateCheck settles every failure itself, so this arm should be unreachable —
-      // but an unhandled rejection here would hit the handler above and take a live
-      // daemon down with it, which is far too high a price for an update nudge.
-      (err) => log.error("update", err),
-    );
-  }
+  // Boot's own check, fired last so it cannot delay the bind or the signal handlers.
   refreshUpdate();
   // Bun.serve keeps the process alive; the daemon idle-auto-shuts-down.
 }

@@ -82,6 +82,11 @@ test.describe("with a pending update", () => {
     await expect(page.locator("[data-updates-pane] .update-headline")).toContainText(
       "Update checks are off",
     );
+    // And the switch beneath it agrees. This is `checkEnabled`'s whole job — App seeds the
+    // toggle's synchronous read() from it — and the only place that seeding is proven:
+    // without it the holder answers its optimistic `true` default and the control reads ON
+    // above a pane saying the checks are off.
+    await expect(page.getByRole("switch", { name: "Check for updates" })).not.toBeChecked();
 
     // The marker was not spent either: turning the check back on must still toast this
     // version. Proven by lifting the opt-out and reloading.

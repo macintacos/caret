@@ -40,7 +40,7 @@ export function writeToastedUpdate(signature: string): void {
   }
 }
 
-// Default-on, matching the daemon's own readUpdatesCheck: a load whose prefs fetch never
+// Default-on, matching the daemon's own readUpdatesCheck: a load whose update fetch never
 // lands behaves exactly as an un-opted-out install does.
 let updatesCheck = true;
 

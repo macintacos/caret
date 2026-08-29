@@ -155,11 +155,13 @@ export interface CreateServerOptions {
    * fixture daemon wires a synthetic one (EXC-1207): the UI reads this route on every
    * load, so an unwired route there would 404 into every spec's page load. */
   updateReport?: () => UpdateReport | Promise<UpdateReport>;
-  /** Called after a POST /api/prefs patch that turns `updates.check` back ON (EXC-1210).
-   * A user action is exactly what the 24h throttle's constraint permits a call for, so
-   * runDaemon wires it to the same check boot runs — without it, a reviewer who opted out
-   * long ago would wait a whole daemon lifetime for a verdict. Omitted (default) → the
-   * flip just lands, so a bare test daemon is unaffected. */
+  /** Called after a landed POST /api/prefs patch whose `updates.check` is `true`
+   * (EXC-1210). A user action is exactly what the 24h throttle's constraint permits a
+   * call for, so runDaemon wires it to the same check boot runs — without it, a reviewer
+   * who opted out long ago would wait a whole daemon lifetime for a verdict. The daemon
+   * does not read the prior value, so a redundant write of `true` fires it too; the
+   * throttle is what bounds the cost. Fire-and-forget — it never delays the response.
+   * Omitted (default) → the flip just lands, so a bare test daemon is unaffected. */
   onUpdatesEnabled?: () => void;
   /** Clear the unread mark on the cmux pane a review was submitted from
    * (EXC-961). Defaults to the real spawn; injectable so tests assert on the
@@ -399,11 +401,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   }
 
   // GET /api/update — whether the caret this daemon is, is behind (EXC-1205): the
-  // install kind, the running version/commit, and the verdict with the command that
-  // would take the upgrade. The thunk reads a verdict the daemon already holds, so
-  // serving this never makes a network call — but it does fold in the LIVE `updates.check`
-  // (EXC-1210), a prefs.json read, which is why it may be async. With no thunk wired
-  // (default; e.g. a bare test daemon) the route 404s, like any absent optional capability.
+  // install kind, the running version/commit, whether the check is on, and the verdict
+  // with the command that would take the upgrade. The thunk reads a verdict the daemon
+  // already holds, so serving this never makes a network call — but it does fold in the
+  // LIVE `updates.check` (EXC-1210), a prefs.json read, which is why it may be async.
+  // With no thunk wired (default; e.g. a bare test daemon) the route 404s, like any
+  // absent optional capability.
   async function handleUpdate(): Promise<Response> {
     if (!cfg.updateReport) return notFound();
     return Response.json(await cfg.updateReport());

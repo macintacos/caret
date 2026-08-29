@@ -106,6 +106,11 @@ const server = createServer({
   // is folded over it per request through the same updateReportFor production uses
   // (EXC-1210), so a spec that flips the opt-out gets the daemon's real behaviour rather
   // than a stub's.
+  //
+  // A staged verdict rides on the `install: "dev"` identity below, a pair the real check
+  // can never settle on — a dev build short-circuits before it compares anything. Inert:
+  // no UI arm reads `report.install`. If one ever does, stage the install kind beside the
+  // status rather than letting a spec assert an impossible build.
   updateReport: async () =>
     updateReportFor(
       { install: "dev", version: "0.0.0-e2e", commit: "e2ecommit0000000" },

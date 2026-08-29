@@ -138,13 +138,19 @@ export function updateStatusFor(facts: UpdateFacts): UpdateStatus {
 /** The report GET /api/update serves: the held verdict when the check is on, and the
  * `disabled` verdict when the reviewer has turned it off. Pure — the caller reads the
  * live switch and hands the answer in — which is what lets the route reflect a flip the
- * moment it lands, without the daemon re-deciding anything or reaching the network. */
+ * moment it lands, without the daemon re-deciding anything or reaching the network.
+ *
+ * A dev build is the one verdict the switch does not outrank. It has no upstream at all,
+ * so there is nothing for the opt-out to silence — and the `disabled` copy would tell a
+ * contributor to turn the check back on to hear about new carets, which on a build that
+ * short-circuits to `dev` before it ever reads the switch could never happen. */
 export function updateReportFor(
   identity: Omit<UpdateReport, "status" | "checkEnabled">,
   status: UpdateStatus,
   checkEnabled: boolean,
 ): UpdateReport {
-  return { ...identity, checkEnabled, status: checkEnabled ? status : DISABLED };
+  const devBuild = status.kind === "unavailable" && status.reason === "dev";
+  return { ...identity, checkEnabled, status: checkEnabled || devBuild ? status : DISABLED };
 }
 
 /** The last persisted verdict, or `NEVER_CHECKED` when nothing usable is cached —

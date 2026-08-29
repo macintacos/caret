@@ -244,9 +244,10 @@ Two readings are not problems, and the pane says so rather than reading like a f
   turned them off.
 
 The **Check for updates** switch in that pane is the same `updates.check` setting the
-README describes, without the file edit. Turning it off stops the toast and both marks
-immediately; the daemon reads the switch when it starts, so the check itself stops at its
-next restart.
+README describes, without the file edit. The daemon reads it on every request rather than
+only at startup, so turning it off stops the toast and both marks immediately. Turning it
+back on asks again on the spot — subject to the same once-a-day throttle as any other
+check — and reports the answer on your next load.
 
 ## Logging & Debugging
 

@@ -454,10 +454,10 @@ test("with the check on, the held verdict rides through untouched", () => {
 test("with the check off, every held verdict is served as disabled", () => {
   // Including a pending one — that is the whole point: an opted-out reviewer is not
   // nagged, and the daemon says so rather than the browser second-guessing a verdict it
-  // was handed. A `dev` build too: the switch outranks the reason the check was off.
+  // was handed.
   const held: UpdateStatus[] = [
     { kind: "behind-release", available: "0.14.0", command: BUNX },
-    { kind: "unavailable", reason: "dev" },
+    { kind: "behind-commit", aheadBy: 4, command: REBUILD },
     CURRENT,
   ];
   for (const status of held) {
@@ -467,4 +467,17 @@ test("with the check off, every held verdict is served as disabled", () => {
       status: { kind: "unavailable", reason: "disabled" },
     });
   }
+});
+
+test("a dev verdict outranks the opt-out, so the pane keeps the copy that fits", () => {
+  // The one verdict the switch does not override. runUpdateCheck returns `dev` before it
+  // ever reads the switch, so folding it to `disabled` would render "turn them back on to
+  // hear about a new caret" on a build that could never deliver one. `checkEnabled` still
+  // reports the switch honestly — which is the only place its value survives here.
+  const dev: UpdateStatus = { kind: "unavailable", reason: "dev" };
+  expect(updateReportFor(IDENTITY, dev, false)).toEqual({
+    ...IDENTITY,
+    checkEnabled: false,
+    status: dev,
+  });
 });

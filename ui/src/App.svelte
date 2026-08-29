@@ -227,7 +227,11 @@
     // owns it, exactly as the line above re-reads the shortcut hints. That is what clears
     // the badges the instant the reviewer turns the check off.
     if (field.key === UPDATES_CHECK_KEY) {
-      updateReport = await getUpdate().catch(() => null);
+      // Keep the last known verdict when the re-read fails: null is the pane's "could not
+      // be read" signal, so blanking it here would empty the Updates pane at the same
+      // instant the success toast says the write landed.
+      const fresh = await getUpdate().catch(() => null);
+      if (fresh) updateReport = fresh;
     }
     settingsRev++;
     alerts.push({

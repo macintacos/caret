@@ -90,8 +90,9 @@
     initialCategory?: string;
     /** Whether an update is waiting, badging the Updates rail row (EXC-1207). */
     updatePending?: boolean;
-    /** The daemon's cached update verdict, rendered by the Updates pane. Null when it
-     * could not be read; the pane degrades rather than erroring. */
+    /** The daemon's update verdict, rendered by the Updates pane — the reviewer's live
+     * `updates.check` already folded in. Null when it could not be read; the pane
+     * degrades rather than erroring. */
     updateReport?: UpdateReport | null;
   }
   let {

@@ -504,10 +504,10 @@ export interface UpdateReport {
   version: string;
   /** The commit this caret was built from; "unknown" when the build baked none. */
   commit: string;
-  /** Whether the daily check is on (`updates.check`), read live per request. `status`
-   * already reflects it — an off check serves `unavailable`/`disabled` whatever verdict
-   * the daemon holds — so this is the switch's own value, which a `disabled` status
-   * cannot be inverted back into once several reasons collapse onto it. */
+  /** Whether the daily check is on (`updates.check`), read live per request. Stated
+   * explicitly rather than inferred from `status`, because a `dev` verdict outranks the
+   * switch (see updateReportFor) and so masks it entirely — this is the only place the
+   * switch's own value survives, and what the Settings toggle seeds itself from. */
   checkEnabled: boolean;
   status: UpdateStatus;
 }
