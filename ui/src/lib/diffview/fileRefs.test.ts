@@ -382,4 +382,19 @@ describe("mergeFileRefSpans", () => {
     expect(merged.get(1)?.[0]?.line).toBe(7);
     expect(merged.get(1)?.[0]?.target).toBe("b/c.ts:7");
   });
+
+  test("a target naming no line keeps the label's cited range", () => {
+    // `` [`a.ts:5-9`](a.ts) ``: the label is the only half that cites a line, so
+    // taking the emitted span's line unconditionally would discard the citation
+    // and open the preview on the file's head with nothing washed.
+    const merged = mergeFileRefSpans(
+      map([1, [{ startCol: 1, endCol: 11, path: "a.ts", line: 5, endLine: 9 }]]),
+      map([1, [{ startCol: 0, endCol: 12, path: "a.ts", target: "a.ts" }]]),
+    );
+    expect(merged.get(1)).toHaveLength(1);
+    expect(merged.get(1)?.[0]?.line).toBe(5);
+    expect(merged.get(1)?.[0]?.endLine).toBe(9);
+    // The leftmost scanned span still places the glyph.
+    expect(merged.get(1)?.[0]?.startCol).toBe(1);
+  });
 });
