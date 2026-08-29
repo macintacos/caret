@@ -224,14 +224,16 @@ export function buildFileRefLayer(text: string): FileRefSpanMap {
  * leftmost SCANNED span's columns win (inline code is where a path gets its own
  * shiki token, so they place the glyph tight against the filename) and the
  * EMITTED span's path and target win (the link's real destination, which need
- * not be what the label says). Its cited lines win only when it HAS some: a
- * target that contradicts the label still wins outright, but one naming no line
- * at all leaves the label's citation standing, so `` [`a.ts:5-9`](a.ts) `` still
- * frames 5–9 rather than opening on the file's head. Every span an emitted one covers
- * collapses into
- * that single survivor, so a label citing two paths draws one glyph pointing at
- * the link's target rather than two, one of them at a file the link never named.
- * Each line's spans are sorted by startCol.
+ * not be what the label says). Its cited lines win too, with one narrowing: where
+ * it names NO line and both spans name the SAME path, the label is the only half
+ * citing one, so `` [`a.ts:5-9`](a.ts) `` still frames 5–9 rather than opening on
+ * the file's head — and that fallback reads the leftmost scanned span, the one
+ * that placed the columns. A target naming a different path never inherits the
+ * label's line, and line and end line always move as a unit, so a survivor never
+ * carries a start from one span and an end from the other. Every span an emitted
+ * one covers collapses into that single survivor, so a label citing two paths
+ * draws one glyph pointing at the link's target rather than two, one of them at a
+ * file the link never named. Each line's spans are sorted by startCol.
  *
  * Both maps and their spans are treated as immutable: the result carries emitted
  * spans by reference rather than copying them. */
@@ -253,8 +255,8 @@ export function mergeFileRefSpans(
         // line. A path mismatch keeps the anchor's line out — `` [`x.ts:10`](y.ts) ``
         // must not cite line 10 in y.ts — and that also fires on cosmetic differences
         // like a `./` prefix, where dropping the citation beats guessing at one. Line
-        // and end line are picked as a unit, never field by field: a `a.ts:42` target
-        // under a `a.ts:10-20` label would otherwise yield the reversed 42–20, which
+        // and end line are picked as a unit, never field by field: an `a.ts:42` target
+        // under an `a.ts:10-20` label would otherwise yield the reversed 42–20, which
         // bypasses the normalization classify does.
         const cited = span.line !== undefined || span.path !== anchor.path ? span : anchor;
         into.push({

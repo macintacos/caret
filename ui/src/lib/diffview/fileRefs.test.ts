@@ -386,15 +386,42 @@ describe("mergeFileRefSpans", () => {
   test("a target naming no line keeps the label's cited range", () => {
     // `` [`a.ts:5-9`](a.ts) ``: the label is the only half that cites a line, so
     // taking the emitted span's line unconditionally would discard the citation
-    // and open the preview on the file's head with nothing washed.
+    // and open the preview on the file's head with nothing washed. The link layer
+    // emits no target for this shape — the label already shows it (links.ts).
     const merged = mergeFileRefSpans(
-      map([1, [{ startCol: 1, endCol: 11, path: "a.ts", line: 5, endLine: 9 }]]),
-      map([1, [{ startCol: 0, endCol: 12, path: "a.ts", target: "a.ts" }]]),
+      map([1, [{ startCol: 1, endCol: 9, path: "a.ts", line: 5, endLine: 9 }]]),
+      map([1, [{ startCol: 0, endCol: 10, path: "a.ts" }]]),
     );
     expect(merged.get(1)).toHaveLength(1);
     expect(merged.get(1)?.[0]?.line).toBe(5);
     expect(merged.get(1)?.[0]?.endLine).toBe(9);
-    // The leftmost scanned span still places the glyph.
+    // The leftmost scanned span still places the glyph, and its end still covers
+    // the range tail, so a click on the `-9` lands on the reference.
     expect(merged.get(1)?.[0]?.startCol).toBe(1);
+    expect(merged.get(1)?.[0]?.endCol).toBe(9);
+  });
+
+  test("a target naming a different path never inherits the label's line", () => {
+    // `` [`a.ts:10`](b/c.ts) ``: the label's citation is about a.ts, so carrying it
+    // over would frame line 10 of a file the label never cited. Dropping it beats
+    // guessing, which is why the path guard is not just a `??` away.
+    const merged = mergeFileRefSpans(
+      map([1, [{ startCol: 1, endCol: 9, path: "a.ts", line: 10 }]]),
+      map([1, [{ startCol: 0, endCol: 10, path: "b/c.ts", target: "b/c.ts" }]]),
+    );
+    expect(merged.get(1)?.[0]?.path).toBe("b/c.ts");
+    expect(merged.get(1)?.[0]?.line).toBeUndefined();
+  });
+
+  test("the cited range comes from one span, never a field from each", () => {
+    // `` [`a.ts:10-20`](a.ts:42) ``: mixing the target's start with the label's end
+    // yields the reversed 42–20, a range classify's own normalization would never
+    // produce and the preview cannot frame. The target wins whole instead.
+    const merged = mergeFileRefSpans(
+      map([1, [{ startCol: 1, endCol: 11, path: "a.ts", line: 10, endLine: 20 }]]),
+      map([1, [{ startCol: 0, endCol: 12, path: "a.ts", line: 42, target: "a.ts:42" }]]),
+    );
+    expect(merged.get(1)?.[0]?.line).toBe(42);
+    expect(merged.get(1)?.[0]?.endLine).toBeUndefined();
   });
 });
