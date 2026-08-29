@@ -104,27 +104,51 @@ function citedRowInRegion(page: import("@playwright/test").Page): Promise<{
 /** The washed band a cited range paints: the mounted `.fp-target` rows' line
  * numbers, and where the band's two edges sit inside the scrolling code region.
  * Rows are windowed (EXC-970), so for a band taller than the region this reports
- * the mounted part of it — which is the part a reader can see. */
-function citedBandInRegion(page: import("@playwright/test").Page): Promise<{
+ * the mounted part of it — which is the part a reader can see.
+ *
+ * Polled until the band is mounted, per `browser-testing.md` § "A budget cannot
+ * save a read that never retries": every caller asserts three things off one
+ * read, and a bare `evaluate` would hand them whatever the renderer held at that
+ * instant. Waiting on the rows covers the framing scroll with them — the effect
+ * that mounts the region queues that scroll as a microtask, so a read that sees
+ * the rows is a read taken after it landed. What it does NOT cover is a window
+ * the auto-loader is still growing; the one spec facing that retries its whole
+ * assertion block on top of this. */
+async function citedBandInRegion(page: import("@playwright/test").Page): Promise<{
   lines: number[];
   top: number;
   bottom: number;
   region: number;
-} | null> {
-  return page.evaluate(() => {
-    const code = document.querySelector("[data-file-preview] .fp-code");
-    const rows = [...document.querySelectorAll("[data-file-preview] .fp-target")];
-    const first = rows[0];
-    const last = rows.at(-1);
-    if (code === null || first === undefined || last === undefined) return null;
-    const c = code.getBoundingClientRect();
-    return {
-      lines: rows.map((r) => Number(r.querySelector(".fp-lnum")?.textContent?.trim())),
-      top: first.getBoundingClientRect().top - c.top,
-      bottom: last.getBoundingClientRect().bottom - c.top,
-      region: c.height,
-    };
-  });
+}> {
+  const read = () =>
+    page.evaluate(() => {
+      const code = document.querySelector("[data-file-preview] .fp-code");
+      const rows = [...document.querySelectorAll("[data-file-preview] .fp-target")];
+      const first = rows[0];
+      const last = rows.at(-1);
+      if (code === null || first === undefined || last === undefined) return null;
+      const c = code.getBoundingClientRect();
+      return {
+        lines: rows.map((r) => Number(r.querySelector(".fp-lnum")?.textContent?.trim())),
+        top: first.getBoundingClientRect().top - c.top,
+        bottom: last.getBoundingClientRect().bottom - c.top,
+        region: c.height,
+      };
+    });
+  // Held on an object rather than in a local: control-flow analysis cannot see
+  // through `expect.poll`'s callback, so a local would still read as `null` at
+  // the return.
+  const seen: { band: Awaited<ReturnType<typeof read>> } = { band: null };
+  await expect
+    .poll(
+      async () => {
+        seen.band = await read();
+        return seen.band;
+      },
+      { message: "no cited band is mounted in the preview's code region" },
+    )
+    .not.toBeNull();
+  return seen.band as NonNullable<typeof seen.band>;
 }
 
 /** Scroll the preview's code region to one of its ends, the way a reader
@@ -591,10 +615,10 @@ test("a cited range washes every line it names, framed with context on both side
 
     // Exactly the five cited lines are washed — not one, and not the padding.
     const band = await citedBandInRegion(page);
-    expect(band?.lines).toEqual([40, 41, 42, 43, 44]);
+    expect(band.lines).toEqual([40, 41, 42, 43, 44]);
     // …and the whole band opens on screen, both edges inside the region.
-    expect(band?.top ?? -1).toBeGreaterThanOrEqual(0);
-    expect(band?.bottom ?? Infinity).toBeLessThanOrEqual(band?.region ?? 0);
+    expect(band.top).toBeGreaterThanOrEqual(0);
+    expect(band.bottom).toBeLessThanOrEqual(band.region);
   } finally {
     await proj.cleanup();
   }
@@ -626,11 +650,11 @@ test("a range taller than the region opens at its first line, not centred", asyn
     const band = await citedBandInRegion(page);
     // The band starts at the citation's own first line, sitting at the region's
     // top edge — within a pixel, the browser quantizing a fractional scrollTop.
-    expect(band?.lines[0]).toBe(100);
-    expect(Math.abs(band?.top ?? Number.NaN)).toBeLessThanOrEqual(1);
+    expect(band.lines[0]).toBe(100);
+    expect(Math.abs(band.top)).toBeLessThanOrEqual(1);
     // And it really is taller than the region, or the assertion above would hold
     // for a centred span too.
-    expect(band?.bottom ?? 0).toBeGreaterThan(band?.region ?? Infinity);
+    expect(band.bottom).toBeGreaterThan(band.region);
   } finally {
     await proj.cleanup();
   }
@@ -670,9 +694,9 @@ test("a range running past the file's end still opens, framed on its last lines"
     // measurements would read the band mid-shift.
     await expect(async () => {
       const band = await citedBandInRegion(page);
-      expect(band?.lines).toEqual([295, 296, 297, 298, 299, 300]);
-      expect(band?.top ?? -1).toBeGreaterThanOrEqual(0);
-      expect(band?.bottom ?? Infinity).toBeLessThanOrEqual(band?.region ?? 0);
+      expect(band.lines).toEqual([295, 296, 297, 298, 299, 300]);
+      expect(band.top).toBeGreaterThanOrEqual(0);
+      expect(band.bottom).toBeLessThanOrEqual(band.region);
     }).toPass({ timeout: 10_000 });
   } finally {
     await proj.cleanup();
@@ -718,6 +742,49 @@ test("clicking a range reference's end-line tail opens the preview", async ({ da
     await expect(preview).toBeVisible();
     await expect(preview).toContainText("src/cache.ts");
     await expect(preview.getByRole("status")).toHaveText(`lines 10–74 of ${CACHE_TS_LINES}`);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+// EXC-1192. A citation can arrive link-shaped — `` [`path:start-end`](path) `` —
+// where the label carries the range and the target names only the file. The two
+// halves are merged before the preview ever sees them, and taking the range from
+// the wrong half opens the excerpt on the file's head with nothing washed.
+// This belongs in the browser rather than beside the merge unit: `FilePreview`'s
+// component tests inject `line` and `endLine` straight in as props, so they are
+// blind by construction to anything that drops the citation upstream of the
+// component. The pure half — which span the merge takes the range from — is a
+// unit in `ui/src/lib/diffview/fileRefs.test.ts`; what needs a real browser is
+// that the range survives the whole plan-render → merge → click → preview path.
+test("a link whose label carries the range frames it like a bare citation", async ({
+  daemon,
+  page,
+}) => {
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Refs\n\nThe key is built across [`src/cache.ts:40-44`](src/cache.ts) today.\n",
+    });
+    await page.goto("/");
+    await planSurface(page);
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+    await page.locator("[data-file-ref]").first().click();
+
+    const preview = page.locator("[data-file-preview]");
+    await expect(preview).toBeVisible();
+    await settleDrawer(page);
+
+    // Same window the bare `src/cache.ts:40-44` citation opens — the link form
+    // must not degrade to the file's head.
+    await expect(preview.getByRole("status")).toHaveText(`lines 10–74 of ${CACHE_TS_LINES}`);
+
+    // …and the same five rows carry the wash, both band edges on screen.
+    const band = await citedBandInRegion(page);
+    expect(band.lines).toEqual([40, 41, 42, 43, 44]);
+    expect(band.top).toBeGreaterThanOrEqual(0);
+    expect(band.bottom).toBeLessThanOrEqual(band.region);
   } finally {
     await proj.cleanup();
   }
