@@ -758,17 +758,20 @@ test(
 // The argv the gate spawns per task (EXC-1146). A task's name doubles as the map
 // key, the display title, and the `--task` selector, so a flag the gate wants can
 // live only here — never folded into the name.
-test("preflight spawns the test tasks in quiet mode", () => {
+test("preflight spawns the e2e task in quiet mode", () => {
   // The gate captures every task's output and replays only a failure's tail, so
   // Playwright's per-spec list reporter would push the real failure out of it.
-  expect(miseTaskCommand("test")).toEqual(["run", "test", "--quiet"]);
   expect(miseTaskCommand("test e2e")).toEqual(["run", "test", "e2e", "--quiet"]);
   // The flag must follow the positional target: `test e2e` is a subcommand path,
   // and caret's own flags stop parsing at the first operand.
   expect(miseTaskCommand("test e2e").indexOf("--quiet")).toBe(3);
 });
 
-test("preflight leaves every non-test task's argv untouched", () => {
+// Quiet on the UNIT task means bun's dots reporter, one character per test. The
+// gate has no terminal to animate — it captures — so that would only bloat the
+// log it replays, with ~4900 dots on a single line.
+test("preflight leaves every non-e2e task's argv untouched", () => {
+  expect(miseTaskCommand("test")).toEqual(["run", "test"]);
   expect(miseTaskCommand("lint")).toEqual(["run", "lint"]);
   expect(miseTaskCommand("build ui")).toEqual(["run", "build", "ui"]);
   expect(miseTaskCommand("build bin")).toEqual(["run", "build", "bin"]);

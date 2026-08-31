@@ -8,20 +8,28 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { ensureUi, paletteCssCommand } from "@/tasks/build.ts";
-import { execAndExit, runCapture, runForward, stripAnsi } from "@/tasks/lib/exec.ts";
+import {
+  execAndExit,
+  runCapture,
+  runForward,
+  runQuietly,
+  stripAnsi,
+  writeAndFlush,
+} from "@/tasks/lib/exec.ts";
+import { underProgressLine } from "@/tasks/lib/progress.ts";
 
 // --- output modes -----------------------------------------------------------
 // Three output modes (EXC-1146), splitting the run the way `mise run preflight`
 // splits a live display from a --json contract: `verbose` is the historical
-// stream, `quiet` asks each runner to print failures only, and `json` emits one
-// result document and nothing else. Which one applies is decided by one pure
-// function.
+// stream, `quiet` is progress without a transcript, and `json` emits one result
+// document and nothing else. Which one applies is decided by one pure function.
 //
-// How much `quiet` actually removes differs sharply by target, because the two
-// runners start from different defaults. bun 1.3.14 ALREADY prints failures only
-// — a green 4900-test run is a five-line summary — so unit quiet pins that rather
-// than reducing it. Playwright's configured reporter is `list`
-// (playwright.config.ts), one line per spec, so e2e quiet is a real reduction.
+// What `quiet` has to FIX differs by target, because the two runners start from
+// opposite defaults. Playwright is configured with the `list` reporter
+// (playwright.config.ts), a line per spec, so e2e quiet cuts that down to dots.
+// bun's console reporter has the reverse problem: it prints nothing between its
+// banner and its summary, so a green 4900-test run shows no sign of life for a
+// full minute — unit quiet ADDS the progress that was missing, as dots.
 
 export type TestOutputMode = "verbose" | "quiet" | "json";
 
@@ -55,16 +63,18 @@ export function resolveTestMode(flags: TestFlags, isTty: boolean): TestOutputMod
  * `--reporter-outfile`, so the path is not optional there and a json call without
  * one does not compile.
  *
- * `quiet` asks for `--only-failures` and NOT `--dots`. The dots reporter emits one
- * character per test with no overwrite — ~4900 of them on this suite, some sixty
- * wrapped rows — so it would make the terminal default the loudest unit mode there
- * is. `--only-failures` matches bun 1.3.14's own default, and is passed anyway so
- * the mode states its contract rather than inheriting it.
+ * `quiet` is the dots reporter, because on this target the problem is the opposite
+ * of noise: bun's console reporter prints nothing at all between its banner and its
+ * summary, so a green run sits silent for its whole minute. `--dots` emits one
+ * character per test as it lands — ~4900 across the suite, which the terminal wraps
+ * into some dozens of rows — and still prints each failure in full. `--only-failures`
+ * is NOT passed with it: that flag trims the console reporter, which `--dots`
+ * (`--reporter=dots`) has already replaced.
  */
 export function unitModeArgs(mode: "verbose" | "quiet"): string[];
 export function unitModeArgs(mode: "json", junitPath: string): string[];
 export function unitModeArgs(mode: TestOutputMode, junitPath?: string): string[] {
-  if (mode === "quiet") return ["--only-failures"];
+  if (mode === "quiet") return ["--dots"];
   if (mode === "json") return ["--reporter=junit", `--reporter-outfile=${junitPath}`];
   return [];
 }
@@ -190,15 +200,13 @@ function stripAnsiDeep(value: unknown): unknown {
 }
 
 /** Write the result document as the only thing on stdout, then exit with the
- * runner's code. The write is awaited because `process.exit()` truncates a piped
- * write at the pipe buffer — the 64KB cliff scripts/preflight.ts documents — and
- * a failing run's native report clears that many times over. */
+ * runner's code. The write is flushed first: a failing run's native report clears
+ * the pipe buffer many times over, and the exit would truncate it there. */
 async function emitTestReport(
   input: Omit<TestReportInput, "durationMs"> & { startedAt: number },
 ): Promise<never> {
   const report = buildTestReport({ ...input, durationMs: Date.now() - input.startedAt });
-  const line = `${JSON.stringify(report)}\n`;
-  await new Promise<void>((resolve) => process.stdout.write(line, () => resolve()));
+  await writeAndFlush(process.stdout, `${JSON.stringify(report)}\n`);
   process.exit(input.exitCode);
 }
 
@@ -319,14 +327,36 @@ export async function chromiumInstalled(): Promise<boolean> {
 const CHROMIUM_MISSING =
   "caret e2e: Chromium not installed. Run: mise run setup  (or: bunx playwright install chromium)\n";
 
+/**
+ * The UI build an e2e run does first, rendered for the mode. Verbose streams it,
+ * exactly as it always did. Quiet hides it behind one live progress line — vite
+ * prints some four hundred lines and not one of them is the suite you asked to
+ * run — and hands back the captured log so the caller can replay a build that
+ * broke. Same deal `mise run build` already gives the binary build.
+ *
+ * The builder and the display are both injectable, so this is drivable in a test
+ * without spawning vite or taking over the terminal.
+ */
+export async function ensureUiForE2e(
+  mode: "verbose" | "quiet",
+  build: typeof ensureUi = ensureUi,
+  progress: typeof underProgressLine = underProgressLine,
+): Promise<{ code: number; output: string }> {
+  if (mode === "verbose") return { code: await build(), output: "" };
+  return await progress("building ui", (onLine) => runQuietly(build, onLine));
+}
+
 export async function runTestE2e(args: string[], flags: TestFlags = {}): Promise<never> {
   const mode = resolveTestMode(flags, process.stdout.isTTY === true);
   if (mode === "json") return runTestE2eJson(args);
   // Build the UI first so the suite drives a freshly built ui/dist. ensureUi
   // honours CARET_SKIP_BUILD_UI, so the preflight gate (which runs `build ui`
   // itself and spawns `test e2e` with the skip set) never double-builds it.
-  const ui = await ensureUi();
-  if (ui !== 0) process.exit(ui);
+  const ui = await ensureUiForE2e(mode);
+  if (ui.code !== 0) {
+    await writeAndFlush(process.stderr, ui.output);
+    process.exit(ui.code);
+  }
   if (!(await chromiumInstalled())) {
     process.stderr.write(CHROMIUM_MISSING);
     process.exit(1);

@@ -1,10 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
+import { runForward } from "@/tasks/lib/exec.ts";
+import type { underProgressLine } from "@/tasks/lib/progress.ts";
 import {
   buildTestReport,
   collectE2eJsonRun,
   collectUnitJsonRun,
   e2eModeArgs,
+  ensureUiForE2e,
   resolveTestMode,
   unitModeArgs,
 } from "@/tasks/test.ts";
@@ -43,10 +46,12 @@ describe("unitModeArgs", () => {
     expect(unitModeArgs("verbose")).toEqual([]);
   });
 
-  // NOT --dots: it prints one character per test with no overwrite, so on this
-  // suite the terminal default would become the loudest unit mode there is.
-  test("quiet asks bun for failures only, and never the dots reporter", () => {
-    expect(unitModeArgs("quiet")).toEqual(["--only-failures"]);
+  // The dots reporter is the whole point of quiet on this target: bun's console
+  // reporter prints NOTHING between the banner and the summary, so a green run
+  // shows no sign of life for its whole minute. Not --only-failures alongside it:
+  // that flag trims the console reporter, which --dots has already replaced.
+  test("quiet selects bun's dots reporter, and nothing else", () => {
+    expect(unitModeArgs("quiet")).toEqual(["--dots"]);
   });
 
   // bun's junit reporter REQUIRES an outfile, so the mode carries the path the
@@ -72,6 +77,43 @@ describe("e2eModeArgs", () => {
   // PLAYWRIGHT_JSON_OUTPUT_FILE so the report lands in a file, not on stdout.
   test("json selects Playwright's json reporter", () => {
     expect(e2eModeArgs("json")).toEqual(["--reporter=json"]);
+  });
+});
+
+// The UI build an e2e run does first. Quiet hides vite's ~400-line transcript
+// behind one live progress line; verbose leaves the stream as it always was. The
+// display is injected out for these — what matters here is which side of it the
+// build's output lands on, not how listr2 renders.
+describe("ensureUiForE2e", () => {
+  /** underProgressLine with the live display removed: run the work, drop the lines. */
+  const noDisplay: typeof underProgressLine = (_title, work) => work(() => {});
+
+  test("verbose streams the build, so there is nothing captured to replay", async () => {
+    const { code, output } = await ensureUiForE2e("verbose", async () => 7, noDisplay);
+    expect(code).toBe(7);
+    expect(output).toBe("");
+  });
+
+  test("quiet captures what the build writes instead of letting it stream", async () => {
+    const { code, output } = await ensureUiForE2e(
+      "quiet",
+      (run = runForward) => run(["bun", "-e", "console.log('vite noise')"]),
+      noDisplay,
+    );
+    expect(code).toBe(0);
+    expect(output).toContain("vite noise");
+  });
+
+  // Hiding a build is only safe if a broken one is still diagnosable: the code
+  // and the whole captured log come back for the caller to replay.
+  test("quiet keeps a failed build's exit code and its log", async () => {
+    const { code, output } = await ensureUiForE2e(
+      "quiet",
+      (run = runForward) => run(["bun", "-e", "console.error('vite exploded'); process.exit(2)"]),
+      noDisplay,
+    );
+    expect(code).toBe(2);
+    expect(output).toContain("vite exploded");
   });
 });
 

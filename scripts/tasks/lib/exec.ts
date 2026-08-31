@@ -77,6 +77,49 @@ export async function runCapture(
   return code;
 }
 
+/** Run `work` with a runForward-shaped runner whose children are CAPTURED rather
+ * than inherited, resolving the exit code alongside everything they wrote. `onLine`
+ * receives each chunk's last displayable line, so a caller can show one live line
+ * for a step that would otherwise print hundreds. The spawner is injectable so a
+ * test can drive this without real children.
+ *
+ * Never throws. A step can fail by throwing rather than by exiting non-zero — a
+ * spawn that cannot start, a precondition that gives up — and the callers render
+ * this behind a live display that RESOLVES a task's throw rather than rethrowing
+ * it, so an escaping throw would be reported as a successful step. The stack goes
+ * into the returned log instead, where an unexpected one is still diagnosable. */
+export async function runQuietly(
+  work: (run: typeof runForward) => Promise<number>,
+  onLine: (line: string) => void,
+  spawn: typeof runCapture = runCapture,
+): Promise<{ code: number; output: string }> {
+  const chunks: string[] = [];
+  const run: typeof runForward = (cmd, opts) =>
+    spawn(
+      cmd,
+      (chunk) => {
+        chunks.push(chunk);
+        const line = lastDisplayLine(chunk);
+        if (line) onLine(line);
+      },
+      opts,
+    );
+  try {
+    return { code: await work(run), output: chunks.join("") };
+  } catch (err) {
+    chunks.push(`${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
+    return { code: 1, output: chunks.join("") };
+  }
+}
+
+/** Write `text` to `stream` and wait for the flush. Anything written on the way to
+ * `process.exit()` has to be awaited: exit truncates a piped write at the pipe
+ * buffer — the 64KB cliff scripts/preflight.ts documents — and the tail it drops is
+ * exactly the part a failure is read from. */
+export async function writeAndFlush(stream: NodeJS.WriteStream, text: string): Promise<void> {
+  await new Promise<void>((resolve) => stream.write(text, () => resolve()));
+}
+
 /** Spawn `cmd` via runForward and exit this process with the child's code — the
  * "the tool's exit status is the task's exit status" tail shared by every task
  * that forwards to a single tool (build ui, lint, format, test unit, test e2e). */

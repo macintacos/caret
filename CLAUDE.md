@@ -158,8 +158,9 @@ when the runner produced none, and `output` still carries what it wrote, so a ru
 died early stays diagnosable.
 
 A failing whole-suite run is large — the native report grows with the number of tests, so
-scope the run when you can. `--verbose` restores the full stream; `--quiet` shows failures
-only and is the default at a terminal.
+scope the run when you can. `--verbose` restores the full stream; `--quiet` is a dot per
+test plus failures in full, and is the default at a terminal — those dots are for a human
+watching, so an agent piping the output wants `--json` or the `verbose` default instead.
 
 **Caret's flags must precede the forwarded ones.** `mise run test --json <path>` is
 parsed; `mise run test <path> --json` hands `--json` to `bun test`, because the forwarding

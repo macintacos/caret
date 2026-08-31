@@ -353,15 +353,21 @@ gate that reads the output today sees a different one.
 
 | Flag        | What the runner prints                                              |
 | ----------- | ------------------------------------------------------------------- |
-| `--quiet`   | Failures only. The default at a terminal.                           |
+| `--quiet`   | A dot per test, and failures in full. The default at a terminal.    |
 | `--verbose` | Everything — the default when stdout is piped.                      |
 | `--json`    | One result document on stdout, and nothing else.                    |
 
-**How much `--quiet` actually removes differs by target**, because the two runners start
-from different defaults. `bun test` already prints failures only — a green run is a
-five-line summary — so `--quiet` pins that behaviour for `unit` rather than reducing it.
-Playwright is configured with the `list` reporter, one line per spec, so for `e2e` the
-switch to its dot reporter is a real reduction. That asymmetry is expected, not a bug.
+**What `--quiet` has to fix differs by target**, because the two runners start from
+opposite defaults. Playwright is configured with the `list` reporter, a line per spec, so
+for `e2e` the switch to its dot reporter is a reduction. `bun test` has the reverse
+problem: its console reporter prints nothing at all between the banner and the summary, so
+a green run shows no sign of life for the minute it takes — for `unit`, `--quiet` selects
+the dots reporter to _add_ the progress that was missing. Both end up at a dot per test,
+from different directions.
+
+`e2e` builds the UI before it runs, and in `--quiet` that build goes behind one live
+progress line — the same one `mise run build` renders — instead of Vite's ~400-line
+transcript. A build that fails still dumps its whole captured log before the task exits.
 
 The `--json` document is for tooling:
 `{ schemaVersion, target, ok, passed, failed, durationMs, report }`, where `ok` is the
@@ -437,10 +443,12 @@ forwarder sets `#MISE raw_args=true` so mise hands every argument — including 
 Task modules are siblings of the CLI in `scripts/tasks/`, named after their group; the
 table above names the two that are not. Code shared across tasks lives in
 `scripts/tasks/lib/`: `exec.ts` (the `runForward` / `execAndExit` spawn helpers, plus
-`runCapture` / `lastDisplayLine` / `stripAnsi` for the quiet umbrella build and
-`test --json`), `signals.ts` (the cleanup-on-exit/signal wiring the supervising tasks
-share), and `smoke-probe.ts` (the over-the-wire UI probe both smoke targets run). Every
-subcommand's parsing contract is unit-tested in `test/scripts/tasks-cli.test.ts`.
+`runCapture` / `runQuietly` / `lastDisplayLine` / `stripAnsi` / `writeAndFlush` for the
+captured builds and `test --json`), `progress.ts` (`underProgressLine`, the single live
+listr2 line the umbrella build and the e2e UI build each render over a captured child),
+`signals.ts` (the cleanup-on-exit/signal wiring the supervising tasks share), and
+`smoke-probe.ts` (the over-the-wire UI probe both smoke targets run). Every subcommand's
+parsing contract is unit-tested in `test/scripts/tasks-cli.test.ts`.
 
 Two groups diverge from the plain-module shape. `release` keeps its own JSON-on-stdout
 error discipline — Commander help and errors to stderr, a typed JSON result per action —

@@ -177,17 +177,16 @@ const TASK_ORDER = [...IMMEDIATE, ...DEPENDENT.map((d) => d.name)];
  * that name is also the results map key, the display title, and what `--task`
  * matches — a flag folded into it would break all three.
  *
- * Both test tasks run quiet. The gate pipes every child, which resolves the test
- * task's own default to `verbose`, so the mode has to be asked for. It earns its
- * place on `test e2e`, whose configured `list` reporter prints a line per spec:
- * that chatter is what pushes a real failure out of the 20-line tail the result
- * document carries by default. On `test` it currently changes nothing — bun's
- * console reporter already prints failures only — and is passed so the gate
- * states the output it wants from both rather than inheriting one runner's
- * default.
+ * Only `test e2e` runs quiet. The gate pipes every child, which resolves the test
+ * task's own default to `verbose`, so the mode has to be asked for; on e2e it earns
+ * that, because the configured `list` reporter prints a line per spec and that
+ * chatter is what pushes a real failure out of the 20-line tail the result document
+ * carries by default. The UNIT task is deliberately left alone: quiet there means
+ * bun's dots reporter, whose one-character-per-test progress is for a terminal to
+ * animate, and this gate has none — it would only add ~4900 dots on a single line
+ * to a log nobody watches live.
  */
 const TASK_ARGS: Readonly<Record<string, readonly string[]>> = {
-  test: ["--quiet"],
   "test e2e": ["--quiet"],
 };
 
