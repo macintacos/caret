@@ -54,6 +54,7 @@ mise run dev        # dev console: isolated daemon + three fake plans + Vite UI
 mise run caret      # caret's own CLI from src/cli.ts, e.g. `mise run caret discovery`
 mise run test       # bun test (unit); `mise run test unit` is the same target
 mise run test e2e   # Playwright browser e2e (isolated daemon, Chromium)
+                    # both take --quiet / --verbose / --json, before any forwarded args
 mise run lint       # read-only gate: formatting + Biome lint + tsc + svelte-check
 mise run format     # Biome (write)
 mise run smoke      # smoke the shipped artifacts; also `smoke bin` / `smoke bundle`
@@ -344,6 +345,32 @@ and any review respawns the fresh build. The second is below.
 > `ps -eo pid,command | grep caret` and kill the `caret review` processes, not just the
 > daemon.
 
+### Test output modes
+
+Both test targets take the same three flags, and with none of them the mode follows the
+audience: a terminal gets `quiet`, anything piped keeps the full stream, so no script or
+gate that reads the output today sees a different one.
+
+| Flag        | What the runner prints                                                |
+| ----------- | --------------------------------------------------------------------- |
+| `--quiet`   | Dots as tests run, then failures in full. The default at a terminal.   |
+| `--verbose` | Everything — the default when stdout is piped.                        |
+| `--json`    | One result document on stdout, and nothing else.                      |
+
+The `--json` document is for tooling:
+`{ schemaVersion, target, ok, passed, failed, durationMs, report }`, where `ok` is the
+runner's own exit code and `report` nests its native report unnormalised — JUnit XML as a
+string for `unit`, Playwright's json report as an object for `e2e`. A runner that dies
+before writing one yields `report: null` plus an `output` field carrying what it did
+write. Everything the run spawns is captured in this mode, the UI build included, so the
+document is the only thing on stdout.
+
+The flags must come **before** any argument you are forwarding to the runner:
+`mise run test --json path/to/x.test.ts` is parsed by caret, while
+`mise run test path/to/x.test.ts --json` hands `--json` to `bun test`. That ordering is
+the price of the byte-for-byte forwarding contract described under
+[The tasks CLI](#the-tasks-cli).
+
 ### End-to-end tests
 
 `mise run test e2e` runs the Playwright specs in `test/e2e/` against an isolated daemon
@@ -383,18 +410,19 @@ forwarder sets `#MISE raw_args=true` so mise hands every argument — including 
 | --------------------------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------- |
 | `dev`                                               | `scripts/tasks/dev/`            | The one multi-file task, so it keeps a folder rather than a single module.        |
 | `build` — bare, `ui`, `bin`, `bundle`               | `scripts/tasks/build.ts`        | Bare is the umbrella; `mise run build bin` reaches a target.                      |
-| `test` — bare / `unit`, `e2e`                       | `scripts/tasks/test.ts`         | Bare and `unit` are the same bun target; `e2e` is Playwright.                     |
+| `test` — bare / `unit`, `e2e`                       | `scripts/tasks/test.ts`         | Bare and `unit` are the same bun target; `e2e` is Playwright. Both carry `--quiet`, `--verbose`, and `--json` ahead of their forwarded args. |
 | `smoke` — bare, `bin`, `bundle`                     | `scripts/tasks/smoke.ts`        | Bare smokes both artifacts.                                                       |
 | `assets` — bare, `stitch`, `video`                  | `scripts/tasks/assets.ts`       | Regenerates the README hero image and demo recording. Needs ImageMagick and ffmpeg on `PATH`. |
 | `lint`, `format`, `caret`                           | `scripts/tasks/lint.ts` et al.  | Passthroughs: operands and flags reach the underlying tool. Only `caret` forwards a bare `--help`. |
 | `setup`                                             | `scripts/tasks/setup.ts`        | The bootstrap's three steps, plus the e2e Chromium.                               |
-| `preflight`                                         | `scripts/preflight.ts`          | The one task with real Commander options: `--json`, `-v`, `--grep`, `--task`, `--full`. |
+| `preflight`                                         | `scripts/preflight.ts`          | Real Commander options rather than passthrough: `--json`, `-v`, `--grep`, `--task`, `--full`. |
 | `release` — `compute`, `baseline`, `prepare`, `finalize` | `scripts/tasks/release/command.ts` | JSON on stdout so `/release-caret` can parse it.                            |
 
 Task modules are siblings of the CLI in `scripts/tasks/`, named after their group; the
 table above names the two that are not. Code shared across tasks lives in
 `scripts/tasks/lib/`: `exec.ts` (the `runForward` / `execAndExit` spawn helpers, plus
-`runCapture` / `lastDisplayLine` for the quiet umbrella build), `signals.ts` (the
+`runCapture` / `lastDisplayLine` for the quiet umbrella build and `runCaptureSplit` for
+`test --json`, which needs the two streams kept apart), `signals.ts` (the
 cleanup-on-exit/signal wiring the supervising tasks share), and `smoke-probe.ts` (the
 over-the-wire UI probe both smoke targets run). Every subcommand's parsing contract is
 unit-tested in `test/scripts/tasks-cli.test.ts`.

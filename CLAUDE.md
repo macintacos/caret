@@ -141,6 +141,22 @@ README.
 `mise run test` (unit) and `mise run test e2e` (Playwright) are the entry points, and both
 forward their arguments, so `mise run test <path>` scopes the run to one file.
 
+**`mise run test --json` is the call you want when you only need the verdict.** It emits
+one JSON document on stdout and nothing else — every child, the UI build included, runs
+captured — so a scoped run costs a few hundred tokens instead of a transcript:
+`{"schemaVersion": 1, "target": "unit"|"e2e", "ok", "passed", "failed", "durationMs", "report"}`.
+`ok` is the runner's own exit code, never re-derived from the counts, and the exit code is
+unchanged (`0` pass, non-zero fail). `report` nests the runner's native report
+**unnormalised** — JUnit XML as a string for `unit`, Playwright's json report as an object
+for `e2e` — so per-test detail is there when you need it. A runner that died before
+writing one gives `report: null` plus an `output` field holding what it wrote, so a
+crashed run stays diagnosable. `--verbose` restores the full stream, and `--quiet` (the
+default at a terminal) shows failures only.
+
+**Caret's flags must precede the forwarded ones.** `mise run test --json <path>` is
+parsed; `mise run test <path> --json` hands `--json` to `bun test`, because the forwarding
+contract stops caret's own parsing at the first operand.
+
 **Never bare `bun test`.** Those entry points carry `--conditions browser`, which bun
 accepts only on the CLI; without it svelte resolves its server runtime and every UI
 component file aborts at import, while the backend suite still passes — so a bare run
