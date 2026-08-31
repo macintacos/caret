@@ -20,7 +20,7 @@
 // without spawning the tools. It reuses createProgram from src/lib/program.ts so all
 // caret CLIs share the same name/description/help conventions.
 
-import { InvalidArgumentError } from "@commander-js/extra-typings";
+import { type Command, InvalidArgumentError, type OptionValues } from "@commander-js/extra-typings";
 
 import { createProgram } from "@/lib/program.ts";
 import { runAssets, runAssetsStitch, runAssetsVideo } from "@/tasks/assets.ts";
@@ -224,34 +224,38 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
   // passthrough, the way `preflight` carries its own --json. passThroughOptions
   // stops parsing at the first operand, which is what preserves the forwarding
   // contract (EXC-738/739), so these must precede the forwarded args — hence the
-  // "(before forwarded args)" each description carries.
+  // "(before forwarded args)" each description carries. The two targets share one
+  // declaration so a reworded description cannot drift between them.
+  const withModeFlags = <Args extends unknown[], Opts extends OptionValues>(
+    cmd: Command<Args, Opts>,
+  ) =>
+    cmd
+      .option("--json", "Emit one machine-readable result document (before forwarded args)")
+      .option("--verbose", "Stream the runner's full output (before forwarded args)")
+      .option("--quiet", "Show failures only (before forwarded args)");
   const test = program
     .command("test")
     .description("Run tests: bare/`unit` = bun test, `e2e` = Playwright");
-  test
-    .command("unit", { isDefault: true })
-    .description("Run the unit suite (bun test --conditions browser)")
-    .allowUnknownOption()
-    .passThroughOptions()
-    .argument("[args...]", "forwarded to bun test")
-    .option("--json", "Emit one machine-readable result document (before forwarded args)")
-    .option("--verbose", "Stream the runner's full output (before forwarded args)")
-    .option("--quiet", "Show failures only, hiding passing tests (before forwarded args)")
-    .action(async (args: string[], opts) => {
-      await actions.test(args, opts);
-    });
-  test
-    .command("e2e")
-    .description("Run the Playwright e2e suite against an isolated daemon (builds the UI first)")
-    .allowUnknownOption()
-    .passThroughOptions()
-    .argument("[args...]", "forwarded to playwright test")
-    .option("--json", "Emit one machine-readable result document (before forwarded args)")
-    .option("--verbose", "Stream the runner's full output (before forwarded args)")
-    .option("--quiet", "Show failures only, hiding passing tests (before forwarded args)")
-    .action(async (args: string[], opts) => {
-      await actions.testE2e(args, opts);
-    });
+  withModeFlags(
+    test
+      .command("unit", { isDefault: true })
+      .description("Run the unit suite (bun test --conditions browser)")
+      .allowUnknownOption()
+      .passThroughOptions()
+      .argument("[args...]", "forwarded to bun test"),
+  ).action(async (args: string[], opts) => {
+    await actions.test(args, opts);
+  });
+  withModeFlags(
+    test
+      .command("e2e")
+      .description("Run the Playwright e2e suite against an isolated daemon (builds the UI first)")
+      .allowUnknownOption()
+      .passThroughOptions()
+      .argument("[args...]", "forwarded to playwright test"),
+  ).action(async (args: string[], opts) => {
+    await actions.testE2e(args, opts);
+  });
 
   program
     .command("setup")

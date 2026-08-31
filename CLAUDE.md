@@ -143,15 +143,23 @@ forward their arguments, so `mise run test <path>` scopes the run to one file.
 
 **`mise run test --json` is the call you want when you only need the verdict.** It emits
 one JSON document on stdout and nothing else — every child, the UI build included, runs
-captured — so a scoped run costs a few hundred tokens instead of a transcript:
+captured — and the exit code is unchanged (`0` pass, non-zero fail):
 `{"schemaVersion": 1, "target": "unit"|"e2e", "ok", "passed", "failed", "durationMs", "report"}`.
-`ok` is the runner's own exit code, never re-derived from the counts, and the exit code is
-unchanged (`0` pass, non-zero fail). `report` nests the runner's native report
-**unnormalised** — JUnit XML as a string for `unit`, Playwright's json report as an object
-for `e2e` — so per-test detail is there when you need it. A runner that died before
-writing one gives `report: null` plus an `output` field holding what it wrote, so a
-crashed run stays diagnosable. `--verbose` restores the full stream, and `--quiet` (the
-default at a terminal) shows failures only.
+`ok` is the runner's own exit code, never re-derived from the counts.
+
+**What rides along depends on the verdict**, the same discipline `preflight --json`
+applies. A **passing** run is that envelope and nothing else — about 120 bytes, whether it
+ran one file or all 4900. A **failing** run adds two fields: `report`, the runner's native
+report nested unnormalised (JUnit XML as a string for `unit`, Playwright's json report as
+an object for `e2e`), and `output`, everything the runner wrote. Read `output` first on a
+`unit` failure — bun's JUnit reporter emits a bare `<failure type="…"/>` with no message,
+so the console stream is the only place the diff and the stack exist. `report` is `null`
+when the runner produced none, and `output` still carries what it wrote, so a run that
+died early stays diagnosable.
+
+A failing whole-suite run is large — the native report grows with the number of tests, so
+scope the run when you can. `--verbose` restores the full stream; `--quiet` shows failures
+only and is the default at a terminal.
 
 **Caret's flags must precede the forwarded ones.** `mise run test --json <path>` is
 parsed; `mise run test <path> --json` hands `--json` to `bun test`, because the forwarding

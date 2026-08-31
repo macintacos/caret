@@ -8,15 +8,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { ensureUi, paletteCssCommand } from "@/tasks/build.ts";
-import { execAndExit, runCaptureSplit, runForward, stripAnsi } from "@/tasks/lib/exec.ts";
+import { execAndExit, runCapture, runForward, stripAnsi } from "@/tasks/lib/exec.ts";
 
 // --- output modes -----------------------------------------------------------
-// `mise run test` is the loudest command in the repo, and it printed its whole
-// transcript to every consumer alike (EXC-1146). Three modes now split that, the
-// same way `mise run preflight` splits a live display from a --json contract:
-// `verbose` is the historical stream, `quiet` asks each runner for a dots
-// reporter that shows failures only, and `json` emits one result document and
-// nothing else. Which one applies is decided by one pure function.
+// Three output modes (EXC-1146), splitting the run the way `mise run preflight`
+// splits a live display from a --json contract: `verbose` is the historical
+// stream, `quiet` asks each runner to print failures only, and `json` emits one
+// result document and nothing else. Which one applies is decided by one pure
+// function.
+//
+// How much `quiet` actually removes differs sharply by target, because the two
+// runners start from different defaults. bun 1.3.14 ALREADY prints failures only
+// — a green 4900-test run is a five-line summary — so unit quiet pins that rather
+// than reducing it. Playwright's configured reporter is `list`
+// (playwright.config.ts), one line per spec, so e2e quiet is a real reduction.
 
 export type TestOutputMode = "verbose" | "quiet" | "json";
 
@@ -44,19 +49,29 @@ export function resolveTestMode(flags: TestFlags, isTty: boolean): TestOutputMod
   return isTty ? "quiet" : "verbose";
 }
 
-/** The `bun test` flags a mode injects ahead of the forwarded args. `junitPath`
- * is used only by json mode, where bun's junit reporter requires an outfile —
- * it writes its own console stream to stderr and its banner to stdout, so the
- * report cannot simply be read back off a captured stream. */
-export function unitModeArgs(mode: TestOutputMode, junitPath: string | null): string[] {
-  if (mode === "quiet") return ["--dots", "--only-failures"];
-  if (mode === "json" && junitPath) return ["--reporter=junit", `--reporter-outfile=${junitPath}`];
+/**
+ * The `bun test` flags a mode injects ahead of the forwarded args. The overloads
+ * put json's requirement in the type: bun's junit reporter refuses to run without
+ * `--reporter-outfile`, so the path is not optional there and a json call without
+ * one does not compile.
+ *
+ * `quiet` asks for `--only-failures` and NOT `--dots`. The dots reporter emits one
+ * character per test with no overwrite — ~4900 of them on this suite, some sixty
+ * wrapped rows — so it would make the terminal default the loudest unit mode there
+ * is. `--only-failures` matches bun 1.3.14's own default, and is passed anyway so
+ * the mode states its contract rather than inheriting it.
+ */
+export function unitModeArgs(mode: "verbose" | "quiet"): string[];
+export function unitModeArgs(mode: "json", junitPath: string): string[];
+export function unitModeArgs(mode: TestOutputMode, junitPath?: string): string[] {
+  if (mode === "quiet") return ["--only-failures"];
+  if (mode === "json") return ["--reporter=junit", `--reporter-outfile=${junitPath}`];
   return [];
 }
 
-/** The `playwright test` flags a mode injects ahead of the forwarded args. The
- * json reporter writes its report to stdout, which is why the json run path
- * captures the child's streams instead of inheriting them. */
+/** The `playwright test` flags a mode injects ahead of the forwarded args. Where
+ * the json reporter WRITES is not a flag — it follows PLAYWRIGHT_JSON_OUTPUT_FILE,
+ * which the json run path sets so the report lands in a file instead of on stdout. */
 export function e2eModeArgs(mode: TestOutputMode): string[] {
   if (mode === "quiet") return ["--reporter=dot"];
   if (mode === "json") return ["--reporter=json"];
@@ -65,9 +80,17 @@ export function e2eModeArgs(mode: TestOutputMode): string[] {
 
 // --- the --json result document ----------------------------------------------
 // One document per run, on stdout, and nothing else. The envelope is shared
-// between the two targets; each runner's native report is nested UNNORMALISED
+// between the two targets; a runner's native report is nested UNNORMALISED
 // beneath it — JUnit XML text for unit, Playwright's parsed JSON for e2e — so
 // this file never has to model what a "test result" is in two dialects.
+//
+// What rides along depends on the verdict, the same discipline
+// scripts/preflight.ts applies to its own --json result: a GREEN run is the
+// envelope and the counts, nothing more, because a passing run's native report
+// says only what `passed` already says and costs 1.1MB of <testcase/> rows to say
+// it. A FAILING run carries both the native report and the captured output —
+// output because bun's junit reporter emits a bare `<failure type="…"/>` with no
+// message, so the console stream is the only place the diff and the stack exist.
 
 /** Bumpable integer so a machine consumer detects a breaking shape change.
  * Numbered independently of scripts/preflight.ts's: separate contracts, which
@@ -83,10 +106,11 @@ export interface TestReport {
   failed: number;
   durationMs: number;
   /** The runner's native report, unnormalised: JUnit XML text (unit) or
-   * Playwright's JSON (e2e). Null when the runner produced none. */
+   * Playwright's JSON (e2e). Null on a passing run, where the envelope is the
+   * whole answer, and on a run whose runner produced no report at all. */
   report: string | Record<string, unknown> | null;
-  /** Captured runner output — present only when `report` is null, so a runner
-   * that died before writing one is diagnosable rather than a black hole. */
+  /** Everything the runner wrote. Carried on every failing run — for `unit` it is
+   * the only place the failure detail exists — and never on a passing one. */
   output?: string;
 }
 
@@ -94,10 +118,10 @@ export interface TestReportInput {
   target: "unit" | "e2e";
   exitCode: number;
   durationMs: number;
-  /** The runner's native report as written: JUnit XML read back from bun's
-   * outfile, or Playwright's json reporter on stdout. */
+  /** The runner's native report as written, read back from the file each runner
+   * was pointed at. Null when the runner produced none. */
   native: string | null;
-  /** Everything the runner wrote, for the case where it produced no report. */
+  /** Everything the runner wrote, interleaved as it arrived. */
   output: string;
 }
 
@@ -110,10 +134,9 @@ export function buildTestReport(input: TestReportInput): TestReport {
     durationMs: input.durationMs,
   };
   const parsed = input.native === null ? null : parseNative(input.target, input.native);
-  if (parsed === null) {
-    return { ...envelope, passed: 0, failed: 0, report: null, output: input.output };
-  }
-  return { ...envelope, ...parsed };
+  const counts = { passed: parsed?.passed ?? 0, failed: parsed?.failed ?? 0 };
+  if (envelope.ok) return { ...envelope, ...counts, report: null };
+  return { ...envelope, ...counts, report: parsed?.report ?? null, output: input.output };
 }
 
 /** Counts plus the report to nest, or null when the text isn't a report at all. */
@@ -145,7 +168,7 @@ function parsePlaywrightReport(
   } catch {
     return null;
   }
-  if (typeof parsed !== "object" || parsed === null) return null;
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
   const stats = (parsed as { stats?: { expected?: number; unexpected?: number } }).stats;
   return {
     passed: stats?.expected ?? 0,
@@ -169,24 +192,14 @@ function stripAnsiDeep(value: unknown): unknown {
 /** Write the result document as the only thing on stdout, then exit with the
  * runner's code. The write is awaited because `process.exit()` truncates a piped
  * write at the pipe buffer — the 64KB cliff scripts/preflight.ts documents — and
- * a whole-suite JUnit report clears that many times over. */
+ * a failing run's native report clears that many times over. */
 async function emitTestReport(
-  target: "unit" | "e2e",
-  exitCode: number,
-  startedAt: number,
-  native: string | null,
-  captured: { stdout: string; stderr: string },
+  input: Omit<TestReportInput, "durationMs"> & { startedAt: number },
 ): Promise<never> {
-  const report = buildTestReport({
-    target,
-    exitCode,
-    durationMs: Date.now() - startedAt,
-    native,
-    output: captured.stdout + captured.stderr,
-  });
+  const report = buildTestReport({ ...input, durationMs: Date.now() - input.startedAt });
   const line = `${JSON.stringify(report)}\n`;
   await new Promise<void>((resolve) => process.stdout.write(line, () => resolve()));
-  process.exit(exitCode);
+  process.exit(input.exitCode);
 }
 
 // --- test unit --------------------------------------------------------------
@@ -241,26 +254,42 @@ export async function runTest(args: string[], flags: TestFlags = {}): Promise<ne
   // lib/appCss.ts, and this path never runs Vite — so emit it here.
   const palette = await runForward(paletteCssCommand());
   if (palette !== 0) process.exit(palette);
-  return execAndExit(testCommand([...unitModeArgs(mode, null), ...args]));
+  return execAndExit(testCommand([...unitModeArgs(mode), ...args]));
 }
 
-/** The unit suite with stdout reserved for the result document. bun writes its
- * banner to stdout and its console stream to stderr, so BOTH children run
- * captured — the palette generator included, which is why that step streams
- * normally in the other two modes and only here does not. The report itself
- * arrives out-of-band: bun's junit reporter requires an outfile. */
-async function runTestJson(args: string[]): Promise<never> {
-  const started = Date.now();
-  const palette = await runCaptureSplit(paletteCssCommand());
-  if (palette.code !== 0) return emitTestReport("unit", palette.code, started, null, palette);
+/**
+ * Run the unit suite for json mode and collect what the document needs, without
+ * emitting or exiting — so the orchestration below is drivable by a test.
+ *
+ * Every child runs captured, the palette generator included: stdout is reserved
+ * for the document, and that capture is the one thing json mode does differently
+ * from the streaming modes. The runner is injectable for the same reason
+ * `buildBinArtifacts`'s is in build.ts.
+ */
+export async function collectUnitJsonRun(
+  args: string[],
+  run: typeof runCapture = runCapture,
+): Promise<Omit<TestReportInput, "durationMs">> {
+  let log = "";
+  const sink = (chunk: string): void => {
+    log += chunk;
+  };
+  // The CSS-contract suites read app.css's generated palette partial through
+  // lib/appCss.ts, and this path never runs Vite — so emit it here, and stop if
+  // it fails rather than reporting a suite that never ran.
+  const palette = await run(paletteCssCommand(), sink);
+  if (palette !== 0) return { target: "unit", exitCode: palette, native: null, output: log };
   const dir = mkdtempSync(join(tmpdir(), "caret-test-json-"));
   const junitPath = join(dir, "report.xml");
-  const run = await runCaptureSplit(testCommand([...unitModeArgs("json", junitPath), ...args]));
-  // Read before the cleanup, and both before the emit: emitTestReport exits, so
-  // nothing after it — a `finally` included — would ever run.
+  const exitCode = await run(testCommand([...unitModeArgs("json", junitPath), ...args]), sink);
   const native = existsSync(junitPath) ? readFileSync(junitPath, "utf8") : null;
   rmSync(dir, { recursive: true, force: true });
-  return emitTestReport("unit", run.code, started, native, run);
+  return { target: "unit", exitCode, native, output: log };
+}
+
+async function runTestJson(args: string[]): Promise<never> {
+  const startedAt = Date.now();
+  return emitTestReport({ ...(await collectUnitJsonRun(args)), startedAt });
 }
 
 // --- test e2e ---------------------------------------------------------------
@@ -305,22 +334,41 @@ export async function runTestE2e(args: string[], flags: TestFlags = {}): Promise
   return execAndExit(e2eCommand([...e2eModeArgs(mode), ...args]));
 }
 
-/** The e2e suite with stdout reserved for the result document. Playwright's json
- * reporter writes its report THERE, so the run is captured and that stdout is
- * the report; ensureUi takes an injectable runner, so the Vite build is captured
- * with it rather than streaming into the middle of the document. */
-async function runTestE2eJson(args: string[]): Promise<never> {
-  const started = Date.now();
-  let uiLog = "";
-  const ui = await ensureUi(async (cmd, opts) => {
-    const built = await runCaptureSplit(cmd, opts);
-    uiLog += built.stdout + built.stderr;
-    return built.code;
-  });
-  if (ui !== 0) return emitTestReport("e2e", ui, started, null, { stdout: uiLog, stderr: "" });
-  if (!(await chromiumInstalled())) {
-    return emitTestReport("e2e", 1, started, null, { stdout: "", stderr: CHROMIUM_MISSING });
+/**
+ * `collectUnitJsonRun`'s e2e twin: run the suite and collect the document's
+ * inputs, emitting and exiting nowhere.
+ *
+ * Every child runs captured here too, the Vite build included — which is why
+ * `ensureUi`'s injectable runner is threaded rather than left to stream.
+ * Playwright's json reporter writes to stdout by default, so
+ * PLAYWRIGHT_JSON_OUTPUT_FILE redirects it to a file; that is what keeps the
+ * document the only thing this process puts on stdout.
+ */
+export async function collectE2eJsonRun(
+  args: string[],
+  run: typeof runCapture = runCapture,
+  chromium: () => Promise<boolean> = chromiumInstalled,
+): Promise<Omit<TestReportInput, "durationMs">> {
+  let log = "";
+  const sink = (chunk: string): void => {
+    log += chunk;
+  };
+  const ui = await ensureUi((cmd, opts) => run(cmd, sink, opts));
+  if (ui !== 0) return { target: "e2e", exitCode: ui, native: null, output: log };
+  if (!(await chromium())) {
+    return { target: "e2e", exitCode: 1, native: null, output: log + CHROMIUM_MISSING };
   }
-  const run = await runCaptureSplit(e2eCommand([...e2eModeArgs("json"), ...args]));
-  return emitTestReport("e2e", run.code, started, run.stdout, run);
+  const dir = mkdtempSync(join(tmpdir(), "caret-test-json-"));
+  const reportPath = join(dir, "report.json");
+  const exitCode = await run(e2eCommand([...e2eModeArgs("json"), ...args]), sink, {
+    env: { ...(process.env as Record<string, string>), PLAYWRIGHT_JSON_OUTPUT_FILE: reportPath },
+  });
+  const native = existsSync(reportPath) ? readFileSync(reportPath, "utf8") : null;
+  rmSync(dir, { recursive: true, force: true });
+  return { target: "e2e", exitCode, native, output: log };
+}
+
+async function runTestE2eJson(args: string[]): Promise<never> {
+  const startedAt = Date.now();
+  return emitTestReport({ ...(await collectE2eJsonRun(args)), startedAt });
 }

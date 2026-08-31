@@ -351,25 +351,41 @@ Both test targets take the same three flags, and with none of them the mode foll
 audience: a terminal gets `quiet`, anything piped keeps the full stream, so no script or
 gate that reads the output today sees a different one.
 
-| Flag        | What the runner prints                                                |
-| ----------- | --------------------------------------------------------------------- |
-| `--quiet`   | Dots as tests run, then failures in full. The default at a terminal.   |
-| `--verbose` | Everything — the default when stdout is piped.                        |
-| `--json`    | One result document on stdout, and nothing else.                      |
+| Flag        | What the runner prints                                              |
+| ----------- | ------------------------------------------------------------------- |
+| `--quiet`   | Failures only. The default at a terminal.                           |
+| `--verbose` | Everything — the default when stdout is piped.                      |
+| `--json`    | One result document on stdout, and nothing else.                    |
+
+**How much `--quiet` actually removes differs by target**, because the two runners start
+from different defaults. `bun test` already prints failures only — a green run is a
+five-line summary — so `--quiet` pins that behaviour for `unit` rather than reducing it.
+Playwright is configured with the `list` reporter, one line per spec, so for `e2e` the
+switch to its dot reporter is a real reduction. That asymmetry is expected, not a bug.
 
 The `--json` document is for tooling:
 `{ schemaVersion, target, ok, passed, failed, durationMs, report }`, where `ok` is the
-runner's own exit code and `report` nests its native report unnormalised — JUnit XML as a
-string for `unit`, Playwright's json report as an object for `e2e`. A runner that dies
-before writing one yields `report: null` plus an `output` field carrying what it did
-write. Everything the run spawns is captured in this mode, the UI build included, so the
-document is the only thing on stdout.
+runner's own exit code. What rides along depends on the verdict, the same way
+`mise run preflight --json` reports a passing task: a **passing** run is that envelope
+alone, because a green run's native report says only what `passed` already says and costs
+megabytes to say it. A **failing** run adds `report` — the runner's native report nested
+unnormalised, JUnit XML as a string for `unit` and Playwright's json report as an object
+for `e2e` — and `output`, everything the runner wrote. On a `unit` failure `output` is the
+one to read: bun's JUnit reporter writes a bare `<failure type="…"/>`, so the message and
+the stack exist only in the console stream. A runner that produced no report at all yields
+`report: null` and still carries `output`. Everything the run spawns is captured in this
+mode, the UI build included, so the document is the only thing on stdout.
 
 The flags must come **before** any argument you are forwarding to the runner:
 `mise run test --json path/to/x.test.ts` is parsed by caret, while
 `mise run test path/to/x.test.ts --json` hands `--json` to `bun test`. That ordering is
 the price of the byte-for-byte forwarding contract described under
 [The tasks CLI](#the-tasks-cli).
+
+One collision follows from it: `playwright test` has a `--quiet` of its own, and
+`mise run test e2e --quiet` is caret's. Put a spec path first
+(`mise run test e2e some.e2e.ts --quiet`) to reach Playwright's. `--json` and `--verbose`
+collide with nothing on either runner.
 
 ### End-to-end tests
 
@@ -421,11 +437,10 @@ forwarder sets `#MISE raw_args=true` so mise hands every argument — including 
 Task modules are siblings of the CLI in `scripts/tasks/`, named after their group; the
 table above names the two that are not. Code shared across tasks lives in
 `scripts/tasks/lib/`: `exec.ts` (the `runForward` / `execAndExit` spawn helpers, plus
-`runCapture` / `lastDisplayLine` for the quiet umbrella build and `runCaptureSplit` for
-`test --json`, which needs the two streams kept apart), `signals.ts` (the
-cleanup-on-exit/signal wiring the supervising tasks share), and `smoke-probe.ts` (the
-over-the-wire UI probe both smoke targets run). Every subcommand's parsing contract is
-unit-tested in `test/scripts/tasks-cli.test.ts`.
+`runCapture` / `lastDisplayLine` / `stripAnsi` for the quiet umbrella build and
+`test --json`), `signals.ts` (the cleanup-on-exit/signal wiring the supervising tasks
+share), and `smoke-probe.ts` (the over-the-wire UI probe both smoke targets run). Every
+subcommand's parsing contract is unit-tested in `test/scripts/tasks-cli.test.ts`.
 
 Two groups diverge from the plain-module shape. `release` keeps its own JSON-on-stdout
 error discipline — Commander help and errors to stderr, a typed JSON result per action —

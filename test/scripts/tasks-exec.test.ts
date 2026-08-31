@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { lastDisplayLine, runCapture, runCaptureSplit, stripAnsi } from "@/tasks/lib/exec.ts";
+import { lastDisplayLine, runCapture, stripAnsi } from "@/tasks/lib/exec.ts";
 
 const ESC = String.fromCharCode(27);
 
@@ -75,31 +75,5 @@ describe("runCapture", () => {
     ]);
     expect(out).toBe("");
     expect(err).toBe("probe:0");
-  });
-});
-
-// The buffering, stream-separating sibling of runCapture (EXC-1146). `test --json`
-// reads Playwright's report off the child's stdout, so the two streams must not be
-// interleaved into one sink the way runCapture interleaves them.
-describe("runCaptureSplit", () => {
-  test("keeps the child's stdout and stderr apart", async () => {
-    const { code, stdout, stderr } = await runCaptureSplit([
-      "bun",
-      "-e",
-      "console.log('out'); console.error('err')",
-    ]);
-    expect(code).toBe(0);
-    expect(stdout).toBe("out\n");
-    expect(stderr).toBe("err\n");
-  });
-
-  test("resolves a failing child's exit code alongside what it wrote", async () => {
-    const { code, stdout } = await runCaptureSplit([
-      "bun",
-      "-e",
-      "console.log('partial'); process.exit(3)",
-    ]);
-    expect(code).toBe(3);
-    expect(stdout).toBe("partial\n");
   });
 });

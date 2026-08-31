@@ -33,8 +33,8 @@ export async function runForward(cmd: string[], opts: ExecOpts = {}): Promise<nu
 // the child, so display lines are stripped. Buffered output stays raw.
 const ANSI_ESCAPES = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, "g");
 
-/** `text` with ANSI control sequences removed. Also used on captured reports —
- * the escapes survive JSON encoding, so a runner's colorized failure message
+/** `text` with ANSI control sequences removed. Also used on a captured runner
+ * report — the escapes survive JSON encoding, so a colorized failure message
  * would otherwise reach a machine consumer full of them. */
 export function stripAnsi(text: string): string {
   return text.replace(ANSI_ESCAPES, "");
@@ -60,55 +60,21 @@ export async function runCapture(
   sink: (chunk: string) => void,
   opts: ExecOpts = {},
 ): Promise<number> {
-  const child = spawnPiped(cmd, opts);
-  const [, , code] = await Promise.all([
-    drain(child.stdout, sink),
-    drain(child.stderr, sink),
-    child.exited,
-  ]);
-  return code;
-}
-
-/** Spawn `cmd` with both streams piped and buffered SEPARATELY, resolving the
- * exit code alongside each stream's full text. runCapture's sibling for a child
- * whose stdout is data rather than log: `test --json` reads Playwright's report
- * off stdout, which a single interleaved sink would mix with its stderr. */
-export async function runCaptureSplit(
-  cmd: string[],
-  opts: ExecOpts = {},
-): Promise<{ code: number; stdout: string; stderr: string }> {
-  const child = spawnPiped(cmd, opts);
-  const out: string[] = [];
-  const err: string[] = [];
-  const [, , code] = await Promise.all([
-    drain(child.stdout, (chunk) => out.push(chunk)),
-    drain(child.stderr, (chunk) => err.push(chunk)),
-    child.exited,
-  ]);
-  return { code, stdout: out.join(""), stderr: err.join("") };
-}
-
-/** Spawn with both streams piped. stdin is closed rather than inherited — a
- * child whose output the caller is capturing must not race it for the terminal. */
-function spawnPiped(cmd: string[], opts: ExecOpts) {
-  return Bun.spawn(cmd, {
+  const child = Bun.spawn(cmd, {
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
     cwd: opts.cwd,
     env: opts.env ?? (process.env as Record<string, string>),
   });
-}
-
-/** Decode one piped stream into `sink`, flushing any partial multibyte tail. */
-async function drain(
-  stream: ReadableStream<Uint8Array>,
-  sink: (chunk: string) => void,
-): Promise<void> {
-  const decoder = new TextDecoder();
-  for await (const chunk of stream) sink(decoder.decode(chunk, { stream: true }));
-  const tail = decoder.decode();
-  if (tail) sink(tail);
+  const drain = async (stream: ReadableStream<Uint8Array>): Promise<void> => {
+    const decoder = new TextDecoder();
+    for await (const chunk of stream) sink(decoder.decode(chunk, { stream: true }));
+    const tail = decoder.decode(); // flush a partial multibyte sequence, if any
+    if (tail) sink(tail);
+  };
+  const [, , code] = await Promise.all([drain(child.stdout), drain(child.stderr), child.exited]);
+  return code;
 }
 
 /** Spawn `cmd` via runForward and exit this process with the child's code — the
