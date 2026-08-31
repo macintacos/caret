@@ -35,8 +35,9 @@ const rejectProps = {
 
 // bits-ui AlertDialog portals its content to document.body on a deferred tick, so
 // render/structure is asserted against the body after an effect+timer flush (the
-// shadcn-foundation verdict). Interaction — Escape/Enter-to-confirm, the button
-// callbacks, and the no-backdrop-dismiss behavior — is real-browser and lives in
+// shadcn-foundation verdict). Interaction — Escape, the confirming keystroke (a bare
+// Enter for reject, the focused notes editor's ⌘↵ for approve), the button callbacks,
+// and the no-backdrop-dismiss behavior — is real-browser and lives in
 // test/e2e/approve.e2e.ts + reject.e2e.ts.
 const q = (sel: string) => document.body.querySelector(sel);
 const content = () => q("[data-slot='alert-dialog-content']");
