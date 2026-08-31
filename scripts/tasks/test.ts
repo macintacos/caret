@@ -3,10 +3,12 @@
 // `mise run test <target>`. Bare `mise run test` (and `mise run test unit`) run
 // the unit suite, preserving today's `mise run test == unit` behaviour.
 
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { ensureUi, paletteCssCommand } from "@/tasks/build.ts";
-import { execAndExit, runForward } from "@/tasks/lib/exec.ts";
+import { execAndExit, runCaptureSplit, runForward, stripAnsi } from "@/tasks/lib/exec.ts";
 
 // --- output modes -----------------------------------------------------------
 // `mise run test` is the loudest command in the repo, and it printed its whole
@@ -61,6 +63,132 @@ export function e2eModeArgs(mode: TestOutputMode): string[] {
   return [];
 }
 
+// --- the --json result document ----------------------------------------------
+// One document per run, on stdout, and nothing else. The envelope is shared
+// between the two targets; each runner's native report is nested UNNORMALISED
+// beneath it — JUnit XML text for unit, Playwright's parsed JSON for e2e — so
+// this file never has to model what a "test result" is in two dialects.
+
+/** Bumpable integer so a machine consumer detects a breaking shape change.
+ * Numbered independently of scripts/preflight.ts's: separate contracts, which
+ * will version separately. */
+const REPORT_SCHEMA_VERSION = 1;
+
+export interface TestReport {
+  schemaVersion: number;
+  target: "unit" | "e2e";
+  /** The runner's own verdict — its exit code, never one re-derived from counts. */
+  ok: boolean;
+  passed: number;
+  failed: number;
+  durationMs: number;
+  /** The runner's native report, unnormalised: JUnit XML text (unit) or
+   * Playwright's JSON (e2e). Null when the runner produced none. */
+  report: string | Record<string, unknown> | null;
+  /** Captured runner output — present only when `report` is null, so a runner
+   * that died before writing one is diagnosable rather than a black hole. */
+  output?: string;
+}
+
+export interface TestReportInput {
+  target: "unit" | "e2e";
+  exitCode: number;
+  durationMs: number;
+  /** The runner's native report as written: JUnit XML read back from bun's
+   * outfile, or Playwright's json reporter on stdout. */
+  native: string | null;
+  /** Everything the runner wrote, for the case where it produced no report. */
+  output: string;
+}
+
+/** The result document for one run. */
+export function buildTestReport(input: TestReportInput): TestReport {
+  const envelope = {
+    schemaVersion: REPORT_SCHEMA_VERSION,
+    target: input.target,
+    ok: input.exitCode === 0,
+    durationMs: input.durationMs,
+  };
+  const parsed = input.native === null ? null : parseNative(input.target, input.native);
+  if (parsed === null) {
+    return { ...envelope, passed: 0, failed: 0, report: null, output: input.output };
+  }
+  return { ...envelope, ...parsed };
+}
+
+/** Counts plus the report to nest, or null when the text isn't a report at all. */
+function parseNative(
+  target: "unit" | "e2e",
+  native: string,
+): Pick<TestReport, "passed" | "failed" | "report"> | null {
+  return target === "unit" ? parseJUnit(native) : parsePlaywrightReport(native);
+}
+
+/** bun's junit reporter puts the whole-run totals on the root `<testsuites>`
+ * element, so the counts are its attributes rather than a walk over the cases. */
+function parseJUnit(xml: string): Pick<TestReport, "passed" | "failed" | "report"> | null {
+  const root = /<testsuites\b[^>]*>/.exec(xml)?.[0];
+  if (!root) return null;
+  const attr = (name: string): number =>
+    Number(new RegExp(`\\b${name}="(\\d+)"`).exec(root)?.[1] ?? 0);
+  const failed = attr("failures") + attr("errors");
+  return { passed: attr("tests") - failed - attr("skipped"), failed, report: stripAnsi(xml) };
+}
+
+/** Playwright's json reporter carries the whole-run totals under `stats`. */
+function parsePlaywrightReport(
+  text: string,
+): Pick<TestReport, "passed" | "failed" | "report"> | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const stats = (parsed as { stats?: { expected?: number; unexpected?: number } }).stats;
+  return {
+    passed: stats?.expected ?? 0,
+    failed: stats?.unexpected ?? 0,
+    report: stripAnsiDeep(parsed) as Record<string, unknown>,
+  };
+}
+
+/** ANSI stripped from every string in a parsed report. The escapes live inside
+ * string VALUES and survive JSON encoding, so they have to be removed after the
+ * parse rather than scrubbed off the source text. */
+function stripAnsiDeep(value: unknown): unknown {
+  if (typeof value === "string") return stripAnsi(value);
+  if (Array.isArray(value)) return value.map(stripAnsiDeep);
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, stripAnsiDeep(v)]));
+  }
+  return value;
+}
+
+/** Write the result document as the only thing on stdout, then exit with the
+ * runner's code. The write is awaited because `process.exit()` truncates a piped
+ * write at the pipe buffer — the 64KB cliff scripts/preflight.ts documents — and
+ * a whole-suite JUnit report clears that many times over. */
+async function emitTestReport(
+  target: "unit" | "e2e",
+  exitCode: number,
+  startedAt: number,
+  native: string | null,
+  captured: { stdout: string; stderr: string },
+): Promise<never> {
+  const report = buildTestReport({
+    target,
+    exitCode,
+    durationMs: Date.now() - startedAt,
+    native,
+    output: captured.stdout + captured.stderr,
+  });
+  const line = `${JSON.stringify(report)}\n`;
+  await new Promise<void>((resolve) => process.stdout.write(line, () => resolve()));
+  process.exit(exitCode);
+}
+
 // --- test unit --------------------------------------------------------------
 // `--conditions browser` selects svelte's client runtime entry so the UI
 // component suite can mount components under happy-dom (see bunfig.toml and
@@ -108,11 +236,31 @@ export function testCommand(args: string[]): string[] {
 
 export async function runTest(args: string[], flags: TestFlags = {}): Promise<never> {
   const mode = resolveTestMode(flags, process.stdout.isTTY === true);
+  if (mode === "json") return runTestJson(args);
   // The CSS-contract suites read app.css's generated palette partial through
   // lib/appCss.ts, and this path never runs Vite — so emit it here.
   const palette = await runForward(paletteCssCommand());
   if (palette !== 0) process.exit(palette);
   return execAndExit(testCommand([...unitModeArgs(mode, null), ...args]));
+}
+
+/** The unit suite with stdout reserved for the result document. bun writes its
+ * banner to stdout and its console stream to stderr, so BOTH children run
+ * captured — the palette generator included, which is why that step streams
+ * normally in the other two modes and only here does not. The report itself
+ * arrives out-of-band: bun's junit reporter requires an outfile. */
+async function runTestJson(args: string[]): Promise<never> {
+  const started = Date.now();
+  const palette = await runCaptureSplit(paletteCssCommand());
+  if (palette.code !== 0) return emitTestReport("unit", palette.code, started, null, palette);
+  const dir = mkdtempSync(join(tmpdir(), "caret-test-json-"));
+  const junitPath = join(dir, "report.xml");
+  const run = await runCaptureSplit(testCommand([...unitModeArgs("json", junitPath), ...args]));
+  // Read before the cleanup, and both before the emit: emitTestReport exits, so
+  // nothing after it — a `finally` included — would ever run.
+  const native = existsSync(junitPath) ? readFileSync(junitPath, "utf8") : null;
+  rmSync(dir, { recursive: true, force: true });
+  return emitTestReport("unit", run.code, started, native, run);
 }
 
 // --- test e2e ---------------------------------------------------------------
@@ -137,20 +285,42 @@ export async function chromiumInstalled(): Promise<boolean> {
   return existsSync(chromium.executablePath());
 }
 
+/** What to tell a caller whose Chromium install is missing — the probe below
+ * fails actionably here rather than mid-suite with Playwright's runtime error. */
+const CHROMIUM_MISSING =
+  "caret e2e: Chromium not installed. Run: mise run setup  (or: bunx playwright install chromium)\n";
+
 export async function runTestE2e(args: string[], flags: TestFlags = {}): Promise<never> {
   const mode = resolveTestMode(flags, process.stdout.isTTY === true);
+  if (mode === "json") return runTestE2eJson(args);
   // Build the UI first so the suite drives a freshly built ui/dist. ensureUi
   // honours CARET_SKIP_BUILD_UI, so the preflight gate (which runs `build ui`
   // itself and spawns `test e2e` with the skip set) never double-builds it.
   const ui = await ensureUi();
   if (ui !== 0) process.exit(ui);
-  // Probe for the Chromium binary so a missing install fails actionably instead
-  // of mid-suite with Playwright's runtime error.
   if (!(await chromiumInstalled())) {
-    process.stderr.write(
-      "caret e2e: Chromium not installed. Run: mise run setup  (or: bunx playwright install chromium)\n",
-    );
+    process.stderr.write(CHROMIUM_MISSING);
     process.exit(1);
   }
   return execAndExit(e2eCommand([...e2eModeArgs(mode), ...args]));
+}
+
+/** The e2e suite with stdout reserved for the result document. Playwright's json
+ * reporter writes its report THERE, so the run is captured and that stdout is
+ * the report; ensureUi takes an injectable runner, so the Vite build is captured
+ * with it rather than streaming into the middle of the document. */
+async function runTestE2eJson(args: string[]): Promise<never> {
+  const started = Date.now();
+  let uiLog = "";
+  const ui = await ensureUi(async (cmd, opts) => {
+    const built = await runCaptureSplit(cmd, opts);
+    uiLog += built.stdout + built.stderr;
+    return built.code;
+  });
+  if (ui !== 0) return emitTestReport("e2e", ui, started, null, { stdout: uiLog, stderr: "" });
+  if (!(await chromiumInstalled())) {
+    return emitTestReport("e2e", 1, started, null, { stdout: "", stderr: CHROMIUM_MISSING });
+  }
+  const run = await runCaptureSplit(e2eCommand([...e2eModeArgs("json"), ...args]));
+  return emitTestReport("e2e", run.code, started, run.stdout, run);
 }
