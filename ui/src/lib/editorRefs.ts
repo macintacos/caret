@@ -21,7 +21,7 @@ import { type EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 
 import type { FileRefKind, SkillRef } from "@core/lib/types";
 import { resolveFileRefs } from "$lib/api.ts";
-import { classify, pathCandidates } from "$lib/diffview/fileRefs.ts";
+import { classify, pathCandidates, worthAsking } from "$lib/diffview/fileRefs.ts";
 import type { ReviewContext } from "$lib/editorCompletion.ts";
 import { SKILL_TOKEN, type SkillLookup, skillsFor } from "$lib/skillCompletion.ts";
 
@@ -162,22 +162,6 @@ const TRAILING_STOP = /[.:]+$/;
 function withoutTrailingStop(text: string, from: number, to: number): { run: string; to: number } {
   const run = text.slice(from, to).replace(TRAILING_STOP, "");
   return { run, to: from + run.length };
-}
-
-/** Whether a bare-prose run is discriminating enough to spend a request on.
- *
- * This clause is the whole reason the editor may scan prose where the plan view
- * scans only inline code: `classify`'s floor is one letter in the last segment,
- * so without it every word is a candidate and `test` wears a chip the moment a
- * `test/` exists beside it. A separator is what distinguishes a path a reviewer
- * wrote from a word they wrote.
- *
- * ponytail: an extensionless file at the repo root — `Makefile`, `LICENSE` —
- * is therefore only recognized inside backticks, where the author's own
- * "this is a path" signal stands in for the separator. Widen this only with a
- * second signal to spend, never by dropping the clause. */
-function worthAsking(path: string): boolean {
-  return path.includes("/") || path.includes(".");
 }
 
 /** `from`, moved back over the `@` the reviewer completed with.

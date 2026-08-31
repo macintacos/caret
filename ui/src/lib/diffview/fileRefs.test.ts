@@ -11,11 +11,13 @@ import {
 
 // buildFileRefLayer is one of two detection sources for the filename-reference
 // feature (EXC-687): it scans a plan's display source for path-shaped tokens
-// *inside inline-code spans* and returns per-line spans. The other is the link
-// layer's emission over collapsed markdown-link labels (EXC-954), which
-// mergeFileRefSpans below unions with this one. This scan stays scoped to inline
-// code because that is where a path renders as its own shiki token (prose is one
-// coarse run). Shape is only a plausibility floor — the filesystem, not the
+// *inside inline-code spans* and *inside parentheses* (EXC-1184), and returns
+// per-line spans. The other is the link layer's emission over collapsed
+// markdown-link labels (EXC-954), which mergeFileRefSpans below unions with this
+// one. Everything else stays out: backticks are an author signalling "this is a
+// path", a parenthesis carrying one space-free separator-bearing run is a
+// citation, and the rest of prose is ordinary words. Shape is only a
+// plausibility floor — the filesystem, not the
 // parser, decides what a token is (EXC-916) — so a bare word, a directory, and a
 // dotfile are all offered to the daemon, and only a token with no letter in its
 // last segment ("3.14", "42") is refused outright. Columns index the display line
@@ -132,6 +134,70 @@ describe("detection (inside inline code)", () => {
     const map = buildFileRefLayer("intro\nsee `foo.ts`\nend");
     expect(map.has(1)).toBe(false);
     expect(map.get(2)?.[0]?.path).toBe("foo.ts");
+  });
+});
+
+// A parenthesized citation is the third detection scope (EXC-1184): plans name a
+// symbol and cite the file beside it — `Emailer.attempt_send` (spam/email.py:127-141)
+// — and a parenthesis is where that shape lives. Three gates keep the widening off
+// ordinary prose: the run holds no whitespace (scanLine's single-token rule), it does
+// not follow a `]` (a markdown link or image target, which the link layer already
+// owns), and it carries a separator (worthAsking, shared with the editor's prose scan).
+describe("detection (parenthesized prose)", () => {
+  test("detects a cited range written in bare parentheses", () => {
+    const s = spanFor(
+      "Today `Emailer.attempt_send` (spam/email.py:127-141) sends the email first",
+      "spam/email.py:127-141",
+    );
+    expect(s).toBeDefined();
+    expect(s?.path).toBe("spam/email.py");
+    expect(s?.line).toBe(127);
+    expect(s?.endLine).toBe(141);
+  });
+
+  test("detects a single cited line", () => {
+    const s = spanFor(
+      "parses (spam/models/retool_api.py:65) already",
+      "spam/models/retool_api.py:65",
+    );
+    expect(s?.path).toBe("spam/models/retool_api.py");
+    expect(s?.line).toBe(65);
+  });
+
+  test("detects a directory with no citation", () => {
+    expect(spanFor("see (src/daemon/) for the rest", "src/daemon/")?.path).toBe("src/daemon/");
+  });
+
+  test("the span covers the interior only, never the parentheses", () => {
+    // CANDIDATE_RE admits neither bracket, so a span that swallowed one would put
+    // the glyph on punctuation the author wrote as a delimiter, not as a path.
+    const spans = only("see (src/daemon/) for the rest");
+    expect(spans).toHaveLength(1);
+    expect(spans[0]?.startCol).toBe(5);
+    expect(spans[0]?.endCol).toBe(16);
+  });
+
+  test.each([
+    ["a run holding whitespace", "this time it is (that are NOT markdown links)"],
+    ["an image target", "![shot](https://uploads.linear.app/a/b/c)"],
+    ["a non-collapsing link target", "see [docs](github.com/o/r) here"],
+    ["a parenthetical with no separator", "a note (sic) and (deprecated) and (EXC-1065)"],
+    ["a version with no letter in its last segment", "version (2.0) shipped"],
+  ])("ignores %s", (_name, text) => {
+    expect(buildFileRefLayer(text).size).toBe(0);
+  });
+
+  test("a parenthesized code span yields one span, not two", () => {
+    // The code scan already owns it, and its columns sit tight against the
+    // filename rather than against the backticks.
+    const spans = only("code (`foo.ts`) wrapped");
+    expect(spans).toHaveLength(1);
+    expect(spans[0]?.path).toBe("foo.ts");
+  });
+
+  test("a line carrying both sources returns its spans in startCol order", () => {
+    const spans = only("Today `Emailer.attempt_send` (spam/email.py:127-141) sends");
+    expect(spans.map((s) => s.path)).toEqual(["Emailer.attempt_send", "spam/email.py"]);
   });
 });
 
