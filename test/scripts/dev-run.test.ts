@@ -180,6 +180,10 @@ function baseDeps(over: Partial<DevDeps>): DevDeps {
     // the real terminal would pass piped and fail at a developer's prompt.
     startTui: () => null,
     stdinIsTty: () => false,
+    // Swallowed by default: runDev's boot line is real output, and eighteen of
+    // these tests booting it would print eighteen lines into the unit suite's own
+    // stream. The one test that cares collects it instead.
+    log: () => {},
     ...over,
   };
 }
@@ -211,10 +215,12 @@ describe("runDev supervision", () => {
     await withCleanDevEnv(async () => {
       const { spawn, calls, children } = capturingSpawn(0);
       const driverCalls: DriverOptions[] = [];
+      const reported: string[] = [];
       let xdgAtDriver: string | undefined;
       let exitCode: number | undefined;
       const deps = baseDeps({
         spawn,
+        log: (line) => reported.push(line),
         runDriver: (o) => {
           // Capture the state dir the in-process driver sees at call time.
           xdgAtDriver = process.env.XDG_STATE_HOME;
@@ -244,6 +250,14 @@ describe("runDev supervision", () => {
         join(calls[0]?.env?.XDG_STATE_HOME as string, "caret", "logs", "daemon.log"),
       );
       expect(calls[0]?.stderr).toBe("inherit");
+
+      // The boot line goes through the injected sink, not console.log: it is the
+      // one thing runDev prints, and a suite that let it reach the terminal would
+      // scribble three of these across `mise run test`'s own output.
+      expect(reported).toHaveLength(1);
+      expect(reported[0]).toMatch(
+        /^caret dev: port=40123 state=\S+ config=\S+ fresh=0 persistent=0$/,
+      );
 
       // The driver ran in-process with the discovered base and the parsed opts —
       // no argv round-trip, no re-parse (candidate 1).

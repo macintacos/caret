@@ -175,6 +175,10 @@ export interface DevDeps {
    * keys are wired differently on each side of it, and a suite that read the real
    * terminal would assert one branch when piped and the other at a prompt. */
   stdinIsTty: () => boolean;
+  /** Report the boot line — the one thing this task prints for itself. Injected
+   * like every other effect here, so the eighteen tests that boot the supervision
+   * don't print eighteen boot lines into `mise run test`'s own output. */
+  log: (line: string) => void;
 }
 
 const realDevDeps: DevDeps = {
@@ -207,6 +211,11 @@ const realDevDeps: DevDeps = {
     });
   },
   stdinIsTty: () => process.stdin.isTTY === true,
+  // Through `console.log` at call time, not a captured reference: with the split
+  // pane up, captureProcessOutput has replaced console.log with the one that
+  // writes into the log pane, and a reference bound at module load would go
+  // straight to the terminal underneath the frame instead.
+  log: (line) => console.log(line),
 };
 
 /** The real terminal writer, captured at import — before `captureProcessOutput`
@@ -441,7 +450,7 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
       daemonAlive: () => isPidAlive(daemon.pid),
     });
     childEnv.CARET_PORT = String(port);
-    console.log(
+    deps.log(
       `caret dev: port=${port} state=${stateDirPath} config=${configFilePath} fresh=${opts.fresh ? 1 : 0} persistent=${persistState ? 1 : 0}`,
     );
 
