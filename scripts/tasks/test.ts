@@ -8,6 +8,59 @@ import { existsSync } from "node:fs";
 import { ensureUi, paletteCssCommand } from "@/tasks/build.ts";
 import { execAndExit, runForward } from "@/tasks/lib/exec.ts";
 
+// --- output modes -----------------------------------------------------------
+// `mise run test` is the loudest command in the repo, and it printed its whole
+// transcript to every consumer alike (EXC-1146). Three modes now split that, the
+// same way `mise run preflight` splits a live display from a --json contract:
+// `verbose` is the historical stream, `quiet` asks each runner for a dots
+// reporter that shows failures only, and `json` emits one result document and
+// nothing else. Which one applies is decided by one pure function.
+
+export type TestOutputMode = "verbose" | "quiet" | "json";
+
+/** The mode flags, as commander parses them off `test unit` / `test e2e`. */
+export interface TestFlags {
+  json?: boolean;
+  verbose?: boolean;
+  quiet?: boolean;
+}
+
+/**
+ * The mode a run uses. `--json` outranks everything (it is a different output
+ * contract, not a volume); `--verbose` then outranks `--quiet` so the louder
+ * explicit flag wins. With no flag the default follows the audience: a terminal
+ * gets `quiet`, anything piped — a gate, an agent, a CI log — keeps today's
+ * full stream, so no existing non-interactive consumer changes.
+ *
+ * `isTty` is passed in rather than read here: the caller reads
+ * `process.stdout.isTTY` at its entry point, leaving this decidable in a test.
+ */
+export function resolveTestMode(flags: TestFlags, isTty: boolean): TestOutputMode {
+  if (flags.json) return "json";
+  if (flags.verbose) return "verbose";
+  if (flags.quiet) return "quiet";
+  return isTty ? "quiet" : "verbose";
+}
+
+/** The `bun test` flags a mode injects ahead of the forwarded args. `junitPath`
+ * is used only by json mode, where bun's junit reporter requires an outfile —
+ * it writes its own console stream to stderr and its banner to stdout, so the
+ * report cannot simply be read back off a captured stream. */
+export function unitModeArgs(mode: TestOutputMode, junitPath: string | null): string[] {
+  if (mode === "quiet") return ["--dots", "--only-failures"];
+  if (mode === "json" && junitPath) return ["--reporter=junit", `--reporter-outfile=${junitPath}`];
+  return [];
+}
+
+/** The `playwright test` flags a mode injects ahead of the forwarded args. The
+ * json reporter writes its report to stdout, which is why the json run path
+ * captures the child's streams instead of inheriting them. */
+export function e2eModeArgs(mode: TestOutputMode): string[] {
+  if (mode === "quiet") return ["--reporter=dot"];
+  if (mode === "json") return ["--reporter=json"];
+  return [];
+}
+
 // --- test unit --------------------------------------------------------------
 // `--conditions browser` selects svelte's client runtime entry so the UI
 // component suite can mount components under happy-dom (see bunfig.toml and
@@ -53,12 +106,13 @@ export function testCommand(args: string[]): string[] {
   ];
 }
 
-export async function runTest(args: string[]): Promise<never> {
+export async function runTest(args: string[], flags: TestFlags = {}): Promise<never> {
+  const mode = resolveTestMode(flags, process.stdout.isTTY === true);
   // The CSS-contract suites read app.css's generated palette partial through
   // lib/appCss.ts, and this path never runs Vite — so emit it here.
   const palette = await runForward(paletteCssCommand());
   if (palette !== 0) process.exit(palette);
-  return execAndExit(testCommand(args));
+  return execAndExit(testCommand([...unitModeArgs(mode, null), ...args]));
 }
 
 // --- test e2e ---------------------------------------------------------------
@@ -83,7 +137,8 @@ export async function chromiumInstalled(): Promise<boolean> {
   return existsSync(chromium.executablePath());
 }
 
-export async function runTestE2e(args: string[]): Promise<never> {
+export async function runTestE2e(args: string[], flags: TestFlags = {}): Promise<never> {
+  const mode = resolveTestMode(flags, process.stdout.isTTY === true);
   // Build the UI first so the suite drives a freshly built ui/dist. ensureUi
   // honours CARET_SKIP_BUILD_UI, so the preflight gate (which runs `build ui`
   // itself and spawns `test e2e` with the skip set) never double-builds it.
@@ -97,5 +152,5 @@ export async function runTestE2e(args: string[]): Promise<never> {
     );
     process.exit(1);
   }
-  return execAndExit(e2eCommand(args));
+  return execAndExit(e2eCommand([...e2eModeArgs(mode), ...args]));
 }

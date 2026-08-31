@@ -20,7 +20,7 @@ import { formatCommand } from "@/tasks/format.ts";
 import { lintCommand } from "@/tasks/lint.ts";
 import { setupCommands } from "@/tasks/setup.ts";
 import { smokePlan } from "@/tasks/smoke.ts";
-import { e2eCommand, testCommand } from "@/tasks/test.ts";
+import { e2eCommand, resolveTestMode, type TestFlags, testCommand } from "@/tasks/test.ts";
 
 // The actions are injectable, so these drive the real commander tree (parsing,
 // defaults, coercion, passthrough) and capture what it would hand each run
@@ -156,6 +156,74 @@ describe("tasks CLI: passthrough forwarding", () => {
         "--flag",
         "-x",
       ]);
+    });
+  }
+});
+
+// The `test` targets carry real --json/--verbose/--quiet options alongside their
+// passthrough argv (EXC-1146), so this captures both halves of what the action
+// receives: what commander kept, and what it forwarded to the runner.
+async function parseTestArgs(
+  commandPath: string[],
+  actionKey: "test" | "testE2e",
+  args: string[],
+): Promise<{ args: string[]; flags: TestFlags }> {
+  let captured: { args: string[]; flags: TestFlags } | undefined;
+  const overrides = {
+    [actionKey]: async (a: string[], flags: TestFlags) => {
+      captured = { args: a, flags };
+    },
+  } as Partial<TaskActions>;
+  const program = buildProgram(overrides);
+  await program.parseAsync([...commandPath, ...args], { from: "user" });
+  if (captured === undefined) throw new Error(`${commandPath.join(" ")} action was not invoked`);
+  return captured;
+}
+
+describe("tasks CLI: test output-mode flags", () => {
+  const targets: Array<[string[], "test" | "testE2e"]> = [
+    [["test"], "test"],
+    [["test", "unit"], "test"],
+    [["test", "e2e"], "testE2e"],
+  ];
+  for (const [commandPath, key] of targets) {
+    const label = commandPath.join(" ");
+
+    test(`${label}: no flags parse to an empty flag set`, async () => {
+      expect(await parseTestArgs(commandPath, key, [])).toEqual({ args: [], flags: {} });
+    });
+
+    test(`${label}: each mode flag reaches the action`, async () => {
+      expect((await parseTestArgs(commandPath, key, ["--json"])).flags).toEqual({ json: true });
+      expect((await parseTestArgs(commandPath, key, ["--verbose"])).flags).toEqual({
+        verbose: true,
+      });
+      expect((await parseTestArgs(commandPath, key, ["--quiet"])).flags).toEqual({ quiet: true });
+    });
+
+    // passThroughOptions stops parsing at the first operand, which is what keeps
+    // the forwarding contract (EXC-738/739) intact — so caret's own flags must
+    // come BEFORE the forwarded path, and the path still reaches the runner.
+    test(`${label}: a leading flag parses and the trailing path still forwards`, async () => {
+      expect(await parseTestArgs(commandPath, key, ["--json", "some/path"])).toEqual({
+        args: ["some/path"],
+        flags: { json: true },
+      });
+    });
+
+    // The mirror of the rule above: after an operand, a mode flag is the
+    // runner's, not caret's.
+    test(`${label}: a flag after the path forwards instead of parsing`, async () => {
+      expect(await parseTestArgs(commandPath, key, ["some/path", "--json"])).toEqual({
+        args: ["some/path", "--json"],
+        flags: {},
+      });
+    });
+
+    test(`${label}: --verbose and --quiet both parse, and the resolver breaks the tie`, async () => {
+      const { flags } = await parseTestArgs(commandPath, key, ["--verbose", "--quiet"]);
+      expect(flags).toEqual({ verbose: true, quiet: true });
+      expect(resolveTestMode(flags, true)).toBe("verbose");
     });
   }
 });

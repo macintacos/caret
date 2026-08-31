@@ -33,7 +33,7 @@ import { runLint } from "@/tasks/lint.ts";
 import { buildReleaseCommand } from "@/tasks/release/command.ts";
 import { runSetup } from "@/tasks/setup.ts";
 import { runSmoke, runSmokeBin, runSmokeBundle } from "@/tasks/smoke.ts";
-import { runTest, runTestE2e } from "@/tasks/test.ts";
+import { runTest, runTestE2e, type TestFlags } from "@/tasks/test.ts";
 
 import { type JsonArgs, runPreflightCli } from "../../scripts/preflight.ts";
 
@@ -49,8 +49,8 @@ export interface TaskActions {
   lint: (args: string[]) => Promise<unknown>;
   format: (args: string[]) => Promise<unknown>;
   caret: (args: string[]) => Promise<unknown>;
-  test: (args: string[]) => Promise<unknown>;
-  testE2e: (args: string[]) => Promise<unknown>;
+  test: (args: string[], flags: TestFlags) => Promise<unknown>;
+  testE2e: (args: string[], flags: TestFlags) => Promise<unknown>;
   setup: () => Promise<unknown>;
   smoke: () => Promise<unknown>;
   smokeBin: () => Promise<unknown>;
@@ -219,7 +219,12 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
 
   // `test`: bare and `unit` run the bun unit suite (the default target); `e2e`
   // runs the Playwright suite (building the UI first). Each forwards its own args
-  // — a path / --test-name-pattern for unit, a spec path / --grep for e2e.
+  // — a path / --test-name-pattern for unit, a spec path / --grep for e2e — and
+  // carries the three output-mode flags (EXC-1146) as REAL options rather than
+  // passthrough, the way `preflight` carries its own --json. passThroughOptions
+  // stops parsing at the first operand, which is what preserves the forwarding
+  // contract (EXC-738/739), so these must precede the forwarded args — hence the
+  // "(before forwarded args)" each description carries.
   const test = program
     .command("test")
     .description("Run tests: bare/`unit` = bun test, `e2e` = Playwright");
@@ -229,8 +234,11 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
     .allowUnknownOption()
     .passThroughOptions()
     .argument("[args...]", "forwarded to bun test")
-    .action(async (args: string[]) => {
-      await actions.test(args);
+    .option("--json", "Emit one machine-readable result document (before forwarded args)")
+    .option("--verbose", "Stream the runner's full output (before forwarded args)")
+    .option("--quiet", "Show failures only, hiding passing tests (before forwarded args)")
+    .action(async (args: string[], opts) => {
+      await actions.test(args, opts);
     });
   test
     .command("e2e")
@@ -238,8 +246,11 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
     .allowUnknownOption()
     .passThroughOptions()
     .argument("[args...]", "forwarded to playwright test")
-    .action(async (args: string[]) => {
-      await actions.testE2e(args);
+    .option("--json", "Emit one machine-readable result document (before forwarded args)")
+    .option("--verbose", "Stream the runner's full output (before forwarded args)")
+    .option("--quiet", "Show failures only, hiding passing tests (before forwarded args)")
+    .action(async (args: string[], opts) => {
+      await actions.testE2e(args, opts);
     });
 
   program
