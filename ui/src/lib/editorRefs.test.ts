@@ -47,9 +47,10 @@ describe("scanRefTokens — what counts as a reference in prose", () => {
   });
 
   test("a bare word is NOT a candidate, however real a directory of that name is", () => {
-    // The whole reason the editor may scan prose where the plan view refuses to:
-    // without this clause every word is asked about, and `test` chips the moment
-    // a `test/` exists beside it.
+    // worthAsking is what keeps prose scanning honest wherever it happens — this
+    // whole-document scan and the plan view's parenthesized scope alike: without
+    // that clause every word is asked about, and `test` chips the moment a
+    // `test/` exists beside it.
     expect(scanned("this test is broken and src is fine")).toEqual([]);
   });
 

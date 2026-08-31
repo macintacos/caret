@@ -5,27 +5,33 @@
 // spans line up with the rendered tokens; line numbers are 1-based, matching the
 // view's per-line data-line.
 //
-// Detection is scoped to inline-code spans (`…`), which is where caret's plans
-// cite files. The scope is about what may be GUESSED at, not about what can be
-// decorated: backticks are the author saying "this is a path", and scanning bare
-// prose for path-shaped runs would tag ordinary words. Where a reference is known
-// rather than guessed — a markdown link's target — the decoration pass cuts the row
-// at its columns so it decorates wherever it sits (inlineDecorate.ts). Within a span a
-// token qualifies on a bare plausibility floor — its last segment holds a letter
-// — optionally trailed by a line reference (`:line`, `:line:col`, or a
-// `:start-end` range, each also spellable with `#`/`L` as in `#L154-L162`). What
-// a candidate actually IS, file or directory or nothing, is resolved server-side
-// against the review's cwd (EXC-916); a candidate that resolves to neither gets
-// no icon and no affordance. Within that scope only SINGLE-TOKEN spans are
-// scanned: a span holding whitespace is a command or prose rather than a path,
-// and since a candidate can never span a space, scanning one would offer each
-// word on its own — enough for `bun test` to draw a folder glyph over the whole
-// command on the strength of the word `test` (EXC-1065).
+// This module SCANS for references that must be GUESSED at, and it has two
+// scopes. Inline-code spans (`…`) are where caret's plans cite files: backticks
+// are the author saying "this is a path". A PARENTHESIZED run is the citation
+// shape a plan writes beside the symbol it names — `Emailer.attempt_send`
+// (spam/email.py:127-141) — and it is safe only because of the four gates
+// scanLine states at the loop that applies them. Bare prose outside both is never
+// scanned: a path-shaped run in ordinary prose is an ordinary word.
 //
-// The scan is not the only source of references: the link layer emits its own
-// over collapsed markdown-link labels, whose paths never survive into the display
-// text as inline code. mergeFileRefSpans unions the two into the one candidate
-// set the view resolves and tags.
+// A markdown link's target is not a scope here at all. It is a reference that is
+// KNOWN rather than guessed, so links.ts emits its span and the decoration pass
+// cuts the row at its columns wherever it sits (inlineDecorate.ts).
+//
+// Within a scope a token qualifies on a bare plausibility floor — its last
+// segment holds a letter — optionally trailed by a line reference (`:line`,
+// `:line:col`, or a `:start-end` range, each also spellable with `#`/`L` as in
+// `#L154-L162`). What a candidate actually IS, file or directory or nothing, is
+// resolved server-side against the review's cwd (EXC-916); a candidate that
+// resolves to neither gets no icon and no affordance. Only SINGLE-TOKEN runs are
+// scanned: a run holding whitespace is a command or prose rather than a path, and
+// since a candidate can never span a space, scanning one would offer each word on
+// its own — enough for `bun test` to draw a folder glyph over the whole command
+// on the strength of the word `test` (EXC-1065). That rule is also what makes a
+// parenthesis a signal rather than a coincidence: a citation holds no spaces,
+// prose does.
+//
+// mergeFileRefSpans unions the scan with the link layer's emission into the one
+// candidate set the view resolves and tags.
 
 import type { FileRefKind } from "@core/lib/types";
 
@@ -65,8 +71,13 @@ export type FileRefSpanMap = Map<number, FileRefSpan[]>;
 const FENCE = /^\s*(`{3,}|~{3,})/;
 
 // An inline-code span: one or more backticks, then the shortest run closing with
-// the same count. Detection runs only inside these (group 2 is the interior).
+// the same count (group 2 is the interior).
 const INLINE_CODE = /(`+)(.*?)\1/g;
+
+// A parenthesized run, group 1 being the interior — so the brackets themselves
+// stay outside every span. The shape is the first of the four gates scanLine's
+// paren loop states; the other three are call-site tests, and live there.
+const PAREN_RUN = /\(([^()\s]+)\)/g;
 
 // A bare URL run — masked so a path-looking tail like ".../app.ts" inside a
 // code-spanned URL is never mistaken for a file reference.
@@ -100,9 +111,10 @@ const LINE_SUFFIX = /^(.+?)(?::L?|:?#L)(\d+)(?:[-–,]L?(\d+)|:\d+)?$/;
  * construction.
  *
  * The one definition of "path-shaped" in the codebase: the scan below applies it
- * to runs inside inline code, and the link layer applies it to a `[label](target)`
- * target to decide whether it is a path at all (EXC-954). A second, drifting
- * notion would let the two decoration paths disagree about the same text. The
+ * to runs inside inline code and inside parentheses, and the link layer applies
+ * it to a `[label](target)` target to decide whether it is a path at all
+ * (EXC-954). A second, drifting notion would let the two decoration paths
+ * disagree about the same text. The
  * floor is deliberately low — one letter in the last segment, trailing slashes
  * ignored — because the filesystem is what knows whether a token is a file, a
  * directory, or nothing (EXC-916), and a shape test that guessed would keep
@@ -137,6 +149,18 @@ export function classify(raw: string): { path: string; line?: number; endLine?: 
   return { path, line, endLine };
 }
 
+/** A half-open `[start, end)` region of a line that some other layer owns. */
+interface Range {
+  start: number;
+  end: number;
+}
+
+/** Whether `[start, end)` touches any of `ranges` — the one overlap predicate
+ * this module's exclusions are written in. */
+function overlaps(ranges: readonly Range[], start: number, end: number): boolean {
+  return ranges.some((r) => start < r.end && end > r.start);
+}
+
 /** One path-shaped run found in a piece of text: where it sits (0-based,
  * half-open, into the text it was found in) and what `classify` made of it. */
 export interface PathCandidate {
@@ -150,11 +174,11 @@ export interface PathCandidate {
 /** The path-shaped runs in `text`, URLs masked out and `classify` applied.
  *
  * The tokenizer half of the "one definition of path-shaped" rule `classify`
- * states: `scanLine` applies it to an inline-code interior, and the feedback
- * editors' chip scan (`$lib/editorRefs.ts`) applies it to the document's prose
- * with code spans and fences masked out — so neither surface can drift on what a
- * run is. Offsets are relative to `text`; a caller scanning a fragment adds its
- * own base. */
+ * states: `scanLine` applies it to an inline-code interior and to a parenthesized
+ * interior, and the feedback editors' chip scan (`$lib/editorRefs.ts`) applies it
+ * to the document's prose with code spans and fences masked out — so no surface
+ * can drift on what a run is. Offsets are relative to `text`; a caller scanning a
+ * fragment adds its own base. */
 export function pathCandidates(text: string): PathCandidate[] {
   const urlRanges = [...text.matchAll(URL_RE)].map((m) => ({
     start: m.index,
@@ -165,7 +189,7 @@ export function pathCandidates(text: string): PathCandidate[] {
     const raw = m[0];
     const start = m.index;
     const end = start + raw.length;
-    if (urlRanges.some((r) => start < r.end && end > r.start)) continue;
+    if (overlaps(urlRanges, start, end)) continue;
     const ref = classify(raw);
     if (ref === null) continue;
     found.push({ start, end, path: ref.path, line: ref.line, endLine: ref.endLine });
@@ -173,9 +197,49 @@ export function pathCandidates(text: string): PathCandidate[] {
   return found;
 }
 
+/** Whether a bare-prose run is discriminating enough to spend a request on.
+ *
+ * This clause is what lets a surface scan prose at all: `classify`'s floor is one
+ * letter in the last segment, so without it every word is a candidate and `test`
+ * wears a chip the moment a `test/` exists beside it. A separator is what
+ * distinguishes a path someone wrote from a word they wrote. Both prose scanners
+ * apply it — the parenthesized scope below, and the feedback editors' chip scan
+ * (`$lib/editorRefs.ts`).
+ *
+ * It is a floor, not a filter: an English abbreviation carries a separator too,
+ * so `(e.g.)`, `(and/or)` and `(N/A)` all become candidates. They cost one
+ * resolve each and are inert when it comes back empty, which is the same bargain
+ * every scope here makes — the filesystem is the real gate (EXC-916).
+ *
+ * ponytail: an extensionless file at the repo root — `Makefile`, `LICENSE` —
+ * is therefore only recognized inside backticks, where the author's own
+ * "this is a path" signal stands in for the separator. Widen this only with a
+ * second signal to spend, never by dropping the clause. */
+export function worthAsking(path: string): boolean {
+  return path.includes("/") || path.includes(".");
+}
+
+/** A candidate's span in the display line, given the column its fragment starts
+ * at — the "add your own base" half of `pathCandidates`' offset contract. */
+function spanAt(base: number, c: PathCandidate): FileRefSpan {
+  return {
+    startCol: base + c.start,
+    endCol: base + c.end,
+    path: c.path,
+    line: c.line,
+    endLine: c.endLine,
+  };
+}
+
 function scanLine(source: string): FileRefSpan[] {
   const spans: FileRefSpan[] = [];
+  // Every code span's outer range, collected before the whitespace test below so
+  // the SPACEY ones are in it too: a parenthesized run inside
+  // `sed -n '1,5p' (a/b.ts)` belongs to the command, and the paren loop would
+  // otherwise pick the command apart in exactly the way EXC-1065 refused.
+  const codeRanges: Range[] = [];
   for (const code of source.matchAll(INLINE_CODE)) {
+    codeRanges.push({ start: code.index, end: code.index + code[0].length });
     const interior = code[2] ?? "";
     // Whitespace is a property of the SPAN and never of a candidate, since
     // CANDIDATE_RE cannot match across one — so this aborts the whole interior
@@ -186,22 +250,49 @@ function scanLine(source: string): FileRefSpan[] {
     // Column of the interior's first character in the display line (past the
     // opening backticks), so span columns are absolute.
     const base = code.index + (code[1]?.length ?? 0);
-    for (const c of pathCandidates(interior)) {
-      spans.push({
-        startCol: base + c.start,
-        endCol: base + c.end,
-        path: c.path,
-        line: c.line,
-        endLine: c.endLine,
-      });
+    for (const c of pathCandidates(interior)) spans.push(spanAt(base, c));
+  }
+  // Four gates bound the parenthesized scope, and this is the one place they are
+  // enumerated (EXC-1184):
+  //
+  //   1. PAREN_RUN's own shape — no whitespace, no nested parens. The
+  //      single-token rule again, and what makes a parenthesis a signal rather
+  //      than a coincidence: a citation holds no spaces, prose does.
+  //   2. Not preceded by `]`. buildFileRefLayer reads DISPLAY text, where a safe
+  //      link has already collapsed to its label and its target's parens are
+  //      gone. What still wears literal `](…)` is exactly the two shapes that
+  //      must stay out: an IMAGE, whose target links.ts refuses to cite because a
+  //      click would open a text preview over bytes (EXC-870), and a link that
+  //      did not collapse (unsafe scheme, scheme-less host).
+  //   3. Not overlapping a code span, which the loop above already owns — and
+  //      whose columns sit tighter against the filename besides.
+  //   4. worthAsking: the path carries a separator. Without it `(sic)` and
+  //      `(deprecated)` are candidates.
+  for (const paren of source.matchAll(PAREN_RUN)) {
+    // Out of range at column 0 reads back undefined, so a leading `(` is scanned.
+    if (source[paren.index - 1] === "]") continue;
+    const start = paren.index;
+    const end = start + paren[0].length;
+    if (overlaps(codeRanges, start, end)) continue;
+    // One past the `(`, so the interior's candidate offsets land on the display
+    // line and the brackets stay outside every span.
+    const base = start + 1;
+    for (const c of pathCandidates(paren[1] ?? "")) {
+      if (worthAsking(c.path)) spans.push(spanAt(base, c));
     }
   }
-  return spans;
+  // mergeFileRefSpans anchors an emitted span on the FIRST scanned span it
+  // overlaps and documents that as "the leftmost". One loop was sorted by
+  // construction; two are not, so a label covering a paren citation and a code
+  // reference would otherwise anchor on the wrong one and drop the label's cited
+  // range (EXC-1192).
+  return spans.sort((a, b) => a.startCol - b.startCol);
 }
 
 /** Scans plan display text into per-line filename-reference spans. Fenced code
  * blocks are skipped; each remaining line is scanned for references inside its
- * inline-code spans. */
+ * inline-code spans and its parenthesized runs. Each line's spans come back
+ * sorted by `startCol`. */
 export function buildFileRefLayer(text: string): FileRefSpanMap {
   const lines = text.split("\n");
   const map: FileRefSpanMap = new Map();

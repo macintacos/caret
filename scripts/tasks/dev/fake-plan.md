@@ -9,7 +9,7 @@ ONE long line, wrapped nowhere. Do not hand-wrap it, and do not run rumdl over i
 
 It is excluded from the repo's markdown tooling on purpose (.rumdl.toml `exclude`, and
 `exclude` on both rumdl steps in hk.pkl). caret reflows every incoming plan at ingest
-through its own config (src/plan/rumdl.ts), and this file is the input that reflow is
+through its own config in src/plan/rumdl.ts, and this file is the input that reflow is
 tested against — so it has to arrive unformatted, as real agent output does. Wrapping it
 here would pre-break lines under a config with no reflow exemptions, and caret's reflow
 never rejoins a line something else already broke, so the fixture would quietly stop
@@ -30,7 +30,7 @@ last fence to the end of this file rendering inside a code panel.
 protocol.ts), which rewrites them to build the earlier draft versions. Editing one means
 editing that copy in the same change; the drift guard fails loudly if you don't.
 
-3. This file is SEEDED BY AN E2E SPEC (test/e2e/showcase.e2e.ts), which drives it in a real
+3. This file is SEEDED BY AN E2E SPEC, test/e2e/showcase.e2e.ts, which drives it in a real
 browser and asserts that every construct the plan view decorates still draws. It finds its
 rows by the decoration they carry and by where they sit relative to each other, never by
 their wording, with ONE exception: its search case types the heading "Rendering showcase".
@@ -525,7 +525,7 @@ If anything in the paragraph above escapes the sanitizer — an alert fires, an 
 
 ## Filename references
 
-EXC-687: a filename written in **inline code** that resolves to a real file under the review's working directory gets a small file icon to its left, and clicking the reference opens a syntax-highlighted excerpt of that file — the head of the file, or a window framed on the lines the reference cites when it carries a `:line` or a `:start-end` range. A bare path in prose is not detected here — backticks are how a plan says "this is a path", and scanning bare prose would tag ordinary words — and a path that does not resolve stays completely inert — no icon, no preview — so a made-up reference never masquerades as a link. Inline code is one of two ways to write a reference; markdown links are the other, below.
+EXC-687: a filename written in **inline code** that resolves to a real file under the review's working directory gets a small file icon to its left, and clicking the reference opens a syntax-highlighted excerpt of that file — the head of the file, or a window framed on the lines the reference cites when it carries a `:line` or a `:start-end` range. EXC-1184: a path cited in bare parentheses beside the symbol it belongs to — like this one (src/plan/markdown.ts:39) — is detected too, because a parenthetical citation holds no spaces where ordinary prose does. A path loose in a sentence is still not detected — backticks and parentheses are how a plan says "this is a path", and scanning the rest of prose would tag ordinary words — and a path that does not resolve stays completely inert — no icon, no preview — so a made-up reference never masquerades as a link. Inline code and parentheses are two of three ways to write a reference; markdown links are the third, below.
 
 The list below points at long-lived files, and leans on paths and line numbers that stay meaningful as their contents drift, so the check keeps working as the tree around it changes. Every path needs a known extension to be tagged at all, which is why extensionless files like `LICENSE` are absent. Click each to verify:
 

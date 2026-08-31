@@ -328,7 +328,8 @@
   });
 
   // The filename-reference layer (EXC-687). Two sources union here: the paths
-  // SCANNED out of the display text's inline code, and the ones the link layer
+  // SCANNED out of the display text (inline code, and parenthesized runs per
+  // EXC-1184), and the ones the link layer
   // EMITTED over collapsed markdown-link labels (EXC-954) — which the scan can
   // never re-find, since the target is gone by the time it reads display text.
   // Memoized on the link layer OBJECT, not its text: two plans can render the
