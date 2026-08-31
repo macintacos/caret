@@ -407,6 +407,25 @@ describe("mergeFileRefSpans", () => {
     expect(merged.get(1)).toHaveLength(2);
   });
 
+  test("anchors on the leftmost scanned span even when handed them out of order", () => {
+    // The anchor pick is `find`, so "leftmost" is a property of the array. Every
+    // producer sorts today; the merge re-sorts anyway, so this holds for one
+    // that does not — and the label's cited range survives, which is what a
+    // wrong anchor silently drops (EXC-1192).
+    const merged = mergeFileRefSpans(
+      map([
+        1,
+        [
+          { startCol: 12, endCol: 16, path: "b.ts" },
+          { startCol: 1, endCol: 5, path: "a.ts" },
+        ],
+      ]),
+      map([1, [{ startCol: 0, endCol: 17, path: "a.ts" }]]),
+    );
+    expect(merged.get(1)).toHaveLength(1);
+    expect(merged.get(1)?.[0]?.startCol).toBe(1);
+  });
+
   test("sorts each line's spans by startCol", () => {
     const merged = mergeFileRefSpans(
       map([1, [{ startCol: 20, endCol: 26, path: "late.ts" }]]),

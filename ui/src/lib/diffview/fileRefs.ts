@@ -63,7 +63,11 @@ export interface FileRefSpan {
 }
 
 /** Per-line spans, keyed by 1-based display line number. Lines with no
- * references are absent from the map. */
+ * references are absent from the map. Each line's spans are ordered by
+ * `startCol`: consumers read them left to right, and `mergeFileRefSpans` takes
+ * the first overlapping span as the leftmost one. Producers here hold that —
+ * `buildFileRefLayer` sorts, the link layer emits in document order — and the
+ * merge re-sorts what it is handed, so a new producer cannot break it. */
 export type FileRefSpanMap = Map<number, FileRefSpan[]>;
 
 // A ``` (or longer) fence toggles fenced-code mode. The same stateless detection
@@ -219,6 +223,13 @@ export function worthAsking(path: string): boolean {
   return path.includes("/") || path.includes(".");
 }
 
+/** Orders one line's spans left to right, in place. The ordering every
+ * `FileRefSpanMap` carries: `mergeFileRefSpans` picks its anchor with `find`, so
+ * "leftmost" is a property of the array rather than of the search. */
+function byStartCol(spans: FileRefSpan[]): FileRefSpan[] {
+  return spans.sort((a, b) => a.startCol - b.startCol);
+}
+
 /** A candidate's span in the display line, given the column its fragment starts
  * at — the "add your own base" half of `pathCandidates`' offset contract. */
 function spanAt(base: number, c: PathCandidate): FileRefSpan {
@@ -285,8 +296,9 @@ function scanLine(source: string): FileRefSpan[] {
   // overlaps and documents that as "the leftmost". One loop was sorted by
   // construction; two are not, so a label covering a paren citation and a code
   // reference would otherwise anchor on the wrong one and drop the label's cited
-  // range (EXC-1192).
-  return spans.sort((a, b) => a.startCol - b.startCol);
+  // range (EXC-1192). Consumers that read a line's spans in array order without
+  // merging first — refHint.ts — depend on it directly.
+  return byStartCol(spans);
 }
 
 /** Scans plan display text into per-line filename-reference spans. Fenced code
@@ -333,7 +345,11 @@ export function mergeFileRefSpans(
   emitted: FileRefSpanMap,
 ): FileRefSpanMap {
   const merged: FileRefSpanMap = new Map();
-  for (const [line, spans] of scanned) merged.set(line, [...spans]);
+  // Sorted on the way in, because the anchor pick below is `find` — "leftmost"
+  // only if the array is. buildFileRefLayer already hands them over sorted; this
+  // is what makes that a property of the merge rather than a coupling to one
+  // producer, so a third one cannot quietly break the rule this docstring states.
+  for (const [line, spans] of scanned) merged.set(line, byStartCol([...spans]));
   for (const [line, spans] of emitted) {
     let into = merged.get(line) ?? [];
     for (const span of spans) {
@@ -362,6 +378,6 @@ export function mergeFileRefSpans(
     }
     merged.set(line, into);
   }
-  for (const spans of merged.values()) spans.sort((a, b) => a.startCol - b.startCol);
+  for (const spans of merged.values()) byStartCol(spans);
   return merged;
 }
