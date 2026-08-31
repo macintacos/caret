@@ -170,6 +170,11 @@ export interface DevDeps {
    * stdio inherited. Null whenever stdout is not a TTY — piped, redirected, or
    * under CI — which is what keeps `mise run dev > log.txt` behaving as before. */
   startTui: (opts: TuiOptions) => Tui | null;
+  /** Whether stdin is a terminal, i.e. whether there is a keyboard to read at
+   * all. Injected beside startTui rather than read off `process`: the shortcut
+   * keys are wired differently on each side of it, and a suite that read the real
+   * terminal would assert one branch when piped and the other at a prompt. */
+  stdinIsTty: () => boolean;
 }
 
 const realDevDeps: DevDeps = {
@@ -201,6 +206,7 @@ const realDevDeps: DevDeps = {
       schedule: (fn) => setTimeout(fn, 16),
     });
   },
+  stdinIsTty: () => process.stdin.isTTY === true,
 };
 
 /** The real terminal writer, captured at import — before `captureProcessOutput`
@@ -467,7 +473,7 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
       // all means no keyboard to own.
       onKey: tui
         ? (handler) => (onDriverKey = handler)
-        : process.stdin.isTTY
+        : deps.stdinIsTty()
           ? lineModeKeys
           : undefined,
     });
