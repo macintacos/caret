@@ -1,8 +1,8 @@
 // Approve: approving ALWAYS routes through an "are you sure?" confirmation
 // (EXC-791) — even with nothing queued — observable in the UI (the review leaves
 // the pending set) and via the API (the list no longer carries it). The confirm
-// is a dismissible dialog: Enter confirms; Escape, the Cancel button, and a click
-// outside all dismiss. With pending inline comments it additionally previews what
+// is a dismissible dialog: it opens with the notes field focused, so Cmd/Ctrl+Enter
+// confirms; Escape, the Cancel button, and a click outside all dismiss. With pending inline comments it additionally previews what
 // a plain approve would silently drop.
 //
 // Everything here needs a real browser or the live daemon. The verdict is only
@@ -47,17 +47,23 @@ test("approving opens a confirmation and resolves on confirm (UI and API)", asyn
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).not.toContain(id);
 });
 
-test("Enter confirms the bare approve dialog", async ({ daemon, page }) => {
+test("the bare approve dialog opens focused on the notes field, and the chord confirms", async ({
+  daemon,
+  page,
+}) => {
   const id = await daemon.seed();
   await page.goto("/");
   await planSurface(page);
   await waitPastSafeModeGrace(page);
 
+  const confirm = page.getByRole("dialog", APPROVE_CONFIRM);
   await page.getByRole("button", { name: "Approve", exact: true }).click();
-  await expect(page.getByRole("dialog", APPROVE_CONFIRM)).toBeVisible();
+  await expect(confirm).toBeVisible();
 
-  // The confirm action is focused on open, so a bare Enter activates it.
-  await page.keyboard.press("Enter");
+  // The notes field takes focus on open (EXC-1212), so the reviewer types their
+  // note without reaching for the mouse; the editor's submit chord confirms.
+  await expect(confirm.getByRole("textbox", { name: /notes for the agent/i })).toBeFocused();
+  await page.keyboard.press("ControlOrMeta+Enter");
   await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).not.toContain(id);
 });
@@ -251,7 +257,7 @@ test("'Approve anyway' on the guard resolves as an allow", async ({ daemon, page
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).not.toContain(id);
 });
 
-test("Enter confirms the approve guard, resolving it as an allow", async ({ daemon, page }) => {
+test("the chord confirms the approve guard, resolving it as an allow", async ({ daemon, page }) => {
   const id = await daemon.seed();
   await daemon.putDraft(id, {
     annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain the cold cost" }],
@@ -265,9 +271,10 @@ test("Enter confirms the approve guard, resolving it as an allow", async ({ daem
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(guard).toBeVisible();
 
-  // The confirm action is focused on open, so a bare Enter activates it — the
-  // same primary-path shortcut the hand-rolled guard offered (EXC-761).
-  await page.keyboard.press("Enter");
+  // The notes field is focused on open (EXC-1212), so the primary-path shortcut is
+  // the editor's submit chord rather than the bare Enter the button carried (EXC-761).
+  await expect(guard.getByRole("textbox", { name: /notes for the agent/i })).toBeFocused();
+  await page.keyboard.press("ControlOrMeta+Enter");
   await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).not.toContain(id);
 });

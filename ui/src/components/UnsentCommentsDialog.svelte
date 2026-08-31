@@ -72,16 +72,17 @@
   let count = $derived(items.length);
   let hasComments = $derived(count > 0);
 
-  // The primary path is Enter-confirmable (EXC-761 keeps today's behavior): focus
-  // the confirm action on open (via Modal's onOpenAutoFocus) so a bare Enter
-  // activates it, rather than letting bits-ui land focus on Cancel.
+  // Without a notes field the primary path is Enter-confirmable (EXC-761 keeps
+  // today's behavior): focus the confirm action on open (via Modal's
+  // onOpenAutoFocus) so a bare Enter activates it, rather than letting bits-ui
+  // land focus on Cancel. With one, the note is what the reviewer came to type, so
+  // the editor takes the on-open focus instead and ⌘↵ confirms (EXC-1212).
   let confirmEl = $state<HTMLElement | null>(null);
 
-  // ⌘↵/Ctrl+Enter confirms from the focused confirm button (the on-open focus, so
-  // a bare Enter activates it). The notes editor routes its own submit chord
-  // through onSubmitChord below, so this handler rides only the button.
-  // preventDefault stops the focused button's native click from double-firing
-  // onConfirm.
+  // ⌘↵/Ctrl+Enter confirms from the focused confirm button (the no-notes variant's
+  // on-open focus). The notes editor routes its own submit chord through
+  // onSubmitChord below, so this handler rides only the button. preventDefault
+  // stops the focused button's native click from double-firing onConfirm.
   function onKey(e: KeyboardEvent) {
     if (!isSubmitChord(e)) return;
     e.preventDefault();
@@ -103,8 +104,11 @@
   contentClass="guard-content"
   onDismiss={onCancel}
   onOpenAutoFocus={(e) => {
+    // Prevent bits-ui's first-focusable focus either way — it would land on
+    // Cancel. With notes shown, MarkdownEditor autofocuses its own contenteditable
+    // on mount (with preventScroll), so nothing more is needed here.
     e.preventDefault();
-    confirmEl?.focus();
+    if (!showNotes) confirmEl?.focus();
   }}
 >
   {#snippet description()}
@@ -139,6 +143,7 @@
            styles markdown as the reviewer types. ⌘↵ confirms the approval; Esc
            dismisses the dialog (the editor intercepts both chords). -->
       <MarkdownEditor
+        autofocus
         value={notes}
         placeholder="Anything the agent should fold into the work — no re-planning needed."
         ariaLabel="Notes for the agent"
