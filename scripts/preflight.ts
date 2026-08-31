@@ -172,6 +172,33 @@ const DEPENDENT: readonly Dependent[] = [
 ];
 const TASK_ORDER = [...IMMEDIATE, ...DEPENDENT.map((d) => d.name)];
 
+/**
+ * Extra argv a task is spawned with (EXC-1146). Separate from the name because
+ * that name is also the results map key, the display title, and what `--task`
+ * matches — a flag folded into it would break all three.
+ *
+ * Both test tasks run quiet. The gate pipes every child, which resolves the test
+ * task's own default to `verbose`, so the mode has to be asked for. It earns its
+ * place on `test e2e`, whose configured `list` reporter prints a line per spec:
+ * that chatter is what pushes a real failure out of the 20-line tail the result
+ * document carries by default. On `test` it currently changes nothing — bun's
+ * console reporter already prints failures only — and is passed so the gate
+ * states the output it wants from both rather than inheriting one runner's
+ * default.
+ */
+const TASK_ARGS: Readonly<Record<string, readonly string[]>> = {
+  test: ["--quiet"],
+  "test e2e": ["--quiet"],
+};
+
+/** The `mise` argv the gate spawns for `name`. A multi-word name (`build ui`,
+ * `test e2e`) splits into positional targets, which mise routes to the task's
+ * own subcommand path (EXC-738); any TASK_ARGS follow, since caret's flags stop
+ * parsing at the first operand. */
+export function miseTaskCommand(name: string): string[] {
+  return ["run", ...name.split(" "), ...(TASK_ARGS[name] ?? [])];
+}
+
 // Bumpable integer so machine consumers detect a breaking shape change,
 // mirroring scripts/tasks/release/contract.ts. 2 (EXC-1042): the gate can now
 // run a subset, so `ok` means "every task that RAN passed" rather than "all six
@@ -666,10 +693,7 @@ export function createProcessGroupController(graceMs = 2000): ProcessGroupContro
 function makeSpawnMiseTask(controller: ProcessGroupController): SpawnTask {
   return (name, env, onLine, signal) =>
     new Promise<SpawnOutcome>((resolve) => {
-      // A multi-word name (`build ui`, `test e2e`, `build bin`) splits into
-      // `mise run build ui` — mise routes the trailing words to the task's
-      // positional target (EXC-738); a single-word name is unchanged.
-      const child = controller.spawn("mise", ["run", ...name.split(" ")], {
+      const child = controller.spawn("mise", miseTaskCommand(name), {
         // Node's spawn accepts `undefined` env values (it drops them), so the
         // parent env passes through as-is with `extra` (e.g. CARET_SKIP_BUILD_UI)
         // merged on top.
