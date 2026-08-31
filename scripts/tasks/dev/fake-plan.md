@@ -535,7 +535,7 @@ The list below points at long-lived files, and leans on paths and line numbers t
 - `README.md:3` — a line near the top: the window clamps at line 1, so a bottom strip shows and there is **no** top strip.
 - `mise.toml` — a file shorter than the 60-line opening window: the whole file shows, with **no** strips on either side, and the header reads a plain line count instead of a range.
 - `mise.toml:900` — a line far past the end: the window clamps to the last line rather than opening empty, and **nothing** is marked, since the cited line doesn't exist.
-- `doc/DEVELOPMENT.md:124` — a long file opened mid-way, so both strips carry large counts. Click `↑` and `↓` repeatedly to walk the window out to line 1 and to the last line; each strip disappears when its side runs out, and an upward click should not throw away the line you were reading.
+- `doc/DEVELOPMENT.md:125` — a long file opened mid-way, so both strips carry large counts. Click `↑` and `↓` repeatedly to walk the window out to line 1 and to the last line; each strip disappears when its side runs out, and an upward click should not throw away the line you were reading.
 - `src/cli.ts` — real source rather than config: a line too long for the drawer scrolls sideways inside the excerpt rather than being cut off, and dragging the drawer's inner edge wider brings more of it into view.
 - `src/does-not-exist.ts` — a path deliberately **not** in the repo: it must show **no** icon and **no** preview. If it ever sprouts one, the existence gate has regressed.
 
@@ -553,13 +553,13 @@ EXC-918: a reference that resolves to a **directory** gets a folder glyph rather
 
 EXC-938: a reference can cite a **span** rather than a single line, and the preview frames the whole of it — every cited line washed, the usual context around it, and the end-line tail inside the click target rather than dangling outside it. Click the last character of each reference below, not its path, to check that half.
 
-- `doc/DEVELOPMENT.md:154-162` — nine cited lines: all nine are washed as one band, and the window reaches 30 lines past the span at each end rather than starting where the citation does.
+- `doc/DEVELOPMENT.md:155-163` — nine cited lines: all nine are washed as one band, and the window reaches 30 lines past the span at each end rather than starting where the citation does.
 - `README.md:3-9` — a span near the file's head: the window clamps at line 1 instead of asking for a line before it, so the preview opens on the file rather than degrading to a head view.
 - `src/cli.ts:10-110` — a span taller than the panel: it opens parked on its **first** line rather than centred, so reading starts where the citation does; the rest is a scroll away.
 - `mise.toml:5-900` — a span running past the end: it clamps to the last line, and only the lines that exist are washed.
 - `README.md:37-37` — a one-line span: identical to writing `README.md:37`.
 - `README.md#L37-L44` and `README.md:L37-L44` — the same span in the `#L` spellings a code host would produce. Both parse; `README.md:37:5` is still a line and a **column**, so it marks one row and no range.
-- `doc/DEVELOPMENT.md:154,162` — the comma spelling of the span the first bullet writes with a dash, and it must open on exactly the same nine washed lines. The separator is the only difference: a comma reads as a selection an editor would hand you, so a plan that pastes one cites a range rather than falling back to the head of the file. `README.md:37,37` collapses to a single line the same way `README.md:37-37` does.
+- `doc/DEVELOPMENT.md:155,163` — the comma spelling of the span the first bullet writes with a dash, and it must open on exactly the same nine washed lines. The separator is the only difference: a comma reads as a selection an editor would hand you, so a plan that pastes one cites a range rather than falling back to the head of the file. `README.md:37,37` collapses to a single line the same way `README.md:37-37` does.
 
 ### As markdown links
 
@@ -573,8 +573,8 @@ Each bullet below carries exactly one link and no other reference, so whatever i
 - Mid-sentence, [`README.md`](README.md) still takes its icon, because the backticks give it a token of its own wherever it sits.
 - [README.md](README.md) — a bare-path label. The path shows, plainly styled, and takes the icon exactly as the backticked rows above do: the decoration pass cuts the row at the reference's own columns, so even a collapsed bare label has a token of its own for the glyph to sit on. Clicking the words opens the preview.
 - [the caret dev workflow](doc/DEVELOPMENT.md) — a prose label: the words survive and the path does not appear at all. Hovering reveals the target in a tooltip, the only way to see where the click goes.
-- [the deep middle of a long file](doc/DEVELOPMENT.md:124) — a target carrying a line number: opens centered on line 124 with both strips showing, and the tooltip carries the line as well as the path.
-- [a stretch of the dev guide](doc/DEVELOPMENT.md:226-238) — a target carrying a **range**: the label hides it entirely, so the tooltip is the only place the span is visible before the click, and the preview washes all thirteen lines.
+- [the deep middle of a long file](doc/DEVELOPMENT.md:125) — a target carrying a line number: opens centered on line 125 with both strips showing, and the tooltip carries the line as well as the path.
+- [a stretch of the dev guide](doc/DEVELOPMENT.md:227-239) — a target carrying a **range**: the label hides it entirely, so the tooltip is the only place the span is visible before the click, and the preview washes all thirteen lines.
 - [`mise.toml`](package.json) — a label and target that **disagree**: the click opens the target, never the file the label names. Read the tooltip before clicking. The icon still sits inside the backticks.
 - [a plan that moved](doc/does-not-exist.md) — an unresolved target: the label reads as plain prose with no icon, no chip, and no preview, and its line still opens a comment composer on click.
 - [docs](guide) — a single extensionless segment: the brackets come off like any link's, but it is **not a citation** — no icon, no tooltip, no preview. It could be a directory, but nothing in the text says so, and that is decided before anything resolves.

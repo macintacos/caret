@@ -1,14 +1,31 @@
 import { afterEach, expect, test } from "bun:test";
-import { closeSync, existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname } from "node:path";
 
 import { setupTempStateDir } from "@test/support/env.ts";
 import { ndjsonRecords } from "@test/support/ndjson.ts";
-import { daemonStderrLogFile, ensureLogsDir, logArchiveDir, logFile } from "@/config/paths.ts";
+import {
+  daemonLock,
+  daemonStderrLogFile,
+  ensureLogsDir,
+  logArchiveDir,
+  logFile,
+} from "@/config/paths.ts";
 import { DEFAULTS } from "@/config/settings.ts";
 import {
   DAEMON_CWD,
   ensureDaemon,
   openDaemonStderr,
+  removeOwnDaemonLock,
   retireDaemon,
   spawnDaemon,
 } from "@/daemon/lifecycle.ts";
@@ -506,4 +523,36 @@ test("spawnDaemon pins the daemon's cwd to DAEMON_CWD", () => {
   // openDaemonStderr handed the fake a real fd, as the sibling tests above do.
   const out = calls[0]?.stdio?.[1];
   if (typeof out === "number") closeSync(out);
+});
+
+// ---- removeOwnDaemonLock ----
+
+// A daemon tearing ITSELF down must remove its own lock and nothing else: the
+// path may hold the lock of whichever daemon won the port race, and unlinking
+// that one strands a live daemon nothing can find. Placement used to carry that
+// invariant (the cleanup was wired only after a successful bind); the ownership
+// check is what lets it be wired BEFORE the bind instead, which is what closes
+// the signal window in runDaemon.
+test("removeOwnDaemonLock removes a lock naming this process", () => {
+  mkdirSync(dirname(daemonLock()), { recursive: true });
+  writeFileSync(daemonLock(), JSON.stringify({ pid: process.pid, port: 42718 }));
+  removeOwnDaemonLock();
+  expect(existsSync(daemonLock())).toBe(false);
+});
+
+test("removeOwnDaemonLock keeps a lock naming another process", () => {
+  mkdirSync(dirname(daemonLock()), { recursive: true });
+  writeFileSync(daemonLock(), JSON.stringify({ pid: process.pid + 1, port: 42718 }));
+  removeOwnDaemonLock();
+  expect(existsSync(daemonLock())).toBe(true);
+  unlinkSync(daemonLock());
+});
+
+test("removeOwnDaemonLock tolerates a missing or unreadable lock", () => {
+  mkdirSync(dirname(daemonLock()), { recursive: true });
+  expect(() => removeOwnDaemonLock()).not.toThrow();
+  writeFileSync(daemonLock(), "{ not json");
+  expect(() => removeOwnDaemonLock()).not.toThrow();
+  expect(existsSync(daemonLock())).toBe(true);
+  unlinkSync(daemonLock());
 });

@@ -4,7 +4,7 @@
 // the lock on shutdown (EXC-406).
 
 import { randomUUID } from "node:crypto";
-import { existsSync, unlinkSync } from "node:fs";
+import { existsSync } from "node:fs";
 
 import { selectAdapter } from "@/adapters/index.ts";
 import { warnInvalidEnvVars } from "@/commands/boot.ts";
@@ -21,7 +21,7 @@ import {
   watchSettings,
 } from "@/config/settings.ts";
 import { buildDiagnostics } from "@/daemon/diagnostics.ts";
-import { isAddrInUse } from "@/daemon/lifecycle.ts";
+import { isAddrInUse, removeOwnDaemonLock } from "@/daemon/lifecycle.ts";
 import { type CaretServer, createServer } from "@/daemon/server.ts";
 import {
   fileUpdateCache,
@@ -122,7 +122,40 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   // daemon and discovers the bound port from the lock, so port resolution for
   // hooks (getPort) is untouched.
   const ephemeral = opts.ephemeral;
-  let server: CaretServer;
+
+  // Signal cleanup goes up BEFORE the bind, because until a handler exists
+  // SIGTERM and SIGINT take their DEFAULT disposition: the kernel kills the
+  // process outright, no shutdown runs, and the lock createServer had just
+  // written is left behind for the next boot to trip over (the daemon exits 143
+  // with nothing in its log). That window is a few statements wide and looks
+  // impossible to hit — but a loaded box preempts inside it, which is how a
+  // contended `mise run preflight` reproduced it about once in twenty boots.
+  //
+  // Placement used to carry the invariant that a daemon which LOST the
+  // EADDRINUSE race below never unlinks the winner's lock. Wiring this early
+  // gives that up, so the invariant moves into the code: `server` is undefined
+  // until the bind succeeds, so a loser stops nothing, and removeOwnDaemonLock
+  // unlinks only a lock naming this pid.
+  let server: CaretServer | undefined;
+  const shutdown = (code: number) => {
+    server?.stop();
+    process.exit(code);
+  };
+  // Signal deaths leave a record (the synchronous write is durable before the
+  // exit); fatal errors log through the daemon's own sink, not caret.log.
+  process.once("SIGTERM", () => {
+    log.info("signal", "sigterm: shutting down");
+    shutdown(0);
+  });
+  process.once("SIGINT", () => {
+    log.info("signal", "sigint: shutting down");
+    shutdown(0);
+  });
+  // Last-resort unlink for an exit path that bypassed stop() — including a signal
+  // landing in the sliver between createServer writing the lock and `server`
+  // being assigned, where shutdown() has nothing to stop yet.
+  process.once("exit", removeOwnDaemonLock);
+
   try {
     server = createServer({
       store,
@@ -185,38 +218,15 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
     }
     throw e;
   }
-  // Cleanup is wired ONLY after a successful bind + lock write: a daemon that
-  // lost the EADDRINUSE race exits via the catch above without a lock, so it
-  // must never reach here and unlink the winner's lock. stop() removes the lock;
-  // pending reviews are already write-through to disk and rehydrate on restart.
-  const shutdown = (code: number) => {
-    server.stop();
-    process.exit(code);
-  };
-  // Signal deaths leave a record (the synchronous write is durable before the
-  // exit); fatal errors log through the daemon's own sink, not caret.log.
-  process.once("SIGTERM", () => {
-    log.info("signal", "sigterm: shutting down");
-    shutdown(0);
-  });
-  process.once("SIGINT", () => {
-    log.info("signal", "sigint: shutting down");
-    shutdown(0);
-  });
+  // The fatal handlers stay BELOW the bind: a boot that dies before this point
+  // should surface its stack the way any other startup crash does, rather than
+  // being turned into a logged exit(1).
   const onFatal = (label: string) => (err: unknown) => {
     log.error(label, err);
     shutdown(1);
   };
   process.once("uncaughtException", onFatal("uncaughtException"));
   process.once("unhandledRejection", onFatal("unhandledRejection"));
-  // Last-resort synchronous unlink in case an exit path bypassed stop().
-  process.once("exit", () => {
-    try {
-      unlinkSync(daemonLock());
-    } catch {
-      // already removed by stop(), or never written — both fine.
-    }
-  });
   // Boot's own check, fired last so it cannot delay the bind or the signal handlers.
   refreshUpdate();
   // Bun.serve keeps the process alive; the daemon idle-auto-shuts-down.

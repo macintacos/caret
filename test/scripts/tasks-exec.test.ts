@@ -1,8 +1,18 @@
 import { describe, expect, test } from "bun:test";
 
-import { lastDisplayLine, runCapture } from "@/tasks/lib/exec.ts";
+import { lastDisplayLine, runCapture, stripAnsi } from "@/tasks/lib/exec.ts";
 
 const ESC = String.fromCharCode(27);
+
+describe("stripAnsi", () => {
+  test("removes color and cursor-control sequences, keeping the text", () => {
+    expect(stripAnsi(`${ESC}[2K${ESC}[1mtransforming...${ESC}[0m`)).toBe("transforming...");
+  });
+
+  test("leaves text with no escapes untouched", () => {
+    expect(stripAnsi("plain text")).toBe("plain text");
+  });
+});
 
 describe("lastDisplayLine", () => {
   test("returns the last non-empty line of a chunk", () => {

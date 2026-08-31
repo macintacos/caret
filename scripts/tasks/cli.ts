@@ -20,7 +20,7 @@
 // without spawning the tools. It reuses createProgram from src/lib/program.ts so all
 // caret CLIs share the same name/description/help conventions.
 
-import { InvalidArgumentError } from "@commander-js/extra-typings";
+import { type Command, InvalidArgumentError, type OptionValues } from "@commander-js/extra-typings";
 
 import { createProgram } from "@/lib/program.ts";
 import { runAssets, runAssetsStitch, runAssetsVideo } from "@/tasks/assets.ts";
@@ -33,7 +33,7 @@ import { runLint } from "@/tasks/lint.ts";
 import { buildReleaseCommand } from "@/tasks/release/command.ts";
 import { runSetup } from "@/tasks/setup.ts";
 import { runSmoke, runSmokeBin, runSmokeBundle } from "@/tasks/smoke.ts";
-import { runTest, runTestE2e } from "@/tasks/test.ts";
+import { runTest, runTestE2e, type TestFlags } from "@/tasks/test.ts";
 
 import { type JsonArgs, runPreflightCli } from "../../scripts/preflight.ts";
 
@@ -49,8 +49,8 @@ export interface TaskActions {
   lint: (args: string[]) => Promise<unknown>;
   format: (args: string[]) => Promise<unknown>;
   caret: (args: string[]) => Promise<unknown>;
-  test: (args: string[]) => Promise<unknown>;
-  testE2e: (args: string[]) => Promise<unknown>;
+  test: (args: string[], flags: TestFlags) => Promise<unknown>;
+  testE2e: (args: string[], flags: TestFlags) => Promise<unknown>;
   setup: () => Promise<unknown>;
   smoke: () => Promise<unknown>;
   smokeBin: () => Promise<unknown>;
@@ -219,28 +219,43 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
 
   // `test`: bare and `unit` run the bun unit suite (the default target); `e2e`
   // runs the Playwright suite (building the UI first). Each forwards its own args
-  // — a path / --test-name-pattern for unit, a spec path / --grep for e2e.
+  // — a path / --test-name-pattern for unit, a spec path / --grep for e2e — and
+  // carries the three output-mode flags (EXC-1146) as REAL options rather than
+  // passthrough, the way `preflight` carries its own --json. passThroughOptions
+  // stops parsing at the first operand, which is what preserves the forwarding
+  // contract (EXC-738/739), so these must precede the forwarded args — hence the
+  // "(before forwarded args)" each description carries. The two targets share one
+  // declaration so a reworded description cannot drift between them.
+  const withModeFlags = <Args extends unknown[], Opts extends OptionValues>(
+    cmd: Command<Args, Opts>,
+  ) =>
+    cmd
+      .option("--json", "Emit one machine-readable result document (before forwarded args)")
+      .option("--verbose", "Stream the runner's full output (before forwarded args)")
+      .option("--quiet", "Show failures only (before forwarded args)");
   const test = program
     .command("test")
     .description("Run tests: bare/`unit` = bun test, `e2e` = Playwright");
-  test
-    .command("unit", { isDefault: true })
-    .description("Run the unit suite (bun test --conditions browser)")
-    .allowUnknownOption()
-    .passThroughOptions()
-    .argument("[args...]", "forwarded to bun test")
-    .action(async (args: string[]) => {
-      await actions.test(args);
-    });
-  test
-    .command("e2e")
-    .description("Run the Playwright e2e suite against an isolated daemon (builds the UI first)")
-    .allowUnknownOption()
-    .passThroughOptions()
-    .argument("[args...]", "forwarded to playwright test")
-    .action(async (args: string[]) => {
-      await actions.testE2e(args);
-    });
+  withModeFlags(
+    test
+      .command("unit", { isDefault: true })
+      .description("Run the unit suite (bun test --conditions browser)")
+      .allowUnknownOption()
+      .passThroughOptions()
+      .argument("[args...]", "forwarded to bun test"),
+  ).action(async (args: string[], opts) => {
+    await actions.test(args, opts);
+  });
+  withModeFlags(
+    test
+      .command("e2e")
+      .description("Run the Playwright e2e suite against an isolated daemon (builds the UI first)")
+      .allowUnknownOption()
+      .passThroughOptions()
+      .argument("[args...]", "forwarded to playwright test"),
+  ).action(async (args: string[], opts) => {
+    await actions.testE2e(args, opts);
+  });
 
   program
     .command("setup")

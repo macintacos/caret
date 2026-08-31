@@ -170,6 +170,15 @@ export interface DevDeps {
    * stdio inherited. Null whenever stdout is not a TTY — piped, redirected, or
    * under CI — which is what keeps `mise run dev > log.txt` behaving as before. */
   startTui: (opts: TuiOptions) => Tui | null;
+  /** Whether stdin is a terminal, i.e. whether there is a keyboard to read at
+   * all. Injected beside startTui rather than read off `process`: the shortcut
+   * keys are wired differently on each side of it, and a suite that read the real
+   * terminal would assert one branch when piped and the other at a prompt. */
+  stdinIsTty: () => boolean;
+  /** Report the boot line — the one thing this task prints for itself. Injected
+   * like every other effect here, so the eighteen tests that boot the supervision
+   * don't print eighteen boot lines into `mise run test`'s own output. */
+  log: (line: string) => void;
 }
 
 const realDevDeps: DevDeps = {
@@ -201,6 +210,12 @@ const realDevDeps: DevDeps = {
       schedule: (fn) => setTimeout(fn, 16),
     });
   },
+  stdinIsTty: () => process.stdin.isTTY === true,
+  // Through `console.log` at call time, not a captured reference: with the split
+  // pane up, captureProcessOutput has replaced console.log with the one that
+  // writes into the log pane, and a reference bound at module load would go
+  // straight to the terminal underneath the frame instead.
+  log: (line) => console.log(line),
 };
 
 /** The real terminal writer, captured at import — before `captureProcessOutput`
@@ -435,7 +450,7 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
       daemonAlive: () => isPidAlive(daemon.pid),
     });
     childEnv.CARET_PORT = String(port);
-    console.log(
+    deps.log(
       `caret dev: port=${port} state=${stateDirPath} config=${configFilePath} fresh=${opts.fresh ? 1 : 0} persistent=${persistState ? 1 : 0}`,
     );
 
@@ -467,7 +482,7 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
       // all means no keyboard to own.
       onKey: tui
         ? (handler) => (onDriverKey = handler)
-        : process.stdin.isTTY
+        : deps.stdinIsTty()
           ? lineModeKeys
           : undefined,
     });

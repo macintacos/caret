@@ -141,6 +141,31 @@ README.
 `mise run test` (unit) and `mise run test e2e` (Playwright) are the entry points, and both
 forward their arguments, so `mise run test <path>` scopes the run to one file.
 
+**`mise run test --json` is the call you want when you only need the verdict.** It emits
+one JSON document on stdout and nothing else — every child, the UI build included, runs
+captured — and the exit code is unchanged (`0` pass, non-zero fail):
+`{"schemaVersion": 1, "target": "unit"|"e2e", "ok", "passed", "failed", "durationMs", "report"}`.
+`ok` is the runner's own exit code, never re-derived from the counts.
+
+**What rides along depends on the verdict**, the same discipline `preflight --json`
+applies. A **passing** run is that envelope and nothing else — about 120 bytes, whether it
+ran one file or all 4900. A **failing** run adds two fields: `report`, the runner's native
+report nested unnormalised (JUnit XML as a string for `unit`, Playwright's json report as
+an object for `e2e`), and `output`, everything the runner wrote. Read `output` first on a
+`unit` failure — bun's JUnit reporter emits a bare `<failure type="…"/>` with no message,
+so the console stream is the only place the diff and the stack exist. `report` is `null`
+when the runner produced none, and `output` still carries what it wrote, so a run that
+died early stays diagnosable.
+
+A failing whole-suite run is large — the native report grows with the number of tests, so
+scope the run when you can. `--verbose` restores the full stream; `--quiet` is a dot per
+test plus failures in full, and is the default at a terminal — those dots are for a human
+watching, so an agent piping the output wants `--json` or the `verbose` default instead.
+
+**Caret's flags must precede the forwarded ones.** `mise run test --json <path>` is
+parsed; `mise run test <path> --json` hands `--json` to `bun test`, because the forwarding
+contract stops caret's own parsing at the first operand.
+
 **Never bare `bun test`.** Those entry points carry `--conditions browser`, which bun
 accepts only on the CLI; without it svelte resolves its server runtime and every UI
 component file aborts at import, while the backend suite still passes — so a bare run

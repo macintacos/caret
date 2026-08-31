@@ -18,6 +18,7 @@ import {
   childEnvFor,
   type DevDeps,
   daemonCommand,
+  lineModeKeys,
   makeCleanup,
   planStateDir,
   runDev,
@@ -173,9 +174,16 @@ function baseDeps(over: Partial<DevDeps>): DevDeps {
     exit: ((code: number): never => {
       throw new ExitSignal(String(code));
     }) as (code: number) => never,
-    // No terminal UI, which is what a non-TTY boot resolves to for real — so
-    // these cases exercise the inherited-stdio path the tests below assert on.
+    // No terminal UI and no keyboard, which is what a non-TTY boot resolves to
+    // for real — so these cases exercise the inherited-stdio path the tests below
+    // assert on. Both are injected rather than read off process: a suite that read
+    // the real terminal would pass piped and fail at a developer's prompt.
     startTui: () => null,
+    stdinIsTty: () => false,
+    // Swallowed by default: runDev's boot line is real output, and eighteen of
+    // these tests booting it would print eighteen lines into the unit suite's own
+    // stream. The one test that cares collects it instead.
+    log: () => {},
     ...over,
   };
 }
@@ -207,10 +215,12 @@ describe("runDev supervision", () => {
     await withCleanDevEnv(async () => {
       const { spawn, calls, children } = capturingSpawn(0);
       const driverCalls: DriverOptions[] = [];
+      const reported: string[] = [];
       let xdgAtDriver: string | undefined;
       let exitCode: number | undefined;
       const deps = baseDeps({
         spawn,
+        log: (line) => reported.push(line),
         runDriver: (o) => {
           // Capture the state dir the in-process driver sees at call time.
           xdgAtDriver = process.env.XDG_STATE_HOME;
@@ -240,6 +250,14 @@ describe("runDev supervision", () => {
         join(calls[0]?.env?.XDG_STATE_HOME as string, "caret", "logs", "daemon.log"),
       );
       expect(calls[0]?.stderr).toBe("inherit");
+
+      // The boot line goes through the injected sink, not console.log: it is the
+      // one thing runDev prints, and a suite that let it reach the terminal would
+      // scribble three of these across `mise run test`'s own output.
+      expect(reported).toHaveLength(1);
+      expect(reported[0]).toMatch(
+        /^caret dev: port=40123 state=\S+ config=\S+ fresh=0 persistent=0$/,
+      );
 
       // The driver ran in-process with the discovered base and the parsed opts —
       // no argv round-trip, no re-parse (candidate 1).
@@ -441,7 +459,7 @@ describe("runDev supervision", () => {
     });
   });
 
-  test("the driver is handed a key subscription only when the terminal UI owns stdin", async () => {
+  test("the driver gets no key subscription when nothing owns a keyboard", async () => {
     await withCleanDevEnv(async () => {
       const { spawn, calls } = capturingSpawn(0);
       const driverCalls: DriverOptions[] = [];
@@ -451,8 +469,31 @@ describe("runDev supervision", () => {
         runDev({ numVersions: 4, notify: false, persist: false }, deps),
       ).rejects.toBeInstanceOf(ExitSignal);
 
-      // startTui returned null here, so there is no keyboard owner to forward from.
+      // startTui returned null and stdin is not a terminal, so there is no
+      // keyboard to read at all — not merely no console to forward from.
       expect(driverCalls[0]?.onKey).toBeUndefined();
+
+      rmSync(calls[0]?.env?.XDG_STATE_HOME as string, { recursive: true, force: true });
+    });
+  });
+
+  test("the driver reads keys line-mode when a terminal has no console on it", async () => {
+    await withCleanDevEnv(async () => {
+      const { spawn, calls } = capturingSpawn(0);
+      const driverCalls: DriverOptions[] = [];
+      const deps = baseDeps({
+        spawn,
+        runDriver: (o) => driverCalls.push(o),
+        stdinIsTty: () => true,
+      });
+
+      await expect(
+        runDev({ numVersions: 4, notify: false, persist: false }, deps),
+      ).rejects.toBeInstanceOf(ExitSignal);
+
+      // A terminal with no console on it still has a keyboard, read a line at a
+      // time so Ctrl-C keeps reaching the signal handlers.
+      expect(driverCalls[0]?.onKey).toBe(lineModeKeys);
 
       rmSync(calls[0]?.env?.XDG_STATE_HOME as string, { recursive: true, force: true });
     });
