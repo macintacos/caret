@@ -98,6 +98,19 @@ test("file-refs de-dupes before capping, so repeats do not consume the budget", 
   expect(await resolvedKinds(id, paths)).toEqual({ "src/foo.ts": "file" });
 });
 
+test("file-refs resolves every path across the resolve batches, not just the first", async () => {
+  // The resolve fans out in fixed batches rather than one Promise.all over the
+  // whole set. A batch boundary is where entries get dropped or double-counted,
+  // so this spans several: 150 real files, none of which may go missing, and one
+  // straddling name per boundary is not enough to prove the seam holds.
+  const names = Array.from({ length: 150 }, (_, i) => `src/f${i}.ts`);
+  for (const n of names) write(n, "x");
+  const id = await d.seed({ cwd });
+  const resolved = await resolvedKinds(id, names);
+  expect(Object.keys(resolved)).toHaveLength(names.length);
+  expect(new Set(Object.values(resolved))).toEqual(new Set(["file"]));
+});
+
 test("file-refs 404s for an unknown review", async () => {
   expect((await fileRefs("nope", ["src/foo.ts"])).status).toBe(404);
 });

@@ -73,6 +73,12 @@ const INDEX_CACHE_CONTROL = "no-cache";
 const ASSET_CACHE_CONTROL = "public, max-age=31536000, immutable";
 const INDEX_PATH = "/index.html";
 
+/** How many candidate paths handleFileRefs resolves at once. Big enough that a
+ * plan's worth of references still costs a handful of round trips rather than
+ * hundreds; small enough that the burst of open file descriptors stays ordinary
+ * even at MAX_FILE_REFS. */
+const FILE_REF_BATCH = 64;
+
 /** Decides whether an incoming plan starts a new review or appends a version.
  * The router owns the review record (created vs appended), so it receives the
  * daemon's logger. */
@@ -593,7 +599,16 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // De-duped BEFORE the cap, so a plan repeating one path can't crowd out the
   // ones behind it, and resolved in parallel — the wider candidate gate makes
   // this a few hundred resolves on a long plan, which a sequential loop would
-  // walk one blocking syscall at a time.
+  // walk one blocking syscall at a time. In BATCHES, though, not one fan-out
+  // over the lot: MAX_FILE_REFS bounds how many resolves happen, and nothing
+  // bounded how many happen at once, so a plan at the cap put a few thousand
+  // simultaneous realpath+stat pairs on the event loop (resolveInCwd realpaths
+  // the cwd per call by design, src/plan/excerpt.ts). The batch keeps the
+  // parallelism that makes this fast and bounds the burst.
+  //
+  // ponytail: a fixed batch, so the slowest resolve in one holds up the next.
+  // A sliding window would not, and is the upgrade if a cold filesystem ever
+  // makes this measurable — the cap below is the knob to reach for first.
   async function handleFileRefs(req: Request, id: string): Promise<Response> {
     const r = store.get(id);
     if (!r) return notFound();
@@ -609,12 +624,17 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       seen.add(p);
       if (unique.push(p) === MAX_FILE_REFS) break;
     }
-    const entries = await Promise.all(
-      unique.map(async (p) => {
-        const hit = await resolveInCwd(r.cwd, p);
-        return hit === null ? null : ([p, hit.kind] as const);
-      }),
-    );
+    const entries: (readonly [string, FileRefKind] | null)[] = [];
+    for (let i = 0; i < unique.length; i += FILE_REF_BATCH) {
+      entries.push(
+        ...(await Promise.all(
+          unique.slice(i, i + FILE_REF_BATCH).map(async (p) => {
+            const hit = await resolveInCwd(r.cwd, p);
+            return hit === null ? null : ([p, hit.kind] as const);
+          }),
+        )),
+      );
+    }
     const resolved: Record<string, FileRefKind> = Object.fromEntries(
       entries.filter((e) => e !== null),
     );
