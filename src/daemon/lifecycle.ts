@@ -183,6 +183,16 @@ export function removeDaemonLock(): void {
   }
 }
 
+/** Remove the daemon lock, but only when it names THIS process. `removeDaemonLock`
+ * is for a caller that has already established the lock is stale; this is for a
+ * daemon tearing itself down, where the file on disk may belong to whichever
+ * daemon won the port — and unlinking that one would strand a live daemon nothing
+ * can find. Carrying the ownership check here is what lets a daemon wire its
+ * cleanup BEFORE it binds (see runDaemon). */
+export function removeOwnDaemonLock(): void {
+  if (readDaemonLock()?.pid === process.pid) removeDaemonLock();
+}
+
 /** Ask a stale daemon to step down. Returns true if a graceful shutdown was
  * initiated; false if nothing could be done (pre-fix daemon: no route, no lock).
  * Exported for the SIGTERM-gating tests; `kill` is injectable for the same
