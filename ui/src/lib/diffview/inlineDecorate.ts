@@ -213,8 +213,9 @@ function tagRow(
  *
  * Rows are visited for every line either map names: a prose-labelled reference
  * produces a file-reference span but no inline run at all (links.ts emits no
- * link range for a label that already resolved to a reference), and that line
- * still needs its cut.
+ * link range for a label that already resolved to a reference), and so does a
+ * parenthesized citation written in bare prose (fileRefs.ts) — and those lines
+ * still need their cuts.
  *
  * `quoteDepth` is the per-line blockquote nesting depth (links.ts), written to
  * the ROW as data-quote-depth. It defaults to empty so the pass still runs for a

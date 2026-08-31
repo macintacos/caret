@@ -26,7 +26,8 @@
 //
 // WHAT MARKS A COLLAPSED LABEL. A path-shaped target specific enough to cite
 // (isCitablePath) emits a FileRefSpan over the label (EXC-954, EXC-956), which
-// the view merges with the inline-code scan and decorates as a reference.
+// the view merges with fileRefs.ts's display-text scan and decorates as a
+// reference.
 // Emission belongs here because fileRefs.ts reads *display* text: once the link
 // collapses, its target is gone and only this layer still knows where the label
 // landed. Any other collapsed label takes a `link` run instead, which EXC-859

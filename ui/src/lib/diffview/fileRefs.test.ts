@@ -16,8 +16,8 @@ import {
 // markdown-link labels (EXC-954), which mergeFileRefSpans below unions with this
 // one. Everything else stays out: backticks are an author signalling "this is a
 // path", a parenthesis carrying one space-free separator-bearing run is a
-// citation, and the rest of prose is ordinary words. Shape is only a
-// plausibility floor — the filesystem, not the
+// citation, and the rest of prose is ordinary words. Shape is only a plausibility
+// floor — the filesystem, not the
 // parser, decides what a token is (EXC-916) — so a bare word, a directory, and a
 // dotfile are all offered to the daemon, and only a token with no letter in its
 // last segment ("3.14", "42") is refused outright. Columns index the display line
@@ -137,12 +137,13 @@ describe("detection (inside inline code)", () => {
   });
 });
 
-// A parenthesized citation is the third detection scope (EXC-1184): plans name a
-// symbol and cite the file beside it — `Emailer.attempt_send` (spam/email.py:127-141)
-// — and a parenthesis is where that shape lives. Three gates keep the widening off
-// ordinary prose: the run holds no whitespace (scanLine's single-token rule), it does
-// not follow a `]` (a markdown link or image target, which the link layer already
-// owns), and it carries a separator (worthAsking, shared with the editor's prose scan).
+// A parenthesized citation is the scan's second scope (EXC-1184): plans name a
+// symbol and cite the file beside it — `Emailer.attempt_send` (spam/email.py:127-141).
+// Four gates keep the widening off ordinary prose, enumerated at scanLine's paren
+// loop: the run's shape (no whitespace, no nested parens), a `]` predecessor test,
+// no overlap with a code span, and worthAsking. Each has a fixture below that goes
+// RED when that one gate is removed — a gate its own fixture passes without is
+// documentation rather than an invariant.
 describe("detection (parenthesized prose)", () => {
   test("detects a cited range written in bare parentheses", () => {
     const s = spanFor(
@@ -178,11 +179,15 @@ describe("detection (parenthesized prose)", () => {
   });
 
   test.each([
-    ["a run holding whitespace", "this time it is (that are NOT markdown links)"],
-    ["an image target", "![shot](https://uploads.linear.app/a/b/c)"],
+    // Each fixture carries a path the gate under test is the ONLY thing refusing.
+    // A whitespace fixture whose every word also fails worthAsking, or an image
+    // fixture whose target is also a URL, would pass with its gate deleted.
+    ["a run holding whitespace", "it is (a note about src/a.ts here)"],
+    ["an image target", "![shot](docs/pic.png)"],
     ["a non-collapsing link target", "see [docs](github.com/o/r) here"],
     ["a parenthetical with no separator", "a note (sic) and (deprecated) and (EXC-1065)"],
     ["a version with no letter in its last segment", "version (2.0) shipped"],
+    ["a URL in parentheses", "fetch (https://example.com/app.ts) now"],
   ])("ignores %s", (_name, text) => {
     expect(buildFileRefLayer(text).size).toBe(0);
   });
@@ -195,9 +200,31 @@ describe("detection (parenthesized prose)", () => {
     expect(spans[0]?.path).toBe("foo.ts");
   });
 
+  test("a paren inside a spacey code span belongs to the command", () => {
+    // The code scan abandons a span holding whitespace, but its RANGE is still
+    // collected — otherwise the paren scan would pick the command apart, which is
+    // the offer EXC-1065 removed.
+    expect(buildFileRefLayer("run `sed -n '1,5p' (a/b.ts)` first").size).toBe(0);
+  });
+
   test("a line carrying both sources returns its spans in startCol order", () => {
-    const spans = only("Today `Emailer.attempt_send` (spam/email.py:127-141) sends");
-    expect(spans.map((s) => s.path)).toEqual(["Emailer.attempt_send", "spam/email.py"]);
+    // The paren reference sits LEFT of the code one, which is the opposite of the
+    // order the two loops append in — so this reds the moment the sort goes, and
+    // with it mergeFileRefSpans' "leftmost scanned span" promise.
+    const spans = only("see (src/a.ts) and `x/y.ts` end");
+    expect(spans.map((s) => s.path)).toEqual(["src/a.ts", "x/y.ts"]);
+  });
+
+  test.each([
+    ["at the start of the line", "(foo.ts) leads", ["foo.ts"]],
+    ["nested brackets", "((foo.ts))", ["foo.ts"]],
+    ["two adjacent runs", "(a.ts)(b.ts)", ["a.ts", "b.ts"]],
+    ["two runs in one paren", "(a.ts,b.ts)", ["a.ts", "b.ts"]],
+    ["an unclosed paren", "(unclosed a.ts", []],
+  ])("handles %s", (_name, text, paths) => {
+    // The first row is the only place the implementation reads an out-of-bounds
+    // index (`source[-1]`), which reads back undefined rather than throwing.
+    expect(only(text).map((s) => s.path)).toEqual(paths);
   });
 });
 
@@ -223,7 +250,7 @@ describe("the plausibility floor", () => {
 });
 
 describe("exclusions", () => {
-  test("does not detect a path in prose (only inside inline code)", () => {
+  test("does not detect a path in bare prose, outside a code span or a parenthesis", () => {
     expect(buildFileRefLayer("edit src/foo.ts in prose").size).toBe(0);
   });
 
@@ -317,10 +344,10 @@ describe("classify", () => {
 
 // pathCandidates is the tokenizer half of the scan: the maximal path-shaped runs
 // in one piece of text, with URLs masked and classify() applied. It is shared —
-// scanLine below applies it to an inline-code interior, and the editor's chip
-// scan (lib/editorRefs.ts, EXC-1177) applies it to the document's prose with code
-// masked out — so what counts as a path-shaped run has one definition rather than
-// one per surface.
+// scanLine below applies it to an inline-code interior and to a parenthesized
+// interior, and the editor's chip scan (lib/editorRefs.ts, EXC-1177) applies it
+// to the document's prose with code masked out — so what counts as a path-shaped
+// run has one definition rather than one per surface.
 describe("pathCandidates", () => {
   test("offsets each run into the text it was given", () => {
     // Every word clears the plausibility floor — the floor is deliberately low
@@ -354,8 +381,9 @@ describe("pathCandidates", () => {
   });
 });
 
-// mergeFileRefSpans unions the references the layers SCAN out of inline code with
-// the ones the link layer EMITS over collapsed labels (EXC-954). The two can land
+// mergeFileRefSpans unions the references the scan finds in inline code and in
+// parenthesized runs with the ones the link layer EMITS over collapsed labels
+// (EXC-954). The two can land
 // on the same text — a markdown link whose label is itself an inline-code path —
 // and two overlapping spans would tag two tokens and draw two glyphs, so the
 // merge must collapse each collision to exactly one span.

@@ -148,9 +148,11 @@ const SKILL_RUN = new RegExp(SKILL_TOKEN.source, "g");
 /** Sentence punctuation a prose run absorbs but does not own.
  *
  * `CANDIDATE_RE` and `SKILL_TOKEN` both admit `.`, and `SKILL_TOKEN` admits `:`.
- * Inside a codespan the closing backtick bounds the run, so the plan view never
- * meets this; in prose nothing does, and `fix src/a.ts.` would ask the daemon
- * about `src/a.ts.` — which resolves to nothing. That failure is
+ * A bracket bounds the run wherever one exists — the closing backtick of a
+ * codespan, or the `)` of the plan view's parenthesized scope, which is why that
+ * scope carries no trim of its own and leaves `(src/a.ts.)` unresolved. Free
+ * prose has no such bound, and `fix src/a.ts.` would ask the daemon about
+ * `src/a.ts.` — which resolves to nothing. That failure is
  * indistinguishable from this feature's deliberate signal: the reviewer would
  * read "caret cannot find this" about a path that is perfectly real, at the end
  * of a sentence, which is the most ordinary place to write one. */
