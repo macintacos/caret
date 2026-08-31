@@ -145,6 +145,28 @@ that line away; the shortcut keeps working.
 
 ## References caret recognizes
 
+Caret picks filenames out of two places: the plan you are reading, where they become
+clickable, and the comment you are writing, where they become chips. Both check what they
+find against the working directory the plan was written in, so what you see reflects the
+project as it actually is.
+
+### In a plan you are reading
+
+A file the agent cited draws a small icon beside it, and clicking it opens a preview of
+that file — the head of it, or a window framed on the lines the reference names, so
+`src/mail/send.ts:127-141` opens on 127. A folder opens its tree instead.
+
+Caret picks up two ways of writing one: a path in backticks, and a path in parentheses
+beside the symbol it belongs to, the way a plan cites its evidence —
+``the retry lives in `attempt_send` (src/mail/send.ts:127-141)``. A path loose in a
+sentence is left alone. Backticks and parentheses are how a plan says "this is a path";
+reading the rest of the prose the same way would put icons on ordinary words.
+
+A reference that does not resolve stays plain text — no icon, nothing to click. That is
+the useful half: a filename the agent invented never looks like one you can open.
+
+### In a comment you are writing
+
 A reference caret can actually resolve wears a soft chip as you type it; one it cannot
 stays plain text. That is the signal, not an error — a chip that never appears is how you
 catch a misremembered skill name or a path that does not exist, while you can still fix
@@ -163,7 +185,8 @@ part of what the agent reads.
 In prose a path has to carry a `/` or a `.` before caret looks it up, which is what keeps
 an ordinary word like `test` from wearing a chip next to a `test/` directory. Wrapping a
 name in backticks says "this is a path" outright, so a bare `Makefile` at the top of the
-project is recognized that way and not otherwise.
+project is recognized that way and not otherwise. The same rule governs the parenthesized
+citations above: `(Makefile)` in a plan draws nothing, `` `Makefile` `` does.
 
 The chip is presentation only. What the agent receives is the literal text you typed,
 whether or not anything wore one.
