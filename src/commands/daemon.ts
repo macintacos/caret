@@ -11,7 +11,6 @@ import { warnInvalidEnvVars } from "@/commands/boot.ts";
 import { configFile, daemonLock, reviewsDir, stateDir, updateCheckFile } from "@/config/paths.ts";
 import { readUpdatesCheck } from "@/config/prefs.ts";
 import {
-  envOverrides,
   getPort,
   heartbeatMs,
   idleMs,
@@ -20,7 +19,7 @@ import {
   settings,
   watchSettings,
 } from "@/config/settings.ts";
-import { buildDiagnostics } from "@/daemon/diagnostics.ts";
+import { buildDiagnostics, prodDiagnosticsDeps } from "@/daemon/diagnostics.ts";
 import { isAddrInUse, removeOwnDaemonLock } from "@/daemon/lifecycle.ts";
 import { type CaretServer, createServer } from "@/daemon/server.ts";
 import {
@@ -183,23 +182,17 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
       // GET /api/reviews/:id/skill-description for the Ctrl+Space preview panel
       // (EXC-1186).
       readSkillDescription: (cwd, skill) => adapter.readSkillDescription(cwd, skill),
-      // Daemon self-diagnostics for the settings Advanced pane (EXC-842). Reads
-      // live settings (settings().current() hot-reloads a config edit) and the
-      // CARET_* env overrides in effect; buildDiagnostics scrubs the settings dump.
+      // Daemon self-diagnostics for the settings Advanced pane (EXC-842). The
+      // settings thunk is re-read per request, so a config edit hot-reloads;
+      // prodDiagnosticsDeps supplies the readers and buildDiagnostics scrubs the dump.
       diagnostics: () =>
-        buildDiagnostics({
-          now: Date.now,
-          startedAt,
-          system: () => ({
-            platform: process.platform,
-            arch: process.arch,
-            runtime: `bun ${Bun.version}`,
+        buildDiagnostics(
+          prodDiagnosticsDeps({
+            startedAt,
+            settings: () => settings().current(),
+            configPath: cfg,
           }),
-          settings: () => settings().current(),
-          configPath: cfg,
-          configExists: () => existsSync(cfg),
-          envOverrides,
-        }),
+        ),
       // Whether this caret is behind (EXC-1205). A thunk over a local the background
       // check assigns, so GET /api/update never makes a network call of its own — it
       // reads the live `updates.check` (a prefs.json read, not a call out) and folds it

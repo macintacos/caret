@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test";
 
-import { buildDiagnostics, type DiagnosticsDeps } from "@/daemon/diagnostics.ts";
+import {
+  buildDiagnostics,
+  type DiagnosticsDeps,
+  prodDiagnosticsDeps,
+  systemInfo,
+} from "@/daemon/diagnostics.ts";
 import { CENSOR } from "@/redact/core.ts";
 
 /** Baseline deps; each test overrides only the surface it asserts on. */
@@ -8,7 +13,7 @@ function deps(over: Partial<DiagnosticsDeps> = {}): DiagnosticsDeps {
   return {
     now: () => 5000,
     startedAt: 1000,
-    system: () => ({ platform: "darwin", arch: "arm64", runtime: "bun 1.3.14" }),
+    system: () => ({ platform: "darwin", arch: "arm64", runtime: "bun 0.0.0" }),
     settings: () => ({ logging: { level: "info" } }),
     configPath: "/home/u/.config/caret/config.toml",
     configExists: () => true,
@@ -24,13 +29,13 @@ test("uptimeMs is now() minus startedAt", () => {
 test("system, config path/exists, and env pass through untouched", () => {
   const d = buildDiagnostics(
     deps({
-      system: () => ({ platform: "linux", arch: "x64", runtime: "bun 1.3.14" }),
+      system: () => ({ platform: "linux", arch: "x64", runtime: "bun 0.0.0" }),
       configPath: "/etc/caret/config.toml",
       configExists: () => false,
       envOverrides: () => [{ name: "CARET_PORT", value: "6000" }],
     }),
   );
-  expect(d.system).toEqual({ platform: "linux", arch: "x64", runtime: "bun 1.3.14" });
+  expect(d.system).toEqual({ platform: "linux", arch: "x64", runtime: "bun 0.0.0" });
   expect(d.config.path).toBe("/etc/caret/config.toml");
   expect(d.config.exists).toBe(false);
   expect(d.config.env).toEqual([{ name: "CARET_PORT", value: "6000" }]);
@@ -51,4 +56,22 @@ test("settings() is read on every call (reflects live hot-reload)", () => {
   expect(read()).toBe("info");
   level = "debug";
   expect(read()).toBe("debug");
+});
+
+test("systemInfo reads the live process identity and `bun <semver>` runtime", () => {
+  expect(systemInfo().runtime).toMatch(/^bun \d+\.\d+\.\d+/);
+  expect(systemInfo().platform).toBe(process.platform);
+  expect(systemInfo().arch).toBe(process.arch);
+});
+
+test("prodDiagnosticsDeps wires the real readers rather than constants", () => {
+  const deps = prodDiagnosticsDeps({
+    startedAt: 0,
+    settings: () => ({}),
+    configPath: "/nonexistent/caret/config.toml",
+  });
+  expect(deps.system()).toEqual(systemInfo());
+  expect(deps.configExists()).toBe(false);
+  expect(deps.now()).toBeGreaterThan(0);
+  expect(Array.isArray(deps.envOverrides())).toBe(true);
 });
