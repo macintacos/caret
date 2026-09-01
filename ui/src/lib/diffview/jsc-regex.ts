@@ -24,6 +24,19 @@
 // This is a source-level workaround for a JSC bug, not a shiki bug. It is written
 // to be a no-op on a fixed JSC — the rewritten form is correct everywhere — so the
 // module can simply be deleted if the engine is ever repaired.
+//
+// "The engine" is the BROWSER's, not the test runner's, and the two have already
+// diverged. Measured on macOS arm64 under EXC-1156 with `/(^a)?b/.exec("xb")`:
+//
+//     bun 1.3.14   null        bun 1.4.0    ["b", undefined]
+//     WebKit 26.5  null        Chromium 151 ["b", undefined]
+//
+// So bun's JSC fork has the fix and shipping Safari does not. Deleting this
+// module on the strength of a green unit suite would leave every `//` comment in
+// the diff view mistokenized for Safari reviewers, and silently: the rule falls
+// through to the arithmetic-operator rule rather than throwing. The trigger for
+// deletion is a fixed WebKit, which bun cannot observe — re-probe under
+// playwright's webkit build, not under `bun test`.
 
 /**
  * The prefixes a group can open with, ordered so a longer form wins over a shorter

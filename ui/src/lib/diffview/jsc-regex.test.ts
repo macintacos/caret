@@ -122,20 +122,29 @@ describe("the rewrite fixes the JavaScriptCore divergence it exists for", () => 
   // The bug: JSC treats an optional group containing `^` as anchoring the whole
   // pattern, so scanning for the group's *absent* case fails. V8 returns a match.
   //
-  // This block is JSC-only by design. caret's unit suite runs under bun, which IS
-  // JavaScriptCore, so the reproduction below genuinely holds here — on V8 it would
-  // fail, and deliberately so: that failure is the signal the workaround can go.
+  // This block runs on whatever engine hosts the suite, and deliberately asserts
+  // nothing about which one that is. The two JSCs in play move independently:
+  // bun's is a fork on bun's release cadence, the UI's is whatever WebKit the
+  // reviewer's browser ships. Measured under EXC-1156, they already disagree —
+  // bun 1.4.0 returns a match for `/(^a)?b/.exec("xb")`, WebKit 26.5 still
+  // returns null. So the suite's own engine is not evidence about the deployment
+  // engine, and a reproduction asserted here would only pin the wrong one.
+  //
+  // What survives is the invariant that holds either way: the transform rewrites
+  // the shape, and the rewritten form matches on every engine. The deletion
+  // trigger is a fixed BROWSER JSC, which this suite cannot observe — see the
+  // header of jsc-regex.ts.
   const shapes = [
     String.raw`(^[\t ]+)?(?=\/\/)`,
     String.raw`((?:^[\t ]+)?)(?=\/\/)`,
     String.raw`(?:^[\t ]+)?(\/\/)`,
   ];
 
-  test("JSC drops the match that the plain optional anchored group should find", () => {
-    // The minimal reproduction, kept here as the reason the module exists. If a
-    // future JSC fixes this, the transform becomes a no-op rather than a hazard —
-    // but this test is where that news arrives.
-    expect(/(^a)?b/.exec("xb")).toBeNull();
+  test("the minimal shape is rewritten rather than passed through", () => {
+    // The reason the module exists, pinned as a property of the transform instead
+    // of a property of the host engine.
+    expect(jscSafeSource("(^a)?b")).toBe("(?:(^a)|)b");
+    expect(new RegExp(jscSafeSource("(^a)?b"), "d").exec("xb")?.index).toBe(1);
   });
 
   for (const source of shapes) {
