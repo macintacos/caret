@@ -20,7 +20,7 @@ const health: HealthIdentity = {
 };
 
 const diagnostics: DaemonDiagnostics = {
-  system: { platform: "darwin", arch: "arm64", runtime: "bun 1.2.19" },
+  system: { platform: "darwin", arch: "arm64", runtime: "bun 0.0.0" },
   uptimeMs: 2 * 3_600_000 + 14 * 60_000,
   settings: { daemon: { port: 42718 }, review: { timeout_s: 3600 } },
   config: { path: "/Users/x/.config/caret/config.toml", exists: true, env: [] },
@@ -43,7 +43,7 @@ describe("AdvancedPane render", () => {
 
     expect(textOf(target, "version")).toBe("caret 0.7.0 · build 2f81c3a · commit 8c5d84a");
     expect(textOf(target, "daemon")).toBe("live · port 42718 · up 2h 14m");
-    expect(textOf(target, "system")).toBe("darwin (arm64) · bun 1.2.19");
+    expect(textOf(target, "system")).toBe("darwin (arm64) · bun 0.0.0");
     expect(textOf(target, "config")).toContain("[daemon]");
     expect(textOf(target, "config")).toContain("port = 42718");
 

@@ -8,7 +8,7 @@ function deps(over: Partial<DiagnosticsDeps> = {}): DiagnosticsDeps {
   return {
     now: () => 5000,
     startedAt: 1000,
-    system: () => ({ platform: "darwin", arch: "arm64", runtime: "bun 1.2.19" }),
+    system: () => ({ platform: "darwin", arch: "arm64", runtime: "bun 0.0.0" }),
     settings: () => ({ logging: { level: "info" } }),
     configPath: "/home/u/.config/caret/config.toml",
     configExists: () => true,
@@ -24,13 +24,13 @@ test("uptimeMs is now() minus startedAt", () => {
 test("system, config path/exists, and env pass through untouched", () => {
   const d = buildDiagnostics(
     deps({
-      system: () => ({ platform: "linux", arch: "x64", runtime: "bun 1.2.19" }),
+      system: () => ({ platform: "linux", arch: "x64", runtime: "bun 0.0.0" }),
       configPath: "/etc/caret/config.toml",
       configExists: () => false,
       envOverrides: () => [{ name: "CARET_PORT", value: "6000" }],
     }),
   );
-  expect(d.system).toEqual({ platform: "linux", arch: "x64", runtime: "bun 1.2.19" });
+  expect(d.system).toEqual({ platform: "linux", arch: "x64", runtime: "bun 0.0.0" });
   expect(d.config.path).toBe("/etc/caret/config.toml");
   expect(d.config.exists).toBe(false);
   expect(d.config.env).toEqual([{ name: "CARET_PORT", value: "6000" }]);

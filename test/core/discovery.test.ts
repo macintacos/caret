@@ -32,7 +32,7 @@ function discoveryDeps(over: Partial<DiscoveryDeps> = {}): DiscoveryDeps {
     now: () => new Date("2026-06-04T12:00:00.000Z"),
     version: "1.2.3",
     system: () => ({ platform: "darwin", os: "macos", arch: "arm64" }),
-    install: () => ({ kind: "dev", binaryPath: "/bin/caret", bunVersion: "1.2.0" }),
+    install: () => ({ kind: "dev", binaryPath: "/bin/caret", bunVersion: "0.0.0" }),
     settings: () => DEFAULTS,
     configPath: "/cfg/config.toml",
     configExists: () => true,
@@ -88,7 +88,7 @@ test("collectReport assembles a full document with every section present", async
 test("happy path populates the section scalars from the deps", async () => {
   const report = await collectReport(discoveryDeps());
   expect(report.system).toEqual({ platform: "darwin", os: "macos", arch: "arm64" });
-  expect(report.install).toEqual({ kind: "dev", binaryPath: "/bin/caret", bunVersion: "1.2.0" });
+  expect(report.install).toEqual({ kind: "dev", binaryPath: "/bin/caret", bunVersion: "0.0.0" });
   expect(report.daemon).toMatchObject({
     reachable: true,
     service: "caret",
@@ -332,7 +332,7 @@ test("home paths and foreign usernames are scrubbed in the finished report", asy
       install: () => ({
         kind: "prod",
         binaryPath: `${home}/.local/share/caret/bin/caret`,
-        bunVersion: "1.2.0",
+        bunVersion: "0.0.0",
       }),
       configPath: "/Users/somebodyelse/.config/caret/config.toml",
     }),

@@ -333,7 +333,7 @@ describe("getHealth instrumentation", () => {
 
 describe("getDiagnostics instrumentation", () => {
   const doc = {
-    system: { platform: "darwin", arch: "arm64", runtime: "bun 1.2.19" },
+    system: { platform: "darwin", arch: "arm64", runtime: "bun 0.0.0" },
     uptimeMs: 1000,
     settings: { daemon: { port: 42718 } },
     config: { path: "/x/config.toml", exists: true, env: [] },

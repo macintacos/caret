@@ -270,7 +270,7 @@ test("GET /api/health omits approveVariants when the adapter declares none", asy
 
 test("GET /api/diagnostics returns the injected diagnostics body", async () => {
   const diag = {
-    system: { platform: "linux", arch: "x64", runtime: "bun 1.2.19" },
+    system: { platform: "linux", arch: "x64", runtime: "bun 0.0.0" },
     uptimeMs: 1234,
     settings: { logging: { level: "info" } },
     config: { path: "/x/config.toml", exists: true, env: [] },
@@ -1053,7 +1053,7 @@ describe("read-confidentiality posture", () => {
       listSkills: async () => [{ name: "git", origin: "user" }],
       readSkillDescription: async () => "a description",
       diagnostics: () => ({
-        system: { platform: "linux", arch: "x64", runtime: "bun 1.2.19" },
+        system: { platform: "linux", arch: "x64", runtime: "bun 0.0.0" },
         uptimeMs: 0,
         settings: {},
         config: { path: "/x/config.toml", exists: false, env: [] },

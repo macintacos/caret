@@ -38,7 +38,7 @@ test("renders the diagnostics blocks and copies one to the clipboard", async ({ 
   );
   await expect(pane.locator("[data-diag='daemon'] .diag-dot")).toHaveAttribute("data-live", "true");
   await expect(pane.locator("[data-diag='system'] .diag-text")).toHaveText(
-    "darwin (arm64) · bun 1.2.19",
+    "darwin (arm64) · bun 0.0.0",
   );
   await expect(pane.locator("[data-diag='config'] .diag-path")).toContainText("config.toml");
   await expect(pane.locator("[data-diag='config'] .diag-text")).toContainText("[daemon]");
