@@ -517,9 +517,13 @@ describe("caret themes over a real TypeScript sample", () => {
 // through to the arithmetic-operator rule. caret's engine rewrites the pattern
 // (diffview/jsc-regex.ts) to restore it.
 //
-// This suite runs under bun, which IS JavaScriptCore — the buggy engine — so this
-// is a genuine regression pin rather than a tautology, and it belongs in the unit
-// suite rather than e2e for exactly that reason.
+// What this suite does NOT pin is that repair. bun's JSC carried the defect when
+// these expectations were written; since bun 1.4 it does not, so they now hold with
+// or without the rewrite (see diffview/jsc-regex.ts's header for the per-engine
+// measurements). They remain worth having as the grammar's own truth, read off the
+// Oniguruma reference — a mis-scoped token fails here by name instead of surfacing
+// as a puzzling wrong hue. The repair's trigger lives in a browser this runner is
+// not, and getting it observed is EXC-1223.
 describe("the shipped engine tokenizes TypeScript to the grammar's real scopes", () => {
   // Every expectation below was read off the Oniguruma engine — the reference
   // implementation — rather than guessed, so the suite pins the grammar's truth.

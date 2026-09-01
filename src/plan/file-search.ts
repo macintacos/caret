@@ -63,21 +63,19 @@ export interface SearchBudget {
  *
  * ponytail: `dirents` caps what the walk EXAMINES, not what a single `readdir`
  * materializes — a directory holding far more than this is read whole before
- * `partition` sees one entry of it. Nothing here avoids that: `opendir` and
- * `opendirSync` slurp too, and pulling five entries out of a 60,000-entry
- * directory costs what pulling all 60,000 does. Measured at 274 bytes and
- * 0.38us per entry, so a pathological half-million-entry directory costs
- * roughly 130MB and 190ms of the keystroke it lands on — a hiccup rather than a
- * failure, which is why it stays a documented ceiling rather than a behaviour
- * change.
- *
- * Re-measured on Bun 1.4.0 under EXC-1156 and unchanged: `opendir`'s first five
- * entries cost 1.5ms at 1k entries, 14ms at 10k and 100ms at 60k — linear in the
- * directory, not in the read, which is the whole reason the cap cannot be
- * literal. End-to-end the route is unaffected either way (`@` completion over
- * caret's own tree measures 1-6ms through POST /api/reviews/:id/file-search on
- * both 1.3.14 and 1.4.0). Re-measure on the next upgrade; an incremental
- * directory reader is what would make this cap literal.
+ * `partition` sees one entry of it. `opendir` is not an escape: it slurps too, so
+ * pulling five entries costs what pulling all of them does (bun 1.4.0: 1.5ms at 1k
+ * entries, 14ms at 10k, 100ms at 60k — the cost tracks the directory's SIZE, not
+ * how many entries the caller consumes, which is why the cap cannot be literal).
+ * The slurp itself runs 274 bytes and 0.38us per entry — a separate figure from
+ * those latencies, and the one the projection uses — so a pathological
+ * half-million-entry directory costs roughly 130MB and 190ms of the keystroke it
+ * lands on: a hiccup rather than a failure, and so a documented ceiling rather
+ * than a behaviour change. The rate was re-measured on 1.4.0 (0.32us) and holds;
+ * the 274 bytes was not, RSS deltas at these sizes being page-granular noise.
+ * End to end, `@` completion over caret's own tree measures 1-6ms through
+ * POST /api/reviews/:id/file-search. Re-measure on the next bun bump; an
+ * incremental directory reader is what would make the cap literal.
  */
 export const SEARCH_BUDGET: SearchBudget = { dirents: 20_000, results: 50 };
 

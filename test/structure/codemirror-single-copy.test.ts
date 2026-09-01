@@ -25,13 +25,21 @@
 // every range still admits them — so the manifest ends byte-identical and only
 // bun.lock moves.
 //
-// `bun dedupe` (new in 1.4) is not a shortcut past that. It collapses versions
-// onto one that satisfies EVERY range, so it is blind to the split this guards:
-// measured under EXC-1156 against a tree holding @codemirror/state at both 6.5.0
-// and 6.7.1, it reported "No duplicates" and changed nothing, because no single
-// version satisfied both edges. `bun prune` likewise — it removes what bun.lock
-// no longer names, and both copies are named. The overrides round-trip stays the
-// mechanism.
+// `bun dedupe` and `bun prune`, which bun 1.4 added, are not a shortcut past that
+// round-trip, and the reason is worth recording because it is not the obvious one.
+// On 1.4.0 the hazard the paragraph above describes did not reproduce at all:
+// pinning the whole set back through overrides and then running
+// `bun update @codemirror/state` moved every edge forward together, transitive
+// consumers included, leaving one copy and nothing for dedupe to collapse. Forcing
+// a genuine two-copy tree needs ranges no single version satisfies — which this
+// manifest cannot express, since every edge on @codemirror/state is ^6.0.0, ^6.6.0
+// or ^6.7.0 — and dedupe correctly declines that one. `bun prune` likewise: it
+// removes what bun.lock no longer names, and both copies are named.
+//
+// So the update path looks repaired on 1.4, for this set. The gate stays anyway: it
+// fails on a split however one arrives, one path re-resolving cleanly is not
+// evidence that every future one will, and dedupe is a manual pass — it cannot be
+// what stands between a bad resolution and a reviewer's editor.
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

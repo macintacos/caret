@@ -6,9 +6,12 @@ import { jscSafeSource } from "$lib/diffview/jsc-regex.ts";
 // compiled pattern. It rewrites `(^X)?` into `(?:(^X)|)` — an equivalent form JSC
 // matches correctly — and returns everything else byte-identical.
 //
-// The behavioral block at the bottom is the one that would catch a broken rewrite:
-// the string assertions pin the shape, but only running both forms shows the
-// original failing and the rewrite matching on the very engine this file exists for.
+// The string assertions are the guard: a rewrite that regressed to a no-op fails
+// them on any engine. The behavioral block at the bottom used to be the stronger
+// check — it ran both forms and showed the original failing where the rewritten
+// one matched — but that only worked while the host engine carried the bug, and
+// bun's JSC no longer does (EXC-1156). It now documents the semantics here and
+// guards them on the engines that still need the rewrite. See its own comment.
 
 describe("jscSafeSource rewrites an optional anchored group", () => {
   test("rewrites a leading optional capture group", () => {
@@ -118,7 +121,7 @@ describe("jscSafeSource finds the group boundary through every prefix form", () 
   });
 });
 
-describe("the rewrite fixes the JavaScriptCore divergence it exists for", () => {
+describe("the rewritten form matches where the original diverges", () => {
   // The bug: JSC treats an optional group containing `^` as anchoring the whole
   // pattern, so scanning for the group's *absent* case fails. V8 returns a match.
   //
@@ -130,22 +133,22 @@ describe("the rewrite fixes the JavaScriptCore divergence it exists for", () => 
   // returns null. So the suite's own engine is not evidence about the deployment
   // engine, and a reproduction asserted here would only pin the wrong one.
   //
-  // What survives is the invariant that holds either way: the transform rewrites
-  // the shape, and the rewritten form matches on every engine. The deletion
-  // trigger is a fixed BROWSER JSC, which this suite cannot observe — see the
-  // header of jsc-regex.ts.
+  // What survives is the invariant that holds either way: the rewritten form
+  // matches on every engine. The deletion trigger is a fixed BROWSER JSC, which
+  // this suite cannot observe — see the header of jsc-regex.ts.
+  //
+  // Be clear about what these three cases are worth on each engine. On a FIXED
+  // one — bun 1.4's — they pass under an identity transform too, so here they
+  // document the intended semantics rather than guard them; the string assertions
+  // in the describes above are what actually fail on a broken rewrite. On an
+  // engine that still carries the bug, which is every WebKit that ships this code
+  // today, they are a real behavioural guard. They earn their place on the second
+  // engine, not the one running them.
   const shapes = [
     String.raw`(^[\t ]+)?(?=\/\/)`,
     String.raw`((?:^[\t ]+)?)(?=\/\/)`,
     String.raw`(?:^[\t ]+)?(\/\/)`,
   ];
-
-  test("the minimal shape is rewritten rather than passed through", () => {
-    // The reason the module exists, pinned as a property of the transform instead
-    // of a property of the host engine.
-    expect(jscSafeSource("(^a)?b")).toBe("(?:(^a)|)b");
-    expect(new RegExp(jscSafeSource("(^a)?b"), "d").exec("xb")?.index).toBe(1);
-  });
 
   for (const source of shapes) {
     test(`rewritten ${source} matches a trailing comment`, () => {

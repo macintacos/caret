@@ -71,14 +71,10 @@ export default defineConfig({
     // at the root regardless of how the tree is shaped. @lezer/common rides along
     // because Tree/NodeType identity flows through the same extensions.
     //
-    // Bun 1.4 added `bun dedupe` and `bun prune`, and neither replaces this
-    // (EXC-1156). Both were run on 1.4.0 against a tree deliberately holding two
-    // reachable copies of @codemirror/state: `bun dedupe --check` reported "No
-    // duplicates" and neither command changed anything. That is correct on its own
-    // terms — dedupe collapses versions onto one that satisfies EVERY range, and
-    // the split here is two ranges no single version satisfies. It is also exactly
-    // the case that breaks the editor, so the guarantee this needs is vite's
-    // resolution-time one, not a lockfile pass someone has to remember to run.
+    // `bun dedupe` / `bun prune` (new in 1.4) do not replace this. Both act on
+    // bun.lock, and what breaks the editor is the resolved tree — so they are a
+    // manual pass standing where an always-on resolution rule has to. Measured in
+    // test/structure/codemirror-single-copy.test.ts's header.
     dedupe: ["@codemirror/state", "@codemirror/view", "@codemirror/language", "@lezer/common"],
     // `@core/*` resolves to the tool-agnostic core in src/, so the UI imports
     // the wire contract (src/lib/types.ts) directly. Type-only imports erase at

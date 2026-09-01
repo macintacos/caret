@@ -26,17 +26,22 @@
 // module can simply be deleted if the engine is ever repaired.
 //
 // "The engine" is the BROWSER's, not the test runner's, and the two have already
-// diverged. Measured on macOS arm64 under EXC-1156 with `/(^a)?b/.exec("xb")`:
+// diverged. `/(^a)?b/.exec("xb")` on macOS arm64:
 //
-//     bun 1.3.14   null        bun 1.4.0    ["b", undefined]
-//     WebKit 26.5  null        Chromium 151 ["b", undefined]
+//     bun 1.4.0     ["b", undefined]   the unit runner — has the fix
+//     Chromium 151  ["b", undefined]   the e2e runner — never had the bug
+//     WebKit 26.5   null               what Safari reviewers actually get
 //
-// So bun's JSC fork has the fix and shipping Safari does not. Deleting this
-// module on the strength of a green unit suite would leave every `//` comment in
-// the diff view mistokenized for Safari reviewers, and silently: the rule falls
-// through to the arithmetic-operator rule rather than throwing. The trigger for
-// deletion is a fixed WebKit, which bun cannot observe — re-probe under
-// playwright's webkit build, not under `bun test`.
+// So neither runner can see the defect any more, and shipping Safari still has it.
+// Deleting this module on the strength of a green suite would leave every `//`
+// comment in the diff view mistokenized for Safari reviewers, and silently: the
+// rule falls through to the arithmetic-operator rule rather than throwing.
+//
+// The trigger for deletion is therefore a fixed WebKit — re-probe under a webkit
+// build, never under `bun test`. There is no standing way to do that here:
+// playwright.config.ts defines only a chromium project, so it means
+// `bunx playwright install webkit` and an ad-hoc script. Giving that measurement a
+// home is EXC-1223.
 
 /**
  * The prefixes a group can open with, ordered so a longer form wins over a shorter

@@ -124,9 +124,7 @@ const ESC = String.fromCharCode(27);
 
 // bun 1.3.14's junit reporter, verbatim: 3 tests, one skipped, none failing. The
 // version is the recording's provenance, not a value to keep current — re-record
-// it only if bun changes the <testsuites> attributes parseJUnit reads. Re-verified
-// against 1.4.0 under EXC-1156: the attribute set is unchanged on all three
-// elements, so the 1.3.14 recording still stands.
+// it only if bun changes the <testsuites> attributes parseJUnit reads.
 const PASSING_JUNIT = `<?xml version="1.0" encoding="UTF-8"?>
 <testsuites name="bun test" tests="3" assertions="2" failures="0" skipped="1" time="0.014287">
   <testsuite name="sample.test.ts" file="sample.test.ts" tests="3" assertions="2" failures="0" skipped="1" time="0" hostname="Mac.localdomain">
