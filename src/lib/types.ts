@@ -456,7 +456,7 @@ export interface HealthIdentity {
  * daemon describing itself to its own UI.
  */
 export interface DaemonDiagnostics {
-  /** OS platform, CPU architecture, and runtime version (e.g. "bun 1.3.14"). */
+  /** OS platform, CPU architecture, and runtime version (the `bun <semver>` string). */
   system: { platform: string; arch: string; runtime: string };
   /** Milliseconds the daemon has been running (now − boot). */
   uptimeMs: number;
