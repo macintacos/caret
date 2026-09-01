@@ -16,6 +16,12 @@
 # `--timeout` rides on those same two entry points for the same reason (EXC-1056):
 # `[test]` has no `timeout` key, and a preload calling `setDefaultTimeout` reaches
 # only some files of a multi-file run. See scripts/tasks/test.ts.
+#
+# Both re-probed on bun 1.4.0 under EXC-1156 and both still stand. `conditions`
+# was tried in all three plausible homes — `[test]`, top level, and `[install]` —
+# against a package whose `browser` condition resolves a different file: bare
+# `bun test` picked the default entry every time, while `--conditions browser` on
+# the CLI picked the browser one. Re-probe on the next bump.
 [test]
 # rumdl-preload points the plan formatter (src/plan/rumdl.ts) at the mise-pinned
 # rumdl so tests run offline; svelte-preload compiles .svelte for the UI suite.
