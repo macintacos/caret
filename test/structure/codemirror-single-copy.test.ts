@@ -23,7 +23,15 @@
 // `bun install` so every edge resolves to it, then delete the block and run
 // `bun install` again. The resolutions stay put — every edge is satisfied and
 // every range still admits them — so the manifest ends byte-identical and only
-// bun.lock moves. bun offers no dedupe command, so this is the mechanism.
+// bun.lock moves.
+//
+// `bun dedupe` (new in 1.4) is not a shortcut past that. It collapses versions
+// onto one that satisfies EVERY range, so it is blind to the split this guards:
+// measured under EXC-1156 against a tree holding @codemirror/state at both 6.5.0
+// and 6.7.1, it reported "No duplicates" and changed nothing, because no single
+// version satisfied both edges. `bun prune` likewise — it removes what bun.lock
+// no longer names, and both copies are named. The overrides round-trip stays the
+// mechanism.
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
