@@ -14,6 +14,14 @@ const e2eWorkers: number | string = (() => {
   return Number.isInteger(n) && n > 0 ? n : "50%";
 })();
 
+// EXC-1223: the engine probe, routed to the webkit project alone by the
+// testMatch/testIgnore pair below. It asserts the JavaScriptCore defect that
+// ui/src/lib/diffview/jsc-regex.ts works around is STILL PRESENT, so running it
+// under Chromium — an engine that never had the bug — would red the suite for
+// the wrong reason. The pair is the whole routing mechanism: a project with
+// neither would run every spec.
+const JSC_PROBE = "**/jsc-regex.e2e.ts";
+
 // Real-browser e2e for the review UI (EXC-453). Specs are named *.e2e.ts so
 // `bun test` (which collects *.test.ts AND *.spec.ts repo-wide) never picks
 // them up — the two runners stay disjoint. Each test boots its own isolated
@@ -63,6 +71,7 @@ export default defineConfig<E2EOptions>({
   projects: [
     {
       name: "chromium",
+      testIgnore: JSC_PROBE,
       use: {
         ...devices["Desktop Chrome"],
         // After the device spread (which pins 1280x720): widen to the reference
@@ -76,6 +85,18 @@ export default defineConfig<E2EOptions>({
         // suite's baseline is caret dark, and a spec that cares about system
         // switching overrides this with page.emulateMedia().
         colorScheme: "dark",
+      },
+    },
+    {
+      // EXC-1223: WebKit exists here to run the engine probe and nothing else —
+      // it watches shipping Safari's regex engine, it does not double-run the UI
+      // suite. The device spread is the whole `use` block, deliberately: the
+      // probe renders nothing, so there is no layout to widen a viewport for and
+      // no fresh origin for `colorScheme` to decide the paint of.
+      name: "webkit",
+      testMatch: JSC_PROBE,
+      use: {
+        ...devices["Desktop Safari"],
       },
     },
   ],
