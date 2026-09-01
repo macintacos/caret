@@ -18,6 +18,27 @@ closes over should be passed in (the backing store, the clock, the timer), so a 
 construct a fresh instance and a load-bearing window can be driven deterministically
 rather than slept through.
 
+### Where the prod deps builder lives
+
+Both placements are in the tree, and the choice is **what it costs a test to import**, not
+which layer the builder belongs to:
+
+- **Beside the interface it satisfies**, in the core module — when the builder reads only
+  ambient effects (`process`, `Bun`, the clock, a path probe) and pulls in nothing the
+  entrypoint owns. `prodEnsureDeps` (`src/daemon/lifecycle.ts`, shared by two entrypoints)
+  and `prodDiagnosticsDeps` (`src/daemon/diagnostics.ts`, covered by
+  `test/core/daemon/diagnostics.test.ts`) are here, both exported — importing the module
+  costs a test, or a second caller, nothing.
+- **At the wiring point**, in `src/commands/` — when the builder needs the entrypoint's
+  own graph: the adapter registry, the store, the server, loaded UI assets.
+  `prodDiscoveryDeps` (`src/commands/discovery.ts`) is here, and it is unexported, because
+  a test that imported it would drag that graph in behind it.
+
+What the builder cannot know — the boot timestamp, the resolved config path, the live
+settings service — stays a parameter either way. That is what keeps the first bullet's
+builders testable: a test constructs one, then asserts production wires the real readers
+rather than constants.
+
 ## File-split discipline
 
 - **One concern per module.** `cli.ts` is the precedent for a *thin entrypoint*: it only
