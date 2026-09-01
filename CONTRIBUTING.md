@@ -19,7 +19,7 @@ Whichever task you run first installs the pinned tools, JS deps, and generated p
 before doing its own job, and registers the git hooks along the way. mise asks you to
 trust the clone's config the first time — answer yes, or run `mise trust` up front.
 
-`mise run setup` runs those same steps and adds the e2e Chromium the bootstrap leaves out;
+`mise run setup` runs those same steps and adds the e2e browsers the bootstrap leaves out;
 run it before the e2e suite — `mise run test e2e`, and `mise run preflight`, which
 includes it.
 

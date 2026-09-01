@@ -37,11 +37,11 @@
 // comment in the diff view mistokenized for Safari reviewers, and silently: the
 // rule falls through to the arithmetic-operator rule rather than throwing.
 //
-// The trigger for deletion is therefore a fixed WebKit — re-probe under a webkit
-// build, never under `bun test`. There is no standing way to do that here:
-// playwright.config.ts defines only a chromium project, so it means
-// `bunx playwright install webkit` and an ad-hoc script. Giving that measurement a
-// home is EXC-1223.
+// The trigger for deletion is therefore a fixed WebKit, and test/e2e/jsc-regex.e2e.ts
+// is where that is standing measured: playwright.config.ts routes it to a webkit
+// project of its own, and it asserts the defect is still present. That spec is
+// INVERTED — it reds on good news. A red there is the notification that this module
+// can be deleted, not a test to repair (EXC-1223).
 
 /**
  * The prefixes a group can open with, ordered so a longer form wins over a shorter

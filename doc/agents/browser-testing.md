@@ -39,7 +39,7 @@ body:
   through `revealGutterPlus` (`test/e2e/support/source-view.ts:238`), which does
   `getBoundingClientRect()` and then `page.mouse.move()`. Inline the helper before
   concluding a spec is pure logic.
-- **Browser dependence declared in the config.** `playwright.config.ts:78` emulates
+- **Browser dependence declared in the config.** `playwright.config.ts:87` emulates
   `colorScheme: "dark"`, so a spec asserting what a fresh origin paints is doing media
   emulation with nothing in its body that says so. Read the config's `use` block too.
 
@@ -63,6 +63,29 @@ collects all four of `*.test.ts`, `*_test.ts`, `*.spec.ts` and `*_spec.ts` repo-
 Playwright spec under any of those names would be swept into the unit runner and crash it.
 `.e2e.ts` keeps the two runners disjoint — Playwright owns `test/e2e/`, `bun test` owns
 the rest.
+
+## The project matrix
+
+`playwright.config.ts` defines two projects, and the split is a **correctness**
+requirement rather than a speed one:
+
+| Project    | Collects                             | Why                                                        |
+| ---------- | ------------------------------------ | ---------------------------------------------------------- |
+| `chromium` | every spec except `jsc-regex.e2e.ts` | the review UI, on the engine the suite has always driven    |
+| `webkit`   | `jsc-regex.e2e.ts`, nothing else     | shipping Safari's regex engine, which the UI suite never is |
+
+Routing is a `testMatch` / `testIgnore` pair over the one glob. The probe asserts a
+JavaScriptCore defect *exists*, so collecting it under Chromium — an engine that never had
+the bug — would red the suite for the wrong reason. WebKit is not a second lane for the UI
+suite either: it watches one engine behaviour, and doubling the suite onto it would buy
+contention rather than coverage.
+
+**An inverted spec says so in its header, in those words.** A normal spec reds when caret
+breaks; `jsc-regex.e2e.ts` reds when an upstream engine is *fixed*, and that red is the
+notification that `ui/src/lib/diffview/jsc-regex.ts` can be deleted. State it, or the next
+reader repairs the test and the workaround outlives its bug — which is nearly what
+happened when EXC-1156 read a green suite as permission to delete it, both runners having
+gained the JSC fix while shipping Safari had not (EXC-1223).
 
 ## The harness contract
 
@@ -132,7 +155,7 @@ is sized for the machine the suite actually runs on rather than an idle one. Pla
 own defaults — 30s per test, 5s per assertion — assume the suite owns the host, and inside
 `mise run preflight` it does not: `lint` and `test` (unit) are already running when
 `test e2e` starts, `build bin` and `smoke` land during it, and six e2e workers each
-driving a Chromium tree plus a spawned daemon saturate the cores before any of that
+driving a browser tree plus a spawned daemon saturate the cores before any of that
 arrives. On a 12-core host the unit suite measures 31s standalone against 88s inside the
 gate — 2.8x. That figure is the unit suite's; e2e's own factor was never measured, and
 2.8x is the working number the budgets are sized against.

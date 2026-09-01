@@ -26,7 +26,7 @@
 # The marker is deliberately asymmetric — set on the cold path, left unset on
 # the warm one — so it answers "did I just install everything?", not "has this
 # run?". Its reader is scripts/tasks/setup.ts: when the marker is set, `setup`
-# skips the three steps below and runs only the e2e Chromium download, which the
+# skips the three steps below and runs only the e2e browser download, which the
 # preamble deliberately excludes. A warm-but-stale run does only the middle step,
 # so it too leaves the marker unset: claiming it would make a following
 # `mise run setup` skip two steps nothing has vouched for.
@@ -70,8 +70,8 @@ caret_bootstrap() {
 
   # Cold. Subshell so a sourced preamble never moves the caller's cwd; `&&`
   # aborts on the first failure. These mirror the first three steps of
-  # `mise run setup`; Chromium is deliberately excluded — the tasks CLI doesn't
-  # need it, and downloading a browser on every fresh clone isn't this job.
+  # `mise run setup`; the browsers are deliberately excluded — the tasks CLI
+  # doesn't need them, and downloading them on every fresh clone isn't this job.
   #
   # stdout goes to stderr: install chatter is a diagnostic, and the forwarders
   # for `preflight`, `release` and `caret` all treat their stdout as a
