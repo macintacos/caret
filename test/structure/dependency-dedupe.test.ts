@@ -1,11 +1,9 @@
 // Standing gate on bun.lock carrying no duplicate version that bun can collapse
-// (EXC-1216). A duplicate is not neutral churn here: CodeMirror's extension system is
-// identity-based, so a second physical copy of @codemirror/state (or view, language,
-// @lezer/common) hands EditorState.create an extension set it does not recognise as
-// its own, MarkdownEditor.svelte never constructs, and a reviewer sees the Notes label
-// above an empty bordered box. Nothing in that failure names a version, which is why
-// it is worth failing `bun test` over rather than trusting a contributor to remember a
-// cleanup pass.
+// (EXC-1216). Most duplicates are inert churn; the class that is not is CodeMirror's, and
+// DUPLICATE_HINT below carries that story because it is the text a failing run actually
+// prints. What makes the rule worth failing `bun test` over rather than trusting a
+// contributor to remember a cleanup pass is that nothing in the resulting failure names a
+// version — a duplicate that does break something breaks it silently.
 //
 // `bun dedupe --check` is the instrument, rather than a re-implementation that reads
 // the lock itself, because deciding "could this duplicate be collapsed?" is
@@ -38,26 +36,32 @@ const { exitCode, stdout, stderr } = Bun.spawnSync([process.execPath, "dedupe", 
   stderr: "pipe",
 });
 const report = stdout.toString();
+const failure = stderr.toString().trim();
 
-/** bun's own report says `N duplicate versions can be removed` and nothing about what a
- * duplicate costs, so the gate owns the explanation and the remedy. */
+/** bun's own report says `N duplicate versions can be removed` and ends with a bare
+ * `bun dedupe`, so the gate owns the cost a duplicate carries and sharpens that one-word
+ * remedy into a committable one. */
 const DUPLICATE_HINT = [
   "bun.lock resolves a package to more than one version where one would do.",
+  "The versions bun would collapse are listed below.",
   "",
-  "A duplicated CodeMirror copy (@codemirror/* or @lezer/common) breaks the annotation",
-  "editor: the extension system is identity-based, so EditorState.create rejects the",
-  "set, MarkdownEditor.svelte never constructs, and the Notes field renders as an empty",
-  "bordered box with no error naming a version.",
+  "Most duplicates are inert; one class is not, and it is why this is a gate. CodeMirror's",
+  "extension system is identity-based, so a second copy of @codemirror/* or @lezer/common",
+  "makes EditorState.create reject the extension set — MarkdownEditor.svelte never",
+  "constructs and the Notes field renders as an empty bordered box, with no error naming a",
+  "version. Keeping the lock collapsed is what keeps that class out.",
   "",
   "Fix: run `bun dedupe` at the repo root and commit the resulting bun.lock.",
 ].join("\n");
 
-test("`bun dedupe --check` actually ran", () => {
-  // An older bun answers `error: Script not found "dedupe"` on stderr and exits
-  // non-zero with nothing on stdout, which the assertion below would otherwise report
-  // as a dirty lockfile. bun writes its whole report to stdout, so an empty stdout is
-  // that misfire and nothing else.
-  expect(report.trim() === "" ? stderr.toString().trim() : "").toBe("");
+test("`bun dedupe --check` ran a real check", () => {
+  // bun exits 1 without checking anything in three cases the duplicate assertion below
+  // would otherwise report as a dirty lockfile: an older bun with no `dedupe` subcommand
+  // (`Script not found`), a missing bun.lock, and a bun.lock that no longer matches
+  // package.json — the shape a package.json edit leaves behind until `bun install` runs.
+  // Each is announced on stderr, which a completed check leaves empty; the version banner
+  // bun prints to stdout even on those errors is why stdout cannot be the signal.
+  expect(failure).toBe("");
 });
 
 test("bun.lock carries no collapsible duplicate versions", () => {

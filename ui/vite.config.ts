@@ -73,8 +73,8 @@ export default defineConfig({
     //
     // `bun dedupe` / `bun prune` (new in 1.4) do not replace this. Both act on
     // bun.lock, and what breaks the editor is the resolved tree, so a clean lock is no
-    // substitute for an always-on resolution rule — even now that dedupe is gated on
-    // every push by test/structure/dependency-dedupe.test.ts. Measured in
+    // substitute for an always-on resolution rule — even now that dedupe is gated by
+    // `bun test` (test/structure/dependency-dedupe.test.ts). Measured in
     // test/structure/codemirror-single-copy.test.ts's header.
     dedupe: ["@codemirror/state", "@codemirror/view", "@codemirror/language", "@lezer/common"],
     // `@core/*` resolves to the tool-agnostic core in src/, so the UI imports
