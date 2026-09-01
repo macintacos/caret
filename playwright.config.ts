@@ -35,13 +35,13 @@ export default defineConfig<E2EOptions>({
   // doc/agents/browser-testing.md § Timeouts are budgets for the loaded host.
   retries: 0,
   forbidOnly: true,
-  // EXC-587: bound the fan-out. Each worker drives a Chromium tree plus a
+  // EXC-587: bound the fan-out. Each worker drives a browser tree plus a
   // spawned daemon, so an uncapped count is the dominant driver of the orphan
   // storm when several preflight runs stack; cap it at half the cores
   // (CARET_E2E_WORKERS overrides for a constrained host).
   workers: e2eWorkers,
   // EXC-587: a wedged suite self-aborts instead of needing an external SIGKILL
-  // (the path that orphans Chromium). Generous so it can't flake a slow or
+  // (the path that orphans a browser). Generous so it can't flake a slow or
   // loaded host's normal pass.
   globalTimeout: 15 * 60 * 1000,
   // EXC-1050: budgets for the LOADED preflight host, not an idle one.
@@ -68,6 +68,10 @@ export default defineConfig<E2EOptions>({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
+  // Adding a project here means adding its name to E2E_BROWSERS in
+  // scripts/tasks/test.ts, which is what `mise run setup` downloads and what the
+  // e2e task checks for before it runs. Nothing gates the two lists against
+  // each other.
   projects: [
     {
       name: "chromium",

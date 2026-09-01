@@ -324,11 +324,18 @@ export async function chromiumInstalled(): Promise<boolean> {
   return existsSync(chromium.executablePath());
 }
 
-/** The Playwright browsers the e2e matrix drives — playwright.config.ts projects. */
-const E2E_BROWSERS = ["chromium", "webkit"] as const;
+/** The Playwright browsers the e2e matrix drives. Must match the project names in
+ * playwright.config.ts — nothing checks that, so a project added there is added
+ * here too. `setup` spreads this list, so the download and the probe cannot drift
+ * from each other. */
+export const E2E_BROWSERS = ["chromium", "webkit"] as const;
 
-/** Which of them have no downloaded binary, in config order. Dynamic-imports
- * @playwright/test so a plain lint/dev invocation never loads Playwright. */
+/** Which of them have no downloaded binary, in list order. Deliberately
+ * matrix-wide: it demands every browser regardless of what the invocation would
+ * collect, so `test e2e --project=chromium` still fails on a missing WebKit. The
+ * alternative — parsing --project and path operands to work out what a run needs —
+ * costs more than the one download it saves. Dynamic-imports @playwright/test so a
+ * plain lint/dev invocation never loads Playwright. */
 export async function missingE2eBrowsers(): Promise<string[]> {
   const pw = await import("@playwright/test");
   return E2E_BROWSERS.filter((name) => !existsSync(pw[name].executablePath()));
@@ -336,8 +343,9 @@ export async function missingE2eBrowsers(): Promise<string[]> {
 
 /** What to tell a caller whose browser downloads are incomplete — the probe above
  * fails actionably here, naming what is actually missing, rather than mid-suite
- * with Playwright's runtime error. */
-function browsersMissing(missing: string[]): string {
+ * with Playwright's runtime error. The two joins differ on purpose: prose takes
+ * commas, the remedy has to stay pasteable as a command. */
+function missingBrowsersMessage(missing: string[]): string {
   return `caret e2e: ${missing.join(", ")} not installed. Run: mise run setup  (or: bunx playwright install ${missing.join(" ")})\n`;
 }
 
@@ -373,7 +381,7 @@ export async function runTestE2e(args: string[], flags: TestFlags = {}): Promise
   }
   const missing = await missingE2eBrowsers();
   if (missing.length > 0) {
-    process.stderr.write(browsersMissing(missing));
+    process.stderr.write(missingBrowsersMessage(missing));
     process.exit(1);
   }
   return execAndExit(e2eCommand([...e2eModeArgs(mode), ...args]));
@@ -402,7 +410,12 @@ export async function collectE2eJsonRun(
   if (ui !== 0) return { target: "e2e", exitCode: ui, native: null, output: log };
   const missing = await missingBrowsers();
   if (missing.length > 0) {
-    return { target: "e2e", exitCode: 1, native: null, output: log + browsersMissing(missing) };
+    return {
+      target: "e2e",
+      exitCode: 1,
+      native: null,
+      output: log + missingBrowsersMessage(missing),
+    };
   }
   const dir = mkdtempSync(join(tmpdir(), "caret-test-json-"));
   const reportPath = join(dir, "report.json");

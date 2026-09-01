@@ -8,6 +8,7 @@
 
 import { paletteCssCommand } from "@/tasks/build.ts";
 import { runForward } from "@/tasks/lib/exec.ts";
+import { E2E_BROWSERS } from "@/tasks/test.ts";
 
 /**
  * The commands `setup` runs, in order. `scripts/bootstrap.sh` sets
@@ -21,11 +22,12 @@ export function setupCommands(env: Record<string, string | undefined>): string[]
   // What scripts/bootstrap.sh re-implements in bash. A new step the tasks CLI
   // needs in order to *load* belongs here and there, or a fresh clone can't run.
   const preamble = [["mise", "install"], ["bun", "install"], paletteCssCommand()];
-  // What `setup` owns whatever the preamble did. The browsers are here because
-  // the bootstrap deliberately never downloads one; both of them because the e2e
-  // matrix drives two Playwright projects (EXC-1223), and one invocation because
-  // `playwright install` takes the whole list. New steps go here too.
-  const own = [["bunx", "playwright", "install", "chromium", "webkit"]];
+  // What `setup` owns whatever the preamble did. The browsers are here because the
+  // bootstrap deliberately never downloads one; the list is spread from the guard's
+  // own constant so what `setup` installs cannot drift from what `test e2e` demands
+  // (EXC-1223), and it is one invocation because `playwright install` takes the
+  // whole list. New steps go here too.
+  const own = [["bunx", "playwright", "install", ...E2E_BROWSERS]];
   return env.CARET_BOOTSTRAPPED ? own : [...preamble, ...own];
 }
 

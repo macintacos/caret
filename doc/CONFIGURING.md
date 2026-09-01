@@ -183,7 +183,7 @@ or stacked host.
 | Env var                | Config key | Default        | Purpose                                                                                                                            |
 | ---------------------- | ---------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `CARET_PREFLIGHT_JOBS` | —          | CPU count      | Max `mise run preflight` tasks in flight; a positive int. Set it to `1` to serialize the gate. Invalid/unset → the host's CPU count. |
-| `CARET_E2E_WORKERS`    | —          | `50%` of cores | Playwright e2e worker count (each drives a browser tree + daemon); a positive int. Unset → half the cores.                          |
+| `CARET_E2E_WORKERS`    | —          | `50%` of cores | Playwright e2e worker count (each drives a browser tree + daemon); a positive int. Unset → half the cores.                           |
 
 ## Plan formatting (rumdl)
 

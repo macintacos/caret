@@ -2,52 +2,88 @@
 // ui/src/lib/diffview/jsc-regex.ts works around.
 //
 // A real browser, and specifically a real WebKit: the defect is the engine's own,
-// and it is already gone from both engines that could otherwise see it — bun 1.4
-// has the fix and Chromium never had the bug — so shipping Safari's engine is the
-// only place left that can observe it. The pure half of the workaround (that
-// jscSafeSource rewrites the `(^X)?` sites and leaves every other pattern
-// byte-identical) is a unit in ui/src/lib/diffview/jsc-regex.test.ts.
+// and it is already gone from both engines this repo runs — bun 1.4 has the fix
+// and Chromium never had the bug — so a WebKit build is the only place left that
+// can observe it. The pure half of the workaround (that jscSafeSource rewrites the
+// `(^X)?` sites and leaves every other pattern byte-identical) is a unit in
+// ui/src/lib/diffview/jsc-regex.test.ts.
 //
-// READ THIS BEFORE "FIXING" A RED HERE: THE FIRST ASSERTION IS INVERTED. It
-// asserts the BUG STILL EXISTS, so it goes red on GOOD news — WebKit repaired the
-// engine. The response is NOT to fix this test. It is to DELETE
-// ui/src/lib/diffview/jsc-regex.ts (with its callers, this spec, and the webkit
-// project in playwright.config.ts), which is the entire reason this file exists.
-// Without a red somewhere, the workaround is un-deletable in practice: EXC-1156
-// swept the repo for workarounds its dependency bumps had made obsolete and could
-// not retire this one, because nothing here could look at the engine.
+// What runs here is PLAYWRIGHT'S WebKit — ms-playwright/webkit-<rev>, pinned by
+// @playwright/test — not the Safari on anyone's machine. It tracks WebKit upstream
+// and therefore LEADS shipping Safari, which in turn leads whichever Safari a
+// reviewer has actually updated to.
 //
-// What the probe pays for and never uses: Playwright's `page` fixture depends on
+// READ THIS BEFORE "FIXING" A RED HERE: THE FIRST ASSERTION IS INVERTED. It asserts
+// the BUG STILL EXISTS, so it goes red on GOOD news — WebKit repaired the engine.
+// The response is NOT to fix this test. Because of the lead above, a red means the
+// fix landed upstream, NOT that Safari reviewers have it: it starts the retirement
+// clock rather than ending it. Find which Safari release carries the fix and whether
+// caret still serves one that does not; once it does not, DELETE
+// ui/src/lib/diffview/jsc-regex.ts, with its callers, this spec, and the webkit
+// project in playwright.config.ts. Deleting on the day the red arrives is the very
+// regression this file exists to prevent — the module is a no-op on a fixed engine,
+// so carrying it through the wait costs nothing, while dropping it early silently
+// mistokenizes every `//` comment for reviewers still on the old engine. During the
+// wait, hold the red with `test.fail()` and the Safari version being waited on —
+// never `test.skip`, which retires the signal instead of recording it.
+//
+// Without a red somewhere the workaround is un-deletable in practice: EXC-1156 swept
+// the repo for workarounds its dependency bumps had made obsolete and could not
+// retire this one, because nothing here could look at the engine.
+//
+// Both tests take `browser`, not the fixture's `page`. `page` reaches Playwright's
 // `_contextOptions`, which depends on `baseURL`, which fixtures.ts overrides to
-// depend on `daemon` — so merely touching `page` boots a caret daemon (~137ms at
-// six workers, plus the fixture's hard requirement that rumdl resolve) that these
-// two tests never talk to. There is no page.goto below; about:blank is all
-// page.evaluate needs. Paying the boot is deliberate — standing up an escape hatch
-// in fixtures.ts to dodge one daemon is machinery built for a single spec.
-//
-// Both evaluates below are pure computation on a constant input, reading no
-// renderer state, so the poll-or-record rule in doc/agents/browser-testing.md has
-// nothing to settle here.
+// depend on `daemon` — so it would boot a caret daemon these tests never talk to and
+// inherit that fixture's hard failure when no rumdl reporting RUMDL_VERSION resolves.
+// A signal whose red is defined to mean one specific thing must not be able to red
+// for a plan-formatter reason. `browser` is Playwright's own fixture, which
+// fixtures.ts does not override, so avoiding that chain costs no escape hatch here.
+// about:blank is all page.evaluate needs, and nothing is rendered, so the trace and
+// screenshot a fixture-managed context would carry buy this spec nothing.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { jscSafeSource } from "@ui/src/lib/diffview/jsc-regex.ts";
 
+// The three `(^X)?` shapes shiki's bundle carries, kept in step with the list in
+// ui/src/lib/diffview/jsc-regex.test.ts. That unit says of all three that they
+// "earn their place on the second engine, not the one running them" — this is that
+// engine, so all three run here rather than the first alone. They are not variants
+// of one pattern: they put the alternation at the top level, nested inside a capture
+// group, and bare with the capture following, which are three engine paths.
+const BUNDLE_SHAPES = [
+  String.raw`(^[\t ]+)?(?=\/\/)`,
+  String.raw`((?:^[\t ]+)?)(?=\/\/)`,
+  String.raw`(?:^[\t ]+)?(\/\/)`,
+];
+
 // The defect in its minimal form: JSC lets the optional group's `^` anchor the
 // whole pattern, so the branch where the group matches nothing is never tried and
 // a match at index 1 comes back null. A fixed engine returns ["b", undefined].
-test("WebKit still anchors an optional group containing ^", async ({ page }) => {
-  expect(await page.evaluate(() => /(^a)?b/.exec("xb"))).toBeNull();
+test("WebKit still anchors an optional group containing ^", async ({ browser }) => {
+  const page = await browser.newPage();
+  try {
+    expect(await page.evaluate(() => /(^a)?b/.exec("xb"))).toBeNull();
+  } finally {
+    await page.close();
+  }
 });
 
 // The workaround's payload, run as the REAL jscSafeSource output rather than a
-// retyped copy of it, so the probe cannot drift from the transform: the shape
-// taken from the TypeScript grammar's comment rule matches the `//` after code
-// that the original form misses under JSC.
-test("the rewritten form matches where the original diverges", async ({ page }) => {
-  const rewritten = jscSafeSource(String.raw`(^[\t ]+)?(?=\/\/)`);
-  const index = await page.evaluate(
-    (source) => new RegExp(source, "d").exec("code // x")?.index,
-    rewritten,
-  );
-  expect(index).toBe(5);
+// retyped copy of it, so the probe cannot drift from the transform: each rewritten
+// shape must match the `//` after code that its original form misses under JSC. No
+// regex flags — `.exec()?.index` needs none, and what is under test is the source
+// rewrite, not how the pattern is compiled.
+test("every rewritten bundle shape matches where the original diverges", async ({ browser }) => {
+  const page = await browser.newPage();
+  try {
+    for (const source of BUNDLE_SHAPES) {
+      const index = await page.evaluate(
+        (rewritten) => new RegExp(rewritten).exec("code // x")?.index,
+        jscSafeSource(source),
+      );
+      expect(index, source).toBe(5);
+    }
+  } finally {
+    await page.close();
+  }
 });

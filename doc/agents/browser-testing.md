@@ -69,10 +69,10 @@ the rest.
 `playwright.config.ts` defines two projects, and the split is a **correctness**
 requirement rather than a speed one:
 
-| Project    | Collects                             | Why                                                        |
-| ---------- | ------------------------------------ | ---------------------------------------------------------- |
-| `chromium` | every spec except `jsc-regex.e2e.ts` | the review UI, on the engine the suite has always driven    |
-| `webkit`   | `jsc-regex.e2e.ts`, nothing else     | shipping Safari's regex engine, which the UI suite never is |
+| Project    | Collects                             | Why                                                       |
+| ---------- | ------------------------------------ | --------------------------------------------------------- |
+| `chromium` | every spec except `jsc-regex.e2e.ts` | the review UI, on the engine the suite has always driven   |
+| `webkit`   | `jsc-regex.e2e.ts`, nothing else     | WebKit's regex engine, which the UI suite never exercises  |
 
 Routing is a `testMatch` / `testIgnore` pair over the one glob. The probe asserts a
 JavaScriptCore defect *exists*, so collecting it under Chromium — an engine that never had
@@ -81,11 +81,16 @@ suite either: it watches one engine behaviour, and doubling the suite onto it wo
 contention rather than coverage.
 
 **An inverted spec says so in its header, in those words.** A normal spec reds when caret
-breaks; `jsc-regex.e2e.ts` reds when an upstream engine is *fixed*, and that red is the
-notification that `ui/src/lib/diffview/jsc-regex.ts` can be deleted. State it, or the next
+breaks; `jsc-regex.e2e.ts` reds when an upstream engine is *fixed*. State it, or the next
 reader repairs the test and the workaround outlives its bug — which is nearly what
 happened when EXC-1156 read a green suite as permission to delete it, both runners having
 gained the JSC fix while shipping Safari had not (EXC-1223).
+
+**A red on such a spec starts the retirement clock rather than ending it**, and the header
+has to say which. The webkit project runs Playwright's WebKit build, which leads shipping
+Safari, which leads whatever a reviewer has updated to — so the red means the fix landed
+upstream, not that the audience has it. Deleting the workaround on the day the red arrives
+reintroduces the bug for everyone still behind.
 
 ## The harness contract
 
@@ -322,9 +327,9 @@ the values live.
 - **Real contention**, closest to the gate: raise the worker cap past the core count, e.g.
   `CARET_E2E_WORKERS=<2x cores> mise run test e2e`. Faithful, but stochastic — what it
   turns up depends on what else the host is doing. It is also deliberately the fan-out
-  EXC-587 capped, so don't SIGKILL such a run and do check for stray `chromium`/daemon
-  processes afterwards; an interrupted oversubscribed run is exactly the orphan storm the
-  cap exists to prevent.
+  EXC-587 capped, so don't SIGKILL such a run and do check for stray
+  `chromium`/`webkit`/daemon processes afterwards; an interrupted oversubscribed run is
+  exactly the orphan storm the cap exists to prevent.
 - **Deterministic**, and the one to reach for when a specific spec is in question: drive
   it from a throwaway `playwright-cli` probe that CPU-throttles the renderer over CDP
   (`Emulation.setCPUThrottlingRate`), which widens every browser-side wait by a fixed

@@ -30,7 +30,7 @@
 //
 //     bun 1.4.0     ["b", undefined]   the unit runner — has the fix
 //     Chromium 151  ["b", undefined]   the e2e runner — never had the bug
-//     WebKit 26.5   null               what Safari reviewers actually get
+//     WebKit 26.5   null               Playwright's build; Safari trails it
 //
 // So neither runner can see the defect any more, and shipping Safari still has it.
 // Deleting this module on the strength of a green suite would leave every `//`
@@ -40,8 +40,10 @@
 // The trigger for deletion is therefore a fixed WebKit, and test/e2e/jsc-regex.e2e.ts
 // is where that is standing measured: playwright.config.ts routes it to a webkit
 // project of its own, and it asserts the defect is still present. That spec is
-// INVERTED — it reds on good news. A red there is the notification that this module
-// can be deleted, not a test to repair (EXC-1223).
+// INVERTED — it reds on good news, and is a signal to read rather than a test to
+// repair. It runs Playwright's WebKit, which leads shipping Safari, so a red means
+// the fix landed upstream — the point to start checking whether the Safari versions
+// caret still serves carry it, not the point to delete this module (EXC-1223).
 
 /**
  * The prefixes a group can open with, ordered so a longer form wins over a shorter

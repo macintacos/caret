@@ -401,6 +401,16 @@ describe("collectE2eJsonRun", () => {
     expect(calls.some((c) => c.cmd.includes("playwright"))).toBe(false);
   });
 
+  // The message joins the same list twice with different separators — commas for
+  // the prose, spaces for the remedy, which has to stay pasteable. One missing
+  // browser cannot tell those apart, so the plural case is what pins them.
+  test("the hint lists every missing browser and keeps the remedy pasteable", async () => {
+    const { run } = capturingCapture();
+    const collected = await collectE2eJsonRun([], run, async () => ["chromium", "webkit"]);
+    expect(collected.output).toContain("chromium, webkit not installed");
+    expect(collected.output).toContain("playwright install chromium webkit");
+  });
+
   test("a failing UI build short-circuits before the browser probe", async () => {
     const { calls, run } = capturingCapture((cmd) => (cmd.includes("vite") ? 3 : 0));
     const collected = await collectE2eJsonRun([], run, async () => {
