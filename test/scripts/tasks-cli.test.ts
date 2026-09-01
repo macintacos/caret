@@ -409,16 +409,17 @@ describe("tasks CLI: build pipeline command lines", () => {
       ["mise", "install"],
       ["bun", "install"],
       ["bun", "ui/generate-palette-css.ts"],
-      ["bunx", "playwright", "install", "chromium"],
+      ["bunx", "playwright", "install", "chromium", "webkit"],
     ]);
   });
 
   // scripts/bootstrap.sh runs those first three itself on a cold checkout and
   // exports CARET_BOOTSTRAPPED, so `mise run setup` on a fresh clone is left with
-  // the one step the bootstrap deliberately skips.
-  test("setup runs only the Chromium step when the bootstrap marker is set", () => {
+  // the one step the bootstrap deliberately skips: the Chromium + WebKit download
+  // the e2e matrix drives (EXC-1223).
+  test("setup runs only the browser download when the bootstrap marker is set", () => {
     expect(setupCommands({ CARET_BOOTSTRAPPED: "1" })).toEqual([
-      ["bunx", "playwright", "install", "chromium"],
+      ["bunx", "playwright", "install", "chromium", "webkit"],
     ]);
   });
 });

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Install pinned tools, JS deps, the generated palette, e2e Chromium, and register git hooks"
+#MISE description="Install pinned tools, JS deps, the generated palette, the e2e browsers, and register git hooks"
 #MISE raw_args=true
 # Fresh-clone guard (scripts/bootstrap.sh); `|| exit 1` is its caller contract.
 # shellcheck source=/dev/null

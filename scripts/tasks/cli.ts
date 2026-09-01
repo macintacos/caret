@@ -259,7 +259,7 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
 
   program
     .command("setup")
-    .description("Install pinned tools, JS deps, e2e Chromium, and register git hooks")
+    .description("Install pinned tools, JS deps, the e2e browsers, and register git hooks")
     .action(async () => {
       await actions.setup();
     });
