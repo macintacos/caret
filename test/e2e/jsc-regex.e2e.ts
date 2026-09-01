@@ -31,15 +31,23 @@
 // the repo for workarounds its dependency bumps had made obsolete and could not
 // retire this one, because nothing here could look at the engine.
 //
-// Both tests take `browser`, not the fixture's `page`. `page` reaches Playwright's
-// `_contextOptions`, which depends on `baseURL`, which fixtures.ts overrides to
-// depend on `daemon` — so it would boot a caret daemon these tests never talk to and
-// inherit that fixture's hard failure when no rumdl reporting RUMDL_VERSION resolves.
-// A signal whose red is defined to mean one specific thing must not be able to red
-// for a plan-formatter reason. `browser` is Playwright's own fixture, which
-// fixtures.ts does not override, so avoiding that chain costs no escape hatch here.
-// about:blank is all page.evaluate needs, and nothing is rendered, so the trace and
-// screenshot a fixture-managed context would carry buy this spec nothing.
+// These tests boot a caret daemon they never talk to, and no spec here can decline
+// it. Playwright's `_setupArtifacts` fixture is `auto`, and it depends on
+// `_combinedContextOptions`, which reads `baseURL`, which fixtures.ts overrides to
+// depend on `daemon` — so the boot happens for EVERY spec in this tree, including
+// one that declares no fixtures at all. Taking `browser` instead of `page` does not
+// dodge it; that was measured rather than reasoned, by running a no-fixture test
+// with CARET_RUMDL_BIN pointed at nothing and watching it fail in the daemon
+// fixture. Dodging it at all means changing fixtures.ts, which is machinery built
+// for a single spec. So `page` it is — the same fixture every other spec takes.
+//
+// That leaves one caveat worth stating plainly, because this signal is supposed to
+// mean exactly one thing: the daemon fixture hard-fails when no rumdl reporting
+// RUMDL_VERSION resolves, so a red here CAN be a toolchain problem rather than a
+// repaired engine. Read the failure before acting on it — a genuine retirement
+// signal fails on the assertions below, naming the shape that stopped diverging.
+//
+// There is no page.goto below; about:blank is all page.evaluate needs.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { jscSafeSource } from "@ui/src/lib/diffview/jsc-regex.ts";
@@ -59,13 +67,8 @@ const BUNDLE_SHAPES = [
 // The defect in its minimal form: JSC lets the optional group's `^` anchor the
 // whole pattern, so the branch where the group matches nothing is never tried and
 // a match at index 1 comes back null. A fixed engine returns ["b", undefined].
-test("WebKit still anchors an optional group containing ^", async ({ browser }) => {
-  const page = await browser.newPage();
-  try {
-    expect(await page.evaluate(() => /(^a)?b/.exec("xb"))).toBeNull();
-  } finally {
-    await page.close();
-  }
+test("WebKit still anchors an optional group containing ^", async ({ page }) => {
+  expect(await page.evaluate(() => /(^a)?b/.exec("xb"))).toBeNull();
 });
 
 // The workaround's payload, run as the REAL jscSafeSource output rather than a
@@ -73,17 +76,12 @@ test("WebKit still anchors an optional group containing ^", async ({ browser }) 
 // shape must match the `//` after code that its original form misses under JSC. No
 // regex flags — `.exec()?.index` needs none, and what is under test is the source
 // rewrite, not how the pattern is compiled.
-test("every rewritten bundle shape matches where the original diverges", async ({ browser }) => {
-  const page = await browser.newPage();
-  try {
-    for (const source of BUNDLE_SHAPES) {
-      const index = await page.evaluate(
-        (rewritten) => new RegExp(rewritten).exec("code // x")?.index,
-        jscSafeSource(source),
-      );
-      expect(index, source).toBe(5);
-    }
-  } finally {
-    await page.close();
+test("every rewritten bundle shape matches where the original diverges", async ({ page }) => {
+  for (const source of BUNDLE_SHAPES) {
+    const index = await page.evaluate(
+      (rewritten) => new RegExp(rewritten).exec("code // x")?.index,
+      jscSafeSource(source),
+    );
+    expect(index, source).toBe(5);
   }
 });
