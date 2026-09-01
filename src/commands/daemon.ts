@@ -20,7 +20,7 @@ import {
   settings,
   watchSettings,
 } from "@/config/settings.ts";
-import { buildDiagnostics } from "@/daemon/diagnostics.ts";
+import { buildDiagnostics, systemInfo } from "@/daemon/diagnostics.ts";
 import { isAddrInUse, removeOwnDaemonLock } from "@/daemon/lifecycle.ts";
 import { type CaretServer, createServer } from "@/daemon/server.ts";
 import {
@@ -190,11 +190,7 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
         buildDiagnostics({
           now: Date.now,
           startedAt,
-          system: () => ({
-            platform: process.platform,
-            arch: process.arch,
-            runtime: `bun ${Bun.version}`,
-          }),
+          system: systemInfo,
           settings: () => settings().current(),
           configPath: cfg,
           configExists: () => existsSync(cfg),

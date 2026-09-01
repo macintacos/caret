@@ -3,10 +3,11 @@
 // overrides the settings Advanced pane renders. Pure and dependency-injected —
 // every effect is passed in (DiagnosticsDeps), so the document is a pure
 // function of its deps and unit-testable with fakes, the same shape
-// src/discovery.ts's collectReport uses. The settings dump rides redact/core.ts's
-// scrubGraph (the shared DENY_KEYS walk) rather than a second hand-rolled
-// redaction path; censor-only (no home-path scrub) since this serves the user's
-// own loopback UI, not a pasteable bug report.
+// src/discovery.ts's collectReport uses — with the one prod reader, systemInfo
+// for `system`, sitting here beside the interface it satisfies. The settings
+// dump rides redact/core.ts's scrubGraph (the shared DENY_KEYS walk) rather
+// than a second hand-rolled redaction path; censor-only (no home-path scrub)
+// since this serves the user's own loopback UI, not a pasteable bug report.
 
 import type { DaemonDiagnostics, EnvOverride } from "@/lib/types.ts";
 import { scrubGraph } from "@/redact/core.ts";
@@ -26,6 +27,12 @@ export interface DiagnosticsDeps {
   configPath: string;
   configExists: () => boolean;
   envOverrides: () => EnvOverride[];
+}
+
+/** The prod `DiagnosticsDeps.system` reader: process identity plus the runtime
+ * string the settings Advanced pane renders. */
+export function systemInfo(): { platform: string; arch: string; runtime: string } {
+  return { platform: process.platform, arch: process.arch, runtime: `bun ${Bun.version}` };
 }
 
 /** Assemble the daemon self-diagnostics document (EXC-842). Pure — every effect

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { buildDiagnostics, type DiagnosticsDeps } from "@/daemon/diagnostics.ts";
+import { buildDiagnostics, type DiagnosticsDeps, systemInfo } from "@/daemon/diagnostics.ts";
 import { CENSOR } from "@/redact/core.ts";
 
 /** Baseline deps; each test overrides only the surface it asserts on. */
@@ -51,4 +51,8 @@ test("settings() is read on every call (reflects live hot-reload)", () => {
   expect(read()).toBe("info");
   level = "debug";
   expect(read()).toBe("debug");
+});
+
+test("systemInfo reports the runtime as `bun <semver>`", () => {
+  expect(systemInfo().runtime).toMatch(/^bun \d+\.\d+\.\d+/);
 });
