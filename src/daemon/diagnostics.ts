@@ -1,13 +1,15 @@
 // Daemon self-diagnostics for GET /api/diagnostics (EXC-842): the system/runtime
 // identity, uptime, live parsed settings, and config path + CARET_* env
-// overrides the settings Advanced pane renders. Pure and dependency-injected —
-// every effect is passed in (DiagnosticsDeps), so the document is a pure
-// function of its deps and unit-testable with fakes, the same shape
-// src/discovery.ts's collectReport uses — with the one prod reader, systemInfo
-// for `system`, sitting here beside the interface it satisfies. The settings
-// dump rides redact/core.ts's scrubGraph (the shared DENY_KEYS walk) rather
-// than a second hand-rolled redaction path; censor-only (no home-path scrub)
-// since this serves the user's own loopback UI, not a pasteable bug report.
+// overrides the settings Advanced pane renders. buildDiagnostics is pure and
+// dependency-injected — every effect is passed in (DiagnosticsDeps), so the
+// document is a pure function of its deps and unit-testable with fakes, the same
+// shape src/discovery.ts's collectReport uses. systemInfo, the module's one
+// effectful reader, sits beside the DiagnosticsDeps field it satisfies (as
+// lifecycle.ts's prodEnsureDeps does) rather than at the wiring point, so a test
+// can pin its shape without importing the daemon boot graph. The settings dump
+// rides redact/core.ts's scrubGraph (the shared DENY_KEYS walk) rather than a
+// second hand-rolled redaction path; censor-only (no home-path scrub) since this
+// serves the user's own loopback UI, not a pasteable bug report.
 
 import type { DaemonDiagnostics, EnvOverride } from "@/lib/types.ts";
 import { scrubGraph } from "@/redact/core.ts";
@@ -31,7 +33,7 @@ export interface DiagnosticsDeps {
 
 /** The prod `DiagnosticsDeps.system` reader: process identity plus the runtime
  * string the settings Advanced pane renders. */
-export function systemInfo(): { platform: string; arch: string; runtime: string } {
+export function systemInfo(): DaemonDiagnostics["system"] {
   return { platform: process.platform, arch: process.arch, runtime: `bun ${Bun.version}` };
 }
 
