@@ -143,7 +143,8 @@ describe("the rewritten form matches where the original diverges", () => {
   // in the describes above are what actually fail on a broken rewrite. On an
   // engine that still carries the bug, which is every WebKit that ships this code
   // today, they are a real behavioural guard. They earn their place on the second
-  // engine, not the one running them.
+  // engine, not the one running them — test/e2e/jsc-regex.e2e.ts runs the same
+  // three there, under the webkit project (EXC-1223).
   const shapes = [
     String.raw`(^[\t ]+)?(?=\/\/)`,
     String.raw`((?:^[\t ]+)?)(?=\/\/)`,

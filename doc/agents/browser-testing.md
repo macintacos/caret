@@ -39,7 +39,7 @@ body:
   through `revealGutterPlus` (`test/e2e/support/source-view.ts:238`), which does
   `getBoundingClientRect()` and then `page.mouse.move()`. Inline the helper before
   concluding a spec is pure logic.
-- **Browser dependence declared in the config.** `playwright.config.ts:78` emulates
+- **Browser dependence declared in the config.** `playwright.config.ts:87` emulates
   `colorScheme: "dark"`, so a spec asserting what a fresh origin paints is doing media
   emulation with nothing in its body that says so. Read the config's `use` block too.
 
@@ -63,6 +63,34 @@ collects all four of `*.test.ts`, `*_test.ts`, `*.spec.ts` and `*_spec.ts` repo-
 Playwright spec under any of those names would be swept into the unit runner and crash it.
 `.e2e.ts` keeps the two runners disjoint — Playwright owns `test/e2e/`, `bun test` owns
 the rest.
+
+## The project matrix
+
+`playwright.config.ts` defines two projects, and the split is a **correctness**
+requirement rather than a speed one:
+
+| Project    | Collects                             | Why                                                       |
+| ---------- | ------------------------------------ | --------------------------------------------------------- |
+| `chromium` | every spec except `jsc-regex.e2e.ts` | the review UI, on the engine the suite has always driven   |
+| `webkit`   | `jsc-regex.e2e.ts`, nothing else     | WebKit's regex engine, which the UI suite never exercises  |
+
+Routing is a `testMatch` / `testIgnore` pair over the one glob. The probe asserts a
+JavaScriptCore defect *exists*, so collecting it under Chromium — an engine that never had
+the bug — would red the suite for the wrong reason. WebKit is not a second lane for the UI
+suite either: it watches one engine behaviour, and doubling the suite onto it would buy
+contention rather than coverage.
+
+**An inverted spec says so in its header, in those words.** A normal spec reds when caret
+breaks; `jsc-regex.e2e.ts` reds when an upstream engine is *fixed*. State it, or the next
+reader repairs the test and the workaround outlives its bug — which is nearly what
+happened when EXC-1156 read a green suite as permission to delete it, both runners having
+gained the JSC fix while shipping Safari had not (EXC-1223).
+
+**A red on such a spec starts the retirement clock rather than ending it**, and the header
+has to say which. The webkit project runs Playwright's WebKit build, which leads shipping
+Safari, which leads whatever a reviewer has updated to — so the red means the fix landed
+upstream, not that the audience has it. Deleting the workaround on the day the red arrives
+reintroduces the bug for everyone still behind.
 
 ## The harness contract
 
@@ -132,7 +160,7 @@ is sized for the machine the suite actually runs on rather than an idle one. Pla
 own defaults — 30s per test, 5s per assertion — assume the suite owns the host, and inside
 `mise run preflight` it does not: `lint` and `test` (unit) are already running when
 `test e2e` starts, `build bin` and `smoke` land during it, and six e2e workers each
-driving a Chromium tree plus a spawned daemon saturate the cores before any of that
+driving a browser tree plus a spawned daemon saturate the cores before any of that
 arrives. On a 12-core host the unit suite measures 31s standalone against 88s inside the
 gate — 2.8x. That figure is the unit suite's; e2e's own factor was never measured, and
 2.8x is the working number the budgets are sized against.
@@ -299,9 +327,9 @@ the values live.
 - **Real contention**, closest to the gate: raise the worker cap past the core count, e.g.
   `CARET_E2E_WORKERS=<2x cores> mise run test e2e`. Faithful, but stochastic — what it
   turns up depends on what else the host is doing. It is also deliberately the fan-out
-  EXC-587 capped, so don't SIGKILL such a run and do check for stray `chromium`/daemon
-  processes afterwards; an interrupted oversubscribed run is exactly the orphan storm the
-  cap exists to prevent.
+  EXC-587 capped, so don't SIGKILL such a run and do check for stray
+  `chromium`/`webkit`/daemon processes afterwards; an interrupted oversubscribed run is
+  exactly the orphan storm the cap exists to prevent.
 - **Deterministic**, and the one to reach for when a specific spec is in question: drive
   it from a throwaway `playwright-cli` probe that CPU-throttles the renderer over CDP
   (`Emulation.setCPUThrottlingRate`), which widens every browser-side wait by a fixed

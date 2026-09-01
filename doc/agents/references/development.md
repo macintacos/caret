@@ -25,8 +25,8 @@ MD051 resolves a cross-file fragment only when the file it points into is in the
 scan, so a whole-tree `mise run lint` catches the break but the pre-commit hook — staged
 files only — does not. Rename one of these and run the full gate, not just the hook.
 
-`scripts/tasks/dev/fake-plan.md` cites this file **by line** — `:124`, `:154-162`,
-`:226-238` — and its bullets assert what the preview does with them.
+`scripts/tasks/dev/fake-plan.md` cites this file **by line**, in several places, and its
+bullets assert what the preview does with them.
 [`test/scripts/dev-driver.test.ts`](../../../test/scripts/dev-driver.test.ts) guards the
 citations: it parses them out of the fixture and fails if one runs past the end of this
 page, if the line a citation opens on is blank, or if the page is too short for the

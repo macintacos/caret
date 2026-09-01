@@ -379,7 +379,7 @@ describe("collectUnitJsonRun", () => {
 describe("collectE2eJsonRun", () => {
   test("builds the UI through the injected runner, then runs the suite", async () => {
     const { calls, run } = capturingCapture();
-    const collected = await collectE2eJsonRun([], run, async () => true);
+    const collected = await collectE2eJsonRun([], run, async () => []);
     expect(calls[0]?.cmd).toEqual(["bunx", "vite", "build"]);
     expect(calls[1]?.cmd).toEqual(["bunx", "playwright", "test", "--reporter=json"]);
     expect(collected.output).toContain("[bunx] ran");
@@ -389,22 +389,32 @@ describe("collectE2eJsonRun", () => {
   // and stdout is where the document goes — so this is what keeps them apart.
   test("redirects Playwright's report to a file via PLAYWRIGHT_JSON_OUTPUT_FILE", async () => {
     const { calls, run } = capturingCapture();
-    await collectE2eJsonRun([], run, async () => true);
+    await collectE2eJsonRun([], run, async () => []);
     expect(calls[1]?.env?.PLAYWRIGHT_JSON_OUTPUT_FILE).toMatch(/caret-test-json-.*report\.json$/);
   });
 
-  test("a missing Chromium reports the actionable hint and never runs the suite", async () => {
+  test("a missing browser reports the actionable hint and never runs the suite", async () => {
     const { calls, run } = capturingCapture();
-    const collected = await collectE2eJsonRun([], run, async () => false);
+    const collected = await collectE2eJsonRun([], run, async () => ["webkit"]);
     expect(collected.exitCode).toBe(1);
-    expect(collected.output).toContain("Chromium not installed");
+    expect(collected.output).toContain("webkit not installed");
     expect(calls.some((c) => c.cmd.includes("playwright"))).toBe(false);
   });
 
-  test("a failing UI build short-circuits before the Chromium probe", async () => {
+  // The message joins the same list twice with different separators — commas for
+  // the prose, spaces for the remedy, which has to stay pasteable. One missing
+  // browser cannot tell those apart, so the plural case is what pins them.
+  test("the hint lists every missing browser and keeps the remedy pasteable", async () => {
+    const { run } = capturingCapture();
+    const collected = await collectE2eJsonRun([], run, async () => ["chromium", "webkit"]);
+    expect(collected.output).toContain("chromium, webkit not installed");
+    expect(collected.output).toContain("playwright install chromium webkit");
+  });
+
+  test("a failing UI build short-circuits before the browser probe", async () => {
     const { calls, run } = capturingCapture((cmd) => (cmd.includes("vite") ? 3 : 0));
     const collected = await collectE2eJsonRun([], run, async () => {
-      throw new Error("probed Chromium despite a failed UI build");
+      throw new Error("probed the browsers despite a failed UI build");
     });
     expect(collected.exitCode).toBe(3);
     expect(calls).toHaveLength(1);

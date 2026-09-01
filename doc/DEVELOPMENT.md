@@ -47,13 +47,13 @@ Prerequisites are [`git`](https://git-scm.com) and [mise](https://mise.jdx.dev);
 ## Development
 
 ```sh
-mise run setup      # install pinned tools + JS deps + the generated palette + e2e Chromium + register git hooks
+mise run setup      # install pinned tools + JS deps + the generated palette + e2e browsers + register git hooks
 mise run build      # build the UI (Vite multi-asset) then the binary; one progress line, log only on failure
 mise run build ui   # just the Svelte UI (Vite -> ui/dist), verbose; also `build bin` / `build bundle`
 mise run dev        # dev console: isolated daemon + three fake plans + Vite UI
 mise run caret      # caret's own CLI from src/cli.ts, e.g. `mise run caret discovery`
 mise run test       # bun test (unit); `mise run test unit` is the same target
-mise run test e2e   # Playwright browser e2e (isolated daemon, Chromium)
+mise run test e2e   # Playwright browser e2e (isolated daemon; Chromium, plus WebKit for the JSC probe)
                     # both take --quiet / --verbose / --json, before any forwarded args
 mise run lint       # read-only gate: formatting + Biome lint + tsc + svelte-check
 mise run format     # Biome (write)
@@ -70,9 +70,10 @@ That works because every task sources `scripts/bootstrap.sh` before it reaches b
 whichever task you run first installs the pinned tools, the JS deps, and the generated
 palette before doing its own job.
 
-The one thing the bootstrap deliberately excludes is the e2e Chromium download, which is
-why `mise run setup` exists alongside it — same three steps, plus Chromium. On a fresh
-clone its own forwarder has already run the three, so it goes straight to the download.
+The one thing the bootstrap deliberately excludes is the e2e browser download, which is
+why `mise run setup` exists alongside it — same three steps, plus Chromium and WebKit. On
+a fresh clone its own forwarder has already run the three, so it goes straight to the
+download.
 
 One wrinkle worth knowing about ahead of time: in a non-interactive shell, a clone whose
 mise config you have not trusted is a hard error rather than a prompt. `mise trust`
@@ -398,8 +399,8 @@ collide with nothing on either runner.
 `mise run test e2e` runs the Playwright specs in `test/e2e/` against an isolated daemon
 that serves the built `ui/dist/` artifact on an OS-assigned port with ephemeral state, so
 the suite never touches your real daemon or `~/.local/state/caret`. It builds the UI first
-(honouring `CARET_SKIP_BUILD_UI`), and `mise run setup` installs the Chromium the specs
-drive.
+(honouring `CARET_SKIP_BUILD_UI`), and `mise run setup` installs both browsers the specs
+drive: Chromium runs the suite, WebKit runs the single JSC engine probe.
 
 For when to write an e2e spec versus a `bun test` unit versus throwaway exploration, see
 [`agents/browser-testing.md`](agents/browser-testing.md).
@@ -436,7 +437,7 @@ forwarder sets `#MISE raw_args=true` so mise hands every argument — including 
 | `smoke` — bare, `bin`, `bundle`                     | `scripts/tasks/smoke.ts`        | Bare smokes both artifacts.                                                       |
 | `assets` — bare, `stitch`, `video`                  | `scripts/tasks/assets.ts`       | Regenerates the README hero image and demo recording. Needs ImageMagick and ffmpeg on `PATH`. |
 | `lint`, `format`, `caret`                           | `scripts/tasks/lint.ts` et al.  | Passthroughs: operands and flags reach the underlying tool. Only `caret` forwards a bare `--help`. |
-| `setup`                                             | `scripts/tasks/setup.ts`        | The bootstrap's three steps, plus the e2e Chromium.                               |
+| `setup`                                             | `scripts/tasks/setup.ts`        | The bootstrap's three steps, plus the e2e browsers (Chromium and WebKit).         |
 | `preflight`                                         | `scripts/preflight.ts`          | Real Commander options rather than passthrough: `--json`, `-v`, `--grep`, `--task`, `--full`. |
 | `release` — `compute`, `baseline`, `prepare`, `finalize` | `scripts/tasks/release/command.ts` | JSON on stdout so `/release-caret` can parse it.                            |
 

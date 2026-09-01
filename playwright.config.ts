@@ -14,6 +14,14 @@ const e2eWorkers: number | string = (() => {
   return Number.isInteger(n) && n > 0 ? n : "50%";
 })();
 
+// EXC-1223: the engine probe, routed to the webkit project alone by the
+// testMatch/testIgnore pair below. It asserts the JavaScriptCore defect that
+// ui/src/lib/diffview/jsc-regex.ts works around is STILL PRESENT, so running it
+// under Chromium — an engine that never had the bug — would red the suite for
+// the wrong reason. The pair is the whole routing mechanism: a project with
+// neither would run every spec.
+const JSC_PROBE = "**/jsc-regex.e2e.ts";
+
 // Real-browser e2e for the review UI (EXC-453). Specs are named *.e2e.ts so
 // `bun test` (which collects *.test.ts AND *.spec.ts repo-wide) never picks
 // them up — the two runners stay disjoint. Each test boots its own isolated
@@ -27,13 +35,13 @@ export default defineConfig<E2EOptions>({
   // doc/agents/browser-testing.md § Timeouts are budgets for the loaded host.
   retries: 0,
   forbidOnly: true,
-  // EXC-587: bound the fan-out. Each worker drives a Chromium tree plus a
+  // EXC-587: bound the fan-out. Each worker drives a browser tree plus a
   // spawned daemon, so an uncapped count is the dominant driver of the orphan
   // storm when several preflight runs stack; cap it at half the cores
   // (CARET_E2E_WORKERS overrides for a constrained host).
   workers: e2eWorkers,
   // EXC-587: a wedged suite self-aborts instead of needing an external SIGKILL
-  // (the path that orphans Chromium). Generous so it can't flake a slow or
+  // (the path that orphans a browser). Generous so it can't flake a slow or
   // loaded host's normal pass.
   globalTimeout: 15 * 60 * 1000,
   // EXC-1050: budgets for the LOADED preflight host, not an idle one.
@@ -60,9 +68,14 @@ export default defineConfig<E2EOptions>({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
+  // Adding a project here means adding its name to E2E_BROWSERS in
+  // scripts/tasks/test.ts, which is what `mise run setup` downloads and what the
+  // e2e task checks for before it runs. Nothing gates the two lists against
+  // each other.
   projects: [
     {
       name: "chromium",
+      testIgnore: JSC_PROBE,
       use: {
         ...devices["Desktop Chrome"],
         // After the device spread (which pins 1280x720): widen to the reference
@@ -76,6 +89,18 @@ export default defineConfig<E2EOptions>({
         // suite's baseline is caret dark, and a spec that cares about system
         // switching overrides this with page.emulateMedia().
         colorScheme: "dark",
+      },
+    },
+    {
+      // EXC-1223: WebKit exists here to run the engine probe and nothing else —
+      // it watches shipping Safari's regex engine, it does not double-run the UI
+      // suite. The device spread is the whole `use` block, deliberately: the
+      // probe renders nothing, so there is no layout to widen a viewport for and
+      // no fresh origin for `colorScheme` to decide the paint of.
+      name: "webkit",
+      testMatch: JSC_PROBE,
+      use: {
+        ...devices["Desktop Safari"],
       },
     },
   ],

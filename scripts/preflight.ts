@@ -36,7 +36,7 @@
 // Interruption safety (EXC-587): the real spawner runs each task as a detached
 // process group; SIGINT/SIGTERM tear every group down before exit, and the
 // first failure aborts in-flight siblings, so an interrupted gate can't orphan
-// the mise → bun/vite/tsc/playwright → chromium+daemon subtree.
+// the mise → bun/vite/tsc/playwright → browser+daemon subtree.
 
 import { type ChildProcess, type SpawnOptions, spawn } from "node:child_process";
 import { once } from "node:events";
@@ -628,7 +628,7 @@ export interface ProcessGroupController {
 /**
  * A registry of detached child process groups (EXC-587). Each child is spawned
  * with `detached: true`, so it leads its own process group and the whole
- * `mise → bash → bun/vite/tsc/playwright → chromium+daemon` subtree shares that
+ * `mise → bash → bun/vite/tsc/playwright → browser+daemon` subtree shares that
  * group — killable in one shot via `process.kill(-pid, …)`. (`Bun.spawn` keeps
  * children in the orchestrator's own group, so node's `spawn` is used here
  * specifically for the per-child group isolation `Bun.spawn` can't give.)
@@ -757,7 +757,7 @@ function parseJobs(raw: string | undefined): number | undefined {
 
 /**
  * On a catchable signal, tear every live task's process group down (SIGTERM →
- * SIGKILL grace) before exiting, so no mise/bun/vite/playwright/chromium/daemon
+ * SIGKILL grace) before exiting, so no mise/bun/vite/playwright/browser/daemon
  * descendant is orphaned (EXC-587). A SIGKILL of THIS process can't run a
  * handler — see createProcessGroupController for why that case is bounded by
  * the fan-out caps rather than caught here.

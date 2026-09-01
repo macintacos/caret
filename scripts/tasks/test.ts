@@ -314,20 +314,40 @@ export function e2eCommand(args: string[]): string[] {
   return ["bunx", "playwright", "test", ...args];
 }
 
-/** Whether Playwright's Chromium binary is installed. Dynamic-imports
- * @playwright/test so a plain `caret-tasks lint`/`dev` invocation never loads
- * Playwright — only this task pays for it. Shared with the `assets` task
- * (scripts/tasks/assets.ts), which drives the same Chromium through the library
- * API rather than the runner. */
+/** Whether Playwright's Chromium binary is installed. The `assets` task
+ * (scripts/tasks/assets.ts) is the only caller: it drives Chromium through the
+ * library API for a recording of its own, so it asks about that one browser
+ * rather than the e2e matrix's list below. Dynamic-imports @playwright/test so a
+ * plain `caret-tasks lint`/`dev` invocation never loads Playwright. */
 export async function chromiumInstalled(): Promise<boolean> {
   const { chromium } = await import("@playwright/test");
   return existsSync(chromium.executablePath());
 }
 
-/** What to tell a caller whose Chromium install is missing — the probe below
- * fails actionably here rather than mid-suite with Playwright's runtime error. */
-const CHROMIUM_MISSING =
-  "caret e2e: Chromium not installed. Run: mise run setup  (or: bunx playwright install chromium)\n";
+/** The Playwright browsers the e2e matrix drives. Must match the project names in
+ * playwright.config.ts — nothing checks that, so a project added there is added
+ * here too. `setup` spreads this list, so the download and the probe cannot drift
+ * from each other. */
+export const E2E_BROWSERS = ["chromium", "webkit"] as const;
+
+/** Which of them have no downloaded binary, in list order. Deliberately
+ * matrix-wide: it demands every browser regardless of what the invocation would
+ * collect, so `test e2e --project=chromium` still fails on a missing WebKit. The
+ * alternative — parsing --project and path operands to work out what a run needs —
+ * costs more than the one download it saves. Dynamic-imports @playwright/test so a
+ * plain lint/dev invocation never loads Playwright. */
+export async function missingE2eBrowsers(): Promise<string[]> {
+  const pw = await import("@playwright/test");
+  return E2E_BROWSERS.filter((name) => !existsSync(pw[name].executablePath()));
+}
+
+/** What to tell a caller whose browser downloads are incomplete — the probe above
+ * fails actionably here, naming what is actually missing, rather than mid-suite
+ * with Playwright's runtime error. The two joins differ on purpose: prose takes
+ * commas, the remedy has to stay pasteable as a command. */
+function missingBrowsersMessage(missing: string[]): string {
+  return `caret e2e: ${missing.join(", ")} not installed. Run: mise run setup  (or: bunx playwright install ${missing.join(" ")})\n`;
+}
 
 /**
  * The UI build an e2e run does first, rendered for the mode. Verbose streams it,
@@ -359,8 +379,9 @@ export async function runTestE2e(args: string[], flags: TestFlags = {}): Promise
     await writeAndFlush(process.stderr, ui.output);
     process.exit(ui.code);
   }
-  if (!(await chromiumInstalled())) {
-    process.stderr.write(CHROMIUM_MISSING);
+  const missing = await missingE2eBrowsers();
+  if (missing.length > 0) {
+    process.stderr.write(missingBrowsersMessage(missing));
     process.exit(1);
   }
   return execAndExit(e2eCommand([...e2eModeArgs(mode), ...args]));
@@ -379,7 +400,7 @@ export async function runTestE2e(args: string[], flags: TestFlags = {}): Promise
 export async function collectE2eJsonRun(
   args: string[],
   run: typeof runCapture = runCapture,
-  chromium: () => Promise<boolean> = chromiumInstalled,
+  missingBrowsers: () => Promise<string[]> = missingE2eBrowsers,
 ): Promise<Omit<TestReportInput, "durationMs">> {
   let log = "";
   const sink = (chunk: string): void => {
@@ -387,8 +408,14 @@ export async function collectE2eJsonRun(
   };
   const ui = await ensureUi((cmd, opts) => run(cmd, sink, opts));
   if (ui !== 0) return { target: "e2e", exitCode: ui, native: null, output: log };
-  if (!(await chromium())) {
-    return { target: "e2e", exitCode: 1, native: null, output: log + CHROMIUM_MISSING };
+  const missing = await missingBrowsers();
+  if (missing.length > 0) {
+    return {
+      target: "e2e",
+      exitCode: 1,
+      native: null,
+      output: log + missingBrowsersMessage(missing),
+    };
   }
   const dir = mkdtempSync(join(tmpdir(), "caret-test-json-"));
   const reportPath = join(dir, "report.json");
