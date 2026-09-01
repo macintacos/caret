@@ -122,7 +122,8 @@ describe("ensureUiForE2e", () => {
 // the captured output; a passing run is the envelope and the counts alone.
 const ESC = String.fromCharCode(27);
 
-// bun 1.3.14's junit reporter, verbatim: 3 tests, one skipped, none failing.
+// bun 1.3.14's junit reporter, verbatim — a pinned recording, not a version to
+// keep current: 3 tests, one skipped, none failing.
 const PASSING_JUNIT = `<?xml version="1.0" encoding="UTF-8"?>
 <testsuites name="bun test" tests="3" assertions="2" failures="0" skipped="1" time="0.014287">
   <testsuite name="sample.test.ts" file="sample.test.ts" tests="3" assertions="2" failures="0" skipped="1" time="0" hostname="Mac.localdomain">
@@ -167,7 +168,7 @@ describe("buildTestReport", () => {
       exitCode: 0,
       durationMs: 1234,
       native: PASSING_JUNIT,
-      output: "bun test v1.3.14",
+      output: "bun test",
     });
     expect(report.schemaVersion).toBe(1);
     expect(report.target).toBe("unit");
@@ -187,7 +188,7 @@ describe("buildTestReport", () => {
       exitCode: 0,
       durationMs: 1234,
       native: PASSING_JUNIT,
-      output: "bun test v1.3.14",
+      output: "bun test",
     });
     expect(report.report).toBeNull();
     expect(report.output).toBeUndefined();
