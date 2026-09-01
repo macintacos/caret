@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test";
 
-import { buildDiagnostics, type DiagnosticsDeps, systemInfo } from "@/daemon/diagnostics.ts";
+import {
+  buildDiagnostics,
+  type DiagnosticsDeps,
+  prodDiagnosticsDeps,
+  systemInfo,
+} from "@/daemon/diagnostics.ts";
 import { CENSOR } from "@/redact/core.ts";
 
 /** Baseline deps; each test overrides only the surface it asserts on. */
@@ -57,4 +62,16 @@ test("systemInfo reads the live process identity and `bun <semver>` runtime", ()
   expect(systemInfo().runtime).toMatch(/^bun \d+\.\d+\.\d+/);
   expect(systemInfo().platform).toBe(process.platform);
   expect(systemInfo().arch).toBe(process.arch);
+});
+
+test("prodDiagnosticsDeps wires the real readers rather than constants", () => {
+  const deps = prodDiagnosticsDeps({
+    startedAt: 0,
+    settings: () => ({}),
+    configPath: "/nonexistent/caret/config.toml",
+  });
+  expect(deps.system()).toEqual(systemInfo());
+  expect(deps.configExists()).toBe(false);
+  expect(deps.now()).toBeGreaterThan(0);
+  expect(Array.isArray(deps.envOverrides())).toBe(true);
 });
