@@ -235,9 +235,11 @@ async function emitTestReport(
  * slowness is a different claim and stays a per-test third argument (the shiki pattern
  * sweep's `60_000`), which every entry point honours — including a bare
  * `bun test <file>`, where this flag is absent. A preload calling `setDefaultTimeout`
- * would cover all three at once and was tried: bun 1.3 applies it to some files in a
- * multi-file run and not others, so it is not a usable home. `bunfig.toml`'s `[test]`
- * has no `timeout` key at all.
+ * would cover all three at once and does not work: on bun 1.4.0 a preload setting a
+ * 50ms default over two 200ms files times out one of them and not the other, so it is
+ * not a usable home. `bunfig.toml`'s `[test]` has no `timeout` key — one there is
+ * silently ignored rather than rejected, so there is no error to go looking for.
+ * Re-probe both on the next bun bump.
  */
 const UNIT_TEST_TIMEOUT_MS = 30_000;
 

@@ -70,6 +70,11 @@ export default defineConfig({
     // dev server and `vite build`. Deduping resolves every importer to the one copy
     // at the root regardless of how the tree is shaped. @lezer/common rides along
     // because Tree/NodeType identity flows through the same extensions.
+    //
+    // `bun dedupe` / `bun prune` (new in 1.4) do not replace this. Both act on
+    // bun.lock, and what breaks the editor is the resolved tree — so they are a
+    // manual pass standing where an always-on resolution rule has to. Measured in
+    // test/structure/codemirror-single-copy.test.ts's header.
     dedupe: ["@codemirror/state", "@codemirror/view", "@codemirror/language", "@lezer/common"],
     // `@core/*` resolves to the tool-agnostic core in src/, so the UI imports
     // the wire contract (src/lib/types.ts) directly. Type-only imports erase at

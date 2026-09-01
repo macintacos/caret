@@ -6,16 +6,21 @@
 # flag (on the test command) selects svelte's client runtime entry; the backend
 # suite passes unchanged under it.
 #
-# The flag cannot live here: export conditions are a module-resolution input
-# Bun reads from the CLI (`--conditions`), not a [test] config key — so the
-# canonical entry points carry it (.mise/tasks/test, package.json `test`). Bare
-# `bun test` therefore resolves svelte's server runtime, which ui/test-mount.ts
-# detects and rejects with an actionable error rather than the cryptic mount()
-# crash (EXC-537).
+# The flag cannot live here: export conditions are a module-resolution input Bun
+# reads from the CLI (`--conditions`), not a config key — so the canonical entry
+# points carry it (.mise/tasks/test, package.json `test`). Tried on 1.4.0 in all
+# three plausible homes, `[test]`, top level and `[install]`, against a package
+# whose `browser` condition resolves a different file: bare `bun test` picked the
+# default entry from every one, while `--conditions browser` on the CLI picked the
+# browser entry. Bare `bun test` therefore resolves svelte's server runtime, which
+# ui/test-mount.ts detects and rejects with an actionable error rather than the
+# cryptic mount() crash (EXC-537).
 #
 # `--timeout` rides on those same two entry points for the same reason (EXC-1056):
 # `[test]` has no `timeout` key, and a preload calling `setDefaultTimeout` reaches
 # only some files of a multi-file run. See scripts/tasks/test.ts.
+#
+# Re-probe both on the next bun bump.
 [test]
 # rumdl-preload points the plan formatter (src/plan/rumdl.ts) at the mise-pinned
 # rumdl so tests run offline; svelte-preload compiles .svelte for the UI suite.

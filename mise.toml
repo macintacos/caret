@@ -18,7 +18,7 @@ HK_MISE = 1
 # fails if they diverge.
 hk  = "1.55"
 pkl = "0"
-bun = "1.3"
+bun = "1.4"
 # Bump biome.jsonc's `$schema` to match whatever release mise.lock resolves. biome
 # prints the mismatch on every run, but only as an info — nothing fails on it.
 biome = "2.5"
