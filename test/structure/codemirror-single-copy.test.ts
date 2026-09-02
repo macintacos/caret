@@ -37,9 +37,11 @@
 // removes what bun.lock no longer names, and both copies are named.
 //
 // So the update path looks repaired on 1.4, for this set. The gate stays anyway: it
-// fails on a split however one arrives, one path re-resolving cleanly is not
-// evidence that every future one will, and dedupe is a manual pass — it cannot be
-// what stands between a bad resolution and a reviewer's editor.
+// fails on a split however one arrives, and one path re-resolving cleanly is not
+// evidence that every future one will. `bun dedupe` is itself gated now, by
+// dependency-dedupe.test.ts — but that gate only catches duplicates dedupe CAN
+// collapse, and the split described above is exactly the one it declines, so neither
+// suite stands in for the other.
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
