@@ -1,5 +1,4 @@
 import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { svelte } from "@sveltejs/vite-plugin-svelte";
@@ -7,15 +6,11 @@ import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 
 import { DEFAULT_PORT } from "../src/config/constants.ts";
-import { budgetFailure, measureDist, UI_BUNDLE_BUDGET_BYTES } from "./bundle-budget.ts";
+import { bundleBudgetPlugin } from "./bundle-budget.ts";
 
 // The dev daemon the `/api` proxy below forwards to. Hoisted so the target and
 // the Origin the proxy rewrites to cannot drift apart.
 const DEV_API_TARGET = `http://localhost:${process.env.CARET_PORT ?? DEFAULT_PORT}`;
-
-// Where caret-bundle-budget measures, captured from the resolved config rather
-// than read off writeBundle's options so the directory never depends on cwd.
-let outDir = "";
 
 // A standard multi-asset build: Vite emits dist/index.html plus content-hashed
 // dist/assets/* (JS + CSS). The binary embeds each asset by URL path via a
@@ -60,24 +55,10 @@ export default defineConfig({
         };
       },
     },
-    {
-      // EXC-1217: assert the built dist/ against the budget in ui/bundle-budget.ts.
-      // The three shiki entries in the resolve.alias block below are what hold that
-      // number down; before this plugin an alias that stopped matching grew the
-      // bundle and failed nothing. Throwing from writeBundle fails `vite build` with
-      // a non-zero exit — the same thing caret-palette-css does with its own throw —
-      // so `build ui`, `build bin`, `build bundle`, `test e2e`, and preflight's own
-      // `build ui` task all inherit the gate with no further wiring.
-      name: "caret-bundle-budget",
-      apply: "build",
-      configResolved(config) {
-        outDir = resolve(config.root, config.build.outDir);
-      },
-      writeBundle() {
-        const failure = budgetFailure(measureDist(outDir), UI_BUNDLE_BUDGET_BYTES);
-        if (failure) throw new Error(failure);
-      },
-    },
+    // EXC-1217: assert the built dist/ against the budget in ui/bundle-budget.ts,
+    // which is where the number, what it does and does not cover, and the measured
+    // cost of each alias entry below ceasing to match are all recorded.
+    bundleBudgetPlugin(),
   ],
   resolve: {
     // CodeMirror's extension system is identity-sensitive: a Facet, StateField, or
