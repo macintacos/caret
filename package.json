@@ -85,7 +85,7 @@
   },
   "pinned": {
     "//": "bun.lock is committed, so it is what pins every dependency exactly; a range above is the upgrade policy, not the resolved version. A bare version therefore means `bun update` must never move this one on its own, and these entries are the whole set. Everything else takes a range deliberately — zod and the TOML parser reading the config.toml trust boundary included: the lockfile already holds them, so a range costs no reproducibility and keeps them visible to an upgrade sweep. test/structure/exact-pin.test.ts fails on an exact pin with no reason, and on a reason that outlived its pin.",
-    "@pierre/diffs": "Version-coupled to shiki through the resolve.alias block in ui/vite.config.ts, where an alias that stops matching grows the bundle by ~600 KB silently rather than failing anything. The pair moves as one reviewed bump, never on a sweep.",
+    "@pierre/diffs": "Version-coupled to shiki through the resolve.alias block in ui/vite.config.ts, where an alias that stops matching grows the bundle by ~600 KB. That growth is no longer silent — the caret-bundle-budget plugin fails `vite build` against the recorded budget in ui/bundle-budget.ts — but the gate reports the size, not the cause, so the pair still moves as one reviewed bump, never on a sweep.",
     "@pierre/trees": "No stable release exists — the `latest` and `beta` dist-tags both point at the same prerelease. Exact rather than caret because a prerelease under a caret range is still a caret range: `^1.0.0-beta.6` expands to `>=1.0.0-beta.6 <2.0.0-0`, so a sweep would take a stable 1.0.0 the day it lands, and beta-to-stable is the jump that wants a human."
   },
   "held": {
