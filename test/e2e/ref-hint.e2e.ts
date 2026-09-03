@@ -23,9 +23,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 import { makeProject } from "@test/e2e/support/file-refs.ts";
+import type { Daemon } from "@test/e2e/support/fixtures.ts";
 import { expect, test, waitForTwoPollTicks } from "@test/e2e/support/fixtures.ts";
 import { PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
 
@@ -165,6 +166,22 @@ async function openPlan(page: Page): Promise<void> {
   await expect(page.locator("[data-file-ref]")).toHaveCount(4);
 }
 
+/** Seed `plan` at `dir`, open it, and wait for `badge` (the file badge by
+ * default) to appear — the arrange nearly every badge spec shares before it
+ * diverges into its own assertions. Returns the seeded review's id. */
+async function seedAndOpenBadge(
+  daemon: Daemon,
+  page: Page,
+  dir: string,
+  plan: string,
+  badge: (page: Page) => Locator = fileBadge,
+): Promise<string> {
+  const id = await daemon.seed({ cwd: dir, plan });
+  await openPlan(page);
+  await expect(badge(page)).toHaveCount(1);
+  return id;
+}
+
 test("exactly one badge per kind, however many references the plan cites", async ({
   daemon,
   page,
@@ -174,7 +191,6 @@ test("exactly one badge per kind, however many references the plan cites", async
   try {
     await daemon.seed({ cwd: proj.dir, plan: PLAN });
     await openPlan(page);
-
     await expect(fileBadge(page)).toHaveCount(1);
     await expect(dirBadge(page)).toHaveCount(1);
   } finally {
@@ -191,9 +207,7 @@ test("each badge sits on the top-right corner of its reference's pill", async ({
   // whether it landed, which is why this claim cannot be a unit.
   const proj = await makeProject(PROJECT);
   try {
-    await daemon.seed({ cwd: proj.dir, plan: PLAN });
-    await openPlan(page);
-    await expect(fileBadge(page)).toHaveCount(1);
+    await seedAndOpenBadge(daemon, page, proj.dir, PLAN);
 
     // The first of each kind in reading order — `src/cache.ts` and `src/lib`, both
     // on line 3. The file's tag is valueless and the directory's carries its kind.
@@ -214,9 +228,7 @@ test("opening a file retires only the file badge, and the reload keeps it retire
   // filename opens an excerpt teaches nothing about the folder tree.
   const proj = await makeProject(PROJECT);
   try {
-    await daemon.seed({ cwd: proj.dir, plan: PLAN });
-    await openPlan(page);
-    await expect(fileBadge(page)).toHaveCount(1);
+    await seedAndOpenBadge(daemon, page, proj.dir, PLAN);
     await expect(dirBadge(page)).toHaveCount(1);
 
     await page.locator('[data-file-ref=""]').first().click();
@@ -238,9 +250,7 @@ test("opening a file retires only the file badge, and the reload keeps it retire
 test("the folder badge retires on its own and leaves nothing behind", async ({ daemon, page }) => {
   const proj = await makeProject(PROJECT);
   try {
-    await daemon.seed({ cwd: proj.dir, plan: PLAN });
-    await openPlan(page);
-    await expect(dirBadge(page)).toHaveCount(1);
+    await seedAndOpenBadge(daemon, page, proj.dir, PLAN, dirBadge);
 
     await page.locator('[data-file-ref="directory"]').first().click();
     await expect(page.locator("[data-folder-tree]")).toBeVisible();
@@ -267,9 +277,7 @@ test("the badge itself opens the reference it teaches", async ({ daemon, page })
   // library repaint here would prove less than the direct DOM swap does.)
   const proj = await makeProject(PROJECT);
   try {
-    await daemon.seed({ cwd: proj.dir, plan: PLAN });
-    await openPlan(page);
-    await expect(dirBadge(page)).toHaveCount(1);
+    await seedAndOpenBadge(daemon, page, proj.dir, PLAN, dirBadge);
 
     await dirBadge(page).click();
     const card = page.locator("[data-folder-tree]");
@@ -298,9 +306,7 @@ test("the badge is reachable and operable from the keyboard", async ({ daemon, p
   // key activation are all real-browser behaviour.
   const proj = await makeProject(PROJECT);
   try {
-    await daemon.seed({ cwd: proj.dir, plan: PLAN });
-    await openPlan(page);
-    await expect(fileBadge(page)).toHaveCount(1);
+    await seedAndOpenBadge(daemon, page, proj.dir, PLAN);
 
     await fileBadge(page).focus();
     await expect(fileBadge(page)).toBeFocused();
@@ -366,9 +372,7 @@ test("a placed badge is never re-anchored by a later scroll", async ({ daemon, p
   // content coordinates — and never re-pick a different reference to sit on.
   const proj = await makeProject(PROJECT);
   try {
-    await daemon.seed({ cwd: proj.dir, plan: `${PLAN}\n${"\nFiller line.\n".repeat(60)}` });
-    await openPlan(page);
-    await expect(fileBadge(page)).toHaveCount(1);
+    await seedAndOpenBadge(daemon, page, proj.dir, `${PLAN}\n${"\nFiller line.\n".repeat(60)}`);
     const corner = await pillTopRight(page, '[data-file-ref=""]');
     const at = await badgeCenter(page, FILE_BADGE);
     const offset = { x: at.x - corner!.x, y: at.y - corner!.y };
@@ -394,9 +398,7 @@ test("the badges hold their place across the poll", async ({ daemon, page }) => 
   // re-measured or remounted on every tick.
   const proj = await makeProject(PROJECT);
   try {
-    await daemon.seed({ cwd: proj.dir, plan: PLAN });
-    await openPlan(page);
-    await expect(fileBadge(page)).toHaveCount(1);
+    await seedAndOpenBadge(daemon, page, proj.dir, PLAN);
     const before = await badgeCenter(page, FILE_BADGE);
 
     await waitForTwoPollTicks(page);
@@ -421,9 +423,7 @@ test("a new version re-measures the badges against the document it delivered", a
   // down the page precisely so stale coordinates cannot pass.
   const proj = await makeProject(PROJECT);
   try {
-    const id = await daemon.seed({ cwd: proj.dir, plan: PLAN });
-    await openPlan(page);
-    await expect(fileBadge(page)).toHaveCount(1);
+    const id = await seedAndOpenBadge(daemon, page, proj.dir, PLAN);
     const before = await badgeCenter(page, FILE_BADGE);
 
     await daemon.addVersion(id, `# Refs\n\nA paragraph that pushes the references down.\n${PLAN}`);

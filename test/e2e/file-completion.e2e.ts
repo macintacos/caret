@@ -39,7 +39,7 @@ import type { Locator, Page } from "@playwright/test";
 import { makeProject } from "@test/e2e/support/file-refs.ts";
 import type { Daemon } from "@test/e2e/support/fixtures.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
-import { composer, planSurface, revealGutterPlus } from "@test/e2e/support/source-view.ts";
+import { composer, planSurface } from "@test/e2e/support/source-view.ts";
 
 /** A project with one obvious subsequence target and two near-misses beside it. */
 const PROJECT = {
@@ -113,19 +113,6 @@ async function rects(page: Page): Promise<{
   return boxes;
 }
 
-/** The gutter composer opened on `line`, rather than on the line 3 `composer()`
- * fixes. Which line matters only for the two placement tests: where the cursor
- * sits in the window is what decides which side of it the list takes. */
-async function composerAt(page: Page, line: number): Promise<Locator> {
-  await (await revealGutterPlus(page, line)).click();
-  const dialog = page.getByRole("dialog", { name: "Add a comment" });
-  await expect(dialog).toBeVisible();
-  const input = dialog.getByRole("textbox", { name: "Comment" });
-  await input.click();
-  await expect(input).toBeFocused();
-  return input;
-}
-
 /** How much vertical space the panel shares with the list. Positive is what
  * "beside" MEANS — and it is the assertion a panel placed against an unplaced
  * tooltip fails, because that one lands at the top of the viewport with the list
@@ -152,6 +139,46 @@ async function withProject(
   } finally {
     await project.cleanup();
   }
+}
+
+/** Open the composer, resolve `@src/lib/alpha` to its one row, and press
+ * Control+Space to open its preview. */
+async function openAlphaPreview(page: Page): Promise<void> {
+  await composer(page);
+  await page.keyboard.type("@src/lib/alpha");
+  await expect(rowsIn(page)).toHaveText(["src/lib/alpha.ts"]);
+  await page.keyboard.press("Control+Space");
+}
+
+/** Open the composer, resolve `@src/lib/` to its two rows, and open the
+ * preview on the first. */
+async function openLibPreview(page: Page): Promise<void> {
+  await composer(page);
+  await page.keyboard.type("@src/lib/");
+  await expect(rowsIn(page)).toHaveText(["src/lib/alpha.ts", "src/lib/beta.ts"]);
+  await page.keyboard.press("Control+Space");
+  await expect(page.locator(panel)).toBeVisible();
+}
+
+/** Set up the crowded-list placement scenario: a narrow, short viewport, the
+ * completion-preview pref pre-set, and CROWDED_PROJECT's 24-row list typed
+ * from the composer opened on `line` — then hand its input to `run` for the
+ * caller's own placement assertions. */
+async function withCrowdedList(
+  daemon: Daemon,
+  page: Page,
+  line: number,
+  run: (input: Locator) => Promise<void>,
+): Promise<void> {
+  await page.setViewportSize({ width: 760, height: 900 });
+  await page.addInitScript(() => localStorage.setItem("caret.completionPreview", "on"));
+  await withProject(daemon, page, CROWDED_PROJECT, async () => {
+    const input = await composer(page, line);
+    await page.keyboard.type("@src/lib/f");
+    await expect(rowsIn(page)).toHaveCount(24);
+    await expect(page.locator(panel)).toBeVisible();
+    await run(input);
+  });
 }
 
 test("an @ opens the files under the review's working directory", async ({ daemon, page }) => {
@@ -265,12 +292,7 @@ test("ctrl+space previews the highlighted file, and follows the arrow keys", asy
   page,
 }) => {
   await withProject(daemon, page, PREVIEW_PROJECT, async () => {
-    await composer(page);
-    await page.keyboard.type("@src/lib/");
-    await expect(rowsIn(page)).toHaveText(["src/lib/alpha.ts", "src/lib/beta.ts"]);
-
-    await page.keyboard.press("Control+Space");
-    await expect(page.locator(panel)).toBeVisible();
+    await openLibPreview(page);
     await expect(page.locator(panel)).toContainText("src/lib/alpha.ts");
     await expect(page.locator(panel)).toContainText("const alpha1 = 1;");
 
@@ -342,11 +364,7 @@ test("the preview panel lands beside the list, not inside it", async ({ daemon, 
   // `Completion.info`: this is a matter of layout, and layout is the one thing no
   // unit can see. Both rects come off the live page.
   await withProject(daemon, page, PREVIEW_PROJECT, async () => {
-    await composer(page);
-    await page.keyboard.type("@src/lib/");
-    await expect(rowsIn(page)).toHaveText(["src/lib/alpha.ts", "src/lib/beta.ts"]);
-    await page.keyboard.press("Control+Space");
-    await expect(page.locator(panel)).toBeVisible();
+    await openLibPreview(page);
 
     const boxes = await rects(page);
 
@@ -397,11 +415,7 @@ test("the panel stays beside the list across a resize", async ({ daemon, page })
   // hand — and the list under it has moved by then. The rects have to agree
   // afterwards, which is a browser question end to end.
   await withProject(daemon, page, PREVIEW_PROJECT, async () => {
-    await composer(page);
-    await page.keyboard.type("@src/lib/");
-    await expect(rowsIn(page)).toHaveText(["src/lib/alpha.ts", "src/lib/beta.ts"]);
-    await page.keyboard.press("Control+Space");
-    await expect(page.locator(panel)).toBeVisible();
+    await openLibPreview(page);
     expect(await verticalOverlap(page)).toBeGreaterThan(0);
 
     await page.setViewportSize({ width: 1180, height: 820 });
@@ -415,11 +429,7 @@ test("a window too narrow for both puts the preview below the list", async ({ da
   // at the viewport's edge is worse than a whole one under the list.
   await page.setViewportSize({ width: 760, height: 900 });
   await withProject(daemon, page, PREVIEW_PROJECT, async () => {
-    await composer(page);
-    await page.keyboard.type("@src/lib/");
-    await expect(rowsIn(page)).toHaveText(["src/lib/alpha.ts", "src/lib/beta.ts"]);
-    await page.keyboard.press("Control+Space");
-    await expect(page.locator(panel)).toBeVisible();
+    await openLibPreview(page);
 
     const boxes = await rects(page);
     // Under the list, not beside it, and still whole.
@@ -440,57 +450,48 @@ test("a list near the foot of the window rises above the line being typed", asyn
   // out of the space CodeMirror lays tooltips in, so the list flips above the
   // cursor and the panel stacks over it. Narrow, so a side placement is off the
   // table; short, so the composer sits near the bottom.
-  await page.setViewportSize({ width: 760, height: 900 });
-  await page.addInitScript(() => localStorage.setItem("caret.completionPreview", "on"));
-  await withProject(daemon, page, CROWDED_PROJECT, async () => {
+  await withCrowdedList(
+    daemon,
+    page,
     // A line well down the plan, so the cursor sits below the middle of the window
     // and the room is decisively above it — the shape the whole rule is about.
-    // `composer()` opens on line 3, which is near the top of any window and is
+    // Line 3 (the other test's line) is near the top of any window and is
     // supposed to keep its list below.
-    const input = await composerAt(page, 20);
-    await page.keyboard.type("@src/lib/f");
-    await expect(rowsIn(page)).toHaveCount(24);
-    await expect(page.locator(panel)).toBeVisible();
+    20,
+    async (input) => {
+      // `cm-tooltip-above` is CodeMirror's own statement that it put the list on the
+      // far side of the line being typed — the decision the reserved space provokes,
+      // read back from the element it stamps it on rather than re-derived from rects
+      // (the tooltip anchors to the CURSOR, which sits inside the composer's box,
+      // not to the box's own edges).
+      await expect(page.locator(list)).toHaveClass(/cm-tooltip-above/);
 
-    // `cm-tooltip-above` is CodeMirror's own statement that it put the list on the
-    // far side of the line being typed — the decision the reserved space provokes,
-    // read back from the element it stamps it on rather than re-derived from rects
-    // (the tooltip anchors to the CURSOR, which sits inside the composer's box,
-    // not to the box's own edges).
-    await expect(page.locator(list)).toHaveClass(/cm-tooltip-above/);
+      // Polled, not read once: the flip lands on CodeMirror's own 50ms resize
+      // debounce and the panel follows it a frame later, so the class arriving is
+      // not yet the two having settled against each other.
+      await expect
+        .poll(async () => {
+          const { list: l, win } = await rects(page);
+          return win.bottom <= l.top + 1;
+        })
+        .toBe(true);
 
-    // Polled, not read once: the flip lands on CodeMirror's own 50ms resize
-    // debounce and the panel follows it a frame later, so the class arriving is
-    // not yet the two having settled against each other.
-    await expect
-      .poll(async () => {
-        const { list: l, win } = await rects(page);
-        return win.bottom <= l.top + 1;
-      })
-      .toBe(true);
-
-    const boxes = await rects(page);
-    // All of it on screen, which is the whole point.
-    expect(boxes.win.top).toBeGreaterThanOrEqual(0);
-    expect(boxes.win.height).toBeGreaterThan(0);
-    expect(boxes.list.top).toBeLessThan(
-      await input.evaluate((el) => el.getBoundingClientRect().top),
-    );
-  });
+      const boxes = await rects(page);
+      // All of it on screen, which is the whole point.
+      expect(boxes.win.top).toBeGreaterThanOrEqual(0);
+      expect(boxes.win.height).toBeGreaterThan(0);
+      expect(boxes.list.top).toBeLessThan(
+        await input.evaluate((el) => el.getBoundingClientRect().top),
+      );
+    },
+  );
 });
 
 test("a list with room below it keeps its place under the line", async ({ daemon, page }) => {
   // The other half of the rule, and the one that keeps it from being a blanket
   // "always go up": a composer near the TOP of the window has its room below, so
   // the list stays there and the panel stacks under it.
-  await page.setViewportSize({ width: 760, height: 900 });
-  await page.addInitScript(() => localStorage.setItem("caret.completionPreview", "on"));
-  await withProject(daemon, page, CROWDED_PROJECT, async () => {
-    const input = await composer(page);
-    await page.keyboard.type("@src/lib/f");
-    await expect(rowsIn(page)).toHaveCount(24);
-    await expect(page.locator(panel)).toBeVisible();
-
+  await withCrowdedList(daemon, page, 3, async (input) => {
     await expect(page.locator(list)).not.toHaveClass(/cm-tooltip-above/);
 
     await expect
@@ -510,10 +511,7 @@ test("a list with room below it keeps its place under the line", async ({ daemon
 
 test("a file's lines are coloured the way the plan view colours them", async ({ daemon, page }) => {
   await withProject(daemon, page, PREVIEW_PROJECT, async () => {
-    await composer(page);
-    await page.keyboard.type("@src/lib/alpha");
-    await expect(rowsIn(page)).toHaveText(["src/lib/alpha.ts"]);
-    await page.keyboard.press("Control+Space");
+    await openAlphaPreview(page);
     await expect(page.locator(panel)).toContainText("const alpha1 = 1;");
 
     // The grammar loads off disk after the lines are already up — that is the
@@ -538,10 +536,7 @@ test("a file's lines are coloured the way the plan view colours them", async ({ 
 // test here pays for that once; a reload test pays twice.
 test("turning the preview on is remembered", async ({ daemon, page }) => {
   await withProject(daemon, page, PREVIEW_PROJECT, async () => {
-    await composer(page);
-    await page.keyboard.type("@src/lib/alpha");
-    await expect(rowsIn(page)).toHaveText(["src/lib/alpha.ts"]);
-    await page.keyboard.press("Control+Space");
+    await openAlphaPreview(page);
     await expect(page.locator(panel)).toBeVisible();
 
     await expect

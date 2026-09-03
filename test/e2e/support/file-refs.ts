@@ -6,7 +6,11 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
+
+import type { Daemon } from "@test/e2e/support/fixtures.ts";
+import { expect } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 /** Write a throwaway project dir with the given files, returning its path and a
  * cleanup. The daemon (a real subprocess) reads it via the seeded review's cwd. */
@@ -46,4 +50,37 @@ export async function settleDrawer(page: Page): Promise<void> {
     // for our purposes, so swallow it rather than failing the spec.
     await Promise.all(el.getAnimations().map((a) => a.finished.catch(() => undefined)));
   });
+}
+
+/** Seed `plan` in a project at `cwd`, open it, and wait until exactly `refCount`
+ * file references are tagged — the arrange every file-refs spec opens with,
+ * before it decides which token to click. */
+export async function seedFileRefs(
+  page: Page,
+  daemon: Daemon,
+  cwd: string,
+  plan: string,
+  refCount = 1,
+): Promise<void> {
+  await daemon.seed({ cwd, plan });
+  await page.goto("/");
+  await planSurface(page);
+  await expect.poll(() => fileRefCount(page)).toBe(refCount);
+}
+
+/** `seedFileRefs`, then click the first tagged reference and wait for its
+ * preview to open. */
+export async function openFileRefPreview(
+  page: Page,
+  daemon: Daemon,
+  cwd: string,
+  plan: string,
+  opts: { refCount?: number } = {},
+): Promise<Locator> {
+  const { refCount = 1 } = opts;
+  await seedFileRefs(page, daemon, cwd, plan, refCount);
+  await page.locator("[data-file-ref]").first().click();
+  const preview = page.locator("[data-file-preview]");
+  await expect(preview).toBeVisible();
+  return preview;
 }

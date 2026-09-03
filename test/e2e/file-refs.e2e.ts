@@ -30,7 +30,13 @@
 // writes a synthetic project dir and seeds a review whose cwd points at it. The
 // content is throwaway, non-identifying scaffolding — never a real plan.
 
-import { fileRefCount, makeProject, settleDrawer } from "@test/e2e/support/file-refs.ts";
+import {
+  fileRefCount,
+  makeProject,
+  openFileRefPreview,
+  seedFileRefs,
+  settleDrawer,
+} from "@test/e2e/support/file-refs.ts";
 import { expect, motionToken, test, waitForTwoPollTicks } from "@test/e2e/support/fixtures.ts";
 import { expectNoComposerOpens, planSurface } from "@test/e2e/support/source-view.ts";
 import { OVERSCAN_ROWS } from "@ui/src/lib/previewWindow.ts";
@@ -50,6 +56,10 @@ const CACHE_TS = Array.from({ length: CACHE_TS_LINES }, (_, i) => {
   if (n === 150) return 'const deepKey = "MARKER_LINE_DEEP"; // line 150';
   return `const line${n} = ${n};`;
 }).join("\n");
+
+/** The single-reference plan most simple preview-open specs share, citing
+ * line 42 of CACHE_TS. */
+const LINE_42_PLAN = "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n";
 
 /** The first tagged reference's computed chip fill and cursor, read from inside the
  * shadow root. The rule lives in an adopted stylesheet while the tokens it spends are
@@ -75,6 +85,35 @@ function refChipStyle(
  * tint is doing the painting rather than merely that a gradient is present. */
 function litLayers(fill: string): string[] {
   return fill.split(/,\s*(?=linear-gradient)/).filter((l) => !/rgba\(0,\s*0,\s*0,\s*0\)/.test(l));
+}
+
+/** Assert the resting (unhovered) reference chip: a pointer cursor, one lit
+ * background layer, and a transparent own box — the citation's pill carries
+ * the tint, not the token itself (see the resolution spec's note on why).
+ * Returns the read style so a caller can diff it against the hovered one. */
+async function expectRestingChip(
+  page: import("@playwright/test").Page,
+): Promise<Awaited<ReturnType<typeof refChipStyle>>> {
+  await page.mouse.move(0, 0);
+  const resting = await refChipStyle(page);
+  expect(resting?.cursor).toBe("pointer");
+  expect(litLayers(resting!.fill)).toHaveLength(1);
+  expect(resting?.background).toBe("rgba(0, 0, 0, 0)");
+  return resting;
+}
+
+/** Assert `chip` (read while the pointer is on the token) differs from both
+ * transparent and `resting`'s fill — the shape every hover assertion in this
+ * file makes once a reference is actually hovered. The not.toBeNull() guard
+ * matters here: both assertions after it are negative and would pass
+ * vacuously against the `undefined` a missing token reads back as. */
+function expectHoverChipDiffers(
+  chip: Awaited<ReturnType<typeof refChipStyle>>,
+  resting: Awaited<ReturnType<typeof refChipStyle>>,
+): void {
+  expect(chip).not.toBeNull();
+  expect(chip?.background).not.toBe("rgba(0, 0, 0, 0)");
+  expect(chip?.background).not.toBe(resting?.background);
 }
 
 /** Where the cited (`.fp-target`) row sits inside the preview's scrolling code
@@ -149,6 +188,22 @@ async function citedBandInRegion(page: import("@playwright/test").Page): Promise
     )
     .not.toBeNull();
   return seen.band as NonNullable<typeof seen.band>;
+}
+
+/** Assert `src/cache.ts:40-44`'s standard citation frame: ten lines of context
+ * padding the window on each side, exactly the five cited lines washed, and
+ * the whole band on screen. The bare citation, the link whose label carries
+ * the range, and the bare-text label carrying it all make this identical
+ * claim — the three spellings of one citation must not frame differently. */
+async function expectStandardBand(
+  page: import("@playwright/test").Page,
+  preview: import("@playwright/test").Locator,
+): Promise<void> {
+  await expect(preview.getByRole("status")).toHaveText(`lines 10–74 of ${CACHE_TS_LINES}`);
+  const band = await citedBandInRegion(page);
+  expect(band.lines).toEqual([40, 41, 42, 43, 44]);
+  expect(band.top).toBeGreaterThanOrEqual(0);
+  expect(band.bottom).toBeLessThanOrEqual(band.region);
 }
 
 /** Scroll the preview's code region to one of its ends, the way a reader
@@ -267,11 +322,7 @@ test("marks only references that resolve to a real file", async ({ daemon, page 
     // rebound to the reference's tint; the reference's own box is transparent, or the
     // wash would be laid down twice over the path alone and the pill would change
     // colour at each backtick.
-    await page.mouse.move(0, 0);
-    const resting = await refChipStyle(page);
-    expect(resting?.cursor).toBe("pointer");
-    expect(litLayers(resting!.fill)).toHaveLength(1);
-    expect(resting?.background).toBe("rgba(0, 0, 0, 0)");
+    const resting = await expectRestingChip(page);
 
     // Hovering a resolved reference reveals no preview — for an inline-code
     // reference like this one hover is highlight-only (EXC-840); the preview
@@ -286,12 +337,8 @@ test("marks only references that resolve to a real file", async ({ daemon, page 
     // that the resting state is tinted too: with the pointer on the token the real
     // :hover state swaps the fill to a DIFFERENT color than the resting chip, so
     // hover still reads as a change of state rather than as nothing happening.
-    // Pin the read non-null first — both assertions below are negative, so they
-    // would pass vacuously on the `undefined` a missing token reads back as.
     const hovered = await refChipStyle(page);
-    expect(hovered).not.toBeNull();
-    expect(hovered?.background).not.toBe("rgba(0, 0, 0, 0)");
-    expect(hovered?.background).not.toBe(resting?.background);
+    expectHoverChipDiffers(hovered, resting);
 
     // And the wash covers the WHOLE pill, backticks included. Lighting the path alone
     // reads as a lit core inside an unlit chip rather than as one pressed object, and
@@ -403,19 +450,11 @@ test("marks references under a vendor palette too", async ({ daemon, page }) => 
 
     await expect.poll(() => fileRefCount(page)).toBe(1);
 
-    await page.mouse.move(0, 0);
-    const resting = await refChipStyle(page);
-    expect(resting?.cursor).toBe("pointer");
-    // Backticked, so the citation's own pill carries the resting tint — see the note
-    // in the resolution spec above.
-    expect(litLayers(resting!.fill)).toHaveLength(1);
-    expect(resting?.background).toBe("rgba(0, 0, 0, 0)");
+    const resting = await expectRestingChip(page);
 
     await page.locator("[data-file-ref]").first().hover();
     const hovered = await refChipStyle(page);
-    expect(hovered).not.toBeNull();
-    expect(hovered?.background).not.toBe("rgba(0, 0, 0, 0)");
-    expect(hovered?.background).not.toBe(resting?.background);
+    expectHoverChipDiffers(hovered, resting);
   } finally {
     await proj.cleanup();
   }
@@ -526,22 +565,10 @@ test("clicking a real reference reveals a highlighted excerpt centered on its li
 }) => {
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({
-      cwd: proj.dir,
-      plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n",
-    });
-    await page.goto("/");
-    await planSurface(page);
-
-    // Wait for the icon (async resolve), then click the tagged token.
-    await expect.poll(() => fileRefCount(page)).toBe(1);
-    await page.locator("[data-file-ref]").first().click();
-
     // The preview appears (light DOM, not the shadow root) with the resolved path
     // and a window centered on line 42 — so the line-42 marker shows and the
     // line-1 marker (outside the ±30 window) does not.
-    const preview = page.locator("[data-file-preview]");
-    await expect(preview).toBeVisible();
+    const preview = await openFileRefPreview(page, daemon, proj.dir, LINE_42_PLAN);
     await expect(preview).toContainText("src/cache.ts");
     await expect(preview).toContainText("MARKER_LINE_FORTYTWO");
     await expect(preview).not.toContainText("MARKER_LINE_ONE");
@@ -596,29 +623,18 @@ test("a cited range washes every line it names, framed with context on both side
 }) => {
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({
-      cwd: proj.dir,
-      plan: "# Refs\n\nThe key is built across `src/cache.ts:40-44` today.\n",
-    });
-    await page.goto("/");
-    await planSurface(page);
-    await expect.poll(() => fileRefCount(page)).toBe(1);
-    await page.locator("[data-file-ref]").first().click();
-
-    const preview = page.locator("[data-file-preview]");
-    await expect(preview).toBeVisible();
+    const preview = await openFileRefPreview(
+      page,
+      daemon,
+      proj.dir,
+      "# Refs\n\nThe key is built across `src/cache.ts:40-44` today.\n",
+    );
     await settleDrawer(page);
 
     // The window is the citation padded by the daemon's own radius on each side,
-    // so the span is read in context rather than flush against the window's ends.
-    await expect(preview.getByRole("status")).toHaveText(`lines 10–74 of ${CACHE_TS_LINES}`);
-
-    // Exactly the five cited lines are washed — not one, and not the padding.
-    const band = await citedBandInRegion(page);
-    expect(band.lines).toEqual([40, 41, 42, 43, 44]);
-    // …and the whole band opens on screen, both edges inside the region.
-    expect(band.top).toBeGreaterThanOrEqual(0);
-    expect(band.bottom).toBeLessThanOrEqual(band.region);
+    // so the span is read in context rather than flush against the window's ends,
+    // with exactly the five cited lines washed — not one, and not the padding.
+    await expectStandardBand(page, preview);
   } finally {
     await proj.cleanup();
   }
@@ -634,17 +650,12 @@ test("a range taller than the region opens at its first line, not centred", asyn
   // head at the top edge — no branch, and nothing to tune.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({
-      cwd: proj.dir,
-      plan: "# Refs\n\nThe whole middle, `src/cache.ts:100-250`, moves.\n",
-    });
-    await page.goto("/");
-    await planSurface(page);
-    await expect.poll(() => fileRefCount(page)).toBe(1);
-    await page.locator("[data-file-ref]").first().click();
-
-    const preview = page.locator("[data-file-preview]");
-    await expect(preview).toBeVisible();
+    await openFileRefPreview(
+      page,
+      daemon,
+      proj.dir,
+      "# Refs\n\nThe whole middle, `src/cache.ts:100-250`, moves.\n",
+    );
     await settleDrawer(page);
 
     const band = await citedBandInRegion(page);
@@ -669,17 +680,12 @@ test("a range running past the file's end still opens, framed on its last lines"
   // rather than reaching for rows that do not exist.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({
-      cwd: proj.dir,
-      plan: "# Refs\n\nThe tail, `src/cache.ts:295-400`, is gone.\n",
-    });
-    await page.goto("/");
-    await planSurface(page);
-    await expect.poll(() => fileRefCount(page)).toBe(1);
-    await page.locator("[data-file-ref]").first().click();
-
-    const preview = page.locator("[data-file-preview]");
-    await expect(preview).toBeVisible();
+    const preview = await openFileRefPreview(
+      page,
+      daemon,
+      proj.dir,
+      "# Refs\n\nThe tail, `src/cache.ts:295-400`, is gone.\n",
+    );
     await settleDrawer(page);
 
     // The window ends at the file's last line, and no row past it exists to
@@ -710,13 +716,12 @@ test("clicking a range reference's end-line tail opens the preview", async ({ da
   // shadow root can tell the two apart.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({
-      cwd: proj.dir,
-      plan: "# Refs\n\nThe key is built across `src/cache.ts:40-44` today.\n",
-    });
-    await page.goto("/");
-    await planSurface(page);
-    await expect.poll(() => fileRefCount(page)).toBe(1);
+    await seedFileRefs(
+      page,
+      daemon,
+      proj.dir,
+      "# Refs\n\nThe key is built across `src/cache.ts:40-44` today.\n",
+    );
 
     // The tagged token covers the whole reference, end line included. Aim at the
     // centre of its last character through a Range over that character, not at
@@ -763,28 +768,18 @@ test("a link whose label carries the range frames it like a bare citation", asyn
 }) => {
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({
-      cwd: proj.dir,
-      plan: "# Refs\n\nThe key is built across [`src/cache.ts:40-44`](src/cache.ts) today.\n",
-    });
-    await page.goto("/");
-    await planSurface(page);
-    await expect.poll(() => fileRefCount(page)).toBe(1);
-    await page.locator("[data-file-ref]").first().click();
-
-    const preview = page.locator("[data-file-preview]");
-    await expect(preview).toBeVisible();
+    const preview = await openFileRefPreview(
+      page,
+      daemon,
+      proj.dir,
+      "# Refs\n\nThe key is built across [`src/cache.ts:40-44`](src/cache.ts) today.\n",
+    );
     await settleDrawer(page);
 
-    // Same window the bare `src/cache.ts:40-44` citation opens — the link form
-    // must not degrade to the file's head.
-    await expect(preview.getByRole("status")).toHaveText(`lines 10–74 of ${CACHE_TS_LINES}`);
-
-    // …and the same five rows carry the wash, both band edges on screen.
-    const band = await citedBandInRegion(page);
-    expect(band.lines).toEqual([40, 41, 42, 43, 44]);
-    expect(band.top).toBeGreaterThanOrEqual(0);
-    expect(band.bottom).toBeLessThanOrEqual(band.region);
+    // Same window the bare `src/cache.ts:40-44` citation opens, and the same
+    // five rows carry the wash — the link form must not degrade to the file's
+    // head or frame differently.
+    await expectStandardBand(page, preview);
   } finally {
     await proj.cleanup();
   }
@@ -804,26 +799,17 @@ test("a bare-text label carrying a range frames it like a backticked one", async
 }) => {
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({
-      cwd: proj.dir,
-      plan: "# Refs\n\nThe key is built across [src/cache.ts:40-44](src/cache.ts) today.\n",
-    });
-    await page.goto("/");
-    await planSurface(page);
-    await expect.poll(() => fileRefCount(page)).toBe(1);
-    await page.locator("[data-file-ref]").first().click();
-
-    const preview = page.locator("[data-file-preview]");
-    await expect(preview).toBeVisible();
+    const preview = await openFileRefPreview(
+      page,
+      daemon,
+      proj.dir,
+      "# Refs\n\nThe key is built across [src/cache.ts:40-44](src/cache.ts) today.\n",
+    );
     await settleDrawer(page);
 
     // The same window and the same five washed rows the backticked form opens —
     // the two spellings of one citation must not frame differently.
-    await expect(preview.getByRole("status")).toHaveText(`lines 10–74 of ${CACHE_TS_LINES}`);
-    const band = await citedBandInRegion(page);
-    expect(band.lines).toEqual([40, 41, 42, 43, 44]);
-    expect(band.top).toBeGreaterThanOrEqual(0);
-    expect(band.bottom).toBeLessThanOrEqual(band.region);
+    await expectStandardBand(page, preview);
   } finally {
     await proj.cleanup();
   }
@@ -839,19 +825,9 @@ test("the preview omits the esc-to-close hint when shortcut hints are off", asyn
   // only the visible hint is gated, not the behavior.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({
-      cwd: proj.dir,
-      plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n",
-    });
     await page.addInitScript(() => localStorage.setItem("caret.shortcutHints", "off"));
-    await page.goto("/");
-    await planSurface(page);
+    const preview = await openFileRefPreview(page, daemon, proj.dir, LINE_42_PLAN);
 
-    await expect.poll(() => fileRefCount(page)).toBe(1);
-    await page.locator("[data-file-ref]").first().click();
-
-    const preview = page.locator("[data-file-preview]");
-    await expect(preview).toBeVisible();
     await expect(preview).toContainText("src/cache.ts");
     // The header renders, but with no esc-to-close hint.
     await expect(preview.locator(".fp-hint")).toHaveCount(0);
@@ -872,20 +848,14 @@ test("clicking outside the preview leaves it open and does its normal thing", as
   // excerpt open. Dismissal is Escape or the close button, both specced below.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({
-      cwd: proj.dir,
-      // A reference line to open the preview from, and a plain prose line with no
-      // reference — so a click on it can only mean "comment on this line".
-      plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n\nJust some plain prose here.\n",
-    });
-    await page.goto("/");
-    await planSurface(page);
-
-    await expect.poll(() => fileRefCount(page)).toBe(1);
-    await page.locator("[data-file-ref]").first().click();
-
-    const preview = page.locator("[data-file-preview]");
-    await expect(preview).toBeVisible();
+    // A reference line to open the preview from, and a plain prose line with no
+    // reference — so a click on it can only mean "comment on this line".
+    const preview = await openFileRefPreview(
+      page,
+      daemon,
+      proj.dir,
+      "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n\nJust some plain prose here.\n",
+    );
 
     // One click on the plain line opens the composer — the click is not spent
     // closing anything.
@@ -908,18 +878,7 @@ test("pressing Escape dismisses the open preview", async ({ daemon, page }) => {
   // movement no longer dismisses, so Escape is the only thing that closes it here.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({
-      cwd: proj.dir,
-      plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n",
-    });
-    await page.goto("/");
-    await planSurface(page);
-
-    await expect.poll(() => fileRefCount(page)).toBe(1);
-    await page.locator("[data-file-ref]").first().click();
-
-    const preview = page.locator("[data-file-preview]");
-    await expect(preview).toBeVisible();
+    const preview = await openFileRefPreview(page, daemon, proj.dir, LINE_42_PLAN);
 
     // Retry Escape until it lands: right after the view gains focus, Safe Mode
     // (safeMode.ts) swallows keystrokes for a short window, so a single immediate
@@ -943,18 +902,7 @@ test("clicking the close circle dismisses the open preview", async ({ daemon, pa
   // before it unmounts. Neither exists on a component mounted alone.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({
-      cwd: proj.dir,
-      plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n",
-    });
-    await page.goto("/");
-    await planSurface(page);
-
-    await expect.poll(() => fileRefCount(page)).toBe(1);
-    await page.locator("[data-file-ref]").first().click();
-
-    const preview = page.locator("[data-file-preview]");
-    await expect(preview).toBeVisible();
+    const preview = await openFileRefPreview(page, daemon, proj.dir, LINE_42_PLAN);
 
     await page.getByRole("button", { name: "Close preview" }).click();
     await expect(preview).toHaveCount(0);
@@ -978,14 +926,12 @@ test("the preview fills its lane and pages inside itself", async ({ daemon, page
   ).join("\n");
   const proj = await makeProject({ "src/big.ts": BIG });
   try {
-    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nOpen `src/big.ts` to see it.\n" });
-    await page.goto("/");
-    await planSurface(page);
-    await expect.poll(() => fileRefCount(page)).toBe(1);
-
-    await page.locator("[data-file-ref]").first().click();
-    const preview = page.locator("[data-file-preview]");
-    await expect(preview).toBeVisible();
+    const preview = await openFileRefPreview(
+      page,
+      daemon,
+      proj.dir,
+      "# Refs\n\nOpen `src/big.ts` to see it.\n",
+    );
     // Measure at the lane's settled size, not part-way through its opening wipe.
     await settleDrawer(page);
 
@@ -1052,17 +998,7 @@ test("scrolling walks the preview to both ends of the file", async ({ daemon, pa
   // and over, until that end of the file is on screen — no click anywhere.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({
-      cwd: proj.dir,
-      plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n",
-    });
-    await page.goto("/");
-    await planSurface(page);
-    await expect.poll(() => fileRefCount(page)).toBe(1);
-    await page.locator("[data-file-ref]").first().click();
-
-    const preview = page.locator("[data-file-preview]");
-    await expect(preview).toBeVisible();
+    const preview = await openFileRefPreview(page, daemon, proj.dir, LINE_42_PLAN);
     await settleDrawer(page);
     await expect(preview.locator("button:not(.fp-close)")).toHaveCount(0);
 
@@ -1113,17 +1049,7 @@ test("a keyboard reader walks the preview to both ends with no pointer", async (
   // after the opening click below is keys: no wheel, no scrollTop assignment.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({
-      cwd: proj.dir,
-      plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n",
-    });
-    await page.goto("/");
-    await planSurface(page);
-    await expect.poll(() => fileRefCount(page)).toBe(1);
-    await page.locator("[data-file-ref]").first().click();
-
-    const preview = page.locator("[data-file-preview]");
-    await expect(preview).toBeVisible();
+    const preview = await openFileRefPreview(page, daemon, proj.dir, LINE_42_PLAN);
     await settleDrawer(page);
 
     // A named landmark, so the stop announces what it holds rather than landing
@@ -1214,14 +1140,12 @@ test("a fully loaded preview keeps only a screenful of rows in the DOM", async (
   // — can only be made here.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nOpen `src/cache.ts` here.\n" });
-    await page.goto("/");
-    await planSurface(page);
-    await expect.poll(() => fileRefCount(page)).toBe(1);
-    await page.locator("[data-file-ref]").first().click();
-
-    const preview = page.locator("[data-file-preview]");
-    await expect(preview).toBeVisible();
+    const preview = await openFileRefPreview(
+      page,
+      daemon,
+      proj.dir,
+      "# Refs\n\nOpen `src/cache.ts` here.\n",
+    );
     await settleDrawer(page);
 
     // Reading to the end is what loads the file (EXC-969), so walking it is a
@@ -1308,18 +1232,14 @@ test("swapping the reference re-frames the panel from the new file's first line"
   // it, leaving the reader looking at a spacer where the head should be.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS, "src/other.ts": CACHE_TS });
   try {
-    await daemon.seed({
-      cwd: proj.dir,
-      plan: "# Refs\n\nDeep in `src/cache.ts:150`, then `src/other.ts` from the top.\n",
-    });
-    await page.goto("/");
-    await planSurface(page);
-    await expect.poll(() => fileRefCount(page)).toBe(2);
-
     // The first reference cites line 150, so opening it scrolls the region.
-    await page.locator("[data-file-ref]").first().click();
-    const preview = page.locator("[data-file-preview]");
-    await expect(preview).toBeVisible();
+    const preview = await openFileRefPreview(
+      page,
+      daemon,
+      proj.dir,
+      "# Refs\n\nDeep in `src/cache.ts:150`, then `src/other.ts` from the top.\n",
+      { refCount: 2 },
+    );
     await settleDrawer(page);
     await expect(preview.locator(".fp-target .fp-lnum")).toHaveText("150");
     expect((await citedRowInRegion(page))?.scrollTop ?? 0).toBeGreaterThan(0);
@@ -1345,17 +1265,7 @@ test("loading upward keeps the reader's line in view", async ({ daemon, page }) 
   // fold. The cited line is the one they were on, so it must still be in view.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({
-      cwd: proj.dir,
-      plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n",
-    });
-    await page.goto("/");
-    await planSurface(page);
-    await expect.poll(() => fileRefCount(page)).toBe(1);
-    await page.locator("[data-file-ref]").first().click();
-
-    const preview = page.locator("[data-file-preview]");
-    await expect(preview).toBeVisible();
+    const preview = await openFileRefPreview(page, daemon, proj.dir, LINE_42_PLAN);
     await settleDrawer(page);
     await expect(preview.locator(".fp-target")).toHaveCount(1);
 
@@ -1408,17 +1318,12 @@ for (const cited of [150, 42]) {
   }) => {
     const proj = await makeProject({ "src/cache.ts": CACHE_TS });
     try {
-      await daemon.seed({
-        cwd: proj.dir,
-        plan: `# Refs\n\nThe key lives in \`src/cache.ts:${cited}\` today.\n`,
-      });
-      await page.goto("/");
-      await planSurface(page);
-      await expect.poll(() => fileRefCount(page)).toBe(1);
-      await page.locator("[data-file-ref]").first().click();
-
-      const preview = page.locator("[data-file-preview]");
-      await expect(preview).toBeVisible();
+      const preview = await openFileRefPreview(
+        page,
+        daemon,
+        proj.dir,
+        `# Refs\n\nThe key lives in \`src/cache.ts:${cited}\` today.\n`,
+      );
       await settleDrawer(page);
       await expect(preview.locator(".fp-target")).toHaveCount(1);
       const opened = await citedRowInRegion(page);
@@ -1499,13 +1404,12 @@ test("the cited line is in view on open, wherever the reference sits", async ({ 
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
     const filler = Array.from({ length: 7 }, (_, i) => `Preamble paragraph ${i + 1}.`).join("\n\n");
-    await daemon.seed({
-      cwd: proj.dir,
-      plan: `# Refs\n\n${filler}\n\nThe cache key lives in \`src/cache.ts:42\` today.\n`,
-    });
-    await page.goto("/");
-    await planSurface(page);
-    await expect.poll(() => fileRefCount(page)).toBe(1);
+    await seedFileRefs(
+      page,
+      daemon,
+      proj.dir,
+      `# Refs\n\n${filler}\n\nThe cache key lives in \`src/cache.ts:42\` today.\n`,
+    );
 
     // The reference must actually sit well down the plan for this to be the case
     // it claims to be — "wherever the reference sits", not in its first lines;
@@ -1542,14 +1446,12 @@ test("a file too large to preview says so, rather than reading as a load failure
   const HUGE = FILLER.repeat(Math.ceil(MAX_EXCERPT_BYTES / FILLER.length) + 1);
   const proj = await makeProject({ "src/huge.ts": HUGE });
   try {
-    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nOpen `src/huge.ts` to see it.\n" });
-    await page.goto("/");
-    await planSurface(page);
-    await expect.poll(() => fileRefCount(page)).toBe(1);
-
-    await page.locator("[data-file-ref]").first().click();
-    const preview = page.locator("[data-file-preview]");
-    await expect(preview).toBeVisible();
+    const preview = await openFileRefPreview(
+      page,
+      daemon,
+      proj.dir,
+      "# Refs\n\nOpen `src/huge.ts` to see it.\n",
+    );
     await expect(preview.locator('[data-preview-state="too-large"]')).toBeVisible();
     await expect(preview.locator('[data-preview-state="error"]')).toHaveCount(0);
   } finally {
@@ -1569,13 +1471,7 @@ test("the preview renders code in the plan view's own font, not the browser defa
   // author rule targets them directly (an inherited family loses to `code {}`).
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nOpen `src/cache.ts` here.\n" });
-    await page.goto("/");
-    await planSurface(page);
-    await expect.poll(() => fileRefCount(page)).toBe(1);
-
-    await page.locator("[data-file-ref]").first().click();
-    await expect(page.locator("[data-file-preview]")).toBeVisible();
+    await openFileRefPreview(page, daemon, proj.dir, "# Refs\n\nOpen `src/cache.ts` here.\n");
 
     // Read the excerpt code's computed font and a plan source line's, across the
     // light-DOM card and the shadow-root source view.
@@ -1615,16 +1511,12 @@ test("the open preview survives the review poll without repaint churn", async ({
   // resolves once, so an open preview sees no repaint across ticks.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({
-      cwd: proj.dir,
-      plan: "# Refs\n\nEdit `src/cache.ts` to fix it.\n\nMore prose so the view has rows.\n",
-    });
-    await page.goto("/");
-    await planSurface(page);
-    await expect.poll(() => fileRefCount(page)).toBe(1);
-
-    await page.locator("[data-file-ref]").first().click();
-    await expect(page.locator("[data-file-preview]")).toBeVisible();
+    await openFileRefPreview(
+      page,
+      daemon,
+      proj.dir,
+      "# Refs\n\nEdit `src/cache.ts` to fix it.\n\nMore prose so the view has rows.\n",
+    );
 
     // Tag the live file-ref token node with a JS marker, and watch for the preview
     // being torn down. A repaint rebuilds the token (dropping the marker), which is
@@ -1677,17 +1569,11 @@ test("the open preview fetches the excerpt once, not on every poll tick", async 
   // re-highlighting the excerpt (a loading→ready flash) while the pointer sat still.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nOpen `src/cache.ts` here.\n" });
     let excerptFetches = 0;
     page.on("request", (req) => {
       if (req.url().includes("/file?")) excerptFetches++;
     });
-    await page.goto("/");
-    await planSurface(page);
-    await expect.poll(() => fileRefCount(page)).toBe(1);
-
-    await page.locator("[data-file-ref]").first().click();
-    await expect(page.locator("[data-file-preview]")).toBeVisible();
+    await openFileRefPreview(page, daemon, proj.dir, "# Refs\n\nOpen `src/cache.ts` here.\n");
     const afterOpen = excerptFetches;
 
     // Pointer parked: the fetch effect must not re-fire on a tick.
@@ -1702,20 +1588,14 @@ test("the open preview fetches the excerpt once, not on every poll tick", async 
 test("a reference with no line shows the head of the file", async ({ daemon, page }) => {
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({
-      cwd: proj.dir,
-      plan: "# Refs\n\nReview `src/cache.ts` in full before merging.\n",
-    });
-    await page.goto("/");
-    await planSurface(page);
-
-    await expect.poll(() => fileRefCount(page)).toBe(1);
-    await page.locator("[data-file-ref]").first().click();
-
     // No line number → the excerpt starts at the top, so the line-1 marker shows
     // and the line-150 marker (past the 60-line head window) does not.
-    const preview = page.locator("[data-file-preview]");
-    await expect(preview).toBeVisible();
+    const preview = await openFileRefPreview(
+      page,
+      daemon,
+      proj.dir,
+      "# Refs\n\nReview `src/cache.ts` in full before merging.\n",
+    );
     await expect(preview).toContainText("MARKER_LINE_ONE");
     await expect(preview).not.toContainText("MARKER_LINE_DEEP");
 
@@ -1742,18 +1622,8 @@ test("clicking a reference does not also open the line's comment composer", asyn
   // does for a clicked link (see links.e2e.ts).
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({
-      cwd: proj.dir,
-      plan: "# Refs\n\nThe cache key lives in `src/cache.ts:42` today.\n",
-    });
-    await page.goto("/");
-    await planSurface(page);
-
-    await expect.poll(() => fileRefCount(page)).toBe(1);
-    await page.locator("[data-file-ref]").first().click();
-
     // The preview opened…
-    await expect(page.locator("[data-file-preview]")).toBeVisible();
+    await openFileRefPreview(page, daemon, proj.dir, LINE_42_PLAN);
 
     // …and the line it sits on did NOT also open a comment composer.
     await expectNoComposerOpens(page);
@@ -1779,13 +1649,13 @@ test("switching references lets the outgoing file leave before the next arrives"
   // from swallowing the animation, and is asserted after the gate is released.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS, "src/other.ts": CACHE_TS });
   try {
-    await daemon.seed({
-      cwd: proj.dir,
-      plan: "# Refs\n\nFirst `src/cache.ts:42`, then `src/other.ts:150`.\n",
-    });
-    await page.goto("/");
-    await planSurface(page);
-    await expect.poll(() => fileRefCount(page)).toBe(2);
+    await seedFileRefs(
+      page,
+      daemon,
+      proj.dir,
+      "# Refs\n\nFirst `src/cache.ts:42`, then `src/other.ts:150`.\n",
+      2,
+    );
 
     await page.locator("[data-file-ref]").first().click();
     await expect(page.locator(".fp-path")).toHaveText("src/cache.ts");

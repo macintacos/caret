@@ -18,6 +18,7 @@
 import type { Page } from "@playwright/test";
 
 import { fileRefCount, makeProject, settleDrawer } from "@test/e2e/support/file-refs.ts";
+import type { Daemon } from "@test/e2e/support/fixtures.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
 import { MIN_APP_WIDTH_PX, NARROW_WIDTH_PX, TIGHT_WIDTH_PX } from "@ui/src/lib/layout.ts";
@@ -52,6 +53,19 @@ function laneGeometry(page: Page): Promise<{
   });
 }
 
+/** Seed a plan citing `src/cache.ts` at `cwd`, set the viewport, and
+ * navigate — before opening (or driving) the preview itself. */
+async function seedCacheDrawer(
+  daemon: Daemon,
+  page: Page,
+  cwd: string,
+  viewport: { width: number; height: number },
+): Promise<void> {
+  await daemon.seed({ cwd, plan: "# Refs\n\nEdit `src/cache.ts` to fix it.\n" });
+  await page.setViewportSize(viewport);
+  await page.goto("/");
+}
+
 /** Open the preview for the first resolved reference in the plan, and wait out
  * the lane's opening wipe so every rect below is measured at its settled size. */
 async function openPreview(page: Page): Promise<void> {
@@ -63,15 +77,60 @@ async function openPreview(page: Page): Promise<void> {
   await settleDrawer(page);
 }
 
+/** Arm a `__drawerRemovals` counter that increments each time the lane leaves
+ * the DOM — so a spec asserting the drawer never closed across an action can
+ * check `0` rather than trusting a snapshot. */
+async function armDrawerRemovalCounter(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const w = window as unknown as { __drawerRemovals: number };
+    w.__drawerRemovals = 0;
+    new MutationObserver((records) => {
+      for (const r of records) {
+        for (const node of r.removedNodes) {
+          if (node instanceof Element && node.hasAttribute("data-file-drawer")) {
+            w.__drawerRemovals += 1;
+          }
+        }
+      }
+    }).observe(document.querySelector(".diff-surface") as Node, { childList: true });
+  });
+}
+
+/** Read `armDrawerRemovalCounter`'s counter. */
+function drawerRemovals(page: Page): Promise<number> {
+  return page.evaluate(() => (window as unknown as { __drawerRemovals: number }).__drawerRemovals);
+}
+
+/** Arm a log of every `animationstart` firing on the lane itself — the
+ * closing wipe's animation-name, captured live since the class it fires on
+ * is gone once the wipe has played out. */
+async function armLaneWipeLog(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const w = window as unknown as { __wipes: string[] };
+    w.__wipes = [];
+    window.addEventListener(
+      "animationstart",
+      (e) => {
+        const t = e.target as Element | null;
+        if (t?.hasAttribute("data-file-drawer")) w.__wipes.push(e.animationName);
+      },
+      { capture: true },
+    );
+  });
+}
+
+/** Read `armLaneWipeLog`'s log. */
+function laneWipes(page: Page): Promise<string[]> {
+  return page.evaluate(() => (window as unknown as { __wipes: string[] }).__wipes);
+}
+
 test("at a wide width the drawer docks right, taking space rather than covering the plan", async ({
   daemon,
   page,
 }) => {
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nEdit `src/cache.ts` to fix it.\n" });
-    await page.setViewportSize(WIDE);
-    await page.goto("/");
+    await seedCacheDrawer(daemon, page, proj.dir, WIDE);
 
     const before = await laneGeometry(page);
     expect(before?.drawer).toBeNull();
@@ -194,9 +253,7 @@ test("at a narrow width the drawer docks bottom, shortening the plan the same wa
 }) => {
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nEdit `src/cache.ts` to fix it.\n" });
-    await page.setViewportSize(NARROW);
-    await page.goto("/");
+    await seedCacheDrawer(daemon, page, proj.dir, NARROW);
 
     const before = await laneGeometry(page);
     await openPreview(page);
@@ -226,9 +283,7 @@ test("crossing the breakpoint re-docks the open drawer without closing it", asyn
 }) => {
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nEdit `src/cache.ts` to fix it.\n" });
-    await page.setViewportSize(WIDE);
-    await page.goto("/");
+    await seedCacheDrawer(daemon, page, proj.dir, WIDE);
     await openPreview(page);
 
     const drawer = page.locator("[data-file-drawer]");
@@ -239,19 +294,7 @@ test("crossing the breakpoint re-docks the open drawer without closing it", asyn
     // apart from "it closed and a new one opened" — the drawer is deliberately
     // NOT keyed on the edge, so the same instance survives and the excerpt is
     // never refetched.
-    await page.evaluate(() => {
-      const w = window as unknown as { __drawerRemovals: number };
-      w.__drawerRemovals = 0;
-      new MutationObserver((records) => {
-        for (const r of records) {
-          for (const node of r.removedNodes) {
-            if (node instanceof Element && node.hasAttribute("data-file-drawer")) {
-              w.__drawerRemovals += 1;
-            }
-          }
-        }
-      }).observe(document.querySelector(".diff-surface") as Node, { childList: true });
-    });
+    await armDrawerRemovalCounter(page);
 
     await page.setViewportSize(NARROW);
     await expect(handle).toHaveAttribute("aria-orientation", "horizontal");
@@ -262,11 +305,7 @@ test("crossing the breakpoint re-docks the open drawer without closing it", asyn
     await expect(handle).toHaveAttribute("aria-orientation", "vertical");
     await expect(page.locator("[data-file-preview] .fp-path")).toHaveText("src/cache.ts");
 
-    expect(
-      await page.evaluate(
-        () => (window as unknown as { __drawerRemovals: number }).__drawerRemovals,
-      ),
-    ).toBe(0);
+    expect(await drawerRemovals(page)).toBe(0);
   } finally {
     await proj.cleanup();
   }
@@ -278,11 +317,9 @@ test("dragging the handle resizes the lane, and each edge remembers its own size
 }) => {
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nEdit `src/cache.ts` to fix it.\n" });
     // Record the bottom lane's height first, so the right-edge drag below has a
     // before-value to be measured against.
-    await page.setViewportSize(NARROW);
-    await page.goto("/");
+    await seedCacheDrawer(daemon, page, proj.dir, NARROW);
     await openPreview(page);
     const bottomBefore = (await laneGeometry(page))?.drawer?.height ?? 0;
     expect(bottomBefore).toBeGreaterThan(0);
@@ -409,30 +446,14 @@ test("clicking a second filename swaps the drawer's contents in place", async ({
     await page.locator("[data-file-ref]").first().click();
     await expect(page.locator("[data-file-preview] .fp-path")).toHaveText("src/cache.ts");
 
-    await page.evaluate(() => {
-      const w = window as unknown as { __drawerRemovals: number };
-      w.__drawerRemovals = 0;
-      new MutationObserver((records) => {
-        for (const r of records) {
-          for (const node of r.removedNodes) {
-            if (node instanceof Element && node.hasAttribute("data-file-drawer")) {
-              w.__drawerRemovals += 1;
-            }
-          }
-        }
-      }).observe(document.querySelector(".diff-surface") as Node, { childList: true });
-    });
+    await armDrawerRemovalCounter(page);
 
     await page.locator("[data-file-ref]").nth(1).click();
     await expect(page.locator("[data-file-preview] .fp-path")).toHaveText("src/other.ts");
     await expect(page.locator("[data-file-preview]")).toContainText("OTHER_MARKER_1");
 
     // One click, one swap — the lane never closed in between.
-    expect(
-      await page.evaluate(
-        () => (window as unknown as { __drawerRemovals: number }).__drawerRemovals,
-      ),
-    ).toBe(0);
+    expect(await drawerRemovals(page)).toBe(0);
   } finally {
     await proj.cleanup();
   }
@@ -448,9 +469,7 @@ test("no surface overflows the viewport at any breakpoint with the drawer open",
   // left open across the sweep, so each width is measured with it docked.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nEdit `src/cache.ts` to fix it.\n" });
-    await page.setViewportSize(WIDE);
-    await page.goto("/");
+    await seedCacheDrawer(daemon, page, proj.dir, WIDE);
     await openPreview(page);
 
     for (const width of [
@@ -483,26 +502,10 @@ test("the lane wipes out again when the preview is dismissed", async ({ daemon, 
   // lane at that moment, and only then expects it gone.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({
-      cwd: proj.dir,
-      plan: "# Refs\n\nEdit `src/cache.ts` to fix it.\n",
-    });
-    await page.setViewportSize(WIDE);
-    await page.goto("/");
+    await seedCacheDrawer(daemon, page, proj.dir, WIDE);
     await openPreview(page);
 
-    await page.evaluate(() => {
-      const w = window as unknown as { __wipes: string[] };
-      w.__wipes = [];
-      window.addEventListener(
-        "animationstart",
-        (e) => {
-          const t = e.target as Element | null;
-          if (t?.hasAttribute("data-file-drawer")) w.__wipes.push(e.animationName);
-        },
-        { capture: true },
-      );
-    });
+    await armLaneWipeLog(page);
 
     // Dismiss through the header's close circle — the pointer's route out; an
     // outside click closes nothing (EXC-1067).
@@ -510,13 +513,7 @@ test("the lane wipes out again when the preview is dismissed", async ({ daemon, 
 
     // The collapse starts on the lane, and the excerpt is still inside it.
     await expect
-      .poll(() =>
-        page.evaluate(() =>
-          (window as unknown as { __wipes: string[] }).__wipes.some((n) =>
-            n.includes("fd-close-right"),
-          ),
-        ),
-      )
+      .poll(async () => (await laneWipes(page)).some((n) => n.includes("fd-close-right")))
       .toBe(true);
 
     // …and once it has played, the lane is gone and the plan has the room back.
@@ -546,6 +543,20 @@ const COEXIST = {
 // fails loudly rather than going quiet.
 const COEXIST_PLAN =
   "# Refs\n\nEdit `src/cache.ts` and `src/other.ts`, both of which live under `src`.\n";
+
+/** Seed COEXIST_PLAN against a COEXIST project at `viewport` — the arrange
+ * every EXC-1129/1137 coexistence spec shares before it decides whether to
+ * open the lane, the card, or both. */
+async function seedCoexist(
+  daemon: Daemon,
+  page: Page,
+  dir: string,
+  viewport: { width: number; height: number },
+): Promise<void> {
+  await daemon.seed({ cwd: dir, plan: COEXIST_PLAN });
+  await page.setViewportSize(viewport);
+  await page.goto("/");
+}
 
 /**
  * Open the excerpt lane, let it settle, then open the folder card beside it.
@@ -583,15 +594,33 @@ async function cardRect(page: Page): Promise<DOMRect> {
   return el.evaluate((node) => node.getBoundingClientRect().toJSON() as DOMRect);
 }
 
+/** Settle the lane, then assert the card was pushed clear of it on `edge` —
+ * the newly-opened-or-re-docked lane must no longer overlap `before`, and the
+ * card's settled rect must now clear the lane's edge on the same axis. */
+async function expectCardPushedClear(
+  page: Page,
+  before: DOMRect,
+  edge: "right" | "bottom",
+): Promise<void> {
+  await settleDrawer(page);
+  const drawer = (await laneGeometry(page))?.drawer;
+  expect(drawer).toBeTruthy();
+  if (edge === "right") {
+    expect(before.right).toBeGreaterThan(drawer!.left);
+    expect((await cardRect(page)).right).toBeLessThanOrEqual(drawer!.left);
+  } else {
+    expect(before.bottom).toBeGreaterThan(drawer!.top);
+    expect((await cardRect(page)).bottom).toBeLessThanOrEqual(drawer!.top);
+  }
+}
+
 test("at a wide width the card is placed clear of the right-docked lane", async ({
   daemon,
   page,
 }) => {
   const proj = await makeProject(COEXIST);
   try {
-    await daemon.seed({ cwd: proj.dir, plan: COEXIST_PLAN });
-    await page.setViewportSize(WIDE);
-    await page.goto("/");
+    await seedCoexist(daemon, page, proj.dir, WIDE);
     await openLaneThenCard(page);
 
     const drawer = (await laneGeometry(page))?.drawer;
@@ -608,9 +637,7 @@ test("at a narrow width the card is placed clear of the bottom-docked lane", asy
 }) => {
   const proj = await makeProject(COEXIST);
   try {
-    await daemon.seed({ cwd: proj.dir, plan: COEXIST_PLAN });
-    await page.setViewportSize(NARROW);
-    await page.goto("/");
+    await seedCoexist(daemon, page, proj.dir, NARROW);
     await openLaneThenCard(page);
 
     const drawer = (await laneGeometry(page))?.drawer;
@@ -629,9 +656,7 @@ test("at a narrow width the card is placed clear of the bottom-docked lane", asy
 test("a lane opened from a file row pushes the card clear of it", async ({ daemon, page }) => {
   const proj = await makeProject(COEXIST);
   try {
-    await daemon.seed({ cwd: proj.dir, plan: COEXIST_PLAN });
-    await page.setViewportSize(WIDE);
-    await page.goto("/");
+    await seedCoexist(daemon, page, proj.dir, WIDE);
     await openCardAlone(page);
 
     // The card is where a lane would land: without the re-place it would be sat
@@ -644,12 +669,7 @@ test("a lane opened from a file row pushes the card clear of it", async ({ daemo
     // few ms into the wipe — every rect below would be read off a lane still a
     // sliver of its settled width. The app measures mid-wipe on purpose (that is
     // what `laneEdge` is for); the assertion must not.
-    await settleDrawer(page);
-
-    const drawer = (await laneGeometry(page))?.drawer;
-    expect(drawer).toBeTruthy();
-    expect(before.right).toBeGreaterThan(drawer!.left);
-    expect((await cardRect(page)).right).toBeLessThanOrEqual(drawer!.left);
+    await expectCardPushedClear(page, before, "right");
   } finally {
     await proj.cleanup();
   }
@@ -665,20 +685,13 @@ test("at a narrow width the row-opened lane pushes the card clear of the bottom 
   // dock only narrows width, where the clamp slides.
   const proj = await makeProject(COEXIST);
   try {
-    await daemon.seed({ cwd: proj.dir, plan: COEXIST_PLAN });
-    await page.setViewportSize(NARROW);
-    await page.goto("/");
+    await seedCoexist(daemon, page, proj.dir, NARROW);
     await openCardAlone(page);
 
     const before = await cardRect(page);
     await page.locator('[data-folder-tree] [data-item-path="other.ts"]').click();
     await expect(page.locator("[data-file-preview] .fp-path")).toHaveText("src/other.ts");
-    await settleDrawer(page);
-
-    const drawer = (await laneGeometry(page))?.drawer;
-    expect(drawer).toBeTruthy();
-    expect(before.bottom).toBeGreaterThan(drawer!.top);
-    expect((await cardRect(page)).bottom).toBeLessThanOrEqual(drawer!.top);
+    await expectCardPushedClear(page, before, "bottom");
   } finally {
     await proj.cleanup();
   }
@@ -699,9 +712,7 @@ test("a lane the reader opened from the plan leaves the card where it is", async
   // and the test would pass with the guard deleted.
   const proj = await makeProject(COEXIST);
   try {
-    await daemon.seed({ cwd: proj.dir, plan: COEXIST_PLAN });
-    await page.setViewportSize(WIDE);
-    await page.goto("/");
+    await seedCoexist(daemon, page, proj.dir, WIDE);
     await openCardAlone(page);
 
     await page.locator("[data-file-ref]").first().click();
@@ -742,9 +753,7 @@ test("a row clicked during the lane's closing wipe still pushes the card clear",
   // it never measured.
   const proj = await makeProject(COEXIST);
   try {
-    await daemon.seed({ cwd: proj.dir, plan: COEXIST_PLAN });
-    await page.setViewportSize(WIDE);
-    await page.goto("/");
+    await seedCoexist(daemon, page, proj.dir, WIDE);
     await openCardAlone(page);
 
     // A lane opened from the PLAN, which correctly does not move the card
@@ -792,12 +801,7 @@ test("a row clicked during the lane's closing wipe still pushes the card clear",
     // when the row was clicked, which is the premise the rest of this test rests on.
     expect(sawClosing, "the lane was mid-wipe when the row was clicked").toBe(true);
     await expect(page.locator("[data-file-preview] .fp-path")).toHaveText("src/other.ts");
-    await settleDrawer(page);
-
-    const drawer = (await laneGeometry(page))?.drawer;
-    expect(drawer).toBeTruthy();
-    expect(before.right).toBeGreaterThan(drawer!.left);
-    expect((await cardRect(page)).right).toBeLessThanOrEqual(drawer!.left);
+    await expectCardPushedClear(page, before, "right");
   } finally {
     await proj.cleanup();
   }
@@ -806,23 +810,10 @@ test("a row clicked during the lane's closing wipe still pushes the card clear",
 test("Escape plays the same closing wipe", async ({ daemon, page }) => {
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nEdit `src/cache.ts` to fix it.\n" });
-    await page.setViewportSize(NARROW);
-    await page.goto("/");
+    await seedCacheDrawer(daemon, page, proj.dir, NARROW);
     await openPreview(page);
 
-    await page.evaluate(() => {
-      const w = window as unknown as { __wipes: string[] };
-      w.__wipes = [];
-      window.addEventListener(
-        "animationstart",
-        (e) => {
-          const t = e.target as Element | null;
-          if (t?.hasAttribute("data-file-drawer")) w.__wipes.push(e.animationName);
-        },
-        { capture: true },
-      );
-    });
+    await armLaneWipeLog(page);
 
     // Safe mode swallows keystrokes for a beat after the view gains focus, so
     // retry the press until the lane actually starts leaving.
@@ -832,7 +823,7 @@ test("Escape plays the same closing wipe", async ({ daemon, page }) => {
     }).toPass();
 
     // The bottom dock collapses on its own dimension, not the right one's.
-    const wipes = await page.evaluate(() => (window as unknown as { __wipes: string[] }).__wipes);
+    const wipes = await laneWipes(page);
     expect(wipes.some((n) => n.includes("fd-close-bottom"))).toBe(true);
     expect(wipes.some((n) => n.includes("fd-close-right"))).toBe(false);
   } finally {
