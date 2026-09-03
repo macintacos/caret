@@ -98,8 +98,6 @@ describe("UnsentCommentsDialog render", () => {
 
   test("with no pending comments it is a plain confirm — no warning, no preview, no divert, no 'anyway'", async () => {
     await mount({ ...rejectProps, items: [] });
-    // A bare confirmation: no comments warning, no preview list, no Request-changes
-    // divert, and the confirm button drops the "anyway".
     expect(description()?.textContent).not.toContain("pending comment");
     expect(q(".comments")).toBeNull();
     const requestChanges = [...document.body.querySelectorAll("button")].find((b) =>

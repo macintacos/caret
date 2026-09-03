@@ -75,7 +75,6 @@ test("daemon serves the hashed-asset build with zero failed same-origin requests
   expect(okJs.length).toBeGreaterThan(0);
   expect(okCss.length).toBeGreaterThan(0);
 
-  // No same-origin request failed and no console error fired during the load.
   expect(failures).toEqual([]);
   expect(consoleErrors).toEqual([]);
 });
@@ -141,6 +140,5 @@ test("a code-split shiki grammar chunk is served over the wire and applies", asy
   // it applied.
   expect(grammarChunks.length).toBeGreaterThan(0);
 
-  // No grammar chunk (nor any other same-origin request) failed during the load.
   expect(failures).toEqual([]);
 });

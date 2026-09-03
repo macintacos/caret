@@ -77,7 +77,7 @@ test("/ focuses the search input without typing a slash; the field shows a / hin
   const search = page.getByLabel("Search shortcuts");
 
   // ? opens the modal with focus on the dialog content — the input is not
-  // autofocused (:37-40), so ? and Esc keep toggling the modal.
+  // autofocused, so ? and Esc keep toggling the modal.
   await page.keyboard.press("?");
   await expect(dialog).toBeVisible();
 

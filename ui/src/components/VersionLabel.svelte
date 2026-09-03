@@ -24,7 +24,7 @@
 
 <style>
   /* The ^ is the caret brand glyph, so it carries the amber accent; the badge
-     chrome around it stays neutral (the outline variant). */
+     chrome around it stays neutral. */
   .caret {
     color: var(--accent);
     font-weight: 700;

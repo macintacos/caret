@@ -14,8 +14,6 @@
 
   let { alerts, onDismiss }: { alerts: AlertItem[]; onDismiss: (id: number) => void } = $props();
 
-  // Leading glyph per variant: success carries the check (the "it worked"
-  // affordance), destructive an x; a plain default alert leads with no icon.
   const ICONS: Record<AlertItem["variant"], IconName | null> = {
     default: null,
     success: "check",

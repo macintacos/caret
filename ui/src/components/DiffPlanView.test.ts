@@ -89,7 +89,6 @@ describe("DiffPlanView rendering", () => {
     await until(() => shadow(target)?.textContent?.includes("the docs") ?? false);
     const text = shadow(target)?.textContent ?? "";
     expect(text).toContain("the docs");
-    // The raw inline-link syntax is collapsed to the label.
     expect(text).not.toContain("](https://caret.test/docs)");
   });
 });

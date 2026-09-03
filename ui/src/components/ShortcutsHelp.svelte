@@ -215,7 +215,6 @@
     column-count: 1;
   }
   .help-group {
-    /* Keep each group whole — never split its rows across a column boundary. */
     break-inside: avoid;
     /* Vertical rhythm between stacked groups (column-gap is horizontal only). */
     margin-bottom: 1rem;

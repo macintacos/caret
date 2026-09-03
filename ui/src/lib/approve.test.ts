@@ -45,7 +45,6 @@ describe("approveLabel", () => {
       { id: "yolo", label: "Ship it & auto" },
     ];
     expect(approveLabel("yolo", variants)).toBe("Ship it & auto");
-    // An unknown id falls back to the first declared variant's label.
     expect(approveLabel("nope", variants)).toBe("Ship it");
   });
 });

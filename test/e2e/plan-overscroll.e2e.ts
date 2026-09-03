@@ -24,7 +24,6 @@ test("the reader can scroll past the end of the plan", async ({ daemon, page }) 
   // which is rendered unguarded, so it cannot stand in for this.
   await expect(page.locator(".diffview [data-line]").first()).toBeVisible();
 
-  // Scroll to the very bottom and wait for it to settle at max scroll.
   await view.evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
   await expect
     .poll(() => view.evaluate((el) => Math.round(el.scrollHeight - el.clientHeight - el.scrollTop)))

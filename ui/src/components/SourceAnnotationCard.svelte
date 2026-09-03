@@ -43,11 +43,8 @@
   }
   let { annotation, focused, onFocus, onEdit, onDelete, reviewContext }: Props = $props();
 
-  // UI-only expand state, owned per card so several comments on one line can be
-  // open at once (EXC-765): focusing or expanding one never collapses a sibling.
-  // Seeded from `focused` and nudged open when THIS card becomes the focused one
-  // (a navigator reveal), but never auto-collapsed when focus moves elsewhere —
-  // the reviewer's own open/close choice stands until they change it.
+  // Nudged open when THIS card becomes the focused one (a navigator reveal) —
+  // see the header comment for the general expand-state contract (EXC-765).
   // untrack the initial reads: `expanded` seeds from focus once at mount, and
   // `wasFocused` is the previous-value tracker the effect compares against — both
   // want focus's value now, not a reactive dependency on it (the effect owns that).

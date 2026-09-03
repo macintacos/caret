@@ -67,7 +67,6 @@ test("appends the reviewer notes section to an existing .md plan file", () => {
   writeFileSync(path, "# Canonical\n\nwrapped\n");
   appendReviewerNotesToPlanFile(path, "use the retry helper", recordingLog().log);
   const out = readFileSync(path, "utf8");
-  // The canonical plan is preserved and the note is appended below it.
   expect(out.startsWith("# Canonical\n\nwrapped\n")).toBe(true);
   expect(out).toContain("## Notes from the user");
   expect(out).toContain("use the retry helper");

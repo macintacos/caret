@@ -85,7 +85,6 @@ test("compare-versions controls and version options show the pointer cursor", as
   expect(bar.length).toBeGreaterThan(3);
   expect(bar.filter((b) => b.cursor !== "pointer")).toEqual([]);
 
-  // The version options inside a picker's dropdown.
   await page.getByLabel("Target version").click();
   await expect(page.getByRole("menuitemradio", { name: "v1" })).toBeVisible();
   const options = await page.$$eval("[role=menuitemradio]", (els) =>

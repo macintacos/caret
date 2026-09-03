@@ -183,18 +183,6 @@ function previewFailure(err: unknown): string {
 }
 
 /**
- * What one row shows in the preview panel: the file's lines around whatever the
- * reviewer cited, or a sentence saying why they are not there.
- *
- * The `key` is the path and the cited line together, which is what the answer
- * actually depends on — so narrowing a query that leaves this row highlighted
- * re-uses the lines already on screen instead of blanking and refetching them per
- * keystroke, while typing the `2` of `:42` does move the excerpt.
- *
- * The abort signal is what keeps a slow read from writing into a body the
- * reviewer has already arrowed away from — the excerpt and the colour both.
- */
-/**
  * Colours an excerpt already on screen, in place.
  *
  * A second pass rather than part of the fill, and deliberately: the panel waits
@@ -228,6 +216,18 @@ async function paintHighlight(
   });
 }
 
+/**
+ * What one row shows in the preview panel: the file's lines around whatever the
+ * reviewer cited, or a sentence saying why they are not there.
+ *
+ * The `key` is the path and the cited line together, which is what the answer
+ * actually depends on — so narrowing a query that leaves this row highlighted
+ * re-uses the lines already on screen instead of blanking and refetching them per
+ * keystroke, while typing the `2` of `:42` does move the excerpt.
+ *
+ * The abort signal is what keeps a slow read from writing into a body the
+ * reviewer has already arrowed away from — the excerpt and the colour both.
+ */
 function filePreview(
   excerpt: GetFileExcerpt,
   reviewId: string,

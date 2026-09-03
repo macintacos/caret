@@ -36,7 +36,6 @@ test("clicking the cwd path copies the absolute path and shows a success alert",
 
   await cwd.click();
 
-  // A success alert appears bottom-right.
   const alert = alerts(page);
   await expect(alert).toBeVisible();
   await expect(alert).toHaveAttribute("data-variant", "success");
@@ -61,7 +60,6 @@ test("success alerts stack and a dismiss removes one", async ({ daemon, page }) 
   // Two copies in quick succession stack (oldest on top, newer underneath).
   await expect(alerts(page)).toHaveCount(2);
 
-  // Dismissing the first via its × leaves the other standing.
   await alerts(page).first().getByRole("button", { name: "Dismiss" }).click();
   await expect(alerts(page)).toHaveCount(1);
 });

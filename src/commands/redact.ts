@@ -5,10 +5,6 @@
 import { redactLogFiles } from "@/redact/node.ts";
 
 export function runRedactSubcommand(): void {
-  // Scrub the state-dir logs into shareable *.redacted.log siblings (EXC-399).
-  // Human-facing output, not hook JSON: print each written path, or say nothing
-  // was found. Failures report to stderr with a non-zero exit — never the
-  // review path's deny JSON.
   try {
     const written = redactLogFiles();
     if (written.length === 0) {

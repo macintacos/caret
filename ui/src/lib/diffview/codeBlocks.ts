@@ -33,9 +33,9 @@ export function codeBlockRanges(text: string): CodeBlockRange[] {
     if (!FENCE.test(lines[i] ?? "")) continue;
     const line = i + 1;
     if (start == null) {
-      start = line; // opening fence
+      start = line;
     } else {
-      ranges.push({ start, end: line }); // closing fence
+      ranges.push({ start, end: line });
       start = null;
     }
   }

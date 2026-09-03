@@ -11,10 +11,7 @@
 // down: on `pagehide` the tab tells the daemon it is going away, so a closed tab
 // stops counting at once and the next plan correctly opens a fresh tab.
 //
-// `pagehide` (not `unload`) is the reliable close hook for sendBeacon. A
-// `persisted` pagehide is a bfcache freeze, not a teardown: the page can be
-// restored and resume polling, so it is not a real departure and must not
-// retract presence — only an actual unload (persisted false) does.
+// `pagehide` (not `unload`) is the reliable close hook for sendBeacon.
 // Framework-agnostic and unit-tested in isolation; App.svelte wires it to
 // `window` (cf. safeMode.ts).
 

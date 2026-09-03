@@ -228,9 +228,9 @@ test("prepare rejects BRANCH_DIVERGED when the remote release branch is not an a
     refs: {
       "origin/trunk": "trunksha",
       "release/v0.1.0": "localsha",
-      "origin/release/v0.1.0": "remotesha", // diverged from local
+      "origin/release/v0.1.0": "remotesha",
     },
-    ancestor: false, // remote is not an ancestor of local
+    ancestor: false,
     files: {
       "package.json": pkg("0.1.0"),
       ".claude-plugin/plugin.json": pkg("0.1.0"),
@@ -371,7 +371,7 @@ test("finalize skips npm publish when the version is already on the registry", a
   const { deps, calls } = makeReleaseHarness({ ...FINALIZE_OPTS, npmPublishedVersions: ["0.1.0"] });
   const r = await finalize(deps, { dryRun: false });
   expect(calls).toContain("releaseCreate:v0.1.0"); // the GitHub release still happens
-  expect(calls).not.toContain("npmPublish"); // but npm publish is skipped
+  expect(calls).not.toContain("npmPublish");
   expect(r.npmPublished).toBe(false);
 });
 
@@ -388,8 +388,8 @@ test("finalize still publishes to npm when the GitHub release already exists (re
     },
   });
   const r = await finalize(deps, { dryRun: false });
-  expect(calls).not.toContain("releaseCreate:v0.1.0"); // release reused
-  expect(calls).toContain("npmPublish"); // npm publish still runs
+  expect(calls).not.toContain("releaseCreate:v0.1.0");
+  expect(calls).toContain("npmPublish");
   expect(r.npmPublished).toBe(true);
 });
 
@@ -437,7 +437,7 @@ test("finalize resumes after its own tag was pushed rather than crying NOT_MERGE
   });
   const r = await finalize(deps, { dryRun: false });
   expect(r.tag).toBe("v0.1.0");
-  expect(calls).toContain("npmPublish"); // the step that failed last time completes
+  expect(calls).toContain("npmPublish");
   expect(r.npmPublished).toBe(true);
 });
 
@@ -483,7 +483,7 @@ test("finalize rejects TAG_EXISTS when the local tag points at another commit", 
     },
   });
   await expectGuard(finalize(deps, { dryRun: false }), "TAG_EXISTS");
-  expect(calls).not.toContain("createTag:v0.1.0@mergedsha"); // never re-tagged
+  expect(calls).not.toContain("createTag:v0.1.0@mergedsha");
   expect(calls).not.toContain("pushTag:v0.1.0"); // never pushed the stale tag
 });
 
@@ -557,8 +557,8 @@ test("finalize with a notes file refreshes the notes of a reused release", async
     }),
   );
   await finalize(deps, { dryRun: false, notesFile: NOTES_FILE });
-  expect(calls).not.toContain("releaseCreate:v0.1.0"); // reused, not recreated
-  expect(calls).toContain("releaseEdit:v0.1.0"); // notes refreshed in place
+  expect(calls).not.toContain("releaseCreate:v0.1.0");
+  expect(calls).toContain("releaseEdit:v0.1.0");
   expect(releases.get("v0.1.0")?.notes).toContain("Ships the widget.");
 });
 
@@ -586,7 +586,7 @@ test("finalize without a notes file leaves a reused release's notes untouched", 
       },
     },
   });
-  await finalize(deps, { dryRun: false }); // no notes file
+  await finalize(deps, { dryRun: false });
   expect(calls).not.toContain("releaseEdit:v0.1.0");
   expect(releases.get("v0.1.0")?.notes).toBe("Prior notes the operator published.");
 });

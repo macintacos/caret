@@ -261,7 +261,7 @@ describe("groupedHeadingMatches", () => {
   });
 
   test("gathers two matching siblings under a single shared trail", () => {
-    // AC3, and the reason the model groups at all: one header, two rows.
+    // The reason the model groups at all: one header, two rows.
     const headings = extractHeadings("# A\n\n## Target one\n\n## Target two\n");
     expect(shape(groupedHeadingMatches(headings, "target"))).toEqual(["A[Target one, Target two]"]);
   });

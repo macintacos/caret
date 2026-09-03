@@ -14,7 +14,6 @@ test("the options menu approves the review in a chosen variant", async ({ daemon
   await page.goto("/");
   await planSurface(page);
 
-  // Open the split-button's variant menu — both non-default variants are listed.
   await page.getByRole("button", { name: "Approve options" }).click();
   await expect(page.getByRole("menuitem", { name: "Approve & accept edits" })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Approve & auto mode" })).toBeVisible();

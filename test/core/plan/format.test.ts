@@ -7,7 +7,6 @@ test("a bare fenced code block is untagged", () => {
   expect(hasUntaggedCodeBlock("# Plan\n\n```\nconst x = 1;\n```\n")).toBe(true);
 });
 
-// An info string present on every fence → no violation.
 test("a fenced code block with a language marker is tagged", () => {
   expect(hasUntaggedCodeBlock("# Plan\n\n```ts\nconst x = 1;\n```\n")).toBe(false);
 });
@@ -64,13 +63,11 @@ test("literal fences inside a tagged outer fence are not flagged", () => {
   expect(hasUntaggedCodeBlock(md)).toBe(false);
 });
 
-// A tagged block and a bare block together → still a violation.
 test("a mix with one bare fence is untagged", () => {
   const md = "```ts\nconst a = 1;\n```\n\nmore\n\n```\nbare\n```\n";
   expect(hasUntaggedCodeBlock(md)).toBe(true);
 });
 
-// The format-deny message is actionable and distinct from the fail-safe deny.
 test("the deny message names the fix and is distinct from the fail-safe deny", () => {
   expect(PLAN_FORMAT_DENY_MESSAGE).toContain("language marker");
   expect(PLAN_FORMAT_DENY_MESSAGE.toLowerCase()).toContain("text");

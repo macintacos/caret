@@ -159,9 +159,9 @@ export async function finalize(
   );
 
   // Resolve the GitHub release: reuse an existing one, preview it in a dry run,
-  // or tag + create it. An existing release no longer returns early — finalize
-  // falls through to the npm publish below, so a re-run after a
-  // release-created-but-npm-publish-failed partial failure still completes.
+  // or tag + create it. An existing release still falls through to the npm
+  // publish below, so a re-run after a release-created-but-npm-publish-failed
+  // partial failure still completes.
   const existing = await deps.github.releaseView(tag);
   let releaseUrl: string | null;
   if (existing !== null) {

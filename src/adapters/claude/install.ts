@@ -12,11 +12,9 @@ import { readJsonFileSync } from "@/lib/json-file.ts";
  * "caret" per src/commands/install/claude.ts. */
 const PLUGIN_ID = "caret@caret";
 
-/** Best-effort read of caret's Claude Code install state. Every miss degrades
- * to "unknown". Reads ONLY caret's own entries — never any other settings key
- * (privacy). hookInUserSettings is the NORMAL-false probe: caret's hooks ride
- * inside the plugin's own hooks.json, so a user-settings hook means a MANUAL
- * entry; false when settings parse but hold none, "unknown" when unreadable. */
+/** hookInUserSettings is the NORMAL-false probe: caret's hooks ride inside
+ * the plugin's own hooks.json, so a user-settings hook means a MANUAL entry;
+ * false when settings parse but hold none, "unknown" when unreadable. */
 export function readClaudeInstallState(): InstallProbe {
   return {
     pluginVersion: readPluginVersion(installedPluginsFile()),

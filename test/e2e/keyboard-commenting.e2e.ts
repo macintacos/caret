@@ -90,7 +90,6 @@ test("c opens the composer on the cursor line and ⌘Enter submits a line commen
   await expect(composer).toBeVisible();
   await expect(composer.locator(".label")).toHaveText(`Line ${line}`);
 
-  // Type real keystrokes into the autofocused editor, then submit with ⌘Enter.
   const input = composerInput(composer);
   await expect(input).toBeFocused();
   await page.keyboard.type("Comment from the keyboard.");
@@ -123,13 +122,11 @@ test("V + j selects a line range that c comments and ⌘Enter submits", async ({
   await page.keyboard.press("j");
   await page.keyboard.press("j");
   await expectCursorLine(page, 3);
-  // The visual selection mirrors into the amber band: three selected rows.
   await expect(selectedLines(page)).toHaveCount(3);
   // The aria-live range readout announces the span (keyboard parity with the
   // mouse-drag readout).
   await expect(page.locator(".drag-readout")).toHaveText("Lines 1–3");
 
-  // c opens a range composer over the selection; its label reads the span.
   await page.keyboard.press("c");
   const composer = composerOf(page);
   await expect(composer).toBeVisible();

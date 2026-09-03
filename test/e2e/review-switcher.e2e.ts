@@ -23,17 +23,15 @@ test("switches the active plan through the dropdown, both ways", async ({ daemon
   await expect(trigger).toBeVisible();
   await expect(trigger).toHaveAccessibleDescription("2 reviews pending");
 
-  // Open the menu: both plans are listed as menu items.
   await trigger.click();
   await expect(page.getByRole("menuitem", { name: "Plan Alpha" })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Plan Beta" })).toBeVisible();
 
-  // Pick Alpha → the trigger reflects it as the active plan.
   await page.getByRole("menuitem", { name: "Plan Alpha" }).click();
   await expect(trigger.locator(".title")).toHaveText("Plan Alpha");
 
-  // Pick Beta → the active plan switches back the other way, proving the wiring
-  // isn't a no-op that only ever lands on the initial selection.
+  // Switching to Beta proves the wiring isn't a no-op that only ever lands on
+  // the initial selection.
   await trigger.click();
   await page.getByRole("menuitem", { name: "Plan Beta" }).click();
   await expect(trigger.locator(".title")).toHaveText("Plan Beta");
@@ -62,6 +60,5 @@ test("Escape closes the switcher menu, leaving the active plan unchanged", async
     await page.keyboard.press("Escape");
     await expect(alpha).toHaveCount(0, { timeout: 500 });
   }).toPass();
-  // The title is untouched — Escape dismisses without selecting.
   await expect(trigger.locator(".title")).toHaveText(before ?? "");
 });

@@ -68,9 +68,6 @@
     reviewContext,
   }: Props = $props();
 
-  // "edit" reuses this whole surface to revise a saved comment: same Card, same
-  // MarkdownEditor, same layout — only the action row and the accessible names
-  // change, so the reviewer never meets a second, differently-shaped editor.
   const isEdit = $derived(mode === "edit");
 
   // Seed from `initial` once, at mount: a resumed scratch mounts a fresh composer
@@ -79,9 +76,8 @@
   // clobber in-progress edits. MarkdownEditor keeps this in sync via onInput.
   let comment = $state(untrack(() => initial));
 
-  // Surface the seed and every edit to the host so it always holds the live text:
-  // if the reviewer opens a different range without dismissing first, the host
-  // retains this text as a scratch rather than losing it.
+  // Fires immediately with the seeded value too (Svelte effects run on mount),
+  // not just later edits — see the onInput prop doc for why the host wants this.
   $effect(() => {
     onInput?.(comment);
   });

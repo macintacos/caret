@@ -29,9 +29,8 @@ import { logError } from "@/lib/log.ts";
 import { createProgram, runProgram } from "@/lib/program.ts";
 
 // The CLI command tree (EXC-472). Each subcommand's action threads its parsed
-// options into the run functions, replacing the former process.argv reads. The
-// daemon self-spawn vector (daemonCommand) and runReviewSubcommand's fail-safe
-// are independent of this layer and unchanged.
+// options into the run functions. The daemon self-spawn vector (daemonCommand)
+// and runReviewSubcommand's fail-safe are independent of this layer.
 function buildProgram(): Command {
   const program = createProgram(
     "caret",

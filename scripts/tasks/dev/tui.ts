@@ -157,7 +157,6 @@ export function renderFrame(state: FrameState, cols: number, rows: number): stri
   const pane = paneWidth(cols, left);
   const bodyRows = bodyRowsFor(rows);
 
-  // Right pane: the backlog wrapped to the pane width, windowed by the offset.
   const wrapped: string[] = [];
   for (const line of state.lines) wrapped.push(...wrapAnsi(line, pane));
   const offset = clampOffset(state.offset, wrapped.length, bodyRows);

@@ -522,7 +522,6 @@
     border-radius: 50%;
     background: var(--attention);
   }
-  /* The esc hint, in the sidebar footer. */
   .nav-hint {
     display: flex;
     align-items: center;

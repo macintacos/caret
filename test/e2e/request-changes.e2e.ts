@@ -31,8 +31,6 @@ test("dialog opens, Escape closes, Cmd/Ctrl+Enter submits a rejection with feedb
   await waitPastSafeModeGrace(page);
 
   const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
-  // The general comment is now the live-markdown editor (a CodeMirror textbox),
-  // located by its accessible name.
   const editor = dialog.getByRole("textbox", { name: "General comment" });
 
   // Open → Escape closes. The editor autofocuses on open, so the Escape key

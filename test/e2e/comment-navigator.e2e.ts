@@ -24,8 +24,6 @@ test("opens from the strip, filters + underlines by text, and reveals comments a
   page,
 }) => {
   const id = await daemon.seed();
-  // Two committed inline comments plus one unsent composer scratch (a draft), on
-  // distinct lines with distinct text.
   await daemon.putDraft(id, {
     annotations: [
       { id: "ann-1", startLine: 7, endLine: 7, comment: "warm the cache path" },
@@ -73,7 +71,6 @@ test("opens from the strip, filters + underlines by text, and reveals comments a
   await nav.locator("[data-nav-row].draft").click();
   await expect(nav.locator('[aria-current="true"].draft')).toContainText("an unsent thought");
 
-  // Escape dismisses the panel.
   await page.keyboard.press("Escape");
   await expect(nav).toHaveCount(0);
 });

@@ -47,7 +47,6 @@ test("narrow: secondaries collapse into the overflow menu, count preserved", asy
 
   await page.setViewportSize({ width: 500, height: 800 });
 
-  // The inline secondaries hide; the overflow trigger takes their place.
   await expect(page.getByRole("button", { name: "Reject" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Request changes" })).toHaveCount(0);
   const trigger = page.getByRole("button", { name: "More actions" });
@@ -55,12 +54,10 @@ test("narrow: secondaries collapse into the overflow menu, count preserved", asy
   // The pending count rides the trigger so it stays visible in the collapsed row.
   await expect(trigger.locator(".count")).toHaveText("2");
 
-  // Opening the menu surfaces both actions.
   await trigger.click();
   await expect(page.getByRole("menuitem", { name: "Request changes" })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Reject" })).toBeVisible();
 
-  // Request changes routes through to its dialog.
   await page.getByRole("menuitem", { name: "Request changes" }).click();
   await expect(page.getByRole("dialog", { name: "Send the plan back for revision" })).toBeVisible();
 });

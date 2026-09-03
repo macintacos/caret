@@ -4,9 +4,7 @@
 // a still-mounted component. A host that gates the modal with `{#if}` rips it out
 // in the same tick, so the exit never runs. This owns the two facts a host needs to
 // hold the surface open a moment longer: whether it is present, and which open it
-// belongs to. Pure and node-free — the modals drive it, so the re-open-mid-exit
-// rule is unit-testable without mounting (see modalPresence.test.ts; svelte-rules.md
-// "state modules are plain factories, not runes-in-.svelte.ts").
+// belongs to.
 
 export interface PresenceStore {
   /** Whether the surface is in the DOM — open, or still playing its exit. */

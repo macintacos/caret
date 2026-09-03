@@ -21,8 +21,6 @@ import { planSurface } from "@test/e2e/support/source-view.ts";
 const cursor = (page: Page) =>
   page.locator(".diffview [data-content] [data-line][data-caret-cursor]");
 
-// Two committed inline comments on distinct lines with distinct text — the rows
-// the keyboard walks.
 const ANNOTATIONS = [
   { id: "ann-1", startLine: 7, endLine: 7, comment: "warm the cache path" },
   { id: "ann-2", startLine: 13, endLine: 13, comment: "verify the sidecar replay" },
@@ -44,7 +42,6 @@ test("Shift+C summons the navigator, focuses the list, and advertises its shortc
   await expect(toggle).toHaveAttribute("aria-keyshortcuts", "Shift+C");
   await expect(nav).toHaveCount(0);
 
-  // Shift+C opens it and drops focus on the first row, so j/k work immediately.
   await page.keyboard.press("C");
   await expect(nav).toBeVisible();
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
@@ -80,7 +77,6 @@ test("j/k walk the rows; Enter reveals without dismissing; / drops into search",
 
   await page.keyboard.press("C");
   await expect(items.first()).toBeFocused();
-  // j moves the roving focus down a row.
   await page.keyboard.press("j");
   await expect(items.nth(1)).toBeFocused();
 

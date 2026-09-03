@@ -152,7 +152,7 @@ test("redactLogFiles writes scrubbed 0600 .redacted.log siblings, returns their 
   expect(scrubbed).not.toContain(home);
   expect(scrubbed).toContain("~/src");
   expect(statSync(sibling).mode & 0o777).toBe(0o600);
-  expect(readFileSync(file, "utf-8")).toBe(original); // original untouched
+  expect(readFileSync(file, "utf-8")).toBe(original);
 });
 
 test("redactLogFiles skips absent files", async () => {

@@ -116,10 +116,10 @@ test("approvedMessage without notes stays the bare proceed message", () => {
 
 test("deniedMessage carries the feedback and resubmit instruction, without echoing the plan", () => {
   const msg = deniedMessage("narrow step 2");
-  expect(msg).toContain("narrow step 2"); // reviewer feedback, verbatim
-  expect(msg).toContain("requested CHANGES"); // the change-request preamble
-  expect(msg).toContain(REVIEW_TOOL); // resubmit instruction
-  expect(msg).not.toContain("Current plan"); // the plan is no longer echoed
+  expect(msg).toContain("narrow step 2");
+  expect(msg).toContain("requested CHANGES");
+  expect(msg).toContain(REVIEW_TOOL);
+  expect(msg).not.toContain("Current plan");
 });
 
 test("planningSteer names the review tool and steers away from plan_exit", () => {
@@ -128,7 +128,7 @@ test("planningSteer names the review tool and steers away from plan_exit", () =>
   expect(s.toLowerCase()).toContain("plan_exit");
 });
 
-// --- parseReviewUrl / reviewPendingTitle (review-link surfacing, EXC-691) ---
+// --- parseReviewUrl (review-link surfacing, EXC-691) ---
 
 test("parseReviewUrl extracts the review URL from caret's stderr line", () => {
   const url = "http://caret.localhost:42718/?review=abc123";
@@ -178,13 +178,13 @@ test("applyCaretConfig is idempotent and preserves existing config", () => {
     agent: { plan: { mode: "primary", permission: { edit: "allow" } } },
   };
   applyCaretConfig(config);
-  applyCaretConfig(config); // second pass must not duplicate
+  applyCaretConfig(config);
   const pt = (config.experimental as { primary_tools: string[] }).primary_tools;
   expect(pt).toEqual(["other_tool", REVIEW_TOOL]);
   const plan = (config.agent as { plan: { mode: string; permission: Record<string, string> } })
     .plan;
-  expect(plan.mode).toBe("primary"); // preserved
-  expect(plan.permission.edit).toBe("allow"); // preserved
+  expect(plan.mode).toBe("primary");
+  expect(plan.permission.edit).toBe("allow");
   expect(plan.permission[REVIEW_TOOL]).toBe("allow");
 });
 
@@ -358,7 +358,7 @@ test("the review tool denies: a plan-agent call returns the feedback without ech
   const hooks = await buildHooks(stubRunner(`{"behavior":"deny","feedback":"narrow it"}`));
   const out = await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P\nbody" }, ctx("plan"));
   expect(String(out)).toContain("narrow it");
-  expect(String(out)).not.toContain("body"); // the submitted plan is not re-pasted
+  expect(String(out)).not.toContain("body");
 });
 
 // A plugin client whose `session.get` is `get` — the one call the review tool's

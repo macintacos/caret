@@ -2,8 +2,7 @@
   // The active-plan switcher. With one review it's an inert label; with several
   // it's a shadcn DropdownMenu (EXC-760) whose trigger carries the active title
   // and a count Badge, and whose items list each plan's title + abbreviated cwd.
-  // The hand-rolled listbox + click-away scrim it replaced are gone — bits-ui
-  // owns open/close, Escape, outside-click, and focus.
+  // bits-ui owns open/close, Escape, outside-click, and focus.
   import { shortCwd } from "$lib/cwd.ts";
   import { stripTitleLinks } from "$lib/title.ts";
   import type { ClientReview } from "@core/lib/types";

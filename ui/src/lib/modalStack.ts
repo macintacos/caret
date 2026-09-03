@@ -3,11 +3,8 @@
 // content']` in the DOM is the modal stacked highest. When ShortcutsHelp opens
 // above Settings, both register a capture-phase `/` handler — this decides which
 // one claims the key so `/` focuses the topmost modal's search, not whichever
-// registered its listener first. Pure and node-free: the modals drive it, so the
-// "take the last open portalled dialog" rule is unit-testable without mounting (see
-// modalStack.test.ts; svelte-rules.md "extract component logic to a testable lib
-// module"). The idiom was inlined in ShortcutsHelp.focusDialog; this is its one
-// source.
+// registered its listener first. ShortcutsHelp.focusDialog is the one caller;
+// keep new topmost-dialog logic here rather than duplicating it there.
 
 /** The topmost open dialog's content — the last `[data-slot='dialog-content']`
  * in document order, i.e. the modal stacked above any others. Null when none is

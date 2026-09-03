@@ -161,7 +161,7 @@ export const NEVER_IDLE_MS = 2147483647;
 // request and returns a 204 heartbeat after `heartbeatMs`, well before any
 // socket idle timeout can close the connection mid-wait. The invariant the
 // connection depends on is `idleTimeout > heartbeat`. The WebSocket/SSE
-// migration is deliberately DEFERRED (EXC-527 §2): Bun's WebSocket idle is
+// migration is deliberately DEFERRED (EXC-527): Bun's WebSocket idle is
 // hard-capped at 255s and `sendPings` does not reliably reset idle (a WS still
 // needs app-level heartbeats), so a rewrite relocates rather than removes this
 // timing — for a marginal latency win on a single-user laptop tool and the

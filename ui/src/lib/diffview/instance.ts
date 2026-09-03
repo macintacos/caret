@@ -1,11 +1,7 @@
 // Lifecycle controller for a @pierre/diffs view instance. One controller
-// backs one mounted component: it creates the instance on first sync, applies
-// option changes via setOptions (full replacement — the previous options are
-// spread in so untouched keys survive) plus a repaint, applies annotation
-// changes via setLineAnnotations plus a repaint, and recreates the instance
-// only when the content identity (contentKey) changes. The instance factory
-// is injected: components supply the real File/FileDiff constructors, tests a
-// recording fake.
+// backs one mounted component; the instance factory is injected so components
+// supply the real File/FileDiff constructors while tests supply a recording
+// fake.
 
 import { ensureCoreStyles } from "$lib/diffview/coreStyles.ts";
 

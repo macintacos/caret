@@ -80,9 +80,9 @@
   }
   /* The field parts carry shadcn's roomier default gaps; the pane's own rhythm is
      re-asserted here rather than in the vendored tree, which a re-sync reverts wholesale
-     (shadcn-rules.md § Adding a component that collides with the vendored tree). Svelte
-     does not scope-hash a class handed to a COMPONENT, so those selectors are written
-     :global, anchored on `.updates`, which is a plain element and still carries the hash. */
+     (shadcn-rules.md). Svelte does not scope-hash a class handed to a COMPONENT, so those
+     selectors are written :global, anchored on `.updates`, which is a plain element and
+     still carries the hash. */
   .updates :global(.update-section) {
     gap: 0.4rem;
   }

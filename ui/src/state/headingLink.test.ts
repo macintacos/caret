@@ -72,7 +72,6 @@ describe("takeHeadingSlug", () => {
     setParams({ heading: "tables" });
     expect(takeHeadingSlug()).toBe("tables");
     expect(new URLSearchParams(location.search).get("heading")).toBe(null);
-    // A second take after consumption yields null.
     expect(takeHeadingSlug()).toBe(null);
   });
 

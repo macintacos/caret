@@ -10,8 +10,8 @@ import { defineFlagPref } from "$lib/definePref.ts";
 const STORAGE_KEY = "caret:diffview:drag-hint-dismissed";
 
 // defineFlagPref registers the key for the `--fresh` reset (prefs.ts) and owns the
-// never-throw fail-safe. onError: true means an unreadable store (storage-disabled
-// or private mode) reports dismissed, so the hint is never re-nagged on every load.
+// never-throw fail-safe; onError: true sets the read-failure default (storage-disabled
+// or private mode).
 const pref = defineFlagPref(STORAGE_KEY, { onError: true });
 
 /** Whether the drag-to-comment hint has already been dismissed. Fail-safe: an

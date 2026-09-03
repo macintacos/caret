@@ -3,7 +3,7 @@
 // suite needs, and both suites share this one bun-test process. Each case below
 // reproduces one leak deterministically in a single file — register, then
 // exercise the native — so none of them depends on cross-file ordering.
-import "./test-setup.ts"; // registers happy-dom once per process
+import "./test-setup.ts";
 import { afterAll, describe, expect, test } from "bun:test";
 import { setMaxListeners } from "node:events";
 

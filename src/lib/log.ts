@@ -81,15 +81,12 @@ const pinoOpts = {
  * (the [logging].redact switch, EXC-399) gates the redact.ts scrub of every
  * outgoing msg/extra/err — re-read per emit so it hot-reloads too. The walk
  * runs even with the switch off (plan/prompt/feedback censoring is
- * unconditional);
- * `step` is attached after it, raw: structural fields always win and a fixed
- * step token is never PII. `source` names the emitting process ("hook" or
- * "daemon", EXC-445) so every record carries its provenance; an explicit
- * extra.source wins — that's how the daemon tags bridged browser events "ui".
- * Errors are serialized here (errWithCause) rather
- * than via a pino serializer so the scrub can cover message/stack/cause —
- * pino's own `redact` option can't rewrite substrings inside those strings,
- * walk an unbounded cause chain, or hot-toggle (see src/redact/node.ts). */
+ * unconditional); `step` is attached after it, raw: structural fields always
+ * win and a fixed step token is never PII. Errors are serialized here
+ * (errWithCause) rather than via a pino serializer so the scrub can cover
+ * message/stack/cause — pino's own `redact` option can't rewrite substrings
+ * inside those strings, walk an unbounded cause chain, or hot-toggle (see
+ * src/redact/node.ts). */
 function wrap(
   logger: pino.Logger,
   liveLevel: () => LogLevel,

@@ -11,7 +11,6 @@ import { readAppCss } from "$lib/appCss.ts";
 
 const appCss = readAppCss();
 
-// Extract the body of the single .diffview rule.
 function diffviewRule(css: string): string {
   const match = css.match(/\.diffview\s*\{([^}]*)\}/);
   return match?.[1] ?? "";

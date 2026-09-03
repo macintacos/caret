@@ -632,7 +632,7 @@ describe("setPrefs", () => {
 
   test("rejects with a human message the reviewer can act on", async () => {
     // A settings control renders this verbatim in a persistent error toast, so
-    // each failure must read as a sentence — never "HTTP 400" (AC #5).
+    // each failure must read as a sentence — never "HTTP 400".
     for (const answer of [
       () => Promise.resolve(new Response(null, { status: 400 })),
       () => Promise.resolve(new Response(null, { status: 500 })),

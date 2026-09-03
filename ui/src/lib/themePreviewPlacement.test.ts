@@ -103,10 +103,9 @@ describe("placeOnNextFrame", () => {
   test("measures at frame time, so a menu that settles before the frame is placed correctly (the fix)", () => {
     const q = makeFrameQueue();
     const placed: { top: number; left: number }[] = [];
-    // Synchronously the menu is still at the origin (bits-ui not yet positioned); by the
-    // time the deferred frame runs it has settled. Deferring the measurement means the card
-    // anchors to the settled rect, never the origin — the essence of the fix. A synchronous
-    // measurement would instead capture ORIGIN and strand the card at { top: 8, left: 10 }.
+    // Synchronously the menu is still at the origin (bits-ui not yet positioned);
+    // by the time the deferred frame runs it has settled. The frame must measure
+    // the settled rect, not the origin a synchronous read would have captured.
     let settled = false;
     placeOnNextFrame(
       {

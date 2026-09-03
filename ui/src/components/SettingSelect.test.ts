@@ -177,7 +177,10 @@ describe("SettingSelect row states", () => {
   const at = (selector: string) => componentSource.indexOf(`${selector} {`);
 
   test("selection wins the fill over the highlight, not the other way round", () => {
-    // Why this ordering: doc/agents/shadcn-rules.md § The caret surface language.
+    // A listbox parks its highlight on the selected row as soon as it opens (bits-ui's
+    // setInitialHighlightedNode), so unlike a DropdownMenu — where the highlight only ever
+    // greys a row transiently under the cursor — losing to the highlight here would leave
+    // the resting panel with no amber selection mark at all.
     const highlighted = at(".setting-item[data-highlighted])");
     const selected = at(".setting-item[data-selected])");
     expect(highlighted).toBeGreaterThan(-1);

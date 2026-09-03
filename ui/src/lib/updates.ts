@@ -100,9 +100,7 @@ export function updatePaneCopy(report: UpdateReport): {
     case "unknown":
       // The one reason worth its own words, because on a developer's machine it is the
       // normal daily reading rather than a fault: `mise run build --install` bakes an
-      // unpushed commit into the binary, GitHub's compare 404s, and the check settles
-      // here. Matched on the daemon's own sentence — see NEEDS_COMPARE in
-      // src/daemon/update-check.ts, the constant this string mirrors.
+      // unpushed commit into the binary, GitHub's compare 404s, and the check settles here.
       return status.reason === UNCOMPARABLE
         ? {
             headline: "Nothing to compare against",

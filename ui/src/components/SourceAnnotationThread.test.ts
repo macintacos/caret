@@ -77,8 +77,8 @@ describe("SourceAnnotationThread stacked comments", () => {
       SourceAnnotationThread,
       base({ annotations: two, focusedAnnotation: "b" }),
     );
-    // Only the matching card expands; the other stays a collapsed chip. (The body
-    // is always mounted for the grid reveal, so expansion is the .expanded class.)
+    // The body is always mounted for the grid reveal, so expansion is the
+    // .expanded class, not presence.
     expect(target.querySelector('[data-annotation-card="b"].card.expanded')).not.toBeNull();
     expect(target.querySelector('[data-annotation-card="a"].card.expanded')).toBeNull();
     expect(target.querySelector('[data-annotation-card="a"] .chip')).not.toBeNull();

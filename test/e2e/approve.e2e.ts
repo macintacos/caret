@@ -32,8 +32,8 @@ test("approving opens a confirmation and resolves on confirm (UI and API)", asyn
   await page.goto("/");
   await planSurface(page);
 
-  // Approve no longer resolves straight through: it opens a bare "are you sure?"
-  // confirm (nothing queued, so no pending-comment warning).
+  // Approve opens a bare "are you sure?" confirm — nothing queued, so no
+  // pending-comment warning.
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   const confirm = page.getByRole("dialog", APPROVE_CONFIRM);
   await expect(confirm).toBeVisible();

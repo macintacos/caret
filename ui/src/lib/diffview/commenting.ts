@@ -17,10 +17,6 @@
 // the rendered content changes (a new version, a review switch) — so a reload
 // restores the reviewer's markers, while a scratch still never mis-anchors onto
 // text it was not written against (a fresh version carries none of its own).
-//
-// This is deliberately distinct from commentState.ts's "Draft" — a created,
-// pending annotation already added to the working copy. A scratch was never
-// added; its line marker reads "Resume", an action, not the "Draft" state.
 
 import type { PersistedScratch } from "@core/lib/types";
 import type { SoundEvent } from "$lib/sound.ts";

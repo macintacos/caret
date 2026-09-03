@@ -21,7 +21,6 @@ export type ThemeMode = "light" | "dark" | "system";
  * persisted-preference allow-list. */
 export const THEME_MODES: readonly ThemeMode[] = ["light", "dark", "system"];
 
-/** Automatic system switching is the default, per the ticket. */
 export const DEFAULT_MODE: ThemeMode = "system";
 
 /** Each slot defaults to the caret palette of its own scheme. */

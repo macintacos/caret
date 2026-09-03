@@ -9,17 +9,11 @@
   // sentinel. Distinct from the TopBar VersionLabel (the per-plan revision pill
   // ^v2); this is the app build. Mirrors DevBadge.svelte's self-gating shape.
   //
-  // EXC-664: clicking the pill copies a debug block to the clipboard — version,
-  // the FULL commit (not the truncated display tail), build type, page URL, and
-  // user agent — and flashes a "Copied" confirmation, so a bug report can carry
-  // the exact running build in one click.
-  //
-  // EXC-763: the build/commit hint moved from a native title= to a shadcn
-  // Tooltip (matching the TopBar cwd tooltip), and the pill wears the tabular
-  // .metric badge vocabulary. It stays a real <button> — click-to-copy needs
-  // button semantics, which the shadcn Badge (span/anchor only) can't give — and
-  // reads as a flat metric segment in the status bar rather than the topbar's
-  // louder .float-chip fill.
+  // EXC-763: the pill uses a shadcn Tooltip (matching the TopBar cwd tooltip) and
+  // wears the tabular .metric badge vocabulary. It stays a real <button> —
+  // click-to-copy needs button semantics, which the shadcn Badge (span/anchor
+  // only) can't give — and reads as a flat metric segment in the status bar
+  // rather than the topbar's louder .float-chip fill.
   import { onDestroy } from "svelte";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
 
@@ -95,7 +89,7 @@
      tabular figures come from the .metric atom (EXC-376); muted at rest,
      brightening on hover so it stays out of the way until looked at. It's a
      button (EXC-664: click-to-copy), reset to the bar's flat metric type;
-     StatusBar lays it out, so it no longer self-pins. */
+     StatusBar owns layout, so the badge does not position itself. */
   .version-badge {
     display: inline-flex;
     align-items: center;

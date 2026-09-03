@@ -236,7 +236,6 @@ describe("runDev supervision", () => {
         runDev({ numVersions: 4, notify: true, persist: false }, deps),
       ).rejects.toBeInstanceOf(ExitSignal);
 
-      // daemon (ephemeral), the log tail, pino-pretty, then vite.
       expect(calls[0]?.cmd).toEqual(["bun", "src/cli.ts", "daemon", "--ephemeral"]);
       expect(calls[1]?.cmd[0]).toBe("tail");
       expect(calls[2]?.cmd[0]).toBe("bunx");

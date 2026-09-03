@@ -68,8 +68,7 @@
 <style>
   /* A quiet, full-width strip — not a loud accent bar. A top hairline and a
      raised-paper fill set it apart from the plan above; the ink-soft mono/tabular
-     voice rides the .metric atom the segments carry. App.svelte pins it to the
-     status-bar grid row, so it reserves space rather than overlaying the plan. */
+     voice rides the .metric atom the segments carry. */
   .status-bar {
     display: flex;
     align-items: center;
@@ -81,8 +80,6 @@
     border-top: 1px solid var(--rule);
     color: var(--ink-soft);
   }
-  /* The right cluster: the review-status segments, then the keyboard affordance
-     flush to the far right. */
   .status-bar-end {
     display: flex;
     align-items: center;

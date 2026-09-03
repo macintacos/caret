@@ -5,9 +5,9 @@
 // ONE place rather than drifting between two hand-mirrored copies.
 //
 // Pure TS with no node imports, so it bundles into the browser UI as well as
-// the compiled bun binary (target architecture §5). Node-only concerns — home
-// path scrubbing, NDJSON file round-trips — stay in src/redact/node.ts and ride in
-// through the optional per-string transform below.
+// the compiled bun binary. Node-only concerns — home path scrubbing, NDJSON
+// file round-trips — stay in src/redact/node.ts and ride in through the
+// optional per-string transform below.
 
 export const CENSOR = "<redacted>";
 

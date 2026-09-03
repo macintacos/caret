@@ -14,26 +14,12 @@
    surfaces that own them. No file outside this rule (and the diffview module)
    references --diffs-*.
 
-   Motionless by design: the diff render surface — line hover, line/range-
-   selection, decoration bars, gutter affordances, hunk-expand — changes state
-   with instant color-mix swaps and carries no transition or keyframe. The shadow
-   boundary keeps the global reduced-motion rule above from reaching it and keeps
-   a light-DOM transition from leaking in, but the host could still add a
-   transition/animation to .diffview or a bridged --diffs-* property here — so
-   this rule deliberately sets neither, and css-bridge.test.ts pins that it stays
-   that way. The rationale lives in doc/agents/svelte-rules.md.
+   Motionless by design (doc/agents/svelte-rules.md): this rule must never gain
+   a transition or animation — css-bridge.test.ts pins it.
 
    Berkeley Mono is referenced by name only — no font files ship (commercial
    license); the stack falls back gracefully when it is not installed. */
 .diffview {
-  /* Accent strategy: amber-selection-only. caret adopts @pierre/diffs's
-     surface STRUCTURE — the layered buffer/context/separator depth system —
-     not its blue skin. The comment SELECTION is caret amber (set via
-     --diffs-bg-selection-override); --diffs-modified stays library-blue, so the
-     gutter +, change-type icons, and merge-conflict incoming read blue for
-     free. caret amber stays scarce and brand-reserved (the wordmark, the
-     primary action, the ^). The same decision is recorded for contributors in
-     doc/agents/svelte-rules.md. */
   --diffs-font-family: 'Berkeley Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   /* The diff mono sits one scale step above the .mono inline-chrome size: it
      draws --text-base (≈13.12px at the 16px root) where .mono draws --text-sm

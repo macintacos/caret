@@ -28,9 +28,7 @@ function makeTimer() {
     clearTimer: () => {
       pending = null;
     },
-    /** Whether a flush is scheduled. */
     armed: () => pending !== null,
-    /** Fire the scheduled flush. */
     fire: () => {
       const fn = pending;
       pending = null;

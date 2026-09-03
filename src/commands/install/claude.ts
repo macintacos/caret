@@ -98,14 +98,14 @@ interface PhaseCommand {
   fallback?: string[];
 }
 
-/** One reported phase: the label its spinner carries, an optional local-side effect to
- * perform first, and the `claude` commands it covers. `marketplace add` and `enable` are
- * best-effort — an already-registered marketplace or already-enabled plugin is not a
- * failure — so a phase fails only when one of its `fatal` commands does. */
 /** What a phase's commands returned, one entry per entry in `commands` and in the same
  * order — pushed even for a failed non-fatal command, so the positions stay aligned. */
 type CommandResults = Awaited<ReturnType<ClaudeRunner>>[];
 
+/** One reported phase: the label its spinner carries, an optional local-side effect to
+ * perform first, and the `claude` commands it covers. `marketplace add` and `enable` are
+ * best-effort — an already-registered marketplace or already-enabled plugin is not a
+ * failure — so a phase fails only when one of its `fatal` commands does. */
 interface Phase {
   label: string;
   /** The settled line. A function when the line reports what the commands returned rather

@@ -103,7 +103,6 @@ describe("CommentNavigator", () => {
       onReveal: (e) => (revealed = e),
     });
     const items = target.querySelectorAll<HTMLButtonElement>("[data-nav-row]");
-    // Only the scratch row is a draft, and it carries the tag.
     expect(items[0]!.classList.contains("draft")).toBe(false);
     expect(items[1]!.classList.contains("draft")).toBe(true);
     expect(items[1]!.querySelector(".nav-draft-tag")!.textContent).toContain("draft");

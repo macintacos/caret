@@ -77,7 +77,6 @@ async function until(predicate: () => boolean, timeoutMs = 5000): Promise<void> 
 
 describe("startPolling instrumentation", () => {
   test("two consecutive failures emit exactly one warn; recovery emits info failures:2", async () => {
-    // Sequence: fail, fail, then succeed with one review.
     const sequence: Array<() => Promise<Response>> = [
       () => Promise.reject(new Error("down")),
       () => Promise.reject(new Error("down")),
@@ -157,7 +156,6 @@ describe("startPolling daemon identity (onSwap)", () => {
     );
     // Let the baseline seed (start-of-poll health check) and one good poll land.
     await until(() => updates >= 1);
-    // Now drive an outage, swap identity behind it, then recover.
     reviewsFails = true;
     instanceId = "bbbb2222";
     await new Promise((r) => setTimeout(r, 5));

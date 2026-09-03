@@ -29,7 +29,7 @@ const baseProps = {
   onSetDiffIndicators: () => {},
 };
 
-// The segmented controls are now shadcn ToggleGroups: each option is a
+// The segmented controls are shadcn ToggleGroups: each option is a
 // role="radio" whose accessible name is its visible label, and the active one
 // carries data-state="on". Find one by its label.
 function radio(target: Element, name: string): HTMLButtonElement {

@@ -125,7 +125,6 @@ describe("diff-view lifecycle updates preserve the instance", () => {
     expect(factory.instances).toHaveLength(1);
     const updates = factory.instances[0]!.calls.slice(1);
     expect(updates).toEqual([
-      // Full replacement: untouched keys from the previous options survive.
       { method: "setOptions", args: [{ overflow: "wrap", diffStyle: "split" }] },
       { method: "rerender", args: [] },
     ]);

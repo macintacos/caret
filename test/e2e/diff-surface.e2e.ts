@@ -46,7 +46,6 @@ test("scroll position survives the 2-second poll tick", async ({ daemon, page })
   const view = await planSurface(page);
   await expect(page.getByText("Line 1 of the plan body")).toBeVisible();
 
-  // Scroll down, then assert the position settled at a non-zero offset.
   await view.evaluate((el) => {
     el.scrollTop = 400;
   });
