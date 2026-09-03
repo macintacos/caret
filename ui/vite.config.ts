@@ -6,6 +6,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 
 import { DEFAULT_PORT } from "../src/config/constants.ts";
+import { bundleBudgetPlugin } from "./bundle-budget.ts";
 
 // The dev daemon the `/api` proxy below forwards to. Hoisted so the target and
 // the Origin the proxy rewrites to cannot drift apart.
@@ -54,6 +55,10 @@ export default defineConfig({
         };
       },
     },
+    // EXC-1217: assert the built dist/ against the budget in ui/bundle-budget.ts,
+    // which is where the number, what it does and does not cover, and the measured
+    // cost of each alias entry below ceasing to match are all recorded.
+    bundleBudgetPlugin(),
   ],
   resolve: {
     // CodeMirror's extension system is identity-sensitive: a Facet, StateField, or
