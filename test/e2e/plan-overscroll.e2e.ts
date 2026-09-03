@@ -16,6 +16,14 @@ test("the reader can scroll past the end of the plan", async ({ daemon, page }) 
 
   const view = await planSurface(page);
 
+  // The rows have to be rendered before the scroll below means anything. The
+  // overscroll room is .diff-plan's own ::after, so an unpopulated container is
+  // ~33vh tall, does not overflow the viewport, and satisfies the max-scroll poll
+  // vacuously — on a loaded host that walked the measurement into an empty shadow
+  // root and asserted the miss as a real gap. planSurface waits for the container,
+  // which is rendered unguarded, so it cannot stand in for this.
+  await expect(page.locator(".diffview [data-line]").first()).toBeVisible();
+
   // Scroll to the very bottom and wait for it to settle at max scroll.
   await view.evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
   await expect
@@ -27,17 +35,35 @@ test("the reader can scroll past the end of the plan", async ({ daemon, page }) 
   // between the last [data-line] row and the container bottom as a fraction of
   // the viewport height (idiom borrowed from headingTopOffset in
   // diff-surface.e2e.ts).
-  const gapFraction = await page.evaluate(() => {
-    const container = document.querySelector(".diff-plan");
-    const shadow = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-    const rows = Array.from(shadow?.querySelectorAll<HTMLElement>("[data-line]") ?? []);
-    if (container == null || rows.length === 0) return 0;
-    const lastRow = rows.reduce((a, b) =>
-      Number(b.getAttribute("data-line")) > Number(a.getAttribute("data-line")) ? b : a,
-    );
-    const gap = container.getBoundingClientRect().bottom - lastRow.getBoundingClientRect().bottom;
-    return gap / window.innerHeight;
-  });
+  // `null` rather than 0 when the DOM is not ready, and polled rather than read
+  // once — the idiom lineCenterY documents in source-view.ts. A numeric sentinel
+  // reads as a measured gap, which is how a plan that had not rendered failed here
+  // as "Received: 0" rather than saying the rows were missing.
+  const read = () =>
+    page.evaluate(() => {
+      const container = document.querySelector(".diff-plan");
+      const shadow = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+      const rows = Array.from(shadow?.querySelectorAll<HTMLElement>("[data-line]") ?? []);
+      if (container == null || rows.length === 0) return null;
+      const lastRow = rows.reduce((a, b) =>
+        Number(b.getAttribute("data-line")) > Number(a.getAttribute("data-line")) ? b : a,
+      );
+      const gap = container.getBoundingClientRect().bottom - lastRow.getBoundingClientRect().bottom;
+      return gap / window.innerHeight;
+    });
+  // Held on an object rather than in a local: control-flow analysis cannot see
+  // through expect.poll's callback, so a local would still read as `null` below.
+  const last: { gap: number | null } = { gap: null };
+  await expect
+    .poll(
+      async () => {
+        last.gap = await read();
+        return last.gap;
+      },
+      { message: "the plan's rows never rendered, so no overscroll gap could be measured" },
+    )
+    .not.toBeNull();
+  const gapFraction = last.gap as number;
 
   // ~33.3% of the viewport (last line ~2/3 down), with tolerance for line
   // height, the shadow content's own breathing room, and scrollbar rounding.
