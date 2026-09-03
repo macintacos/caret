@@ -1,4 +1,4 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { describe, expect, test } from "bun:test";
 
 import { type CompletionSource, completionStatus } from "@codemirror/autocomplete";
@@ -12,7 +12,7 @@ import {
   mountEditor,
   completionListPainted as painted,
   typeInto as type,
-} from "@ui/test-helpers.ts";
+} from "@ui/support/helpers.ts";
 
 import { chordAction, cursorInList } from "./markdownEditor.ts";
 

@@ -1,9 +1,9 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 import { describe, expect, test } from "bun:test";
 
 import { createRawSnippet } from "svelte";
 
-import { capture, render } from "@ui/test-mount.ts";
+import { capture, render } from "@ui/support/mount.ts";
 import FileDrawer from "@/components/FileDrawer.svelte";
 import { type DrawerEdge, MIN_DRAWER_PX, maxDrawerSize } from "$lib/fileDrawer.ts";
 

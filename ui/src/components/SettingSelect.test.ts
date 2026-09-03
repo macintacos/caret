@@ -18,12 +18,12 @@
 // COMMITS on `pointerup` (`SelectItemState.onpointerup`), and the highlight MOVES on
 // `pointermove` (`SelectItemState.onpointermove`). A suite carried over from the menu's
 // `.click()` / `pointerenter` idioms would pass vacuously.
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 
-import { capture, flushUntil, render } from "@ui/test-mount.ts";
+import { capture, flushUntil, render } from "@ui/support/mount.ts";
 import SettingSelect from "@/components/SettingSelect.svelte";
 import { THEMES } from "$lib/theme.ts";
 

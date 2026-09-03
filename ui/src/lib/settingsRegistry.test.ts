@@ -1,7 +1,7 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import { type LogCapture, logCapture } from "@ui/test-helpers.ts";
+import { type LogCapture, logCapture } from "@ui/support/helpers.ts";
 import { THEME_MODES } from "$lib/appearance.ts";
 import { knownPrefKeys } from "$lib/definePref.ts";
 import {
@@ -509,7 +509,7 @@ describe("daemonField", () => {
       patch: (check) => ({ updates: { check } }),
     });
 
-  // The shared fetch double (test-helpers.ts), so uiLog's own /api/logs batch is
+  // The shared fetch double (helpers.ts), so uiLog's own /api/logs batch is
   // captured rather than answered by the per-test stub.
   let respond: (url: string, options: RequestInit | undefined) => Promise<Response>;
   let cap: LogCapture;

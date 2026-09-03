@@ -1,7 +1,7 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
 
-import { versions } from "@ui/test-plan-versions.ts";
+import { versions } from "@ui/support/plan-versions.ts";
 import { type CompareStore, createCompare } from "@/state/compare.svelte.ts";
 import type { DiffIndicators, DiffStyle } from "$lib/diffview/types.ts";
 import type { SoundEvent } from "$lib/sound.ts";

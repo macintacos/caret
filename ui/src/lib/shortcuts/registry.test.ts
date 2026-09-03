@@ -1,7 +1,7 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import { type LogCapture, logCapture } from "@ui/test-helpers.ts";
+import { type LogCapture, logCapture } from "@ui/support/helpers.ts";
 import { flush } from "$lib/log.ts";
 import {
   ariaKeyshortcuts,

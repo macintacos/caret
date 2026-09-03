@@ -1,13 +1,13 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import { render } from "@ui/test-mount.ts";
+import { render } from "@ui/support/mount.ts";
 import {
   installNotificationStub,
   type NotificationStub,
   restoreNotification,
   trackRequestPermission,
-} from "@ui/test-notification-stub.ts";
+} from "@ui/support/notification-stub.ts";
 import NotificationsPane from "@/components/NotificationsPane.svelte";
 
 // The settings Notifications pane (EXC-847) reflects the browser's live

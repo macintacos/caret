@@ -49,7 +49,7 @@ follows the same singleton-plus-exported-factory shape as the non-reactive `shor
 registry (`ui/src/lib/shortcuts/index.ts`). This stays the exception: reach for it only
 once a consumer outside App's tree actually exists, and keep the factory exported so tests
 construct a fresh instance with injected deps instead of sharing the singleton. Runes are
-testable there — `ui/test-svelte-preload.ts` compiles `.svelte.ts` modules through
+testable there — `ui/support/svelte-preload.ts` compiles `.svelte.ts` modules through
 svelte's `compileModule` for the bun runner (§ Component tests).
 
 ## Extract component logic to a testable lib module
@@ -79,10 +79,10 @@ functions. When a component grows non-trivial DOM manipulation, extract it the s
 ## Component tests
 
 A `.svelte` component is unit-tested by mounting it under happy-dom. The harness:
-`bunfig.toml`'s `[test].preload` registers `ui/test-svelte-preload.ts` (compiles `.svelte`
-to client output), the test command passes `--conditions browser` (selects svelte's client
-runtime), and `ui/test-mount.ts` exposes `render(Component, props)` + a `capture()`
-callback recorder with auto-unmount. Component units cover
+`bunfig.toml`'s `[test].preload` registers `ui/support/svelte-preload.ts` (compiles
+`.svelte` to client output), the test command passes `--conditions browser` (selects
+svelte's client runtime), and `ui/support/mount.ts` exposes `render(Component, props)` + a
+`capture()` callback recorder with auto-unmount. Component units cover
 **render output, prop reactivity, conditional branches, and callback wiring** — the things
 a mounted component exposes.
 
@@ -101,7 +101,7 @@ caret runs **one** test runner — `bun test` — for both the backend and the U
 suites. Svelte's official testing story is Vitest (runes-native, no preload needed), but
 adopting it would add a *second* runner and a second config surface; the bun-test harness
 already works, so keeping a single runner is the deliberate choice against that cost. The
-price of one runner is the bespoke `ui/test-svelte-preload.ts` plus the mandatory
+price of one runner is the bespoke `ui/support/svelte-preload.ts` plus the mandatory
 `--conditions browser` flag — accepted, not accidental.
 
 The flag is load-bearing: svelte's `.` export map gates the client runtime (the real
@@ -110,10 +110,10 @@ stub that throws) otherwise. So the canonical entry points — the `mise run tes
 `package.json`'s `test` script — both pass `--conditions browser`; it can't move into
 `bunfig.toml`'s `[test]` table because export conditions are a CLI resolution input, not a
 config key. Bare `bun test` resolves the server runtime and would crash component mounts
-cryptically, so `ui/test-mount.ts` probes the resolved svelte module at import and throws
-an actionable error (run via `mise run test` / `bun test --conditions browser`) instead.
-The guard lives only in the mount harness, so the backend suite — which never imports it —
-stays green under any invocation.
+cryptically, so `ui/support/mount.ts` probes the resolved svelte module at import and
+throws an actionable error (run via `mise run test` / `bun test --conditions browser`)
+instead. The guard lives only in the mount harness, so the backend suite — which never
+imports it — stays green under any invocation.
 
 ## CSS-token discipline
 

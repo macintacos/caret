@@ -3,12 +3,12 @@
 // logCapture() in beforeEach and restore() in afterEach: the module-global
 // uiLog buffer is drained at install AND at restore — while the stub is live —
 // so records can't bleed between cases or suites sharing one bun process.
-// Imported as ../../test-helpers.ts by the lib tests (cf. test-setup.ts).
+// Imported as @ui/support/helpers.ts by the lib tests (cf. setup.ts).
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
-import { flush } from "./src/lib/log.ts";
-import { type MarkdownEditorOptions, markdownExtensions } from "./src/lib/markdownEditor.ts";
+import { flush } from "$lib/log.ts";
+import { type MarkdownEditorOptions, markdownExtensions } from "$lib/markdownEditor.ts";
 
 export interface FetchCall {
   url: string;

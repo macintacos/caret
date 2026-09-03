@@ -11,11 +11,11 @@
 // document.body, not the mount target. The real interaction semantics — focus
 // trap, Escape-to-close, outside-click, filtering as you type — are
 // real-browser behaviours and stay e2e per doc/agents/browser-testing.md.
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 
 import { expect, test } from "bun:test";
 
-import { flushUntil, render } from "@ui/test-mount.ts";
+import { flushUntil, render } from "@ui/support/mount.ts";
 import CommandPopoverFixture from "$lib/shadcn-command-popover-fixture.svelte";
 
 const popoverContent = () => document.body.querySelector("[data-slot='popover-content']");
@@ -25,7 +25,7 @@ const commandInput = () => document.body.querySelector("input[data-slot='command
  * same guard PlanToc.test.ts carries: bits-ui's portal presence waits for an
  * `animationend` that never fires under happy-dom, so content left open at unmount
  * keeps its effects alive into the next test, which then reads deriveds whose owner
- * is already destroyed and svelte warns `derived_inert`. test-mount.ts purges the DOM
+ * is already destroyed and svelte warns `derived_inert`. mount.ts purges the DOM
  * half of that leak; only closing purges the effect half. Guarded, so it is a no-op
  * if a test already closed. */
 async function close(target: HTMLElement, flush: () => void): Promise<void> {

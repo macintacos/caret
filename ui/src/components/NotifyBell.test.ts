@@ -1,13 +1,13 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import { render } from "@ui/test-mount.ts";
+import { render } from "@ui/support/mount.ts";
 import {
   installNotificationStub,
   type NotificationStub,
   restoreNotification,
   trackRequestPermission,
-} from "@ui/test-notification-stub.ts";
+} from "@ui/support/notification-stub.ts";
 import NotifyBell from "@/components/NotifyBell.svelte";
 
 // bellPresentation() (the permission→icon/tone/title mapping) is covered in

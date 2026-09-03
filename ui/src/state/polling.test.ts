@@ -1,14 +1,14 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import type { ClientReview } from "@core/lib/types";
-import type { LogCapture } from "@ui/test-helpers.ts";
+import type { LogCapture } from "@ui/support/helpers.ts";
 import {
   emptyResponse,
   installRoutedFetch,
   jsonResponse,
   type Respond,
-} from "@ui/test-routed-fetch.ts";
+} from "@ui/support/routed-fetch.ts";
 import {
   createReviewSelection,
   type SelectionStore,
@@ -17,7 +17,7 @@ import {
 import { flush } from "$lib/log.ts";
 import type { SoundEvent } from "$lib/sound.ts";
 
-// Shared URL-routing fetch double (test-routed-fetch.ts): /api/logs POSTs are
+// Shared URL-routing fetch double (routed-fetch.ts): /api/logs POSTs are
 // captured; the review/health endpoints answer from the per-test `respond`.
 let respond: Respond;
 let cap: LogCapture;

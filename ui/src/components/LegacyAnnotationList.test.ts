@@ -1,8 +1,8 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 import { describe, expect, test } from "bun:test";
 
 import type { LegacyAnnotation } from "@core/lib/types";
-import { render } from "@ui/test-mount.ts";
+import { render } from "@ui/support/mount.ts";
 import LegacyAnnotationList from "@/components/LegacyAnnotationList.svelte";
 
 // LegacyAnnotationList renders selection-anchored (legacy-shape) annotations

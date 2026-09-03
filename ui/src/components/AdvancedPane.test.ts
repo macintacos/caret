@@ -1,8 +1,8 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 import { describe, expect, test } from "bun:test";
 
 import type { DaemonDiagnostics, HealthIdentity } from "@core/lib/types";
-import { capture, flushUntil, render } from "@ui/test-mount.ts";
+import { capture, flushUntil, render } from "@ui/support/mount.ts";
 import AdvancedPane from "@/components/AdvancedPane.svelte";
 
 // The Advanced diagnostics pane (EXC-848): a read-only, copyable view of the

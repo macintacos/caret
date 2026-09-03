@@ -15,10 +15,10 @@
 // ARIA assertions (with an async flush), but their real interaction semantics —
 // focus trap, Escape-to-close, outside-click, focus restoration, scroll lock —
 // are real-browser behaviors that stay e2e per doc/agents/browser-testing.md.
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { expect, test } from "bun:test";
 
-import { render } from "@ui/test-mount.ts";
+import { render } from "@ui/support/mount.ts";
 import { Button } from "$lib/components/ui/button/index.js";
 import DialogFixture from "$lib/shadcn-dialog-fixture.svelte";
 

@@ -1,4 +1,4 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 
 import { createSeenWatcher, SEEN_DWELL_MS, type SeenWatcher } from "$lib/seen.ts";

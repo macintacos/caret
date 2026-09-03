@@ -1,7 +1,7 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import { type LogCapture, logCapture } from "@ui/test-helpers.ts";
+import { type LogCapture, logCapture } from "@ui/support/helpers.ts";
 import { flush } from "$lib/log.ts";
 import { createSafeModeGuard, type SafeModeGuard } from "$lib/safeMode.ts";
 
@@ -162,7 +162,7 @@ describe("createSafeModeGuard", () => {
 // draining the module-global buffer with flush() (cf. log.test.ts). Scoped to
 // its own describe so the fetch stub never leaks into the behavior tests above.
 describe("createSafeModeGuard instrumentation", () => {
-  // Shared fetch double (test-helpers.ts): captures /api/logs POSTs and drains
+  // Shared fetch double (helpers.ts): captures /api/logs POSTs and drains
   // the module-global buffer at install and restore so cases don't bleed.
   let cap: LogCapture;
 

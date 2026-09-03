@@ -1,11 +1,11 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { describe, expect, test } from "bun:test";
 
 import { CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
 import { EditorState } from "@codemirror/state";
 
 import type { FileExcerpt, FileSearchResponse } from "@core/lib/types";
-import { drainMicrotasks } from "@ui/test-helpers.ts";
+import { drainMicrotasks } from "@ui/support/helpers.ts";
 import { HttpError } from "$lib/api.ts";
 import type { PreviewableCompletion, RowPreview } from "$lib/completionPreview.ts";
 import type { ReviewContext } from "$lib/editorCompletion.ts";

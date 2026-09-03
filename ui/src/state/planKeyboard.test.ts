@@ -1,4 +1,4 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
 
 import { createPlanKeyboard, type PlanKeyboardStore } from "@/state/planKeyboard.svelte.ts";

@@ -11,11 +11,11 @@
 // reds this whole file; a re-sync that swaps what field-label renders would not,
 // which is the case this assertion covers.) Nothing composes Field yet, so this
 // suite is its only consumer.
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 
 import { expect, test } from "bun:test";
 
-import { flushUntil, render } from "@ui/test-mount.ts";
+import { flushUntil, render } from "@ui/support/mount.ts";
 import FieldFixture from "$lib/shadcn-field-fixture.svelte";
 
 const field = (target: HTMLElement) => target.querySelector("[data-slot='field']");

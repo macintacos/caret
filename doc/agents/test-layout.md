@@ -66,8 +66,9 @@ side to match the other.
 
 ## Where else tests live
 
-- **Browser/UI** — `ui/src/**/*.test.ts` (happy-dom units) and `test/e2e/*.e2e.ts`
-  (Playwright; the `.e2e.ts` suffix keeps them out of `bun test`'s collection even though
-  they sit under `test/`, and its harness is `test/e2e/support/`, distinct from
-  `test/support/`). The unit-vs-e2e split is governed by `browser-testing.md`; this file
-  governs only the backend `test/` subtrees.
+- **Browser/UI** — `ui/src/**/*.test.ts` (happy-dom units, whose shared harness sits in
+  `ui/support/` and is reached as `@ui/support/…`) and `test/e2e/*.e2e.ts` (Playwright;
+  the `.e2e.ts` suffix keeps them out of `bun test`'s collection even though they sit
+  under `test/`, and its harness is `test/e2e/support/`, distinct from `test/support/`).
+  The unit-vs-e2e split is governed by `browser-testing.md`; this file governs only the
+  backend `test/` subtrees.

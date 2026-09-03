@@ -1,10 +1,10 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 import { describe, expect, test } from "bun:test";
 
 import type { ComponentProps } from "svelte";
 
-import { capture, flushUntil, render } from "@ui/test-mount.ts";
-import { HEADINGS, releaseKey } from "@ui/test-plan-nav.ts";
+import { capture, flushUntil, render } from "@ui/support/mount.ts";
+import { HEADINGS, releaseKey } from "@ui/support/plan-nav.ts";
 import PlanBreadcrumbs from "@/components/PlanBreadcrumbs.svelte";
 import type { TocHeading } from "$lib/toc.ts";
 
@@ -327,7 +327,7 @@ describe("PlanBreadcrumbs keyboard invocation", () => {
 // open at unmount keeps its document listeners alive, and this panel's own dismiss
 // layer is what then reads those dead effects. Dismissing here (below) is measurably
 // better than not, and no amount of per-file settling closes the gap — the fix is
-// portal-effect teardown in ui/test-mount.ts, shared by every suite that mounts an
+// portal-effect teardown in ui/support/mount.ts, shared by every suite that mounts an
 // overlay, rather than a third per-file workaround.
 describe("PlanBreadcrumbs filter", () => {
   /** The open menu's own content element — where the bar claims `/`. */

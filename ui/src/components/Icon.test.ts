@@ -1,7 +1,7 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 import { describe, expect, test } from "bun:test";
 
-import { render } from "@ui/test-mount.ts";
+import { render } from "@ui/support/mount.ts";
 import Icon from "@/components/Icon.svelte";
 
 // icons.test.ts gates the registry↔directory↔Icon.svelte wiring; this suite

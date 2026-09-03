@@ -1,16 +1,16 @@
-// Guards the globals test-setup.ts restores: importing it registers happy-dom's
+// Guards the globals setup.ts restores: importing it registers happy-dom's
 // DOM globals via GlobalRegistrator, which clobbers Bun natives the backend
 // suite needs, and both suites share this one bun-test process. Each case below
 // reproduces one leak deterministically in a single file — register, then
 // exercise the native — so none of them depends on cross-file ordering.
-import "./test-setup.ts";
+import "./setup.ts";
 import { afterAll, describe, expect, test } from "bun:test";
 import { setMaxListeners } from "node:events";
 
 const server = Bun.serve({ port: 0, fetch: () => new Response("ok") });
 afterAll(() => server.stop(true));
 
-describe("test-setup happy-dom registration", () => {
+describe("setup.ts happy-dom registration", () => {
   test("registers happy-dom's DOM globals", () => {
     expect((globalThis as { document?: unknown }).document).toBeDefined();
   });

@@ -1,7 +1,7 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { expect, test } from "bun:test";
 
-import { gutterContentRoot, openComment } from "@ui/test-diffview-dom.ts";
+import { gutterContentRoot, openComment } from "@ui/support/diffview-dom.ts";
 import { paintCardSelection } from "$lib/diffview/cardSelection.ts";
 import { CARD_ATTR, GUTTER_CARD_ATTR } from "$lib/diffview/codeBlockScroll.ts";
 import { TABLE_CARD_ATTR, TABLE_GUTTER_CARD_ATTR } from "$lib/diffview/tables.ts";

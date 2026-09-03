@@ -1,12 +1,12 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 import { afterEach, beforeAll, describe, expect, test } from "bun:test";
 
 import { EXCERPT_RADIUS, MAX_CITED_SPAN_LINES } from "@core/config/constants";
 import type { FileExcerpt } from "@core/lib/types";
 import { until } from "@test/support/poll.ts";
-import { type LogCapture, logCapture } from "@ui/test-helpers.ts";
-import { render } from "@ui/test-mount.ts";
-import { reactiveProps } from "@ui/test-props.svelte.ts";
+import { type LogCapture, logCapture } from "@ui/support/helpers.ts";
+import { render } from "@ui/support/mount.ts";
+import { reactiveProps } from "@ui/support/props.svelte.ts";
 import FilePreview from "@/components/FilePreview.svelte";
 import { appearance } from "@/state/appearance.svelte.ts";
 import { highlightChunk, MAX_HIGHLIGHT_LINE_CHARS } from "$lib/diffview/highlight.ts";

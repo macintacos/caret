@@ -1,8 +1,8 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 
-import { flushUntil, render } from "@ui/test-mount.ts";
+import { flushUntil, render } from "@ui/support/mount.ts";
 import EmptyState from "@/components/EmptyState.svelte";
 import { CARROT_FACTS } from "$lib/carrotFacts.ts";
 

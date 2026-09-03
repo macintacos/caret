@@ -1,12 +1,12 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 import { afterEach, expect, test } from "bun:test";
 
 import { flushSync, mount, unmount } from "svelte";
 
 import type { DirListing } from "@core/lib/types";
 import { until } from "@test/support/poll.ts";
-import { type LogCapture, logCapture } from "@ui/test-helpers.ts";
-import { render } from "@ui/test-mount.ts";
+import { type LogCapture, logCapture } from "@ui/support/helpers.ts";
+import { render } from "@ui/support/mount.ts";
 import FolderTree from "@/components/FolderTree.svelte";
 import { createFolderMemory, type FolderMemory } from "$lib/folderTree.ts";
 

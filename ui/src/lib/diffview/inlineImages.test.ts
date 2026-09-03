@@ -1,7 +1,7 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { expect, test } from "bun:test";
 
-import { root, row as rowOf } from "@ui/test-diffview-dom.ts";
+import { root, row as rowOf } from "@ui/support/diffview-dom.ts";
 import { syncInlineImages } from "$lib/diffview/inlineImages.ts";
 import type { ImageSpan, ImageSpanMap } from "$lib/diffview/links.ts";
 

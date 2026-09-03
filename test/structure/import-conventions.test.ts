@@ -115,11 +115,9 @@ test("the rule permits a same-directory sibling and rejects a subdirectory desce
 });
 
 test("the rule reads side-effect and dynamic imports, not just the from form", () => {
-  expect(offendingSpecifiers(sideEffect(`${UP}/${UP}/test-setup.ts`))).toEqual([
-    `${UP}/${UP}/test-setup.ts`,
-  ]);
+  expect(offendingSpecifiers(sideEffect(`${UP}/${UP}/setup.ts`))).toEqual([`${UP}/${UP}/setup.ts`]);
   expect(offendingSpecifiers(dynamic(`${UP}/${UP}/opencode/index.ts`))).toEqual([
     `${UP}/${UP}/opencode/index.ts`,
   ]);
-  expect(offendingSpecifiers(sideEffect("@ui/test-setup.ts"))).toEqual([]);
+  expect(offendingSpecifiers(sideEffect("@ui/support/setup.ts"))).toEqual([]);
 });

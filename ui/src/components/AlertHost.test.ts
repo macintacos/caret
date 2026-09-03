@@ -1,7 +1,7 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 import { describe, expect, test } from "bun:test";
 
-import { capture, render } from "@ui/test-mount.ts";
+import { capture, render } from "@ui/support/mount.ts";
 import AlertHost from "@/components/AlertHost.svelte";
 import type { AlertItem } from "@/state/alerts.ts";
 

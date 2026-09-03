@@ -1,7 +1,7 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { withBlockedStorage } from "@ui/test-storage.ts";
+import { withBlockedStorage } from "@ui/support/storage.ts";
 import { DARK_SLOT_KEY, LEGACY_THEME_KEY, LIGHT_SLOT_KEY, MODE_KEY } from "$lib/appearance.ts";
 import { knownPrefKeys } from "$lib/definePref.ts";
 import { DIFF_INDICATORS_KEY } from "$lib/diffIndicatorsPref.ts";

@@ -1,4 +1,4 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -14,7 +14,7 @@ import {
   completionListPainted as painted,
   typeInto,
   until,
-} from "@ui/test-helpers.ts";
+} from "@ui/support/helpers.ts";
 import { createPreviewToggle, type PreviewToggle } from "$lib/completionPreview.ts";
 import { fileCompletion } from "$lib/fileCompletion.ts";
 

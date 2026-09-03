@@ -4,7 +4,7 @@
 // runtime (`index-server.js`, whose `mount` is a stub that throws
 // `lifecycle_function_unavailable` deep inside a component mount). So `bun test`
 // without `--conditions browser` would mount every component into the server
-// stub and crash cryptically. test-mount.ts probes the resolved svelte module at
+// stub and crash cryptically. mount.ts probes the resolved svelte module at
 // import and fails with the message below instead.
 //
 // Kept node-free and happy-dom-free so the guard's tests import it directly

@@ -1,4 +1,4 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { describe, expect, test } from "bun:test";
 
 import { markdown } from "@codemirror/lang-markdown";
@@ -6,7 +6,7 @@ import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
 import type { FileRefKind, SkillRef } from "@core/lib/types";
-import { drainMicrotasks as drain, fakeTimers } from "@ui/test-helpers.ts";
+import { drainMicrotasks as drain, fakeTimers } from "@ui/support/helpers.ts";
 import type { ReviewContext } from "$lib/editorCompletion.ts";
 
 import { recognizedRefs, refKey, refRecognition, scanRefTokens } from "./editorRefs.ts";

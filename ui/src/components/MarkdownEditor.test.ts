@@ -1,10 +1,10 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 import { describe, expect, test } from "bun:test";
 
 import { languages } from "@codemirror/language-data";
 
-import { withFocusSpy } from "@ui/test-helpers.ts";
-import { render } from "@ui/test-mount.ts";
+import { withFocusSpy } from "@ui/support/helpers.ts";
+import { render } from "@ui/support/mount.ts";
 import MarkdownEditor from "@/components/MarkdownEditor.svelte";
 
 // MarkdownEditor is the swappable CodeMirror boundary. These units cover the

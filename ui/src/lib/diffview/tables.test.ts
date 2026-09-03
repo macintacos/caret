@@ -1,9 +1,9 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { gutterContentRoot, openComment } from "@ui/test-diffview-dom.ts";
+import { gutterContentRoot, openComment } from "@ui/support/diffview-dom.ts";
 import { type CodeBlockRange, codeBlockRanges } from "$lib/diffview/codeBlocks.ts";
 import { CELL_ATTR } from "$lib/diffview/rowTokens.ts";
 import {

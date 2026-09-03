@@ -1,8 +1,8 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 import { describe, expect, test } from "bun:test";
 
 import { until } from "@test/support/poll.ts";
-import { render } from "@ui/test-mount.ts";
+import { render } from "@ui/support/mount.ts";
 import { buildLinkLayer } from "$lib/diffview/links.ts";
 import SourceView from "$lib/diffview/SourceView.svelte";
 

@@ -1,4 +1,4 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { knownPrefKeys } from "$lib/definePref.ts";

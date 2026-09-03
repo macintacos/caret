@@ -1,10 +1,10 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 import { describe, expect, test } from "bun:test";
 
 import { until } from "@test/support/poll.ts";
-import { expectViewRecreated } from "@ui/test-diffview.ts";
-import { render } from "@ui/test-mount.ts";
-import { reactiveProps } from "@ui/test-props.svelte.ts";
+import { expectViewRecreated } from "@ui/support/diffview.ts";
+import { render } from "@ui/support/mount.ts";
+import { reactiveProps } from "@ui/support/props.svelte.ts";
 import SourceView from "$lib/diffview/SourceView.svelte";
 import type { SourceDocument, SourceViewOptions } from "$lib/diffview/types.ts";
 

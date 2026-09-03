@@ -1,10 +1,10 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 import { describe, expect, test } from "bun:test";
 
 import type { ComponentProps } from "svelte";
 
-import { capture, flushUntil, render } from "@ui/test-mount.ts";
-import { HEADINGS, releaseKey } from "@ui/test-plan-nav.ts";
+import { capture, flushUntil, render } from "@ui/support/mount.ts";
+import { HEADINGS, releaseKey } from "@ui/support/plan-nav.ts";
 import PlanToc from "@/components/PlanToc.svelte";
 import type { TocHeading } from "$lib/toc.ts";
 
@@ -172,7 +172,7 @@ async function open(target: HTMLElement, flush: () => void): Promise<void> {
  * portal presence waits for an `animationend` that never fires under happy-dom, so
  * content left open at unmount keeps its effects alive into the NEXT test file,
  * where they read deriveds whose owner is already destroyed and svelte warns
- * `derived_inert` — the effect half of the same leak ui/test-mount.ts purges the DOM
+ * `derived_inert` — the effect half of the same leak ui/support/mount.ts purges the DOM
  * half of. Guarded, so it is a no-op in the test whose pick already closed it. */
 async function close(target: HTMLElement, flush: () => void): Promise<void> {
   if (listbox() === null) return;

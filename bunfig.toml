@@ -1,6 +1,6 @@
 # Bun test-runner config. The UI component suite (ui/src/components/*.test.ts)
 # mounts Svelte 5 components under happy-dom; the preload compiles `.svelte`
-# files to client-side output (see ui/test-svelte-preload.ts). The preload is
+# files to client-side output (see ui/support/svelte-preload.ts). The preload is
 # inert for the backend suite — its onLoad filters match only `.svelte` files —
 # so it is safe to register globally here. The companion `--conditions browser`
 # flag (on the test command) selects svelte's client runtime entry; the backend
@@ -13,7 +13,7 @@
 # whose `browser` condition resolves a different file: bare `bun test` picked the
 # default entry from every one, while `--conditions browser` on the CLI picked the
 # browser entry. Bare `bun test` therefore resolves svelte's server runtime, which
-# ui/test-mount.ts detects and rejects with an actionable error rather than the
+# ui/support/mount.ts detects and rejects with an actionable error rather than the
 # cryptic mount() crash (EXC-537).
 #
 # `--timeout` rides on those same two entry points for the same reason (EXC-1056):
@@ -24,4 +24,4 @@
 [test]
 # rumdl-preload points the plan formatter (src/plan/rumdl.ts) at the mise-pinned
 # rumdl so tests run offline; svelte-preload compiles .svelte for the UI suite.
-preload = ["./test/support/rumdl-preload.ts", "./ui/test-svelte-preload.ts"]
+preload = ["./test/support/rumdl-preload.ts", "./ui/support/svelte-preload.ts"]

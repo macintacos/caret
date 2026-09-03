@@ -1,4 +1,4 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { describe, expect, test } from "bun:test";
 
 import type { UpdateReport, UpdateStatus } from "@core/lib/types";

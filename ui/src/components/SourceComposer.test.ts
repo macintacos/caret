@@ -1,8 +1,8 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 import { describe, expect, test } from "bun:test";
 
-import { withFocusSpy } from "@ui/test-helpers.ts";
-import { flushUntil, render } from "@ui/test-mount.ts";
+import { withFocusSpy } from "@ui/support/helpers.ts";
+import { flushUntil, render } from "@ui/support/mount.ts";
 import SourceComposer from "@/components/SourceComposer.svelte";
 
 // SourceComposer is the inline comment editor for the source-view gutter flow.

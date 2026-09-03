@@ -18,9 +18,9 @@
     // components and components.json assume. Mirrors the vite `$lib` alias so
     // svelte-check, the vite build, and bun test agree (EXC-757).
     //
-    // `@ui/*` → this program's root (ui/), one level above its source root, where
-    // the unit harness lives (test-mount.ts, test-setup.ts, test-helpers.ts,
-    // test-props.svelte.ts). `@test/*` → the bun program's test/ tree, which the
+    // `@ui/*` → this program's root (ui/), one level above its source root, so the
+    // unit harness in ui/support/ is addressable as `@ui/support/…`.
+    // `@test/*` → the bun program's test/ tree, which the
     // UI suites reach for shared polling helpers (EXC-879). Both are duplicated
     // here rather than inherited because bun resolves `paths` from the *nearest*
     // tsconfig, so ui/src/**/*.test.ts never sees the root config's mapping.
@@ -37,5 +37,5 @@
       "@test/*": ["../test/*"]
     }
   },
-  "include": ["src/**/*.ts", "*.ts"]
+  "include": ["src/**/*.ts", "support/**/*.ts", "*.ts"]
 }

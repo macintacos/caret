@@ -1,10 +1,10 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 
 import { describe, expect, test } from "bun:test";
 
 import type { ComponentProps } from "svelte";
 
-import { flushUntil, render } from "@ui/test-mount.ts";
+import { flushUntil, render } from "@ui/support/mount.ts";
 import UnsentCommentsDialog from "@/components/UnsentCommentsDialog.svelte";
 
 const twoItems = [

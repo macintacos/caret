@@ -1,9 +1,9 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 
 import { afterEach, describe, expect, test } from "bun:test";
 
 import type { UpdateReport } from "@core/lib/types";
-import { flushUntil, render } from "@ui/test-mount.ts";
+import { flushUntil, render } from "@ui/support/mount.ts";
 import SettingsDialog from "@/components/SettingsDialog.svelte";
 import { writeDiffStyle } from "$lib/diffStylePref.ts";
 import {

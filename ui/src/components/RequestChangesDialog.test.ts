@@ -1,11 +1,11 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 
 import { describe, expect, test } from "bun:test";
 
 import type { ComponentProps } from "svelte";
 
 import type { Annotation } from "@core/lib/types";
-import { capture, flushUntil, render } from "@ui/test-mount.ts";
+import { capture, flushUntil, render } from "@ui/support/mount.ts";
 import RequestChangesDialog from "@/components/RequestChangesDialog.svelte";
 import type { ComposerScratch } from "$lib/diffview/commenting.ts";
 

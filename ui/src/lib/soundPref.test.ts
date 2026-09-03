@@ -1,7 +1,7 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { withBlockedStorage } from "@ui/test-storage.ts";
+import { withBlockedStorage } from "@ui/support/storage.ts";
 import {
   DEFAULT_SOUND_VOLUME,
   readSoundEnabled,

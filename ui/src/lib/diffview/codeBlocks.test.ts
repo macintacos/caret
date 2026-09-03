@@ -1,7 +1,7 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { describe, expect, test } from "bun:test";
 
-import { gutterContentRoot } from "@ui/test-diffview-dom.ts";
+import { gutterContentRoot } from "@ui/support/diffview-dom.ts";
 import { codeBlockRanges, codeBlockText, tagCodeBlockRows } from "$lib/diffview/codeBlocks.ts";
 
 // codeBlockRanges classifies which lines of a rendered plan belong to a fenced

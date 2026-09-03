@@ -1,8 +1,8 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 import { describe, expect, test } from "bun:test";
 
 import type { ApproveVariant, ClientReview } from "@core/lib/types";
-import { capture, render } from "@ui/test-mount.ts";
+import { capture, render } from "@ui/support/mount.ts";
 import TopBar from "@/components/TopBar.svelte";
 import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
 

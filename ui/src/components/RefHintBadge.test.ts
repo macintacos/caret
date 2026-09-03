@@ -1,9 +1,9 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 import { describe, expect, test } from "bun:test";
 
 import type { FileRefKind } from "@core/lib/types";
-import { render } from "@ui/test-mount.ts";
-import { reactiveProps } from "@ui/test-props.svelte.ts";
+import { render } from "@ui/support/mount.ts";
+import { reactiveProps } from "@ui/support/props.svelte.ts";
 import RefHintBadge from "@/components/RefHintBadge.svelte";
 
 // RefHintBadge is the one-time teaching dot over a clickable path token (EXC-1061).

@@ -1,8 +1,8 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 import { describe, expect, test } from "bun:test";
 
 import type { LineAnnotation } from "@core/lib/types";
-import { capture, flushUntil, render } from "@ui/test-mount.ts";
+import { capture, flushUntil, render } from "@ui/support/mount.ts";
 import SourceAnnotationThread from "@/components/SourceAnnotationThread.svelte";
 import SourceAnnotationThreadFixture from "@/components/SourceAnnotationThread-fixture.svelte";
 
@@ -95,7 +95,7 @@ describe("SourceAnnotationThread stacked comments", () => {
     // Delete confirms first (EXC-749); confirm to fire onDelete. The confirmation is
     // a `popover`, so it portals to document.body and mounts deferred — polled for
     // rather than read straight after the click, and closed before the test ends so
-    // its effects don't outlive the mount (see flushUntil in ui/test-mount.ts).
+    // its effects don't outlive the mount (see flushUntil in ui/support/mount.ts).
     const bubble = () => document.body.querySelector(".confirm-popover");
     await flushUntil(flush, () => bubble() !== null);
     (document.querySelector(".confirm-popover .confirm") as HTMLElement).click();

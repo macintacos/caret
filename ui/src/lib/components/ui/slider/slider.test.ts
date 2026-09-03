@@ -15,7 +15,7 @@
 // target and needs no document.body query. Assertions go through `data-slot` and real
 // ARIA, never the registry's `cn-*` marker classes — those live in a CSS layer caret
 // does not import and are renamed upstream freely (§ Where the test goes).
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
@@ -23,7 +23,7 @@ import { join } from "node:path";
 
 import { Slider } from "$lib/components/ui/slider/index.js";
 
-import { flushUntil, render } from "@ui/test-mount.ts";
+import { flushUntil, render } from "@ui/support/mount.ts";
 
 const thumb = (target: HTMLElement) => target.querySelector("[data-slot='slider-thumb']");
 

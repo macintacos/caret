@@ -1,4 +1,4 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { createShortcutDispatcher, type ShortcutDispatcher } from "$lib/shortcuts/dispatcher.ts";

@@ -1,4 +1,4 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -18,7 +18,7 @@ import {
   settleCompletion,
   typeInto as type,
   until,
-} from "@ui/test-helpers.ts";
+} from "@ui/support/helpers.ts";
 import type { PreviewableCompletion, RowPreview } from "$lib/completionPreview.ts";
 
 import { createSkillCache, type DescribeSkill, skillCompletion } from "./skillCompletion.ts";
@@ -29,7 +29,7 @@ import { createSkillCache, type DescribeSkill, skillCompletion } from "./skillCo
 // list paints, what it inserts, and — the criterion a pure call can't reach —
 // that an ordinary path in prose leaves no list sitting open over the text. The
 // live-view scaffolding is shared with markdownEditor.test.ts
-// (ui/test-helpers.ts). The preview-panel block at the foot of the file is pure
+// (ui/support/helpers.ts). The preview-panel block at the foot of the file is pure
 // and says so where it sits.
 
 const SKILLS: SkillRef[] = [

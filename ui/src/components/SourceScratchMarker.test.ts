@@ -1,7 +1,7 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 import { describe, expect, test } from "bun:test";
 
-import { render } from "@ui/test-mount.ts";
+import { render } from "@ui/support/mount.ts";
 import SourceScratchMarker from "@/components/SourceScratchMarker.svelte";
 
 // SourceScratchMarker is the quiet, pre-card line affordance for a retained but

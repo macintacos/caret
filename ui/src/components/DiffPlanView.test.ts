@@ -1,12 +1,12 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import type { ClientReview, PlanVersion } from "@core/lib/types";
 import { until } from "@test/support/poll.ts";
-import { expectViewRecreated } from "@ui/test-diffview.ts";
-import { logCapture } from "@ui/test-helpers.ts";
-import { capture, render } from "@ui/test-mount.ts";
-import { reactiveProps } from "@ui/test-props.svelte.ts";
+import { expectViewRecreated } from "@ui/support/diffview.ts";
+import { logCapture } from "@ui/support/helpers.ts";
+import { capture, render } from "@ui/support/mount.ts";
+import { reactiveProps } from "@ui/support/props.svelte.ts";
 import DiffPlanView from "@/components/DiffPlanView.svelte";
 import { createSourceCommenting, scratchKey } from "$lib/diffview/commenting.ts";
 import { shortcuts } from "$lib/shortcuts/index.ts";

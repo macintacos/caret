@@ -8,11 +8,11 @@
 // Escape-to-cancel, outside-click-to-cancel, initial focus on the confirm button and
 // focus restoration to the trigger all live in test/e2e/confirm-popover.e2e.ts, per
 // doc/agents/browser-testing.md. Asserting them here would be asserting happy-dom.
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 
 import { expect, test } from "bun:test";
 
-import { flushUntil, render } from "@ui/test-mount.ts";
+import { flushUntil, render } from "@ui/support/mount.ts";
 import ConfirmPopoverFixture from "@/components/ConfirmPopover-fixture.svelte";
 
 const bubble = () => document.body.querySelector<HTMLElement>(".confirm-popover");
@@ -21,7 +21,7 @@ const cancelBtn = () => bubble()?.querySelector<HTMLElement>(".cancel");
 
 /** Open the bubble by clicking the trigger, the way a reviewer does — `open` is the
  * popover's own state now, with no prop to set it from outside. The flush before the
- * click is load-bearing, not tidy: see flushUntil's note in ui/test-mount.ts. */
+ * click is load-bearing, not tidy: see flushUntil's note in ui/support/mount.ts. */
 async function open(target: HTMLElement, flush: () => void): Promise<void> {
   flush();
   target.querySelector<HTMLButtonElement>(".fixture-trigger")?.click();
@@ -32,7 +32,7 @@ async function open(target: HTMLElement, flush: () => void): Promise<void> {
  * shadcn-command-popover.test.ts carries: bits-ui's portal presence waits for an
  * `animationend` that never fires under happy-dom, so content left open at unmount
  * keeps its effects alive into the next test, which then reads deriveds whose owner
- * is already destroyed and svelte warns `derived_inert`. test-mount.ts purges the DOM
+ * is already destroyed and svelte warns `derived_inert`. mount.ts purges the DOM
  * half of that leak; only closing purges the effect half. */
 async function close(flush: () => void): Promise<void> {
   if (bubble() === null) return;

@@ -15,13 +15,13 @@
 // The commit window is driven through the injected `schedule`, the same
 // injectable-timer discipline state/alerts.ts and lib/safeMode.ts use: nothing here
 // waits on a real timer, so the suite is deterministic rather than merely fast.
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 
 import { describe, expect, test } from "bun:test";
 
 import { flushSync, mount, unmount } from "svelte";
 
-import { capture, flushUntil, render } from "@ui/test-mount.ts";
+import { capture, flushUntil, render } from "@ui/support/mount.ts";
 import SettingSlider from "@/components/SettingSlider.svelte";
 
 const thumb = (target: HTMLElement) =>

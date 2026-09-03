@@ -1,4 +1,4 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { installUiGoneBeacon, UI_GONE_PATH } from "$lib/presence.ts";

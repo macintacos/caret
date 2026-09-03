@@ -1,7 +1,7 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
 
-import { scrolledOffsetReader } from "@ui/test-diffview-dom.ts";
+import { scrolledOffsetReader } from "@ui/support/diffview-dom.ts";
 import type { RectReader } from "$lib/diffview/codeCopy.ts";
 import type { FileRefSpan, FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 import {
@@ -13,7 +13,7 @@ import {
 } from "$lib/diffview/refHint.ts";
 
 // Both halves of the one-time reference hint (EXC-1061): the per-kind dismissal
-// flags, against the happy-dom localStorage test-setup wires, and the anchor
+// flags, against the happy-dom localStorage support/setup.ts wires, and the anchor
 // pick, against a hand-built shadow host. happy-dom lays nothing out, so the
 // geometry runs through an injected rect reader — the same seam codeCopy uses.
 

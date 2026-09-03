@@ -1,10 +1,10 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import { batchEvents, type LogCapture, logCapture } from "@ui/test-helpers.ts";
+import { batchEvents, type LogCapture, logCapture } from "@ui/support/helpers.ts";
 import { flush, startLogBridge, uiLog } from "$lib/log.ts";
 
-// Shared fetch double (test-helpers.ts): captures /api/logs POSTs and drains
+// Shared fetch double (helpers.ts): captures /api/logs POSTs and drains
 // the module-global buffer at install and restore so cases don't bleed.
 let cap: LogCapture;
 let stopBridge: (() => void) | null;

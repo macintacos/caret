@@ -1,4 +1,4 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import type {
@@ -9,13 +9,13 @@ import type {
   SkillRef,
   UpdateReport,
 } from "@core/lib/types";
-import type { LogCapture } from "@ui/test-helpers.ts";
+import type { LogCapture } from "@ui/support/helpers.ts";
 import {
   emptyResponse,
   installRoutedFetch,
   jsonResponse,
   type Respond,
-} from "@ui/test-routed-fetch.ts";
+} from "@ui/support/routed-fetch.ts";
 import {
   getApproveMode,
   getDiagnostics,
@@ -36,7 +36,7 @@ import {
 } from "$lib/api.ts";
 import { flush } from "$lib/log.ts";
 
-// Shared URL-routing fetch double (test-routed-fetch.ts): /api/logs POSTs are
+// Shared URL-routing fetch double (routed-fetch.ts): /api/logs POSTs are
 // captured; the review/prefs endpoints answer from the per-test `respond` so
 // each case can pick success, a non-2xx Response, or a rejected promise.
 let respond: Respond;

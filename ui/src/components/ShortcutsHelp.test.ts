@@ -1,8 +1,8 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 
 import { describe, expect, test } from "bun:test";
 
-import { flushUntil, render } from "@ui/test-mount.ts";
+import { flushUntil, render } from "@ui/support/mount.ts";
 import ShortcutsHelp from "@/components/ShortcutsHelp.svelte";
 import type { ShortcutEntry } from "$lib/shortcuts/registry.ts";
 

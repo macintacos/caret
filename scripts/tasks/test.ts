@@ -213,7 +213,7 @@ async function emitTestReport(
 // --- test unit --------------------------------------------------------------
 // `--conditions browser` selects svelte's client runtime entry so the UI
 // component suite can mount components under happy-dom (see bunfig.toml and
-// ui/test-svelte-preload.ts); the backend suite passes unchanged under it. Extra
+// ui/support/svelte-preload.ts); the backend suite passes unchanged under it. Extra
 // args (a path, --test-name-pattern, …) are forwarded to `bun test`.
 
 /**

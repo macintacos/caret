@@ -1,7 +1,7 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { describe, expect, test } from "bun:test";
 
-import { fillLines } from "@ui/test-diffview-dom.ts";
+import { fillLines } from "@ui/support/diffview-dom.ts";
 import { codeBlockRanges } from "$lib/diffview/codeBlocks.ts";
 import { tagThematicBreakRows, thematicBreakLines } from "$lib/diffview/thematicBreaks.ts";
 

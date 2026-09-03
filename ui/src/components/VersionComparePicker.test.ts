@@ -1,8 +1,8 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 import { describe, expect, test } from "bun:test";
 
-import { capture, render } from "@ui/test-mount.ts";
-import { versions } from "@ui/test-plan-versions.ts";
+import { capture, render } from "@ui/support/mount.ts";
+import { versions } from "@ui/support/plan-versions.ts";
 import VersionComparePicker from "@/components/VersionComparePicker.svelte";
 
 const baseProps = {

@@ -1,9 +1,9 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 import { describe, expect, test } from "bun:test";
 
 import { until } from "@test/support/poll.ts";
-import { capture, render } from "@ui/test-mount.ts";
-import { reactiveProps } from "@ui/test-props.svelte.ts";
+import { capture, render } from "@ui/support/mount.ts";
+import { reactiveProps } from "@ui/support/props.svelte.ts";
 import SourceDiffView from "$lib/diffview/SourceDiffView.svelte";
 import type {
   SourceDiffViewApi,

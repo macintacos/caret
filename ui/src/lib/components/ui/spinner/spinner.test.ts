@@ -1,10 +1,10 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 
 import { describe, expect, test } from "bun:test";
 
 import { Spinner } from "$lib/components/ui/spinner/index.js";
 
-import { flushUntil, render } from "@ui/test-mount.ts";
+import { flushUntil, render } from "@ui/support/mount.ts";
 
 // Composition guard for the vendored spinner (EXC-1109). Spinner is a plain
 // (non-bits-ui, non-portalled) element, so it gets its suite beside it rather

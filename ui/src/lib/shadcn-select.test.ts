@@ -11,12 +11,12 @@
 // mount target. The real interaction semantics — keyboard roving, typeahead,
 // outside-click, focus restoration — are real-browser behaviours and stay e2e
 // per doc/agents/browser-testing.md.
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 
-import { flushUntil, render } from "@ui/test-mount.ts";
+import { flushUntil, render } from "@ui/support/mount.ts";
 import SelectFixture from "$lib/shadcn-select-fixture.svelte";
 
 const content = () => document.body.querySelector("[data-slot='select-content']");
@@ -27,7 +27,7 @@ const trigger = (target: HTMLElement) => target.querySelector("[data-slot='selec
  * waits for an `animationend` that never fires under happy-dom, so content left
  * open at unmount keeps its effects alive into the next test, which then reads
  * deriveds whose owner is already destroyed and svelte warns `derived_inert`.
- * test-mount.ts purges the DOM half of that leak; only closing purges the effect
+ * mount.ts purges the DOM half of that leak; only closing purges the effect
  * half. Guarded, so it is a no-op if a test never opened.
  *
  * The gesture is a real `pointerdown`, NOT the `.click()` the Popover suite uses:

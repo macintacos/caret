@@ -1,8 +1,8 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { fakeMediaQuery } from "@ui/test-media-query.ts";
-import { withBlockedStorage } from "@ui/test-storage.ts";
+import { fakeMediaQuery } from "@ui/support/media-query.ts";
+import { withBlockedStorage } from "@ui/support/storage.ts";
 import {
   appearanceSummary,
   DARK_SLOT_KEY,

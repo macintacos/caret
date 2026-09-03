@@ -1,4 +1,4 @@
-import { type LogCapture, logCapture } from "@ui/test-helpers.ts";
+import { type LogCapture, logCapture } from "./helpers.ts";
 
 export type Respond = (url: string, options: RequestInit | undefined) => Promise<Response>;
 
@@ -7,7 +7,7 @@ export type Respond = (url: string, options: RequestInit | undefined) => Promise
 export const emptyResponse: Respond = () => Promise.resolve(new Response(null, { status: 204 }));
 
 /** Wire a URL-routing fetch double: `/api/logs` POSTs are captured via
- * `logCapture` (test-helpers.ts), and every other URL is answered by calling
+ * `logCapture` (helpers.ts), and every other URL is answered by calling
  * whatever `getRespond()` currently returns — so a test can reassign its own
  * `respond` local per case without re-wiring the stub. */
 export function installRoutedFetch(getRespond: () => Respond): LogCapture {

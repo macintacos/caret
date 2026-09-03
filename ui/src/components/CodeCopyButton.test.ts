@@ -1,7 +1,7 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 import { describe, expect, test } from "bun:test";
 
-import { render } from "@ui/test-mount.ts";
+import { render } from "@ui/support/mount.ts";
 import CodeCopyButton from "@/components/CodeCopyButton.svelte";
 
 // CodeCopyButton is the per-code-block copy affordance. These units cover the

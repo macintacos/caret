@@ -1,7 +1,7 @@
-import "@ui/test-setup.ts";
+import "@ui/support/setup.ts";
 import { describe, expect, test } from "bun:test";
 
-import { fillLines, scrolledOffsetReader } from "@ui/test-diffview-dom.ts";
+import { fillLines, scrolledOffsetReader } from "@ui/support/diffview-dom.ts";
 import { codeBlockAtPoint, copyAnchor, type RectReader } from "$lib/diffview/codeCopy.ts";
 
 // A host with a shadow root of [data-content] > [data-line] rows, matching the

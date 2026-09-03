@@ -1,8 +1,8 @@
-import "@ui/test-mount.ts";
+import "@ui/support/mount.ts";
 import { describe, expect, test } from "bun:test";
 
 import type { UpdateReport, UpdateStatus } from "@core/lib/types";
-import { render } from "@ui/test-mount.ts";
+import { render } from "@ui/support/mount.ts";
 import UpdatesPane from "@/components/UpdatesPane.svelte";
 
 // The settings Updates pane (EXC-1207): the read-only half of the category — what the

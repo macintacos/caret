@@ -1,9 +1,9 @@
 // Shared mount harness for the component suite. Mounts a Svelte 5 component into
-// a detached target under happy-dom (DOM globals registered by test-setup.ts,
-// client-side compilation wired by test-svelte-preload.ts), exposes the host
+// a detached target under happy-dom (DOM globals registered by setup.ts,
+// client-side compilation wired by svelte-preload.ts), exposes the host
 // element for queries, and tracks live instances so afterEach can unmount them.
-// Imported as ../../test-mount.ts by the component tests.
-import "./test-setup.ts";
+// Imported as @ui/support/mount.ts by the component tests.
+import "./setup.ts";
 import { afterEach } from "bun:test";
 
 import { type Component, flushSync, mount, unmount } from "svelte";
