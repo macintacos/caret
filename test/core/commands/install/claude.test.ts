@@ -27,6 +27,21 @@ function recorder(
   };
 }
 
+/** The dev-mode `local` option every `--from-local` case installs from. */
+const localTarget = { repoDir: "/checkout", marketplaceDir: "/dev-mp" };
+
+/** Run `--from-local` against `runner` with a recording UI and a no-op
+ * marketplace writer, returning that UI — the invocation shape shared by every
+ * case below that inspects the transcript. */
+async function runLocalWithUi(runner: ClaudeRunner): Promise<ReturnType<typeof recordingUI>> {
+  const ui = recordingUI();
+  await runInstallClaudeTarget(
+    { uninstall: false, dryRun: false, local: localTarget },
+    { claude: runner, writeDevMarketplace: () => {}, ui },
+  );
+  return ui;
+}
+
 /** A `claude plugin list --json` payload reporting `version` for caret, alongside another
  * plugin so the lookup has to pick caret's entry out rather than take the first. */
 function listing(version: string): string {
@@ -50,20 +65,23 @@ function versioned(listings: string[]): { runner: ClaudeRunner; calls: string[][
   };
 }
 
+// Unconditional, not a fallback: on a machine whose marketplace is already registered
+// the marketplace-update step no-ops, and without this refresh the install reads stale
+// metadata.
+const SUCCESSFUL_INSTALL_CALLS: string[][] = [
+  ["plugin", "marketplace", "add", "macintacos/caret"],
+  ["plugin", "marketplace", "update", "caret"],
+  ["plugin", "install", "caret@caret", "--scope", "user"],
+  ["plugin", "enable", "caret@caret"],
+  ["plugin", "list", "--json"],
+  ["plugin", "update", "caret@caret", "--scope", "user"],
+  ["plugin", "list", "--json"],
+];
+
 test("install refreshes the marketplace, installs and enables, then updates the plugin", async () => {
   const { runner, calls } = recorder();
   await runInstallClaudeTarget({ uninstall: false, dryRun: false }, { claude: runner });
-  expect(calls).toEqual([
-    ["plugin", "marketplace", "add", "macintacos/caret"],
-    // Unconditional, not a fallback: on a machine whose marketplace is already registered
-    // the add no-ops, and without this refresh the install reads stale metadata.
-    ["plugin", "marketplace", "update", "caret"],
-    ["plugin", "install", "caret@caret", "--scope", "user"],
-    ["plugin", "enable", "caret@caret"],
-    ["plugin", "list", "--json"],
-    ["plugin", "update", "caret@caret", "--scope", "user"],
-    ["plugin", "list", "--json"],
-  ]);
+  expect(calls).toEqual(SUCCESSFUL_INSTALL_CALLS);
 });
 
 test("an updated plugin settles with the versions it moved between", async () => {
@@ -138,7 +156,7 @@ test("neither --from-local nor --uninstall asks Claude to update the plugin", as
   // the published plugin over it. An uninstall is setting nothing up.
   const local = recorder();
   await runInstallClaudeTarget(
-    { uninstall: false, dryRun: false, local: { repoDir: "/checkout", marketplaceDir: "/dev-mp" } },
+    { uninstall: false, dryRun: false, local: localTarget },
     { claude: local.runner, writeDevMarketplace: () => {} },
   );
   const removed = recorder();
@@ -195,11 +213,7 @@ test("a failed marketplace add is best-effort; a failed install is fatal", async
       : { ok: false, detail: "boom", stdout: "" };
   };
   await runInstallClaudeTarget({ uninstall: false, dryRun: false }, { claude: runner });
-  expect(calls).toEqual([
-    ["plugin", "marketplace", "add", "macintacos/caret"],
-    ["plugin", "marketplace", "update", "caret"],
-    ["plugin", "install", "caret@caret", "--scope", "user"],
-  ]);
+  expect(calls).toEqual(SUCCESSFUL_INSTALL_CALLS.slice(0, 3));
 });
 
 test("a failed enable is best-effort: the install still completes", async () => {
@@ -214,15 +228,7 @@ test("a failed enable is best-effort: the install still completes", async () => 
   };
   const ui = recordingUI();
   await runInstallClaudeTarget({ uninstall: false, dryRun: false }, { claude: runner, ui });
-  expect(calls).toEqual([
-    ["plugin", "marketplace", "add", "macintacos/caret"],
-    ["plugin", "marketplace", "update", "caret"],
-    ["plugin", "install", "caret@caret", "--scope", "user"],
-    ["plugin", "enable", "caret@caret"],
-    ["plugin", "list", "--json"],
-    ["plugin", "update", "caret@caret", "--scope", "user"],
-    ["plugin", "list", "--json"],
-  ]);
+  expect(calls).toEqual(SUCCESSFUL_INSTALL_CALLS);
   expect(ui.events.some((e) => e.startsWith("error:"))).toBe(false);
   expect(ui.events.some((e) => e.startsWith("failed:"))).toBe(false);
 });
@@ -231,7 +237,7 @@ test("--from-local registers the generated dev marketplace, never the published 
   const { runner, calls } = recorder();
   const written: [string, string][] = [];
   await runInstallClaudeTarget(
-    { uninstall: false, dryRun: false, local: { repoDir: "/checkout", marketplaceDir: "/dev-mp" } },
+    { uninstall: false, dryRun: false, local: localTarget },
     { claude: runner, writeDevMarketplace: (repo, out) => void written.push([repo, out]) },
   );
   expect(written).toEqual([["/checkout", "/dev-mp"]]);
@@ -256,11 +262,7 @@ test("--from-local survives a clean machine: uninstall and enable failures are b
       ? { ok: false, detail: "nothing to do", stdout: "" }
       : { ok: true, detail: "", stdout: "" };
   };
-  const ui = recordingUI();
-  await runInstallClaudeTarget(
-    { uninstall: false, dryRun: false, local: { repoDir: "/checkout", marketplaceDir: "/dev-mp" } },
-    { claude: runner, writeDevMarketplace: () => {}, ui },
-  );
+  const ui = await runLocalWithUi(runner);
   expect(calls).toContainEqual(["plugin", "install", "caret@caret", "--scope", "user"]);
   expect(ui.events.some((e) => e.startsWith("error:"))).toBe(false);
 });
@@ -276,7 +278,7 @@ test("--from-local falls back to updating the marketplace when the add fails", a
       : { ok: true, detail: "", stdout: "" };
   };
   await runInstallClaudeTarget(
-    { uninstall: false, dryRun: false, local: { repoDir: "/checkout", marketplaceDir: "/dev-mp" } },
+    { uninstall: false, dryRun: false, local: localTarget },
     { claude: runner, writeDevMarketplace: () => {} },
   );
   expect(calls[0]).toEqual(["plugin", "marketplace", "add", "/dev-mp"]);
@@ -293,11 +295,7 @@ test("--from-local stops when neither the marketplace add nor its update lands",
       ? { ok: false, detail: "nope", stdout: "" }
       : { ok: true, detail: "", stdout: "" };
   };
-  const ui = recordingUI();
-  await runInstallClaudeTarget(
-    { uninstall: false, dryRun: false, local: { repoDir: "/checkout", marketplaceDir: "/dev-mp" } },
-    { claude: runner, writeDevMarketplace: () => {}, ui },
-  );
+  const ui = await runLocalWithUi(runner);
   expect(calls).toEqual([
     ["plugin", "marketplace", "add", "/dev-mp"],
     ["plugin", "marketplace", "update", "caret"],
@@ -310,7 +308,7 @@ test("--from-local --dry-run writes no marketplace and spawns no claude", async 
   const written: string[] = [];
   const ui = recordingUI();
   await runInstallClaudeTarget(
-    { uninstall: false, dryRun: true, local: { repoDir: "/checkout", marketplaceDir: "/dev-mp" } },
+    { uninstall: false, dryRun: true, local: localTarget },
     { claude: runner, writeDevMarketplace: (_r, out) => void written.push(out), ui },
   );
   expect(calls).toEqual([]);

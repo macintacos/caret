@@ -9,23 +9,34 @@ import { join } from "node:path";
 /**
  * Run `fn` with the given env vars applied (an `undefined` value deletes the
  * var), restoring every touched key — including ones that were already set —
- * afterward. Synchronous: the restore runs in a `finally`, so a throwing `fn`
- * still leaves process.env clean.
+ * afterward, whether `fn` is sync or async: the restore runs in a `finally`
+ * (chained onto the returned promise for an async `fn`), so a throwing or
+ * rejecting `fn` still leaves process.env clean.
  */
-export function withEnv(vars: Record<string, string | undefined>, fn: () => void): void {
+export function withEnv<T>(vars: Record<string, string | undefined>, fn: () => T): T {
   const saved = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
   for (const [k, v] of Object.entries(vars)) {
     if (v === undefined) delete process.env[k];
     else process.env[k] = v;
   }
-  try {
-    fn();
-  } finally {
+  const restore = () => {
     for (const [k, v] of Object.entries(saved)) {
       if (v === undefined) delete process.env[k];
       else process.env[k] = v;
     }
+  };
+  let result: T;
+  try {
+    result = fn();
+  } catch (e) {
+    restore();
+    throw e;
   }
+  if (result instanceof Promise) {
+    return result.finally(restore) as T;
+  }
+  restore();
+  return result;
 }
 
 /**

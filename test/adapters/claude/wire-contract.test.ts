@@ -17,9 +17,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { setupTempStateDir } from "@test/support/env.ts";
+import { emitWire as emitWireVia, expectWireDenyContract } from "@test/support/wire-contract.ts";
 import { claudeAdapter } from "@/adapters/claude/index.ts";
 import type { Decision } from "@/lib/types.ts";
-import { runReview } from "@/review/orchestrate.ts";
 
 const FIXTURE = join(import.meta.dir, "fixtures", "permission-request-stdin.json");
 const stdin = readFileSync(FIXTURE, "utf-8");
@@ -33,26 +33,8 @@ const fixturePlan = (JSON.parse(stdin) as { tool_input: { plan: string } }).tool
 // dir so this suite never appends to the real ~/.local/state/caret.
 setupTempStateDir("caret-wire-contract-");
 
-// Build review deps that parse with the REAL Claude adapter and fake only the
-// daemon-side effects (the network, the browser, the timer). longPoll returns the
-// supplied decision, so one call drives the whole loop to that outcome.
-function depsReturning(decision: Decision): Parameters<typeof runReview>[1] {
-  return {
-    parseHookInput: claudeAdapter.parseHookInput,
-    ensureDaemon: async () => "http://x",
-    postReview: async () => ({ id: "rid" }),
-    longPoll: async () => decision,
-    openBrowser: () => {},
-    timeoutMs: 1000,
-    expire: async () => {},
-  };
-}
-
-// Run the real parse → runReview → emitDecision path over the fixture and return
-// the parsed stdout wire object the hook would write.
-async function emitWire(decision: Decision): Promise<unknown> {
-  const out = await runReview(stdin, depsReturning(decision));
-  return JSON.parse(claudeAdapter.emitDecision(out, claudeAdapter.parseHookInput(stdin)));
+function emitWire(decision: Decision): Promise<unknown> {
+  return emitWireVia(stdin, decision, claudeAdapter);
 }
 
 test("the fixture parses to a PlanInput carrying the realistic payload", () => {
@@ -104,12 +86,5 @@ test("approve + auto over the fixture carries updatedInput and a setMode auto pe
 });
 
 test("a deny over the fixture carries the reviewer feedback in decision.message", async () => {
-  expect(
-    await emitWire({ behavior: "deny", feedback: "narrow step 2 to one route", decidedAt: 1 }),
-  ).toEqual({
-    hookSpecificOutput: {
-      hookEventName: "PermissionRequest",
-      decision: { behavior: "deny", message: "narrow step 2 to one route" },
-    },
-  });
+  await expectWireDenyContract(emitWire);
 });

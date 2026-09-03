@@ -8,6 +8,10 @@
 // runs under the Playwright/node runner, binds an OS-assigned port for parallel
 // workers, and serves the built ui/dist/ tree (index plus its hashed assets) —
 // a hermetic createServer-with-explicit-opts posture this module does not replace.
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { type CaretServer, type CreateServerOptions, createServer } from "@/daemon/server.ts";
 import { createStore, type Store } from "@/review/store.ts";
 
@@ -105,4 +109,31 @@ export async function bootDaemon(dir: string, opts: BootOptions = {}): Promise<T
       return fetch(`${url}/api/reviews/${id}/expire`, { method: "POST" });
     },
   };
+}
+
+export interface DaemonTree {
+  /** The daemon's own state dir. */
+  store: string;
+  /** The review's project dir, for a test to populate with real files. */
+  cwd: string;
+  /** The daemon booted over `store`. */
+  d: TestDaemon;
+}
+
+/**
+ * Create a throwaway state dir and project cwd, and boot a daemon over the
+ * state dir. `prefix` names the temp dirs for diagnosability (e.g. "dir").
+ */
+export async function bootDaemonTree(prefix: string): Promise<DaemonTree> {
+  const store = mkdtempSync(join(tmpdir(), `caret-${prefix}-store-`));
+  const cwd = mkdtempSync(join(tmpdir(), `caret-${prefix}-cwd-`));
+  const d = await bootDaemon(store);
+  return { store, cwd, d };
+}
+
+/** Stop the daemon and remove both temp dirs from a `bootDaemonTree` fixture. */
+export function teardownDaemonTree({ store, cwd, d }: DaemonTree): void {
+  d.stop();
+  rmSync(store, { recursive: true, force: true });
+  rmSync(cwd, { recursive: true, force: true });
 }

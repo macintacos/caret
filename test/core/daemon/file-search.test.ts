@@ -1,10 +1,16 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { bootDaemon, type TestDaemon } from "@test/support/daemon.ts";
-import { recordingLog } from "@test/support/recording-log.ts";
+import {
+  bootDaemon,
+  bootDaemonTree,
+  type TestDaemon,
+  teardownDaemonTree,
+} from "@test/support/daemon.ts";
+import { writeTreeFile } from "@test/support/fs-tree.ts";
+import { expectDebugRequestRecord, recordingLog } from "@test/support/recording-log.ts";
 import { expectNeverLogsBody } from "@test/support/redaction.ts";
 import type { FileSearchResponse } from "@/lib/types.ts";
 import { SEARCH_BUDGET } from "@/plan/file-search.ts";
@@ -24,20 +30,14 @@ let cwd: string; // the review's project dir, populated with real files
 let d: TestDaemon;
 
 beforeEach(async () => {
-  store = mkdtempSync(join(tmpdir(), "caret-fsearch-store-"));
-  cwd = mkdtempSync(join(tmpdir(), "caret-fsearch-cwd-"));
-  d = await bootDaemon(store);
+  ({ store, cwd, d } = await bootDaemonTree("fsearch"));
 });
 afterEach(() => {
-  d.stop();
-  rmSync(store, { recursive: true, force: true });
-  rmSync(cwd, { recursive: true, force: true });
+  teardownDaemonTree({ store, cwd, d });
 });
 
 function write(rel: string, content = "x"): void {
-  const abs = join(cwd, rel);
-  mkdirSync(join(abs, ".."), { recursive: true });
-  writeFileSync(abs, content);
+  writeTreeFile(cwd, rel, content);
 }
 
 function search(id: string, body: unknown): Promise<Response> {
@@ -135,10 +135,7 @@ test("file-search logs counts at debug level and never a query or a path", async
       body: JSON.stringify({ query: "confidential-query" }),
     });
     expect(res.status).toBe(200);
-    const requests = recs.filter((r) => r.step === "request");
-    expect(requests).toHaveLength(1);
-    expect(requests[0]?.level).toBe("debug");
-    expect(requests[0]?.extra).toMatchObject({ reviewId: id, returned: 0, stoppedAt: null });
+    expectDebugRequestRecord(recs, { reviewId: id, returned: 0, stoppedAt: null });
     expectNeverLogsBody(recs, ["top-secret-filename.ts", "confidential-query"]);
   } finally {
     logged.stop();

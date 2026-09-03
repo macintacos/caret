@@ -1,8 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 
 import { setupTempStateDir } from "@test/support/env.ts";
-import { ndjsonRecords } from "@test/support/ndjson.ts";
+import { caretLogRecords } from "@test/support/ndjson.ts";
 import { logFile } from "@/config/paths.ts";
 import { setLogLevel } from "@/lib/log.ts";
 import type { Decision, PlanInput } from "@/lib/types.ts";
@@ -43,15 +42,6 @@ const stdin = JSON.stringify({ session_id: "S", cwd: "/p", tool_input: { plan: "
 // disposable caret.log instead of the real ~/.local/state/caret.
 setupTempStateDir("caret-cli-");
 afterEach(() => setLogLevel("info")); // undo any per-test level change
-
-/** Parse caret.log into NDJSON records ([] when the file doesn't exist). */
-function logRecords(): Array<Record<string, unknown>> {
-  try {
-    return ndjsonRecords(readFileSync(logFile(), "utf-8"));
-  } catch {
-    return [];
-  }
-}
 
 // ---- runReview ----
 //
@@ -327,7 +317,7 @@ test("a failure logs the step + context to caret.log and surfaces the path", asy
   // The deny reason points the user at the log.
   expect(out.feedback).toContain(logFile());
   // The log captures which step failed, the message, and stdin context.
-  const rec = logRecords().find((r) => r.step === "ensureDaemon");
+  const rec = caretLogRecords().find((r) => r.step === "ensureDaemon");
   expect(rec).toMatchObject({ level: 50, msg: "daemon down", sessionId: "S", cwd: "/p" });
 });
 
@@ -348,7 +338,7 @@ test("a failed reconnect logs step=reconnect, not the poll step", async () => {
       },
     }),
   );
-  const recs = logRecords();
+  const recs = caretLogRecords();
   expect(recs.some((r) => r.step === "reconnect")).toBe(true);
   expect(recs.some((r) => r.step === "longPoll")).toBe(false);
 });
@@ -417,40 +407,14 @@ test("a bare-fence plan is denied for format before any daemon work", async () =
   expect(postCalls).toBe(0);
 });
 
-test("a fully-tagged plan is posted for review as before", async () => {
+test.each<[string, string | undefined]>([
+  ["a fully-tagged plan is posted for review as before", "# Plan\n\n```ts\nconst x = 1;\n```\n"],
+  ["a plan with no code blocks is posted for review", "# Just prose, no code.\n"],
+  ["an absent plan is posted for review (no spurious format-deny)", undefined],
+])("%s", async (_title, plan) => {
   let postCalls = 0;
   const out = await runReview(
-    planStdin("# Plan\n\n```ts\nconst x = 1;\n```\n"),
-    reviewDeps({
-      postReview: async () => {
-        postCalls++;
-        return { id: "rid" };
-      },
-    }),
-  );
-  expect(out.behavior).toBe("allow");
-  expect(postCalls).toBe(1);
-});
-
-test("a plan with no code blocks is posted for review", async () => {
-  let postCalls = 0;
-  const out = await runReview(
-    planStdin("# Just prose, no code.\n"),
-    reviewDeps({
-      postReview: async () => {
-        postCalls++;
-        return { id: "rid" };
-      },
-    }),
-  );
-  expect(out.behavior).toBe("allow");
-  expect(postCalls).toBe(1);
-});
-
-test("an absent plan is posted for review (no spurious format-deny)", async () => {
-  let postCalls = 0;
-  const out = await runReview(
-    planStdin(undefined),
+    planStdin(plan),
     reviewDeps({
       postReview: async () => {
         postCalls++;
@@ -470,7 +434,7 @@ test("a format-deny is logged at info — an expected reject, not an error", asy
   // Stable contract: the format reject is an info-level "validatePlan" record
   // carrying the session — assert the step/level/field and the "plan rejected"
   // token, not the exact descriptive tail (F1 brittleness reduction).
-  const rec = logRecords().find((r) => r.step === "validatePlan");
+  const rec = caretLogRecords().find((r) => r.step === "validatePlan");
   expect(rec).toMatchObject({ level: 30, sessionId: "FMT" });
   expect(typeof rec?.msg === "string" && rec.msg.startsWith("plan rejected")).toBe(true);
 });
@@ -484,7 +448,7 @@ test("a rejected plan is logged at info without the feedback body (EXC-444)", as
       longPoll: async () => ({ behavior: "deny", feedback: "tighten phase 2", decidedAt: 1 }),
     }),
   );
-  const rec = logRecords().find((r) => r.step === "decision");
+  const rec = caretLogRecords().find((r) => r.step === "decision");
   expect(rec).toMatchObject({
     level: 30,
     msg: "plan rejected",
@@ -497,7 +461,7 @@ test("a rejected plan is logged at info without the feedback body (EXC-444)", as
 
 test("an approved plan is logged at info", async () => {
   await runReview(stdin, reviewDeps());
-  const rec = logRecords().find((r) => r.step === "decision");
+  const rec = caretLogRecords().find((r) => r.step === "decision");
   expect(rec).toMatchObject({ level: 30, msg: "plan approved", sessionId: "S" });
 });
 
@@ -505,7 +469,7 @@ test("an approved plan is logged at info", async () => {
 
 test("a review start is logged at info with session context", async () => {
   await runReview(stdin, reviewDeps());
-  const rec = logRecords().find((r) => r.step === "review" && r.msg === "review requested");
+  const rec = caretLogRecords().find((r) => r.step === "review" && r.msg === "review requested");
   expect(rec).toMatchObject({ level: 30, sessionId: "S", cwd: "/p" });
 });
 
@@ -514,11 +478,11 @@ test("the posted review id is logged at debug and stitches later records", async
   await runReview(stdin, reviewDeps());
   // Locate the create record by its stable contract (debug "review" step
   // carrying the reviewId), not the id-embedding message prose (F1 style).
-  const posted = logRecords().find((r) => r.step === "review" && r.reviewId === "rid");
+  const posted = caretLogRecords().find((r) => r.step === "review" && r.reviewId === "rid");
   expect(posted).toMatchObject({ level: 20, step: "review", reviewId: "rid" });
   // Once the id is known, every later record carries it — caret.log records
   // stitch against the daemon's review/resolve records by reviewId.
-  const decision = logRecords().find((r) => r.step === "decision");
+  const decision = caretLogRecords().find((r) => r.step === "decision");
   expect(decision).toMatchObject({ msg: "plan approved", reviewId: "rid" });
 });
 
@@ -529,7 +493,7 @@ test("an approved plan's record carries the acceptMode", async () => {
       longPoll: async () => ({ behavior: "allow", acceptMode: "acceptEdits", decidedAt: 1 }),
     }),
   );
-  const rec = logRecords().find((r) => r.step === "decision");
+  const rec = caretLogRecords().find((r) => r.step === "decision");
   expect(rec).toMatchObject({ msg: "plan approved", acceptMode: "acceptEdits" });
 });
 
@@ -538,7 +502,7 @@ test("a failure after the review was posted carries the reviewId", async () => {
     stdin,
     reviewDeps({ longPoll: () => new Promise<Decision>(() => {}), timeoutMs: 30 }),
   );
-  const rec = logRecords().find((r) => r.level === 50);
+  const rec = caretLogRecords().find((r) => r.level === 50);
   expect(rec).toMatchObject({ step: "longPoll", reviewId: "rid", sessionId: "S" });
 });
 
@@ -550,7 +514,7 @@ test("decision info records are suppressed when the level is error", async () =>
       longPoll: async () => ({ behavior: "deny", feedback: "nope", decidedAt: 1 }),
     }),
   );
-  expect(logRecords()).toHaveLength(0);
+  expect(caretLogRecords()).toHaveLength(0);
 });
 
 // ---- onPosted seam + abandon expiry (EXC-482) ----

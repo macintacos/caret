@@ -13,6 +13,49 @@ import { RUMDL_VERSION } from "@/plan/rumdl.ts";
  * to the production acquisition, which reaches the network and writes to the state dir. */
 const noRumdl = async () => ({ bin: "/tmp/rumdl", installed: false });
 
+/** The resolved local checkout every `--from-local` case installs from, sharing one ref. */
+const resolvedCheckout = () => ({ repoDir: "/checkout", ref: "ref" });
+const devMarketplaceDir = () => "/dev-mp";
+const bothAgents = (): InstallTarget[] => ["claude", "opencode"];
+
+/** The plain "install claude" invocation options every rumdl-step case starts from. */
+const INSTALL_CLAUDE = { target: "claude", uninstall: false, dryRun: false };
+
+/** Deps that just record which target ran, in order — the recording pair
+ * nearly every dispatch test in this file shares. */
+function recordingRunners(calls: string[]): { runOpencode: () => void; runClaude: () => void } {
+  return {
+    runOpencode: () => void calls.push("opencode"),
+    runClaude: () => void calls.push("claude"),
+  };
+}
+
+/** Deps shared by the two `--from-local` prewarm outcomes below — a resolved
+ * checkout, a no-op claude runner, and no rumdl download; only `prewarm` differs. */
+function fromLocalPrewarmDeps(ui: ReturnType<typeof recordingUI>, prewarm: () => Promise<void>) {
+  return {
+    ui,
+    resolveLocal: resolvedCheckout,
+    marketplaceDir: devMarketplaceDir,
+    runClaude: () => {},
+    ensureRumdl: noRumdl,
+    prewarm,
+  };
+}
+
+/** A chooser prompt that always cancels, recording whether it was ever invoked — the
+ * fixture every "chooser not offered" and "chooser cancelled" case shares. */
+function decliningPrompt(): { prompt: () => Promise<null>; wasPrompted: () => boolean } {
+  let called = false;
+  return {
+    prompt: async () => {
+      called = true;
+      return null;
+    },
+    wasPrompted: () => called,
+  };
+}
+
 test("parseTargets accepts a single target, both, and dedupes/preserves order", () => {
   expect(parseTargets("opencode")).toEqual({ targets: ["opencode"] });
   expect(parseTargets("claude")).toEqual({ targets: ["claude"] });
@@ -67,8 +110,7 @@ test("runInstallSubcommand runs only the requested target", async () => {
     { target: "opencode", uninstall: false, dryRun: true },
     {
       ui: silentUI,
-      runOpencode: () => void calls.push("opencode"),
-      runClaude: () => void calls.push("claude"),
+      ...recordingRunners(calls),
     },
   );
   expect(calls).toEqual(["opencode"]);
@@ -80,8 +122,7 @@ test("runInstallSubcommand sets a non-zero exit code and dispatches nothing on a
     { target: "bogus", uninstall: false, dryRun: false },
     {
       ui: silentUI,
-      runOpencode: () => void calls.push("opencode"),
-      runClaude: () => void calls.push("claude"),
+      ...recordingRunners(calls),
     },
   );
   expect(calls).toEqual([]);
@@ -101,8 +142,7 @@ test("with no --target on a TTY, the chooser sees the detected agents and drives
         return ["opencode", "claude"];
       },
       ui: silentUI,
-      runOpencode: () => void calls.push("opencode"),
-      runClaude: () => void calls.push("claude"),
+      ...recordingRunners(calls),
       ensureRumdl: noRumdl,
     },
   );
@@ -112,44 +152,36 @@ test("with no --target on a TTY, the chooser sees the detected agents and drives
 
 test("a cancelled chooser installs nothing", async () => {
   const calls: string[] = [];
-  let prompted = false;
+  const chooser = decliningPrompt();
   await runInstallSubcommand(
     { uninstall: false, dryRun: false },
     {
-      detect: () => ["claude", "opencode"],
+      detect: bothAgents,
       isInteractive: () => true,
-      prompt: async () => {
-        prompted = true;
-        return null;
-      },
+      prompt: chooser.prompt,
       ui: silentUI,
-      runOpencode: () => void calls.push("opencode"),
-      runClaude: () => void calls.push("claude"),
+      ...recordingRunners(calls),
     },
   );
-  expect(prompted).toBe(true);
+  expect(chooser.wasPrompted()).toBe(true);
   expect(calls).toEqual([]);
 });
 
 test("with no --target and no TTY, every detected agent is installed without prompting", async () => {
   const calls: string[] = [];
-  let prompted = false;
+  const chooser = decliningPrompt();
   await runInstallSubcommand(
     { uninstall: false, dryRun: false },
     {
-      detect: () => ["claude", "opencode"],
+      detect: bothAgents,
       isInteractive: () => false,
-      prompt: async () => {
-        prompted = true;
-        return null;
-      },
+      prompt: chooser.prompt,
       ui: silentUI,
-      runOpencode: () => void calls.push("opencode"),
-      runClaude: () => void calls.push("claude"),
+      ...recordingRunners(calls),
       ensureRumdl: noRumdl,
     },
   );
-  expect(prompted).toBe(false);
+  expect(chooser.wasPrompted()).toBe(false);
   expect(calls).toEqual(["claude", "opencode"]);
 });
 
@@ -162,8 +194,7 @@ test("with no --target, no TTY, and no agent detected, it falls back to Claude C
       isInteractive: () => false,
       prompt: async () => null,
       ui: silentUI,
-      runOpencode: () => void calls.push("opencode"),
-      runClaude: () => void calls.push("claude"),
+      ...recordingRunners(calls),
       ensureRumdl: noRumdl,
     },
   );
@@ -190,44 +221,28 @@ test("with no --target, the chooser is told whether this is an uninstall", async
 
 test("installing ensures rumdl once, after the targets", async () => {
   const calls: string[] = [];
-  await runInstallSubcommand(
-    { target: "claude", uninstall: false, dryRun: false },
-    {
-      ui: silentUI,
-      runClaude: () => void calls.push("claude"),
-      ensureRumdl: async () => {
-        calls.push("rumdl");
-        return { bin: "/x/rumdl", installed: false };
-      },
+  await runInstallSubcommand(INSTALL_CLAUDE, {
+    ui: silentUI,
+    runClaude: () => void calls.push("claude"),
+    ensureRumdl: async () => {
+      calls.push("rumdl");
+      return { bin: "/x/rumdl", installed: false };
     },
-  );
+  });
   expect(calls).toEqual(["claude", "rumdl"]);
 });
 
-test("the rumdl step reports a fresh download, naming the binary", async () => {
+test.each([
+  ["a fresh download, naming the binary", true, "installed at"],
+  ["an already-cached binary as present, not downloaded", false, "already present at"],
+])("the rumdl step reports %s", async (_label, installed, phrase) => {
   const ui = recordingUI();
-  await runInstallSubcommand(
-    { target: "claude", uninstall: false, dryRun: false },
-    {
-      ui,
-      runClaude: () => {},
-      ensureRumdl: async () => ({ bin: "/x/rumdl", installed: true }),
-    },
-  );
-  expect(ui.events).toContain(`settled:rumdl ${RUMDL_VERSION} installed at /x/rumdl`);
-});
-
-test("the rumdl step reports an already-cached binary as present, not downloaded", async () => {
-  const ui = recordingUI();
-  await runInstallSubcommand(
-    { target: "claude", uninstall: false, dryRun: false },
-    {
-      ui,
-      runClaude: () => {},
-      ensureRumdl: async () => ({ bin: "/x/rumdl", installed: false }),
-    },
-  );
-  expect(ui.events).toContain(`settled:rumdl ${RUMDL_VERSION} already present at /x/rumdl`);
+  await runInstallSubcommand(INSTALL_CLAUDE, {
+    ui,
+    runClaude: () => {},
+    ensureRumdl: async () => ({ bin: "/x/rumdl", installed }),
+  });
+  expect(ui.events).toContain(`settled:rumdl ${RUMDL_VERSION} ${phrase} /x/rumdl`);
 });
 
 test("uninstalling and --dry-run never download rumdl", async () => {
@@ -247,14 +262,11 @@ test("uninstalling and --dry-run never download rumdl", async () => {
 
 test("a failing rumdl download leaves the install successful", async () => {
   const calls: string[] = [];
-  await runInstallSubcommand(
-    { target: "claude", uninstall: false, dryRun: false },
-    {
-      ui: silentUI,
-      runClaude: () => void calls.push("claude"),
-      ensureRumdl: () => Promise.reject(new Error("offline")),
-    },
-  );
+  await runInstallSubcommand(INSTALL_CLAUDE, {
+    ui: silentUI,
+    runClaude: () => void calls.push("claude"),
+    ensureRumdl: () => Promise.reject(new Error("offline")),
+  });
   expect(calls).toEqual(["claude"]);
   expect(process.exitCode).toBe(0);
 });
@@ -276,7 +288,7 @@ test("--from-local hands every target the resolved checkout and prewarms once, l
     {
       ui: silentUI,
       resolveLocal: () => ({ repoDir: "/checkout", ref: "v0.7.2-dirty" }),
-      marketplaceDir: () => "/dev-mp",
+      marketplaceDir: devMarketplaceDir,
       runClaude: (o) => {
         calls.push("claude");
         handed = o.local;
@@ -295,17 +307,14 @@ test("--from-local hands every target the resolved checkout and prewarms once, l
 test("without --from-local nothing prewarms and no target sees a checkout", async () => {
   const calls: string[] = [];
   let handed: unknown = "untouched";
-  await runInstallSubcommand(
-    { target: "claude", uninstall: false, dryRun: false },
-    {
-      ui: silentUI,
-      runClaude: (o) => {
-        handed = o.local;
-      },
-      ensureRumdl: noRumdl,
-      prewarm: async () => void calls.push("prewarm"),
+  await runInstallSubcommand(INSTALL_CLAUDE, {
+    ui: silentUI,
+    runClaude: (o) => {
+      handed = o.local;
     },
-  );
+    ensureRumdl: noRumdl,
+    prewarm: async () => void calls.push("prewarm"),
+  });
   expect(handed).toBeUndefined();
   expect(calls).toEqual([]);
 });
@@ -336,7 +345,7 @@ test("--from-local --uninstall is refused: local mode only installs", async () =
     { target: "claude", uninstall: true, dryRun: false, fromLocal: true },
     {
       ui: silentUI,
-      resolveLocal: () => ({ repoDir: "/checkout", ref: "ref" }),
+      resolveLocal: resolvedCheckout,
       runClaude: () => void calls.push("claude"),
     },
   );
@@ -350,8 +359,8 @@ test("--from-local --dry-run previews without prewarming", async () => {
     { target: "claude", uninstall: false, dryRun: true, fromLocal: true },
     {
       ui: silentUI,
-      resolveLocal: () => ({ repoDir: "/checkout", ref: "ref" }),
-      marketplaceDir: () => "/dev-mp",
+      resolveLocal: resolvedCheckout,
+      marketplaceDir: devMarketplaceDir,
       runClaude: () => void calls.push("claude"),
       prewarm: async () => void calls.push("prewarm"),
     },
@@ -365,14 +374,7 @@ test("the prewarm step reports that prewarm ran, not that the daemon was swapped
   const ui = recordingUI();
   await runInstallSubcommand(
     { target: "claude", uninstall: false, dryRun: false, fromLocal: true },
-    {
-      ui,
-      resolveLocal: () => ({ repoDir: "/checkout", ref: "ref" }),
-      marketplaceDir: () => "/dev-mp",
-      runClaude: () => {},
-      ensureRumdl: noRumdl,
-      prewarm: async () => {},
-    },
+    fromLocalPrewarmDeps(ui, async () => {}),
   );
   expect(ui.events).toContain("settled:Ran the fresh build's prewarm");
 });
@@ -392,8 +394,8 @@ test("a target that reports failure exits non-zero and never claims caret was in
     { target: "claude", uninstall: false, dryRun: false, fromLocal: true },
     {
       ui,
-      resolveLocal: () => ({ repoDir: "/checkout", ref: "ref" }),
-      marketplaceDir: () => "/dev-mp",
+      resolveLocal: resolvedCheckout,
+      marketplaceDir: devMarketplaceDir,
       runClaude: () => false,
       ensureRumdl: async () => {
         calls.push("rumdl");
@@ -412,16 +414,13 @@ test("a throwing target is reported and fails the run rather than escaping the c
   // An escaping throw reaches the CLI's fail-safe handler, which prints a hook deny line
   // and exits 0 — nonsense from an install command.
   const ui = recordingUI();
-  await runInstallSubcommand(
-    { target: "claude", uninstall: false, dryRun: false },
-    {
-      ui,
-      runClaude: () => {
-        throw new Error("EACCES");
-      },
-      ensureRumdl: noRumdl,
+  await runInstallSubcommand(INSTALL_CLAUDE, {
+    ui,
+    runClaude: () => {
+      throw new Error("EACCES");
     },
-  );
+    ensureRumdl: noRumdl,
+  });
   expect(process.exitCode).toBe(1);
   expect(ui.events.some((e) => e.includes("EACCES"))).toBe(true);
 });
@@ -436,9 +435,9 @@ test("--from-local --dry-run previews from a checkout that was never built", asy
       ui: silentUI,
       resolveLocal: (opts) => {
         askedFor = opts?.requireArtifacts;
-        return { repoDir: "/checkout", ref: "ref" };
+        return resolvedCheckout();
       },
-      marketplaceDir: () => "/dev-mp",
+      marketplaceDir: devMarketplaceDir,
       runClaude: () => {},
     },
   );
@@ -449,14 +448,7 @@ test("a failing prewarm still leaves the install successful", async () => {
   const ui = recordingUI();
   await runInstallSubcommand(
     { target: "claude", uninstall: false, dryRun: false, fromLocal: true },
-    {
-      ui,
-      resolveLocal: () => ({ repoDir: "/checkout", ref: "ref" }),
-      marketplaceDir: () => "/dev-mp",
-      runClaude: () => {},
-      ensureRumdl: noRumdl,
-      prewarm: () => Promise.reject(new Error("daemon busy")),
-    },
+    fromLocalPrewarmDeps(ui, () => Promise.reject(new Error("daemon busy"))),
   );
   expect(process.exitCode).toBe(0);
   expect(ui.events.some((e) => e.startsWith("outro:"))).toBe(true);
@@ -464,21 +456,17 @@ test("a failing prewarm still leaves the install successful", async () => {
 
 test("--dry-run without --target previews the detected agents instead of prompting", async () => {
   const calls: string[] = [];
-  let prompted = false;
+  const chooser = decliningPrompt();
   await runInstallSubcommand(
     { uninstall: false, dryRun: true },
     {
       detect: () => ["opencode"],
       isInteractive: () => true,
-      prompt: async () => {
-        prompted = true;
-        return null;
-      },
+      prompt: chooser.prompt,
       ui: silentUI,
-      runOpencode: () => void calls.push("opencode"),
-      runClaude: () => void calls.push("claude"),
+      ...recordingRunners(calls),
     },
   );
-  expect(prompted).toBe(false);
+  expect(chooser.wasPrompted()).toBe(false);
   expect(calls).toEqual(["opencode"]);
 });

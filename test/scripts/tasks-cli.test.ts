@@ -112,6 +112,23 @@ describe("tasks CLI: dev command", () => {
   });
 });
 
+/** Build the program with `overrides` applied, parse `commandPath args` through
+ * it, and return whatever `captured()` holds afterward — throwing if the
+ * action never ran. Shared by every "does the CLI forward what it received"
+ * parse helper below; they differ only in what their override captures. */
+async function runParsed<T>(
+  commandPath: string[],
+  args: string[],
+  overrides: Partial<TaskActions>,
+  captured: () => T | undefined,
+): Promise<T> {
+  const program = buildProgram(overrides);
+  await program.parseAsync([...commandPath, ...args], { from: "user" });
+  const result = captured();
+  if (result === undefined) throw new Error(`${commandPath.join(" ")} action was not invoked`);
+  return result;
+}
+
 // Capture the raw argv a passthrough subcommand hands its run function. These
 // tasks forward `"$@"` verbatim to an external tool (vite, hk, bun), so
 // commander must pass operands AND flags through untouched (passThroughOptions).
@@ -126,10 +143,7 @@ async function parsePassthrough(
       captured = a;
     },
   } as Partial<TaskActions>;
-  const program = buildProgram(overrides);
-  await program.parseAsync([...commandPath, ...args], { from: "user" });
-  if (captured === undefined) throw new Error(`${commandPath.join(" ")} action was not invoked`);
-  return captured;
+  return runParsed(commandPath, args, overrides, () => captured);
 }
 
 describe("tasks CLI: passthrough forwarding", () => {
@@ -174,10 +188,7 @@ async function parseTestArgs(
       captured = { args: a, flags };
     },
   } as Partial<TaskActions>;
-  const program = buildProgram(overrides);
-  await program.parseAsync([...commandPath, ...args], { from: "user" });
-  if (captured === undefined) throw new Error(`${commandPath.join(" ")} action was not invoked`);
-  return captured;
+  return runParsed(commandPath, args, overrides, () => captured);
 }
 
 describe("tasks CLI: test output-mode flags", () => {

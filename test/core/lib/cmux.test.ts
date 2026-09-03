@@ -41,6 +41,11 @@ function recordingSpawn() {
   return { calls, spawn };
 }
 
+/** A spawn stand-in that always throws — cmux absent from PATH. */
+const throwingSpawn = (() => {
+  throw new Error("ENOENT: cmux");
+}) as unknown as typeof Bun.spawn;
+
 test("markPaneRead clears exactly the named pane", () => {
   const { calls, spawn } = recordingSpawn();
   markPaneRead(pane, { spawn });
@@ -62,28 +67,19 @@ test("markPaneRead never clears a whole workspace", () => {
 });
 
 test("markPaneRead swallows a spawn failure (cmux absent from PATH)", () => {
-  const throwing = (() => {
-    throw new Error("ENOENT: cmux");
-  }) as unknown as typeof Bun.spawn;
-  expect(() => markPaneRead(pane, { spawn: throwing })).not.toThrow();
+  expect(() => markPaneRead(pane, { spawn: throwingSpawn })).not.toThrow();
 });
 
 test("markPaneRead warns rather than errors on a spawn failure", () => {
   const log = recordingLog();
-  const throwing = (() => {
-    throw new Error("ENOENT: cmux");
-  }) as unknown as typeof Bun.spawn;
-  markPaneRead(pane, { spawn: throwing, log: log.log });
+  markPaneRead(pane, { spawn: throwingSpawn, log: log.log });
   const rec = log.recs.find((r) => r.step === "spawn");
   expect(rec?.level).toBe("warn");
 });
 
 test("markPaneRead never logs the opaque pane ids", () => {
   const log = recordingLog();
-  const throwing = (() => {
-    throw new Error("ENOENT: cmux");
-  }) as unknown as typeof Bun.spawn;
-  markPaneRead(pane, { spawn: throwing, log: log.log });
+  markPaneRead(pane, { spawn: throwingSpawn, log: log.log });
   expect(JSON.stringify(log.recs)).not.toContain("w1");
   expect(JSON.stringify(log.recs)).not.toContain("s1");
 });

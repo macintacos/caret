@@ -12,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { writeTreeFile } from "@test/support/fs-tree.ts";
 import { EXCERPT_RADIUS } from "@/config/constants.ts";
 import {
   EXCERPT_HEAD_LINES,
@@ -40,9 +41,7 @@ afterEach(() => {
 });
 
 function write(rel: string, content: string): void {
-  const abs = join(cwd, rel);
-  mkdirSync(join(abs, ".."), { recursive: true });
-  writeFileSync(abs, content);
+  writeTreeFile(cwd, rel, content);
 }
 
 // A file with n numbered lines: "line 1\nline 2\n…\nline n\n".

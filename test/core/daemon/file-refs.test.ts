@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
-import { bootDaemon, type TestDaemon } from "@test/support/daemon.ts";
+import { bootDaemonTree, type TestDaemon, teardownDaemonTree } from "@test/support/daemon.ts";
+import { writeTreeFile } from "@test/support/fs-tree.ts";
 import { EXCERPT_RADIUS } from "@/config/constants.ts";
 import { MAX_FILE_REFS } from "@/daemon/schemas.ts";
 import type { FileExcerpt, FileRefsResponse } from "@/lib/types.ts";
@@ -20,20 +20,14 @@ let cwd: string; // the review's project dir, populated with real files
 let d: TestDaemon;
 
 beforeEach(async () => {
-  store = mkdtempSync(join(tmpdir(), "caret-frefs-store-"));
-  cwd = mkdtempSync(join(tmpdir(), "caret-frefs-cwd-"));
-  d = await bootDaemon(store);
+  ({ store, cwd, d } = await bootDaemonTree("frefs"));
 });
 afterEach(() => {
-  d.stop();
-  rmSync(store, { recursive: true, force: true });
-  rmSync(cwd, { recursive: true, force: true });
+  teardownDaemonTree({ store, cwd, d });
 });
 
 function write(rel: string, content: string): void {
-  const abs = join(cwd, rel);
-  mkdirSync(join(abs, ".."), { recursive: true });
-  writeFileSync(abs, content);
+  writeTreeFile(cwd, rel, content);
 }
 
 function numbered(n: number): string {

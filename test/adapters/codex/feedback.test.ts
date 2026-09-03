@@ -1,15 +1,15 @@
 import { expect, test } from "bun:test";
 
+import {
+  expectBareAllow,
+  expectDenyCarriesFeedback,
+  expectDenyDefaultMessage,
+  expectDenyOutputContract,
+} from "@test/support/hook-output.ts";
 import { denyOutput, toHookOutput } from "@/adapters/codex/feedback.ts";
 
 test("plain approve emits behavior=allow with no escalation fields", () => {
-  const out = toHookOutput({ behavior: "allow" });
-  expect(out).toEqual({
-    hookSpecificOutput: {
-      hookEventName: "PermissionRequest",
-      decision: { behavior: "allow" },
-    },
-  });
+  expectBareAllow(toHookOutput);
 });
 
 test("approve with an acceptMode still emits a plain allow (escalation dropped)", () => {
@@ -25,22 +25,13 @@ test("allow drops reviewer notes — Codex has no allow-side agent channel (EXC-
 });
 
 test("deny carries the feedback in decision.message", () => {
-  const out = toHookOutput({ behavior: "deny", feedback: "Fix the bug" });
-  expect(out.hookSpecificOutput.decision).toEqual({
-    behavior: "deny",
-    message: "Fix the bug",
-  });
+  expectDenyCarriesFeedback(toHookOutput);
 });
 
 test("deny with no feedback falls back to a default message", () => {
-  const out = toHookOutput({ behavior: "deny" });
-  expect(out.hookSpecificOutput.decision.behavior).toBe("deny");
-  expect(out.hookSpecificOutput.decision.message).toBeTruthy();
+  expectDenyDefaultMessage(toHookOutput);
 });
 
 test("denyOutput produces a deny decision carrying the reason", () => {
-  const out = denyOutput("daemon unreachable");
-  expect(out.hookSpecificOutput.hookEventName).toBe("PermissionRequest");
-  expect(out.hookSpecificOutput.decision.behavior).toBe("deny");
-  expect(out.hookSpecificOutput.decision.message).toContain("daemon unreachable");
+  expectDenyOutputContract(denyOutput);
 });

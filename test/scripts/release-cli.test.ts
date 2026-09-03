@@ -15,6 +15,7 @@
 
 import { describe, expect, test } from "bun:test";
 
+import { drainProcess } from "@test/support/cli-process.ts";
 import { makeReleaseHarness } from "@test/support/release-harness.ts";
 import { buildReleaseCommand } from "@/tasks/release/command.ts";
 import type { Deps } from "@/tasks/release/steps.ts";
@@ -29,12 +30,7 @@ async function runRelease(
     stdout: "pipe",
     stderr: "pipe",
   });
-  const [stdout, stderr, exit] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  return { exit, stdout, stderr };
+  return drainProcess(proc);
 }
 
 // Each case spawns a cold `bun` subprocess; that start-up plus the CLI's import
@@ -126,19 +122,28 @@ async function runReleaseInProcess(
   return { stdout: out.join(""), stderr: err.join(""), exitCode, threw };
 }
 
+/** Drive `compute patch` in-process — the two error-discipline cases below only
+ * differ in the deps they inject and the error that surfaces. */
+const runComputePatch = (deps: Deps) => runReleaseInProcess(deps, ["compute", "patch"]);
+
+/** Assert `compute patch` surfaced `errorCode` as a typed JSON error on
+ * stdout, exiting 1 with nothing propagating to the caller — the contract
+ * both error-discipline cases below pin, differing only past this point. */
+async function expectComputeError(deps: Deps, errorCode: string): Promise<{ stderr: string }> {
+  const { stdout, stderr, exitCode, threw } = await runComputePatch(deps);
+  expect(threw).toBeUndefined(); // the action self-contained the error; nothing propagated
+  expect(exitCode).toBe(1);
+  const parsed = JSON.parse(stdout);
+  expect(parsed.ok).toBe(false);
+  expect(parsed.errorCode).toBe(errorCode);
+  return { stderr };
+}
+
 describe("release group error discipline (in-process, injected deps)", () => {
   test("a GuardError from a step becomes a typed JSON error on stdout, stderr clean", async () => {
     // latestTag: null drives compute's NO_BASELINE guard (a thrown GuardError).
     const { deps } = makeReleaseHarness({ latestTag: null });
-    const { stdout, stderr, exitCode, threw } = await runReleaseInProcess(deps, [
-      "compute",
-      "patch",
-    ]);
-    expect(threw).toBeUndefined(); // the action self-contained the error; nothing propagated
-    expect(exitCode).toBe(1);
-    const parsed = JSON.parse(stdout);
-    expect(parsed.ok).toBe(false);
-    expect(parsed.errorCode).toBe("NO_BASELINE");
+    const { stderr } = await expectComputeError(deps, "NO_BASELINE");
     // The GuardError path never touches stderr — and in particular never reaches
     // the tasks CLI's plain-stderr `caret-tasks:` top-level catch.
     expect(stderr).toBe("");
@@ -182,15 +187,7 @@ describe("release group error discipline (in-process, injected deps)", () => {
         },
       },
     };
-    const { stdout, stderr, exitCode, threw } = await runReleaseInProcess(boom, [
-      "compute",
-      "patch",
-    ]);
-    expect(threw).toBeUndefined();
-    expect(exitCode).toBe(1);
-    const parsed = JSON.parse(stdout);
-    expect(parsed.ok).toBe(false);
-    expect(parsed.errorCode).toBe("INTERNAL");
+    const { stderr } = await expectComputeError(boom, "INTERNAL");
     expect(stderr).toContain("boom"); // the stack/message went to stderr, not stdout
     expect(stderr).not.toContain("caret-tasks:"); // not the tasks CLI's top-level catch
   });

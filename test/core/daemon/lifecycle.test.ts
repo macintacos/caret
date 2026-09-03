@@ -4,22 +4,16 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
-  readFileSync,
   statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { dirname } from "node:path";
 
+import { ensureDaemonNoOps } from "@test/support/ensure-daemon-deps.ts";
 import { setupTempStateDir } from "@test/support/env.ts";
-import { ndjsonRecords } from "@test/support/ndjson.ts";
-import {
-  daemonLock,
-  daemonStderrLogFile,
-  ensureLogsDir,
-  logArchiveDir,
-  logFile,
-} from "@/config/paths.ts";
+import { caretLogRecords } from "@test/support/ndjson.ts";
+import { daemonLock, daemonStderrLogFile, ensureLogsDir, logArchiveDir } from "@/config/paths.ts";
 import { DEFAULTS } from "@/config/settings.ts";
 import {
   DAEMON_CWD,
@@ -36,15 +30,6 @@ import { setLogLevel } from "@/lib/log.ts";
 setupTempStateDir("caret-daemon-lifecycle-");
 afterEach(() => setLogLevel("info")); // undo any per-test level change
 
-/** Parse caret.log into NDJSON records ([] when the file doesn't exist). */
-function logRecords(): Array<Record<string, unknown>> {
-  try {
-    return ndjsonRecords(readFileSync(logFile(), "utf-8"));
-  } catch {
-    return [];
-  }
-}
-
 // ---- ensureDaemon ----
 
 function ensureDeps(over: Partial<Parameters<typeof ensureDaemon>[0]> = {}) {
@@ -60,14 +45,40 @@ function ensureDeps(over: Partial<Parameters<typeof ensureDaemon>[0]> = {}) {
         version?: string;
         stateDir?: string;
       } | null,
-    readLock: () => null,
-    isAlive: () => false,
-    retire: async () => true,
-    removeLock: () => {},
-    spawn: () => {},
-    backoff: async () => {},
-    maxAttempts: 5,
+    ...ensureDaemonNoOps(),
     ...over,
+  };
+}
+
+/**
+ * A health/retire/spawn trio simulating a stale build (b0) that answers until
+ * retired, then a fresh build (b1) that binds once the port frees. `stateDir`,
+ * when given, rides both health responses — the world-identity-safe variant of
+ * the same scenario.
+ */
+function staleThenFreshDaemon(stateDir?: string): {
+  counts: { retires: number; spawns: number };
+  deps: Pick<Parameters<typeof ensureDaemon>[0], "health" | "retire" | "spawn">;
+} {
+  const counts = { retires: 0, spawns: 0 };
+  const health = (build: string) =>
+    stateDir === undefined
+      ? { service: "caret", build, version: "v1" }
+      : { service: "caret", build, version: "v1", stateDir };
+  return {
+    counts,
+    deps: {
+      health: async () => {
+        if (counts.retires === 0) return health("b0");
+        if (counts.spawns === 0) return null;
+        return health("b1");
+      },
+      retire: async () => {
+        counts.retires++;
+        return true;
+      },
+      spawn: () => counts.spawns++,
+    },
   };
 }
 
@@ -129,29 +140,15 @@ test("ensureDaemon logs the spawn attempt at debug", async () => {
         ++checks === 1 ? null : { service: "caret", build: "b1", version: "v1" },
     }),
   );
-  const recs = logRecords().filter((r) => r.step === "spawn");
+  const recs = caretLogRecords().filter((r) => r.step === "spawn");
   expect(recs.some((r) => r.msg === "daemon spawned")).toBe(true);
 });
 
 test("ensureDaemon logs the stale-daemon retire at debug", async () => {
   setLogLevel("debug");
-  let retires = 0;
-  let spawns = 0;
-  await ensureDaemon(
-    ensureDeps({
-      health: async () => {
-        if (retires === 0) return { service: "caret", build: "b0", version: "v1" };
-        if (spawns === 0) return null;
-        return { service: "caret", build: "b1", version: "v1" };
-      },
-      retire: async () => {
-        retires++;
-        return true;
-      },
-      spawn: () => spawns++,
-    }),
-  );
-  const recs = logRecords().filter((r) => r.step === "retire");
+  const { deps } = staleThenFreshDaemon();
+  await ensureDaemon(ensureDeps(deps));
+  const recs = caretLogRecords().filter((r) => r.step === "retire");
   expect(recs.some((r) => r.msg === "stale daemon retiring")).toBe(true);
 });
 
@@ -166,7 +163,7 @@ test("ensureDaemon logs orphan-lock removal at debug", async () => {
       isAlive: () => false,
     }),
   );
-  const recs = logRecords().filter((r) => r.step === "spawn");
+  const recs = caretLogRecords().filter((r) => r.step === "spawn");
   expect(recs.some((r) => r.msg === "orphan daemon lock removed")).toBe(true);
 });
 
@@ -248,25 +245,10 @@ test("ensureDaemon with takeover:false still refuses a foreign world", async () 
 });
 
 test("ensureDaemon retires a stale-build daemon, then reuses the fresh respawn", async () => {
-  let retires = 0;
-  let spawns = 0;
-  const url = await ensureDaemon(
-    ensureDeps({
-      // Old daemon (b0) answers until retired; the port frees; a fresh daemon (b1) binds.
-      health: async () => {
-        if (retires === 0) return { service: "caret", build: "b0", version: "v1" };
-        if (spawns === 0) return null;
-        return { service: "caret", build: "b1", version: "v1" };
-      },
-      retire: async () => {
-        retires++;
-        return true;
-      },
-      spawn: () => spawns++,
-    }),
-  );
-  expect(retires).toBe(1);
-  expect(spawns).toBe(1);
+  const { counts, deps } = staleThenFreshDaemon();
+  const url = await ensureDaemon(ensureDeps(deps));
+  expect(counts.retires).toBe(1);
+  expect(counts.spawns).toBe(1);
   expect(url).toBe("http://localhost:42718");
 });
 
@@ -354,26 +336,10 @@ test("ensureDaemon reuses a same-world same-build daemon", async () => {
 });
 
 test("ensureDaemon retires a same-world stale daemon (EXC-406 preserved)", async () => {
-  let retires = 0;
-  let spawns = 0;
-  const url = await ensureDaemon(
-    ensureDeps({
-      health: async () => {
-        if (retires === 0) {
-          return { service: "caret", build: "b0", version: "v1", stateDir: "/my/world" };
-        }
-        if (spawns === 0) return null;
-        return { service: "caret", build: "b1", version: "v1", stateDir: "/my/world" };
-      },
-      retire: async () => {
-        retires++;
-        return true;
-      },
-      spawn: () => spawns++,
-    }),
-  );
-  expect(retires).toBe(1);
-  expect(spawns).toBe(1);
+  const { counts, deps } = staleThenFreshDaemon("/my/world");
+  const url = await ensureDaemon(ensureDeps(deps));
+  expect(counts.retires).toBe(1);
+  expect(counts.spawns).toBe(1);
   expect(url).toBe("http://localhost:42718");
 });
 

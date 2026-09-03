@@ -14,30 +14,17 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { setupTempStateDir } from "@test/support/env.ts";
+import { emitWire as emitWireVia } from "@test/support/wire-contract.ts";
 import { opencodeAdapter } from "@/adapters/opencode/index.ts";
 import type { Decision } from "@/lib/types.ts";
-import { runReview } from "@/review/orchestrate.ts";
 
 const FIXTURE = join(import.meta.dir, "fixtures", "review-request-stdin.json");
 const stdin = readFileSync(FIXTURE, "utf-8");
 
 setupTempStateDir("caret-opencode-wire-contract-");
 
-function depsReturning(decision: Decision): Parameters<typeof runReview>[1] {
-  return {
-    parseHookInput: opencodeAdapter.parseHookInput,
-    ensureDaemon: async () => "http://x",
-    postReview: async () => ({ id: "rid" }),
-    longPoll: async () => decision,
-    openBrowser: () => {},
-    timeoutMs: 1000,
-    expire: async () => {},
-  };
-}
-
-async function emitWire(decision: Decision): Promise<unknown> {
-  const out = await runReview(stdin, depsReturning(decision));
-  return JSON.parse(opencodeAdapter.emitDecision(out));
+function emitWire(decision: Decision): Promise<unknown> {
+  return emitWireVia(stdin, decision, opencodeAdapter);
 }
 
 test("the fixture parses to a PlanInput carrying the envelope payload", () => {

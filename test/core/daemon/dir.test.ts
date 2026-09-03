@@ -3,8 +3,14 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { bootDaemon, type TestDaemon } from "@test/support/daemon.ts";
-import { recordingLog } from "@test/support/recording-log.ts";
+import {
+  bootDaemon,
+  bootDaemonTree,
+  type TestDaemon,
+  teardownDaemonTree,
+} from "@test/support/daemon.ts";
+import { writeTreeFile } from "@test/support/fs-tree.ts";
+import { expectDebugRequestRecord, recordingLog } from "@test/support/recording-log.ts";
 import { expectNeverLogsBody } from "@test/support/redaction.ts";
 import type { DirListing } from "@/lib/types.ts";
 import { MAX_DIR_DEPTH, MAX_DIR_ENTRIES } from "@/plan/directory.ts";
@@ -25,20 +31,14 @@ let cwd: string; // the review's project dir, populated with real files
 let d: TestDaemon;
 
 beforeEach(async () => {
-  store = mkdtempSync(join(tmpdir(), "caret-dir-store-"));
-  cwd = mkdtempSync(join(tmpdir(), "caret-dir-cwd-"));
-  d = await bootDaemon(store);
+  ({ store, cwd, d } = await bootDaemonTree("dir"));
 });
 afterEach(() => {
-  d.stop();
-  rmSync(store, { recursive: true, force: true });
-  rmSync(cwd, { recursive: true, force: true });
+  teardownDaemonTree({ store, cwd, d });
 });
 
 function write(rel: string, content = "x"): void {
-  const abs = join(cwd, rel);
-  mkdirSync(join(abs, ".."), { recursive: true });
-  writeFileSync(abs, content);
+  writeTreeFile(cwd, rel, content);
 }
 
 function dir(rel: string): void {
@@ -217,12 +217,7 @@ test("dir logs entry counts at debug level and never an entry name", async () =>
     const id = await logged.seed({ cwd });
     const res = await fetch(`${logged.url}/api/reviews/${id}/dir?root=src`);
     expect(res.status).toBe(200);
-    // Pinned on the record's durable shape — step, level, structured counts —
-    // rather than its message prose, which is free to be reworded.
-    const requests = recs.filter((r) => r.step === "request");
-    expect(requests).toHaveLength(1);
-    expect(requests[0]?.level).toBe("debug");
-    expect(requests[0]?.extra).toMatchObject({ reviewId: id, total: 2, returned: 2 });
+    expectDebugRequestRecord(recs, { reviewId: id, total: 2, returned: 2 });
     expectNeverLogsBody(recs, ["top-secret-filename.ts", "confidential-directory"]);
   } finally {
     logged.stop();

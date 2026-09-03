@@ -21,26 +21,7 @@ import {
   updateToastBody,
 } from "@opencode/caret.plugin.ts";
 
-// A client that records every toast realUpdateChecker surfaces.
-function recordingClient(): {
-  client: PluginInput["client"];
-  toasts: Array<{ title?: string; message: string; variant: string }>;
-} {
-  const toasts: Array<{ title?: string; message: string; variant: string }> = [];
-  const client = {
-    tui: {
-      showToast: (opts: { body: { title?: string; message: string; variant: string } }) => {
-        toasts.push({
-          title: opts.body.title,
-          message: opts.body.message,
-          variant: opts.body.variant,
-        });
-        return Promise.resolve({});
-      },
-    },
-  } as unknown as PluginInput["client"];
-  return { client, toasts };
-}
+import { recordingClient } from "./toast-client.ts";
 
 // --- isNewer (inline semver) ---
 
@@ -197,9 +178,13 @@ function memCache(last: number | null = null): {
   };
 }
 
-test("realUpdateChecker toasts when a newer release exists, and stamps the check", async () => {
-  const { client, toasts } = recordingClient();
-  const { cache, writes } = memCache(null);
+/** Run realUpdateChecker against a genuinely newer release, expecting the
+ * shared outcome — one toast, one stamped check — that every case below
+ * differs from only by the cache's seeded last-check time. */
+async function checkAndExpectToast(
+  { client, toasts }: ReturnType<typeof recordingClient>,
+  { cache, writes }: ReturnType<typeof memCache>,
+): Promise<void> {
   await realUpdateChecker(client, {
     currentVersion: "0.3.0",
     env: {},
@@ -208,8 +193,13 @@ test("realUpdateChecker toasts when a newer release exists, and stamps the check
     cache,
   });
   expect(toasts).toHaveLength(1);
-  expect(toasts[0]?.message).toContain("0.4.0");
   expect(writes).toEqual([NOW]);
+}
+
+test("realUpdateChecker toasts when a newer release exists, and stamps the check", async () => {
+  const recording = recordingClient();
+  await checkAndExpectToast(recording, memCache(null));
+  expect(recording.toasts[0]?.message).toContain("0.4.0");
 });
 
 test("realUpdateChecker is silent when already current", async () => {
@@ -282,17 +272,7 @@ test("realUpdateChecker skips the network when it checked within the last day", 
 });
 
 test("realUpdateChecker checks again once a day has passed", async () => {
-  const { client, toasts } = recordingClient();
-  const { cache, writes } = memCache(NOW - 25 * 60 * 60_000); // 25h ago
-  await realUpdateChecker(client, {
-    currentVersion: "0.3.0",
-    env: {},
-    fetchImpl: async () => jsonResponse({ tag_name: "v0.4.0", html_url: "https://x/0.4.0" }),
-    now: fixedNow,
-    cache,
-  });
-  expect(toasts).toHaveLength(1);
-  expect(writes).toEqual([NOW]);
+  await checkAndExpectToast(recordingClient(), memCache(NOW - 25 * 60 * 60_000)); // 25h ago
 });
 
 test("realUpdateChecker stamps the check even when the fetch fails, so it backs off a day", async () => {

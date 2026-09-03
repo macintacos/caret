@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { writeTreeFile } from "@test/support/fs-tree.ts";
 import { MAX_SEARCH_QUERY_CHARS, SEARCH_BUDGET, searchFiles } from "@/plan/file-search.ts";
 
 // The tree-wide file search behind the feedback editors' `@` completion
@@ -22,9 +23,7 @@ afterEach(() => {
 });
 
 function write(rel: string, content = "x"): void {
-  const abs = join(cwd, rel);
-  mkdirSync(join(abs, ".."), { recursive: true });
-  writeFileSync(abs, content);
+  writeTreeFile(cwd, rel, content);
 }
 
 test("an empty query offers every file, shallowest first", async () => {

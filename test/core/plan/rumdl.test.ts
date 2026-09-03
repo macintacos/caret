@@ -226,28 +226,35 @@ function freshAcquisition(): { state: RumdlAcquisition; t0: number } {
   return { state: { cooldownUntil: 0 }, t0: 1_000 };
 }
 
+/** A failing installer and fresh acquisition state, with the first install
+ * already attempted and failed — the shared precondition for both cooldown
+ * cases below. */
+async function firstInstallFailed(): Promise<{
+  calls: string[];
+  install: (p: string) => Promise<string>;
+  state: RumdlAcquisition;
+  t0: number;
+}> {
+  const { calls, install } = failingInstaller();
+  const { state, t0 } = freshAcquisition();
+  await expect(ensureRumdl(install, () => t0, state)).rejects.toThrow(/download failed/);
+  return { calls, install, state, t0 };
+}
+
 test("ensureRumdl refuses to reinstall during the cooldown after a failed install", async () => {
   await withoutOverride(async () => {
-    const { calls, install } = failingInstaller();
-    const { state, t0 } = freshAcquisition();
-
-    await expect(ensureRumdl(install, () => t0, state)).rejects.toThrow(/download failed/);
+    const { calls, install, state, t0 } = await firstInstallFailed();
     await expect(ensureRumdl(install, () => t0, state)).rejects.toThrow(/cooldown/);
-
     expect(calls).toEqual([rumdlBin()]);
   });
 });
 
 test("ensureRumdl retries the install once the cooldown has expired", async () => {
   await withoutOverride(async () => {
-    const { calls, install } = failingInstaller();
-    const { state, t0 } = freshAcquisition();
-
-    await expect(ensureRumdl(install, () => t0, state)).rejects.toThrow(/download failed/);
+    const { calls, install, state, t0 } = await firstInstallFailed();
     await expect(
       ensureRumdl(install, () => t0 + RUMDL_RETRY_COOLDOWN_MS + 1, state),
     ).rejects.toThrow(/download failed/);
-
     expect(calls).toEqual([rumdlBin(), rumdlBin()]);
   });
 });

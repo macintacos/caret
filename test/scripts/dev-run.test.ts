@@ -9,6 +9,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { withEnv } from "@test/support/env.ts";
 import { NEVER_IDLE_MS } from "@/config/constants.ts";
 import { DEFAULTS } from "@/config/settings.ts";
 import { DAEMON_DIED } from "@/tasks/dev/dev-env.ts";
@@ -188,26 +189,18 @@ function baseDeps(over: Partial<DevDeps>): DevDeps {
   };
 }
 
-/** Clear the dev env overrides so runDev resolves to the ephemeral default,
- * restoring them afterward. withEnv can't span awaits, so save/restore inline. */
-async function withCleanDevEnv(fn: () => Promise<void>): Promise<void> {
-  const saved = {
-    CARET_DEV_STATE_DIR: process.env.CARET_DEV_STATE_DIR,
-    CARET_DEV_PORT: process.env.CARET_DEV_PORT,
-    // runDev sets XDG_STATE_HOME for the in-process driver; capture it so the
-    // mutation doesn't leak into other tests.
-    XDG_STATE_HOME: process.env.XDG_STATE_HOME,
-  };
-  delete process.env.CARET_DEV_STATE_DIR;
-  delete process.env.CARET_DEV_PORT;
-  try {
-    await fn();
-  } finally {
-    for (const [k, v] of Object.entries(saved)) {
-      if (v === undefined) delete process.env[k];
-      else process.env[k] = v;
-    }
-  }
+/** Clear the dev env overrides so runDev resolves to the ephemeral default, and
+ * undo whatever it mutates on XDG_STATE_HOME for the in-process driver — the
+ * state env every case here needs isolated. */
+function withCleanDevEnv(fn: () => Promise<void>): Promise<void> {
+  return withEnv(
+    {
+      CARET_DEV_STATE_DIR: undefined,
+      CARET_DEV_PORT: undefined,
+      XDG_STATE_HOME: process.env.XDG_STATE_HOME,
+    },
+    fn,
+  );
 }
 
 describe("runDev supervision", () => {

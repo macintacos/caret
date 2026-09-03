@@ -8,11 +8,19 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
+import {
+  runCaretCli,
+  spawnCaretDaemon,
+  spawnEphemeralDaemon,
+  untilLockWritten,
+} from "@test/support/cli-process.ts";
+import { ensureDaemonNoOps } from "@test/support/ensure-daemon-deps.ts";
 import { ndjsonRecords } from "@test/support/ndjson.ts";
 import { freePort } from "@test/support/net.ts";
 import { until } from "@test/support/poll.ts";
 import { recordingLog } from "@test/support/recording-log.ts";
 import { expectNeverLogsBody } from "@test/support/redaction.ts";
+import { DEFAULTS } from "@/config/settings.ts";
 import { httpHealth } from "@/daemon/client.ts";
 import { ensureDaemon } from "@/daemon/lifecycle.ts";
 import { createServer } from "@/daemon/server.ts";
@@ -40,28 +48,6 @@ setDefaultTimeout(90_000);
  * stderr the daemon no longer writes records to (EXC-1068). */
 function daemonLog(stateHome: string): string {
   return join(stateHome, "caret", "logs", "daemon.log");
-}
-
-/**
- * Wait for the daemon to write `lockPath`, polling only while the process is alive:
- * tolerant of an arbitrarily slow boot under a loaded box, but failing fast — with the
- * exit code — the instant the process exits without a lock (a crash, not slowness). The
- * test's setDefaultTimeout backstops a boot that hangs without ever exiting.
- */
-async function untilLockWritten(
-  proc: { exited: Promise<number> },
-  lockPath: string,
-): Promise<void> {
-  let exitCode: number | undefined;
-  void proc.exited.then((code) => {
-    exitCode = code;
-  });
-  while (!existsSync(lockPath)) {
-    if (exitCode !== undefined) {
-      throw new Error(`daemon exited (code ${exitCode}) before writing its lock at ${lockPath}`);
-    }
-    await Bun.sleep(25);
-  }
 }
 
 // In-process health/discovery probe servers (a bare createServer + fixed-path
@@ -121,13 +107,8 @@ test("concurrent ensureDaemon callers both connect to a live daemon", async () =
     currentVersion: VERSION,
     currentStateDir: "/it/world",
     health: httpHealth,
-    readLock: () => null,
-    isAlive: () => false,
-    retire: async () => true,
-    removeLock: () => {},
+    ...ensureDaemonNoOps(),
     spawn: () => spawns++,
-    backoff: async () => {},
-    maxAttempts: 5,
   };
   const [a, b] = await Promise.all([ensureDaemon(deps), ensureDaemon(deps)]);
   expect(a).toBe(baseUrl);
@@ -148,13 +129,7 @@ test("ensureDaemon fails fast against a non-caret server on the port", async () 
         currentVersion: VERSION,
         currentStateDir: "/it/world",
         health: httpHealth,
-        readLock: () => null,
-        isAlive: () => false,
-        retire: async () => true,
-        removeLock: () => {},
-        spawn: () => {},
-        backoff: async () => {},
-        maxAttempts: 3,
+        ...ensureDaemonNoOps(3),
       }),
     ).rejects.toThrow(/CARET_PORT/);
   } finally {
@@ -168,15 +143,7 @@ test("ensureDaemon fails fast against a non-caret server on the port", async () 
 async function assertLockRemovedOnSignal(signal: "SIGTERM" | "SIGINT") {
   const stateHome = await mkdtemp(join(tmpdir(), "caret-signal-"));
   const lockPath = join(stateHome, "caret", "daemon.lock");
-  const proc = Bun.spawn([process.execPath, "src/cli.ts", "daemon"], {
-    env: {
-      ...process.env,
-      CARET_PORT: String(freePort()),
-      XDG_STATE_HOME: stateHome,
-      CARET_IDLE_MS: "600000", // don't idle-shutdown before we signal
-    },
-    stdio: ["ignore", "ignore", "ignore"],
-  });
+  const proc = spawnCaretDaemon(stateHome);
   try {
     await untilLockWritten(proc, lockPath);
     proc.kill(signal);
@@ -202,23 +169,8 @@ test("the daemon writes the lock on start and removes it on SIGTERM", async () =
 // world identity a dev session discovers the daemon by.
 test("an --ephemeral daemon binds an OS port and records identity in the lock", async () => {
   const stateHome = await mkdtemp(join(tmpdir(), "caret-ephemeral-"));
-  const lockPath = join(stateHome, "caret", "daemon.lock");
-  const proc = Bun.spawn([process.execPath, "src/cli.ts", "daemon", "--ephemeral"], {
-    env: {
-      ...process.env,
-      XDG_STATE_HOME: stateHome,
-      CARET_PORT: "", // blank = unset: --ephemeral must not need a port at all
-      CARET_IDLE_MS: "600000",
-    },
-    stdio: ["ignore", "ignore", "ignore"],
-  });
+  const { proc, lock } = await spawnEphemeralDaemon(stateHome);
   try {
-    await untilLockWritten(proc, lockPath);
-    const lock = JSON.parse(await Bun.file(lockPath).text()) as {
-      port: number;
-      stateDir?: string;
-      instanceId?: string;
-    };
     // OS-assigned, never the configured default the env would have resolved to.
     expect(lock.port).toBeGreaterThan(0);
     expect(lock.port).not.toBe(42718);
@@ -246,20 +198,8 @@ test("an --ephemeral daemon binds an OS port and records identity in the lock", 
 // reads this field from /api/health to reset its saved preferences on boot.
 test("a daemon started with CARET_FRESH=1 reports fresh in /api/health", async () => {
   const stateHome = await mkdtemp(join(tmpdir(), "caret-fresh-"));
-  const lockPath = join(stateHome, "caret", "daemon.lock");
-  const proc = Bun.spawn([process.execPath, "src/cli.ts", "daemon", "--ephemeral"], {
-    env: {
-      ...process.env,
-      XDG_STATE_HOME: stateHome,
-      CARET_PORT: "",
-      CARET_IDLE_MS: "600000",
-      CARET_FRESH: "1",
-    },
-    stdio: ["ignore", "ignore", "ignore"],
-  });
+  const { proc, lock } = await spawnEphemeralDaemon(stateHome, { CARET_FRESH: "1" });
   try {
-    await untilLockWritten(proc, lockPath);
-    const lock = JSON.parse(await Bun.file(lockPath).text()) as { port: number };
     const h = (await (await fetch(`http://127.0.0.1:${lock.port}/api/health`)).json()) as {
       fresh?: boolean;
     };
@@ -282,17 +222,13 @@ test("caret redact scrubs state-dir logs into shareable siblings", async () => {
   const logPath = join(stateHome, "caret", "logs", "caret.log");
   const home = homedir();
   await Bun.write(logPath, `${JSON.stringify({ step: "x", msg: `boom at ${home}/src` })}\n`);
-  const proc = Bun.spawn([process.execPath, "src/cli.ts", "redact"], {
-    env: { ...process.env, XDG_STATE_HOME: stateHome },
-    stdout: "pipe",
-    stderr: "ignore",
-  });
   try {
-    const exit = await proc.exited;
-    const out = await new Response(proc.stdout).text();
+    const { exitCode, stdout } = await runCaretCli(["redact"], {
+      env: { ...process.env, XDG_STATE_HOME: stateHome },
+    });
     const sibling = join(stateHome, "caret", "logs", "caret.redacted.log");
-    expect(exit).toBe(0);
-    expect(out).toContain(sibling);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain(sibling);
     const scrubbed = await Bun.file(sibling).text();
     expectNeverLogsBody(scrubbed, home);
     expect(scrubbed).toContain("~/src");
@@ -303,16 +239,12 @@ test("caret redact scrubs state-dir logs into shareable siblings", async () => {
 
 test("caret redact reports when there are no logs to scrub", async () => {
   const stateHome = await mkdtemp(join(tmpdir(), "caret-redact-empty-"));
-  const proc = Bun.spawn([process.execPath, "src/cli.ts", "redact"], {
-    env: { ...process.env, XDG_STATE_HOME: stateHome },
-    stdout: "pipe",
-    stderr: "ignore",
-  });
   try {
-    const exit = await proc.exited;
-    const out = await new Response(proc.stdout).text();
-    expect(exit).toBe(0);
-    expect(out).toContain("no logs");
+    const { exitCode, stdout } = await runCaretCli(["redact"], {
+      env: { ...process.env, XDG_STATE_HOME: stateHome },
+    });
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("no logs");
   } finally {
     await rm(stateHome, { recursive: true, force: true });
   }
@@ -338,15 +270,11 @@ function discoveryEnv(stateHome: string): Record<string, string> {
 
 test("caret discovery prints a human-readable report and exits 0", async () => {
   const stateHome = await mkdtemp(join(tmpdir(), "caret-discovery-human-"));
-  const proc = Bun.spawn([process.execPath, "src/cli.ts", "discovery"], {
-    env: discoveryEnv(stateHome),
-    stdout: "pipe",
-    stderr: "ignore",
-  });
   try {
-    const exit = await proc.exited;
-    const out = await new Response(proc.stdout).text();
-    expect(exit).toBe(0);
+    const { exitCode, stdout: out } = await runCaretCli(["discovery"], {
+      env: discoveryEnv(stateHome),
+    });
+    expect(exitCode).toBe(0);
     expect(out.startsWith("caret discovery (caret-discovery/1)")).toBe(true);
     // Every section title renders, and the daemon (nothing on the port) reads
     // as unreachable.
@@ -371,15 +299,11 @@ test("caret discovery prints a human-readable report and exits 0", async () => {
 
 test("caret discovery --json prints one parseable, redacted document", async () => {
   const stateHome = await mkdtemp(join(tmpdir(), "caret-discovery-json-"));
-  const proc = Bun.spawn([process.execPath, "src/cli.ts", "discovery", "--json"], {
-    env: discoveryEnv(stateHome),
-    stdout: "pipe",
-    stderr: "ignore",
-  });
   try {
-    const exit = await proc.exited;
-    const out = await new Response(proc.stdout).text();
-    expect(exit).toBe(0);
+    const { exitCode, stdout: out } = await runCaretCli(["discovery", "--json"], {
+      env: discoveryEnv(stateHome),
+    });
+    expect(exitCode).toBe(0);
     const report = JSON.parse(out) as Record<string, unknown>;
     expect(report.schema).toBe("caret-discovery/1");
     expect(report.version).toBe(VERSION);
@@ -423,15 +347,9 @@ test("caret discovery --json reports a live daemon's identity and commit", async
   servers.push(srv);
   const env = discoveryEnv(stateHome);
   env.CARET_PORT = String(srv.port);
-  const proc = Bun.spawn([process.execPath, "src/cli.ts", "discovery", "--json"], {
-    env,
-    stdout: "pipe",
-    stderr: "ignore",
-  });
   try {
-    const exit = await proc.exited;
-    const out = await new Response(proc.stdout).text();
-    expect(exit).toBe(0);
+    const { exitCode, stdout: out } = await runCaretCli(["discovery", "--json"], { env });
+    expect(exitCode).toBe(0);
     const report = JSON.parse(out) as Record<string, unknown>;
     expect(report.daemon).toEqual({
       reachable: true,
@@ -451,16 +369,8 @@ test("caret discovery --json reports a live daemon's identity and commit", async
 test("the daemon logs env warns, ui fallback, and the sigterm shutdown", async () => {
   const stateHome = await mkdtemp(join(tmpdir(), "caret-daemon-logs-"));
   const lockPath = join(stateHome, "caret", "daemon.lock");
-  const proc = Bun.spawn([process.execPath, "src/cli.ts", "daemon"], {
-    env: {
-      ...process.env,
-      CARET_PORT: String(freePort()),
-      CARET_TIMEOUT: "nope", // set-but-invalid → one boot warn
-      XDG_STATE_HOME: stateHome,
-      CARET_IDLE_MS: "600000",
-    },
-    stdio: ["ignore", "ignore", "pipe"],
-  });
+  // CARET_TIMEOUT set-but-invalid → one boot warn.
+  const proc = spawnCaretDaemon(stateHome, { CARET_TIMEOUT: "nope" }, true);
   try {
     await untilLockWritten(proc, lockPath);
     proc.kill("SIGTERM");
@@ -495,18 +405,14 @@ test("the daemon logs env warns, ui fallback, and the sigterm shutdown", async (
 
 test("the review hook warns about invalid CARET_* env vars in caret.log", async () => {
   const stateHome = await mkdtemp(join(tmpdir(), "caret-review-env-"));
-  const proc = Bun.spawn([process.execPath, "src/cli.ts", "review"], {
-    env: { ...process.env, XDG_STATE_HOME: stateHome, CARET_PORT: "nope" },
+  try {
     // Bad stdin: the run fail-safe-denies at the parse step, before any daemon
     // work — the env warn must already be on disk by then.
-    stdin: new TextEncoder().encode("not json"),
-    stdout: "pipe",
-    stderr: "ignore",
-  });
-  try {
-    const exit = await proc.exited;
-    const out = await new Response(proc.stdout).text();
-    expect(exit).toBe(0);
+    const { exitCode, stdout: out } = await runCaretCli(["review"], {
+      env: { ...process.env, XDG_STATE_HOME: stateHome, CARET_PORT: "nope" },
+      stdin: new TextEncoder().encode("not json"),
+    });
+    expect(exitCode).toBe(0);
     expect(out).toContain('"deny"');
     const recs = ndjsonRecords(
       await Bun.file(join(stateHome, "caret", "logs", "caret.log")).text(),
@@ -533,18 +439,14 @@ test("the review hook treats an unknown flag as a parse error, not a deny", asyn
   // before the review action runs and reads stdin — so the process exits
   // non-zero with nothing on stdout, never a deny written to stdout at exit 0.
   const stateHome = await mkdtemp(join(tmpdir(), "caret-review-parse-"));
-  const proc = Bun.spawn([process.execPath, "src/cli.ts", "review", "--nonexistent-flag"], {
-    env: { ...process.env, XDG_STATE_HOME: stateHome },
+  try {
     // Stdin is supplied so the baseline (which ignores the flag and reads stdin)
     // resolves rather than blocking; the parse error errors before stdin is read.
-    stdin: new TextEncoder().encode("not json"),
-    stdout: "pipe",
-    stderr: "ignore",
-  });
-  try {
-    const exit = await proc.exited;
-    const out = await new Response(proc.stdout).text();
-    expect(exit).not.toBe(0);
+    const { exitCode, stdout: out } = await runCaretCli(["review", "--nonexistent-flag"], {
+      env: { ...process.env, XDG_STATE_HOME: stateHome },
+      stdin: new TextEncoder().encode("not json"),
+    });
+    expect(exitCode).not.toBe(0);
     expect(out).not.toContain('"deny"');
   } finally {
     await rm(stateHome, { recursive: true, force: true });
@@ -559,16 +461,7 @@ test("the daemon logs the parsed settings at startup", async () => {
     "[logging]\ndebug = true\nredact = true\n",
   );
   const lockPath = join(stateHome, "caret", "daemon.lock");
-  const proc = Bun.spawn([process.execPath, "src/cli.ts", "daemon"], {
-    env: {
-      ...process.env,
-      CARET_PORT: String(freePort()),
-      XDG_STATE_HOME: stateHome,
-      XDG_CONFIG_HOME: configHome,
-      CARET_IDLE_MS: "600000", // don't idle-shutdown before we read the boot line
-    },
-    stdio: ["ignore", "ignore", "pipe"],
-  });
+  const proc = spawnCaretDaemon(stateHome, { XDG_CONFIG_HOME: configHome }, true);
   try {
     // The boot settings line is emitted before the server binds (lock write),
     // so the lock appearing means the line is already flushed (sync writes).
@@ -584,14 +477,11 @@ test("the daemon logs the parsed settings at startup", async () => {
     // The daemon/review tables are the file-or-default values — the CARET_PORT /
     // CARET_IDLE_MS env overrides above resolve in the accessors (EXC-430) and
     // never appear in the parsed settings.
-    expect(rec?.settings).toEqual({
-      logging: { level: "info", redact: true, max_size: 5_242_880, keep: 10 },
-      daemon: { port: 42718, idle_ms: 60_000, heartbeat_ms: 8_000 },
-      review: { timeout_s: 3600 },
-      // EXC-558: the [dev] table rides the boot record too; here it is the
-      // schema default (no [dev] in this config). A prod binary gates it inert.
-      dev: { notify: { enabled: false, interval_ms: 15_000, max_pending: 3 } },
-    });
+    // EXC-558: the [dev] table rides the boot record too; here it is the
+    // schema default (no [dev] in this config). A prod binary gates it inert.
+    // Every table but logging.redact is untouched by this config, so they ride
+    // straight from DEFAULTS.
+    expect(rec?.settings).toEqual({ ...DEFAULTS, logging: { ...DEFAULTS.logging, redact: true } });
   } finally {
     proc.kill("SIGKILL");
     await proc.exited;

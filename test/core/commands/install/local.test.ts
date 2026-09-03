@@ -118,22 +118,25 @@ test("resolveLocalCheckout rejects a checkout whose build artifacts are missing"
   ).toBe(repo);
 });
 
-test("resolveLocalCheckout names the artifact that is missing", () => {
+/** A checkout missing bin/caret-native — every other build artifact present, so the
+ * incomplete-build guard can be pinned to that one file. */
+function checkoutMissingBinary(): string {
   const repo = temp();
   mkdirSync(join(repo, ".claude-plugin"), { recursive: true });
   mkdirSync(join(repo, "bin", "ui"), { recursive: true });
   writeFileSync(join(repo, ".claude-plugin", "marketplace.json"), "{}");
+  return repo;
+}
 
+test("resolveLocalCheckout names the artifact that is missing", () => {
+  const repo = checkoutMissingBinary();
   // bin/ui is there; only the binary is missing, and the error says so rather than
   // claiming both are absent.
   expect(() => resolveLocalCheckout({}, { root: () => repo })).toThrow(/missing bin\/caret-native/);
 });
 
 test("resolveLocalCheckout treats an unrunnable artifact as a missing one", () => {
-  const repo = temp();
-  mkdirSync(join(repo, ".claude-plugin"), { recursive: true });
-  mkdirSync(join(repo, "bin", "ui"), { recursive: true });
-  writeFileSync(join(repo, ".claude-plugin", "marketplace.json"), "{}");
+  const repo = checkoutMissingBinary();
   // Written, but never chmod +x — the dev loop would fail at spawn time.
   writeFileSync(join(repo, "bin", "caret-native"), "#!/bin/sh\n");
 

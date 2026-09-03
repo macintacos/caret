@@ -1,9 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 import pkg from "@root/package.json" with { type: "json" };
+import { makeFakeUiAssets } from "@test/support/fake-ui-assets.ts";
 import {
   buildHash,
   buildKind,
@@ -13,30 +11,11 @@ import {
   resolveCommit,
   VERSION,
 } from "@/lib/build-id.ts";
-import type { UiAssets } from "@/ui/assets.ts";
 
-// A UiAssets handle over real temp files, so buildHash reads bytes through
-// Bun.file exactly as it does in production. `paths` is sorted to match the
-// resolver's contract (the digest folds assets in sorted-path order).
-const assetDirs: string[] = [];
-function fakeAssets(files: Record<string, string>): UiAssets {
-  const root = mkdtempSync(join(tmpdir(), "caret-assets-"));
-  assetDirs.push(root);
-  const map: Record<string, string> = {};
-  for (const [urlPath, content] of Object.entries(files)) {
-    const safe = join(root, urlPath.replace(/[^A-Za-z0-9]/g, "_"));
-    writeFileSync(safe, content);
-    map[urlPath] = safe;
-  }
-  return {
-    paths: Object.keys(map).sort(),
-    file: (urlPath) => (map[urlPath] ? Bun.file(map[urlPath]) : undefined),
-  };
-}
-
-afterEach(() => {
-  for (const d of assetDirs.splice(0)) rmSync(d, { recursive: true, force: true });
-});
+// `paths` is sorted to match buildHash's contract (the digest folds assets in
+// sorted-path order).
+const { fakeAssets, cleanup } = makeFakeUiAssets();
+afterEach(cleanup);
 
 // The static identity surface plus the build fingerprint and commit resolver.
 

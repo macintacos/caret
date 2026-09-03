@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { type BootOptions, bootDaemon, type TestDaemon } from "@test/support/daemon.ts";
+import { makeFakeUiAssets } from "@test/support/fake-ui-assets.ts";
 import { recordingLog } from "@test/support/recording-log.ts";
 import { expectNeverLogsBody } from "@test/support/redaction.ts";
 import { APPROVE_VARIANTS } from "@/adapters/claude/approve.ts";
@@ -20,29 +21,10 @@ import { createDaemonLogger } from "@/lib/log.ts";
 import type { UpdateReport } from "@/lib/types.ts";
 import { formatPlanMarkdown } from "@/plan/markdown.ts";
 import type { Store } from "@/review/store.ts";
-import type { UiAssets } from "@/ui/assets.ts";
 
-// A UiAssets handle over real temp files, so the daemon serves bytes through
-// Bun.file (and its MIME) exactly as in production. Resolver injected as a dep —
-// the core daemon stays tool-agnostic and never reaches into ui-assets.ts.
-const assetDirs: string[] = [];
-function fakeAssets(files: Record<string, string>): UiAssets {
-  const root = mkdtempSync(join(tmpdir(), "caret-ui-assets-"));
-  assetDirs.push(root);
-  const map: Record<string, string> = {};
-  let i = 0;
-  for (const [urlPath, content] of Object.entries(files)) {
-    // Keep the URL path's basename (extension included) so Bun.file derives the
-    // same MIME the embedded path would; an index prefix avoids name collisions.
-    const safe = join(root, `${i++}-${urlPath.split("/").pop()}`);
-    writeFileSync(safe, content);
-    map[urlPath] = safe;
-  }
-  return {
-    paths: Object.keys(map).sort(),
-    file: (urlPath) => (map[urlPath] ? Bun.file(map[urlPath]) : undefined),
-  };
-}
+// Resolver injected as a dep — the core daemon stays tool-agnostic and never
+// reaches into ui-assets.ts.
+const { fakeAssets, cleanup: cleanupAssets } = makeFakeUiAssets();
 
 let dir: string;
 let d: TestDaemon;
@@ -82,6 +64,15 @@ async function waitForPrefMode(want: string): Promise<string> {
     await Bun.sleep(10);
   }
   return last;
+}
+
+/** Seed a review, approve it with acceptMode "auto", and wait for the
+ * remembered approve mode to land — the common precondition for a test that
+ * then exercises prefs merge or restart persistence. */
+async function approveWithAutoMode(): Promise<string> {
+  const { id } = await newReview();
+  await resolve(id, { behavior: "allow", acceptMode: "auto" });
+  return waitForPrefMode("auto");
 }
 
 // A promise that resolves the first time the daemon's idle/retire shutdown fires,
@@ -150,6 +141,26 @@ async function resolve(id: string, body: Record<string, unknown>) {
   await d.resolve(id, body);
 }
 
+/**
+ * Boot with a manual idle timer and shutdown signal wired in, so a test can
+ * fire the timer and await the shutdown deterministically instead of racing a
+ * real `idleMs` delay. `opts` merges on top of the idleMs:30 default.
+ */
+async function bootWithManualIdle(
+  opts: BootOptions = {},
+): Promise<{ sig: ReturnType<typeof shutdownSignal>; timer: ReturnType<typeof manualTimer> }> {
+  const sig = shutdownSignal();
+  const timer = manualTimer();
+  await boot({
+    idleMs: 30,
+    onShutdown: sig.onShutdown,
+    setTimer: timer.setTimer,
+    clearTimer: timer.clearTimer,
+    ...opts,
+  });
+  return { sig, timer };
+}
+
 async function newReview(body: Record<string, unknown> = {}) {
   return { id: await d.seed(body) };
 }
@@ -160,7 +171,7 @@ beforeEach(async () => {
 afterEach(async () => {
   srv?.stop();
   await rm(dir, { recursive: true, force: true });
-  for (const d of assetDirs.splice(0)) await rm(d, { recursive: true, force: true });
+  cleanupAssets();
 });
 
 test("GET /api/health returns the caret identity signature", async () => {
@@ -519,14 +530,7 @@ test("POST /api/ui/gone retracts presence so the next create reports hasLiveClie
 });
 
 test("a present UI tab keeps the daemon alive past idle; /api/ui/gone lets it shut down (EXC-562)", async () => {
-  const sig = shutdownSignal();
-  const timer = manualTimer();
-  await boot({
-    idleMs: 30,
-    onShutdown: sig.onShutdown,
-    setTimer: timer.setTimer,
-    clearTimer: timer.clearTimer,
-  });
+  const { sig, timer } = await bootWithManualIdle();
   await fetch(`${base}/api/reviews`); // a live tab is present
   // A present tab must hold the daemon open even when idle fires while it's still
   // around (it can poll slower than idle) — otherwise the daemon dies and forgets
@@ -573,11 +577,7 @@ test("GET /decision returns 204 when no decision arrives within the heartbeat wi
 test("GET /decision serves a persisted deny decision on reconnect", async () => {
   await boot({ heartbeatMs: 30 });
   const { id } = await newReview();
-  await fetch(`${base}/api/reviews/${id}/resolve`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ behavior: "deny", feedback: "rephrase" }),
-  });
+  await resolve(id, { behavior: "deny", feedback: "rephrase" });
   // A hook that dropped its long-poll reconnects and re-requests the decision.
   const res = await fetch(`${base}/api/reviews/${id}/decision`);
   expect(res.status).toBe(200);
@@ -587,11 +587,7 @@ test("GET /decision serves a persisted deny decision on reconnect", async () => 
 test("GET /decision serves a persisted allow decision after approve removed it from memory", async () => {
   await boot({ heartbeatMs: 30 });
   const { id } = await newReview();
-  await fetch(`${base}/api/reviews/${id}/resolve`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ behavior: "allow" }),
-  });
+  await resolve(id, { behavior: "allow" });
   expect(store.get(id)).toBeUndefined(); // approve drops it from memory
   const res = await fetch(`${base}/api/reviews/${id}/decision`);
   expect(res.status).toBe(200);
@@ -633,19 +629,11 @@ test("approve removes the review from the active set; deny keeps it as rejected"
   await boot();
 
   const { id: a } = await newReview();
-  await fetch(`${base}/api/reviews/${a}/resolve`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ behavior: "allow" }),
-  });
+  await resolve(a, { behavior: "allow" });
   expect(store.get(a)).toBeUndefined();
 
   const { id: d } = await newReview();
-  await fetch(`${base}/api/reviews/${d}/resolve`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ behavior: "deny", feedback: "fix it" }),
-  });
+  await resolve(d, { behavior: "deny", feedback: "fix it" });
   expect(store.get(d)?.status).toBe("rejected");
 });
 
@@ -1133,11 +1121,7 @@ describe("read-confidentiality posture", () => {
     }
     const { id: rid } = await newReview();
     expectNoCorsHeaders(
-      await fetch(`${base}/api/reviews/${rid}/resolve`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ behavior: "allow" }),
-      }),
+      await d.resolve(rid, { behavior: "allow" }),
       "POST /api/reviews/:id/resolve",
     );
     const { id: eid } = await newReview();
@@ -1189,30 +1173,29 @@ describe("UI serving", () => {
     });
   }
 
-  test("GET / serves the placeholder with no-cache when no UI is built", async () => {
-    await boot();
-    const res = await fetch(`${base}/`);
+  /** GET `path`, assert the 200/text-html/no-cache envelope every index
+   * response shares, and return the body for the caller's own content check. */
+  async function expectNoCacheHtml(path: string): Promise<string> {
+    const res = await fetch(`${base}${path}`);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/html");
     expect(res.headers.get("cache-control")).toBe("no-cache");
-    expect(await res.text()).toContain('<div id="app">');
+    return res.text();
+  }
+
+  test("GET / serves the placeholder with no-cache when no UI is built", async () => {
+    await boot();
+    expect(await expectNoCacheHtml("/")).toContain('<div id="app">');
   });
 
   test("GET / serves the built index document with no-cache", async () => {
     await bootUi();
-    const res = await fetch(`${base}/`);
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("text/html");
-    expect(res.headers.get("cache-control")).toBe("no-cache");
-    expect(await res.text()).toBe(INDEX);
+    expect(await expectNoCacheHtml("/")).toBe(INDEX);
   });
 
   test("GET /index.html serves the same index document as GET /", async () => {
     await bootUi();
-    const res = await fetch(`${base}/index.html`);
-    expect(res.status).toBe(200);
-    expect(res.headers.get("cache-control")).toBe("no-cache");
-    expect(await res.text()).toBe(INDEX);
+    expect(await expectNoCacheHtml("/index.html")).toBe(INDEX);
   });
 
   test("GET a hashed JS asset returns 200 with the JS MIME and an immutable cache", async () => {
@@ -1393,14 +1376,7 @@ describe("routing fallthrough", () => {
 });
 
 test("idle shutdown fires when empty, not while a review is pending", async () => {
-  const sig = shutdownSignal();
-  const timer = manualTimer();
-  await boot({
-    idleMs: 30,
-    onShutdown: sig.onShutdown,
-    setTimer: timer.setTimer,
-    clearTimer: timer.clearTimer,
-  });
+  const { sig, timer } = await bootWithManualIdle();
   // A review is created before the idle timer would fire — keeps it alive.
   const { id } = await newReview();
   // Negative leg: a pending review must hold the daemon open. The invariant is
@@ -1409,25 +1385,13 @@ test("idle shutdown fires when empty, not while a review is pending", async () =
   expect(timer.pending()).toBe(false);
   expect(sig.fired()).toBe(false);
   // Approve → removed → 1→0 transition arms idle → shutdown; fire it.
-  await fetch(`${base}/api/reviews/${id}/resolve`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ behavior: "allow" }),
-  });
+  await resolve(id, { behavior: "allow" });
   timer.fire();
   await sig.shutdown;
 });
 
 test("a superseded review's decision entry does not pin idle shutdown", async () => {
-  const sig = shutdownSignal();
-  const timer = manualTimer();
-  await boot({
-    idleMs: 30,
-    heartbeatMs: 20,
-    onShutdown: sig.onShutdown,
-    setTimer: timer.setTimer,
-    clearTimer: timer.clearTimer,
-  });
+  const { sig, timer } = await bootWithManualIdle({ heartbeatMs: 20 });
   const { id: stale } = await newReview();
   // The (timed-out) hook long-polled once, leaving an unsettled decision entry.
   expect((await fetch(`${base}/api/reviews/${stale}/decision`)).status).toBe(204);
@@ -1475,15 +1439,7 @@ test("POST /expire refuses a non-pending review", async () => {
 });
 
 test("POST /expire clears the decision entry even when the review is gone", async () => {
-  const sig = shutdownSignal();
-  const timer = manualTimer();
-  await boot({
-    idleMs: 30,
-    heartbeatMs: 20,
-    onShutdown: sig.onShutdown,
-    setTimer: timer.setTimer,
-    clearTimer: timer.clearTimer,
-  });
+  const { sig, timer } = await bootWithManualIdle({ heartbeatMs: 20 });
   // A zombie hook polls a review that no longer exists, re-creating an
   // unsettled entry that would pin openDecisionCount forever.
   expect((await fetch(`${base}/api/reviews/ghost/decision`)).status).toBe(204);
@@ -1494,15 +1450,7 @@ test("POST /expire clears the decision entry even when the review is gone", asyn
 });
 
 test("idle shutdown fires after a pending review is expired", async () => {
-  const sig = shutdownSignal();
-  const timer = manualTimer();
-  await boot({
-    idleMs: 30,
-    heartbeatMs: 20,
-    onShutdown: sig.onShutdown,
-    setTimer: timer.setTimer,
-    clearTimer: timer.clearTimer,
-  });
+  const { sig, timer } = await bootWithManualIdle({ heartbeatMs: 20 });
   const { id } = await newReview();
   // The hook long-polled once (unsettled entry), then timed out and expired.
   expect((await fetch(`${base}/api/reviews/${id}/decision`)).status).toBe(204);
@@ -1535,19 +1483,24 @@ test("lifecycle events are logged at info: listen, review created, resolved", as
   expect(info.some((r) => r.step === "resolve" && r.msg.includes("resolved: deny"))).toBe(true);
 });
 
-test("a handler exception is logged at error level before returning the 500", async () => {
-  const { recs, log } = recordingLog();
-  await boot({
-    log,
-    routePlan: async () => {
-      throw new Error("kaboom");
-    },
-  });
-  const res = await fetch(`${base}/api/reviews`, {
+/** A routePlan that always throws, for the handler-exception tests below. */
+async function throwingRoutePlan(): Promise<never> {
+  throw new Error("kaboom");
+}
+
+/** POST a minimal, valid review body — enough to reach routePlan. */
+function postTriggeringRoutePlan(): Promise<Response> {
+  return fetch(`${base}/api/reviews`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ sessionId: "S", plan: "# x" }),
   });
+}
+
+test("a handler exception is logged at error level before returning the 500", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log, routePlan: throwingRoutePlan });
+  const res = await postTriggeringRoutePlan();
   expect(res.status).toBe(500);
   const rec = recs.find((r) => r.level === "error");
   expect(rec?.step).toBe("request");
@@ -1564,34 +1517,17 @@ test("a throwing log sink during a handler error still returns the clean 500", a
         throw new Error("log sink broken");
       },
     },
-    routePlan: async () => {
-      throw new Error("kaboom");
-    },
+    routePlan: throwingRoutePlan,
   });
-  const res = await fetch(`${base}/api/reviews`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sessionId: "S", plan: "# x" }),
-  });
+  const res = await postTriggeringRoutePlan();
   expect(res.status).toBe(500);
   expect(await res.text()).toBe("internal error");
 });
 
 test("a rejected (changes-requested) review does NOT keep the daemon alive", async () => {
-  const sig = shutdownSignal();
-  const timer = manualTimer();
-  await boot({
-    idleMs: 30,
-    onShutdown: sig.onShutdown,
-    setTimer: timer.setTimer,
-    clearTimer: timer.clearTimer,
-  });
+  const { sig, timer } = await bootWithManualIdle();
   const { id } = await newReview();
-  await fetch(`${base}/api/reviews/${id}/resolve`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ behavior: "deny", feedback: "redo" }),
-  });
+  await resolve(id, { behavior: "deny", feedback: "redo" });
   expect(store.get(id)?.status).toBe("rejected"); // kept on disk for the revision
   timer.fire();
   await sig.shutdown; // but idle still fires
@@ -1600,17 +1536,9 @@ test("a rejected (changes-requested) review does NOT keep the daemon alive", asy
 test("resolving an already-resolved review is rejected (double-resolve guard)", async () => {
   await boot();
   const { id } = await newReview();
-  const first = await fetch(`${base}/api/reviews/${id}/resolve`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ behavior: "deny", feedback: "x" }),
-  });
+  const first = await d.resolve(id, { behavior: "deny", feedback: "x" });
   expect(first.ok).toBe(true);
-  const second = await fetch(`${base}/api/reviews/${id}/resolve`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ behavior: "allow" }),
-  });
+  const second = await d.resolve(id, { behavior: "allow" });
   expect(second.status).toBe(404); // already rejected — not pending
   expect(store.get(id)?.status).toBe("rejected"); // unchanged by the 2nd resolve
 });
@@ -1622,11 +1550,7 @@ test("a revision re-pends the review and clears the prior decision (no stale re-
   // so the deny is delivered through the decision pipe (which drains it).
   const poll = fetch(`${base}/api/reviews/${id}/decision`);
   await Bun.sleep(10); // let the long-poll register before the resolve
-  await fetch(`${base}/api/reviews/${id}/resolve`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ behavior: "deny", feedback: "redo" }),
-  });
+  await resolve(id, { behavior: "deny", feedback: "redo" });
   expect(await (await poll).json()).toMatchObject({ behavior: "deny" });
   // Agent posts a revision in the same session → appends v2, re-pends to pending.
   await newReview({ plan: "# v2" });
@@ -1710,9 +1634,7 @@ describe("POST /api/prefs", () => {
     // The merge, exercised through the route: the remembered approve mode is what a
     // whole-file write here would erase.
     await bootClaude();
-    const { id } = await newReview();
-    await resolve(id, { behavior: "allow", acceptMode: "auto" });
-    expect(await waitForPrefMode("auto")).toBe("auto");
+    expect(await approveWithAutoMode()).toBe("auto");
     expect((await setPrefs({ updates: { check: false } })).status).toBe(200);
     expect(prefsOnDisk()).toEqual({ approveMode: "auto", updates: { check: false } });
   });
@@ -1772,9 +1694,7 @@ test("an allow with an unrecognized acceptMode leaves prefs at 'default'", async
 
 test("the remembered approve mode survives a daemon restart", async () => {
   await bootClaude();
-  const { id } = await newReview();
-  await resolve(id, { behavior: "allow", acceptMode: "auto" });
-  expect(await waitForPrefMode("auto")).toBe("auto");
+  expect(await approveWithAutoMode()).toBe("auto");
 
   // Restart: stop the server, boot a fresh one against the same state dir.
   srv.stop();
@@ -2032,14 +1952,7 @@ test("POST /api/logs from a foreign origin is blocked (403, nothing recorded)", 
 });
 
 test("POST /api/logs does not permanently defer idle shutdown", async () => {
-  const sig = shutdownSignal();
-  const timer = manualTimer();
-  await boot({
-    idleMs: 30,
-    onShutdown: sig.onShutdown,
-    setTimer: timer.setTimer,
-    clearTimer: timer.clearTimer,
-  });
+  const { sig, timer } = await bootWithManualIdle();
   // A log POST defers idle while in flight (like any request); once it returns
   // and no reviews are pending, the idle timer must re-arm and fire.
   const res = await postLogs([{ level: "info", step: "ui", msg: "heartbeat" }]);

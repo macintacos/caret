@@ -5,8 +5,7 @@
 // these tests pin its URL mapping, enumeration completeness, and emitted-module
 // shape without a real build.
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -15,18 +14,11 @@ import {
   renderManifestModule,
   writeManifest,
 } from "@scripts/generate-ui-manifest.ts";
+import { fakeDistDir } from "@test/support/fs-tree.ts";
 
 // Lay down a representative dist tree (index plus hashed siblings under assets/)
 // in a temp dir and return its root; caller cleans up.
-function fakeDist(files: Record<string, string>): string {
-  const root = mkdtempSync(join(tmpdir(), "caret-gen-dist-"));
-  for (const [rel, content] of Object.entries(files)) {
-    const full = join(root, rel);
-    mkdirSync(join(full, ".."), { recursive: true });
-    writeFileSync(full, content);
-  }
-  return root;
-}
+const fakeDist = (files: Record<string, string>): string => fakeDistDir("caret-gen-dist-", files);
 
 // ---- enumerateDist: URL mapping + enumeration completeness ----
 

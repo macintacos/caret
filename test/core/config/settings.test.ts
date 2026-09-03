@@ -107,10 +107,17 @@ test("current() yields all defaults when the file never existed", () => {
   expect(createSettings(file).current()).toEqual(DEFAULTS);
 });
 
-test("current() re-reads when the file's mtime changes", async () => {
+/** Seed `file` with `[logging]\nlevel = "warn"\n` at a fixed mtime and build a
+ * settings service from it — the common starting point every cache-behavior
+ * case below reads once, then writes over. */
+async function seedWarmFile(file: string): Promise<ReturnType<typeof createSettings>> {
   await Bun.write(file, '[logging]\nlevel = "warn"\n');
   utimesSync(file, new Date(1_000_000_000), new Date(1_000_000_000));
-  const svc = createSettings(file);
+  return createSettings(file);
+}
+
+test("current() re-reads when the file's mtime changes", async () => {
+  const svc = await seedWarmFile(file);
   expect(svc.current().logging.level).toBe("warn");
   await Bun.write(file, '[logging]\nlevel = "error"\n');
   utimesSync(file, new Date(2_000_000_000), new Date(2_000_000_000));
@@ -118,9 +125,7 @@ test("current() re-reads when the file's mtime changes", async () => {
 });
 
 test("current() serves the cached parse while mtime and size are unchanged", async () => {
-  await Bun.write(file, '[logging]\nlevel = "warn"\n');
-  utimesSync(file, new Date(1_000_000_000), new Date(1_000_000_000));
-  const svc = createSettings(file);
+  const svc = await seedWarmFile(file);
   expect(svc.current().logging.level).toBe("warn");
   // Same byte length ("info" == "warn"), same mtime reapplied: the stat gate
   // must short-circuit without re-reading.
@@ -130,9 +135,7 @@ test("current() serves the cached parse while mtime and size are unchanged", asy
 });
 
 test("a failed re-parse keeps serving last-known-good", async () => {
-  await Bun.write(file, '[logging]\nlevel = "warn"\n');
-  utimesSync(file, new Date(1_000_000_000), new Date(1_000_000_000));
-  const svc = createSettings(file);
+  const svc = await seedWarmFile(file);
   expect(svc.current().logging.level).toBe("warn");
   await Bun.write(file, "[logging\nlevel =");
   utimesSync(file, new Date(2_000_000_000), new Date(2_000_000_000));

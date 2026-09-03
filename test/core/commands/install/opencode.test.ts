@@ -164,18 +164,24 @@ test("a bare entry with nothing cached is reported fresh, and nothing is cleared
   expect(said).not.toContain("Cleared");
 });
 
+/** A `confirm` stub that records every prompt kind it is asked — for a case
+ * that expects it never to fire. */
+function recordingConfirm(): { confirm: InstallOpencodeDeps["confirm"]; asked: string[] } {
+  const asked: string[] = [];
+  return {
+    confirm: async (v) => {
+      asked.push(v.kind);
+      return true;
+    },
+    asked,
+  };
+}
+
 test("--refresh clears a stale cache without asking", async () => {
   const cache = cacheDir(CARET_PACKAGE, "0.2.0");
-  const asked: string[] = [];
+  const { confirm, asked } = recordingConfirm();
   const said = await transcript(
-    {
-      published: async () => "0.8.1",
-      cacheDirs: () => [cache],
-      confirm: async (v) => {
-        asked.push(v.kind);
-        return true;
-      },
-    },
+    { published: async () => "0.8.1", cacheDirs: () => [cache], confirm },
     { refresh: true },
   );
   expect(asked).toEqual([]);
@@ -183,57 +189,50 @@ test("--refresh clears a stale cache without asking", async () => {
   expect(said).toContain("Cleared 1 cached copy");
 });
 
-test("a stale cache the user accepts is cleared", async () => {
-  const cache = cacheDir(CARET_PACKAGE, "0.2.0");
-  const said = await transcript({
+/** The stale-cache upgrade deps a case exercises, with the prompt's answer as the only
+ * variable — the fixture every "user did not clear the cache" case shares. */
+function staleCacheDeps(
+  cache: string,
+  confirm: InstallOpencodeDeps["confirm"],
+): InstallOpencodeDeps {
+  return {
     published: async () => "0.8.1",
     cacheDirs: () => [cache],
     isInteractive: () => true,
-    confirm: async () => true,
-  });
+    confirm,
+  };
+}
+
+test("a stale cache the user accepts is cleared", async () => {
+  const cache = cacheDir(CARET_PACKAGE, "0.2.0");
+  const said = await transcript(staleCacheDeps(cache, async () => true));
   expect(existsSync(cache)).toBe(false);
   expect(said).toContain("Cleared 1 cached copy");
 });
 
-test("a stale cache the user declines is left alone, and the install is not a failure", async () => {
-  const cache = cacheDir(CARET_PACKAGE, "0.2.0");
-  const exitCode = process.exitCode;
-  await transcript({
-    published: async () => "0.8.1",
-    cacheDirs: () => [cache],
-    isInteractive: () => true,
-    confirm: async () => false,
-  });
-  expect(existsSync(cache)).toBe(true);
-  expect(process.exitCode).toBe(exitCode);
-  expect(existsSync(commandFile())).toBe(true);
-});
-
-test("a cancelled prompt leaves the cache alone, and is not a failure", async () => {
-  const cache = cacheDir(CARET_PACKAGE, "0.2.0");
-  const exitCode = process.exitCode;
-  await transcript({
-    published: async () => "0.8.1",
-    cacheDirs: () => [cache],
-    isInteractive: () => true,
-    confirm: async () => null,
-  });
-  expect(existsSync(cache)).toBe(true);
-  expect(process.exitCode).toBe(exitCode);
-  expect(existsSync(commandFile())).toBe(true);
-});
+test.each([
+  ["declines", false],
+  ["cancels", null],
+])(
+  "a stale cache the user %s is left alone, and the install is not a failure",
+  async (_label, answer) => {
+    const cache = cacheDir(CARET_PACKAGE, "0.2.0");
+    const exitCode = process.exitCode;
+    await transcript(staleCacheDeps(cache, async () => answer));
+    expect(existsSync(cache)).toBe(true);
+    expect(process.exitCode).toBe(exitCode);
+    expect(existsSync(commandFile())).toBe(true);
+  },
+);
 
 test("without a terminal, a stale cache names the gap and --refresh rather than asking", async () => {
   const cache = cacheDir(CARET_PACKAGE, "0.2.0");
-  const asked: string[] = [];
+  const { confirm, asked } = recordingConfirm();
   const said = await transcript({
     published: async () => "0.8.1",
     cacheDirs: () => [cache],
     isInteractive: () => false,
-    confirm: async (v) => {
-      asked.push(v.kind);
-      return true;
-    },
+    confirm,
   });
   expect(asked).toEqual([]);
   expect(said).toContain("0.2.0");
@@ -541,12 +540,7 @@ test("the install sweep runs after the upgrade check, never before it", async ()
 test("a declined refresh still sweeps — two loaded caret plugins is the worse outcome", async () => {
   const cache = cacheDir(CARET_PACKAGE, "0.2.0");
   seedLegacy();
-  await transcript({
-    published: async () => "0.8.1",
-    cacheDirs: () => [cache],
-    isInteractive: () => true,
-    confirm: async () => false,
-  });
+  await transcript(staleCacheDeps(cache, async () => false));
   expect(existsSync(cache)).toBe(true); // the decline was honoured
   expect(stillThere(legacyPaths())).toEqual([]);
 });

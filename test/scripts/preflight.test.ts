@@ -71,6 +71,17 @@ function waitForCond(cond: () => boolean, ms = 1000): Promise<true> {
   return waitFor(() => (cond() ? true : undefined), ms);
 }
 
+/** Release every task a gatedSpawner ordering test still holds gated, and await
+ * the run to a green finish — the closing sequence once start order is pinned. */
+async function releaseRemainingAndFinish(
+  s: ReturnType<typeof gatedSpawner>,
+  run: Promise<{ exitCode: number }>,
+): Promise<void> {
+  for (const name of ["lint", "test", "test e2e", "smoke"]) s.release(name);
+  const r = await run;
+  expect(r.exitCode).toBe(0);
+}
+
 test("all tasks pass: exit 0, every task reported passed, build ui spawned once", async () => {
   const { calls, spawnTask } = fakeSpawner();
   const r = await runPreflight({ spawnTask, renderer: "silent" });
@@ -97,9 +108,7 @@ test("lint, test, build ui start immediately; dependents wait for build ui", asy
 
   s.release("build bin");
   await waitForCond(() => s.calls.includes("smoke"));
-  for (const name of ["lint", "test", "test e2e", "smoke"]) s.release(name);
-  const r = await run;
-  expect(r.exitCode).toBe(0);
+  await releaseRemainingAndFinish(s, run);
 });
 
 // smoke is the one second-order node: it gates on `build bin`, which is itself a
@@ -118,9 +127,7 @@ test("smoke waits for build bin, not merely build ui", async () => {
   s.release("build bin");
   await waitForCond(() => s.calls.includes("smoke"));
 
-  for (const name of ["lint", "test", "test e2e", "smoke"]) s.release(name);
-  const r = await run;
-  expect(r.exitCode).toBe(0);
+  await releaseRemainingAndFinish(s, run);
 });
 
 // listr2 fills its concurrency slots in array order, so a task can only start

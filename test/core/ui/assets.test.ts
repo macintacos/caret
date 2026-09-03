@@ -4,21 +4,14 @@
 // placeholder. The embedded-manifest source is exercised end-to-end by the
 // compiled-binary check; the daemon's serving behavior is pinned in daemon.test.
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { fakeDistDir } from "@test/support/fs-tree.ts";
 import { assetsFromDist, uiDistCandidates } from "@/ui/assets.ts";
 
-function fakeDist(files: Record<string, string>): string {
-  const root = mkdtempSync(join(tmpdir(), "caret-ui-dist-"));
-  for (const [rel, content] of Object.entries(files)) {
-    const full = join(root, rel);
-    mkdirSync(join(full, ".."), { recursive: true });
-    writeFileSync(full, content);
-  }
-  return root;
-}
+const fakeDist = (files: Record<string, string>): string => fakeDistDir("caret-ui-dist-", files);
 
 test("assetsFromDist enumerates a dist tree into URL paths, sorted", () => {
   const dist = fakeDist({

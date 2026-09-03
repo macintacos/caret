@@ -12,6 +12,7 @@ import {
   pkg,
 } from "@test/support/release-harness.ts";
 import type { ErrorCode } from "@/tasks/release/contract.ts";
+import type { PrState } from "@/tasks/release/github.ts";
 import { baseline, compute, finalize, GuardError, prepare } from "@/tasks/release/steps.ts";
 
 /** The themed release name the agent hands the script via `--title`. */
@@ -125,6 +126,33 @@ test("baseline is a no-op when v0.0.1 already exists", async () => {
 // The manifests themselves come from the harness default (all three at 0.0.1).
 const PREPARE_OPTS: HarnessOptions = { porcelain: [" M package.json"] };
 
+/** PR #3 against `release/v0.1.0` — the fixture every "an existing release PR"
+ * case starts from, parametrized by its lifecycle state. */
+const releasePr3 = (state: PrState) => [
+  { number: 3, url: "https://github.com/macintacos/caret/pull/3", state },
+];
+
+/** `release/v0.1.0` already bumped and pushed, with PR #3 open against it at
+ * `state` — the fixture every "prepare resumed on an already-bumped branch"
+ * case (success and guard alike) starts from. */
+const resumedReleaseBranch = (state: PrState): HarnessOptions => ({
+  branch: "release/v0.1.0",
+  porcelain: [],
+  localBranches: ["release/v0.1.0"],
+  remoteBranches: ["release/v0.1.0"],
+  refs: {
+    "origin/trunk": "trunksha",
+    "release/v0.1.0": "z",
+    "origin/release/v0.1.0": "z",
+  },
+  files: {
+    "package.json": pkg("0.1.0"),
+    ".claude-plugin/plugin.json": pkg("0.1.0"),
+    ".claude-plugin/marketplace.json": market("0.1.0"),
+  },
+  prs: releasePr3(state),
+});
+
 test("prepare dry-run writes, commits, pushes, and PRs nothing", async () => {
   const { deps, calls } = makeReleaseHarness(PREPARE_OPTS);
   const r = await prepare(deps, { bump: "minor", dryRun: true, title: THEME });
@@ -171,13 +199,7 @@ test("prepare reuses an already-open PR instead of opening a duplicate", async (
     localBranches: ["release/v0.1.0"],
     remoteBranches: ["release/v0.1.0"],
     refs: { "origin/trunk": "trunksha", "origin/release/v0.1.0": "x" },
-    prs: [
-      {
-        number: 3,
-        url: "https://github.com/macintacos/caret/pull/3",
-        state: "OPEN",
-      },
-    ],
+    prs: releasePr3("OPEN"),
   });
   const r = await prepare(deps, { bump: "minor", dryRun: false, title: THEME });
   expect(calls).not.toContain("prCreate");
@@ -186,29 +208,7 @@ test("prepare reuses an already-open PR instead of opening a duplicate", async (
 });
 
 test("prepare resumes cleanly when the release branch is already bumped", async () => {
-  const { deps, calls } = makeReleaseHarness({
-    branch: "release/v0.1.0",
-    porcelain: [],
-    localBranches: ["release/v0.1.0"],
-    remoteBranches: ["release/v0.1.0"],
-    refs: {
-      "origin/trunk": "trunksha",
-      "release/v0.1.0": "z",
-      "origin/release/v0.1.0": "z",
-    },
-    files: {
-      "package.json": pkg("0.1.0"),
-      ".claude-plugin/plugin.json": pkg("0.1.0"),
-      ".claude-plugin/marketplace.json": market("0.1.0"),
-    },
-    prs: [
-      {
-        number: 3,
-        url: "https://github.com/macintacos/caret/pull/3",
-        state: "OPEN",
-      },
-    ],
-  });
+  const { deps, calls } = makeReleaseHarness(resumedReleaseBranch("OPEN"));
   const r = await prepare(deps, { bump: "minor", dryRun: false, title: THEME });
   expect(r.version).toBe("0.1.0");
   expect(r.prNumber).toBe(3);
@@ -247,29 +247,7 @@ test("prepare rejects BRANCH_DIVERGED when the remote release branch is not an a
 test("prepare rejects ALREADY_MERGED when the release PR is already merged", async () => {
   // The bump PR merged but the operator re-ran prepare; it must point them at
   // finalize rather than open a duplicate or push again.
-  const { deps, calls } = makeReleaseHarness({
-    branch: "release/v0.1.0",
-    porcelain: [],
-    localBranches: ["release/v0.1.0"],
-    remoteBranches: ["release/v0.1.0"],
-    refs: {
-      "origin/trunk": "trunksha",
-      "release/v0.1.0": "z",
-      "origin/release/v0.1.0": "z",
-    },
-    files: {
-      "package.json": pkg("0.1.0"),
-      ".claude-plugin/plugin.json": pkg("0.1.0"),
-      ".claude-plugin/marketplace.json": market("0.1.0"),
-    },
-    prs: [
-      {
-        number: 3,
-        url: "https://github.com/macintacos/caret/pull/3",
-        state: "MERGED",
-      },
-    ],
-  });
+  const { deps, calls } = makeReleaseHarness(resumedReleaseBranch("MERGED"));
   await expectGuard(
     prepare(deps, { bump: "minor", dryRun: false, title: THEME }),
     "ALREADY_MERGED",
@@ -280,29 +258,7 @@ test("prepare rejects ALREADY_MERGED when the release PR is already merged", asy
 test("prepare rejects PR_CLOSED when the release PR was closed unmerged", async () => {
   // A closed-unmerged PR means a human intervened; prepare refuses to silently
   // open a fresh PR over the same branch.
-  const { deps, calls } = makeReleaseHarness({
-    branch: "release/v0.1.0",
-    porcelain: [],
-    localBranches: ["release/v0.1.0"],
-    remoteBranches: ["release/v0.1.0"],
-    refs: {
-      "origin/trunk": "trunksha",
-      "release/v0.1.0": "z",
-      "origin/release/v0.1.0": "z",
-    },
-    files: {
-      "package.json": pkg("0.1.0"),
-      ".claude-plugin/plugin.json": pkg("0.1.0"),
-      ".claude-plugin/marketplace.json": market("0.1.0"),
-    },
-    prs: [
-      {
-        number: 3,
-        url: "https://github.com/macintacos/caret/pull/3",
-        state: "CLOSED",
-      },
-    ],
-  });
+  const { deps, calls } = makeReleaseHarness(resumedReleaseBranch("CLOSED"));
   await expectGuard(prepare(deps, { bump: "minor", dryRun: false, title: THEME }), "PR_CLOSED");
   expect(calls).not.toContain("prCreate");
 });
@@ -330,13 +286,37 @@ const withNotes = (opts: HarnessOptions = FINALIZE_OPTS): HarnessOptions => ({
   files: { [NOTES_FILE]: NOTES },
 });
 
-test("finalize tags trunk's merged HEAD, creates the release, and publishes to npm", async () => {
-  const { deps, calls } = makeReleaseHarness(FINALIZE_OPTS);
-  const r = await finalize(deps, { dryRun: false });
+/** v0.1.0 already tagged, pushed, and published as a GitHub release — the
+ * fixture every "resume/reuse" finalize case starts from. `releases` lets a
+ * case override the published release's fields (e.g. its existing notes). */
+const releaseAlreadyPublished = (
+  releases: HarnessOptions["releases"] = {
+    "v0.1.0": { url: "https://github.com/macintacos/caret/releases/tag/v0.1.0" },
+  },
+): HarnessOptions => ({
+  ...FINALIZE_OPTS,
+  tags: ["v0.0.1", "v0.1.0"],
+  remoteTags: ["v0.0.1", "v0.1.0"],
+  refs: { "origin/trunk": "mergedsha", "v0.1.0^{commit}": "mergedsha" },
+  releases,
+});
+
+/** Every finalize case tags v0.1.0 on the merged sha — the one fact both a
+ * fresh run and a resume from another branch must agree on. */
+function expectFinalizedAtMergedSha(
+  r: { version: string; tag: string; taggedSha: string },
+  calls: string[],
+): void {
   expect(r.version).toBe("0.1.0");
   expect(r.tag).toBe("v0.1.0");
   expect(r.taggedSha).toBe("mergedsha");
   expect(calls).toContain("createTag:v0.1.0@mergedsha");
+}
+
+test("finalize tags trunk's merged HEAD, creates the release, and publishes to npm", async () => {
+  const { deps, calls } = makeReleaseHarness(FINALIZE_OPTS);
+  const r = await finalize(deps, { dryRun: false });
+  expectFinalizedAtMergedSha(r, calls);
   expect(calls).toContain("pushTag:v0.1.0");
   expect(calls).toContain("releaseCreate:v0.1.0");
   expect(calls).toContain("npmPublish");
@@ -349,10 +329,7 @@ test("finalize succeeds from a release branch (working branch is irrelevant)", a
   // origin/trunk's HEAD, so the local branch must not block it.
   const { deps, calls } = makeReleaseHarness({ ...FINALIZE_OPTS, branch: "release/v0.1.0" });
   const r = await finalize(deps, { dryRun: false });
-  expect(r.version).toBe("0.1.0");
-  expect(r.tag).toBe("v0.1.0");
-  expect(r.taggedSha).toBe("mergedsha");
-  expect(calls).toContain("createTag:v0.1.0@mergedsha");
+  expectFinalizedAtMergedSha(r, calls);
   expect(calls).toContain("releaseCreate:v0.1.0");
 });
 
@@ -378,15 +355,7 @@ test("finalize skips npm publish when the version is already on the registry", a
 test("finalize still publishes to npm when the GitHub release already exists (resume)", async () => {
   // A prior run created the release but its npm publish failed; the re-run must
   // reuse the release AND complete the npm publish rather than no-op.
-  const { deps, calls } = makeReleaseHarness({
-    ...FINALIZE_OPTS,
-    tags: ["v0.0.1", "v0.1.0"],
-    remoteTags: ["v0.0.1", "v0.1.0"],
-    refs: { "origin/trunk": "mergedsha", "v0.1.0^{commit}": "mergedsha" },
-    releases: {
-      "v0.1.0": { url: "https://github.com/macintacos/caret/releases/tag/v0.1.0" },
-    },
-  });
+  const { deps, calls } = makeReleaseHarness(releaseAlreadyPublished());
   const r = await finalize(deps, { dryRun: false });
   expect(calls).not.toContain("releaseCreate:v0.1.0");
   expect(calls).toContain("npmPublish");
@@ -428,13 +397,7 @@ test("finalize resumes after its own tag was pushed rather than crying NOT_MERGE
   // longer "ahead of the latest tag" — but that tag is this release's own, which
   // is proof the earlier run already cleared the merged check. Blocking here would
   // strand every post-tag resume.
-  const { deps, calls } = makeReleaseHarness({
-    ...FINALIZE_OPTS,
-    tags: ["v0.0.1", "v0.1.0"],
-    remoteTags: ["v0.0.1", "v0.1.0"],
-    refs: { "origin/trunk": "mergedsha", "v0.1.0^{commit}": "mergedsha" },
-    releases: { "v0.1.0": { url: "https://github.com/macintacos/caret/releases/tag/v0.1.0" } },
-  });
+  const { deps, calls } = makeReleaseHarness(releaseAlreadyPublished());
   const r = await finalize(deps, { dryRun: false });
   expect(r.tag).toBe("v0.1.0");
   expect(calls).toContain("npmPublish");
@@ -488,15 +451,7 @@ test("finalize rejects TAG_EXISTS when the local tag points at another commit", 
 });
 
 test("finalize reuses an existing GitHub release", async () => {
-  const { deps, calls } = makeReleaseHarness({
-    ...FINALIZE_OPTS,
-    tags: ["v0.0.1", "v0.1.0"],
-    remoteTags: ["v0.0.1", "v0.1.0"],
-    refs: { "origin/trunk": "mergedsha", "v0.1.0^{commit}": "mergedsha" },
-    releases: {
-      "v0.1.0": { url: "https://github.com/macintacos/caret/releases/tag/v0.1.0" },
-    },
-  });
+  const { deps, calls } = makeReleaseHarness(releaseAlreadyPublished());
   const r = await finalize(deps, { dryRun: false });
   expect(calls).not.toContain("releaseCreate:v0.1.0");
   expect(r.releaseUrl).toBe("https://github.com/macintacos/caret/releases/tag/v0.1.0");
@@ -547,15 +502,7 @@ test("finalize creates a release with empty notes when no notes file is given", 
 });
 
 test("finalize with a notes file refreshes the notes of a reused release", async () => {
-  const { deps, calls, releases } = makeReleaseHarness(
-    withNotes({
-      ...FINALIZE_OPTS,
-      tags: ["v0.0.1", "v0.1.0"],
-      remoteTags: ["v0.0.1", "v0.1.0"],
-      refs: { "origin/trunk": "mergedsha", "v0.1.0^{commit}": "mergedsha" },
-      releases: { "v0.1.0": { url: "https://github.com/macintacos/caret/releases/tag/v0.1.0" } },
-    }),
-  );
+  const { deps, calls, releases } = makeReleaseHarness(withNotes(releaseAlreadyPublished()));
   await finalize(deps, { dryRun: false, notesFile: NOTES_FILE });
   expect(calls).not.toContain("releaseCreate:v0.1.0");
   expect(calls).toContain("releaseEdit:v0.1.0");
@@ -574,18 +521,14 @@ test("finalize without a notes file leaves a reused release's notes untouched", 
   // The no-clobber invariant: a notes-less resume must never rewrite the body, so
   // the notes a prior run published survive. Dropping the notes guard in finalize
   // would fail this (reuse would releaseEdit with an empty body).
-  const { deps, calls, releases } = makeReleaseHarness({
-    ...FINALIZE_OPTS,
-    tags: ["v0.0.1", "v0.1.0"],
-    remoteTags: ["v0.0.1", "v0.1.0"],
-    refs: { "origin/trunk": "mergedsha", "v0.1.0^{commit}": "mergedsha" },
-    releases: {
+  const { deps, calls, releases } = makeReleaseHarness(
+    releaseAlreadyPublished({
       "v0.1.0": {
         url: "https://github.com/macintacos/caret/releases/tag/v0.1.0",
         notes: "Prior notes the operator published.",
       },
-    },
-  });
+    }),
+  );
   await finalize(deps, { dryRun: false });
   expect(calls).not.toContain("releaseEdit:v0.1.0");
   expect(releases.get("v0.1.0")?.notes).toBe("Prior notes the operator published.");

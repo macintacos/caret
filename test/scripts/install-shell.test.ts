@@ -7,6 +7,8 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 
+import { drainProcess } from "@test/support/cli-process.ts";
+
 const REPO_ROOT = join(import.meta.dir, "..", "..");
 
 // The bash suites, each self-contained (mktemp fixtures, PATH stubs — no network,
@@ -27,11 +29,7 @@ async function runSuite(rel: string): Promise<{ exit: number; output: string }> 
     // so the captured logs carry no ANSI escapes.
     env: { ...process.env, NO_COLOR: "1" },
   });
-  const [stdout, stderr, exit] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
+  const { stdout, stderr, exit } = await drainProcess(proc);
   return { exit, output: `${stdout}${stderr}` };
 }
 

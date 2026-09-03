@@ -243,6 +243,15 @@ function deps(over: Partial<UpdateCheckDeps> = {}): UpdateCheckDeps & {
   };
 }
 
+/** Run the check against `cache` and assert it gathered a fresh "current"
+ * verdict — the common outcome once a test's staleness condition (past the
+ * window, a build change, a clock rollback) forces the throttle open. */
+async function expectFreshCurrentCheck(cache: MemoryCache): Promise<void> {
+  const d = deps({ cache });
+  expect((await runUpdateCheck(d))?.kind).toBe("current");
+  expect(d.calls).toEqual(["release", "compare"]);
+}
+
 test("a dev daemon reports unavailable without reaching the network", async () => {
   const d = deps({ kind: "dev" });
   expect(await runUpdateCheck(d)).toEqual({ kind: "unavailable", reason: "dev" });
@@ -271,28 +280,26 @@ test("a check inside the 24h window is throttled to null, so the caller keeps it
 });
 
 test("a check past the 24h window runs again", async () => {
-  const cache = memoryCache({
-    checkedAt: 1_000_000 - DAY_MS,
-    version: "0.13.0",
-    commit: "abc1234",
-    status: CURRENT,
-  });
-  const d = deps({ cache });
-  expect((await runUpdateCheck(d))?.kind).toBe("current");
-  expect(d.calls).toEqual(["release", "compare"]);
+  await expectFreshCurrentCheck(
+    memoryCache({
+      checkedAt: 1_000_000 - DAY_MS,
+      version: "0.13.0",
+      commit: "abc1234",
+      status: CURRENT,
+    }),
+  );
 });
 
 test("a build change runs the check even inside the 24h window", async () => {
   // The freshly-upgraded moment is exactly when the answer matters most.
-  const cache = memoryCache({
-    checkedAt: 1_000_000 - 1,
-    version: "0.12.0",
-    commit: "abc1234",
-    status: CURRENT,
-  });
-  const d = deps({ cache });
-  expect((await runUpdateCheck(d))?.kind).toBe("current");
-  expect(d.calls).toEqual(["release", "compare"]);
+  await expectFreshCurrentCheck(
+    memoryCache({
+      checkedAt: 1_000_000 - 1,
+      version: "0.12.0",
+      commit: "abc1234",
+      status: CURRENT,
+    }),
+  );
 });
 
 test("the stamp is written before the gather, so an offline attempt still backs off", async () => {
@@ -345,15 +352,14 @@ test("a record orphaned mid-check reads back as no record at all", async () => {
 test("a stamp from the future is treated as stale, not as a permanent throttle", async () => {
   // An NTP correction, a restored backup, or a resumed VM can leave one behind; a
   // plain `now - checkedAt < DAY` comparison would suppress every later check.
-  const cache = memoryCache({
-    checkedAt: 1_000_000 + 5 * DAY_MS,
-    version: "0.13.0",
-    commit: "abc1234",
-    status: CURRENT,
-  });
-  const d = deps({ cache });
-  expect((await runUpdateCheck(d))?.kind).toBe("current");
-  expect(d.calls).toEqual(["release", "compare"]);
+  await expectFreshCurrentCheck(
+    memoryCache({
+      checkedAt: 1_000_000 + 5 * DAY_MS,
+      version: "0.13.0",
+      commit: "abc1234",
+      status: CURRENT,
+    }),
+  );
 });
 
 test("a failure anywhere in the runner settles as unknown rather than rejecting", async () => {

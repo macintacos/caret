@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { recordingLog } from "@test/support/recording-log.ts";
+import { type RecordedEmit, recordingLog } from "@test/support/recording-log.ts";
 import {
   type ApproveModeSet,
   createPrefsWriter,
@@ -77,34 +77,35 @@ test("defaults to a lone 'default' set when no recognized set is supplied", asyn
 
 // ---- instrumentation (EXC-444) ----
 
+/** Asserts a `recordingLog()` capture holds exactly one calm debug "prefs"
+ * event — the stable contract every readApproveMode degrade-and-log path
+ * shares; the human-readable prose is free to be reworded. */
+function expectCalmDebugPrefsLog(recs: RecordedEmit[]): void {
+  expect(recs).toHaveLength(1);
+  expect(recs[0]).toMatchObject({ level: "debug", step: "prefs" });
+}
+
 test("a missing prefs file logs the normal-first-run message at debug", async () => {
   // ENOENT is the expected state before any approve has been remembered (and
   // on every `mise run dev`, which wipes the state dir) — the record must not
-  // read like a failure. Stable contract: exactly one calm debug "prefs"
-  // record, never a warn/error; the prose itself is free to be reworded.
+  // read like a failure.
   const { recs, log } = recordingLog();
   await readApproveMode(file, log);
-  expect(recs).toHaveLength(1);
-  expect(recs[0]).toMatchObject({ level: "debug", step: "prefs" });
+  expectCalmDebugPrefsLog(recs);
 });
 
 test("a corrupt prefs file logs the unreadable message at debug", async () => {
   await Bun.write(file, "{ not valid json");
   const { recs, log } = recordingLog();
   await readApproveMode(file, log);
-  // Stable contract: a corrupt prefs read degrades to a calm debug "prefs"
-  // event, never a warn/error.
-  expect(recs).toHaveLength(1);
-  expect(recs[0]).toMatchObject({ level: "debug", step: "prefs" });
+  expectCalmDebugPrefsLog(recs);
 });
 
 test("an unrecognized stored value is logged at debug", async () => {
   await Bun.write(file, JSON.stringify({ approveMode: "turbo" }));
   const { recs, log } = recordingLog();
   await readApproveMode(file, log);
-  // Stable contract: an out-of-set stored value is a calm debug "prefs" event.
-  expect(recs).toHaveLength(1);
-  expect(recs[0]).toMatchObject({ level: "debug", step: "prefs" });
+  expectCalmDebugPrefsLog(recs);
 });
 
 test("writing an invalid mode is logged at warn", async () => {
