@@ -263,19 +263,36 @@ describe("buildLinkLayer file-path targets", () => {
     return buildLinkLayer(text).fileRefs.get(line) ?? [];
   }
 
+  /** Asserts line 1 emits exactly one file ref, at `path`, with no clickable
+   * span — the shared shape a path-target collapse and a directory collapse
+   * both check before their own distinguishing assertions. */
+  function expectSoleFileRef(layer: ReturnType<typeof buildLinkLayer>, path: string) {
+    expect(layer.spans.get(1) ?? []).toHaveLength(0);
+    const refs = layer.fileRefs.get(1) ?? [];
+    expect(refs).toHaveLength(1);
+    expect(refs[0]?.path).toBe(path);
+    return refs[0];
+  }
+
+  /** Asserts line 1 stays completely unmarked — no clickable span, no file ref,
+   * no inline run — the "nothing collapsed" shape a rejected target leaves. */
+  function expectLiteral(layer: ReturnType<typeof buildLinkLayer>, input: string): void {
+    expect(layer.text).toBe(input);
+    expect(layer.spans.get(1) ?? []).toHaveLength(0);
+    expect(layer.fileRefs.size).toBe(0);
+    expect(layer.inline.get(1) ?? []).toHaveLength(0);
+  }
+
   test("a path target collapses to the label and emits a file ref, not a link span", () => {
-    const { text, spans, fileRefs } = buildLinkLayer("[a/b.md](a/b.md)");
-    expect(text).toBe("a/b.md");
+    const layer = buildLinkLayer("[a/b.md](a/b.md)");
+    expect(layer.text).toBe("a/b.md");
     // No LinkSpan: a filesystem path must never reach openUrl, and an unresolved
     // file link must not consume the row click.
-    expect(spans.get(1) ?? []).toHaveLength(0);
-    const refs = fileRefs.get(1) ?? [];
-    expect(refs).toHaveLength(1);
-    expect(refs[0]?.path).toBe("a/b.md");
-    expect(refs[0]?.startCol).toBe(0);
-    expect(refs[0]?.endCol).toBe(6);
+    const ref = expectSoleFileRef(layer, "a/b.md");
+    expect(ref?.startCol).toBe(0);
+    expect(ref?.endCol).toBe(6);
     // The label already shows the path, so hover has nothing to add.
-    expect(refs[0]?.target).toBeUndefined();
+    expect(ref?.target).toBeUndefined();
   });
 
   test("a bare label's cited range survives a target that names no line", () => {
@@ -360,11 +377,7 @@ describe("buildLinkLayer file-path targets", () => {
     // and collapsing it would leave the label with its destination recorded
     // nowhere — not in the text, and not in a tooltip either.
     const input = "see [caret](github.com/macintacos/caret) for more";
-    const { text, spans, fileRefs, inline } = buildLinkLayer(input);
-    expect(text).toBe(input);
-    expect(spans.get(1) ?? []).toHaveLength(0);
-    expect(fileRefs.size).toBe(0);
-    expect(inline.get(1) ?? []).toHaveLength(0);
+    expectLiteral(buildLinkLayer(input), input);
   });
 
   test("a scoped-package path is still a citable file target", () => {
@@ -386,15 +399,12 @@ describe("buildLinkLayer file-path targets", () => {
     ["without a trailing slash", "see [the daemon](src/daemon) for more", "src/daemon"],
     ["with a trailing slash", "see [the daemon](src/daemon/) for more", "src/daemon/"],
   ])("a directory target collapses and emits a ref (%s)", (_name, input, path) => {
-    const { text, spans, fileRefs } = buildLinkLayer(input);
-    expect(text).toBe("see the daemon for more");
-    expect(spans.get(1) ?? []).toHaveLength(0);
-    const refs = fileRefs.get(1) ?? [];
-    expect(refs).toHaveLength(1);
-    expect(refs[0]?.path).toBe(path);
+    const layer = buildLinkLayer(input);
+    expect(layer.text).toBe("see the daemon for more");
+    const ref = expectSoleFileRef(layer, path);
     // A prose label hides the path, so hover is the only place it can appear.
-    expect(refs[0]?.target).toBe(path);
-    expect(text.slice(refs[0]?.startCol ?? 0, refs[0]?.endCol ?? 0)).toBe("the daemon");
+    expect(ref?.target).toBe(path);
+    expect(layer.text.slice(ref?.startCol ?? 0, ref?.endCol ?? 0)).toBe("the daemon");
   });
 
   test("a bare-path directory label shows the path, so it carries no target", () => {
@@ -431,12 +441,7 @@ describe("buildLinkLayer file-path targets", () => {
     // reason; the link layer rejects the scheme instead. Without the guard these
     // reach the daemon, whose basename fallback would resolve them to an
     // unrelated local file and preview it.
-    const { text, spans, fileRefs, inline } = buildLinkLayer(input);
-    expect(text).toBe(input);
-    expect(spans.get(1) ?? []).toHaveLength(0);
-    expect(fileRefs.size).toBe(0);
-    // Nothing collapsed, so nothing is marked: the reader sees the real target.
-    expect(inline.get(1) ?? []).toHaveLength(0);
+    expectLiteral(buildLinkLayer(input), input);
   });
 
   test("a :line target the label does not show gets the tooltip", () => {

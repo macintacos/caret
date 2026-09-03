@@ -116,6 +116,16 @@ describe("diff-view lifecycle mount", () => {
 });
 
 describe("diff-view lifecycle updates preserve the instance", () => {
+  /** A lifecycle with one annotation already synced (line 1) — the arrangement
+   * shared by the cases below, which each apply their own next `sync`. */
+  function withOneAnnotationSynced() {
+    const factory = makeFactory();
+    const lifecycle = makeLifecycle(factory);
+    const p = props({ annotations: [{ lineNumber: 1 }] });
+    lifecycle.sync(p);
+    return { factory, lifecycle, p };
+  }
+
   test("an option change replaces options wholesale (previous spread in) and repaints", () => {
     const factory = makeFactory();
     const lifecycle = makeLifecycle(factory);
@@ -131,10 +141,7 @@ describe("diff-view lifecycle updates preserve the instance", () => {
   });
 
   test("an annotation change goes through setLineAnnotations and repaints", () => {
-    const factory = makeFactory();
-    const lifecycle = makeLifecycle(factory);
-    const p = props({ annotations: [{ lineNumber: 1 }] });
-    lifecycle.sync(p);
+    const { factory, lifecycle, p } = withOneAnnotationSynced();
     const next = [{ lineNumber: 2 }];
     lifecycle.sync({ ...p, annotations: next });
     expect(factory.instances).toHaveLength(1);
@@ -145,10 +152,7 @@ describe("diff-view lifecycle updates preserve the instance", () => {
   });
 
   test("clearing annotations passes an empty list", () => {
-    const factory = makeFactory();
-    const lifecycle = makeLifecycle(factory);
-    const p = props({ annotations: [{ lineNumber: 1 }] });
-    lifecycle.sync(p);
+    const { factory, lifecycle, p } = withOneAnnotationSynced();
     lifecycle.sync({ ...p, annotations: undefined });
     expect(factory.instances[0]!.calls.slice(1)).toEqual([
       { method: "setLineAnnotations", args: [[]] },
@@ -157,10 +161,7 @@ describe("diff-view lifecycle updates preserve the instance", () => {
   });
 
   test("options and annotations changing together repaint once", () => {
-    const factory = makeFactory();
-    const lifecycle = makeLifecycle(factory);
-    const p = props({ annotations: [{ lineNumber: 1 }] });
-    lifecycle.sync(p);
+    const { factory, lifecycle, p } = withOneAnnotationSynced();
     lifecycle.sync({ ...p, options: { overflow: "wrap" }, annotations: [{ lineNumber: 2 }] });
     const rerenders = factory.instances[0]!.calls.filter((c) => c.method === "rerender");
     expect(factory.instances).toHaveLength(1);

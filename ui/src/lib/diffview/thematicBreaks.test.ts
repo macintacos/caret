@@ -2,6 +2,7 @@ import "@ui/test-setup.ts";
 import { describe, expect, test } from "bun:test";
 
 import { codeBlockRanges } from "$lib/diffview/codeBlocks.ts";
+import { fillLines } from "$lib/diffview/dom-fixture.ts";
 import { tagThematicBreakRows, thematicBreakLines } from "$lib/diffview/thematicBreaks.ts";
 
 // thematicBreakLines decides which lines of a rendered plan are real thematic
@@ -107,11 +108,7 @@ function buildContent(lineCount: number): HTMLElement {
   const root = document.createElement("div");
   const content = document.createElement("div");
   content.setAttribute("data-content", "");
-  for (let n = 1; n <= lineCount; n++) {
-    const row = document.createElement("div");
-    row.setAttribute("data-line", String(n));
-    content.appendChild(row);
-  }
+  fillLines(content, lineCount);
   root.append(content);
   return root;
 }

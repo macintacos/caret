@@ -3,6 +3,7 @@ import { expect, test } from "bun:test";
 
 import { paintCardSelection } from "$lib/diffview/cardSelection.ts";
 import { CARD_ATTR, GUTTER_CARD_ATTR } from "$lib/diffview/codeBlockScroll.ts";
+import { gutterContentRoot, openComment } from "$lib/diffview/dom-fixture.ts";
 import { TABLE_CARD_ATTR, TABLE_GUTTER_CARD_ATTR } from "$lib/diffview/tables.ts";
 
 // paintCardSelection re-applies the library's own [data-selected-line] marks to the
@@ -19,11 +20,7 @@ function build(
   carded: { start: number; end: number },
   kind: [content: string, gutter: string] = [CARD_ATTR, GUTTER_CARD_ATTR],
 ): HTMLElement {
-  const root = document.createElement("div");
-  const gutter = document.createElement("div");
-  gutter.setAttribute("data-gutter", "");
-  const content = document.createElement("div");
-  content.setAttribute("data-content", "");
+  const { root, gutter, content } = gutterContentRoot();
   const card = document.createElement("div");
   card.setAttribute(kind[0], String(carded.start));
   const mirror = document.createElement("div");
@@ -41,21 +38,7 @@ function build(
       gutter.appendChild(mirror);
     }
   }
-  root.append(gutter, content);
   return root;
-}
-
-/** Adds the library's annotation row for `line` and its gutter buffer, immediately
- * after that line's own cell in each column — wherever those now sit. */
-function openComment(root: HTMLElement, line: number): void {
-  const row = root.querySelector(`[data-content] [data-line="${line}"]`);
-  const annotation = document.createElement("div");
-  annotation.setAttribute("data-line-annotation", `0,${line}`);
-  row?.parentElement?.insertBefore(annotation, row.nextSibling);
-  const number = root.querySelector(`[data-gutter] [data-column-number="${line}"]`);
-  const buffer = document.createElement("div");
-  buffer.setAttribute("data-gutter-buffer", "annotation");
-  number?.parentElement?.insertBefore(buffer, number.nextSibling);
 }
 
 /** Every selected element, as `<key>=<value>`, in document order. */

@@ -1,9 +1,9 @@
 import "@ui/test-setup.ts";
 import { beforeEach, expect, test } from "bun:test";
 
+import { celledRow, fileRefTexts, root, row } from "$lib/diffview/dom-fixture.ts";
 import type { FileRefSpan, FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 import { tagFileRefTokens } from "$lib/diffview/fileRefTag.ts";
-import { CELL_ATTR } from "$lib/diffview/rowTokens.ts";
 
 // tagFileRefTokens marks the token span that begins each resolved file reference
 // with data-file-ref, so the override sheet can render the file icon before it.
@@ -11,33 +11,11 @@ import { CELL_ATTR } from "$lib/diffview/rowTokens.ts";
 // exists in a real browser, so this is exercised with a hand-built stand-in DOM;
 // the live shadow-root behavior is covered by e2e.
 
-function row(line: number, tokens: string[]): HTMLElement {
-  const el = document.createElement("div");
-  el.setAttribute("data-line", String(line));
-  for (const t of tokens) {
-    const span = document.createElement("span");
-    span.textContent = t;
-    el.appendChild(span);
-  }
-  return el;
-}
-
-function root(...rows: HTMLElement[]): HTMLElement {
-  const host = document.createElement("div");
-  const content = document.createElement("div");
-  content.setAttribute("data-content", "");
-  for (const r of rows) content.appendChild(r);
-  host.appendChild(content);
-  return host;
-}
-
 function map(entries: [number, FileRefSpan[]][]): FileRefSpanMap {
   return new Map(entries);
 }
 
-function tagged(host: HTMLElement): string[] {
-  return [...host.querySelectorAll("[data-file-ref]")].map((el) => el.textContent ?? "");
-}
+const tagged = fileRefTexts;
 
 let host: HTMLElement;
 beforeEach(() => {
@@ -128,22 +106,6 @@ test("is a no-op for a line whose row is not rendered", () => {
 
 // EXC-864: a table row groups its tokens into cell elements, so the pass has to
 // reach the token one level down.
-function celledRow(line: number, cells: string[][]): HTMLElement {
-  const el = document.createElement("div");
-  el.setAttribute("data-line", String(line));
-  for (const tokens of cells) {
-    const cell = document.createElement("span");
-    cell.setAttribute(CELL_ATTR, "");
-    for (const t of tokens) {
-      const span = document.createElement("span");
-      span.textContent = t;
-      cell.appendChild(span);
-    }
-    el.appendChild(cell);
-  }
-  return el;
-}
-
 test("tags a reference whose token sits inside a table cell", () => {
   //                     | a | src/x.ts |
   // columns             0    4 6      14

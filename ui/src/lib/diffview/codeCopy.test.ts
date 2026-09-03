@@ -2,6 +2,7 @@ import "@ui/test-setup.ts";
 import { describe, expect, test } from "bun:test";
 
 import { codeBlockAtPoint, copyAnchor, type RectReader } from "$lib/diffview/codeCopy.ts";
+import { fillLines, scrolledOffsetReader } from "$lib/diffview/dom-fixture.ts";
 
 // A host with a shadow root of [data-content] > [data-line] rows, matching the
 // @pierre/diffs structure codeCopy reads.
@@ -10,11 +11,7 @@ function makeHost(lineCount: number): HTMLElement {
   const root = host.attachShadow({ mode: "open" });
   const content = document.createElement("div");
   content.setAttribute("data-content", "");
-  for (let n = 1; n <= lineCount; n++) {
-    const row = document.createElement("div");
-    row.setAttribute("data-line", String(n));
-    content.appendChild(row);
-  }
+  fillLines(content, lineCount);
   root.appendChild(content);
   return host;
 }
@@ -74,12 +71,7 @@ describe("copyAnchor", () => {
   test("accounts for the scroller's viewport offset and scroll", () => {
     const host = makeHost(5);
     const scroller = document.createElement("div");
-    scroller.scrollTop = 50;
-    scroller.scrollLeft = 10;
-    const read: RectReader = (el) =>
-      el === scroller
-        ? { top: 5, bottom: 1000, left: 8, right: 400 }
-        : { top: 100, bottom: 110, left: 100, right: 300 };
+    const read = scrolledOffsetReader(scroller);
     // top = 100 - (5 - 50) = 145 ; left = 300 - (8 - 10) = 302
     expect(copyAnchor(host, scroller, { start: 1, end: 3 }, read)).toEqual({ top: 145, left: 302 });
   });

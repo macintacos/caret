@@ -87,39 +87,11 @@ describe("createLinkHandlers onTokenClick", () => {
   });
 
   test("opens the href when a click lands in a link span", () => {
-    const opened: string[] = [];
-    const handlers = createLinkHandlers(mapOf(1, [span(4, 12, "https://a.test")]), {
-      openUrl: (href) => opened.push(href),
-    });
-    handlers.onTokenClick(
-      {
-        lineNumber: 1,
-        lineCharStart: 4,
-        lineCharEnd: 12,
-        tokenText: "the docs",
-        tokenElement: fakeTokenElement(),
-      },
-      new MouseEvent("click"),
-    );
-    expect(opened).toEqual(["https://a.test"]);
+    expect(openedFor([span(4, 12, "https://a.test")], 4, 12)).toBe("https://a.test");
   });
 
   test("does nothing when the click is outside any span", () => {
-    const opened: string[] = [];
-    const handlers = createLinkHandlers(mapOf(1, [span(4, 12, "https://a.test")]), {
-      openUrl: (href) => opened.push(href),
-    });
-    handlers.onTokenClick(
-      {
-        lineNumber: 1,
-        lineCharStart: 0,
-        lineCharEnd: 3,
-        tokenText: "See",
-        tokenElement: fakeTokenElement(),
-      },
-      new MouseEvent("click"),
-    );
-    expect(opened).toEqual([]);
+    expect(openedFor([span(4, 12, "https://a.test")], 0, 3)).toBeUndefined();
   });
 
   test("does nothing for a line with no spans", () => {
@@ -215,6 +187,23 @@ describe("composeTokenHandlers", () => {
     tokenElement: fakeTokenElement(),
   });
 
+  /** Composes handlers over one link span (columns 4-12) and clicks the token
+   * at [charStart, charEnd) — the shared shape behind the two cases below. */
+  function clickComposed(
+    charStart: number,
+    charEnd: number,
+  ): { opened: string[]; wasLinkClick: boolean | undefined } {
+    const opened: string[] = [];
+    const composed = composeTokenHandlers(
+      new Map([[1, [span(4, 12, "https://a.test")]]]),
+      undefined,
+      { openUrl: (href) => opened.push(href) },
+    );
+    const event = new MouseEvent("click");
+    composed?.handlers.onTokenClick(clickProps(1, charStart, charEnd), event);
+    return { opened, wasLinkClick: composed?.wasLinkClick(event) };
+  }
+
   test("exposes one handler object with all three token handlers", () => {
     const composed = composeTokenHandlers(
       new Map([[1, [span(4, 12, "https://a.test")]]]),
@@ -246,36 +235,18 @@ describe("composeTokenHandlers", () => {
   });
 
   test("opens a clicked link and marks the event as a consumed link click", () => {
-    const opened: string[] = [];
-    const composed = composeTokenHandlers(
-      new Map([[1, [span(4, 12, "https://a.test")]]]),
-      undefined,
-      {
-        openUrl: (href) => opened.push(href),
-      },
-    );
-    const event = new MouseEvent("click");
-    composed?.handlers.onTokenClick(clickProps(1, 4, 12), event);
     // The link opened, and the same event is now flagged so the row-click
     // handler stands down — the link's line does not also open a comment.
+    const { opened, wasLinkClick } = clickComposed(4, 12);
     expect(opened).toEqual(["https://a.test"]);
-    expect(composed?.wasLinkClick(event)).toBe(true);
+    expect(wasLinkClick).toBe(true);
   });
 
   test("a click outside any span opens nothing and is not a link click", () => {
-    const opened: string[] = [];
-    const composed = composeTokenHandlers(
-      new Map([[1, [span(4, 12, "https://a.test")]]]),
-      undefined,
-      {
-        openUrl: (href) => opened.push(href),
-      },
-    );
-    const event = new MouseEvent("click");
-    composed?.handlers.onTokenClick(clickProps(1, 0, 3), event);
     // No link consumed the click, so the row-click handler is free to act.
+    const { opened, wasLinkClick } = clickComposed(0, 3);
     expect(opened).toEqual([]);
-    expect(composed?.wasLinkClick(event)).toBe(false);
+    expect(wasLinkClick).toBe(false);
   });
 
   test("wasLinkClick tracks only the most recent link-click event", () => {
@@ -352,6 +323,22 @@ describe("composeTokenHandlers — file references", () => {
     };
   }
 
+  /** Composes handlers over `fileRefs` and clicks the token at [charStart, charEnd)
+   * — the shared shape behind the two cases below. */
+  function clickFileRef(
+    charStart: number,
+    charEnd: number,
+  ): { clicked: string[]; wasLinkClick: boolean | undefined } {
+    const clicked: string[] = [];
+    const composed = composeTokenHandlers(undefined, fileRefs, {
+      openUrl: () => {},
+      onFileRefClick: (ref) => clicked.push(ref.path),
+    });
+    const event = new MouseEvent("click");
+    composed?.handlers.onTokenClick(props(charStart, charEnd), event);
+    return { clicked, wasLinkClick: composed?.wasLinkClick(event) };
+  }
+
   test("returns handlers when only file refs are present (no link layer)", () => {
     const composed = composeTokenHandlers(undefined, fileRefs, {
       openUrl: () => {},
@@ -361,17 +348,11 @@ describe("composeTokenHandlers — file references", () => {
   });
 
   test("a click on a file reference dispatches it and consumes the event", () => {
-    const clicked: string[] = [];
-    const composed = composeTokenHandlers(undefined, fileRefs, {
-      openUrl: () => {},
-      onFileRefClick: (ref) => clicked.push(ref.path),
-    });
-    const event = new MouseEvent("click");
-    composed?.handlers.onTokenClick(props(4, 13), event);
     // The preview opens, and the same event is flagged so the row-click handler
     // stands down — the reference's line does not also open a comment composer.
+    const { clicked, wasLinkClick } = clickFileRef(4, 13);
     expect(clicked).toEqual(["src/a.ts"]);
-    expect(composed?.wasLinkClick(event)).toBe(true);
+    expect(wasLinkClick).toBe(true);
   });
 
   test("hovering a file reference dispatches nothing — the highlight is CSS-only", () => {
@@ -444,15 +425,9 @@ describe("composeTokenHandlers — file references", () => {
   });
 
   test("a click that misses every file reference dispatches nothing and stays unconsumed", () => {
-    const clicked: string[] = [];
-    const composed = composeTokenHandlers(undefined, fileRefs, {
-      openUrl: () => {},
-      onFileRefClick: (ref) => clicked.push(ref.path),
-    });
-    const event = new MouseEvent("click");
-    composed?.handlers.onTokenClick(props(0, 3), event);
+    const { clicked, wasLinkClick } = clickFileRef(0, 3);
     expect(clicked).toEqual([]);
-    expect(composed?.wasLinkClick(event)).toBe(false);
+    expect(wasLinkClick).toBe(false);
   });
 
   test("with both layers present, a file-ref click dispatches the ref, not the link", () => {

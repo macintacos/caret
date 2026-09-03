@@ -51,45 +51,51 @@ describe("SourceDiffView onReady", () => {
 });
 
 describe("SourceDiffView instance preservation", () => {
-  test("a diff-style flip applies in place — the rendered pre keeps its identity", async () => {
-    const props = reactiveProps({
-      oldDoc,
-      newDoc,
-      contentKey: "r1:v1:v2",
-      options: { diffStyle: "split" } as SourceDiffViewOptions,
-    });
+  /** Mounts with `options`, asserts `attr` starts at `before`, then applies
+   * `after` and asserts it lands on `afterValue` — in place, on the same `pre`.
+   * The two cases below share this shape, differing only in which option and
+   * attribute they flip. */
+  async function expectAttrFlip(
+    options: SourceDiffViewOptions,
+    attr: string,
+    before: string,
+    after: SourceDiffViewOptions,
+    afterValue: string,
+  ): Promise<void> {
+    const props = reactiveProps({ oldDoc, newDoc, contentKey: "r1:v1:v2", options });
     const { target, flush } = render(SourceDiffView, props);
     await until(() => shadow(target)?.textContent?.includes("line three") ?? false);
     const pre = shadow(target)?.querySelector("pre");
-    expect(pre?.getAttribute("data-diff-type")).toBe("split");
+    expect(pre?.getAttribute(attr)).toBe(before);
 
-    props.options = { diffStyle: "unified" };
+    props.options = after;
     flush();
-    // The library renders unified layout as data-diff-type="single".
-    const applied = await until(() => pre?.getAttribute("data-diff-type") === "single");
+    const applied = await until(() => pre?.getAttribute(attr) === afterValue);
     expect(applied).toBe(true);
     expect(shadow(target)?.querySelector("pre")).toBe(pre as HTMLPreElement);
+  }
+
+  test("a diff-style flip applies in place — the rendered pre keeps its identity", async () => {
+    await expectAttrFlip(
+      { diffStyle: "split" } as SourceDiffViewOptions,
+      "data-diff-type",
+      "split",
+      // The library renders unified layout as data-diff-type="single".
+      { diffStyle: "unified" },
+      "single",
+    );
   });
 
   test("the classic indicators flip applies in place via data-indicators", async () => {
-    const props = reactiveProps({
-      oldDoc,
-      newDoc,
-      contentKey: "r1:v1:v2",
-      options: {} as SourceDiffViewOptions,
-    });
-    const { target, flush } = render(SourceDiffView, props);
-    await until(() => shadow(target)?.textContent?.includes("line three") ?? false);
-    const pre = shadow(target)?.querySelector("pre");
-    // Default (no indicators set) is the library's "bars".
-    expect(pre?.getAttribute("data-indicators")).toBe("bars");
-
-    props.options = { diffIndicators: "classic" };
-    flush();
-    // The library marks the pre so its CSS renders the +/- glyphs.
-    const applied = await until(() => pre?.getAttribute("data-indicators") === "classic");
-    expect(applied).toBe(true);
-    expect(shadow(target)?.querySelector("pre")).toBe(pre as HTMLPreElement);
+    await expectAttrFlip(
+      // Default (no indicators set) is the library's "bars".
+      {} as SourceDiffViewOptions,
+      "data-indicators",
+      "bars",
+      // The library marks the pre so its CSS renders the +/- glyphs.
+      { diffIndicators: "classic" },
+      "classic",
+    );
   });
 
   test("a content-key change recreates the view", async () => {

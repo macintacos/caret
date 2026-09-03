@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { type CodeBlockRange, codeBlockRanges } from "$lib/diffview/codeBlocks.ts";
+import { gutterContentRoot, openComment } from "$lib/diffview/dom-fixture.ts";
 import { CELL_ATTR } from "$lib/diffview/rowTokens.ts";
 import {
   syncTableCards,
@@ -211,11 +212,7 @@ describe("the seed plan's tables", () => {
 /** A stand-in for the library's rendered grid: a gutter cell and a one-token
  * content row per line, the shape @pierre/diffs paints before any pass runs. */
 function build(text: string): { root: HTMLElement; ranges: TableRange[] } {
-  const root = document.createElement("div");
-  const gutter = document.createElement("div");
-  gutter.setAttribute("data-gutter", "");
-  const content = document.createElement("div");
-  content.setAttribute("data-content", "");
+  const { root, gutter, content } = gutterContentRoot();
   text.split("\n").forEach((line, i) => {
     const cell = document.createElement("div");
     cell.setAttribute("data-column-number", String(i + 1));
@@ -228,7 +225,6 @@ function build(text: string): { root: HTMLElement; ranges: TableRange[] } {
     row.appendChild(token);
     content.appendChild(row);
   });
-  root.append(gutter, content);
   return { root, ranges: tableRanges(text, NO_CODE) };
 }
 
@@ -248,25 +244,18 @@ function cellEdges(root: HTMLElement, line: number): (string | null)[] {
   );
 }
 
-/** The library's annotation row for `line` plus its gutter buffer, placed where
- * FileRenderer places them: immediately after that line's own cell in each column.
- * A comment on a mid-table line therefore lands INSIDE the run of rows the card
- * takes, which is the case EXC-865 exists for. */
-function openComment(root: HTMLElement, line: number): void {
-  const row = root.querySelector(`[data-content] [data-line="${line}"]`);
-  const annotation = document.createElement("div");
-  annotation.setAttribute("data-line-annotation", `0,${line}`);
-  row?.parentElement?.insertBefore(annotation, row.nextSibling);
-  const number = root.querySelector(`[data-gutter] [data-column-number="${line}"]`);
-  const buffer = document.createElement("div");
-  buffer.setAttribute("data-gutter-buffer", "annotation");
-  number?.parentElement?.insertBefore(buffer, number.nextSibling);
-}
-
 /** A column's children as their keying attribute, or `annotation` for the rows the
  * library interleaves — the shape both columns must agree on. */
 function slotOrder(parent: Element | null | undefined, attr: string): string[] {
   return [...(parent?.children ?? [])].map((el) => el.getAttribute(attr) ?? "annotation");
+}
+
+/** Asserts the gutter and content columns still carry the same child count —
+ * the parity @pierre/diffs' selection walk requires. */
+function expectColumnsBalanced(root: HTMLElement): void {
+  const gutter = root.querySelector("[data-gutter]");
+  const content = root.querySelector("[data-content]");
+  expect(gutter?.children).toHaveLength(content?.children.length ?? -1);
 }
 
 const SIMPLE = ["prose", "| a | b |", "| - | - |", "| 1 | 2 |"].join("\n");
@@ -348,9 +337,8 @@ test("puts each column's alignment on every row's cell", () => {
 test("mirrors the card in the gutter so the two columns keep matching counts", () => {
   const { root, ranges } = build(SIMPLE);
   syncTableCards(root, ranges);
+  expectColumnsBalanced(root);
   const gutter = root.querySelector("[data-gutter]");
-  const content = root.querySelector("[data-content]");
-  expect(gutter?.children).toHaveLength(content?.children.length ?? -1);
   expect(gutter?.querySelector(`[${TABLE_GUTTER_CARD_ATTR}="2"]`)?.children).toHaveLength(3);
 });
 
@@ -411,9 +399,7 @@ test("keeps the two columns matching with a mid-table comment open", () => {
   const { root, ranges } = build(TWO_BODY);
   openComment(root, 4);
   syncTableCards(root, ranges);
-  const gutter = root.querySelector("[data-gutter]");
-  const content = root.querySelector("[data-content]");
-  expect(gutter?.children).toHaveLength(content?.children.length ?? -1);
+  expectColumnsBalanced(root);
 });
 
 test("keeps the two columns matching when the table is malformed", () => {
@@ -425,9 +411,7 @@ test("keeps the two columns matching when the table is malformed", () => {
     ["| a | b |", "| - | - |", "| 1 | 2 |", "| 3 | 4 | 5 |", "| 6 | 7 |"].join("\n"),
   );
   syncTableCards(root, ranges);
-  const gutter = root.querySelector("[data-gutter]");
-  const content = root.querySelector("[data-content]");
-  expect(gutter?.children).toHaveLength(content?.children.length ?? -1);
+  expectColumnsBalanced(root);
   // The ragged row and everything after it stay plain source rows.
   expect(cellTexts(root, 4)).toEqual([]);
   expect(cellTexts(root, 5)).toEqual([]);
@@ -438,9 +422,7 @@ test("cards nothing at all when the delimiter row's column count disagrees", () 
   syncTableCards(root, ranges);
   expect(root.querySelector(`[${TABLE_CARD_ATTR}]`)).toBeNull();
   expect(root.querySelector(`[${CELL_ATTR}]`)).toBeNull();
-  const gutter = root.querySelector("[data-gutter]");
-  const content = root.querySelector("[data-content]");
-  expect(gutter?.children).toHaveLength(content?.children.length ?? -1);
+  expectColumnsBalanced(root);
 });
 
 test("returns a carded comment's row to its column when the table is retired", () => {

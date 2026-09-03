@@ -25,6 +25,26 @@ function declarations(css: string): string {
 
 const FONT_STACK = "'Berkeley Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace";
 
+/** Asserts each of `names` is set in `rule` to a value matching `valuePattern`
+ * and never `oklch` (mangled in the embedding Chrome build) — the shared shape
+ * behind every per-override-name loop below. */
+function testTokenOverrides(
+  rule: string,
+  names: readonly string[],
+  valuePattern: RegExp,
+  label: string,
+): void {
+  for (const name of names) {
+    test(`sets ${name} ${label}`, () => {
+      const decl = rule.match(new RegExp(`${name}:\\s*([^;]+);`));
+      expect(decl).not.toBeNull();
+      const value = decl?.[1]?.trim() ?? "";
+      expect(value).toMatch(valuePattern);
+      expect(value).not.toContain("oklch");
+    });
+  }
+}
+
 describe("the .diffview → --diffs-* bridge", () => {
   const rule = diffviewRule(appCss);
 
@@ -78,18 +98,14 @@ describe("the .diffview → --diffs-* bridge", () => {
     "--diffs-bg-hover-override",
   ] as const;
 
-  for (const name of SURFACE_OVERRIDES) {
-    test(`sets ${name} from a caret token via color-mix(in lab) or var()`, () => {
-      // Present in the single .diffview rule…
-      const decl = rule.match(new RegExp(`${name}:\\s*([^;]+);`));
-      expect(decl).not.toBeNull();
-      const value = decl?.[1]?.trim() ?? "";
-      // …and var()/color-mix-based, never a raw color literal.
-      expect(value).toMatch(/^(var\(--|color-mix\(in lab,)/);
-      // lab mixing only — oklch is mangled in the embedding Chrome build.
-      expect(value).not.toContain("oklch");
-    });
-  }
+  // Present in the single .diffview rule, and var()/color-mix-based — never a
+  // raw color literal, lab mixing only.
+  testTokenOverrides(
+    rule,
+    SURFACE_OVERRIDES,
+    /^(var\(--|color-mix\(in lab,)/,
+    "from a caret token via color-mix(in lab) or var()",
+  );
 
   test("expresses scheme entirely through flipping operands — no @media inside the rule", () => {
     // The flat .diffview rule carries no nested at-rule; light/dark depth comes
@@ -112,17 +128,13 @@ describe("the .diffview → --diffs-* bridge", () => {
     "--diffs-deletion-color-override",
   ] as const;
 
-  for (const name of SEMANTIC_OVERRIDES) {
-    test(`sets ${name} from a caret token via var() or color-mix(in lab)`, () => {
-      const decl = rule.match(new RegExp(`${name}:\\s*([^;]+);`));
-      expect(decl).not.toBeNull();
-      const value = decl?.[1]?.trim() ?? "";
-      // A caret token reference or a lab mix — never a raw color literal.
-      expect(value).toMatch(/^(var\(--|color-mix\(in lab,)/);
-      // oklch is mangled in the embedding Chrome build.
-      expect(value).not.toContain("oklch");
-    });
-  }
+  // A caret token reference or a lab mix — never a raw color literal.
+  testTokenOverrides(
+    rule,
+    SEMANTIC_OVERRIDES,
+    /^(var\(--|color-mix\(in lab,)/,
+    "from a caret token via var() or color-mix(in lab)",
+  );
 
   test("carries no transition or animation — the diff surface is motionless by design", () => {
     // The @pierre/diffs render surface (line hover, line/range-selection, the
@@ -156,15 +168,12 @@ describe("the .diffview → --diffs-* bridge", () => {
     "--diffs-bg-selection-number-override",
   ] as const;
 
-  for (const name of SELECTION_OVERRIDES) {
-    test(`sets ${name} to caret's amber accent via a token, never a literal`, () => {
-      const decl = rule.match(new RegExp(`${name}:\\s*([^;]+);`));
-      expect(decl).not.toBeNull();
-      const value = decl?.[1]?.trim() ?? "";
-      // The amber accent token (carries its own light/dark variant), or a lab
-      // mix of it — never a raw color literal, never oklch.
-      expect(value).toMatch(/^(var\(--accent|color-mix\(in lab,)/);
-      expect(value).not.toContain("oklch");
-    });
-  }
+  // The amber accent token (carries its own light/dark variant), or a lab mix
+  // of it — never a raw color literal, never oklch.
+  testTokenOverrides(
+    rule,
+    SELECTION_OVERRIDES,
+    /^(var\(--accent|color-mix\(in lab,)/,
+    "to caret's amber accent via a token, never a literal",
+  );
 });

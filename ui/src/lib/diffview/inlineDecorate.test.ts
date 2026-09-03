@@ -1,38 +1,19 @@
 import "@ui/test-setup.ts";
 import { beforeEach, expect, test } from "bun:test";
 
+import { celledRow, fileRefTexts, root, row } from "$lib/diffview/dom-fixture.ts";
 import type { FileRefSpan, FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 import { tagFileRefTokens } from "$lib/diffview/fileRefTag.ts";
 import { decorateInlineRuns } from "$lib/diffview/inlineDecorate.ts";
 import type { InlineSpan, InlineSpanMap } from "$lib/diffview/inlineSpans.ts";
 import { buildLinkLayer } from "$lib/diffview/links.ts";
-import { CELL_ATTR, tokenChildren } from "$lib/diffview/rowTokens.ts";
+import { tokenChildren } from "$lib/diffview/rowTokens.ts";
 
 // decorateInlineRuns splits a row's shiki tokens at every inline-run boundary
 // and tags each resulting child with the run covering it, so the override sheet
 // can draw the markdown pills. The token structure (shiki spans whose text
 // concatenates to the line) only exists in a real browser, so this is exercised
 // with a hand-built stand-in DOM; the live shadow-root behavior is covered by e2e.
-
-function row(line: number, tokens: string[]): HTMLElement {
-  const el = document.createElement("div");
-  el.setAttribute("data-line", String(line));
-  for (const t of tokens) {
-    const span = document.createElement("span");
-    span.textContent = t;
-    el.appendChild(span);
-  }
-  return el;
-}
-
-function root(...rows: HTMLElement[]): HTMLElement {
-  const host = document.createElement("div");
-  const content = document.createElement("div");
-  content.setAttribute("data-content", "");
-  for (const r of rows) content.appendChild(r);
-  host.appendChild(content);
-  return host;
-}
 
 function spanMap(entries: [number, InlineSpan[]][]): InlineSpanMap {
   return new Map(entries);
@@ -42,14 +23,52 @@ function refMap(entries: [number, FileRefSpan[]][]): FileRefSpanMap {
   return new Map(entries);
 }
 
+/** A single bold run over columns 0-5 — the span every 5-character bold-run
+ * fixture below decorates against, however its row is tokenized. */
+const BOLD_RUN: InlineSpan[] = [{ startCol: 0, endCol: 5, bold: true }];
+
+/** The decorated pieces of a bold "**a**" run followed by plain "b" — what a
+ * coarse "**a**b" token splits into, and what an already-split ["**a**", "b"]
+ * row decorates to directly. */
+const BOLD_A_THEN_B = [
+  { text: "**a**", md: "bold", start: "bold", end: "bold" },
+  { text: "b", md: null, start: null, end: null },
+];
+
+/** ``**a `c` b**``'s three runs: bold spanning columns 0-9, with code nested at
+ * 3-6 — shared by the coarse-token, exact-token and shiki-fragmented spellings
+ * of the same fixture below. */
+const BOLD_WRAPPING_CODE: InlineSpan[] = [
+  { startCol: 0, endCol: 3, bold: true },
+  { startCol: 3, endCol: 6, bold: true, code: true },
+  { startCol: 6, endCol: 9, bold: true },
+];
+
+/** `***x***` as one run carrying both bold and italic — shared by the two tests
+ * below that read the same decorated row for different attributes. */
+function decorateBoldItalicRun(): HTMLElement {
+  const host = root(row(1, ["***x***"]));
+  decorateInlineRuns(
+    host,
+    spanMap([[1, [{ startCol: 0, endCol: 7, bold: true, italic: true }]]]),
+    new Map(),
+  );
+  return host;
+}
+
+/** A row's direct children, by line — what `pieces`/`nested`/`cited`/`markers`
+ * each map into their own record shape. */
+function rowChildren(host: HTMLElement, line = 1): Element[] {
+  return [...(host.querySelector(`[data-line="${line}"]`)?.children ?? [])];
+}
+
 /** One record per direct child of a row: its text plus the three token-list
  * attributes, so a whole decorated row is asserted in a single toEqual. */
 function pieces(
   host: HTMLElement,
   line = 1,
 ): { text: string; md: string | null; start: string | null; end: string | null }[] {
-  const rowEl = host.querySelector(`[data-line="${line}"]`);
-  return [...(rowEl?.children ?? [])].map((child) => ({
+  return rowChildren(host, line).map((child) => ({
     text: child.textContent ?? "",
     md: child.getAttribute("data-md"),
     start: child.getAttribute("data-md-start"),
@@ -63,8 +82,7 @@ function nested(
   host: HTMLElement,
   line = 1,
 ): { text: string; inner: string | null; start: boolean; end: boolean }[] {
-  const rowEl = host.querySelector(`[data-line="${line}"]`);
-  return [...(rowEl?.children ?? [])].map((child) => ({
+  return rowChildren(host, line).map((child) => ({
     text: child.textContent ?? "",
     inner: child.getAttribute("data-md-inner"),
     start: child.hasAttribute("data-md-inner-start"),
@@ -75,8 +93,7 @@ function nested(
 /** One record per direct child of a row: its text plus whether it belongs to a
  * codespan the pass found a file reference inside. */
 function cited(host: HTMLElement, line = 1): { text: string; cite: boolean }[] {
-  const rowEl = host.querySelector(`[data-line="${line}"]`);
-  return [...(rowEl?.children ?? [])].map((child) => ({
+  return rowChildren(host, line).map((child) => ({
     text: child.textContent ?? "",
     cite: child.hasAttribute("data-md-cite"),
   }));
@@ -85,16 +102,13 @@ function cited(host: HTMLElement, line = 1): { text: string; cite: boolean }[] {
 /** One record per direct child of a row: its text plus the list-marker value —
  * the `pieces` shape for the valued attribute rather than the token lists. */
 function markers(host: HTMLElement, line = 1): { text: string; list: string | null }[] {
-  const rowEl = host.querySelector(`[data-line="${line}"]`);
-  return [...(rowEl?.children ?? [])].map((child) => ({
+  return rowChildren(host, line).map((child) => ({
     text: child.textContent ?? "",
     list: child.getAttribute("data-md-list"),
   }));
 }
 
-function fileRefs(host: HTMLElement): string[] {
-  return [...host.querySelectorAll("[data-file-ref]")].map((el) => el.textContent ?? "");
-}
+const fileRefs = fileRefTexts;
 
 let host: HTMLElement;
 beforeEach(() => {
@@ -106,7 +120,7 @@ test("tags every token of a bold element, with the pill ends on the outer two", 
   // differently from the text, so they are separate tokens. Every token carries
   // the member; only the outer two carry the pill's rounded ends.
   host = root(row(1, ["**", "x", "**"]));
-  decorateInlineRuns(host, spanMap([[1, [{ startCol: 0, endCol: 5, bold: true }]]]), new Map());
+  decorateInlineRuns(host, spanMap([[1, BOLD_RUN]]), new Map());
   expect(pieces(host)).toEqual([
     { text: "**", md: "bold", start: "bold", end: null },
     { text: "x", md: "bold", start: null, end: null },
@@ -118,11 +132,8 @@ test("splits a coarse token that straddles a run boundary, cloning its ink", () 
   host = root(row(1, ["**a**b"]));
   const token = host.querySelector("[data-line] > span");
   token?.setAttribute("style", "color:#f00");
-  decorateInlineRuns(host, spanMap([[1, [{ startCol: 0, endCol: 5, bold: true }]]]), new Map());
-  expect(pieces(host)).toEqual([
-    { text: "**a**", md: "bold", start: "bold", end: "bold" },
-    { text: "b", md: null, start: null, end: null },
-  ]);
+  decorateInlineRuns(host, spanMap([[1, BOLD_RUN]]), new Map());
+  expect(pieces(host)).toEqual(BOLD_A_THEN_B);
   // cloneNode(false) carries the token's inline style onto both halves, so the
   // split is invisible to the reader.
   expect(
@@ -164,20 +175,7 @@ test("one element fragmented by a nested element draws a single pill", () => {
   // and punch a notch through the middle of the bold pill. A cap lands only where
   // every member the child carries ends, which is why the outermost pill wins.
   host = root(row(1, ["**a", "`c`", "b**"]));
-  decorateInlineRuns(
-    host,
-    spanMap([
-      [
-        1,
-        [
-          { startCol: 0, endCol: 3, bold: true },
-          { startCol: 3, endCol: 6, bold: true, code: true },
-          { startCol: 6, endCol: 9, bold: true },
-        ],
-      ],
-    ]),
-    new Map(),
-  );
+  decorateInlineRuns(host, spanMap([[1, BOLD_WRAPPING_CODE]]), new Map());
   expect(pieces(host)).toEqual([
     { text: "**a", md: "bold", start: "bold", end: null },
     { text: "`c`", md: "bold code", start: null, end: null },
@@ -191,20 +189,7 @@ test("names the nested member and caps its own pill", () => {
   // NESTED member — and its ends are the ones the sheet rounds on a pseudo-element, since
   // the child's own radius belongs to the bold pill still passing through it.
   host = root(row(1, ["**a", "`c`", "b**"]));
-  decorateInlineRuns(
-    host,
-    spanMap([
-      [
-        1,
-        [
-          { startCol: 0, endCol: 3, bold: true },
-          { startCol: 3, endCol: 6, bold: true, code: true },
-          { startCol: 6, endCol: 9, bold: true },
-        ],
-      ],
-    ]),
-    new Map(),
-  );
+  decorateInlineRuns(host, spanMap([[1, BOLD_WRAPPING_CODE]]), new Map());
   expect(nested(host)).toEqual([
     { text: "**a", inner: null, start: false, end: false },
     { text: "`c`", inner: "code", start: true, end: true },
@@ -218,20 +203,7 @@ test("closes a fragmented inner pill once, at its outer ends", () => {
   // member; only the outer two cap, or the inner pill would pinch at every seam, which is
   // the same rule the outer pill follows one level up.
   host = root(row(1, ["**a", "`", "c", "`", "b**"]));
-  decorateInlineRuns(
-    host,
-    spanMap([
-      [
-        1,
-        [
-          { startCol: 0, endCol: 3, bold: true },
-          { startCol: 3, endCol: 6, bold: true, code: true },
-          { startCol: 6, endCol: 9, bold: true },
-        ],
-      ],
-    ]),
-    new Map(),
-  );
+  decorateInlineRuns(host, spanMap([[1, BOLD_WRAPPING_CODE]]), new Map());
   expect(nested(host)).toEqual([
     { text: "**a", inner: null, start: false, end: false },
     { text: "`", inner: "code", start: true, end: false },
@@ -245,12 +217,7 @@ test("two members over the same span are one pill, not a nested pair", () => {
   // `***x***` reaching the pass as a single run carrying both members: their groups have
   // the same extent, so neither is inside the other and neither moves to the pseudo — the
   // child caps normally and the two washes composite over one shape.
-  host = root(row(1, ["***x***"]));
-  decorateInlineRuns(
-    host,
-    spanMap([[1, [{ startCol: 0, endCol: 7, bold: true, italic: true }]]]),
-    new Map(),
-  );
+  host = decorateBoldItalicRun();
   expect(nested(host)).toEqual([{ text: "***x***", inner: null, start: false, end: false }]);
 });
 
@@ -268,12 +235,7 @@ test("a nested element's own group still caps once it is alone on the child", ()
 });
 
 test("a run carrying two members lists both", () => {
-  host = root(row(1, ["***x***"]));
-  decorateInlineRuns(
-    host,
-    spanMap([[1, [{ startCol: 0, endCol: 7, bold: true, italic: true }]]]),
-    new Map(),
-  );
+  host = decorateBoldItalicRun();
   expect(pieces(host)).toEqual([
     { text: "***x***", md: "bold italic", start: "bold italic", end: "bold italic" },
   ]);
@@ -294,15 +256,14 @@ test("carries the checkbox and quote-marker values on their own runs", () => {
     ]),
     new Map(),
   );
-  const row1 = host.querySelector("[data-line]");
-  expect([...(row1?.children ?? [])].map((c) => c.getAttribute("data-md-quote"))).toEqual([
+  expect(rowChildren(host).map((c) => c.getAttribute("data-md-quote"))).toEqual([
     "1",
     null,
     null,
     null,
     null,
   ]);
-  expect([...(row1?.children ?? [])].map((c) => c.getAttribute("data-md-checkbox"))).toEqual([
+  expect(rowChildren(host).map((c) => c.getAttribute("data-md-checkbox"))).toEqual([
     null,
     null,
     null,
@@ -352,9 +313,8 @@ test("a task item's marker and its checkbox each carry their own value", () => {
     ]),
     new Map(),
   );
-  const rowEl = host.querySelector("[data-line]");
   expect(markers(host).map((m) => m.list)).toEqual(["task", null, null, null]);
-  expect([...(rowEl?.children ?? [])].map((c) => c.getAttribute("data-md-checkbox"))).toEqual([
+  expect(rowChildren(host).map((c) => c.getAttribute("data-md-checkbox"))).toEqual([
     null,
     null,
     "checked",
@@ -508,7 +468,7 @@ test("decorates a row that a scroll card re-parented", () => {
   const card = document.createElement("div");
   card.appendChild(row(1, ["**x**"]));
   host.querySelector("[data-content]")?.appendChild(card);
-  decorateInlineRuns(host, spanMap([[1, [{ startCol: 0, endCol: 5, bold: true }]]]), new Map());
+  decorateInlineRuns(host, spanMap([[1, BOLD_RUN]]), new Map());
   expect(pieces(host)).toEqual([{ text: "**x**", md: "bold", start: "bold", end: "bold" }]);
 });
 
@@ -537,11 +497,8 @@ test("is a no-op for a line whose row is not rendered", () => {
 
 test("clears stale tags before applying the new set", () => {
   host = root(row(1, ["**a**", "b"]));
-  decorateInlineRuns(host, spanMap([[1, [{ startCol: 0, endCol: 5, bold: true }]]]), new Map());
-  expect(pieces(host)).toEqual([
-    { text: "**a**", md: "bold", start: "bold", end: "bold" },
-    { text: "b", md: null, start: null, end: null },
-  ]);
+  decorateInlineRuns(host, spanMap([[1, BOLD_RUN]]), new Map());
+  expect(pieces(host)).toEqual(BOLD_A_THEN_B);
   // A repaint whose map no longer marks the line must drop the prior tags.
   decorateInlineRuns(host, new Map(), new Map());
   expect(pieces(host)).toEqual([
@@ -561,22 +518,6 @@ test("moves the tags when the same line's runs change", () => {
 // EXC-864: a table row groups its tokens into cell elements, so "the row's tokens"
 // sits one level down for those rows. The pass reaches them through
 // tokenChildren, and everything else about the tagging is unchanged.
-function celledRow(line: number, cells: string[][]): HTMLElement {
-  const el = document.createElement("div");
-  el.setAttribute("data-line", String(line));
-  for (const tokens of cells) {
-    const cell = document.createElement("span");
-    cell.setAttribute(CELL_ATTR, "");
-    for (const t of tokens) {
-      const span = document.createElement("span");
-      span.textContent = t;
-      cell.appendChild(span);
-    }
-    el.appendChild(cell);
-  }
-  return el;
-}
-
 test("tags a run whose tokens sit inside table cells", () => {
   //                     | | **a** |
   // columns             0 2 4    9 11

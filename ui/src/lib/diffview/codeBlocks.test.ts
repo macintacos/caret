@@ -2,6 +2,7 @@ import "@ui/test-setup.ts";
 import { describe, expect, test } from "bun:test";
 
 import { codeBlockRanges, codeBlockText, tagCodeBlockRows } from "$lib/diffview/codeBlocks.ts";
+import { gutterContentRoot } from "$lib/diffview/dom-fixture.ts";
 
 // codeBlockRanges classifies which lines of a rendered plan belong to a fenced
 // code block, so the source view can decorate those rows as a panel (EXC-692).
@@ -83,11 +84,7 @@ describe("codeBlockText", () => {
 // A fixture mirroring the @pierre/diffs shadow DOM: a gutter of [data-column-number]
 // cells and a content column of [data-line] rows, one per source line.
 function buildContent(lineCount: number): HTMLElement {
-  const root = document.createElement("div");
-  const gutter = document.createElement("div");
-  gutter.setAttribute("data-gutter", "");
-  const content = document.createElement("div");
-  content.setAttribute("data-content", "");
+  const { root, gutter, content } = gutterContentRoot();
   for (let n = 1; n <= lineCount; n++) {
     const num = document.createElement("div");
     num.setAttribute("data-column-number", String(n));
@@ -96,7 +93,6 @@ function buildContent(lineCount: number): HTMLElement {
     row.setAttribute("data-line", String(n));
     content.appendChild(row);
   }
-  root.append(gutter, content);
   return root;
 }
 

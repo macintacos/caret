@@ -25,6 +25,14 @@ function depth(line: string): number {
   return buildInlineSpans(line, [], [], []).quoteDepth;
 }
 
+/** `"> - item"`'s two runs: the quote marker, then the bullet past it. Shared by
+ * the EXC-866 quote-offset regression below and the blockquote-mixing sweep
+ * further down, which pin the same fixture from two different motivations. */
+const QUOTE_MARKER_THEN_BULLET: InlineSpan[] = [
+  { startCol: 0, endCol: 1, quoteMarker: 1 },
+  { startCol: 2, endCol: 3, listMarker: "bullet" },
+];
+
 describe("emphasis and code runs", () => {
   test("a bold element is one run covering its markers", () => {
     expect(runs("**bold**")).toEqual([{ startCol: 0, endCol: 8, bold: true }]);
@@ -383,10 +391,7 @@ describe("list markers", () => {
   test("a quoted marker sits past the quote prefix, not at column zero", () => {
     // EXC-866 recorded that TASK_MARKER's group-1 offset is wrong inside a quote;
     // this scan takes its columns off contentStart for the same reason.
-    expect(runs("> - item")).toEqual([
-      { startCol: 0, endCol: 1, quoteMarker: 1 },
-      { startCol: 2, endCol: 3, listMarker: "bullet" },
-    ]);
+    expect(runs("> - item")).toEqual(QUOTE_MARKER_THEN_BULLET);
   });
 
   test("a marker coexists with inline chips later on the line", () => {
@@ -546,10 +551,7 @@ describe("blockquote depth and markers", () => {
 // source put them and the construct inside keeps its own columns.
 describe("blockquote mixing cases", () => {
   test("a quote containing a list marks the quote marker and the bullet", () => {
-    expect(runs("> - item")).toEqual([
-      { startCol: 0, endCol: 1, quoteMarker: 1 },
-      { startCol: 2, endCol: 3, listMarker: "bullet" },
-    ]);
+    expect(runs("> - item")).toEqual(QUOTE_MARKER_THEN_BULLET);
   });
 
   test("a list inside a quote inside a list marks both markers", () => {

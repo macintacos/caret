@@ -1,6 +1,7 @@
 import "@ui/test-setup.ts";
 import { expect, test } from "bun:test";
 
+import { root, row as rowOf } from "$lib/diffview/dom-fixture.ts";
 import { syncInlineImages } from "$lib/diffview/inlineImages.ts";
 import type { ImageSpan, ImageSpanMap } from "$lib/diffview/links.ts";
 
@@ -12,23 +13,7 @@ import type { ImageSpan, ImageSpanMap } from "$lib/diffview/links.ts";
 // the gutter number growing with it) has no answer under happy-dom and is pinned
 // by images.e2e.ts instead.
 
-function row(line: number, text: string): HTMLElement {
-  const el = document.createElement("div");
-  el.setAttribute("data-line", String(line));
-  const span = document.createElement("span");
-  span.textContent = text;
-  el.appendChild(span);
-  return el;
-}
-
-function root(...rows: HTMLElement[]): HTMLElement {
-  const host = document.createElement("div");
-  const content = document.createElement("div");
-  content.setAttribute("data-content", "");
-  for (const r of rows) content.appendChild(r);
-  host.appendChild(content);
-  return host;
-}
+const row = (line: number, text: string): HTMLElement => rowOf(line, [text]);
 
 function map(entries: [number, ImageSpan[]][]): ImageSpanMap {
   return new Map(entries);

@@ -50,12 +50,16 @@ describe("findMatches", () => {
   });
 });
 
+// Shared by nearestMatchIndex and matchStepFromLine below, which walk the same
+// match list from two different starting questions.
+const SAMPLE_MATCHES = [
+  { line: 2, startCol: 0, endCol: 1 },
+  { line: 5, startCol: 0, endCol: 1 },
+  { line: 9, startCol: 0, endCol: 1 },
+];
+
 describe("nearestMatchIndex", () => {
-  const matches = [
-    { line: 2, startCol: 0, endCol: 1 },
-    { line: 5, startCol: 0, endCol: 1 },
-    { line: 9, startCol: 0, endCol: 1 },
-  ];
+  const matches = SAMPLE_MATCHES;
 
   test("first match at or after the given line", () => {
     expect(nearestMatchIndex(matches, 5)).toBe(1); // on the line counts
@@ -73,11 +77,7 @@ describe("nearestMatchIndex", () => {
 });
 
 describe("matchStepFromLine", () => {
-  const matches = [
-    { line: 2, startCol: 0, endCol: 1 },
-    { line: 5, startCol: 0, endCol: 1 },
-    { line: 9, startCol: 0, endCol: 1 },
-  ];
+  const matches = SAMPLE_MATCHES;
 
   test("n (delta +1): the first match strictly after the line", () => {
     expect(matchStepFromLine(matches, 3, 1)).toBe(1); // 5 is the next

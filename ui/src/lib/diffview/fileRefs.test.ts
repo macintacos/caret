@@ -390,6 +390,15 @@ describe("pathCandidates", () => {
 describe("mergeFileRefSpans", () => {
   const map = (...entries: [number, FileRefSpan[]][]): FileRefSpanMap => new Map(entries);
 
+  /** Merges a fixed scanned span (a.ts, columns 1-5) against an emitted span at
+   * columns 0-6 carrying `emitted` — the overlapping-pair shape shared by the
+   * three collision cases below, which vary only the emitted span's fields. */
+  const mergeOverlap = (emitted: Omit<FileRefSpan, "startCol" | "endCol">): FileRefSpanMap =>
+    mergeFileRefSpans(
+      map([1, [{ startCol: 1, endCol: 5, path: "a.ts" }]]),
+      map([1, [{ startCol: 0, endCol: 6, ...emitted }]]),
+    );
+
   test("unions spans from disjoint lines", () => {
     const merged = mergeFileRefSpans(
       map([1, [{ startCol: 0, endCol: 6, path: "a/b.md" }]]),
@@ -437,10 +446,7 @@ describe("mergeFileRefSpans", () => {
   test("an overlapping pair collapses to one span — the label never draws two glyphs", () => {
     // The backticked-path label `` [`a.ts`](a.ts) ``: the scan finds the path
     // inside the backticks, the link layer emits over the whole label.
-    const merged = mergeFileRefSpans(
-      map([1, [{ startCol: 1, endCol: 5, path: "a.ts" }]]),
-      map([1, [{ startCol: 0, endCol: 6, path: "a.ts", target: "a.ts" }]]),
-    );
+    const merged = mergeOverlap({ path: "a.ts", target: "a.ts" });
     expect(merged.get(1)).toHaveLength(1);
     // The scanned columns win — inline code is where a path gets its own shiki
     // token, so they place the glyph tight against the filename.
@@ -473,23 +479,19 @@ describe("mergeFileRefSpans", () => {
   test("a collapsed collision keeps the emitted span's cited range", () => {
     // The survivor is rebuilt field by field, so a range dropped here would
     // leave the preview framing one line of a span the link plainly cites.
-    const merged = mergeFileRefSpans(
-      map([1, [{ startCol: 1, endCol: 5, path: "a.ts" }]]),
-      map([
-        1,
-        [{ startCol: 0, endCol: 6, path: "b/c.ts", line: 7, endLine: 19, target: "b/c.ts:7-19" }],
-      ]),
-    );
+    const merged = mergeOverlap({
+      path: "b/c.ts",
+      line: 7,
+      endLine: 19,
+      target: "b/c.ts:7-19",
+    });
     expect(merged.get(1)?.[0]?.line).toBe(7);
     expect(merged.get(1)?.[0]?.endLine).toBe(19);
   });
 
   test("on a collision the emitted path wins — the click opens the link's target", () => {
     // `` [`a.ts`](b/c.ts) ``: the label names one file, the link points at another.
-    const merged = mergeFileRefSpans(
-      map([1, [{ startCol: 1, endCol: 5, path: "a.ts" }]]),
-      map([1, [{ startCol: 0, endCol: 6, path: "b/c.ts", line: 7, target: "b/c.ts:7" }]]),
-    );
+    const merged = mergeOverlap({ path: "b/c.ts", line: 7, target: "b/c.ts:7" });
     expect(merged.get(1)).toHaveLength(1);
     expect(merged.get(1)?.[0]?.path).toBe("b/c.ts");
     expect(merged.get(1)?.[0]?.line).toBe(7);

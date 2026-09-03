@@ -35,6 +35,26 @@ beforeEach(() => {
   sounds = [];
 });
 
+/** Asserts the composer closed with nothing created and no scratch retained. */
+function expectClosedClean(c: ReturnType<typeof build>): void {
+  expect(created).toHaveLength(0);
+  expect(c.pending()).toBeUndefined();
+  expect(c.scratches()).toHaveLength(0);
+}
+
+/** Asserts nothing was created and exactly one scratch — matching `scratch` —
+ * was retained at its range's key. */
+function expectOnlyScratch(
+  c: ReturnType<typeof build>,
+  scratch: Omit<ComposerScratch, "key">,
+): void {
+  expect(created).toHaveLength(0);
+  expect(c.pending()).toBeUndefined();
+  expect(c.scratches()).toEqual([
+    { key: scratchKey(scratch.startLine, scratch.endLine), ...scratch } satisfies ComposerScratch,
+  ]);
+}
+
 describe("composer open/close state", () => {
   test("starts closed: no pending target", () => {
     const c = build();
@@ -103,9 +123,7 @@ describe("cancel transition", () => {
     const c = build();
     c.open({ start: 6, end: 6 });
     c.cancel();
-    expect(created).toHaveLength(0);
-    expect(c.pending()).toBeUndefined();
-    expect(c.scratches()).toHaveLength(0);
+    expectClosedClean(c);
   });
 
   test("cancel with empty/whitespace text leaves no scratch (preserves current discard)", () => {
@@ -131,9 +149,7 @@ describe("discard the open composer", () => {
     const c = build();
     c.open({ start: 6, end: 6 });
     c.discardOpen();
-    expect(created).toHaveLength(0);
-    expect(c.pending()).toBeUndefined();
-    expect(c.scratches()).toHaveLength(0);
+    expectClosedClean(c);
   });
 
   test("discardOpen drops a resumed scratch entirely, leaving no marker", () => {
@@ -143,9 +159,7 @@ describe("discard the open composer", () => {
     expect(c.scratches()).toHaveLength(1);
     c.resume(scratchKey(5, 5)); // consume the scratch back into the open composer
     c.discardOpen(); // discarding the resumed draft leaves nothing behind
-    expect(created).toHaveLength(0);
-    expect(c.pending()).toBeUndefined();
-    expect(c.scratches()).toHaveLength(0);
+    expectClosedClean(c);
   });
 
   test("discardOpen while closed is a no-op", () => {
@@ -174,16 +188,7 @@ describe("scratch drafts", () => {
     const c = build();
     c.open({ start: 4, end: 6 });
     c.cancel("half a thought");
-    expect(created).toHaveLength(0);
-    expect(c.pending()).toBeUndefined();
-    expect(c.scratches()).toEqual([
-      {
-        key: scratchKey(4, 6),
-        startLine: 4,
-        endLine: 6,
-        text: "half a thought",
-      } satisfies ComposerScratch,
-    ]);
+    expectOnlyScratch(c, { startLine: 4, endLine: 6, text: "half a thought" });
   });
 
   test("a scratch trims surrounding whitespace from the retained text", () => {
@@ -418,11 +423,7 @@ describe("draft (demote an annotation into a scratch)", () => {
   test("inserts a scratch at the range, visible in scratches(), creating nothing", () => {
     const c = build();
     c.draft({ startLine: 4, endLine: 6, text: "reconsider this" });
-    expect(created).toHaveLength(0);
-    expect(c.pending()).toBeUndefined();
-    expect(c.scratches()).toEqual([
-      { key: scratchKey(4, 6), startLine: 4, endLine: 6, text: "reconsider this" },
-    ]);
+    expectOnlyScratch(c, { startLine: 4, endLine: 6, text: "reconsider this" });
   });
 
   test("trims the demoted text", () => {

@@ -2,6 +2,7 @@ import "@ui/test-setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
 
 import type { RectReader } from "$lib/diffview/codeCopy.ts";
+import { scrolledOffsetReader } from "$lib/diffview/dom-fixture.ts";
 import type { FileRefSpan, FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 import {
   dismissRefHint,
@@ -184,12 +185,7 @@ describe("pickRefHintAnchors", () => {
   test("reports the token's first-rect top-right in scroller content coords", () => {
     const host = makeHost([[1, ["a.ts"]]]);
     const scroller = document.createElement("div");
-    scroller.scrollTop = 50;
-    scroller.scrollLeft = 10;
-    const read: RectReader = (el) =>
-      el === scroller
-        ? { top: 5, bottom: 1000, left: 8, right: 400 }
-        : { top: 100, bottom: 110, left: 100, right: 300 };
+    const read = scrolledOffsetReader(scroller);
     const refs: FileRefSpanMap = new Map([[1, [span(0, 4, "a.ts", "file")]]]);
     // top = 100 - (5 - 50) = 145 ; left = 300 - (8 - 10) = 302
     const got = pickRefHintAnchors(host, scroller, refs, ["file"], read);
@@ -211,15 +207,22 @@ describe("the default rect reader", () => {
     Object.defineProperty(el, "getClientRects", { value: () => rects, configurable: true });
   }
 
-  test("anchors to a wrapped token's FIRST fragment, not its union box", () => {
-    const host = makeHost([[1, ["src/some/long/path.ts"]]]);
+  /** A scroller stubbed to a fixed viewport, and the row's single token —
+   * shared by the two cases below, which stub the token's own rects differently. */
+  function scrollerAndToken(host: HTMLElement): { scroller: HTMLElement; token: Element } {
     const scroller = document.createElement("div");
     stubClientRects(scroller, { top: 0, bottom: 100, left: 0, right: 400 });
+    const token = host.shadowRoot?.querySelector("span") as Element;
+    return { scroller, token };
+  }
+
+  test("anchors to a wrapped token's FIRST fragment, not its union box", () => {
+    const host = makeHost([[1, ["src/some/long/path.ts"]]]);
+    const { scroller, token } = scrollerAndToken(host);
     // A path wrapped across two rows: the head runs to x=340 on the first row, the
     // tail restarts at the left margin and reaches further right. The union box's
     // top-right is (390, 10) — a point the text never occupies. The first
     // fragment's is (340, 10), where the reference visibly begins.
-    const token = host.shadowRoot?.querySelector("span") as Element;
     stubClientRects(
       token,
       { top: 10, bottom: 20, left: 300, right: 340 },
@@ -232,9 +235,7 @@ describe("the default rect reader", () => {
 
   test("falls back to the bounding box when a token has no client rects", () => {
     const host = makeHost([[1, ["a.ts"]]]);
-    const scroller = document.createElement("div");
-    stubClientRects(scroller, { top: 0, bottom: 100, left: 0, right: 400 });
-    const token = host.shadowRoot?.querySelector("span") as Element;
+    const { scroller, token } = scrollerAndToken(host);
     stubClientRects(token); // none at all
     Object.defineProperty(token, "getBoundingClientRect", {
       value: () => ({ top: 10, bottom: 20, left: 100, right: 200 }),
@@ -313,6 +314,21 @@ describe("a reference inside a codespan", () => {
 describe("syncRefHints", () => {
   const scroller = () => document.createElement("div");
 
+  /** A single "a.ts" hint already placed on line 1 — the fixture shared by the
+   * cases below that re-sync from a settled placement. */
+  function placedFileHint(): {
+    host: HTMLElement;
+    sc: HTMLElement;
+    refs: FileRefSpanMap;
+    placed: ReturnType<typeof syncRefHints>;
+  } {
+    const host = makeHost([[1, ["a.ts"]]]);
+    const sc = scroller();
+    const refs: FileRefSpanMap = new Map([[1, [span(0, 4, "a.ts", "file")]]]);
+    const placed = syncRefHints(host, sc, refs, ["file"], [], reader(sc));
+    return { host, sc, refs, placed };
+  }
+
   test("picks a kind that only comes into view later, keeping the one already placed", () => {
     // The reference kinds are rarely both on screen at once, so a sync that stopped
     // as soon as anything was placed would leave the other kind untaught for good.
@@ -337,10 +353,7 @@ describe("syncRefHints", () => {
   test("re-derives coordinates when the content above a token shifts", () => {
     // Content coordinates survive scrolling, but not a height change above the
     // token — a font arriving, a row repainting, a wide block moving into a card.
-    const host = makeHost([[1, ["a.ts"]]]);
-    const sc = scroller();
-    const refs: FileRefSpanMap = new Map([[1, [span(0, 4, "a.ts", "file")]]]);
-    const placed = syncRefHints(host, sc, refs, ["file"], [], reader(sc));
+    const { host, sc, refs, placed } = placedFileHint();
     expect(placed[0]?.top).toBe(10);
 
     const shifted = syncRefHints(host, sc, refs, ["file"], placed, (el) =>
@@ -382,10 +395,7 @@ describe("syncRefHints", () => {
   });
 
   test("drops a hint whose row has left the document", () => {
-    const host = makeHost([[1, ["a.ts"]]]);
-    const sc = scroller();
-    const refs: FileRefSpanMap = new Map([[1, [span(0, 4, "a.ts", "file")]]]);
-    const placed = syncRefHints(host, sc, refs, ["file"], [], reader(sc));
+    const { host, sc, refs, placed } = placedFileHint();
     host.shadowRoot?.querySelector('[data-line="1"]')?.remove();
     expect(syncRefHints(host, sc, refs, ["file"], placed, reader(sc))).toEqual([]);
   });

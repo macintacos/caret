@@ -46,10 +46,14 @@ interface Harness {
   scroller: HTMLElement;
 }
 
-/** A scroll container wrapping a shadow host whose root holds the given rows. */
-function harness(lines: number[], scrollable = true): Harness {
+/** A scroll container wrapping a shadow host whose root holds the given rows.
+ * `rect` stubs the scroller's own getBoundingClientRect, for the suites below
+ * that measure a viewport rather than only resolving a row. */
+function harness(lines: number[], opts: { scrollable?: boolean; rect?: DOMRect } = {}): Harness {
+  const { scrollable = true, rect: scrollerRect } = opts;
   const scroller = document.createElement("div");
   if (scrollable) scroller.style.overflowY = "auto";
+  if (scrollerRect) scroller.getBoundingClientRect = () => scrollerRect;
   const host = document.createElement("div");
   const root = host.attachShadow({ mode: "open" });
   for (const n of lines) {
@@ -60,6 +64,11 @@ function harness(lines: number[], scrollable = true): Harness {
   scroller.append(host);
   document.body.append(scroller);
   return { host, scroller };
+}
+
+function stubRow(host: HTMLElement, line: number, top: number, bottom = top): void {
+  const row = host.shadowRoot?.querySelector<HTMLElement>(`[data-line="${line}"]`);
+  if (row != null) row.getBoundingClientRect = () => rect(top, bottom);
 }
 
 /** Resolves after `n` animation frames, so a rAF loop can run to a known point. */
@@ -91,6 +100,12 @@ afterEach(() => {
 /** Runs an in-flight jump tween out to the end of its flight. */
 async function settle(): Promise<void> {
   now = SCROLL_ANIM_MS;
+  await frames(1);
+}
+
+/** Advances to the midpoint of a jump flight, one frame in. */
+async function midFlight(): Promise<void> {
+  now = SCROLL_ANIM_MS / 2;
   await frames(1);
 }
 
@@ -146,17 +161,19 @@ describe("scrollTweenTop", () => {
 });
 
 describe("scrollToLine", () => {
-  function stubRow(host: HTMLElement, line: number, top: number): void {
-    const row = host.shadowRoot?.querySelector<HTMLElement>(`[data-line="${line}"]`);
-    if (row != null) row.getBoundingClientRect = () => rect(top);
+  /** Starts a jump to line 5 (stubbed at scrollTop 500) and rides it to
+   * mid-flight — the shared arrangement for the two cases below, which
+   * continue differently from there. */
+  async function jumpLine5ToMidFlight(): Promise<Harness> {
+    const h = harness([1, 5, 9]);
+    stubRow(h.host, 5, 500);
+    expect(scrollToLine(h.host, 5)).toBe(true);
+    await midFlight();
+    return h;
   }
 
   test("tweens the surrounding container to the matching row and returns true", async () => {
-    const { host, scroller } = harness([1, 5, 9]);
-    stubRow(host, 5, 500);
-    expect(scrollToLine(host, 5)).toBe(true);
-    now = SCROLL_ANIM_MS / 2;
-    await frames(1);
+    const { scroller } = await jumpLine5ToMidFlight();
     // Mid-flight: under way, not yet arrived.
     expect(scroller.scrollTop).toBeGreaterThan(0);
     expect(scroller.scrollTop).toBeLessThan(500 - SCROLL_OFFSET_TOP);
@@ -189,11 +206,7 @@ describe("scrollToLine", () => {
     // position now — the jump lets go rather than dragging the view back for the
     // rest of its flight. (The cursor follow is no longer such a case: it runs
     // through the same driver, so it retargets the flight instead of fighting it.)
-    const { host, scroller } = harness([1, 5, 9]);
-    stubRow(host, 5, 500);
-    expect(scrollToLine(host, 5)).toBe(true);
-    now = SCROLL_ANIM_MS / 2;
-    await frames(1);
+    const { scroller } = await jumpLine5ToMidFlight();
     scroller.scrollTop = 1234;
     await settle();
     expect(scroller.scrollTop).toBe(1234);
@@ -212,7 +225,7 @@ describe("scrollToLine", () => {
   });
 
   test("falls back to the row's scrollIntoView when there is no scroll container", () => {
-    const { host } = harness([1, 5, 9], false);
+    const { host } = harness([1, 5, 9], { scrollable: false });
     const row = host.shadowRoot?.querySelector<HTMLElement>('[data-line="5"]');
     let scrolledIntoView = false;
     if (row != null) row.scrollIntoView = () => (scrolledIntoView = true);
@@ -449,21 +462,7 @@ describe("followScrollDelta", () => {
 
 describe("followCursorLine", () => {
   /** A scroller (top 100, bottom 700 → 600px tall) wrapping a shadow host. */
-  function harness(lines: number[]): { host: HTMLElement; scroller: HTMLElement } {
-    const scroller = document.createElement("div");
-    scroller.style.overflowY = "auto";
-    scroller.getBoundingClientRect = () => rect(100, 700);
-    const host = document.createElement("div");
-    const root = host.attachShadow({ mode: "open" });
-    for (const n of lines) {
-      const row = document.createElement("div");
-      row.setAttribute("data-line", String(n));
-      root.append(row);
-    }
-    scroller.append(host);
-    document.body.append(scroller);
-    return { host, scroller };
-  }
+  const viewport = (lines: number[]): Harness => harness(lines, { rect: rect(100, 700) });
 
   /** Runs an in-flight follow tween out to the end of its (shorter) flight. */
   async function settleFollow(): Promise<void> {
@@ -471,32 +470,30 @@ describe("followCursorLine", () => {
     await frames(1);
   }
 
-  function stubRow(host: HTMLElement, line: number, top: number, bottom: number): void {
-    const row = host.shadowRoot?.querySelector<HTMLElement>(`[data-line="${line}"]`);
-    if (row != null) row.getBoundingClientRect = () => rect(top, bottom);
-  }
-
-  test("tweens by the follow delta when the row passes the bottom band", async () => {
-    const { host, scroller } = harness([1, 5, 9]);
+  /** Follows to row 5, stubbed 20px past the bottom band, and asserts the tween
+   * lands on the overshoot — the fixture both cases below check before their own
+   * further assertion. */
+  async function expectFollowLandsAtOvershoot(): Promise<void> {
+    const { host, scroller } = viewport([1, 5, 9]);
     stubRow(host, 5, 650, 670); // below the [200,600] band (margin CURSOR_SCROLLOFF*20)
     expect(followCursorLine(host, 5)).toBe(true);
     await settleFollow();
     expect(scroller.scrollTop).toBe(670 - (700 - CURSOR_SCROLLOFF * 20)); // overshoot past bottom bound
+  }
+
+  test("tweens by the follow delta when the row passes the bottom band", async () => {
+    await expectFollowLandsAtOvershoot();
   });
 
   test("runs the follow shorter than a jump, so a held key is not left trailing", async () => {
     // The follow and the jump share a curve but not a duration: at FOLLOW_ANIM_MS
     // the follow has landed, which is a point a jump would still be flying past.
-    const { host, scroller } = harness([1, 5, 9]);
-    stubRow(host, 5, 650, 670);
-    expect(followCursorLine(host, 5)).toBe(true);
-    await settleFollow();
-    expect(scroller.scrollTop).toBe(670 - (700 - CURSOR_SCROLLOFF * 20));
+    await expectFollowLandsAtOvershoot();
     expect(FOLLOW_ANIM_MS).toBeLessThan(SCROLL_ANIM_MS);
   });
 
   test("does not scroll when the row is comfortably inside the band", async () => {
-    const { host, scroller } = harness([1, 5, 9]);
+    const { host, scroller } = viewport([1, 5, 9]);
     stubRow(host, 5, 300, 320);
     expect(followCursorLine(host, 5)).toBe(true);
     await settleFollow();
@@ -504,7 +501,7 @@ describe("followCursorLine", () => {
   });
 
   test("returns false when the requested line is not rendered", () => {
-    const { host, scroller } = harness([1, 2, 3]);
+    const { host, scroller } = viewport([1, 2, 3]);
     expect(followCursorLine(host, 99)).toBe(false);
     expect(scroller.scrollTop).toBe(0);
   });
