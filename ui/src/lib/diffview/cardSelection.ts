@@ -16,15 +16,13 @@
 //
 //   - It NEVER writes a value that is already there. SourceView drives it from a
 //     MutationObserver on data-selected-line, which is the only trigger that cannot
-//     race the library's rAF-queued render; a write of an unchanged value still emits
-//     a MutationRecord, so an unconditional set would re-trigger that observer forever.
+//     race the library's rAF-queued render.
 //   - It stands down on a card whose gutter mirror has a different child count. That
 //     divergence is the state renderSelection throws on, and painting into it would
 //     leave the two columns disagreeing about which rows are banded.
 //
-// The rows themselves are library-owned and are rewritten on every repaint, so
-// SourceView also replays this from its repaint pass, the same non-reactive-mirror
-// shape tagCursorRow and paintSearchHighlights already use.
+// This pass is replayed from SourceView's repaint pass too, the same
+// non-reactive-mirror shape tagCursorRow and paintSearchHighlights already use.
 
 import { CARD_ATTR, GUTTER_CARD_ATTR } from "$lib/diffview/codeBlockScroll.ts";
 import { TABLE_CARD_ATTR, TABLE_GUTTER_CARD_ATTR } from "$lib/diffview/tables.ts";

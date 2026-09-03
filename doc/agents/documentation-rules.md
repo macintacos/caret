@@ -39,7 +39,7 @@ digraph caret_docs_router {
     "Which doc does the change affect?" -> "Edit doc/DEVELOPMENT.md" [label="developing caret: build-from-source, the mise task catalog and dev workflow, the tasks CLI, icons"];
     "Which doc does the change affect?" -> "Edit CONTRIBUTING.md" [label="human contributor onboarding: local setup, the mise workflow, where tests live"];
     "Which doc does the change affect?" -> "Edit CLAUDE.md" [label="the code-change routing index, plus the CodeGraph / verifying-changes prose"];
-    "Which doc does the change affect?" -> "Edit a doc/agents/*.md rule file" [label="a rule-of-the-road for a code area (architecture, logging, TS, Svelte, shadcn, testing, icons, settings, dependencies, OpenCode, rumdl)"];
+    "Which doc does the change affect?" -> "Edit a doc/agents/*.md rule file" [label="a rule-of-the-road for a code area (architecture, logging, TS, Svelte, shadcn, plan rendering, testing, icons, settings, dependencies, OpenCode, rumdl)"];
     "Which doc does the change affect?" -> "Edit doc/README.md" [label="the router for the doc/ directory: which page answers a given reader's question"];
     "Which doc does the change affect?" -> "Edit .greptile/rules.md" [label="how the PR reviewer reviews: its stance, priorities, and what it should not comment on"];
 }

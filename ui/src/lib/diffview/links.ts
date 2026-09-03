@@ -1,28 +1,9 @@
-// The source view's one per-line pass over plan text. It returns display text
-// plus five layers keyed by display line: clickable link spans, file references,
-// flat inline-markdown runs, blockquote depth, and images. The transform is
-// strictly per-line — each line is processed independently and rejoined with "\n"
-// — so the output always has the same line count as the input (the line-parity
-// guarantee the annotation/feedback line numbers depend on).
-//
-// The LINK COLLAPSE is the only display rewrite, and the only reason a display
-// column ever differs from its source column:
+// The LINK COLLAPSE is the only display rewrite:
 //   - inline links `[label](target)` collapse to `label`
 //   - autolinks `<url>` collapse to `url`
 //   - a bare `http(s)://…` URL is left in place
-// Everything else — emphasis markers, backticks, task brackets, quote markers —
-// stays in the text and is marked rather than removed (EXC-855), so what the
-// reader copies is the real plan text. Fenced code blocks pass through with no
-// layers at all, and a link written inside inline code stays literal.
-//
-// WHICH LINKS COLLAPSE. A safe `http`/`https` target does, and records a
-// clickable span carrying its href. A path-shaped target does too, but records NO
-// clickable span — openUrl must never be handed a filesystem path. Everything
-// else stays literal source text: a target naming any other scheme
-// (`javascript:`, `data:`, `mailto:`), the protocol-relative `//host/…` form, and
-// a scheme-less host like `github.com/…`, whose destination would survive nowhere
-// once collapsed. Leaving an unsafe scheme visible is a safety property — a
-// reader can see what the link would actually do — not a styling one.
+// Fenced code blocks pass through with no layers at all, and a link written
+// inside inline code stays literal.
 //
 // WHAT MARKS A COLLAPSED LABEL. A path-shaped target specific enough to cite
 // (isCitablePath) emits a FileRefSpan over the label (EXC-954, EXC-956), which
@@ -39,16 +20,12 @@
 // directory emit the identical shape, and the daemon's resolve (EXC-916) is what
 // later decides which glyph the token draws and which surface a click opens.
 //
-// IMAGES are the exception to the collapse (EXC-870). `![alt](url)` keeps every
-// character of its markup, so the row's display text is its source text and copy
-// carries the real markdown; the picture is ADDED to that row by inlineImages.ts
-// rather than substituted for it, which is the epic's transform-in-place stance
-// (EXC-855) applied to the one construct that has something to render. Only an
-// `http`/`https` target draws — the same isSafeUrl gate the links above use — and
-// every image, drawable or not, takes a `link` run over its whole shape, so an
-// image that cannot be fetched degrades to exactly the chip it already wore. The
-// titled form `![alt](url "title")` matches nothing here at all, because the
-// target grammar allows no space.
+// IMAGES are the exception to the collapse (EXC-870). Only an `http`/`https`
+// target draws — the same isSafeUrl gate the links above use — and every image,
+// drawable or not, takes a `link` run over its whole shape, so an image that
+// cannot be fetched degrades to exactly the chip it already wore. The titled
+// form `![alt](url "title")` matches nothing here at all, because the target
+// grammar allows no space.
 //
 // An image emits NO FileRefSpan, even when its target is a citable path. That is
 // a deliberate loss: before EXC-870 `![d](doc/arch.svg)` collapsed to `!d` and
@@ -98,7 +75,7 @@ export interface ImageSpan {
 export type ImageSpanMap = Map<number, ImageSpan[]>;
 
 export interface LinkLayer {
-  /** Display text — same line count as the input. */
+  /** Display text. */
   text: string;
   /** Clickable spans per 1-based line. */
   spans: LinkSpanMap;
@@ -114,8 +91,7 @@ export interface LinkLayer {
    * absent; this rides the ROW rather than the runs, since subduing a quote is a
    * whole-line property (EXC-863). */
   quoteDepth: Map<number, number>;
-  /** Drawable images per 1-based display line (EXC-870). The picture is added to
-   * the row by inlineImages.ts; the markup that names it stays in the text. */
+  /** Drawable images per 1-based display line (EXC-870). */
   images: ImageSpanMap;
 }
 
@@ -443,8 +419,7 @@ export function openLinkInNewTab(href: string): void {
   window.open(href, "_blank", "noopener,noreferrer");
 }
 
-/** Transforms plan source text into display text plus per-line link spans.
- * Line count is invariant. */
+/** Transforms plan source text into display text plus per-line link spans. */
 export function buildLinkLayer(text: string): LinkLayer {
   const lines = text.split("\n");
   const spans: LinkSpanMap = new Map();

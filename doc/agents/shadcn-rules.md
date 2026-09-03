@@ -126,6 +126,18 @@ passes (EXC-1111); and `toggle-group.svelte` gives the root `role="group"` while
 single-type items take `role="radio"`, which no `role="group"` may own (EXC-1112). Both
 also deserve an upstream issue — patching here is the local fix, not the cure.
 
+### A filter field never lives inside a dropdown menu
+
+Reach for `command` in a `popover`, not a text field hosted in menu content (EXC-1098).
+bits-ui puts `role="menu"` on dropdown content, a textbox is not among the roles `menu`
+admits as children, and the role cannot be overridden from the call site — so a field
+inside the menu gives a screen reader the field's label and then silence as its rows
+narrow. The command-in-popover pair gives a real combobox whose `aria-activedescendant`
+names the row the selection is on, over a listbox of real options.
+
+`PlanBreadcrumbs.svelte` and `PlanToc.svelte` are both built this way, which is why the
+plan's two heading surfaces narrate identically.
+
 ## Token-bridge discipline
 
 Components consume caret's palette through the **bridged shadcn semantic variables**

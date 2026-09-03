@@ -11,6 +11,10 @@
     {
       "path": "../doc/agents/typescript-rules.md",
       "description": "Read for TypeScript module shape — dependency injection, file-split seams, zod boundaries, helpers, and the @/ import aliases."
+    },
+    {
+      "path": "../doc/agents/plan-render-rules.md",
+      "description": "Read when the diff touches ui/src/lib/diffview/ or the SourceView / DiffPlanView plan surface — the layer pipeline, transform-in-place, line parity, the token partition, and the idempotency the MutationObservers require."
     }
   ]
 }

@@ -1,9 +1,6 @@
 // Pure detection for the source view's filename-reference layer (EXC-687).
 // Takes the plan's display source text and returns a per-line map of path-shaped
 // spans — the candidates the daemon then confirms against the real filesystem.
-// The transform is strictly per-line and reads columns off the display text, so
-// spans line up with the rendered tokens; line numbers are 1-based, matching the
-// view's per-line data-line.
 //
 // This module SCANS for references that must be GUESSED at, and it has two
 // scopes. Inline-code spans (`…`) are where caret's plans cite files: backticks

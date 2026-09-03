@@ -5,12 +5,9 @@
   // the drill-down surface, this is the see-the-whole-shape-at-once one — and
   // takes the same three props, so both read one heading model and one activeLine.
   //
-  // Built on `command` inside a `popover`, which is the whole point of the epic:
-  // bits-ui puts role="menu" on dropdown content, and a textbox is not a role
-  // `menu` admits as a child, so a filter field hosted inside a menu narrates
-  // nothing as its rows narrow. The breadcrumbs bar's own filter is built on the
-  // same two primitives for the same reason; only its hierarchy menus are
-  // dropdowns.
+  // Built on `command` inside a `popover`, which is the whole point of the epic.
+  // The breadcrumbs bar's own filter is built on the same two primitives for the
+  // same reason; only its hierarchy menus are dropdowns.
   //
   // What that buys HERE is both halves (EXC-1096 closed the second). Structurally
   // the field is a legal sibling of the list and the rows are real options a screen

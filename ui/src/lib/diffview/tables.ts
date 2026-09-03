@@ -1,15 +1,8 @@
-// GFM table classification for the markdown plan view (EXC-864). The plan renders
-// as line-numbered markdown source (SourceView.svelte), so a table is just the run
-// of source lines that form one — a header row, a delimiter row, and the body rows
-// that agree with them on cell count. This module computes that run, and where each
-// row's cells sit on its line, then restructures those rows into a real
+// GFM table classification for the markdown plan view (EXC-864). A table is just
+// the run of source lines that form one — a header row, a delimiter row, and the
+// body rows that agree with them on cell count. This module computes that run, and
+// where each row's cells sit on its line, then restructures those rows into a real
 // column-aligned table (syncTableCards, below).
-//
-// A table is the one construct in this epic that RESTRUCTURES rather than
-// overdrawing in place: the `|` columns in the source do not line up with a table's
-// columns, so alignment has to come from layout. Everything else about the source
-// survives it — no character is added, removed, or moved, so copy, `/` search, vim
-// motions and comment anchors all keep resolving against the same column space.
 //
 // Columns are 0-based and half-open, and each cell's extent INCLUDES the pipe that
 // opens it (and, for the last cell, the one that closes the row). That is what makes
@@ -18,9 +11,6 @@
 // cell's EDGE MARKER rather than its border: it stays in the text, where copy and
 // search still find it, and is taken to `transparent`, while the rule the reader
 // sees is a border the sheet paints on the cell.
-//
-// Lines are indexed over the DISPLAY text, the same space codeBlockRanges and the
-// inline layers use, so a collapsed link's columns are the ones the reader sees.
 
 import type { CodeBlockRange } from "$lib/diffview/codeBlocks.ts";
 import { CELL_ATTR, splitTokens, tokenChildren } from "$lib/diffview/rowTokens.ts";
@@ -346,8 +336,7 @@ function cellCuts(text: string, cells: TableCell[], inert: [number, number][]): 
 }
 
 /** Whether `row` already carries exactly the cells `cells` describes. Compared by
- * count and text length rather than by rebuilding: an already-correct row must
- * mutate nothing, or SourceView's MutationObserver would re-fire every frame.
+ * count and text length rather than by rebuilding.
  *
  * Counts the row's CELLS rather than its children, and that is the difference
  * between settling and looping. inlineImages.ts appends its <img> to the row after
@@ -549,11 +538,8 @@ function wrapGutterCard(gutter: Element, key: string, lines: number[]): void {
  * rules from, and each pipe is marked so the sheet can hide the glyph it draws over.
  * `root` is the source view's shadow root.
  *
- * Idempotent, and that is a hard requirement rather than a nicety: SourceView runs
- * this from a `MutationObserver` watching childList over the whole subtree, so a
- * pass that re-carded or re-celled a settled table would loop forever. A card that
- * still holds its range and a row that already carries its cells are both left
- * completely untouched.
+ * A card that still holds its range and a row that already carries its cells are
+ * both left completely untouched.
  *
  * A row whose painted text LENGTH is not the parsed line's is skipped rather than celled,
  * and the next repaint brings this pass back to finish it. That is a guard on the two

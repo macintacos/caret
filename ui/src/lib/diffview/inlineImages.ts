@@ -1,11 +1,8 @@
 // Draws the plan's markdown images onto their source rows (EXC-870). Every other
 // pass over a rendered row only tags or splits what shiki already painted; this
 // one ADDS an element, which makes it the closest sibling of syncCodeBlockCards
-// rather than of tagFileRefTokens — and inherits that module's hard requirement:
-// SourceView drives it from a MutationObserver watching childList over the whole
-// subtree, so a pass that re-created a settled row's image would loop the
-// observer forever. A row whose images already match the map is left completely
-// untouched; only a real mismatch removes and rebuilds.
+// rather than of tagFileRefTokens. A row whose images already match the map is
+// left completely untouched; only a real mismatch removes and rebuilds.
 //
 // The work is proportional to the IMAGES, not to the plan: the map is iterated
 // rather than the row set, and the stale sweep is one query for the elements this
@@ -16,12 +13,8 @@
 // The image is APPENDED, so it sits past the last text token. Both this pass and
 // the token passes are safe in either order — an <img> holds no characters, and
 // splitTokens (rowTokens.ts), tagRow (inlineDecorate.ts) and refTokenAt
-// (fileRefTag.ts) all locate a token through tokenChildren — a row's own children,
-// or a celled table row's cells' children one level down — accumulating text
-// length, so a zero-length child appended after them is invisible to each. What the placement buys is
-// the row's own text: the literal `![alt](url)` links.ts refused to collapse is
-// untouched, which is what keeps copy, selection, the gutter number and the
-// comment affordance exactly as they were.
+// (fileRefTag.ts) all locate a token through tokenChildren, accumulating text
+// length, so a zero-length child appended after them is invisible to each.
 //
 // A FAILED LOAD hides the element rather than removing it. Removing it would have
 // the next observer pass create it again, and remembering the failure would need
@@ -40,14 +33,12 @@
 // makes the reviewer's browser GET an arbitrary host when the row scrolls into
 // view, with whatever the agent put in the path. That is the exfiltration channel
 // every surface rendering someone else's markdown has to answer for, and caret's
-// answer today is that plan text is trusted enough to render — the mitigations
-// below reduce what leaks, they do not close the channel. `referrerpolicy` keeps
-// the request from naming the page it came from, mirroring the noreferrer stance
-// openLinkInNewTab takes for the surface's other outbound affordance, and
+// answer today is that plan text is trusted enough to render. `referrerpolicy`
+// keeps the request from naming the page it came from, mirroring the noreferrer
+// stance openLinkInNewTab takes for the surface's other outbound affordance, and
 // `loading` keeps a long plan from fetching every asset before the reviewer has
 // scrolled to any of them. Closing it properly wants an `img-src` CSP on the
-// daemon's own response, which would cover the comment renderer too; there is no
-// CSP today.
+// daemon's own response, which would cover the comment renderer too.
 
 import type { ImageSpan, ImageSpanMap } from "$lib/diffview/links.ts";
 

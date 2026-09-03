@@ -1,10 +1,8 @@
-// Fenced-code-block classification for the markdown plan view. The plan is
-// rendered as line-numbered markdown source (SourceView.svelte), so a code block
-// is just its fence lines plus the code between them. To decorate those rows as a
+// Fenced-code-block classification for the markdown plan view. A code block is
+// just its fence lines plus the code between them. To decorate those rows as a
 // distinct panel (EXC-692) the view needs to know which line numbers belong to a
 // block; this module computes that, and tags the shadow-DOM rows the library
-// paints. The DOM tagging lives here (not in the component) so it is unit-testable
-// against a constructed fixture, mirroring lib/diffview/links.ts and bracket.ts.
+// paints.
 
 // An opening/closing fence: 3+ backticks or tildes, ≤3 leading spaces per
 // CommonMark. Deliberately the same stateless detection buildLinkLayer (links.ts)
@@ -106,8 +104,7 @@ function tagFenceToken(row: Element): void {
  * token kinds the panel CSS styles: `data-code-lang` on the opening line's language
  * tag, and `data-code-fence` on each fence line's markers. The panel CSS shifts
  * the language tag and the closing markers to their row's vertical center
- * (EXC-692). The library owns these rows and repaints them, so this is re-run after
- * every repaint (see SourceView.svelte); it is idempotent and clears rows and
+ * (EXC-692). Re-run after every repaint (see SourceView.svelte); clears rows and
  * tokens no longer in a block. Content rows carry the panel tags (`data-code-line`
  * + start/end); the gutter number cells get only `data-code-line`, so the cursor
  * and hover band can brighten the gutter half to match the content on a code row.

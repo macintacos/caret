@@ -4,11 +4,9 @@
 // walking that sequence and accumulating text length. This module owns what "that
 // sequence" means and how it is refined.
 //
-// It exists because a table row (EXC-864) groups its tokens into cell elements, so
-// the sequence sits one level down for those rows and at the top level for every
-// other. Both halves live here so no pass has to know which kind of row it is
-// looking at, and so tables.ts can refine a row without importing the pass that
-// decorates it — the import that would otherwise be a cycle.
+// It exists because a table row (EXC-864) groups its tokens into cell elements.
+// Both halves live here so tables.ts can refine a row without importing the pass
+// that decorates it — the import that would otherwise be a cycle.
 
 /** Marks a table cell. Declared here rather than in tables.ts because it is what
  * `tokenChildren` reads: a pass recognises a celled row without depending on the
@@ -40,16 +38,14 @@ export function tokenChildren(row: Element): Element[] {
 /**
  * Replaces every token a cut falls strictly inside with one clone per piece, so no
  * token straddles a boundary. A token with no interior cut is left as-is — the
- * idempotency guarantee, and not a nicety: SourceView.svelte runs these passes from
- * a `MutationObserver` watching childList over the whole subtree, so a pass that
- * re-split a settled row would loop forever.
+ * idempotency guarantee.
  *
  * It SPLITS ONLY, and never merges. Merging would be the obvious way to make one
  * element out of one run, and it is wrong twice over: shiki colours the markers and
  * the content of an emphasis span as different tokens, so fusing them throws away
  * the marker ink the theme deliberately dims; and every walk built on this locates a
  * token by accumulating text length, so a coarser partition can hide a boundary one
- * of them needs. Splitting only ever refines, so every boundary shiki drew survives.
+ * of them needs.
  *
  * A token holding elements of its own is skipped defensively; a shiki token holds a
  * single text node, so there is no known trigger. The landing if one ever appears is

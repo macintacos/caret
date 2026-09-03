@@ -1,35 +1,27 @@
 // Pure emission for the plan view's inline-markdown layer (EXC-855, EXC-866).
-// Takes one DISPLAY line and returns the flat atomic runs covering it — one span
-// per element-bounded stretch of identical attribute set, each carrying every
-// attribute that covers it — plus the line's blockquote depth. Nothing is
-// stripped and nothing is rewritten: markers are part of the runs that mark them,
-// which is what keeps display columns equal to source columns and copy honest.
+// Takes one DISPLAY line and returns the flat atomic runs covering it — each
+// carrying every attribute that covers it — plus the line's blockquote depth.
 //
 // Flat runs are a requirement rather than a style. The decoration pass (EXC-867)
 // turns each run into a sibling element, and every pass that then locates a token
 // walks the row accumulating text length: tagLanguageToken / tagFenceToken
 // (codeBlocks.ts) over the row's direct children, tagTokenAt (fileRefTag.ts) over
-// rowTokens.ts's tokenChildren — the row's own children, or a table row's cells'
-// children one level down. A nested wrapper would break that partition and put
-// data-file-ref on an element spanning more than the reference — the exact case
-// tagTokenAt's two-bound check exists to refuse.
+// rowTokens.ts's tokenChildren. A nested wrapper would break that partition and
+// put data-file-ref on an element spanning more than the reference — the exact
+// case tagTokenAt's two-bound check exists to refuse.
 //
-// Abutting elements are NOT fused into one run even when their attributes match.
-// `*a*_b_` is two italic runs, and two adjacent links are two link runs: the
-// boundary is where EXC-867 draws a pill's rounded end, and for links it is the
-// only record of which label belongs to which target.
+// `*a*_b_` is two italic runs, and two adjacent links are two link runs
+// (EXC-867) — for links, that boundary is the only record of which label
+// belongs to which target.
 //
 // The inline grammar comes from marked, already a UI dependency (lib/markdown.ts
 // renders comment bodies with it). Reusing its CommonMark delimiter-run pass is
-// what makes nested emphasis, emphasis inside link labels, escaped markers and
-// emphasis-looking text inside inline code come out right; a hand-rolled scanner
-// would be the fiddliest parser in the repo for a strictly worse answer. Columns
+// what makes emphasis-looking text inside inline code come out right. Columns
 // come from the token tree's own `raw` strings, which tile the line exactly.
 //
 // The line is read as DISPLAY text, not source: on a line with no link collapse
 // the two are identical, and on one that collapsed the label survives verbatim,
-// so emphasis inside a collapsed label lands on the columns the reader sees. That
-// is why this layer needs no column remapping of its own.
+// so emphasis inside a collapsed label lands on the columns the reader sees.
 //
 // Where the reference layer (EXC-687) and that grammar disagree, the reference
 // wins (EXC-1066): emphasis inside a reference range is dropped before the runs

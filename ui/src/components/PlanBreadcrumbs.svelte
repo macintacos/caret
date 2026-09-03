@@ -19,18 +19,9 @@
   // menu's rows — including a submenu's — by re-dispatching as the arrow keys the
   // menu already handles.
   //
-  // EXC-1121: Tab and Shift+Tab walk whichever list is open — a crumb's menu, a
-  // submenu, or the filter panel below — and wrap at its ends.
-  //
-  // EXC-1120: each arrow is its vim twin, ArrowLeft included, and Escape means
-  // one step out at every depth the bar has — filter back to hierarchy, hierarchy
-  // shut, and then out of the bar itself, which stays on screen with nothing in
-  // it focused.
-  //
-  // EXC-1122: and HOLDING any navigation key traverses, on a delay and a cadence
-  // the bar owns rather than the OS's. The lifecycle is $lib/keyRepeat.ts; what the
-  // bar owes it is dropping the OS's own repeat, which is why every handler below
-  // bails on `e.repeat` and why the arrows are claimed rather than left to bits-ui.
+  // EXC-1122: The lifecycle is $lib/keyRepeat.ts; what the bar owes it is
+  // dropping the OS's own repeat, which is why every handler below bails on
+  // `e.repeat` and why the arrows are claimed rather than left to bits-ui.
   //
   // EXC-948: `/` swaps the open menu for a flat filter over EVERY heading in the
   // plan — the browsing model the menus give you, traded for the one you want
@@ -38,17 +29,12 @@
   // rather than closing, so the two views are one surface from the bar's side.
   //
   // EXC-1098: that filter is `command` in a `popover` rather than a mode of the
-  // menu, and the reason is accessibility rather than layout. bits-ui puts
-  // role="menu" on dropdown content, a textbox is not among the roles `menu`
-  // admits as children, and the role cannot be overridden from the call site — so
-  // a filter field hosted inside the menu gives a screen reader the field's label
-  // and then silence as its rows narrow. Here the field is a real combobox whose
-  // `aria-activedescendant` names the row the selection is on, over a listbox of
-  // real options. Both attributes are bits-ui's, derived from the command's
-  // viewport node, which exists only because the vendored command-list.svelte
-  // renders a `Command.Viewport`; read the comment there before touching it. The
-  // ToC popup (PlanToc.svelte) is built on the same two primitives, so the plan's
-  // two heading surfaces narrate identically.
+  // menu, and the reason is accessibility rather than layout. Here the field is
+  // a real combobox whose `aria-activedescendant` names the row the selection is
+  // on, over a listbox of real options. Both attributes are bits-ui's, derived
+  // from the command's viewport node, which exists only because the vendored
+  // command-list.svelte renders a `Command.Viewport`; read the comment there
+  // before touching it.
   //
   // Where they diverge is deliberate and stays: this filter names each match's
   // enclosing heading ON the row, one row per match, where the ToC popup gathers

@@ -1,12 +1,7 @@
-// Thematic-break classification for the markdown plan view (EXC-862). The plan
-// renders as line-numbered markdown source (SourceView.svelte), so a horizontal
-// rule is just the row whose line IS the break: this module says which lines
-// those are, and tags them so CARET_OVERRIDES (coreStyles.ts) can draw the rule
-// over the characters. It is EXC-855's transform-in-place category — every
-// character stays in the DOM, so the row keeps its gutter number, its hover
-// comment affordance and its cursor reachability, and copy carries the real
-// `---`. The DOM tagging lives here rather than in the component so it is
-// unit-testable against a constructed fixture, mirroring codeBlocks.ts.
+// Thematic-break classification for the markdown plan view (EXC-862). A
+// horizontal rule is just the row whose line IS the break: this module says
+// which lines those are, and tags them so CARET_OVERRIDES (coreStyles.ts) can
+// draw the rule over the characters.
 //
 // The hard half is the NEGATIVE cases, and marked's own block lexer answers all
 // of them. `---` is spelled identically to a setext heading underline, a table
@@ -25,21 +20,14 @@
 // closer. Both are suppressed, and only when the document really opens on a
 // closed front-matter block — an unclosed leading `---` is a rule like any other.
 //
-// The fenced ranges are taken as a parameter for the same reason tableRanges takes
-// them: caret's own fence scan (codeBlocks.ts) toggles on EVERY line of three or
-// more backticks, which CommonMark does not, so on a plan quoting nested fences it
-// and marked disagree about which rows are code. marked is right, but the panel is
-// what the reader sees, and a rule drawn inside one would read as this pass
-// ignoring the fence. Deferring to the panel where they disagree costs a break
-// that marked would have drawn and keeps the two views of the row consistent.
+// The fenced ranges are taken as a parameter for the same reason tableRanges
+// takes them. Deferring to the panel where they disagree costs a break that
+// marked would have drawn and keeps the two views of the row consistent.
 //
 // A break nested inside a blockquote or a list item is deliberately not found:
 // those arrive as nested tokens whose `raw` has the container's markers stripped,
 // so their offsets no longer index the source. The row keeps its raw characters,
 // which is the bottom rung of the issue's ladder rather than a wrong render.
-//
-// Lines are indexed over the DISPLAY text, the same space codeBlockRanges and
-// tableRanges use, so what is judged is the line the reader actually sees.
 
 import { Lexer } from "marked";
 
@@ -106,11 +94,9 @@ export function thematicBreakLines(
 /**
  * Tags the source view's content rows so the rule CSS (CARET_OVERRIDES in
  * coreStyles.ts) can draw on them: `data-md-rule` on every
- * `[data-content] [data-line]` cell whose line is a thematic break. The library
- * owns these rows and repaints them, so this is re-run after every repaint (see
- * SourceView.svelte); it writes attributes only — never nodes — so it can never
- * re-trigger the childList observer that schedules it, and it clears rows that
- * are no longer breaks.
+ * `[data-content] [data-line]` cell whose line is a thematic break. Re-run
+ * after every repaint (see SourceView.svelte); clears rows that are no longer
+ * breaks.
  *
  * Descendant, not child: a row a scroll card has re-parented is no longer a
  * direct child of `[data-content]` (codeBlockScroll.ts), and four gutter rules

@@ -1,17 +1,13 @@
 // Turns the flat inline runs (inlineSpans.ts) into decorable DOM for the plan
 // view (EXC-867). shiki paints each row as a sequence of classless token spans
-// whose text concatenates to the line; this pass makes that sequence FINER until
-// no token straddles a run boundary, then tags each token with the run covering
-// it. Everything downstream — the emphasis ink, the pills, the checkbox and
-// blockquote decorations — is then one CSS rule against an attribute.
+// whose text concatenates to the line. Everything downstream — the emphasis
+// ink, the pills, the checkbox and blockquote decorations — is then one CSS
+// rule against an attribute.
 //
 // The refining itself is rowTokens.ts's splitTokens, which is shared with the
 // table pass and carries the split-only rule and its reasoning. What matters here
-// is that it only ever refines, so every boundary shiki drew survives and every
-// column tagTokenAt (fileRefTag.ts), tagLanguageToken and tagFenceToken
-// (codeBlocks.ts) look for is still a token boundary. The same module's
-// tokenChildren is how a row's tokens are reached, which is one level down for a
-// table row (EXC-864) and the row's own children for every other.
+// is that every column tagTokenAt (fileRefTag.ts), tagLanguageToken and
+// tagFenceToken (codeBlocks.ts) look for is still a token boundary.
 //
 // Pill grouping follows inlineSpans.ts's abutting-elements contract. A pill is
 // drawn per ELEMENT, not per run, so consecutive runs are grouped — but the
@@ -57,13 +53,10 @@
 // reference chip, so every token of that code group is marked and the sheet
 // rebinds the group's tint rather than capping the reference's end of it.
 //
-// Idempotency is a hard requirement, not a nicety: SourceView.svelte runs this
-// from a MutationObserver watching childList over the whole subtree, so a pass
-// that re-splits a settled row would loop forever. splitTokens owns that half — an
-// already-correct token has no cut strictly inside it and is left completely
-// untouched, the same way syncCodeBlockCards leaves a settled block alone.
-// Attribute writes are free — the observer does not watch attributes — so only node
-// splitting is conditional.
+// Idempotency is a hard requirement, not a nicety: splitTokens keeps this pass
+// idempotent — an already-correct token has no cut strictly inside it and is
+// left completely untouched, the same way syncCodeBlockCards leaves a settled
+// block alone.
 
 import type { FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 import type { ColumnRange, InlineSpan, InlineSpanMap } from "$lib/diffview/inlineSpans.ts";

@@ -354,6 +354,27 @@ stays green under any invocation.
   [`shadcn-rules.md`](shadcn-rules.md) for the compose-first norm and the bridge's
   component-side rules.
 
+## Keyboard conventions
+
+The plan's navigation surfaces — `PlanBreadcrumbs.svelte`, `PlanToc.svelte`, and the
+breadcrumb bar's filter panel — are fully keyboard-drivable, and they answer the same four
+rules. A new navigable surface adopts them rather than inventing its own.
+
+- **Every arrow has a vim twin**, `ArrowLeft` included. Implement the vim key by
+  re-dispatching the arrow the underlying primitive already handles, rather than
+  duplicating that primitive's logic.
+- **Escape means one step out, not "close"** — at every depth the surface has. Filter back
+  to hierarchy, hierarchy shut, then out of the surface itself, which stays on screen with
+  nothing in it focused.
+- **Tab and Shift+Tab walk whichever list is open** — a menu, a submenu, or a filter panel
+  — and wrap at its ends.
+- **Holding a key traverses on caret's cadence, not the OS's.** `ui/src/lib/keyRepeat.ts`
+  owns the `keydown → delay → run → keyup` lifecycle, because the OS's repeat delay and
+  rate are per-user settings and are not portably simulable in a test. What every surface
+  owes it: **bail on `e.repeat`**, on the real keydown, before any re-dispatch. A
+  re-dispatched arrow does not carry `repeat`, so a bail placed after the translation sees
+  a held key as a first press and the list double-steps.
+
 ## Motion principles
 
 caret runs two motion tracks, one system by intent. The chrome's own motion is restraint

@@ -9,6 +9,10 @@
       "description": "Read when the diff composes UI from shadcn-svelte components — the compose-first norm, the token bridge, the icon swap, and what stays custom."
     },
     {
+      "path": "../doc/agents/plan-render-rules.md",
+      "description": "Read when the diff touches ui/src/lib/diffview/ or the SourceView / DiffPlanView plan surface — the layer pipeline, transform-in-place, line parity, the token partition, and the idempotency the MutationObservers require."
+    },
+    {
       "path": "../doc/agents/icon-rules.md",
       "description": "Read only when the diff adds or works with a vendored icon."
     },
