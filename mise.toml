@@ -27,11 +27,12 @@ biome = "2.5"
 # rumdl is held at the release mise.lock resolved, because caret ships that same release
 # to end users — so moving it is a deliberate, verified bump, never a routine `mise up`
 # sweep. Why the two must agree, and what else moves with them: doc/agents/rumdl-rules.md.
-rumdl      = "latest" # aqua:rvben/rumdl (Markdown format + lint; mise.lock pins the version)
-yamlfmt    = "0"      # aqua:google/yamlfmt
-taplo      = "0"      # aqua:tamasfe/taplo
-shellcheck = "0"      # aqua:koalaman/shellcheck
-shfmt      = "3.13"   # aqua:mvdan/sh
+rumdl       = "latest" # aqua:rvben/rumdl (Markdown format + lint; mise.lock pins the version)
+yamlfmt     = "0"      # aqua:google/yamlfmt
+taplo       = "0"      # aqua:tamasfe/taplo
+shellcheck  = "0"      # aqua:koalaman/shellcheck
+shfmt       = "3.13"   # aqua:mvdan/sh
+"npm:jscpd" = "5"      # copy-paste detector; npm is the only distribution
 
 # (Re)register git hooks whenever tools are installed or updated.
 [hooks]

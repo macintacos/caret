@@ -167,6 +167,10 @@ checksum = "sha256:402b3c9c5f9a5b3cb8ab6229d0f6d169b122fc3db1e39fc2fa53421a1aa24
 url = "https://github.com/jdx/hk/releases/download/v1.55.0/hk-x86_64-pc-windows-msvc.zip"
 url_api = "https://api.github.com/repos/jdx/hk/releases/assets/510729674"
 
+[[tools."npm:jscpd"]]
+version = "5.1.1"
+backend = "npm:jscpd"
+
 [[tools.pkl]]
 version = "0.32.1"
 backend = "aqua:apple/pkl"
