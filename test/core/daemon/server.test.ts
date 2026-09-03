@@ -101,6 +101,18 @@ function shutdownSignal(): {
   };
 }
 
+// Resolves when the daemon's long-poll actually parks on the decision pipe. The
+// registration signal a fixed sleep can only approximate — and the sleep spends the
+// heartbeat window it is trying to win (EXC-468). One review per booted daemon here,
+// so the id the daemon reports is not worth carrying.
+function decisionParked(): { onDecisionAwaited: () => void; parked: Promise<void> } {
+  let fire!: () => void;
+  const parked = new Promise<void>((r) => {
+    fire = r;
+  });
+  return { onDecisionAwaited: () => fire(), parked };
+}
+
 // A controllable stand-in for the daemon's idle timer: captures the scheduled
 // callback so a test fires it on demand (`fire()`) instead of racing a real
 // `idleMs` delay. The idle timer is armed at boot with no request in flight, so
@@ -545,7 +557,8 @@ test("a present UI tab keeps the daemon alive past idle; /api/ui/gone lets it sh
 });
 
 test("resolve's 200 flushes BEFORE the long-poll resolves (one-tick defer)", async () => {
-  await boot();
+  const park = decisionParked();
+  await boot({ onDecisionAwaited: park.onDecisionAwaited });
   const { id } = await newReview();
 
   const events: string[] = [];
@@ -554,7 +567,7 @@ test("resolve's 200 flushes BEFORE the long-poll resolves (one-tick defer)", asy
     events.push("longpoll");
     return d;
   });
-  await Bun.sleep(20); // let the long-poll register
+  await park.parked;
 
   const resolve = fetch(`${base}/api/reviews/${id}/resolve`, {
     method: "POST",
@@ -1544,12 +1557,15 @@ test("resolving an already-resolved review is rejected (double-resolve guard)", 
 });
 
 test("a revision re-pends the review and clears the prior decision (no stale re-serve)", async () => {
-  await boot({ heartbeatMs: 50 });
+  const park = decisionParked();
+  // Long enough that only the resolve round-trip runs inside the poll's window; short
+  // enough that the closing poll's real 204 stays cheap.
+  await boot({ heartbeatMs: 200, onDecisionAwaited: park.onDecisionAwaited });
   const { id } = await newReview();
   // The driver/hook is already long-polling when the browser requests changes,
   // so the deny is delivered through the decision pipe (which drains it).
   const poll = fetch(`${base}/api/reviews/${id}/decision`);
-  await Bun.sleep(10); // let the long-poll register before the resolve
+  await park.parked;
   await resolve(id, { behavior: "deny", feedback: "redo" });
   expect(await (await poll).json()).toMatchObject({ behavior: "deny" });
   // Agent posts a revision in the same session → appends v2, re-pends to pending.
