@@ -30,13 +30,16 @@
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import {
+  awaitTagged,
   cellWidth,
+  copyRows,
   firstGlyphX,
   gridCounts,
   lineOf,
-  planSurface,
+  openPlan,
   revealGutterPlus,
   settledMutations,
+  taggedRowTexts,
   taggedRuns,
 } from "@test/e2e/support/source-view.ts";
 
@@ -98,20 +101,9 @@ const EMPHASIS_LINE = "*emphasis opening the line, which is not a marker*";
 const BREAK = "---";
 const FENCED_BULLET = "- fenced and literal";
 
-/** Seed `plan` and open it. */
-async function open(
-  page: import("@playwright/test").Page,
-  daemon: { seed: (input: { plan: string }) => Promise<string> },
-  plan: string,
-): Promise<void> {
-  await daemon.seed({ plan });
-  await page.goto("/");
-  await planSurface(page);
-}
-
 test("each marker is tagged with its kind, over its own characters", async ({ page, daemon }) => {
-  await open(page, daemon, LIST_PLAN);
-  await expect.poll(async () => (await taggedRuns(page, "data-md-list")).length).toBeGreaterThan(0);
+  await openPlan(page, daemon, LIST_PLAN);
+  await awaitTagged(page, "data-md-list");
   expect(await taggedRuns(page, "data-md-list")).toEqual([
     { row: BULLET, value: "bullet", text: "-" },
     { row: "  - A second-level item carrying `inline code`", value: "bullet", text: "-" },
@@ -143,10 +135,10 @@ test("each marker is tagged with its kind, over its own characters", async ({ pa
 });
 
 test("the bullet is painted over the dash, which is still in the row", async ({ page, daemon }) => {
-  await open(page, daemon, LIST_PLAN);
+  await openPlan(page, daemon, LIST_PLAN);
   // The decoration passes run from a MutationObserver a frame behind the rows, so
   // every read of a marker waits for one to exist rather than racing the paint.
-  await expect.poll(async () => (await taggedRuns(page, "data-md-list")).length).toBeGreaterThan(0);
+  await awaitTagged(page, "data-md-list");
   const drawn = await page.evaluate(
     (ln: number) => {
       const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
@@ -190,8 +182,8 @@ test("an ordered marker takes the ink and a task marker takes no room", async ({
   page,
   daemon,
 }) => {
-  await open(page, daemon, LIST_PLAN);
-  await expect.poll(async () => (await taggedRuns(page, "data-md-list")).length).toBeGreaterThan(0);
+  await openPlan(page, daemon, LIST_PLAN);
+  await awaitTagged(page, "data-md-list");
   const kinds = await page.evaluate(
     (lines) => {
       const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
@@ -234,48 +226,14 @@ test("copying a marked row yields the source markers, not the glyph", async ({
   context,
   daemon,
 }) => {
-  await open(page, daemon, LIST_PLAN);
+  await openPlan(page, daemon, LIST_PLAN);
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-  await expect.poll(async () => (await taggedRuns(page, "data-md-list")).length).toBeGreaterThan(0);
-  const copied = await page.evaluate(
-    async (lines) => {
-      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot as
-        | (ShadowRoot & { getSelection?: () => Selection | null })
-        | null;
-      const read = async (ln: number) => {
-        const row = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])].find(
-          (r) => r.getAttribute("data-line") === String(ln),
-        );
-        if (sh == null || row == null) return { selection: "", clipboard: "<no row>" };
-        const range = document.createRange();
-        range.selectNodeContents(row);
-        const sel = sh.getSelection?.() ?? getSelection();
-        sel?.removeAllRanges();
-        sel?.addRange(range);
-        // execCommand rather than a Ctrl+C keypress, because it drives the copy from
-        // inside the page with no dependency on which element the harness left
-        // focused — and it runs the SAME serialization the keypress would, which is
-        // the whole question. Selection.toString() is NOT that serialization: it
-        // takes a different path through Blink, one that cannot emit generated
-        // content, so reading the real clipboard is what makes this mean anything.
-        document.execCommand("copy");
-        return {
-          selection: sel?.toString() ?? "",
-          clipboard: await navigator.clipboard.readText(),
-        };
-      };
-      return {
-        bullet: await read(lines.bullet),
-        deep: await read(lines.deep),
-        ordered: await read(lines.ordered),
-      };
-    },
-    {
-      bullet: await lineOf(page, BULLET),
-      deep: await lineOf(page, BULLET_DEEP),
-      ordered: await lineOf(page, ORDERED),
-    },
-  );
+  await awaitTagged(page, "data-md-list");
+  const copied = await copyRows(page, {
+    bullet: await lineOf(page, BULLET),
+    deep: await lineOf(page, BULLET_DEEP),
+    ordered: await lineOf(page, ORDERED),
+  });
   expect(copied.bullet.clipboard).toBe(BULLET);
   expect(copied.bullet.selection).toBe(copied.bullet.clipboard);
   // The indentation is the nesting, so it has to survive the copy verbatim too.
@@ -287,8 +245,8 @@ test("the monospace grid does not move on a marked row or its neighbours", async
   page,
   daemon,
 }) => {
-  await open(page, daemon, LIST_PLAN);
-  await expect.poll(async () => (await taggedRuns(page, "data-md-list")).length).toBeGreaterThan(0);
+  await openPlan(page, daemon, LIST_PLAN);
+  await awaitTagged(page, "data-md-list");
   const [above, bullet, deep, ordered, below] = await Promise.all(
     [PROSE_ABOVE, BULLET, BULLET_DEEP, ORDERED, PROSE_BELOW].map(async (text) =>
       firstGlyphX(page, await lineOf(page, text)),
@@ -305,8 +263,8 @@ test("the monospace grid does not move on a marked row or its neighbours", async
 });
 
 test("every row still has exactly one gutter number", async ({ page, daemon }) => {
-  await open(page, daemon, LIST_PLAN);
-  await expect.poll(async () => (await taggedRuns(page, "data-md-list")).length).toBeGreaterThan(0);
+  await openPlan(page, daemon, LIST_PLAN);
+  await awaitTagged(page, "data-md-list");
   const counts = await gridCounts(page);
   expect(counts.numbers).toBe(counts.rows);
   expect(counts.rows).toBe(counts.highestLine);
@@ -318,8 +276,8 @@ test("a marked row still opens the comment composer from its gutter", async ({ p
   // height, so the risk is low — but the sibling image pass asserted the same
   // thing on its affected row, and a criterion nobody checks is a criterion nobody
   // notices breaking.
-  await open(page, daemon, LIST_PLAN);
-  await expect.poll(async () => (await taggedRuns(page, "data-md-list")).length).toBeGreaterThan(0);
+  await openPlan(page, daemon, LIST_PLAN);
+  await awaitTagged(page, "data-md-list");
   const plus = await revealGutterPlus(page, await lineOf(page, BULLET));
   await plus.click();
   await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
@@ -327,8 +285,8 @@ test("a marked row still opens the comment composer from its gutter", async ({ p
 });
 
 test("nothing that merely looks like a marker draws one", async ({ page, daemon }) => {
-  await open(page, daemon, LIST_PLAN);
-  await expect.poll(async () => (await taggedRuns(page, "data-md-list")).length).toBeGreaterThan(0);
+  await openPlan(page, daemon, LIST_PLAN);
+  await awaitTagged(page, "data-md-list");
   const marked = new Set((await taggedRuns(page, "data-md-list")).map((m) => m.row));
   // A thematic break belongs to EXC-862 and takes no marker here; emphasis opening
   // a line is not a marker at all; and a fenced list stays literal, since links.ts
@@ -352,7 +310,7 @@ test("the repaint settles over a quoted list", async ({ page, daemon }) => {
   // two seconds when EXC-870 hit that with an image. This decoration appends nothing,
   // but it does put rows the pass never visited into its working set, so the claim is
   // worth holding rather than assuming.
-  await open(
+  await openPlan(
     page,
     daemon,
     `# Settle Plan
@@ -366,17 +324,7 @@ Trailing prose.
 `,
   );
   const mutations = await settledMutations(page);
-  const settled = await page.evaluate(() => {
-    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-    const rows = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])];
-    return {
-      marked: rows.filter((r) => r.querySelector("[data-md-list]")).map((r) => r.textContent ?? ""),
-    };
-  });
+  const marked = await taggedRowTexts(page, "data-md-list");
   expect(mutations).toBe(0);
-  expect(settled.marked).toEqual([
-    "> - a quoted bullet",
-    "> 1. a quoted number",
-    "- a plain bullet",
-  ]);
+  expect(marked).toEqual(["> - a quoted bullet", "> 1. a quoted number", "- a plain bullet"]);
 });

@@ -48,9 +48,11 @@ import {
   cellWidth,
   gridCounts,
   lineOf,
+  openPlan,
   planSurface,
   revealGutterPlus,
   rowHeights,
+  selectGutterRange,
   settledMutations,
   taggedRuns,
 } from "@test/e2e/support/source-view.ts";
@@ -181,11 +183,18 @@ ${WRAP_PROSE}
 /** The three tables on the page, by their header row's text. */
 const TABLES = [A_HEAD, B_HEAD, C_HEAD];
 
-/** Seed `plan` and open it. */
-async function open(page: Page, daemon: Daemon, plan: string): Promise<void> {
-  await daemon.seed({ plan });
+/** Make a throwaway project carrying `src/queue.ts`, seed TABLE_PLAN against it
+ * (so its file reference in B_WRAPPED resolves), and open it. Callers wrap the
+ * rest of the test in `try { … } finally { await proj.cleanup(); }`. */
+async function openTableProject(
+  page: Page,
+  daemon: Daemon,
+): Promise<Awaited<ReturnType<typeof makeProject>>> {
+  const proj = await makeProject({ "src/queue.ts": "export const queue = [];\n" });
+  await daemon.seed({ cwd: proj.dir, plan: TABLE_PLAN });
   await page.goto("/");
   await planSurface(page);
+  return proj;
 }
 
 /** Resolve once all three tables have been carded. The pass runs from a
@@ -358,34 +367,6 @@ async function placeCursor(page: Page, line: number): Promise<void> {
   await expect(cursor(page)).toHaveAttribute("data-line", String(line));
 }
 
-/** Viewport-px centre of a 1-based line's number cell in the gutter column — the
- * library's own `data-line-index` / `data-line-number-content` pairing, resolved the same
- * way `lineCenterY` resolves it. A table's cells sit inside the gutter card, which is
- * `display: contents`, so the pairing reaches them unchanged. */
-async function gutterCellCenter(page: Page, line: number): Promise<{ x: number; y: number }> {
-  const pt = await page.evaluate((ln) => {
-    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-    const span = [...(sh?.querySelectorAll("[data-line-number-content]") ?? [])].find(
-      (s) => (s.parentElement as HTMLElement)?.dataset.lineIndex === String(ln - 1),
-    );
-    const r = (span?.parentElement as HTMLElement)?.getBoundingClientRect();
-    return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null;
-  }, line);
-  if (pt === null) throw new Error(`gutter cell for line ${line} not found`);
-  return pt;
-}
-
-/** Drag down the line-number column from `startLine` to `endLine` — the library's
- * line-selection gesture. */
-async function selectGutterRange(page: Page, startLine: number, endLine: number): Promise<void> {
-  const start = await gutterCellCenter(page, startLine);
-  const end = await gutterCellCenter(page, endLine);
-  await page.mouse.move(start.x, start.y);
-  await page.mouse.down();
-  await page.mouse.move(end.x, end.y, { steps: 12 });
-  await page.mouse.up();
-}
-
 /** Which lines took the amber band, per column. The two lists agreeing is the claim:
  * a table's rows live in a content card and its numbers in a gutter card, so a band that
  * reached only one of them would mean the two columns had diverged. */
@@ -411,7 +392,7 @@ test("a table's columns line up down its length, ragged source and all", async (
   // so cells that share a left edge on screen did so because the grid put them there.
   expect(new Set(A_ROWS.map((row) => row.indexOf("|", 1))).size).toBeGreaterThan(1);
 
-  await open(page, daemon, TABLE_PLAN);
+  await openPlan(page, daemon, TABLE_PLAN);
   await carded(page);
 
   const rows = await Promise.all(A_ROWS.map((text) => cellBoxes(page, text)));
@@ -457,7 +438,7 @@ test("each column wears the alignment its delimiter row declared", async ({ page
   // what stops this being a restatement of coreStyles.test.ts's text scan: A's tracks are
   // max-content, every body cell here is shorter than its track, and where the glyphs sit
   // in that slack is the alignment.
-  await open(page, daemon, TABLE_PLAN);
+  await openPlan(page, daemon, TABLE_PLAN);
   await carded(page);
 
   const ch = await cellWidth(page, PROSE_ABOVE);
@@ -498,7 +479,7 @@ test("a wrapped cell's continuation lines follow its column too", async ({ page,
   // wrapped right-aligned cell would read as one aligned line above a stack of ragged
   // ones. B's Note column is right-aligned and its first body cell wraps, which is the
   // only place on the page where the two meet.
-  await open(page, daemon, TABLE_PLAN);
+  await openPlan(page, daemon, TABLE_PLAN);
   await carded(page);
 
   const ch = await cellWidth(page, PROSE_ABOVE);
@@ -525,7 +506,7 @@ test("a wrapped cell's continuation lines follow its column too", async ({ page,
 });
 
 test("no pipe glyph paints, and the rules stand where the pipes did", async ({ page, daemon }) => {
-  await open(page, daemon, TABLE_PLAN);
+  await openPlan(page, daemon, TABLE_PLAN);
   await carded(page);
 
   const pipes = await page.evaluate(() => {
@@ -737,7 +718,7 @@ test("the delimiter row is a dot and a hairline, not a numbered line", async ({ 
   // several times shorter than itself, so where it ends up is a layout answer. And the
   // dot has to land ON the numbers above and below rather than merely near them — which
   // is a claim about two boxes the cascade sizes, not about a declaration.
-  await open(page, daemon, LINK_PADDED);
+  await openPlan(page, daemon, LINK_PADDED);
   await carded(page, 1);
   const read = () =>
     page.evaluate(() => {
@@ -875,7 +856,7 @@ test("a column is as wide as what it shows, not as wide as the source", async ({
   // column that holds a link is padded for the link's SOURCE — and the source is what
   // nobody can see once it collapses. Left alone, the whole column stays as wide as a
   // URL that renders as three words.
-  await open(page, daemon, LINK_PADDED);
+  await openPlan(page, daemon, LINK_PADDED);
   await carded(page, 1);
   const geom = await page.evaluate(() => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
@@ -914,7 +895,7 @@ test("every row still has exactly one gutter number, with three tables on the pa
   // rows collapse into ONE direct child of the content column, so without the gutter
   // mirror the two columns' child counts diverge and @pierre/diffs' renderSelection
   // throws — which kills drag selection for the WHOLE view, not just the table.
-  await open(page, daemon, TABLE_PLAN);
+  await openPlan(page, daemon, TABLE_PLAN);
   await carded(page);
   const counts = await gridCounts(page);
   expect(counts.numbers).toBe(counts.rows);
@@ -926,11 +907,8 @@ test("inline decoration survives inside a cell", async ({ page, daemon }) => {
   // inline pass and the file-reference tagger both have to reach through the cells to
   // find the columns they mark. A regression here is silent — the row still reads
   // correctly, it just stops being decorated.
-  const proj = await makeProject({ "src/queue.ts": "export const queue = [];\n" });
+  const proj = await openTableProject(page, daemon);
   try {
-    await daemon.seed({ cwd: proj.dir, plan: TABLE_PLAN });
-    await page.goto("/");
-    await planSurface(page);
     await carded(page);
 
     await expect.poll(() => fileRefCount(page)).toBe(1);
@@ -995,7 +973,7 @@ test("a malformed table renders as plain source rows", async ({ page, daemon }) 
   // table" cannot be armed end to end and stays pinned in tables.test.ts. What rumdl
   // does not repair is a DELIMITER row short of the header: it pads it with an EMPTY
   // trailing cell, and an empty cell is not a delimiter, so the whole table is voided.
-  await open(page, daemon, TABLE_PLAN);
+  await openPlan(page, daemon, TABLE_PLAN);
   await carded(page);
 
   for (const text of [MALFORMED_HEAD, MALFORMED_RULE, MALFORMED_ROW]) {
@@ -1024,7 +1002,7 @@ test("the repaint settles over a plan of tables", async ({ page, daemon }) => {
   // and it runs from the MutationObserver that watches for exactly that. A pass whose
   // settle check disagreed with what it built would rebuild every frame, the runaway
   // EXC-870 measured at ~10,800 mutations in two seconds.
-  await open(page, daemon, TABLE_PLAN);
+  await openPlan(page, daemon, TABLE_PLAN);
   // Two barriers before the claim, because `open` resolves on the scroll container
   // being visible and nothing more. `carded` is the one that proves the pass has
   // actually run; the discarded settle is the one that proves it has finished
@@ -1056,7 +1034,7 @@ test("a wide table outgrows the reading measure without a scrollbar", async ({ p
   // fenced-code card: a table is prose-adjacent data whose whole value is being
   // comparable at a glance, so it grows until every column is visible rather than
   // hiding the last ones behind a scroll box.
-  await open(page, daemon, TABLE_PLAN);
+  await openPlan(page, daemon, TABLE_PLAN);
   await carded(page);
 
   const readMax = Number.parseFloat(await shadowToken(page, "--caret-read-max"));
@@ -1088,7 +1066,7 @@ test("a wrapped cell hangs its continuation lines under its own first line", asy
   // hanging indent is invisible by construction on flush-right lines, since they share
   // their trailing edge and not their leading one. This needs a column that hangs left,
   // and a cell that opens with a pipe — the two conditions the sheet keys on.
-  await open(page, daemon, WRAP_LEFT);
+  await openPlan(page, daemon, WRAP_LEFT);
   await carded(page, 1);
 
   const ch = await cellWidth(page, WRAP_PROSE);
@@ -1166,7 +1144,7 @@ test("a cell past the cap wraps inside its own column", async ({ page, daemon })
   // The per-column half of the sizing policy: max-content tracks plus a max-width on the
   // CELL, so a genuinely prose-heavy cell hits the cap and wraps while the columns
   // beside it keep their natural widths and the table does not grow.
-  await open(page, daemon, TABLE_PLAN);
+  await openPlan(page, daemon, TABLE_PLAN);
   await carded(page);
 
   const ch = await cellWidth(page, PROSE_ABOVE);
@@ -1190,7 +1168,7 @@ test("a cell past the cap wraps inside its own column", async ({ page, daemon })
 });
 
 test("vim motion and `/` search reach every table line", async ({ page, daemon }) => {
-  await open(page, daemon, TABLE_PLAN);
+  await openPlan(page, daemon, TABLE_PLAN);
   await readyForKeys(page);
 
   const { highestLine } = await gridCounts(page);
@@ -1245,7 +1223,7 @@ test("vim motion and `/` search reach every table line", async ({ page, daemon }
 });
 
 test("V + c opens the composer over a range spanning table rows", async ({ page, daemon }) => {
-  await open(page, daemon, TABLE_PLAN);
+  await openPlan(page, daemon, TABLE_PLAN);
   await readyForKeys(page);
 
   const head = await lineOf(page, A_HEAD);
@@ -1263,7 +1241,7 @@ test("a comment on an interior table row lands between it and the next", async (
   page,
   daemon,
 }) => {
-  await open(page, daemon, TABLE_PLAN);
+  await openPlan(page, daemon, TABLE_PLAN);
   await carded(page);
 
   const before = await cellBoxes(page, A_HEAD);
@@ -1301,7 +1279,7 @@ test("a drag bands a table's rows in both columns, inside it and into it", async
   const pageErrors: string[] = [];
   page.on("pageerror", (err) => pageErrors.push(err.message));
 
-  await open(page, daemon, TABLE_PLAN);
+  await openPlan(page, daemon, TABLE_PLAN);
   await carded(page);
 
   const first = await lineOf(page, A_ROW1);
@@ -1332,11 +1310,8 @@ test("a `/` match inside a cell paints, wrapped and decorated alike", async ({ p
   // cell boundary, or a row whose text nodes stopped being walkable, would paint
   // nothing. The claim is per MATCH: which cell each painted range landed in, and that
   // it produced real boxes inside that cell's own box.
-  const proj = await makeProject({ "src/queue.ts": "export const queue = [];\n" });
+  const proj = await openTableProject(page, daemon);
   try {
-    await daemon.seed({ cwd: proj.dir, plan: TABLE_PLAN });
-    await page.goto("/");
-    await planSurface(page);
     await readyForKeys(page);
     await expect.poll(() => fileRefCount(page)).toBe(1);
 
@@ -1406,7 +1381,7 @@ test("copying a selection across a table yields the source markdown, pipes and a
   // break it: a cell is a grid item, and Blink's plain-text serialization emits line
   // breaks around blockified boxes. A selection that came back one cell per line would
   // make a copied plan unusable as markdown.
-  await open(page, daemon, TABLE_PLAN);
+  await openPlan(page, daemon, TABLE_PLAN);
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await carded(page);
 

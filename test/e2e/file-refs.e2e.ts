@@ -32,7 +32,7 @@
 
 import { fileRefCount, makeProject, settleDrawer } from "@test/e2e/support/file-refs.ts";
 import { expect, motionToken, test, waitForTwoPollTicks } from "@test/e2e/support/fixtures.ts";
-import { planSurface } from "@test/e2e/support/source-view.ts";
+import { expectNoComposerOpens, planSurface } from "@test/e2e/support/source-view.ts";
 import { OVERSCAN_ROWS } from "@ui/src/lib/previewWindow.ts";
 import { MAX_EXCERPT_BYTES } from "@/plan/excerpt.ts";
 
@@ -1755,12 +1755,8 @@ test("clicking a reference does not also open the line's comment composer", asyn
     // The preview opened…
     await expect(page.locator("[data-file-preview]")).toBeVisible();
 
-    // …and the line it sits on did NOT also open a comment composer. Give any
-    // (incorrect) composer a beat to appear, then assert it never did.
-    const composer = page.getByRole("dialog", { name: "Add a comment" });
-    const t0 = await page.evaluate(() => performance.now());
-    await page.waitForFunction((t) => performance.now() > t + 300, t0);
-    await expect(composer).toHaveCount(0);
+    // …and the line it sits on did NOT also open a comment composer.
+    await expectNoComposerOpens(page);
   } finally {
     await proj.cleanup();
   }

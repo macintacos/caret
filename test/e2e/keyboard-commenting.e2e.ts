@@ -13,6 +13,7 @@
 import type { Locator, Page } from "@playwright/test";
 
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { expectSingleAnnotation } from "@test/e2e/support/review-state.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
 // Tall enough that the cursor has room to move, with three headings so the plan
@@ -97,11 +98,7 @@ test("c opens the composer on the cursor line and ⌘Enter submits a line commen
   await page.keyboard.press("ControlOrMeta+Enter");
 
   await expect(composer).toHaveCount(0);
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
-    .toBe(1);
-  const ann = (await daemon.getReview(id)).body?.annotations?.[0];
-  expect(ann).toMatchObject({
+  await expectSingleAnnotation(daemon, id, {
     startLine: line,
     endLine: line,
     comment: "Comment from the keyboard.",
@@ -141,11 +138,7 @@ test("V + j selects a line range that c comments and ⌘Enter submits", async ({
   await page.keyboard.press("ControlOrMeta+Enter");
 
   await expect(composer).toHaveCount(0);
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
-    .toBe(1);
-  const ann = (await daemon.getReview(id)).body?.annotations?.[0];
-  expect(ann).toMatchObject({ startLine: 1, endLine: 3, comment: "Range note." });
+  await expectSingleAnnotation(daemon, id, { startLine: 1, endLine: 3, comment: "Range note." });
 });
 
 test("Esc in visual mode clears the selection without commenting and keeps the cursor", async ({

@@ -14,7 +14,11 @@
 // navigation: the test owns the seam the daemon serves, not the wider web.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
-import { planSurface, revealGutterPlus } from "@test/e2e/support/source-view.ts";
+import {
+  expectNoComposerOpens,
+  planSurface,
+  revealGutterPlus,
+} from "@test/e2e/support/source-view.ts";
 
 const SAFE_URL = "https://docs.example.test/widget-cache";
 // An http link (display collapses to its label), a plain-prose row with no link
@@ -151,12 +155,8 @@ test("clicking a link token does not also open the line's comment composer", asy
     .poll(async () => (await openCalls(page))[0])
     .toEqual([SAFE_URL, "_blank", "noopener,noreferrer"]);
 
-  // …and the line it sits on did NOT also open a comment composer. Give any
-  // (incorrect) composer a beat to appear, then assert it never did.
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
-  const t0 = await page.evaluate(() => performance.now());
-  await page.waitForFunction((t) => performance.now() > t + 300, t0);
-  await expect(composer).toHaveCount(0);
+  // …and the line it sits on did NOT also open a comment composer.
+  await expectNoComposerOpens(page);
 });
 
 /** The full href text of the caret hover tooltip mounted in the diff shadow

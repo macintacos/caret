@@ -17,6 +17,7 @@
 
 import { alerts, discardConfirm, inlineRows, unsentRows } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { awaitDenied, submitForRevision } from "@test/e2e/support/review-state.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
 const FEEDBACK = "Please tighten the verification section.";
@@ -53,8 +54,7 @@ test("dialog opens, Escape closes, Cmd/Ctrl+Enter submits a rejection with feedb
   await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
 
   // API: rejected, and the decision carries the feedback text.
-  await expect.poll(async () => (await daemon.getReview(id)).body?.decision?.behavior).toBe("deny");
-  const review = (await daemon.getReview(id)).body;
+  const review = await awaitDenied(daemon, id);
   expect(review?.status).toBe("rejected");
   expect(review?.decision?.feedback).toContain(FEEDBACK);
 });
@@ -84,15 +84,11 @@ test("a line-anchored annotation reaches Decision.feedback as a line reference p
   // disclosure but still in the DOM, so its text is readable without expanding.)
   await expect(dialog.locator(".preview pre")).toContainText("Lines 7-8:");
   await expect(dialog.locator(".preview pre")).toContainText("The cache layer … full cold cost.");
-  await dialog.getByRole("button", { name: "Send for revision" }).click();
-
-  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
 
   // The new format reached Decision.feedback: a line reference AND an
   // abbreviated quote (first/last few words around an ellipsis), so the agent
   // can locate the feedback by content without the full selection's token cost.
-  await expect.poll(async () => (await daemon.getReview(id)).body?.decision?.behavior).toBe("deny");
-  const feedback = (await daemon.getReview(id)).body?.decision?.feedback ?? "";
+  const feedback = await submitForRevision(page, dialog, daemon, id);
   expect(feedback).toContain("Lines 7-8:");
   expect(feedback).toContain("> The cache layer … full cold cost.");
   expect(feedback).toContain("explain the cold cost");
@@ -130,11 +126,7 @@ test("a scratch's Save shows without expanding the row and graduates it into the
   // quotes it (the deny button enables with it), and it reaches Decision.feedback.
   await save.click();
   await expect(dialog.locator(".preview pre")).toContainText("a half-typed thought");
-  await dialog.getByRole("button", { name: "Send for revision" }).click();
-
-  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
-  await expect.poll(async () => (await daemon.getReview(id)).body?.decision?.behavior).toBe("deny");
-  const feedback = (await daemon.getReview(id)).body?.decision?.feedback ?? "";
+  const feedback = await submitForRevision(page, dialog, daemon, id);
   expect(feedback).toContain("a half-typed thought");
 });
 
@@ -288,5 +280,5 @@ test("submitting confirms the outcome, and the waiting room arrives behind it", 
 
   await expect(alerts(page)).toContainText("Changes requested");
   await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
-  await expect.poll(async () => (await daemon.getReview(id)).body?.decision?.behavior).toBe("deny");
+  await awaitDenied(daemon, id);
 });

@@ -17,6 +17,7 @@ import type { Locator, Page } from "@playwright/test";
 import { discardConfirm, unsentRows } from "@test/e2e/support/chrome.ts";
 import { makeProject } from "@test/e2e/support/file-refs.ts";
 import {
+  type Daemon,
   expect,
   motionToken,
   test,
@@ -24,8 +25,17 @@ import {
   waitPastSafeModeGrace,
 } from "@test/e2e/support/fixtures.ts";
 import {
+  awaitAnnotationComment,
+  awaitAnnotationCount,
+  awaitScratchCount,
+  expectSingleAnnotation,
+  submitForRevision,
+} from "@test/e2e/support/review-state.ts";
+import {
+  expectNoComposerOpens,
   firstGlyphX,
   gridCounts,
+  gutterCellCenter,
   jumpToHeading,
   lineCenterY,
   PLAN_SURFACE,
@@ -33,18 +43,25 @@ import {
   revealGutterPlus,
   rowHeights,
   SEAM_STRIP,
+  selectGutterRange,
   settledMutations,
 } from "@test/e2e/support/source-view.ts";
 
 // A plan tall enough to scroll the source view past one viewport.
 const TALL_PLAN = `# Tall Plan\n\n${Array.from({ length: 120 }, (_, i) => `Line ${i + 1} of the plan body, long enough to overflow the viewport.`).join("\n\n")}\n`;
 
-test("scroll position survives the 2-second poll tick", async ({ daemon, page }) => {
+/** Seed TALL_PLAN and open it, waiting for its first body line and returning
+ * the plan surface. */
+async function openTallPlan(page: Page, daemon: Daemon): Promise<Locator> {
   await daemon.seed({ plan: TALL_PLAN });
   await page.goto("/");
-
   const view = await planSurface(page);
   await expect(page.getByText("Line 1 of the plan body")).toBeVisible();
+  return view;
+}
+
+test("scroll position survives the 2-second poll tick", async ({ daemon, page }) => {
+  const view = await openTallPlan(page, daemon);
 
   await view.evaluate((el) => {
     el.scrollTop = 400;
@@ -113,32 +130,92 @@ function composerInput(composer: Locator): Locator {
   return composer.getByRole("textbox", { name: "Comment" });
 }
 
-/** Viewport-px centre of a 1-based line's number cell in the gutter column. */
-async function gutterCellCenter(page: Page, line: number): Promise<{ x: number; y: number }> {
-  const pt = await page.evaluate((ln) => {
-    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-    const span = Array.from(sh?.querySelectorAll("[data-line-number-content]") ?? []).find(
-      (s) => (s.parentElement as HTMLElement)?.dataset.lineIndex === String(ln - 1),
-    );
-    const r = (span?.parentElement as HTMLElement)?.getBoundingClientRect();
-    return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null;
-  }, line);
-  if (!pt) throw new Error(`gutter cell for line ${line} not found`);
-  return pt;
+/** Click the gutter `+` a range selection revealed, and return the composer it
+ * opens once visible. */
+async function openComposerFromSelection(page: Page): Promise<Locator> {
+  const plus = page.locator(".diffview [data-utility-button]");
+  await expect(plus).toBeVisible();
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+  return composer;
 }
 
-/**
- * Select a line span by dragging down the line-number column from `startLine` to
- * `endLine` (the library's line-selection gesture). A stepped real-mouse drag
- * grows the selection row by row; the gutter `+` then reports that range.
- */
-async function selectGutterRange(page: Page, startLine: number, endLine: number): Promise<void> {
-  const start = await gutterCellCenter(page, startLine);
-  const end = await gutterCellCenter(page, endLine);
-  await page.mouse.move(start.x, start.y);
-  await page.mouse.down();
-  await page.mouse.move(end.x, end.y, { steps: 12 });
-  await page.mouse.up();
+/** goto + planSurface + the default fixture plan's marker text — split out from
+ * `openDefaultPlan` for the one caller that must seed and put a draft before
+ * `goto`. */
+async function gotoDefaultPlan(page: Page): Promise<void> {
+  await page.goto("/");
+  await planSurface(page);
+  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+}
+
+/** Seed the default fixture plan and open it, waiting for its own text. */
+async function openDefaultPlan(page: Page, daemon: Daemon): Promise<string> {
+  const id = await daemon.seed();
+  await gotoDefaultPlan(page);
+  return id;
+}
+
+/** Open the default plan, past Safe Mode's grace window, and click the gutter's
+ * `+` on line 3 to open the comment composer — the arrange sequence most of the
+ * composer/scratch specs below share. */
+async function openComposerOnLine3(
+  page: Page,
+  daemon: Daemon,
+): Promise<{ id: string; composer: Locator }> {
+  const id = await openDefaultPlan(page, daemon);
+  await waitPastSafeModeGrace(page);
+  const plus = await revealGutterPlus(page, 3);
+  await plus.click();
+  return { id, composer: page.getByRole("dialog", { name: "Add a comment" }) };
+}
+
+/** Open the default plan and click the gutter's `+` on line 3 to open the
+ * comment composer, with no Safe Mode grace wait — for tests whose first
+ * keystroke lands well clear of the window on its own, or that never press
+ * one at all. */
+async function openComposerOnLine3NoGrace(
+  page: Page,
+  daemon: Daemon,
+): Promise<{ id: string; composer: Locator }> {
+  const id = await openDefaultPlan(page, daemon);
+  const plus = await revealGutterPlus(page, 3);
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+  return { id, composer };
+}
+
+/** goto + planSurface + the RANGE_PLAN/BRACKET_PLAN's shared marker text — split
+ * out from `openRangePlan` for the one caller that must seed and run an
+ * `addInitScript` before `goto`. */
+async function gotoRangePlan(page: Page): Promise<void> {
+  await page.goto("/");
+  await planSurface(page);
+  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+}
+
+/** Seed `plan` (RANGE_PLAN by default) and open it, waiting for its shared
+ * "Body line 1 content here." marker — also what BRACKET_PLAN's first body line
+ * reads, so it opens that plan too. */
+async function openRangePlan(
+  page: Page,
+  daemon: Daemon,
+  plan: string = RANGE_PLAN,
+): Promise<string> {
+  const id = await daemon.seed({ plan });
+  await gotoRangePlan(page);
+  return id;
+}
+
+/** On the open RANGE_PLAN/BRACKET_PLAN, click line 3's body ("Body line 1") to
+ * open its composer, and return it once the range label confirms line 3. */
+async function openComposerOnRangeLine3(page: Page): Promise<Locator> {
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await page.getByText("Body line 1 content here.").click();
+  await expect(composer.getByText("Line 3")).toBeVisible();
+  return composer;
 }
 
 /**
@@ -195,28 +272,19 @@ test("creating a single-line annotation from the gutter persists it line-anchore
   daemon,
   page,
 }) => {
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
-
   // Line 3 is the "This plan reorganizes…" paragraph in the fixture plan.
-  const plus = await revealGutterPlus(page, 3);
-  await plus.click();
-
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
-  await expect(composer).toBeVisible();
+  const { id, composer } = await openComposerOnLine3NoGrace(page, daemon);
   await expect(composer.getByText("Line 3")).toBeVisible();
   await composerInput(composer).fill("Quantify the cold cost here.");
   await composer.getByRole("button", { name: "Comment" }).click();
 
   // The composer closes and the annotation persists line-anchored via /draft.
   await expect(composer).toHaveCount(0);
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
-    .toBe(1);
-  const ann = (await daemon.getReview(id)).body?.annotations?.[0];
-  expect(ann).toMatchObject({ startLine: 3, endLine: 3, comment: "Quantify the cold cost here." });
+  await expectSingleAnnotation(daemon, id, {
+    startLine: 3,
+    endLine: 3,
+    comment: "Quantify the cold cost here.",
+  });
 });
 
 test("Tab nests the current list item in the comment composer", async ({ daemon, page }) => {
@@ -224,15 +292,7 @@ test("Tab nests the current list item in the comment composer", async ({ daemon,
   // marker shifts one level right (a nested list item), rather than tabbing focus
   // out of the editor. The item follows a first line so submit's trim (which
   // strips only the whole-comment edges) can't hide the indent.
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
-  await waitPastSafeModeGrace(page);
-
-  const plus = await revealGutterPlus(page, 3);
-  await plus.click();
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  const { id, composer } = await openComposerOnLine3(page, daemon);
   await expect(composer.locator(".cm-editor")).toBeVisible();
   await page.keyboard.type("Note");
   await page.keyboard.press("Enter");
@@ -240,48 +300,28 @@ test("Tab nests the current list item in the comment composer", async ({ daemon,
   await page.keyboard.press("Tab");
   await composer.getByRole("button", { name: "Comment" }).click();
 
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.annotations?.[0]?.comment)
-    .toBe("Note\n    - item");
+  await awaitAnnotationComment(daemon, id, "Note\n    - item");
 });
 
 test("Tab inserts four spaces outside a list in the comment composer", async ({ daemon, page }) => {
   // Off a list line Tab inserts four literal spaces at the cursor (the "just
   // enter four spaces" fallback), still without moving focus out of the editor.
   // Text on both sides keeps the run off the whole-comment edges submit trims.
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
-  await waitPastSafeModeGrace(page);
-
-  const plus = await revealGutterPlus(page, 3);
-  await plus.click();
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  const { id, composer } = await openComposerOnLine3(page, daemon);
   await expect(composer.locator(".cm-editor")).toBeVisible();
   await page.keyboard.type("a");
   await page.keyboard.press("Tab");
   await page.keyboard.type("b");
   await composer.getByRole("button", { name: "Comment" }).click();
 
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.annotations?.[0]?.comment)
-    .toBe("a    b");
+  await awaitAnnotationComment(daemon, id, "a    b");
 });
 
 test("Tab indents every line of a multi-line selection", async ({ daemon, page }) => {
   // Highlighting several lines and pressing Tab indents them all (indentMore over
   // the selection) rather than replacing the highlight with a single tab. A
   // leading unselected line keeps the indented block off the trimmed edges.
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
-  await waitPastSafeModeGrace(page);
-
-  const plus = await revealGutterPlus(page, 3);
-  await plus.click();
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  const { id, composer } = await openComposerOnLine3(page, daemon);
   await expect(composer.locator(".cm-editor")).toBeVisible();
   await page.keyboard.type("Head");
   await page.keyboard.press("Enter");
@@ -293,9 +333,7 @@ test("Tab indents every line of a multi-line selection", async ({ daemon, page }
   await page.keyboard.press("Tab");
   await composer.getByRole("button", { name: "Comment" }).click();
 
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.annotations?.[0]?.comment)
-    .toBe("Head\n    one\n    two");
+  await awaitAnnotationComment(daemon, id, "Head\n    one\n    two");
 });
 
 test("Escape blurs the edit editor, then a second Escape saves the change", async ({
@@ -309,9 +347,7 @@ test("Escape blurs the edit editor, then a second Escape saves the change", asyn
   await daemon.putDraft(id, {
     annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "original" }],
   });
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await gotoDefaultPlan(page);
 
   const card = page.locator("[data-annotation-card]");
   await card.getByRole("button", { name: "Edit" }).click();
@@ -327,9 +363,7 @@ test("Escape blurs the edit editor, then a second Escape saves the change", asyn
   expect((await daemon.getReview(id)).body?.annotations?.[0]?.comment).toBe("original");
 
   await page.keyboard.press("Escape");
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.annotations?.[0]?.comment)
-    .toBe("revised");
+  await awaitAnnotationComment(daemon, id, "revised");
 });
 
 test("Escape blurs the composer, then a second Escape keeps the draft", async ({
@@ -338,15 +372,7 @@ test("Escape blurs the composer, then a second Escape keeps the draft", async ({
 }) => {
   // In create mode the second Escape keeps the draft for later (a resumable
   // scratch) rather than discarding it — the non-destructive "clicked away" path.
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
-  await waitPastSafeModeGrace(page);
-
-  const plus = await revealGutterPlus(page, 3);
-  await plus.click();
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  const { id, composer } = await openComposerOnLine3(page, daemon);
   await expect(composer.locator(".cm-editor")).toBeVisible();
   await page.keyboard.type("keep me for later");
 
@@ -357,9 +383,7 @@ test("Escape blurs the composer, then a second Escape keeps the draft", async ({
   await page.keyboard.press("Escape");
   await expect(composer).toHaveCount(0); // dismissed
   await expect(page.getByRole("button", { name: "Resume unsent comment" })).toBeVisible();
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.composerScratches?.length ?? 0)
-    .toBe(1);
+  await awaitScratchCount(daemon, id, 1);
 });
 
 test("typing in a composer opened while another is open keeps the caret in place (EXC-780)", async ({
@@ -375,18 +399,13 @@ test("typing in a composer opened while another is open keeps the caret in place
   // composer specs use fill(), which replaces the field in one shot and bypasses
   // the per-character path where the desync lives, so a fill()-based test passes
   // even while the bug is present.
-  const id = await daemon.seed({ plan: RANGE_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+  const id = await openRangePlan(page, daemon);
   await waitPastSafeModeGrace(page);
 
   // Composer A: open on line 3 via a line-body click and give it text, matching
   // the reported repro (the first field holds an in-progress draft when the
   // second is opened).
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
-  await page.getByText("Body line 1 content here.").click();
-  await expect(composer.getByText("Line 3")).toBeVisible();
+  const composer = await openComposerOnRangeLine3(page);
   await composerInput(composer).fill("first draft, kept for later");
 
   // Composer B: open on line 7 while A is still open — the open-while-open
@@ -408,28 +427,16 @@ test("typing in a composer opened while another is open keeps the caret in place
   await composer.getByRole("button", { name: "Comment" }).click();
 
   await expect(composer).toHaveCount(0);
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
-    .toBe(1);
-  const ann = (await daemon.getReview(id)).body?.annotations?.[0];
-  expect(ann).toMatchObject({ startLine: 7, endLine: 7, comment: "hellX" });
+  await expectSingleAnnotation(daemon, id, { startLine: 7, endLine: 7, comment: "hellX" });
 });
 
 test("an unsubmitted composer scratch survives a page reload (EXC-744)", async ({
   daemon,
   page,
 }) => {
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
-
   // Type a comment on line 3 and Keep it for later instead of submitting: it is
   // retained as a "scratch" that leaves a Resume marker on the line.
-  const plus = await revealGutterPlus(page, 3);
-  await plus.click();
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
-  await expect(composer).toBeVisible();
+  const { id, composer } = await openComposerOnLine3NoGrace(page, daemon);
   await composerInput(composer).fill("Half-written thought to finish later.");
   await composer.getByRole("button", { name: "Keep for later" }).click();
 
@@ -439,9 +446,7 @@ test("an unsubmitted composer scratch survives a page reload (EXC-744)", async (
 
   // The scratch persists to the daemon through the draft autosave (the fix): the
   // review now carries a composer scratch.
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.composerScratches?.length ?? 0)
-    .toBe(1);
+  await awaitScratchCount(daemon, id, 1);
 
   // Reload. Before the fix the marker vanished (scratches lived only in memory);
   // now it rehydrates from the persisted scratch.
@@ -469,9 +474,7 @@ test("creating a range annotation from the gutter persists the correct line span
   // This test guards range-annotation correctness, not theming, so it exercises
   // the working (light) path; EXC-751 owns the dark case.
   await page.addInitScript(() => localStorage.setItem("caret.theme.mode", "light"));
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+  await gotoRangePlan(page);
   // The submit chord below is this test's first keydown, ~330ms after mount — 30ms
   // clear of the 300ms safe-mode grace, and less under load. Unguarded, the guard
   // eats the chord and the composer never closes (EXC-897).
@@ -480,12 +483,7 @@ test("creating a range annotation from the gutter persists the correct line span
   // Select lines 5–8 by dragging the number column, then open the composer from
   // the gutter + that the selection reveals.
   await selectGutterRange(page, 5, 8);
-  const plus = page.locator(".diffview [data-utility-button]");
-  await expect(plus).toBeVisible();
-  await plus.click();
-
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
-  await expect(composer).toBeVisible();
+  const composer = await openComposerFromSelection(page);
   await expect(composer.getByText("Lines 5–8")).toBeVisible();
   const rangeInput = composerInput(composer);
   await rangeInput.fill("This whole block needs a rewrite.");
@@ -494,11 +492,7 @@ test("creating a range annotation from the gutter persists the correct line span
   await page.keyboard.press("ControlOrMeta+Enter");
 
   await expect(composer).toHaveCount(0);
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
-    .toBe(1);
-  const ann = (await daemon.getReview(id)).body?.annotations?.[0];
-  expect(ann).toMatchObject({ startLine: 5, endLine: 8 });
+  await expectSingleAnnotation(daemon, id, { startLine: 5, endLine: 8 });
 });
 
 test("a shift-extend selection reaches the composer with an ascending range", async ({
@@ -508,62 +502,34 @@ test("a shift-extend selection reaches the composer with an ascending range", as
   // The keyboard-additive path: anchor a line, Shift-click a later one to extend
   // the span, then open the composer from the gutter +. It must land the same
   // ascending Lines X–Y the drag does, so the keyboard path stays equivalent.
-  const id = await daemon.seed({ plan: RANGE_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+  const id = await openRangePlan(page, daemon);
 
   await shiftExtendSelection(page, 4, 9);
-  const plus = page.locator(".diffview [data-utility-button]");
-  await expect(plus).toBeVisible();
-  await plus.click();
-
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
-  await expect(composer).toBeVisible();
+  const composer = await openComposerFromSelection(page);
   await expect(composer.getByText("Lines 4–9")).toBeVisible();
   await composerInput(composer).fill("Shift-extended this span.");
   await composer.getByRole("button", { name: "Comment" }).click();
 
   await expect(composer).toHaveCount(0);
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
-    .toBe(1);
-  expect((await daemon.getReview(id)).body?.annotations?.[0]).toMatchObject({
-    startLine: 4,
-    endLine: 9,
-  });
+  await expectSingleAnnotation(daemon, id, { startLine: 4, endLine: 9 });
 });
 
 test("a bottom-up drag normalizes to an ascending span", async ({ daemon, page }) => {
   // Dragging the number column upward (endLine < startLine) must still persist an
   // ascending {startLine, endLine} — this locks commenting.ts's Math.min/max
   // normalization against regression, the invariant the live readout shares.
-  const id = await daemon.seed({ plan: RANGE_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+  const id = await openRangePlan(page, daemon);
 
   // Drag from line 9 up to line 5 — the gesture runs bottom-up.
   await selectGutterRange(page, 9, 5);
-  const plus = page.locator(".diffview [data-utility-button]");
-  await expect(plus).toBeVisible();
-  await plus.click();
-
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
-  await expect(composer).toBeVisible();
+  const composer = await openComposerFromSelection(page);
   // Ascending despite the upward drag.
   await expect(composer.getByText("Lines 5–9")).toBeVisible();
   await composerInput(composer).fill("Dragged upward.");
   await composer.getByRole("button", { name: "Comment" }).click();
 
   await expect(composer).toHaveCount(0);
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
-    .toBe(1);
-  expect((await daemon.getReview(id)).body?.annotations?.[0]).toMatchObject({
-    startLine: 5,
-    endLine: 9,
-  });
+  await expectSingleAnnotation(daemon, id, { startLine: 5, endLine: 9 });
 });
 
 test("dragging across the code body opens the range composer on release", async ({
@@ -573,10 +539,7 @@ test("dragging across the code body opens the range composer on release", async 
   // The headline gesture (EXC-639): click-drag across the code body — not the
   // narrow gutter — selects the span and opens the composer on release, with no
   // separate + click. Submitting persists the ascending {startLine, endLine}.
-  const id = await daemon.seed({ plan: RANGE_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+  const id = await openRangePlan(page, daemon);
 
   await dragLineBody(page, 4, 8);
 
@@ -587,13 +550,7 @@ test("dragging across the code body opens the range composer on release", async 
   await composer.getByRole("button", { name: "Comment" }).click();
 
   await expect(composer).toHaveCount(0);
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
-    .toBe(1);
-  expect((await daemon.getReview(id)).body?.annotations?.[0]).toMatchObject({
-    startLine: 4,
-    endLine: 8,
-  });
+  await expectSingleAnnotation(daemon, id, { startLine: 4, endLine: 8 });
 });
 
 test("holding Shift while dragging the code body opens no composer (text-select escape-hatch)", async ({
@@ -604,10 +561,7 @@ test("holding Shift while dragging the code body opens no composer (text-select 
   // browser selects text natively. We assert the deterministic half — no composer
   // opens — rather than that text got selected (a synthetic drag selecting text is
   // too flaky in headless Chromium to assert on).
-  await daemon.seed({ plan: RANGE_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+  await openRangePlan(page, daemon);
 
   await dragLineBody(page, 4, 8, { shift: true });
 
@@ -621,10 +575,7 @@ test("a plain code-body drag suppresses native text selection", async ({ daemon,
   // drag is held the code lines compute as unselectable. (A synthetic mouse drag does
   // not reliably create a selection in headless Chromium, so asserting the mechanism —
   // the computed user-select — is what actually proves the fix.)
-  await daemon.seed({ plan: RANGE_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+  await openRangePlan(page, daemon);
 
   const x = await page
     .locator(PLAN_SURFACE)
@@ -656,10 +607,7 @@ test("a live readout previews the range during the drag and clears on release", 
 }, testInfo) => {
   // The headline interaction: as the drag grows the selection, a live "Lines X–Y"
   // readout tracks it before release; on release it disappears with no residue.
-  await daemon.seed({ plan: RANGE_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+  await openRangePlan(page, daemon);
 
   const readout = page.locator(".drag-readout");
   await expect(readout).toHaveCount(0);
@@ -688,10 +636,7 @@ test("dismissing the composer clears the line-selection highlight", async ({ dae
   // Opening the composer from the gutter + selects the line (the library highlights
   // it amber). Dismissing the composer must clear that highlight — otherwise it
   // lingers on the line after the reviewer moves on.
-  await daemon.seed({ plan: RANGE_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+  await openRangePlan(page, daemon);
   await waitPastSafeModeGrace(page); // Escape is absorbed during the safe-mode grace
 
   const selectedLineCount = () =>
@@ -727,10 +672,7 @@ test("a drag selection renders the selected lines in caret amber, not library-bl
   // selected line's own grey, so this asserts the resolved background reads as
   // amber — warm, not cool — proving the override took effect end to end in the
   // real Chromium build, not just in the static stylesheet.
-  await daemon.seed({ plan: RANGE_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+  await openRangePlan(page, daemon);
 
   await selectGutterRange(page, 5, 8);
 
@@ -1287,10 +1229,7 @@ test("the row highlight and gutter + follow the row under a stationary cursor as
   // pointermove, not CSS :hover, and has no scroll listener — so scrolling the plan
   // under a still cursor used to leave both glued to the row that scrolled away. They
   // must instead follow the row now under the pointer, with the mouse never moving.
-  await daemon.seed({ plan: TALL_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("Line 1 of the plan body")).toBeVisible();
+  await openTallPlan(page, daemon);
 
   // Park the cursor on a specific content row; the library highlights it and mounts
   // the + on it.
@@ -1330,10 +1269,7 @@ test("numeric chrome renders with tabular figures end to end", async ({ daemon, 
   // column; caret's own numeric chrome gets the same via the .metric atom's
   // font-variant-numeric. Both are computed-style facts in the real Chromium
   // build, not just static stylesheet text.
-  await daemon.seed({ plan: RANGE_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+  await openRangePlan(page, daemon);
 
   // A diff line-number cell resolves font-feature-settings to the tabular tag.
   const lineNumberFeatures = await page.evaluate(() => {
@@ -1360,18 +1296,9 @@ test("numeric chrome renders with tabular figures end to end", async ({ daemon, 
 test("dismissing an empty composer with Escape leaves no residue", async ({ daemon, page }) => {
   // An empty composer dismissed produces no draft — only typed text is retained
   // as a scratch (see the scratch-draft tests below). This pins the empty case.
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
-  // Past Safe Mode's grace/suppression window, which would otherwise swallow the
-  // first keystroke (the Escape) as an accidental interruption.
-  await waitPastSafeModeGrace(page);
-
-  const plus = await revealGutterPlus(page, 3);
-  await plus.click();
-
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  // Safe Mode's grace/suppression window would otherwise swallow the first
+  // keystroke (the Escape) as an accidental interruption.
+  const { id, composer } = await openComposerOnLine3(page, daemon);
   await expect(composer).toBeVisible();
   // Two-stage Escape: the first blurs into the card, the second dismisses. An
   // empty box has nothing to keep, so dismissing leaves no residue.
@@ -1382,9 +1309,7 @@ test("dismissing an empty composer with Escape leaves no residue", async ({ daem
   // The composer is gone, no scratch marker appears, and nothing was persisted.
   await expect(composer).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Resume unsent comment" })).toHaveCount(0);
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
-    .toBe(0);
+  await awaitAnnotationCount(daemon, id, 0);
 });
 
 // ----- Scratch drafts: an unsubmitted composer dismissed with text is retained
@@ -1396,16 +1321,24 @@ function scratchMarker(page: Page): Locator {
   return page.getByRole("button", { name: "Resume unsent comment" });
 }
 
-test("Keep for later retains a returnable Resume marker", async ({ daemon, page }) => {
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
-  await waitPastSafeModeGrace(page);
+/** Discard `composer`'s draft, confirm the discard (EXC-749), and assert
+ * nothing of it survives: the composer, the Resume marker, and the
+ * persisted scratch are all gone. */
+async function discardComposerScratch(
+  page: Page,
+  daemon: Daemon,
+  id: string,
+  composer: Locator,
+): Promise<void> {
+  await composer.getByRole("button", { name: "Discard" }).click();
+  await discardConfirm(page).getByRole("button", { name: "Discard" }).click();
+  await expect(composer).toHaveCount(0);
+  await expect(scratchMarker(page)).toHaveCount(0);
+  await awaitScratchCount(daemon, id, 0);
+}
 
-  const plus = await revealGutterPlus(page, 3);
-  await plus.click();
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
+test("Keep for later retains a returnable Resume marker", async ({ daemon, page }) => {
+  const { id, composer } = await openComposerOnLine3(page, daemon);
   await expect(composer).toBeVisible();
   const textarea = composerInput(composer);
   await textarea.fill("half a thought to finish later");
@@ -1422,48 +1355,22 @@ test("Keep for later retains a returnable Resume marker", async ({ daemon, page 
   await expect(marker).toContainText("half a thought to finish later");
 
   // Nothing is persisted — a scratch is in-memory only, not a created annotation.
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
-    .toBe(0);
+  await awaitAnnotationCount(daemon, id, 0);
 });
 
 test("the Discard button discards a typed draft, leaving no Resume marker", async ({
   daemon,
   page,
 }) => {
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
-  await waitPastSafeModeGrace(page);
-
-  const plus = await revealGutterPlus(page, 3);
-  await plus.click();
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  const { id, composer } = await openComposerOnLine3(page, daemon);
   await composerInput(composer).fill("drop this via the button");
-  await composer.getByRole("button", { name: "Discard" }).click();
-  // Confirm the discard (EXC-749).
-  await discardConfirm(page).getByRole("button", { name: "Discard" }).click();
-
-  await expect(composer).toHaveCount(0);
-  await expect(scratchMarker(page)).toHaveCount(0);
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.composerScratches?.length ?? 0)
-    .toBe(0);
+  await discardComposerScratch(page, daemon, id, composer);
 });
 
 test("canceling a Discard keeps the composer open", async ({ daemon, page }) => {
   // The confirmation's whole point: an accidental Discard is recoverable.
   // Canceling backs out and leaves the composer (and its draft) in place.
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
-  await waitPastSafeModeGrace(page);
-
-  const plus = await revealGutterPlus(page, 3);
-  await plus.click();
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  const { composer } = await openComposerOnLine3(page, daemon);
   await composerInput(composer).fill("do not lose me");
   await composer.getByRole("button", { name: "Discard" }).click();
 
@@ -1480,51 +1387,25 @@ test("resuming a kept scratch then Discarding removes the marker and un-persists
   // Keep for later persists a scratch; resuming consumes it back into the
   // composer; Discarding then drops it for good — the persisted scratch is
   // removed, not merely hidden.
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
-  await waitPastSafeModeGrace(page);
-
-  const plus = await revealGutterPlus(page, 3);
-  await plus.click();
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  const { id, composer } = await openComposerOnLine3(page, daemon);
   await composerInput(composer).fill("keep then change my mind");
   await composer.getByRole("button", { name: "Keep for later" }).click();
 
   const marker = scratchMarker(page);
   await expect(marker).toBeVisible();
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.composerScratches?.length ?? 0)
-    .toBe(1);
+  await awaitScratchCount(daemon, id, 1);
 
   // Resume it, then Discard: the marker is gone and the persisted scratch cleared.
   await marker.click();
   await expect(composer).toBeVisible();
-  await composer.getByRole("button", { name: "Discard" }).click();
-  // Confirm the discard (EXC-749).
-  await discardConfirm(page).getByRole("button", { name: "Discard" }).click();
-
-  await expect(composer).toHaveCount(0);
-  await expect(scratchMarker(page)).toHaveCount(0);
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.composerScratches?.length ?? 0)
-    .toBe(0);
+  await discardComposerScratch(page, daemon, id, composer);
 });
 
 test("clicking the Resume marker reopens the composer with the text restored", async ({
   daemon,
   page,
 }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
-  await waitPastSafeModeGrace(page);
-
-  const plus = await revealGutterPlus(page, 3);
-  await plus.click();
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  const { composer } = await openComposerOnLine3(page, daemon);
   await composerInput(composer).fill("restore this exactly");
   await composer.getByRole("button", { name: "Keep for later" }).click();
 
@@ -1540,15 +1421,7 @@ test("clicking the Resume marker reopens the composer with the text restored", a
 });
 
 test("a resumed scratch can be completed into a persisted annotation", async ({ daemon, page }) => {
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
-  await waitPastSafeModeGrace(page);
-
-  const plus = await revealGutterPlus(page, 3);
-  await plus.click();
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  const { id, composer } = await openComposerOnLine3(page, daemon);
   await composerInput(composer).fill("start it");
   await composer.getByRole("button", { name: "Keep for later" }).click();
 
@@ -1561,10 +1434,7 @@ test("a resumed scratch can be completed into a persisted annotation", async ({ 
   // Submitting graduates the scratch to a real annotation; no marker survives.
   await expect(composer).toHaveCount(0);
   await expect(scratchMarker(page)).toHaveCount(0);
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
-    .toBe(1);
-  expect((await daemon.getReview(id)).body?.annotations?.[0]).toMatchObject({
+  await expectSingleAnnotation(daemon, id, {
     startLine: 3,
     endLine: 3,
     comment: "start it, then finish it",
@@ -1579,16 +1449,11 @@ test("opening a different range retains the in-progress text as a scratch", asyn
   // mind mid-comment: typing on line 3, then clicking line 7, must retain the
   // line-3 text as a scratch rather than dropping it — the host retains before it
   // opens the new range.
-  await daemon.seed({ plan: RANGE_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+  await openRangePlan(page, daemon);
   await waitPastSafeModeGrace(page);
 
   // Open the composer on line 3 ("Body line 1") via a line-body click and type.
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
-  await page.getByText("Body line 1 content here.").click();
-  await expect(composer.getByText("Line 3")).toBeVisible();
+  const composer = await openComposerOnRangeLine3(page);
   await composerInput(composer).fill("started on line 3");
 
   // Switch to line 7 ("Body line 3") without dismissing the line-3 composer.
@@ -1613,15 +1478,10 @@ test("opening a different range starts the new composer empty, not seeded with t
   // Regression: switching lines mid-draft must open a CLEAN composer at the new
   // line. Keeping the prior line's text as a Resume marker is correct, but that
   // text must not bleed into the fresh composer — each range is its own draft.
-  await daemon.seed({ plan: RANGE_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+  await openRangePlan(page, daemon);
   await waitPastSafeModeGrace(page);
 
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
-  await page.getByText("Body line 1 content here.").click();
-  await expect(composer.getByText("Line 3")).toBeVisible();
+  const composer = await openComposerOnRangeLine3(page);
   await composerInput(composer).fill("started on line 3");
 
   // Switch to line 7 without dismissing: the new composer opens empty.
@@ -1637,15 +1497,7 @@ test("scratch drafts clear when a new plan version arrives", async ({ daemon, pa
   // A scratch's anchor belongs to the version it was typed against; a new version
   // must drop it so it never resumes onto text it was not written for. This
   // mirrors the existing discard-on-content-change guard for the open composer.
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
-  await waitPastSafeModeGrace(page);
-
-  const plus = await revealGutterPlus(page, 3);
-  await plus.click();
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  const { id, composer } = await openComposerOnLine3(page, daemon);
   await composerInput(composer).fill("anchored to v1");
   await composer.getByRole("button", { name: "Keep for later" }).click();
   await expect(scratchMarker(page)).toBeVisible();
@@ -1685,10 +1537,7 @@ test("the Request Changes dialog lists an unsent scratch, collapsed and uncounte
   daemon,
   page,
 }) => {
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  const id = await openDefaultPlan(page, daemon);
   await waitPastSafeModeGrace(page);
 
   const dialog = await scratchThenOpenDialog(page, 3, "an unsent thought on line 3");
@@ -1707,16 +1556,11 @@ test("the Request Changes dialog lists an unsent scratch, collapsed and uncounte
   await expect(dialog.getByRole("button", { name: "Send for revision" })).toBeDisabled();
 
   // And nothing is persisted while it sits unsent.
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
-    .toBe(0);
+  await awaitAnnotationCount(daemon, id, 0);
 });
 
 test("Saving a scratch graduates it into the sent feedback", async ({ daemon, page }) => {
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  const id = await openDefaultPlan(page, daemon);
   await waitPastSafeModeGrace(page);
 
   const dialog = await scratchThenOpenDialog(page, 3, "save me into the review");
@@ -1732,19 +1576,13 @@ test("Saving a scratch graduates it into the sent feedback", async ({ daemon, pa
   await expect(dialog.locator(".preview pre")).toContainText("save me into the review");
 
   // Submitting now sends it. It reaches Decision.feedback as a line reference.
-  await dialog.getByRole("button", { name: "Send for revision" }).click();
-  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
-  await expect.poll(async () => (await daemon.getReview(id)).body?.decision?.behavior).toBe("deny");
-  const feedback = (await daemon.getReview(id)).body?.decision?.feedback ?? "";
+  const feedback = await submitForRevision(page, dialog, daemon, id);
   expect(feedback).toContain("Line 3:");
   expect(feedback).toContain("save me into the review");
 });
 
 test("Discarding a scratch removes it and never sends it", async ({ daemon, page }) => {
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  const id = await openDefaultPlan(page, daemon);
   await waitPastSafeModeGrace(page);
 
   const dialog = await scratchThenOpenDialog(page, 3, "discard this draft");
@@ -1763,9 +1601,7 @@ test("Discarding a scratch removes it and never sends it", async ({ daemon, page
   await expect(scratchMarker(page)).toHaveCount(0);
 
   // Nothing was ever persisted.
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
-    .toBe(0);
+  await awaitAnnotationCount(daemon, id, 0);
 });
 
 test("submitting with an unsaved scratch sends only committed comments", async ({
@@ -1774,10 +1610,7 @@ test("submitting with an unsaved scratch sends only committed comments", async (
 }) => {
   // The default: an unsaved scratch is NOT silently included. A general comment
   // makes the submit possible; the scratch left unsent must not reach feedback.
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  const id = await openDefaultPlan(page, daemon);
   await waitPastSafeModeGrace(page);
 
   const dialog = await scratchThenOpenDialog(page, 3, "must not be sent unsaved");
@@ -1786,11 +1619,7 @@ test("submitting with an unsaved scratch sends only committed comments", async (
   await dialog
     .getByRole("textbox", { name: "General comment" })
     .fill("Please revise the cache section.");
-  await dialog.getByRole("button", { name: "Send for revision" }).click();
-  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
-
-  await expect.poll(async () => (await daemon.getReview(id)).body?.decision?.behavior).toBe("deny");
-  const feedback = (await daemon.getReview(id)).body?.decision?.feedback ?? "";
+  const feedback = await submitForRevision(page, dialog, daemon, id);
   expect(feedback).toContain("Please revise the cache section.");
   expect(feedback).not.toContain("must not be sent unsaved");
 });
@@ -1817,10 +1646,7 @@ test("a created annotation shows an inline card that doesn't overlay the code", 
   daemon,
   page,
 }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await openDefaultPlan(page, daemon);
 
   await createAnnotation(page, 3, "Quantify the cold cost.");
 
@@ -1847,10 +1673,7 @@ test("a created annotation shows an inline card that doesn't overlay the code", 
 });
 
 test("two comments on the same line render as one ordered thread", async ({ daemon, page }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await openDefaultPlan(page, daemon);
 
   // Two comments anchored to the same line. The library reserves one annotation
   // row per line, so both land in that single row — caret frames them as one
@@ -1892,10 +1715,7 @@ test("hovering a line body reveals the + and lifts that line's background, scope
   // --diffs-bg-hover-override). This proves the library applies the lift end to end
   // in the real Chromium build — css-bridge.test.ts only pins the static
   // declaration — and that the lift is scoped to the hovered line, not the view.
-  await daemon.seed({ plan: RANGE_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+  await openRangePlan(page, daemon);
 
   // At rest — mouse parked off any line — the library renders no gutter `+` at all.
   await page.mouse.move(0, 0);
@@ -1947,10 +1767,7 @@ test("text selected on a line is preserved and a click opens no composer", async
   // the selection first. (A synthetic mouse drag is too flaky in headless Chromium
   // to select text reliably.) It also pins that the handler reads the shadow
   // selection, not the document one — the subtlety its own comment warns about.
-  await daemon.seed({ plan: RANGE_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+  await openRangePlan(page, daemon);
 
   // Select the line's prose inside the shadow root — proving it is selectable (copy
   // works; user-select is not suppressed) and seeding the selection the click
@@ -1977,17 +1794,11 @@ test("text selected on a line is preserved and a click opens no composer", async
   // issues the click without a native mousedown, so the selection is still present
   // when the handler reads it.
   await page.getByText("Body line 1 content here.").dispatchEvent("click");
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
-  const t0 = await page.evaluate(() => performance.now());
-  await page.waitForFunction((t) => performance.now() > t + 300, t0);
-  await expect(composer).toHaveCount(0);
+  await expectNoComposerOpens(page);
 });
 
 test("an inline card collapses to a chip and expands again", async ({ daemon, page }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await openDefaultPlan(page, daemon);
 
   await createAnnotation(page, 3, "Tighten this paragraph.");
   const card = page.locator("[data-annotation-card]");
@@ -2009,10 +1820,7 @@ test("the composer reveal and the card swap share one opacity-only token transit
   daemon,
   page,
 }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await openDefaultPlan(page, daemon);
 
   // Reads the computed reveal: the scoped animation-name (Svelte hashes it, so it
   // ends in "-reveal"), the resolved duration, and the transform applied while the
@@ -2079,15 +1887,10 @@ test("the saved card's trash Discard wobbles on hover", async ({ daemon, page })
 });
 
 test("deleting an inline card removes the annotation", async ({ daemon, page }) => {
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  const id = await openDefaultPlan(page, daemon);
 
   await createAnnotation(page, 3, "Drop this section.");
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
-    .toBe(1);
+  await awaitAnnotationCount(daemon, id, 1);
 
   await page.locator("[data-annotation-card]").getByRole("button", { name: "Discard" }).click();
   // Discarding a submitted comment can't be undone, so confirm first (EXC-749).
@@ -2095,18 +1898,13 @@ test("deleting an inline card removes the annotation", async ({ daemon, page }) 
 
   // The card leaves the DOM and the delete persists through /draft.
   await expect(page.locator("[data-annotation-card]")).toHaveCount(0);
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
-    .toBe(0);
+  await awaitAnnotationCount(daemon, id, 0);
 });
 
 test("canceling a delete keeps the inline card", async ({ daemon, page }) => {
   // Deleting a submitted comment is irreversible; canceling the confirm must
   // leave the card and its persisted annotation untouched (EXC-749).
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  const id = await openDefaultPlan(page, daemon);
 
   await createAnnotation(page, 3, "Keep this section.");
   await page.locator("[data-annotation-card]").getByRole("button", { name: "Discard" }).click();
@@ -2115,21 +1913,14 @@ test("canceling a delete keeps the inline card", async ({ daemon, page }) => {
   await discardConfirm(page).getByRole("button", { name: "Cancel" }).click();
   await expect(discardConfirm(page)).toHaveCount(0);
   await expect(page.locator("[data-annotation-card]")).toHaveCount(1);
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
-    .toBe(1);
+  await awaitAnnotationCount(daemon, id, 1);
 });
 
 test("editing an inline card rewrites the comment and persists it", async ({ daemon, page }) => {
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  const id = await openDefaultPlan(page, daemon);
 
   await createAnnotation(page, 3, "Original note.");
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.annotations?.[0]?.comment)
-    .toBe("Original note.");
+  await awaitAnnotationComment(daemon, id, "Original note.");
 
   // Enter edit mode; the textarea seeds with the current comment, then rewrite it
   // and submit with the keyboard chord.
@@ -2143,9 +1934,7 @@ test("editing an inline card rewrites the comment and persists it", async ({ dae
   // The card returns to its read view showing the new text, and /draft carries it.
   await expect(card.getByText("Revised note with more detail.")).toBeVisible();
   await expect(card.getByRole("textbox", { name: "Edit comment" })).toHaveCount(0);
-  await expect
-    .poll(async () => (await daemon.getReview(id)).body?.annotations?.[0]?.comment)
-    .toBe("Revised note with more detail.");
+  await awaitAnnotationComment(daemon, id, "Revised note with more detail.");
 });
 
 test("editing a saved comment focuses the editor so the caret tracks typing", async ({
@@ -2160,10 +1949,7 @@ test("editing a saved comment focuses the editor so the caret tracks typing", as
   // .cm-focused class that renders the caret was never applied, and typing left
   // the caret invisible/stuck. Passing root: document (see MarkdownEditor) points
   // CM at where the slotted content's focus actually lives.
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("This plan reorganizes the widget cache")).toBeVisible();
+  await openDefaultPlan(page, daemon);
   // End and the typed "XY" below are this test's only keydowns and both are
   // load-bearing; a swallowed End also puts Safe Mode's 2s suppression over the
   // typing. Measured 348ms after mount, 48ms clear of the grace (EXC-897).
@@ -2225,10 +2011,7 @@ test("clicking a line near the top opens its composer without jumping the scroll
   // browser's native scroll-into-view against the mid-rerender annotation row
   // and slam a tall view to its bottom — clicking a line "jumped the page".
   // Opening must leave the scroll position put.
-  await daemon.seed({ plan: TALL_PLAN });
-  await page.goto("/");
-  const view = await planSurface(page);
-  await expect(page.getByText("Line 1 of the plan body")).toBeVisible();
+  const view = await openTallPlan(page, daemon);
   await view.evaluate((el) => {
     el.scrollTop = 0;
   });
@@ -2247,10 +2030,7 @@ test("clicking a line focuses the comment field immediately", async ({ daemon, p
   // start typing at once — no second click into the field. The composer's node
   // is relocated into the library's slot on open (slotInto), which blurs the
   // just-autofocused editor unless slotInto restores it.
-  await daemon.seed({ plan: TALL_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("Line 1 of the plan body")).toBeVisible();
+  await openTallPlan(page, daemon);
 
   await page.getByText("Line 1 of the plan body").click();
   const composer = page.getByRole("dialog", { name: "Add a comment" });
@@ -2374,11 +2154,7 @@ async function createRangeAnnotation(
   // after mount, barely clear of the 300ms safe-mode grace (EXC-897).
   await waitPastSafeModeGrace(page);
   await selectGutterRange(page, start, end);
-  const plus = page.locator(".diffview [data-utility-button]");
-  await expect(plus).toBeVisible();
-  await plus.click();
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
-  await expect(composer).toBeVisible();
+  const composer = await openComposerFromSelection(page);
   const textarea = composerInput(composer);
   await textarea.fill(comment);
   // Confirm CodeMirror has applied the input before the submit chord (see
@@ -2395,10 +2171,7 @@ test("a multi-line comment paints a gutter bracket spanning its whole range", as
 }) => {
   // The comment anchors its card to endLine, but the bracket must mark every line
   // from startLine to endLine — a 13-line span (4–16) on the body text.
-  await daemon.seed({ plan: BRACKET_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+  await openRangePlan(page, daemon, BRACKET_PLAN);
 
   // Source lines: line 1 is the heading, line 2 blank, then "Body line N" lands on
   // source line 2N+1. Select source lines 5–17 (Body line 2 → Body line 8), a
@@ -2435,10 +2208,8 @@ test("a multi-line comment paints a gutter bracket spanning its whole range", as
 });
 
 test("the comment bracket tracks its lines through a scroll", async ({ daemon, page }) => {
-  await daemon.seed({ plan: BRACKET_PLAN });
-  await page.goto("/");
+  await openRangePlan(page, daemon, BRACKET_PLAN);
   const view = await planSurface(page);
-  await expect(page.getByText("Body line 1 content here.")).toBeVisible();
 
   await createRangeAnnotation(page, 5, 13, "Track me through scroll.");
   await expect.poll(async () => bracketRailRect(page)).not.toBeNull();
@@ -2466,10 +2237,7 @@ for (const colorScheme of ["light", "dark"] as const) {
     // inherits to the host-side rail; it must paint a visible (non-transparent)
     // color in both schemes, distinct from the page background.
     await page.emulateMedia({ colorScheme });
-    await daemon.seed({ plan: BRACKET_PLAN });
-    await page.goto("/");
-    await planSurface(page);
-    await expect(page.getByText("Body line 1 content here.")).toBeVisible();
+    await openRangePlan(page, daemon, BRACKET_PLAN);
 
     await createRangeAnnotation(page, 5, 17, "Color me amber.");
     await expect.poll(async () => bracketRailRect(page)).not.toBeNull();
@@ -2571,20 +2339,24 @@ function rowTextWidth(page: Page, n: number) {
   }, n);
 }
 
+/** Seed EMPHASIS_PLAN, open it, and wait until `awaitLine` has been decorated. */
+async function openEmphasisPlan(page: Page, daemon: Daemon, awaitLine: number): Promise<void> {
+  await daemon.seed({ plan: EMPHASIS_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect
+    .poll(async () => (await readEmphasis(page, awaitLine)).tagged.length)
+    .toBeGreaterThan(0);
+}
+
 for (const colorScheme of ["light", "dark"] as const) {
   test(`inline emphasis chips resolve their tint, radius and glyphs in ${colorScheme}`, async ({
     daemon,
     page,
   }) => {
     await page.emulateMedia({ colorScheme });
-    await daemon.seed({ plan: EMPHASIS_PLAN });
-    await page.goto("/");
-    await planSurface(page);
+    await openEmphasisPlan(page, daemon, 5);
     await expect(page.getByText("Plain prose on its own line here.")).toBeVisible();
-
-    // The decoration lands after the library's async highlight repaints the rows,
-    // so poll until line 5 carries its tags rather than reading once.
-    await expect.poll(async () => (await readEmphasis(page, 5)).tagged.length).toBeGreaterThan(0);
 
     const bold = await readEmphasis(page, 5);
     // The markers stay in the text — nothing is hidden or rewritten.
@@ -2623,10 +2395,7 @@ test("a fragmented emphasis element still draws exactly one pill (EXC-867)", asy
 }) => {
   // `**before `inline()` after**` fragments into three runs once the inline-code
   // run is split out, but it is ONE bold element and must close its pill once.
-  await daemon.seed({ plan: EMPHASIS_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-  await expect.poll(async () => (await readEmphasis(page, 9)).tagged.length).toBeGreaterThan(0);
+  await openEmphasisPlan(page, daemon, 9);
 
   const row = await readEmphasis(page, 9);
   expect(row.boldStarts).toBe(1);
@@ -2656,10 +2425,7 @@ test("a chip's padding pushes its neighbours rather thanoverlapping them (EXC-86
   // cost. Lines 11 and 13 are the same 22 characters, one carrying two pills and one
   // carrying none, so the difference between their painted widths is the padding and
   // nothing else — four edges of it, since each pill is padded at both ends.
-  await daemon.seed({ plan: EMPHASIS_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-  await expect.poll(async () => (await readEmphasis(page, 11)).tagged.length).toBeGreaterThan(0);
+  await openEmphasisPlan(page, daemon, 11);
 
   const geometry = await page.evaluate(() => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
@@ -2729,10 +2495,7 @@ test("the decoration pass leaves the row's other consumers intact (EXC-867)", as
   // and every one of these needs a real browser: rangeForSpan resolves a DOM Range
   // over the live text nodes, and the decoration only exists after the library's
   // async repaint.
-  await daemon.seed({ plan: EMPHASIS_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-  await expect.poll(async () => (await readEmphasis(page, 5)).tagged.length).toBeGreaterThan(0);
+  await openEmphasisPlan(page, daemon, 5);
 
   // Search highlights (rangeForSpan) still land on exactly the matched columns of a
   // SPLIT row. "bold text" sits inside the emphasis run on line 5, so its range is
@@ -3184,16 +2947,21 @@ function readRuleRows(page: Page) {
 
 const TRANSPARENT = "rgba(0, 0, 0, 0)";
 
+/** Seed RULE_PLAN, open it, and wait until at least one rule row has rendered. */
+async function openRulePlan(page: Page, daemon: Daemon): Promise<void> {
+  await daemon.seed({ plan: RULE_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect.poll(async () => (await readRuleRows(page)).some((r) => r.rule)).toBe(true);
+}
+
 for (const colorScheme of ["light", "dark"] as const) {
   test(`thematic breaks draw a rule and the look-alikes do not in ${colorScheme} (EXC-862)`, async ({
     daemon,
     page,
   }) => {
     await page.emulateMedia({ colorScheme });
-    await daemon.seed({ plan: RULE_PLAN });
-    await page.goto("/");
-    await planSurface(page);
-    await expect.poll(async () => (await readRuleRows(page)).some((r) => r.rule)).toBe(true);
+    await openRulePlan(page, daemon);
 
     const rows = await readRuleRows(page);
     const ruled = rows.filter((r) => r.rule);
@@ -3278,10 +3046,7 @@ test("the rule's ink follows the colour scheme (EXC-862)", async ({ daemon, page
   };
 
   await page.emulateMedia({ colorScheme: "light" });
-  await daemon.seed({ plan: RULE_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-  await expect.poll(async () => (await readRuleRows(page)).some((r) => r.rule)).toBe(true);
+  await openRulePlan(page, daemon);
   const light = await stop();
 
   await page.emulateMedia({ colorScheme: "dark" });
@@ -3298,10 +3063,7 @@ test("the repaint settles over the rules (EXC-862)", async ({ daemon, page }) =>
   // The claim every decoration pass in this epic owes. A pass that APPENDS a node to a row
   // can rebuild it on every repaint — the runaway EXC-870 measured at ~10,800 mutations in
   // two seconds. A background-image adds no node, so this is zero by construction.
-  await daemon.seed({ plan: RULE_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-  await expect.poll(async () => (await readRuleRows(page)).some((r) => r.rule)).toBe(true);
+  await openRulePlan(page, daemon);
   expect(await settledMutations(page)).toBe(0);
 });
 
@@ -3317,10 +3079,7 @@ test("copying a rule's row yields the source characters (EXC-862)", async ({
   // treatment that removed them (or that let the drawn line contribute text of its own)
   // would corrupt the copied markdown without changing anything a reader can see.
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-  await daemon.seed({ plan: RULE_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-  await expect.poll(async () => (await readRuleRows(page)).some((r) => r.rule)).toBe(true);
+  await openRulePlan(page, daemon);
 
   const copied = await page.evaluate(async () => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;

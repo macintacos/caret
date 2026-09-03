@@ -28,9 +28,10 @@
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import {
+  copyRows,
   firstGlyphX,
   gridCounts,
-  planSurface,
+  openPlan,
   revealGutterPlus,
   rowHeights,
 } from "@test/e2e/support/source-view.ts";
@@ -127,9 +128,7 @@ async function open(
   plan: string,
 ): Promise<void> {
   await routeAssets(page);
-  await daemon.seed({ plan });
-  await page.goto("/");
-  await planSurface(page);
+  await openPlan(page, daemon, plan);
 }
 
 test("a safe image renders on its source line and the markup stays put", async ({
@@ -160,28 +159,7 @@ test("copying the image's row yields the source markdown, not the alt text", asy
   // selection is exactly what could add `the cache topology` to the copied text.
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await imageDecoded(page);
-  const copied = await page.evaluate(async (ln) => {
-    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot as
-      | (ShadowRoot & { getSelection?: () => Selection | null })
-      | null;
-    const row = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])].find(
-      (r) => r.getAttribute("data-line") === String(ln),
-    );
-    if (sh == null || row == null) return { selection: "", clipboard: "<no row>" };
-    const range = document.createRange();
-    range.selectNodeContents(row);
-    const sel = sh.getSelection?.() ?? getSelection();
-    sel?.removeAllRanges();
-    sel?.addRange(range);
-    // execCommand rather than a Ctrl+C keypress, because it drives the copy from
-    // inside the page with no dependency on which element the harness left
-    // focused — and it runs the SAME serialization the keypress would, which is
-    // the whole question. Selection.toString() is NOT that serialization: it takes
-    // a different path through Blink, one that cannot emit an image's alt text, so
-    // reading the real clipboard is what makes this assertion mean anything.
-    document.execCommand("copy");
-    return { selection: sel?.toString() ?? "", clipboard: await navigator.clipboard.readText() };
-  }, IMAGE_LINE);
+  const { row: copied } = await copyRows(page, { row: IMAGE_LINE });
   expect(copied.selection).toBe(IMAGE_MARKUP);
   expect(copied.clipboard).toBe(IMAGE_MARKUP);
 });

@@ -41,13 +41,16 @@
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import {
+  awaitTagged,
   cellWidth,
+  copyRows,
   firstGlyphX,
   gridCounts,
   lineOf,
-  planSurface,
+  openPlan,
   revealGutterPlus,
   settledMutations,
+  taggedRowTexts,
   taggedRuns,
 } from "@test/e2e/support/source-view.ts";
 
@@ -166,32 +169,12 @@ async function checkboxRuns(
   return [...byRow.values()];
 }
 
-/** Seed `plan` and open it. */
-async function open(
-  page: import("@playwright/test").Page,
-  daemon: { seed: (input: { plan: string }) => Promise<string> },
-  plan: string,
-): Promise<void> {
-  await daemon.seed({ plan });
-  await page.goto("/");
-  await planSurface(page);
-}
-
-/** Resolve once the decoration pass has tagged at least one checkbox. The passes run
- * from a MutationObserver a frame behind the rows, so every read waits for one to
- * exist rather than racing the paint. */
-async function decorated(page: import("@playwright/test").Page): Promise<void> {
-  await expect
-    .poll(async () => (await taggedRuns(page, "data-md-checkbox")).length)
-    .toBeGreaterThan(0);
-}
-
 test("each checkbox is tagged with its state, over its own three characters", async ({
   page,
   daemon,
 }) => {
-  await open(page, daemon, TASK_PLAN);
-  await decorated(page);
+  await openPlan(page, daemon, TASK_PLAN);
+  await awaitTagged(page, "data-md-checkbox");
   expect(await checkboxRuns(page)).toEqual([
     { row: CHECKED, value: "checked", text: "[x]" },
     // Uppercase reads exactly as lowercase does — an acceptance criterion, and the
@@ -214,8 +197,8 @@ test("the box is painted over the brackets, which are still in the row", async (
   page,
   daemon,
 }) => {
-  await open(page, daemon, TASK_PLAN);
-  await decorated(page);
+  await openPlan(page, daemon, TASK_PLAN);
+  await awaitTagged(page, "data-md-checkbox");
   const cell = await cellWidth(page, PROSE_ABOVE);
   const box = await drawnRun(page, await lineOf(page, CHECKED));
   expect(box?.text).toBe("[x]");
@@ -245,8 +228,8 @@ test("one box is drawn per run, however many tokens shiki cut the run into", asy
   page,
   daemon,
 }) => {
-  await open(page, daemon, TASK_PLAN);
-  await decorated(page);
+  await openPlan(page, daemon, TASK_PLAN);
+  await awaitTagged(page, "data-md-checkbox");
   // The defect this ticket had to fix, and the reason it could not simply copy the
   // one-cell bullet: shiki hands an uppercase bracket run over as THREE tokens, and
   // inlineDecorate tags every token a run covers, so the sheet drew three boxes side by
@@ -267,8 +250,8 @@ test("one box is drawn per run, however many tokens shiki cut the run into", asy
 });
 
 test("the three states differ in shape, not in colour", async ({ page, daemon }) => {
-  await open(page, daemon, TASK_PLAN);
-  await decorated(page);
+  await openPlan(page, daemon, TASK_PLAN);
+  await awaitTagged(page, "data-md-checkbox");
   const [checked, unchecked, slashed] = await Promise.all(
     [CHECKED, UNCHECKED, SLASHED].map(async (text) => drawnRun(page, await lineOf(page, text))),
   );
@@ -286,8 +269,8 @@ test("the three states differ in shape, not in colour", async ({ page, daemon })
 });
 
 test("the checkbox is not interactive", async ({ page, daemon }) => {
-  await open(page, daemon, TASK_PLAN);
-  await decorated(page);
+  await openPlan(page, daemon, TASK_PLAN);
+  await awaitTagged(page, "data-md-checkbox");
   const line = await lineOf(page, UNCHECKED);
   const before = await drawnRun(page, line);
   // An acceptance criterion in its own right: this is a RENDER of the source text, not
@@ -320,50 +303,16 @@ test("copying a task row yields the source brackets, not the box", async ({
   context,
   daemon,
 }) => {
-  await open(page, daemon, TASK_PLAN);
+  await openPlan(page, daemon, TASK_PLAN);
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-  await decorated(page);
-  const copied = await page.evaluate(
-    async (lines) => {
-      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot as
-        | (ShadowRoot & { getSelection?: () => Selection | null })
-        | null;
-      const read = async (ln: number) => {
-        const row = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])].find(
-          (r) => r.getAttribute("data-line") === String(ln),
-        );
-        if (sh == null || row == null) return { selection: "", clipboard: "<no row>" };
-        const range = document.createRange();
-        range.selectNodeContents(row);
-        const sel = sh.getSelection?.() ?? getSelection();
-        sel?.removeAllRanges();
-        sel?.addRange(range);
-        // execCommand rather than a Ctrl+C keypress, because it drives the copy from
-        // inside the page with no dependency on which element the harness left focused
-        // — and it runs the SAME serialization the keypress would, which is the whole
-        // question. Selection.toString() is NOT that serialization.
-        document.execCommand("copy");
-        return {
-          selection: sel?.toString() ?? "",
-          clipboard: await navigator.clipboard.readText(),
-        };
-      };
-      return {
-        checked: await read(lines.checked),
-        unchecked: await read(lines.unchecked),
-        slashed: await read(lines.slashed),
-        nested: await read(lines.nested),
-        quoted: await read(lines.quoted),
-      };
-    },
-    {
-      checked: await lineOf(page, CHECKED),
-      unchecked: await lineOf(page, UNCHECKED),
-      slashed: await lineOf(page, SLASHED),
-      nested: await lineOf(page, NESTED),
-      quoted: await lineOf(page, QUOTED),
-    },
-  );
+  await awaitTagged(page, "data-md-checkbox");
+  const copied = await copyRows(page, {
+    checked: await lineOf(page, CHECKED),
+    unchecked: await lineOf(page, UNCHECKED),
+    slashed: await lineOf(page, SLASHED),
+    nested: await lineOf(page, NESTED),
+    quoted: await lineOf(page, QUOTED),
+  });
   expect(copied.checked.clipboard).toBe(CHECKED);
   expect(copied.checked.selection).toBe(copied.checked.clipboard);
   expect(copied.unchecked.clipboard).toBe(UNCHECKED);
@@ -381,8 +330,8 @@ test("copying a task row yields the source brackets, not the box", async ({
 });
 
 test("the box lands where the item begins, and only a task row moves", async ({ page, daemon }) => {
-  await open(page, daemon, TASK_PLAN);
-  await decorated(page);
+  await openPlan(page, daemon, TASK_PLAN);
+  await awaitTagged(page, "data-md-checkbox");
   const cell = await cellWidth(page, PROSE_ABOVE);
   const [above, below] = await Promise.all(
     [PROSE_ABOVE, PROSE_BELOW].map(async (text) => firstGlyphX(page, await lineOf(page, text))),
@@ -409,8 +358,8 @@ test("the box lands where the item begins, and only a task row moves", async ({ 
 });
 
 test("every row still has exactly one gutter number", async ({ page, daemon }) => {
-  await open(page, daemon, TASK_PLAN);
-  await decorated(page);
+  await openPlan(page, daemon, TASK_PLAN);
+  await awaitTagged(page, "data-md-checkbox");
   const counts = await gridCounts(page);
   expect(counts.numbers).toBe(counts.rows);
   expect(counts.rows).toBe(counts.highestLine);
@@ -419,8 +368,8 @@ test("every row still has exactly one gutter number", async ({ page, daemon }) =
 test("a task row still opens the comment composer from its gutter", async ({ page, daemon }) => {
   // An acceptance criterion of its own: the checkbox must not cost the row its hover
   // affordance or its reachability.
-  await open(page, daemon, TASK_PLAN);
-  await decorated(page);
+  await openPlan(page, daemon, TASK_PLAN);
+  await awaitTagged(page, "data-md-checkbox");
   const plus = await revealGutterPlus(page, await lineOf(page, CHECKED));
   await plus.click();
   await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
@@ -428,8 +377,8 @@ test("a task row still opens the comment composer from its gutter", async ({ pag
 });
 
 test("nothing that merely looks like a checkbox draws one", async ({ page, daemon }) => {
-  await open(page, daemon, TASK_PLAN);
-  await decorated(page);
+  await openPlan(page, daemon, TASK_PLAN);
+  await awaitTagged(page, "data-md-checkbox");
   const tagged = new Set((await taggedRuns(page, "data-md-checkbox")).map((run) => run.row));
   // A bracketed word in prose and a bracket run mid-sentence are both left alone: a
   // task marker is only a task marker at the start of a list item. Each row is
@@ -452,7 +401,7 @@ test("the repaint settles over a quoted task list", async ({ page, daemon }) => 
   // two seconds when EXC-870 hit that with an image. This decoration appends nothing,
   // and EXC-865 established that the annotation machinery adds a sibling row rather
   // than a child, so zero is the expectation rather than the hope.
-  await open(
+  await openPlan(
     page,
     daemon,
     `# Settle Plan
@@ -465,15 +414,7 @@ Trailing prose.
 `,
   );
   const mutations = await settledMutations(page);
-  const settled = await page.evaluate(() => {
-    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-    const rows = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])];
-    return {
-      tagged: rows
-        .filter((r) => r.querySelector("[data-md-checkbox]"))
-        .map((r) => r.textContent ?? ""),
-    };
-  });
+  const tagged = await taggedRowTexts(page, "data-md-checkbox");
   expect(mutations).toBe(0);
-  expect(settled.tagged).toEqual(["> - [ ] a quoted task", "- [x] a plain task"]);
+  expect(tagged).toEqual(["> - [ ] a quoted task", "- [x] a plain task"]);
 });

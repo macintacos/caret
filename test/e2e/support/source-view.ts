@@ -49,6 +49,18 @@ export async function planSurface(page: Page): Promise<Locator> {
   return plan;
 }
 
+/** Seed `plan` through the daemon, open it, and wait for the plan surface. The
+ * arrange sequence nearly every source-view spec opens with. */
+export async function openPlan(
+  page: Page,
+  daemon: { seed: (input: { plan: string }) => Promise<string> },
+  plan: string,
+): Promise<void> {
+  await daemon.seed({ plan });
+  await page.goto("/");
+  await planSurface(page);
+}
+
 /** The vertical center (viewport px) of a 1-based source line's row. Waits for the
  * row, then fails with `source line N is not rendered` on timeout — so a wrong line
  * number still fails here rather than as an unrelated miss on whatever the resulting
@@ -227,6 +239,62 @@ export function taggedRuns(
   }, attribute);
 }
 
+/** Resolve once the decoration pass has tagged at least one run with `attribute`.
+ * The passes run from a MutationObserver a frame behind the rows, so every read
+ * of a tagged run waits for one to exist rather than racing the paint. */
+export async function awaitTagged(page: Page, attribute: string): Promise<void> {
+  await expect.poll(async () => (await taggedRuns(page, attribute)).length).toBeGreaterThan(0);
+}
+
+/** Every rendered row's text, for the rows carrying an element tagged `attribute`. */
+export function taggedRowTexts(page: Page, attribute: string): Promise<string[]> {
+  return page.evaluate((attr) => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const rows = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])];
+    return rows.filter((r) => r.querySelector(`[${attr}]`)).map((r) => r.textContent ?? "");
+  }, attribute);
+}
+
+/** Select each named line's full row text and copy it, one at a time, via the
+ * shadow root's own `getSelection()` and `execCommand("copy")` — the same
+ * serialization a real Ctrl+C takes and Selection.toString() does not, which
+ * is the whole point of reading the real clipboard back rather than the DOM
+ * selection. Sequential rather than parallel: the system clipboard is shared
+ * state, so two copies at once would race each other's read. */
+export async function copyRows<K extends string>(
+  page: Page,
+  lines: Record<K, number>,
+): Promise<Record<K, { selection: string; clipboard: string }>> {
+  const out = await page.evaluate(
+    async (lines: Record<string, number>) => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot as
+        | (ShadowRoot & { getSelection?: () => Selection | null })
+        | null;
+      const read = async (ln: number) => {
+        const row = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])].find(
+          (r) => r.getAttribute("data-line") === String(ln),
+        );
+        if (sh == null || row == null) return { selection: "", clipboard: "<no row>" };
+        const range = document.createRange();
+        range.selectNodeContents(row);
+        const sel = sh.getSelection?.() ?? getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+        document.execCommand("copy");
+        return {
+          selection: sel?.toString() ?? "",
+          clipboard: await navigator.clipboard.readText(),
+        };
+      };
+      const result: Record<string, { selection: string; clipboard: string }> = {};
+      for (const [key, ln] of Object.entries(lines)) result[key] = await read(ln);
+      return result;
+    },
+    lines as Record<string, number>,
+  );
+  return out as Record<K, { selection: string; clipboard: string }>;
+}
+
 /** Watch the source view's shadow root for childList mutations, then resolve with the
  * count once it has stopped moving.
  *
@@ -266,6 +334,41 @@ export async function settledMutations(page: Page): Promise<number> {
     })
     .toBe(true);
   return read();
+}
+
+/** Viewport-px centre of a 1-based line's number cell in the gutter column — the
+ * library's own `data-line-index` / `data-line-number-content` pairing, the same
+ * contract `lineCenterY` resolves. */
+export async function gutterCellCenter(
+  page: Page,
+  line: number,
+): Promise<{ x: number; y: number }> {
+  const pt = await page.evaluate((ln) => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const span = [...(sh?.querySelectorAll("[data-line-number-content]") ?? [])].find(
+      (s) => (s.parentElement as HTMLElement)?.dataset.lineIndex === String(ln - 1),
+    );
+    const r = (span?.parentElement as HTMLElement)?.getBoundingClientRect();
+    return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null;
+  }, line);
+  if (pt === null) throw new Error(`gutter cell for line ${line} not found`);
+  return pt;
+}
+
+/** Select a line span by dragging down the line-number column from `startLine`
+ * to `endLine` — the library's line-selection gesture. A stepped real-mouse drag
+ * grows the selection row by row; the gutter `+` then reports that range. */
+export async function selectGutterRange(
+  page: Page,
+  startLine: number,
+  endLine: number,
+): Promise<void> {
+  const start = await gutterCellCenter(page, startLine);
+  const end = await gutterCellCenter(page, endLine);
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(end.x, end.y, { steps: 12 });
+  await page.mouse.up();
 }
 
 /** Reveal the gutter `+` on `line` by moving the mouse over its left edge. The
@@ -336,4 +439,14 @@ export async function composer(page: Page): Promise<Locator> {
   await input.click();
   await expect(input).toBeFocused();
   return input;
+}
+
+/** Assert no comment composer opened, giving one a beat to appear first — for a
+ * gesture that opens something else instead (a file preview, a new tab) and must
+ * not also trigger the row's own comment affordance. */
+export async function expectNoComposerOpens(page: Page): Promise<void> {
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  const t0 = await page.evaluate(() => performance.now());
+  await page.waitForFunction((t) => performance.now() > t + 300, t0);
+  await expect(composer).toHaveCount(0);
 }

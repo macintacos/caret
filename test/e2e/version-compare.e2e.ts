@@ -23,7 +23,7 @@
 // preference read/write in ui/src/lib/diffStylePref.test.ts and
 // diffIndicatorsPref.test.ts.
 
-import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { type Daemon, expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
 // Three versions whose bodies each carry a unique, greppable line so a diff
@@ -31,6 +31,35 @@ import { planSurface } from "@test/e2e/support/source-view.ts";
 const V1 = "# Plan\n\nalpha line one\n";
 const V2 = "# Plan\n\nbeta line two\n";
 const V3 = "# Plan\n\ngamma line three\n";
+
+/** The library's `<pre>` for the current diff — one per page, so `.first()` is
+ * always the whole answer. */
+const diffPre = (page: import("@playwright/test").Page) => page.locator(".diffview pre").first();
+
+/** Seed V1–V3, open the compare picker, and wait for the newest version's own
+ * line — the arrange sequence most of the layout/indicator toggle tests share. */
+async function openThreeVersionCompare(page: import("@playwright/test").Page, daemon: Daemon) {
+  await daemon.seedVersions(3, [V1, V2, V3]);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Versions" }).click();
+  await expect(page.getByText("gamma line three")).toBeVisible();
+}
+
+// Two tall versions so the diff overflows the viewport and a scroll offset sticks.
+const tallBody = (tag: string) =>
+  Array.from({ length: 80 }, (_, i) => `${tag} line ${i + 1} of the plan body.`).join("\n\n");
+
+/** Seed two tall versions and open the compare picker, returning the plan
+ * surface — the arrange sequence the scroll-retention tests share. */
+async function openTallCompare(page: import("@playwright/test").Page, daemon: Daemon) {
+  await daemon.seedVersions(2, [
+    `# Plan\n\n${tallBody("alpha")}\n`,
+    `# Plan\n\n${tallBody("beta")}\n`,
+  ]);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Versions" }).click();
+  return planSurface(page);
+}
 
 test("the compare control is disabled for a single-version review", async ({ daemon, page }) => {
   await daemon.seed({ plan: V1 });
@@ -73,13 +102,10 @@ test("toggling split↔unified switches layout in place without a remount", asyn
   daemon,
   page,
 }) => {
-  await daemon.seedVersions(3, [V1, V2, V3]);
-  await page.goto("/");
-  await page.getByRole("button", { name: "Versions" }).click();
-  await expect(page.getByText("gamma line three")).toBeVisible();
+  await openThreeVersionCompare(page, daemon);
 
   // The library renders split as data-diff-type="split" and unified as "single".
-  const pre = page.locator(".diffview pre").first();
+  const pre = diffPre(page);
   await expect(pre).toHaveAttribute("data-diff-type", "split");
 
   await page.getByRole("radio", { name: "Unified" }).click();
@@ -91,15 +117,8 @@ test("toggling split↔unified switches layout in place without a remount", asyn
 });
 
 test("toggling layout preserves the diff scroll position", async ({ daemon, page }) => {
-  // Tall versions so the diff overflows the viewport and a scroll offset sticks.
-  const body = (tag: string) =>
-    Array.from({ length: 80 }, (_, i) => `${tag} line ${i + 1} of the plan body.`).join("\n\n");
-  await daemon.seedVersions(2, [`# Plan\n\n${body("alpha")}\n`, `# Plan\n\n${body("beta")}\n`]);
-  await page.goto("/");
-  await page.getByRole("button", { name: "Versions" }).click();
-
-  const view = await planSurface(page);
-  await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-diff-type", "split");
+  const view = await openTallCompare(page, daemon);
+  await expect(diffPre(page)).toHaveAttribute("data-diff-type", "split");
 
   await view.evaluate((el) => {
     el.scrollTop = 400;
@@ -109,7 +128,7 @@ test("toggling layout preserves the diff scroll position", async ({ daemon, page
 
   // Switch layout in place (setOptions, not a remount); the scroll offset holds.
   await page.getByRole("radio", { name: "Unified" }).click();
-  await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-diff-type", "single");
+  await expect(diffPre(page)).toHaveAttribute("data-diff-type", "single");
   expect(await view.evaluate((el) => el.scrollTop)).toBe(before);
 });
 
@@ -117,15 +136,7 @@ test("the compare header stays pinned to the top and reads the version pair", as
   daemon,
   page,
 }) => {
-  // A diff tall enough to overflow the viewport, so a scroll would carry a
-  // non-sticky header out of view.
-  const body = (tag: string) =>
-    Array.from({ length: 80 }, (_, i) => `${tag} line ${i + 1} of the plan body.`).join("\n\n");
-  await daemon.seedVersions(2, [`# Plan\n\n${body("alpha")}\n`, `# Plan\n\n${body("beta")}\n`]);
-  await page.goto("/");
-  await page.getByRole("button", { name: "Versions" }).click();
-
-  const view = await planSurface(page);
+  const view = await openTallCompare(page, daemon);
   // The header reads the default pair: target=v1 on the before side (the rename
   // "from"), base=v2 as the title — surfacing what is compared, not a filename.
   const header = page.locator(".diffview [data-diffs-header]").first();
@@ -157,30 +168,24 @@ test("the compare header stays pinned to the top and reads the version pair", as
 });
 
 test("the chosen layout persists across a reload", async ({ daemon, page }) => {
-  await daemon.seedVersions(3, [V1, V2, V3]);
-  await page.goto("/");
-  await page.getByRole("button", { name: "Versions" }).click();
-  await expect(page.getByText("gamma line three")).toBeVisible();
+  await openThreeVersionCompare(page, daemon);
   await page.getByRole("radio", { name: "Unified" }).click();
-  await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-diff-type", "single");
+  await expect(diffPre(page)).toHaveAttribute("data-diff-type", "single");
 
   await page.reload();
   await page.getByRole("button", { name: "Versions" }).click();
   // The remembered layout drives the initial diff style after reload.
-  await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-diff-type", "single");
+  await expect(diffPre(page)).toHaveAttribute("data-diff-type", "single");
 });
 
 test("toggling bars↔classic↔both switches gutter indicators in place without a remount", async ({
   daemon,
   page,
 }) => {
-  await daemon.seedVersions(3, [V1, V2, V3]);
-  await page.goto("/");
-  await page.getByRole("button", { name: "Versions" }).click();
-  await expect(page.getByText("gamma line three")).toBeVisible();
+  await openThreeVersionCompare(page, daemon);
 
   // The library marks the pre with data-indicators; the default is "bars".
-  const pre = page.locator(".diffview pre").first();
+  const pre = diffPre(page);
   await expect(pre).toHaveAttribute("data-indicators", "bars");
 
   await page.getByRole("radio", { name: "+/−" }).click();
@@ -199,17 +204,14 @@ test("toggling bars↔classic↔both switches gutter indicators in place without
 });
 
 test("the chosen gutter indicators persist across a reload", async ({ daemon, page }) => {
-  await daemon.seedVersions(3, [V1, V2, V3]);
-  await page.goto("/");
-  await page.getByRole("button", { name: "Versions" }).click();
-  await expect(page.getByText("gamma line three")).toBeVisible();
+  await openThreeVersionCompare(page, daemon);
   await page.getByRole("radio", { name: "+/−" }).click();
-  await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-indicators", "classic");
+  await expect(diffPre(page)).toHaveAttribute("data-indicators", "classic");
 
   await page.reload();
   await page.getByRole("button", { name: "Versions" }).click();
   // The remembered indicators drive the initial diff markers after reload.
-  await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-indicators", "classic");
+  await expect(diffPre(page)).toHaveAttribute("data-indicators", "classic");
 });
 
 // Semantic +/- color (EXC-604). The bridge ties --diffs-addition-color-override
@@ -304,18 +306,23 @@ const CTX_MIDDLE = Array.from(
 const CTX_V1 = `# Plan\n\nfirst line ALPHA\n\n${CTX_MIDDLE}\n\nlast line ALPHA\n`;
 const CTX_V2 = `# Plan\n\nfirst line OMEGA\n\n${CTX_MIDDLE}\n\nlast line OMEGA\n`;
 
+/** Seed CTX_V1/CTX_V2 and open the compare picker — the changed first/last
+ * lines flank a long identical middle, so the library collapses that middle
+ * behind one line-info separator band. */
+async function openCollapsedContextCompare(page: import("@playwright/test").Page, daemon: Daemon) {
+  await daemon.seedVersions(2, [CTX_V1, CTX_V2]);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Versions" }).click();
+  await expect(page.getByText("first line OMEGA")).toBeVisible();
+}
+
 for (const colorScheme of ["light", "dark"] as const) {
   test(`collapsed context renders a line-info band on caret's separator surface in ${colorScheme}`, async ({
     daemon,
     page,
   }) => {
     await page.emulateMedia({ colorScheme });
-    await daemon.seedVersions(2, [CTX_V1, CTX_V2]);
-    await page.goto("/");
-    await page.getByRole("button", { name: "Versions" }).click();
-    // The changed first/last lines flank a long identical middle, so the library
-    // collapses that middle behind one line-info separator band.
-    await expect(page.getByText("first line OMEGA")).toBeVisible();
+    await openCollapsedContextCompare(page, daemon);
 
     const probe = await page.evaluate(() => {
       const sh = document.querySelector(".diffview")?.shadowRoot;
@@ -358,10 +365,7 @@ for (const colorScheme of ["light", "dark"] as const) {
 }
 
 test("clicking the expand pill reveals the collapsed context", async ({ daemon, page }) => {
-  await daemon.seedVersions(2, [CTX_V1, CTX_V2]);
-  await page.goto("/");
-  await page.getByRole("button", { name: "Versions" }).click();
-  await expect(page.getByText("first line OMEGA")).toBeVisible();
+  await openCollapsedContextCompare(page, daemon);
 
   // How many of the shared middle's lines are currently rendered in the diff. The
   // blank-line structure fragments the change into several hunks, so the middle
@@ -403,14 +407,11 @@ test("clicking the expand pill reveals the collapsed context", async ({ daemon, 
 test("forces unified and drops the layout toggle below --w-narrow", async ({ daemon, page }) => {
   // A narrow viewport (< 960); the persisted layout preference is still split.
   await page.setViewportSize({ width: 800, height: 900 });
-  await daemon.seedVersions(3, [V1, V2, V3]);
-  await page.goto("/");
-  await page.getByRole("button", { name: "Versions" }).click();
-  await expect(page.getByText("gamma line three")).toBeVisible();
+  await openThreeVersionCompare(page, daemon);
 
   // Split's two columns can't fit, so the diff renders unified ("single") even
   // though split is the stored preference — the library marks unified as "single".
-  await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-diff-type", "single");
+  await expect(diffPre(page)).toHaveAttribute("data-diff-type", "single");
   // The layout choice is gone (there is nothing to pick at this width)…
   await expect(page.getByRole("radio", { name: "Split" })).toHaveCount(0);
   await expect(page.getByRole("radio", { name: "Unified" })).toHaveCount(0);
@@ -423,14 +424,11 @@ test("crossing --w-narrow forces unified then restores the split preference", as
   page,
 }) => {
   // Fixture viewport is wide (1600), so the stored split preference applies.
-  await daemon.seedVersions(3, [V1, V2, V3]);
-  await page.goto("/");
-  await page.getByRole("button", { name: "Versions" }).click();
-  await expect(page.getByText("gamma line three")).toBeVisible();
+  await openThreeVersionCompare(page, daemon);
 
   // The same <pre> element throughout — the layout switches in place (setOptions),
   // it is never recreated by a width change.
-  const pre = page.locator(".diffview pre").first();
+  const pre = diffPre(page);
   await expect(pre).toHaveAttribute("data-diff-type", "split");
 
   // Below the breakpoint: forced to unified, and the layout toggle drops out.
