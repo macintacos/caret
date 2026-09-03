@@ -1025,13 +1025,24 @@ test("the repaint settles over a plan of tables", async ({ page, daemon }) => {
   // settle check disagreed with what it built would rebuild every frame, the runaway
   // EXC-870 measured at ~10,800 mutations in two seconds.
   await open(page, daemon, TABLE_PLAN);
+  // Two barriers before the claim, because `open` resolves on the scroll container
+  // being visible and nothing more. `carded` is the one that proves the pass has
+  // actually run; the discarded settle is the one that proves it has finished
+  // running. settledMutations counts from the moment its observer goes in, so
+  // installing it while the passes are still working counts their legitimate one-shot
+  // churn — measured at 300 on a loaded host — as a repaint that never settled. Its
+  // own contract is "reaches rest and STAYS there": this first call is the reaching,
+  // the second is the claim. A genuine runaway still fails here rather than below,
+  // because a view that never rests never lets the first call return either.
+  await carded(page);
+  await settledMutations(page);
+
   const mutations = await settledMutations(page);
   expect(mutations).toBe(0);
-  // Not vacuous: the tables really are carded at rest, and the image row — the one
-  // line on the page two passes both write to — still holds the image the other one
-  // put there. Without that second check the zero above would also be what a pass
-  // that quietly deleted the image and never looked again produced.
-  await carded(page);
+  // Not vacuous: the tables were carded above and the zero proves they stayed that way,
+  // and the image row — the one line on the page two passes both write to — still holds
+  // the image the other one put there. Without that second check the zero would also be
+  // what a pass that quietly deleted the image and never looked again produced.
   const line = await lineOf(page, B_IMAGE);
   await expect(
     (await planSurface(page)).locator(
