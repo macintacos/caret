@@ -28,14 +28,16 @@
 
 import type { Locator, Page } from "@playwright/test";
 
+import { cursor } from "@test/e2e/support/cursor.ts";
 import {
+  type Daemon,
   expect,
   motionToken,
   pastKeyRepeatDelay,
   test,
   waitPastSafeModeGrace,
-  walkVisits,
 } from "@test/e2e/support/fixtures.ts";
+import { clickBelowPanel, holdAndSettle, isWithinBox } from "@test/e2e/support/plan-nav.ts";
 import { jumpToHeading, PLAN_SURFACE } from "@test/e2e/support/source-view.ts";
 
 // Each section must be taller than the viewport, so scrolling to a later one
@@ -157,19 +159,18 @@ const queryField = (page: Page) =>
  * is told about it through the field's aria-activedescendant, asserted below. */
 const walkedTo = (page: Page) => results(page).and(page.locator("[data-selected]"));
 
-/** Whether `row` sits inside the results list's visible box — the claim a unit mount
- * cannot make, since happy-dom lays nothing out.
- *
- * Throws rather than returning false when either box is unmeasurable: one caller
- * asserts this is FALSE, to prove the list really scrolls, and a false-on-null would
- * let "not measurable" pass as "correctly out of view". `expect.poll` fails on a throw
- * exactly as it should. The one-pixel tolerance absorbs sub-pixel layout rounding,
- * which would otherwise red a row correctly scrolled flush against an edge. */
-async function isWithinResults(page: Page, row: Locator): Promise<boolean> {
-  const rowBox = await row.boundingBox();
-  const listBox = await resultsList(page).boundingBox();
-  if (rowBox === null || listBox === null) throw new Error("row or list has no bounding box");
-  return rowBox.y >= listBox.y - 1 && rowBox.y + rowBox.height <= listBox.y + listBox.height + 1;
+/** Seed `plan`, load it, and open the bar's flat filter — the arrange nearly every
+ * filter spec opens with. Waits past the safe-mode grace so `/` reaches the bar
+ * rather than being swallowed by the window-level guard. */
+async function openFilterOn(page: Page, daemon: Daemon, plan: string): Promise<void> {
+  await daemon.seed({ plan });
+  await page.goto("/");
+  await expect(page.locator(`${CRUMB}.current`)).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  await page.keyboard.press("b");
+  await page.keyboard.press("/");
+  await expect(queryField(page)).toBeFocused();
 }
 
 /** Where the plan is parked. Several specs below assert that walking the menus
@@ -197,6 +198,46 @@ async function parkedAt(page: Page): Promise<number> {
  * the only way to reach an arbitrary heading — so the gesture is the shared one in
  * support/source-view.ts rather than a private copy that could drift from it. */
 const jumpTo = jumpToHeading;
+
+/** Seed `plan`, load it, and jump to `heading` — the arrange nearly every spec below
+ * opens with, before it goes on to drive the bar from that reading position. */
+async function arriveAt(page: Page, daemon: Daemon, plan: string, heading: string): Promise<void> {
+  await daemon.seed({ plan });
+  await page.goto("/");
+  await jumpTo(page, heading);
+}
+
+/** Two Escapes from an open crumb menu: the first closes the menu with focus back on
+ * `trigger`, the second leaves the bar entirely, with focus on the body. */
+async function escapesLeaveTheBar(page: Page, menu: Locator, trigger: Locator): Promise<void> {
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+
+  await page.keyboard.press("Escape");
+  await expect(page.locator(BAR)).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).toBe("BODY");
+}
+
+/** Click the crumb at `index` and confirm its menu shows `items` — the arrange
+ * several walk specs below share before diverging into their own key sequence. */
+async function openCrumbMenu(page: Page, index: number, items: string[]): Promise<Locator> {
+  const menu = page.locator(MENU);
+  await page.locator(CRUMB).nth(index).click();
+  await expect(menu.getByRole("menuitem")).toHaveText(items);
+  return menu;
+}
+
+/** Open the reading crumb's menu via `b`, then step out one level with `h` — the
+ * arrange two of the walk specs below share before diverging. */
+async function openThenStepOut(page: Page, atCrumb: string[], outOne: string[]): Promise<Locator> {
+  await page.keyboard.press("b");
+  const menu = page.locator(MENU);
+  await expect(menu.getByRole("menuitem")).toHaveText(atCrumb);
+  await page.keyboard.press("h");
+  await expect(menu.getByRole("menuitem")).toHaveText(outOne);
+  return menu;
+}
 
 test("the bar sits in the control row between the compare picker and the path", async ({
   daemon,
@@ -262,11 +303,8 @@ test("picking a sibling from a crumb's menu scrolls the plan to that heading", a
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-
   // Reading Bravo, so the innermost crumb's menu offers Bravo and its sibling Delta.
-  await jumpTo(page, "Bravo");
+  await arriveAt(page, daemon, NESTED_PLAN, "Bravo");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo"]);
 
   await page.locator(CRUMB).last().click();
@@ -288,10 +326,7 @@ test("picking a heading leaves the bar instead of parking a focus ring on the cr
   // return: a crumb left focused wears the app's focus ring over a plan the
   // reviewer has already moved on to. Only a pick — Escape still hands focus back
   // to the crumb (review-shortcuts.e2e.ts), since a dismissal leaves them in the bar.
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-
-  await jumpTo(page, "Bravo");
+  await arriveAt(page, daemon, NESTED_PLAN, "Bravo");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo"]);
 
   await page.locator(CRUMB).last().click();
@@ -319,26 +354,22 @@ test("a picked heading takes the line cursor with it, scrolling to one does not"
   await page.goto("/");
   await waitPastSafeModeGrace(page);
 
-  const cursor = page.locator(".diffview [data-content] [data-line][data-caret-cursor]");
   await page.locator(PLAN_SURFACE).evaluate((el) => el.scrollBy(0, 2000));
   // The trail deepened, so the scroll really did move the reading position — and
   // still no cursor exists.
   await expect.poll(() => page.locator(CRUMB).count()).toBeGreaterThan(1);
-  await expect(cursor).toHaveCount(0);
+  await expect(cursor(page)).toHaveCount(0);
 
   await jumpTo(page, "Delta");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Delta"]);
-  await expect(cursor).toHaveText("## Delta");
+  await expect(cursor(page)).toHaveText("## Delta");
 });
 
 test("a crumb's own heading opens the level below it without leaving the menu", async ({
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-
-  await jumpTo(page, "Charlie");
+  await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
 
   // Open the level-2 crumb, then hover its own row, which nests level 3 — one
@@ -357,10 +388,7 @@ test("j and k walk a nested submenu, not the plan behind it", async ({ daemon, p
   // EXC-947: j/k are handled on the menu content's own keydown, and a submenu's
   // content has its own roving group — so the walk has to keep working one level
   // in. The key that summons the bar is pinned in review-shortcuts.e2e.ts.
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-
-  await jumpTo(page, "Charlie");
+  await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
 
   // The outermost crumb's own row nests the level below rather than jumping, so
@@ -387,9 +415,7 @@ test("j and k walk a nested submenu, not the plan behind it", async ({ daemon, p
   // even with the suppression broken — but the very first stray `j` steps the row
   // it sits on. That row is Charlie's own heading, put there by the pick that
   // arranged this reading position rather than by anything in the walk above.
-  await expect(page.locator(".diffview [data-content] [data-caret-cursor]")).toHaveText(
-    "### Charlie",
-  );
+  await expect(cursor(page)).toHaveText("### Charlie");
 });
 
 // EXC-1121: Tab walks the open list too, and stays on the level it is on. Left to
@@ -398,15 +424,10 @@ test("j and k walk a nested submenu, not the plan behind it", async ({ daemon, p
 // list. Real focus movement through the primitive's roving group, so it lives here.
 
 test("Tab and Shift+Tab walk the open menu, wrapping at its ends", async ({ daemon, page }) => {
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-
-  await jumpTo(page, "Charlie");
+  await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
 
-  const menu = page.locator(MENU);
-  await page.locator(CRUMB).nth(1).click();
-  await expect(menu.getByRole("menuitem")).toHaveText(["Bravo", "Delta", "Foxtrot"]);
+  const menu = await openCrumbMenu(page, 1, ["Bravo", "Delta", "Foxtrot"]);
 
   await page.keyboard.press("Tab");
   await expect(menu.getByRole("menuitem", { name: "Bravo" })).toBeFocused();
@@ -438,10 +459,7 @@ test("Tab walks a submenu without stepping out of it", async ({ daemon, page }) 
   // so the walk has to keep working one level in — and `Tab` was never one of
   // bits-ui's SUB_OPEN_KEYS or SUB_CLOSE_KEYS, so it cannot cross the boundary in
   // either direction.
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-
-  await jumpTo(page, "Charlie");
+  await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
 
   await page.locator(CRUMB).first().click();
@@ -478,28 +496,16 @@ const focusedRow = (page: Page) =>
   });
 
 test("holding a walk key keeps traversing until it is released", async ({ daemon, page }) => {
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-
-  await jumpTo(page, "Charlie");
+  await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
 
-  const menu = page.locator(MENU);
-  await page.locator(CRUMB).nth(1).click();
-  await expect(menu.getByRole("menuitem")).toHaveText(["Bravo", "Delta", "Foxtrot"]);
+  await openCrumbMenu(page, 1, ["Bravo", "Delta", "Foxtrot"]);
 
   // Held down rather than pressed, which is the whole subject: one keydown goes in,
-  // and every move after the first is the app's own timer.
-  await page.keyboard.down("j");
-  await walkVisits(() => focusedRow(page), 3);
-  await page.keyboard.up("j");
-
-  // Released, the walk stops where it stopped — no trailing move once the window a
-  // run would have ticked in has passed.
-  const stopped = await focusedRow(page);
-  expect(stopped).not.toBe("");
-  await pastKeyRepeatDelay(page);
-  expect(await focusedRow(page)).toBe(stopped);
+  // and every move after the first is the app's own timer. Released, the walk stops
+  // where it stopped — no trailing move once the window a run would have ticked in
+  // has passed.
+  await holdAndSettle(page, "j", () => focusedRow(page), 3);
 });
 
 test("a held arrow traverses on the app's cadence rather than the OS's", async ({
@@ -511,13 +517,8 @@ test("a held arrow traverses on the app's cadence rather than the OS's", async (
   // different from holding `j`. Claiming them is also what makes double-stepping
   // possible, since the OS keeps emitting keydowns the primitive would act on, so the
   // single press below is as load-bearing as the hold.
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-
-  await jumpTo(page, "Charlie");
-  const menu = page.locator(MENU);
-  await page.locator(CRUMB).nth(1).click();
-  await expect(menu.getByRole("menuitem")).toHaveText(["Bravo", "Delta", "Foxtrot"]);
+  await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
+  const menu = await openCrumbMenu(page, 1, ["Bravo", "Delta", "Foxtrot"]);
 
   // One press, one row: the claim did not turn into two walks of the same list.
   await page.keyboard.press("ArrowDown");
@@ -525,14 +526,7 @@ test("a held arrow traverses on the app's cadence rather than the OS's", async (
   await page.keyboard.press("ArrowDown");
   await expect(menu.getByRole("menuitem", { name: "Delta" })).toBeFocused();
 
-  await page.keyboard.down("ArrowDown");
-  await walkVisits(() => focusedRow(page), 3);
-  await page.keyboard.up("ArrowDown");
-
-  const stopped = await focusedRow(page);
-  expect(stopped).not.toBe("");
-  await pastKeyRepeatDelay(page);
-  expect(await focusedRow(page)).toBe(stopped);
+  await holdAndSettle(page, "ArrowDown", () => focusedRow(page), 3);
 });
 
 test("a held ArrowRight descends the hierarchy at the same cadence", async ({ daemon, page }) => {
@@ -542,10 +536,7 @@ test("a held ArrowRight descends the hierarchy at the same cadence", async ({ da
   // onRowKeydown, where the handler still runs ahead of the primitive's. Nothing but
   // a real press can exercise that: a synthetic arrow is untrusted and returns at
   // the guard, which is exactly what keeps the walk's own re-dispatch working.
-  await daemon.seed({ plan: DEEP_PLAN });
-  await page.goto("/");
-
-  await jumpTo(page, "Echo");
+  await arriveAt(page, daemon, DEEP_PLAN, "Echo");
   const menu = page.locator(MENU);
   await page.locator(CRUMB).first().click();
   await expect(menu.getByRole("menuitem")).toHaveText(["Alpha"]);
@@ -580,10 +571,7 @@ test("h and l walk into a section the reader is not in, and only Enter goes ther
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-
-  await jumpTo(page, "Charlie");
+  await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
   const parked = await parkedAt(page);
 
@@ -623,20 +611,12 @@ test("h steps out to the crumb before it once there is no submenu left to close"
   // only ever reach that crumb's subtree while a mouse could reach the whole
   // plan from the outermost crumb. Walking out to depth 0 and descending a
   // different branch is the reach the issue asks for.
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-
-  await jumpTo(page, "Charlie");
+  await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
   const parked = await parkedAt(page);
 
-  await page.keyboard.press("b");
-  const menu = page.locator(MENU);
-  await expect(menu.getByRole("menuitem")).toHaveText(["Charlie"]);
-
   // Out to Bravo's level, then out again to Alpha's — the top of the trail.
-  await page.keyboard.press("h");
-  await expect(menu.getByRole("menuitem")).toHaveText(["Bravo", "Delta", "Foxtrot"]);
+  const menu = await openThenStepOut(page, ["Charlie"], ["Bravo", "Delta", "Foxtrot"]);
   await page.keyboard.press("h");
   await expect(menu.getByRole("menuitem")).toHaveText(["Alpha"]);
   // One more has nowhere to go and leaves the menu open where it is.
@@ -658,10 +638,7 @@ test("ArrowLeft walks the trail exactly as h does", async ({ daemon, page }) => 
   // reaches for never changes what they get (EXC-1120). The sibling spec above
   // drives the identical walk with `h`, and the two are one code path: `h` maps
   // onto ArrowLeft and re-enters the handler as one.
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-
-  await jumpTo(page, "Charlie");
+  await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
   const parked = await parkedAt(page);
 
@@ -699,10 +676,7 @@ test("a submenu opened by hover still closes on its own, without stepping out a 
   // Hover leaves focus on the parent row that spawned the submenu, so a walk asking
   // where focus sits reads "nothing open" and jumps out a whole crumb instead of
   // closing the submenu standing in front of it (EXC-1127).
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-
-  await jumpTo(page, "Charlie");
+  await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
 
   await page.locator(CRUMB).nth(1).click();
@@ -736,10 +710,7 @@ test("a hovered level-2 submenu closes without taking the level above it", async
   // a row of a level-1 submenu opens level 2 and leaves focus in level 1, so aiming
   // at focus would shut level 1 and take level 2 down with it — two levels for one
   // press (EXC-1127).
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-
-  await jumpTo(page, "Charlie");
+  await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
 
   await page.locator(CRUMB).first().click();
@@ -760,10 +731,7 @@ test("a second Escape leaves the bar with nothing focused", async ({ daemon, pag
   // Escape steps out one layer at a time: the menu, then the bar itself. Only the
   // second half is new — `onMenuKeydown` rides on portalled menu content, so the
   // bar had nothing listening once the menu had gone (EXC-1120).
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-
-  await jumpTo(page, "Charlie");
+  await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
   await waitPastSafeModeGrace(page);
 
@@ -772,18 +740,11 @@ test("a second Escape leaves the bar with nothing focused", async ({ daemon, pag
   await page.keyboard.press("b");
   await expect(menu).toBeVisible();
 
-  // The first Escape is unchanged: the menu goes, the crumb keeps focus.
-  await page.keyboard.press("Escape");
-  await expect(menu).toHaveCount(0);
-  await expect(page.locator(CRUMB).last()).toBeFocused();
-
-  // The second leaves the bar entirely — still on screen, merely unfocused. Read
-  // off the live document rather than through a locator: `BODY` is the acceptance
-  // criterion's own wording, and it is the spelling the rest of this file and
+  // The first Escape closes the menu with focus back on the crumb; the second
+  // leaves the bar entirely — still on screen, merely unfocused. `BODY` is the
+  // acceptance criterion's own wording, and the spelling the rest of this file and
   // plan-toc.e2e.ts already use for a focus-landed-here claim.
-  await page.keyboard.press("Escape");
-  await expect(page.locator(BAR)).toBeVisible();
-  await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).toBe("BODY");
+  await escapesLeaveTheBar(page, menu, page.locator(CRUMB).last());
 
   // Which is the whole point of landing on the body: the plan's window-level keys
   // reach it again, `/` opens the search HUD, and `b` brings the bar back.
@@ -812,10 +773,7 @@ test("holding h walks out to the top of the trail and settles there", async ({ d
   // hold has to survive that and stop cleanly at the outermost crumb, rather than
   // re-arming behind its own cancel — the shape ui/src/lib/keyRepeat.test.ts pins
   // directly, and the only place a browser can show what it looks like.
-  await daemon.seed({ plan: DEEP_PLAN });
-  await page.goto("/");
-
-  await jumpTo(page, "Echo");
+  await arriveAt(page, daemon, DEEP_PLAN, "Echo");
   const parked = await parkedAt(page);
   const menu = page.locator(MENU);
 
@@ -841,19 +799,11 @@ test("b shuts the bar from whatever crumb the walk reached", async ({ daemon, pa
   // onto an ancestor, so the trigger `b` opened is no longer the open one, and
   // re-opening the trailing crumb left the ancestor's panel standing beside it —
   // nothing dismisses it, since a programmatic click carries no pointerdown.
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-
-  await jumpTo(page, "Charlie");
+  await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
   await parkedAt(page);
 
-  await page.keyboard.press("b");
-  const menu = page.locator(MENU);
-  await expect(menu.getByRole("menuitem")).toHaveText(["Charlie"]);
-
-  await page.keyboard.press("h");
-  await expect(menu.getByRole("menuitem")).toHaveText(["Bravo", "Delta", "Foxtrot"]);
+  const menu = await openThenStepOut(page, ["Charlie"], ["Bravo", "Delta", "Foxtrot"]);
   await expect(menu).toHaveCount(1);
 
   await page.keyboard.press("b");
@@ -871,9 +821,7 @@ test("every level of a deep walk is actually on screen", async ({ daemon, page }
   // down each panel was clipped away — present in the DOM, sized, and invisible.
   // Playwright's own visibility check does not see overflow clipping, so this
   // hit-tests each panel's middle: a clipped one is not there to be hit.
-  await daemon.seed({ plan: DEEP_PLAN });
-  await page.goto("/");
-  await jumpTo(page, "Echo");
+  await arriveAt(page, daemon, DEEP_PLAN, "Echo");
 
   // Onto the top-level heading, then straight down the chain — each submenu opens
   // with its first row focused, and in this plan that row is the next level down.
@@ -895,10 +843,7 @@ test("Enter on a heading that has children takes the reader there", async ({ dae
   // The split the whole recursion rests on: a row can both open a level and be a
   // destination, and bits-ui flattens its own open keys into a click that looks
   // exactly like a press. Enter must land on the heading, not on its submenu.
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-
-  await jumpTo(page, "Charlie");
+  await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
   await page.locator(CRUMB).first().click();
   await page.keyboard.press("j");
   await expect(page.locator(MENU).getByRole("menuitem", { name: "Alpha" })).toBeFocused();
@@ -912,10 +857,7 @@ test("Escape and an outside click leave the reader exactly where they were", asy
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-
-  await jumpTo(page, "Charlie");
+  await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
   const parked = await parkedAt(page);
   const menu = page.locator(MENU);
 
@@ -945,10 +887,7 @@ test("a five-level trail shows whole while the row has room for it", async ({ da
   // a depth count, so this trail shortened on a 1600px window with the row half
   // empty. The marker stays in the list — that is what keeps the full trail
   // measurable — but it is not on screen, hence toBeHidden over toHaveCount(0).
-  await daemon.seed({ plan: DEEP_PLAN });
-  await page.goto("/");
-
-  await jumpTo(page, "Echo");
+  await arriveAt(page, daemon, DEEP_PLAN, "Echo");
   await expect(page.locator(SHOWN)).toHaveText(["Alpha", "Bravo", "Charlie", "Delta", "Echo"]);
   await expect(page.locator(MARKER)).toBeHidden();
 });
@@ -957,9 +896,7 @@ test("the trail elides once the row cannot hold it, and the marker opens what it
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: DEEP_PLAN });
-  await page.goto("/");
-  await jumpTo(page, "Echo");
+  await arriveAt(page, daemon, DEEP_PLAN, "Echo");
   await expect(page.locator(SHOWN)).toHaveCount(5);
 
   // MIN_APP_WIDTH_PX — the supported floor (ui/src/lib/layout.ts), where the row
@@ -995,9 +932,7 @@ test("the marker's menu takes the same two Escapes a crumb's does", async ({ dae
   // inside the same <nav>, carrying the same aria-expanded (EXC-1120). Pinned
   // rather than left true by construction: moving that handler onto the crumb
   // button, the shape the issue first sketched, would drop the marker silently.
-  await daemon.seed({ plan: DEEP_PLAN });
-  await page.goto("/");
-  await jumpTo(page, "Echo");
+  await arriveAt(page, daemon, DEEP_PLAN, "Echo");
   await page.setViewportSize({ width: 480, height: 900 });
   await expect(page.locator(MARKER)).toBeVisible();
 
@@ -1005,13 +940,7 @@ test("the marker's menu takes the same two Escapes a crumb's does", async ({ dae
   const menu = page.locator(MENU);
   await expect(menu).toBeVisible();
 
-  await page.keyboard.press("Escape");
-  await expect(menu).toHaveCount(0);
-  await expect(page.locator(MARKER)).toBeFocused();
-
-  await page.keyboard.press("Escape");
-  await expect(page.locator(BAR)).toBeVisible();
-  await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).toBe("BODY");
+  await escapesLeaveTheBar(page, menu, page.locator(MARKER));
 });
 
 // The bar's flat `/` filter (EXC-948, EXC-1098): a `command` inside a `popover`.
@@ -1028,12 +957,9 @@ test("the marker's menu takes the same two Escapes a crumb's does", async ({ dae
 // "jump". The specs below pin both halves.
 
 test("b then / then a query then Enter jumps across the hierarchy", async ({ daemon, page }) => {
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-
   // Reading Charlie, whose crumb menu offers only Charlie — the hierarchy cannot
   // reach Echo from here without closing and reopening at two other depths.
-  await jumpTo(page, "Charlie");
+  await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
 
   await page.keyboard.press("b");
@@ -1064,14 +990,7 @@ test("the arrows walk the results without focus leaving the field, and it narrat
   // The accessibility payoff the retrofit was for: the field is a real combobox, so
   // the list can be walked and narrowed while focus never leaves it and every stop
   // is announced. Read off the live DOM, which is where a screen reader reads it.
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-  await expect(page.locator(`${CRUMB}.current`)).toBeVisible();
-  await waitPastSafeModeGrace(page);
-
-  await page.keyboard.press("b");
-  await page.keyboard.press("/");
-  await expect(queryField(page)).toBeFocused();
+  await openFilterOn(page, daemon, NESTED_PLAN);
   await page.keyboard.type("a");
   await expect(results(page)).toHaveText(["Alpha", "Bravo Alpha", "Charlie Bravo", "Delta Alpha"]);
 
@@ -1106,14 +1025,7 @@ test("j and k are query text in the filter, not walk keys", async ({ daemon, pag
   // menus walk on j/k — asserted by the specs above — but inside the filter a bare
   // letter is a letter, because a field that swallowed it could not search for a
   // heading containing it.
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-  await expect(page.locator(`${CRUMB}.current`)).toBeVisible();
-  await waitPastSafeModeGrace(page);
-
-  await page.keyboard.press("b");
-  await page.keyboard.press("/");
-  await expect(queryField(page)).toBeFocused();
+  await openFilterOn(page, daemon, NESTED_PLAN);
   await page.keyboard.type("k");
 
   await expect(queryField(page)).toHaveValue("k");
@@ -1131,13 +1043,7 @@ test("the flat filter drives the list, not the command's own filter engine", asy
   // Turning it off is what lets `headingMatches` own the list — the same one prop the
   // ToC popup sets, which is what the issue means by sharing the override rather than
   // copying it.
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-  await expect(page.locator(`${CRUMB}.current`)).toBeVisible();
-  await waitPastSafeModeGrace(page);
-
-  await page.keyboard.press("b");
-  await page.keyboard.press("/");
+  await openFilterOn(page, daemon, NESTED_PLAN);
   await page.keyboard.type("o");
 
   // Exactly the three matches, in document order, each naming its parent on its own
@@ -1152,16 +1058,9 @@ test("the bar's / never reaches the plan's own search, and gives it back on clos
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-  await expect(page.locator(`${CRUMB}.current`)).toBeVisible();
-  await waitPastSafeModeGrace(page);
-
   const menu = page.locator(MENU);
   const search = page.getByRole("search");
-  await page.keyboard.press("b");
-  await page.keyboard.press("/");
-  await expect(queryField(page)).toBeFocused();
+  await openFilterOn(page, daemon, NESTED_PLAN);
   // The bar's keydown handler called preventDefault, which the window dispatcher
   // honours by returning early — so actions.search never fired.
   await expect(search).toHaveCount(0);
@@ -1177,10 +1076,7 @@ test("the bar's / never reaches the plan's own search, and gives it back on clos
 });
 
 test("Escape restores the hierarchical menu without leaving the bar", async ({ daemon, page }) => {
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-
-  await jumpTo(page, "Charlie");
+  await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
 
   const menu = page.locator(MENU);
@@ -1197,15 +1093,9 @@ test("Escape restores the hierarchical menu without leaving the bar", async ({ d
   await expect(menu.getByRole("menuitem")).toHaveText(["Charlie"]);
   await expect(menu.getByRole("menuitem", { name: "Charlie" })).toBeFocused();
 
-  await page.keyboard.press("Escape");
-  await expect(menu).toHaveCount(0);
-  await expect(page.locator(CRUMB).last()).toBeFocused();
-
   // And a third leaves the bar. Escape means one step out at every depth the bar
   // has, the filter panel included: hierarchy back, menu shut, bar unfocused.
-  await page.keyboard.press("Escape");
-  await expect(page.locator(BAR)).toBeVisible();
-  await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).toBe("BODY");
+  await escapesLeaveTheBar(page, menu, page.locator(CRUMB).last());
 });
 
 test("Tab walks the filter's results without leaving the panel", async ({ daemon, page }) => {
@@ -1214,14 +1104,7 @@ test("Tab walks the filter's results without leaving the panel", async ({ daemon
   // would step off the END OF THE DOCUMENT, since the panel is portalled to the body
   // and nothing is tabbable after it — so "focus never moved" is half the claim and
   // "the selection did" is the other half.
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-  await expect(page.locator(`${CRUMB}.current`)).toBeVisible();
-  await waitPastSafeModeGrace(page);
-
-  await page.keyboard.press("b");
-  await page.keyboard.press("/");
-  await expect(queryField(page)).toBeFocused();
+  await openFilterOn(page, daemon, NESTED_PLAN);
   await expect(walkedTo(page)).toHaveText("Alpha");
 
   await page.keyboard.press("Tab");
@@ -1243,23 +1126,16 @@ test("the Tab walk wraps, and brings the row it lands on into view", async ({ da
   // gesture that also proves the scroll: it lands on the last row of a list taller
   // than its box, which the re-dispatched arrow brings into sight and a hand-written
   // selection would not.
-  await daemon.seed({ plan: LONG_PLAN });
-  await page.goto("/");
-  await expect(page.locator(`${CRUMB}.current`)).toBeVisible();
-  await waitPastSafeModeGrace(page);
-
-  await page.keyboard.press("b");
-  await page.keyboard.press("/");
-  await expect(queryField(page)).toBeFocused();
+  await openFilterOn(page, daemon, LONG_PLAN);
   await expect(walkedTo(page)).toHaveText("Alpha");
 
   const last = results(page).last();
   await expect(last).toHaveText("Section 12 Alpha");
-  expect(await isWithinResults(page, last)).toBe(false);
+  expect(await isWithinBox(last, resultsList(page))).toBe(false);
 
   await page.keyboard.press("Shift+Tab");
   await expect(walkedTo(page)).toHaveText("Section 12 Alpha");
-  await expect.poll(() => isWithinResults(page, last)).toBe(true);
+  await expect.poll(() => isWithinBox(last, resultsList(page))).toBe(true);
 
   // And forwards off the last row comes back to the first.
   await page.keyboard.press("Tab");
@@ -1273,25 +1149,11 @@ test("holding Tab keeps walking the filter's results until it is released", asyn
   // The filter's half of the hold (EXC-1122). It walks a SELECTION rather than focus,
   // so the row is read off the command's own marker — and a thirteen-row list gives
   // the run somewhere to go before it wraps.
-  await daemon.seed({ plan: LONG_PLAN });
-  await page.goto("/");
-  await expect(page.locator(`${CRUMB}.current`)).toBeVisible();
-  await waitPastSafeModeGrace(page);
-
-  await page.keyboard.press("b");
-  await page.keyboard.press("/");
-  await expect(queryField(page)).toBeFocused();
+  await openFilterOn(page, daemon, LONG_PLAN);
   await expect(walkedTo(page)).toHaveText("Alpha");
 
   const selected = async () => (await walkedTo(page).allTextContents()).join("");
-  await page.keyboard.down("Tab");
-  await walkVisits(selected, 5);
-  await page.keyboard.up("Tab");
-
-  const stopped = await selected();
-  expect(stopped).not.toBe("");
-  await pastKeyRepeatDelay(page);
-  expect(await selected()).toBe(stopped);
+  await holdAndSettle(page, "Tab", selected, 5);
 
   // And the panel is still the reviewer's: a held Tab neither dismissed it nor let
   // the browser's own tab move out of it through.
@@ -1305,10 +1167,7 @@ test("a click outside dismisses the filter and leaves the plan where it was", as
   // The filter is a panel of its own now, so the menu's dismissal no longer covers
   // it: a popover left standing over the plan after the reviewer clicks away is the
   // failure this pins.
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-
-  await jumpTo(page, "Charlie");
+  await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
   const parked = await parkedAt(page);
 
   await page.keyboard.press("b");
@@ -1318,11 +1177,7 @@ test("a click outside dismisses the filter and leaves the plan where it was", as
   // Below the panel's own box rather than on a named element: the panel hangs off a
   // crumb at the top of the plan, so the first rows sit beneath it and a click there
   // would land on the dismiss layer instead of outside it.
-  const panelBox = await filterPanel(page).boundingBox();
-  const planBox = await page.locator(PLAN_SURFACE).boundingBox();
-  expect(panelBox).not.toBeNull();
-  expect(planBox).not.toBeNull();
-  await page.mouse.click(planBox!.x + planBox!.width / 2, panelBox!.y + panelBox!.height + 40);
+  await clickBelowPanel(page, filterPanel(page));
 
   await expect(filterPanel(page)).toHaveCount(0);
   await expect(page.locator(MENU)).toHaveCount(0);
@@ -1334,10 +1189,7 @@ test("/ reaches the filter from inside a submenu too", async ({ daemon, page }) 
   // The handler sits on the SubContent as well as the Content, so the key works at
   // any depth — and that is the one path where the swap unmounts the submenu and
   // its trigger underneath the focus the field is about to take.
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-
-  await jumpTo(page, "Charlie");
+  await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
 
   // Open the outermost crumb and step into its submenu, as the nested-walk spec does.
@@ -1355,13 +1207,7 @@ test("/ reaches the filter from inside a submenu too", async ({ daemon, page }) 
 });
 
 test("a query matching nothing says so instead of emptying the panel", async ({ daemon, page }) => {
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-  await expect(page.locator(`${CRUMB}.current`)).toBeVisible();
-  await waitPastSafeModeGrace(page);
-
-  await page.keyboard.press("b");
-  await page.keyboard.press("/");
+  await openFilterOn(page, daemon, NESTED_PLAN);
   await page.keyboard.type("zzz");
   await expect(results(page)).toHaveCount(0);
   // Narrowing to nothing is the one change aria-activedescendant cannot carry —
@@ -1535,10 +1381,7 @@ test("walking to a sibling swaps the label without firing the exit", async ({ da
   // subsections, so the trail genuinely deepens and shortens on the way and an exit there
   // is correct. What must not animate out is the swap itself: a re-root that leaves the
   // depth where it was.
-  await daemon.seed({ plan: SIBLING_PLAN });
-  await page.goto("/");
-
-  await jumpTo(page, "Bravo");
+  await arriveAt(page, daemon, SIBLING_PLAN, "Bravo");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo"]);
 
   await armBarMotion(page);
@@ -1563,10 +1406,7 @@ test("reduced motion collapses the exit rather than removing it", async ({ daemo
   // twice over: the same duration is what holds the leaving crumb in the DOM, so an
   // `animation: none` would leave a wait behind with nothing left to wait for.
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await daemon.seed({ plan: NESTED_PLAN });
-  await page.goto("/");
-
-  await jumpTo(page, "Charlie");
+  await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
 
   // Read off the CASCADE rather than off a caught event, which is what makes this

@@ -16,9 +16,14 @@
 // in ui/src/state/resolve.test.ts.
 
 import { alerts, discardConfirm, inlineRows, unsentRows } from "@test/e2e/support/chrome.ts";
+import {
+  openRequestChangesDialog,
+  openWithPendingAnnotation,
+  openWithPendingScratch,
+} from "@test/e2e/support/decision.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { awaitDenied, submitForRevision } from "@test/e2e/support/review-state.ts";
-import { planSurface } from "@test/e2e/support/source-view.ts";
+import { seedAndOpen } from "@test/e2e/support/source-view.ts";
 
 const FEEDBACK = "Please tighten the verification section.";
 
@@ -26,9 +31,7 @@ test("dialog opens, Escape closes, Cmd/Ctrl+Enter submits a rejection with feedb
   daemon,
   page,
 }) => {
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
+  const id = await seedAndOpen(page, daemon);
   await waitPastSafeModeGrace(page);
 
   const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
@@ -36,8 +39,7 @@ test("dialog opens, Escape closes, Cmd/Ctrl+Enter submits a rejection with feedb
 
   // Open → Escape closes. The editor autofocuses on open, so the Escape key
   // originates inside it (the editor wires Esc → onCancel to dismiss the dialog).
-  await page.getByRole("button", { name: "Request changes" }).click();
-  await expect(dialog).toBeVisible();
+  await openRequestChangesDialog(page);
   await expect(editor).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
@@ -45,8 +47,7 @@ test("dialog opens, Escape closes, Cmd/Ctrl+Enter submits a rejection with feedb
   // Reopen → type feedback → Cmd/Ctrl+Enter submits. fill() focuses the editor
   // and populates it (CodeMirror registers it), leaving focus there so the chord
   // lands inside the editor.
-  await page.getByRole("button", { name: "Request changes" }).click();
-  await expect(dialog).toBeVisible();
+  await openRequestChangesDialog(page);
   await editor.fill(FEEDBACK);
   await page.keyboard.press("ControlOrMeta+Enter");
 
@@ -63,22 +64,12 @@ test("a line-anchored annotation reaches Decision.feedback as a line reference p
   daemon,
   page,
 }) => {
-  const id = await daemon.seed();
-  // Seed a line-anchored annotation on lines 7-8 of the fixture plan, the same
-  // way the UI's autosave would, before the page loads its working copy.
-  await daemon.putDraft(id, {
-    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain the cold cost" }],
-  });
-
-  await page.goto("/");
-  await planSurface(page);
+  const id = await openWithPendingAnnotation(daemon, page, "explain the cold cost");
   await waitPastSafeModeGrace(page);
 
   // Open the dialog and submit with no general comment — the seeded annotation
   // alone produces feedback, so the deny button is enabled.
-  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
-  await page.getByRole("button", { name: "Request changes" }).click();
-  await expect(dialog).toBeVisible();
+  const dialog = await openRequestChangesDialog(page);
   // The preview shows the new format the agent will receive — the line reference
   // and the abbreviated quote, identical to the sent feedback. (Behind a collapsed
   // disclosure but still in the DOM, so its text is readable without expanding.)
@@ -98,21 +89,13 @@ test("a scratch's Save shows without expanding the row and graduates it into the
   daemon,
   page,
 }) => {
-  const id = await daemon.seed();
   // Seed a retained-but-unsent composer scratch (the reviewer typed an inline
   // comment but never clicked "Comment"), the same way the UI's autosave persists
   // one, before the page loads its working copy.
-  await daemon.putDraft(id, {
-    composerScratches: [{ startLine: 7, endLine: 8, text: "a half-typed thought" }],
-  });
-
-  await page.goto("/");
-  await planSurface(page);
+  const id = await openWithPendingScratch(daemon, page, "a half-typed thought");
   await waitPastSafeModeGrace(page);
 
-  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
-  await page.getByRole("button", { name: "Request changes" }).click();
-  await expect(dialog).toBeVisible();
+  const dialog = await openRequestChangesDialog(page);
 
   // The regression (EXC-746): the scratch's Save is visible WITHOUT expanding any
   // row. Before the fix it lived inside the collapsed disclosure body and was
@@ -134,18 +117,10 @@ test("discarding an unsent comment asks to confirm before dropping it (EXC-762)"
   daemon,
   page,
 }) => {
-  const id = await daemon.seed();
-  await daemon.putDraft(id, {
-    composerScratches: [{ startLine: 7, endLine: 8, text: "a half-typed thought" }],
-  });
-
-  await page.goto("/");
-  await planSurface(page);
+  await openWithPendingScratch(daemon, page, "a half-typed thought");
   await waitPastSafeModeGrace(page);
 
-  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
-  await page.getByRole("button", { name: "Request changes" }).click();
-  await expect(dialog).toBeVisible();
+  const dialog = await openRequestChangesDialog(page);
 
   const row = unsentRows(dialog);
   await expect(row).toHaveCount(1);
@@ -165,18 +140,10 @@ test("marking an inline comment as a draft demotes it into Unsent and out of the
   daemon,
   page,
 }) => {
-  const id = await daemon.seed();
-  await daemon.putDraft(id, {
-    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain the cold cost" }],
-  });
-
-  await page.goto("/");
-  await planSurface(page);
+  await openWithPendingAnnotation(daemon, page, "explain the cold cost");
   await waitPastSafeModeGrace(page);
 
-  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
-  await page.getByRole("button", { name: "Request changes" }).click();
-  await expect(dialog).toBeVisible();
+  const dialog = await openRequestChangesDialog(page);
 
   // It starts as a committed inline comment, and Send is enabled.
   await expect(inlineRows(dialog)).toHaveCount(1);
@@ -198,18 +165,10 @@ test("discarding a committed inline comment drops it and leaves the dialog open 
   daemon,
   page,
 }) => {
-  const id = await daemon.seed();
-  await daemon.putDraft(id, {
-    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain the cold cost" }],
-  });
-
-  await page.goto("/");
-  await planSurface(page);
+  await openWithPendingAnnotation(daemon, page, "explain the cold cost");
   await waitPastSafeModeGrace(page);
 
-  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
-  await page.getByRole("button", { name: "Request changes" }).click();
-  await expect(dialog).toBeVisible();
+  const dialog = await openRequestChangesDialog(page);
   await expect(inlineRows(dialog)).toHaveCount(1);
 
   // Discard opens the confirmation; nothing is dropped yet.
@@ -229,18 +188,10 @@ test("an inline comment reveals a nested Context with the anchored source lines 
   daemon,
   page,
 }) => {
-  const id = await daemon.seed();
-  await daemon.putDraft(id, {
-    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain the cold cost" }],
-  });
-
-  await page.goto("/");
-  await planSurface(page);
+  await openWithPendingAnnotation(daemon, page, "explain the cold cost");
   await waitPastSafeModeGrace(page);
 
-  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
-  await page.getByRole("button", { name: "Request changes" }).click();
-  await expect(dialog).toBeVisible();
+  const dialog = await openRequestChangesDialog(page);
 
   // Both disclosures are collapsed by default (a real-browser check — happy-dom
   // can't tell a collapsed disclosure from an open one). The Context lives nested
@@ -267,14 +218,10 @@ test("submitting confirms the outcome, and the waiting room arrives behind it", 
   // The hand-off (EXC-894) on the request-changes arm — the third verdict, and the one
   // whose modal is a full dialog rather than a guard, so it proves the acknowledgment is
   // wired to the decision rather than to the alertdialog primitive.
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
+  const id = await seedAndOpen(page, daemon);
   await waitPastSafeModeGrace(page);
 
-  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
-  await page.getByRole("button", { name: "Request changes" }).click();
-  await expect(dialog).toBeVisible();
+  const dialog = await openRequestChangesDialog(page);
   await dialog.getByRole("textbox", { name: "General comment" }).fill(FEEDBACK);
   await page.keyboard.press("ControlOrMeta+Enter");
 

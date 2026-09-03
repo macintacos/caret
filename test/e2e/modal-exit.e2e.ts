@@ -11,9 +11,10 @@
 // bookkeeping (modalPresence.test.ts already does). Whether a real exit runs, what it
 // spends, and whether the surface actually leaves afterwards, is browser behavior.
 
-import { alerts } from "@test/e2e/support/chrome.ts";
+import { alerts, openSettings } from "@test/e2e/support/chrome.ts";
+import { openRejectGuard, openWithPendingAnnotation } from "@test/e2e/support/decision.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
-import { planSurface } from "@test/e2e/support/source-view.ts";
+import { seedAndOpen } from "@test/e2e/support/source-view.ts";
 
 const settingsDialog = "[data-slot='dialog-content']";
 const settingsOverlay = "[data-slot='dialog-overlay']";
@@ -74,11 +75,6 @@ async function recordHandoff(page: import("@playwright/test").Page) {
   });
 }
 
-async function openSettings(page: import("@playwright/test").Page) {
-  await page.getByRole("button", { name: "Settings" }).click();
-  await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
-}
-
 /** Resolve once nothing is animating on the dialog content — the enter has
  * finished. Not a sleep: it reads the same getAnimations the presence layer does,
  * so a listener registered after it cannot catch the enter's tail. */
@@ -93,9 +89,7 @@ test("closing a modal plays its exit before the surface leaves the DOM", async (
   daemon,
   page,
 }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
+  await seedAndOpen(page, daemon);
   await waitPastSafeModeGrace(page);
 
   await openSettings(page);
@@ -135,9 +129,7 @@ test("re-opening a modal mounts it fresh", async ({ daemon, page }) => {
   // completed close, and the {#key} remount per open — and either alone suffices
   // here; the {#key}'s own case (re-opening mid-exit, where the unmount never
   // happens) is pinned in modalPresence.test.ts.
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
+  await seedAndOpen(page, daemon);
   await waitPastSafeModeGrace(page);
 
   await openSettings(page);
@@ -161,16 +153,10 @@ test("a confirm guard unmounts too — the alertdialog branch of the shell", asy
   // Modal selects a different bits-ui primitive per `kind`, and every other case
   // here drives the Dialog half. This covers the alertdialog half closing cleanly
   // under the gate — the guards are the sites where `active` can go null mid-exit.
-  const id = await daemon.seed();
-  await daemon.putDraft(id, {
-    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain cold cost" }],
-  });
-  await page.goto("/");
-  await planSurface(page);
+  await openWithPendingAnnotation(daemon, page, "explain cold cost");
   await waitPastSafeModeGrace(page);
 
-  await page.getByRole("button", { name: "Reject", exact: true }).click();
-  await expect(page.getByRole("alertdialog")).toBeVisible();
+  await openRejectGuard(page);
   await page.keyboard.press("Escape");
   await expect(page.locator("[data-slot='alert-dialog-content']")).toHaveCount(0);
 });
@@ -196,16 +182,10 @@ test("the backdrop moves with the panel, and both leave quicker than they arrive
   // plus the shared arms motion.test.ts pins. The guard is the branch where a backdrop on
   // its own clock is expressible at all — its overlay is the surface stock ships with no
   // duration of its own.
-  const id = await daemon.seed();
-  await daemon.putDraft(id, {
-    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain cold cost" }],
-  });
-  await page.goto("/");
-  await planSurface(page);
+  await openWithPendingAnnotation(daemon, page, "explain cold cost");
   await waitPastSafeModeGrace(page);
 
-  await page.getByRole("button", { name: "Reject", exact: true }).click();
-  await expect(page.getByRole("alertdialog")).toBeVisible();
+  await openRejectGuard(page);
 
   // The enter is read off the COMPUTED style rather than off a running animation: the
   // surface stays data-state="open" for as long as it is open, so there is no window to
@@ -285,9 +265,7 @@ test("a modal neither moves nor sticks under reduced motion", async ({ daemon, p
   // timing must not out-specify the guard and fade in anyway. Sampled in BOTH directions,
   // since the two arms are separate rules.
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
+  await seedAndOpen(page, daemon);
   await waitPastSafeModeGrace(page);
 
   await openSettings(page);
@@ -341,14 +319,10 @@ test("a decided guard's exit leads the arrival that uncovers the next state", as
   // can carry — it only exists while the app runs — so it is sampled at animationstart. The
   // duration comparison beside it is a computed-style read, and is here only because the
   // two claims are the same claim: the exit leads, and it is over first.
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
+  await seedAndOpen(page, daemon);
   await waitPastSafeModeGrace(page);
 
-  await page.getByRole("button", { name: "Reject", exact: true }).click();
-  const guard = page.getByRole("alertdialog");
-  await expect(guard).toBeVisible();
+  const guard = await openRejectGuard(page);
   // Let the guard's own arrival finish first, so the recorder cannot mistake the enter it
   // is still playing for part of the hand-off that has not started yet.
   await page.waitForFunction(
@@ -388,17 +362,10 @@ test("diverting from a guard to the dialog acknowledges nothing and uncovers not
   // is the assertion that keeps it from becoming one. Nothing resolved, so there is
   // nothing to confirm; `active` never changed, so there is nothing to uncover. Written as
   // a guard against this ticket's own change leaking one step further than it should.
-  const id = await daemon.seed();
-  await daemon.putDraft(id, {
-    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain cold cost" }],
-  });
-  await page.goto("/");
-  await planSurface(page);
+  const id = await openWithPendingAnnotation(daemon, page, "explain cold cost");
   await waitPastSafeModeGrace(page);
 
-  await page.getByRole("button", { name: "Reject", exact: true }).click();
-  const guard = page.getByRole("alertdialog");
-  await expect(guard).toBeVisible();
+  const guard = await openRejectGuard(page);
 
   await recordHandoff(page);
   await guard.getByRole("button", { name: "Request changes" }).click();

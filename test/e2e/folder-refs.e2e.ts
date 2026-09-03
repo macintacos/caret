@@ -33,6 +33,7 @@ import { join } from "node:path";
 
 import type { Locator, Page } from "@playwright/test";
 
+import { cursor, expectCursorLine, readCursorLine } from "@test/e2e/support/cursor.ts";
 import { makeProject, settleDrawer } from "@test/e2e/support/file-refs.ts";
 import type { Daemon } from "@test/e2e/support/fixtures.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
@@ -598,7 +599,6 @@ test("with both open, plan prose dismisses only the card", async ({ daemon, page
 test("with both open, the plan's own line cursor still moves", async ({ daemon, page }) => {
   // The card swallows outside CLICKS; it was never entitled to the plan's keys.
   // With a second surface now able to sit open indefinitely, that stays true.
-  const cursor = page.locator(".diffview [data-content] [data-line][data-caret-cursor]");
   const proj = await makeProject(NESTED);
   try {
     await seedBothRefs(daemon, page, proj.dir);
@@ -607,10 +607,10 @@ test("with both open, the plan's own line cursor still moves", async ({ daemon, 
     await waitPastSafeModeGrace(page);
 
     await page.keyboard.press("j");
-    await expect(cursor).toHaveCount(1);
-    const start = Number(await cursor.getAttribute("data-line"));
+    await expect(cursor(page)).toHaveCount(1);
+    const start = await readCursorLine(page);
     await page.keyboard.press("j");
-    await expect(cursor).toHaveAttribute("data-line", String(start + 1));
+    await expectCursorLine(page, start + 1);
   } finally {
     await proj.cleanup();
   }

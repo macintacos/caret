@@ -8,8 +8,13 @@
 import type { Locator, Page } from "@playwright/test";
 
 import { TALL_PLAN } from "@test/e2e/support/fixture-plan.ts";
-import { expect, test } from "@test/e2e/support/fixtures.ts";
-import { PLAN_SURFACE, planSurface, revealGutterPlus } from "@test/e2e/support/source-view.ts";
+import { type Daemon, expect, test } from "@test/e2e/support/fixtures.ts";
+import {
+  openPlan,
+  PLAN_SURFACE,
+  revealGutterPlus,
+  submitComposer,
+} from "@test/e2e/support/source-view.ts";
 
 // TALL_PLAN is several viewports tall, so a composer can open well below the fold
 // and there is always somewhere to scroll to.
@@ -62,9 +67,28 @@ async function afterFrames(page: Page, count: number): Promise<void> {
   );
 }
 
-async function loadPlan(page: Page): Promise<void> {
-  await planSurface(page);
+async function loadPlan(page: Page, daemon: Daemon): Promise<void> {
+  await openPlan(page, daemon, TALL_PLAN);
   await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
+}
+
+/** Scroll the plan a third of the way down, so there is plan above and below whatever
+ * opens next. Returns the plan view. */
+async function parkAThirdDown(page: Page): Promise<Locator> {
+  const view = page.locator(PLAN_SURFACE);
+  await view.evaluate((el) => el.scrollTo({ top: Math.round(el.scrollHeight / 3) }));
+  await expect.poll(() => view.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  return view;
+}
+
+/** Open a composer on the last fully visible line — the line whose composer is
+ * guaranteed to open past the fold, since the annotation row renders below its line. */
+async function openComposerOnLastVisibleLine(page: Page): Promise<Locator> {
+  const plus = await revealGutterPlus(page, await lastVisibleLine(page));
+  await plus.click();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+  return composer;
 }
 
 /** Scroll so `target`'s bottom edge rests on the scroll viewport's bottom edge.
@@ -84,22 +108,14 @@ test("a composer opened on the last visible line scrolls itself fully into view"
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: TALL_PLAN });
-  await page.goto("/");
-  await loadPlan(page);
+  await loadPlan(page, daemon);
 
   // Park a third of the way down, so there is plan above and below the composer.
-  const view = page.locator(PLAN_SURFACE);
-  await view.evaluate((el) => el.scrollTo({ top: Math.round(el.scrollHeight / 3) }));
-  await expect.poll(() => view.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  const view = await parkAThirdDown(page);
   const before = await view.evaluate((el) => el.scrollTop);
 
   // The composer opens in the annotation row BELOW this line, so it starts clipped.
-  const plus = await revealGutterPlus(page, await lastVisibleLine(page));
-  await plus.click();
-
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
-  await expect(composer).toBeVisible();
+  const composer = await openComposerOnLastVisibleLine(page);
 
   // The whole card ends up on screen — the poll absorbs the settle frames and the
   // smooth scroll — and it took a scroll to get there. Without the reveal the view
@@ -112,9 +128,7 @@ test("a composer that already fits leaves the view exactly where it was", async 
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: TALL_PLAN });
-  await page.goto("/");
-  await loadPlan(page);
+  await loadPlan(page, daemon);
 
   const view = page.locator(PLAN_SURFACE);
   const before = await view.evaluate((el) => el.scrollTop);
@@ -139,27 +153,15 @@ test("re-opening a saved comment for editing inherits the same reveal", async ({
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: TALL_PLAN });
-  await page.goto("/");
-  await loadPlan(page);
-
-  const view = page.locator(PLAN_SURFACE);
-  await view.evaluate((el) => el.scrollTo({ top: Math.round(el.scrollHeight / 3) }));
-  await expect.poll(() => view.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  await loadPlan(page, daemon);
+  const view = await parkAThirdDown(page);
 
   // Leave a comment anchored near the bottom of the view.
-  const plus = await revealGutterPlus(page, await lastVisibleLine(page));
-  await plus.click();
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
-  await expect(composer).toBeVisible();
-  await composer.getByRole("textbox", { name: "Comment" }).fill("Worth a second look.");
-  await composer.getByRole("button", { name: "Comment" }).click();
-  await expect(composer).toHaveCount(0);
+  const composer = await openComposerOnLastVisibleLine(page);
 
   // Park the saved card flush against the bottom edge, so the taller edit
   // composer that replaces it is clipped the moment it mounts.
-  const card = page.locator("[data-annotation-card]");
-  await expect(card).toBeVisible();
+  const card = await submitComposer(composer, "Worth a second look.");
   await parkAtBottom(card);
   const before = await view.evaluate((el) => el.scrollTop);
   await card.getByRole("button", { name: "Edit" }).click();

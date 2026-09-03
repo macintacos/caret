@@ -17,38 +17,35 @@
 
 import { alerts } from "@test/e2e/support/chrome.ts";
 import {
+  assertGuardDismissed,
+  openRejectGuard,
+  openWithPendingAnnotation,
+} from "@test/e2e/support/decision.ts";
+import {
   awaitDismissArmed,
   expect,
   test,
   waitForTwoPollTicks,
   waitPastSafeModeGrace,
 } from "@test/e2e/support/fixtures.ts";
-import { planSurface } from "@test/e2e/support/source-view.ts";
+import { assertRejected } from "@test/e2e/support/review-state.ts";
+import { seedAndOpen } from "@test/e2e/support/source-view.ts";
 
 test("rejecting resolves the review as a deny carrying the wait message", async ({
   daemon,
   page,
 }) => {
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
+  const id = await seedAndOpen(page, daemon);
 
   // Reject always confirms (EXC-685), even with nothing queued: the top-bar
   // button opens a plain "are you sure?" dialog — no "won't be sent" warning.
-  await page.getByRole("button", { name: "Reject", exact: true }).click();
-  const confirm = page.getByRole("alertdialog");
-  await expect(confirm).toBeVisible();
+  const confirm = await openRejectGuard(page);
   await expect(confirm).not.toContainText("won't be sent");
   await confirm.getByRole("button", { name: "Reject", exact: true }).click();
 
-  // UI: the review leaves the pending set.
-  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
-
   // API: rejected, and the decision carries only the concise reject-and-wait
   // message (no reviewer prose).
-  await expect.poll(async () => (await daemon.getReview(id)).body?.decision?.behavior).toBe("deny");
-  const review = (await daemon.getReview(id)).body;
-  expect(review?.status).toBe("rejected");
+  const review = await assertRejected(page, daemon, id);
   const feedback = review?.decision?.feedback ?? "";
   expect(feedback).toContain("rejected");
   expect(feedback.toLowerCase()).toContain("wait");
@@ -58,20 +55,12 @@ test("a pending inline comment guards reject; 'Reject anyway' sends only the wai
   daemon,
   page,
 }) => {
-  const id = await daemon.seed();
   // Seed a non-blank inline comment the same way the UI's autosave would.
-  await daemon.putDraft(id, {
-    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain cold cost" }],
-  });
-
-  await page.goto("/");
-  await planSurface(page);
+  const id = await openWithPendingAnnotation(daemon, page, "explain cold cost");
   await waitPastSafeModeGrace(page);
 
   // Reject now opens the confirmation naming the count — it does NOT resolve.
-  const guard = page.getByRole("alertdialog");
-  await page.getByRole("button", { name: "Reject", exact: true }).click();
-  await expect(guard).toBeVisible();
+  const guard = await openRejectGuard(page);
   await expect(guard).toContainText("1 pending comment");
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
 
@@ -88,36 +77,23 @@ test("Escape dismisses the reject guard and leaves the review pending", async ({
   daemon,
   page,
 }) => {
-  const id = await daemon.seed();
-  await daemon.putDraft(id, {
-    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain cold cost" }],
-  });
-
-  await page.goto("/");
-  await planSurface(page);
+  const id = await openWithPendingAnnotation(daemon, page, "explain cold cost");
   await waitPastSafeModeGrace(page);
 
-  const guard = page.getByRole("alertdialog");
-  await page.getByRole("button", { name: "Reject", exact: true }).click();
-  await expect(guard).toBeVisible();
+  const guard = await openRejectGuard(page);
   await page.keyboard.press("Escape");
-  await expect(guard).toHaveCount(0);
 
   // The review is untouched.
-  await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
+  await assertGuardDismissed(daemon, guard, id);
 });
 
 test("a backdrop click does NOT dismiss the reject guard (deliberate verdict, EXC-685)", async ({
   daemon,
   page,
 }) => {
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
+  const id = await seedAndOpen(page, daemon);
 
-  await page.getByRole("button", { name: "Reject", exact: true }).click();
-  const guard = page.getByRole("alertdialog");
-  await expect(guard).toBeVisible();
+  const guard = await openRejectGuard(page);
   // A NEGATIVE assertion, so an unarmed layer drops the click and the guard survives
   // either way: here the helper is the precondition for testing anything, not the flake
   // remedy it is at confirm-popover's three sites (EXC-1204).
@@ -142,13 +118,9 @@ test("rejecting confirms the outcome at its own weight", async ({ daemon, page }
   // a different weight: this confirmation is the neutral variant, not the success one —
   // a rejection is a completed decision rather than a good outcome, and a green tick on
   // "Plan rejected" would say otherwise.
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
+  const id = await seedAndOpen(page, daemon);
 
-  await page.getByRole("button", { name: "Reject", exact: true }).click();
-  const guard = page.getByRole("alertdialog");
-  await expect(guard).toBeVisible();
+  const guard = await openRejectGuard(page);
   await guard.getByRole("button", { name: "Reject", exact: true }).click();
 
   await expect(alerts(page)).toContainText("Plan rejected");

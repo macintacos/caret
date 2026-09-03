@@ -9,9 +9,8 @@
 // ui/src/state/polling.test.ts, and the trigger's own dot and accessible
 // description are ui/src/components/ReviewSwitcher.test.ts.
 
-import { reviewSwitcher } from "@test/e2e/support/chrome.ts";
+import { seedTwoPlansAndOpen } from "@test/e2e/support/decision.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
-import { planSurface } from "@test/e2e/support/source-view.ts";
 
 test("marks a plan arriving mid-review, and clears the mark on opening it", async ({
   daemon,
@@ -19,13 +18,7 @@ test("marks a plan arriving mid-review, and clears the mark on opening it", asyn
 }) => {
   // Plans already pending when the page opens are not news — the first poll
   // snapshot seeds silently — so nothing is marked at load.
-  await daemon.seed({ title: "Plan Alpha", cwd: "/tmp/proj-alpha" });
-  await daemon.seed({ title: "Plan Beta", cwd: "/tmp/proj-beta" });
-
-  await page.goto("/");
-  await planSurface(page);
-
-  const trigger = reviewSwitcher(page);
+  const trigger = await seedTwoPlansAndOpen(daemon, page);
   const dot = trigger.locator(".unread-dot");
   await expect(trigger).toHaveAccessibleDescription("2 reviews pending");
   await expect(dot).toHaveCount(0);

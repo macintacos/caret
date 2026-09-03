@@ -3,8 +3,20 @@
 // discard confirmation, and the breadcrumbs bar. Each is queried by the role and
 // accessible name the component already publishes, so a styling refactor cannot
 // red a spec (typescript-rules.md § Shared-helper policy: one idiom, one home).
+// `openSettings` is the one action rather than a locator: it opens the dialog and
+// returns it, since every caller needs it open rather than merely addressable.
 
 import type { Locator, Page } from "@playwright/test";
+
+import { expect } from "@test/e2e/support/fixtures.ts";
+
+/** Open Settings and return its dialog. */
+export async function openSettings(page: Page): Promise<Locator> {
+  await page.getByRole("button", { name: "Settings" }).click();
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
 
 /** The comment navigator panel. `CommentNavigator.svelte` labels the aside with its
  * header title, which is "Comments" plus a version range while comparing — so the

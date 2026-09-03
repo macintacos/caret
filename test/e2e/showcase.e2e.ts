@@ -49,11 +49,13 @@ import { fileURLToPath } from "node:url";
 
 import type { Page } from "@playwright/test";
 
+import { cursor } from "@test/e2e/support/cursor.ts";
 import { type Daemon, expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import {
   firstGlyphX,
   lineCenterY,
   planSurface,
+  probeColor,
   revealGutterPlus,
   settledMutations,
   taggedRuns,
@@ -412,7 +414,7 @@ test("the search anchor and the line cursor still land on decorated rows", async
 }) => {
   await openShowcase(page, daemon);
   await waitPastSafeModeGrace(page);
-  const cursor = page.locator(".diffview [data-content] [data-line][data-caret-cursor]");
+  const cursorRow = cursor(page);
 
   // Both features count CHARACTERS: the search highlight resolves a match's columns
   // against the row's own text, and j/k walks rendered rows. A decoration that took room
@@ -421,12 +423,12 @@ test("the search anchor and the line cursor still land on decorated rows", async
   // epic added, and every row it matches there carries a decoration.
   await page.keyboard.press("/");
   await page.locator("input[aria-label='Search plan']").fill("Rendering showcase");
-  await expect.poll(() => cursor.count()).toBe(0);
+  await expect.poll(() => cursorRow.count()).toBe(0);
   await page.keyboard.press("Enter");
-  await expect(cursor).toHaveCount(1);
-  const parked = Number(await cursor.getAttribute("data-line"));
+  await expect(cursorRow).toHaveCount(1);
+  const parked = Number(await cursorRow.getAttribute("data-line"));
   expect(parked).toBeGreaterThan(0);
-  expect(((await cursor.textContent()) ?? "").toLowerCase()).toContain("rendering showcase");
+  expect(((await cursorRow.textContent()) ?? "").toLowerCase()).toContain("rendering showcase");
 
   // Then walk it down into the section's decorated rows with the vim motion, one row per
   // press, and land on something the epic drew.
@@ -435,7 +437,7 @@ test("the search anchor and the line cursor still land on decorated rows", async
   for (let i = 0; i < 12; i++) {
     await page.keyboard.press("j");
     await expect
-      .poll(async () => Number(await cursor.getAttribute("data-line")))
+      .poll(async () => Number(await cursorRow.getAttribute("data-line")))
       .toBe(parked + i + 1);
     seen.push(parked + i + 1);
   }
@@ -511,33 +513,28 @@ test("a vendor palette resolves every decoration's paint", async ({ daemon, page
   // below from being tautologies.
   await expect(page.locator("html")).toHaveAttribute("style", /--paper-sunk:\s*#dce0e8/i);
 
+  // What the palette's own tokens resolve to inside this shadow root, measured rather
+  // than transcribed — a hex copied into this file is a second place a flavour bump has
+  // to be edited, and it reds naming a colour instead of a token.
+  const [inkSoft, inkFaint, tableInk] = await Promise.all([
+    probeColor(page, "--ink-soft"),
+    probeColor(page, "--ink-faint"),
+    // A table's rules are not an ink at all: EXC-1136 restated them as one step off the
+    // SURFACE — --paper-sunk 12% toward --ink, the same idiom as the card fill and the
+    // row bands — so one number reads the same on every palette without a light-dark().
+    // Written as the sheet writes it, and resolved here the same way the tokens above
+    // are, so it stays a claim about the DERIVED value reaching the sheet rather than a
+    // hex transcribed into this file.
+    probeColor(page, "color-mix(in lab, var(--paper-sunk), var(--ink) 12%)"),
+  ]);
+
   const paint = await page.evaluate(() => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
     const pick = <T>(selector: string, read: (el: HTMLElement) => T): T | null => {
       const el = sh?.querySelector(selector) as HTMLElement | null;
       return el === null || el === undefined ? null : read(el);
     };
-    // What the palette's own tokens resolve to inside this shadow root, measured rather
-    // than transcribed — a hex copied into this file is a second place a flavour bump has
-    // to be edited, and it reds naming a colour instead of a token.
-    const probe = (value: string) => {
-      const el = document.createElement("span");
-      el.style.color = value.startsWith("--") ? `var(${value})` : value;
-      sh?.appendChild(el);
-      const resolved = getComputedStyle(el).color;
-      el.remove();
-      return resolved;
-    };
     return {
-      inkSoft: probe("--ink-soft"),
-      inkFaint: probe("--ink-faint"),
-      // A table's rules are not an ink at all: EXC-1136 restated them as one step off the
-      // SURFACE — --paper-sunk 12% toward --ink, the same idiom as the card fill and the
-      // row bands — so one number reads the same on every palette without a light-dark().
-      // Written as the sheet writes it, and resolved here the same way the tokens above
-      // are, so it stays a claim about the DERIVED value reaching the sheet rather than a
-      // hex transcribed into this file.
-      tableInk: probe("color-mix(in lab, var(--paper-sunk), var(--ink) 12%)"),
       chip: pick('[data-content] [data-line] [data-md~="code"]', (el) => {
         return getComputedStyle(el).backgroundImage;
       }),
@@ -573,18 +570,18 @@ test("a vendor palette resolves every decoration's paint", async ({ daemon, page
   // mark that REPLACES its source glyph lands on this palette's --ink-soft, a step above
   // the --ink-faint the markers that survive take. Opaque throughout — an alpha suffix
   // here would be the 10%-alpha --rule regression coming back.
-  expect(paint.inkSoft).not.toBe(paint.inkFaint);
-  expect(paint.bullet).toBe(paint.inkSoft);
-  expect(paint.quoteBar).toBe(paint.inkSoft);
-  expect(paint.checkbox).toBe(paint.inkSoft);
-  expect(paint.rule).toContain(paint.inkSoft);
+  expect(inkSoft).not.toBe(inkFaint);
+  expect(paint.bullet).toBe(inkSoft);
+  expect(paint.quoteBar).toBe(inkSoft);
+  expect(paint.checkbox).toBe(inkSoft);
+  expect(paint.rule).toContain(inkSoft);
   // The table's two rules are one mark and spend one colour, stepped off --paper-sunk
   // rather than taken from a token of their own — so they track a flavour bump with
   // everything else, and stay well clear of the ink ramp they used to be softened from.
-  expect(paint.tableInk).not.toBe(paint.inkSoft);
-  expect(paint.tableInk).not.toBe(paint.inkFaint);
-  expect(paint.tableRule).toContain(paint.tableInk);
-  expect(paint.tableColumn).toContain(paint.tableInk);
+  expect(tableInk).not.toBe(inkSoft);
+  expect(tableInk).not.toBe(inkFaint);
+  expect(paint.tableRule).toContain(tableInk);
+  expect(paint.tableColumn).toContain(tableInk);
 
   // The chip is four background layers, one per member, each resolving to `transparent`
   // through its var() fallback when its member is absent — so "contains a gradient" would

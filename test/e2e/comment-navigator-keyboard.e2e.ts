@@ -10,34 +10,35 @@
 // uppercase "C" (Playwright emits key="C"); a lowercase "c" is the comment-line
 // shortcut instead (the case-sensitive matcher keeps the two distinct).
 
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 import { commentNavigator, commentTally, rows } from "@test/e2e/support/chrome.ts";
-import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { cursor } from "@test/e2e/support/cursor.ts";
+import { type Daemon, expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
-
-// The focused plan-cursor marker (SourceView tags the focused row data-caret-cursor;
-// Playwright's CSS engine pierces the library's open shadow root).
-const cursor = (page: Page) =>
-  page.locator(".diffview [data-content] [data-line][data-caret-cursor]");
 
 const ANNOTATIONS = [
   { id: "ann-1", startLine: 7, endLine: 7, comment: "warm the cache path" },
   { id: "ann-2", startLine: 13, endLine: 13, comment: "verify the sidecar replay" },
 ];
 
-test("Shift+C summons the navigator, focuses the list, and advertises its shortcut", async ({
-  daemon,
-  page,
-}) => {
+/** Seed a review with the two draft annotations, load the plan, and wait past the
+ * safe-mode grace window. Returns the (not yet summoned) navigator locator. */
+async function openWithAnnotations(page: Page, daemon: Daemon): Promise<Locator> {
   const id = await daemon.seed();
   await daemon.putDraft(id, { annotations: ANNOTATIONS });
   await page.goto("/");
   await planSurface(page);
   await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
   await waitPastSafeModeGrace(page);
+  return commentNavigator(page);
+}
 
-  const nav = commentNavigator(page);
+test("Shift+C summons the navigator, focuses the list, and advertises its shortcut", async ({
+  daemon,
+  page,
+}) => {
+  const nav = await openWithAnnotations(page, daemon);
   const toggle = commentTally(page);
   await expect(toggle).toHaveAttribute("aria-keyshortcuts", "Shift+C");
   await expect(nav).toHaveCount(0);
@@ -65,14 +66,7 @@ test("j/k walk the rows; Enter reveals without dismissing; / drops into search",
   daemon,
   page,
 }) => {
-  const id = await daemon.seed();
-  await daemon.putDraft(id, { annotations: ANNOTATIONS });
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
-  await waitPastSafeModeGrace(page);
-
-  const nav = commentNavigator(page);
+  const nav = await openWithAnnotations(page, daemon);
   const items = rows(nav);
 
   await page.keyboard.press("C");
@@ -103,14 +97,7 @@ test("the navigator captures j/k, so the plan cursor stays put while it holds fo
   daemon,
   page,
 }) => {
-  const id = await daemon.seed();
-  await daemon.putDraft(id, { annotations: ANNOTATIONS });
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
-  await waitPastSafeModeGrace(page);
-
-  const nav = commentNavigator(page);
+  const nav = await openWithAnnotations(page, daemon);
   const items = rows(nav);
   await expect(cursor(page)).toHaveCount(0);
 

@@ -7,6 +7,8 @@
 // scroll + layout geometry is browser behavior, so this is an e2e, not a unit
 // (per doc/agents/browser-testing.md).
 
+import { openSettings } from "@test/e2e/support/chrome.ts";
+import { openRejectGuard } from "@test/e2e/support/decision.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
@@ -55,10 +57,7 @@ test("a tall dialog is height-capped to the viewport and scrolls instead of clip
   await page.setViewportSize({ width: 1000, height: 140 });
   await page.goto("/");
 
-  await page.getByRole("button", { name: "Settings" }).click();
-  const dialog = page.getByRole("dialog", { name: "Settings" });
-  await expect(dialog).toBeVisible();
-
+  const dialog = await openSettings(page);
   expectCappedAndScrolling(await readFit(dialog));
 });
 
@@ -83,9 +82,7 @@ test("a tall alert-dialog is height-capped to the viewport and scrolls instead o
 
   // Reject with pending comments opens the confirmation guard (UnsentCommentsDialog
   // kind="confirm" → AlertDialog shell), previewing the comments that won't be sent.
-  await page.getByRole("button", { name: "Reject", exact: true }).click();
-  const guard = page.getByRole("alertdialog");
-  await expect(guard).toBeVisible();
+  const guard = await openRejectGuard(page);
 
   expectCappedAndScrolling(await readFit(guard));
 });

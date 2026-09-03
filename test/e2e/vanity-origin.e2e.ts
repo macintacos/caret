@@ -8,7 +8,13 @@
 // special-cases *.localhost to loopback, so caret.localhost reaches the per-test
 // fixture daemon bound on 127.0.0.1.
 
+import {
+  assertResolved,
+  openApproveGuard,
+  openRequestChangesDialog,
+} from "@test/e2e/support/decision.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { assertRejected } from "@test/e2e/support/review-state.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
 const FEEDBACK = "Please tighten the verification section.";
@@ -29,13 +35,9 @@ test("approve under caret.localhost resolves the review", async ({ daemon, page 
   // Approve opens a confirmation (EXC-791); confirming it issues the mutating
   // POST /api/reviews/:id/resolve, which carries the browser-computed
   // caret.localhost origin — no 403 means the guard allowed it.
-  await page.getByRole("button", { name: "Approve", exact: true }).click();
-  const confirm = page.getByRole("dialog", { name: "Approve this plan?" });
-  await expect(confirm).toBeVisible();
+  const confirm = await openApproveGuard(page);
   await confirm.getByRole("button", { name: "Approve", exact: true }).click();
-
-  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
-  await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).not.toContain(id);
+  await assertResolved(daemon, page, id);
 });
 
 test("request changes under caret.localhost rejects with feedback", async ({ daemon, page }) => {
@@ -44,18 +46,12 @@ test("request changes under caret.localhost rejects with feedback", async ({ dae
   await planSurface(page);
   await waitPastSafeModeGrace(page);
 
-  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
-  await page.getByRole("button", { name: "Request changes" }).click();
-  await expect(dialog).toBeVisible();
+  const dialog = await openRequestChangesDialog(page);
   await dialog.getByRole("textbox", { name: "General comment" }).fill(FEEDBACK);
   await page.keyboard.press("ControlOrMeta+Enter");
 
-  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
-
   // The deny POST under the vanity origin resolves the review rejected, carrying
   // the typed feedback — proof the guard allowed the mutating request.
-  await expect.poll(async () => (await daemon.getReview(id)).body?.decision?.behavior).toBe("deny");
-  const review = (await daemon.getReview(id)).body;
-  expect(review?.status).toBe("rejected");
+  const review = await assertRejected(page, daemon, id);
   expect(review?.decision?.feedback).toContain(FEEDBACK);
 });

@@ -15,15 +15,131 @@
 // click to its control, and what accessible name a browser then computes, are both
 // engine behaviour that happy-dom does not model.
 
+import type { Locator, Page } from "@playwright/test";
+
+import { openSettings } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
-import { planSurface } from "@test/e2e/support/source-view.ts";
+import { planSurface, seedAndOpen } from "@test/e2e/support/source-view.ts";
 
 const topbarHints = ".topbar [data-slot='kbd']";
 const keyboardButton = "button[aria-label='Keyboard shortcuts']";
 
-async function openSettings(page: import("@playwright/test").Page) {
-  await page.getByRole("button", { name: "Settings" }).click();
-  await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
+/** Seed, load, and open Settings — the common start nearly every spec here needs. */
+async function openSettingsPane(
+  page: Page,
+  daemon: { seed: () => Promise<string> },
+): Promise<Locator> {
+  await seedAndOpen(page, daemon);
+  return openSettings(page);
+}
+
+/** `openSettingsPane`, past the safe-mode grace window — for specs whose first key
+ * press could otherwise race it. */
+async function openSettingsReady(
+  page: Page,
+  daemon: { seed: () => Promise<string> },
+): Promise<Locator> {
+  const dialog = await openSettingsPane(page, daemon);
+  await waitPastSafeModeGrace(page);
+  return dialog;
+}
+
+/** Open Settings, past the safe-mode grace window, with the search box ready for a
+ * keyboard-driven assertion. */
+async function openSettingsSearch(
+  page: Page,
+  daemon: { seed: () => Promise<string> },
+): Promise<Locator> {
+  const dialog = await openSettingsReady(page, daemon);
+  return dialog.getByRole("textbox", { name: "Search settings" });
+}
+
+/** `seedAndOpen`, confirm the OS-emulated dark theme is live, and open Settings —
+ * the arrangement the palette-pick specs that need nothing between those steps
+ * share. */
+async function openSettingsFromDark(
+  page: Page,
+  daemon: { seed: () => Promise<string> },
+): Promise<Locator> {
+  await seedAndOpen(page, daemon);
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  return openSettings(page);
+}
+
+/** Switch to the Notifications category and confirm its pane reflects the granted
+ * permission. */
+async function expectNotificationsPane(dialog: Locator, page: Page): Promise<void> {
+  await dialog.locator("[data-category='Notifications']").click();
+  await expect(dialog.getByRole("heading", { name: "Notifications" })).toBeVisible();
+  await expect(page.locator("[data-notifications-pane]")).toHaveAttribute(
+    "data-permission",
+    "granted",
+  );
+}
+
+/** Open Settings and switch to the Sound category. */
+async function openSoundPane(
+  page: Page,
+  daemon: { seed: () => Promise<string> },
+): Promise<Locator> {
+  const dialog = await openSettingsPane(page, daemon);
+  await dialog.locator("[data-category='Sound']").click();
+  return dialog;
+}
+
+/** Reload, reopen Settings to the Sound pane, and return its slider — for asserting a
+ * volume pick survived the reload. */
+async function reopenSoundSlider(page: Page): Promise<Locator> {
+  await page.reload();
+  await planSurface(page);
+  const dialog = await openSettings(page);
+  await dialog.locator("[data-category='Sound']").click();
+  return dialog.getByRole("slider");
+}
+
+/** Pick the Dracula palette for the dark slot and wait for the confirming toast. */
+async function pickDraculaDark(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Dark theme" }).click();
+  await page.getByRole("option", { name: "Dracula" }).click();
+  await expect(page.getByText("Dark theme updated")).toBeVisible();
+}
+
+/** Assert `card` sits beside `.setting-menu`, fully within the viewport — the shared
+ * layout claim behind the previewed-palette tests. Returns both boxes (possibly null,
+ * exactly as `boundingBox()` can return) so a caller can add its own extra assertion. */
+async function expectBesideMenu(
+  page: Page,
+  card: Locator,
+): Promise<{
+  cardBox: { x: number; y: number; width: number; height: number } | null;
+  menuBox: { x: number; y: number; width: number; height: number } | null;
+}> {
+  const menuBox = await page.locator(".setting-menu").boundingBox();
+  const cardBox = await card.boundingBox();
+  const vp = page.viewportSize();
+  expect(cardBox).not.toBeNull();
+  expect(menuBox).not.toBeNull();
+  if (cardBox && menuBox && vp) {
+    expect(cardBox.x).toBeGreaterThanOrEqual(0);
+    expect(cardBox.y).toBeGreaterThanOrEqual(0);
+    expect(cardBox.x + cardBox.width).toBeLessThanOrEqual(vp.width);
+    expect(cardBox.y + cardBox.height).toBeLessThanOrEqual(vp.height);
+    // Beside, not over: the card sits entirely to one side of the menu.
+    const clearsRight = cardBox.x >= menuBox.x + menuBox.width - 1;
+    const clearsLeft = cardBox.x + cardBox.width <= menuBox.x + 1;
+    expect(clearsRight || clearsLeft).toBe(true);
+  }
+  return { cardBox, menuBox };
+}
+
+/** Clear `search` the way a real keystroke would. Playwright's fill("") doesn't drive
+ * Svelte 5's bind:value to empty in this build, so dispatch the bubbling input event a
+ * real keystroke fires instead. */
+async function clearSearch(search: Locator): Promise<void> {
+  await search.evaluate((el) => {
+    (el as HTMLInputElement).value = "";
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  });
 }
 
 // Headless Chromium hard-codes Notification.permission to "denied" regardless of the
@@ -55,11 +171,7 @@ test("opens the Appearance pane with theme, hints, and the folded-in Diff view s
   daemon,
   page,
 }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-
-  await openSettings(page);
+  await openSettingsPane(page, daemon);
 
   // Appearance is the (only) pane; Diff view is now a section within it, not its own
   // nav row.
@@ -90,9 +202,7 @@ test("opens the Appearance pane with theme, hints, and the folded-in Diff view s
 // page.emulateMedia rather than seeding a stored theme. (That lever was inert while
 // caret ignored prefers-color-scheme — it is the real one again under `system`.)
 test("a fresh origin follows the system, in both directions", async ({ daemon, page }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
+  await seedAndOpen(page, daemon);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
   // Flipping the OS retints the running app — no reload, no re-pick.
@@ -106,11 +216,7 @@ test("pinning a mode overrides the system and persists across a reload", async (
   daemon,
   page,
 }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-
-  await openSettings(page);
+  await openSettingsPane(page, daemon);
 
   // Pin Light while the emulated OS is dark: the whole UI retints AT ONCE, with no
   // Save step, the modal stays open, and a success toast confirms it.
@@ -133,11 +239,7 @@ test("both theme slots stay visible, and the IN USE marker tracks the live one",
   daemon,
   page,
 }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-
-  await openSettings(page);
+  await openSettingsPane(page, daemon);
 
   // Neither slot is hidden behind the current mode — that pairing is the feature.
   const lightRow = page.locator("[data-field='themeLight']");
@@ -162,12 +264,7 @@ test("picking a slot's palette applies it immediately when that slot is live", a
   daemon,
   page,
 }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-
-  await openSettings(page);
+  await openSettingsFromDark(page, daemon);
 
   // The dark slot is live under the emulated dark OS, so changing its palette applies at
   // once — no Save step — and confirms with its own toast. The pick is a DIFFERENT
@@ -186,7 +283,7 @@ test("picking a slot's palette applies it immediately when that slot is live", a
 // The distinct computed colors of the plan row carrying `text`, read inside the diff
 // view's shadow root — where the shiki tokens live, so this is the rendered syntax
 // color rather than a token value read back out of the registry.
-function rowColors(page: import("@playwright/test").Page, text: string): Promise<string[]> {
+function rowColors(page: Page, text: string): Promise<string[]> {
   return page.evaluate((needle) => {
     const shadow = document.querySelector(".diffview")?.shadowRoot;
     for (const row of shadow?.querySelectorAll("[data-line]") ?? []) {
@@ -203,9 +300,7 @@ function rowColors(page: import("@playwright/test").Page, text: string): Promise
 // retints with it. Dracula is the pick precisely because nothing in it is caret's
 // amber, so "the heading is still amber" is an unambiguous failure.
 test("picking a vendor palette retints the chrome and the code", async ({ daemon, page }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
+  await seedAndOpen(page, daemon);
 
   // The emulated OS is dark, so the dark slot is live: caret dark, amber headings.
   // Computed styles come back in decimal, so the two assertions below spell caret
@@ -214,9 +309,7 @@ test("picking a vendor palette retints the chrome and the code", async ({ daemon
   await expect.poll(() => rowColors(page, "Widget Cache Refactor")).toContain("rgb(255, 143, 61)");
 
   await openSettings(page);
-  await page.getByRole("button", { name: "Dark theme" }).click();
-  await page.getByRole("option", { name: "Dracula" }).click();
-  await expect(page.getByText("Dark theme updated")).toBeVisible();
+  await pickDraculaDark(page);
 
   // The chrome repaints from Dracula's own tokens, and the block still explains
   // which slot is showing.
@@ -249,9 +342,7 @@ test("picking a vendor palette retints the chrome and the code", async ({ daemon
 // build would visibly resolve dark.
 test("a pre-mode caret.theme pick migrates to an explicit mode", async ({ daemon, page }) => {
   await page.addInitScript(() => localStorage.setItem("caret.theme", "caret-light"));
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
+  await seedAndOpen(page, daemon);
 
   // The stored light pick became mode=light, which holds against the dark OS.
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
@@ -266,13 +357,7 @@ test("hovering a theme option previews its palette beside the menu, without appl
   daemon,
   page,
 }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  // The emulated OS is dark, so the dark slot is live.
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-
-  await openSettings(page);
+  await openSettingsFromDark(page, daemon);
   // Open the LIGHT slot's menu while dark is showing — the palette being previewed is
   // deliberately not the live one, so "preview without applying" is unambiguous.
   await page.getByRole("button", { name: "Light theme" }).click();
@@ -302,21 +387,7 @@ test("hovering a theme option previews its palette beside the menu, without appl
   await expect(preview).toHaveAttribute("style", /color-scheme:\s*light/i);
 
   // Beside the menu, fully within the viewport (never clipped).
-  const menuBox = await page.locator(".setting-menu").boundingBox();
-  const cardBox = await preview.boundingBox();
-  const vp = page.viewportSize();
-  expect(cardBox).not.toBeNull();
-  expect(menuBox).not.toBeNull();
-  if (cardBox && menuBox && vp) {
-    expect(cardBox.x).toBeGreaterThanOrEqual(0);
-    expect(cardBox.y).toBeGreaterThanOrEqual(0);
-    expect(cardBox.x + cardBox.width).toBeLessThanOrEqual(vp.width);
-    expect(cardBox.y + cardBox.height).toBeLessThanOrEqual(vp.height);
-    // Beside, not over: the card sits entirely to one side of the menu.
-    const clearsRight = cardBox.x >= menuBox.x + menuBox.width - 1;
-    const clearsLeft = cardBox.x + cardBox.width <= menuBox.x + 1;
-    expect(clearsRight || clearsLeft).toBe(true);
-  }
+  await expectBesideMenu(page, preview);
 
   // Exactly one at a time — closing this panel and opening the other slot's swaps the
   // single card to that slot's palette rather than stacking a second.
@@ -327,10 +398,7 @@ test("hovering a theme option previews its palette beside the menu, without appl
 });
 
 test("keyboard-highlighting a theme option previews it too (EXC-753)", async ({ daemon, page }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-
+  await seedAndOpen(page, daemon);
   await openSettings(page);
   // This spec's first keypress lands ~120ms after the plan renders, well inside the
   // 300ms safe-mode grace window armed at mount — which swallows it capture-phase, so
@@ -365,17 +433,11 @@ test("reopening the theme menu after a switch keeps the preview beside the menu,
   daemon,
   page,
 }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-
-  await openSettings(page);
+  await openSettingsPane(page, daemon);
 
   // Commit a palette — the panel closes on pick. A palette other than the one already
   // selected, since re-picking the current value commits nothing (EXC-1111).
-  await page.getByRole("button", { name: "Dark theme" }).click();
-  await page.getByRole("option", { name: "Dracula" }).click();
-  await expect(page.getByText("Dark theme updated")).toBeVisible();
+  await pickDraculaDark(page);
 
   // Reopen and highlight the first option — the fast reopen that raced the menu's async
   // positioning in the bug report.
@@ -385,20 +447,9 @@ test("reopening the theme menu after a switch keeps the preview beside the menu,
   const preview = page.locator("[data-slot='theme-preview']");
   await expect(preview).toBeVisible();
 
-  const menuBox = await page.locator(".setting-menu").boundingBox();
-  const cardBox = await preview.boundingBox();
-  const vp = page.viewportSize();
-  expect(cardBox).not.toBeNull();
-  expect(menuBox).not.toBeNull();
-  if (cardBox && menuBox && vp) {
-    // Beside the menu (either side), fully within the viewport.
-    const clearsRight = cardBox.x >= menuBox.x + menuBox.width - 1;
-    const clearsLeft = cardBox.x + cardBox.width <= menuBox.x + 1;
-    expect(clearsRight || clearsLeft).toBe(true);
-    expect(cardBox.x).toBeGreaterThanOrEqual(0);
-    expect(cardBox.y).toBeGreaterThanOrEqual(0);
-    expect(cardBox.x + cardBox.width).toBeLessThanOrEqual(vp.width);
-    expect(cardBox.y + cardBox.height).toBeLessThanOrEqual(vp.height);
+  // Beside the menu (either side), fully within the viewport.
+  const { cardBox, menuBox } = await expectBesideMenu(page, preview);
+  if (cardBox && menuBox) {
     // Aligned to the menu top — NOT stranded in the top-left corner, where the glitch left
     // it near y≈8 while the menu opened far lower down the pane.
     expect(Math.abs(cardBox.y - menuBox.y)).toBeLessThan(40);
@@ -412,12 +463,7 @@ test("reopening the theme menu after a switch keeps the preview beside the menu,
 // matches on substring, so a name that silently GREW would satisfy all of them.
 // toHaveAccessibleName is exact, which is the point of asserting it here.
 test("clicking a row's label reaches its control, and names it", async ({ daemon, page }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-
-  await openSettings(page);
-  const dialog = page.getByRole("dialog", { name: "Settings" });
+  const dialog = await openSettingsPane(page, daemon);
 
   // The switch is a <button>, so it is labelable: the label forwards its click.
   const hints = dialog.getByRole("switch");
@@ -456,9 +502,7 @@ test("clicking a row's label reaches its control, and names it", async ({ daemon
 });
 
 test("toggling shortcut hints applies immediately and persists", async ({ daemon, page }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
+  await seedAndOpen(page, daemon);
   await expect(page.locator(topbarHints).first()).toBeVisible();
 
   await openSettings(page);
@@ -502,12 +546,7 @@ test("changing the diff Layout in Settings reflows an open compare diff live", a
 });
 
 test("Esc closes the settings modal", async ({ daemon, page }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-
-  await openSettings(page);
-  await waitPastSafeModeGrace(page);
+  await openSettingsReady(page, daemon);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Settings" })).toHaveCount(0);
 });
@@ -516,11 +555,7 @@ test("only the selected category is filled — an unselected nav row is transpar
   daemon,
   page,
 }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-
-  await openSettings(page);
+  await openSettingsPane(page, daemon);
 
   // Appearance is selected by default; Notifications is not. sidebar-menu-button.svelte
   // keys its accent fill on `data-[active=true]:`; stock's bare `data-active:` matches on
@@ -540,22 +575,12 @@ test("the Notifications pane reflects the permission and its test affordance fir
   page,
 }) => {
   await page.addInitScript(initGrantedNotification);
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-
-  await openSettings(page);
+  const dialog = await openSettingsPane(page, daemon);
 
   // Switching to the Notifications category swaps the field pane for the live pane
   // (the first non-staged pane — a new real-browser flow this shell had no coverage
   // for). Its header reads Notifications and it reflects the injected grant.
-  await page.locator("[data-category='Notifications']").click();
-  const dialog = page.getByRole("dialog", { name: "Settings" });
-  await expect(dialog.getByRole("heading", { name: "Notifications" })).toBeVisible();
-  await expect(page.locator("[data-notifications-pane]")).toHaveAttribute(
-    "data-permission",
-    "granted",
-  );
+  await expectNotificationsPane(dialog, page);
 
   // Granted → the diagnosis affordance; clicking it constructs exactly one toast
   // through the live path (the same probe the granted bell offers).
@@ -571,12 +596,7 @@ test("the search filters the nav and fields across categories; clearing restores
   daemon,
   page,
 }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-
-  await openSettings(page);
-  const dialog = page.getByRole("dialog", { name: "Settings" });
+  const dialog = await openSettingsPane(page, daemon);
   const search = dialog.getByRole("textbox", { name: "Search settings" });
 
   // "theme" leaves the whole appearance block intact — all three of its fields carry
@@ -595,10 +615,7 @@ test("the search filters the nav and fields across categories; clearing restores
   // bubbling input event (what a real keystroke fires) — Playwright's fill("") /
   // keyboard-delete don't drive Svelte 5's bind:value to empty in this build, so dispatch
   // it explicitly. (The two-stage Esc, another clear path, is covered below.)
-  await search.evaluate((el) => {
-    (el as HTMLInputElement).value = "";
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  await clearSearch(search);
   await expect(search).toHaveValue("");
   await expect(dialog.locator("[data-field='shortcutHints']")).toBeVisible();
   await expect(dialog.locator("[data-category='Advanced']")).toBeVisible();
@@ -608,14 +625,7 @@ test("`/` focuses the search from anywhere in the modal; once focused, `/` types
   daemon,
   page,
 }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-
-  await openSettings(page);
-  await waitPastSafeModeGrace(page);
-  const dialog = page.getByRole("dialog", { name: "Settings" });
-  const search = dialog.getByRole("textbox", { name: "Search settings" });
+  const search = await openSettingsSearch(page, daemon);
 
   // Focus rests on the dialog content after open, not the input.
   await expect(search).not.toBeFocused();
@@ -631,14 +641,8 @@ test("Esc in the search clears the query and returns focus to the dialog; a seco
   daemon,
   page,
 }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-
-  await openSettings(page);
-  await waitPastSafeModeGrace(page);
+  const search = await openSettingsSearch(page, daemon);
   const dialog = page.getByRole("dialog", { name: "Settings" });
-  const search = dialog.getByRole("textbox", { name: "Search settings" });
 
   // Stage one: with a query in the focused search, Esc clears it and moves focus back
   // to the dialog — the modal stays open.
@@ -663,12 +667,7 @@ test("? stacks the shortcuts help over Settings; / routes to the topmost modal's
   daemon,
   page,
 }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-
-  await openSettings(page);
-  await waitPastSafeModeGrace(page);
+  await openSettingsReady(page, daemon);
 
   const contents = page.locator("[data-slot='dialog-content']");
   const settingsSearch = page.locator("input[aria-label='Search settings']");
@@ -704,15 +703,12 @@ test("drives the full journey: edit Appearance live, search across categories, o
   page,
 }) => {
   await page.addInitScript(initGrantedNotification);
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
+  await seedAndOpen(page, daemon);
   // Fresh origin: caret dark, with the shortcut-hint chrome showing.
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(page.locator(topbarHints).first()).toBeVisible();
 
-  await openSettings(page);
-  const dialog = page.getByRole("dialog", { name: "Settings" });
+  const dialog = await openSettings(page);
 
   // Edit #1 (Appearance): shortcut hints off — the topbar chrome disappears live and a
   // toast confirms it, no Save step.
@@ -736,20 +732,12 @@ test("drives the full journey: edit Appearance live, search across categories, o
 
   // Clearing the query restores the full nav. Emptying the field fires a bubbling input
   // event (Playwright's fill("") doesn't drive Svelte 5's bind:value empty in this build).
-  await search.evaluate((el) => {
-    (el as HTMLInputElement).value = "";
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  await clearSearch(search);
   await expect(dialog.locator("[data-field='themeLight']")).toBeVisible();
 
   // Cross into a second category: the Notifications nav row swaps the field pane for the
   // live pane, which reflects the injected grant.
-  await dialog.locator("[data-category='Notifications']").click();
-  await expect(dialog.getByRole("heading", { name: "Notifications" })).toBeVisible();
-  await expect(page.locator("[data-notifications-pane]")).toHaveAttribute(
-    "data-permission",
-    "granted",
-  );
+  await expectNotificationsPane(dialog, page);
 });
 
 // Scoped shortcuts (EXC-849): while the Settings modal owns the view, only the
@@ -760,12 +748,7 @@ test("while Settings is open, the review shortcuts are inert underneath", async 
   daemon,
   page,
 }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-
-  await openSettings(page);
-  await waitPastSafeModeGrace(page);
+  await openSettingsReady(page, daemon);
 
   const contents = page.locator("[data-slot='dialog-content']");
   await expect(contents).toHaveCount(1); // just Settings
@@ -783,12 +766,7 @@ test("? over Settings lists only the settings-view shortcuts, not the review key
   daemon,
   page,
 }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-
-  await openSettings(page);
-  await waitPastSafeModeGrace(page);
+  await openSettingsReady(page, daemon);
 
   // ? opens the help over Settings (a global shortcut, still active in the modal scope).
   await page.keyboard.press("?");
@@ -817,13 +795,7 @@ test("? over Settings lists only the settings-view shortcuts, not the review key
 // (ui/src/components/SettingSlider.test.ts, ui/src/lib/components/ui/slider/) cover
 // the coalescing and the ARIA wiring; this covers that it works in a browser.
 test("the volume slider is keyboard-operable, named, and persists", async ({ daemon, page }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-
-  await openSettings(page);
-  const dialog = page.getByRole("dialog", { name: "Settings" });
-  await dialog.locator("[data-category='Sound']").click();
+  const dialog = await openSoundPane(page, daemon);
 
   // The slider's root is a <span>, so no <label for> can bind to it — the name has to
   // arrive via aria-labelledby, forwarded to the thumb that carries role="slider".
@@ -864,24 +836,12 @@ test("the volume slider is keyboard-operable, named, and persists", async ({ dae
   await expect(page.getByText("Volume updated").first()).toBeVisible();
 
   // The level survives a reload: it is a persisted preference, not view state.
-  await page.reload();
-  await planSurface(page);
-  await openSettings(page);
-  await page.getByRole("dialog", { name: "Settings" }).locator("[data-category='Sound']").click();
-  await expect(page.getByRole("dialog", { name: "Settings" }).getByRole("slider")).toHaveAttribute(
-    "aria-valuenow",
-    "40",
-  );
+  const reopenedSlider = await reopenSoundSlider(page);
+  await expect(reopenedSlider).toHaveAttribute("aria-valuenow", "40");
 });
 
 test("the volume slider reaches silence, which is a real setting", async ({ daemon, page }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-
-  await openSettings(page);
-  const dialog = page.getByRole("dialog", { name: "Settings" });
-  await dialog.locator("[data-category='Sound']").click();
+  const dialog = await openSoundPane(page, daemon);
 
   // 0 is falsy, so a `||` anywhere on the read path would resurrect the default and
   // leave the left end of the track unreachable.
@@ -896,12 +856,6 @@ test("the volume slider reaches silence, which is a real setting", async ({ daem
   // and test nothing.
   await expect(page.getByText("Volume updated")).toBeVisible();
 
-  await page.reload();
-  await planSurface(page);
-  await openSettings(page);
-  await page.getByRole("dialog", { name: "Settings" }).locator("[data-category='Sound']").click();
-  await expect(page.getByRole("dialog", { name: "Settings" }).getByRole("slider")).toHaveAttribute(
-    "aria-valuenow",
-    "0",
-  );
+  const reopenedSlider = await reopenSoundSlider(page);
+  await expect(reopenedSlider).toHaveAttribute("aria-valuenow", "0");
 });

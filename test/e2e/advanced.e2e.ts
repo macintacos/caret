@@ -6,13 +6,12 @@
 // synthetic build identity + diagnostics wired in support/daemon-entry.ts; the two
 // are kept in sync deliberately.
 
+import { openSettings } from "@test/e2e/support/chrome.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
 async function openAdvanced(page: import("@playwright/test").Page) {
-  await page.getByRole("button", { name: "Settings" }).click();
-  const dialog = page.getByRole("dialog", { name: "Settings" });
-  await expect(dialog).toBeVisible();
+  const dialog = await openSettings(page);
   await page.locator("[data-category='Advanced']").click();
   await expect(dialog.getByRole("heading", { name: "Advanced" })).toBeVisible();
 }

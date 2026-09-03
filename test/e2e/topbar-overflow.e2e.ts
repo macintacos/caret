@@ -13,14 +13,25 @@
 // (doc/agents/browser-testing.md § Absence and invisibility).
 
 import { reviewSwitcher } from "@test/e2e/support/chrome.ts";
-import { expect, test } from "@test/e2e/support/fixtures.ts";
-import { planSurface } from "@test/e2e/support/source-view.ts";
+import { approveViaVariant, assertResolved } from "@test/e2e/support/decision.ts";
+import { type Daemon, expect, test } from "@test/e2e/support/fixtures.ts";
+import { planSurface, seedAndOpen } from "@test/e2e/support/source-view.ts";
+
+/** Seed a bare review, open it at the narrow width that collapses the secondary
+ * verdicts into the overflow menu, and open that menu. Returns the review id. */
+async function openNarrowOverflowMenu(
+  daemon: Daemon,
+  page: import("@playwright/test").Page,
+): Promise<string> {
+  await page.setViewportSize({ width: 500, height: 800 });
+  const id = await seedAndOpen(page, daemon);
+  await page.getByRole("button", { name: "More actions" }).click();
+  return id;
+}
 
 test("wide: secondaries are inline and the overflow menu is hidden", async ({ daemon, page }) => {
-  await daemon.seed();
   // Fixture viewport is REFERENCE_WIDTH_PX + 200 = 1600, above every breakpoint.
-  await page.goto("/");
-  await planSurface(page);
+  await seedAndOpen(page, daemon);
 
   await expect(page.getByRole("button", { name: "Reject" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Request changes" })).toBeVisible();
@@ -66,20 +77,14 @@ test("narrow: the reject action still resolves from the overflow menu", async ({
   daemon,
   page,
 }) => {
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await page.setViewportSize({ width: 500, height: 800 });
-
-  await page.getByRole("button", { name: "More actions" }).click();
+  const id = await openNarrowOverflowMenu(daemon, page);
   await page.getByRole("menuitem", { name: "Reject" }).click();
   // Reject always confirms (EXC-685); confirming denies the plan and clears the
   // queue — proving the collapsed action is fully wired, not just visible.
   const confirm = page.getByRole("alertdialog");
   await expect(confirm).toBeVisible();
   await confirm.getByRole("button", { name: "Reject", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
-  await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).not.toContain(id);
+  await assertResolved(daemon, page, id);
 });
 
 test("the right-hand controls stay on-screen across a width sweep", async ({ daemon, page }) => {
@@ -107,9 +112,7 @@ test("the right-hand controls stay on-screen across a width sweep", async ({ dae
 });
 
 test("tight: Approve moves into the overflow menu", async ({ daemon, page }) => {
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
+  const id = await seedAndOpen(page, daemon);
   await page.setViewportSize({ width: 600, height: 800 }); // below --w-tight (640)
 
   // The inline Approve control is off; only ⋯ + bell + settings remain right.
@@ -119,12 +122,7 @@ test("tight: Approve moves into the overflow menu", async ({ daemon, page }) => 
   // approving from there resolves the review through the confirm dialog.
   await page.getByRole("button", { name: "More actions" }).click();
   await expect(page.getByRole("menuitem", { name: "Approve & accept edits" })).toBeVisible();
-  await page.getByRole("menuitem", { name: "Approve & auto mode" }).click();
-  const confirm = page.getByRole("dialog", { name: "Approve this plan?" });
-  await expect(confirm).toBeVisible();
-  await confirm.getByRole("button", { name: "Approve", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
-  await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).not.toContain(id);
+  await approveViaVariant(daemon, page, "Approve & auto mode", id);
 });
 
 test("narrow: bell and settings stay visible while a long title truncates", async ({
@@ -154,12 +152,7 @@ test("the overflow Reject row carries the Shift+R cap (EXC-913)", async ({ daemo
   // The collapsed row gets the same cap as the inline button, so all three verdicts
   // are keyed once they consolidate here. The menu Content is portalled, so this is
   // e2e rather than a TopBar unit (browser-testing.md).
-  await daemon.seed();
-  await page.setViewportSize({ width: 500, height: 800 });
-  await page.goto("/");
-  await planSurface(page);
-
-  await page.getByRole("button", { name: "More actions" }).click();
+  await openNarrowOverflowMenu(daemon, page);
   const cap = page.getByRole("menuitem", { name: "Reject" }).locator("[data-slot='kbd']");
   await expect(cap).toBeVisible();
   // The shift half is the shared icon, never a ⇧ character.
@@ -172,12 +165,7 @@ test("the overflow Reject glyph is red like its label", async ({ daemon, page })
   // label — a real-rendering (computed color) check, so it's an e2e. caret's Icon
   // nests the svg in a span, which the shadcn base rule tints muted; the fix makes
   // the destructive variant reach that nested glyph.
-  await daemon.seed();
-  await page.setViewportSize({ width: 500, height: 800 });
-  await page.goto("/");
-  await planSurface(page);
-
-  await page.getByRole("button", { name: "More actions" }).click();
+  await openNarrowOverflowMenu(daemon, page);
   const reject = page.getByRole("menuitem", { name: "Reject" });
   await expect(reject).toBeVisible();
   const { labelColor, glyphColor } = await reject.evaluate((el) => ({

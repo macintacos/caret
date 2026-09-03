@@ -6,13 +6,12 @@
 // The fixture daemon declares no adapter variants, so the UI renders the
 // WIRE_FALLBACK set (Approve / Approve & accept edits / Approve & auto mode).
 
+import { approveViaVariant } from "@test/e2e/support/decision.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
-import { planSurface } from "@test/e2e/support/source-view.ts";
+import { seedAndOpen } from "@test/e2e/support/source-view.ts";
 
 test("the options menu approves the review in a chosen variant", async ({ daemon, page }) => {
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
+  const id = await seedAndOpen(page, daemon);
 
   await page.getByRole("button", { name: "Approve options" }).click();
   await expect(page.getByRole("menuitem", { name: "Approve & accept edits" })).toBeVisible();
@@ -21,18 +20,11 @@ test("the options menu approves the review in a chosen variant", async ({ daemon
   // Picking a variant now opens the approval confirmation (EXC-791); confirming
   // resolves the review on that variant's allow path — the same path the primary
   // button takes.
-  await page.getByRole("menuitem", { name: "Approve & auto mode" }).click();
-  const confirm = page.getByRole("dialog", { name: "Approve this plan?" });
-  await expect(confirm).toBeVisible();
-  await confirm.getByRole("button", { name: "Approve", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
-  await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).not.toContain(id);
+  await approveViaVariant(daemon, page, "Approve & auto mode", id);
 });
 
 test("Escape closes the options menu and leaves the review pending", async ({ daemon, page }) => {
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
+  const id = await seedAndOpen(page, daemon);
 
   const item = page.getByRole("menuitem", { name: "Approve & auto mode" });
   await page.getByRole("button", { name: "Approve options" }).click();

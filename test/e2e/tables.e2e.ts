@@ -42,6 +42,7 @@
 
 import type { Page } from "@playwright/test";
 
+import { expectCursorLine, goToTop, readCursorLine } from "@test/e2e/support/cursor.ts";
 import { fileRefCount, makeProject } from "@test/e2e/support/file-refs.ts";
 import { type Daemon, expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import {
@@ -50,6 +51,7 @@ import {
   lineOf,
   openPlan,
   planSurface,
+  probeColor,
   revealGutterPlus,
   rowHeights,
   selectGutterRange,
@@ -344,13 +346,7 @@ function shadowToken(page: Page, name: string): Promise<string> {
   }, name);
 }
 
-/** The line cursor's row, and the plan-readiness wait every keyboard spec opens with. */
-const cursor = (page: Page) =>
-  page.locator(".diffview [data-content] [data-line][data-caret-cursor]");
-
-const cursorLine = async (page: Page): Promise<number> =>
-  Number((await cursor(page).getAttribute("data-line")) ?? -1);
-
+/** The plan-readiness wait every keyboard spec here opens with. */
 async function readyForKeys(page: Page): Promise<void> {
   await carded(page);
   await waitPastSafeModeGrace(page);
@@ -360,11 +356,9 @@ async function readyForKeys(page: Page): Promise<void> {
  * ingest, so the caller resolves `line` from the DOM rather than counting it off the
  * seeded string. */
 async function placeCursor(page: Page, line: number): Promise<void> {
-  await page.keyboard.press("g");
-  await page.keyboard.press("g");
-  await expect(cursor(page)).toHaveAttribute("data-line", "1");
+  await goToTop(page);
   for (let i = 1; i < line; i++) await page.keyboard.press("j");
-  await expect(cursor(page)).toHaveAttribute("data-line", String(line));
+  await expectCursorLine(page, line);
 }
 
 /** Which lines took the amber band, per column. The two lists agreeing is the claim:
@@ -626,25 +620,20 @@ test("no pipe glyph paints, and the rules stand where the pipes did", async ({ p
   // text instead of the colour it resolves to. --table-rule is written out as the sheet
   // writes it for that reason: what is being claimed is that the DERIVED value reaches the
   // row, not that a hex transcribed into this file still matches.
+  const [inkSoft, ruleInk] = await Promise.all([
+    probeColor(page, "--ink-soft"),
+    probeColor(page, "color-mix(in lab, var(--paper-sunk), var(--ink) 12%)"),
+  ]);
+
   const marks = await page.evaluate(() => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
     const card = sh?.querySelector("[data-content] > [data-table-card]") as HTMLElement;
-    const probe = (value: string) => {
-      const el = document.createElement("span");
-      el.style.color = value.startsWith("--") ? `var(${value})` : value;
-      sh?.appendChild(el);
-      const resolved = getComputedStyle(el).color;
-      el.remove();
-      return resolved;
-    };
     const head = card.querySelector(":scope > [data-line][data-table-head]") as HTMLElement;
     const tokens = [...head.querySelectorAll("[data-table-cell] *")];
     const colorsOf = (match: (el: Element) => boolean) => [
       ...new Set(tokens.filter(match).map((t) => getComputedStyle(t).color)),
     ];
     return {
-      inkSoft: probe("--ink-soft"),
-      ruleInk: probe("color-mix(in lab, var(--paper-sunk), var(--ink) 12%)"),
       rows: [...card.querySelectorAll(":scope > [data-line]")].map((row) => {
         const s = getComputedStyle(row);
         return {
@@ -673,7 +662,7 @@ test("no pipe glyph paints, and the rules stand where the pipes did", async ({ p
   const body = marks.rows.filter((r) => !r.head && !r.delimiter && !r.last);
   expect(body.length).toBeGreaterThan(1);
   for (const row of body) {
-    expect(row.image).toContain(marks.ruleInk);
+    expect(row.image).toContain(ruleInk);
     expect(row.size).toBe("100% 1px");
     // Bottom edge, where the delimiter row's identical layer sits at the centre.
     expect(row.position).toBe("50% 100%");
@@ -695,10 +684,10 @@ test("no pipe glyph paints, and the rules stand where the pipes did", async ({ p
   // transform is a rendering-time one, so the copy spec further down still reads the
   // source's own case back out of this row.
   expect(marks.header.transform).toBe("uppercase");
-  expect(marks.header.color).toBe(marks.inkSoft);
+  expect(marks.header.color).toBe(inkSoft);
   // Every inked token takes the header's ink rather than shiki's — one colour, not a
   // per-token spread.
-  expect(marks.header.inked).toEqual([marks.inkSoft]);
+  expect(marks.header.inked).toEqual([inkSoft]);
   // And the :not([data-table-pipe]) exclusion held: the 0,5,0 arm would otherwise have
   // outranked the rule that hid them and put the picket fence back.
   expect(marks.header.pipes).toEqual(["rgba(0, 0, 0, 0)"]);
@@ -1179,18 +1168,16 @@ test("vim motion and `/` search reach every table line", async ({ page, daemon }
   const walked = [1];
   for (let i = 1; i < highestLine; i++) {
     await page.keyboard.press("j");
-    await expect(cursor(page)).toHaveAttribute("data-line", String(i + 1));
+    await expectCursorLine(page, i + 1);
     walked.push(i + 1);
   }
   expect(walked).toEqual(Array.from({ length: highestLine }, (_, i) => i + 1));
   // G is already where the walk ended; k steps back off it.
   await page.keyboard.press("G");
-  await expect(cursor(page)).toHaveAttribute("data-line", String(highestLine));
+  await expectCursorLine(page, highestLine);
   await page.keyboard.press("k");
-  await expect(cursor(page)).toHaveAttribute("data-line", String(highestLine - 1));
-  await page.keyboard.press("g");
-  await page.keyboard.press("g");
-  await expect(cursor(page)).toHaveAttribute("data-line", "1");
+  await expectCursorLine(page, highestLine - 1);
+  await goToTop(page);
 
   // } steps blank line to blank line, and the blanks it has to cross are the ones
   // bracketing the three tables — so landing on BOTH sides of every one of them, and
@@ -1198,7 +1185,7 @@ test("vim motion and `/` search reach every table line", async ({ page, daemon }
   const seen: number[] = [];
   for (let i = 0; i < 12; i++) {
     await page.keyboard.press("}");
-    const line = await cursorLine(page);
+    const line = await readCursorLine(page);
     if (seen.at(-1) !== line) seen.push(line);
   }
   expect(seen).toEqual([...seen].sort((a, b) => a - b));
@@ -1212,14 +1199,14 @@ test("vim motion and `/` search reach every table line", async ({ page, daemon }
   }
   expect(seen.at(-1)).toBeGreaterThan(await lineOf(page, MALFORMED_ROW));
   await page.keyboard.press("{");
-  expect(await cursorLine(page)).toBeLessThan(seen.at(-1) ?? 0);
+  expect(await readCursorLine(page)).toBeLessThan(seen.at(-1) ?? 0);
 
   // `/` reaches a word that only exists inside a cell, and Enter puts the cursor on it.
   await page.keyboard.press("/");
   await page.keyboard.type("draining");
   await expect(page.locator(".search-count")).toContainText("1");
   await page.keyboard.press("Enter");
-  await expect(cursor(page)).toHaveAttribute("data-line", String(await lineOf(page, A_ROW3)));
+  await expectCursorLine(page, await lineOf(page, A_ROW3));
 });
 
 test("V + c opens the composer over a range spanning table rows", async ({ page, daemon }) => {

@@ -16,7 +16,7 @@
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import {
   expectNoComposerOpens,
-  planSurface,
+  openPlan,
   revealGutterPlus,
 } from "@test/e2e/support/source-view.ts";
 
@@ -110,20 +110,25 @@ async function rowPoints(
   return { onLabel: { x: box.x + box.width / 2, y }, offLabel: { x: lineRight - 4, y } };
 }
 
-test("clicking a link token opens its http URL in a new tab", async ({ daemon, page }) => {
-  await daemon.seed({ plan: LINK_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-
-  // The inline link renders as its label only; the raw URL syntax is gone.
+/** Seed the link fixture, wait for the label — confirming the inline link renders as
+ * its label only, with the raw URL syntax gone — and stub window.open, ready for a
+ * spec to click one of the row's points and inspect the recorded call. */
+async function readyLinkForClick(
+  page: import("@playwright/test").Page,
+  daemon: { seed: (input: { plan: string }) => Promise<string> },
+): ReturnType<typeof rowPoints> {
+  await openPlan(page, daemon, LINK_PLAN);
   await expect(page.getByText("the cache docs")).toBeVisible();
   await stubWindowOpen(page);
+  return rowPoints(page);
+}
 
+test("clicking a link token opens its http URL in a new tab", async ({ daemon, page }) => {
   // A real click on the label runs the library's pointer pipeline, which
   // hit-tests the pointer against the link span and calls the new-tab opener.
   // Aimed at the label's own columns. The row is split at those columns, so this
   // is the label's own element rather than a point inside a sentence-wide token.
-  const { onLabel } = await rowPoints(page);
+  const { onLabel } = await readyLinkForClick(page, daemon);
   await page.mouse.click(onLabel.x, onLabel.y);
 
   await expect
@@ -135,19 +140,13 @@ test("clicking a link token does not also open the line's comment composer", asy
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: LINK_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-
   // The read-write source view wires BOTH the link layer and row-click
   // commenting, so a single event reaches the token-click handler (which opens
   // the link) and then the line-click handler (which would open a composer). The
   // composition's link-click/row-click race coordination makes the line stand
   // down: the library fires the token click first, the composed handler records
   // that event, and the row-click handler sees it was consumed and does nothing.
-  await expect(page.getByText("the cache docs")).toBeVisible();
-  await stubWindowOpen(page);
-  const { onLabel } = await rowPoints(page);
+  const { onLabel } = await readyLinkForClick(page, daemon);
   await page.mouse.click(onLabel.x, onLabel.y);
 
   // The link opened in a new tab…
@@ -172,18 +171,12 @@ test("clicking the link's row away from its label opens no tab, only the compose
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: LINK_PLAN });
-  await page.goto("/");
-  await planSurface(page);
-  await expect(page.getByText("the cache docs")).toBeVisible();
-  await stubWindowOpen(page);
-
   // Past the label. This still reaches the same per-token pointer handler the
   // label's click does — the row is split, but the library routes every token
   // through one pipeline — and only the pointer position says it is not on the
   // link. It must fall through to the row, exactly as a click on a row with no
   // link at all does.
-  const { offLabel } = await rowPoints(page);
+  const { offLabel } = await readyLinkForClick(page, daemon);
   await page.mouse.click(offLabel.x, offLabel.y);
 
   // The row's own affordance ran…
@@ -193,9 +186,7 @@ test("clicking the link's row away from its label opens no tab, only the compose
 });
 
 test("hovering the link's row away from its label reveals no tooltip", async ({ daemon, page }) => {
-  await daemon.seed({ plan: LINK_PLAN });
-  await page.goto("/");
-  await planSurface(page);
+  await openPlan(page, daemon, LINK_PLAN);
   await expect(page.getByText("the cache docs")).toBeVisible();
 
   const { onLabel, offLabel } = await rowPoints(page);
@@ -212,9 +203,7 @@ test("hovering a link token reveals a caret tooltip with the full href, not a na
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: LINK_PLAN });
-  await page.goto("/");
-  await planSurface(page);
+  await openPlan(page, daemon, LINK_PLAN);
 
   const link = page.getByText("the cache docs");
   await expect(link).toBeVisible();
@@ -249,9 +238,7 @@ test("hovering a link token reveals a caret tooltip with the full href, not a na
 });
 
 test("a link wears its chip before any hover, over its label only", async ({ daemon, page }) => {
-  await daemon.seed({ plan: LINK_PLAN });
-  await page.goto("/");
-  await planSurface(page);
+  await openPlan(page, daemon, LINK_PLAN);
   await expect(page.getByText("the cache docs")).toBeVisible();
 
   // Tagged over the label ONLY: the decoration pass cuts the row at the link's own
@@ -295,9 +282,7 @@ test("the link chip survives a drag-selected row, unlike the emphasis chips", as
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: LINK_PLAN });
-  await page.goto("/");
-  await planSurface(page);
+  await openPlan(page, daemon, LINK_PLAN);
   await expect(linkLabels(page)).toHaveCount(1);
 
   // The whole reason the selection guard sits on each member's tint VARIABLE rather than
@@ -322,9 +307,7 @@ test("the link chip survives a drag-selected row, unlike the emphasis chips", as
 });
 
 test("hovering an ordinary code token reveals no tooltip", async ({ daemon, page }) => {
-  await daemon.seed({ plan: LINK_PLAN });
-  await page.goto("/");
-  await planSurface(page);
+  await openPlan(page, daemon, LINK_PLAN);
 
   // "cold-standby" is plain prose on a row with no link at all; hovering it
   // produces no tooltip. Kept off the link's line so the check is about the
@@ -342,9 +325,7 @@ test("hovering an ordinary code token reveals no tooltip", async ({ daemon, page
 });
 
 test("clicking a dangerous-scheme token opens no tab", async ({ daemon, page }) => {
-  await daemon.seed({ plan: LINK_PLAN });
-  await page.goto("/");
-  await planSurface(page);
+  await openPlan(page, daemon, LINK_PLAN);
 
   // The javascript:-scheme link is left as literal markdown source with no
   // clickable span, so its label token "this control" carries no link.

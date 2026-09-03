@@ -55,3 +55,22 @@ This plan trims the gadget renderer's unused layout passes.
 
 Only the renderer module changes; public interfaces stay frozen.
 `;
+
+/** `count` short, distinguishable filler lines under `label`, joined by blank lines. */
+export const bodyFiller = (label: string, count: number) =>
+  Array.from({ length: count }, (_, i) => `${label} body line ${i + 1}.`).join("\n\n");
+
+/** A three-heading plan (Alpha/Bravo/Charlie), `linesPerSection` `bodyFiller` lines
+ * under each — tall enough for gg/G, half-page, and heading-jump motion to have
+ * somewhere to go, with three headings so heading jumps have distinct targets. */
+export function headedFillerPlan(linesPerSection: number): string {
+  return [
+    "# Alpha",
+    bodyFiller("Alpha", linesPerSection),
+    "## Bravo",
+    bodyFiller("Bravo", linesPerSection),
+    "## Charlie",
+    bodyFiller("Charlie", linesPerSection),
+    "",
+  ].join("\n\n");
+}

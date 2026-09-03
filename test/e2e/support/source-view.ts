@@ -61,6 +61,42 @@ export async function openPlan(
   await planSurface(page);
 }
 
+/** Seed the default fixture plan, open it, and wait for the plan surface. Returns
+ * the review id. The bare-review counterpart to `openPlan` above, for the many
+ * decision-flow specs that need the id back rather than a plan of their own. */
+export async function seedAndOpen(
+  page: Page,
+  daemon: { seed: () => Promise<string> },
+): Promise<string> {
+  const id = await daemon.seed();
+  await page.goto("/");
+  await planSurface(page);
+  return id;
+}
+
+/** Wait until the plan is ready for real keystrokes: the first content row is visible
+ * (rows paint asynchronously) and the post-mount safe-mode grace window has passed.
+ * Call right after the plan loads and before the first keypress. */
+export async function awaitPlanReadyForKeys(page: Page): Promise<void> {
+  await planSurface(page);
+  await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
+  await waitPastSafeModeGrace(page);
+}
+
+/** Seed `plan`, open it, and wait until it's ready for real keystrokes — `openPlan`
+ * plus the vim-motion specs' mandatory pre-keypress wait. Returns the review id, for
+ * the rare spec that also needs it back. */
+export async function openPlanForKeys(
+  page: Page,
+  daemon: { seed: (input: { plan: string }) => Promise<string> },
+  plan: string,
+): Promise<string> {
+  const id = await daemon.seed({ plan });
+  await page.goto("/");
+  await awaitPlanReadyForKeys(page);
+  return id;
+}
+
 /** The vertical center (viewport px) of a 1-based source line's row. Waits for the
  * row, then fails with `source line N is not rendered` on timeout — so a wrong line
  * number still fails here rather than as an unrelated miss on whatever the resulting
@@ -441,9 +477,48 @@ export async function composer(page: Page, line = 3): Promise<Locator> {
   return input;
 }
 
-/** Assert no comment composer opened, giving one a beat to appear first — for a
- * gesture that opens something else instead (a file preview, a new tab) and must
- * not also trigger the row's own comment affordance. */
+/** Paint `value` — a custom-property name (leading `--`) or any CSS color — onto a
+ * throwaway span inside the diff shadow root and read back its resolved color.
+ * Measured rather than transcribed: reading an untyped custom property straight off the
+ * sheet hands back its source text (e.g. a `color-mix()` expression) rather than the
+ * color it resolves to, so a palette spec asserting the derived value probes it the
+ * same way the browser paints it. */
+export async function probeColor(page: Page, value: string): Promise<string> {
+  return page.evaluate((v) => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const el = document.createElement("span");
+    el.style.color = v.startsWith("--") ? `var(${v})` : v;
+    sh?.appendChild(el);
+    const resolved = getComputedStyle(el).color;
+    el.remove();
+    return resolved;
+  }, value);
+}
+
+/** Fill an open composer, submit it, and return the saved card once the composer is
+ * gone — the commit half of the composer lifecycle: type the comment, click Comment,
+ * and land on the annotation card it left behind. */
+export async function submitComposer(composer: Locator, text: string): Promise<Locator> {
+  await composer.getByRole("textbox", { name: "Comment" }).fill(text);
+  await composer.getByRole("button", { name: "Comment" }).click();
+  await expect(composer).toHaveCount(0);
+  const card = composer.page().locator("[data-annotation-card]");
+  await expect(card).toBeVisible();
+  return card;
+}
+
+/**
+ * Assert no comment composer opened — for a gesture that opens something else instead
+ * (a file preview, a new tab) and must not also trigger the row's own comment
+ * affordance.
+ *
+ * The 300ms clock wait is one of the dishonest sleeps browser-testing.md § Timing
+ * discipline keeps as a standing finding, not a sanctioned idiom: nothing in `ui/`
+ * holds a deadline at that number, so it is `page.waitForTimeout` with extra steps.
+ * It sits here because three specs need the same negative; that shares the sleep, it
+ * does not license a fourth. Replacing it needs a signal for "the composer was never
+ * going to open" — the pointer pipeline publishes none today.
+ */
 export async function expectNoComposerOpens(page: Page): Promise<void> {
   const composer = page.getByRole("dialog", { name: "Add a comment" });
   const t0 = await page.evaluate(() => performance.now());

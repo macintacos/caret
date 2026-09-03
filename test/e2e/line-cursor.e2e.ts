@@ -7,8 +7,9 @@
 //
 // The plan is reflowed on ingest, so heading line numbers shift; the spec
 // asserts RELATIVE motion and reads line numbers from the DOM, never hardcoding
-// them. waitPastSafeModeGrace is mandatory before the first keystroke (a key
-// inside the post-mount grace window is swallowed by Safe Mode).
+// them. `openPlanForKeys` waits past the safe-mode grace window before returning,
+// which is mandatory before the first keystroke (a key inside the post-mount
+// grace window is swallowed by Safe Mode).
 //
 // Where the two scrolls PARK the row is covered here for the same reason: ]]/[[
 // take the top-parked shared jump and j the scrolloff follow, so the difference
@@ -17,22 +18,14 @@
 
 import type { Page } from "@playwright/test";
 
-import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
-import { PLAN_SURFACE, planSurface, SEAM_STRIP } from "@test/e2e/support/source-view.ts";
+import { cursor, expectCursorLine, goToTop, readCursorLine } from "@test/e2e/support/cursor.ts";
+import { bodyFiller, headedFillerPlan } from "@test/e2e/support/fixture-plan.ts";
+import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { openPlanForKeys, PLAN_SURFACE, SEAM_STRIP } from "@test/e2e/support/source-view.ts";
 
 // Tall enough that G and the half-page jump actually scroll, with three headings
 // so ]]/[[ have distinct targets.
-const filler = (label: string) =>
-  Array.from({ length: 14 }, (_, i) => `${label} body line ${i + 1}.`).join("\n\n");
-const PLAN = [
-  "# Alpha",
-  filler("Alpha"),
-  "## Bravo",
-  filler("Bravo"),
-  "## Charlie",
-  filler("Charlie"),
-  "",
-].join("\n\n");
+const PLAN = headedFillerPlan(14);
 
 // A plan with a fenced code block. The fence and its lines join with single
 // newlines (one string) so reflow on ingest keeps them a contiguous block; the
@@ -44,39 +37,18 @@ const CODE_BLOCK = [
 ].join("\n");
 const PLAN_WITH_CODE = [
   "# Alpha",
-  filler("Alpha"),
+  bodyFiller("Alpha", 14),
   "## Bravo",
   CODE_BLOCK,
-  filler("Bravo"),
+  bodyFiller("Bravo", 14),
   "",
 ].join("\n\n");
 
-// The cursor marker: SourceView tags BOTH cells of the focused row
-// data-caret-cursor — the content cell and its gutter cell. Read the line from
-// the content cell (it carries data-line); the gutter cell carries the bar.
-// Playwright's CSS engine pierces the library's open shadow root, so a plain
-// descendant selector reaches them.
-const cursor = (page: Page) =>
-  page.locator(".diffview [data-content] [data-line][data-caret-cursor]");
+// The cursor marker's gutter cell — SourceView also tags it data-caret-cursor,
+// alongside the content cell cursor.ts reads. Playwright's CSS engine pierces the
+// library's open shadow root, so a plain descendant selector reaches it.
 const cursorBar = (page: Page) =>
   page.locator(".diffview [data-gutter] [data-column-number][data-caret-cursor]");
-
-const lineOf = async (page: Page): Promise<number> =>
-  Number((await cursor(page).getAttribute("data-line")) ?? -1);
-
-// Assert the cursor rests on an exact line, web-first (auto-retries until the
-// effect flush settles the marker).
-async function expectCursorLine(page: Page, line: number): Promise<void> {
-  await expect(cursor(page)).toHaveAttribute("data-line", String(line));
-}
-
-// Read the cursor line once it has settled to a value other than `notLine` — so
-// a relative capture waits out the effect flush instead of racing it. Defaults
-// to -1 (i.e. wait for the marker to exist and carry any line).
-async function readCursorLine(page: Page, notLine = -1): Promise<number> {
-  await expect.poll(() => lineOf(page)).not.toBe(notLine);
-  return lineOf(page);
-}
 
 // Where a scroll PARKED the cursor row: its top as a fraction of the scroller's
 // height. This is what tells the top-parked shared jump (]]/[[, the breadcrumb
@@ -106,21 +78,11 @@ async function settleScroll(page: Page): Promise<void> {
     .toBe(true);
 }
 
-async function loadPlan(page: Page): Promise<void> {
-  await planSurface(page);
-  // The rows paint asynchronously; wait for one before driving motion so the
-  // cursor lands on a real row (and topVisibleLine has something to seed from).
-  await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
-  await waitPastSafeModeGrace(page);
-}
-
 test("j/k place and step the cursor, it reads as distinct, and Esc leaves it placed", async ({
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: PLAN });
-  await page.goto("/");
-  await loadPlan(page);
+  await openPlanForKeys(page, daemon, PLAN);
 
   // No cursor until a motion places it.
   await expect(cursor(page)).toHaveCount(0);
@@ -153,14 +115,10 @@ test("gg/G and half-page motions move the cursor and scroll it into view", async
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: PLAN });
-  await page.goto("/");
-  await loadPlan(page);
+  await openPlanForKeys(page, daemon, PLAN);
 
   // gg goes to the top.
-  await page.keyboard.press("g");
-  await page.keyboard.press("g");
-  await expectCursorLine(page, 1);
+  await goToTop(page);
 
   // G goes to the last rendered line and scrolls it into view.
   const last = Number(
@@ -171,9 +129,7 @@ test("gg/G and half-page motions move the cursor and scroll it into view", async
   await expect(cursor(page)).toBeInViewport();
 
   // Ctrl+d jumps down more than one line from the top; Ctrl+u brings it back up.
-  await page.keyboard.press("g");
-  await page.keyboard.press("g");
-  await expectCursorLine(page, 1);
+  await goToTop(page);
   await page.keyboard.press("Control+d");
   const afterHalf = await readCursorLine(page, 1);
   expect(afterHalf).toBeGreaterThan(2);
@@ -186,15 +142,11 @@ test("]] and [[ jump between headings, and a line click relocates the cursor", a
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: PLAN });
-  await page.goto("/");
-  await loadPlan(page);
+  await openPlanForKeys(page, daemon, PLAN);
 
   // From the top (heading Alpha), ]] advances to the next heading (Bravo), then
   // to Charlie; [[ steps back to Bravo. Line numbers come from the DOM.
-  await page.keyboard.press("g");
-  await page.keyboard.press("g");
-  await expectCursorLine(page, 1);
+  await goToTop(page);
   await page.keyboard.press("]");
   await page.keyboard.press("]");
   const bravo = await readCursorLine(page, 1);
@@ -226,16 +178,12 @@ test("} and { jump the cursor between blank (paragraph-boundary) lines", async (
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: PLAN });
-  await page.goto("/");
-  await loadPlan(page);
+  await openPlanForKeys(page, daemon, PLAN);
 
   // From the top, } advances to the next blank line, then to a later one. Line
   // numbers come from the DOM (the plan is reflowed on ingest). "}" is a shifted
   // key; press("}") holds Shift → event.key "}" (as press("G") does for G).
-  await page.keyboard.press("g");
-  await page.keyboard.press("g");
-  await expectCursorLine(page, 1);
+  await goToTop(page);
   await page.keyboard.press("}");
   const firstBlank = await readCursorLine(page, 1);
   expect(firstBlank).toBeGreaterThan(1);
@@ -254,13 +202,9 @@ test("holding j keeps the cursor on-screen and follows it, never yanking it to t
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: PLAN });
-  await page.goto("/");
-  await loadPlan(page);
+  await openPlanForKeys(page, daemon, PLAN);
 
-  await page.keyboard.press("g");
-  await page.keyboard.press("g");
-  await expectCursorLine(page, 1);
+  await goToTop(page);
 
   // Step far past the first viewport. The cursor must stay on-screen at EVERY
   // step — the old behavior parked it at the very top once it crossed the fold.
@@ -278,9 +222,7 @@ test("the focused-line cursor band paints the code row, not just its gutter", as
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: PLAN_WITH_CODE });
-  await page.goto("/");
-  await loadPlan(page);
+  await openPlanForKeys(page, daemon, PLAN_WITH_CODE);
 
   // The fenced code rows (data-code-line is applied after render).
   const codeCells = page.locator(".diffview [data-content] [data-line][data-code-line]");
@@ -344,9 +286,7 @@ test("hovering a code row bands both columns, consistent with the cursor", async
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: PLAN_WITH_CODE });
-  await page.goto("/");
-  await loadPlan(page);
+  await openPlanForKeys(page, daemon, PLAN_WITH_CODE);
 
   const codeCells = page.locator(".diffview [data-content] [data-line][data-code-line]");
   await expect(codeCells.first()).toBeAttached();

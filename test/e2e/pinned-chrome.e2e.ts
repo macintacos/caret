@@ -7,14 +7,29 @@
 // Layout and positioning are real-browser concerns (browser-testing.md), so this
 // asserts on visibility + bounding-box geometry, not a component unit.
 
+import type { Locator, Page } from "@playwright/test";
+
 import { commentNavigator, commentTally } from "@test/e2e/support/chrome.ts";
-import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { type Daemon, expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
 
 // A right-docked 21rem card is at most this wide; the full-bleed sheet is wider.
 const CARD_MAX_PX = 21 * 16 + 4; // 21rem + rounding headroom
 // The pinned elements inset ~0.7rem (11.2px) from the viewport edge.
 const EDGE_INSET_PX = 16;
+
+/** Seed a review with one draft annotation, load the plan, and wait past the
+ * safe-mode grace window. Returns the (not-yet-open) comment navigator locator. */
+async function openNavigator(page: Page, daemon: Daemon): Promise<Locator> {
+  const id = await daemon.seed();
+  await daemon.putDraft(id, {
+    annotations: [{ id: "ann-1", startLine: 7, endLine: 7, comment: "warm cache path" }],
+  });
+  await page.goto("/");
+  await planSurface(page);
+  await waitPastSafeModeGrace(page);
+  return commentNavigator(page);
+}
 
 test("the status bar spans full width, reserves space, and holds the segments", async ({
   daemon,
@@ -61,16 +76,8 @@ test("the comment navigator opens from the bar tally and docks above the bar", a
   daemon,
   page,
 }) => {
-  const id = await daemon.seed();
-  await daemon.putDraft(id, {
-    annotations: [{ id: "ann-1", startLine: 7, endLine: 7, comment: "warm cache path" }],
-  });
-  await page.goto("/");
-  await planSurface(page);
-  await waitPastSafeModeGrace(page);
-
+  const nav = await openNavigator(page, daemon);
   const bar = page.getByRole("contentinfo", { name: "Status bar" });
-  const nav = commentNavigator(page);
 
   // The comment tally lives in the bar's status strip and toggles the navigator.
   await commentTally(page).click();
@@ -93,16 +100,8 @@ test("at narrow width the navigator widens to a full-bleed sheet above the bar",
   daemon,
   page,
 }) => {
-  const id = await daemon.seed();
-  await daemon.putDraft(id, {
-    annotations: [{ id: "ann-1", startLine: 7, endLine: 7, comment: "warm cache path" }],
-  });
   await page.setViewportSize({ width: 500, height: 900 });
-  await page.goto("/");
-  await planSurface(page);
-  await waitPastSafeModeGrace(page);
-
-  const nav = commentNavigator(page);
+  const nav = await openNavigator(page, daemon);
   await commentTally(page).click();
   await expect(nav).toBeVisible();
 
@@ -121,16 +120,8 @@ test("at wide width the navigator stays a right-docked card above the bar", asyn
   daemon,
   page,
 }) => {
-  const id = await daemon.seed();
-  await daemon.putDraft(id, {
-    annotations: [{ id: "ann-1", startLine: 7, endLine: 7, comment: "warm cache path" }],
-  });
   // The default fixture viewport is wide, so none of the narrow-width rules apply.
-  await page.goto("/");
-  await planSurface(page);
-  await waitPastSafeModeGrace(page);
-
-  const nav = commentNavigator(page);
+  const nav = await openNavigator(page, daemon);
   await commentTally(page).click();
   await expect(nav).toBeVisible();
 

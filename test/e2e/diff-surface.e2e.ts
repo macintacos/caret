@@ -45,6 +45,7 @@ import {
   SEAM_STRIP,
   selectGutterRange,
   settledMutations,
+  submitComposer,
 } from "@test/e2e/support/source-view.ts";
 
 // A plan tall enough to scroll the source view past one viewport.
@@ -1324,7 +1325,7 @@ function scratchMarker(page: Page): Locator {
 /** Discard `composer`'s draft, confirm the discard (EXC-749), and assert
  * nothing of it survives: the composer, the Resume marker, and the
  * persisted scratch are all gone. */
-async function discardComposerScratch(
+async function discardScratchAndExpectGone(
   page: Page,
   daemon: Daemon,
   id: string,
@@ -1364,7 +1365,7 @@ test("the Discard button discards a typed draft, leaving no Resume marker", asyn
 }) => {
   const { id, composer } = await openComposerOnLine3(page, daemon);
   await composerInput(composer).fill("drop this via the button");
-  await discardComposerScratch(page, daemon, id, composer);
+  await discardScratchAndExpectGone(page, daemon, id, composer);
 });
 
 test("canceling a Discard keeps the composer open", async ({ daemon, page }) => {
@@ -1398,7 +1399,7 @@ test("resuming a kept scratch then Discarding removes the marker and un-persists
   // Resume it, then Discard: the marker is gone and the persisted scratch cleared.
   await marker.click();
   await expect(composer).toBeVisible();
-  await discardComposerScratch(page, daemon, id, composer);
+  await discardScratchAndExpectGone(page, daemon, id, composer);
 });
 
 test("clicking the Resume marker reopens the composer with the text restored", async ({
@@ -1857,11 +1858,7 @@ test("the composer reveal and the card swap share one opacity-only token transit
   // The saved card reveals on the same contract: a one-shot opacity fade as it
   // settles into the document, no transform bounce. (The expand/collapse height
   // reveal is a separate grid-rows transition, exercised below.)
-  await composerInput(composer).fill("Same considered reveal.");
-  await composer.getByRole("button", { name: "Comment" }).click();
-  await expect(composer).toHaveCount(0);
-  const card = page.locator("[data-annotation-card]");
-  await expect(card).toBeVisible();
+  const card = await submitComposer(composer, "Same considered reveal.");
   const cardMotion = await card.evaluate(motionOf);
   expect(cardMotion.name).toMatch(/reveal$/);
   expect(cardMotion.transform).toBe("none");

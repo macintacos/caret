@@ -14,13 +14,15 @@
 // in ui/src/components/ConfirmPopover.test.ts, per doc/agents/browser-testing.md.
 
 import { discardConfirm, inlineRows } from "@test/e2e/support/chrome.ts";
+import { openRequestChangesDialog, openWithPendingAnnotation } from "@test/e2e/support/decision.ts";
 import {
   awaitDismissArmed,
   expect,
   test,
   waitPastSafeModeGrace,
 } from "@test/e2e/support/fixtures.ts";
-import { planSurface, revealGutterPlus } from "@test/e2e/support/source-view.ts";
+import { clickBelowPanel } from "@test/e2e/support/plan-nav.ts";
+import { planSurface, revealGutterPlus, seedAndOpen } from "@test/e2e/support/source-view.ts";
 
 /** Open the gutter composer on `line` with `draft` typed into it. The composer only
  * confirms a discard once it holds text, so the draft is what puts the bubble in
@@ -41,9 +43,7 @@ test("Escape backs out of the composer's discard and hands focus back to its tri
   daemon,
   page,
 }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
+  await seedAndOpen(page, daemon);
   await waitPastSafeModeGrace(page);
 
   const composer = await composerWithDraft(page, "do not lose me");
@@ -64,9 +64,7 @@ test("a click outside the composer's discard bubble cancels rather than confirms
   daemon,
   page,
 }) => {
-  const id = await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
+  const id = await seedAndOpen(page, daemon);
   await waitPastSafeModeGrace(page);
 
   const composer = await composerWithDraft(page, "still here");
@@ -92,12 +90,7 @@ test("the card's delete confirmation opens with the confirm button focused", asy
   daemon,
   page,
 }) => {
-  const id = await daemon.seed();
-  await daemon.putDraft(id, {
-    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain the cold cost" }],
-  });
-  await page.goto("/");
-  await planSurface(page);
+  const id = await openWithPendingAnnotation(daemon, page, "explain the cold cost");
   await waitPastSafeModeGrace(page);
 
   await page.locator("[data-annotation-card]").getByRole("button", { name: "Discard" }).click();
@@ -131,9 +124,7 @@ test("inside the scrolling dialog the bubble tracks its trigger and still takes 
   await planSurface(page);
   await waitPastSafeModeGrace(page);
 
-  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
-  await page.getByRole("button", { name: "Request changes" }).click();
-  await expect(dialog).toBeVisible();
+  const dialog = await openRequestChangesDialog(page);
   await expect(inlineRows(dialog)).toHaveCount(24);
 
   const trigger = inlineRows(dialog).first().getByRole("button", { name: "Discard", exact: true });
@@ -195,17 +186,10 @@ test("inside the scrolling dialog the bubble tracks its trigger and still takes 
 });
 
 test("Escape closes the dialog's bubble without closing the dialog", async ({ daemon, page }) => {
-  const id = await daemon.seed();
-  await daemon.putDraft(id, {
-    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain the cold cost" }],
-  });
-  await page.goto("/");
-  await planSurface(page);
+  await openWithPendingAnnotation(daemon, page, "explain the cold cost");
   await waitPastSafeModeGrace(page);
 
-  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
-  await page.getByRole("button", { name: "Request changes" }).click();
-  await expect(dialog).toBeVisible();
+  const dialog = await openRequestChangesDialog(page);
 
   await inlineRows(dialog).getByRole("button", { name: "Discard", exact: true }).click();
   await expect(discardConfirm(page)).toBeVisible();
@@ -231,12 +215,7 @@ test("Escape backs out of the card's delete without touching the comment", async
   daemon,
   page,
 }) => {
-  const id = await daemon.seed();
-  await daemon.putDraft(id, {
-    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain the cold cost" }],
-  });
-  await page.goto("/");
-  await planSurface(page);
+  const id = await openWithPendingAnnotation(daemon, page, "explain the cold cost");
   await waitPastSafeModeGrace(page);
 
   const trigger = page.locator("[data-annotation-card]").getByRole("button", { name: "Discard" });
@@ -252,12 +231,7 @@ test("Escape backs out of the card's delete without touching the comment", async
 });
 
 test("a click outside the card's delete bubble keeps the comment", async ({ daemon, page }) => {
-  const id = await daemon.seed();
-  await daemon.putDraft(id, {
-    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain the cold cost" }],
-  });
-  await page.goto("/");
-  await planSurface(page);
+  const id = await openWithPendingAnnotation(daemon, page, "explain the cold cost");
   await waitPastSafeModeGrace(page);
 
   const card = page.locator("[data-annotation-card]");
@@ -265,17 +239,9 @@ test("a click outside the card's delete bubble keeps the comment", async ({ daem
   await expect(discardConfirm(page)).toBeVisible();
   await awaitDismissArmed(discardConfirm(page));
 
-  // A real pointerdown on the plan, placed BELOW the bubble's own box rather than on
-  // a named element — the same gesture plan-toc.e2e.ts uses, and for the same reason:
-  // the bubble hangs under its trigger and covers whatever is nominally "next to" it,
-  // so a click aimed at a named element can land on the dismiss layer instead of
-  // outside it. Unlike the composer, a card is not itself dismissed by an outside
-  // click, so the plan is a safe target: only the bubble goes away.
-  const bubbleBox = await discardConfirm(page).boundingBox();
-  const planBox = await (await planSurface(page)).boundingBox();
-  expect(bubbleBox).not.toBeNull();
-  expect(planBox).not.toBeNull();
-  await page.mouse.click(planBox!.x + planBox!.width / 2, bubbleBox!.y + bubbleBox!.height + 40);
+  // Unlike the composer, a card is not itself dismissed by an outside click, so the
+  // plan is a safe target: only the bubble goes away.
+  await clickBelowPanel(page, discardConfirm(page));
   await expect(discardConfirm(page)).toHaveCount(0);
   await expect
     .poll(async () => (await daemon.getReview(id)).body?.annotations?.length ?? 0)
@@ -286,17 +252,10 @@ test("a click outside the dialog's discard bubble keeps the comment and the dial
   daemon,
   page,
 }) => {
-  const id = await daemon.seed();
-  await daemon.putDraft(id, {
-    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain the cold cost" }],
-  });
-  await page.goto("/");
-  await planSurface(page);
+  await openWithPendingAnnotation(daemon, page, "explain the cold cost");
   await waitPastSafeModeGrace(page);
 
-  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
-  await page.getByRole("button", { name: "Request changes" }).click();
-  await expect(dialog).toBeVisible();
+  const dialog = await openRequestChangesDialog(page);
 
   await inlineRows(dialog).getByRole("button", { name: "Discard", exact: true }).click();
   await expect(discardConfirm(page)).toBeVisible();

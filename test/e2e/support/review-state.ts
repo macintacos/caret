@@ -72,3 +72,16 @@ export async function submitForRevision(
   await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
   return (await awaitDenied(daemon, id))?.decision?.feedback ?? "";
 }
+
+/** Assert the review left the pending set via the UI and resolved as a rejection,
+ * then return the persisted review body. */
+export async function assertRejected(
+  page: Page,
+  daemon: Daemon,
+  id: string,
+): Promise<ClientReview | undefined> {
+  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
+  const review = await awaitDenied(daemon, id);
+  expect(review?.status).toBe("rejected");
+  return review;
+}

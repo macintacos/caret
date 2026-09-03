@@ -59,14 +59,9 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import {
-  expect,
-  motionToken,
-  pastKeyRepeatDelay,
-  test,
-  walkVisits,
-} from "@test/e2e/support/fixtures.ts";
-import { jumpToHeading, PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
+import { type Daemon, expect, motionToken, test } from "@test/e2e/support/fixtures.ts";
+import { clickBelowPanel, holdAndSettle, isWithinBox } from "@test/e2e/support/plan-nav.ts";
+import { jumpToHeading, planSurface } from "@test/e2e/support/source-view.ts";
 
 // Sections taller than the viewport, so jumping to one genuinely changes which
 // heading is being read rather than leaving the whole plan in view.
@@ -232,6 +227,13 @@ const labelLefts = (page: Page): Promise<(number | null)[]> =>
     }),
   );
 
+/** Each row's `--toc-depth`, in document order — the indent level its guides and
+ * left padding are keyed on. */
+const rowDepths = (page: Page): Promise<string[]> =>
+  options(page).evaluateAll((els) =>
+    els.map((el) => (el as HTMLElement).style.getPropertyValue("--toc-depth")),
+  );
+
 /** Wait until nothing in the popup is still animating.
  *
  * A real promise on a real animation, not a sleep: `Animation.finished` settles when the
@@ -298,6 +300,15 @@ async function readingAt(page: Page, heading: string): Promise<void> {
     .toBe(heading.toLowerCase().replaceAll(" ", "-"));
 }
 
+/** Seed `plan`, load it, park the reading position on `heading`, and open the popup —
+ * the arrange nearly every spec in this file shares. */
+async function openTocAt(page: Page, daemon: Daemon, plan: string, heading: string): Promise<void> {
+  await daemon.seed({ plan });
+  await page.goto("/");
+  await readingAt(page, heading);
+  await openToc(page);
+}
+
 /** The indent's origin in px — `0.5rem` at the default root size, the offset every
  * row's padding and every guide band is measured from. Named because two specs below
  * assert against it and a bare `8` reads as a magic number in both. */
@@ -347,31 +358,13 @@ async function measureGuides(page: Page) {
   );
 }
 
-/** Whether `row` is inside the scrolled list's visible box — the claim a unit mount
- * cannot make, since happy-dom lays nothing out.
- *
- * Throws rather than returning false when either box is unmeasurable: one caller asserts
- * this is FALSE, to prove the list really scrolls rather than showing every heading at
- * once, and a false-on-null would let "not measurable" pass as "correctly out of view".
- * `expect.poll` fails on a throw exactly as it should. */
-async function isWithinList(page: Page, row: Locator): Promise<boolean> {
-  const rowBox = await row.boundingBox();
-  const listBox = await listbox(page).boundingBox();
-  if (rowBox === null || listBox === null) throw new Error("row or list has no bounding box");
-  return rowBox.y >= listBox.y - 1 && rowBox.y + rowBox.height <= listBox.y + listBox.height + 1;
-}
-
 test("opens on the heading being read, scrolled into view", async ({ daemon, page }) => {
-  await daemon.seed({ plan: TALL_PLAN });
-  await page.goto("/");
   // Whiskey, not the trailing Xray: the plan scrolls only a third of a viewport past its
   // end, which is not enough room to bring the FINAL heading up to the reading zone, so
   // a jump there clamps short and the tracked heading stays on the section above it.
   // Whiskey is still far enough down that a popup opening at the top would leave its row
   // below the list's 36rem fold.
-  await readingAt(page, "Whiskey");
-
-  await openToc(page);
+  await openTocAt(page, daemon, TALL_PLAN, "Whiskey");
   const current = options(page).and(page.locator('[aria-current="location"]'));
   await expect(current).toHaveText("Whiskey");
 
@@ -379,11 +372,11 @@ test("opens on the heading being read, scrolled into view", async ({ daemon, pag
   // before it announces — so it must cost no height while it has nothing to say.
   expect(await panel(page).getByRole("status").count()).toBe(1);
   expect((await panel(page).getByRole("status").boundingBox())?.height ?? -1).toBe(0);
-  await expect.poll(() => isWithinList(page, current)).toBe(true);
+  await expect.poll(() => isWithinBox(current, listbox(page))).toBe(true);
 
   // And the row above it is not — proof the list really is scrolled rather than short
   // enough to show every heading at once, which would make the assertion vacuous.
-  expect(await isWithinList(page, options(page).first())).toBe(false);
+  expect(await isWithinBox(options(page).first(), listbox(page))).toBe(false);
 });
 
 test("the down arrow starts the walk at the heading being read, not the first row", async ({
@@ -393,11 +386,7 @@ test("the down arrow starts the walk at the heading being read, not the first ro
   // The deviation from the command's stock behavior, which selects the first row on
   // open. Asserted as the row AFTER the current one: landing on "Echo" is only
   // reachable from a walk that began at "Delta".
-  await daemon.seed({ plan: TALL_PLAN });
-  await page.goto("/");
-  await readingAt(page, "Delta");
-
-  await openToc(page);
+  await openTocAt(page, daemon, TALL_PLAN, "Delta");
   await expect(walkedTo(page)).toHaveText("Delta");
 
   await page.keyboard.press("ArrowDown");
@@ -413,23 +402,12 @@ test("holding a walk key keeps traversing until it is released", async ({ daemon
   // ignores Tab outright, so the OS's repeats reached a handler that had already
   // done its one job — and the list stopped dead at its ends besides. See the file
   // header for why the whole of this lives in the browser layer.
-  await daemon.seed({ plan: TALL_PLAN });
-  await page.goto("/");
-  await readingAt(page, "Delta");
-
-  await openToc(page);
+  await openTocAt(page, daemon, TALL_PLAN, "Delta");
   await expect(walkedTo(page)).toHaveText("Delta");
 
-  const selected = async () => (await walkedTo(page).allTextContents()).join("");
-  await page.keyboard.down("Tab");
-  await walkVisits(selected, 5);
-  await page.keyboard.up("Tab");
-
   // Released, the walk stops where it stopped.
-  const stopped = await selected();
-  expect(stopped).not.toBe("");
-  await pastKeyRepeatDelay(page);
-  expect(await selected()).toBe(stopped);
+  const selected = async () => (await walkedTo(page).allTextContents()).join("");
+  await holdAndSettle(page, "Tab", selected, 5);
 
   // And focus never left the field, which is what narrates the walk.
   await expect(field(page)).toBeFocused();
@@ -443,11 +421,7 @@ test("the roving walk visits match rows only, never a breadcrumb header", async 
   // inverts rather than disappearing: the headers are still between the matches
   // visually, and one arrow press still has to cross a header without landing on it.
   // Real-browser because it is bits-ui's roving selection under a real keydown.
-  await daemon.seed({ plan: BRANCHED_PLAN });
-  await page.goto("/");
-  await readingAt(page, "Setup");
-
-  await openToc(page);
+  await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
   await field(page).fill("notes");
 
   await expect(options(page)).toHaveText(["Setup notes", "Rollout notes"]);
@@ -466,14 +440,10 @@ test("a breadcrumb header keeps one line, elides from the start, and holds its p
 }) => {
   // EXC-1108, and every claim here is rendering-only — `textContent` is identical
   // whether this passes or fails, which is why none of it can live in a mount.
-  await daemon.seed({ plan: PUNCTUATED_PLAN });
-  await page.goto("/");
   // Parked on a punctuation-free heading on purpose: readingAt asserts the `?heading=`
   // slug, and the daemon strips punctuation when it builds one, so "Why?" would never
   // match. Where the reader is parked is irrelevant to what this spec measures.
-  await readingAt(page, "Migration notes");
-
-  await openToc(page);
+  await openTocAt(page, daemon, PUNCTUATED_PLAN, "Migration notes");
   await field(page).fill("notes");
   await expect(crumbs(page)).toHaveCount(2);
 
@@ -539,11 +509,7 @@ test("each breadcrumb header names its group in the accessibility tree", async (
   // caret's own: the ancestor path has to reach a screen reader as the group's NAME.
   // Real-browser because only the role engine resolves aria-labelledby — the unit mount
   // can assert the attribute points somewhere, not that the name computes from it.
-  await daemon.seed({ plan: BRANCHED_PLAN });
-  await page.goto("/");
-  await readingAt(page, "Setup");
-
-  await openToc(page);
+  await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
   await field(page).fill("notes");
 
   await expect(group(page, "Plan › Setup")).toBeVisible();
@@ -564,11 +530,7 @@ test("the grouping filter drives the list, not the command's own filter engine",
   // own the list. Falsifiable two ways: a score sort would shuffle the document order
   // the groups and their rows keep, and the stock engine — which scores a row against
   // its VALUE, the source line — would empty the panel outright rather than re-sort it.
-  await daemon.seed({ plan: BRANCHED_PLAN });
-  await page.goto("/");
-  await readingAt(page, "Setup");
-
-  await openToc(page);
+  await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
   await field(page).fill("notes");
 
   await expect(crumbs(page)).toHaveText(["Plan › Setup", "Plan › Rollout"]);
@@ -576,10 +538,7 @@ test("the grouping filter drives the list, not the command's own filter engine",
 
   // Every match row is flush left now, whatever its own heading level: the breadcrumb
   // above it carries the hierarchy, so the indent no longer repeats it (AC5).
-  const depths = await options(page).evaluateAll((els) =>
-    els.map((el) => (el as HTMLElement).style.getPropertyValue("--toc-depth")),
-  );
-  expect(depths).toEqual(["0", "0"]);
+  expect(await rowDepths(page)).toEqual(["0", "0"]);
 });
 
 // EXC-1104 marks the matched characters by cutting a row's label into runs, which turns
@@ -598,11 +557,7 @@ test("marking the matched characters leaves the option's accessible name alone",
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: BRANCHED_PLAN });
-  await page.goto("/");
-  await readingAt(page, "Setup");
-
-  await openToc(page);
+  await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
   await field(page).fill("ote");
 
   // The mark is really rendered — otherwise the name below is trivially unchanged and
@@ -616,11 +571,7 @@ test("clearing the query puts the nested tree back", async ({ daemon, page }) =>
   // AC8: the breadcrumb form is a search affordance only. Real-browser because it
   // crosses bits-ui's `{#key search === ""}` boundary, which tears the whole viewport
   // down and rebuilds it — the one transition a mounted unit cannot exercise honestly.
-  await daemon.seed({ plan: BRANCHED_PLAN });
-  await page.goto("/");
-  await readingAt(page, "Setup");
-
-  await openToc(page);
+  await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
   await field(page).fill("notes");
   await expect(crumbs(page)).toHaveCount(2);
 
@@ -636,21 +587,14 @@ test("clearing the query puts the nested tree back", async ({ daemon, page }) =>
   ]);
 
   // Back to indenting by the heading's own level.
-  const depths = await options(page).evaluateAll((els) =>
-    els.map((el) => (el as HTMLElement).style.getPropertyValue("--toc-depth")),
-  );
-  expect(depths).toEqual(["0", "1", "2", "1", "2", "1"]);
+  expect(await rowDepths(page)).toEqual(["0", "1", "2", "1", "2", "1"]);
 });
 
 test("pressing Enter on a walked-to row goes there and leaves focus in the plan", async ({
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: TALL_PLAN });
-  await page.goto("/");
-  await readingAt(page, "Delta");
-
-  await openToc(page);
+  await openTocAt(page, daemon, TALL_PLAN, "Delta");
   await page.keyboard.press("ArrowDown");
   await expect(walkedTo(page)).toHaveText("Echo");
   await page.keyboard.press("Enter");
@@ -666,11 +610,7 @@ test("pressing Enter on a walked-to row goes there and leaves focus in the plan"
 });
 
 test("clicking a heading goes there and dismisses", async ({ daemon, page }) => {
-  await daemon.seed({ plan: TALL_PLAN });
-  await page.goto("/");
-  await readingAt(page, "Alpha");
-
-  await openToc(page);
+  await openTocAt(page, daemon, TALL_PLAN, "Alpha");
   await options(page).filter({ hasText: "Hotel" }).click();
 
   await expect(page.locator(TOC)).toHaveCount(0);
@@ -680,12 +620,8 @@ test("clicking a heading goes there and dismisses", async ({ daemon, page }) => 
 test("Escape dismisses and hands focus back to the trigger", async ({ daemon, page }) => {
   // The other half of the focus split: a dismissal leaves the reviewer where they
   // were, so the trigger takes focus back. Only a pick suppresses that.
-  await daemon.seed({ plan: TALL_PLAN });
-  await page.goto("/");
-  await readingAt(page, "Delta");
+  await openTocAt(page, daemon, TALL_PLAN, "Delta");
   const parked = new URL(page.url()).searchParams.get("heading");
-
-  await openToc(page);
   await page.keyboard.press("Escape");
 
   await expect(page.locator(TOC)).toHaveCount(0);
@@ -695,20 +631,12 @@ test("Escape dismisses and hands focus back to the trigger", async ({ daemon, pa
 });
 
 test("clicking outside the popup dismisses it", async ({ daemon, page }) => {
-  await daemon.seed({ plan: TALL_PLAN });
-  await page.goto("/");
-  await readingAt(page, "Delta");
-
-  await openToc(page);
+  await openTocAt(page, daemon, TALL_PLAN, "Delta");
   // A real pointerdown on the plan, placed below the panel's own box rather than on a
   // named element: the panel is anchored under its trigger at the top of the plan, so
   // the first rows sit beneath it and a click there lands on the dismiss layer instead
   // of outside it.
-  const panelBox = await page.locator(TOC).boundingBox();
-  const planBox = await page.locator(PLAN_SURFACE).boundingBox();
-  expect(panelBox).not.toBeNull();
-  expect(planBox).not.toBeNull();
-  await page.mouse.click(planBox!.x + planBox!.width / 2, panelBox!.y + panelBox!.height + 40);
+  await clickBelowPanel(page, page.locator(TOC));
 
   await expect(page.locator(TOC)).toHaveCount(0);
 });
@@ -716,11 +644,7 @@ test("clicking outside the popup dismisses it", async ({ daemon, page }) => {
 test("the filter field is empty on every open", async ({ daemon, page }) => {
   // The popup always opens on the whole plan: a query that survived a close would show
   // a narrowed view of a plan the reviewer has since scrolled away from.
-  await daemon.seed({ plan: BRANCHED_PLAN });
-  await page.goto("/");
-  await readingAt(page, "Setup");
-
-  await openToc(page);
+  await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
   await field(page).fill("notes");
   await expect(options(page)).toHaveCount(2);
 
@@ -741,11 +665,7 @@ test("the field narrates the row the walk is on, and says so when nothing matche
   // real combobox whose aria-activedescendant names the active row, so the list can be
   // walked and narrowed without focus ever leaving it. Read off the live DOM, which is
   // where a screen reader would read it.
-  await daemon.seed({ plan: BRANCHED_PLAN });
-  await page.goto("/");
-  await readingAt(page, "Setup");
-
-  await openToc(page);
+  await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
   await expect(field(page)).toHaveAttribute("aria-controls", /.+/);
 
   // aria-controls resolves to the viewport the rows live in, inside the listbox.
@@ -791,7 +711,9 @@ test("\\ opens the popup on the heading being read (EXC-1097)", async ({ daemon,
   await expect(listbox(page)).toBeVisible();
   await expect(walkedTo(page)).toHaveText("Golf");
   await expect
-    .poll(() => isWithinList(page, options(page).and(page.locator('[aria-current="location"]'))))
+    .poll(() =>
+      isWithinBox(options(page).and(page.locator('[aria-current="location"]')), listbox(page)),
+    )
     .toBe(true);
   await expect(field(page)).toBeFocused();
 });
@@ -827,11 +749,7 @@ test("every row wears its heading level, in both of the popup's views", async ({
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: BRANCHED_PLAN });
-  await page.goto("/");
-  await readingAt(page, "Setup");
-
-  await openToc(page);
+  await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
   await expect(options(page)).toHaveCount(6);
   // Read bare rather than polled, here and below: a marker renders in the same pass as the
   // row that owns it, so once `toHaveCount` has settled there is nothing left to wait for.
@@ -850,10 +768,7 @@ test("every row wears its heading level, in both of the popup's views", async ({
   // anything. A query matching one level would leave both of them true by accident.
   await field(page).fill("o");
   await expect(options(page)).toHaveText(["Setup notes", "Rollout", "Rollout notes"]);
-  const depths = await options(page).evaluateAll((els) =>
-    els.map((el) => (el as HTMLElement).style.getPropertyValue("--toc-depth")),
-  );
-  expect(depths).toEqual(["0", "0", "0"]);
+  expect(await rowDepths(page)).toEqual(["0", "0", "0"]);
   expect(await markerNames(page)).toEqual(["heading-3", "heading-2", "heading-3"]);
 
   // AC8. Three rows at one indent, three different glyphs, one left edge.
@@ -885,11 +800,7 @@ test("the level marker paints a dimmer rung of the ink ramp than the label", asy
   // "Dimmer" then reduces to a property of the ramp, which theme.test.ts already pins
   // across every palette — where a number measured in this one Playwright run, on this one
   // palette, could not see a palette shipping a compressed ramp.
-  await daemon.seed({ plan: BRANCHED_PLAN });
-  await page.goto("/");
-  await readingAt(page, "Setup");
-
-  await openToc(page);
+  await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
   await expect(walkedTo(page)).toHaveCount(1);
 
   const paint = await options(page).evaluateAll((els) => {
@@ -957,10 +868,7 @@ test("the indent guides sit on the indent's own grid and join across rows", asyn
   // engine does — over a custom property, inside a pseudo-element that has no node to
   // locate — and it is the whole of the affordance. Read off ::before for that reason;
   // a bounding box cannot see it.
-  await daemon.seed({ plan: BRANCHED_PLAN });
-  await page.goto("/");
-  await readingAt(page, "Setup");
-  await openToc(page);
+  await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
 
   const bands = await measureGuides(page);
   expect(bands).toHaveLength(6);
@@ -995,18 +903,12 @@ test("a plan that opens at `##` draws no guide for the root it does not have", a
   // down a column no heading opens, beside every row, the length of the panel. With a
   // `#`-rooted plan the term that prevents it is identically zero, so the spec above
   // passes either way — this is where it becomes falsifiable.
-  await daemon.seed({ plan: SHALLOW_PLAN });
-  await page.goto("/");
-  await readingAt(page, "Setup");
-  await openToc(page);
+  await openTocAt(page, daemon, SHALLOW_PLAN, "Setup");
 
   // The plan reaches the UI still rooted at `##` — the daemon's formatter normalizes
   // several things about an incoming plan and this is not one of them, which is what
   // makes the shape reachable rather than hypothetical.
-  const depths = await options(page).evaluateAll((els) =>
-    els.map((el) => (el as HTMLElement).style.getPropertyValue("--toc-depth")),
-  );
-  expect(depths).toEqual(["1", "2", "1"]);
+  expect(await rowDepths(page)).toEqual(["1", "2", "1"]);
 
   const bands = await measureGuides(page);
   // Every band starts ONE step in from the indent's origin — the column `## Setup`
@@ -1021,10 +923,7 @@ test("filtering drops the guides, headers and all", async ({ daemon, page }) => 
   // AC4 and AC6. A filtered row is flush left under a breadcrumb header that carries the
   // hierarchy, so a column beside it would mark a nesting this view does not show — and
   // the header is not a row, so nothing should reach it either.
-  await daemon.seed({ plan: BRANCHED_PLAN });
-  await page.goto("/");
-  await readingAt(page, "Setup");
-  await openToc(page);
+  await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
   await field(page).fill("notes");
   await expect(crumbs(page)).toHaveCount(2);
 
@@ -1136,15 +1035,9 @@ test("every way out of the popup is animated, not cut", async ({ daemon, page })
   await page.goto("/");
   await readingAt(page, "Delta");
 
-  const outsideClick = async (): Promise<void> => {
-    // Below the panel's own box, on the plan: the panel hangs off the control row, so a
-    // click on the first rows would land on the dismiss layer instead of outside it.
-    const panelBox = await panel(page).boundingBox();
-    const planBox = await page.locator(PLAN_SURFACE).boundingBox();
-    expect(panelBox).not.toBeNull();
-    expect(planBox).not.toBeNull();
-    await page.mouse.click(planBox!.x + planBox!.width / 2, panelBox!.y + panelBox!.height + 40);
-  };
+  // Below the panel's own box, on the plan: the panel hangs off the control row, so a
+  // click on the first rows would land on the dismiss layer instead of outside it.
+  const outsideClick = () => clickBelowPanel(page, panel(page));
 
   const paths: [string, () => Promise<void>][] = [
     ["Escape", () => page.keyboard.press("Escape")],
@@ -1171,10 +1064,7 @@ test("a match and its breadcrumb header arrive on one animation", async ({ daemo
   // claim is a single equality between what the cascade handed each of them. A header
   // given a duration of its own is exactly the drift that would pop it in above rows that
   // were still fading, and it is what this reds on.
-  await daemon.seed({ plan: BRANCHED_PLAN });
-  await page.goto("/");
-  await readingAt(page, "Setup");
-  await openToc(page);
+  await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
 
   await field(page).fill("notes");
   await expect(options(page)).toHaveCount(2);
@@ -1199,10 +1089,7 @@ test("the outline carries its motion on the list, never on its rows", async ({ d
   // animation scoped to it would start several hundred simultaneous ramps on open and on
   // every clear. The list re-forming carries that direction instead, on one element.
   // TALL_PLAN is the fixture that makes this say something: 25 headings, more than fit.
-  await daemon.seed({ plan: TALL_PLAN });
-  await page.goto("/");
-  await readingAt(page, "Delta");
-  await openToc(page);
+  await openTocAt(page, daemon, TALL_PLAN, "Delta");
 
   const viewport = panel(page).locator("[data-slot='command-viewport']");
   const list = await animationOf(viewport);
@@ -1314,10 +1201,7 @@ test("typing fast queues no animation behind the reviewer", async ({ daemon, pag
   // 9.7ms, no frame over 32ms either way), because mounting the rows is the expense and
   // ramping their opacity is not. What would NOT be fine is generations stacking, so that
   // is what this measures: at most one live ramp per element that could carry one.
-  await daemon.seed({ plan: TALL_PLAN });
-  await page.goto("/");
-  await readingAt(page, "Delta");
-  await openToc(page);
+  await openTocAt(page, daemon, TALL_PLAN, "Delta");
 
   // A broad query first — a bare "a" takes half of TALL_PLAN's sections plus its root, so
   // this is the crossing at its widest, with most of the list arriving in one frame.
@@ -1372,10 +1256,7 @@ test("reduced motion collapses the surface and leaves it fully usable", async ({
   // bits-ui's portal presence waits on `animationend`, so an `animation: none` here would
   // strand the panel in the DOM on every dismissal under the preference.
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await daemon.seed({ plan: BRANCHED_PLAN });
-  await page.goto("/");
-  await readingAt(page, "Setup");
-  await openToc(page);
+  await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
 
   // Read in TWO passes, because no single view has all four animations live and a read
   // taken where one is not declared measures the initial `0s` — which is under the

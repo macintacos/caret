@@ -16,7 +16,7 @@
 // props; what these specs add is that the daemon's own per-version annotations
 // reach it.
 
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 import { commentNavigator, commentTally } from "@test/e2e/support/chrome.ts";
 import { type Daemon, expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
@@ -161,6 +161,29 @@ async function openSideAnchors(page: Page, layout: "Split" | "Unified") {
   return nav;
 }
 
+/** Click the "before-side anchor" comment and assert the view landed on its row —
+ * the assertion the split round-trip test repeats before and after leaving compare
+ * mode, to prove the reveal survives the diff view's remount. */
+async function revealsBeforeAnchor(page: Page, nav: Locator): Promise<void> {
+  await nav
+    .getByRole("listitem")
+    .getByRole("button")
+    .filter({ hasText: "before-side anchor" })
+    .click();
+  await expect.poll(() => rowsAtTop(page)).toContain("alpha body line 20");
+}
+
+/** Seed the three-version comment fixture, open the compare panel, and widen the
+ * target to v1 so the comment range spans all three versions. */
+async function openWidenedToV1(page: Page, daemon: Daemon): Promise<Locator> {
+  await seedCommentedVersions(daemon);
+  await page.goto("/");
+  const nav = await openComparePanel(page);
+  await page.getByLabel("Target version").click();
+  await page.getByRole("menuitemradio", { name: "v1" }).click();
+  return nav;
+}
+
 // Unified interleaves the two documents into ONE column, so a line number alone
 // is genuinely ambiguous there and the side is what disambiguates it. That makes
 // this the layout where side-awareness is observable — and this test is what pins
@@ -214,12 +237,7 @@ test("reveals a compare comment past the fold (split), including after a round t
   const scrollTop = () => page.locator(PLAN_SURFACE).evaluate((el) => el.scrollTop);
   expect(await scrollTop()).toBe(0);
 
-  await nav
-    .getByRole("listitem")
-    .getByRole("button")
-    .filter({ hasText: "before-side anchor" })
-    .click();
-  await expect.poll(() => rowsAtTop(page)).toContain("alpha body line 20");
+  await revealsBeforeAnchor(page, nav);
   expect(await scrollTop()).toBeGreaterThan(0);
 
   // The after-side row for the same line is its column's own line 41, alongside it.
@@ -237,25 +255,15 @@ test("reveals a compare comment past the fold (split), including after a round t
   await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-diff-type", "split");
   await expect.poll(() => scrollTop()).toBe(0);
 
-  await nav
-    .getByRole("listitem")
-    .getByRole("button")
-    .filter({ hasText: "before-side anchor" })
-    .click();
-  await expect.poll(() => rowsAtTop(page)).toContain("alpha body line 20");
+  await revealsBeforeAnchor(page, nav);
 });
 
 test("lists every version's comments in the compared range, each badged with its version", async ({
   daemon,
   page,
 }) => {
-  await seedCommentedVersions(daemon);
-  await page.goto("/");
-  const nav = await openComparePanel(page);
-
   // Widen the pair to base v3 / target v1 so the range spans all three versions.
-  await page.getByLabel("Target version").click();
-  await page.getByRole("menuitemradio", { name: "v1" }).click();
+  const nav = await openWidenedToV1(page, daemon);
   await expect(nav).toHaveAccessibleName("Comments in v1–v3");
 
   // Every comment on v1, v2 and v3, ordered by version then by line, each row
@@ -274,13 +282,8 @@ test("marks an in-range comment from a version on neither side as not in the dif
   daemon,
   page,
 }) => {
-  await seedCommentedVersions(daemon);
-  await page.goto("/");
-  const nav = await openComparePanel(page);
-
   // v1 vs v3: v2 is inside the range but rendered on neither side of the diff.
-  await page.getByLabel("Target version").click();
-  await page.getByRole("menuitemradio", { name: "v1" }).click();
+  const nav = await openWidenedToV1(page, daemon);
   await expect(nav.getByRole("listitem")).toHaveCount(4);
 
   // The two v2 rows are the only ones that carry the marker, and they are list

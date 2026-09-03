@@ -10,8 +10,9 @@
 
 import type { Page } from "@playwright/test";
 
-import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
-import { planSurface } from "@test/e2e/support/source-view.ts";
+import { cursor, expectCursorLine, readCursorLine } from "@test/e2e/support/cursor.ts";
+import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { openPlanForKeys } from "@test/e2e/support/source-view.ts";
 
 const filler = (label: string) =>
   Array.from({ length: 8 }, (_, i) => `${label} filler line ${i + 1}.`).join("\n\n");
@@ -34,14 +35,6 @@ const PLAN = [
 
 const pill = (page: Page) => page.getByRole("search");
 const field = (page: Page) => page.locator("input[aria-label='Search plan']");
-const cursor = (page: Page) =>
-  page.locator(".diffview [data-content] [data-line][data-caret-cursor]");
-
-async function loadPlan(page: Page): Promise<void> {
-  await planSurface(page);
-  await expect(page.locator(".diffview [data-content] [data-line]").first()).toBeVisible();
-  await waitPastSafeModeGrace(page);
-}
 
 // The pill's tabular "n / total" counter, parsed.
 async function counter(page: Page): Promise<{ current: number; total: number }> {
@@ -58,16 +51,28 @@ async function highlightSizes(page: Page): Promise<{ current: number; all: numbe
   }));
 }
 
-const cursorLine = async (page: Page): Promise<number> =>
-  Number((await cursor(page).getAttribute("data-line")) ?? -1);
+/** Open the search pill, type "widget", and commit — the arrange several specs below
+ * share before diverging into their own checks on the landed cursor. */
+async function commitWidgetSearch(page: Page): Promise<void> {
+  await page.keyboard.press("/");
+  await page.keyboard.type("widget");
+  await expect.poll(async () => (await counter(page)).total).toBeGreaterThan(1);
+  await page.keyboard.press("Enter");
+  await expect(cursor(page)).toHaveCount(1);
+}
+
+/** Escape a committed search and confirm it is gone, highlights cleared with it. */
+async function dismissSearch(page: Page): Promise<void> {
+  await page.keyboard.press("Escape");
+  await expect(pill(page)).toHaveCount(0);
+  await expect.poll(async () => (await highlightSizes(page)).all).toBe(0);
+}
 
 test("/ opens the pill, focuses it, and typing paints live match highlights", async ({
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: PLAN });
-  await page.goto("/");
-  await loadPlan(page);
+  await openPlanForKeys(page, daemon, PLAN);
 
   // No pill until / opens it.
   await expect(pill(page)).toHaveCount(0);
@@ -89,20 +94,12 @@ test("Enter commits: the cursor lands on a match and the pill persists as a HUD"
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: PLAN });
-  await page.goto("/");
-  await loadPlan(page);
-
-  await page.keyboard.press("/");
-  await page.keyboard.type("widget");
-  await expect.poll(async () => (await counter(page)).total).toBeGreaterThan(1);
-
-  await page.keyboard.press("Enter");
+  await openPlanForKeys(page, daemon, PLAN);
+  await commitWidgetSearch(page);
 
   // The line cursor lands on a row containing the query; the pill stays as a HUD and
   // focus returns to the plan (the field is blurred so n/N fire globally). The field is
   // read-only in the committed HUD so a click can't desync the counter (re-edit via /).
-  await expect(cursor(page)).toHaveCount(1);
   expect(((await cursor(page).textContent()) ?? "").toLowerCase()).toContain("widget");
   await expect(pill(page)).toBeVisible();
   await expect(field(page)).not.toBeFocused();
@@ -113,40 +110,28 @@ test("n / N cycle matches, wrapping back to the start after a full loop", async 
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: PLAN });
-  await page.goto("/");
-  await loadPlan(page);
-
-  await page.keyboard.press("/");
-  await page.keyboard.type("widget");
-  await expect.poll(async () => (await counter(page)).total).toBeGreaterThan(1);
+  await openPlanForKeys(page, daemon, PLAN);
+  await commitWidgetSearch(page);
   const { total } = await counter(page);
-  await page.keyboard.press("Enter");
-  await expect(cursor(page)).toHaveCount(1);
-  const start = await cursorLine(page);
+  const start = await readCursorLine(page);
 
   // n advances to a different match line; N steps back to the start.
   await page.keyboard.press("n");
   await expect(cursor(page)).not.toHaveAttribute("data-line", String(start));
   await page.keyboard.press("N");
-  await expect(cursor(page)).toHaveAttribute("data-line", String(start));
+  await expectCursorLine(page, start);
 
   // A full loop of n (total steps) wraps back to the start line.
   for (let i = 0; i < total; i++) await page.keyboard.press("n");
-  await expect(cursor(page)).toHaveAttribute("data-line", String(start));
+  await expectCursorLine(page, start);
 });
 
 test("/ reopens the previous committed search, prefilled and selected", async ({
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: PLAN });
-  await page.goto("/");
-  await loadPlan(page);
-
-  await page.keyboard.press("/");
-  await page.keyboard.type("widget");
-  await page.keyboard.press("Enter");
+  await openPlanForKeys(page, daemon, PLAN);
+  await commitWidgetSearch(page);
   await expect(field(page)).not.toBeFocused();
 
   // Committing remembers the query: reopening with / brings it back focused, prefilled
@@ -167,20 +152,12 @@ test("n resumes a closed search from the cursor, reopening the pill as a HUD", a
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: PLAN });
-  await page.goto("/");
-  await loadPlan(page);
+  await openPlanForKeys(page, daemon, PLAN);
 
   // Commit a search, then Esc to dismiss the pill entirely.
-  await page.keyboard.press("/");
-  await page.keyboard.type("widget");
-  await expect.poll(async () => (await counter(page)).total).toBeGreaterThan(1);
-  await page.keyboard.press("Enter");
-  await expect(cursor(page)).toHaveCount(1);
-  const committed = await cursorLine(page);
-  await page.keyboard.press("Escape");
-  await expect(pill(page)).toHaveCount(0);
-  await expect.poll(async () => (await highlightSizes(page)).all).toBe(0);
+  await commitWidgetSearch(page);
+  const committed = await readCursorLine(page);
+  await dismissSearch(page);
 
   // With the pill closed, n resumes the remembered search: the pill returns as a HUD
   // (field NOT refocused, so bare keys keep flowing), the highlights repaint, and the
@@ -197,9 +174,7 @@ test("the '/ to search' hint shows with hints on, and / swaps it for the pill", 
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: PLAN });
-  await page.goto("/");
-  await loadPlan(page);
+  await openPlanForKeys(page, daemon, PLAN);
 
   // Show Hints is on by default: the discovery chip sits in the dock, naming the key.
   const hint = page.locator(".search-hint");
@@ -222,9 +197,7 @@ test("the hint is hidden when Show Hints is off, but / still opens search", asyn
   page,
 }) => {
   await page.addInitScript(() => localStorage.setItem("caret.shortcutHints", "off"));
-  await daemon.seed({ plan: PLAN });
-  await page.goto("/");
-  await loadPlan(page);
+  await openPlanForKeys(page, daemon, PLAN);
 
   await expect(page.locator(".search-hint")).toHaveCount(0);
   await page.keyboard.press("/");
@@ -232,9 +205,7 @@ test("the hint is hidden when Show Hints is off, but / still opens search", asyn
 });
 
 test("smartcase: an uppercase letter narrows the match set", async ({ daemon, page }) => {
-  await daemon.seed({ plan: PLAN });
-  await page.goto("/");
-  await loadPlan(page);
+  await openPlanForKeys(page, daemon, PLAN);
 
   // Lowercase query is case-insensitive.
   await page.keyboard.press("/");
@@ -256,22 +227,16 @@ test("Esc dismisses from the field and from a committed search, clearing highlig
   daemon,
   page,
 }) => {
-  await daemon.seed({ plan: PLAN });
-  await page.goto("/");
-  await loadPlan(page);
+  await openPlanForKeys(page, daemon, PLAN);
 
   // From the focused field: Esc closes and clears the highlights.
   await page.keyboard.press("/");
   await page.keyboard.type("widget");
   await expect.poll(async () => (await highlightSizes(page)).current).toBe(1);
-  await page.keyboard.press("Escape");
-  await expect(pill(page)).toHaveCount(0);
-  await expect.poll(async () => (await highlightSizes(page)).all).toBe(0);
+  await dismissSearch(page);
 
   // From a committed search (field blurred, cursor placed): Esc still closes.
-  await page.keyboard.press("/");
-  await page.keyboard.type("widget");
-  await page.keyboard.press("Enter");
+  await commitWidgetSearch(page);
   await expect(field(page)).not.toBeFocused();
   await page.keyboard.press("Escape");
   await expect(pill(page)).toHaveCount(0);
