@@ -65,6 +65,12 @@ session mode/variant tokens like `acceptEdits`/`auto` — lives **only** in
 adapter maps a token to a tool permission (`setModeFor` in
 `src/adapters/claude/approve.ts`).
 
+`src/adapters/wire.ts` is the one shelf above the per-tool directories: the pieces every
+PermissionRequest-hook adapter implements identically — the stdin parse, the neutral deny
+text, and the `hookEventName` envelope — with each adapter's own decision payload passed
+in as a parameter. Vocabulary shared by all of them belongs there; vocabulary one of them
+owns still belongs only in its own directory.
+
 **Adding a new agent tool:** create `src/adapters/<tool>/`, implement `AgentAdapter`
 (declare its own approve variants with their ids/labels, parse its hook shape, render its
 decision wire format and its `fatalDenyLine`, probe its install, enumerate its skills),

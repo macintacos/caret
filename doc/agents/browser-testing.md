@@ -35,8 +35,8 @@ Two things make a spec look unit-able when it is not, and neither is visible fro
 body:
 
 - **Browser dependence behind a helper.** `createAnnotation`
-  (`test/e2e/diff-surface.e2e.ts:1616`) reads as a few lines of intent, but it routes
-  through `revealGutterPlus` (`test/e2e/support/source-view.ts:238`), which does
+  (`test/e2e/diff-surface.e2e.ts:1632`) reads as a few lines of intent, but it routes
+  through `revealGutterPlus` (`test/e2e/support/source-view.ts:415`), which does
   `getBoundingClientRect()` and then `page.mouse.move()`. Inline the helper before
   concluding a spec is pure logic.
 - **Browser dependence declared in the config.** `playwright.config.ts:87` emulates
@@ -210,14 +210,14 @@ Two rules follow, and both are about direction rather than magnitude:
   the instant its condition is true. A flake is a bug to name, not a run to repeat.
 
 The raising rule has five standing exceptions, all in `file-refs.e2e.ts`: four
-`toPass({ timeout: 20_000 })` (lines 897, 907, 997, 1004) and one `30_000` (line 1056),
+`toPass({ timeout: 20_000 })` (lines 1011, 1021, 1101, 1108) and one `30_000` (line 1158),
 guarding loops that walk a 300-line file's virtualised preview to both ends through real
 chunked loading. That is product cost, and the fixture's 300 lines — not the budget — is
 the tuning target. They predate the rule; a sixth needs an argument of the same kind.
 
 **A `waitForFunction` on the clock is a fixed sleep unless the app holds the same
 deadline.** The suite writes
-`await page.waitForFunction((t) => performance.now() > t + N, t0)` in eleven places and
+`await page.waitForFunction((t) => performance.now() > t + N, t0)` in eight places and
 they are not all the same thing. Two are **honest waits**, and both live in `fixtures.ts`
 rather than in a spec, which is the shape to copy: the justification is written once
 beside the helper instead of restated at each call site. `waitPastSafeModeGrace` is the
@@ -228,14 +228,17 @@ window's expiry has no DOM signal to poll. `pastKeyRepeatDelay` is the second (E
 `ui/src/lib/keyRepeat.ts` arms `KEY_REPEAT_DELAY_MS` before a held key starts repeating,
 the helper **imports that constant** rather than retyping the number, and a run that had
 not stopped would have ticked several times inside the window — which is what turns "the
-walk stopped on release" into a claim rather than a snapshot. The other nine are sleeps
+walk stopped on release" into a claim rather than a snapshot. The other six are sleeps
 wearing the same costume: "give the pointer pipeline a beat, then assert nothing
 appeared", where the number names nothing in the app. **The discriminator is whether code
 in `ui/` holds a deadline on that clock at that number.** If it does, the wait is honest.
 If it does not, you have written `page.waitForTimeout` with extra steps — reach for
 `waitForTwoPollTicks` or a `page.waitForResponse` on the event that must not happen, both
-of which say what they are waiting for. The nine are a standing finding, not a licence to
-add a tenth.
+of which say what they are waiting for. The six are a standing finding, not a licence to
+add a seventh. One of them — `expectNoComposerOpens`
+(`test/e2e/support/source-view.ts:522`) — sits in a harness module, shared by three specs;
+its docblock says which of the two it is, because a helper is exactly where an unlabelled
+one reads as sanctioned.
 
 **A budget cannot save a read that never retries.** Every deadline above buys time for an
 assertion that is *polling*; a bare `page.evaluate` polls nothing. It runs once, and

@@ -1,6 +1,7 @@
-// Shared scaffolding for the bun-test suite: env isolation, NDJSON parsing, the
-// in-process daemon boot + client, polling, free ports, the recording logger,
-// and the never-log-body matcher. Import from here or the individual modules.
+// Shared scaffolding for the bun-test suite. This barrel re-exports the modules
+// enough suites reach for that the grouped import earns its keep; the rest of the
+// directory is imported by module path. Both styles are fine — read the directory,
+// not this list, for what is available.
 export { type BootOptions, bootDaemon, type TestDaemon } from "./daemon.ts";
 export { setupTempStateDir, withEnv } from "./env.ts";
 export { ndjsonRecords } from "./ndjson.ts";
