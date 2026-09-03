@@ -177,17 +177,14 @@ export interface CreateServerOptions {
    * tests stay quiet. Lifecycle events log at info, handler failures at error. */
   log?: CaretLogger;
   /** Called when a long-poll parks on the decision pipe: GET /api/reviews/:id/decision
-   * found no recorded decision and is now awaiting one. Injectable so a test orders a
-   * resolve after the poll has registered instead of sleeping past the window — the
-   * sleep is inside the heartbeat deadline it races. Omitted (default) → nobody
-   * observes the parking. */
+   * found no recorded decision and is now awaiting one (EXC-468). Injectable so a test
+   * orders its resolve inside the heartbeat window instead of sleeping through it.
+   * Omitted (default) → nobody observes the parking. */
   onDecisionAwaited?: (id: string) => void;
   /** Schedule the idle-shutdown timer; injectable so tests fire it deterministically
    * instead of racing a real delay. Defaults to setTimeout. (The idle timer is the
    * only one armed at boot with no request in flight, so it's the one a test must be
-   * able to control. The long-poll heartbeat timer does race test setup — a fixed
-   * sleep ordering a resolve after the poll spends the very window it needs — which
-   * is what onDecisionAwaited above exists to remove.) */
+   * able to control.) */
   setTimer?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
   /** Cancel a scheduled idle-shutdown timer. Defaults to clearTimeout. */
   clearTimer?: (handle: ReturnType<typeof setTimeout>) => void;
@@ -221,6 +218,7 @@ interface ResolvedOptions {
   diagnostics: (() => DaemonDiagnostics) | undefined;
   updateReport: (() => UpdateReport | Promise<UpdateReport>) | undefined;
   onUpdatesEnabled: (() => void) | undefined;
+  onDecisionAwaited: ((id: string) => void) | undefined;
   markPaneRead: (pane: CmuxPane) => void;
   log: CaretLogger;
 }
@@ -246,6 +244,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     diagnostics: opts.diagnostics,
     updateReport: opts.updateReport,
     onUpdatesEnabled: opts.onUpdatesEnabled,
+    onDecisionAwaited: opts.onDecisionAwaited,
     markPaneRead: opts.markPaneRead ?? ((pane) => clearCmuxMark(pane, { log: opts.log })),
     log: opts.log ?? noopLogger,
   };
@@ -309,7 +308,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
         clearTimeout(t);
         resolve(d);
       });
-      opts.onDecisionAwaited?.(id);
+      cfg.onDecisionAwaited?.(id);
     });
   }
 

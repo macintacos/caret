@@ -101,10 +101,10 @@ function shutdownSignal(): {
   };
 }
 
-// Resolves when the daemon's long-poll actually parks on the decision pipe. The
-// registration signal a fixed sleep can only approximate — and the sleep spends the
-// heartbeat window it is trying to win (EXC-468). One review per booted daemon here,
-// so the id the daemon reports is not worth carrying.
+// Resolves when the daemon's long-poll actually parks on the decision pipe — the
+// registration signal a fixed sleep can only approximate, and the sleep spends the
+// heartbeat window it is trying to win (EXC-468). Latches on the first park only;
+// awaiting it a second time in the same test resolves at once.
 function decisionParked(): { onDecisionAwaited: () => void; parked: Promise<void> } {
   let fire!: () => void;
   const parked = new Promise<void>((r) => {
