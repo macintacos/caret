@@ -574,10 +574,10 @@
   style:left="{placed?.left ?? 0}px"
   style:visibility={placed === undefined ? "hidden" : "visible"}
 >
-  <div class="ft-header">
-    <span class="ft-badge">Folder</span>
-    <span class="ft-path">{path}</span>
-    <span class="ft-header-end">
+  <div class="ft-header ref-header">
+    <span class="ft-badge ref-badge">Folder</span>
+    <span class="ft-path ref-path">{path}</span>
+    <span class="ft-header-end ref-header-end">
       {#if view.kind === "ready" && view.elided > 0}
         <!-- The cap has no page-past, so this is a statement of what the reader
              cannot reach through this card — never an affordance implying they
@@ -600,7 +600,7 @@
              on it instead of being dropped to the body. -->
         <button
           type="button"
-          class="ft-refresh"
+          class="ft-refresh ref-icon-btn"
           aria-label="Re-read this folder"
           aria-disabled={refreshing}
           aria-busy={refreshing}
@@ -614,7 +614,7 @@
         </button>
       {/if}
       {#if showShortcutHints}
-        <span class="ft-hint"><Kbd class="kbd-sm">esc</Kbd> to close</span>
+        <span class="ft-hint ref-esc-hint"><Kbd class="kbd-sm">esc</Kbd> to close</span>
       {/if}
     </span>
   </div>
@@ -628,13 +628,13 @@
     <!-- Decorative: the "Loading…" beside it is the accessible message, so the
          spinner's default role="status" + aria-label would say it twice. Nothing
          announces the wait; spinner.svelte records why a region cannot here. -->
-    <div class="ft-message" data-folder-state="loading">
+    <div class="ft-message ref-message" data-folder-state="loading">
       <Spinner size={12} aria-hidden="true" />Loading…
     </div>
   {:else if view.kind === "error"}
-    <div class="ft-message" data-folder-state="error">Couldn't read this folder.</div>
+    <div class="ft-message ref-message" data-folder-state="error">Couldn't read this folder.</div>
   {:else if view.kind === "empty" || view.empty}
-    <div class="ft-message" data-folder-state="empty">This folder is empty.</div>
+    <div class="ft-message ref-message" data-folder-state="empty">This folder is empty.</div>
   {/if}
 </div>
 
@@ -664,44 +664,6 @@
     box-shadow: var(--shadow-card);
     animation: ft-in var(--dur-enter) var(--ease-out);
   }
-  /* The same header vocabulary FilePreview uses — a filled kind chip, the path,
-     and the way out pushed right — so the two reference surfaces read as one
-     family rather than two designs. */
-  .ft-header {
-    --ft-header-gap: 0.45rem;
-    display: flex;
-    align-items: baseline;
-    gap: var(--ft-header-gap);
-    padding: 0.3rem 0.6rem;
-    border-bottom: 1px solid var(--rule);
-    font-family: var(--font-mono);
-    font-size: var(--text-2xs);
-  }
-  .ft-badge {
-    flex: 0 0 auto;
-    align-self: center;
-    padding: 0.05rem 0.4rem;
-    border-radius: var(--radius);
-    background: var(--ink-soft);
-    color: var(--paper);
-    font-weight: 700;
-    font-size: var(--text-2xs);
-    letter-spacing: 0.09em;
-    text-transform: uppercase;
-  }
-  .ft-path {
-    color: var(--ink);
-    font-weight: 600;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .ft-header-end {
-    display: flex;
-    align-items: baseline;
-    gap: var(--ft-header-gap);
-    margin-left: auto;
-  }
   .ft-elided,
   .ft-stale {
     color: var(--ink-faint);
@@ -711,33 +673,17 @@
      give back the flex gap it would otherwise hold open. `display: none` would
      reintroduce the very insertion the unconditional mount avoids. */
   .ft-stale:empty {
-    margin-inline-end: calc(-1 * var(--ft-header-gap));
+    margin-inline-end: calc(-1 * var(--ref-header-gap));
   }
   /* The same button idiom FilePreview's header uses (.fp-close): a real control
-     at header scale, carrying the 24px pointer target WCAG 2.2 SC 2.5.8 asks for
-     as an invisible inset rather than a bigger glyph. It takes no tint of its
-     own — this is not a way out of the card — so it sits in the header's faint
-     ink and comes up to full ink under the pointer. The focus ring is the app's
-     global `button:focus-visible` in styles/base.css. */
+     at header scale. It takes no tint of its own — this is not a way out of the
+     card — so it sits in the header's faint ink and comes up to full ink under
+     the pointer. The focus ring is the app's global `button:focus-visible` in
+     styles/base.css. */
   .ft-refresh {
-    position: relative;
-    flex: 0 0 auto;
-    align-self: center;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 11px;
-    height: 11px;
-    padding: 0;
-    border: none;
     background: none;
     color: var(--ink-faint);
     transition: color var(--dur-micro) var(--ease-out);
-  }
-  .ft-refresh::after {
-    content: "";
-    position: absolute;
-    inset: -7px;
   }
   .ft-refresh:hover,
   .ft-refresh:focus-visible {
@@ -747,16 +693,6 @@
      one device pixel and smudges rather than reading as a pair of arrows. */
   .ft-refresh :global(svg) {
     stroke-width: 2.5;
-  }
-  .ft-hint {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3em;
-    padding: 0.1rem 0.4rem;
-    border-radius: var(--radius);
-    background: var(--paper-sunk);
-    color: var(--ink-faint);
-    white-space: nowrap;
   }
   /* The tree is virtualized, so it cannot size to its content: the library's own
      `:host([data-file-tree-virtualized]) { height: 100% }` means the host resolves
@@ -815,12 +751,6 @@
     --trees-border-radius-override: var(--radius);
   }
   .ft-message {
-    display: flex;
-    align-items: center;
-    gap: 0.45rem;
-    padding: 0.5rem 0.6rem;
-    color: var(--ink-soft);
-    font-size: var(--text-2xs);
     font-family: var(--font-mono);
     animation: ft-in var(--dur-micro) var(--ease-out);
   }

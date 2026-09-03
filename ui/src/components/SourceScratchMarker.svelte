@@ -28,8 +28,11 @@
 </script>
 
 <Button variant="ghost" class="scratch" onclick={onResume} aria-label="Resume unsent comment">
-  <Badge variant="outline" class="badge">Resume</Badge>
-  <span class="preview">{text}</span>
+  <!-- Neutral ink (not amber), which keeps it off the brand-active hue that
+       SourceAnnotationCard's unresolved "Draft" dot owns, so the two
+       affordances stay visually distinct. -->
+  <Badge variant="outline" class="quiet-badge">Resume</Badge>
+  <span class="clamp-line preview">{text}</span>
 </Button>
 
 <style>
@@ -64,27 +67,6 @@
     background: transparent;
     border-color: var(--rule-strong);
     border-left-color: var(--ink-soft);
-  }
-  /* The action badge: a quiet, neutral outline tag. Neutral ink (not amber) keeps
-     it off the brand-active hue that SourceAnnotationCard's unresolved "Draft" dot
-     owns, so the two affordances stay visually distinct. */
-  :global([data-slot="badge"].badge) {
-    flex: none;
-    padding: 0.05rem 0.4rem;
-    font-size: var(--text-2xs);
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    color: var(--ink-faint);
-    line-height: var(--leading-none);
-  }
-  .preview {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    font-size: var(--text-base);
-    color: var(--ink-soft);
   }
   @keyframes reveal {
     from {

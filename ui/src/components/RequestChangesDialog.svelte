@@ -201,7 +201,7 @@
                     <span class="anchor metric">
                       {isLineAnnotation(a) ? rangeLabel(a.startLine, a.endLine) : "Comment"}
                     </span>
-                    <span class="snippet">{a.comment}</span>
+                    <span class="clamp-line">{a.comment}</span>
                   </Collapsible.Trigger>
                   <div class="inline-actions">
                     {#if isLineAnnotation(a)}
@@ -268,7 +268,7 @@
                   <Collapsible.Trigger class="row-trigger">
                     <Icon name="chevron-down" size={14} />
                     <span class="anchor metric">{rangeLabel(s.startLine, s.endLine)}</span>
-                    <span class="snippet">{s.text}</span>
+                    <span class="clamp-line">{s.text}</span>
                   </Collapsible.Trigger>
                   <div class="scratch-actions">
                     <Button
@@ -543,15 +543,6 @@
     flex: none;
     font-size: var(--text-2xs);
     font-weight: 600;
-    color: var(--ink-soft);
-  }
-  .snippet {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    font-size: var(--text-base);
     color: var(--ink-soft);
   }
   .row-text {

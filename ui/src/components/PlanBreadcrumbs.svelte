@@ -1139,16 +1139,26 @@
      the resting look does not depend on out-specifying a shared class.
      The unbroken min-width: 0 chain (list -> item -> button) plus the overflow
      rules are what keep a long heading truncating instead of widening the control
-     row, and so what holds the app inside its MIN_APP_WIDTH_PX floor. */
+     row, and so what holds the app inside its MIN_APP_WIDTH_PX floor.
+     The crumb button and the elision marker share one reset — border, radius,
+     transparent ground, pointer, the hover/menu-open transition — so the shared
+     rule lives once and each keeps only what makes it what it is. */
+  :global(.plan-breadcrumbs .crumb),
+  :global(.plan-breadcrumbs .crumb-ellipsis) {
+    border: none;
+    border-radius: var(--radius);
+    background: transparent;
+    cursor: pointer;
+    transition:
+      background var(--dur-micro) var(--ease-out),
+      color var(--dur-micro) var(--ease-out);
+  }
   :global(.plan-breadcrumbs .crumb) {
     display: block;
     max-width: 14rem;
     min-width: 0;
     height: calc(var(--ctl-h) - 0.25rem);
     padding: 0 0.4rem;
-    border: none;
-    border-radius: var(--radius);
-    background: transparent;
     color: var(--ink-soft);
     font-family: inherit;
     font-size: var(--text-sm);
@@ -1160,31 +1170,17 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    cursor: pointer;
-    transition:
-      background var(--dur-micro) var(--ease-out),
-      color var(--dur-micro) var(--ease-out);
-  }
-  :global(.plan-breadcrumbs .crumb:hover),
-  :global(.plan-breadcrumbs .crumb[aria-expanded="true"]) {
-    background: var(--chip-hover);
-    color: var(--ink);
   }
   /* The elision marker stands in for the crumbs it swallowed, so it reads as one
      rather than earning a treatment of its own: quiet punctuation ink at rest,
      warming to the crumbs' own chip fill under the pointer and while its menu is
      open. Its box comes from the vendored component (a centred 1.25rem square),
-     so only the button reset, the radius and the state colours are set here. */
+     so only the shared reset above plus this color are set here. */
   :global(.plan-breadcrumbs .crumb-ellipsis) {
-    border: none;
-    border-radius: var(--radius);
-    background: transparent;
     color: inherit;
-    cursor: pointer;
-    transition:
-      background var(--dur-micro) var(--ease-out),
-      color var(--dur-micro) var(--ease-out);
   }
+  :global(.plan-breadcrumbs .crumb:hover),
+  :global(.plan-breadcrumbs .crumb[aria-expanded="true"]),
   :global(.plan-breadcrumbs .crumb-ellipsis:hover),
   :global(.plan-breadcrumbs .crumb-ellipsis[aria-expanded="true"]) {
     background: var(--chip-hover);

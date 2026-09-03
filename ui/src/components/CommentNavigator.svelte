@@ -423,23 +423,12 @@
     letter-spacing: 0.02em;
     color: var(--ink-faint);
   }
-  /* The version tag: which plan revision a compare-mode comment was left on. Same
-     quiet neutral pill as the draft tag, but solid-bordered — a version is a fact,
-     where a draft is provisional. */
-  .nav-version-tag {
-    font-size: var(--text-2xs);
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    color: var(--ink-faint);
-    padding: 0 0.3rem;
-    border: 1px solid var(--rule-strong);
-    border-radius: var(--radius);
-  }
-  /* The unlinked tag: this comment's version is in the compared range but is
-     rendered on neither side, so the row has nowhere to jump to. Shares the
-     version tag's solid neutral pill — the two read as one statement of
-     provenance ("v2, not in diff") — and only drops the tracking, which sets off
-     a token like "v2" but strings out a phrase. */
+  /* The version tag and the unlinked tag share one solid neutral pill — a
+     version is a fact, so both read as one statement of provenance ("v2" /
+     "v2, not in diff"). The version tag alone tracks its letters wide, which
+     sets off a short token; the unlinked tag strings out a whole phrase, where
+     the same tracking would only make it harder to read. */
+  .nav-version-tag,
   .nav-unlinked-tag {
     font-size: var(--text-2xs);
     font-weight: 600;
@@ -447,6 +436,9 @@
     padding: 0 0.3rem;
     border: 1px solid var(--rule-strong);
     border-radius: var(--radius);
+  }
+  .nav-version-tag {
+    letter-spacing: 0.08em;
   }
   /* The draft tag: a quiet uppercase pill marking an unsent scratch as provisional,
      kept neutral so amber stays the navigation cue. */

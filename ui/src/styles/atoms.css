@@ -1,6 +1,7 @@
 /* Shared chrome atoms — .mono, the floating chip, .metric, .eyebrow, the form
-   label, the count chip, the keycap, and the completion preview panel. @imported
-   by app.css after the base layer. */
+   label, the count chip, the keycap, the settings pane's section label and copy
+   block, the quiet badge, the clamped line, the reference-surface header, and
+   the completion preview panel. @imported by app.css after the base layer. */
 
 /* ----- Shared atoms ----- */
 .mono {
@@ -162,6 +163,150 @@ button.float-chip[aria-expanded="true"]:not(:disabled) {
 }
 [data-theme="light"] [data-slot="kbd"] {
   background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+/* A settings pane's section label — the uppercase caption above a read-only
+   block (Advanced's diagnostics, Updates' status), in the same vocabulary as
+   the SettingsDialog section heads. */
+.settings-block-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+}
+/* The sunk-paper box behind a settings pane's copyable/reference text (the
+   Advanced diagnostics blocks, the Updates upgrade command). */
+.settings-copy-box {
+  display: block;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-sunk);
+  overflow-x: auto;
+}
+.settings-copy-text {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  color: var(--ink);
+  white-space: pre;
+}
+
+/* A quiet outline Badge: small, tabular ink-faint text, no hue of its own —
+   the "Draft"/"Resume" family of small status pills. */
+[data-slot="badge"].quiet-badge {
+  flex: none;
+  padding: 0.05rem 0.4rem;
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+  line-height: var(--leading-none);
+}
+
+/* A clamped single line of text — a comment or reply's own preview — that
+   truncates with an ellipsis rather than wrapping. */
+.clamp-line {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--text-base);
+  color: var(--ink-soft);
+}
+
+/* ----- The reference-surface header (FilePreview, FolderTree) -----
+
+   The two plan-reference surfaces — the file excerpt lane and the folder card —
+   read as one family rather than two designs, so their shared header chrome
+   lives here once. */
+.ref-header {
+  --ref-header-gap: 0.45rem;
+  display: flex;
+  align-items: baseline;
+  gap: var(--ref-header-gap);
+  padding: 0.3rem 0.6rem;
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+}
+/* Path on the left, line range pushed to the right — the same reading order as a
+   `path:line` reference. */
+.ref-header-end {
+  display: flex;
+  align-items: baseline;
+  gap: var(--ref-header-gap);
+  margin-left: auto;
+}
+/* The kind label ("Preview", "Folder") — a filled chip so the surface is
+   unmistakably a reference, not the thing itself. Neutral ink fill (amber stays
+   brand-reserved); high-contrast against the panel in both schemes. */
+.ref-badge {
+  flex: 0 0 auto;
+  /* The header is baseline-aligned; a chip has no baseline worth sharing. */
+  align-self: center;
+  padding: 0.05rem 0.4rem;
+  border-radius: var(--radius);
+  background: var(--ink-soft);
+  color: var(--paper);
+  font-weight: 700;
+  font-size: var(--text-2xs);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.ref-path {
+  color: var(--ink);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The "esc to close" affordance: a quiet recessed chip wrapping the esc keycap,
+   naming the way out of a click-opened surface. Faint ink so it reads as ambient
+   guidance, not a control; the keycap tints off that same faint ink.
+   Named `ref-esc-hint`, not `ref-hint` — that name is already
+   RefHintBadge.svelte's teaching-dot class. */
+.ref-esc-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius);
+  background: var(--paper-sunk);
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+/* A small (11px) header icon button, carrying the 24px pointer target WCAG 2.2
+   SC 2.5.8 asks for as an invisible inset rather than a bigger glyph. Fill and
+   ink stay the caller's — this only sets the shared box. */
+.ref-icon-btn {
+  position: relative;
+  flex: 0 0 auto;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 11px;
+  height: 11px;
+  padding: 0;
+  border: none;
+}
+.ref-icon-btn::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+}
+/* The loading/error/empty state row both surfaces show in place of their
+   content. */
+.ref-message {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.5rem 0.6rem;
+  color: var(--ink-soft);
+  font-size: var(--text-2xs);
 }
 
 /* ----- The completion preview panel (EXC-1186) ----- */

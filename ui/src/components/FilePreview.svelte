@@ -583,13 +583,18 @@
 </script>
 
 <div class="file-preview" data-file-preview>
-  <div class="fp-header">
-    <button type="button" class="fp-close" aria-label="Close preview" onclick={onClose}>
+  <div class="fp-header ref-header">
+    <button
+      type="button"
+      class="fp-close ref-icon-btn"
+      aria-label="Close preview"
+      onclick={onClose}
+    >
       <Icon name="x" size={8} />
     </button>
-    <span class="fp-badge">Preview</span>
-    <span class="fp-path">{preview.kind === "ready" ? preview.path : path}</span>
-    <span class="fp-header-end">
+    <span class="fp-badge ref-badge">Preview</span>
+    <span class="fp-path ref-path">{preview.kind === "ready" ? preview.path : path}</span>
+    <span class="fp-header-end ref-header-end">
       <!-- The range doubles as the growth announcement: a chunk landing rewrites
            it, and role="status" hands a screen reader that one short sentence
            ("lines 1–180 of 300") instead of the hundreds of rows that arrived.
@@ -597,7 +602,7 @@
            live region is in place long before the first chunk. -->
       {#if meta}<span class="fp-range" role="status">{meta.label}</span>{/if}
       {#if showShortcutHints}
-        <span class="fp-hint"><Kbd class="kbd-sm">esc</Kbd> to close</span>
+        <span class="fp-hint ref-esc-hint"><Kbd class="kbd-sm">esc</Kbd> to close</span>
       {/if}
     </span>
   </div>
@@ -653,16 +658,16 @@
       </div>
     {/key}
   {:else if preview.kind === "too-large"}
-    <div class="fp-message" data-preview-state="too-large">This file is too large to preview.</div>
+    <div class="fp-message ref-message" data-preview-state="too-large">This file is too large to preview.</div>
   {:else if preview.kind === "error"}
-    <div class="fp-message" data-preview-state="error">Couldn't load this file.</div>
+    <div class="fp-message ref-message" data-preview-state="error">Couldn't load this file.</div>
   {:else}
     <!-- Decorative: the "Loading…" beside it is the accessible message, so the
          spinner's default role="status" + aria-label would say it twice. Nothing
          announces the wait; spinner.svelte records why a region cannot here —
          and `.fp-range` cannot either on a first open, being `{#if meta}`-mounted
          and so inserted already populated itself. -->
-    <div class="fp-message" data-preview-state="loading">
+    <div class="fp-message ref-message" data-preview-state="loading">
       <Spinner size={12} aria-hidden="true" />Loading…
     </div>
   {/if}
@@ -683,17 +688,6 @@
     background: var(--paper);
     color: var(--ink);
   }
-  /* Path on the left, line range pushed to the right — the same reading order as
-     a "path:line" reference. */
-  .fp-header {
-    display: flex;
-    align-items: baseline;
-    gap: 0.45rem;
-    padding: 0.3rem 0.6rem;
-    border-bottom: 1px solid var(--rule);
-    font-family: var(--font-mono);
-    font-size: var(--text-2xs);
-  }
   /* The close circle: the macOS traffic light, at the pane's top-left where that
      idiom lives. Shape carries it — a filled disc the reader decodes before
      reading anything — with the glyph held back until hover or focus, as the
@@ -701,31 +695,11 @@
      every-hue-has-a-job rule; doc/agents/svelte-rules.md § CSS-token discipline
      records it and why, and theme.test.ts pins its 3:1 non-text contrast on
      --paper (WCAG 1.4.11, the clause that binds for a control carried by shape
-     alone).
-
-     align-self because the header is baseline-aligned and a disc has no baseline
-     worth sharing — the same opt-out .fp-badge takes. */
+     alone). */
   .fp-close {
-    position: relative;
-    flex: 0 0 auto;
-    align-self: center;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 11px;
-    height: 11px;
-    padding: 0;
-    border: none;
     border-radius: 50%;
     background: var(--danger);
     color: var(--paper);
-  }
-  /* The disc reads at 11px because the idiom is small; the POINTER gets the 24px
-     WCAG 2.2 SC 2.5.8 asks for, as an invisible inset rather than a bigger circle. */
-  .fp-close::after {
-    content: "";
-    position: absolute;
-    inset: -7px;
   }
   /* Icon.svelte wraps its SVG in a .icon span, so the fade hangs on that rather
      than on the svg itself. The stroke is thickened to hold at this size: the
@@ -749,49 +723,7 @@
       opacity: 1;
     }
   }
-  /* The explicit "Preview" label — a filled chip so the panel is unmistakably a
-     snippet, not the file itself. Neutral ink fill (amber stays brand-reserved);
-     high-contrast against the panel in both schemes. */
-  .fp-badge {
-    flex: 0 0 auto;
-    align-self: center;
-    padding: 0.05rem 0.4rem;
-    border-radius: var(--radius);
-    background: var(--ink-soft);
-    color: var(--paper);
-    font-weight: 700;
-    font-size: var(--text-2xs);
-    letter-spacing: 0.09em;
-    text-transform: uppercase;
-  }
-  .fp-path {
-    color: var(--ink);
-    font-weight: 600;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
   .fp-range {
-    color: var(--ink-faint);
-    white-space: nowrap;
-  }
-  /* Range + the esc hint pushed to the header's right edge as one group. */
-  .fp-header-end {
-    display: flex;
-    align-items: baseline;
-    gap: 0.45rem;
-    margin-left: auto;
-  }
-  /* The "esc to close" affordance — a quiet recessed chip wrapping the esc keycap,
-     naming the way out of the click-opened preview (EXC-840). Faint ink so it reads
-     as ambient guidance, not a control; the keycap tints off that same faint ink. */
-  .fp-hint {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3em;
-    padding: 0.1rem 0.4rem;
-    border-radius: var(--radius);
-    background: var(--paper-sunk);
     color: var(--ink-faint);
     white-space: nowrap;
   }
@@ -913,16 +845,10 @@
     padding: 0 0.8rem;
     white-space: pre;
   }
+  /* One line of text rather than a screenful, so it takes the micro tier
+     rather than the surface one — long enough not to pop, short enough that a
+     reader waiting to be told the file is too large is not watching it arrive. */
   .fp-message {
-    display: flex;
-    align-items: center;
-    gap: 0.45rem;
-    padding: 0.5rem 0.6rem;
-    color: var(--ink-soft);
-    font-size: var(--text-2xs);
-    /* One line of text rather than a screenful, so it takes the micro tier
-       rather than the surface one — long enough not to pop, short enough that a
-       reader waiting to be told the file is too large is not watching it arrive. */
     animation: fp-in var(--dur-micro) var(--ease-out);
   }
   /* Both halves travel the same 4px in the same direction: contents rise into

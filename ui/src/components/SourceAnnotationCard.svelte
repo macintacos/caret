@@ -156,11 +156,11 @@
       >
         <Icon name="chevron-down" size={12} />
         <span class="ref">{label}</span>
-        <Badge variant="outline" class="state state-{stateView.tone}">
+        <Badge variant="outline" class="quiet-badge state state-{stateView.tone}">
           <span class="dot" aria-hidden="true"></span>{stateView.label}
         </Badge>
         {#if !expanded}
-          <span class="preview">{annotation.comment}</span>
+          <span class="clamp-line preview">{annotation.comment}</span>
         {/if}
       </Button>
       <div class="actions">
@@ -302,28 +302,12 @@
     letter-spacing: 0.02em;
     color: var(--ink-soft);
   }
-  .preview {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    font-size: var(--text-base);
-    color: var(--ink-soft);
-  }
   /* Per-comment state affordance: an outline Badge carrying a small colored dot
      plus a quiet label. The dot carries the hue (state-driven, via the inherited
      --state-accent); the label stays neutral so the indicator reads as chrome,
      not a second accent. Shown collapsed and expanded. */
   :global([data-slot="badge"].state) {
-    flex: none;
     gap: 0.3rem;
-    padding: 0.05rem 0.4rem;
-    font-size: var(--text-2xs);
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    color: var(--ink-faint);
-    line-height: var(--leading-none);
   }
   .dot {
     width: 0.4rem;

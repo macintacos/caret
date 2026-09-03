@@ -322,7 +322,7 @@
                      legend is the fieldset's FIRST child, which is what makes a browser
                      render it as the group's legend. -->
                 <FieldSet class="section">
-                  <FieldLegend class="section-head">{section.label}</FieldLegend>
+                  <FieldLegend class="section-head settings-block-label">{section.label}</FieldLegend>
                   {@render rows(section.fields)}
                 </FieldSet>
               {:else}
@@ -521,11 +521,6 @@
      spelling that holds whether or not an engine keeps it in flow. */
   .settings :global(.section-head) {
     margin: 0 0 0.5rem;
-    font-size: var(--text-xs);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--ink-faint);
   }
 
   /* One setting = one shadcn Field (label block left, control flush right), sized to

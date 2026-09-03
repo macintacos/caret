@@ -42,7 +42,7 @@
      FieldLabel. -->
 <div class="updates" data-updates-pane>
   <Field class="update-section" aria-labelledby="update-status-label">
-    <FieldTitle id="update-status-label" class="update-label">Update status</FieldTitle>
+    <FieldTitle id="update-status-label" class="update-label settings-block-label">Update status</FieldTitle>
 
     {#if copy}
       <p class="update-headline">
@@ -62,7 +62,7 @@
              role plus the tab stop ARE the keyboard reading affordance, exactly as
              FilePreview's `.fp-code` carries them for the same reason (EXC-972). -->
         <code
-          class="update-command"
+          class="update-command settings-copy-box settings-copy-text"
           role="region"
           tabindex="0"
           aria-label="Upgrade command">{copy.command}</code>
@@ -86,16 +86,6 @@
   .updates :global(.update-section) {
     gap: 0.4rem;
   }
-  /* The uppercase block label, in the same vocabulary as the Advanced pane's labels and
-     the settings section heads — so a reader crossing panes meets one heading style. */
-  .updates :global(.update-label) {
-    font-size: var(--text-xs);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--ink-faint);
-  }
-
   /* The verdict itself: the pane's answer, at full ink so it out-reads everything around
      it, with the dot on its leading edge. */
   .update-headline {
@@ -135,18 +125,7 @@
   /* The upgrade command, on the recessed surface the Advanced blocks use. It scrolls
      rather than wrapping: a wrapped shell command invites a half-copied paste. */
   .update-command {
-    display: block;
     margin-top: 0.35rem;
-    padding: 0.6rem 0.75rem;
-    border: 1px solid var(--rule);
-    border-radius: var(--radius);
-    background: var(--paper-sunk);
-    overflow-x: auto;
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    line-height: var(--leading-normal);
-    color: var(--ink);
-    white-space: pre;
   }
 
   /* A degraded pane reads muted — it is a placeholder, not data, and not a failure. */

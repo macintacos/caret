@@ -103,7 +103,7 @@
     {#each blocks as block (block.key)}
       <Field class="diag-section" data-diag={block.key} aria-labelledby="diag-{block.key}-label">
         <div class="diag-head">
-          <FieldTitle id="diag-{block.key}-label" class="diag-label">{block.label}</FieldTitle>
+          <FieldTitle id="diag-{block.key}-label" class="diag-label settings-block-label">{block.label}</FieldTitle>
           {#if block.available}
             <button
               class="diag-copy"
@@ -128,7 +128,7 @@
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
-          class="diag-block"
+          class="diag-block settings-copy-box"
           class:is-config={block.key === "config"}
           class:is-unavailable={!block.available}
           onclick={() => block.available && onCopyDiagnostic(block.text)}
@@ -136,7 +136,7 @@
           {#if block.key === "daemon"}
             <span class="diag-dot" data-live={block.available}></span>
           {/if}
-          <code class="diag-text">{block.available ? block.text : "Unavailable"}</code>
+          <code class="diag-text settings-copy-text">{block.available ? block.text : "Unavailable"}</code>
         </div>
       </Field>
     {/each}
@@ -170,14 +170,6 @@
     justify-content: space-between;
     min-height: 1.25rem;
   }
-  .advanced :global(.diag-label) {
-    font-size: var(--text-xs);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--ink-faint);
-  }
-
   /* The Copy affordance: a quiet chip in the label row, brightening on hover. It
      is the keyboard / screen-reader control; the success toast (EXC-850) confirms
      the copy, so the chip needs no flash of its own. */
@@ -216,16 +208,10 @@
      where the tier's opaque fills ride --paper-raised and --ink-wash is a
      translucent tint at twice this strength. */
   .diag-block {
-    display: block;
     width: 100%;
     margin: 0;
-    padding: 0.6rem 0.75rem;
     text-align: left;
-    border: 1px solid var(--rule);
-    border-radius: var(--radius);
-    background: var(--paper-sunk);
     cursor: pointer;
-    overflow-x: auto;
     transition:
       border-color var(--dur-micro) var(--ease-out),
       background-color var(--dur-micro) var(--ease-out);
@@ -244,13 +230,6 @@
     overflow-y: auto;
   }
 
-  .diag-text {
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    line-height: var(--leading-normal);
-    color: var(--ink);
-    white-space: pre;
-  }
   /* A degraded block reads muted — it's a placeholder, not data. */
   .diag-block.is-unavailable .diag-text {
     color: var(--ink-faint);
