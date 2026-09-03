@@ -302,7 +302,7 @@ NOT dismiss" — an unarmed layer PASSES it, so the helper is the precondition f
 testing anything at all, and belongs there unconditionally (EXC-1204).
 
 **Arming is not itself a bound.** A dismissing guard needs 196–319ms to leave the DOM — a
-10ms interact-outside debounce (bits-ui 2.18.1, the file the helper's docblock pins), then
+10ms interact-outside debounce (bits-ui 2.19.0, the file the helper's docblock pins), then
 the exit animation — while an auto-retrying assertion resolves on its first sample, ~0ms
 after the click. Armed but unbounded, the negative above still could not red at its own
 `toBeVisible()`: flipping the guard backdrop-dismissible reds it 8/10, always at the

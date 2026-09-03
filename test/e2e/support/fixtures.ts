@@ -518,7 +518,7 @@ type BitsLayerRegistry = { bitsDismissableLayers?: Map<BitsLayer, unknown> };
  * Wait until `layer`'s bits-ui dismissible layer has armed its outside-click handler.
  *
  * A layer is not dismissible the moment it is on screen. `DismissibleLayerState` (bits-ui
- * 2.18.1: node_modules/bits-ui/dist/bits/utilities/dismissible-layer/use-dismissable-layer.svelte.js)
+ * 2.19.0: node_modules/bits-ui/dist/bits/utilities/dismissible-layer/use-dismissable-layer.svelte.js)
  * attaches its document `pointerdown`/`focusin` listeners inside `afterSleep(1, …)` once
  * its `ref` is set — so both `toBeVisible()`, which resolves on paint, and the confirm
  * button taking focus from `onOpenAutoFocus`, which runs on mount, land INSIDE that
@@ -566,7 +566,7 @@ export async function awaitDismissArmed(layer: Locator): Promise<void> {
         message:
           "bits-ui never registered this layer in globalThis.bitsDismissableLayers. Either " +
           "the layer never opened, or bits-ui moved the internal this wait reads — re-check " +
-          "use-dismissable-layer.svelte.js against the docblock above (read at 2.18.1).",
+          "use-dismissable-layer.svelte.js against the docblock above (read at 2.19.0).",
       },
     )
     .toBe(true);

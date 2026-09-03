@@ -53,7 +53,7 @@ const VARIANT = /(?:has-|group-|peer-|in-|not-|\*:)*data-([a-z][a-z0-9-]*)(?:\/[
 
 /**
  * Attributes bits-ui stamps as `"" | undefined`, so `[data-x]` presence is the
- * CORRECT selector. Verified against bits-ui 2.18.1, where the presence shape is
+ * CORRECT selector. Verified against bits-ui 2.19.0, where the presence shape is
  * `boolToEmptyStrOrUndef(...)` / `x ? "" : undefined` and the valued one is a
  * plain assignment (`"data-orientation": this.opts.orientation.current`). Each
  * entry is one grep away from falsifiable:
