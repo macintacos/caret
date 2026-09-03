@@ -1,9 +1,16 @@
 import "@ui/test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { withBlockedStorage } from "@ui/test-storage.ts";
 import { defineFlagPref, definePref, knownPrefKeys, registerPrefKey } from "$lib/definePref.ts";
 
 afterEach(() => localStorage.clear());
+
+/** A pref factory registers its key and surfaces it back as `KEY`. */
+function expectKeyContract(pref: { KEY: string }, key: string): void {
+  expect(knownPrefKeys()).toContain(key);
+  expect(pref.KEY).toBe(key);
+}
 
 describe("registerPrefKey / knownPrefKeys", () => {
   test("a registered key appears in knownPrefKeys()", () => {
@@ -23,12 +30,8 @@ describe("definePref (enum)", () => {
   const KEY = "test.definePref.enum";
   const pref = definePref<"a" | "b">(KEY, ["a", "b"], "a");
 
-  test("registers its key", () => {
-    expect(knownPrefKeys()).toContain(KEY);
-  });
-
-  test("surfaces the key as KEY", () => {
-    expect(pref.KEY).toBe(KEY);
+  test("registers its key and surfaces it as KEY", () => {
+    expectKeyContract(pref, KEY);
   });
 
   test("reads a stored valid value", () => {
@@ -52,33 +55,15 @@ describe("definePref (enum)", () => {
   });
 
   test("read fails safe to the fallback when localStorage throws", () => {
-    const original = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      get() {
-        throw new Error("blocked");
-      },
-    });
-    try {
+    withBlockedStorage(() => {
       expect(pref.read()).toBe("a");
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", { configurable: true, value: original });
-    }
+    });
   });
 
   test("write swallows a localStorage failure", () => {
-    const original = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      get() {
-        throw new Error("blocked");
-      },
-    });
-    try {
+    withBlockedStorage(() => {
       expect(() => pref.write("b")).not.toThrow();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", { configurable: true, value: original });
-    }
+    });
   });
 });
 
@@ -86,12 +71,8 @@ describe("defineFlagPref (boolean flag)", () => {
   const KEY = "test.defineFlagPref.flag";
   const pref = defineFlagPref(KEY);
 
-  test("registers its key", () => {
-    expect(knownPrefKeys()).toContain(KEY);
-  });
-
-  test("surfaces the key as KEY", () => {
-    expect(pref.KEY).toBe(KEY);
+  test("registers its key and surfaces it as KEY", () => {
+    expectKeyContract(pref, KEY);
   });
 
   test("reads false when nothing is stored", () => {
@@ -117,48 +98,21 @@ describe("defineFlagPref (boolean flag)", () => {
   });
 
   test("defaults onError to false (fails safe to unset)", () => {
-    const original = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      get() {
-        throw new Error("blocked");
-      },
-    });
-    try {
+    withBlockedStorage(() => {
       expect(pref.read()).toBe(false);
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", { configurable: true, value: original });
-    }
+    });
   });
 
   test("honors onError: true (fails safe to set — e.g. the drag hint's don't-nag)", () => {
     const failSafeSet = defineFlagPref("test.defineFlagPref.onErrorTrue", { onError: true });
-    const original = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      get() {
-        throw new Error("blocked");
-      },
-    });
-    try {
+    withBlockedStorage(() => {
       expect(failSafeSet.read()).toBe(true);
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", { configurable: true, value: original });
-    }
+    });
   });
 
   test("write swallows a localStorage failure", () => {
-    const original = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      get() {
-        throw new Error("blocked");
-      },
-    });
-    try {
+    withBlockedStorage(() => {
       expect(() => pref.write(true)).not.toThrow();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", { configurable: true, value: original });
-    }
+    });
   });
 });

@@ -196,12 +196,21 @@ describe("SettingSelect row states", () => {
 });
 
 describe("SettingSelect commit", () => {
-  test("picking an option fires onSelect with its value, and closes", async () => {
+  /** Render with an onSelect capture and open the listbox — the common
+   * opening both commit tests below then pick a row from. */
+  async function openWithSelectCapture(): Promise<{
+    flush: () => void;
+    picked: ReturnType<typeof capture<string>>;
+  }> {
     const picked = capture<string>();
     const { flush } = render(SettingSelect, { ...baseProps, onSelect: picked.cb });
     flush();
     await open(flush);
+    return { flush, picked };
+  }
 
+  test("picking an option fires onSelect with its value, and closes", async () => {
+    const { flush, picked } = await openWithSelectCapture();
     pointer(option("unified"), "pointerup");
     await flushUntil(flush, () => content() === null);
     expect(picked.last()).toBe("unified");
@@ -214,11 +223,7 @@ describe("SettingSelect commit", () => {
     // is already current — the same silence a native <select> keeps when you re-pick an
     // option. The DropdownMenu this replaced re-fired onSelect for an unchanged value,
     // and one e2e case depended on that.
-    const picked = capture<string>();
-    const { flush } = render(SettingSelect, { ...baseProps, onSelect: picked.cb });
-    flush();
-    await open(flush);
-
+    const { flush, picked } = await openWithSelectCapture();
     pointer(option("split"), "pointerup");
     await flushUntil(flush, () => content() === null);
     expect(picked.last()).toBeUndefined();
@@ -246,6 +251,18 @@ describe("SettingSelect theme preview (EXC-753)", () => {
    * `setHighlightedNode` and so the same `onHighlight` this component listens to. */
   const highlight = (value: string) => pointer(option(value), "pointermove");
 
+  /** Render with the theme preview options, open the listbox, and highlight
+   * caret-dark until its preview card lands — the common opening the tests
+   * below that start from "dark is now highlighted" share. */
+  async function openWithDarkHighlighted(): Promise<{ flush: () => void }> {
+    const { flush } = render(SettingSelect, previewProps);
+    flush();
+    await open(flush);
+    highlight("caret-dark");
+    await flushUntil(flush, () => card()?.style.getPropertyValue("--accent") === DARK_ACCENT);
+    return { flush };
+  }
+
   test("a listbox always has an active option, so opening previews the current one", async () => {
     // `SelectSingleRootState.setInitialHighlightedNode` highlights the selected row as the
     // content mounts: under aria-activedescendant there is no "nothing highlighted" state,
@@ -260,12 +277,7 @@ describe("SettingSelect theme preview (EXC-753)", () => {
   });
 
   test("highlighting a theme option surfaces a preview card tinted by that option", async () => {
-    const { flush } = render(SettingSelect, previewProps);
-    flush();
-    await open(flush);
-
-    highlight("caret-dark");
-    await flushUntil(flush, () => card()?.style.getPropertyValue("--accent") === DARK_ACCENT);
+    const { flush } = await openWithDarkHighlighted();
     expect(card()?.style.getPropertyValue("--accent")).toBe(DARK_ACCENT);
     await close(flush);
   });
@@ -284,12 +296,7 @@ describe("SettingSelect theme preview (EXC-753)", () => {
 
   test("highlighting never retints the document root", async () => {
     const before = document.documentElement.style.getPropertyValue("--accent");
-    const { flush } = render(SettingSelect, previewProps);
-    flush();
-    await open(flush);
-
-    highlight("caret-dark");
-    await flushUntil(flush, () => card()?.style.getPropertyValue("--accent") === DARK_ACCENT);
+    const { flush } = await openWithDarkHighlighted();
     expect(document.documentElement.style.getPropertyValue("--accent")).toBe(before);
     await close(flush);
   });
@@ -304,12 +311,7 @@ describe("SettingSelect theme preview (EXC-753)", () => {
     ["inside the panel", () => content()?.dispatchEvent(new Event("scroll"))],
   ] as const) {
     test(`a scroll from ${origin} keeps the preview up`, async () => {
-      const { flush } = render(SettingSelect, previewProps);
-      flush();
-      await open(flush);
-
-      highlight("caret-dark");
-      await flushUntil(flush, () => card()?.style.getPropertyValue("--accent") === DARK_ACCENT);
+      const { flush } = await openWithDarkHighlighted();
 
       dispatch();
       flush();

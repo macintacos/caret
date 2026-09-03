@@ -19,6 +19,7 @@ import { flushUntil, render } from "@ui/test-mount.ts";
 import CommandPopoverFixture from "$lib/shadcn-command-popover-fixture.svelte";
 
 const popoverContent = () => document.body.querySelector("[data-slot='popover-content']");
+const commandInput = () => document.body.querySelector("input[data-slot='command-input']");
 
 /** Dismiss the popover before the test ends. Load-bearing rather than tidy, and the
  * same guard PlanToc.test.ts carries: bits-ui's portal presence waits for an
@@ -33,9 +34,15 @@ async function close(target: HTMLElement, flush: () => void): Promise<void> {
   await flushUntil(flush, () => popoverContent() === null);
 }
 
-test("Popover portals its content, which hosts the Command root", async () => {
+/** Mount the fixture already open, and wait for the portalled content. */
+async function openedPopover() {
   const { target, flush } = render(CommandPopoverFixture, { open: true });
   await flushUntil(flush, () => popoverContent() !== null);
+  return { target, flush };
+}
+
+test("Popover portals its content, which hosts the Command root", async () => {
+  const { target, flush } = await openedPopover();
 
   expect(popoverContent()).not.toBeNull();
   expect(popoverContent()?.querySelector("[data-slot='command']")).not.toBeNull();
@@ -43,10 +50,9 @@ test("Popover portals its content, which hosts the Command root", async () => {
 });
 
 test("Command renders its input and item rows", async () => {
-  const { target, flush } = render(CommandPopoverFixture, { open: true });
-  await flushUntil(flush, () => popoverContent() !== null);
+  const { target, flush } = await openedPopover();
 
-  const input = document.body.querySelector("input[data-slot='command-input']");
+  const input = commandInput();
   expect(input?.getAttribute("placeholder")).toBe("Jump to section");
 
   const labels = [...document.body.querySelectorAll("[data-slot='command-item']")].map((el) =>
@@ -64,10 +70,9 @@ test("Command renders its input and item rows", async () => {
 // here at the primitive rather than on the ToC popup because the defect is the
 // primitive's, and a re-sync from the registry is what would reintroduce it.
 test("the command input names the viewport it controls", async () => {
-  const { target, flush } = render(CommandPopoverFixture, { open: true });
-  await flushUntil(flush, () => popoverContent() !== null);
+  const { target, flush } = await openedPopover();
 
-  const input = document.body.querySelector("input[data-slot='command-input']");
+  const input = commandInput();
   const controls = input?.getAttribute("aria-controls");
   expect(controls).toBeTruthy();
 
@@ -88,10 +93,9 @@ test("the command input names the viewport it controls", async () => {
 // so a screen reader is told which option the selection landed on without focus ever
 // leaving the field.
 test("the command input names the option the selection is on", async () => {
-  const { target, flush } = render(CommandPopoverFixture, { open: true });
-  await flushUntil(flush, () => popoverContent() !== null);
+  const { target, flush } = await openedPopover();
 
-  const input = document.body.querySelector("input[data-slot='command-input']");
+  const input = commandInput();
   await flushUntil(flush, () => input?.getAttribute("aria-activedescendant") != null);
 
   const active = document.getElementById(input?.getAttribute("aria-activedescendant") ?? "");
@@ -102,8 +106,7 @@ test("the command input names the option the selection is on", async () => {
 });
 
 test("the icon swap renders vendored SVGs, not the dropped @lucide/svelte components", async () => {
-  const { target, flush } = render(CommandPopoverFixture, { open: true });
-  await flushUntil(flush, () => popoverContent() !== null);
+  const { target, flush } = await openedPopover();
 
   // command-input's search glyph, inside the addon Icon.svelte was swapped into.
   const wrapper = document.body.querySelector("[data-slot='command-input-wrapper']");
@@ -131,8 +134,7 @@ test("the icon swap renders vendored SVGs, not the dropped @lucide/svelte compon
 // stamps. The `**:[[cmdk-group-heading]]:…` Tailwind variants the registry source
 // still carries target a cmdk-era attribute that appears nowhere in this tree.
 test("Command.Group forwards headingClass onto the heading element", async () => {
-  const { target, flush } = render(CommandPopoverFixture, { open: true });
-  await flushUntil(flush, () => popoverContent() !== null);
+  const { target, flush } = await openedPopover();
 
   const heading = document.body.querySelector("[data-command-group-heading]");
   expect(heading?.textContent?.trim()).toBe("Sections");

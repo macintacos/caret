@@ -38,6 +38,9 @@ from the mapping rule; prefer the mapping.
   modules are plain `.ts` (not `*.test.ts`), so their location — not a naming comment — is
   what keeps `bun test` from collecting them. Reach them through the **`@test/*` alias**
   (see `typescript-rules.md`); import helpers from here, never re-derive them in a suite.
+  This stays the single home whichever program or tool a module is named for — a stub for
+  the OpenCode plugin client, a Claude hook payload, a `CLAUDE_CONFIG_DIR` temp dir —
+  since the boundary rule below constrains *importers*, not where a module sits.
 
 ## The boundary rule
 

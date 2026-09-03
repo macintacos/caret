@@ -27,6 +27,18 @@ function makeEntries(onRun: () => void): ShortcutEntry[] {
   ];
 }
 
+/** Open ShortcutsHelp with inert entries and wait for it to mount — the common
+ * opening of the tests below that don't need their own onRun/onClose. */
+async function openHelp(): Promise<() => void> {
+  const { flush } = render(ShortcutsHelp, {
+    open: true,
+    entries: makeEntries(() => {}),
+    onClose: () => {},
+  });
+  await flushUntil(flush, mounted);
+  return flush;
+}
+
 describe("ShortcutsHelp render", () => {
   // The host keeps the component mounted through the exit (EXC-891), so a closed
   // `open` must render nothing rather than a surface the {#if} used to hide.
@@ -41,12 +53,7 @@ describe("ShortcutsHelp render", () => {
   });
 
   test("mounts a dialog titled Shortcuts", async () => {
-    const { flush } = render(ShortcutsHelp, {
-      open: true,
-      entries: makeEntries(() => {}),
-      onClose: () => {},
-    });
-    await flushUntil(flush, mounted);
+    await openHelp();
     expect(content()?.getAttribute("role")).toBe("dialog");
     expect(document.body.querySelector("[data-slot='dialog-title']")?.textContent).toContain(
       "Shortcuts",
@@ -56,12 +63,7 @@ describe("ShortcutsHelp render", () => {
   // The `/` hint cap rides an input-group addon slot (EXC-1113), so the group's own
   // layout reserves its track beside the control.
   test("the search field composes input-group with the / cap in a trailing addon", async () => {
-    const { flush } = render(ShortcutsHelp, {
-      open: true,
-      entries: makeEntries(() => {}),
-      onClose: () => {},
-    });
-    await flushUntil(flush, mounted);
+    await openHelp();
     const group = document.body.querySelector("[data-slot='input-group']");
     expect(group !== null).toBe(true);
     expect(group?.querySelector("[data-slot='input-group-control']") !== null).toBe(true);
@@ -71,12 +73,7 @@ describe("ShortcutsHelp render", () => {
   });
 
   test("renders a group heading, an entry label, and its key cap", async () => {
-    const { flush } = render(ShortcutsHelp, {
-      open: true,
-      entries: makeEntries(() => {}),
-      onClose: () => {},
-    });
-    await flushUntil(flush, mounted);
+    await openHelp();
     expect(bodyText()).toContain("Motion"); // group label
     expect(bodyText()).toContain("Cancel editing"); // entry label
     expect(bodyText()).toContain("Esc"); // key cap for editor.cancel
@@ -106,12 +103,7 @@ describe("ShortcutsHelp wiring", () => {
   });
 
   test("typing in search narrows the visible rows", async () => {
-    const { flush } = render(ShortcutsHelp, {
-      open: true,
-      entries: makeEntries(() => {}),
-      onClose: () => {},
-    });
-    await flushUntil(flush, mounted);
+    const flush = await openHelp();
     const search = document.body.querySelector<HTMLInputElement>(
       "[data-slot='input-group-control']",
     );

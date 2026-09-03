@@ -86,6 +86,11 @@ callback recorder with auto-unmount. Component units cover
 **render output, prop reactivity, conditional branches, and callback wiring** — the things
 a mounted component exposes.
 
+Scaffolding a second suite reaches for — a fixture, a stub, a storage double — joins that
+harness as `ui/test-<name>.ts` and is imported through the test-only `@ui/*` alias. Not
+under `ui/src/`: a module there sits among production `$lib` code, and a production import
+of one would drag its test-only dependencies into the vite bundle.
+
 What does *not* go in a component unit: real-browser behavior (text selection,
 focus/keyboard, scroll, popover positioning, timing windows). That is e2e. The unit-vs-e2e
 split is governed by `browser-testing.md` — defer to it, don't restate it here.

@@ -1,6 +1,8 @@
 import "@ui/test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { fakeMediaQuery } from "@ui/test-media-query.ts";
+import { withBlockedStorage } from "@ui/test-storage.ts";
 import {
   appearanceSummary,
   DARK_SLOT_KEY,
@@ -23,24 +25,6 @@ import {
 import { THEMES } from "$lib/theme.ts";
 
 afterEach(() => localStorage.clear());
-
-/** A minimal stand-in for the `(prefers-color-scheme: dark)` MediaQueryList, so
- * the OS-flip path is driven deterministically instead of slept through. */
-function fakeMediaQuery(matches: boolean) {
-  const listeners = new Set<(e: { matches: boolean }) => void>();
-  return {
-    mql: {
-      matches,
-      addEventListener: (_t: "change", l: (e: { matches: boolean }) => void) => listeners.add(l),
-      removeEventListener: (_t: "change", l: (e: { matches: boolean }) => void) =>
-        listeners.delete(l),
-    },
-    flip(next: boolean) {
-      for (const l of listeners) l({ matches: next });
-    },
-    listenerCount: () => listeners.size,
-  };
-}
 
 const SLOTS = { light: "caret-light", dark: "caret-dark" } as const;
 
@@ -204,18 +188,9 @@ describe("migrateLegacyTheme", () => {
   });
 
   test("swallows a storage failure rather than breaking boot", () => {
-    const original = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      get() {
-        throw new Error("blocked");
-      },
-    });
-    try {
+    withBlockedStorage(() => {
       expect(() => migrateLegacyTheme()).not.toThrow();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", { configurable: true, value: original });
-    }
+    });
   });
 });
 

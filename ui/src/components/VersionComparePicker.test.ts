@@ -1,18 +1,9 @@
 import "@ui/test-mount.ts";
 import { describe, expect, test } from "bun:test";
 
-import type { PlanVersion } from "@core/lib/types";
 import { capture, render } from "@ui/test-mount.ts";
+import { versions } from "@ui/test-plan-versions.ts";
 import VersionComparePicker from "@/components/VersionComparePicker.svelte";
-
-function versions(n: number): PlanVersion[] {
-  return Array.from({ length: n }, (_, i) => ({
-    version: i + 1,
-    plan: `plan v${i + 1}`,
-    annotations: [],
-    createdAt: i,
-  }));
-}
 
 const baseProps = {
   versions: versions(3),
@@ -27,6 +18,15 @@ const baseProps = {
   onSelectTarget: () => {},
   onSetDiffStyle: () => {},
   onSetDiffIndicators: () => {},
+};
+
+/** A single-version review: nothing to compare, so the toggle is shown but
+ * disabled. Shared by every test asserting that disabled shape. */
+const disabledSingleVersionProps = {
+  ...baseProps,
+  versions: versions(1),
+  comparing: false,
+  canCompare: false,
 };
 
 // The segmented controls are shadcn ToggleGroups: each option is a
@@ -78,12 +78,7 @@ describe("VersionComparePicker visibility", () => {
   // EXC-664: with nothing to compare the toggle is shown-but-disabled (greyed
   // out) rather than hidden, so the affordance is discoverable.
   test("always renders the toggle, disabled, with a single version", () => {
-    const { target } = render(VersionComparePicker, {
-      ...baseProps,
-      versions: versions(1),
-      comparing: false,
-      canCompare: false,
-    });
+    const { target } = render(VersionComparePicker, disabledSingleVersionProps);
     const toggle = target.querySelector<HTMLButtonElement>(".compare-toggle");
     expect(toggle).not.toBeNull();
     expect(toggle!.disabled).toBe(true);
@@ -94,10 +89,7 @@ describe("VersionComparePicker visibility", () => {
   test("a disabled toggle does not enter compare mode on click", () => {
     const onSetComparing = capture<boolean>();
     const { target } = render(VersionComparePicker, {
-      ...baseProps,
-      versions: versions(1),
-      comparing: false,
-      canCompare: false,
+      ...disabledSingleVersionProps,
       onSetComparing: onSetComparing.cb,
     });
     target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();
@@ -146,12 +138,7 @@ describe("VersionComparePicker compare icon", () => {
   });
 
   test("the disabled toggle also renders the compare icon", () => {
-    const { target } = render(VersionComparePicker, {
-      ...baseProps,
-      versions: versions(1),
-      comparing: false,
-      canCompare: false,
-    });
+    const { target } = render(VersionComparePicker, disabledSingleVersionProps);
     const toggle = target.querySelector<HTMLButtonElement>(".compare-toggle");
     expect(toggle!.querySelector(".icon svg")).not.toBeNull();
   });
@@ -226,12 +213,7 @@ describe("VersionComparePicker version count badge", () => {
   // Nothing to compare means nothing to count: the disabled toggle stays a bare
   // affordance, and its Tooltip already explains why.
   test("renders no badge on the disabled single-version toggle", () => {
-    const { target } = render(VersionComparePicker, {
-      ...baseProps,
-      versions: versions(1),
-      comparing: false,
-      canCompare: false,
-    });
+    const { target } = render(VersionComparePicker, disabledSingleVersionProps);
     expect(countBadge(target) != null).toBe(false);
   });
 

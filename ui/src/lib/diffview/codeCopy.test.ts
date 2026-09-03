@@ -1,8 +1,8 @@
 import "@ui/test-setup.ts";
 import { describe, expect, test } from "bun:test";
 
+import { fillLines, scrolledOffsetReader } from "@ui/test-diffview-dom.ts";
 import { codeBlockAtPoint, copyAnchor, type RectReader } from "$lib/diffview/codeCopy.ts";
-import { fillLines, scrolledOffsetReader } from "$lib/diffview/dom-fixture.ts";
 
 // A host with a shadow root of [data-content] > [data-line] rows, matching the
 // @pierre/diffs structure codeCopy reads.

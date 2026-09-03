@@ -2,7 +2,13 @@ import "@ui/test-setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import type { ClientReview } from "@core/lib/types";
-import { type LogCapture, logCapture } from "@ui/test-helpers.ts";
+import type { LogCapture } from "@ui/test-helpers.ts";
+import {
+  emptyResponse,
+  installRoutedFetch,
+  jsonResponse,
+  type Respond,
+} from "@ui/test-routed-fetch.ts";
 import {
   createReviewSelection,
   type SelectionStore,
@@ -11,26 +17,19 @@ import {
 import { flush } from "$lib/log.ts";
 import type { SoundEvent } from "$lib/sound.ts";
 
-// Shared URL-routing fetch double (test-helpers.ts): /api/logs POSTs are
+// Shared URL-routing fetch double (test-routed-fetch.ts): /api/logs POSTs are
 // captured; the review/health endpoints answer from the per-test `respond`.
-let respond: (url: string, options: RequestInit | undefined) => Promise<Response>;
+let respond: Respond;
 let cap: LogCapture;
 
 beforeEach(() => {
-  respond = () => Promise.resolve(new Response(null, { status: 204 }));
-  cap = logCapture((url, options) => respond(url, options));
+  respond = emptyResponse;
+  cap = installRoutedFetch(() => respond);
 });
 
 afterEach(() => {
   cap.restore();
 });
-
-function jsonResponse(value: unknown): Response {
-  return new Response(JSON.stringify(value), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
-}
 
 // Build a ClientReview list of `n` placeholder reviews to drive count changes.
 function reviewsOfLength(n: number): ClientReview[] {
@@ -52,6 +51,21 @@ function makeStore(over: Partial<SelectionStore> = {}): SelectionStore {
     arrivals: 0,
     ...over,
   };
+}
+
+/** A fresh selection over a fresh store, for cases with no onSound wiring. */
+function selectionOf(over: Partial<SelectionStore> = {}) {
+  const store = makeStore(over);
+  const sel = createReviewSelection(store);
+  return { store, sel };
+}
+
+/** A fresh selection with "b" freshly arrived and marked unread. */
+function withUnreadB(over: Partial<SelectionStore> = {}) {
+  const result = selectionOf(over);
+  result.sel.mergeReviews([review("a")]);
+  result.sel.mergeReviews([review("a"), review("b")]);
+  return result;
 }
 
 // Set the `?review=` deep-link param. happy-dom's base is about:blank and
@@ -136,6 +150,29 @@ describe("startPolling daemon identity (onSwap)", () => {
     };
   }
 
+  /** Start polling with an onSwap recorder wired in, alongside the plain update
+   * counter every onSwap case also reads. Callers own the returned `stop`. */
+  function startPollingWithSwaps() {
+    const swaps: string[] = [];
+    let updates = 0;
+    const stop = startPolling(
+      () => updates++,
+      1,
+      undefined,
+      (id) => swaps.push(id),
+    );
+    return { swaps, getUpdates: () => updates, stop };
+  }
+
+  /** Run polling to completion and assert onSwap never fired. */
+  async function expectNoSwap(): Promise<void> {
+    const { swaps, getUpdates, stop } = startPollingWithSwaps();
+    await until(() => getUpdates() >= 8);
+    stop();
+    flush();
+    expect(swaps).toEqual([]);
+  }
+
   test("onSwap fires once when instanceId changes across a failure→recovery edge", async () => {
     // Health flips identity while the reviews poll is mid-outage; the recovery
     // edge re-checks identity and notices the swap.
@@ -146,16 +183,9 @@ describe("startPolling daemon identity (onSwap)", () => {
       () => jsonResponse({ service: "caret", version: "1", instanceId }),
     );
 
-    const swaps: string[] = [];
-    let updates = 0;
-    const stop = startPolling(
-      () => updates++,
-      1,
-      undefined,
-      (id) => swaps.push(id),
-    );
+    const { swaps, getUpdates, stop } = startPollingWithSwaps();
     // Let the baseline seed (start-of-poll health check) and one good poll land.
-    await until(() => updates >= 1);
+    await until(() => getUpdates() >= 1);
     reviewsFails = true;
     instanceId = "bbbb2222";
     await new Promise((r) => setTimeout(r, 5));
@@ -173,19 +203,7 @@ describe("startPolling daemon identity (onSwap)", () => {
       () => jsonResponse({ service: "caret", version: "1", instanceId: "stable00" }),
     );
 
-    const swaps: string[] = [];
-    let updates = 0;
-    const stop = startPolling(
-      () => updates++,
-      1,
-      undefined,
-      (id) => swaps.push(id),
-    );
-    await until(() => updates >= 8);
-    stop();
-    flush();
-
-    expect(swaps).toEqual([]);
+    await expectNoSwap();
   });
 
   test("the periodic check catches a swap with no intervening failure", async () => {
@@ -197,15 +215,8 @@ describe("startPolling daemon identity (onSwap)", () => {
       () => jsonResponse({ service: "caret", version: "1", instanceId }),
     );
 
-    const swaps: string[] = [];
-    let updates = 0;
-    const stop = startPolling(
-      () => updates++,
-      1,
-      undefined,
-      (id) => swaps.push(id),
-    );
-    await until(() => updates >= 1);
+    const { swaps, getUpdates, stop } = startPollingWithSwaps();
+    await until(() => getUpdates() >= 1);
     instanceId = "second00";
     await until(() => swaps.length >= 1);
     stop();
@@ -247,19 +258,7 @@ describe("startPolling daemon identity (onSwap)", () => {
       () => jsonResponse({ service: "caret", version: "1" }),
     );
 
-    const swaps: string[] = [];
-    let updates = 0;
-    const stop = startPolling(
-      () => updates++,
-      1,
-      undefined,
-      (id) => swaps.push(id),
-    );
-    await until(() => updates >= 8);
-    stop();
-    flush();
-
-    expect(swaps).toEqual([]);
+    await expectNoSwap();
   });
 });
 
@@ -270,14 +269,12 @@ describe("createReviewSelection", () => {
   });
 
   test("active is derived from reviews + activeId", () => {
-    const store = makeStore({ reviews: [review("a"), review("b")], activeId: "b" });
-    const sel = createReviewSelection(store);
+    const { sel } = selectionOf({ reviews: [review("a"), review("b")], activeId: "b" });
     expect(sel.active?.id).toBe("b");
   });
 
   test("selectReview sets activeId and mirrors it into the URL", () => {
-    const store = makeStore({ reviews: [review("a")] });
-    const sel = createReviewSelection(store);
+    const { store, sel } = selectionOf({ reviews: [review("a")] });
     sel.selectReview("a");
     expect(store.activeId).toBe("a");
     expect(new URLSearchParams(location.search).get("review")).toBe("a");
@@ -287,54 +284,47 @@ describe("createReviewSelection", () => {
   });
 
   test("merge keeps the active review when it is still present", () => {
-    const store = makeStore({ reviews: [review("a")], activeId: "a" });
-    const sel = createReviewSelection(store);
+    const { store, sel } = selectionOf({ reviews: [review("a")], activeId: "a" });
     sel.mergeReviews([review("a"), review("b")]);
     expect(store.activeId).toBe("a");
   });
 
   test("merge selects the first review when nothing is active", () => {
-    const store = makeStore();
-    const sel = createReviewSelection(store);
+    const { store, sel } = selectionOf();
     sel.mergeReviews([review("x"), review("y")]);
     expect(store.activeId).toBe("x");
   });
 
   test("merge honors the deep link when the active review is gone", () => {
     setDeepLink("y");
-    const store = makeStore({ reviews: [review("a")], activeId: "a" });
-    const sel = createReviewSelection(store);
+    const { store, sel } = selectionOf({ reviews: [review("a")], activeId: "a" });
     // `a` is gone; the deep link `y` wins over the first review `x`.
     sel.mergeReviews([review("x"), review("y")]);
     expect(store.activeId).toBe("y");
   });
 
   test("merge clears the active id when the snapshot is empty", () => {
-    const store = makeStore({ reviews: [review("a")], activeId: "a" });
-    const sel = createReviewSelection(store);
+    const { store, sel } = selectionOf({ reviews: [review("a")], activeId: "a" });
     sel.mergeReviews([]);
     expect(store.activeId).toBe(null);
   });
 
   test("afterResolve drops the review and auto-advances to the next", () => {
-    const store = makeStore({ reviews: [review("a"), review("b")], activeId: "a" });
-    const sel = createReviewSelection(store);
+    const { store, sel } = selectionOf({ reviews: [review("a"), review("b")], activeId: "a" });
     sel.afterResolve("a");
     expect(store.reviews.map((r) => r.id)).toEqual(["b"]);
     expect(store.activeId).toBe("b");
   });
 
   test("afterResolve clears selection when no reviews remain", () => {
-    const store = makeStore({ reviews: [review("a")], activeId: "a" });
-    const sel = createReviewSelection(store);
+    const { store, sel } = selectionOf({ reviews: [review("a")], activeId: "a" });
     sel.afterResolve("a");
     expect(store.reviews).toEqual([]);
     expect(store.activeId).toBe(null);
   });
 
   test("connection and daemon-changed flags are settable", () => {
-    const store = makeStore();
-    const sel = createReviewSelection(store);
+    const { store, sel } = selectionOf();
     sel.setConnected(false);
     expect(store.connected).toBe(false);
     sel.markDaemonChanged();
@@ -453,23 +443,18 @@ describe("createReviewSelection unread markers (EXC-411)", () => {
   });
 
   test("the first snapshot marks nothing — what was already pending is not news", () => {
-    const store = makeStore();
-    const sel = createReviewSelection(store);
+    const { sel } = selectionOf();
     sel.mergeReviews([review("a"), review("b")]);
     expect(sel.unread).toEqual([]);
   });
 
   test("a plan arriving while another is active is marked unread", () => {
-    const store = makeStore();
-    const sel = createReviewSelection(store);
-    sel.mergeReviews([review("a")]);
-    sel.mergeReviews([review("a"), review("b")]);
+    const { sel } = withUnreadB();
     expect(sel.unread).toEqual(["b"]);
   });
 
   test("a version bump on a background plan re-marks it", () => {
-    const store = makeStore();
-    const sel = createReviewSelection(store);
+    const { sel } = selectionOf();
     sel.mergeReviews([review("a"), review("b", 1)]);
     sel.selectReview("b");
     sel.selectReview("a");
@@ -478,16 +463,14 @@ describe("createReviewSelection unread markers (EXC-411)", () => {
   });
 
   test("the plan you are reading is never marked, however it became active", () => {
-    const store = makeStore();
-    const sel = createReviewSelection(store);
+    const { sel } = selectionOf();
     sel.mergeReviews([review("a", 1)]);
     sel.mergeReviews([review("a", 2)]);
     expect(sel.unread).toEqual([]);
   });
 
   test("an unchanged snapshot marks nothing, so the 2s poll never accumulates", () => {
-    const store = makeStore();
-    const sel = createReviewSelection(store);
+    const { sel } = selectionOf();
     sel.mergeReviews([review("a")]);
     sel.mergeReviews([review("a")]);
     sel.mergeReviews([review("a")]);
@@ -495,19 +478,13 @@ describe("createReviewSelection unread markers (EXC-411)", () => {
   });
 
   test("picking the plan from the dropdown clears its mark", () => {
-    const store = makeStore();
-    const sel = createReviewSelection(store);
-    sel.mergeReviews([review("a")]);
-    sel.mergeReviews([review("a"), review("b")]);
+    const { sel } = withUnreadB();
     sel.selectReview("b");
     expect(sel.unread).toEqual([]);
   });
 
   test("a deep link resolving to the plan clears its mark", () => {
-    const store = makeStore();
-    const sel = createReviewSelection(store);
-    sel.mergeReviews([review("a")]);
-    sel.mergeReviews([review("a"), review("b")]);
+    const { store, sel } = withUnreadB();
     setDeepLink("b");
     // The active plan vanishes, so merge re-selects — through the deep link.
     sel.mergeReviews([review("b")]);
@@ -516,10 +493,7 @@ describe("createReviewSelection unread markers (EXC-411)", () => {
   });
 
   test("merge auto-reselecting onto the plan clears its mark", () => {
-    const store = makeStore();
-    const sel = createReviewSelection(store);
-    sel.mergeReviews([review("a")]);
-    sel.mergeReviews([review("a"), review("b")]);
+    const { store, sel } = withUnreadB();
     expect(sel.unread).toEqual(["b"]);
     sel.mergeReviews([review("b")]);
     expect(store.activeId).toBe("b");
@@ -527,18 +501,14 @@ describe("createReviewSelection unread markers (EXC-411)", () => {
   });
 
   test("resolve auto-advancing onto the plan clears its mark", () => {
-    const store = makeStore();
-    const sel = createReviewSelection(store);
-    sel.mergeReviews([review("a")]);
-    sel.mergeReviews([review("a"), review("b")]);
+    const { store, sel } = withUnreadB();
     sel.afterResolve("a");
     expect(store.activeId).toBe("b");
     expect(sel.unread).toEqual([]);
   });
 
   test("a plan bumped twice while unread clears in one select", () => {
-    const store = makeStore();
-    const sel = createReviewSelection(store);
+    const { sel } = selectionOf();
     sel.mergeReviews([review("a"), review("b", 1)]);
     sel.mergeReviews([review("a"), review("b", 2)]);
     sel.mergeReviews([review("a"), review("b", 3)]);
@@ -548,20 +518,14 @@ describe("createReviewSelection unread markers (EXC-411)", () => {
   });
 
   test("a plan expiring while unread is pruned, so no mark outlives its row", () => {
-    const store = makeStore();
-    const sel = createReviewSelection(store);
-    sel.mergeReviews([review("a")]);
-    sel.mergeReviews([review("a"), review("b")]);
+    const { sel } = withUnreadB();
     expect(sel.unread).toEqual(["b"]);
     sel.mergeReviews([review("a")]);
     expect(sel.unread).toEqual([]);
   });
 
   test("a tick that clears one mark and raises another still counts an arrival", () => {
-    const store = makeStore();
-    const sel = createReviewSelection(store);
-    sel.mergeReviews([review("a")]);
-    sel.mergeReviews([review("a"), review("b")]);
+    const { sel } = withUnreadB();
     expect(sel.unread).toEqual(["b"]);
     const before = sel.arrivals;
     // b expires and c lands in the same poll: the total stays at one, so a count
@@ -572,16 +536,14 @@ describe("createReviewSelection unread markers (EXC-411)", () => {
   });
 
   test("seeding and unchanged snapshots never count an arrival", () => {
-    const store = makeStore();
-    const sel = createReviewSelection(store);
+    const { sel } = selectionOf();
     sel.mergeReviews([review("a"), review("b")]);
     sel.mergeReviews([review("a"), review("b")]);
     expect(sel.arrivals).toBe(0);
   });
 
   test("resolving an unread plan prunes its mark", () => {
-    const store = makeStore();
-    const sel = createReviewSelection(store);
+    const { sel } = selectionOf();
     sel.mergeReviews([review("a")]);
     sel.mergeReviews([review("a"), review("b"), review("c")]);
     expect(sel.unread).toEqual(["b", "c"]);

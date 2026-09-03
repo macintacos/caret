@@ -1,6 +1,7 @@
 import "@ui/test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { withBlockedStorage } from "@ui/test-storage.ts";
 import {
   clampDrawerSize,
   drawerSizeFromPointer,
@@ -14,25 +15,6 @@ import {
 } from "$lib/fileDrawer.ts";
 
 afterEach(() => localStorage.clear());
-
-/** Swap localStorage for one that throws on every access, for the fail-safe tests. */
-function withBlockedStorage(body: () => void): void {
-  const original = globalThis.localStorage;
-  Object.defineProperty(globalThis, "localStorage", {
-    configurable: true,
-    get() {
-      throw new Error("blocked");
-    },
-  });
-  try {
-    body();
-  } finally {
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: original,
-    });
-  }
-}
 
 describe("clampDrawerSize", () => {
   test("passes a size that fits both bounds through unchanged", () => {

@@ -2,6 +2,12 @@ import "@ui/test-mount.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { render } from "@ui/test-mount.ts";
+import {
+  installNotificationStub,
+  type NotificationStub,
+  restoreNotification,
+  trackRequestPermission,
+} from "@ui/test-notification-stub.ts";
 import NotificationsPane from "@/components/NotificationsPane.svelte";
 
 // The settings Notifications pane (EXC-847) reflects the browser's live
@@ -12,51 +18,24 @@ import NotificationsPane from "@/components/NotificationsPane.svelte";
 // Notification stub with a chosen permission and a requestPermission spy. The
 // pane is a plain component (no bits-ui portal), so it mounts synchronously.
 
-type Perm = NotificationPermission;
-
-interface NotificationStub {
-  permission: Perm;
-  requestPermission: () => Promise<Perm>;
-  // Constructor calls (fireTestNotification) are swallowed; we only need the count.
-  fired: number;
-}
-
 let stub: NotificationStub;
 const realNotification = (globalThis as { Notification?: unknown }).Notification;
-
-function installNotification(permission: Perm): void {
-  stub = {
-    permission,
-    requestPermission: () => Promise.resolve(permission),
-    fired: 0,
-  };
-  function Ctor(this: unknown) {
-    stub.fired++;
-  }
-  Object.assign(Ctor, {
-    get permission() {
-      return stub.permission;
-    },
-    requestPermission: () => stub.requestPermission(),
-  });
-  (globalThis as { Notification?: unknown }).Notification = Ctor;
-}
 
 const pane = (target: HTMLElement) => target.querySelector("[data-notifications-pane]")!;
 const enableBtn = (target: HTMLElement) => target.querySelector("[data-action='enable']");
 const testBtn = (target: HTMLElement) => target.querySelector("[data-action='test']");
 
 beforeEach(() => {
-  installNotification("default");
+  stub = installNotificationStub("default");
 });
 
 afterEach(() => {
-  (globalThis as { Notification?: unknown }).Notification = realNotification;
+  restoreNotification(realNotification);
 });
 
 describe("NotificationsPane state rendering", () => {
   test("default: shows the enable affordance, no test button", () => {
-    installNotification("default");
+    stub = installNotificationStub("default");
     const { target } = render(NotificationsPane, {});
     expect(pane(target).getAttribute("data-permission")).toBe("default");
     expect(enableBtn(target)).not.toBeNull();
@@ -65,7 +44,7 @@ describe("NotificationsPane state rendering", () => {
   });
 
   test("granted: shows the test affordance, no enable button", () => {
-    installNotification("granted");
+    stub = installNotificationStub("granted");
     const { target } = render(NotificationsPane, {});
     expect(pane(target).getAttribute("data-permission")).toBe("granted");
     expect(testBtn(target)).not.toBeNull();
@@ -74,7 +53,7 @@ describe("NotificationsPane state rendering", () => {
   });
 
   test("denied: guidance to re-enable in the browser, no action button", () => {
-    installNotification("denied");
+    stub = installNotificationStub("denied");
     const { target } = render(NotificationsPane, {});
     expect(pane(target).getAttribute("data-permission")).toBe("denied");
     expect(enableBtn(target)).toBeNull();
@@ -95,31 +74,23 @@ describe("NotificationsPane state rendering", () => {
 
 describe("NotificationsPane click behavior", () => {
   test("default: clicking Enable requests permission and fires no test notification", () => {
-    installNotification("default");
-    let requested = false;
-    stub.requestPermission = () => {
-      requested = true;
-      return Promise.resolve("granted");
-    };
+    stub = installNotificationStub("default");
+    const permission = trackRequestPermission(stub, "granted");
     const { target } = render(NotificationsPane, {});
     (enableBtn(target) as HTMLElement).click();
     // The badge re-read after the awaited grant is timing/live-static dependent
     // (covered by the settings e2e). Here we assert the deterministic wiring:
     // Enable routes to a permission request, never to a test notification.
-    expect(requested).toBe(true);
+    expect(permission.requested()).toBe(true);
     expect(stub.fired).toBe(0);
   });
 
   test("granted: clicking Send a test notification fires one, no permission request", () => {
-    installNotification("granted");
-    let requested = false;
-    stub.requestPermission = () => {
-      requested = true;
-      return Promise.resolve("granted");
-    };
+    stub = installNotificationStub("granted");
+    const permission = trackRequestPermission(stub, "granted");
     const { target } = render(NotificationsPane, {});
     (testBtn(target) as HTMLElement).click();
     expect(stub.fired).toBe(1);
-    expect(requested).toBe(false);
+    expect(permission.requested()).toBe(false);
   });
 });

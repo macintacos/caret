@@ -36,6 +36,8 @@ function props(over: Record<string, unknown> = {}) {
 const content = () => document.body.querySelector("[data-slot='dialog-content']");
 const mounted = () => content() !== null;
 const has = (sel: string) => document.body.querySelector(sel) !== null;
+const sectionHeads = () =>
+  [...document.body.querySelectorAll(".section-head")].map((h) => h.textContent?.trim());
 
 describe("SettingsDialog shell", () => {
   // Settings wires its own Dialog.Root rather than composing Modal, so its `open`
@@ -84,19 +86,13 @@ describe("SettingsDialog shell", () => {
   test("the theme block carries no section header of its own", async () => {
     const { flush } = render(SettingsDialog, props());
     await flushUntil(flush, mounted);
-    const heads = [...document.body.querySelectorAll(".section-head")].map((h) =>
-      h.textContent?.trim(),
-    );
-    expect(heads).not.toContain("Theme");
+    expect(sectionHeads()).not.toContain("Theme");
   });
 
   test("groups the diff prefs under a 'Diff view' section header", async () => {
     const { flush } = render(SettingsDialog, props());
     await flushUntil(flush, mounted);
-    const heads = [...document.body.querySelectorAll(".section-head")].map((h) =>
-      h.textContent?.trim(),
-    );
-    expect(heads).toContain("Diff view");
+    expect(sectionHeads()).toContain("Diff view");
   });
 
   test("no save chip — edits apply immediately", async () => {
@@ -270,6 +266,26 @@ describe("SettingsDialog async apply (EXC-1206)", () => {
   const pickB = () =>
     (document.body.querySelector("[data-setting-option='b']") as HTMLButtonElement).click();
 
+  /** A toggle field whose persisted value is read through `readOn`, plus the
+   * accessor for its rendered state — the snap-back tests below share both. */
+  function probeToggle(readOn: () => boolean): {
+    toggle: StagedField;
+    state: () => string | null | undefined;
+  } {
+    const toggle = stagedField<boolean>({
+      key: "probeToggle",
+      category: "Appearance",
+      label: "Probe toggle",
+      description: "A toggle whose write the test drives.",
+      control: { kind: "toggle" },
+      read: readOn,
+      write: () => {},
+    });
+    const state = () =>
+      document.body.querySelector("#setting-probeToggle")?.getAttribute("data-state");
+    return { toggle, state };
+  }
+
   /** Drain the promise chain a click starts, then repaint. Microtasks only — the
    * control is already mounted, so `apply`'s await and the re-seed are the only things
    * left to settle, and `flushUntil`'s real-timer turns would instead give bits-ui's
@@ -327,17 +343,7 @@ describe("SettingsDialog async apply (EXC-1206)", () => {
   // back and the control lies about what is persisted.
   test("a toggle whose write didn't land snaps back too", async () => {
     const on = true;
-    const toggle = stagedField<boolean>({
-      key: "probeToggle",
-      category: "Appearance",
-      label: "Probe toggle",
-      description: "A toggle whose write the test drives.",
-      control: { kind: "toggle" },
-      read: () => on,
-      write: () => {},
-    });
-    const state = () =>
-      document.body.querySelector("#setting-probeToggle")?.getAttribute("data-state");
+    const { toggle, state } = probeToggle(() => on);
 
     const { flush } = render(
       SettingsDialog,
@@ -352,17 +358,7 @@ describe("SettingsDialog async apply (EXC-1206)", () => {
 
   test("a toggle whose write landed shows the new value", async () => {
     let on = true;
-    const toggle = stagedField<boolean>({
-      key: "probeToggle",
-      category: "Appearance",
-      label: "Probe toggle",
-      description: "A toggle whose write the test drives.",
-      control: { kind: "toggle" },
-      read: () => on,
-      write: () => {},
-    });
-    const state = () =>
-      document.body.querySelector("#setting-probeToggle")?.getAttribute("data-state");
+    const { toggle, state } = probeToggle(() => on);
 
     const { flush } = render(
       SettingsDialog,

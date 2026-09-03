@@ -3,8 +3,8 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { gutterContentRoot, openComment } from "@ui/test-diffview-dom.ts";
 import { type CodeBlockRange, codeBlockRanges } from "$lib/diffview/codeBlocks.ts";
-import { gutterContentRoot, openComment } from "$lib/diffview/dom-fixture.ts";
 import { CELL_ATTR } from "$lib/diffview/rowTokens.ts";
 import {
   syncTableCards,

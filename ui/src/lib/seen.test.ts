@@ -106,24 +106,33 @@ test("the poll re-delivering the same review does not restart the dwell", () => 
   expect(seen).toEqual(["r1"]);
 });
 
-test("losing focus mid-dwell cancels it", () => {
+/** Track r1, then go away and blur mid-dwell. */
+function trackThenBlur() {
   let away = false;
   const { watcher, seen, timer } = makeWatcher({ away: () => away });
   watcher.track({ id: "r1", version: 1 });
   away = true;
   target.dispatchEvent(new Event("blur"));
+  return {
+    watcher,
+    seen,
+    timer,
+    refocus() {
+      away = false;
+      target.dispatchEvent(new Event("focus"));
+    },
+  };
+}
+
+test("losing focus mid-dwell cancels it", () => {
+  const { timer, seen } = trackThenBlur();
   expect(timer.pending()).toBe(false);
   expect(seen).toEqual([]);
 });
 
 test("refocusing restarts the dwell from zero rather than resuming it", () => {
-  let away = false;
-  const { watcher, seen, timer } = makeWatcher({ away: () => away });
-  watcher.track({ id: "r1", version: 1 });
-  away = true;
-  target.dispatchEvent(new Event("blur"));
-  away = false;
-  target.dispatchEvent(new Event("focus"));
+  const { timer, seen, refocus } = trackThenBlur();
+  refocus();
   expect(timer.armedFor()).toBe(SEEN_DWELL_MS);
   timer.fire();
   expect(seen).toEqual(["r1"]);

@@ -113,6 +113,23 @@ beforeEach(() => {
   store = makeStore();
 });
 
+/** The search fields are all back to their closed/unset state. */
+function expectSearchReset(): void {
+  expect(store.searchOpen).toBe(false);
+  expect(store.searchCommitted).toBe(false);
+  expect(store.searchQuery).toBe("");
+  expect(store.searchIndex).toBe(-1);
+}
+
+/** A committed "alpha" search sitting on its first match. */
+function committedSearchAtZero() {
+  store.searchQuery = "alpha";
+  store.searchOpen = true;
+  store.searchCommitted = true;
+  store.searchIndex = 0;
+  return build(store, { text: PLAN });
+}
+
 describe("matches", () => {
   test("an empty query matches nothing", () => {
     const { keyboard } = build(store, { text: PLAN });
@@ -197,11 +214,7 @@ describe("commitSearch", () => {
 
 describe("stepSearch", () => {
   test("steps the committed index with wraparound", () => {
-    store.searchQuery = "alpha";
-    store.searchOpen = true;
-    store.searchCommitted = true;
-    store.searchIndex = 0;
-    const h = build(store, { text: PLAN });
+    const h = committedSearchAtZero();
     h.keyboard.stepSearch(1); // 0 → 1 (still line 3)
     expect(store.searchIndex).toBe(1);
     h.keyboard.stepSearch(1); // 1 → 2 (line 5)
@@ -212,11 +225,7 @@ describe("stepSearch", () => {
   });
 
   test("N wraps backwards past the first match", () => {
-    store.searchQuery = "alpha";
-    store.searchOpen = true;
-    store.searchCommitted = true;
-    store.searchIndex = 0;
-    const h = build(store, { text: PLAN });
+    const h = committedSearchAtZero();
     h.keyboard.stepSearch(-1);
     expect(store.searchIndex).toBe(2);
   });
@@ -260,10 +269,7 @@ describe("closeSearch", () => {
     const h = build(store, { text: PLAN, hints: false });
     h.keyboard.closeSearch();
     expect(h.blurCount()).toBe(1);
-    expect(store.searchOpen).toBe(false);
-    expect(store.searchCommitted).toBe(false);
-    expect(store.searchQuery).toBe("");
-    expect(store.searchIndex).toBe(-1);
+    expectSearchReset();
     expect(store.searchClosing).toBe(false);
     expect(h.pendingTimers()).toBe(0);
   });
@@ -321,10 +327,7 @@ describe("clearForContentSwitch", () => {
     h.keyboard.clearForContentSwitch();
     expect(store.cursorLine).toBeNull();
     expect(store.visualAnchor).toBeNull();
-    expect(store.searchOpen).toBe(false);
-    expect(store.searchCommitted).toBe(false);
-    expect(store.searchQuery).toBe("");
-    expect(store.searchIndex).toBe(-1);
+    expectSearchReset();
     expect(store.lastQuery).toBe("alpha");
   });
 });
@@ -553,11 +556,7 @@ describe("sound events (EXC-1126)", () => {
   });
 
   test("stepSearch sounds each step it lands", () => {
-    store.searchQuery = "alpha";
-    store.searchOpen = true;
-    store.searchCommitted = true;
-    store.searchIndex = 0;
-    const h = build(store, { text: PLAN });
+    const h = committedSearchAtZero();
     h.keyboard.stepSearch(1);
     h.keyboard.stepSearch(1);
     expect(h.sounds).toEqual(["searchStepped", "searchStepped"]);

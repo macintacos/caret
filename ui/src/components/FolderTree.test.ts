@@ -35,6 +35,34 @@ function serveListing(listing: DirListing): LogCapture {
   });
 }
 
+/** Install a fetch double that 404s every `/dir` request. */
+function serveNotFound(): LogCapture {
+  return logCapture((url) =>
+    Promise.resolve(new Response(null, { status: url.includes("/dir?") ? 404 : 204 })),
+  );
+}
+
+/** Serve one `/dir` request per call, delegating to `answer(dirCalls)` for what
+ * (or whether) to serve; every other URL answers 204. */
+function servePerCall(
+  answer: (dirCalls: number) => { entries: DirListing["entries"]; total: number } | "not-found",
+): LogCapture & { dirCalls: () => number } {
+  let dirCalls = 0;
+  const cap = logCapture((url) => {
+    if (!url.includes("/dir?")) return Promise.resolve(new Response(null, { status: 204 }));
+    dirCalls += 1;
+    const result = answer(dirCalls);
+    if (result === "not-found") return Promise.resolve(new Response(null, { status: 404 }));
+    return Promise.resolve(
+      new Response(JSON.stringify({ path: "src/lib", ...result }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+  });
+  return Object.assign(cap, { dirCalls: () => dirCalls });
+}
+
 function props(
   over: Partial<{
     path: string;
@@ -142,9 +170,7 @@ test("spins a decorative glyph beside the loading text", async () => {
 test("says so when the level cannot be read", async () => {
   // One 404 covers every refusal the route makes, so the card has one failure to
   // show rather than a taxonomy the reader cannot act on.
-  cap = logCapture((url) =>
-    Promise.resolve(new Response(null, { status: url.includes("/dir?") ? 404 : 204 })),
-  );
+  cap = serveNotFound();
   const { target } = render(FolderTree, props());
   await until(() => state(target) === "error");
   expect(target.textContent).toContain("Couldn't read this folder.");
@@ -220,14 +246,24 @@ async function openThenDismiss(over: Parameters<typeof props>[0] = {}): Promise<
   target.remove();
 }
 
-test("reopening a folder reference asks the daemon for nothing", async () => {
-  // The whole point of caching the served levels: a restored card is
-  // constructed from them in one frame rather than refetching the root and
-  // reassembling itself as each level settles.
+/** Serve one two-entry level, open a card into a fresh memory, and dismiss it —
+ * the common opening for the reopen-restore tests below. */
+async function primeMemory(): Promise<{
+  serve: ReturnType<typeof countingServe>;
+  memory: FolderMemory;
+}> {
   const serve = countingServe();
   cap = serve.cap;
   const memory = createFolderMemory();
   await openThenDismiss({ memory });
+  return { serve, memory };
+}
+
+test("reopening a folder reference asks the daemon for nothing", async () => {
+  // The whole point of caching the served levels: a restored card is
+  // constructed from them in one frame rather than refetching the root and
+  // reassembling itself as each level settles.
+  const { serve, memory } = await primeMemory();
   expect(serve.dirCalls()).toBe(1);
 
   const { target } = render(FolderTree, props({ memory }));
@@ -236,10 +272,7 @@ test("reopening a folder reference asks the daemon for nothing", async () => {
 });
 
 test("a second folder reference in the same review is fetched on its own", async () => {
-  const serve = countingServe();
-  cap = serve.cap;
-  const memory = createFolderMemory();
-  await openThenDismiss({ memory });
+  const { serve, memory } = await primeMemory();
 
   const { target } = render(FolderTree, props({ memory, path: "src/other" }));
   await until(() => target.querySelector(".ft-tree") !== null);
@@ -249,10 +282,7 @@ test("a second folder reference in the same review is fetched on its own", async
 test("never restores one review's card over another's", async () => {
   // The instance is replaced on a review switch, so this can only happen through
   // a mis-wired swap — which the review half of the key is there to survive.
-  const serve = countingServe();
-  cap = serve.cap;
-  const memory = createFolderMemory();
-  await openThenDismiss({ memory });
+  const { serve, memory } = await primeMemory();
 
   const { target } = render(FolderTree, props({ memory, reviewId: "r2" }));
   await until(() => target.querySelector(".ft-tree") !== null);
@@ -263,10 +293,7 @@ test("a review switch leaves the incoming card nothing to restore", async () => 
   // DiffPlanView discards the whole instance rather than emptying one in place,
   // because the outgoing card files ITS memory on the way out — after the switch
   // has already run. That write lands in the instance nobody holds any more.
-  const serve = countingServe();
-  cap = serve.cap;
-  const before = createFolderMemory();
-  await openThenDismiss({ memory: before });
+  const { serve } = await primeMemory();
 
   const { target } = render(FolderTree, props({ memory: createFolderMemory() }));
   await until(() => target.querySelector(".ft-tree") !== null);
@@ -337,6 +364,19 @@ const refreshControl = (el: HTMLElement) => el.querySelector<HTMLButtonElement>(
  * report, since the region itself is always mounted. */
 const stale = (el: HTMLElement) => el.querySelector(".ft-stale")?.textContent;
 
+/** Serve a gated level and wait for the refresh control to appear — the common
+ * opening of the tests that drive it. */
+async function openWithRefresh(): Promise<{
+  target: HTMLElement;
+  serve: ReturnType<typeof gatedServe>;
+}> {
+  const serve = gatedServe();
+  cap = serve.cap;
+  const { target } = render(FolderTree, props());
+  await until(() => refreshControl(target) !== null);
+  return { target, serve };
+}
+
 test("offers a named control for re-reading the folder", async () => {
   // A real button rather than a click handler on a glyph: the reader who opened
   // this card from the keyboard has to be able to reach it from there too.
@@ -351,19 +391,14 @@ test("offers a named control for re-reading the folder", async () => {
 test("offers nothing to refresh on a card that has no tree", async () => {
   // The reference effect owns the first fetch, and a card that never got a level
   // has no cached tree to re-read — reopening it is its retry.
-  cap = logCapture((url) =>
-    Promise.resolve(new Response(null, { status: url.includes("/dir?") ? 404 : 204 })),
-  );
+  cap = serveNotFound();
   const { target } = render(FolderTree, props());
   await until(() => state(target) === "error");
   expect(refreshControl(target)).toBeNull();
 });
 
 test("re-reads the level the card is showing", async () => {
-  const serve = gatedServe();
-  cap = serve.cap;
-  const { target } = render(FolderTree, props());
-  await until(() => refreshControl(target) !== null);
+  const { target, serve } = await openWithRefresh();
   expect(serve.dirCalls()).toBe(1);
 
   refreshControl(target)?.click();
@@ -372,10 +407,7 @@ test("re-reads the level the card is showing", async () => {
 });
 
 test("does not stack a second round of requests on the first", async () => {
-  const serve = gatedServe();
-  cap = serve.cap;
-  const { target } = render(FolderTree, props());
-  await until(() => refreshControl(target) !== null);
+  const { target, serve } = await openWithRefresh();
 
   refreshControl(target)?.click();
   expect(await until(() => refreshControl(target)?.getAttribute("aria-disabled") === "true")).toBe(
@@ -390,56 +422,34 @@ test("does not stack a second round of requests on the first", async () => {
   );
 });
 
-test("keeps the tree it has when a refresh cannot be read", async () => {
-  // Emptying the card would cost the reader everything they had open in exchange
-  // for a request that failed — so the stale tree stands and the header says it
-  // is stale.
-  let dirCalls = 0;
-  cap = logCapture((url) => {
-    if (!url.includes("/dir?")) return Promise.resolve(new Response(null, { status: 204 }));
-    dirCalls += 1;
-    if (dirCalls > 1) return Promise.resolve(new Response(null, { status: 404 }));
-    return Promise.resolve(
-      new Response(
-        JSON.stringify({ path: "src/lib", entries: [{ name: "a.ts", kind: "file" }], total: 1 }),
-        {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        },
-      ),
-    );
-  });
+/** Serve `answer`, mount, and click refresh once — waiting for the header to
+ * report the failed refresh. The live region is mounted from the start with
+ * empty text — see the markup's own note — so what this proves is what it
+ * says, not whether it is there. */
+async function refreshExpectingStale(
+  answer: (dirCalls: number) => { entries: DirListing["entries"]; total: number } | "not-found",
+): Promise<HTMLElement> {
+  cap = servePerCall(answer);
   const { target } = render(FolderTree, props());
   await until(() => refreshControl(target) !== null);
-
   refreshControl(target)?.click();
-  // The live region is mounted from the start with empty text — see the markup's
-  // own note — so what changes here is what it says, not whether it is there.
   expect(await until(() => stale(target) === "couldn't refresh")).toBe(true);
+  return target;
+}
+
+test("keeps the tree it has when a refresh cannot be read", async () => {
+  // Emptying the card would cost the reader everything they had open in exchange
+  // for a request that failed — so the stale tree stands.
+  const target = await refreshExpectingStale((n) =>
+    n > 1 ? "not-found" : { entries: [{ name: "a.ts", kind: "file" }], total: 1 },
+  );
   expect(target.querySelector(".ft-tree")).not.toBeNull();
 });
 
 test("stops saying a refresh failed once one succeeds", async () => {
-  let dirCalls = 0;
-  cap = logCapture((url) => {
-    if (!url.includes("/dir?")) return Promise.resolve(new Response(null, { status: 204 }));
-    dirCalls += 1;
-    if (dirCalls === 2) return Promise.resolve(new Response(null, { status: 404 }));
-    return Promise.resolve(
-      new Response(
-        JSON.stringify({ path: "src/lib", entries: [{ name: "a.ts", kind: "file" }], total: 1 }),
-        {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        },
-      ),
-    );
-  });
-  const { target } = render(FolderTree, props());
-  await until(() => refreshControl(target) !== null);
-
-  refreshControl(target)?.click();
-  expect(await until(() => stale(target) === "couldn't refresh")).toBe(true);
+  const target = await refreshExpectingStale((n) =>
+    n === 2 ? "not-found" : { entries: [{ name: "a.ts", kind: "file" }], total: 1 },
+  );
   refreshControl(target)?.click();
   expect(await until(() => stale(target) === "")).toBe(true);
 });
@@ -449,22 +459,14 @@ test("files the tree it re-read, not the one it replaced", async () => {
   // effect captured that instance when it mounted, so a refresh that swapped the
   // variable would leave the teardown filing the card as it was BEFORE the
   // refresh — and reopening would restore a tree the reader had already replaced.
-  let dirCalls = 0;
-  cap = logCapture((url) => {
-    if (!url.includes("/dir?")) return Promise.resolve(new Response(null, { status: 204 }));
-    dirCalls += 1;
+  cap = servePerCall((n) =>
     // The refreshed level reports an elision the first one did not, which is the
-    // card's own signal that the refresh LANDED — `dirCalls` only says the
-    // request went out, and unmounting on that files the card mid-flight.
-    const entries =
-      dirCalls === 1 ? [{ name: "before.ts", kind: "file" }] : [{ name: "after.ts", kind: "file" }];
-    return Promise.resolve(
-      new Response(JSON.stringify({ path: "src/lib", entries, total: dirCalls === 1 ? 1 : 5 }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-  });
+    // card's own signal that the refresh LANDED — `n` only says the request went
+    // out, and unmounting on that files the card mid-flight.
+    n === 1
+      ? { entries: [{ name: "before.ts", kind: "file" }], total: 1 }
+      : { entries: [{ name: "after.ts", kind: "file" }], total: 5 },
+  );
   const memory = createFolderMemory();
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -483,17 +485,9 @@ test("files the tree it re-read, not the one it replaced", async () => {
 test("says an emptied folder is empty without taking the control away", async () => {
   // A refresh that finds the folder gone empty must not paint a blank card — and
   // must not remove the one affordance that could bring it back.
-  let dirCalls = 0;
-  cap = logCapture((url) => {
-    if (!url.includes("/dir?")) return Promise.resolve(new Response(null, { status: 204 }));
-    dirCalls += 1;
-    const entries = dirCalls === 1 ? [{ name: "a.ts", kind: "file" }] : [];
-    return Promise.resolve(
-      new Response(JSON.stringify({ path: "src/lib", entries, total: entries.length }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
+  cap = servePerCall((n) => {
+    const entries: DirListing["entries"] = n === 1 ? [{ name: "a.ts", kind: "file" }] : [];
+    return { entries, total: entries.length };
   });
   const { target } = render(FolderTree, props());
   await until(() => refreshControl(target) !== null);

@@ -43,6 +43,11 @@ describe("the toasted-update marker", () => {
   test("never throws when storage itself does", () => {
     // Private mode, disabled storage, quota. A marker that cannot persist must degrade
     // to re-toasting once, never to a thrown load.
+    //
+    // Bespoke rather than `withBlockedStorage`: that helper makes the `localStorage`
+    // GETTER throw, so the object is unreachable. Here the store is present and its
+    // methods fail — the failure a quota or a disabled origin actually produces, and a
+    // separate branch through the accessors.
     const storage = globalThis.localStorage;
     const poisoned = {
       getItem() {

@@ -1,6 +1,7 @@
 import "@ui/test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { withBlockedStorage } from "@ui/test-storage.ts";
 import {
   DEFAULT_SOUND_VOLUME,
   readSoundEnabled,
@@ -12,23 +13,6 @@ import {
 } from "$lib/soundPref.ts";
 
 afterEach(() => localStorage.clear());
-
-/** Run `body` with localStorage replaced by a getter that throws, mirroring a
- * blocked / private-mode store. */
-function withBlockedStorage(body: () => void): void {
-  const original = globalThis.localStorage;
-  Object.defineProperty(globalThis, "localStorage", {
-    configurable: true,
-    get() {
-      throw new Error("blocked");
-    },
-  });
-  try {
-    body();
-  } finally {
-    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: original });
-  }
-}
 
 describe("readSoundEnabled", () => {
   test("defaults to on when nothing is stored", () => {

@@ -2,6 +2,7 @@ import "@ui/test-mount.ts";
 import { describe, expect, test } from "bun:test";
 
 import { until } from "@test/support/poll.ts";
+import { expectViewRecreated } from "@ui/test-diffview.ts";
 import { render } from "@ui/test-mount.ts";
 import { reactiveProps } from "@ui/test-props.svelte.ts";
 import SourceView from "$lib/diffview/SourceView.svelte";
@@ -85,13 +86,8 @@ describe("SourceView instance preservation", () => {
     props.doc = { name: "plan.md", text: "# Title\n\nrevised text\n" };
     props.contentKey = "r1:v2";
     flush();
-    const repainted = await until(
-      () => shadow(target)?.textContent?.includes("revised text") ?? false,
-    );
-    expect(repainted).toBe(true);
-    expect(shadow(target)?.querySelector("pre")).not.toBe(pre as HTMLPreElement);
     // The old instance's DOM is gone — no stale content or duplicate views.
-    expect(shadow(target)?.textContent).not.toContain("hello world");
+    await expectViewRecreated(() => shadow(target), pre, "revised text", "hello world");
     expect(shadow(target)?.querySelectorAll("pre")).toHaveLength(1);
   });
 });

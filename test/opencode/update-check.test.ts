@@ -20,8 +20,7 @@ import {
   updateCheckCachePath,
   updateToastBody,
 } from "@opencode/caret.plugin.ts";
-
-import { recordingClient } from "./toast-client.ts";
+import { recordingClient } from "@test/support/opencode-toast-client.ts";
 
 // --- isNewer (inline semver) ---
 

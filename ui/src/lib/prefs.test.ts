@@ -1,6 +1,7 @@
 import "@ui/test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { withBlockedStorage } from "@ui/test-storage.ts";
 import { DARK_SLOT_KEY, LEGACY_THEME_KEY, LIGHT_SLOT_KEY, MODE_KEY } from "$lib/appearance.ts";
 import { knownPrefKeys } from "$lib/definePref.ts";
 import { DIFF_INDICATORS_KEY } from "$lib/diffIndicatorsPref.ts";
@@ -41,33 +42,15 @@ describe("hasOnboarded / markOnboarded", () => {
   });
 
   test("hasOnboarded fails safe to false when localStorage throws", () => {
-    const original = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      get() {
-        throw new Error("blocked");
-      },
-    });
-    try {
+    withBlockedStorage(() => {
       expect(hasOnboarded()).toBe(false);
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", { configurable: true, value: original });
-    }
+    });
   });
 
   test("markOnboarded swallows a storage failure", () => {
-    const original = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      get() {
-        throw new Error("blocked");
-      },
-    });
-    try {
+    withBlockedStorage(() => {
       expect(() => markOnboarded()).not.toThrow();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", { configurable: true, value: original });
-    }
+    });
   });
 });
 
@@ -90,18 +73,9 @@ describe("clearKnownPrefs", () => {
   });
 
   test("swallows a storage failure", () => {
-    const original = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      get() {
-        throw new Error("blocked");
-      },
-    });
-    try {
+    withBlockedStorage(() => {
       expect(() => clearKnownPrefs()).not.toThrow();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", { configurable: true, value: original });
-    }
+    });
   });
 });
 

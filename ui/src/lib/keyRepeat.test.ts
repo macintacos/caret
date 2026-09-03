@@ -32,6 +32,13 @@ function makeScheduler() {
   return { schedule, runNext, armed };
 }
 
+/** A keyRepeat instance wired to a fresh, inspectable scheduler. */
+function makeRepeat() {
+  const clock = makeScheduler();
+  const repeat = createKeyRepeat({ schedule: clock.schedule });
+  return { clock, repeat };
+}
+
 /** Release a key the way a browser does — on `window`, where the helper listens,
  * rather than on whatever the walk has moved focus to. */
 const release = (key: string) =>
@@ -39,9 +46,8 @@ const release = (key: string) =>
 
 describe("createKeyRepeat", () => {
   test("a hold moves once and then waits out the delay", () => {
-    const clock = makeScheduler();
+    const { clock, repeat } = makeRepeat();
     let steps = 0;
-    const repeat = createKeyRepeat({ schedule: clock.schedule });
 
     repeat.start("j", () => steps++);
 
@@ -51,9 +57,8 @@ describe("createKeyRepeat", () => {
   });
 
   test("the run starts after the delay and holds the interval", () => {
-    const clock = makeScheduler();
+    const { clock, repeat } = makeRepeat();
     let steps = 0;
-    const repeat = createKeyRepeat({ schedule: clock.schedule });
 
     repeat.start("j", () => steps++);
     clock.runNext();
@@ -70,9 +75,8 @@ describe("createKeyRepeat", () => {
   });
 
   test("releasing the key stops the run with nothing left armed", () => {
-    const clock = makeScheduler();
+    const { clock, repeat } = makeRepeat();
     let steps = 0;
-    const repeat = createKeyRepeat({ schedule: clock.schedule });
 
     repeat.start("j", () => steps++);
     clock.runNext();
@@ -86,9 +90,8 @@ describe("createKeyRepeat", () => {
   // Shift+Tab is held as two keys, and the reviewer can let go of the modifier
   // first. Ending the hold on ANY keyup would stop the walk mid-run there.
   test("releasing a different key leaves the hold running", () => {
-    const clock = makeScheduler();
+    const { clock, repeat } = makeRepeat();
     let steps = 0;
-    const repeat = createKeyRepeat({ schedule: clock.schedule });
 
     repeat.start("Tab", () => steps++);
     release("Shift");
@@ -102,9 +105,8 @@ describe("createKeyRepeat", () => {
   // A window that loses focus never delivers the keyup, so without this the run
   // would still be going when the reviewer came back.
   test("the window losing focus stops the run", () => {
-    const clock = makeScheduler();
+    const { clock, repeat } = makeRepeat();
     let steps = 0;
-    const repeat = createKeyRepeat({ schedule: clock.schedule });
 
     repeat.start("j", () => steps++);
     window.dispatchEvent(new Event("blur"));
@@ -117,9 +119,8 @@ describe("createKeyRepeat", () => {
   // stop() is what a closing menu calls, and it has to take the listeners with it:
   // one left behind would let a stale key end a hold it never started.
   test("stop leaves no listener behind for the key it ended", () => {
-    const clock = makeScheduler();
+    const { clock, repeat } = makeRepeat();
     let steps = 0;
-    const repeat = createKeyRepeat({ schedule: clock.schedule });
 
     repeat.start("j", () => steps++);
     repeat.stop();
@@ -136,9 +137,8 @@ describe("createKeyRepeat", () => {
   // A run that re-armed behind that stop would hold a timer nothing has a handle to:
   // releasing the key could not cancel it, and neither could the next hold.
   test("a step that stops the hold arms no run behind it", () => {
-    const clock = makeScheduler();
+    const { clock, repeat } = makeRepeat();
     let steps = 0;
-    const repeat = createKeyRepeat({ schedule: clock.schedule });
 
     repeat.start("h", () => {
       steps++;
@@ -153,9 +153,8 @@ describe("createKeyRepeat", () => {
   });
 
   test("a first step that stops the hold arms nothing at all", () => {
-    const clock = makeScheduler();
+    const { clock, repeat } = makeRepeat();
     let steps = 0;
-    const repeat = createKeyRepeat({ schedule: clock.schedule });
 
     repeat.start("h", () => {
       steps++;
@@ -167,8 +166,7 @@ describe("createKeyRepeat", () => {
   });
 
   test("stop is idempotent", () => {
-    const clock = makeScheduler();
-    const repeat = createKeyRepeat({ schedule: clock.schedule });
+    const { clock, repeat } = makeRepeat();
 
     repeat.start("j", () => {});
     repeat.stop();
@@ -180,9 +178,8 @@ describe("createKeyRepeat", () => {
   // One hold at a time: a second key arriving before the first is released takes
   // the run over rather than adding a second timer driving the same list.
   test("a second hold cancels the first", () => {
-    const clock = makeScheduler();
+    const { clock, repeat } = makeRepeat();
     const stepped: string[] = [];
-    const repeat = createKeyRepeat({ schedule: clock.schedule });
 
     repeat.start("j", () => stepped.push("j"));
     repeat.start("k", () => stepped.push("k"));
@@ -210,8 +207,7 @@ describe("walkCommandList", () => {
     new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
 
   test("Tab and Shift+Tab walk down and up", () => {
-    const clock = makeScheduler();
-    const repeat = createKeyRepeat({ schedule: clock.schedule });
+    const { repeat } = makeRepeat();
     const { field, keys } = makeField();
 
     walkCommandList(press({ key: "Tab" }), field, repeat);
@@ -223,8 +219,7 @@ describe("walkCommandList", () => {
   });
 
   test("a claimed key suppresses the browser's own default", () => {
-    const clock = makeScheduler();
-    const repeat = createKeyRepeat({ schedule: clock.schedule });
+    const { repeat } = makeRepeat();
     const { field } = makeField();
 
     const event = press({ key: "Tab" });
@@ -236,8 +231,7 @@ describe("walkCommandList", () => {
 
   // The OS keeps emitting keydowns while the key is held; only the timer may walk.
   test("an OS repeat stays claimed but walks nothing", () => {
-    const clock = makeScheduler();
-    const repeat = createKeyRepeat({ schedule: clock.schedule });
+    const { repeat } = makeRepeat();
     const { field, keys } = makeField();
 
     walkCommandList(press({ key: "Tab" }), field, repeat);
@@ -252,8 +246,7 @@ describe("walkCommandList", () => {
   // This function's own re-dispatch comes back through it on the way to the
   // primitive. Claiming it again would loop.
   test("the walk's own untrusted arrow passes through unclaimed", () => {
-    const clock = makeScheduler();
-    const repeat = createKeyRepeat({ schedule: clock.schedule });
+    const { clock, repeat } = makeRepeat();
     const { field, keys } = makeField();
 
     const synthetic = press({ key: "ArrowDown" });
@@ -266,8 +259,7 @@ describe("walkCommandList", () => {
 
   // ⌘ and ⌥ are the primitive's own first/last and group jumps.
   test("a modified arrow passes through unclaimed", () => {
-    const clock = makeScheduler();
-    const repeat = createKeyRepeat({ schedule: clock.schedule });
+    const { clock, repeat } = makeRepeat();
     const { field } = makeField();
 
     const event = press({ key: "ArrowDown", metaKey: true });
@@ -278,8 +270,7 @@ describe("walkCommandList", () => {
   });
 
   test("nothing is claimed while the panel has no field", () => {
-    const clock = makeScheduler();
-    const repeat = createKeyRepeat({ schedule: clock.schedule });
+    const { clock, repeat } = makeRepeat();
 
     const event = press({ key: "Tab" });
     walkCommandList(event, null, repeat);

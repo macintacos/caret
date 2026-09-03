@@ -619,21 +619,21 @@ describe("versionCommentIndex", () => {
     expect(entries[1]?.side).toBeUndefined();
   });
 
+  const REVERSIBLE_PAIR = [
+    version(1, [lineC("a", 3, 3, "first")]),
+    version(2, [lineC("b", 4, 4, "second")]),
+  ];
+
   test("swaps the sides when the pair is picked in reverse", () => {
-    const versions = [
-      version(1, [lineC("a", 3, 3, "first")]),
-      version(2, [lineC("b", 4, 4, "second")]),
-    ];
-    expect(versionCommentIndex(versions, 2, 1).map((e) => e.side)).toEqual(["after", "before"]);
+    expect(versionCommentIndex(REVERSIBLE_PAIR, 2, 1).map((e) => e.side)).toEqual([
+      "after",
+      "before",
+    ]);
   });
 
   test("keeps a reversed range listing the same versions in the same order", () => {
-    const versions = [
-      version(1, [lineC("a", 3, 3, "first")]),
-      version(2, [lineC("b", 4, 4, "second")]),
-    ];
-    expect(versionCommentIndex(versions, 2, 1).map((e) => e.id)).toEqual(
-      versionCommentIndex(versions, 1, 2).map((e) => e.id),
+    expect(versionCommentIndex(REVERSIBLE_PAIR, 2, 1).map((e) => e.id)).toEqual(
+      versionCommentIndex(REVERSIBLE_PAIR, 1, 2).map((e) => e.id),
     );
   });
 

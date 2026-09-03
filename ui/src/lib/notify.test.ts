@@ -142,11 +142,17 @@ describe("createPlanNotifier", () => {
     expect(fired).toHaveLength(1);
   });
 
-  test("multiple new ids in one poll fire one notification each", () => {
+  /** Two new reviews arrive while away and granted; both fire. */
+  function twoFired() {
     const { notifier, fired } = makeNotifier();
     notifier.observe([]);
     notifier.observe([review("a"), review("b")]);
     expect(fired).toHaveLength(2);
+    return { notifier, fired };
+  }
+
+  test("multiple new ids in one poll fire one notification each", () => {
+    twoFired();
   });
 
   test("clicking a notification focuses, selects that id, and closes it", () => {
@@ -193,10 +199,7 @@ describe("createPlanNotifier", () => {
   // redundant. Gated on presence: mergeReviews auto-selects while away, and a
   // toast the away user never saw must never be closed out from under them.
   test("dismissAllIfPresent() dismisses every fired notification when present", () => {
-    const { notifier, fired } = makeNotifier();
-    notifier.observe([]);
-    notifier.observe([review("a"), review("b")]); // away + granted → both fire
-    expect(fired).toHaveLength(2);
+    const { notifier, fired } = twoFired();
     away = false; // user is back on the tab
     notifier.dismissAllIfPresent();
     expect(fired[0]!.handle.closed).toBe(1);
@@ -439,12 +442,18 @@ describe("createPlanNotifier instrumentation", () => {
     expect(events[0]?.msg).toContain("fired");
   });
 
-  test("clicking emits one debug record", () => {
+  /** Fire the review's notification and click it, flushing the resulting log. */
+  function firedAndClicked() {
     const { notifier, fired } = makeNotifier();
     notifier.observe([]);
     notifier.observe([review(REVIEW_ID, SECRET_TITLE, SECRET_CWD)]);
     fired[0]!.handle.onclick?.();
     flush();
+    return { notifier, fired };
+  }
+
+  test("clicking emits one debug record", () => {
+    firedAndClicked();
 
     // Stable contract: a debug-level "ui" record classified "clicked", carrying
     // the reviewId. Match the classifying keyword loosely, not the full prose.
@@ -458,11 +467,7 @@ describe("createPlanNotifier instrumentation", () => {
   });
 
   test("no record carries the review title or cwd", () => {
-    const { notifier, fired } = makeNotifier();
-    notifier.observe([]);
-    notifier.observe([review(REVIEW_ID, SECRET_TITLE, SECRET_CWD)]);
-    fired[0]!.handle.onclick?.();
-    flush();
+    firedAndClicked();
 
     expect(cap.text()).not.toContain(SECRET_TITLE);
     expect(cap.text()).not.toContain(SECRET_CWD);
@@ -614,6 +619,17 @@ describe("fireTestNotification", () => {
     );
   });
 
+  /** Fire the test notification over `notification`, and expect it to degrade
+   * to false with a warn logged. */
+  function expectDegradesWithWarn(notification: unknown): void {
+    withGlobalNotification(notification, () => {
+      expect(fireTestNotification()).toBe(false);
+    });
+    flush();
+
+    expect(cap.events().some((e) => e.level === "warn")).toBe(true);
+  }
+
   test("a throwing constructor degrades to false with a warn", () => {
     class ThrowingNotification {
       constructor() {
@@ -621,21 +637,11 @@ describe("fireTestNotification", () => {
       }
       static permission: NotificationPermission = "granted";
     }
-    withGlobalNotification(ThrowingNotification, () => {
-      expect(fireTestNotification()).toBe(false);
-    });
-    flush();
-
-    expect(cap.events().some((e) => e.level === "warn")).toBe(true);
+    expectDegradesWithWarn(ThrowingNotification);
   });
 
   test("an absent Notification API degrades to false with a warn", () => {
-    withGlobalNotification(undefined, () => {
-      expect(fireTestNotification()).toBe(false);
-    });
-    flush();
-
-    expect(cap.events().some((e) => e.level === "warn")).toBe(true);
+    expectDegradesWithWarn(undefined);
   });
 });
 

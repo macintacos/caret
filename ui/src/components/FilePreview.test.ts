@@ -224,6 +224,67 @@ function scrollToBottom(target: HTMLElement, scrollTo: (top: number) => void): v
   scrollTo(region.scrollHeight - region.clientHeight);
 }
 
+/** Serve a windowed file, mount FilePreview, wait for the code region to
+ * appear, and stub its layout — the common opening of the scroll-loading and
+ * keyboard-reach suites' tests. */
+async function openScrollable(
+  totalLines: number,
+  headLines: number,
+  propsOver: Partial<{ path: string; line: number; endLine: number }> = {},
+  initialTop = 0,
+): Promise<{
+  target: HTMLElement;
+  served: ReturnType<typeof serveWindowed>;
+  scrollTo: (top: number) => void;
+}> {
+  const served = serveWindowed(totalLines, headLines);
+  cap = served;
+  const { target } = render(FilePreview, props(propsOver));
+  await until(() => target.querySelector(".fp-code") != null);
+  const scrollTo = stubLayout(target, initialTop);
+  return { target, served, scrollTo };
+}
+
+/** Scroll to the region's bottom and wait for the resulting request to land —
+ * used to pin the region at its scroll limit after `served.failNext()` armed a
+ * failure, before the test exercises its own retry path. */
+async function scrollToFailure(
+  target: HTMLElement,
+  served: { urls: string[] },
+  scrollTo: (top: number) => void,
+): Promise<void> {
+  scrollToBottom(target, scrollTo);
+  await until(() => served.urls.length === 2);
+}
+
+/** Open a windowed preview via `openScrollable`, then arm and confirm the
+ * failure both retry tests below start from. */
+async function openFailedScroll(): Promise<{
+  target: HTMLElement;
+  served: ReturnType<typeof serveWindowed>;
+  scrollTo: (top: number) => void;
+}> {
+  const opened = await openScrollable(300, 60);
+  opened.served.failNext();
+  await scrollToFailure(opened.target, opened.served, opened.scrollTo);
+  return opened;
+}
+
+/** Mount FilePreview with reactive props (a fresh instance a reference change
+ * mutates in place) and wait for the code region — the common opening for the
+ * two tests that swap `path` on a live instance. Assumes the caller has
+ * already installed `cap`. */
+async function openLive(): Promise<{
+  target: HTMLElement;
+  flush: () => void;
+  live: { reviewId: string; path: string; onClose: () => void };
+}> {
+  const live = reactiveProps({ reviewId: ID, path: "src/cache.ts", onClose: () => {} });
+  const { target, flush } = render(FilePreview, live);
+  await until(() => target.querySelector(".fp-code") != null);
+  return { target, flush, live };
+}
+
 /** The `start`/`end` of the last range asked for, as a `start=a&end=b` fragment. */
 const lastRange = (urls: string[]) => {
   const params = new URLSearchParams((urls.at(-1) ?? "").split("?")[1] ?? "");
@@ -460,12 +521,8 @@ describe("FilePreview scroll loading", () => {
     // already loaded is not asking for more file, and a slacker threshold would
     // spend a round trip on every such move — and would reach both ends of a
     // freshly opened window at once.
-    const served = serveWindowed(600, 180);
-    cap = served;
     // Window 210–389: 180 rows (6 screens) with file on both sides.
-    const { target } = render(FilePreview, props({ line: 300 }));
-    await until(() => target.querySelector(".fp-code") != null);
-    const scrollTo = stubLayout(target);
+    const { target, served, scrollTo } = await openScrollable(600, 180, { line: 300 });
 
     // Half a screen short of the bottom — well inside a half-screen threshold,
     // outside a quarter-screen one.
@@ -481,11 +538,7 @@ describe("FilePreview scroll loading", () => {
   });
 
   test("scrolling near the bottom appends the next chunk, fetching only its lines", async () => {
-    const served = serveWindowed(300, 60);
-    cap = served;
-    const { target } = render(FilePreview, props());
-    await until(() => target.querySelector(".fp-code") != null);
-    const scrollTo = stubLayout(target);
+    const { target, served, scrollTo } = await openScrollable(300, 60);
 
     scrollToBottom(target, scrollTo);
     await until(() => lineNumbers(target).length > 60);
@@ -503,14 +556,15 @@ describe("FilePreview scroll loading", () => {
   });
 
   test("scrolling near the top prepends the chunk above, fetching only its lines", async () => {
-    const served = serveWindowed(300, 60);
-    cap = served;
     // Centred on line 100, so the opening window is 70–129 with file on both
     // sides, and the reader starts parked in the middle of it rather than
     // already against an edge.
-    const { target } = render(FilePreview, props({ line: 100 }));
-    await until(() => target.querySelector(".fp-code") != null);
-    const scrollTo = stubLayout(target, VIEWPORT_PX / 2);
+    const { target, served, scrollTo } = await openScrollable(
+      300,
+      60,
+      { line: 100 },
+      VIEWPORT_PX / 2,
+    );
     expect(lineNumbers(target)[0]).toBe("70");
 
     scrollTo(0);
@@ -526,11 +580,7 @@ describe("FilePreview scroll loading", () => {
     // The step is deliberately larger than the threshold, so a gesture costs one
     // round trip. A step at or under the threshold would leave the edge still
     // near after the chunk landed and walk the whole file on one scroll.
-    const served = serveWindowed(300, 60);
-    cap = served;
-    const { target } = render(FilePreview, props());
-    await until(() => target.querySelector(".fp-code") != null);
-    const scrollTo = stubLayout(target);
+    const { target, served, scrollTo } = await openScrollable(300, 60);
 
     scrollToBottom(target, scrollTo);
     await until(() => lineNumbers(target).length > 60);
@@ -539,11 +589,7 @@ describe("FilePreview scroll loading", () => {
   });
 
   test("overlapping scrolls do not stack duplicate requests for the same range", async () => {
-    const served = serveWindowed(300, 60);
-    cap = served;
-    const { target } = render(FilePreview, props());
-    await until(() => target.querySelector(".fp-code") != null);
-    const scrollTo = stubLayout(target);
+    const { target, served, scrollTo } = await openScrollable(300, 60);
 
     // A flurry of scroll events — a real wheel gesture emits many — while the
     // first chunk is still in flight.
@@ -558,11 +604,7 @@ describe("FilePreview scroll loading", () => {
 
   test("the region stops asking once its side reaches the end of the file", async () => {
     // 70 lines with a 60-line opening window: one downward step covers the rest.
-    const served = serveWindowed(70, 60);
-    cap = served;
-    const { target } = render(FilePreview, props());
-    await until(() => target.querySelector(".fp-code") != null);
-    const scrollTo = stubLayout(target);
+    const { target, served, scrollTo } = await openScrollable(70, 60);
 
     scrollToBottom(target, scrollTo);
     await until(() => lineNumbers(target).length === 70);
@@ -580,11 +622,7 @@ describe("FilePreview scroll loading", () => {
     // than the region already holds answers with a line that is already on screen.
     // Appending it would put the same line number in two rows, which Svelte's
     // keyed each throws on; the count it reports is what retires that side.
-    const served = serveWindowed(300, 60);
-    cap = served;
-    const { target } = render(FilePreview, props());
-    await until(() => target.querySelector(".fp-code") != null);
-    const scrollTo = stubLayout(target);
+    const { target, served, scrollTo } = await openScrollable(300, 60);
     served.shrinkTo(60);
 
     scrollToBottom(target, scrollTo);
@@ -598,15 +636,7 @@ describe("FilePreview scroll loading", () => {
     // Nothing at the boundary is clickable any more, so the scroll gesture is the
     // retry affordance — a failure that dead-ended the region would strand the
     // reader with no way back.
-    const served = serveWindowed(300, 60);
-    cap = served;
-    const { target } = render(FilePreview, props());
-    await until(() => target.querySelector(".fp-code") != null);
-    const scrollTo = stubLayout(target);
-    served.failNext();
-
-    scrollToBottom(target, scrollTo);
-    await until(() => served.urls.length === 2);
+    const { target, scrollTo } = await openFailedScroll();
     // The rows already on screen survive the failure; the panel never blanks.
     expect(lineNumbers(target)).toHaveLength(60);
     expect(target.querySelector('[data-preview-state="error"]')).toBeNull();
@@ -627,9 +657,7 @@ describe("FilePreview scroll loading", () => {
     cap = serveWindowed(300, 60);
     // The parent reuses one instance across references, so the accumulated span
     // has to go with the old one rather than framing the new file.
-    const live = reactiveProps({ reviewId: ID, path: "src/cache.ts", onClose: () => {} });
-    const { target, flush } = render(FilePreview, live);
-    await until(() => target.querySelector(".fp-code") != null);
+    const { target, flush, live } = await openLive();
     const scrollTo = stubLayout(target);
     scrollToBottom(target, scrollTo);
     await until(() => lineNumbers(target).length === 120);
@@ -686,15 +714,7 @@ describe("FilePreview keyboard reach", () => {
     // against its scroll limit, where the next key press moves nothing and so
     // fires no scroll event — and the wheel is not an affordance a keyboard
     // reader has. Without the keydown handler they would be stranded there.
-    const served = serveWindowed(300, 60);
-    cap = served;
-    const { target } = render(FilePreview, props());
-    await until(() => target.querySelector(".fp-code") != null);
-    const scrollTo = stubLayout(target);
-    served.failNext();
-
-    scrollToBottom(target, scrollTo);
-    await until(() => served.urls.length === 2);
+    const { target } = await openFailedScroll();
     expect(lineNumbers(target)).toHaveLength(60);
 
     // Pinned now: the press is the only event that fires, and it has to be enough.
@@ -710,15 +730,7 @@ describe("FilePreview keyboard reach", () => {
     // Escape closes the preview (DiffPlanView owns that) and typing goes nowhere;
     // neither is a reader moving through the file, so neither should spend a
     // round trip.
-    const served = serveWindowed(300, 60);
-    cap = served;
-    const { target } = render(FilePreview, props());
-    await until(() => target.querySelector(".fp-code") != null);
-    const scrollTo = stubLayout(target);
-    served.failNext();
-
-    scrollToBottom(target, scrollTo);
-    await until(() => served.urls.length === 2);
+    const { target, served } = await openFailedScroll();
 
     pressKey(target, "Escape");
     pressKey(target, "a");
@@ -803,15 +815,27 @@ describe("FilePreview settling", () => {
     });
   }
 
+  /** Open a gated preview and wait for the loading placeholder — the common
+   * opening of the tests below that never let the fetch land. */
+  async function openLoading(
+    count: number,
+    totalLines: number,
+  ): Promise<{ target: HTMLElement; served: ReturnType<typeof serveGated> }> {
+    const served = serveGated(count, totalLines);
+    cap = served;
+    served.gateNext();
+    const { target } = render(FilePreview, props());
+    await until(() => target.querySelector('[data-preview-state="loading"]') != null);
+    return { target, served };
+  }
+
   test("the outgoing file stays on screen, marked leaving, while the next loads", async () => {
     // The blank the reader used to get here was the one place the panel emptied
     // mid-load — expand() already keeps the rows up while a chunk is in flight,
     // and a reference change is the switch they trigger most deliberately.
     const served = serveGated(20, 300);
     cap = served;
-    const live = reactiveProps({ reviewId: ID, path: "src/cache.ts", onClose: () => {} });
-    const { target, flush } = render(FilePreview, live);
-    await until(() => target.querySelector(".fp-code") != null);
+    const { target, flush, live } = await openLive();
     expect(target.querySelector(".fp-path")?.textContent).toBe("src/cache.ts");
 
     served.gateNext();
@@ -837,11 +861,7 @@ describe("FilePreview settling", () => {
   test("a first open has nothing to hold and shows the loading message", async () => {
     // The departure only applies where a file is already up. Opening onto an
     // empty panel still announces that it is loading rather than showing nothing.
-    const served = serveGated(20, 300);
-    cap = served;
-    served.gateNext();
-    const { target } = render(FilePreview, props());
-    await until(() => target.querySelector('[data-preview-state="loading"]') != null);
+    const { target, served } = await openLoading(20, 300);
 
     expect(target.querySelector('[data-preview-state="loading"]')).not.toBeNull();
     expect(target.querySelector(".fp-code")).toBeNull();
@@ -860,11 +880,7 @@ describe("FilePreview settling", () => {
     // (doc/agents/shadcn-rules.md); the reduced-motion clamp is a media query
     // happy-dom cannot evaluate, so it is verified in the browser rather than
     // here.
-    const served = serveGated(20, 300);
-    cap = served;
-    served.gateNext();
-    const { target } = render(FilePreview, props());
-    await until(() => target.querySelector('[data-preview-state="loading"]') != null);
+    const { target, served } = await openLoading(20, 300);
 
     const placeholder = target.querySelector('[data-preview-state="loading"]');
     expect(placeholder?.textContent).toContain("Loading");
@@ -881,11 +897,8 @@ describe("FilePreview settling", () => {
     // chunk adds rows to the element already on screen. Recreating it per chunk
     // would restart the enter animation mid-scroll and, worse, reset the offset
     // that expand() and the cited-line anchoring both compute against.
-    cap = serveWindowed(300, 60);
-    const { target } = render(FilePreview, props());
-    await until(() => target.querySelector(".fp-code") != null);
+    const { target, scrollTo } = await openScrollable(300, 60);
     const before = target.querySelector(".fp-code");
-    const scrollTo = stubLayout(target);
 
     scrollToBottom(target, scrollTo);
     await until(() => lineNumbers(target).length === 120);

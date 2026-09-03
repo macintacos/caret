@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 
 import { languages } from "@codemirror/language-data";
 
+import { withFocusSpy } from "@ui/test-helpers.ts";
 import { render } from "@ui/test-mount.ts";
 import MarkdownEditor from "@/components/MarkdownEditor.svelte";
 
@@ -18,6 +19,17 @@ function dispatchKey(target: HTMLElement, key: string, mods: Partial<KeyboardEve
   content.dispatchEvent(
     new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...mods }),
   );
+}
+
+/** Mount with a no-op onInput and flush — every chord test wants an editor
+ * up and settled before it dispatches a key. */
+function mountChords(over: { onSubmitChord?: () => void; onCancelChord?: () => void }): {
+  target: HTMLElement;
+  flush: () => void;
+} {
+  const { target, flush } = render(MarkdownEditor, { onInput: () => {}, ...over });
+  flush();
+  return { target, flush };
 }
 
 describe("MarkdownEditor mount", () => {
@@ -102,44 +114,28 @@ describe("MarkdownEditor code styling", () => {
 describe("MarkdownEditor chords", () => {
   test("Cmd+Enter fires onSubmitChord", () => {
     let submits = 0;
-    const { target, flush } = render(MarkdownEditor, {
-      onSubmitChord: () => submits++,
-      onInput: () => {},
-    });
-    flush();
+    const { target } = mountChords({ onSubmitChord: () => submits++ });
     dispatchKey(target, "Enter", { metaKey: true });
     expect(submits).toBe(1);
   });
 
   test("Ctrl+Enter fires onSubmitChord", () => {
     let submits = 0;
-    const { target, flush } = render(MarkdownEditor, {
-      onSubmitChord: () => submits++,
-      onInput: () => {},
-    });
-    flush();
+    const { target } = mountChords({ onSubmitChord: () => submits++ });
     dispatchKey(target, "Enter", { ctrlKey: true });
     expect(submits).toBe(1);
   });
 
   test("Escape fires onCancelChord", () => {
     let cancels = 0;
-    const { target, flush } = render(MarkdownEditor, {
-      onCancelChord: () => cancels++,
-      onInput: () => {},
-    });
-    flush();
+    const { target } = mountChords({ onCancelChord: () => cancels++ });
     dispatchKey(target, "Escape");
     expect(cancels).toBe(1);
   });
 
   test("a bare Enter does not fire onSubmitChord", () => {
     let submits = 0;
-    const { target, flush } = render(MarkdownEditor, {
-      onSubmitChord: () => submits++,
-      onInput: () => {},
-    });
-    flush();
+    const { target } = mountChords({ onSubmitChord: () => submits++ });
     dispatchKey(target, "Enter");
     expect(submits).toBe(0);
   });
@@ -161,20 +157,11 @@ describe("MarkdownEditor aria", () => {
 
 describe("MarkdownEditor focus", () => {
   test("autofocus focuses the editor with preventScroll", () => {
-    const proto = HTMLElement.prototype;
-    const orig = proto.focus;
-    const optsSeen: Array<FocusOptions | undefined> = [];
-    proto.focus = function (opts?: FocusOptions) {
-      optsSeen.push(opts);
-      return orig.call(this, opts);
-    };
-    try {
+    const optsSeen = withFocusSpy(() => {
       const { flush } = render(MarkdownEditor, { autofocus: true, onInput: () => {} });
       flush();
-      expect(optsSeen.some((o) => o?.preventScroll === true)).toBe(true);
-    } finally {
-      proto.focus = orig;
-    }
+    });
+    expect(optsSeen.some((o) => o?.preventScroll === true)).toBe(true);
   });
 });
 

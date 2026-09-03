@@ -1,30 +1,17 @@
 import "@ui/test-mount.ts";
 import { describe, expect, test } from "bun:test";
 
+import type { ComponentProps } from "svelte";
+
 import { capture, flushUntil, render } from "@ui/test-mount.ts";
+import { HEADINGS, releaseKey } from "@ui/test-plan-nav.ts";
 import PlanBreadcrumbs from "@/components/PlanBreadcrumbs.svelte";
 import type { TocHeading } from "$lib/toc.ts";
 
-// A three-level plan: "Details" sits under "Approach", which shares its level with
-// "Verification". Reading line 9 therefore trails Overview > Approach > Details,
-// and the Approach crumb's menu offers Approach and Verification.
-const HEADINGS: TocHeading[] = [
-  { level: 1, text: "Overview", line: 1 },
-  { level: 2, text: "Approach", line: 5 },
-  { level: 3, text: "Details", line: 9 },
-  { level: 2, text: "Verification", line: 20 },
-];
-
-// Two branches off one parent: "Details" under "Approach" is where the reader
-// is, "Steps" under "Verification" is the branch they are not in — the headings
-// the bar could not reach before EXC-957.
-const BRANCHED: TocHeading[] = [
-  { level: 1, text: "Overview", line: 1 },
-  { level: 2, text: "Approach", line: 5 },
-  { level: 3, text: "Details", line: 9 },
-  { level: 2, text: "Verification", line: 20 },
-  { level: 3, text: "Steps", line: 24 },
-];
+// HEADINGS with a second branch grafted on: "Details" under "Approach" is where
+// the reader is, "Steps" under "Verification" is the branch they are not in —
+// the headings the bar could not reach before EXC-957.
+const BRANCHED: TocHeading[] = [...HEADINGS, { level: 3, text: "Steps", line: 24 }];
 
 // Four nested levels, deeper than the bar used to show before it started
 // measuring the room it has.
@@ -38,15 +25,6 @@ const DEEP: TocHeading[] = [
 function crumbs(target: HTMLElement): HTMLElement[] {
   return [...target.querySelectorAll<HTMLElement>("button.crumb")];
 }
-
-/** Let a pressed key go, on `window`, where the bar's hold-to-repeat listens.
- *
- * Every press below is a PRESS, so each one ends here. A keydown with no keyup
- * leaves a real 250ms run armed (EXC-1122) that outlives the test and walks a panel
- * a later one is asserting against — which is exactly what a browser never does,
- * since a press always ends. */
-const releaseKey = (key: string) =>
-  window.dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true }));
 
 /** The portalled menu rows, in order. bits-ui teleports menu content to
  * document.body after an effect + timer flush, so callers poll with flushUntil. */
@@ -69,37 +47,46 @@ async function openCrumb(target: HTMLElement, index: number, flush: () => void):
   await flushUntil(flush, () => menuRows().length > 0);
 }
 
+type CrumbsProps = ComponentProps<typeof PlanBreadcrumbs>;
+
+/** Mount PlanBreadcrumbs against the shared three-level fixture. Every prop can
+ * be overridden; the defaults are the shape most tests read against. */
+function mountCrumbs(props: Partial<CrumbsProps> = {}): { target: HTMLElement; flush: () => void } {
+  return render(PlanBreadcrumbs, { headings: HEADINGS, activeLine: 9, onJump: () => {}, ...props });
+}
+
+/** Mount and open the crumb at `index`'s menu. */
+async function openedCrumb(
+  index: number,
+  props: Partial<CrumbsProps> = {},
+): Promise<{ target: HTMLElement; flush: () => void }> {
+  const { target, flush } = mountCrumbs(props);
+  await openCrumb(target, index, flush);
+  return { target, flush };
+}
+
 describe("PlanBreadcrumbs trail", () => {
   test("renders nothing when the plan has no headings", () => {
-    const { target } = render(PlanBreadcrumbs, { headings: [], activeLine: 1, onJump: () => {} });
+    const { target } = mountCrumbs({ headings: [], activeLine: 1 });
     expect(target.querySelector("nav")).toBeNull();
   });
 
   test("renders nothing before a heading is in the reading zone", () => {
-    const { target } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: null,
-      onJump: () => {},
-    });
+    const { target } = mountCrumbs({ activeLine: null });
     expect(target.querySelector("nav")).toBeNull();
   });
 
   // No minimum-heading gate: one heading is still a location.
   test("renders a single crumb for a one-heading plan", () => {
-    const { target } = render(PlanBreadcrumbs, {
+    const { target } = mountCrumbs({
       headings: [{ level: 1, text: "Only", line: 1 }],
       activeLine: 1,
-      onJump: () => {},
     });
     expect(crumbs(target).map((c) => c.textContent?.trim())).toEqual(["Only"]);
   });
 
   test("renders the ancestor chain outermost first", () => {
-    const { target } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
+    const { target } = mountCrumbs();
     expect(crumbs(target).map((c) => c.textContent?.trim())).toEqual([
       "Overview",
       "Approach",
@@ -115,31 +102,19 @@ describe("PlanBreadcrumbs trail", () => {
   // The scroll observer in DiffPlanView only ever hands this component a new
   // activeLine, so a different reading position must yield a different ancestry.
   test("trails the ancestry of whichever heading is being read", () => {
-    const { target } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 20,
-      onJump: () => {},
-    });
+    const { target } = mountCrumbs({ activeLine: 20 });
     expect(crumbs(target).map((c) => c.textContent?.trim())).toEqual(["Overview", "Verification"]);
   });
 });
 
 describe("PlanBreadcrumbs landmark", () => {
   test("is a named nav landmark", () => {
-    const { target } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
+    const { target } = mountCrumbs();
     expect(target.querySelector("nav")?.getAttribute("aria-label")).toBe("Plan location");
   });
 
   test("marks the innermost crumb as the reader's location", () => {
-    const { target } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
+    const { target } = mountCrumbs();
     const shown = crumbs(target);
     expect(shown.at(-1)?.getAttribute("aria-current")).toBe("location");
     expect(shown[0]?.getAttribute("aria-current")).toBeNull();
@@ -148,11 +123,7 @@ describe("PlanBreadcrumbs landmark", () => {
   // The `current` class is what the shrink weighting keys off, on an element that
   // also takes a {...props} spread — so a regression here would be silent.
   test("flags the innermost crumb and its item for the shrink weighting", () => {
-    const { target } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
+    const { target } = mountCrumbs();
     expect(crumbs(target).at(-1)?.classList.contains("current")).toBe(true);
     expect(crumbs(target)[0]?.classList.contains("current")).toBe(false);
     const items = [...target.querySelectorAll(".crumb-item")];
@@ -163,24 +134,14 @@ describe("PlanBreadcrumbs landmark", () => {
 
 describe("PlanBreadcrumbs menus", () => {
   test("a crumb's menu lists that level's siblings", async () => {
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await openCrumb(target, 1, flush);
+    await openedCrumb(1);
     expect(menuRows().map((r) => r.textContent?.trim())).toEqual(["Approach", "Verification"]);
   });
 
   // Opening "where am I" has to show which row is "here" — at every depth, including
   // the innermost menu, where the current heading is an ordinary row.
   test("marks the heading the reader is already on in every menu", async () => {
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await openCrumb(target, 1, flush);
+    const { target, flush } = await openedCrumb(1);
     expect(menuRows().map((r) => r.getAttribute("aria-current"))).toEqual(["location", null]);
     document.body.querySelector<HTMLElement>("[data-slot='dropdown-menu-content']")?.remove();
     await openCrumb(target, 2, flush);
@@ -190,24 +151,14 @@ describe("PlanBreadcrumbs menus", () => {
   // A heading that encloses others opens them rather than only jumping, so one
   // menu walks the whole hierarchy — the nesting EXC-947's j/k steps through.
   test("a heading with headings under it opens as a submenu", async () => {
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await openCrumb(target, 1, flush);
+    await openedCrumb(1);
     const rows = menuRows();
     expect(rows[0]?.getAttribute("data-slot")).toBe("dropdown-menu-sub-trigger");
     expect(rows[1]?.getAttribute("data-slot")).toBe("dropdown-menu-item");
   });
 
   test("the innermost crumb's menu nests nothing", async () => {
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await openCrumb(target, 2, flush);
+    await openedCrumb(2);
     expect(menuRows().map((r) => r.getAttribute("data-slot"))).toEqual(["dropdown-menu-item"]);
   });
 
@@ -215,12 +166,7 @@ describe("PlanBreadcrumbs menus", () => {
   // sibling they are NOT on is the case the old `here &&` limiter excluded, and
   // the reason most of a plan was unreachable from the bar.
   test("nests a sibling's own headings even when the reader is not in that branch", async () => {
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: BRANCHED,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await openCrumb(target, 1, flush);
+    await openedCrumb(1, { headings: BRANCHED });
     expect(menuRows().map((r) => r.textContent?.trim())).toEqual(["Approach", "Verification"]);
     // Verification encloses Steps, so it opens rather than only jumping.
     expect(menuRows().map((r) => r.getAttribute("data-slot"))).toEqual([
@@ -230,12 +176,7 @@ describe("PlanBreadcrumbs menus", () => {
   });
 
   test("marks only the headings on the reader's own trail", async () => {
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: BRANCHED,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await openCrumb(target, 1, flush);
+    await openedCrumb(1, { headings: BRANCHED });
     expect(menuRows().map((r) => r.getAttribute("aria-current"))).toEqual(["location", null]);
   });
 
@@ -244,12 +185,7 @@ describe("PlanBreadcrumbs menus", () => {
   // navigates — which is what this dispatches.
   test("clicking a heading that has children jumps to it rather than opening it", async () => {
     const jumped = capture<number>();
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: BRANCHED,
-      activeLine: 9,
-      onJump: jumped.cb,
-    });
-    await openCrumb(target, 1, flush);
+    const { flush } = await openedCrumb(1, { headings: BRANCHED, onJump: jumped.cb });
     menuRows()[1]?.dispatchEvent(new MouseEvent("click", { detail: 1, bubbles: true }));
     flush();
     expect(jumped.last()).toBe(20);
@@ -257,12 +193,7 @@ describe("PlanBreadcrumbs menus", () => {
 
   test("leaves the plan alone when bits-ui opens the submenu through a synthetic click", async () => {
     const jumped = capture<number>();
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: BRANCHED,
-      activeLine: 9,
-      onJump: jumped.cb,
-    });
-    await openCrumb(target, 1, flush);
+    const { flush } = await openedCrumb(1, { headings: BRANCHED, onJump: jumped.cb });
     menuRows()[1]?.click(); // detail 0 — what ArrowRight and Space produce
     flush();
     expect(jumped.last()).toBeUndefined();
@@ -270,12 +201,7 @@ describe("PlanBreadcrumbs menus", () => {
 
   test("picking a sibling jumps to its source line", async () => {
     const jumped = capture<number>();
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: jumped.cb,
-    });
-    await openCrumb(target, 1, flush);
+    const { flush } = await openedCrumb(1, { onJump: jumped.cb });
     menuRows()[1]?.click();
     flush();
     expect(jumped.last()).toBe(20);
@@ -287,12 +213,7 @@ describe("PlanBreadcrumbs menus", () => {
   // bail has to read the REAL press — the arrow the walk re-dispatches never carries
   // `repeat`, so by then the tell is gone.
   test("an OS repeat of a walk key re-dispatches no second arrow", async () => {
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await openCrumb(target, 1, flush);
+    const { flush } = await openedCrumb(1);
 
     // The walk's own arrow, counted where it lands: it is dispatched at whatever
     // holds focus and bubbles, so the document sees every one.
@@ -329,12 +250,7 @@ describe("PlanBreadcrumbs menus", () => {
   // a DOM query returns, and the hazard is unreachable in a real browser while bits-ui's
   // `preventScroll` keeps the trail from re-rooting under an open menu.
   test("the crumb walk does not step onto a level still playing its exit", async () => {
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: DEEP,
-      activeLine: 7,
-      onJump: () => {},
-    });
-    await openCrumb(target, 3, flush);
+    const { target, flush } = await openedCrumb(3, { headings: DEEP, activeLine: 7 });
     for (const depth of [2, 3]) {
       crumbs(target)[depth]?.closest(".crumb-item")?.classList.add("crumb-leaving");
     }
@@ -364,12 +280,7 @@ describe("PlanBreadcrumbs menus", () => {
 describe("PlanBreadcrumbs keyboard invocation", () => {
   test("hands the parent an open handle that opens the trailing crumb's menu", async () => {
     const exposed = capture<() => void>();
-    const { flush } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-      onExposeOpen: exposed.cb,
-    });
+    const { flush } = mountCrumbs({ onExposeOpen: exposed.cb });
     flush();
     const open = exposed.last();
     expect(typeof open).toBe("function");
@@ -382,11 +293,7 @@ describe("PlanBreadcrumbs keyboard invocation", () => {
   });
 
   test("advertises b on the crumb the key opens, and only there", () => {
-    const { target } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
+    const { target } = mountCrumbs();
     const shown = crumbs(target);
     expect(shown.at(-1)?.getAttribute("aria-keyshortcuts")).toBe("b");
     expect(shown[0]?.getAttribute("aria-keyshortcuts")).toBeNull();
@@ -394,19 +301,9 @@ describe("PlanBreadcrumbs keyboard invocation", () => {
 
   test("teaches b with a keycap only while shortcut hints are shown", () => {
     const hint = (el: HTMLElement) => el.querySelector("[data-slot='kbd']");
-    const { target: on } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-      showShortcutHints: true,
-    });
+    const { target: on } = mountCrumbs({ showShortcutHints: true });
     expect(hint(on)?.textContent?.trim()).toBe("b");
-    const { target: off } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-      showShortcutHints: false,
-    });
+    const { target: off } = mountCrumbs({ showShortcutHints: false });
     expect(hint(off)).toBeNull();
   });
 });
@@ -529,6 +426,24 @@ describe("PlanBreadcrumbs filter", () => {
     await flushUntil(flush, () => options().length > 0 && menuContent() === null);
   }
 
+  /** Mount and open the filter. */
+  async function openedFilter(
+    props: Partial<CrumbsProps> = {},
+  ): Promise<{ target: HTMLElement; flush: () => void }> {
+    const { target, flush } = mountCrumbs(props);
+    await openFilter(target, flush);
+    return { target, flush };
+  }
+
+  /** Mount, open the filter, and wait for its roving selection to seed. */
+  async function openFilterSelected(
+    props: Partial<CrumbsProps> = {},
+  ): Promise<{ target: HTMLElement; flush: () => void }> {
+    const { target, flush } = await openedFilter(props);
+    await flushUntil(flush, () => selectedLabels().length > 0);
+    return { target, flush };
+  }
+
   /** Dismiss the filter before the test ends, the same guard PlanToc.test.ts carries:
    * bits-ui's portal presence waits for an `animationend` that never fires under
    * happy-dom, so content left open at unmount keeps its effects alive into whatever
@@ -555,11 +470,7 @@ describe("PlanBreadcrumbs filter", () => {
   }
 
   test("replaces the open menu's siblings with a field over every heading", async () => {
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
+    const { target, flush } = mountCrumbs();
     // The innermost crumb's menu offers one row — its own level. The filter that
     // replaces it spans all four headings, across every level, and the menu it
     // replaced is gone rather than left standing behind the panel.
@@ -580,12 +491,7 @@ describe("PlanBreadcrumbs filter", () => {
   // The structural fix the header comment used to record as a deviation: a textbox
   // is not a role `menu` admits, so the filter now publishes combobox + listbox.
   test("publishes the field as a combobox over a labelled listbox", async () => {
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await openFilter(target, flush);
+    const { flush } = await openedFilter();
     expect(queryField()?.getAttribute("role")).toBe("combobox");
     expect(queryField()?.getAttribute("aria-label")).toBe("Filter headings");
     expect(listbox()?.getAttribute("role")).toBe("listbox");
@@ -596,12 +502,7 @@ describe("PlanBreadcrumbs filter", () => {
   });
 
   test("claims the slash so the plan's own search never sees it", async () => {
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await openCrumb(target, 2, flush);
+    const { flush } = await openedCrumb(2);
     const slash = new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true });
     menuContent()?.dispatchEvent(slash);
     // dispatcher.ts returns early on defaultPrevented, which is the whole
@@ -612,12 +513,7 @@ describe("PlanBreadcrumbs filter", () => {
   });
 
   test("names each result's enclosing heading", async () => {
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await openFilter(target, flush);
+    const { flush } = await openedFilter();
     expect(options().map((r) => r.querySelector(".crumb-parent")?.textContent?.trim())).toEqual([
       undefined, // "Overview" is top-level, so it has no parent to name
       "Overview",
@@ -628,12 +524,7 @@ describe("PlanBreadcrumbs filter", () => {
   });
 
   test("narrows the results as the query is typed", async () => {
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await openFilter(target, flush);
+    const { flush } = await openedFilter();
     await typeQuery("ver", flush, () => options().length === 2);
     expect(labels()).toEqual(["Overview", "Verification"]);
     await closeFilter(flush);
@@ -644,12 +535,7 @@ describe("PlanBreadcrumbs filter", () => {
   // rather than sitting under a shared breadcrumb header, and the rows keep
   // document order, which the command's own score-sorting engine would shuffle.
   test("flattens rather than grouping, and leaves the rows in document order", async () => {
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await openFilter(target, flush);
+    const { flush } = await openedFilter();
     await typeQuery("e", flush, () => options().length === 3);
     // Document order, which the command's own score sort would shuffle.
     expect(labels()).toEqual(["Overview", "Details", "Verification"]);
@@ -664,12 +550,7 @@ describe("PlanBreadcrumbs filter", () => {
   });
 
   test("shows an empty state rather than a blank panel when nothing matches", async () => {
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await openFilter(target, flush);
+    const { flush } = await openedFilter();
     await typeQuery("zzz", flush, () => options().length === 0);
     expect(options().length).toBe(0);
     expect(emptyLine()?.textContent?.trim()).toBe("No headings match");
@@ -682,12 +563,7 @@ describe("PlanBreadcrumbs filter", () => {
   // A live region has to be idle in the DOM before the change it announces; one
   // inserted with its content already in it is skipped by some AT outright.
   test("keeps the status line mounted while there are rows to show", async () => {
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await openFilter(target, flush);
+    const { flush } = await openedFilter();
     expect(options().length).toBeGreaterThan(0);
     expect(emptyLine()).not.toBeNull();
     expect(emptyLine()?.textContent).toBe("");
@@ -702,12 +578,7 @@ describe("PlanBreadcrumbs filter", () => {
   // Polled rather than sampled: bits-ui rebuilds the viewport both attributes are
   // derived from whenever a query crosses the empty/non-empty boundary.
   test("the filter field narrates the row the selection is on", async () => {
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await openFilter(target, flush);
+    const { flush } = await openedFilter();
     await flushUntil(flush, () => queryField()?.getAttribute("aria-activedescendant") != null);
 
     const controls = document.getElementById(queryField()?.getAttribute("aria-controls") ?? "");
@@ -724,12 +595,7 @@ describe("PlanBreadcrumbs filter", () => {
 
   test("jumps to a result's source line when it is picked", async () => {
     const jumped = capture<number>();
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: jumped.cb,
-    });
-    await openFilter(target, flush);
+    const { flush } = await openedFilter({ onJump: jumped.cb });
     await typeQuery("verification", flush, () => options().length === 1);
     options()[0]?.click();
     await flushUntil(flush, () => panel() === null);
@@ -739,12 +605,7 @@ describe("PlanBreadcrumbs filter", () => {
   });
 
   test("marks the heading the reader is on among the results", async () => {
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await openFilter(target, flush);
+    const { flush } = await openedFilter();
     expect(options().map((r) => r.getAttribute("aria-current"))).toEqual([
       null,
       null,
@@ -761,13 +622,7 @@ describe("PlanBreadcrumbs filter", () => {
   // walk itself; that the newly selected row is SCROLLED into view is real-browser
   // and lives in the e2e.
   test("Tab walks the selection to the next row", async () => {
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await openFilter(target, flush);
-    await flushUntil(flush, () => selectedLabels().length > 0);
+    const { flush } = await openFilterSelected();
     expect(selectedLabels()).toEqual(["Overview"]);
 
     pressTab(flush);
@@ -777,13 +632,7 @@ describe("PlanBreadcrumbs filter", () => {
   });
 
   test("Shift+Tab walks the selection to the previous row", async () => {
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await openFilter(target, flush);
-    await flushUntil(flush, () => selectedLabels().length > 0);
+    const { flush } = await openFilterSelected();
     pressTab(flush);
     await flushUntil(flush, () => selectedLabels()[0] === "Approach");
 
@@ -796,13 +645,7 @@ describe("PlanBreadcrumbs filter", () => {
   // The command defaults `loop` OFF, where menu content defaults it on — so the two
   // views of one surface would stop at opposite ends without the prop being set.
   test("the Tab walk wraps at both ends of the list", async () => {
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await openFilter(target, flush);
-    await flushUntil(flush, () => selectedLabels().length > 0);
+    const { flush } = await openFilterSelected();
     expect(selectedLabels()).toEqual(["Overview"]);
 
     // Backwards off the first row lands on the last.
@@ -821,13 +664,7 @@ describe("PlanBreadcrumbs filter", () => {
   // `aria-activedescendant` on the field is what narrates the walk, and it only does
   // that while the field is the focused element.
   test("the Tab walk leaves focus in the query field", async () => {
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await openFilter(target, flush);
-    await flushUntil(flush, () => selectedLabels().length > 0);
+    const { flush } = await openFilterSelected();
 
     pressTab(flush);
     await flushUntil(flush, () => selectedLabels()[0] === "Approach");
@@ -843,13 +680,7 @@ describe("PlanBreadcrumbs filter", () => {
   // traps none, and off the end of the document — the panel is portalled to the body
   // and nothing is tabbable after it.
   test("the Tab walk suppresses the browser's own tab move", async () => {
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await openFilter(target, flush);
-    await flushUntil(flush, () => selectedLabels().length > 0);
+    const { flush } = await openFilterSelected();
 
     const event = pressTab(flush);
     expect(event.defaultPrevented).toBe(true);
@@ -863,13 +694,7 @@ describe("PlanBreadcrumbs filter", () => {
   // repeat AND by the hold-to-repeat timer, at two different rates, and every hold
   // would double-step. The repeat is dropped here; the timer owns the cadence.
   test("an OS repeat of a held Tab walks no further", async () => {
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await openFilter(target, flush);
-    await flushUntil(flush, () => selectedLabels().length > 0);
+    const { flush } = await openFilterSelected();
     expect(selectedLabels()).toEqual(["Overview"]);
 
     // A press, then its repeat — the order a held key really arrives in. The OS
@@ -887,23 +712,11 @@ describe("PlanBreadcrumbs filter", () => {
 
   test("teaches the slash in the menu only while shortcut hints are shown", async () => {
     const hint = () => document.body.querySelector(".crumb-menu-hint");
-    const on = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-      showShortcutHints: true,
-    });
-    await openCrumb(on.target, 2, on.flush);
+    const on = await openedCrumb(2, { showShortcutHints: true });
     expect(hint()?.textContent).toContain("/");
     await closeMenu(on.target, on.flush);
 
-    const off = render(PlanBreadcrumbs, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-      showShortcutHints: false,
-    });
-    await openCrumb(off.target, 2, off.flush);
+    const off = await openedCrumb(2, { showShortcutHints: false });
     expect(hint()).toBeNull();
     await closeMenu(off.target, off.flush);
   });
@@ -917,7 +730,7 @@ describe("PlanBreadcrumbs filter", () => {
 // anything, and that the marker is a real control sitting in the trail.
 describe("PlanBreadcrumbs overflow", () => {
   test("shows every level of a deep trail when the row has room for it", () => {
-    const { target } = render(PlanBreadcrumbs, { headings: DEEP, activeLine: 7, onJump: () => {} });
+    const { target } = mountCrumbs({ headings: DEEP, activeLine: 7 });
     expect(crumbs(target).map((c) => c.textContent?.trim())).toEqual([
       "One",
       "Two",
@@ -930,14 +743,14 @@ describe("PlanBreadcrumbs overflow", () => {
   // from it: that is what keeps the full trail measurable while a collapsed one
   // is on screen.
   test("keeps the elision marker in the trail, elided, when nothing is hidden", () => {
-    const { target } = render(PlanBreadcrumbs, { headings: DEEP, activeLine: 7, onJump: () => {} });
+    const { target } = mountCrumbs({ headings: DEEP, activeLine: 7 });
     const marker = target.querySelector(".crumb-ellipsis");
     expect(marker).not.toBeNull();
     expect(marker?.closest(".crumb-marker")?.classList.contains("elided")).toBe(true);
   });
 
   test("makes the elision marker a control rather than inert punctuation", () => {
-    const { target } = render(PlanBreadcrumbs, { headings: DEEP, activeLine: 7, onJump: () => {} });
+    const { target } = mountCrumbs({ headings: DEEP, activeLine: 7 });
     const marker = target.querySelector(".crumb-ellipsis");
     expect(marker?.tagName).toBe("BUTTON");
     expect(marker?.getAttribute("aria-hidden")).toBeNull();
@@ -948,12 +761,7 @@ describe("PlanBreadcrumbs overflow", () => {
   // Whatever the row can hold, the outermost crumb's menu nests every level
   // below it, so no collapse can put a heading out of reach.
   test("keeps every level below the outermost crumb reachable from its menu", async () => {
-    const { target, flush } = render(PlanBreadcrumbs, {
-      headings: DEEP,
-      activeLine: 7,
-      onJump: () => {},
-    });
-    await openCrumb(target, 0, flush);
+    await openedCrumb(0, { headings: DEEP, activeLine: 7 });
     expect(menuRows().map((r) => r.getAttribute("data-slot"))).toEqual([
       "dropdown-menu-sub-trigger",
     ]);

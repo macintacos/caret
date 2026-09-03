@@ -1,7 +1,7 @@
 import "@ui/test-setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
 
-import type { PlanVersion } from "@core/lib/types";
+import { versions } from "@ui/test-plan-versions.ts";
 import { type CompareStore, createCompare } from "@/state/compare.svelte.ts";
 import type { DiffIndicators, DiffStyle } from "$lib/diffview/types.ts";
 import type { SoundEvent } from "$lib/sound.ts";
@@ -31,16 +31,6 @@ function build(store: CompareStore) {
     writeIndicatorsPref: (i) => writtenIndicators.push(i),
     sound: (e) => sounds.push(e),
   });
-}
-
-/** n versions numbered 1..n; plan text encodes the number for assertions. */
-function versions(n: number): PlanVersion[] {
-  return Array.from({ length: n }, (_, i) => ({
-    version: i + 1,
-    plan: `plan v${i + 1}`,
-    annotations: [],
-    createdAt: i,
-  }));
 }
 
 beforeEach(() => {

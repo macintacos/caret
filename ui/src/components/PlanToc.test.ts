@@ -1,19 +1,12 @@
 import "@ui/test-mount.ts";
 import { describe, expect, test } from "bun:test";
 
+import type { ComponentProps } from "svelte";
+
 import { capture, flushUntil, render } from "@ui/test-mount.ts";
+import { HEADINGS, releaseKey } from "@ui/test-plan-nav.ts";
 import PlanToc from "@/components/PlanToc.svelte";
 import type { TocHeading } from "$lib/toc.ts";
-
-// The same three-level shape PlanBreadcrumbs.test.ts uses, so the two heading
-// surfaces are read against one fixture: "Details" sits under "Approach", which
-// shares its level with "Verification".
-const HEADINGS: TocHeading[] = [
-  { level: 1, text: "Overview", line: 1 },
-  { level: 2, text: "Approach", line: 5 },
-  { level: 3, text: "Details", line: 9 },
-  { level: 2, text: "Verification", line: 20 },
-];
 
 // EXC-1103's own worked example, and the shape test/e2e/plan-toc.e2e.ts fixtures:
 // filtering on "notes" leaves one match under Setup and TWO under Rollout, which
@@ -165,15 +158,6 @@ function pressArrow(flush: () => void, key: "ArrowUp" | "ArrowDown"): void {
   flush();
 }
 
-/** Let a pressed key go, on `window`, where the popup's hold-to-repeat listens.
- *
- * Every press above is a PRESS, so each one ends here. A keydown with no keyup leaves
- * a real 250ms run armed (EXC-1122) that outlives the test and walks a panel a later
- * one is asserting against — which is exactly what a browser never does, since a
- * press always ends. */
-const releaseKey = (key: string) =>
-  window.dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true }));
-
 /** Open the popup and wait for its portalled content. The flush BEFORE the click
  * is load-bearing: render() leaves the mount's effects pending, and a click landing
  * on that unsettled graph flips the trigger's aria-expanded while bits-ui's portal
@@ -196,6 +180,56 @@ async function close(target: HTMLElement, flush: () => void): Promise<void> {
   await flushUntil(flush, () => listbox() === null);
 }
 
+type TocProps = ComponentProps<typeof PlanToc>;
+
+/** Mount PlanToc against the shared three-level fixture, closed. Every prop can
+ * be overridden; the defaults are the shape most tests read against. */
+function mountToc(props: Partial<TocProps> = {}): { target: HTMLElement; flush: () => void } {
+  return render(PlanToc, { headings: HEADINGS, activeLine: 9, onJump: () => {}, ...props });
+}
+
+/** Mount and open the popup via its trigger. */
+async function openToc(props: Partial<TocProps> = {}): Promise<{
+  target: HTMLElement;
+  flush: () => void;
+}> {
+  const { target, flush } = mountToc(props);
+  await open(target, flush);
+  return { target, flush };
+}
+
+/** Mount, open, and wait for the reading position to seed the roving selection —
+ * the state every Tab/arrow-walk test starts from. */
+async function openTocSelected(props: Partial<TocProps> = {}): Promise<{
+  target: HTMLElement;
+  flush: () => void;
+}> {
+  const { target, flush } = await openToc(props);
+  await flushUntil(flush, () => options().some((o) => o.hasAttribute("data-selected")));
+  return { target, flush };
+}
+
+/** Mount with an `onExposeOpen` capture wired in, flushed so the exposed action
+ * is armed. */
+function renderExposedToc(props: Partial<TocProps> = {}): {
+  target: HTMLElement;
+  flush: () => void;
+  expose: ReturnType<typeof capture<() => void>>;
+} {
+  const expose = capture<() => void>();
+  const { target, flush } = mountToc({ onExposeOpen: expose.cb, ...props });
+  flush();
+  return { target, flush, expose };
+}
+
+/** Open BRANCHED and filter to "notes" — the three-match state ("Setup notes",
+ * "Rollout notes", "Deploy notes") several tests read against. */
+async function openBranchedNotes(): Promise<{ target: HTMLElement; flush: () => void }> {
+  const { target, flush } = await openToc({ headings: BRANCHED, activeLine: null });
+  await typeQuery("notes", flush, () => options().length === 3);
+  return { target, flush };
+}
+
 /** Type into the filter field the way a reviewer would, so the bound query — and
  * with it the filtered tree — updates. `done` says what settling looks like for
  * this query: a query that matches nothing never grows the option set, so polling
@@ -212,9 +246,21 @@ async function typeQuery(
   await flushUntil(flush, done);
 }
 
+/** The unfiltered outline's labels and indent — the baseline both the initial
+ * render and a cleared filter return to. */
+function expectUnfilteredOutline(): void {
+  expect(options().map(label)).toEqual(["Overview", "Approach", "Details", "Verification"]);
+  expect(options().map((r) => r.style.getPropertyValue("--toc-depth"))).toEqual([
+    "0",
+    "1",
+    "2",
+    "1",
+  ]);
+}
+
 describe("PlanToc surface", () => {
   test("renders a trigger and nothing else until it is opened", () => {
-    const { target } = render(PlanToc, { headings: HEADINGS, activeLine: 9, onJump: () => {} });
+    const { target } = mountToc();
     expect(trigger(target)?.textContent?.trim()).toBe("Contents");
     expect(panel()).toBeNull();
   });
@@ -222,12 +268,7 @@ describe("PlanToc surface", () => {
   // A popover anchored to its trigger, not a centered overlay: bits-ui's popover
   // content is what carries the anchoring, so its slot is the contract.
   test("opens a popover holding a labelled listbox", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await open(target, flush);
+    const { target, flush } = await openToc();
     expect(panel()).not.toBeNull();
     expect(listbox()?.getAttribute("role")).toBe("listbox");
     expect(listbox()?.getAttribute("aria-label")).toBe("Plan headings");
@@ -238,19 +279,8 @@ describe("PlanToc surface", () => {
   });
 
   test("renders every heading in document order, indented by level", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await open(target, flush);
-    expect(options().map(label)).toEqual(["Overview", "Approach", "Details", "Verification"]);
-    expect(options().map((r) => r.style.getPropertyValue("--toc-depth"))).toEqual([
-      "0",
-      "1",
-      "2",
-      "1",
-    ]);
+    const { target, flush } = await openToc();
+    expectUnfilteredOutline();
     // One guide column per level between the plan's own root and the row (EXC-1106).
     // Read beside the indent it has to agree with, rather than in a test of its own.
     expect(options().map((r) => r.style.getPropertyValue("--toc-guides"))).toEqual([
@@ -270,12 +300,7 @@ describe("PlanToc surface", () => {
   // step in with nothing at zero — deliberate, and documented on the indent rule. A
   // guide drawn in that empty column would claim a parent the plan does not have.
   test("draws no guide for a root the plan does not have", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: SHALLOW,
-      activeLine: null,
-      onJump: () => {},
-    });
-    await open(target, flush);
+    const { target, flush } = await openToc({ headings: SHALLOW, activeLine: null });
     expect(options().map(label)).toEqual(["Setup", "Prereqs", "Rollout"]);
     expect(options().map((r) => r.style.getPropertyValue("--toc-depth"))).toEqual(["1", "2", "1"]);
     expect(options().map((r) => r.style.getPropertyValue("--toc-guides"))).toEqual(["0", "1", "0"]);
@@ -285,12 +310,7 @@ describe("PlanToc surface", () => {
   // Driven by the activeLine prop — the same value the breadcrumbs bar receives —
   // rather than by any scroll tracking of its own.
   test("marks the heading being read, and only that one", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await open(target, flush);
+    const { target, flush } = await openToc();
     const marked = options().filter((r) => r.getAttribute("aria-current") === "location");
     expect(marked.map(label)).toEqual(["Details"]);
     await close(target, flush);
@@ -301,13 +321,7 @@ describe("PlanToc surface", () => {
   // it is an attribute, and it is the half a bits-ui bump could silently break
   // while leaving every other assertion here green.
   test("opens with the heading being read pre-selected", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await open(target, flush);
-    await flushUntil(flush, () => options().some((o) => o.hasAttribute("data-selected")));
+    const { target, flush } = await openTocSelected();
     const chosen = options().filter((o) => o.getAttribute("aria-selected") === "true");
     expect(chosen.map(label)).toEqual(["Details"]);
     await close(target, flush);
@@ -316,12 +330,7 @@ describe("PlanToc surface", () => {
   // EXC-1103: filtering collapses a match's ancestors into ONE header rather than
   // spending a row per ancestor per match.
   test("collapses a match's ancestors into a single breadcrumb header", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await open(target, flush);
+    const { target, flush } = await openToc();
     await typeQuery("details", flush);
     expect(groupHeadings().map(label)).toEqual(["Overview › Approach"]);
     expect(options().map(label)).toEqual(["Details"]);
@@ -331,13 +340,7 @@ describe("PlanToc surface", () => {
   });
 
   test("gathers two matching siblings under one shared header", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: BRANCHED,
-      activeLine: null,
-      onJump: () => {},
-    });
-    await open(target, flush);
-    await typeQuery("notes", flush, () => options().length === 3);
+    const { target, flush } = await openBranchedNotes();
     // "Setup notes" and "Deploy notes" share the Rollout path, so one header
     // carries both; "Setup" holds the other. Groups, and the rows inside them,
     // in document order — no score reordering.
@@ -353,15 +356,13 @@ describe("PlanToc surface", () => {
   // disagree exactly here, and disagreeing leaves an unlabelled `role="group"` —
   // a level of structure naming nothing, which is what AC11 rules out.
   test("renders no header when every ancestor's text is empty", async () => {
-    const { target, flush } = render(PlanToc, {
+    const { target, flush } = await openToc({
       headings: [
         { level: 1, text: "", line: 1 },
         { level: 2, text: "Setup notes", line: 5 },
       ],
       activeLine: null,
-      onJump: () => {},
     });
-    await open(target, flush);
     await typeQuery("notes", flush);
     expect(options().map(label)).toEqual(["Setup notes"]);
     expect(groups()).toEqual([]);
@@ -370,28 +371,21 @@ describe("PlanToc surface", () => {
   });
 
   test("drops an empty ancestor from the breadcrumb rather than trailing a separator", async () => {
-    const { target, flush } = render(PlanToc, {
+    const { target, flush } = await openToc({
       headings: [
         { level: 1, text: "", line: 1 },
         { level: 2, text: "Setup", line: 5 },
         { level: 3, text: "Setup notes", line: 9 },
       ],
       activeLine: null,
-      onJump: () => {},
     });
-    await open(target, flush);
     await typeQuery("notes", flush);
     expect(groupHeadings().map(label)).toEqual(["Setup"]);
     await close(target, flush);
   });
 
   test("renders a top-level match with no header above it", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 1,
-      onJump: () => {},
-    });
-    await open(target, flush);
+    const { target, flush } = await openToc({ activeLine: 1 });
     await typeQuery("overview", flush);
     expect(options().map(label)).toEqual(["Overview"]);
     // No trail means no group at all, rather than an unlabelled one wrapping the row.
@@ -401,13 +395,7 @@ describe("PlanToc surface", () => {
   });
 
   test("renders every filtered match row flush left, whatever its heading level", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: BRANCHED,
-      activeLine: null,
-      onJump: () => {},
-    });
-    await open(target, flush);
-    await typeQuery("notes", flush, () => options().length === 3);
+    const { target, flush } = await openBranchedNotes();
     // The header carries the hierarchy, so the rows no longer have to: a level-3
     // match sits at the same indent as a level-2 one.
     expect(options().map((r) => r.style.getPropertyValue("--toc-depth"))).toEqual(["0", "0", "0"]);
@@ -422,12 +410,7 @@ describe("PlanToc surface", () => {
   // aria-hidden row (EXC-1096's shape, which this replaces) nor loose text a
   // listbox may not own.
   test("exposes each header as its group's label, not as an inert row", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await open(target, flush);
+    const { target, flush } = await openToc();
     await typeQuery("details", flush);
 
     const group = groups()[0];
@@ -448,12 +431,7 @@ describe("PlanToc surface", () => {
   // added to the vendored command-group.svelte, which a registry re-sync reverts
   // silently (doc/agents/shadcn-rules.md § Edits a re-sync will silently undo).
   test("dresses the header in the shared eyebrow atom", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await open(target, flush);
+    const { target, flush } = await openToc();
     await typeQuery("details", flush);
     expect(groupHeadings()[0]?.classList.contains("eyebrow")).toBe(true);
     await close(target, flush);
@@ -462,32 +440,20 @@ describe("PlanToc surface", () => {
   // AC8: the breadcrumb form is a search affordance only. Clearing the query puts
   // the nested tree back, headers and all gone.
   test("returns to the nested tree when the query is cleared", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await open(target, flush);
+    const { target, flush } = await openToc();
     await typeQuery("details", flush);
     expect(groupHeadings().length).toBe(1);
 
     await typeQuery("", flush, () => options().length === 4);
     expect(groupHeadings()).toEqual([]);
-    expect(options().map(label)).toEqual(["Overview", "Approach", "Details", "Verification"]);
-    expect(options().map((r) => r.style.getPropertyValue("--toc-depth"))).toEqual([
-      "0",
-      "1",
-      "2",
-      "1",
-    ]);
+    expectUnfilteredOutline();
     // Holds either side of the `{#key search === ""}` boundary, not just once.
     expect(looseText()).toEqual([]);
     await close(target, flush);
   });
 
   test("shows helper text when the plan has no headings", async () => {
-    const { target, flush } = render(PlanToc, { headings: [], activeLine: null, onJump: () => {} });
-    await open(target, flush);
+    const { target, flush } = await openToc({ headings: [], activeLine: null });
     expect(options().length).toBe(0);
     expect(helper()?.textContent?.trim()).toBe("No headings in plan");
     // A status message about the list, not a row in it.
@@ -498,12 +464,7 @@ describe("PlanToc surface", () => {
   // A query that hits nothing is a different message from a plan that has no
   // headings, and only the second is a property of the plan.
   test("shows helper text when a query matches nothing", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await open(target, flush);
+    const { target, flush } = await openToc();
     await typeQuery("nothing matches this", flush, () => options().length === 0);
     expect(options().length).toBe(0);
     expect(helper()?.textContent?.trim()).toBe("No headings match");
@@ -519,12 +480,7 @@ describe("PlanToc surface", () => {
   // dropdown, and it rests on the Viewport that command-list.svelte renders — see
   // ui/src/lib/shadcn-command-popover.test.ts for the primitive-level pin.
   test("the filter field narrates the row the selection is on", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await open(target, flush);
+    const { target, flush } = await openToc();
     await flushUntil(flush, () => field()?.getAttribute("aria-activedescendant") != null);
 
     expect(field()?.getAttribute("role")).toBe("combobox");
@@ -541,12 +497,7 @@ describe("PlanToc surface", () => {
   // A pick hands the reviewer to the plan, so it reports the line AND leaves.
   test("reports the picked heading's source line and dismisses", async () => {
     const jump = capture<number>();
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 1,
-      onJump: jump.cb,
-    });
-    await open(target, flush);
+    const { flush } = await openToc({ activeLine: 1, onJump: jump.cb });
     options()[3]?.click();
     await flushUntil(flush, () => listbox() === null);
     expect(jump.last()).toBe(20);
@@ -561,12 +512,7 @@ describe("PlanToc surface", () => {
 // two fills is a computed colour in a real browser, not a mount.
 describe("PlanToc match highlighting", () => {
   test("marks the characters the query matched inside the row's label", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await open(target, flush);
+    const { target, flush } = await openToc();
     await typeQuery("det", flush, () => options().length === 1);
     const row = options()[0];
     if (row === undefined) throw new Error("no match row rendered");
@@ -580,12 +526,7 @@ describe("PlanToc match highlighting", () => {
   // than on the row, because the vendored Command.Item pads its own check indicator with
   // whitespace this change neither adds nor can remove.
   test("adds no character to the label, so the row's accessible name is unchanged", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await open(target, flush);
+    const { target, flush } = await openToc();
     await typeQuery("det", flush, () => options().length === 1);
     expect(options()[0]?.querySelector(".toc-label")?.textContent).toBe("Details");
     await close(target, flush);
@@ -594,12 +535,7 @@ describe("PlanToc match highlighting", () => {
   // AC7, and the reason one matcher can serve both views: the unfiltered view's query is
   // empty, so it renders through the same row snippet with nothing marked.
   test("marks nothing while the query is empty", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await open(target, flush);
+    const { target, flush } = await openToc();
     expect(options().length).toBe(4);
     expect(options().flatMap(hits)).toEqual([]);
     await close(target, flush);
@@ -609,12 +545,7 @@ describe("PlanToc match highlighting", () => {
   // and rebuilds the whole viewport — so the marks going away is a claim about the
   // rebuilt view, not about the one that was marked.
   test("clears every mark when the query is cleared", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await open(target, flush);
+    const { target, flush } = await openToc();
     await typeQuery("det", flush, () => options().length === 1);
     expect(options().flatMap(hits)).toEqual(["Det"]);
 
@@ -627,12 +558,7 @@ describe("PlanToc match highlighting", () => {
   // match appears TWICE — once as a row, once as text inside the header naming its
   // children's path. Only the row is marked; the header is wayfinding, not a result.
   test("leaves a breadcrumb header unmarked even when the query matches its text", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: BRANCHED,
-      activeLine: null,
-      onJump: () => {},
-    });
-    await open(target, flush);
+    const { target, flush } = await openToc({ headings: BRANCHED, activeLine: null });
     await typeQuery("setup", flush, () => options().length === 2);
     expect(options().map(label)).toEqual(["Setup", "Setup notes"]);
     expect(groupHeadings().map(label)).toEqual(["Plan", "Plan › Setup"]);
@@ -645,12 +571,7 @@ describe("PlanToc match highlighting", () => {
   // node where a listbox may not own one, so the structural guard is re-asserted with
   // highlighting on rather than assumed to still hold from the unfiltered case.
   test("keeps the listbox free of loose text while marks are rendered", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await open(target, flush);
+    const { target, flush } = await openToc();
     await typeQuery("det", flush, () => options().length === 1);
     expect(looseText()).toEqual([]);
     await close(target, flush);
@@ -665,12 +586,7 @@ describe("PlanToc match highlighting", () => {
 // pixels and laid-out boxes, so they are pinned in test/e2e/plan-toc.e2e.ts instead.
 describe("PlanToc level markers", () => {
   test("gives every row the glyph for its own heading level", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await open(target, flush);
+    const { target, flush } = await openToc();
     expect(options().map(label)).toEqual(["Overview", "Approach", "Details", "Verification"]);
     expect(levelNames()).toEqual(["heading-1", "heading-2", "heading-3", "heading-2"]);
     await close(target, flush);
@@ -681,13 +597,7 @@ describe("PlanToc level markers", () => {
   // depths to keep the two claims in one place — a marker that survived while the indent
   // came back would not be evidence of anything.
   test("keeps the glyph on every filtered row, where the indent no longer says it", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: BRANCHED,
-      activeLine: null,
-      onJump: () => {},
-    });
-    await open(target, flush);
-    await typeQuery("notes", flush, () => options().length === 3);
+    const { target, flush } = await openBranchedNotes();
     expect(options().map(label)).toEqual(["Setup notes", "Rollout notes", "Deploy notes"]);
     expect(options().map((r) => r.style.getPropertyValue("--toc-depth"))).toEqual(["0", "0", "0"]);
     expect(levelNames()).toEqual(["heading-3", "heading-3", "heading-3"]);
@@ -704,16 +614,14 @@ describe("PlanToc level markers", () => {
   // and indexes the tuple out of range. Without it that branch goes unexercised and reads
   // as dead code to the next person.
   test("falls back to the nearest glyph for a level outside 1–6", async () => {
-    const { target, flush } = render(PlanToc, {
+    const { target, flush } = await openToc({
       headings: [
         { level: 0, text: "Below one", line: 1 },
         { level: 9, text: "Past six", line: 5 },
         { level: Number.NaN, text: "Not a number", line: 9 },
       ],
       activeLine: null,
-      onJump: () => {},
     });
-    await open(target, flush);
     expect(options().map(label)).toEqual(["Below one", "Past six", "Not a number"]);
     expect(options().every((o) => levelGlyph(o) !== null)).toBe(true);
     expect(levelNames()).toEqual(["heading-1", "heading-6", "heading-1"]);
@@ -730,12 +638,7 @@ describe("PlanToc level markers", () => {
   // Whether the name really computes to the heading alone is a role-engine question and is
   // asserted in test/e2e/plan-toc.e2e.ts.
   test("keeps the marker out of the accessibility tree and out of the row's text", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await open(target, flush);
+    const { target, flush } = await openToc();
     const row = options()[2];
     if (row === undefined) throw new Error("no rows rendered");
     expect(levelGlyph(row)?.getAttribute("aria-hidden")).toBe("true");
@@ -760,12 +663,7 @@ describe("PlanToc level markers", () => {
 // attribute would leave the whole pass inert with nothing else reding.
 describe("PlanToc view marker", () => {
   test("publishes which view the list is rendering", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: BRANCHED,
-      activeLine: 5,
-      onJump: () => {},
-    });
-    await open(target, flush);
+    const { target, flush } = await openToc({ headings: BRANCHED, activeLine: 5 });
     // Asserted here rather than only inside a poll condition: flushUntil gives up
     // silently after its tries, so a claim made only in the predicate passes vacuously.
     expect(listbox()?.getAttribute("data-toc-view")).toBe("outline");
@@ -788,12 +686,7 @@ describe("PlanToc view marker", () => {
     // and a whitespace-only query is where the two disagree. It must land on the view
     // that is actually rendered — the outline — or the filtered view's row animation
     // would fire over a list of several hundred outline rows.
-    const { target, flush } = render(PlanToc, {
-      headings: BRANCHED,
-      activeLine: 5,
-      onJump: () => {},
-    });
-    await open(target, flush);
+    const { target, flush } = await openToc({ headings: BRANCHED, activeLine: 5 });
     // Into the matches view FIRST, so the swing back to "outline" is what this test
     // observes. Going straight to whitespace from an empty field would leave the poll
     // predicate already true on entry and the assertion true before the keystroke —
@@ -814,19 +707,14 @@ describe("PlanToc view marker", () => {
 // here is the wiring either side of it.
 describe("PlanToc entry points", () => {
   test("advertises the contents shortcut on the trigger", () => {
-    const { target } = render(PlanToc, { headings: HEADINGS, activeLine: 9, onJump: () => {} });
+    const { target } = mountToc();
     // Derived from the reservation rather than typed here, so the advertised hint
     // cannot drift from the key the dispatcher fires on.
     expect(trigger(target)?.getAttribute("aria-keyshortcuts")).toBe("\\");
   });
 
   test("teaches the \\ key with a cap when shortcut hints are on", () => {
-    const { target } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-      showShortcutHints: true,
-    });
+    const { target } = mountToc({ showShortcutHints: true });
     // aria-hidden, so the glyph never lands in the trigger's accessible name —
     // the same split the compare toggle's `d` cap takes.
     expect(cap(target)?.textContent?.trim()).toBe("\\");
@@ -835,22 +723,15 @@ describe("PlanToc entry points", () => {
   });
 
   test("hides the cap when shortcut hints are off", () => {
-    const { target } = render(PlanToc, { headings: HEADINGS, activeLine: 9, onJump: () => {} });
+    const { target } = mountToc();
     expect(cap(target)).toBeNull();
   });
 
   test("hands up an open action that summons the popup", async () => {
-    const expose = capture<() => void>();
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-      onExposeOpen: expose.cb,
-    });
-    flush();
-    const openToc = expose.last();
-    if (openToc === undefined) throw new Error("PlanToc never exposed its open action");
-    openToc();
+    const { target, flush, expose } = renderExposedToc();
+    const openAction = expose.last();
+    if (openAction === undefined) throw new Error("PlanToc never exposed its open action");
+    openAction();
     await flushUntil(flush, () => listbox() !== null);
     expect(panel()).not.toBeNull();
     await close(target, flush);
@@ -864,14 +745,7 @@ describe("PlanToc entry points", () => {
   // that attribute is derived from the activeLine prop and reads the same whether
   // the seeding ran or not, which is exactly how an unseeded open looks correct.
   test("the exposed open seeds the heading being read, as the trigger does", async () => {
-    const expose = capture<() => void>();
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-      onExposeOpen: expose.cb,
-    });
-    flush();
+    const { target, flush, expose } = renderExposedToc();
     expose.last()?.();
     await flushUntil(flush, () => listbox() !== null);
     await flushUntil(flush, () => options().some((o) => o.hasAttribute("data-selected")));
@@ -884,13 +758,7 @@ describe("PlanToc entry points", () => {
   });
 
   test("the exposed open clears a query left by the previous session", async () => {
-    const expose = capture<() => void>();
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-      onExposeOpen: expose.cb,
-    });
+    const { target, flush, expose } = renderExposedToc();
     await open(target, flush);
     await typeQuery("details", flush);
     expect(options().length).toBe(1);
@@ -910,13 +778,7 @@ describe("PlanToc entry points", () => {
   // These pin the walk itself; that the newly selected row is SCROLLED into view is
   // real-browser and lives in the e2e.
   test("Tab walks the selection to the next row", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await open(target, flush);
-    await flushUntil(flush, () => options().some((o) => o.hasAttribute("data-selected")));
+    const { target, flush } = await openTocSelected();
     expect(selectedLabels()).toEqual(["Details"]);
 
     pressTab(flush);
@@ -926,13 +788,7 @@ describe("PlanToc entry points", () => {
   });
 
   test("Shift+Tab walks the selection to the previous row", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await open(target, flush);
-    await flushUntil(flush, () => options().some((o) => o.hasAttribute("data-selected")));
+    const { target, flush } = await openTocSelected();
     expect(selectedLabels()).toEqual(["Details"]);
 
     pressTab(flush, { shift: true });
@@ -945,13 +801,7 @@ describe("PlanToc entry points", () => {
   // `aria-activedescendant` on the field is what narrates the walk, and it only
   // does that while the field is the focused element (EXC-1096).
   test("the Tab walk leaves focus in the filter field", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await open(target, flush);
-    await flushUntil(flush, () => options().some((o) => o.hasAttribute("data-selected")));
+    const { target, flush } = await openTocSelected();
 
     pressTab(flush);
     await flushUntil(flush, () => selectedLabels()[0] === "Verification");
@@ -966,13 +816,7 @@ describe("PlanToc entry points", () => {
   // A Tab that reached the browser's default would move focus out of the field and,
   // with one tabbable in the trap, straight back to it — losing the walk silently.
   test("the Tab walk suppresses the browser's own tab move", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await open(target, flush);
-    await flushUntil(flush, () => options().some((o) => o.hasAttribute("data-selected")));
+    const { target, flush } = await openTocSelected();
 
     const event = pressTab(flush);
     expect(event.defaultPrevented).toBe(true);
@@ -986,13 +830,7 @@ describe("PlanToc entry points", () => {
   // the Tab below — which is the point: Tab wrapping while the arrows stopped in
   // the same list would read as a bug.
   test("the Tab walk wraps at both ends of the list", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await open(target, flush);
-    await flushUntil(flush, () => options().some((o) => o.hasAttribute("data-selected")));
+    const { target, flush } = await openTocSelected();
     expect(selectedLabels()).toEqual(["Details"]);
 
     // Forwards off the last row and back to the first.
@@ -1013,13 +851,7 @@ describe("PlanToc entry points", () => {
   // is set for the list, not for one key, and Tab wrapping while the arrows stopped
   // dead in the same list would read as a bug.
   test("the arrows wrap at both ends of the list", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await open(target, flush);
-    await flushUntil(flush, () => options().some((o) => o.hasAttribute("data-selected")));
+    const { target, flush } = await openTocSelected();
     expect(selectedLabels()).toEqual(["Details"]);
 
     pressArrow(flush, "ArrowUp");
@@ -1041,13 +873,7 @@ describe("PlanToc entry points", () => {
   // hold-to-repeat timer, at two different rates, and every hold would double-step.
   // The repeat is dropped here; the timer owns the cadence.
   test("an OS repeat of a held Tab walks no further", async () => {
-    const { target, flush } = render(PlanToc, {
-      headings: HEADINGS,
-      activeLine: 9,
-      onJump: () => {},
-    });
-    await open(target, flush);
-    await flushUntil(flush, () => options().some((o) => o.hasAttribute("data-selected")));
+    const { target, flush } = await openTocSelected();
     expect(selectedLabels()).toEqual(["Details"]);
 
     // A press, then its repeat — the order a held key really arrives in. The OS

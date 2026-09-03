@@ -493,18 +493,30 @@ describe("every theme", () => {
   // Which SELECTORS spend it is coreStyles.test.ts's job — it pins the six this epic drew
   // by name. Neither file can catch a SEVENTH replacement marker shipped on --ink-faint;
   // that gap is real and named here rather than papered over.
-  test("keeps every replacement marker above the non-text floor on every palette", () => {
-    const MARKER_INK = "--ink-soft" as const;
+  /** Assert `paintOn(theme, ground)` clears the 3:1 non-text floor against every
+   * row-banded ground, on every palette. */
+  function expectAboveNonTextFloor(
+    paintOn: (theme: (typeof THEMES)[ThemeId], ground: string) => string,
+    label: string,
+  ): void {
     for (const [id, theme] of themeEntries()) {
       const sunk = theme.tokens["--paper-sunk"];
       for (const pct of ROW_BANDS) {
         const ground = banded(sunk, theme.tokens["--ink"], pct);
         expect(
-          contrast(theme.tokens[MARKER_INK], ground),
-          `${id} replacement marker ${MARKER_INK} on --paper-sunk banded ${pct * 100}%`,
+          contrast(paintOn(theme, ground), ground),
+          `${id} ${label} on --paper-sunk banded ${pct * 100}%`,
         ).toBeGreaterThanOrEqual(3);
       }
     }
+  }
+
+  test("keeps every replacement marker above the non-text floor on every palette", () => {
+    const MARKER_INK = "--ink-soft" as const;
+    expectAboveNonTextFloor(
+      (theme) => theme.tokens[MARKER_INK],
+      `replacement marker ${MARKER_INK}`,
+    );
   });
 
   // EXC-862 draws a thematic break as a full-width hairline and takes the source glyphs
@@ -533,16 +545,10 @@ describe("every theme", () => {
       return m === null ? 1 : Number.parseInt(m[1] as string, 16) / 255;
     };
     const over = (fg: string, bg: string) => banded(bg, fg, alpha(fg));
-    for (const [id, theme] of themeEntries()) {
-      const sunk = theme.tokens["--paper-sunk"];
-      for (const pct of ROW_BANDS) {
-        const ground = banded(sunk, theme.tokens["--ink"], pct);
-        expect(
-          contrast(over(theme.tokens[RULE_INK], ground), ground),
-          `${id} thematic-break rule ${RULE_INK} on --paper-sunk banded ${pct * 100}%`,
-        ).toBeGreaterThanOrEqual(3);
-      }
-    }
+    expectAboveNonTextFloor(
+      (theme, ground) => over(theme.tokens[RULE_INK], ground),
+      `thematic-break rule ${RULE_INK}`,
+    );
   });
 
   // The table's rules — the column dividers, the delimiter rule and the row hairlines —

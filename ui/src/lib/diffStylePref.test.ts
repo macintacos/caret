@@ -1,6 +1,7 @@
 import "@ui/test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { withBlockedStorage } from "@ui/test-storage.ts";
 import { DIFF_STYLE_KEY, readDiffStyle, writeDiffStyle } from "$lib/diffStylePref.ts";
 
 afterEach(() => localStorage.clear());
@@ -21,21 +22,9 @@ describe("readDiffStyle", () => {
   });
 
   test("fails safe to split when localStorage throws", () => {
-    const original = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      get() {
-        throw new Error("blocked");
-      },
-    });
-    try {
+    withBlockedStorage(() => {
       expect(readDiffStyle()).toBe("split");
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: original,
-      });
-    }
+    });
   });
 });
 
@@ -47,20 +36,8 @@ describe("writeDiffStyle", () => {
   });
 
   test("swallows a localStorage write failure", () => {
-    const original = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      get() {
-        throw new Error("blocked");
-      },
-    });
-    try {
+    withBlockedStorage(() => {
       expect(() => writeDiffStyle("unified")).not.toThrow();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: original,
-      });
-    }
+    });
   });
 });

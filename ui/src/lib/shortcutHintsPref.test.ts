@@ -1,6 +1,7 @@
 import "@ui/test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { withBlockedStorage } from "@ui/test-storage.ts";
 import {
   readShortcutHints,
   SHORTCUT_HINTS_KEY,
@@ -30,21 +31,9 @@ describe("readShortcutHints", () => {
   });
 
   test("fails safe to true when localStorage throws", () => {
-    const original = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      get() {
-        throw new Error("blocked");
-      },
-    });
-    try {
+    withBlockedStorage(() => {
       expect(readShortcutHints()).toBe(true);
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: original,
-      });
-    }
+    });
   });
 });
 
@@ -63,20 +52,8 @@ describe("writeShortcutHints", () => {
   });
 
   test("swallows a localStorage write failure", () => {
-    const original = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      get() {
-        throw new Error("blocked");
-      },
-    });
-    try {
+    withBlockedStorage(() => {
       expect(() => writeShortcutHints(false)).not.toThrow();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: original,
-      });
-    }
+    });
   });
 });

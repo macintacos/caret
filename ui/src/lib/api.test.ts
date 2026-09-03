@@ -9,7 +9,13 @@ import type {
   SkillRef,
   UpdateReport,
 } from "@core/lib/types";
-import { type LogCapture, logCapture } from "@ui/test-helpers.ts";
+import type { LogCapture } from "@ui/test-helpers.ts";
+import {
+  emptyResponse,
+  installRoutedFetch,
+  jsonResponse,
+  type Respond,
+} from "@ui/test-routed-fetch.ts";
 import {
   getApproveMode,
   getDiagnostics,
@@ -30,29 +36,36 @@ import {
 } from "$lib/api.ts";
 import { flush } from "$lib/log.ts";
 
-// Shared URL-routing fetch double (test-helpers.ts): /api/logs POSTs are
+// Shared URL-routing fetch double (test-routed-fetch.ts): /api/logs POSTs are
 // captured; the review/prefs endpoints answer from the per-test `respond` so
 // each case can pick success, a non-2xx Response, or a rejected promise.
-let respond: (url: string, options: RequestInit | undefined) => Promise<Response>;
+let respond: Respond;
 let cap: LogCapture;
 
 beforeEach(() => {
-  respond = () => Promise.resolve(new Response(null, { status: 204 }));
-  cap = logCapture((url, options) => respond(url, options));
+  respond = emptyResponse;
+  cap = installRoutedFetch(() => respond);
 });
 
 afterEach(() => {
   cap.restore();
 });
 
-function jsonResponse(value: unknown): Response {
-  return new Response(JSON.stringify(value), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
+const ID = "abc12345-6789-0000-0000-000000000000";
+
+/** Assert a record was logged at `level` under `step`, returning it so the
+ * caller can check its own `msg`/`extra`. Call `flush()` first. */
+function expectLoggedAt(level: string, step: string): Record<string, unknown> {
+  const rec = cap.events().find((r) => r.level === level);
+  expect(rec).toBeDefined();
+  expect(rec!.step).toBe(step);
+  return rec!;
 }
 
-const ID = "abc12345-6789-0000-0000-000000000000";
+/** Assert nothing was recorded. Call `flush()` first. */
+function expectNoRecords(): void {
+  expect(cap.events()).toHaveLength(0);
+}
 
 describe("resolveReview instrumentation", () => {
   test("success emits exactly one info record with id prefix, behavior, extras", async () => {
@@ -98,12 +111,9 @@ describe("resolveReview instrumentation", () => {
     await expect(resolveReview(ID, { behavior: "allow" })).rejects.toBeInstanceOf(HttpError);
     flush();
 
-    const records = cap.events();
-    const warn = records.find((r) => r.level === "warn");
-    expect(warn).toBeDefined();
-    expect(warn!.step).toBe("resolve");
-    expect(warn!.msg as string).toContain("http 409");
-    expect(warn!.extra).toMatchObject({ reviewId: ID, status: 409 });
+    const warn = expectLoggedAt("warn", "resolve");
+    expect(warn.msg as string).toContain("http 409");
+    expect(warn.extra).toMatchObject({ reviewId: ID, status: 409 });
   });
 
   test("a network reject emits an error record and rejects", async () => {
@@ -112,10 +122,8 @@ describe("resolveReview instrumentation", () => {
     await expect(resolveReview(ID, { behavior: "allow" })).rejects.toThrow("network down");
     flush();
 
-    const err = cap.events().find((r) => r.level === "error");
-    expect(err).toBeDefined();
-    expect(err!.step).toBe("resolve");
-    expect(err!.extra).toMatchObject({ reviewId: ID });
+    const err = expectLoggedAt("error", "resolve");
+    expect(err.extra).toMatchObject({ reviewId: ID });
   });
 });
 
@@ -265,7 +273,7 @@ describe("putDraft instrumentation", () => {
     await putDraft(ID, { annotations, generalCommentDraft: "", composerScratches: [] });
     flush();
 
-    expect(cap.events()).toHaveLength(0);
+    expectNoRecords();
   });
 
   test("failure warns with annotationCount and rejects", async () => {
@@ -276,10 +284,8 @@ describe("putDraft instrumentation", () => {
     ).rejects.toBeInstanceOf(HttpError);
     flush();
 
-    const warn = cap.events().find((r) => r.level === "warn");
-    expect(warn).toBeDefined();
-    expect(warn!.step).toBe("draft");
-    expect(warn!.extra).toMatchObject({ reviewId: ID, annotationCount: 2 });
+    const warn = expectLoggedAt("warn", "draft");
+    expect(warn.extra).toMatchObject({ reviewId: ID, annotationCount: 2 });
   });
 
   test("forwards the composer scratches in the PUT body", async () => {
@@ -301,10 +307,8 @@ describe("getApproveMode instrumentation", () => {
     await expect(getApproveMode()).rejects.toThrow("offline");
     flush();
 
-    const warn = cap.events().find((r) => r.level === "warn");
-    expect(warn).toBeDefined();
-    expect(warn!.step).toBe("prefs");
-    expect(warn!.msg as string).toContain("approve mode read failed");
+    const warn = expectLoggedAt("warn", "prefs");
+    expect(warn.msg as string).toContain("approve mode read failed");
   });
 });
 
@@ -315,7 +319,7 @@ describe("getHealth instrumentation", () => {
     await getHealth();
     flush();
 
-    expect(cap.events()).toHaveLength(0);
+    expectNoRecords();
   });
 
   test("failure warns at step request and rejects", async () => {
@@ -324,10 +328,8 @@ describe("getHealth instrumentation", () => {
     await expect(getHealth()).rejects.toThrow("offline");
     flush();
 
-    const warn = cap.events().find((r) => r.level === "warn");
-    expect(warn).toBeDefined();
-    expect(warn!.step).toBe("request");
-    expect(warn!.msg as string).toContain("health probe failed");
+    const warn = expectLoggedAt("warn", "request");
+    expect(warn.msg as string).toContain("health probe failed");
   });
 });
 
@@ -345,7 +347,7 @@ describe("getDiagnostics instrumentation", () => {
     expect(await getDiagnostics()).toEqual(doc);
     flush();
 
-    expect(cap.events()).toHaveLength(0);
+    expectNoRecords();
   });
 
   test("failure warns at step request and rejects", async () => {
@@ -354,10 +356,8 @@ describe("getDiagnostics instrumentation", () => {
     await expect(getDiagnostics()).rejects.toThrow("offline");
     flush();
 
-    const warn = cap.events().find((r) => r.level === "warn");
-    expect(warn).toBeDefined();
-    expect(warn!.step).toBe("request");
-    expect(warn!.msg as string).toContain("diagnostics probe failed");
+    const warn = expectLoggedAt("warn", "request");
+    expect(warn.msg as string).toContain("diagnostics probe failed");
   });
 });
 
@@ -368,7 +368,7 @@ describe("getReview instrumentation", () => {
     await getReview(ID);
     flush();
 
-    expect(cap.events()).toHaveLength(0);
+    expectNoRecords();
   });
 
   test("a non-2xx response warns with the id prefix and status", async () => {
@@ -377,12 +377,10 @@ describe("getReview instrumentation", () => {
     await expect(getReview(ID)).rejects.toBeInstanceOf(HttpError);
     flush();
 
-    const warn = cap.events().find((r) => r.level === "warn");
-    expect(warn).toBeDefined();
-    expect(warn!.step).toBe("request");
-    expect(warn!.msg as string).toContain("abc12345");
-    expect(warn!.msg as string).toContain("http 404");
-    expect(warn!.extra).toMatchObject({ reviewId: ID, status: 404 });
+    const warn = expectLoggedAt("warn", "request");
+    expect(warn.msg as string).toContain("abc12345");
+    expect(warn.msg as string).toContain("http 404");
+    expect(warn.extra).toMatchObject({ reviewId: ID, status: 404 });
   });
 
   test("a network reject emits an error record and rejects", async () => {
@@ -391,10 +389,8 @@ describe("getReview instrumentation", () => {
     await expect(getReview(ID)).rejects.toThrow("network down");
     flush();
 
-    const err = cap.events().find((r) => r.level === "error");
-    expect(err).toBeDefined();
-    expect(err!.step).toBe("request");
-    expect(err!.extra).toMatchObject({ reviewId: ID });
+    const err = expectLoggedAt("error", "request");
+    expect(err.extra).toMatchObject({ reviewId: ID });
   });
 });
 
@@ -656,8 +652,7 @@ describe("setPrefs", () => {
     await expect(setPrefs({ updates: { check: false } })).rejects.toThrow();
     await flush();
 
-    const warn = cap.events().find((r) => r.level === "warn");
-    expect(warn?.step).toBe("prefs");
+    expectLoggedAt("warn", "prefs");
   });
 
   test("a successful save emits no record", async () => {
@@ -667,7 +662,7 @@ describe("setPrefs", () => {
     await flush();
 
     // The daemon logs the write; a second UI line would only restate it.
-    expect(cap.events()).toHaveLength(0);
+    expectNoRecords();
   });
 });
 
@@ -689,7 +684,7 @@ describe("getUpdate", () => {
     expect(await getUpdate()).toEqual(report);
     flush();
 
-    expect(cap.events()).toHaveLength(0);
+    expectNoRecords();
   });
 
   test("a 404 is debug, not warn — this fires on every load", async () => {
@@ -701,9 +696,8 @@ describe("getUpdate", () => {
     flush();
 
     expect(cap.events().some((r) => r.level === "warn")).toBe(false);
-    const debug = cap.events().find((r) => r.level === "debug");
-    expect(debug?.step).toBe("request");
-    expect(debug!.msg as string).toContain("update route unwired");
+    const debug = expectLoggedAt("debug", "request");
+    expect(debug.msg as string).toContain("update route unwired");
   });
 
   test("any other failure warns at step request and rejects", async () => {
@@ -712,8 +706,7 @@ describe("getUpdate", () => {
     await expect(getUpdate()).rejects.toThrow("offline");
     flush();
 
-    const warn = cap.events().find((r) => r.level === "warn");
-    expect(warn?.step).toBe("request");
-    expect(warn!.msg as string).toContain("update report");
+    const warn = expectLoggedAt("warn", "request");
+    expect(warn.msg as string).toContain("update report");
   });
 });

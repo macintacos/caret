@@ -2,6 +2,12 @@ import "@ui/test-mount.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { render } from "@ui/test-mount.ts";
+import {
+  installNotificationStub,
+  type NotificationStub,
+  restoreNotification,
+  trackRequestPermission,
+} from "@ui/test-notification-stub.ts";
 import NotifyBell from "@/components/NotifyBell.svelte";
 
 // bellPresentation() (the permission→icon/tone/title mapping) is covered in
@@ -14,48 +20,25 @@ import NotifyBell from "@/components/NotifyBell.svelte";
 // notifications.e2e.ts (real hover) rather than here. The tone now lives on the
 // inner icon `.stack` (the Button is neutral ghost chrome).
 
-type Perm = NotificationPermission;
-
-interface NotificationStub {
-  permission: Perm;
-  requestPermission: () => Promise<Perm>;
-  // Constructor calls (fireTestNotification) are swallowed; we only need the count.
-  fired: number;
-}
-
 let stub: NotificationStub;
 const realNotification = (globalThis as { Notification?: unknown }).Notification;
 
-function installNotification(permission: Perm): void {
-  stub = {
-    permission,
-    requestPermission: () => Promise.resolve(permission),
-    fired: 0,
-  };
-  function Ctor(this: unknown) {
-    stub.fired++;
-  }
-  Object.assign(Ctor, {
-    get permission() {
-      return stub.permission;
-    },
-    requestPermission: () => stub.requestPermission(),
-  });
-  (globalThis as { Notification?: unknown }).Notification = Ctor;
-}
-
 beforeEach(() => {
-  installNotification("default");
+  stub = installNotificationStub("default");
 });
 
 afterEach(() => {
-  (globalThis as { Notification?: unknown }).Notification = realNotification;
+  restoreNotification(realNotification);
 });
+
+function renderBell(): { target: HTMLElement; bell: Element } {
+  const { target } = render(NotifyBell, {});
+  return { target, bell: target.querySelector(".bell")! };
+}
 
 describe("NotifyBell presentation wiring", () => {
   test("undecided: attention tone, request title, question-mark overlay, no dot", () => {
-    const { target } = render(NotifyBell, {});
-    const bell = target.querySelector(".bell")!;
+    const { target, bell } = renderBell();
     expect(target.querySelector(".stack")!.classList.contains("tone-attention")).toBe(true);
     expect(bell.getAttribute("aria-label")).toBe("Notifications: default");
     // overlay present (two stacked icons), bell base + question-mark; no status dot.
@@ -64,9 +47,8 @@ describe("NotifyBell presentation wiring", () => {
   });
 
   test("granted: neutral bell + green dot, no overlay, not aria-disabled (test is a real click)", () => {
-    installNotification("granted");
-    const { target } = render(NotifyBell, {});
-    const bell = target.querySelector(".bell")!;
+    stub = installNotificationStub("granted");
+    const { target, bell } = renderBell();
     // Neutral bell chrome; the green status dot is the on-state signal.
     expect(target.querySelector(".stack")!.classList.contains("tone-muted")).toBe(true);
     expect(target.querySelector(".dot")!.classList.contains("tone-ok")).toBe(true);
@@ -75,9 +57,8 @@ describe("NotifyBell presentation wiring", () => {
   });
 
   test("denied: neutral bell + red dot, aria-disabled (read-only state)", () => {
-    installNotification("denied");
-    const { target } = render(NotifyBell, {});
-    const bell = target.querySelector(".bell")!;
+    stub = installNotificationStub("denied");
+    const { target, bell } = renderBell();
     expect(target.querySelector(".stack")!.classList.contains("tone-muted")).toBe(true);
     expect(target.querySelector(".dot")!.classList.contains("tone-danger")).toBe(true);
     expect(bell.getAttribute("aria-disabled")).toBe("true");
@@ -92,45 +73,33 @@ describe("NotifyBell presentation wiring", () => {
 
 describe("NotifyBell click behavior", () => {
   test("undecided: clicking requests permission and fires no test notification", () => {
-    installNotification("default");
-    let requested = false;
-    stub.requestPermission = () => {
-      requested = true;
-      return Promise.resolve("granted");
-    };
-    const { target } = render(NotifyBell, {});
-    (target.querySelector(".bell") as HTMLElement).click();
+    stub = installNotificationStub("default");
+    const permission = trackRequestPermission(stub, "granted");
+    const { bell } = renderBell();
+    (bell as HTMLElement).click();
     // The badge re-read after the awaited grant resolves is timing/live-static
     // dependent — that round trip is covered by the notifications e2e. Here we
     // assert the deterministic wiring: undecided routes to a permission request,
     // never to a test notification.
-    expect(requested).toBe(true);
+    expect(permission.requested()).toBe(true);
     expect(stub.fired).toBe(0);
   });
 
   test("granted: clicking fires a test notification, no permission request", () => {
-    installNotification("granted");
-    let requested = false;
-    stub.requestPermission = () => {
-      requested = true;
-      return Promise.resolve("granted");
-    };
-    const { target } = render(NotifyBell, {});
-    (target.querySelector(".bell") as HTMLElement).click();
+    stub = installNotificationStub("granted");
+    const permission = trackRequestPermission(stub, "granted");
+    const { bell } = renderBell();
+    (bell as HTMLElement).click();
     expect(stub.fired).toBe(1);
-    expect(requested).toBe(false);
+    expect(permission.requested()).toBe(false);
   });
 
   test("denied: clicking is inert (no request, no test)", () => {
-    installNotification("denied");
-    let requested = false;
-    stub.requestPermission = () => {
-      requested = true;
-      return Promise.resolve("denied");
-    };
-    const { target } = render(NotifyBell, {});
-    (target.querySelector(".bell") as HTMLElement).click();
-    expect(requested).toBe(false);
+    stub = installNotificationStub("denied");
+    const permission = trackRequestPermission(stub, "denied");
+    const { bell } = renderBell();
+    (bell as HTMLElement).click();
+    expect(permission.requested()).toBe(false);
     expect(stub.fired).toBe(0);
   });
 });

@@ -1,6 +1,7 @@
 import "@ui/test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { withBlockedStorage } from "@ui/test-storage.ts";
 import {
   DIFF_INDICATORS_KEY,
   readDiffIndicators,
@@ -30,21 +31,9 @@ describe("readDiffIndicators", () => {
   });
 
   test("fails safe to bars when localStorage throws", () => {
-    const original = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      get() {
-        throw new Error("blocked");
-      },
-    });
-    try {
+    withBlockedStorage(() => {
       expect(readDiffIndicators()).toBe("bars");
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: original,
-      });
-    }
+    });
   });
 });
 
@@ -56,20 +45,8 @@ describe("writeDiffIndicators", () => {
   });
 
   test("swallows a localStorage write failure", () => {
-    const original = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      get() {
-        throw new Error("blocked");
-      },
-    });
-    try {
+    withBlockedStorage(() => {
       expect(() => writeDiffIndicators("classic")).not.toThrow();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: original,
-      });
-    }
+    });
   });
 });

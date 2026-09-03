@@ -1,6 +1,7 @@
 import "@ui/test-mount.ts";
 import { describe, expect, test } from "bun:test";
 
+import { withFocusSpy } from "@ui/test-helpers.ts";
 import { flushUntil, render } from "@ui/test-mount.ts";
 import SourceComposer from "@/components/SourceComposer.svelte";
 
@@ -185,19 +186,8 @@ describe("SourceComposer keyboard chords", () => {
 
 describe("SourceComposer focus", () => {
   test("autofocuses the editor with preventScroll so opening never scrolls the view", () => {
-    const proto = HTMLElement.prototype;
-    const orig = proto.focus;
-    const optsSeen: Array<FocusOptions | undefined> = [];
-    proto.focus = function (opts?: FocusOptions) {
-      optsSeen.push(opts);
-      return orig.call(this, opts);
-    };
-    try {
-      mount();
-      expect(optsSeen.length).toBeGreaterThan(0);
-      expect(optsSeen.some((o) => o?.preventScroll === true)).toBe(true);
-    } finally {
-      proto.focus = orig;
-    }
+    const optsSeen = withFocusSpy(() => mount());
+    expect(optsSeen.length).toBeGreaterThan(0);
+    expect(optsSeen.some((o) => o?.preventScroll === true)).toBe(true);
   });
 });

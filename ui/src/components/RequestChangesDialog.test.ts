@@ -79,6 +79,23 @@ async function mount(props: ComponentProps<typeof RequestChangesDialog>) {
   await flushUntil(flush, mounted);
 }
 
+/** Click a row's Discard, wait for the confirm popover, confirm it, and assert
+ * the discarded key/id — the shared confirm-then-discard sequence both the
+ * scratch row and the inline-annotation row use. */
+async function confirmDiscard(
+  flush: () => void,
+  rowSelector: string,
+  discarded: { last: () => string | undefined },
+  expectedId: string,
+): Promise<void> {
+  (q(rowSelector) as HTMLElement).click();
+  await flushUntil(flush, () => confirmButton() !== undefined);
+  expect(discarded.last()).toBeUndefined();
+  confirmButton()?.click();
+  flush();
+  expect(discarded.last()).toBe(expectedId);
+}
+
 describe("RequestChangesDialog render", () => {
   test("shows the empty-state when nothing is pending", async () => {
     await mount(baseProps);
@@ -274,14 +291,9 @@ describe("RequestChangesDialog unsent scratches", () => {
       onDiscardScratch: discarded.cb,
     });
     await flushUntil(flush, mounted);
-    // Clicking Discard opens a confirmation rather than dropping immediately.
-    (q(".scratch-row .discard") as HTMLElement).click();
-    await flushUntil(flush, () => confirmButton() !== undefined);
-    expect(discarded.last()).toBeUndefined();
-    // Confirming completes the drop with the scratch key.
-    confirmButton()?.click();
-    flush();
-    expect(discarded.last()).toBe("3:3");
+    // Clicking Discard opens a confirmation rather than dropping immediately;
+    // confirming completes the drop with the scratch key.
+    await confirmDiscard(flush, ".scratch-row .discard", discarded, "3:3");
   });
 
   test("scratches do not count toward the committed tally or clear the empty-state", async () => {
@@ -403,12 +415,7 @@ describe("inline comments — Discard / Mark as draft (EXC-762)", () => {
       onDiscardAnnotation: discarded.cb,
     });
     await flushUntil(flush, mounted);
-    (q(".inline-row .discard") as HTMLElement).click();
-    await flushUntil(flush, () => confirmButton() !== undefined);
-    expect(discarded.last()).toBeUndefined();
-    confirmButton()?.click();
-    flush();
-    expect(discarded.last()).toBe("a1");
+    await confirmDiscard(flush, ".inline-row .discard", discarded, "a1");
   });
 });
 

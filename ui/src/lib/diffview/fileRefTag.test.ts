@@ -1,7 +1,7 @@
 import "@ui/test-setup.ts";
 import { beforeEach, expect, test } from "bun:test";
 
-import { celledRow, fileRefTexts, root, row } from "$lib/diffview/dom-fixture.ts";
+import { celledRow, fileRefTexts, root, row } from "@ui/test-diffview-dom.ts";
 import type { FileRefSpan, FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 import { tagFileRefTokens } from "$lib/diffview/fileRefTag.ts";
 

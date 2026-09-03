@@ -1,8 +1,8 @@
 import "@ui/test-setup.ts";
 import { describe, expect, test } from "bun:test";
 
+import { gutterContentRoot } from "@ui/test-diffview-dom.ts";
 import { codeBlockRanges, codeBlockText, tagCodeBlockRows } from "$lib/diffview/codeBlocks.ts";
-import { gutterContentRoot } from "$lib/diffview/dom-fixture.ts";
 
 // codeBlockRanges classifies which lines of a rendered plan belong to a fenced
 // code block, so the source view can decorate those rows as a panel (EXC-692).

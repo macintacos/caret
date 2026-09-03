@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import type { ClientReview, PlanVersion } from "@core/lib/types";
 import { until } from "@test/support/poll.ts";
+import { expectViewRecreated } from "@ui/test-diffview.ts";
 import { logCapture } from "@ui/test-helpers.ts";
 import { capture, render } from "@ui/test-mount.ts";
 import { reactiveProps } from "@ui/test-props.svelte.ts";
@@ -68,6 +69,28 @@ function multiVersionFixture(n: number): ClientReview {
 
 function shadow(target: HTMLElement): ShadowRoot | null {
   return target.querySelector(".diffview")?.shadowRoot ?? null;
+}
+
+/** Mount with `annotations`, wait for the card, then switch into compare mode
+ * and wait for the second version's text to land — the shared arrange behind
+ * "X is absent/hidden in compare mode" assertions. */
+async function enterCompareMode(annotations: unknown[]): Promise<{ target: HTMLElement }> {
+  const review = multiVersionFixture(3);
+  const { target } = render(DiffPlanView, props({ review, annotations }));
+  await until(() => target.querySelector('[data-annotation-card="ln1"]') != null);
+  target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();
+  await until(() => (shadow(target)?.textContent ?? "").includes("body revision 2"));
+  return { target };
+}
+
+/** Mount with reactive props and wait for the initial paint — the common
+ * opening of the instance-preservation tests below, which then mutate `p`. */
+async function renderAndWaitForPre(
+  p: ReturnType<typeof props>,
+): Promise<{ target: HTMLElement; flush: () => void; pre: Element | null | undefined }> {
+  const { target, flush } = render(DiffPlanView, p);
+  await until(() => shadow(target)?.textContent?.includes("hello world") ?? false);
+  return { target, flush, pre: shadow(target)?.querySelector("pre") };
 }
 
 afterEach(() => localStorage.clear());
@@ -192,9 +215,7 @@ describe("DiffPlanView instance preservation across the poll", () => {
     // The 2s poll re-delivers the active review object; an unchanged id:version
     // must update the instance in place so scroll/DOM state survives.
     const p = reactiveProps(props());
-    const { target, flush } = render(DiffPlanView, p);
-    await until(() => shadow(target)?.textContent?.includes("hello world") ?? false);
-    const pre = shadow(target)?.querySelector("pre");
+    const { target, flush, pre } = await renderAndWaitForPre(p);
     expect(pre).not.toBeNull();
 
     // A fresh object with the SAME id and version (what a poll tick produces).
@@ -206,18 +227,11 @@ describe("DiffPlanView instance preservation across the poll", () => {
 
   test("a new version recreates the view with the new text", async () => {
     const p = reactiveProps(props());
-    const { target, flush } = render(DiffPlanView, p);
-    await until(() => shadow(target)?.textContent?.includes("hello world") ?? false);
-    const pre = shadow(target)?.querySelector("pre");
+    const { target, flush, pre } = await renderAndWaitForPre(p);
 
     p.review = reviewFixture({ version: 2, currentPlan: "# Title\n\nrevised text\n" });
     flush();
-    const repainted = await until(
-      () => shadow(target)?.textContent?.includes("revised text") ?? false,
-    );
-    expect(repainted).toBe(true);
-    expect(shadow(target)?.querySelector("pre")).not.toBe(pre as HTMLPreElement);
-    expect(shadow(target)?.textContent).not.toContain("hello world");
+    await expectViewRecreated(() => shadow(target), pre, "revised text", "hello world");
   });
 });
 
@@ -301,7 +315,12 @@ describe("DiffPlanView version compare", () => {
   // .shell — so the compared versions are reported upward for App to point the panel
   // at. EXC-1041: reported as the two documents the diff renders, not as a sorted
   // range, so the panel knows which side each version's comments jump to.
-  test("reports the compared versions on entering compare mode, before and after", async () => {
+  /** Mount recording every `onCompareChange` call — the shared arrange for the
+   * two tests below, which then drive the toggle differently. */
+  function mountCompareChange(): {
+    target: HTMLElement;
+    calls: Array<{ before: number; after: number } | null>;
+  } {
     const calls: Array<{ before: number; after: number } | null> = [];
     const { target } = render(
       DiffPlanView,
@@ -310,6 +329,11 @@ describe("DiffPlanView version compare", () => {
         onCompareChange: (r: { before: number; after: number } | null) => calls.push(r),
       }),
     );
+    return { target, calls };
+  }
+
+  test("reports the compared versions on entering compare mode, before and after", async () => {
+    const { target, calls } = mountCompareChange();
     await until(() => calls.length > 0);
     expect(calls.at(-1)).toBeNull();
 
@@ -321,14 +345,7 @@ describe("DiffPlanView version compare", () => {
   });
 
   test("reports null once compare mode is left", async () => {
-    const calls: Array<{ before: number; after: number } | null> = [];
-    const { target } = render(
-      DiffPlanView,
-      props({
-        review: multiVersionFixture(3),
-        onCompareChange: (r: { before: number; after: number } | null) => calls.push(r),
-      }),
-    );
+    const { target, calls } = mountCompareChange();
     const toggle = target.querySelector<HTMLButtonElement>(".compare-toggle")!;
     toggle.click();
     await until(() => calls.at(-1) != null);
@@ -360,6 +377,11 @@ describe("DiffPlanView annotation display", () => {
     ...over,
   });
 
+  const twoLineAnnotations = () => [
+    lineAnn({ id: "a", startLine: 2, endLine: 2, comment: "first" }),
+    lineAnn({ id: "b", startLine: 4, endLine: 4, comment: "second" }),
+  ];
+
   test("renders an inline card for a line annotation", async () => {
     const { target } = render(DiffPlanView, props({ annotations: [lineAnn()] }));
     const card = await until(() => target.querySelector('[data-annotation-card="ln1"]') != null);
@@ -367,10 +389,7 @@ describe("DiffPlanView annotation display", () => {
   });
 
   test("the focused annotation renders expanded, the rest collapsed", async () => {
-    const annotations = [
-      lineAnn({ id: "a", startLine: 2, endLine: 2, comment: "first" }),
-      lineAnn({ id: "b", startLine: 4, endLine: 4, comment: "second" }),
-    ];
+    const annotations = twoLineAnnotations();
     const { target } = render(DiffPlanView, props({ annotations, focusedAnnotation: "a" }));
     await until(() => target.querySelector('[data-annotation-card="a"]') != null);
     const a = target.querySelector('[data-annotation-card="a"]')!;
@@ -413,10 +432,7 @@ describe("DiffPlanView annotation display", () => {
   });
 
   test("comments on different lines each get their own (unthreaded) card", async () => {
-    const annotations = [
-      lineAnn({ id: "a", startLine: 2, endLine: 2, comment: "first" }),
-      lineAnn({ id: "b", startLine: 4, endLine: 4, comment: "second" }),
-    ];
+    const annotations = twoLineAnnotations();
     const { target } = render(DiffPlanView, props({ annotations }));
     await until(() => target.querySelector('[data-annotation-card="a"]') != null);
     // Distinct lines: no thread container, two standalone cards.
@@ -441,11 +457,7 @@ describe("DiffPlanView annotation display", () => {
   });
 
   test("shows no annotation cards in compare mode", async () => {
-    const review = multiVersionFixture(3);
-    const { target } = render(DiffPlanView, props({ review, annotations: [lineAnn()] }));
-    await until(() => target.querySelector('[data-annotation-card="ln1"]') != null);
-    target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();
-    await until(() => (shadow(target)?.textContent ?? "").includes("body revision 2"));
+    const { target } = await enterCompareMode([lineAnn()]);
     expect(target.querySelector('[data-annotation-card="ln1"]')).toBeNull();
   });
 });
@@ -488,11 +500,7 @@ describe("DiffPlanView comment-span brackets", () => {
   });
 
   test("the bracket layer is absent in compare mode", async () => {
-    const review = multiVersionFixture(3);
-    const { target } = render(DiffPlanView, props({ review, annotations: [lineAnn()] }));
-    await until(() => target.querySelector('[data-annotation-card="ln1"]') != null);
-    target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();
-    await until(() => (shadow(target)?.textContent ?? "").includes("body revision 2"));
+    const { target } = await enterCompareMode([lineAnn()]);
     expect(layer(target)).toBeNull();
   });
 });
@@ -572,17 +580,26 @@ describe("DiffPlanView file-reference resolution", () => {
 // the reviewer's "Resume" markers instead of starting empty (EXC-744). The
 // controller is owned by App (EXC-877); these tests inject one and observe it directly.
 describe("DiffPlanView scratch rehydration", () => {
-  test("seeds the controller from the review's persisted scratches on mount", async () => {
+  /** Mount with one persisted scratch on line 3 — the common seed the tests
+   * below start from before driving a further review update. */
+  function mountWithScratch(text: string): {
+    commenting: ReturnType<typeof createSourceCommenting>;
+    p: ReturnType<typeof props>;
+    flush: () => void;
+  } {
     const commenting = createSourceCommenting({ onCreate: () => {} });
-    render(
-      DiffPlanView,
+    const p = reactiveProps(
       props({
         commenting,
-        review: reviewFixture({
-          composerScratches: [{ startLine: 3, endLine: 3, text: "resume me" }],
-        }),
+        review: reviewFixture({ composerScratches: [{ startLine: 3, endLine: 3, text }] }),
       }),
     );
+    const { flush } = render(DiffPlanView, p);
+    return { commenting, p, flush };
+  }
+
+  test("seeds the controller from the review's persisted scratches on mount", async () => {
+    const { commenting } = mountWithScratch("resume me");
     await until(() => commenting.scratches().length > 0);
     expect(commenting.scratches()).toEqual([
       { key: scratchKey(3, 3), startLine: 3, endLine: 3, text: "resume me" },
@@ -590,16 +607,7 @@ describe("DiffPlanView scratch rehydration", () => {
   });
 
   test("wipes the prior version's scratches when a new plan version arrives", async () => {
-    const commenting = createSourceCommenting({ onCreate: () => {} });
-    const p = reactiveProps(
-      props({
-        commenting,
-        review: reviewFixture({
-          composerScratches: [{ startLine: 3, endLine: 3, text: "v1 scratch" }],
-        }),
-      }),
-    );
-    const { flush } = render(DiffPlanView, p);
+    const { commenting, p, flush } = mountWithScratch("v1 scratch");
     await until(() => commenting.scratches().length > 0);
     // A revision (new version) is served with its own — empty — scratch set.
     p.review = reviewFixture({
@@ -613,16 +621,7 @@ describe("DiffPlanView scratch rehydration", () => {
   });
 
   test("does not reseed when a poll re-delivers the same id:version", async () => {
-    const commenting = createSourceCommenting({ onCreate: () => {} });
-    const p = reactiveProps(
-      props({
-        commenting,
-        review: reviewFixture({
-          composerScratches: [{ startLine: 3, endLine: 3, text: "live scratch" }],
-        }),
-      }),
-    );
-    const { flush } = render(DiffPlanView, p);
+    const { commenting, p, flush } = mountWithScratch("live scratch");
     await until(() => commenting.scratches().length > 0);
     // The 2s poll re-delivers the SAME id:version as a fresh object carrying a
     // different server-side set; the source view must NOT reseed over the

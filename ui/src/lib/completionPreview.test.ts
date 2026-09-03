@@ -160,6 +160,35 @@ describe("renderExcerptLines", () => {
   });
 });
 
+/** An editor with the panel plugin installed, over `rows`. */
+function mountCompletionPreview(
+  rows: PreviewableCompletion[],
+  toggle: PreviewToggle,
+  showHints: () => boolean = () => true,
+  timeoutMs?: number,
+) {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const view = new EditorView({
+    parent: host,
+    root: document,
+    state: EditorState.create({
+      doc: "",
+      extensions: [
+        autocompletion({ override: [(ctx) => ({ from: ctx.pos, options: rows })] }),
+        completionPreview(toggle, showHints, timeoutMs),
+      ],
+    }),
+  });
+  return {
+    view,
+    dispose: () => {
+      view.destroy();
+      host.remove();
+    },
+  };
+}
+
 // The panel itself, over a real painted list. It is a view plugin that mounts
 // into <body>, so what it decides — whether a panel exists, what is in it, and
 // which row it describes — is reachable here; only its PLACEMENT needs a browser
@@ -191,26 +220,7 @@ describe("the preview panel", () => {
   /** An editor over `ROWS` with the panel plugin installed and nothing else, so
    * the plugin is what these assertions are about. */
   function mount(toggle: PreviewToggle, showHints: () => boolean = () => true) {
-    const host = document.createElement("div");
-    document.body.appendChild(host);
-    const view = new EditorView({
-      parent: host,
-      root: document,
-      state: EditorState.create({
-        doc: "",
-        extensions: [
-          autocompletion({ override: [(ctx) => ({ from: ctx.pos, options: ROWS })] }),
-          completionPreview(toggle, showHints),
-        ],
-      }),
-    });
-    return {
-      view,
-      dispose: () => {
-        view.destroy();
-        host.remove();
-      },
-    };
+    return mountCompletionPreview(ROWS, toggle, showHints);
   }
 
   const panelIn = () => document.querySelector(".caret-preview");
@@ -222,12 +232,33 @@ describe("the preview panel", () => {
     view.dispatch({});
   }
 
-  test("no window until the reviewer asks for one", async () => {
+  /** Mount over `ROWS`, type `@a`, and wait for the list to paint. */
+  async function openedList(showHints?: () => boolean) {
+    const toggle = createPreviewToggle();
+    const { view, dispose } = mount(toggle, showHints);
+    typeInto(view, "@a");
+    expect(await until(() => painted(view))).toBe(true);
+    return { view, toggle, dispose };
+  }
+
+  /** Mount over `ROWS`, type `@a`, and wait for the list to become active and
+   * ready to accept a selection — what `moveCompletionSelection` needs. */
+  async function openedActiveList() {
     const toggle = createPreviewToggle();
     const { view, dispose } = mount(toggle);
+    typeInto(view, "@a");
+    // A painted list is not yet a list `moveCompletionSelection` will act on: it
+    // declines while the state is still pending, and again inside
+    // autocomplete's own interaction delay — the guard against a keystroke in
+    // flight landing on a list that just changed under it.
+    expect(await until(() => completionStatus(view.state) === "active")).toBe(true);
+    await allowCompletionAccept();
+    return { view, toggle, dispose };
+  }
+
+  test("no window until the reviewer asks for one", async () => {
+    const { dispose } = await openedList();
     try {
-      typeInto(view, "@a");
-      expect(await until(() => painted(view))).toBe(true);
       expect(panelIn()).toBeNull();
     } finally {
       dispose();
@@ -235,12 +266,8 @@ describe("the preview panel", () => {
   });
 
   test("opens with the highlighted row's own answer in it, and closes again", async () => {
-    const toggle = createPreviewToggle();
-    const { view, dispose } = mount(toggle);
+    const { view, toggle, dispose } = await openedList();
     try {
-      typeInto(view, "@a");
-      expect(await until(() => painted(view))).toBe(true);
-
       flip(view, toggle);
       // The title is what the panel knows without asking; the answer arrives.
       expect(panelIn()?.textContent).toContain("src/alpha.ts");
@@ -260,16 +287,8 @@ describe("the preview panel", () => {
     // `Completion.info`, which repaints only on a re-query — and a re-query
     // restarts the list at its first row, throwing away the row that was asked
     // about.
-    const toggle = createPreviewToggle();
-    const { view, dispose } = mount(toggle);
+    const { view, toggle, dispose } = await openedActiveList();
     try {
-      typeInto(view, "@a");
-      // A painted list is not yet a list `moveCompletionSelection` will act on: it
-      // declines while the state is still pending, and again inside
-      // autocomplete's own interaction delay — the guard against a keystroke in
-      // flight landing on a list that just changed under it.
-      expect(await until(() => completionStatus(view.state) === "active")).toBe(true);
-      await allowCompletionAccept();
       moveCompletionSelection(true)(view);
       const before = selectedCompletionIndex(view.state);
       expect(before).toBe(1);
@@ -285,12 +304,8 @@ describe("the preview panel", () => {
   });
 
   test("follows the selection from row to row", async () => {
-    const toggle = createPreviewToggle();
-    const { view, dispose } = mount(toggle);
+    const { view, toggle, dispose } = await openedActiveList();
     try {
-      typeInto(view, "@a");
-      expect(await until(() => completionStatus(view.state) === "active")).toBe(true);
-      await allowCompletionAccept();
       flip(view, toggle);
       expect(await until(() => panelIn()?.textContent?.includes("const alpha = 1;") === true)).toBe(
         true,
@@ -306,11 +321,8 @@ describe("the preview panel", () => {
   });
 
   test("goes away with the list it belongs to", async () => {
-    const toggle = createPreviewToggle();
-    const { view, dispose } = mount(toggle);
+    const { view, toggle, dispose } = await openedList();
     try {
-      typeInto(view, "@a");
-      expect(await until(() => painted(view))).toBe(true);
       flip(view, toggle);
       expect(panelIn()).not.toBeNull();
 
@@ -323,10 +335,7 @@ describe("the preview panel", () => {
 
   test("a destroyed editor takes its panel with it", async () => {
     // It lives in <body>, not in the editor, so nothing removes it for free.
-    const toggle = createPreviewToggle();
-    const { view, dispose } = mount(toggle);
-    typeInto(view, "@a");
-    expect(await until(() => painted(view))).toBe(true);
+    const { view, toggle, dispose } = await openedList();
     flip(view, toggle);
     expect(panelIn()).not.toBeNull();
     dispose();
@@ -337,11 +346,8 @@ describe("the preview panel", () => {
     // The reason it is a real element rather than generated content: `::before`
     // can draw a sentence but not a <kbd>, so the strip used to be the one
     // shortcut hint in the UI that looked nothing like the others.
-    const toggle = createPreviewToggle();
-    const { view, dispose } = mount(toggle);
+    const { view, dispose } = await openedList();
     try {
-      typeInto(view, "@a");
-      expect(await until(() => painted(view))).toBe(true);
       const tooltip = view.dom.querySelector(".cm-tooltip-autocomplete");
       expect(
         await until(() => tooltip?.firstElementChild?.className === "caret-completion-hint"),
@@ -356,11 +362,8 @@ describe("the preview panel", () => {
   });
 
   test("with the panel open the strip names the way back out", async () => {
-    const toggle = createPreviewToggle();
-    const { view, dispose } = mount(toggle);
+    const { view, toggle, dispose } = await openedList();
     try {
-      typeInto(view, "@a");
-      expect(await until(() => painted(view))).toBe(true);
       flip(view, toggle);
       const hint = () => view.dom.querySelector(".caret-completion-hint")?.textContent ?? "";
       expect(await until(() => hint().includes("close"))).toBe(true);
@@ -376,11 +379,8 @@ describe("the preview panel", () => {
     // rect. Placing against it put the panel at the top of the screen with the
     // list halfway down, which is what a reviewer saw on every `@` once the
     // toggle started persisting.
-    const toggle = createPreviewToggle();
-    const { view, dispose } = mount(toggle);
+    const { view, toggle, dispose } = await openedList();
     try {
-      typeInto(view, "@a");
-      expect(await until(() => painted(view))).toBe(true);
       const tooltip = view.dom.querySelector<HTMLElement>(".cm-tooltip-autocomplete");
       if (tooltip === null) throw new Error("expected a painted list");
       const parked = new DOMRect(0, -10000, 200, 300);
@@ -404,11 +404,8 @@ describe("the preview panel", () => {
 
   test("shortcut hints off takes the strip away and leaves the shortcut", async () => {
     // The preference hides the AFFORDANCE, never the key.
-    const toggle = createPreviewToggle();
-    const { view, dispose } = mount(toggle, () => false);
+    const { view, toggle, dispose } = await openedList(() => false);
     try {
-      typeInto(view, "@a");
-      expect(await until(() => painted(view))).toBe(true);
       flip(view, toggle);
       expect(view.dom.querySelector(".caret-completion-hint")).toBeNull();
       expect(panelIn()).not.toBeNull();
@@ -449,26 +446,7 @@ describe("the preview panel while an answer is in flight", () => {
   }
 
   function mountOver(rows: PreviewableCompletion[], toggle: PreviewToggle, timeoutMs?: number) {
-    const host = document.createElement("div");
-    document.body.appendChild(host);
-    const view = new EditorView({
-      parent: host,
-      root: document,
-      state: EditorState.create({
-        doc: "",
-        extensions: [
-          autocompletion({ override: [(ctx) => ({ from: ctx.pos, options: rows })] }),
-          completionPreview(toggle, () => true, timeoutMs),
-        ],
-      }),
-    });
-    return {
-      view,
-      dispose: () => {
-        view.destroy();
-        host.remove();
-      },
-    };
+    return mountCompletionPreview(rows, toggle, () => true, timeoutMs);
   }
 
   const panelIn = () => document.querySelector(".caret-preview");
@@ -487,14 +465,20 @@ describe("the preview panel while an answer is in flight", () => {
     return mounted;
   }
 
-  test("a pending answer shows the loading indicator rather than an empty body", async () => {
+  /** Open the panel over a slow row and wait for its loading indicator. */
+  async function openLoadingSlowRow() {
     const held = heldRow("src/slow.ts", "const slow = 1;");
     const toggle = createPreviewToggle();
     const { dispose } = await openOver([held.row], toggle);
+    expect(await until(() => bodyIn()?.querySelector(".caret-preview-loading") !== null)).toBe(
+      true,
+    );
+    return { held, dispose };
+  }
+
+  test("a pending answer shows the loading indicator rather than an empty body", async () => {
+    const { dispose } = await openLoadingSlowRow();
     try {
-      expect(await until(() => bodyIn()?.querySelector(".caret-preview-loading") !== null)).toBe(
-        true,
-      );
       // And the title is already right, so the panel names what it is fetching.
       expect(panelIn()?.textContent).toContain("src/slow.ts");
     } finally {
@@ -503,13 +487,8 @@ describe("the preview panel while an answer is in flight", () => {
   });
 
   test("the answer replaces the indicator when it lands", async () => {
-    const held = heldRow("src/slow.ts", "const slow = 1;");
-    const toggle = createPreviewToggle();
-    const { dispose } = await openOver([held.row], toggle);
+    const { held, dispose } = await openLoadingSlowRow();
     try {
-      expect(await until(() => bodyIn()?.querySelector(".caret-preview-loading") !== null)).toBe(
-        true,
-      );
       held.land();
       expect(await until(() => bodyIn()?.textContent === "const slow = 1;")).toBe(true);
       expect(bodyIn()?.querySelector(".caret-preview-loading")).toBeNull();

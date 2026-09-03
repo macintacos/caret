@@ -78,21 +78,31 @@ function makeFrameQueue() {
   };
 }
 
+/** Schedule a placement over a hand-driven frame queue, recording each placed
+ * spot. Defaults to a menu that is already settled at MENU. */
+function scheduleOverQueue(
+  q: ReturnType<typeof makeFrameQueue>,
+  placed: { top: number; left: number }[],
+  menu: () => Box = () => MENU,
+) {
+  return placeOnNextFrame(
+    {
+      menu,
+      card: () => CARD,
+      view: () => VIEW,
+      place: (p) => placed.push(p),
+      raf: q.raf,
+      cancel: q.cancel,
+    },
+    OPTS,
+  );
+}
+
 describe("placeOnNextFrame", () => {
   test("does not place synchronously — it waits for the frame", () => {
     const q = makeFrameQueue();
     const placed: { top: number; left: number }[] = [];
-    placeOnNextFrame(
-      {
-        menu: () => MENU,
-        card: () => CARD,
-        view: () => VIEW,
-        place: (p) => placed.push(p),
-        raf: q.raf,
-        cancel: q.cancel,
-      },
-      OPTS,
-    );
+    scheduleOverQueue(q, placed);
     // Nothing placed yet: a synchronous measurement is exactly what read the premature
     // origin rect in the bug. The frame must run first.
     expect(placed).toEqual([]);
@@ -107,17 +117,7 @@ describe("placeOnNextFrame", () => {
     // by the time the deferred frame runs it has settled. The frame must measure
     // the settled rect, not the origin a synchronous read would have captured.
     let settled = false;
-    placeOnNextFrame(
-      {
-        menu: () => (settled ? MENU : ORIGIN),
-        card: () => CARD,
-        view: () => VIEW,
-        place: (p) => placed.push(p),
-        raf: q.raf,
-        cancel: q.cancel,
-      },
-      OPTS,
-    );
+    scheduleOverQueue(q, placed, () => (settled ? MENU : ORIGIN));
     settled = true; // the positioning microtask runs before the frame
     q.tick();
     expect(placed).toEqual([{ top: 300, left: 230 }]);
@@ -126,17 +126,7 @@ describe("placeOnNextFrame", () => {
   test("teardown cancels the pending frame so it never places", () => {
     const q = makeFrameQueue();
     const placed: { top: number; left: number }[] = [];
-    const stop = placeOnNextFrame(
-      {
-        menu: () => MENU,
-        card: () => CARD,
-        view: () => VIEW,
-        place: (p) => placed.push(p),
-        raf: q.raf,
-        cancel: q.cancel,
-      },
-      OPTS,
-    );
+    const stop = scheduleOverQueue(q, placed);
     expect(q.pendingId()).not.toBeNull();
     stop();
     expect(q.pendingId()).toBeNull();

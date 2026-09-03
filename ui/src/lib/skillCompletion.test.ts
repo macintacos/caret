@@ -66,6 +66,45 @@ const rows = (view: EditorView) =>
 const details = (view: EditorView) =>
   Array.from(view.dom.querySelectorAll(".cm-completionDetail")).map((n) => n.textContent);
 
+/** Mount `source` bound to `id`, type "/", and expect nothing painted. */
+async function expectFirstAttemptFails(
+  source: ReturnType<typeof skillCompletion>,
+  id: string,
+): Promise<void> {
+  const first = mount(source, id);
+  try {
+    type(first.view, "/");
+    await settleCompletion();
+    expect(painted(first.view)).toBe(false);
+  } finally {
+    first.dispose();
+  }
+}
+
+/** Mount `source` bound to `id` again, type "/", and expect a list to paint. */
+async function expectRetrySucceeds(
+  source: ReturnType<typeof skillCompletion>,
+  id: string,
+): Promise<void> {
+  const second = mount(source, id);
+  try {
+    type(second.view, "/");
+    expect(await until(() => painted(second.view))).toBe(true);
+  } finally {
+    second.dispose();
+  }
+}
+
+/** Type "/" into both `a` and `b`, then wait for both to paint. */
+async function typeBothAndAwaitPainted(
+  a: { view: EditorView },
+  b: { view: EditorView },
+): Promise<void> {
+  type(a.view, "/");
+  type(b.view, "/");
+  expect(await until(() => painted(a.view) && painted(b.view))).toBe(true);
+}
+
 describe("skillCompletion triggering", () => {
   test("paints a list on `/` at the start of a line", async () => {
     const { view, dispose } = mount(sourceOver(SKILLS));
@@ -236,21 +275,8 @@ describe("skillCompletion degradation", () => {
       return SKILLS;
     });
     const id = reviewId();
-    const first = mount(source, id);
-    try {
-      type(first.view, "/");
-      await settleCompletion();
-      expect(painted(first.view)).toBe(false);
-    } finally {
-      first.dispose();
-    }
-    const second = mount(source, id);
-    try {
-      type(second.view, "/");
-      expect(await until(() => painted(second.view))).toBe(true);
-    } finally {
-      second.dispose();
-    }
+    await expectFirstAttemptFails(source, id);
+    await expectRetrySucceeds(source, id);
   });
 });
 
@@ -267,9 +293,7 @@ describe("skillCompletion per-review caching", () => {
     const a = mount(source, id);
     const b = mount(source, id);
     try {
-      type(a.view, "/");
-      type(b.view, "/");
-      expect(await until(() => painted(a.view) && painted(b.view))).toBe(true);
+      await typeBothAndAwaitPainted(a, b);
       expect(asked).toEqual([id]);
     } finally {
       a.dispose();
@@ -287,21 +311,8 @@ describe("skillCompletion per-review caching", () => {
       return attempt === 1 ? null : SKILLS;
     });
     const id = reviewId();
-    const first = mount(source, id);
-    try {
-      type(first.view, "/");
-      await settleCompletion();
-      expect(painted(first.view)).toBe(false);
-    } finally {
-      first.dispose();
-    }
-    const second = mount(source, id);
-    try {
-      type(second.view, "/");
-      expect(await until(() => painted(second.view))).toBe(true);
-    } finally {
-      second.dispose();
-    }
+    await expectFirstAttemptFails(source, id);
+    await expectRetrySucceeds(source, id);
   });
 
   test("keeps a genuinely empty snapshot, so an agent with no skills is asked once", async () => {
@@ -338,9 +349,7 @@ describe("skillCompletion per-review caching", () => {
     const a = mount(source, first);
     const b = mount(source, second);
     try {
-      type(a.view, "/");
-      type(b.view, "/");
-      expect(await until(() => painted(a.view) && painted(b.view))).toBe(true);
+      await typeBothAndAwaitPainted(a, b);
       expect(rows(a.view)).toEqual(["/git"]);
       expect(rows(b.view)).toEqual(["/caret:demo"]);
     } finally {

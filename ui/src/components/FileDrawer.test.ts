@@ -5,7 +5,7 @@ import { createRawSnippet } from "svelte";
 
 import { capture, render } from "@ui/test-mount.ts";
 import FileDrawer from "@/components/FileDrawer.svelte";
-import { MIN_DRAWER_PX, maxDrawerSize } from "$lib/fileDrawer.ts";
+import { type DrawerEdge, MIN_DRAWER_PX, maxDrawerSize } from "$lib/fileDrawer.ts";
 
 const children = createRawSnippet(() => ({
   render: () => `<p class="fd-probe">preview</p>`,
@@ -25,15 +25,30 @@ function press(target: HTMLElement, key: string): KeyboardEvent {
   return event;
 }
 
+/** Mount FileDrawer docked right at 420/1200, the shape most tests below want;
+ * pass overrides for the ones that don't. */
+function mountDrawer(
+  over: Partial<{
+    edge: DrawerEdge;
+    size: number;
+    available: number;
+    closing: boolean;
+    onResize: (px: number) => void;
+  }> = {},
+): ReturnType<typeof render> {
+  return render(FileDrawer, {
+    edge: "right",
+    size: 420,
+    available: 1200,
+    onResize: () => {},
+    children,
+    ...over,
+  });
+}
+
 describe("FileDrawer lane", () => {
   test("renders a labelled aside carrying its size as a custom property", () => {
-    const { target } = render(FileDrawer, {
-      edge: "right",
-      size: 420,
-      available: 1200,
-      onResize: () => {},
-      children,
-    });
+    const { target } = mountDrawer();
     const el = lane(target);
     expect(el.tagName).toBe("ASIDE");
     expect(el.getAttribute("aria-label")).toBe("File preview");
@@ -41,21 +56,9 @@ describe("FileDrawer lane", () => {
   });
 
   test("marks the bottom edge with its own class and leaves the right edge unmarked", () => {
-    const right = render(FileDrawer, {
-      edge: "right",
-      size: 420,
-      available: 1200,
-      onResize: () => {},
-      children,
-    });
+    const right = mountDrawer();
     expect(lane(right.target).classList.contains("fd-bottom")).toBe(false);
-    const bottom = render(FileDrawer, {
-      edge: "bottom",
-      size: 300,
-      available: 900,
-      onResize: () => {},
-      children,
-    });
+    const bottom = mountDrawer({ edge: "bottom", size: 300, available: 900 });
     expect(lane(bottom.target).classList.contains("fd-bottom")).toBe(true);
 
     // The attribute's VALUE is load-bearing, not just its presence: FolderTree
@@ -66,22 +69,9 @@ describe("FileDrawer lane", () => {
   });
 
   test("marks the lane while it plays its closing wipe, and not before", () => {
-    const open = render(FileDrawer, {
-      edge: "right",
-      size: 420,
-      available: 1200,
-      onResize: () => {},
-      children,
-    });
+    const open = mountDrawer();
     expect(lane(open.target).classList.contains("fd-closing")).toBe(false);
-    const closing = render(FileDrawer, {
-      edge: "right",
-      size: 420,
-      available: 1200,
-      closing: true,
-      onResize: () => {},
-      children,
-    });
+    const closing = mountDrawer({ closing: true });
     expect(lane(closing.target).classList.contains("fd-closing")).toBe(true);
     // The excerpt stays rendered on the way out — the pane slides shut with its
     // contents, it does not empty first.
@@ -89,26 +79,14 @@ describe("FileDrawer lane", () => {
   });
 
   test("renders the children snippet inside the lane", () => {
-    const { target } = render(FileDrawer, {
-      edge: "right",
-      size: 420,
-      available: 1200,
-      onResize: () => {},
-      children,
-    });
+    const { target } = mountDrawer();
     expect(lane(target).querySelector(".fd-probe")).not.toBeNull();
   });
 });
 
 describe("FileDrawer resize handle", () => {
   test("is a focusable, labelled separator running along the docked edge", () => {
-    const { target } = render(FileDrawer, {
-      edge: "right",
-      size: 420,
-      available: 1200,
-      onResize: () => {},
-      children,
-    });
+    const { target } = mountDrawer();
     const el = handle(target);
     expect(el.getAttribute("aria-label")).toBe("Resize file preview");
     expect(el.getAttribute("tabindex")).toBe("0");
@@ -116,24 +94,12 @@ describe("FileDrawer resize handle", () => {
   });
 
   test("turns horizontal when the drawer docks to the bottom", () => {
-    const { target } = render(FileDrawer, {
-      edge: "bottom",
-      size: 300,
-      available: 900,
-      onResize: () => {},
-      children,
-    });
+    const { target } = mountDrawer({ edge: "bottom", size: 300, available: 900 });
     expect(handle(target).getAttribute("aria-orientation")).toBe("horizontal");
   });
 
   test("reports the drawer size and its floor as the separator's range", () => {
-    const { target } = render(FileDrawer, {
-      edge: "right",
-      size: 420,
-      available: 1200,
-      onResize: () => {},
-      children,
-    });
+    const { target } = mountDrawer();
     const el = handle(target);
     expect(el.getAttribute("aria-valuenow")).toBe("420");
     expect(el.getAttribute("aria-valuemin")).toBe(String(MIN_DRAWER_PX));
@@ -153,7 +119,7 @@ describe("FileDrawer keyboard resize", () => {
     key: string,
   ): number | undefined {
     const resized = capture<number>();
-    const { target } = render(FileDrawer, { ...props, onResize: resized.cb, children });
+    const { target } = mountDrawer({ ...props, onResize: resized.cb });
     press(target, key);
     return resized.last();
   }
@@ -183,13 +149,7 @@ describe("FileDrawer keyboard resize", () => {
 
   test("ignores the keys of the other edge's axis", () => {
     const resized = capture<number>();
-    const { target } = render(FileDrawer, {
-      edge: "right",
-      size: 420,
-      available: 1200,
-      onResize: resized.cb,
-      children,
-    });
+    const { target } = mountDrawer({ onResize: resized.cb });
     press(target, "ArrowUp");
     press(target, "ArrowDown");
     press(target, "Enter");
@@ -197,13 +157,7 @@ describe("FileDrawer keyboard resize", () => {
   });
 
   test("swallows a key it handles and leaves the rest to the page", () => {
-    const { target } = render(FileDrawer, {
-      edge: "right",
-      size: 420,
-      available: 1200,
-      onResize: () => {},
-      children,
-    });
+    const { target } = mountDrawer();
     expect(press(target, "ArrowLeft").defaultPrevented).toBe(true);
     expect(press(target, "ArrowUp").defaultPrevented).toBe(false);
   });

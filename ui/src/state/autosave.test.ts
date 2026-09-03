@@ -143,21 +143,24 @@ describe("debounced autosave", () => {
     expect(saves).toHaveLength(0);
   });
 
-  test("a non-2xx response does not flip the daemon offline", async () => {
-    saveResult = () => Promise.reject(new HttpError(409));
+  /** Edit the general comment and flush it under the current saveResult. */
+  async function editAndFlush() {
     const store = makeStore();
     const { autosave, wentOffline } = build(store, () => "r1");
     autosave.editGeneralComment("x");
     await autosave.flushPending();
+    return { autosave, wentOffline };
+  }
+
+  test("a non-2xx response does not flip the daemon offline", async () => {
+    saveResult = () => Promise.reject(new HttpError(409));
+    const { wentOffline } = await editAndFlush();
     expect(wentOffline()).toBe(false);
   });
 
   test("a network failure flips the daemon offline", async () => {
     saveResult = () => Promise.reject(new Error("network down"));
-    const store = makeStore();
-    const { autosave, wentOffline } = build(store, () => "r1");
-    autosave.editGeneralComment("x");
-    await autosave.flushPending();
+    const { wentOffline } = await editAndFlush();
     expect(wentOffline()).toBe(true);
   });
 });

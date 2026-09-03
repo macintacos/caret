@@ -31,13 +31,22 @@ const textOf = (target: HTMLElement, key: string): string =>
 const copyBtn = (target: HTMLElement, key: string): HTMLElement | null =>
   target.querySelector(`[data-diag="${key}"] .diag-copy`);
 
+function renderPane(
+  over: {
+    loadDiagnostics?: () => Promise<DaemonDiagnostics>;
+    onCopyDiagnostic?: (text: string) => void;
+  } = {},
+): { target: HTMLElement; flush: () => void } {
+  return render(AdvancedPane, {
+    onCopyDiagnostic: over.onCopyDiagnostic ?? (() => {}),
+    loadHealth: () => Promise.resolve(health),
+    loadDiagnostics: over.loadDiagnostics ?? (() => Promise.resolve(diagnostics)),
+  });
+}
+
 describe("AdvancedPane render", () => {
   test("renders version, daemon, system, and config from health + diagnostics", async () => {
-    const { target, flush } = render(AdvancedPane, {
-      onCopyDiagnostic: () => {},
-      loadHealth: () => Promise.resolve(health),
-      loadDiagnostics: () => Promise.resolve(diagnostics),
-    });
+    const { target, flush } = renderPane();
 
     await flushUntil(flush, () => textOf(target, "version").includes("0.7.0"));
 
@@ -60,11 +69,7 @@ describe("AdvancedPane render", () => {
   // EXC-1112: the blocks title rather than label — they name no control — and each
   // field is named by its own title rather than left a nameless grouping boundary.
   test("each diagnostics block is a named field, titled rather than labelled", async () => {
-    const { target, flush } = render(AdvancedPane, {
-      onCopyDiagnostic: () => {},
-      loadHealth: () => Promise.resolve(health),
-      loadDiagnostics: () => Promise.resolve(diagnostics),
-    });
+    const { target, flush } = renderPane();
 
     await flushUntil(flush, () => textOf(target, "version").includes("0.7.0"));
 
@@ -85,9 +90,7 @@ describe("AdvancedPane render", () => {
 
 describe("AdvancedPane per-block degrade", () => {
   test("daemon/system/config degrade when diagnostics fails; version survives", async () => {
-    const { target, flush } = render(AdvancedPane, {
-      onCopyDiagnostic: () => {},
-      loadHealth: () => Promise.resolve(health),
+    const { target, flush } = renderPane({
       loadDiagnostics: () => Promise.reject(new Error("offline")),
     });
 
@@ -110,11 +113,7 @@ describe("AdvancedPane per-block degrade", () => {
 describe("AdvancedPane copy", () => {
   test("Copy and the block itself both call onCopyDiagnostic with the block's exact text", async () => {
     const cap = capture<string>();
-    const { target, flush } = render(AdvancedPane, {
-      onCopyDiagnostic: cap.cb,
-      loadHealth: () => Promise.resolve(health),
-      loadDiagnostics: () => Promise.resolve(diagnostics),
-    });
+    const { target, flush } = renderPane({ onCopyDiagnostic: cap.cb });
 
     await flushUntil(flush, () => copyBtn(target, "version") !== null);
 

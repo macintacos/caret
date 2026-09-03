@@ -1,6 +1,7 @@
 import "@ui/test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { withBlockedStorage } from "@ui/test-storage.ts";
 import {
   COMPLETION_PREVIEW_KEY,
   readCompletionPreview,
@@ -32,21 +33,9 @@ describe("readCompletionPreview", () => {
   });
 
   test("fails safe to false when localStorage throws", () => {
-    const original = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      get() {
-        throw new Error("blocked");
-      },
-    });
-    try {
+    withBlockedStorage(() => {
       expect(readCompletionPreview()).toBe(false);
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: original,
-      });
-    }
+    });
   });
 });
 
@@ -65,20 +54,8 @@ describe("writeCompletionPreview", () => {
   });
 
   test("swallows a localStorage write failure", () => {
-    const original = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      get() {
-        throw new Error("blocked");
-      },
-    });
-    try {
+    withBlockedStorage(() => {
       expect(() => writeCompletionPreview(true)).not.toThrow();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: original,
-      });
-    }
+    });
   });
 });

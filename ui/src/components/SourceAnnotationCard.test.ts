@@ -63,6 +63,65 @@ function base(over: Record<string, unknown> = {}) {
   };
 }
 
+/** Click Discard, wait for the confirm popover, confirm it, and assert the id
+ * it deletes — the shared confirm-discard path both the collapsed and the
+ * expanded card exercise. */
+async function confirmDelete(
+  target: ParentNode,
+  flush: () => void,
+  deleted: { last: () => string | undefined },
+): Promise<void> {
+  click(target, ".danger");
+  await flushUntil(flush, () => confirmPopover() !== null);
+  expect(confirmPopover()).not.toBeNull();
+  expect(deleted.last()).toBeUndefined();
+  clickDoc(".confirm-popover .confirm");
+  await flushUntil(flush, () => confirmPopover() === null);
+  expect(deleted.last()).toBe("a1");
+}
+
+/** Render an expanded card and click Edit into it — the common opening every
+ * edit/save/cancel test below shares. */
+function openEditor(onEdit: (id: string, comment: string) => void = () => {}): {
+  target: HTMLElement;
+  flush: () => void;
+} {
+  const { target, flush } = render(SourceAnnotationCard, base({ focused: true, onEdit }));
+  click(target, ".edit");
+  flush();
+  return { target, flush };
+}
+
+/** Open the editor, tracking only whether `onEdit` ever fired — for the tests
+ * that assert a save was refused. */
+function openEditorTracking(): { target: HTMLElement; flush: () => void; called: () => boolean } {
+  let called = false;
+  const { target, flush } = openEditor(() => {
+    called = true;
+  });
+  return { target, flush, called: () => called };
+}
+
+/** Open the editor, type `text`, and capture the `{ id, comment }` an eventual
+ * save fires with — for the tests that assert a save landed. */
+function openEditorWithCapture(text: string): {
+  target: HTMLElement;
+  flush: () => void;
+  edited: ReturnType<typeof capture<{ id: string; comment: string }>>;
+} {
+  const edited = capture<{ id: string; comment: string }>();
+  const { target, flush } = openEditor((id, comment) => edited.cb({ id, comment }));
+  setEditorText(target, text);
+  return { target, flush, edited };
+}
+
+/** Assert the chip/header state indicator's class and label together — the
+ * two-line check every state-indicator case repeats. */
+function expectChipState(el: Element | null, cls: string, label: string): void {
+  expect(el?.classList.contains(cls)).toBe(true);
+  expect(el?.textContent?.trim()).toBe(label);
+}
+
 describe("SourceAnnotationCard collapse", () => {
   test("renders collapsed (a chip) when not focused", () => {
     const { target } = render(SourceAnnotationCard, base({ focused: false }));
@@ -99,13 +158,7 @@ describe("SourceAnnotationCard collapse", () => {
     flush();
     // Same confirm bubble and code path as the expanded Discard: nothing deleted
     // until the reviewer confirms, and the card never has to expand first.
-    click(target, ".danger");
-    await flushUntil(flush, () => confirmPopover() !== null);
-    expect(confirmPopover()).not.toBeNull();
-    expect(deleted.last()).toBeUndefined();
-    clickDoc(".confirm-popover .confirm");
-    await flushUntil(flush, () => confirmPopover() === null);
-    expect(deleted.last()).toBe("a1");
+    await confirmDelete(target, flush, deleted);
     expect(target.querySelector(".card.expanded")).toBeNull();
   });
 
@@ -215,47 +268,35 @@ describe("SourceAnnotationCard state indicator", () => {
   test("an annotation with no state shows the pending Draft affordance", () => {
     const { target } = render(SourceAnnotationCard, stated(undefined));
     expect(target.querySelector(".card")?.getAttribute("data-state")).toBe("pending");
-    const chip = target.querySelector(".chip .state");
-    expect(chip?.classList.contains("state-draft")).toBe(true);
-    expect(chip?.textContent?.trim()).toBe("Draft");
+    expectChipState(target.querySelector(".chip .state"), "state-draft", "Draft");
   });
 
   test("a pending comment reads as a Draft", () => {
     const { target } = render(SourceAnnotationCard, stated("pending"));
-    const chip = target.querySelector(".chip .state");
-    expect(chip?.classList.contains("state-draft")).toBe(true);
-    expect(chip?.textContent?.trim()).toBe("Draft");
+    expectChipState(target.querySelector(".chip .state"), "state-draft", "Draft");
   });
 
   test("a rejected comment reads as a still-active Requested", () => {
     const { target } = render(SourceAnnotationCard, stated("rejected"));
     expect(target.querySelector(".card")?.getAttribute("data-state")).toBe("rejected");
-    const chip = target.querySelector(".chip .state");
-    expect(chip?.classList.contains("state-draft")).toBe(true);
-    expect(chip?.textContent?.trim()).toBe("Requested");
+    expectChipState(target.querySelector(".chip .state"), "state-draft", "Requested");
   });
 
   test("an approved comment reads as an Accepted terminal", () => {
     const { target } = render(SourceAnnotationCard, stated("approved"));
     expect(target.querySelector(".card")?.getAttribute("data-state")).toBe("approved");
-    const chip = target.querySelector(".chip .state");
-    expect(chip?.classList.contains("state-accepted")).toBe(true);
-    expect(chip?.textContent?.trim()).toBe("Accepted");
+    expectChipState(target.querySelector(".chip .state"), "state-accepted", "Accepted");
   });
 
   test("an expired comment reads as a quiet Expired terminal", () => {
     const { target } = render(SourceAnnotationCard, stated("expired"));
     expect(target.querySelector(".card")?.getAttribute("data-state")).toBe("expired");
-    const chip = target.querySelector(".chip .state");
-    expect(chip?.classList.contains("state-expired")).toBe(true);
-    expect(chip?.textContent?.trim()).toBe("Expired");
+    expectChipState(target.querySelector(".chip .state"), "state-expired", "Expired");
   });
 
   test("the same state affordance shows in the expanded header", () => {
     const { target } = render(SourceAnnotationCard, stated("approved", { focused: true }));
-    const headState = target.querySelector(".head .state");
-    expect(headState?.classList.contains("state-accepted")).toBe(true);
-    expect(headState?.textContent?.trim()).toBe("Accepted");
+    expectChipState(target.querySelector(".head .state"), "state-accepted", "Accepted");
   });
 });
 
@@ -286,15 +327,9 @@ describe("SourceAnnotationCard edit/delete", () => {
       base({ focused: true, onFocus: () => (focused = true), onDelete: deleted.cb }),
     );
     flush();
-    click(target, ".danger");
-    await flushUntil(flush, () => confirmPopover() !== null);
-    // The confirm pops out of the Discard button; nothing is deleted yet.
-    expect(confirmPopover()).not.toBeNull();
-    expect(deleted.last()).toBeUndefined();
-    // Confirming deletes, and the original click never focused the card.
-    clickDoc(".confirm-popover .confirm");
-    await flushUntil(flush, () => confirmPopover() === null);
-    expect(deleted.last()).toBe("a1");
+    // The confirm pops out of the Discard button; confirming deletes, and the
+    // original click never focused the card.
+    await confirmDelete(target, flush, deleted);
     expect(focused).toBe(false);
   });
 
@@ -324,95 +359,54 @@ describe("SourceAnnotationCard edit/delete", () => {
   });
 
   test("edit opens the editor seeded with the current comment", () => {
-    const { target, flush } = render(SourceAnnotationCard, base({ focused: true }));
-    click(target, ".edit");
-    flush();
+    const { target } = openEditor();
     expect(target.querySelector("textarea")).toBeNull();
     expect(target.querySelector(".cm-content")?.textContent).toContain("needs work");
   });
 
   test("saves a changed, non-empty comment on Cmd/Ctrl+Enter", () => {
-    const edited = capture<{ id: string; comment: string }>();
-    const { target, flush } = render(
-      SourceAnnotationCard,
-      base({ focused: true, onEdit: (id: string, comment: string) => edited.cb({ id, comment }) }),
-    );
-    click(target, ".edit");
-    flush();
-    setEditorText(target, "revised");
+    const { target, flush, edited } = openEditorWithCapture("revised");
     chord(target, "Enter", { metaKey: true });
     flush();
     expect(edited.last()).toEqual({ id: "a1", comment: "revised" });
   });
 
   test("the save button commits a changed comment", () => {
-    const edited = capture<{ id: string; comment: string }>();
-    const { target, flush } = render(
-      SourceAnnotationCard,
-      base({ focused: true, onEdit: (id: string, comment: string) => edited.cb({ id, comment }) }),
-    );
-    click(target, ".edit");
-    flush();
-    setEditorText(target, "via button");
+    const { target, flush, edited } = openEditorWithCapture("via button");
     click(target, ".save");
     flush();
     expect(edited.last()).toEqual({ id: "a1", comment: "via button" });
   });
 
   test("the cancel button discards the edit without saving", () => {
-    let called = false;
-    const { target, flush } = render(
-      SourceAnnotationCard,
-      base({ focused: true, onEdit: () => (called = true) }),
-    );
-    click(target, ".edit");
-    flush();
+    const { target, flush, called } = openEditorTracking();
     setEditorText(target, "discard me");
     click(target, ".cancel");
     flush();
-    expect(called).toBe(false);
+    expect(called()).toBe(false);
     expect(target.querySelector(".cm-content")).toBeNull();
   });
 
   test("does NOT save an unchanged comment", () => {
-    let called = false;
-    const { target, flush } = render(
-      SourceAnnotationCard,
-      base({ focused: true, onEdit: () => (called = true) }),
-    );
-    click(target, ".edit");
-    flush();
+    const { target, flush, called } = openEditorTracking();
     chord(target, "Enter", { metaKey: true });
     flush();
-    expect(called).toBe(false);
+    expect(called()).toBe(false);
   });
 
   test("Escape blurs the field first, keeping the editor open and unsaved", () => {
-    let called = false;
-    const { target, flush } = render(
-      SourceAnnotationCard,
-      base({ focused: true, onEdit: () => (called = true) }),
-    );
-    click(target, ".edit");
-    flush();
+    const { target, flush, called } = openEditorTracking();
     setEditorText(target, "changed");
     // First Escape (from the editor) blurs without dismissing: still editing, and
     // nothing saved yet.
     chord(target, "Escape");
     flush();
-    expect(called).toBe(false);
+    expect(called()).toBe(false);
     expect(target.querySelector(".cm-content")).not.toBeNull();
   });
 
   test("a second Escape (on the card) saves the edit and closes", () => {
-    const edited = capture<{ id: string; comment: string }>();
-    const { target, flush } = render(
-      SourceAnnotationCard,
-      base({ focused: true, onEdit: (id: string, comment: string) => edited.cb({ id, comment }) }),
-    );
-    click(target, ".edit");
-    flush();
-    setEditorText(target, "saved via escape");
+    const { target, flush, edited } = openEditorWithCapture("saved via escape");
     chord(target, "Escape"); // blur into the card
     flush();
     escapeCard(target); // dismiss: for an edit that commits the current text

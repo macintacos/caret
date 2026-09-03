@@ -209,3 +209,28 @@ export function fakeTimers(): {
 export function drainMicrotasks(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
+
+// ---------------------------------------------------------------------------
+// Spying on native focus() (MarkdownEditor.test.ts, SourceComposer.test.ts): both
+// prove an autofocusing editor calls the real DOM focus() with `preventScroll`,
+// which no mounted-component API surfaces directly.
+
+/** Run `body` with `HTMLElement.prototype.focus` spied on, and return every
+ * options object a call received — for asserting a component focuses with a
+ * specific `FocusOptions` (e.g. `preventScroll`). Restores the original focus
+ * afterward even if `body` throws. */
+export function withFocusSpy(body: () => void): Array<FocusOptions | undefined> {
+  const proto = HTMLElement.prototype;
+  const orig = proto.focus;
+  const optsSeen: Array<FocusOptions | undefined> = [];
+  proto.focus = function (opts?: FocusOptions) {
+    optsSeen.push(opts);
+    return orig.call(this, opts);
+  };
+  try {
+    body();
+    return optsSeen;
+  } finally {
+    proto.focus = orig;
+  }
+}

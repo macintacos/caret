@@ -1,8 +1,8 @@
 import "@ui/test-setup.ts";
 import { describe, expect, test } from "bun:test";
 
+import { fillLines } from "@ui/test-diffview-dom.ts";
 import { codeBlockRanges } from "$lib/diffview/codeBlocks.ts";
-import { fillLines } from "$lib/diffview/dom-fixture.ts";
 import { tagThematicBreakRows, thematicBreakLines } from "$lib/diffview/thematicBreaks.ts";
 
 // thematicBreakLines decides which lines of a rendered plan are real thematic

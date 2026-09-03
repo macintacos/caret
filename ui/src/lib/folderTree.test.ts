@@ -532,11 +532,13 @@ test("carries the paths the refresh was answered with", () => {
   expect(card.levels.paths).toEqual(["lib/", "cache.ts", "lib/util.ts", "lib/new.ts"]);
 });
 
+const REFRESH_WITH_LIB_UTIL = [
+  answer("", listing([dir("lib")])),
+  answer("lib", listing([file("util.ts")])),
+];
+
 test("drops a row the refresh no longer found", () => {
-  const card = refreshCard(openCard(), [
-    answer("", listing([dir("lib")])),
-    answer("lib", listing([file("util.ts")])),
-  ]);
+  const card = refreshCard(openCard(), REFRESH_WITH_LIB_UTIL);
   expect(card.levels.paths).toEqual(["lib/", "lib/util.ts"]);
 });
 
@@ -552,10 +554,7 @@ test("takes a whole subtree with the directory that vanished above it", () => {
 });
 
 test("keeps a folder open when its level came back", () => {
-  const card = refreshCard(openCard(), [
-    answer("", listing([dir("lib")])),
-    answer("lib", listing([file("util.ts")])),
-  ]);
+  const card = refreshCard(openCard(), REFRESH_WITH_LIB_UTIL);
   expect(card.expanded).toEqual(["lib/"]);
 });
 

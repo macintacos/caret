@@ -1,6 +1,7 @@
 import "@ui/test-setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { fakeMediaQuery } from "@ui/test-media-query.ts";
 import { type AppearanceDeps, createAppearance } from "@/state/appearance.svelte.ts";
 import { DARK_SLOT_KEY, LIGHT_SLOT_KEY, MODE_KEY } from "$lib/appearance.ts";
 import { THEMES } from "$lib/theme.ts";
@@ -11,24 +12,6 @@ afterEach(() => {
   document.documentElement.removeAttribute("style");
   document.documentElement.removeAttribute("data-theme");
 });
-
-/** A minimal stand-in for the `(prefers-color-scheme: dark)` MediaQueryList, so
- * the OS-flip path is driven deterministically instead of slept through. */
-function fakeMediaQuery(matches: boolean) {
-  const listeners = new Set<(e: { matches: boolean }) => void>();
-  return {
-    mql: {
-      matches,
-      addEventListener: (_t: "change", l: (e: { matches: boolean }) => void) => listeners.add(l),
-      removeEventListener: (_t: "change", l: (e: { matches: boolean }) => void) =>
-        listeners.delete(l),
-    },
-    flip(next: boolean) {
-      for (const l of listeners) l({ matches: next });
-    },
-    listenerCount: () => listeners.size,
-  };
-}
 
 /** An instance whose OS probe and wipe are both injected — so no test touches
  * matchMedia — plus a count of the wipes it actually ran. The count is the
@@ -123,12 +106,17 @@ describe("setSlot", () => {
   });
 });
 
+/** Arm a fake OS media query on `appearance` and flip it to dark. */
+function flipToDark(appearance: ReturnType<typeof harness>["appearance"]): void {
+  const media = fakeMediaQuery(false);
+  appearance.watch(media.mql);
+  media.flip(true);
+}
+
 describe("the OS flip", () => {
   test("under system it moves the resolution, the summary, and repaints", () => {
     const { appearance, wipes } = harness(false);
-    const media = fakeMediaQuery(false);
-    appearance.watch(media.mql);
-    media.flip(true);
+    flipToDark(appearance);
     expect(appearance.scheme).toBe("dark");
     expect(appearance.themeId).toBe("caret-dark");
     expect(appearance.summary).toContain(THEMES["caret-dark"].label);
@@ -141,9 +129,7 @@ describe("the OS flip", () => {
     appearance.setMode("dark");
     expect(wipes()).toBe(1);
 
-    const media = fakeMediaQuery(false);
-    appearance.watch(media.mql);
-    media.flip(true);
+    flipToDark(appearance);
     expect(appearance.scheme).toBe("dark");
     expect(appearance.themeId).toBe("caret-dark");
     expect(wipes()).toBe(1);

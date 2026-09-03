@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { type AlertStore, createAlerts } from "@/state/alerts.ts";
+import { type AlertDeps, type AlertStore, createAlerts } from "@/state/alerts.ts";
 import type { SoundEvent } from "$lib/sound.ts";
 
 // A controllable scheduler so the auto-dismiss + exit timing is deterministic —
@@ -29,10 +29,17 @@ function makeScheduler() {
 
 const makeStore = (): AlertStore => ({ alerts: [] });
 
+/** A fresh alert queue over a fresh store and scheduler. */
+function makeAlerts(deps: Omit<AlertDeps, "schedule"> = {}) {
+  const store = makeStore();
+  const sched = makeScheduler();
+  const alerts = createAlerts(store, { schedule: sched.schedule, ...deps });
+  return { store, sched, alerts };
+}
+
 describe("createAlerts", () => {
   test("push appends a non-leaving alert and returns its id", () => {
-    const store = makeStore();
-    const alerts = createAlerts(store, { schedule: makeScheduler().schedule });
+    const { store, alerts } = makeAlerts();
     const id = alerts.push({ variant: "success", message: "Copied path to clipboard" });
     expect(store.alerts).toHaveLength(1);
     expect(store.alerts[0]).toMatchObject({
@@ -44,24 +51,20 @@ describe("createAlerts", () => {
   });
 
   test("defaults the variant to 'default'", () => {
-    const store = makeStore();
-    const alerts = createAlerts(store, { schedule: makeScheduler().schedule });
+    const { store, alerts } = makeAlerts();
     alerts.push({ message: "hi" });
     expect(store.alerts[0]?.variant).toBe("default");
   });
 
   test("assigns distinct monotonic ids", () => {
-    const store = makeStore();
-    const alerts = createAlerts(store, { schedule: makeScheduler().schedule });
+    const { alerts } = makeAlerts();
     const a = alerts.push({ message: "one" });
     const b = alerts.push({ message: "two" });
     expect(b).toBeGreaterThan(a);
   });
 
   test("the dwell timer marks the alert leaving, then the exit timer removes it", () => {
-    const store = makeStore();
-    const sched = makeScheduler();
-    const alerts = createAlerts(store, { schedule: sched.schedule });
+    const { store, sched, alerts } = makeAlerts();
     alerts.push({ message: "hi" });
     sched.runNext(); // dwell elapses → begins exit
     expect(store.alerts).toHaveLength(1);
@@ -71,9 +74,7 @@ describe("createAlerts", () => {
   });
 
   test("a manual dismiss before the dwell cancels the dwell timer", () => {
-    const store = makeStore();
-    const sched = makeScheduler();
-    const alerts = createAlerts(store, { schedule: sched.schedule });
+    const { store, sched, alerts } = makeAlerts();
     const id = alerts.push({ message: "hi" });
     alerts.dismiss(id);
     expect(store.alerts[0]?.leaving).toBe(true);
@@ -84,9 +85,7 @@ describe("createAlerts", () => {
   });
 
   test("a second dismiss on the same alert schedules nothing new", () => {
-    const store = makeStore();
-    const sched = makeScheduler();
-    const alerts = createAlerts(store, { schedule: sched.schedule });
+    const { sched, alerts } = makeAlerts();
     const id = alerts.push({ message: "hi" });
     alerts.dismiss(id);
     const before = sched.active();
@@ -95,9 +94,7 @@ describe("createAlerts", () => {
   });
 
   test("a persistent push arms no dwell timer, staying until it's manually dismissed", () => {
-    const store = makeStore();
-    const sched = makeScheduler();
-    const alerts = createAlerts(store, { schedule: sched.schedule });
+    const { store, sched, alerts } = makeAlerts();
     const id = alerts.push({ variant: "destructive", message: "Couldn't save", persistent: true });
     // No auto-dismiss: a persistent alert (a failure the user must read + act on)
     // never schedules its own removal.
@@ -111,8 +108,7 @@ describe("createAlerts", () => {
   });
 
   test("multiple pushes stack in insertion order (oldest first)", () => {
-    const store = makeStore();
-    const alerts = createAlerts(store, { schedule: makeScheduler().schedule });
+    const { store, alerts } = makeAlerts();
     alerts.push({ message: "first" });
     alerts.push({ message: "second" });
     expect(store.alerts.map((a) => a.message)).toEqual(["first", "second"]);
@@ -122,12 +118,8 @@ describe("createAlerts", () => {
 describe("createAlerts sound (EXC-1100)", () => {
   /** An alert queue wired to a recording sound dep, plus what it has played. */
   function withSound() {
-    const store = makeStore();
     const events: SoundEvent[] = [];
-    const alerts = createAlerts(store, {
-      schedule: makeScheduler().schedule,
-      sound: (e) => events.push(e),
-    });
+    const { alerts } = makeAlerts({ sound: (e) => events.push(e) });
     return { alerts, events };
   }
 
@@ -169,8 +161,7 @@ describe("createAlerts sound (EXC-1100)", () => {
   });
 
   test("the dep is optional — a queue with no sound still pushes", () => {
-    const store = makeStore();
-    const alerts = createAlerts(store, { schedule: makeScheduler().schedule });
+    const { store, alerts } = makeAlerts();
     alerts.push({ message: "hi" });
     expect(store.alerts).toHaveLength(1);
   });
@@ -178,24 +169,20 @@ describe("createAlerts sound (EXC-1100)", () => {
 
 describe("createAlerts action (EXC-1207)", () => {
   test("push carries an action onto the queued item", () => {
-    const store = makeStore();
-    const alerts = createAlerts(store, { schedule: makeScheduler().schedule });
+    const { store, alerts } = makeAlerts();
     const run = () => {};
     alerts.push({ message: "caret 1.2.0 is available", action: { label: "Update", run } });
     expect(store.alerts[0]?.action).toEqual({ label: "Update", run });
   });
 
   test("an alert pushed without one carries no action", () => {
-    const store = makeStore();
-    const alerts = createAlerts(store, { schedule: makeScheduler().schedule });
+    const { store, alerts } = makeAlerts();
     alerts.push({ message: "hi" });
     expect(store.alerts[0]?.action).toBeUndefined();
   });
 
   test("an action changes neither the dwell nor the dismiss path", () => {
-    const store = makeStore();
-    const sched = makeScheduler();
-    const alerts = createAlerts(store, { schedule: sched.schedule });
+    const { store, sched, alerts } = makeAlerts();
     alerts.push({ message: "hi", action: { label: "Update", run: () => {} } });
     // Still one dwell timer armed, and it still runs the two-phase exit.
     expect(sched.active()).toBe(1);

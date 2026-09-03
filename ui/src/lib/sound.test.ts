@@ -86,27 +86,29 @@ describe("an engine that throws", () => {
 });
 
 describe("unlock", () => {
-  test("creates the AudioContext on the first gesture, inaudibly", () => {
+  /** A recording engine, unlocked on a fresh target. */
+  function unlockedRecorder() {
     const target = new EventTarget();
     const engine = recorder();
-    createSound({ engine, target }).unlock();
+    const dispose = createSound({ engine, target }).unlock();
+    return { target, engine, dispose };
+  }
+
+  test("creates the AudioContext on the first gesture, inaudibly", () => {
+    const { target, engine } = unlockedRecorder();
     target.dispatchEvent(new Event("pointerdown"));
     expect(engine.played).toHaveLength(1);
     expect(engine.played[0]?.volume).toBeLessThan(0.01);
   });
 
   test("a keystroke unlocks too", () => {
-    const target = new EventTarget();
-    const engine = recorder();
-    createSound({ engine, target }).unlock();
+    const { target, engine } = unlockedRecorder();
     target.dispatchEvent(new Event("keydown"));
     expect(engine.played).toHaveLength(1);
   });
 
   test("fires once, not on every later gesture", () => {
-    const target = new EventTarget();
-    const engine = recorder();
-    createSound({ engine, target }).unlock();
+    const { target, engine } = unlockedRecorder();
     target.dispatchEvent(new Event("pointerdown"));
     target.dispatchEvent(new Event("keydown"));
     target.dispatchEvent(new Event("pointerdown"));
@@ -114,9 +116,8 @@ describe("unlock", () => {
   });
 
   test("the disposer detaches both listeners before any gesture lands", () => {
-    const target = new EventTarget();
-    const engine = recorder();
-    createSound({ engine, target }).unlock()();
+    const { target, engine, dispose } = unlockedRecorder();
+    dispose();
     target.dispatchEvent(new Event("pointerdown"));
     target.dispatchEvent(new Event("keydown"));
     expect(engine.played).toHaveLength(0);
@@ -124,9 +125,7 @@ describe("unlock", () => {
 
   test("unlocks even while sound is switched off, so enabling it later needs no second gesture", () => {
     localStorage.setItem(SOUND_ENABLED_KEY, "off");
-    const target = new EventTarget();
-    const engine = recorder();
-    createSound({ engine, target }).unlock();
+    const { target, engine } = unlockedRecorder();
     target.dispatchEvent(new Event("pointerdown"));
     expect(engine.played).toHaveLength(1);
   });
