@@ -42,16 +42,14 @@
   } from "$lib/components/ui/field/index.js";
   import * as InputGroup from "$lib/components/ui/input-group/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
-  import { isTopmostDialog } from "$lib/modalStack.ts";
+  import { claimSlashForSearch } from "$lib/modalStack.ts";
   import { SETTINGS_SHORTCUTS, shortcuts } from "$lib/shortcuts/index.ts";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
-  import { Switch } from "$lib/components/ui/switch/index.js";
   import {
     filterSettings,
     isStagedField,
     SETTINGS_CATEGORIES,
     type SettingEntry,
-    settingControlId,
     settingLabelId,
     settingLabelTarget,
     type StagedField,
@@ -60,9 +58,7 @@
   } from "$lib/settingsRegistry.ts";
   import AdvancedPane from "@/components/AdvancedPane.svelte";
   import NotificationsPane from "@/components/NotificationsPane.svelte";
-  import SettingSegmented from "@/components/SettingSegmented.svelte";
-  import SettingSelect from "@/components/SettingSelect.svelte";
-  import SettingSlider from "@/components/SettingSlider.svelte";
+  import SettingControl from "@/components/SettingControl.svelte";
   import ThemeSection from "@/components/ThemeSection.svelte";
   import UpdatesPane from "@/components/UpdatesPane.svelte";
   import type { UpdateReport } from "@core/lib/types";
@@ -190,29 +186,9 @@
     focusContent();
   }
 
-  // EXC-845 (the EXC-835 capture-phase pattern): while the modal is open, `/` focuses the
-  // search input instead of falling through to the global plan-search binding
-  // (actions.search). Capture phase so the preventDefault lands before the bubble-phase
-  // global dispatcher (dispatcher.ts), which yields on defaultPrevented — the modal traps
-  // focus on the dialog content (not an input), so isEditingContext() wouldn't otherwise
-  // suppress the global `/`. Once the input owns focus, `/` types normally.
-  //
-  // EXC-849: yield unless Settings is the topmost dialog. When ShortcutsHelp stacks above
-  // Settings (? over the settings modal), both register this capture handler; Settings'
-  // fires first (registered first), so without this guard it would steal `/` from the modal
-  // on top. isTopmostDialog gates on portal order instead of registration order, so `/`
-  // reaches whichever modal is stacked highest.
-  $effect(() => {
-    function onKeydown(e: KeyboardEvent): void {
-      if (e.key !== "/" || e.defaultPrevented) return;
-      if (document.activeElement === searchInput) return;
-      if (!isTopmostDialog(searchInput)) return;
-      e.preventDefault();
-      searchInput?.focus();
-    }
-    window.addEventListener("keydown", onKeydown, { capture: true });
-    return () => window.removeEventListener("keydown", onKeydown, { capture: true });
-  });
+  // EXC-845 / EXC-849: while the modal is open, `/` focuses its search input rather
+  // than the global plan search.
+  $effect(() => claimSlashForSearch(() => searchInput));
 
   // EXC-845: Esc is two-stage. When the search input owns focus, Esc clears the query and
   // returns focus to the dialog content — preventDefault cancels bits-ui's close (its
@@ -380,49 +356,10 @@
           >
           <FieldDescription>{field.description}</FieldDescription>
         </FieldContent>
-        {@render control(field)}
+        <SettingControl {field} value={values[field.key]} onApply={apply} />
       </Field>
     {/each}
   </FieldGroup>
-{/snippet}
-
-{#snippet control(field: StagedField)}
-  {#if field.control.kind === "select"}
-    <SettingSelect
-      id={settingControlId(field.key)}
-      value={String(values[field.key] ?? "")}
-      options={field.control.options}
-      onSelect={(v) => apply(field, v)}
-    />
-  {:else if field.control.kind === "segmented"}
-    <SettingSegmented
-      labelledBy={settingLabelId(field.key)}
-      value={String(values[field.key] ?? "")}
-      options={field.control.options}
-      onSelect={(v) => apply(field, v)}
-    />
-  {:else if field.control.kind === "slider"}
-    <!-- Named through the row's label like the segmented control, and for the same
-         reason: the slider's root is a <span>, which `<label for>` cannot bind to.
-         `??` rather than `||` on the fallback — 0 is a real volume, and `||` would
-         swap silence for the default. -->
-    <SettingSlider
-      labelledBy={settingLabelId(field.key)}
-      value={Number(values[field.key] ?? 0)}
-      onSelect={(v) => apply(field, v)}
-    />
-  {:else}
-    <!-- Bound through a getter/setter pair, not a one-way `checked` + onCheckedChange:
-         bits-ui's Switch keeps its own copy, so a plain prop lets a click flip the
-         control while the shell still holds the old value — and re-seeding `values` to
-         the same value pushes nothing back, so a write that never landed would leave
-         the switch showing a state that was never persisted. Same shape as
-         SettingSegmented's toggle group, for the same reason. -->
-    <Switch
-      id={settingControlId(field.key)}
-      bind:checked={() => values[field.key] === true, (v) => apply(field, v)}
-    />
-  {/if}
 {/snippet}
 
 <style>

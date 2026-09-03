@@ -70,6 +70,28 @@ export function createResolve(store: ResolveStore, deps: ResolveDeps): Resolve {
   const submit = deps.resolveReview ?? resolveReview;
   const readMode = deps.getApproveMode ?? getApproveMode;
 
+  // A deny: flush, submit, clear the local general-comment mirror (the daemon
+  // cleared the stored draft on resolve, and a deny keeps this review id, so the
+  // sent text would otherwise linger on reopen), advance. The feedback is a thunk
+  // because it must be composed AFTER the flush — a pending draft the flush
+  // commits belongs in it.
+  async function deny(feedback: () => string): Promise<void> {
+    const id = deps.activeId();
+    if (!id) return;
+    store.busy = true;
+    await deps.flushPending();
+    try {
+      await submit(id, { behavior: "deny", feedback: feedback() });
+      deps.clearGeneralComment();
+      deps.afterResolve(id);
+    } catch (err) {
+      if (err instanceof HttpError) deps.afterResolve(id);
+      else deps.onOffline();
+    } finally {
+      store.busy = false;
+    }
+  }
+
   return {
     get approveMode() {
       return store.approveMode;
@@ -109,45 +131,12 @@ export function createResolve(store: ResolveStore, deps: ResolveDeps): Resolve {
       }
     },
 
-    async requestChanges(generalComment) {
-      const id = deps.activeId();
-      if (!id) return;
-      store.busy = true;
-      await deps.flushPending();
-      const feedback = formatFeedback(deps.annotations(), generalComment, deps.planText());
-      try {
-        await submit(id, { behavior: "deny", feedback });
-        // The daemon cleared the stored draft on resolve; clear the local mirror
-        // too. A deny keeps this review id (the revision reuses it), and the seed
-        // is id-keyed, so without this the sent text would linger on reopen.
-        deps.clearGeneralComment();
-        deps.afterResolve(id);
-      } catch (err) {
-        if (err instanceof HttpError) deps.afterResolve(id);
-        else deps.onOffline();
-      } finally {
-        store.busy = false;
-      }
+    requestChanges(generalComment) {
+      return deny(() => formatFeedback(deps.annotations(), generalComment, deps.planText()));
     },
 
-    async reject() {
-      const id = deps.activeId();
-      if (!id) return;
-      store.busy = true;
-      await deps.flushPending();
-      try {
-        await submit(id, { behavior: "deny", feedback: PLAN_REJECTED_MESSAGE });
-        // Same as requestChanges: the daemon clears the stored draft on resolve,
-        // so clear the local mirror too. Reject sends no annotations — just the
-        // canned message.
-        deps.clearGeneralComment();
-        deps.afterResolve(id);
-      } catch (err) {
-        if (err instanceof HttpError) deps.afterResolve(id);
-        else deps.onOffline();
-      } finally {
-        store.busy = false;
-      }
+    reject() {
+      return deny(() => PLAN_REJECTED_MESSAGE);
     },
   };
 }

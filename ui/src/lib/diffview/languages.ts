@@ -123,3 +123,20 @@ export async function preloadFenceLanguages(langs: string[]): Promise<boolean> {
   const results = await Promise.all(pending);
   return results.some(Boolean);
 }
+
+/**
+ * Attach the grammars `text`'s fences reference, then re-highlight once any of
+ * them lands. Returns a cancel function: a load that resolves after the caller
+ * moved on to other content re-highlights nothing.
+ */
+export function attachFenceLanguages(text: string, rehighlight: () => void): () => void {
+  const langs = scanFenceLanguages(text);
+  if (langs.length === 0) return () => {};
+  let cancelled = false;
+  void preloadFenceLanguages(langs).then((loaded) => {
+    if (loaded && !cancelled) rehighlight();
+  });
+  return () => {
+    cancelled = true;
+  };
+}

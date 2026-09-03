@@ -4,7 +4,7 @@
   // (instance.ts) owns the imperative lifecycle.
   import { type FileContents, FileDiff } from "@pierre/diffs";
   import { createDiffViewLifecycle } from "$lib/diffview/instance.ts";
-  import { preloadFenceLanguages, scanFenceLanguages } from "$lib/diffview/languages.ts";
+  import { attachFenceLanguages } from "$lib/diffview/languages.ts";
   import { type SourceDiffViewLibOptions, toFileDiffOptions } from "$lib/diffview/options.ts";
   import { scrollToDiffLine } from "$lib/diffview/scroll.ts";
   import { registerCaretDiffThemes } from "$lib/diffview/theme.ts";
@@ -81,22 +81,10 @@
     });
   });
 
-  // Fenced-code highlighting for both sides of the diff. Same mechanism as
-  // SourceView: attach the grammars the fences reference, then re-highlight. The
-  // shared highlighter usually already holds them (the single-version view loads
-  // them first), but a language present only in the base version is covered by
-  // scanning both docs. See languages.ts.
-  $effect(() => {
-    const langs = scanFenceLanguages(`${oldDoc.text}\n${newDoc.text}`);
-    if (langs.length === 0) return;
-    let cancelled = false;
-    void preloadFenceLanguages(langs).then((loaded) => {
-      if (loaded && !cancelled) lifecycle.rehighlight();
-    });
-    return () => {
-      cancelled = true;
-    };
-  });
+  // Both sides are scanned together: the single-version view has usually loaded
+  // these grammars already, but a language present only in the base version has
+  // not been seen. See languages.ts.
+  $effect(() => attachFenceLanguages(`${oldDoc.text}\n${newDoc.text}`, lifecycle.rehighlight));
 </script>
 
 <!-- data-caret-indicators="both" is caret's own flag for the combined bars+glyphs

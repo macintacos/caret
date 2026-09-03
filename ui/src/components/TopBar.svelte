@@ -129,18 +129,7 @@
         disabled={busy}
         aria-keyshortcuts={ariaKeyshortcutsFor("actions.requestChanges")}
       >
-        <Icon name="corner-up-left" size={14} />
-        Request changes
-        {#if pendingCount > 0}
-          <Badge
-            variant="secondary"
-            class="count count-attention metric"
-            aria-label="{pendingCount} pending comment{pendingCount === 1 ? '' : 's'}"
-          >
-            {pendingCount}
-          </Badge>
-        {/if}
-        {#if showShortcutHints}<Kbd aria-hidden="true">r</Kbd>{/if}
+        {@render requestChangesLabel()}
       </Button>
 
       <!-- Below --w-narrow the Reject + Request-changes buttons above collapse
@@ -186,10 +175,7 @@
                  this menu has closed or the menu's interact-outside dismisses it. -->
             <DropdownMenu.Item class="overflow-approve" onSelect={() => setTimeout(() => onApprove(v.id), 0)}>
               <Icon name="check" size={14} />
-              <span class="v-col">
-                <span class="v-label">{v.label}</span>
-                {#if v.description}<span class="v-note">{v.description}</span>{/if}
-              </span>
+              {@render variantLabel(v)}
               <!-- Only the remembered variant carries the `a` cap — it's the row
                    the `a` shortcut (onApprove(approveMode)) actually fires. -->
               {#if v.id === approveMode && showShortcutHints}
@@ -204,18 +190,7 @@
                tick. Reject is an alertdialog (ignores outside-interaction), so it
                fires directly. -->
           <DropdownMenu.Item onSelect={() => setTimeout(onRequestChanges, 0)}>
-            <Icon name="corner-up-left" size={14} />
-            Request changes
-            {#if pendingCount > 0}
-              <Badge
-                variant="secondary"
-                class="count count-attention metric"
-                aria-label="{pendingCount} pending comment{pendingCount === 1 ? '' : 's'}"
-              >
-                {pendingCount}
-              </Badge>
-            {/if}
-            {#if showShortcutHints}<Kbd class="menu-key" aria-hidden="true">r</Kbd>{/if}
+            {@render requestChangesLabel("menu-key")}
           </DropdownMenu.Item>
           <DropdownMenu.Item variant="destructive" onSelect={() => onReject()}>
             <Icon name="x" size={14} />
@@ -268,10 +243,7 @@
             {#snippet menu()}
               {#each variants as v (v.id)}
                 <DropdownMenu.Item class="approve-variant" onSelect={() => onApprove(v.id)}>
-                  <span class="v-col">
-                    <span class="v-label">{v.label}</span>
-                    {#if v.description}<span class="v-note">{v.description}</span>{/if}
-                  </span>
+                  {@render variantLabel(v)}
                 </DropdownMenu.Item>
               {/each}
             {/snippet}
@@ -312,6 +284,32 @@
     </Button>
   </div>
 </header>
+
+<!-- Request changes wears the same face inline and in the overflow menu; only the
+     cap's placement class differs (a menu row's cap is pushed to the row's end). -->
+{#snippet requestChangesLabel(kbdClass?: string)}
+  <Icon name="corner-up-left" size={14} />
+  Request changes
+  {#if pendingCount > 0}
+    <Badge
+      variant="secondary"
+      class="count count-attention metric"
+      aria-label="{pendingCount} pending comment{pendingCount === 1 ? '' : 's'}"
+    >
+      {pendingCount}
+    </Badge>
+  {/if}
+  {#if showShortcutHints}<Kbd class={kbdClass} aria-hidden="true">r</Kbd>{/if}
+{/snippet}
+
+<!-- One approve variant's two lines, rendered in both menus that list them (the
+     overflow menu and the split button's own). -->
+{#snippet variantLabel(v: ApproveVariant)}
+  <span class="v-col">
+    <span class="v-label">{v.label}</span>
+    {#if v.description}<span class="v-note">{v.description}</span>{/if}
+  </span>
+{/snippet}
 
 <style>
   /* The header row sits on the raised paper surface with a hairline rule, so it

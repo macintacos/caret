@@ -11,12 +11,11 @@
   // autofocus/preventScroll guard, and reports the chords back here.
   //
   // The chrome is composed from shadcn primitives (EXC-765): a Card-style surface,
-  // Buttons for Keep / Discard / Comment (Comment is the one amber primary), and a
-  // Kbd for the ⌘↵ hint. The editor stays MarkdownEditor.
+  // Buttons for Keep / Discard / Comment (Comment is the one amber primary), and the
+  // shared SubmitCap for the ⌘↵ hint. The editor stays MarkdownEditor.
   import { untrack } from "svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Card } from "$lib/components/ui/card/index.js";
-  import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { rangeLabel } from "$lib/diffview/commenting.ts";
   import { revealCard } from "$lib/diffview/scroll.ts";
   import type { ReviewContext } from "$lib/editorCompletion.ts";
@@ -24,6 +23,7 @@
   import ConfirmPopover from "@/components/ConfirmPopover.svelte";
   import Icon from "@/components/Icon.svelte";
   import MarkdownEditor from "@/components/MarkdownEditor.svelte";
+  import SubmitCap from "@/components/SubmitCap.svelte";
 
   interface Props {
     /** First annotated line (1-based, inclusive). */
@@ -171,9 +171,7 @@
       <Button variant="ghost" class="cancel" onclick={onDiscard}>Cancel</Button>
       <Button class="save" onclick={submit} aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}>
         Save
-        <Kbd aria-hidden="true">
-          <Icon name="command" size={12} /><Icon name="corner-down-left" size={12} />
-        </Kbd>
+        <SubmitCap />
       </Button>
     {:else}
       <Button variant="ghost" class="keep" onclick={keep} disabled={!canKeep}>Keep for later</Button>
@@ -196,9 +194,7 @@
       {/if}
       <Button onclick={submit} aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}>
         Comment
-        <Kbd aria-hidden="true">
-          <Icon name="command" size={12} /><Icon name="corner-down-left" size={12} />
-        </Kbd>
+        <SubmitCap />
       </Button>
     {/if}
   </div>

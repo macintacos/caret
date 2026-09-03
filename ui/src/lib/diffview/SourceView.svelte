@@ -25,7 +25,7 @@
   import { selectionIn, selectionText } from "$lib/diffview/selectionCopy.ts";
   import { tagThematicBreakRows, thematicBreakLines } from "$lib/diffview/thematicBreaks.ts";
   import { type TableRange, syncTableCards, tableRanges } from "$lib/diffview/tables.ts";
-  import { preloadFenceLanguages, scanFenceLanguages } from "$lib/diffview/languages.ts";
+  import { attachFenceLanguages } from "$lib/diffview/languages.ts";
   import { registerCaretDiffThemes } from "$lib/diffview/theme.ts";
   import {
     libraryContents,
@@ -263,24 +263,10 @@
     });
   });
 
-  // Fenced-code highlighting. The library highlights the doc as one "markdown"
-  // file and never attaches the grammars its fenced blocks reference, so code
-  // fences render as a single un-tokenized color. Scan the rendered text for the
-  // languages its fences use, attach those grammars to the shared highlighter,
-  // then force one re-highlight so the now-resolvable fences light up. Re-runs on
-  // content change; a no-op when the plan has no code or the grammars are already
-  // attached (preload reports nothing newly loaded). See languages.ts.
-  $effect(() => {
-    const langs = scanFenceLanguages(doc.text);
-    if (langs.length === 0) return;
-    let cancelled = false;
-    void preloadFenceLanguages(langs).then((loaded) => {
-      if (loaded && !cancelled) lifecycle.rehighlight();
-    });
-    return () => {
-      cancelled = true;
-    };
-  });
+  // The library highlights the doc as one "markdown" file and attaches only that
+  // grammar, so without this every fenced block renders in a single un-tokenized
+  // color. See languages.ts.
+  $effect(() => attachFenceLanguages(doc.text, lifecycle.rehighlight));
 
   // Content-drag range commenting (EXC-639). The @pierre/diffs view only starts a
   // line selection from the gutter and never opens the composer, so caret owns the

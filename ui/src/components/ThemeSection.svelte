@@ -34,14 +34,12 @@
     FieldSeparator,
   } from "$lib/components/ui/field/index.js";
   import {
-    settingControlId,
     settingLabelId,
     settingLabelTarget,
     type StagedField,
     THEME_FIELD,
   } from "$lib/settingsRegistry.ts";
-  import SettingSegmented from "@/components/SettingSegmented.svelte";
-  import SettingSelect from "@/components/SettingSelect.svelte";
+  import SettingControl from "@/components/SettingControl.svelte";
 
   interface Props {
     /** The Theme section's fields, in registry order and possibly search-filtered. */
@@ -101,21 +99,7 @@
           </FieldLabel>
           <FieldDescription>{field.description}</FieldDescription>
         </FieldContent>
-        {#if field.control.kind === "segmented"}
-          <SettingSegmented
-            labelledBy={settingLabelId(field.key)}
-            value={String(values[field.key] ?? "")}
-            options={field.control.options}
-            onSelect={(v) => onApply(field, v)}
-          />
-        {:else if field.control.kind === "select"}
-          <SettingSelect
-            id={settingControlId(field.key)}
-            value={String(values[field.key] ?? "")}
-            options={field.control.options}
-            onSelect={(v) => onApply(field, v)}
-          />
-        {/if}
+        <SettingControl {field} value={values[field.key]} {onApply} />
       </Field>
     {/each}
   </FieldGroup>

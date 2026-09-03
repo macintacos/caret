@@ -12,6 +12,7 @@
 // This module starts nothing at import time: startLogBridge() installs the
 // flush timer and pagehide handler, and returns a stop function.
 
+import { errorMessage } from "@core/lib/types";
 import { scrubGraph, shortId } from "@core/redact/core";
 import { MAX_EVENTS, MAX_MSG_LEN, STEP_RE } from "@core/ui/log-bridge";
 
@@ -114,7 +115,7 @@ export const uiLog = {
   info: (step: string, msg: string, extra?: object) => emit("info", step, msg, extra),
   warn: (step: string, msg: string, extra?: object) => emit("warn", step, msg, extra),
   error(step: string, err: unknown, extra?: object) {
-    emit("error", step, err instanceof Error ? err.message : String(err), extra);
+    emit("error", step, errorMessage(err), extra);
   },
 };
 

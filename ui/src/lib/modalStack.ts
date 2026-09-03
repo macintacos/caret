@@ -23,3 +23,25 @@ export function isTopmostDialog(el: Element | null, root: ParentNode = document)
   const content = el?.closest<HTMLElement>("[data-slot='dialog-content']") ?? null;
   return content != null && content === topmostDialogContent(root);
 }
+
+/** Claim `/` for a modal's own search input, capture-phase, for as long as the
+ * returned teardown is uncalled. Capture so the preventDefault lands before the
+ * bubble-phase global dispatcher (dispatcher.ts), which yields on
+ * defaultPrevented — a modal traps focus on the dialog content rather than an
+ * input, so isEditingContext() would not otherwise suppress the global `/`
+ * (actions.search). Once the input owns focus, `/` types normally. The
+ * topmost-dialog gate is what makes a stack route by portal order rather than by
+ * registration order: Settings registers first, but `?` opens ShortcutsHelp above
+ * it and the key belongs to whichever modal is on top. */
+export function claimSlashForSearch(searchInput: () => HTMLInputElement | null): () => void {
+  function onKeydown(e: KeyboardEvent): void {
+    if (e.key !== "/" || e.defaultPrevented) return;
+    const input = searchInput();
+    if (document.activeElement === input) return;
+    if (!isTopmostDialog(input)) return;
+    e.preventDefault();
+    input?.focus();
+  }
+  window.addEventListener("keydown", onKeydown, { capture: true });
+  return () => window.removeEventListener("keydown", onKeydown, { capture: true });
+}

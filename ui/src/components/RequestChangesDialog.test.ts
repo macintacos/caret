@@ -58,7 +58,7 @@ const q = (sel: string) => document.body.querySelector(sel);
 const content = () => q("[data-slot='dialog-content']");
 const mounted = () => content() !== null;
 const summary = () => q(".summary");
-const label = () => q(".field .lbl");
+const label = () => q(".field .form-label");
 // The confirm bubble a Discard opens; its "Discard" button completes the action.
 const confirmButton = () =>
   [...document.body.querySelectorAll(".confirm-popover .confirm")].find(

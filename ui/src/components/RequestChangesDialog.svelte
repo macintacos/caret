@@ -8,7 +8,6 @@
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
-  import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { type ComposerScratch, rangeLabel } from "$lib/diffview/commenting.ts";
   import type { ReviewContext } from "$lib/editorCompletion.ts";
   import { formatFeedback, pendingInline, pendingLineCount, sourceLines } from "$lib/feedback.ts";
@@ -18,6 +17,7 @@
   import Icon from "@/components/Icon.svelte";
   import MarkdownEditor from "@/components/MarkdownEditor.svelte";
   import Modal from "@/components/Modal.svelte";
+  import SubmitCap from "@/components/SubmitCap.svelte";
 
   interface Props {
     // Controlled open — false while the dialog plays its exit.
@@ -139,7 +139,7 @@
 >
   <div class="body" role="presentation" onkeydown={onKey}>
     <div class="field">
-      <span class="lbl">
+      <span class="form-label">
         General comment{#if !generalRequired}<span class="optional"> (optional)</span>{/if}
       </span>
       <!-- The live-markdown composer (the same swap boundary as the inline
@@ -177,7 +177,7 @@
          hide behind a collapse (the EXC-746 guard, applied here too). -->
     {#if inlineComments.length > 0}
       <section class="inline-comments" aria-labelledby="inline-label">
-        <span class="lbl" id="inline-label">
+        <span class="form-label" id="inline-label">
           Inline comments
           <Badge variant="outline" class="tally">{inlineCount}</Badge>
         </span>
@@ -214,24 +214,7 @@
                         Mark as draft
                       </Button>
                     {/if}
-                    <!-- Discarding is the destructive one, so it routes through a
-                         confirmation; Mark as draft and Save do not. The bubble owns
-                         its own open state and anchors itself to the trigger — this
-                         dialog's body scrolls, and bits-ui tracks the button through
-                         it. Only one settles open: opening a second row's bubble is
-                         an outside interaction that dismisses the first, though the
-                         loser plays its exit before leaving the DOM. -->
-                    <ConfirmPopover
-                      question="Discard this comment?"
-                      confirmLabel="Discard"
-                      onConfirm={() => onDiscardAnnotation(a.id)}
-                    >
-                      {#snippet trigger(props)}
-                        <Button {...props} variant="secondary" size="sm" class="float-chip discard">
-                          Discard
-                        </Button>
-                      {/snippet}
-                    </ConfirmPopover>
+                    {@render discard(() => onDiscardAnnotation(a.id))}
                   </div>
                 </div>
                 <Collapsible.Content>
@@ -270,7 +253,7 @@
          annotation), so it never looks like a comment that was actually added. -->
     {#if scratches.length > 0}
       <section class="scratches" aria-labelledby="scratches-label">
-        <span class="lbl" id="scratches-label">
+        <span class="form-label" id="scratches-label">
           Unsent comments
           <Badge variant="outline" class="tally">{scratches.length}</Badge>
         </span>
@@ -296,24 +279,7 @@
                     >
                       Save
                     </Button>
-                    <!-- Discarding is the destructive one, so it routes through a
-                         confirmation; Mark as draft and Save do not. The bubble owns
-                         its own open state and anchors itself to the trigger — this
-                         dialog's body scrolls, and bits-ui tracks the button through
-                         it. Only one settles open: opening a second row's bubble is
-                         an outside interaction that dismisses the first, though the
-                         loser plays its exit before leaving the DOM. -->
-                    <ConfirmPopover
-                      question="Discard this comment?"
-                      confirmLabel="Discard"
-                      onConfirm={() => onDiscardScratch(s.key)}
-                    >
-                      {#snippet trigger(props)}
-                        <Button {...props} variant="secondary" size="sm" class="float-chip discard">
-                          Discard
-                        </Button>
-                      {/snippet}
-                    </ConfirmPopover>
+                    {@render discard(() => onDiscardScratch(s.key))}
                   </div>
                 </div>
                 <Collapsible.Content>
@@ -345,12 +311,24 @@
     <Button variant="secondary" class="float-chip" onclick={onCancel}>Cancel</Button>
     <Button onclick={submit} disabled={!preview} aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}>
       Send for revision
-      <Kbd aria-hidden="true">
-        <Icon name="command" size={12} /><Icon name="corner-down-left" size={12} />
-      </Kbd>
+      <SubmitCap />
     </Button>
   {/snippet}
 </Modal>
+
+<!-- Discarding is the destructive one, so it routes through a confirmation; Mark as
+     draft and Save do not. The bubble owns its own open state and anchors itself to
+     the trigger — this dialog's body scrolls, and bits-ui tracks the button through
+     it. Only one settles open: opening a second row's bubble is an outside
+     interaction that dismisses the first, though the loser plays its exit before
+     leaving the DOM. -->
+{#snippet discard(onConfirm: () => void)}
+  <ConfirmPopover question="Discard this comment?" confirmLabel="Discard" {onConfirm}>
+    {#snippet trigger(props)}
+      <Button {...props} variant="secondary" size="sm" class="float-chip discard">Discard</Button>
+    {/snippet}
+  </ConfirmPopover>
+{/snippet}
 
 <style>
   /* Widen the modal past the shadcn default. contentClass rides through Modal to
@@ -391,24 +369,6 @@
   .field {
     display: block;
   }
-  .lbl {
-    display: block;
-    font-size: var(--text-xs);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--ink-soft);
-    margin-bottom: 0.4rem;
-  }
-  /* The "(optional)" qualifier on the general-comment label: a soft, un-uppercased
-     aside so it reads as a note on the field, not part of the label proper. It
-     appears only while inline comments exist (the field is then genuinely optional);
-     with none, the label drops it and the field is required. */
-  .optional {
-    text-transform: none;
-    letter-spacing: 0;
-    color: var(--ink-faint);
-    font-weight: 400;
-  }
   .summary {
     /* Matches the .mono atom's size (--text-sm) but stays in the sans face — this
        is a count summary, not code, so it takes the size without the mono font. */
@@ -438,7 +398,7 @@
     border-radius: var(--radius);
     background: var(--paper-sunk);
   }
-  .inline-comments .lbl {
+  .inline-comments .form-label {
     display: flex;
     align-items: center;
     gap: 0.4rem;
@@ -487,7 +447,7 @@
     border-radius: var(--radius);
     background: var(--paper-sunk);
   }
-  .scratches .lbl {
+  .scratches .form-label {
     display: flex;
     align-items: center;
     gap: 0.4rem;
@@ -558,16 +518,23 @@
   }
   /* The quoted source lines — a quiet sunk block so the code reads as context
      beneath the comment, not another comment. */
-  .context-lines {
-    margin: 0.15rem 0 0;
-    padding: 0.4rem 0.55rem;
-    border-radius: var(--radius);
-    background: var(--paper-sunk);
+  /* Every block of quoted text in the dialog — a comment's own text, the source
+     lines it anchors to, the compiled preview — is source, wrapped rather than
+     scrolled. Each rule below adds only its own inset and ink. */
+  .context-lines,
+  .row-text,
+  .preview pre {
     font-family: var(--font-mono);
     font-size: var(--text-sm);
     line-height: var(--leading-snug);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+  }
+  .context-lines {
+    margin: 0.15rem 0 0;
+    padding: 0.4rem 0.55rem;
+    border-radius: var(--radius);
+    background: var(--paper-sunk);
     color: var(--ink-soft);
   }
   /* The line-anchor label: a numeric chrome surface, so it takes the tabular metric
@@ -590,11 +557,6 @@
   .row-text {
     margin: 0;
     padding: 0.1rem 0.4rem 0.25rem;
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    line-height: var(--leading-snug);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
     color: var(--ink);
   }
 
@@ -647,11 +609,6 @@
   .preview pre {
     margin: 0;
     padding: 0.5rem 0.8rem 0.8rem;
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    line-height: var(--leading-snug);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
     color: var(--ink);
   }
 

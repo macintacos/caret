@@ -6,7 +6,7 @@
   // whatever is registered when it opens — it grows as later tickets register.
   import * as InputGroup from "$lib/components/ui/input-group/index.js";
   import { Kbd, KbdGroup } from "$lib/components/ui/kbd/index.js";
-  import { isTopmostDialog, topmostDialogContent } from "$lib/modalStack.ts";
+  import { claimSlashForSearch, topmostDialogContent } from "$lib/modalStack.ts";
   import { filterShortcuts, fitsSingleColumn, groupShortcuts } from "$lib/shortcuts/help.ts";
   import { isKbdKey, keyCaps, type ShortcutEntry } from "$lib/shortcuts/index.ts";
   import KbdCap from "@/components/KbdCap.svelte";
@@ -59,28 +59,9 @@
     topmostDialogContent()?.focus();
   }
 
-  // EXC-835: while the modal is open, `/` focuses the search input instead of
-  // falling through to the global plan-search binding (actions.search). Capture
-  // phase so the preventDefault lands before the bubble-phase global dispatcher
-  // (dispatcher.ts), which yields on defaultPrevented — the modal traps focus on
-  // the dialog content (not an input), so isEditingContext() wouldn't otherwise
-  // suppress the global `/`. Once the input owns focus, `/` types normally.
-  //
-  // EXC-849: yield unless this help modal is the topmost dialog. Stacked above
-  // Settings (? over the settings modal), both register this capture handler; the
-  // topmost-modal guard makes `/` route by portal order (this modal is on top)
-  // rather than registration order, so it claims `/` over the Settings search.
-  $effect(() => {
-    function onKeydown(e: KeyboardEvent): void {
-      if (e.key !== "/" || e.defaultPrevented) return;
-      if (document.activeElement === searchInput) return;
-      if (!isTopmostDialog(searchInput)) return;
-      e.preventDefault();
-      searchInput?.focus();
-    }
-    window.addEventListener("keydown", onKeydown, { capture: true });
-    return () => window.removeEventListener("keydown", onKeydown, { capture: true });
-  });
+  // EXC-835 / EXC-849: while the modal is open, `/` focuses its search input rather
+  // than the global plan search.
+  $effect(() => claimSlashForSearch(() => searchInput));
 </script>
 
 <Modal

@@ -1,6 +1,6 @@
-/* Shared chrome atoms — .mono, the floating chip, .metric, .eyebrow, the count
-   chip, the keycap, and the completion preview panel. @imported by app.css after
-   the base layer. */
+/* Shared chrome atoms — .mono, the floating chip, .metric, .eyebrow, the form
+   label, the count chip, the keycap, and the completion preview panel. @imported
+   by app.css after the base layer. */
 
 /* ----- Shared atoms ----- */
 .mono {
@@ -51,6 +51,28 @@ button.float-chip[aria-expanded="true"]:not(:disabled) {
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--ink-faint);
+}
+
+/* The field and section caption inside a form-shaped dialog — Request changes'
+   General comment / Inline comments / Unsent comments, the approve guard's Notes.
+   A step up from .eyebrow in size and ink and a step down in tracking, so a label
+   over a control reads as its own line rather than as a section marker. Shared
+   because the two feedback dialogs are meant to read as one form. */
+.form-label {
+  display: block;
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin-bottom: 0.4rem;
+}
+/* The "(optional)" qualifier: a soft, un-uppercased aside, so it reads as a note on
+   the field rather than part of the label proper. */
+.form-label .optional {
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ink-faint);
+  font-weight: 400;
 }
 
 /* The count chip: every Badge that answers "how many" wears it — the TopBar's

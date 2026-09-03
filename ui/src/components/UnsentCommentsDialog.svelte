@@ -2,13 +2,13 @@
   import type { PendingItem } from "$lib/feedback.ts";
   import type { IconName } from "$lib/icons.ts";
   import { Button } from "$lib/components/ui/button/index.js";
-  import { Kbd } from "$lib/components/ui/kbd/index.js";
   import type { ReviewContext } from "$lib/editorCompletion.ts";
   import { isSubmitChord } from "$lib/keys.ts";
   import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
   import Icon from "@/components/Icon.svelte";
   import MarkdownEditor from "@/components/MarkdownEditor.svelte";
   import Modal from "@/components/Modal.svelte";
+  import SubmitCap from "@/components/SubmitCap.svelte";
 
   interface Props {
     /** Controlled open — false while the guard plays its exit. */
@@ -138,7 +138,7 @@
          unsent inline comments above (which a plain approve drops) — this text IS
          sent, folded into the plan the agent works from, with no re-planning. -->
     <div class="field">
-      <span class="lbl">Notes for the agent <span class="optional">(optional)</span></span>
+      <span class="form-label">Notes for the agent <span class="optional">(optional)</span></span>
       <!-- The same live-markdown composer as the inline comment editor (EXC-803):
            styles markdown as the reviewer types. ⌘↵ confirms the approval; Esc
            dismisses the dialog (the editor intercepts both chords). -->
@@ -171,9 +171,7 @@
     >
       {#if icon}<Icon name={icon} size={14} />{/if}
       {hasComments ? `${action} anyway` : action}
-      <Kbd aria-hidden="true">
-        <Icon name="command" size={12} /><Icon name="corner-down-left" size={12} />
-      </Kbd>
+      <SubmitCap />
     </Button>
   {/snippet}
 </Modal>
@@ -254,19 +252,5 @@
   .field {
     display: block;
     margin-top: 1rem;
-  }
-  .lbl {
-    display: block;
-    font-size: var(--text-xs);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--ink-soft);
-    margin-bottom: 0.4rem;
-  }
-  .optional {
-    text-transform: none;
-    letter-spacing: 0;
-    color: var(--ink-faint);
-    font-weight: 400;
   }
 </style>
