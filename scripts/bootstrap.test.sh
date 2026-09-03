@@ -15,18 +15,9 @@ test_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 script="$test_dir/bootstrap.sh"
 bash_bin="$(command -v bash)"
 
-fails=0
-ok() { printf 'ok   - %s\n' "$1"; }
-fail() {
-  printf 'FAIL - %s\n' "$1" >&2
-  fails=$((fails + 1))
-}
-assert_contains() {
-  case "$1" in
-  *"$2"*) ok "$3" ;;
-  *) fail "$3 (missing substring: $2; got: $1)" ;;
-  esac
-}
+# shellcheck source=/dev/null
+source "$test_dir/test-harness.sh"
+
 # Create a fixture file with an explicit mtime. bash 3.2's `-nt` compares whole
 # seconds, so staleness cases place their fixtures decades apart rather than
 # racing a `sleep`.
@@ -240,11 +231,4 @@ else
 fi
 rm -rf "$root" "$stub"
 
-# --- summary --------------------------------------------------------------
-echo
-if [ "$fails" -eq 0 ]; then
-  echo "bootstrap.test.sh: PASS"
-  exit 0
-fi
-echo "bootstrap.test.sh: $fails failure(s)" >&2
-exit 1
+summary bootstrap.test.sh

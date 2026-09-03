@@ -38,7 +38,7 @@ import type { Browser, BrowserContext, Locator, Page } from "@playwright/test";
 import { isPidAlive } from "@/daemon/lifecycle.ts";
 import type { ClientReview, RouteResult } from "@/lib/types.ts";
 import { runReview } from "@/review/orchestrate.ts";
-import { ensureUi, shouldBuildUi } from "@/tasks/build.ts";
+import { ensureUi, runTargetsAfterUi } from "@/tasks/build.ts";
 import { discoverPort, readDevLockPort } from "@/tasks/dev/dev-env.ts";
 import { devReviewDeps } from "@/tasks/dev/driver.ts";
 import { type DriverState, hookStdin, nextPlan } from "@/tasks/dev/protocol.ts";
@@ -889,22 +889,11 @@ async function ensurePrereqs(): Promise<void> {
 
 // --- assets (umbrella) -------------------------------------------------------
 
-/** Bare `mise run assets`: build the UI once up front, then run both targets as
- * fresh subprocesses with CARET_SKIP_BUILD_UI=1 so neither rebuilds it — each
- * target's own ensurePrereqs would otherwise pay the full Vite build a second
- * time. Stitch runs first because it is the cheap one: a failure there costs
- * seconds, where the same failure after the recording costs the recording. The
- * runner is injectable so tests pin that sequence and the skip env without
- * spawning; the shape is smokePlan's (scripts/tasks/smoke.ts). */
+/** Bare `mise run assets`. Stitch runs first because it is the cheap one: a
+ * failure there costs seconds, where the same failure after the recording costs
+ * the recording. */
 export async function assetsPlan(run: typeof runForward = runForward): Promise<number> {
-  if (shouldBuildUi(process.env)) {
-    const ui = await run(["bun", "scripts/tasks/cli.ts", "build", "ui"]);
-    if (ui !== 0) return ui;
-  }
-  const env = { ...(process.env as Record<string, string>), CARET_SKIP_BUILD_UI: "1" };
-  const stitch = await run(["bun", "scripts/tasks/cli.ts", "assets", "stitch"], { env });
-  if (stitch !== 0) return stitch;
-  return await run(["bun", "scripts/tasks/cli.ts", "assets", "video"], { env });
+  return await runTargetsAfterUi("assets", ["stitch", "video"], run);
 }
 
 export async function runAssets(): Promise<never> {

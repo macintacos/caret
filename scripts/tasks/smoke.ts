@@ -31,30 +31,16 @@ import type { Subprocess } from "bun";
 
 import { isPidAlive } from "@/daemon/lifecycle.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
-import { ensureBin, shouldBuildUi } from "@/tasks/build.ts";
+import { ensureBin, runTargetsAfterUi } from "@/tasks/build.ts";
 import { runForward } from "@/tasks/lib/exec.ts";
 import { installCleanupHandlers } from "@/tasks/lib/signals.ts";
 import { probeServedUi } from "@/tasks/lib/smoke-probe.ts";
 
 // --- smoke (umbrella) -------------------------------------------------------
 
-/** Bare `mise run smoke`: build the UI once up front, then run both targets as
- * fresh subprocesses with CARET_SKIP_BUILD_UI=1 so neither rebuilds it — the
- * umbrella would otherwise pay the full Vite build twice (each target's build
- * bin / build bundle runs ensureUi). That leading build is itself skipped under
- * CARET_SKIP_BUILD_UI, so an in-gate smoke reuses the ui/dist that preflight's
- * own `build ui` task produced. Each target exits on its own; stop at the first
- * failure. The runner is injectable so tests pin the sequence + the skip env
- * without spawning. */
+/** Bare `mise run smoke`: bin then bundle, each target building its own artifact. */
 export async function smokePlan(run: typeof runForward = runForward): Promise<number> {
-  if (shouldBuildUi(process.env)) {
-    const ui = await run(["bun", "scripts/tasks/cli.ts", "build", "ui"]);
-    if (ui !== 0) return ui;
-  }
-  const env = { ...(process.env as Record<string, string>), CARET_SKIP_BUILD_UI: "1" };
-  const bin = await run(["bun", "scripts/tasks/cli.ts", "smoke", "bin"], { env });
-  if (bin !== 0) return bin;
-  return await run(["bun", "scripts/tasks/cli.ts", "smoke", "bundle"], { env });
+  return await runTargetsAfterUi("smoke", ["bin", "bundle"], run);
 }
 
 export async function runSmoke(): Promise<never> {

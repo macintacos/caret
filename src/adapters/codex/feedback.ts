@@ -23,6 +23,7 @@
 //      Codex's permission-escalation shape is stable and live-verified. See
 //      approve.ts for the single-variant rationale.
 
+import { denyMessage, type PermissionRequestOutput, permissionRequest } from "@/adapters/wire.ts";
 import type { ApproveVariantId, Behavior } from "@/lib/types.ts";
 
 export interface CodexDecision {
@@ -30,12 +31,7 @@ export interface CodexDecision {
   message?: string;
 }
 
-export interface HookOutput {
-  hookSpecificOutput: {
-    hookEventName: "PermissionRequest";
-    decision: CodexDecision;
-  };
-}
+export type HookOutput = PermissionRequestOutput<CodexDecision>;
 
 export interface DecisionInput {
   behavior: Behavior;
@@ -51,34 +47,12 @@ export function toHookOutput(input: DecisionInput): HookOutput {
     // carried on input.feedback for an allow) are likewise dropped: Codex's
     // PermissionRequest allow has no documented agent-facing message channel (only
     // deny does), so there is nowhere to fold them until that shape is live-verified.
-    return {
-      hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "allow" } },
-    };
+    return permissionRequest({ behavior: "allow" });
   }
-  return {
-    hookSpecificOutput: {
-      hookEventName: "PermissionRequest",
-      decision: {
-        behavior: "deny",
-        message: input.feedback?.trim() || "Plan changes requested.",
-      },
-    },
-  };
+  return permissionRequest({ behavior: "deny", message: denyMessage(input.feedback) });
 }
 
 /** Fail-safe deny: shipping an unreviewed plan is the one outcome we never allow. */
 export function denyOutput(reason: string): HookOutput {
   return toHookOutput({ behavior: "deny", feedback: reason });
-}
-
-/** Last-resort deny wire line for the CLI's fatal handler. Deliberately
- * dependency-free (literals + JSON.stringify only), so a bug anywhere else in
- * the adapter cannot take the fail-safe down with it. */
-export function fatalDenyLine(reason: string): string {
-  return JSON.stringify({
-    hookSpecificOutput: {
-      hookEventName: "PermissionRequest",
-      decision: { behavior: "deny", message: reason },
-    },
-  });
 }

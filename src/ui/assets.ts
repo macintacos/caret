@@ -40,20 +40,31 @@ function fromPathMap(map: Record<string, string>): UiAssets {
   };
 }
 
-/** Enumerate a dist directory into a UiAssets handle, or undefined when the
- * directory is absent or empty. The URL path is each file's dist-relative path
- * with a leading slash. */
-export function assetsFromDist(distDir: string): UiAssets | undefined {
-  const map: Record<string, string> = {};
+/** Every file under `distDir`, paired with the request URL path it serves at:
+ * the file's dist-relative path, slash-normalized, with a leading slash. Throws
+ * if the directory is absent. Shared with the embed-manifest generator
+ * (scripts/generate-ui-manifest.ts), so the served set and the embedded set are
+ * enumerated the same way. */
+export function walkDist(distDir: string): Array<{ urlPath: string; full: string }> {
+  const found: Array<{ urlPath: string; full: string }> = [];
   const walk = (dir: string) => {
     for (const ent of readdirSync(dir, { withFileTypes: true })) {
       const full = join(dir, ent.name);
       if (ent.isDirectory()) walk(full);
-      else if (ent.isFile()) map[`/${relative(distDir, full).split("\\").join("/")}`] = full;
+      else if (ent.isFile())
+        found.push({ urlPath: `/${relative(distDir, full).split("\\").join("/")}`, full });
     }
   };
+  walk(distDir);
+  return found;
+}
+
+/** Enumerate a dist directory into a UiAssets handle, or undefined when the
+ * directory is absent or empty. */
+export function assetsFromDist(distDir: string): UiAssets | undefined {
+  const map: Record<string, string> = {};
   try {
-    walk(distDir);
+    for (const { urlPath, full } of walkDist(distDir)) map[urlPath] = full;
   } catch {
     return undefined; // dist tree absent — fall through to the next source.
   }

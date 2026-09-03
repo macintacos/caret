@@ -11,6 +11,7 @@
 // The plugin renders an allow into "proceed with the build agent" and a deny into
 // the tool-result string the model revises against (see the opencode/ packaging).
 
+import { denyMessage } from "@/adapters/wire.ts";
 import type { ApproveVariantId, Behavior } from "@/lib/types.ts";
 
 export interface OpencodeDecision {
@@ -33,7 +34,7 @@ export function toWireDecision(input: DecisionInput): OpencodeDecision {
     const notes = input.feedback?.trim();
     return notes ? { behavior: "allow", feedback: notes } : { behavior: "allow" };
   }
-  return { behavior: "deny", feedback: input.feedback?.trim() || "Plan changes requested." };
+  return { behavior: "deny", feedback: denyMessage(input.feedback) };
 }
 
 /** Fail-safe deny: shipping an unreviewed plan is the one outcome we never allow. */

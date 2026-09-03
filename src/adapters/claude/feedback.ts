@@ -32,6 +32,7 @@
 //      own fail-safe deny always emits before Claude could kill the hook.
 
 import { type SetModeName, setModeFor } from "@/adapters/claude/approve.ts";
+import { denyMessage, type PermissionRequestOutput, permissionRequest } from "@/adapters/wire.ts";
 import type { ApproveVariantId, Behavior } from "@/lib/types.ts";
 import { appendReviewerNotes } from "@/plan/reviewer-notes.ts";
 
@@ -48,12 +49,7 @@ export interface PermissionDecision {
   }>;
 }
 
-export interface HookOutput {
-  hookSpecificOutput: {
-    hookEventName: "PermissionRequest";
-    decision: PermissionDecision;
-  };
-}
+export type HookOutput = PermissionRequestOutput<PermissionDecision>;
 
 export interface DecisionInput {
   behavior: Behavior;
@@ -81,34 +77,12 @@ export function toHookOutput(
     if (mode) {
       decision.updatedPermissions = [{ type: "setMode", mode, destination: "session" }];
     }
-    return {
-      hookSpecificOutput: { hookEventName: "PermissionRequest", decision },
-    };
+    return permissionRequest(decision);
   }
-  return {
-    hookSpecificOutput: {
-      hookEventName: "PermissionRequest",
-      decision: {
-        behavior: "deny",
-        message: input.feedback?.trim() || "Plan changes requested.",
-      },
-    },
-  };
+  return permissionRequest({ behavior: "deny", message: denyMessage(input.feedback) });
 }
 
 /** Fail-safe deny: shipping an unreviewed plan is the one outcome we never allow. */
 export function denyOutput(reason: string): HookOutput {
   return toHookOutput({ behavior: "deny", feedback: reason });
-}
-
-/** Last-resort deny wire line for the CLI's fatal handler. Deliberately
- * dependency-free (literals + JSON.stringify only), so a bug anywhere else in
- * the adapter cannot take the fail-safe down with it. */
-export function fatalDenyLine(reason: string): string {
-  return JSON.stringify({
-    hookSpecificOutput: {
-      hookEventName: "PermissionRequest",
-      decision: { behavior: "deny", message: reason },
-    },
-  });
 }

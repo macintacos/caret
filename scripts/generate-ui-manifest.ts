@@ -12,9 +12,11 @@
 // filesystem effects (enumerateDist, writeManifest) so the URL mapping and the
 // emitted module shape are verifiable without a real build.
 
-import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { walkDist } from "@/ui/assets.ts";
 
 /** One asset: its request URL path, the import specifier (relative to the
  * generated module), and the JS identifier the import binds to. */
@@ -64,20 +66,9 @@ function varNameFor(urlPath: string): string {
  * relative to `outFile`'s directory; `urlPath` is the dist-relative path with a
  * leading slash. */
 export function enumerateDist(distDir: string, outFile: string): ManifestEntry[] {
-  const files: string[] = [];
-  const walk = (dir: string) => {
-    for (const ent of readdirSync(dir, { withFileTypes: true })) {
-      const full = join(dir, ent.name);
-      if (ent.isDirectory()) walk(full);
-      else if (ent.isFile()) files.push(full);
-    }
-  };
-  walk(distDir);
-
   const outDir = dirname(outFile);
-  return files
-    .map((full) => {
-      const urlPath = `/${relative(distDir, full).split("\\").join("/")}`;
+  return walkDist(distDir)
+    .map(({ urlPath, full }) => {
       let importPath = relative(outDir, full).split("\\").join("/");
       if (!importPath.startsWith(".")) importPath = `./${importPath}`;
       return { urlPath, importPath, varName: varNameFor(urlPath) };

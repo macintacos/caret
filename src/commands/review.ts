@@ -8,19 +8,13 @@
 
 import type { AgentAdapter } from "@/adapters/adapter.ts";
 import { selectAdapter } from "@/adapters/index.ts";
-import { warnInvalidEnvVars } from "@/commands/boot.ts";
+import { bootHookLogging } from "@/commands/boot.ts";
 import { logFile } from "@/config/paths.ts";
-import {
-  loadSettings,
-  logKeep,
-  logMaxSize,
-  reviewTimeoutMs,
-  type Settings,
-} from "@/config/settings.ts";
+import { loadSettings, reviewTimeoutMs, type Settings } from "@/config/settings.ts";
 import { expireReview, longPoll, postReview } from "@/daemon/client.ts";
 import { ensureDaemon, prodEnsureDeps } from "@/daemon/lifecycle.ts";
 import { readCmuxPane } from "@/lib/cmux.ts";
-import { logError, logWarn, setLogLevel, setLogRotation, setRedact } from "@/lib/log.ts";
+import { logError, logWarn } from "@/lib/log.ts";
 import type { Decision, PlanInput } from "@/lib/types.ts";
 import { appendReviewerNotesToPlanFile } from "@/plan/canonical-file.ts";
 import { expireAbandoned, type ReviewDeps, runReview } from "@/review/orchestrate.ts";
@@ -67,12 +61,7 @@ export async function runReviewSubcommand(): Promise<void> {
   // the hook's logging config and tunables can never come from two different
   // reads of the file.
   const loaded = loadSettings();
-  setLogLevel(loaded.logging.level);
-  setRedact(loaded.logging.redact);
-  setLogRotation(logMaxSize(loaded), logKeep(loaded));
-  // Same boot-time surfacing as the daemon's — a typo'd CARET_* var otherwise
-  // silently falls through to the config file, then the default.
-  warnInvalidEnvVars((msg) => logWarn("env", msg));
+  bootHookLogging(loaded);
   // Resolve the active adapter once (selected by CARET_AGENT, default claude); a
   // bogus selector throws here and propagates to the CLI's fatal handler, which
   // denies to fail safe. The same adapter parses the hook stdin and renders the

@@ -15,6 +15,7 @@ import {
   readOpencodeCommandDescription,
   readOpencodeCommands,
 } from "@/adapters/opencode/skills.ts";
+import { parseHookStdin } from "@/adapters/wire.ts";
 import type { Decision, PlanInput, SkillRef } from "@/lib/types.ts";
 
 /** The caret-defined review envelope the OpenCode plugin pipes to `caret review`.
@@ -34,13 +35,7 @@ export const opencodeAdapter: AgentAdapter = {
   approveVariants: APPROVE_VARIANTS,
 
   parseHookInput(stdin: string): PlanInput {
-    let hook: HookStdin;
-    try {
-      hook = JSON.parse(stdin);
-    } catch {
-      // Malformed stdin → the caller turns this throw into a fail-safe deny.
-      throw new Error("could not parse hook stdin JSON");
-    }
+    const hook = parseHookStdin<HookStdin>(stdin);
     return {
       sessionId: hook.session_id,
       cwd: hook.cwd,
@@ -53,9 +48,7 @@ export const opencodeAdapter: AgentAdapter = {
     return JSON.stringify(toWireDecision(decision));
   },
 
-  fatalDenyLine(reason: string): string {
-    return fatalDenyLine(reason);
-  },
+  fatalDenyLine,
 
   readInstallState(): InstallProbe {
     return readOpencodeInstallState();

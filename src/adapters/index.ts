@@ -10,10 +10,10 @@
 // selection must never silently pick the wrong tool's wire shape.
 
 import type { AgentAdapter } from "@/adapters/adapter.ts";
-import { fatalDenyLine } from "@/adapters/claude/feedback.ts";
 import { claudeAdapter } from "@/adapters/claude/index.ts";
 import { codexAdapter } from "@/adapters/codex/index.ts";
 import { opencodeAdapter } from "@/adapters/opencode/index.ts";
+import { permissionRequestDenyLine } from "@/adapters/wire.ts";
 
 /** The adapter selected when no id is given — the Claude adapter, so the existing
  * Claude plugin packaging keeps working unchanged. */
@@ -82,5 +82,5 @@ export function fatalDeny(reason: string): string {
   }
   // Absolute last resort, dependency-free: a deny is shipped even when no adapter
   // could be resolved at all.
-  return fatalDenyLine(reason);
+  return permissionRequestDenyLine(reason);
 }

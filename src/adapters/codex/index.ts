@@ -19,8 +19,9 @@
 
 import type { AgentAdapter, InstallProbe } from "@/adapters/adapter.ts";
 import { APPROVE_VARIANTS } from "@/adapters/codex/approve.ts";
-import { fatalDenyLine, toHookOutput } from "@/adapters/codex/feedback.ts";
+import { toHookOutput } from "@/adapters/codex/feedback.ts";
 import { readCodexInstallState } from "@/adapters/codex/install.ts";
+import { parseHookStdin, permissionRequestDenyLine } from "@/adapters/wire.ts";
 import type { Decision, PlanInput, SkillRef } from "@/lib/types.ts";
 
 /** The shape of the PermissionRequest hook stdin Codex is modeled to pipe to
@@ -40,13 +41,7 @@ export const codexAdapter: AgentAdapter = {
   approveVariants: APPROVE_VARIANTS,
 
   parseHookInput(stdin: string): PlanInput {
-    let hook: HookStdin;
-    try {
-      hook = JSON.parse(stdin);
-    } catch {
-      // Malformed stdin → the caller turns this throw into a fail-safe deny.
-      throw new Error("could not parse hook stdin JSON");
-    }
+    const hook = parseHookStdin<HookStdin>(stdin);
     return { sessionId: hook.session_id, cwd: hook.cwd, plan: hook.tool_input?.plan };
   },
 
@@ -54,9 +49,7 @@ export const codexAdapter: AgentAdapter = {
     return JSON.stringify(toHookOutput(decision));
   },
 
-  fatalDenyLine(reason: string): string {
-    return fatalDenyLine(reason);
-  },
+  fatalDenyLine: permissionRequestDenyLine,
 
   readInstallState(): InstallProbe {
     return readCodexInstallState();

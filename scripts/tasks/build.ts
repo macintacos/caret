@@ -68,6 +68,30 @@ export async function ensureUi(run: typeof runForward = runForward): Promise<num
   return await run(buildUiCommand([]), { cwd: "ui" });
 }
 
+/** The bare-umbrella shape a multi-target task group runs (`assets`, `smoke`):
+ * build the UI once up front — itself skipped under CARET_SKIP_BUILD_UI, so an
+ * in-gate run reuses what preflight's own `build ui` produced — then run each
+ * target in `group` as a fresh subprocess with the skip set, so no target pays
+ * for the Vite build again. Stops at the first non-zero exit and returns it. The
+ * runner is injectable so tests pin the sequence and the skip env without
+ * spawning. */
+export async function runTargetsAfterUi(
+  group: string,
+  targets: string[],
+  run: typeof runForward = runForward,
+): Promise<number> {
+  if (shouldBuildUi(process.env)) {
+    const ui = await run(["bun", "scripts/tasks/cli.ts", "build", "ui"]);
+    if (ui !== 0) return ui;
+  }
+  const env = { ...(process.env as Record<string, string>), CARET_SKIP_BUILD_UI: "1" };
+  for (const target of targets) {
+    const code = await run(["bun", "scripts/tasks/cli.ts", group, target], { env });
+    if (code !== 0) return code;
+  }
+  return 0;
+}
+
 // --- build bin --------------------------------------------------------------
 // Compile src/cli.ts into the single standalone caret binary (bun build
 // --compile). Regenerates the embed manifest from ui/dist first so the compile

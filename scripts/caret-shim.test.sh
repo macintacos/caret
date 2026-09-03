@@ -13,18 +13,8 @@ test_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 shim="$test_dir/../bin/caret"
 bash_bin="$(command -v bash)"
 
-fails=0
-ok() { printf 'ok   - %s\n' "$1"; }
-fail() {
-  printf 'FAIL - %s\n' "$1" >&2
-  fails=$((fails + 1))
-}
-assert_contains() {
-  case "$1" in
-  *"$2"*) ok "$3" ;;
-  *) fail "$3 (missing substring: $2; got: $1)" ;;
-  esac
-}
+# shellcheck source=/dev/null
+source "$test_dir/test-harness.sh"
 
 # Build a throwaway plugin root; caller seeds the runtimes it wants.
 make_root() {
@@ -82,11 +72,4 @@ assert_contains "$out" "bun" "missing-bun error mentions bun"
 if [ "$rc" -eq 127 ]; then ok "missing-bun exits 127"; else fail "missing-bun exits 127 (got $rc)"; fi
 rm -rf "$root" "$fakebin"
 
-# --- summary --------------------------------------------------------------
-echo
-if [ "$fails" -eq 0 ]; then
-  echo "caret-shim.test.sh: PASS"
-  exit 0
-fi
-echo "caret-shim.test.sh: $fails failure(s)" >&2
-exit 1
+summary caret-shim.test.sh

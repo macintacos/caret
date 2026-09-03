@@ -4,9 +4,10 @@
 
 import type { AgentAdapter, InstallProbe } from "@/adapters/adapter.ts";
 import { APPROVE_VARIANTS } from "@/adapters/claude/approve.ts";
-import { fatalDenyLine, toHookOutput } from "@/adapters/claude/feedback.ts";
+import { toHookOutput } from "@/adapters/claude/feedback.ts";
 import { readClaudeInstallState } from "@/adapters/claude/install.ts";
 import { readClaudeSkillDescription, readClaudeSkills } from "@/adapters/claude/skills.ts";
+import { parseHookStdin, permissionRequestDenyLine } from "@/adapters/wire.ts";
 import type { Decision, PlanInput, SkillRef } from "@/lib/types.ts";
 
 /** The shape of the PermissionRequest/ExitPlanMode hook stdin Claude Code pipes
@@ -39,13 +40,7 @@ export const claudeAdapter: AgentAdapter = {
   approveVariants: APPROVE_VARIANTS,
 
   parseHookInput(stdin: string): PlanInput {
-    let hook: HookStdin;
-    try {
-      hook = JSON.parse(stdin);
-    } catch {
-      // Malformed stdin → the caller turns this throw into a fail-safe deny.
-      throw new Error("could not parse hook stdin JSON");
-    }
+    const hook = parseHookStdin<HookStdin>(stdin);
     return {
       sessionId: hook.session_id,
       cwd: hook.cwd,
@@ -58,9 +53,7 @@ export const claudeAdapter: AgentAdapter = {
     return JSON.stringify(toHookOutput(decision, toolInputEcho(input)));
   },
 
-  fatalDenyLine(reason: string): string {
-    return fatalDenyLine(reason);
-  },
+  fatalDenyLine: permissionRequestDenyLine,
 
   readInstallState(): InstallProbe {
     return readClaudeInstallState();
