@@ -6,14 +6,8 @@
 // Two numbers must stay coupled in the safe direction (hook budget strictly
 // greater than the review ceiling). They live in two files Claude Code's plugin
 // system keeps apart — `hooks/hooks.json` (the plugin's on-disk hook manifest)
-// and the review-timeout ceiling enforced by the settings schema. This suite
-// reads BOTH and fails if either drifts:
-//
-//   - the hooks.json `timeout` is pinned to the named HOOK_TIMEOUT_S source, so
-//     editing the JSON number alone breaks the first assertion;
-//   - the settings schema is driven through its REAL load path (loadSettings over
-//     a temp config) to confirm it rejects a timeout_s at the budget and accepts
-//     just below it, so raising the ceiling at/over the budget breaks the rest.
+// and the review-timeout ceiling enforced by the settings schema — so this suite
+// reads BOTH and fails if either drifts.
 //
 // It reads the Claude plugin's hook manifest and matches Claude's PermissionRequest
 // /ExitPlanMode vocabulary, so it lives beside the Claude adapter (test-layout),

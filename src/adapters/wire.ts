@@ -1,10 +1,8 @@
-// The wire pieces the agent adapters share, on both sides of the hook: parsing
-// the raw stdin JSON, the deny text a reviewer's empty feedback falls back to,
-// and the PermissionRequest stdout envelope. Each adapter's own decision payload
-// stays its own — the envelope takes it as a parameter — so the Claude and Codex
-// adapters can render the one contract they both implement (Codex's
-// PermissionRequest hook is documented as ~1:1 with Claude's) without either
-// learning the other's fields.
+// The wire pieces the agent adapters share, on both sides of the hook. Each
+// adapter's own decision payload stays its own — the envelope takes it as a
+// parameter — so the Claude and Codex adapters can render the one contract they
+// both implement (Codex's PermissionRequest hook is documented as ~1:1 with
+// Claude's) without either learning the other's fields.
 //
 // Runtime-dependency-free by design (literals and JSON.stringify only), because
 // permissionRequestDenyLine is what the CLI's fatal handler falls back to when an

@@ -19,9 +19,9 @@ export const CARET_PACKAGE = "@macintacos/caret";
  * caret checkout. OpenCode hands the specifier to its package installer and SYMLINKS the
  * target into its cache, so the plugin module it loads is the checkout's own file — its
  * `import.meta.url` sits in the checkout, and the `../bin/caret` the plugin resolves is
- * that checkout's shim. A rebuild is therefore picked up with no reinstall, which is the
- * whole point of the dev loop. caret's `package.json` `main` is what makes OpenCode
- * accept the directory as a plugin ("server target"). */
+ * that checkout's shim, so a rebuild is picked up with no reinstall. caret's
+ * `package.json` `main` is what makes OpenCode accept the directory as a plugin
+ * ("server target"). */
 export function localPluginSpecifier(repoDir: string): string {
   return `file:${repoDir}`;
 }

@@ -1,9 +1,9 @@
 // Coverage for the OpenCode plugin's runtime bin/version resolution and the
-// best-effort startup update-check toast (EXC-794). The plugin now runs from the
-// npm package (array install) rather than a marker-substituted deployed file, so it
-// resolves its binary and version at runtime; on load it checks caret's latest
-// GitHub release and toasts a nudge when the user is behind. All logic is exercised
-// through injected env / fetch / file-read / client — no network, no real files.
+// best-effort startup update-check toast (EXC-794). The plugin runs from the npm
+// package (array install), so it resolves its binary and version at runtime; on load
+// it checks caret's latest GitHub release and toasts a nudge when the user is
+// behind. All logic is exercised through injected env / fetch / file-read / client —
+// no network, no real files.
 
 import { expect, test } from "bun:test";
 

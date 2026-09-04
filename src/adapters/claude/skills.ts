@@ -1,21 +1,16 @@
 // Claude Code's skill enumerator: the names a reviewer may cite in feedback, for
 // the feedback editors' `/` completion (EXC-1176). Best-effort and strictly
 // read-only, in the same posture as install.ts — every miss degrades to "nothing
-// from that root" rather than throwing, so the editor behaves exactly as it did
-// before completion existed when a directory is unreadable.
+// from that root" rather than throwing.
 //
 // The enumeration reads directory NAMES only: a skill's `SKILL.md` is probed for
 // existence and never opened, so nothing a skill author wrote reaches the UI on
 // that route.
 //
-// `readClaudeSkillDescription` is a SECOND, on-demand route beside it, and it
-// DOES open one skill's SKILL.md to read that skill's own `description`
-// (EXC-1186). The privacy question is a different one: enumerating is caret
-// deciding what to read, while this is the reviewer pointing at one name in the
-// `/` list and asking what it is. One file is opened per ask, only its
-// frontmatter `description` crosses to the UI, and its body never does — which is
-// why it stays a separate call rather than a field on the list, where every `/`
-// keystroke would open every skill's file.
+// `readClaudeSkillDescription` is a SECOND, on-demand route beside it: it DOES open
+// one skill's SKILL.md, and only that skill's frontmatter `description` crosses to
+// the UI, never its body (EXC-1186). Separate rather than a field on the list, where
+// every `/` keystroke would open every skill's file.
 //
 // SCOPE: Claude's SKILLS, not everything its `/` menu lists. Slash commands
 // (`~/.claude/commands/*.md`, and a plugin's `commands/` — caret's own
@@ -49,11 +44,10 @@ import type { SkillRef } from "@/lib/types.ts";
 /** The file whose presence makes a directory a skill. */
 const SKILL_FILE = "SKILL.md";
 
-/** One install of a plugin, as `installed_plugins.json` records it. Three fields
- * are read — where the install lives, the scope it was installed at
- * (`managed`/`user`/`project`/`local`), and, for the project-shaped scopes, the
- * directory it was installed against. All stay `unknown` and are narrowed at use:
- * this is someone else's JSON. The rest of each entry is Claude's. */
+/** One install of a plugin, as `installed_plugins.json` records it. `scope` is one
+ * of `managed`/`user`/`project`/`local`; `projectPath` is set only for the
+ * project-shaped scopes. All stay `unknown` and are narrowed at use: this is someone
+ * else's JSON, and the rest of each entry is Claude's. */
 interface PluginInstall {
   installPath?: unknown;
   scope?: unknown;
@@ -78,14 +72,13 @@ interface ClaudeSettings {
  * ordinary dotfiles layout — reports as a symlink rather than a directory, and
  * Claude Code loads it fine; the same trap `opencode/paths.ts` documents for its
  * cache dirs. `access()` follows symlinks, so the SKILL.md probe is the whole
- * test and a type filter would only lose those skills. A plain file in the root
- * (a stray `README.md`) fails the probe like any other non-skill. */
+ * test and a type filter would only lose those skills. */
 async function skillNamesUnder(root: string): Promise<string[]> {
   let names: string[];
   try {
     names = await readdir(root);
   } catch {
-    return []; // root absent or unreadable — nothing from here.
+    return [];
   }
   const found = await Promise.all(names.map((name) => hasSkillFile(join(root, name))));
   return names.filter((_, i) => found[i]).sort();
@@ -149,9 +142,8 @@ async function enabledPluginKeys(cwd: string): Promise<Set<string>> {
  * Claude Code canonicalizes both paths before comparing and caret cannot, and
  * caret's own reviews run inside git worktrees — a plugin installed against
  * `…/trunk` while the review sits in `…/EXC-1176+…` fails an equality test that
- * Claude Code passes. Falling back rather than dropping keeps this preference from
- * ever offering FEWER skills than registry order did; it only stops preferring a
- * foreign project's install when a reachable one exists. */
+ * Claude Code passes. Falling back rather than dropping keeps this from ever
+ * offering FEWER skills than registry order did. */
 function pickInstallPath(installs: PluginInstall[], cwd: string): string | undefined {
   const usable = installs.filter(
     (install): install is PluginInstall & { installPath: string } =>

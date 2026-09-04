@@ -1,11 +1,10 @@
-// The OpenCode adapter: caret's third AgentAdapter and its first plugin-shaped
-// integration. OpenCode is NOT a command-hook agent — it loads an in-process JS
-// plugin (see the opencode/ packaging) that registers a plan-review tool and
-// bridges to `caret review` by piping a caret-defined envelope on stdin and
-// reading the decision JSON this adapter emits on stdout. Because both ends of the
-// wire are caret-owned, the envelope and decision shapes are caret's own — the
-// least speculative of the three adapters (no foreign wire format to model).
-// Selectable via CARET_AGENT=opencode; Claude stays the default.
+// The OpenCode adapter: caret's first plugin-shaped integration. OpenCode is NOT a
+// command-hook agent — it loads an in-process JS plugin (see the opencode/
+// packaging) that registers a plan-review tool and bridges to `caret review` by
+// piping a caret-defined envelope on stdin and reading the decision JSON this
+// adapter emits on stdout. Because both ends of the wire are caret-owned, the
+// envelope and decision shapes are caret's own. Selectable via
+// CARET_AGENT=opencode; Claude stays the default.
 
 import type { AgentAdapter, InstallProbe } from "@/adapters/adapter.ts";
 import { APPROVE_VARIANTS } from "@/adapters/opencode/approve.ts";

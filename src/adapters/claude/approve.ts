@@ -1,9 +1,8 @@
 // Claude's approve-variant vocabulary: the variants the adapter declares for the
 // reviewer's approve split-button, and the mapping from a chosen variant id to
-// Claude's session `setMode` permission. The plain approve maps to no permission
-// change; the two accept variants switch the session into Claude's acceptEdits /
-// auto mode. Keeping the declaration and the mapping colocated means the wire
-// tokens, button labels, and emitted permissions can't drift apart.
+// Claude's session `setMode` permission. Keeping the declaration and the mapping
+// colocated means the wire tokens, button labels, and emitted permissions can't
+// drift apart.
 
 import type { ApproveVariant } from "@/lib/types.ts";
 

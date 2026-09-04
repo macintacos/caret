@@ -8,9 +8,8 @@
 //   request changes -> { hookSpecificOutput:{ ...decision:{ behavior:"deny",
 //                                                            message:<feedback> } } }
 //
-// The decision envelope is documented as ~1:1 with Claude's PermissionRequest:
-// the same `hookSpecificOutput.decision.behavior = "allow" | "deny"` plus an
-// optional `message` deny channel the model receives and revises against.
+// The decision envelope is documented as ~1:1 with Claude's PermissionRequest,
+// down to the `message` deny channel the model receives and revises against.
 //
 // Provisional / docs-based, NOT live-verified:
 //   1. The `hookEventName` token. Codex's docs label this hook "PermissionRequest";
@@ -41,12 +40,10 @@ export interface DecisionInput {
 
 export function toHookOutput(input: DecisionInput): HookOutput {
   if (input.behavior === "allow") {
-    // No mode escalation is emitted: Codex's permission-escalation fields are
-    // reserved/fail-closed today (see the file header), so an approve — with or
-    // without an acceptMode — renders a plain allow. Reviewer notes (EXC-791,
-    // carried on input.feedback for an allow) are likewise dropped: Codex's
-    // PermissionRequest allow has no documented agent-facing message channel (only
-    // deny does), so there is nowhere to fold them until that shape is live-verified.
+    // No mode escalation and no reviewer notes: Codex's escalation fields are
+    // reserved/fail-closed (see the file header), and its allow has no documented
+    // agent-facing message channel (only deny does), so notes riding on
+    // input.feedback (EXC-791) are dropped.
     return permissionRequest({ behavior: "allow" });
   }
   return permissionRequest({ behavior: "deny", message: denyMessage(input.feedback) });

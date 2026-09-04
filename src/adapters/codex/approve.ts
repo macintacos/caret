@@ -2,10 +2,9 @@
 // permission-escalation fields (updatedInput / updatedPermissions / interrupt) are
 // documented as reserved and "fail closed today" (EXC-532), so there is no stable
 // session-mode token to map an escalating approve onto — unlike Claude's
-// acceptEdits / auto. The single `default` variant is deliberate, not a stub: it
-// is the only escalation Codex's documented contract supports today. When Codex's
-// escalation shape stabilizes and is live-verified, additional variants get
-// declared here and rendered as Codex modes in feedback.ts.
+// acceptEdits / auto. Deliberate, not a stub. When Codex's escalation shape
+// stabilizes and is live-verified, additional variants get declared here and
+// rendered as Codex modes in feedback.ts.
 
 import type { ApproveVariant } from "@/lib/types.ts";
 

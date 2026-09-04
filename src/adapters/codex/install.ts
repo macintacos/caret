@@ -15,10 +15,8 @@
 //                        "tool has caret enabled" field. "unknown" when config.toml
 //                        is absent/unreadable.
 //   - hookInUserSettings — whether a manual caret hook command sits in
-//                        ~/.codex/hooks.json (the normally-false probe, since caret
-//                        ships no Codex packaging today a configured hook is always
-//                        manual); false when the file parses but holds none,
-//                        "unknown" when unreadable.
+//                        ~/.codex/hooks.json. The normally-false probe: with no
+//                        Codex packaging, a configured hook is always manual.
 
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -35,8 +33,7 @@ function codexConfigDir(): string {
 }
 
 /** Best-effort read of caret's Codex install state. Every miss degrades to
- * "unknown". Reads ONLY caret's own entries / the feature gate — never any other
- * config key (privacy). */
+ * "unknown". */
 export function readCodexInstallState(): InstallProbe {
   const dir = codexConfigDir();
   return {

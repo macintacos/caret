@@ -10,10 +10,8 @@ export type { ApproveVariant };
 
 /**
  * What the adapter can report about the agent tool's local install — surfaced by
- * the discovery command. A tool-agnostic shape describing generic install facts:
- * the installed package version, whether the tool has caret enabled, and whether
- * a manual hook entry sits in the tool's user settings. Each field degrades to
- * "unknown" rather than throwing, so discovery always renders a report.
+ * the discovery command. Each field degrades to "unknown" rather than throwing, so
+ * discovery always renders a report.
  */
 export interface InstallProbe {
   /** The installed caret package version, or "unknown" if unreadable. */
@@ -27,11 +25,8 @@ export interface InstallProbe {
 }
 
 /**
- * The interface a coding-agent adapter implements. Adapters are registered by
- * tool id in `src/adapters/index.ts` and the composition layer selects the active
- * one; each adapter owns its tool's hook-stdin parsing, decision wire format,
- * approve-variant vocabulary, install probe, and a dependency-free fatal-deny
- * renderer.
+ * The interface a coding-agent adapter implements. Adapters are registered by tool
+ * id in `src/adapters/index.ts`; the composition layer selects the active one.
  */
 export interface AgentAdapter {
   /** The tool id this adapter implements — its registry key in
@@ -54,7 +49,7 @@ export interface AgentAdapter {
    * `input` is the parsed `PlanInput` this decision resolves, passed so an adapter
    * can echo the agent's original tool input back in its response (the Claude
    * adapter echoes it as `updatedInput` on an allow — EXC-683). Optional: the
-   * signal-path deny renders without it, and adapters that don't need it ignore it.
+   * signal-path deny renders without it.
    */
   emitDecision(decision: Decision, input?: PlanInput): string;
 
@@ -75,8 +70,8 @@ export interface AgentAdapter {
    *
    * Reads the reviewer's own well-known directories and nothing the agent under
    * review controls, and yields NAMES only — never a skill's file contents. An
-   * agent with nothing to enumerate returns an empty list, which is what makes the
-   * `/` completion silently inert there. Never throws: an unreadable directory
+   * agent with nothing to enumerate returns an empty list, leaving the `/`
+   * completion silently inert there. Never throws: an unreadable directory
    * contributes nothing.
    */
   listSkills(cwd: string): Promise<SkillRef[]>;
@@ -88,15 +83,13 @@ export interface AgentAdapter {
    * this reads one, so a `/` keystroke never pays to open every skill's file.
    *
    * `skill` is a row of `listSkills` handed straight back, whole: its `origin` is
-   * what says WHICH skill is meant — two roots may offer the same bare name and
-   * the list deliberately shows both rows, so the name alone would describe one
-   * of them twice.
+   * what says WHICH skill is meant — two roots may offer the same bare name, and
+   * the list deliberately shows both rows.
    *
    * Reads the reviewer's own well-known directories and nothing the agent under
-   * review controls, and yields only that skill's own description — never the
-   * rest of its file. A skill with no description is null, an ordinary answer the
-   * UI renders as "no description"; so is a name no root answers to. Never
-   * throws.
+   * review controls, and yields only that skill's own description — never the rest
+   * of its file. A skill with no description is null, an ordinary answer the UI
+   * renders as "no description"; so is a name no root answers to. Never throws.
    */
   readSkillDescription(cwd: string, skill: SkillRef): Promise<string | null>;
 }

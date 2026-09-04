@@ -12,9 +12,10 @@ import { readJsonFileSync } from "@/lib/json-file.ts";
  * "caret" per src/commands/install/claude.ts. */
 const PLUGIN_ID = "caret@caret";
 
-/** hookInUserSettings is the NORMAL-false probe: caret's hooks ride inside
- * the plugin's own hooks.json, so a user-settings hook means a MANUAL entry;
- * false when settings parse but hold none, "unknown" when unreadable. */
+/** Best-effort read of caret's Claude install state. Every miss degrades to
+ * "unknown". `hookInUserSettings` is the NORMAL-false probe: caret's hooks ride
+ * inside the plugin's own hooks.json, so a user-settings hook means a MANUAL
+ * entry. */
 export function readClaudeInstallState(): InstallProbe {
   return {
     pluginVersion: readPluginVersion(installedPluginsFile()),
@@ -43,9 +44,8 @@ function readHookInUserSettings(path: string): boolean | "unknown" {
   if (!json) return "unknown";
   const hooks = json.hooks;
   if (hooks === undefined || hooks === null || typeof hooks !== "object") return false;
-  // Walk every event array → every matcher → its hooks[].command, hunting a
-  // manual caret hook entry. Defensive at each hop: a malformed shape just
-  // yields no match (false), never a throw.
+  // Defensive at each hop: a malformed shape just yields no match (false), never a
+  // throw.
   for (const eventEntry of Object.values(hooks as Record<string, unknown>)) {
     if (!Array.isArray(eventEntry)) continue;
     for (const matcher of eventEntry) {

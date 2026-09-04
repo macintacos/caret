@@ -2,13 +2,11 @@
 // shaped: it loads this in-process module and lets it register tools and mutate
 // config. caret has no native plan-approval gate to intercept here (OpenCode has
 // no ExitPlanMode equivalent), so this plugin REGISTERS its own plan-review tool,
-// steers the Plan agent to call it, and
-// runs the review synchronously inside the tool's execute(): it spawns
-// `caret review` (CARET_AGENT=opencode) with a caret-defined envelope on stdin,
-// blocks until the human decides in caret's browser UI, and returns the approval
-// or change-request string as the tool result. The whole caret daemon/review
-// pipeline is reused unchanged — this plugin is the OpenCode-side counterpart to
-// Claude Code's hooks.json, which likewise spawns `caret review`.
+// steers the Plan agent to call it, and runs the review synchronously inside the
+// tool's execute() by spawning `caret review` (CARET_AGENT=opencode). The whole
+// caret daemon/review pipeline is reused unchanged — this plugin is the
+// OpenCode-side counterpart to Claude Code's hooks.json, which likewise spawns
+// `caret review`.
 //
 // Subagent-bypass mitigation: OpenCode's tool.execute.before does not fire for
 // subagent tool calls, so caret does NOT rely on a hook to gate subagents. The
@@ -17,15 +15,13 @@
 // tool body re-checks the calling session's shape — defense in depth. Any PRIMARY
 // agent may ask for a review; only the plan agent is steered toward it.
 //
-// This file runs in-process inside OpenCode. It ships in the @macintacos/caret npm
-// package; OpenCode loads it when the package is in the user's `plugin` array, and
-// it resolves its own binary and version at runtime from that package. (The legacy
-// file-deploy path substitutes the two __CARET_*__ markers instead.) It stays
-// self-contained: its only imports are node builtins (child_process, fs, url) and
-// @opencode-ai/plugin (resolved by OpenCode at runtime). Live in-OpenCode
-// verification of the exact ctx/tool/config shapes is recorded in
-// doc/agents/opencode-integration.md § Verified vs. follow-up, which also names what
-// remains unverified; the pure logic below is covered by test/opencode/.
+// It ships in the @macintacos/caret npm package; OpenCode loads it when the package
+// is in the user's `plugin` array, and it resolves its own binary and version at
+// runtime from that package. (The legacy file-deploy path substitutes the two
+// __CARET_*__ markers instead.) It stays self-contained: its only imports are node
+// builtins (child_process, fs, url) and @opencode-ai/plugin (resolved by OpenCode at
+// runtime). Which ctx/tool/config shapes are live-verified and which are not:
+// doc/agents/opencode-integration.md § Verified vs. follow-up.
 
 import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -158,8 +154,7 @@ export function isPlanningAgent(agent: string | undefined): boolean {
 }
 
 /** Tool result returned to the agent on approval. Optional reviewer notes
- * (EXC-791) are folded in as a clearly-labeled section the agent incorporates as
- * it implements — the plan is already approved, so no re-planning round. The
+ * (EXC-791) ride along — the plan is already approved, so no re-planning round. The
  * OpenCode agent holds the plan in its own tool args (there is no plan file to
  * append to), so this tool result is the delivery channel. */
 export function approvedMessage(notes?: string): string {
@@ -180,15 +175,13 @@ export function approvedMessage(notes?: string): string {
 }
 
 /** Tool result returned to the agent on a change request: the reviewer feedback
- * and a resubmit instruction. The plan itself is NOT echoed — the agent already
- * has it in its own `caret_review_plan` tool-call args, so re-pasting the full
- * plan every round is redundant. A feedback line reference indexes the plan
- * version caret stored, and the abbreviated quote paired with it is what the agent
- * matches against its own text. `abbreviate` in ui/src/lib/feedback.ts builds that
- * quote. The stored version is rumdl-reflowed to 90 columns at ingest
- * (src/plan/markdown.ts); on this path there is no plan file to mirror it back to,
- * so the numbers need not line up with the agent's copy at all. (Pinned across its
- * three surfaces by test/structure/line-anchor-claim.test.ts.) */
+ * and a resubmit instruction. The plan itself is NOT echoed — the agent already has
+ * it in its own `caret_review_plan` tool-call args. A feedback line reference
+ * indexes the plan version caret stored, rumdl-reflowed to 90 columns at ingest
+ * (src/plan/markdown.ts); the abbreviated quote paired with it is what the agent
+ * matches against its own text, because on this path there is no plan file to mirror
+ * the numbers back to. (Pinned across its three surfaces by
+ * test/structure/line-anchor-claim.test.ts.) */
 export function deniedMessage(feedback: string): string {
   return [
     "caret: the user requested CHANGES to this plan.",
@@ -210,12 +203,11 @@ export function parseReviewUrl(stderr: string): string | undefined {
 }
 
 /** The label caret puts in the review toast's TITLE. The review URL goes in the
- * toast MESSAGE (on its own line), not concatenated after this — OpenCode's toast
- * word-wraps, and a URL sharing a line with this prefix breaks across the wrap and
- * stops being terminal-clickable. Title + message-alone keeps the (short) URL whole
- * on its own full-width line (EXC-691). caret owns this toast surface because
- * OpenCode renders `caret_review_plan` as a generic tool whose running state never
- * shows the tool's `metadata` title. */
+ * toast MESSAGE alone, not concatenated after this — OpenCode's toast word-wraps,
+ * and a URL sharing a line with this prefix breaks across the wrap and stops being
+ * terminal-clickable (EXC-691). caret owns this toast surface because OpenCode
+ * renders `caret_review_plan` as a generic tool whose running state never shows the
+ * tool's `metadata` title. */
 const REVIEW_TOAST_TITLE = "caret: review this plan";
 
 /** OpenCode's plugin client, structurally narrowed to the calls caret makes.
@@ -291,7 +283,7 @@ const LATEST_RELEASE_URL = "https://api.github.com/repos/macintacos/caret/releas
 const UPDATE_TOAST_MS = 5_000;
 /** Minimum gap between update checks. The nudge is a convenience, not a security
  * fix, so checking once a day is plenty — and it keeps the network hit off every
- * OpenCode start. The last-check time is persisted in a small throttle file. */
+ * OpenCode start. */
 const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60_000;
 
 /** Semver triple `[major, minor, patch]`, or null when `v` is not `X.Y.Z` (an
@@ -360,10 +352,9 @@ export function shouldCheckForUpdate(lastCheckMs: number | null, nowMs: number):
 }
 
 /** Absolute path of the throttle file holding the last-check epoch-ms. Lives under
- * caret's state dir ($XDG_STATE_HOME/caret or ~/.local/state/caret), matching where
- * caret keeps its other small machine-global markers (prefs.json). Pure so the
- * location is testable; the plugin stays self-contained and cannot import
- * src/config/paths.ts, so the convention is mirrored here by hand. */
+ * caret's state dir, beside caret's other small machine-global markers (prefs.json).
+ * The plugin stays self-contained and cannot import src/config/paths.ts, so that
+ * convention is mirrored here by hand. */
 export function updateCheckCachePath(
   env: Record<string, string | undefined>,
   home: string,
@@ -403,12 +394,9 @@ function fileUpdateCache(path: string): UpdateCache {
 
 /** Best-effort startup update check: fetch caret's latest GitHub release and, if it
  * is newer than this plugin's version, toast a nudge with a link. Throttled to at
- * most once a day via the injected cache — the check time is stamped up front, so
- * even an offline/failed start backs off a full day rather than hitting the network
- * on every restart. Never throws and never blocks plugin load — a network error, a
- * non-200, an unusable body, the throttle, or the `CARET_OPENCODE_NO_UPDATE_CHECK`
- * opt-out all resolve silently. `fetchImpl`/`url`/`now`/`cache` are injected so it is
- * unit-testable without the network or the filesystem. */
+ * most once a day via the injected cache. Never throws and never blocks plugin load
+ * — the `CARET_OPENCODE_NO_UPDATE_CHECK` opt-out and every failure resolve
+ * silently. */
 export async function realUpdateChecker(
   client: ToastClient,
   opts: {
@@ -561,9 +549,8 @@ export async function runReviewViaCaret(
 /** Production runner: spawn the caret binary's `review` subcommand. stderr is
  * PIPED (not inherited) and streamed to `onStderr`: inheriting it leaked core's
  * "review this plan at <url>" line straight into OpenCode's TUI scrollback, where
- * the renderer never owns it and it lingered after the decision (EXC-691). We now
- * parse that URL and surface it as a caret-owned toast instead; the child logs
- * diagnostics to caret.log, so dropping the rest of stderr loses nothing. */
+ * the renderer never owns it and it lingered after the decision (EXC-691). The child
+ * logs diagnostics to caret.log, so dropping the rest of stderr loses nothing. */
 const nodeSpawnRunner: SpawnRunner = (bin, env, stdin, onStderr) =>
   new Promise((resolve, reject) => {
     const child = spawn(bin, ["review"], { env, stdio: ["pipe", "pipe", "pipe"] });
@@ -583,13 +570,11 @@ const nodeSpawnRunner: SpawnRunner = (bin, env, stdin, onStderr) =>
 export type WarmRunner = (bin: string) => void;
 
 /** Production warm: `caret prewarm`, detached and unref'd so it never holds up the
- * turn. Output is discarded — the child logs to caret.log. Two non-obvious
- * requirements, both spelled out in `doc/agents/opencode-integration.md` § Daemon
- * warm-up: CARET_AGENT rides along because this spawn is what stands the daemon
- * up and the daemon picks its adapter from that env; and the 'error' handler is
- * mandatory because spawn emits 'error' ASYNCHRONOUSLY (ENOENT on a bad bin),
- * where the hook's synchronous try/catch cannot see it and an unhandled event
- * would take OpenCode's whole process down. */
+ * turn. Output is discarded — the child logs to caret.log. CARET_AGENT rides along
+ * because this spawn is what stands the daemon up and the daemon picks its adapter
+ * from that env; the 'error' handler is mandatory because spawn emits 'error'
+ * ASYNCHRONOUSLY (ENOENT on a bad bin), where the hook's synchronous try/catch
+ * cannot see it and an unhandled event would take OpenCode's whole process down. */
 const nodeWarmRunner: WarmRunner = (bin) => {
   const child = spawn(bin, ["prewarm"], {
     stdio: "ignore",
@@ -623,12 +608,11 @@ export function createCaretPlugin(
   const warm = opts.warm ?? nodeWarmRunner;
 
   return async (input) => {
-    // OpenCode gives every plugin its SDK client; caret uses it to surface the
-    // review link as a toast (EXC-691) and to read the calling session's shape.
-    // Narrowed structurally for skew-safety.
+    // The SDK client OpenCode hands every plugin — caret uses it for the review-link
+    // toast (EXC-691) and to read the calling session's shape.
     const client = (input as { client?: CaretClient }).client;
-    // Best-effort startup update nudge (EXC-794); fire-and-forget so it never
-    // delays plugin load. Only the production default export wires this.
+    // Startup update nudge (EXC-794), fire-and-forget. Only the production default
+    // export wires this.
     if (opts.checkUpdate) opts.checkUpdate(client);
     // The agent driving each session, recorded by chat.message and read by
     // system.transform, which carries no agent of its own. Why a map is the only
@@ -637,21 +621,18 @@ export function createCaretPlugin(
     // module-global, so a test constructs a fresh one.
     const sessionAgents = new Map<string, string>();
     const hooks: Hooks = {
-      // Restrict the review tool to primary agents (see applyCaretConfig).
       config: async (config) => {
         applyCaretConfig(config as unknown as LooseConfig);
       },
       // Two jobs. (1) Record the session's agent, ALWAYS — it is what the steer
       // below gates on. (2) Warm the daemon, for the PLAN AGENT ONLY, so the first
-      // caret_review_plan call doesn't pay the cold-spawn cost. This is
-      // OpenCode's counterpart to Claude Code's PostToolUse/EnterPlanMode
-      // prewarm hook — the closest-to-submission signal the plugin API offers.
-      // Deliberately per-message and unthrottled: the daemon idle-exits after
-      // [daemon].idle_ms (60s default), so a once-per-session warm would be
-      // dead long before the plan lands. The warm stays plan-only even though any
-      // primary agent may call the tool: the plan agent is the one whose turn
-      // reliably ends in a review, and warming on every build message would spawn
-      // a process on the session's busiest traffic to save ~0.4s in the rare case.
+      // caret_review_plan call doesn't pay the cold-spawn cost. Deliberately
+      // per-message and unthrottled: the daemon idle-exits after [daemon].idle_ms
+      // (60s default), so a once-per-session warm would be dead long before the plan
+      // lands. The warm stays plan-only even though any primary agent may call the
+      // tool: the plan agent is the one whose turn reliably ends in a review, and
+      // warming on every build message would spawn a process on the session's
+      // busiest traffic to save ~0.4s in the rare case.
       "chat.message": async (input) => {
         // A message whose agent is unknown must not clobber the recorded one.
         if (input.sessionID && input.agent) sessionAgents.set(input.sessionID, input.agent);
@@ -674,7 +655,6 @@ export function createCaretPlugin(
         const agent = input.sessionID ? sessionAgents.get(input.sessionID) : undefined;
         if (isPlanningAgent(agent)) output.system.push(planningSteer());
       },
-      // Redirect the native plan_exit tool's description toward caret's tool.
       "tool.definition": async (input, output) => {
         if (input.toolID === "plan_exit") {
           output.description = `Do not call this tool. Call ${REVIEW_TOOL} instead — it opens caret's visual plan-review UI for human approval.`;
@@ -701,9 +681,7 @@ export function createCaretPlugin(
             const decision = await runReviewViaCaret(envelope, {
               bin,
               run,
-              // Show the review URL as a toast while the plan is pending. The URL
-              // is the message ALONE (label in the title) so it renders on its own
-              // full-width line and word-wraps whole, staying clickable (EXC-691).
+              // Show the review URL as a toast while the plan is pending.
               onUrl: (url) => {
                 linkShown = true;
                 showToast(client, {
@@ -714,9 +692,8 @@ export function createCaretPlugin(
                 });
               },
             });
-            // Clear the pending review-link toast on decision by superseding it
-            // with a brief decision toast — OpenCode's toast surface is single-slot
-            // with no hide API, so a fresh toast replaces the link (EXC-691).
+            // Supersede the pending review-link toast with a brief decision toast —
+            // the surface is single-slot with no hide API (EXC-691).
             if (linkShown) {
               showToast(
                 client,
@@ -744,8 +721,8 @@ export function createCaretPlugin(
   };
 }
 
-/** The plugin OpenCode loads (bare default-export function). Wires the production
- * update checker: on load, check caret's latest release and toast if behind. */
+/** The plugin OpenCode loads (bare default-export function), wiring the production
+ * update checker. */
 const CaretPlugin: Plugin = createCaretPlugin({
   checkUpdate: (client) => {
     void realUpdateChecker(client, {

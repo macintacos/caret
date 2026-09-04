@@ -1,7 +1,6 @@
 // The comment-preserving editor that adds/removes caret's entry in an OpenCode
-// config's `plugin` array (EXC-794). This replaces the retired config-dir
-// package.json manifest: `caret install --target opencode` now makes caret a
-// first-class array plugin. Edits go through jsonc-parser so a user's other
+// config's `plugin` array (EXC-794) — how `caret install --target opencode` makes
+// caret a first-class array plugin. Edits go through jsonc-parser so a user's other
 // entries, other keys, and comments survive.
 
 import { expect, test } from "bun:test";

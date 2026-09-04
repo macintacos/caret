@@ -15,9 +15,8 @@
 // (no version sniffing). See anthropics/claude-code#74256 and backnotprop/plannotator#995.
 //
 // A `deny.message` is the documented, verified feedback channel — the model
-// receives it and revises the plan. test/adapters/claude/wire-contract.test.ts
-// pins this exact wire JSON by driving a realistic PermissionRequest payload
-// through the real parse → runReview → emit path.
+// receives it and revises the plan. The exact wire JSON is pinned by
+// test/adapters/claude/wire-contract.test.ts.
 //
 // Two parts of the contract are empirically-working but not pinned by Anthropic
 // docs (EXC-531); EXC-549 is the manual follow-up that verifies them against a

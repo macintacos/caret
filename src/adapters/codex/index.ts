@@ -13,9 +13,7 @@
 // `~/.codex/config.toml`, gated behind `[features] codex_hooks = true`. The exact
 // stdin field names for the session/cwd/plan are NOT fully documented; they are
 // modeled sensibly below and flagged provisional pending live verification (the
-// same manual follow-up pattern as Claude's EXC-549). See feedback.ts (decision
-// wire shape), approve.ts (the single plain-approve variant), and install.ts
-// (the ~/.codex probe) for the per-surface provisional notes.
+// same manual follow-up pattern as Claude's EXC-549).
 
 import type { AgentAdapter, InstallProbe } from "@/adapters/adapter.ts";
 import { APPROVE_VARIANTS } from "@/adapters/codex/approve.ts";
@@ -64,8 +62,7 @@ export const codexAdapter: AgentAdapter = {
   },
 
   // Nothing enumerated is nothing to describe: the `/` list is empty here, so no
-  // name can reach this, and null is what the panel would show anyway. Filling
-  // both in is this module's business alone, not the UI's.
+  // name can reach this, and null is what the panel would show anyway.
   readSkillDescription(): Promise<string | null> {
     return Promise.resolve(null);
   },

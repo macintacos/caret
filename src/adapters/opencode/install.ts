@@ -2,9 +2,7 @@
 // read-only snapshot of caret's OpenCode install. caret installs as a `plugin` array
 // entry (@macintacos/caret) that OpenCode installs into its own cache, one
 // `packages/<specifier>/` dir per array entry with the resolved version recorded in
-// that dir's top-level shim manifest. The probe reports: the version read from that
-// manifest, whether it resolved at all (installed), and whether caret is listed in the
-// user's config `plugin` array (configured). Mirrors claude/codex install.ts's
+// that dir's top-level shim manifest. Mirrors claude/codex install.ts's
 // degrade-to-"unknown" discipline — every field degrades rather than throwing, so
 // discovery always renders. Reads only caret's own cache dirs and the user's plugin
 // array — never any other config key.
@@ -23,7 +21,7 @@ import {
 import { readCachedCaretVersion } from "@/adapters/opencode/upgrade.ts";
 
 /** Best-effort read of caret's OpenCode install state. Every miss degrades to
- * "unknown". Reads ONLY caret's own cache package / the user's plugin array. */
+ * "unknown". */
 export function readOpencodeInstallState(): InstallProbe {
   const dir = opencodeConfigDir();
   if (!existsSync(dir)) {

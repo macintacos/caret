@@ -404,10 +404,9 @@ test("the review tool shows the pending review URL as a toast, then clears it on
     client,
   );
   await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, ctx("plan"));
-  // First: the review-link toast while pending — the URL is the message ALONE
-  // (label in the title) so it lands on its own full-width line and word-wraps
-  // whole, staying terminal-clickable instead of breaking across the prefix.
-  // Then: a decision toast that supersedes it (single-slot surface, no hide API).
+  // First: the review-link toast while pending — the URL is the message ALONE so it
+  // lands on its own full-width line and stays terminal-clickable. Then: a decision
+  // toast that supersedes it (single-slot surface, no hide API).
   expect(toasts[0]?.title).toBe("caret: review this plan");
   expect(toasts[0]?.message).toBe(url);
   expect(toasts[0]?.variant).toBe("info");
