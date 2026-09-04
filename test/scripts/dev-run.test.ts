@@ -45,7 +45,20 @@ test("planStateDir is ephemeral when no dir is configured; --persist keeps it", 
 test("daemonCommand adds --ephemeral only in ephemeral mode", () => {
   expect(daemonCommand({ kind: "ephemeral" })).toContain("--ephemeral");
   expect(daemonCommand({ kind: "fixed", port: 5050 })).not.toContain("--ephemeral");
-  expect(daemonCommand({ kind: "fixed", port: 5050 })).toEqual(["bun", "src/cli.ts", "daemon"]);
+  expect(daemonCommand({ kind: "fixed", port: 5050 })).toEqual([
+    "bun",
+    "--no-orphans",
+    "src/cli.ts",
+    "daemon",
+  ]);
+});
+
+// bun only honours the flag ahead of the script path, so the position is the
+// contract, not just the presence (EXC-1219).
+test("daemonCommand passes --no-orphans to bun, not to the daemon", () => {
+  for (const mode of [{ kind: "ephemeral" }, { kind: "fixed", port: 5050 }] as const) {
+    expect(daemonCommand(mode).indexOf("--no-orphans")).toBe(1);
+  }
 });
 
 // ---- childEnvFor ----
@@ -229,7 +242,7 @@ describe("runDev supervision", () => {
         runDev({ numVersions: 4, notify: true, persist: false }, deps),
       ).rejects.toBeInstanceOf(ExitSignal);
 
-      expect(calls[0]?.cmd).toEqual(["bun", "src/cli.ts", "daemon", "--ephemeral"]);
+      expect(calls[0]?.cmd).toEqual(["bun", "--no-orphans", "src/cli.ts", "daemon", "--ephemeral"]);
       expect(calls[1]?.cmd[0]).toBe("tail");
       expect(calls[2]?.cmd[0]).toBe("bunx");
       expect(calls[2]?.cmd).toContain("pino-pretty");
@@ -311,7 +324,7 @@ describe("runDev supervision", () => {
 
       // --port takes precedence: fixed mode, so no --ephemeral and the daemon
       // gets the pinned port through its env.
-      expect(calls[0]?.cmd).toEqual(["bun", "src/cli.ts", "daemon"]);
+      expect(calls[0]?.cmd).toEqual(["bun", "--no-orphans", "src/cli.ts", "daemon"]);
       expect(calls[0]?.env?.CARET_PORT).toBe("45000");
       // --state-dir takes precedence: the named dir is used and kept, not wiped.
       expect(calls[0]?.env?.XDG_STATE_HOME).toBe(stateDir);

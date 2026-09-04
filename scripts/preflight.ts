@@ -620,7 +620,10 @@ export interface ProcessGroupController {
  * orchestrator runs no handler, and an orphaned process group is NOT
  * auto-reaped by the OS; bounding the fan-out (CARET_PREFLIGHT_JOBS, plus the
  * Playwright `workers` cap + `globalTimeout`) is what keeps that case from
- * arising rather than relying on a teardown that can't run.
+ * arising rather than relying on a teardown that can't run. bun's `--no-orphans`
+ * cannot substitute for any of this: it reaches bun descendants only (inherited
+ * as BUN_FEATURE_FLAG_NO_ORPHANS), and every child here is `mise`. Measured on
+ * bun 1.4.0; re-probe on the next bun bump.
  */
 export function createProcessGroupController(graceMs = 2000): ProcessGroupController {
   const live = new Set<ChildProcess>();
