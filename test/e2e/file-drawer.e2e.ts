@@ -53,8 +53,8 @@ function laneGeometry(page: Page): Promise<{
   });
 }
 
-/** Seed a plan citing `src/cache.ts` at `cwd`, set the viewport, and
- * navigate — before opening (or driving) the preview itself. */
+/** Seed a plan citing `src/cache.ts` at `cwd`, set the viewport, navigate, and wait
+ * for the plan surface — before opening (or driving) the preview itself. */
 async function seedCacheDrawer(
   daemon: Daemon,
   page: Page,
@@ -64,6 +64,8 @@ async function seedCacheDrawer(
   await daemon.seed({ cwd, plan: "# Refs\n\nEdit `src/cache.ts` to fix it.\n" });
   await page.setViewportSize(viewport);
   await page.goto("/");
+  // Callers that measure geometry before opening the preview have no other wait.
+  await planSurface(page);
 }
 
 /** Open the preview for the first resolved reference in the plan, and wait out
