@@ -183,13 +183,6 @@
   let card = $state<HTMLElement | null>(null);
   let placed = $state<{ top: number; left: number } | undefined>();
 
-  // Place the card against its own measured size, once it has settled into the
-  // size it will keep. `view.kind` is read into the effect's dependency set on
-  // purpose: the card is a header and one line of text while it loads, and
-  // ~20rem taller once `.ft-open` applies, so measuring at mount — which is all
-  // `tick()` would ever wait for — would flip against a height five times too
-  // small and hang a full-size card off the bottom of the viewport. It stays put
-  // afterwards: the reader dismisses this card rather than scrolling with it.
   /**
    * The open preview lane's dock and box, or undefined when none is open.
    *
@@ -232,6 +225,13 @@
     );
   }
 
+  // Place the card against its own measured size, once it has settled into the
+  // size it will keep. `view.kind` is read into the effect's dependency set on
+  // purpose: the card is a header and one line of text while it loads, and
+  // ~20rem taller once `.ft-open` applies, so measuring at mount — which is all
+  // `tick()` would ever wait for — would flip against a height five times too
+  // small and hang a full-size card off the bottom of the viewport. It stays put
+  // afterwards: the reader dismisses this card rather than scrolling with it.
   //
   // The lane narrows the box the card is placed inside (EXC-1129). A lane that
   // opens AFTER the card is placed does not re-place it: placement is computed

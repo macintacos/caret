@@ -151,11 +151,6 @@
   // mid-load is the same property expand() preserves for chunk arrival.
   let departing = $state(false);
 
-  // Take the newly loaded region: reset the offset and the framing latch in the
-  // same step that puts it on screen. Both belong here rather than at the top of
-  // the fetch, because until this moment the rows on screen are the *previous*
-  // reference's — winding their offset back to zero would jump the outgoing file
-  // to its first line just as it starts to leave.
   // Hold the swap until the outgoing region has actually finished leaving.
   // A warm local daemon answers well inside one frame, and the departure would
   // otherwise be set and cleared before the browser ever painted it — the
@@ -174,6 +169,11 @@
     await Promise.allSettled(region.getAnimations().map((animation) => animation.finished));
   }
 
+  // Take the newly loaded region: reset the offset and the framing latch in the
+  // same step that puts it on screen. Both belong here rather than at the top of
+  // the fetch, because until this moment the rows on screen are the *previous*
+  // reference's — winding their offset back to zero would jump the outgoing file
+  // to its first line just as it starts to leave.
   function settle(next: Preview): void {
     // The new region is a fresh, unscrolled `.fp-code` — the {#key} on the
     // loaded path recreates it — and nothing scrolls it back to the top for us.

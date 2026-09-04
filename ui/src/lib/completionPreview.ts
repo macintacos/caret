@@ -234,14 +234,14 @@ export function placePreview(
  * panel has nowhere below it to go, and the only room left is at the top of the
  * screen — nowhere near the row it is describing.
  *
- * BOTH horizontal edges are kept back, not just the bottom, and that symmetry is
- * what makes the rule hold whichever side the list ends up on. CodeMirror also
- * SHRINKS a tooltip to the space it is given, so a list that would have filled its
- * side now stops `MIN_HEIGHT` short of the edge — leaving the panel exactly the
- * floor it needs beyond it. Reserving only one edge would tilt the "where is there
- * more room" tie-break toward the other, which is not this feature's decision to
- * make; taking the same slice off each leaves that comparison where CodeMirror
- * would have had it.
+ * The TOP is kept back too, not just the bottom, and that symmetry is what makes
+ * the rule hold whichever side the list ends up on. CodeMirror also SHRINKS a
+ * tooltip to the space it is given, so a list that would have filled its side now
+ * stops `MIN_HEIGHT` short of the edge — leaving the panel exactly the floor it
+ * needs beyond it. Reserving only one end would tilt the "where is there more
+ * room" tie-break toward the other, which is not this feature's decision to make;
+ * taking the same slice off each leaves that comparison where CodeMirror would
+ * have had it.
  *
  * Keyed on the panel merely being OPEN rather than on where the last placement
  * put it: the reservation would otherwise depend on a measurement that depends on
@@ -597,8 +597,7 @@ class PreviewWindow {
    * Staging is the whole anti-flicker: the panel's body keeps the loading bars
    * until there is a complete answer to put in their place, so a reviewer arrowing
    * down a list sees one panel whose contents change rather than a panel that
-   * empties and refills per row. It also means a source may write into `body` as
-   * many times as it likes without any of it being seen half-done.
+   * empties and refills per row.
    */
   private fetchAnswer(preview: RowPreview): () => void {
     const controller = new AbortController();

@@ -385,7 +385,7 @@ function rootElision(levels: LevelsSnapshot): number {
  * directory is accepted; the fold reduces each one the way `record` does.
  *
  * Three rules make it total against a working copy that moved underneath the
- * reader, and each is one of the issue's own criteria:
+ * reader:
  *
  * - A level whose directory is not among the paths recorded so far is dropped.
  *   The daemon answers each open level independently, so a level under a

@@ -57,8 +57,7 @@
       outer,
       offset: (edge === "right" ? outer.right - e.clientX : outer.bottom - e.clientY) - size,
     };
-    // Suppress the text selection the drag would otherwise sweep across the plan —
-    // the one thing this has left to do.
+    // Suppress the text selection the drag would otherwise sweep across the plan.
     e.preventDefault();
     // …including the focus the press would have given the handle, so take that
     // explicitly: a reader who drags can then fine-tune with the arrow keys.
