@@ -30,6 +30,7 @@ import {
   type WarmRunner,
 } from "@opencode/caret.plugin.ts";
 import { recordingClient } from "@test/support/opencode-toast-client.ts";
+import { until } from "@test/support/poll.ts";
 
 // --- buildEnvelope / planTitle ---
 
@@ -593,7 +594,7 @@ test("the real warm runner runs `prewarm` with CARET_AGENT=opencode", async () =
 
   const hooks = await buildRealWarmHooks(shim);
   await hooks["chat.message"]?.(message("plan"), {} as never);
-  // The child is detached; poll briefly rather than racing a fixed sleep.
-  for (let i = 0; i < 100 && !existsSync(out); i++) await Bun.sleep(20);
+  // The shim's redirect creates the file empty, so existence isn't the signal — content is.
+  expect(await until(() => existsSync(out) && readFileSync(out, "utf-8") !== "")).toBe(true);
   expect(readFileSync(out, "utf-8")).toBe("prewarm opencode");
 });
