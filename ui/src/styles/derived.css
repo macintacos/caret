@@ -16,16 +16,14 @@
    wherever it sits in the sheet.
    Mixed in lab like caret's other derivations — oklch is mangled in the embedding
    Chrome build. derived-tokens.test.ts pins the selector, the mix space, and that
-   every input is a palette token, which is what makes the tier well-formed for all
-   nine palettes rather than just caret's. */
+   every input is a palette token. */
 :root,
 [data-theme] {
   /* The floating chip: paper-raised nudged toward ink for a soft solid fill with
-     no hard border, and the firmer step it takes on hover / while its menu is
-     open. This is the chrome's default surface for anything that should read as
-     floating above the page — .float-chip in atoms.css is the shared class, and
-     several components take the fill directly. The hover step also reaches shadcn
-     as --sidebar-accent through the bridge. */
+     no hard border, and the firmer step it takes on hover / while its menu is open.
+     The chrome's default surface for anything that should read as floating above
+     the page — .float-chip in atoms.css is the shared class. The hover step also
+     reaches shadcn as --sidebar-accent through the bridge. */
   --chip: color-mix(in lab, var(--paper-raised), var(--ink) 9%);
   --chip-hover: color-mix(in lab, var(--paper-raised), var(--ink) 15%);
 

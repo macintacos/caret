@@ -20,19 +20,16 @@ import { UPSTREAM_SHIKI_THEMES } from "$lib/upstream-shiki.ts";
 //
 // What the resolver adds is caret's own markdown rules — three structural markers and
 // four for emphasis — appended last, because last-match-wins is what makes them beat
-// whatever the theme underneath says. They are painted from the palette's own tokens in
-// theme.ts, the single source of truth for every color the UI paints (EXC-730;
-// supersedes the hand-copied duplication of EXC-370). shiki resolves token colors at
-// highlight time and can't read CSS custom properties, so the values are read out of
-// THEMES here rather than re-typed.
+// whatever the theme underneath says. shiki resolves token colors at highlight time and
+// can't read CSS custom properties, so their values are read out of THEMES (EXC-730,
+// the single source of truth for every color the UI paints) rather than re-typed.
 interface Palette {
   comment: string; // --ink-faint: the fence markers and the ** / _ emphasis markers
   punctuation: string; // --ink-soft: the inline-code backtick
   keyword: string; // --accent: the fence's language tag
 }
 
-// The three tokens caretMarkdownRules paints with. They are plain 6-digit hex
-// (no alpha), which is what shiki accepts.
+// Plain 6-digit hex, no alpha — the only form shiki accepts.
 function paletteFromTheme(t: Theme): Palette {
   const k = t.tokens;
   return {
@@ -55,28 +52,21 @@ function paletteFromTheme(t: Theme): Palette {
  * exactly like the code between them, which collapses `` `path` `` into a single token
  * and silently drops the file icon, pointer cursor, and hover chip while leaving the
  * click target alive (EXC-687, EXC-840). Coloring the backtick separately keeps the
- * boundary. Under caret's own themes it also lifts the backtick off the generic
- * `punctuation` hue, so the boundary holds by color rather than by rule order alone.
+ * boundary.
  *
- * The last four are EXC-867, and they divide by which half of the render they reach.
+ * The MARKER rule (EXC-867) is the same boundary trick: the grammar scopes the `**` /
+ * `_` markers apart from the content, but shiki merges the three back into ONE token
+ * while they style identically, so giving the markers their own ink is what splits
+ * `**bold**` into `**` / `bold` / `**` for the decoration pass to tag.
  *
- * The MARKER rule is the one the plan view depends on, and it is load-bearing well beyond
- * its color — the same boundary trick as the backtick above. The grammar scopes the `**` /
- * `_` markers apart from the content, but shiki merges the three back into ONE token while
- * they style identically, so giving the markers their own ink is what splits `**bold**`
- * into `**` / `bold` / `**`. The decoration pass tags those pieces; subduing the markers is
- * what a reader wants of them anyway.
- *
- * The three `fontStyle` rules do NOT reach the plan view, and it is worth knowing why
- * before deleting them. @pierre/diffs carries a token's font style into the DOM as a custom
- * property and consumes it with `font-weight: light-dark(…)`, which is invalid — light-dark()
- * is defined over `<color>` — so the library renders every token at one weight whatever the
- * theme says. The plan view's weight and slant are therefore declared in
- * `diffview/coreStyles.ts` off the decoration pass's own attributes instead. These rules
- * still reach the OTHER shiki surface: the excerpt preview (`diffview/highlight.ts`) renders
- * through shiki's own codeToHast, which honours `fontStyle`, so a cited markdown file's
- * excerpt shows real emphasis. Keeping them is what makes the theme honest on its own terms
- * rather than shaped around one consumer's bug.
+ * The three `fontStyle` rules do NOT reach the plan view, which is worth knowing before
+ * deleting them. @pierre/diffs carries a token's font style into the DOM as a custom
+ * property and consumes it with `font-weight: light-dark(…)`, which is invalid —
+ * light-dark() is defined over `<color>` — so the library renders every token at one
+ * weight whatever the theme says, and the plan view's weight and slant are declared in
+ * `diffview/coreStyles.ts` instead. They still reach the excerpt preview
+ * (`diffview/highlight.ts`), which renders through shiki's own codeToHast and honours
+ * `fontStyle`.
  *
  * The nested rule is not redundant with the two beside it. textmate resolves `fontStyle`
  * from the single most-specific matching rule rather than OR-ing what the ancestor scopes
@@ -119,11 +109,10 @@ function caretMarkdownRules(p: Palette): NonNullable<ThemeRegistrationRaw["setti
 /** Re-key a source theme to caret's palette id and append the structural marker
  * rules. Upstream themes carry their rules as `tokenColors` and caret's own pair
  * as `settings`; shiki accepts either — normalizing to one keeps the appended rules
- * last, which is what makes them win (shiki is last-match-wins). This order matches
- * shiki's own `normalizeTheme`; `settings` is the branch TypeScript believes is always
- * taken, `tokenColors` the one every real upstream theme actually uses. The rename is
- * what lets a highlighter resolve the theme by the same handle appearance.ts paints
- * with. */
+ * last, which is what makes them win (shiki is last-match-wins). The `settings ??
+ * tokenColors` order matches shiki's own `normalizeTheme`: `settings` is the branch
+ * TypeScript believes is always taken, `tokenColors` the one every real upstream theme
+ * actually uses. */
 function withStructuralOverrides(theme: Theme, source: ThemeRegistrationRaw): ThemeRegistrationRaw {
   const { tokenColors, settings, ...rest } = source;
   return {
@@ -134,9 +123,8 @@ function withStructuralOverrides(theme: Theme, source: ThemeRegistrationRaw): Th
 }
 
 /** Every theme a palette can name, in one map — the vendors' published themes and
- * caret's own pair. Keying it by `ShikiThemeId` is what makes the lookup below
- * total: a palette's `shikiTheme` is that same union, so there is no unresolved case
- * to branch on. */
+ * caret's own pair. Keyed by `ShikiThemeId`, the same union a palette's `shikiTheme`
+ * is, so the lookup below is total with no unresolved case to branch on. */
 const SHIKI_THEME_SOURCES: Record<ShikiThemeId, ThemeRegistrationRaw> = {
   ...UPSTREAM_SHIKI_THEMES,
   ...CARET_SHIKI_THEMES,
@@ -161,6 +149,5 @@ export function shikiThemeFor(id: ThemeId): ThemeRegistrationRaw {
 }
 
 /** One resolved theme per registered palette, in THEME_IDS order — what a highlighter
- * registers. Every palette's, not just caret's own pair: this is the output side of the
- * resolver, where `CARET_SHIKI_THEMES` and `UPSTREAM_SHIKI_THEMES` are its two inputs. */
+ * registers. */
 export const REGISTERED_SHIKI_THEMES: ThemeRegistrationRaw[] = THEME_IDS.map(shikiThemeFor);

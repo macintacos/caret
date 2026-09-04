@@ -7,11 +7,11 @@ import { FOLLOW_ANIM_MS, SCROLL_ANIM_MS } from "$lib/diffview/scroll.ts";
 
 // caret's motion vocabulary lives in app.css: a small set of functional
 // duration/easing tokens for one-shot chrome reveals, plus a single global
-// prefers-reduced-motion rule that neutralizes movement for the light-DOM app
-// root. This suite pins the substrate the acceptance criteria require — the tier
-// ladder (micro < exit < enter < travel, so a surface leaves quicker than it
-// arrives), the JS constants that mirror it, and the global guard — so a drift
-// fails the unit suite rather than only showing as motion under reduced-motion.
+// prefers-reduced-motion rule that neutralizes movement for the light-DOM app root.
+// This suite pins the substrate — the tier ladder (micro < exit < enter < travel, so
+// a surface leaves quicker than it arrives), the JS constants that mirror it, and the
+// global guard — so a drift fails the unit suite rather than only showing as motion
+// under reduced-motion.
 
 const uiDir = join(import.meta.dir, "..");
 const appCss = readAppCss();
@@ -157,9 +157,8 @@ describe("motion tokens in app.css", () => {
   test("the three exit-window timers mirror --dur-exit", () => {
     // happy-dom fires no animationend, so each surface that must outlive its own
     // closing keyframe holds the duration as a timer instead. Same coupling as the
-    // scroll mirrors above and the same reason to pin it: these three moved when the
-    // exit tier landed, and a future retune that misses one strands or flashes the
-    // surface rather than failing anything.
+    // scroll mirrors above and the same reason to pin it: a retune that misses one
+    // strands or flashes the surface rather than failing anything.
     const exit = dur("exit");
     expect(planKeyboard).toContain(`const CLOSE_ANIM_MS = ${exit};`); // PlanSearch's collapse
     expect(chromeSources["components/DiffPlanView.svelte"]).toContain(

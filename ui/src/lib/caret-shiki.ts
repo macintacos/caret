@@ -12,15 +12,10 @@
 // record is where both halves live, and its `sunk` / `ink` are the same values
 // `--paper-sunk` / `--ink` carry.
 //
-// caret's appended markdown rules — the structural markers and EXC-867's emphasis
-// set — are deliberately ABSENT. caret-theme.ts appends them
-// to every theme it resolves, and appended-last is what makes them win; a copy here would
-// sit among the rules it exists to beat.
-//
-// This is a shiki-side asset map rather than a palette, so it lives beside theme.ts
-// rather than in ./themes/ — every module in that directory is built through
-// `paletteTheme`, which theme.test.ts pins. Same placement, and the same reason, as
-// upstream-shiki.ts.
+// caret's appended markdown rules — the structural markers and EXC-867's emphasis set —
+// are deliberately ABSENT. caret-theme.ts appends them to every theme it resolves, and
+// appended-last is what makes them win; a copy here would sit among the rules it exists
+// to beat.
 
 import type { ThemeRegistrationRaw } from "shiki/core";
 

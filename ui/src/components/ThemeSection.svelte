@@ -5,10 +5,9 @@
   //
   // Both slots stay on screen because they are persistent settings, not a function
   // of the current mode; showing both is what teaches that the pairing exists. The
-  // live one wears an IN USE pill, the block's single amber mark, which moves as
-  // the mode changes or the OS flips. Which one that is comes from the live
-  // appearance module, so the pill and the summary line track an OS flip while the
-  // modal is open without a second subscription of this section's own.
+  // live one wears an IN USE pill, the block's single amber mark. Which one that is
+  // comes from the live appearance module, so the pill and the summary line track an
+  // OS flip while the modal is open without a subscription of this section's own.
   //
   // The shell renders this in place of the generic field rows for the Theme
   // section, and hands it that section's fields — which the /-search may have
@@ -17,10 +16,9 @@
   // It renders ONLY inside the settings pane, and leans on that: the row rhythm
   // (group gap, row padding, the hairline separator) is declared once in
   // SettingsDialog's `.settings :global(…)` rules, which reach these rows through the
-  // component boundary. That is what keeps the two halves of the Appearance pane from
-  // drifting into two treatments — but it means this component is not self-sufficient
-  // elsewhere. A second consumer moves that rhythm into a caret-owned stylesheet keyed
-  // on `[data-slot="field"].setting-item` rather than copying it back here; key on the
+  // component boundary — so this component is not self-sufficient elsewhere. A second
+  // consumer moves that rhythm into a caret-owned stylesheet keyed on
+  // `[data-slot="field"].setting-item` rather than copying it back here; key on the
   // data-slot as well as the class, because SettingSelect puts `.setting-item` on its
   // portalled menu rows too.
   import { appearance } from "@/state/appearance.svelte.ts";
@@ -85,15 +83,12 @@
           >
             <span>{field.label}</span>
             {#if field.key === liveKey}
-              <!-- The block's one amber mark: which palette is actually showing. It
-                   unmounts from one row and mounts in the other as the live scheme
-                   changes, which replays its reveal on arrival.
+              <!-- The block's one amber mark: which palette is actually showing.
                    aria-hidden is load-bearing: this pill sits INSIDE the row's <label>,
                    and a <button> takes its name from its label — so without it the slot
                    trigger would be named "Dark theme In use", a name that silently moves
-                   between the two rows on an OS flip. The resolved-state line below says
-                   which palette is showing in a sentence, which is how that reaches a
-                   screen reader. -->
+                   between the two rows on an OS flip. The resolved-state line below is
+                   how that reaches a screen reader instead. -->
               <Badge class="in-use" aria-hidden="true">In use</Badge>
             {/if}
           </FieldLabel>
@@ -123,9 +118,9 @@
     gap: 0.45rem;
   }
   /* IN USE: an amber-wash pill in the eyebrow's uppercase treatment. The label is
-     written in sentence case and uppercased here, so it is announced as words
-     rather than spelled out. The reveal replays each time it moves rows; the
-     global reduced-motion guard reaches it through the [data-slot] anchor. */
+     written in sentence case and uppercased here, so it is announced as words rather
+     than spelled out. The pill unmounts from one row and mounts in the other as the
+     live scheme changes, which replays the reveal on arrival. */
   .theme-section :global(.in-use) {
     border: 0;
     padding: 0.1rem 0.4rem;

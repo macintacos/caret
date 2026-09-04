@@ -63,7 +63,6 @@
      min-width is safe under the transform/containment caveat above — it
      establishes no containing block, so the pinned chrome's anchor still holds
      (container-type would not, which is why the substrate is tokens + a floor,
-     not a query container). No visual change at current widths: --w-min sits far
-     below any real viewport. */
+     not a query container). */
   min-width: var(--w-min);
 }

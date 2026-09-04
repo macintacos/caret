@@ -68,9 +68,8 @@ describe("ThemePreviewCard tinting is scoped to the card", () => {
     expect(document.documentElement.dataset.theme).toBe(beforeScheme);
   });
 
-  // The card paints through the shared paintTheme (EXC-884) rather than its own
-  // setProperty loop; a copy reintroduced here would drift from the registry's stamp
-  // the same way the deleted applyTokens did.
+  // The card paints through the shared paintTheme (EXC-884) rather than a setProperty
+  // loop of its own, which would drift from the registry's stamp.
   test("owns no paint loop of its own — it delegates to paintTheme", () => {
     const source = readFileSync(join(import.meta.dir, "ThemePreviewCard.svelte"), "utf8");
     expect(/\.setProperty\s*\(/.test(source)).toBe(false);
@@ -99,9 +98,9 @@ describe("ThemePreviewCard samples the palette beyond the accent", () => {
     expect((el?.querySelectorAll("[data-tp-diff='del']").length ?? 0) >= 1).toBe(true);
   });
 
-  // The mark vocabulary is a quarter of the palette's hue jobs and the card showed
-  // none of it (EXC-905). Two segments, not one: --mark-active only means anything
-  // beside a plain --mark, so the pair is what advertises the two-step.
+  // The mark vocabulary is a quarter of the palette's hue jobs (EXC-905). Two
+  // segments, not one: --mark-active only means anything beside a plain --mark, so
+  // the pair is what advertises the two-step.
   test("shows a marked run and the current match (pulling in --mark / --mark-active)", () => {
     const { flush } = render(ThemePreviewCard, baseProps);
     flush();

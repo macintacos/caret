@@ -1,16 +1,13 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-// Test-only reconstituter for the split stylesheet. app.css is the entry that
-// @imports the ./styles/* partials; the Tailwind bundler inlines them at build,
-// so what ships is one flat sheet. The CSS-contract suites (motion, type-scale,
-// shadcn-bridge, layout, derived-tokens, css-bridge) parse that flat sheet as
-// text, so read it back the same way — inline each local ./styles @import in the
-// order app.css lists them — rather than each test reading a single partial
-// (several pin blocks that now live in different partials). One of those
-// partials, styles/palette.generated.css, is emitted rather than committed, so a
-// suite reading this needs the generator to have run — `mise run test` does it.
-// Not imported by app code, so it never reaches the browser bundle.
+// Test-only reconstituter for the split stylesheet. app.css @imports the ./styles/*
+// partials and the Tailwind bundler inlines them at build, so what ships is one flat
+// sheet. The CSS-contract suites parse that flat sheet as text, so read it back the
+// same way rather than each test reading a single partial — several pin blocks live
+// in different partials. One of those, styles/palette.generated.css, is emitted
+// rather than committed, so a suite reading this needs the generator to have run
+// (`mise run test` does).
 
 const APP_CSS = new URL("../app.css", import.meta.url).pathname;
 
@@ -36,9 +33,7 @@ export function rootBlock(css: string, marker: string): string {
 
 /** The body of the sheet's one `@theme inline` block — the shadcn bridge's map onto
  * Tailwind's utility scales — or `""` when it is absent. Flat like a `:root` body, so
- * the same `[^}]*` capture holds. Shared rather than re-derived per suite: two suites
- * now read this block for different keys, and two regexes for one block means two
- * failure modes for one drift. */
+ * the same `[^}]*` capture holds. */
 export function themeBlock(css: string): string {
   return css.match(/@theme inline\s*\{([^}]*)\}/)?.[1] ?? "";
 }

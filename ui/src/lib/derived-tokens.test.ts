@@ -3,28 +3,20 @@ import { describe, expect, test } from "bun:test";
 import { readAppCss } from "$lib/appCss.ts";
 import { THEMES } from "$lib/theme.ts";
 
-// The derived tier (EXC-885): the colors a palette *implies* rather than decides.
-// A palette names its surfaces, ink, and accent through lib/themes/recipe.ts; the
-// chip fills, the sheer panel, the neutral hover wash, and the novelty wash all
-// fall out of that choice, so ui/src/styles/derived.css mixes them once and
-// components read var(--token) instead of mixing by hand.
+// The derived tier (EXC-885), declared in ui/src/styles/derived.css, which carries
+// the tier's own rationale. This suite pins the two properties that make it safe for
+// every palette.
 //
-// This suite pins the two properties that make the tier safe for every palette.
-//
-// The SELECTOR. A custom property's computed value is its specified value with
-// var() already substituted, so a token declared only on :root bakes in :root's
-// palette and inherits into every subtree as a literal — it does NOT re-derive
-// inside a subtree paintTheme(id, node) painted with a different palette (EXC-884).
-// paintTheme stamps data-theme on every target it paints, root or scoped, so
-// `:root, [data-theme]` re-derives the whole tier once per painted scope and
-// exactly where one exists. A regression to a bare :root would show up only as a
-// preview card wearing the app's colors, so it is asserted here instead.
+// The SELECTOR. `:root, [data-theme]` rather than a bare `:root`, so the tier
+// re-derives inside a subtree paintTheme(id, node) painted with a different palette
+// (EXC-884) instead of inheriting :root's palette as a baked literal. A regression to
+// a bare :root would show up only as a preview card wearing the app's colors.
 //
 // WELL-FORMEDNESS. Every value is a color-mix(in lab, …) whose only inputs are
-// palette tokens. theme.test.ts's registry-wide "covers caret-dark's full token
-// set" already pins that key set for all nine palettes, so a tier built solely from
-// those names derives correctly for every one of them by construction — rather than
-// by this suite sampling caret's and hoping.
+// palette tokens. theme.test.ts's registry-wide "covers caret-dark's full token set"
+// already pins that key set for all nine palettes, so a tier built solely from those
+// names derives correctly for every one by construction — rather than by this suite
+// sampling caret's and hoping.
 
 const appCss = readAppCss();
 

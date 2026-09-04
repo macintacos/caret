@@ -2,20 +2,17 @@
    The semantic layer shadcn components read (--background, --primary, --border,
    …), bridged to caret's THEMES tokens so copied components paint on caret's
    palette and retint in lockstep with theme switches — the same single-source
-   pattern the .diffview → --diffs-* rule uses. shadcn-bridge.test.ts pins this
-   contract, mirroring diffview/css-bridge.test.ts. The file carries a second concern
+   pattern the .diffview → --diffs-* rule uses. The file carries a second concern
    below the token map: the modal choreography (motion + backdrop) the copied Dialog
-   and AlertDialog surfaces wear, which lives here for the same single-source reason
-   and is pinned by motion.test.ts.
+   and AlertDialog surfaces wear, which lives here for the same single-source reason.
 
    ONE flat block, no [data-theme="dark"] override: caret's color tokens are
    written inline on :root by paintTheme() (lib/theme.ts) for the active scheme,
    and the static :root fallback in styles/palette.generated.css is caret-dark.
    So a var(--paper) here resolves to the correct scheme at runtime and to
-   caret-dark at first paint — which both kills the first-paint light-on-dark
-   flash the stub risked AND makes a separate dark block redundant (the tokens it
-   would reference already flip). Scheme lives entirely in the caret operands,
-   exactly as it does for the .diffview bridge — no @media, no per-scheme block.
+   caret-dark at first paint, which makes a separate dark block redundant — the
+   tokens it would reference already flip. Scheme lives entirely in the caret
+   operands, exactly as it does for the .diffview bridge.
 
    --primary carries caret's amber accent — the primary action's fill. Amber
    reaches shadcn surfaces in just two controlled spots: this fill and --ring
@@ -54,12 +51,11 @@
      and the diffview share this same token. */
   --ring: color-mix(in oklab, var(--accent-bright), transparent 70%);
   /* Sidebar surface (EXC-843): the Settings shell composes shadcn's Sidebar as its
-     category rail. The rail is the recessed --paper (a shade under the raised
-     popover pane it sits beside); its hover/active wash rides --chip-hover (the
-     app's neutral highlight, same as the menu bridge above) — SettingsDialog.svelte
-     re-tints the SELECTED row to amber so the "amber marks the selection" language
-     survives (stock shadcn folds hover and active into one accent). The rail's own
-     amber "primary" and hairline border round out the standard shadcn token set. */
+     category rail. The rail is the recessed --paper, a shade under the raised
+     popover pane it sits beside; its hover/active wash rides --chip-hover, the
+     app's neutral highlight. Stock shadcn folds hover and active into one accent,
+     so SettingsDialog.svelte re-tints the SELECTED row to amber to keep the "amber
+     marks the selection" language. */
   --sidebar: var(--paper);
   --sidebar-foreground: var(--ink);
   --sidebar-primary: var(--accent);
@@ -113,13 +109,12 @@
   --color-muted-foreground: var(--muted-foreground);
   /* shadcn's neutral hover/active wash — NOT caret amber (that's --color-primary).
      A neutral grey mixed off the RAISED paper (the --popover surface menus render
-     on) toward ink — matching --chip-hover's formula (paper-raised + 15% ink), the
-     brightness the topbar's .float-chip buttons hover to, so a menu/select highlight
-     reads at the same strength as every other neutral control (the old 6%-off-paper
-     wash was too faint to register). Kept a self-contained color-mix rather than a
-     var(--chip-hover) reference so the bridge block stays self-describing (a pinned
-     contract in shadcn-bridge.test.ts); the operands flip per scheme, so it reads
-     right in both without a second block. */
+     on) toward ink, matching --chip-hover's formula (paper-raised + 15% ink) so a
+     menu/select highlight reads at the same strength as the topbar's .float-chip
+     buttons. Kept a self-contained color-mix rather than a var(--chip-hover)
+     reference so the bridge block stays self-describing (a pinned contract in
+     shadcn-bridge.test.ts); the operands flip per scheme, so it reads right in both
+     without a second block. */
   --color-accent: color-mix(in lab, var(--paper-raised), var(--ink) 15%);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
@@ -156,29 +151,26 @@
    TIMING — refined, not replaced: the two custom properties tw-animate-css's
    compiled animate-in / animate-out reads, and no `animation` of caret's own. Why
    that is a correctness rule and not a style one, and why overlay and content take
-   the same arm rather than staggering: svelte-rules.md § Motion principles, which
-   states it once for both this block and PlanToc.svelte's single-surface form.
-   Local to here: both properties are registered `inherits: false`, which is what
-   keeps these arms on the four surfaces and off the controls INSIDE them — a
-   dialog's buttons, inputs and switches all resolve
+   the same arm rather than staggering: svelte-rules.md § Motion principles. Local to
+   here: both properties are registered `inherits: false`, which is what keeps these
+   arms on the four surfaces and off the controls INSIDE them — a dialog's buttons,
+   inputs and switches all resolve
    `var(--tw-duration, var(--default-transition-duration))` for their own
    transitions, and would otherwise retime to a surface's duration.
 
    BACKDROP — the blur radius is deliberately CONSTANT, and that is what makes it
    deepen rather than pop. Element opacity composites the filtered backdrop, so the
-   fade the `enter` keyframe already runs ramps the perceived blur with it (measured:
-   a 6px backdrop-filter over a hard stripe pattern is fully sharp at 10% opacity and
-   fully blurred at 95%). The ramp is therefore a matter of how long it is spent, not
-   of the radius. Interpolating the radius instead would re-blur the whole plan behind
-   the overlay every frame to buy the same percept.
+   fade the `enter` keyframe already runs ramps the perceived blur with it. The ramp
+   is a matter of how long it is spent, not of the radius; interpolating the radius
+   would re-blur the whole plan behind the overlay every frame to buy the same
+   percept.
 
-   The scrim is heavy enough that a guard reads as blocking and light enough that a
-   settings pane does not read as a curtain, with the blur doing the separation work;
-   judged by eye on both caret schemes. It is a black at an alpha rather than a caret
-   token, deliberately: ColorToken in lib/theme.ts is a closed union every palette must
-   supply, so minting a --scrim is a nine-theme change — and a scrim is a shadow cast
-   OVER the app rather than a surface of it, so it should not flip with the scheme the
-   way a bridged token would. It is the one non-token color the bridge declares. */
+   The scrim is a black at an alpha rather than a caret token, deliberately:
+   ColorToken in lib/theme.ts is a closed union every palette must supply, so minting
+   a --scrim is a nine-theme change — and a scrim is a shadow cast OVER the app rather
+   than a surface of it, so it should not flip with the scheme the way a bridged token
+   would. It is the one non-token color the bridge declares; its weight was judged by
+   eye on both caret schemes, with the blur doing the separation work. */
 [data-slot="dialog-overlay"],
 [data-slot="alert-dialog-overlay"] {
   background: rgb(0 0 0 / 0.28);

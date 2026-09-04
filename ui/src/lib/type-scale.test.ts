@@ -4,12 +4,11 @@ import { join } from "node:path";
 
 import { readAppCss, rootBlock } from "$lib/appCss.ts";
 
-// caret's chrome font sizing flows from one named scale declared in app.css: a
-// set of --text-* steps with paired --leading-* tokens. This suite pins that
-// the scale exists, that the shared atoms and the diff-view bridge draw from it,
-// and that no chrome component reintroduces a raw font-size literal — so a
-// drift (a stray `font-size: 0.82rem`) fails the unit suite instead of silently
-// fragmenting the scale again.
+// caret's chrome font sizing flows from one named scale declared in app.css: a set
+// of --text-* steps with paired --leading-* tokens. This suite pins that the scale
+// exists, that the shared atoms and the diff-view bridge draw from it, and that no
+// chrome component carries a raw font-size literal — so a drift (a stray
+// `font-size: 0.82rem`) fails the unit suite instead of silently fragmenting it.
 
 const UI_SRC = join(import.meta.dir, "..");
 const appCss = readAppCss();
@@ -68,13 +67,11 @@ describe("the --text-*/--leading-* type scale in app.css", () => {
     expect(rule).toMatch(/--diffs-line-height:\s*var\(--leading-/);
   });
 
-  // EXC-621's committed per-surface decision. The diff mono is stepped UP to the
-  // --text-base step (0.82rem ≈ 13.12px at the 16px root) — the library's ~13px
-  // reference — for crispness, decoupled from the .mono inline-chrome step
-  // (--text-sm ≈ 12.48px). Its line-height is stepped up too, to --leading-relaxed:
-  // the plan view draws inline chips, and a chip is taller than its glyphs, so two
-  // stacked chips need the extra leading between the rows. Pinning both exact steps
-  // makes the size/line-height choice falsifiable, not just prose.
+  // EXC-621's per-surface decision, pinned by exact step so it is falsifiable rather
+  // than prose. The diff mono takes --text-base (≈13.12px at the 16px root, the
+  // library's ~13px reference) for crispness, decoupled from .mono's --text-sm; its
+  // line-height takes --leading-relaxed because the plan view draws inline chips, and
+  // a chip is taller than its glyphs.
   test("the .diffview bridge commits the diff-mono step-up to --text-base", () => {
     const rule = appCss.match(/\.diffview\s*\{([\s\S]*?)\}/)?.[1] ?? "";
     expect(rule).toMatch(/--diffs-font-size:\s*var\(--text-base\);/);

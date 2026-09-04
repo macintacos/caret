@@ -17,8 +17,7 @@
 // One place the palette is followed rather than corrected: Latte's `green` and
 // `lavender` are low-contrast on a light surface, and they color string literals and
 // entities in the diff view as well as filling gutter bars. They stay as published —
-// reading Latte's own colors is the point of picking Latte, and overriding them would
-// ship caret's opinion of the flavor instead of the flavor.
+// reading Latte's own colors is the point of picking Latte.
 
 import type { Theme, ThemeId } from "$lib/theme.ts";
 import { type PaletteInput, paletteTheme } from "$lib/themes/recipe.ts";

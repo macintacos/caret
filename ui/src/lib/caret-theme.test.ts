@@ -253,9 +253,9 @@ describe("caret-theme ↔ THEMES palette sync", () => {
   });
 });
 
-// AC 3's structural half. There is one resolution path now, so every registered
-// theme takes the same seven rules — and shiki is last-match-wins, so appending them
-// is what makes them beat whatever the theme underneath says about those scopes.
+// The appended rules, unrendered. One resolution path, so every registered theme
+// takes the same seven — and shiki is last-match-wins, so appending them is what
+// makes them beat whatever the theme underneath says about those scopes.
 describe("caret's appended markdown rules", () => {
   for (const id of THEME_IDS) {
     // Resolved fresh rather than read off the cached object, for the reason the
@@ -294,9 +294,9 @@ describe("caret's appended markdown rules", () => {
 // markers carry punctuation.definition.markdown and the language info-string
 // carries fenced_code.block.language. The theme subdues the markers to --ink-faint
 // and makes the language prominent (--accent, bold) while leaving the code body's
-// color untouched. Every registered theme takes that treatment, which is AC 3's
-// rendered half — the rule-order assertions above are the same claim unrendered.
-// The markers and language only become separate spans once their colors differ.
+// color untouched. Every registered theme takes that treatment — the rendered half of
+// the rule-order assertions above. The markers and language only become separate
+// spans once their colors differ.
 describe("fenced-code fence line", () => {
   // The THEMES palette values are lowercase hex; shiki emits some token colors
   // uppercased, so normalize the received color (only) before comparing.
@@ -447,10 +447,10 @@ describe("dracula fenced-code block", () => {
   });
 });
 
-// AC 2: a type reads apart from a function, a number from a string escape, and an
-// attribute from a property. This is where those three pairs are checked against a
-// real grammar rather than read back off the rule table, which would only restate
-// caret-shiki.ts in a second spelling.
+// The three pairs caret's scope set is wide enough to separate — a type from a
+// function, a number from a string escape, an attribute from a property — checked
+// against a real grammar rather than read back off the rule table, which would only
+// restate caret-shiki.ts in a second spelling.
 //
 // A caveat for anyone editing the sample: which scope a token resolves to can
 // depend on the lines around it, not just the token itself, so re-verify the WHOLE
@@ -517,13 +517,11 @@ describe("caret themes over a real TypeScript sample", () => {
 // through to the arithmetic-operator rule. caret's engine rewrites the pattern
 // (diffview/jsc-regex.ts) to restore it.
 //
-// What this suite does NOT pin is that repair. bun's JSC carried the defect when
-// these expectations were written; since bun 1.4 it does not, so they now hold with
-// or without the rewrite (see diffview/jsc-regex.ts's header for the per-engine
-// measurements). They remain worth having as the grammar's own truth, read off the
-// Oniguruma reference — a mis-scoped token fails here by name instead of surfacing
-// as a puzzling wrong hue. The repair's trigger lives in a browser this runner is
-// not, and getting it observed is EXC-1223.
+// What this suite does NOT pin is that repair: bun's JSC no longer carries the defect
+// as of bun 1.4, so these expectations hold with or without the rewrite (see
+// diffview/jsc-regex.ts's header for the per-engine measurements). They remain worth
+// having as the grammar's own truth, read off the Oniguruma reference. The repair's
+// trigger lives in a browser this runner is not, and getting it observed is EXC-1223.
 describe("the shipped engine tokenizes TypeScript to the grammar's real scopes", () => {
   // Every expectation below was read off the Oniguruma engine — the reference
   // implementation — rather than guessed, so the suite pins the grammar's truth.
@@ -578,9 +576,8 @@ describe("the shipped engine tokenizes TypeScript to the grammar's real scopes",
     expect(await scopeAt(1, " rows")).toBe("comment.line.double-slash.tsx");
   });
 
-  // The remaining three are the ticket's other claimed failures. They already hold
-  // today, so they are regression pins rather than the fix's target — and they are
-  // what makes this test the standing answer to "did tokenization drift?".
+  // Regression pins rather than the repair's target: these three hold either way, and
+  // they are what makes this suite the standing answer to "did tokenization drift?".
   test("scopes `function` and `const` as storage types, not entity names", async () => {
     expect(await scopeAt(0, "function")).toBe("storage.type.function.tsx");
     expect(await scopeAt(3, "const")).toBe("storage.type.tsx");

@@ -76,13 +76,9 @@ button.float-chip[aria-expanded="true"]:not(:disabled) {
   font-weight: 400;
 }
 
-/* The count chip: every Badge that answers "how many" wears it — the TopBar's
-   pending comments, the review switcher's plan inventory, the compare picker's
-   other versions, the unanchored-comment tally. Small, quiet and tabular, so a
-   growing number reads as chrome rather than a second accent. Cross-component
-   from the start, it lived as a :global rule inside LegacyAnnotationList until
-   EXC-905 moved it here beside the other shared atoms. Unlayered, so it wins
-   over the shadcn Badge variant's Tailwind text utility. */
+/* The count chip: every Badge that answers "how many" wears it. Small, quiet and
+   tabular, so a growing number reads as chrome rather than a second accent.
+   Unlayered, so it wins over the shadcn Badge variant's Tailwind text utility. */
 [data-slot="badge"].count {
   padding: 0.05rem 0.4rem;
   font-size: var(--text-2xs);
@@ -100,17 +96,14 @@ button.float-chip[aria-expanded="true"]:not(:disabled) {
   color: var(--attention);
 }
 
-/* Keycap: every Kbd renders as a small key, consistent across surfaces
-   (the topbar a/r caps, the composer's ⌘↵, the ? affordance, the help modal).
-   The fill is a translucent tint of currentColor over the container, so the key
-   picks up its container's own colour — a light key on the amber Approve button,
-   a grey key on a neutral chip, an ink key on the help modal's paper. Flat by
-   design (no gradient), but an inset bottom shadow echoing the border thickens
-   the bottom edge, so the key reads as slightly raised — the GitHub <kbd>
-   treatment. These base tints suit the middle; each theme nudges the one facet
-   that reads off against its own surface (the two blocks after .kbd-sm). The
-   glyph is set in the plan-view mono (--font-mono, the diff view's Berkeley
-   Mono). */
+/* Keycap: every Kbd renders as a small key, consistent across surfaces. The fill
+   is a translucent tint of currentColor over the container, so the key picks up its
+   container's own colour — a light key on the amber Approve button, a grey key on a
+   neutral chip, an ink key on the help modal's paper. Flat by design, but an inset
+   bottom shadow echoing the border thickens the bottom edge so the key reads as
+   slightly raised — the GitHub <kbd> treatment. These base tints suit the middle;
+   each theme nudges the one facet that reads off against its own surface (the two
+   blocks after .kbd-sm). */
 [data-slot="kbd"] {
   display: inline-flex;
   align-items: center;
@@ -149,15 +142,13 @@ button.float-chip[aria-expanded="true"]:not(:disabled) {
   min-width: 1.2em;
   padding: 0.08em 0.28em;
 }
-/* Per-theme nudge, one facet each — the rest of the keycap (fill/border, the
-   raised bottom edge, radius) stays shared from the base rule. data-theme is the
-   scheme paintTheme() stamps on <html> — and, since EXC-884, on any subtree it is
-   aimed at; both rules key on ANY ancestor, so a scoped stamp adds a match rather
-   than replacing the page's (lib/theme.ts records what that costs). caret-dark thins the
-   border so the near-white hairline sits a touch darker on the dark paper;
-   caret-light thins the fill so the key floats a touch lighter on the light
-   paper. Higher specificity than the base [data-slot="kbd"], both unlayered, so
-   each override wins. */
+/* Per-theme nudge, one facet each — the rest of the keycap stays shared from the
+   base rule. data-theme is the scheme paintTheme() stamps on <html>, and on any
+   subtree it is aimed at (EXC-884); both rules key on ANY ancestor, so a scoped
+   stamp adds a match rather than replacing the page's (lib/theme.ts records what
+   that costs). Dark thins the border so the near-white hairline sits darker on dark
+   paper; light thins the fill so the key floats lighter on light paper. Higher
+   specificity than the base [data-slot="kbd"], both unlayered, so each wins. */
 [data-theme="dark"] [data-slot="kbd"] {
   border-color: color-mix(in srgb, currentColor 20%, transparent);
 }
@@ -338,13 +329,11 @@ button.float-chip[aria-expanded="true"]:not(:disabled) {
      a dialog. This is the dialog's own editor's affordance, not the page behind
      it, so it opts back in the way the dialog's own content does. */
   pointer-events: auto;
-  /* Wide enough that a source line of ordinary length arrives whole. A file's
-     lines are `white-space: pre` and never wrap, so every column short of the
-     line's own length is a column the reviewer has to scroll for — the one
-     dimension where the panel being generous costs nothing but the space it
-     takes. The max-width is what a stacked panel needs (placePreview drops it
-     below the list on a window too narrow to hold both side by side), where the
-     viewport rather than the list is what bounds it. */
+  /* Wide enough that a source line of ordinary length arrives whole: a file's lines
+     are `white-space: pre` and never wrap, so every column short of the line's own
+     length is a column the reviewer has to scroll for. The max-width is what a
+     stacked panel needs (placePreview drops it below the list on a window too narrow
+     to hold both side by side), where the viewport rather than the list bounds it. */
   width: 29rem;
   max-width: calc(100vw - 1rem);
   display: flex;
@@ -423,14 +412,12 @@ button.float-chip[aria-expanded="true"]:not(:disabled) {
 }
 
 /* The placeholder a pending answer sits behind. Three bars of the sunk paper,
-   pulsing — the shape of the text about to replace them, at the widths a first,
-   middle and last line tend to have, so the swap reads as the same block filling
-   in rather than as one thing replacing another.
+   pulsing at the widths a first, middle and last line tend to have, so the swap
+   reads as the same block filling in rather than as one thing replacing another.
 
-   The delay is the point of it. Every answer is a round trip, but a warm local
-   daemon returns inside a frame or two, and a spinner that flashes on every
-   arrow key is worse than the blank it replaced. The fade starts a beat in, so a
-   fast answer never shows it at all and only a read the reviewer is actually
+   The animation DELAY is the point of it: a warm local daemon returns inside a frame
+   or two, and a spinner that flashes on every arrow key is worse than the blank it
+   replaced. Starting the fade a beat in means only a read the reviewer is actually
    waiting on ever paints. */
 .caret-preview-loading {
   display: flex;

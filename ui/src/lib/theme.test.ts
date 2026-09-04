@@ -101,13 +101,13 @@ const ROW_BANDS = [0, 0.02, 0.08] as const;
  * THIS rather than on the bare surface, so it joins the grounds they are measured over. */
 const TABLE_CARD_FILL = 0.06;
 
-/** The grounds a table's rules are drawn on, which since EXC-1136 are NOT the row bands
- * verbatim. A carded table never sits on bare --paper-sunk: an unbanded row is cleared to
- * transparent and shows the card's own fill, and a banded one paints its band in place of
- * it. So the bare surface drops out and the fill takes its place, leaving the resting
- * panel and the two banded cases a row can be in. Keeping the 0 would measure a ground
- * that only exists outside the card, and it is the LIGHTEST one — so it would quietly set
- * the top of the spread the rules case checks. */
+/** The grounds a table's rules are drawn on — NOT the row bands verbatim. A carded table
+ * never sits on bare --paper-sunk: an unbanded row is cleared to transparent and shows
+ * the card's own fill, and a banded one paints its band in place of it. So the bare
+ * surface drops out and the fill takes its place, leaving the resting panel and the two
+ * banded cases a row can be in. A 0 here would measure a ground that only exists outside
+ * the card, and the LIGHTEST one — quietly setting the top of the spread the rules case
+ * checks. */
 const TABLE_GROUNDS = [0.02, TABLE_CARD_FILL, 0.08] as const;
 
 const themeEntries = () => Object.entries(THEMES) as [ThemeId, (typeof THEMES)[ThemeId]][];
@@ -147,10 +147,10 @@ describe("THEMES", () => {
   });
 
   // EXC-776: the light theme's neutral surfaces, ink, and rules must lean warm
-  // (brown-ish), a sibling to caret-dark, rather than the cool pure greys they
-  // started as. A pure grey has R === B; warm means R > B. Only the neutral tokens
-  // are held to this — the accent and semantic hues carry their own color on purpose.
-  // The alpha rule/mark tokens are `#rrggbbaa`, so the alpha tail is optional.
+  // (brown-ish), a sibling to caret-dark, rather than a cool pure grey. A pure grey
+  // has R === B; warm means R > B. Only the neutral tokens are held to this — the
+  // accent and semantic hues carry their own color on purpose. The alpha rule/mark
+  // tokens are `#rrggbbaa`, so the alpha tail is optional.
   test("caret-light neutral greys lean warm (red channel exceeds blue)", () => {
     const NEUTRALS: ColorToken[] = [
       "--paper",
@@ -472,27 +472,24 @@ describe("every theme", () => {
   // surface (--diffs-bg is --paper-sunk, styles/diffview.css) and on the 2-8% ink mixes the
   // row bands lay over it.
   //
-  // That gap is why every member spends --ink-soft and not the --ink-faint the epic
-  // prescribed for markers generally. Falsifiable, and it really does bite: swap MARKER_INK
-  // to "--ink-faint" and this reds on the FIRST band it reaches, catppuccin-latte at 2.99,
-  // with github-light behind it at 2.97; the ink bottoms at 2.63 across the nine and
-  // --ink-soft at 4.21. doc/agents/svelte-rules.md § chips carries the full ranges.
+  // That gap is why every member spends --ink-soft and not the --ink-faint markers take
+  // generally. Falsifiable, and it really does bite: swap MARKER_INK to "--ink-faint" and
+  // this reds on the FIRST band it reaches, catppuccin-latte at 2.99 with github-light
+  // behind it at 2.97; the ink bottoms at 2.63 across the nine and --ink-soft at 4.21.
+  // doc/agents/svelte-rules.md § chips carries the full ranges.
   //
-  // EXC-860 opened this case for the checkbox alone and left the rest of the family faint,
-  // correctly — re-tinting a shared token is not one ticket's call. EXC-871 made it across
-  // the whole epic and the list is now closed by a rule rather than by inspection: a marker
-  // whose glyph SURVIVES is supplementary and stays on --ink-faint (the fence markers, the
-  // ** / _ emphasis markers, an ordered item's number), and only a marker that has been
-  // replaced appears below. Two of the family are measured separately, one test down
-  // each, because neither paints its token neat: the thematic break's can carry an alpha
-  // suffix that has to composite first, and a table's rules soften theirs toward the
-  // surface, so measuring the token would measure a color the sheet never paints.
+  // The membership is closed by a rule rather than by inspection: a marker whose glyph
+  // SURVIVES is supplementary and stays on --ink-faint (the fence markers, the ** / _
+  // emphasis markers, an ordered item's number), and only a replaced marker appears here.
+  // Two of the family are measured separately, one test down each, because neither paints
+  // its token neat: the thematic break's can carry an alpha suffix that has to composite
+  // first, and a table's rules soften theirs toward the surface, so measuring the token
+  // would measure a color the sheet never paints.
   //
-  // One assertion rather than one per member: all three draw in the same token, so a
-  // per-marker loop would run the identical arithmetic three times for a longer message.
-  // Which SELECTORS spend it is coreStyles.test.ts's job — it pins the six this epic drew
-  // by name. Neither file can catch a SEVENTH replacement marker shipped on --ink-faint;
-  // that gap is real and named here rather than papered over.
+  // One assertion rather than one per member: all three draw in the same token. Which
+  // SELECTORS spend it is coreStyles.test.ts's job. Neither file can catch a SEVENTH
+  // replacement marker shipped on --ink-faint; that gap is real and named here rather
+  // than papered over.
   /** Assert `paintOn(theme, ground)` clears the 3:1 non-text floor against every
    * row-banded ground, on every palette. */
   function expectAboveNonTextFloor(
@@ -555,16 +552,14 @@ describe("every theme", () => {
   // are one mark declared once as --table-rule (diffview/coreStyles.ts).
   //
   // THIS CASE DELIBERATELY DOES NOT MEASURE 3:1, AND THAT IS THE POINT OF READING IT.
-  // EXC-864 held these rules to 1.4.11's non-text floor on the argument that they are a
-  // replacement decoration: the pipes go transparent, so the rule is the only thing left
-  // saying where a column ends. EXC-1136's review pass overrode that on an explicit design
-  // call — the rules are to read as a low-contrast style, closer to the surface than to
-  // the ink, consistently on every palette. What survives the override is the reason the
-  // argument was never quite airtight: a table's columns are ALSO carried by the layout,
-  // since the cells are max-content tracks with the source's own spacing between them, so
-  // a faint divider degrades the reading rather than removing it. A table with no vertical
-  // rules at all is a normal, legible rendering; one with unreadable TEXT is not, which is
-  // why the header case below still measures a real floor.
+  // The rules are a design call (EXC-1136): a low-contrast style, closer to the surface
+  // than to the ink, consistently on every palette. 1.4.11's non-text floor does not bind
+  // them the way it binds a replacement decoration, because a table's columns are ALSO
+  // carried by the layout — the cells are max-content tracks with the source's own spacing
+  // between them — so a faint divider degrades the reading rather than removing it. A
+  // table with no vertical rules at all is a normal, legible rendering; one with
+  // unreadable TEXT is not, which is why the header case below still measures a real
+  // floor.
   //
   // So what is pinned here is the style itself, in two halves:
   //
@@ -576,13 +571,13 @@ describe("every theme", () => {
   //   bug — a step that resolves to the same colour as the ground it is drawn on, which is
   //   what a palette bump or a changed card fill could silently produce.
   //
-  //   CONSISTENT — the spread across the nine stays inside a narrow band. That is the
-  //   property the design call actually asked for and the one the OLD mechanism could not
-  //   hold: --ink-soft softened by a fixed amount lands in two different places on a light
-  //   and a dark palette, which is why it needed a light-dark() with two different numbers.
-  //   Stating the colour the other way round — --paper-sunk stepped 12% toward --ink —
-  //   makes one number land in the same place everywhere, because the operands flip with
-  //   the scheme. Reintroduce a per-scheme arm and the spread widens and this reds.
+  //   CONSISTENT — the spread across the nine stays inside a narrow band, which is the
+  //   property the design call actually asked for. Softening --ink-soft by a fixed amount
+  //   would land in two different places on a light and a dark palette and need a
+  //   light-dark() with two numbers; stating the colour the other way round — --paper-sunk
+  //   stepped 12% toward --ink — makes one number land in the same place everywhere,
+  //   because the operands flip with the scheme. Reintroduce a per-scheme arm and the
+  //   spread widens and this reds.
   //
   // The heaviest ground is the widest ROW BAND, not the card's resting fill: a rule inside
   // a table still has to be findable on a hovered, cursored or selected row.
@@ -608,18 +603,18 @@ describe("every theme", () => {
     expect(Math.max(...seen)).toBeLessThan(1.45);
   });
 
-  // EXC-1136 subdued the table header from bold --ink to plain --ink-soft, on the card's
-  // own fill. The ink is spent neat — only the GROUND is new — which is what separates
-  // this from the rules case above.
+  // The table header is plain --ink-soft on the card's own fill (EXC-1136). The ink is
+  // spent neat — only the GROUND is unusual — which is what separates this from the rules
+  // case above.
   //
   // THE FLOOR HERE IS 3:1 AND THAT IS A DELIBERATE, NARROW EXEMPTION. A header cell is
   // text, so 1.4.3's 4.5:1 would ordinarily bind, and the ink-ramp case further up holds
   // --ink-soft to exactly that on the two CHROME surfaces. On this ground it does not
   // clear it everywhere: catppuccin-latte binds at 4.34, 0.16 short, and it is the only
-  // one that misses. EXC-1136 named 3:1 for this ink and that is what ships, on the
-  // reasoning that the row is uppercase, short, and sits directly above body copy at full
-  // --ink. Soften the ink at all and latte drops below 4 — measure before touching it.
-  // doc/agents/svelte-rules.md § chips carries the range and the rest of the argument.
+  // one that misses. 3:1 ships on the reasoning that the row is uppercase, short, and sits
+  // directly above body copy at full --ink. Soften the ink at all and latte drops below
+  // 4 — measure before touching it. doc/agents/svelte-rules.md § chips carries the range
+  // and the rest of the argument.
   test("keeps a table header above the non-text floor on the card's own fill", () => {
     for (const [id, theme] of themeEntries()) {
       const ground = banded(theme.tokens["--paper-sunk"], theme.tokens["--ink"], TABLE_CARD_FILL);
@@ -694,7 +689,7 @@ describe("every theme", () => {
   // comfortably in all seven vendor palettes (88 degrees at the tightest). caret's own
   // two do NOT clear it that way — verdigris is about 46 degrees off carrot-top — so
   // caret.ts routes them to woad instead, and they land near 72. Without that override
-  // this test is what fails, which is the point of pinning it.
+  // this is the test that fails.
   //
   // NOT pinned: --chip-skill against --chip-link. Catppuccin draws those about 15
   // degrees apart, and no surface renders both — a link chip is the rendered plan's,
@@ -711,11 +706,10 @@ describe("every theme", () => {
     }
   });
 
-  // The reference chip's OTHER load-bearing pair, and the one EXC-880 created. A resolved
-  // reference rests in --chip-ref and takes --accent-wash on hover, so "hover is a visible
-  // step up" now depends on those two being told apart — where before EXC-880 the resting
-  // state was transparent and any wash read against it by construction. The step is
-  // carried almost entirely by hue: the alphas are two percentage points apart
+  // The reference chip's OTHER load-bearing pair (EXC-880). A resolved reference rests in
+  // --chip-ref and takes --accent-wash on hover, so "hover is a visible step up" depends
+  // on those two being told apart. The step is carried almost entirely by hue: the alphas
+  // are two percentage points apart
   // (ALPHA.chip vs ALPHA.wash in recipe.ts), so a palette whose accent drifted toward
   // --chip-ref's green would quietly reduce hover to that alpha nudge. Only the e2e's two
   // palettes are ever rendered in a browser; the other seven are held here or nowhere.
@@ -733,11 +727,10 @@ describe("every theme", () => {
     }
   });
 
-  // The reference chip's THIRD pair, deferred by EXC-880 to the ticket that made it
-  // renderable: until EXC-868 painted inline code, --chip-ref and --chip-code could not
-  // appear side by side, so "a resolved path is distinct from ordinary inline code" was
-  // true by construction with nothing holding it. They now sit in the same paragraph —
-  // `package.json` draws both at once — so it is held here.
+  // The reference chip's THIRD pair (EXC-880, EXC-868). --chip-ref and --chip-code sit in
+  // the same paragraph — `package.json` draws both at once — so "a resolved path is
+  // distinct from ordinary inline code" needs holding rather than being true by
+  // construction.
   //
   // Measured as SATURATION rather than as the hue distance the two pins above use, because
   // --chip-code rides `neutral` and a neutral's hue angle is noise: caret's sits at 30
@@ -828,8 +821,7 @@ describe("paintTheme", () => {
     expect(painted).toBe("caret-light");
   });
 
-  // The scoped-target contract (EXC-884): the same paint, aimed anywhere. The four
-  // tests above are the no-target contract and stay as they are.
+  // The scoped-target contract (EXC-884): the same paint, aimed anywhere.
   test("writes every token as an inline custom property on a passed target", () => {
     const node = document.createElement("div");
     paintTheme("caret-light", node);
@@ -865,14 +857,12 @@ describe("paintTheme", () => {
   });
 });
 
-// EXC-905: a palette token nothing reads is the opposite of a system. --mark-active
-// and --mark-orphan were produced by the recipe for all nine palettes and pinned by
-// both full-token tests above while having zero var() readers anywhere in the
-// chrome, and nothing caught it. This walks ui/src and asserts every ColorToken is
-// read by something, so "declared for nobody" fails the suite rather than waiting to
-// be noticed. It is a floor, not proof a token reaches a rendered surface: the reader
-// may be plumbing rather than paint — --accent-ink is satisfied partly by
-// styles/shadcn-bridge.css. Declared-but-unread is what it catches.
+// EXC-905: a palette token nothing reads is the opposite of a system, and the recipe
+// plus the full-token pins above will happily carry one for all nine palettes without
+// noticing. This walks ui/src and asserts every ColorToken is read by something, so
+// "declared for nobody" fails the suite. It is a floor, not proof a token reaches a
+// rendered surface: the reader may be plumbing rather than paint — --accent-ink is
+// satisfied partly by styles/shadcn-bridge.css.
 describe("every ColorToken is read somewhere in ui/src", () => {
   const UI_SRC = join(import.meta.dir, "..");
   // palette.generated.css DECLARES every token, so counting it would make the
@@ -884,10 +874,9 @@ describe("every ColorToken is read somewhere in ui/src", () => {
     .map((f) => readFileSync(join(UI_SRC, f), "utf8"))
     .join("\n");
 
-  // All five chip tints (EXC-858) are spent in diffview/coreStyles.ts: --chip-code fills
-  // the fence-marker chip, --chip-ref the resting file-reference chip, and --chip-bold /
-  // --chip-italic / --chip-link the three inline chips, each through its own --md-* layer
-  // variable. So the rule below holds over every token with no exemptions.
+  // The five content chips (EXC-858) are spent in diffview/coreStyles.ts, each through
+  // its own --md-* layer variable, and the sixth (--chip-skill, EXC-1186) in
+  // lib/markdownEditor.ts — so the rule below holds over every token with no exemptions.
   for (const token of Object.keys(THEMES["caret-dark"].tokens) as ColorToken[]) {
     test(`${token} is read by at least one var()`, () => {
       // The negative lookahead keeps --mark from matching --mark-active and --ink

@@ -6,8 +6,7 @@
 // and mark — a proofing desk — so the palette is the pigment set that desk would hold,
 // and dark mode's page is a dark PAPER rather than a neutral void. Nothing runs at full
 // chroma, and that restraint is what lets twenty-seven colors read as one page rather
-// than a parade. The count is sized against Catppuccin's 26 per flavor — a count, not a
-// source of hues.
+// than a parade.
 //
 // Nothing sits on the violet arc. A pigment box has nothing there — the historical purples
 // are a shellfish and an aniline dye — so a violet keyword read as the one synthetic in the
@@ -73,14 +72,13 @@ export interface CaretPalette {
 
   // The syntax half — shiki-only, and measured against `sunk`. Eleven hues, because
   // caret's shiki themes must tell a type from a function, a number from a string escape,
-  // an attribute from a property; those three pairs are the ones held apart by hue, never
-  // under 130 degrees in either scheme, measured in OKLCH.
+  // an attribute from a property; those three pairs are held apart by hue, never under
+  // 130 degrees in either scheme, measured in OKLCH.
   //
   // The eight colored ones sit in a narrow, HIGH chroma band — the three neutrals below
   // (variable, comment, punctuation) sit well under it. Holding the band tight is what
   // keeps eleven hues from reading as a parade; sitting it high is what keeps them off
-  // pastel. Gruvbox is the proof the two are compatible: it is the earthiest theme in wide
-  // use and it runs hotter than this.
+  // pastel.
   //
   // Three pigments are each spent twice, at different value: verdigris on number and
   // attention, madder on escape and danger, terre verte on string and ok. Number and
@@ -167,12 +165,10 @@ export const CARET_LIGHT: CaretPalette = {
  * highlighting spends. */
 export type ColorPlacement = "token" | "derived" | "shiki-only";
 
-/** Every color's placement, so EXC-903 (caret's shiki themes) and EXC-904 (the
- * `ColorToken` plumbing) each know which half of the set is theirs.
- *
- * `Record<keyof CaretPalette, ColorPlacement>` is the point: a color with no placement,
- * or a placement for no color, is a compile error rather than something a runtime test
- * has to re-check. */
+/** Every color's placement, so each consumer knows which half of the set is theirs.
+ * `Record<keyof CaretPalette, ColorPlacement>` makes a color with no placement, or a
+ * placement for no color, a compile error rather than something a runtime test has to
+ * re-check. */
 export const CARET_COLOR_PLACEMENT: Record<keyof CaretPalette, ColorPlacement> = {
   paper: "token",
   raised: "token",
@@ -243,13 +239,12 @@ function caretTheme(
     ruleHue: p.ruleHue,
     washHue: p.washHue,
     markHue: p.markHue,
-    // The skill chip's hue, and the one place a syntax color reaches a token.
-    // The recipe's default is `attention`, which works for every vendor palette
-    // and not for these two: verdigris sits about 46 degrees off carrot-top, so a
-    // skill chip and a file chip would be one pill in the composer — the pairing
-    // EXC-1186 exists to separate. caret's semantic set has nothing else free
-    // (accent is selection, danger is semantic), and woad is the palette's stated
-    // cool anchor, a full 70+ degrees off the green. theme.test.ts pins it.
+    // The skill chip's hue, and the one place a syntax color reaches a token. The
+    // recipe's default is `attention`, which works for every vendor palette and not
+    // for these two: verdigris sits about 46 degrees off carrot-top, so a skill chip
+    // and a file chip would be one pill in the composer — the pairing EXC-1186 exists
+    // to separate. Nothing else in caret's semantic set is free (accent is selection,
+    // danger is semantic), and woad is 70+ degrees off the green. theme.test.ts pins it.
     chipSkillHue: p.type,
   });
 }

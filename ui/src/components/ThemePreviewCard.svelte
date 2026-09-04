@@ -2,20 +2,14 @@
   // An abstract, redacted preview of Caret's own chrome, tinted by a candidate theme
   // (EXC-753). Shown beside the Theme dropdown as the reviewer hovers an option, so a
   // palette can be seen ON Caret's layout before it is selected. The mock is a generic
-  // (unfocused) macOS window around a miniature Caret shell — a topbar strip, a left
-  // rail with one selected row, and a plan pane of skeleton bars — never real
-  // plan/diff content, so there is no PII to leak. It is styled ENTIRELY by
+  // (unfocused) macOS window around a miniature Caret shell — never real plan/diff
+  // content, so there is no PII to leak. It is styled ENTIRELY by
   // `paintTheme(themeId, node)` (EXC-884) — the same painter the app itself runs,
   // aimed at this card's root instead of the document — so descendants reading
   // var(--paper)/var(--ink)/… paint in the hovered palette while :root is untouched:
-  // hovering never retints the real app. Painting through the shared function also
-  // scopes `color-scheme` and `data-theme` here, which is what makes a real
-  // (scaled-down) render of Caret's chrome viable as a follow-up rather than this
-  // hand-drawn miniature — see theme.ts's header for the one thing a scoped stamp
-  // still cannot insulate. The single --accent appears exactly once — the selected
-  // rail row (caret's "amber marks the selection" language) — keeping the primary
-  // scarce. The marks on the closing plan line are not a second accent: they do the
-  // content-highlight job, a different one (svelte-rules.md § CSS-token discipline).
+  // hovering never retints the real app. The marks on the closing plan line are not a
+  // second accent: they do the content-highlight job, a different one
+  // (svelte-rules.md § CSS-token discipline).
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import { paintTheme, type ThemeId } from "$lib/theme.ts";
 
@@ -237,12 +231,10 @@
 
   /* The closing prose line, marked: two plan-search hits laid over an ordinary
      .tp-bar — --mark for a match, --mark-active a step up for the current one. Both
-     tokens are translucent by recipe, so the bar reads through them exactly as syntax
+     tokens are translucent by recipe, so the bar reads through them the way syntax
      colors read through a real highlight, and the two-step is what tells the reviewer
-     the palette distinguishes them. The bar stays a Skeleton, so this line breathes
-     with the rest of the pane; only the marks on it hold still. Wrapping a bar in a
-     positioned row is the same shape .tp-line uses for the diff tints, and it keeps
-     the 7px rhythm, so the marked line costs the card no height. */
+     the palette distinguishes them. Wrapping a bar in a positioned row is the shape
+     .tp-line already uses for the diff tints, so the marked line costs no height. */
   .tp-marked-line {
     position: relative;
   }

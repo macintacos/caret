@@ -7,30 +7,20 @@
 // per-component change. Defining a new palette is one more entry in THEMES.
 //
 // A caller may pass any element instead, painting the palette onto that subtree
-// rather than the page (EXC-884). Two adapters justify the parameter: the document
-// in production, and the scoped preview card that previews a palette the app is not
-// currently wearing. Both carry the full stamp — tokens, color-scheme, data-theme —
-// so scheme-keyed rules resolve against the painted scheme, not the app's.
+// rather than the page (EXC-884) — the scoped preview card previews a palette the
+// app is not currently wearing. Both targets carry the full stamp — tokens,
+// color-scheme, data-theme — so scheme-keyed rules resolve against the painted
+// scheme, not the app's.
 //
-// Known limitation of a scoped stamp. It makes the subtree match its own scheme's
-// rules, but it does not unmatch the page's: app.css's
-// `@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *))` and
-// atoms.css's `[data-theme="dark"] [data-slot="kbd"]` both key on *any* ancestor, so
-// the stamp cuts both ways. Under `<html data-theme="dark">` a subtree stamped light
-// matches both rule sets; under a light page a subtree stamped dark newly ACTIVATES
-// the `dark:` utilities, which could not match there before. Both are harmless today
-// — the two kbd rules set disjoint properties, and the only shadcn component the
-// scoped adapter renders (Skeleton) carries no `dark:` variant — but a preview that
-// renders real chrome hits components that do (kbd, input), so it needs the `dark:`
-// variant reworked to a nearest-ancestor form first: every `dark:` utility in the
-// tree, hence a separate change.
-//
-// The same follow-up inherits one more asymmetry. styles/derived.css declares its
-// tier on `:root, [data-theme]`, so it re-derives per painted scope; the shadcn
-// bridge (styles/shadcn-bridge.css) is still :root-only, so its semantic vars bake
-// the root palette and inherit as literals. Inside a scoped paint the two disagree —
-// harmless while no scoped subtree renders a bridged component, which is exactly
-// what that follow-up changes.
+// Known limitation of a scoped stamp: it makes the subtree match its own scheme's
+// rules, but does not unmatch the page's. app.css's `dark:` custom variant and
+// atoms.css's `[data-theme="dark"]` keycap rules key on *any* ancestor, so the stamp
+// cuts both ways; and styles/derived.css re-derives its tier per painted scope while
+// styles/shadcn-bridge.css is still :root-only, so inside a scoped paint the two
+// disagree. Both are harmless while the scoped adapter renders only Skeleton, which
+// carries no `dark:` variant — but a preview that renders real chrome hits components
+// that do (kbd, input), so it needs the `dark:` variant reworked to a nearest-ancestor
+// form first: every `dark:` utility in the tree, hence a separate change.
 //
 // The palettes themselves live in ./themes/ — one module per family, each carrying
 // its upstream source and the mapping onto the tokens below. This module owns the
@@ -43,9 +33,7 @@
 //
 // app.css's static first-paint / no-JS fallback is a :root block emitted from
 // THEMES["caret-dark"] by ui/generate-palette-css.ts, so the palette is never
-// transcribed into CSS by hand. The shiki highlighter resolves its themes from the
-// `shikiTheme` each palette here names (see caret-theme.ts), so there is one place
-// colors live.
+// transcribed into CSS by hand.
 //
 // This module touches `document` only at call time — including the default `target`
 // expression, which a parameter default evaluates per call, not at module load — so
@@ -65,7 +53,7 @@ import type { UpstreamShikiThemeId } from "$lib/upstream-shiki.ts";
 
 /** Every shiki theme a palette may name: the vendors' published ones (EXC-896) and
  * the two caret authors for its own pair (EXC-903). One union over both maps is what
- * lets caret-theme.ts resolve any palette with a single lookup. */
+ * lets caret-theme.ts resolve any palette through a single lookup. */
 export type ShikiThemeId = UpstreamShikiThemeId | CaretShikiThemeId;
 
 export type ThemeId =
@@ -104,10 +92,8 @@ export type ColorToken =
   | "--mark-active"
   | "--mark-orphan"
   // The six inline chip tints (EXC-858, EXC-1186): the wash behind a rendered
-  // markdown span — bold, italic, code, a collapsed link label, a resolved file
-  // or folder reference, and a skill the reviewing agent can reach. They tint
-  // CONTENT, which is what separates them from styles/derived.css's --chip /
-  // --chip-hover, the chrome's floating-surface fill.
+  // markdown span. They tint CONTENT, which is what separates them from
+  // styles/derived.css's --chip / --chip-hover, the chrome's floating-surface fill.
   | "--chip-bold"
   | "--chip-italic"
   | "--chip-code"

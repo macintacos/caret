@@ -10,12 +10,10 @@
 // system is already light, or moving the off-scheme slot, would otherwise wipe
 // the whole UI between two identical frames.
 //
-// App-wide state, so this is a module singleton (the `shortcuts` registry's
-// shape): there is exactly one appearance per document — paintTheme writes
-// `document.documentElement`, and the persisted truth is origin-scoped
-// localStorage — so a per-mount instance would be fiction, and the singleton is
-// what lets ThemeSection and FilePreview read the resolved value without
-// prop-drilling. `createAppearance` stays exported for isolated unit tests.
+// A module singleton (the `shortcuts` registry's shape): there is exactly one
+// appearance per document — paintTheme writes `document.documentElement`, and the
+// persisted truth is origin-scoped localStorage — so a per-mount instance would be
+// fiction. `createAppearance` stays exported for isolated unit tests.
 
 import {
   appearanceSummary,

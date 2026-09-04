@@ -2,13 +2,11 @@
 // shades the official VS Code theme defines alongside them (BGLight / BGDark), which
 // is where its sidebar, editor, and panel surfaces come from.
 //
-// Two colors are not Dracula's: `inkSoft` and `inkFaint`. The palette publishes
-// exactly two neutrals for text — Foreground and Comment — and Comment is a syntax
-// color doing syntax work: Dracula paints it on its darkest surfaces, never on the
-// lifted ones caret puts dialogs and dropdowns on. caret's ink ramp needs three
-// rungs that hold up on all of them, so the middle two are mixed along Dracula's own
-// Foreground↔Comment ramp, staying inside its hue. Comment itself remains the
-// orphaned-mark neutral.
+// `inkSoft` and `inkFaint` are not Dracula's. The palette publishes exactly two text
+// neutrals — Foreground and Comment — and Dracula paints Comment on its darkest
+// surfaces, never on the lifted ones caret puts dialogs and dropdowns on. caret's ink
+// ramp needs three rungs that hold up on all of them, so the middle two are mixed
+// along Dracula's own Foreground↔Comment ramp, staying inside its hue.
 
 import { paletteTheme } from "$lib/themes/recipe.ts";
 

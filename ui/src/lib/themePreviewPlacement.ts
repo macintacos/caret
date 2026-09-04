@@ -67,11 +67,10 @@ export interface DeferredPlacementDeps {
   cancel: (handle: number) => void;
 }
 
-/** Measure and place the card on the NEXT animation frame, rather than synchronously. The
- * frame fires after the browser's microtasks — including bits-ui's positioning `.then()` —
- * so the menu has moved off the viewport origin by the time it is measured, and the card
- * anchors to the settled rect. Re-invoked whenever the highlighted option changes, so each
- * move re-measures on its own frame. Returns a teardown that cancels the pending frame. */
+/** Measure and place the card on the NEXT animation frame, rather than synchronously —
+ * the deferral the module header explains. Re-invoked whenever the highlighted option
+ * changes, so each move re-measures on its own frame. Returns a teardown that cancels
+ * the pending frame. */
 export function placeOnNextFrame(
   deps: DeferredPlacementDeps,
   options: PlacementOptions,

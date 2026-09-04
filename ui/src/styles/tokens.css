@@ -12,21 +12,16 @@
   /* Type scale. One named ramp the chrome sizes against, so density tunes from a
      single lever instead of scattered literals. Steps are rem, so they resolve
      against the root (no html font-size override → 1rem = 16px); the 15px set on
-     <body> below is an absolute-px reading base, NOT the rem origin. Steps sit
-     ~one step apart; --text-sm (≈12.48px) is the .mono inline-chrome size,
-     --text-base (≈13.12px) the diff-view size (a crisper step above .mono),
-     --text-2xs the .eyebrow size, --text-lg the comfortable reading size. A
-     chrome font-size picks the nearest step; genuine display/glyph one-offs
+     <body> in styles/base.css is an absolute-px reading base, NOT the rem origin.
+     A chrome font-size picks the nearest step; genuine display/glyph one-offs
      (EmptyState's hero glyph, a dialog title) stay literal with a justification.
-     The --leading-* tokens are role-keyed (not one-per-step): --none for
+     The --leading-* tokens are role-keyed rather than one-per-step: --none for
      single-line badges/glyphs, --tight for dense multi-line labels, --snug for
-     comment/annotation body copy, --normal for base reading text (it matches the
-     body line-height below), and --relaxed for the plan surface, which sets its
-     rows one step looser than the chrome. That last one is a decoration
-     requirement rather than a taste: the plan view draws inline chips around
-     emphasis, code and links, and a chip is taller than the glyphs inside it, so
-     rows set at the chrome's rhythm put a chip on one row a hair from the chip
-     on the next. The extra leading is the gap between them. */
+     comment/annotation body copy, --normal for base reading text, and --relaxed
+     for the plan surface. That last one is a decoration requirement rather than a
+     taste: the plan view draws inline chips around emphasis, code and links, and a
+     chip is taller than the glyphs inside it, so rows set at the chrome's rhythm
+     put a chip on one row a hair from the chip on the next. */
   --text-2xs: 0.65rem;
   --text-xs: 0.7rem;
   --text-sm: 0.78rem;
@@ -42,42 +37,32 @@
   --leading-relaxed: 1.7;
 
   /* Motion. A small functional vocabulary for the chrome's ONE-SHOT reveals,
-     tiered by WHAT MOVES rather than held under one ceiling, so the chrome reads
-     native: a hover tint and a dialog are different perceptual jobs and have no
-     business sharing a duration. Three tiers plus one exception, and the ladder
-     is monotonic — micro < exit < enter < travel — which is the shape
-     motion.test.ts pins.
-     --dur-micro (120ms) is a micro-interaction: a hover/focus tint, a small pop,
-     the inline composer reveal, the drag readout/hint slide. It is deliberately
-     the SAME time in both directions — at this size there is no arrival to
-     contrast a departure against, and a tint spending an entrance's time reads
-     as lag on the pointer. Its one consumer that is not an interaction is the
-     keyboard cursor's scroll follow (FOLLOW_ANIM_MS, lib/diffview/scroll.ts),
-     which retargets every few frames and so cannot ride --dur-travel; retune this
-     value by eye for hover feel and that scroll retimes with it.
-     --dur-enter (220ms) and --dur-exit (140ms) are the pair for a SURFACE: a
-     dialog, a drawer, a preview lane, a popover panel. Native UI gives an
-     entrance room to be read and takes the exit away quicker — you watch a thing
-     arrive, you only need a thing leaving to be gone — so a surface spends two
-     durations rather than one twice. --ease-out is the ENTER curve (a soft
-     decelerate-in — content settling into place); --ease-in is the EXIT curve
-     (an accelerate-out for content leaving), kept paired so an exit reads as the
-     inverse of its entrance rather than a second effect.
-     Ambient/infinite animations are deliberately EXEMPT: the safe-mode pulse
-     (1.2s), the EmptyState float (4s) and the reference-hint ping (1.6s) breathe
-     on their own bespoke durations and must not borrow these one-shot tokens — a
-     120ms loop would strobe. The theme wipe (0.45s, styles/base.css) is exempt
-     from the other side: it is a full-viewport view transition, not a surface
-     arriving in place. They keep their literals; only one-shot reveals draw from
-     here.
-     --dur-travel (240ms) is the one token OFF the enter/exit axis, and that is
-     what earns it a name of its own rather than a fold into --dur-enter: it
-     times the plan's scroll TRAVEL, which crosses hundreds of pixels and has no
-     exit to be asymmetric against. Distance sets it, not surface size — the eye
-     needs longer to follow a thing moving than to accept a thing appearing — and
-     240ms is where that scroll was landed by eye against the plan's real
-     heights. Nothing that appears, fades, slides or pops may borrow this; if a
-     second traveling animation ever wants it, that is the bar. */
+     tiered by WHAT MOVES rather than held under one ceiling: a hover tint and a
+     dialog are different perceptual jobs. The ladder is monotonic — micro < exit <
+     enter < travel — which is the shape motion.test.ts pins.
+     --dur-micro is a micro-interaction: a hover/focus tint, a small pop, the
+     inline composer reveal, the drag readout/hint slide. It is deliberately the
+     SAME time in both directions — at this size there is no arrival to contrast a
+     departure against, and a tint spending an entrance's time reads as lag on the
+     pointer. Its one consumer that is not an interaction is the keyboard cursor's
+     scroll follow (FOLLOW_ANIM_MS, lib/diffview/scroll.ts), which retargets every
+     few frames and so cannot ride --dur-travel; retune this value by eye for hover
+     feel and that scroll retimes with it.
+     --dur-enter and --dur-exit are the pair for a SURFACE: a dialog, a drawer, a
+     preview lane, a popover panel. Native UI gives an entrance room to be read and
+     takes the exit away quicker, so a surface spends two durations rather than one
+     twice. --ease-out is the ENTER curve, --ease-in the EXIT curve, kept paired so
+     an exit reads as the inverse of its entrance rather than a second effect.
+     Ambient/infinite animations are deliberately EXEMPT and keep their own
+     literals: the safe-mode pulse, the EmptyState float and the reference-hint ping
+     — a 120ms loop would strobe. The theme wipe (styles/base.css) is exempt from
+     the other side: it is a full-viewport view transition, not a surface arriving
+     in place.
+     --dur-travel is the one token OFF the enter/exit axis, and that is what earns
+     it a name of its own rather than a fold into --dur-enter: it times the plan's
+     scroll TRAVEL, which crosses hundreds of pixels and has no exit to be
+     asymmetric against. Distance sets it, not surface size. Nothing that appears,
+     fades, slides or pops may borrow it; a second traveling animation is the bar. */
   --dur-micro: 120ms;
   --dur-enter: 220ms;
   --dur-exit: 140ms;
@@ -86,11 +71,10 @@
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
   /* A damped-spring easing (linear() curve, ~6% overshoot then settle) for
      controls that slide between discrete positions — the segmented-control pill.
-     Paired with --dur-enter, it reads as a springy snap, not a bounce: the pill
-     is small in space, but an overshoot-and-settle needs surface-scale TIME to
-     be seen as one considered move rather than a twitch, which is why it takes
-     the enter tier and not --dur-micro. Modern browsers only (Chrome 113+,
-     Safari 17.2+, Firefox 112+); older ones fall back to a plain ease. */
+     Pair it with --dur-enter, not --dur-micro: an overshoot-and-settle needs
+     surface-scale TIME to read as one considered move rather than a twitch.
+     Modern browsers only (Chrome 113+, Safari 17.2+, Firefox 112+); older ones
+     fall back to a plain ease. */
   --ease-spring: linear(
     0, 0.008, 0.031, 0.068, 0.117, 0.177, 0.246, 0.324, 0.407, 0.496, 0.587, 0.679,
     0.769, 0.855, 0.935, 1.006, 1.049, 1.065, 1.062, 1.049, 1.031, 1.014, 1.001,
@@ -108,26 +92,18 @@
   /* Chip-scale elevation, for the small floating chrome --shadow-card is too big
      for. The palette's shadow is sized for a panel — its far layer offsets 8–10px
      and blurs 24–30px depending on scheme — so under a chip barely 30px tall it
-     casts a plume wider than the chip itself, which reads as soot rather than as
-     a lift (catppuccin mocha and github-dark are where it shows; caret-dark and
-     caret-light are near enough to black that the same shadow resolves to
-     nothing, which is why sampling only those two hides it). This one stays
-     inside the chip's own footprint.
+     casts a plume wider than the chip itself, which reads as soot rather than as a
+     lift (catppuccin mocha and github-dark are where it shows; caret-dark and
+     caret-light are near enough to black that the same shadow resolves to nothing,
+     which is why sampling only those two hides it). This one stays inside the
+     chip's own footprint. The dividing line is the surface's own height: anything
+     shorter than --shadow-card's blur wears this, panels keep --shadow-card.
 
      Hand-written rather than emitted per palette, and for the same reason
-     --caret-card-lift is (see lib/diffview/coreStyles.ts, the shadow-DOM half of
-     this idea): the geometry is fixed, and only the alpha moves — the same black
-     reads much heavier over a light ground than over a dark one — so one
-     light-dark() covers all nine.
-
-     Who wears it: the plan view's "/ to search" chip and the search pill it grows
-     into, the drag readout and the drag / visual-select hints, the code block's
-     copy button, and the link-hover tooltip (which reaches it by inheritance
-     through the diff view's shadow boundary). The dividing line is the surface's
-     own height — every one of those is shorter than the blur --shadow-card was
-     casting under it. Panels stay on --shadow-card: the toasts, the confirm
-     popover, the folder card, the comment navigator, the composer, the annotation
-     card, the theme preview. */
+     --caret-card-lift is (lib/diffview/coreStyles.ts, the shadow-DOM half of this
+     idea): the geometry is fixed and only the alpha moves — the same black reads
+     much heavier over a light ground than over a dark one — so one light-dark()
+     covers all nine. */
   --shadow-chip:
     0 1px 2px light-dark(rgb(0 0 0 / 0.07), rgb(0 0 0 / 0.3)),
     0 2px 6px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.22));
