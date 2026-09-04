@@ -53,14 +53,14 @@ const DELIMITER = /^:?-+:?$/;
 
 // A line that cannot open or continue a table: blank, indented at all, or
 // blockquote-prefixed. Both non-blank cases are carve-outs for the same reason —
-// the prefix would need a column track of its own, and nothing in the epic asks for
-// one. Indentation is the wider of the two: CommonMark would allow up to three
-// spaces, so a table inside a list item classifies, but the render has nowhere to
-// put the indent. It folds into the first cell ahead of that cell's pipe, and a
-// pipe that is not the cell's first character is one the cell cannot hide or draw a
-// rule for — one column reading as bare markdown beside painted rules, which is the
-// exact look this construct exists to remove. Whole-table fallback to plain source
-// is the honest degrade; an indented table renders as the source the author wrote.
+// the prefix would need a column track of its own, which is out of scope.
+// Indentation is the wider of the two: CommonMark would allow up to three spaces,
+// so a table inside a list item classifies, but the render has nowhere to put the
+// indent. It folds into the first cell ahead of that cell's pipe, and a pipe that is
+// not the cell's first character is one the cell cannot hide or draw a rule for —
+// one column reading as bare markdown beside painted rules, which is the exact look
+// this construct exists to remove. Falling the whole table back to plain source is
+// the honest degrade.
 const NOT_A_ROW = /^(?:\s*$|\s|>)/;
 
 /** The column where a run of exactly `run` backticks closes the one opened at

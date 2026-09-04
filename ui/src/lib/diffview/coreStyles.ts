@@ -80,9 +80,7 @@ const CARET_OVERRIDES = `
      the band extension that reaches across it must be the same number or the band
      stops short. --caret-read-max is the reading cap those same three share; a comment
      anchored inside a card is capped by it too, so the composer cannot outgrow the card
-     that scrolls it. EXC-870's inline image spends both as well — its own comments
-     already said it borrowed them, and a test pinned the two indents as a pair by
-     comparing literals; the token is what that pairing wanted to be.
+     that scrolls it. EXC-870's inline image spends both as well.
 
      --caret-gutter-divider is NOT caret's: it restates the library's own
      border-right on a gutter cell (2px, its --diffs-gap-style default, which caret
@@ -356,11 +354,11 @@ const CARET_OVERRIDES = `
      chip's glyphs no longer sit on the same pixel column as the same glyphs one row up,
      which is a look rather than a broken affordance — and it is the look the padding buys.
 
-     The negative margin [data-file-ref] used to cancel its own padding with is gone for the
-     same reason (below): a cancelled pair spends the fill UNDER the neighbouring character,
-     so two chips either side of one glyph — the citation shape, a slash between two paths —
-     double-coat that glyph's cell in translucent wash. Real padding pushes the neighbour out
-     of the way instead, which is what makes abutting chips read as two separate pills.
+     No chip cancels its own padding with a negative margin, [data-file-ref] below
+     included: a cancelled pair spends the fill UNDER the neighbouring character, so two
+     chips either side of one glyph — the citation shape, a slash between two paths —
+     double-coat that glyph's cell in translucent wash. Real padding pushes the neighbour
+     out of the way instead, which is what makes abutting chips read as two separate pills.
 
      Block padding is bounded by the failure mode EXC-855 names: a chip taller than its line
      box reads as confetti in a dense paragraph. It is smaller than the inline half for that
@@ -853,12 +851,11 @@ const CARET_OVERRIDES = `
      spend and needs its ink instead.
 
      What it takes is --ink-soft, and for the reason the marker being GONE supplies rather
-     than for a reason about how a bar looks. EXC-863 shipped it on --ink-faint, the marker
-     ink EXC-855 prescribes; EXC-871 swept the epic's markers together and split them on
-     whether the source character survives (svelte-rules.md § chips carries the rule). This
-     one does not — the glyph is transparent two declarations up, so the bars are the only
-     thing carrying "this is quoted, and this deep", which is exactly WCAG 1.4.11's test for
-     a graphical object required to understand the content. --ink-faint measures 2.90 on
+     than for a reason about how a bar looks. Markers split on whether the source character
+     survives (svelte-rules.md § chips carries the rule), and this one does not — the glyph
+     is transparent two declarations up, so the bars are the only thing carrying "this is
+     quoted, and this deep", which is exactly WCAG 1.4.11's test for a graphical object
+     required to understand the content. --ink-faint measures 2.90 on
      catppuccin-latte and 2.97 on github-light against --paper-sunk and the row's 2-8% ink
      bands, under the 3:1 floor; --ink-soft bottoms at 4.21 across the nine. theme.test.ts
      pins the whole replacement family — this bar, the list bullet, the task checkbox, a
@@ -1156,10 +1153,10 @@ const CARET_OVERRIDES = `
     grid-template-rows: subgrid;
     grid-template-columns: repeat(var(--table-columns, 1), max-content);
     /* The card shrinks to its tracks rather than stretching across the content column,
-       which it has to do now that it is filled: a panel on a stretched card would surface
-       the whole reading column rather than the table sitting in it. It is still free to
-       grow PAST the column when the tracks are wider than it — max-content never shrinks
-       under pressure — which is the "grows until every column is visible" behaviour. */
+       which a filled card has to do: a panel on a stretched one would surface the whole
+       reading column rather than the table sitting in it. It is still free to grow PAST
+       the column when the tracks are wider than it — max-content never shrinks under
+       pressure — which is the "grows until every column is visible" behaviour. */
     justify-self: start;
     margin-inline: var(--caret-card-inset);
     --table-rule: color-mix(in lab, var(--paper-sunk), var(--ink) 12%);
@@ -1347,37 +1344,33 @@ const CARET_OVERRIDES = `
      selector runs on every cell of every table on every repaint.
 
      --table-rule, declared once on the card, is the SURFACE stepped toward the ink — never
-     --ink-soft softened toward the surface, which is what it was until EXC-1136's review
-     pass, and never --rule or --rule-strong, which are chrome-surface tokens.
+     --ink-soft softened toward the surface, and never --rule or --rule-strong, which are
+     chrome-surface tokens.
 
-     Two things changed at once there, and the second is the reason for the first. The
-     design call was that these rules read as a deliberately low-contrast style — much
-     closer to the surface than to the ink — and the same on every palette. An ink softened
-     by a fixed amount cannot do the second half: light ink on a dark ground reads heavier
-     at the same ratio, so the old declaration needed a light-dark() carrying two different
-     numbers to land in one place, and it still drifted apart palette by palette. Stated
-     the other way round, one number does it — --paper-sunk stepped 12% toward --ink lands
-     in the same place on all nine, because the operands do the scheme-flipping themselves.
-     That is exactly the idiom the card fill above and the row bands in styles/diffview.css
-     already use, so this rejoins a vocabulary rather than keeping a private one, and
-     light-dark() drops out of the declaration entirely.
+     The design call is that these rules read as a deliberately low-contrast style — much
+     closer to the surface than to the ink — and the same on every palette. Softening an
+     ink by a fixed amount cannot do the second half: light ink on a dark ground reads
+     heavier at the same ratio, so it needs a light-dark() carrying two numbers and still
+     drifts apart palette by palette. Stated the other way round, one number does it —
+     --paper-sunk stepped 12% toward --ink lands in the same place on all nine, because the
+     operands do the scheme-flipping themselves. That is the idiom the card fill above and
+     the row bands in styles/diffview.css already use.
 
-     WHAT THIS GAVE UP, STATED PLAINLY. EXC-864 held these to WCAG 1.4.11's 3:1 floor,
+     WHAT THAT GIVES UP, STATED PLAINLY. EXC-864 held these to WCAG 1.4.11's 3:1 floor,
      because the pipes go transparent and the rule is then the only thing saying where a
      column ends. At 12% it no longer clears that. The call was made knowingly on the
      strength of what the original argument understated: the columns are ALSO carried by
      the layout — max-content tracks holding the source's own spacing — so a faint divider
      makes the reading quieter rather than ambiguous, and a table drawn with no vertical
      rules at all is a normal rendering. That reasoning does NOT extend to the header's
-     ink, which is text and keeps a measured floor. theme.test.ts pins what replaced the
-     old floor: visible on every palette, and evenly spread across them.
+     ink, which is text and keeps a measured floor. theme.test.ts pins what stands in for
+     that floor: visible on every palette, and evenly spread across them.
      doc/agents/svelte-rules.md § chips carries the range, and carries it alone; a measured
      number restated here is a number that drifts.
 
-     Mixed in lab, like every other surface step on this view. The sRGB the old declaration
-     used was there to match theme.test.ts's arithmetic to hundredths of a ratio point when
-     both arms sat on the floor; nothing sits on a floor now, and the margins are wide
-     enough that the two spaces cannot disagree about them. */
+     Mixed in lab, like every other surface step on this view: nothing here sits on a
+     contrast floor, so the margins are wide enough that lab and sRGB cannot disagree
+     about them. */
   [data-content]
     > [data-table-card]
     [data-table-cell]:not(:first-child):is(
@@ -1432,10 +1425,9 @@ const CARET_OVERRIDES = `
      way: the column dividers paint 0.5ch INSIDE each cell, so a header set on a different
      advance width would land its divider segment on a different x than every row below it.
 
-     The weight declaration this replaces was here rather than routed through shiki's
-     fontStyle, because @pierre/diffs carries that into an invalid font-weight:
-     light-dark(...) and drops it (EXC-867's standing upstream finding). The ink below has
-     the same problem and takes the same route out. */
+     The ink is set here rather than routed through shiki's fontStyle, because
+     @pierre/diffs carries that into an invalid font-weight: light-dark(...) and drops it
+     (EXC-867's standing upstream finding). */
   [data-content] > [data-table-card] > [data-line][data-table-head] {
     text-transform: uppercase;
     color: var(--ink-soft);
@@ -1574,11 +1566,11 @@ const CARET_OVERRIDES = `
   }
   /* The hover "+" is a fixed size and a row is not, so it is centred on its row rather
      than hung from the top of it — and the row it is centred on is ONE LINE, not the
-     whole box. The two are the same thing on almost every line and this changes nothing
-     there, but a row grows when a table cell wraps or an image lands on it, and its
-     number does not: the number stays on the first line while the box runs on for two or
-     three more, so a button centred on the box sits a full line below the address it
-     belongs to and reads as pointing at the wrong row.
+     whole box. The two are the same thing on almost every line, but a row grows when a
+     table cell wraps or an image lands on it, and its number does not: the number stays on
+     the first line while the box runs on for two or three more, so a button centred on the
+     box sits a full line below the address it belongs to and reads as pointing at the
+     wrong row.
 
      The slot the library gives the button is stretched over the whole cell, so the clamp
      is what takes it back to a line. It is a max rather than a height because a row can
@@ -1956,18 +1948,16 @@ const CARET_OVERRIDES = `
      Hover then swaps the fill to the warm accent wash (EXC-840) — a change of hue and
      a touch more alpha, the hue carrying nearly all of it — so pressing one still
      reads as a change of state. theme.test.ts holds that pair 60 degrees apart in
-     every palette, because the resting state used to be transparent and any wash read
-     against it for free; now it has to be told from a green. Padding gives the fill
-     breathing room so it reads as a chip around the whole reference rather than crowding
-     the glyphs, and it is the family's own --chip-pad-* pair rather than a second set of
-     numbers. EXC-880 cancelled the inline half with a matching negative margin so the
-     backticks bracketing a citation never shifted; that is gone, because a cancelled pair
-     spends the fill under the neighbouring glyph and two chips either side of one
-     character double-coat its cell. The reference shifts its neighbours now, exactly as
-     the inline chips above do. The radius sits on the resting rule because the
-     shape is constant — only the fill moves. The swap is instant: the diff surface is
-     motionless by design, so no transition here. The icon sharpens from faint to full
-     ink alongside it.
+     every palette: the resting fill is itself a wash, so the hover has to be told from a
+     green rather than merely from the surface. Padding gives the fill breathing room so it
+     reads as a chip around the whole reference rather than crowding the glyphs, and it is
+     the family's own --chip-pad-* pair rather than a second set of numbers. The inline
+     half is NOT cancelled with a matching negative margin: a cancelled pair spends the
+     fill under the neighbouring glyph, so two chips either side of one character
+     double-coat its cell. The reference shifts its neighbours, exactly as the inline chips
+     above do. The radius sits on the resting rule because the shape is constant — only the
+     fill moves. The swap is instant: the diff surface is motionless by design, so no
+     transition here. The icon sharpens from faint to full ink alongside it.
 
      Unlike the fence chip above, this one is NOT suppressed on a selected row. The
      fence chip is decoration, so dropping it lets a drag-selection read as one flat
@@ -2066,8 +2056,8 @@ const CARET_OVERRIDES = `
      document, so the pair reads caret's content-highlight vocabulary — --mark for
      every match, --mark-active for the current one. That is the two-step the
      recipe's ALPHA.mark / ALPHA.markActive exists to produce, and it leaves the
-     syntax colors legible under both washes rather than replacing them. The accent
-     these used to carry belongs to selection, a different job (EXC-905). */
+     syntax colors legible under both washes rather than replacing them. Not the accent,
+     which belongs to selection — a different job (EXC-905). */
   ::highlight(caret-search) {
     background-color: var(--mark);
   }

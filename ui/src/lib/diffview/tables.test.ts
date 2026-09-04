@@ -145,7 +145,7 @@ describe("tableRanges", () => {
 
   test("does not detect a blockquote-prefixed table", () => {
     // A quoted table renders as raw source: the `>` prefix would need a column
-    // track of its own, and nothing in the epic asks for one yet.
+    // track of its own, which is out of scope.
     const text = lines("> | a | b |", "> | - | - |", "> | 1 | 2 |");
     expect(tableRanges(text, NO_CODE)).toEqual([]);
   });

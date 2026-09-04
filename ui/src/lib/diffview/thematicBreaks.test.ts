@@ -131,9 +131,9 @@ describe("tagThematicBreakRows", () => {
   });
 
   test("tags a row a card has moved out of direct-child position", () => {
-    // EXC-864's reviewer found four gutter rules stopped matching once table rows
-    // were carded; every row rule in this sheet is a DESCENDANT selector for that
-    // reason, and so is this pass's query.
+    // A carded row is no longer a direct child of [data-content] (EXC-864), so a
+    // child selector silently stops matching it. Every row rule in this sheet is a
+    // DESCENDANT selector for that reason, and so is this pass's query.
     const root = buildContent(2);
     const content = root.querySelector("[data-content]") as HTMLElement;
     const card = document.createElement("div");

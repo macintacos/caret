@@ -21,8 +21,7 @@ const BUNDLED: ReadonlySet<string> = new Set(Object.keys(bundledLanguages));
 
 // Fence info-strings agents write don't always match shiki's canonical grammar
 // name; map the common aliases onto the grammar that actually carries their
-// scope so ```sh and ```py resolve. Tags already equal to a canonical name pass
-// through unchanged (the lookup below defaults to the tag itself).
+// scope so ```sh and ```py resolve.
 const ALIAS: Readonly<Record<string, string>> = {
   js: "javascript",
   mjs: "javascript",
@@ -52,11 +51,10 @@ const ALIAS: Readonly<Record<string, string>> = {
 // Opening fences: 3+ backticks or tildes (≤3 leading spaces per CommonMark),
 // then the info string's first token. A closing fence has no token, so it never
 // matches. The class allows `+`/`#`/`.` so c++, c#, and dotted ids survive to
-// the alias step. This is intentionally a stateless superset, not a CommonMark
-// parser: a fence shown *inside* another fenced block is also scanned, so a
-// language may be over-attached (one extra on-demand chunk, harmless — the
-// markdown grammar still nests correctly at tokenization time). It never
-// under-attaches, which is what matters.
+// the alias step. Deliberately a stateless superset, not a CommonMark parser: a
+// fence shown *inside* another fenced block is scanned too, so a language may be
+// over-attached (one extra on-demand chunk). It never under-attaches, which is
+// what matters.
 const FENCE_RE = /^[ \t]{0,3}(?:`{3,}|~{3,})[ \t]*([A-Za-z0-9_+#.-]+)/gm;
 
 /**

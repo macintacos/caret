@@ -10,15 +10,11 @@ import {
 } from "$lib/diffview/codeBlockScroll.ts";
 import type { CodeBlockRange } from "$lib/diffview/codeBlocks.ts";
 
-// EXC-729: a fenced code block renders as independent [data-line] rows (no wrapper), and
-// EXC-692 caps each at a reading width, so an over-wide line broke out of the panel. The fix
-// wraps an overflowing block's rows in ONE per-block card that is a single native horizontal
-// scroll container (subgrid rows keep the gutter aligned): the whole block scrolls as one
-// unit with one scrollbar, so short lines scroll too and there is no per-row jelly. This
-// module does the wrapping; the card styling and scrollbar live in coreStyles.ts. A block
-// that fits is left as plain direct-child rows (EXC-692 styles those). Overflow is measured
-// through an injectable reader because happy-dom reports 0 for every layout metric — without
-// it every block would read as fitting and nothing would ever wrap.
+// syncCodeBlockCards wraps an overflowing fenced block's rows in ONE per-block scroll card
+// and leaves a block that fits as plain direct-child rows (EXC-729). This suite pins the
+// wrap / keep / unwrap decisions and the gutter mirror that balances them. Overflow is
+// measured through an injectable reader because happy-dom reports 0 for every layout
+// metric — without it every block would read as fitting and nothing would ever wrap.
 
 interface RowSpec {
   code?: boolean;

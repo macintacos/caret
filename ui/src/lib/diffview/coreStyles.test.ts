@@ -10,8 +10,8 @@ import { join } from "node:path";
 // seam (a negative inline-start margin, with the inset re-added as padding so the
 // text never moves) and dropping the gutter column's per-row divider for selected
 // rows. The band therefore rounds only its OUTER corners — the gutter column's
-// left edge and the content column's right edge — with the --radius token, a
-// tighter corner than the --radius-lg it used before (EXC-645). The inner corners
+// left edge and the content column's right edge — with the --radius token rather
+// than the looser --radius-lg (EXC-645). The inner corners
 // where the columns join stay square so the band reads as one shape. Line numbers
 // are always shown (EXC-664), so the gutter never collapses and the content's
 // left corners never need rounding. This suite pins the contract structurally so
@@ -107,8 +107,8 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
 
   test("rounds with the tighter --radius token, never --radius-lg or a hardcoded px", () => {
     // Every corner-rounding declaration in the override uses var(--radius) — the
-    // reduction from the previous --radius-lg is the whole point, so a drift back
-    // (or to a raw px) fails here. A literal 0 is the one other admissible value: it
+    // tighter corner is the whole point, so a drift to --radius-lg (or to a raw px)
+    // fails here. A literal 0 is the one other admissible value: it
     // is the ABSENCE of a corner rather than a second opinion about how round one
     // should be, and squaring a nested member is how a pill stays one shape (EXC-868
     // squares a file reference sitting inside a codespan). Any other literal still
@@ -477,12 +477,10 @@ describe("the inline emphasis chips (EXC-867)", () => {
   });
 
   test("shifts its neighbours rather than cancelling the padding under them", () => {
-    // EXC-867 shipped these unpadded and EXC-880 cancelled the reference's padding with a
-    // negative margin, both to keep the monospace grid matching the source columns. The
-    // shift is now intended: nothing resolves a column in pixels (anchors and motions are
+    // The shift is intended: nothing resolves a column in pixels (anchors and motions are
     // character-indexed, the search marks paint over DOM ranges), and a cancelled pair
     // spends the fill UNDER the neighbouring glyph — so two chips either side of one
-    // character double-coat its cell, which is the look this replaces.
+    // character double-coat its cell.
     for (const rule of [fillRule, startRule, endRule]) {
       expect(rule).not.toMatch(/margin/);
     }
@@ -625,9 +623,9 @@ describe("the inline-code chip (EXC-868)", () => {
   });
 
   test("hands the citation's fill to the group, so the pill is one colour", () => {
-    // The reference used to paint its own --chip-ref under the code layer, which left the
-    // pill green in the middle and code-coloured at the backticks — two tints and a seam
-    // where there is one span of meaning. The group's own tint is rebound instead, on every
+    // A reference painting its own --chip-ref under the code layer leaves the pill green
+    // in the middle and code-coloured at the backticks — two tints and a seam where there
+    // is one span of meaning. The group's own tint is rebound instead, on every
     // token the pass marked data-md-cite, and the reference drops its fill so the wash is
     // not laid down twice over the path.
     const cite = rulesFor(String.raw`\[data-md-cite\]`)[0] ?? "";
@@ -820,8 +818,8 @@ describe("the inline image (EXC-870)", () => {
     // Same VALUE, deliberately, so the two things a plan embeds are indented alike
     // rather than by two arbitrary numbers — not the same pixel rail, since the
     // panel's margin moves the row box while this one sits inside that box's own
-    // text padding. Both read --caret-card-inset (EXC-865), so the pairing this used to
-    // assert by comparing two literals is now carried by the value itself.
+    // text padding. Both read --caret-card-inset (EXC-865), so the value carries the
+    // pairing.
     expect(imageRule).toMatch(/margin-inline-start:\s*var\(--caret-card-inset\)/);
     expect(overrideDecls).toMatch(
       /\[data-code-line\][^{}]*\{[^}]*margin-inline-start:\s*var\(--caret-card-inset\)/,
@@ -1730,20 +1728,18 @@ describe("tables (EXC-864)", () => {
   test("declares the rule ink once, as one step off the surface, and spends it everywhere", () => {
     // The column dividers, the delimiter rule and the row hairlines are one mark in three
     // places; a tuned number written out three times is three numbers waiting to drift
-    // apart. (The frame was the fourth until EXC-1136 removed it.)
+    // apart.
     //
-    // ONE STEP OFF THE SURFACE, NOT AN INK SOFTENED TOWARD IT. Until EXC-1136's review
-    // pass this was --ink-soft mixed toward --paper-sunk through a light-dark() whose two
-    // arms carried different numbers, because an ink softened by the same amount lands in
-    // two different places on a light and a dark palette. Stated the other way round —
+    // ONE STEP OFF THE SURFACE, NOT AN INK SOFTENED TOWARD IT. An ink softened by the same
+    // amount lands in two different places on a light and a dark palette, so it needs a
+    // light-dark() whose two arms carry different numbers. Stated the other way round —
     // --paper-sunk stepped toward --ink — one number lands in the SAME place on all nine,
     // because the operands do the scheme-flipping themselves. That is the same idiom the
-    // card fill above and the row bands in styles/diffview.css already use, and it is why
-    // light-dark() is gone from this declaration rather than merely retuned.
+    // card fill above and the row bands in styles/diffview.css already use.
     expect(cardRule).toMatch(
       /--table-rule:\s*color-mix\(in lab, var\(--paper-sunk\), var\(--ink\) 12%\)/,
     );
-    // Not light-dark(): a per-scheme arm here would be the old mechanism creeping back.
+    // Not light-dark(): a per-scheme pair is the form that drifts palette by palette.
     expect(cardRule).not.toMatch(/--table-rule:[^;]*light-dark/);
     for (const rule of [dividerRule, ruleRow, hairlineRule]) {
       expect(rule).toContain("var(--table-rule)");
@@ -1874,9 +1870,9 @@ describe("tables (EXC-864)", () => {
   });
 
   test("caps the header in subdued small-caps rather than shouting it in bold", () => {
-    // EXC-1136: a filled card carries the table's edge now, so the header no longer has to
+    // The filled card carries the table's edge (EXC-1136), so the header does not have to
     // out-weigh a frame to read as a header. Uppercase plus a step back in the ink says
-    // "these are labels" more quietly than bold did.
+    // "these are labels" quietly, where bold would shout it.
     expect(headCap).toMatch(/text-transform:\s*uppercase/);
     expect(headCap).toMatch(/color:\s*var\(--ink-soft\)/);
     expect(headCap).not.toContain("font-weight");

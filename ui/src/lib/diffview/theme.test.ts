@@ -54,10 +54,8 @@ describe("registerCaretDiffThemes", () => {
     }
   });
 
-  // The diff view is the second surface the upstream swap has to reach (EXC-896):
-  // what the library loads for a vendor palette is that vendor's own theme, not
-  // caret's own pair. Pinned on Dracula's pink keyword, a hue caret's
-  // named color set does not carry.
+  // Pinned on Dracula's pink keyword, a hue caret's own named color set does not
+  // carry (EXC-896).
   test("loads a vendor palette's upstream theme, not caret's own", async () => {
     const loaders = new Map<string, () => Promise<unknown>>();
     registerCaretDiffThemes((name, load) => {

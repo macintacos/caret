@@ -39,9 +39,8 @@ export function caretDiffTheme(id?: ThemeId): {
   return { theme: { light: id, dark: id }, themeType: THEMES[id].scheme };
 }
 
-// caret's themes as the library expects them: a name plus an async loader
-// returning the theme object. The name is duplicated onto the object because
-// the library resolves a theme by the name it was registered under.
+// The name is duplicated onto the theme object because the library resolves a
+// theme by the name it was registered under.
 const caretThemeLoaders: { name: string; load: ThemeLoader }[] = REGISTERED_SHIKI_THEMES.map(
   (theme) => {
     const name = String(theme.name);
@@ -53,15 +52,12 @@ let registered = false;
 
 /**
  * Register caret's Shiki themes into the @pierre/diffs highlighter — every
- * palette, so whichever theme the reviewer picks can be selected by name. The
- * register function is injected so the mapping is unit-testable without the
- * library's module-global highlighter; production uses registerCustomTheme.
+ * palette, so whichever theme the reviewer picks can be selected by name.
  *
- * Each call registers the whole set through the supplied register function. The
- * shared production highlighter is a process singleton, so a module-level guard
- * skips repeat production registrations (the wrapper calls this on every mount).
- * Passing a register function bypasses the guard, which is what lets a test
- * observe the registration directly.
+ * The shared production highlighter is a process singleton, so a module-level
+ * guard skips repeat production registrations (the wrapper calls this on every
+ * mount). Passing a register function bypasses the guard, which is what makes the
+ * mapping unit-testable without that module-global highlighter.
  */
 export function registerCaretDiffThemes(register?: RegisterTheme): void {
   if (register) {

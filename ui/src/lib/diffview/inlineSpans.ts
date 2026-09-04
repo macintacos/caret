@@ -40,12 +40,7 @@
 //
 // A LIST MARKER (EXC-861) is a run over the marker characters alone, never over
 // the indentation before them: the marker is overdrawn where it sits, and the
-// columns to its left are what spell the nesting depth. Its kind is settled here
-// rather than in CSS, because a task item's `-` and its `[ ]` would otherwise both
-// claim to be the item's marker — so a marker whose item is a task is emitted as
-// `task`, leaving EXC-860's checkbox as the row's one treatment. A `task` run also
-// swallows the gap to the checkbox, because the sheet collapses that run instead of
-// overdrawing it and the box has to land at the column the marker started at.
+// columns to its left are what spell the nesting depth.
 
 import { Lexer, type Token } from "marked";
 

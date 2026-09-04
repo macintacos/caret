@@ -185,7 +185,7 @@ describe("toFileDiffOptions", () => {
 
   test("pins hunkSeparators and expandUnchanged so a library default flip can't drift them", () => {
     // The collapsed-context band IS the line-info separator: caret themes its
-    // surface through the FND --diffs-bg-separator-override bridge in app.css, so
+    // surface through the --diffs-bg-separator-override bridge in app.css, so
     // the mapper pins the separator kind rather than inheriting it. expandUnchanged
     // stays false so context keeps collapsing — the band and its expand pills only
     // exist while context is hidden. Both currently equal the library defaults;

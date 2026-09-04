@@ -27,7 +27,7 @@
 // A break nested inside a blockquote or a list item is deliberately not found:
 // those arrive as nested tokens whose `raw` has the container's markers stripped,
 // so their offsets no longer index the source. The row keeps its raw characters,
-// which is the bottom rung of the issue's ladder rather than a wrong render.
+// which is a plainer render rather than a wrong one.
 
 import { Lexer } from "marked";
 
@@ -46,13 +46,11 @@ const FRONT_MATTER_CLOSE = ["---", "..."];
  * blank line before it stops marked reading it as a setext underline.
  *
  * The scan stops at the first BLANK line rather than running to the end of the
- * document, and that bound is what keeps this from eating real breaks. Without it
- * any document opening on a genuine thematic break claims the NEXT `---` in the
- * file as its closer, however far away, and suppresses both — the far one being a
- * rule that has nothing to do with the top of the file. Bounding it inverts the
- * error: front matter carrying a blank line inside is no longer recognised, so its
- * two delimiters draw rules. That is the cheaper mistake by a wide margin — it is
- * local, visible, and rare, where the other silently deletes a rule elsewhere. */
+ * document: without that bound, a document opening on a genuine thematic break
+ * claims the next `---` in the file as its closer and suppresses both. The bound
+ * inverts the error to the cheaper one — front matter carrying a blank line inside
+ * is no longer recognised, so its two delimiters draw rules, which is local and
+ * visible where the other silently deletes a rule elsewhere. */
 function frontMatterLines(text: string): number[] {
   const lines = text.split("\n");
   if (lines[0] !== FRONT_MATTER_OPEN) return [];
@@ -99,9 +97,9 @@ export function thematicBreakLines(
  * breaks.
  *
  * Descendant, not child: a row a scroll card has re-parented is no longer a
- * direct child of `[data-content]` (codeBlockScroll.ts), and four gutter rules
- * written the other way silently stopped matching carded rows. A break never
- * lands inside a card today; the selector is the house form regardless.
+ * direct child of `[data-content]` (codeBlockScroll.ts), and a child selector
+ * silently stops matching it. A break never lands inside a card today; the
+ * selector is the house form regardless.
  */
 export function tagThematicBreakRows(root: ParentNode, lines: ReadonlySet<number>): void {
   for (const row of root.querySelectorAll<HTMLElement>("[data-content] [data-line]")) {

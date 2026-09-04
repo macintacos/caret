@@ -102,8 +102,8 @@ test("two images on a line render in source order", () => {
 test("a failed load hides the element rather than removing it", () => {
   // Removing it would make the next observer pass re-create it, and remembering
   // the failure would need module state. Hidden keeps the pass idempotent and
-  // leaves the row reading as the chip and the literal markdown — the ladder's
-  // second rung — with no broken-image chrome.
+  // leaves the row reading as the chip and the literal markdown, with no
+  // broken-image chrome.
   const host = root(row(1, "x"));
   const spans = map([[1, [span("https://cdn.test/gone.png")]]]);
   syncInlineImages(host, spans);

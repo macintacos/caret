@@ -170,12 +170,10 @@ function tagRow(
     const widest = Math.max(0, ...members.map(span));
     const inner = members.filter((m) => span(m) < widest);
     setAttr(child, "data-md", list(members));
-    // A cap lands only where EVERY member the child carries opens (or closes) —
-    // see the header's rounded-ends note. An inner member capping on its own would
-    // notch the pill still running through the same element, because border-radius
-    // is one geometric property of the box and clips all of its background layers.
-    // Its own corners come from the inner caps below, which the sheet spends on a
-    // pseudo-element rather than on this box.
+    // A cap lands only where EVERY member the child carries opens (or closes): an
+    // inner member capping on its own would notch the pill still running through the
+    // same box. Its own corners come from the inner caps below, which the sheet
+    // spends on a pseudo-element rather than on this box.
     setAttr(child, "data-md-start", opens.length === members.length ? list(opens) : undefined);
     setAttr(child, "data-md-end", closes.length === members.length ? list(closes) : undefined);
     setAttr(child, "data-md-inner", list(inner));

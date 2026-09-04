@@ -19,26 +19,20 @@
 // A FAILED LOAD hides the element rather than removing it. Removing it would have
 // the next observer pass create it again, and remembering the failure would need
 // module state; `hidden` is idempotent by construction and leaves the row reading
-// as the link chip over the literal markdown — the issue's second rung — with no
-// broken-image chrome. The one thing this costs is a CSS rule, since `hidden`'s
-// UA `display: none` is overridden by the sheet's own `display: block`
-// (coreStyles.ts, adopted after the UA and library sheets).
+// as the link chip over the literal markdown, with no broken-image chrome. The one
+// thing this costs is a CSS rule, since `hidden`'s UA `display: none` is overridden
+// by the sheet's own `display: block` (coreStyles.ts, adopted after the UA and
+// library sheets).
 //
 // SECURITY. The scheme gate is upstream and absolute: links.ts emits an ImageSpan
 // only for a target its isSafeUrl accepted, so nothing but `http`/`https` reaches
 // here and this module never re-decides safety. What the gate does NOT do is make
-// the fetch itself harmless, and that is the exposure this feature adds rather
-// than one it inherits. A plan is written by the coding agent, and before EXC-870
-// nothing in a plan caused a request without a reviewer's click; an image URL now
-// makes the reviewer's browser GET an arbitrary host when the row scrolls into
-// view, with whatever the agent put in the path. That is the exfiltration channel
-// every surface rendering someone else's markdown has to answer for, and caret's
-// answer today is that plan text is trusted enough to render. `referrerpolicy`
-// keeps the request from naming the page it came from, mirroring the noreferrer
-// stance openLinkInNewTab takes for the surface's other outbound affordance, and
-// `loading` keeps a long plan from fetching every asset before the reviewer has
-// scrolled to any of them. Closing it properly wants an `img-src` CSP on the
-// daemon's own response, which would cover the comment renderer too.
+// the fetch itself harmless: an image URL makes the reviewer's browser GET an
+// arbitrary host when the row scrolls into view, with whatever the agent put in the
+// path. `referrerpolicy` keeps the request from naming the page it came from,
+// mirroring the noreferrer stance openLinkInNewTab takes for the surface's other
+// outbound affordance, and `loading` keeps a long plan from fetching every asset
+// before the reviewer has scrolled to any of them. Neither closes the channel.
 
 import type { ImageSpan, ImageSpanMap } from "$lib/diffview/links.ts";
 

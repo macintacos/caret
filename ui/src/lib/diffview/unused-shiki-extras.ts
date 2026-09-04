@@ -3,16 +3,10 @@
 // specifiers here so their payloads stay out of the build.
 //
 // caret highlights with shiki's pure-JS regex engine (diffview/shiki-bundle.ts),
-// so the Oniguruma WASM binary the library would lazy-load for the `shiki-wasm`
-// engine (~600 KB) is dead weight — the wrapper never selects that engine.
-// caret also renders only its own palettes (registered as custom themes via
-// registerCustomTheme in diffview/theme.ts), so the library's bundled pierre-*
-// theme loaders are never invoked.
-//
-// These exports satisfy the static import graph while contributing no payload. A
-// throwing default makes any future switch to the WASM engine or a pierre theme
-// fail loudly here, pointing back at this stub, rather than silently shipping the
-// dropped bytes again.
+// so the Oniguruma WASM binary the `shiki-wasm` engine would lazy-load (~600 KB) is
+// never fetched, and it renders only its own palettes (registered via
+// registerCustomTheme in diffview/theme.ts), so the library's bundled pierre-* theme
+// loaders are never invoked.
 const unavailable = () => {
   throw new Error(
     "shiki/wasm and @pierre/theme bundles are stubbed out of the caret UI build " +

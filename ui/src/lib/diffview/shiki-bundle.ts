@@ -1,16 +1,12 @@
 // Stand-in for the bare `shiki` barrel that @pierre/diffs imports. vite.config.ts
 // aliases `shiki` to this module for the UI build, so the library's
 // `import { bundledLanguages } from "shiki"` resolves here instead of shiki's own
-// bundle entry. The module exists to swap two things the library would otherwise
-// take from the bare barrel: the highlighter's regex engine (caret uses shiki's
-// pure-JS engine, never the Oniguruma WASM binary) and the bundled-theme map
-// (caret registers its own themes via registerCustomTheme, so the bundled-theme
-// map is never consulted). It re-exports shiki's tree-shakable core plus the
-// engine factories the library names, and — per EXC-665 — exposes shiki's FULL
-// language bundle so every grammar an agent can tag a fenced code block with is
-// highlightable, not just a hand-picked subset. caret runs entirely locally, so
-// the embedded asset's size is a non-concern; the grammars are lazy loaders
-// (below), so the full set costs build-time chunks, not a bigger initial payload.
+// bundle entry. It swaps two things the library would otherwise take from the bare
+// barrel — the highlighter's regex engine and the bundled-theme map — and, per
+// EXC-665, exposes shiki's FULL language bundle so every grammar an agent can tag a
+// fenced code block with is highlightable, not just a hand-picked subset. caret runs
+// entirely locally, so the embedded asset's size is a non-concern; the grammars are
+// lazy loaders, so the full set costs build-time chunks, not a bigger initial payload.
 
 import { bundledLanguages as fullBundledLanguages } from "shiki/bundle/full";
 import { createBundledHighlighter } from "shiki/core";
@@ -53,13 +49,11 @@ export { createOnigurumaEngine, loadWasm } from "shiki/engine/oniguruma";
  * inlined so a test can tokenize through the exact engine the UI renders with — a
  * bare `createJavaScriptRegexEngine()` is a different engine and pins nothing.
  *
- * The engine runs STRICT. `forgiving: true` was carried here from EXC-665 on the
- * theory that some grammar needed it, but all 346 bundled grammars load and all
- * but one of their 15,027 patterns translate without it, so it rescued almost
- * nothing. What it did do was let a pattern the engine cannot compile be dropped
- * silently — and silent degradation is precisely what hid EXC-911's mis-scoped
- * comments for so long. Strict trades that for a throw, which surfaces rather
- * than festers.
+ * The engine runs STRICT deliberately. `forgiving: true` lets a pattern the engine
+ * cannot compile be dropped silently, and silent degradation is precisely what hid
+ * EXC-911's mis-scoped comments for so long. It rescues almost nothing in exchange:
+ * all 346 bundled grammars load and all but one of their 15,027 patterns translate
+ * without it.
  *
  * The one exception is upstream's, not caret's: the AutoHotkey v2 grammar shiki
  * 4.4 added matches a raw byte range that oniguruma-to-es cannot express. Nothing
@@ -101,8 +95,7 @@ export const createCaretRegexEngine = () =>
  * spends it as WALL CLOCK inside its scan loop: once the budget is gone the line is
  * abandoned where it stands, and everything from there to end-of-line comes back as a
  * single token wearing whatever scope was in force. Nothing throws and nothing is
- * logged, so a caller cannot tell a truncated line from a real one — a code line simply
- * stops being highlighted part-way, and a test asserting on a token finds it missing.
+ * logged, so a caller cannot tell a truncated line from a real one.
  *
  * That makes tokenization a function of host load rather than of its input, which is
  * exactly the wrong dependency for either surface. The first tokenize in a process

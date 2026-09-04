@@ -68,12 +68,9 @@ export function splitTokens(row: Element, cuts: number[]): void {
           const piece = child.cloneNode(false) as Element;
           piece.textContent = text.slice(from - col, (bounds[i + 1] ?? end) - col);
           // data-char is the token's START COLUMN, and the library derives the
-          // token's whole range from it plus the element's own text length. A
-          // clone inheriting it verbatim makes every piece claim to begin where
-          // the undivided token did, so a piece past the first reports a range
-          // that is the right width in the wrong place — which is how a
-          // mid-sentence reference ended up decorated but not clickable, its
-          // token reported as ending exactly where its span begins (EXC-1192).
+          // token's whole range from it plus the element's own text length, so a
+          // piece past the first must claim its own start or it reports a range
+          // the right width in the wrong place (EXC-1192).
           if (piece.hasAttribute(CHAR_ATTR)) piece.setAttribute(CHAR_ATTR, String(from));
           return piece;
         }),

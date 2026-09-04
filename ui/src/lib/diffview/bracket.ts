@@ -15,10 +15,7 @@
 // has no slot for a bracket, so an unslotted child would have no box. It lives
 // instead in the scroll container (`.diff-plan`), a caret-owned element, as an
 // absolutely-positioned layer over the scroll CONTENT — so it scrolls with the
-// rows for free. The `--diffs-decoration-bar-color` var lives on the `.diffview`
-// rule (the single --diffs-* bridge); since the layer is a sibling of the host,
-// not a descendant, the action copies the resolved value onto the layer so the
-// rails inherit it.
+// rows for free.
 //
 // This module is the geometry + the imperative overlay lifecycle. The math
 // (`bracketBox`) is pure so it unit-tests without layout; the action
@@ -97,9 +94,7 @@ export interface BracketLayerParams {
  * container). It positions each span as an absolutely-positioned
  * `[data-comment-bracket]` rail over the scroll content — so the rails scroll
  * with the rows without a scroll listener — reconciling rail count in place on
- * span change. The rail color var lives on the host's `.diffview` rule; since
- * the layer is a sibling of the host the action copies the resolved value onto
- * the layer so the rails read it.
+ * span change.
  *
  * Rail offsets are content-relative; a reflow (window resize, fenced-code
  * re-highlight, the content-key repaint) moves the rows, which a ResizeObserver

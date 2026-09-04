@@ -71,8 +71,6 @@ describe("the .diffview → --diffs-* bridge", () => {
     expect(rule).toMatch(/--diffs-bg:\s*var\(--/);
     expect(rule).toMatch(/--diffs-fg:\s*var\(--/);
     expect(rule).toMatch(/--diffs-fg-number:\s*var\(--/);
-    // No hardcoded hex anywhere in the bridge: every value is a var() or a
-    // color-mix() literal, carrying no '#'.
     expect(declarations(appCss)).not.toMatch(/#[0-9a-fA-F]{3,8}/);
   });
 
@@ -98,8 +96,6 @@ describe("the .diffview → --diffs-* bridge", () => {
     "--diffs-bg-hover-override",
   ] as const;
 
-  // Present in the single .diffview rule, and var()/color-mix-based — never a
-  // raw color literal, lab mixing only.
   testTokenOverrides(
     rule,
     SURFACE_OVERRIDES,
@@ -108,8 +104,6 @@ describe("the .diffview → --diffs-* bridge", () => {
   );
 
   test("expresses scheme entirely through flipping operands — no @media inside the rule", () => {
-    // The flat .diffview rule carries no nested at-rule; light/dark depth comes
-    // from the caret operands (--paper-sunk, --ink) flipping across schemes.
     expect(declarations(appCss)).not.toContain("@media");
   });
 
@@ -128,7 +122,6 @@ describe("the .diffview → --diffs-* bridge", () => {
     "--diffs-deletion-color-override",
   ] as const;
 
-  // A caret token reference or a lab mix — never a raw color literal.
   testTokenOverrides(
     rule,
     SEMANTIC_OVERRIDES,
@@ -168,8 +161,6 @@ describe("the .diffview → --diffs-* bridge", () => {
     "--diffs-bg-selection-number-override",
   ] as const;
 
-  // The amber accent token (carries its own light/dark variant), or a lab mix
-  // of it — never a raw color literal, never oklch.
   testTokenOverrides(
     rule,
     SELECTION_OVERRIDES,

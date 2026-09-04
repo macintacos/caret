@@ -6,9 +6,8 @@
 // short lines scroll along with the wide ones (they share the card's scroll area), there is
 // exactly one scrollbar at the card's bottom, and — because the wrapper is a subgrid whose
 // rows still map to the parent's row tracks — the gutter line numbers stay perfectly aligned.
-// This replaces the earlier per-row scroll + JS sync + injected scrollbar, which made each
-// row its own scroll port (a short line couldn't scroll, and syncing N ports lagged into a
-// visible "jelly"). Native scroll of one container has neither problem.
+// Per-row scroll with a JS sync is the alternative that does not work: a short line cannot
+// scroll at all, and syncing N ports lags into a visible "jelly".
 //
 // The card styling and its scrollbar live in coreStyles.ts (CARD_ATTR selects the card); this
 // module only owns the DOM structure — which blocks are wrapped, kept, or unwrapped. A block

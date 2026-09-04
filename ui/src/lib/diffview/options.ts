@@ -22,11 +22,9 @@ import type { SourceDiffViewOptions, SourceViewOptions } from "$lib/diffview/typ
  * combination with hunkSeparators:'line-info' cannot arise. */
 export interface SourceViewGutter {
   enableGutterUtility: true;
-  // Light the hovered line so the whole line — not just the gutter edge — reads as
-  // the comment target. The library sets `data-hovered` on the line element (and
-  // its number); caret's `--diffs-bg-hover-override` (app.css) resolves that into a
-  // subtle grey lift. "both" lifts the line and its number together so the row
-  // brightens as one rather than leaving the number column detached.
+  // Light the hovered line and its number together, not just the gutter edge, so the
+  // whole row reads as the comment target. The library sets `data-hovered` on both;
+  // caret's `--diffs-bg-hover-override` (app.css) resolves it into a subtle grey lift.
   lineHoverHighlight: "both";
   // Lets the reviewer drag (or shift-click) the line-number column to select a
   // span; the gutter `+` then reports that range, so a comment can cover several
@@ -62,9 +60,6 @@ function sharedOptions(
   return {
     overflow: options.overflow,
     disableLineNumbers: options.disableLineNumbers,
-    // The caret theme in effect names both the palette and the scheme it forces;
-    // with none supplied the library stays on caret's pair following the system
-    // preference, as before (EXC-730, EXC-752).
     ...caretDiffTheme(options.themeId),
   };
 }
@@ -75,18 +70,13 @@ export function toFileOptions(
   gutter?: SourceViewGutter,
   onLineClick?: SourceViewLibOptions["onLineClick"],
 ): SourceViewLibOptions {
-  // The token layer composes its single handler object (and the
-  // useTokenTransformer flag those handlers require) in composeTokenHandlers;
-  // here both spread in together so the flag can never drift apart from the
-  // handlers. They are stable for the instance's life (they close over the span
-  // map), so they belong only in the initial options — a content-key change
-  // recreates the instance with a fresh map. When absent, the option object is
-  // unchanged, so views without the link layer behave exactly as before. The
-  // gutter bag spreads the same way: present only when the view enables
-  // commenting, absent (and byte-identical) on the read-only view.
+  // composeTokenHandlers builds the handler object and the useTokenTransformer flag
+  // those handlers require; both spread in together so the flag can never drift
+  // apart from the handlers. They close over the span map, so they are stable for
+  // the instance's life and belong only in the initial options — a content-key
+  // change recreates the instance with a fresh map.
   //
-  // onLineClick lets a plain click anywhere on a line open a comment composer; it
-  // spreads in only when the view wires it, so the read-only view stays unchanged.
+  // onLineClick lets a plain click anywhere on a line open a comment composer.
   const lineClick = onLineClick != null ? { onLineClick } : undefined;
   return {
     ...sharedOptions(options),
@@ -106,25 +96,18 @@ export function toFileDiffOptions(options: SourceDiffViewOptions): SourceDiffVie
     // data-caret-indicators="both" flag (SourceDiffView) + the matching rules in
     // coreStyles.ts, so the two cues show at once.
     diffIndicators: options.diffIndicators === "both" ? "bars" : options.diffIndicators,
-    // Pin the compare header to the top of the scroll viewport. The library
-    // renders a default file header for every diff; left to scroll, the version
-    // pair and the +N/-N counts leave view the moment the reviewer scrolls a long
-    // diff. Sticky keeps that context — the pair name and the change tallies —
-    // anchored while reading. The pinned header fills over the code on its own
-    // surface: [data-diffs-header][data-sticky] paints var(--diffs-bg), which the
+    // Keeps the library's file header — the version pair and the +N/-N counts — in
+    // view down a long diff. The pinned header paints over the code on its own
+    // surface: [data-diffs-header][data-sticky] fills var(--diffs-bg), which the
     // .diffview bridge maps to caret's --paper-sunk.
     stickyHeader: true,
-    // Collapsed context renders as the library's line-info separator: a band on
+    // Collapsed context renders as the library's line-info separator, a band on
     // caret's separator surface (--diffs-bg-separator-override, owned by the
-    // .diffview bridge in app.css) carrying the 'N unmodified lines' label and the
-    // rounded expand pills. Both values match the library defaults today and are
-    // pinned here so a library default flip can't silently change the rethemed
-    // surface — hunkSeparators stays 'line-info' so the band keeps its caret skin,
-    // and expandUnchanged stays false so context keeps collapsing (the band and
-    // its pills only exist while context is hidden). Compare mode (SourceDiffView →
-    // FileDiff, constructed with no enableGutterUtility) has no gutter, so the
-    // WebKit gutter-`+`/line-info interaction the read-write view guards against
-    // cannot arise here.
+    // .diffview bridge in app.css). Both values match the library defaults today and
+    // are pinned so a default flip can't silently change that rethemed surface.
+    // Compare mode has no gutter (FileDiff is constructed with no
+    // enableGutterUtility), so the WebKit gutter-`+`/line-info interaction the
+    // read-write view guards against cannot arise here.
     hunkSeparators: "line-info",
     expandUnchanged: false,
   };

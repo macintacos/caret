@@ -7,11 +7,10 @@ import { jscSafeSource } from "$lib/diffview/jsc-regex.ts";
 // matches correctly — and returns everything else byte-identical.
 //
 // The string assertions are the guard: a rewrite that regressed to a no-op fails
-// them on any engine. The behavioral block at the bottom used to be the stronger
-// check — it ran both forms and showed the original failing where the rewritten
-// one matched — but that only worked while the host engine carried the bug, and
-// bun's JSC no longer does (EXC-1156). It now documents the semantics here and
-// guards them on the engines that still need the rewrite. See its own comment.
+// them on any engine. The behavioral block at the bottom can only show the original
+// failing where the rewritten one matches on a host engine that still carries the
+// bug, which bun's JSC does not (EXC-1156), so it documents the semantics rather
+// than proving them. See its own comment.
 
 describe("jscSafeSource rewrites an optional anchored group", () => {
   test("rewrites a leading optional capture group", () => {

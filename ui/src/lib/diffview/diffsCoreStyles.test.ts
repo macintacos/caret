@@ -1,8 +1,6 @@
 // Drift guard: diffsCoreStyles.ts is a verbatim copy of @pierre/diffs's core
-// stylesheet (the library does not export it, so the wrapper vendors it to adopt
-// into its container-managed shadow root). If a @pierre/diffs upgrade changes
-// that stylesheet, this fails — regenerate diffsCoreStyles.ts from the library's
-// dist/style.js default export.
+// stylesheet. If a @pierre/diffs upgrade changes it, this fails — regenerate
+// diffsCoreStyles.ts from the library's dist/style.js default export.
 
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";

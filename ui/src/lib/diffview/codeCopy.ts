@@ -1,11 +1,8 @@
 // Geometry for the code-block copy affordance (EXC-692). The copy button is a
-// caret-owned overlay in the .diff-plan scroll container, shown at the top-right of
-// the code block the pointer is over — the same host-overlay approach as bracket.ts
-// (the library paints no such control, and the code rows live in a shadow root).
-// This module is the pure geometry: which block a pointer is over, and where that
-// block's top-right sits in the scroll container's content coordinates so an
-// absolutely-positioned button scrolls with the rows. The rect reader is injected
-// so the math unit-tests without real layout (happy-dom returns all-zero rects).
+// caret-owned overlay in the .diff-plan scroll container — the same host-overlay
+// approach as bracket.ts, because the library paints no such control and the code
+// rows live in a shadow root. The rect reader is injected so the math unit-tests
+// without real layout (happy-dom returns all-zero rects).
 
 import type { CodeBlockRange } from "$lib/diffview/codeBlocks.ts";
 
