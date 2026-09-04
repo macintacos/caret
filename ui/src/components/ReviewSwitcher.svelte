@@ -43,10 +43,8 @@
         <!-- The trigger names itself rather than taking its name from its content,
              which would run the active plan's title together with the count Badge
              ("Widget Cache Refactor 2") — a name that says nothing about the control
-             and changes on every switch. The count rides the accessible description
-             through a hidden span, which the accname algorithm still reads because
-             aria-describedby references it directly. Which review is active is
-             announced by the checked item when the menu opens, below. -->
+             and changes on every switch. The count rides a hidden span, which accname
+             still reads because aria-describedby references it directly. -->
         <Button
           {...props}
           variant="secondary"
@@ -84,9 +82,8 @@
             <span class="opt-check"><Icon name="check" size={14} label="Active review" /></span>
           {:else if unread.includes(r.id)}
             <!-- Same trailing slot as the check above: an unread row is never the
-                 active row by construction, so the two can never collide. The dot
-                 is the visual marker and the sr-only text the announced one — the
-                 mark is a shape's presence, not a tint on a shared glyph. -->
+                 active row by construction, so the two can never collide. The dot is
+                 the visual marker and the sr-only text the announced one. -->
             <span class="opt-unread">
               <span class="dot" aria-hidden="true"></span><span class="sr-only">Unread</span>
             </span>
@@ -111,9 +108,8 @@
     /* The inert single-review label reads as a heading, so it keeps full ink. */
     color: var(--ink);
   }
-  /* No color of its own: inside the trigger it inherits the button's quiet
-     ink-soft (brightening on hover with it), matching the badges; in the single
-     case it inherits the full ink above. */
+  /* No colour of its own: inside the trigger it inherits the button's quiet
+     ink-soft, in the single case the full ink above. */
   .title {
     font-weight: 500;
     overflow: hidden;
@@ -139,8 +135,7 @@
     display: inline-flex;
     color: var(--ink-faint);
   }
-  /* Each option stacks its title over its abbreviated path; the active row gets
-     a trailing check (neutral, no amber — amber stays brand-reserved). */
+  /* Each option stacks its title over its abbreviated path. */
   .opt {
     display: flex;
     flex-direction: column;
@@ -157,6 +152,7 @@
     color: var(--ink-faint);
     font-size: var(--text-xs);
   }
+  /* Neutral, never amber — amber stays brand-reserved. */
   .opt-check {
     display: inline-flex;
     margin-inline-start: auto;
@@ -180,10 +176,9 @@
     background: var(--attention);
   }
   /* A one-shot shudder on the arrival of a plan, twice over --dur-micro: enough to
-     catch the eye in a header the reviewer is not looking at, short enough not to
-     read as an ambient loop the way RefHintBadge's teaching ping deliberately does.
-     No local prefers-reduced-motion query — the trigger renders inside #app, which
-     app.css's single global guard covers, exactly as that badge's ping relies on. */
+     catch the eye in a header the reviewer is not looking at, short enough not to read
+     as an ambient loop. No local prefers-reduced-motion query — the trigger renders
+     inside #app, which app.css's single global guard covers. */
   .unread-dot {
     animation: switcher-jiggle var(--dur-micro) var(--ease-out) 2;
   }

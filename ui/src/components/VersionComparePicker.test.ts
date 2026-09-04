@@ -106,8 +106,7 @@ describe("VersionComparePicker compare icon", () => {
     const toggle = target.querySelector<HTMLButtonElement>(".compare-toggle");
     expect(toggle!.querySelector(".icon svg")).not.toBeNull();
     // The icon is decorative, so it adds no text: the visible label stays exactly
-    // "Versions". A stray label= on the Icon would break this at unit speed. The
-    // EXC-804 count badge is subtracted — chrome beside the label, not part of it.
+    // "Versions". The EXC-804 count badge is subtracted — chrome beside the label.
     expect(labelOf(toggle!)).toBe("Versions");
     // EXC-808: the icon leads the label (sits to its left), so it precedes the
     // "Versions" text in DOM order.
@@ -239,21 +238,16 @@ describe("VersionComparePicker version count badge", () => {
   });
 });
 
-// The "(current)" annotation on the newest picker row lives in the e2e spec, not
-// here. Opening a bits-ui DropdownMenu is trigger-driven interaction, which
-// happy-dom cannot carry: a synthetic .click() flips the trigger's aria-expanded
-// to true but renders zero rows, and no synthetic key/pointer event opens it
-// reliably from a fresh mount. That is a different case from the flushUntil
-// dialogs (ShortcutsHelp, UnsentCommentsDialog), which mount already-open through
-// a prop and so never need the interaction. Per browser-testing.md the annotation
-// is asserted in test/e2e/version-compare.e2e.ts, which also pins the newest-first
-// row order the annotation's derivation depends on.
+// The "(current)" annotation on the newest picker row is asserted in
+// test/e2e/version-compare.e2e.ts, not here: opening a bits-ui DropdownMenu is
+// trigger-driven interaction happy-dom cannot carry — a synthetic .click() flips the
+// trigger's aria-expanded but renders zero rows. That is a different case from the
+// flushUntil dialogs (ShortcutsHelp, UnsentCommentsDialog), which mount already-open
+// through a prop and so never need the interaction.
 
 describe("VersionComparePicker pair selection", () => {
-  // The base/target pickers are a bits-ui DropdownMenu; the trigger
-  // (.vpick) shows the current version and carries an accessible label. The
-  // portalled radio menu is a bits-ui overlay, so choosing a version is covered
-  // in the e2e spec.
+  // The trigger (.vpick) shows the current version and carries an accessible label;
+  // choosing one from the portalled radio menu is covered in the e2e spec.
   test("shows a labelled trigger for each side reflecting the selected pair", () => {
     const { target } = render(VersionComparePicker, baseProps);
     const base = target.querySelector<HTMLElement>('[aria-label="Base version"]');

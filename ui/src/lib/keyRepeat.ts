@@ -1,32 +1,20 @@
 // Hold-to-repeat for the plan's heading-navigation keys (EXC-1122). A held key
-// should move one item, pause, then traverse steadily until it is let go — and
-// the OS cannot give that. Its repeat delay and rate are per-user settings
-// (roughly 500-650ms before the first repeat on macOS), so the same hold feels
-// different on every machine and is not portably simulable in a test.
+// should move one item, pause, then traverse steadily until it is let go — and the
+// OS cannot give that: its repeat delay and rate are per-user settings (roughly
+// 500-650ms before the first repeat on macOS), so the same hold feels different on
+// every machine and is not portably simulable in a test.
 //
-// So the app owns the whole `keydown → delay → run → keyup` lifecycle itself,
-// which only works if the OS's own repeat is kept out: `preventDefault()` does
-// not stop the browser emitting repeats, so a handler that does not bail on
-// `e.repeat` lets the native repeat and this timer drive the list at once, and
-// every hold double-steps. The bail belongs on the REAL keydown, before any
-// translation — the arrow a surface re-dispatches does not copy `repeat` off the
-// press it came from, so by then a held key looks like a first press.
+// So the app owns the whole `keydown → delay → run → keyup` lifecycle itself, which
+// only works if the OS's own repeat is kept out: `preventDefault()` does not stop the
+// browser emitting repeats, so a handler that does not bail on `e.repeat` lets the
+// native repeat and this timer drive the list at once, and every hold double-steps.
+// The bail belongs on the REAL keydown, before any translation — the arrow a surface
+// re-dispatches does not copy `repeat` off the press it came from.
 //
 // The move itself is the caller's closure, which is what lets one helper serve
 // surfaces that dispatch differently: PlanBreadcrumbs re-dispatches onto
 // `document.activeElement`, a moving target as focus walks into a submenu, while
 // PlanToc and the breadcrumb filter panel dispatch onto their fixed query field.
-//
-// The end of a hold is watched on `window` rather than on the surface, because
-// the walk moves focus out from under any element-level listener — stepping the
-// breadcrumbs bar to another crumb's menu replaces the whole content node — and a
-// missed keyup is a run that never stops. A window `blur` ends it too: a window
-// that loses focus mid-hold never delivers the keyup at all.
-//
-// `walkCommandList` at the bottom is the one claim that IS shared rather than
-// per-surface: the bar's `/` filter panel and the ToC popup are the same bits-ui
-// `Command` over the same query field, so the keys they walk with and how those
-// reach the primitive are one piece of logic, not two copies of one.
 
 /** Quiet window between the first move and the run, in milliseconds. */
 export const KEY_REPEAT_DELAY_MS = 250;
@@ -70,12 +58,11 @@ const defaultSchedule = (fn: () => void, ms: number) => {
 export function createKeyRepeat(deps: KeyRepeatDeps = {}): KeyRepeat {
   const schedule = deps.schedule ?? defaultSchedule;
 
-  // The hold in flight, undefined when nothing is held. It is an OBJECT rather than
-  // a boolean because its identity is what the run checks itself against: `step()`
-  // can end the hold from the inside — a menu closing calls stop() synchronously —
-  // and a run that armed its next tick without re-reading this would leave a timer
-  // nothing has a handle to. Releasing the key could not cancel it, an unmount could
-  // not, and neither could the next hold, so it would tick for the life of the page.
+  // The hold in flight, undefined when nothing is held. An OBJECT rather than a
+  // boolean because its identity is what the run checks itself against: `step()` can
+  // end the hold from the inside — a menu closing calls stop() synchronously — and a
+  // run that armed its next tick without re-reading this would leave a timer nothing
+  // can cancel, ticking for the life of the page.
   let live: { cancel(): void } | undefined;
 
   function stop(): void {
@@ -104,8 +91,12 @@ export function createKeyRepeat(deps: KeyRepeatDeps = {}): KeyRepeat {
       },
     };
 
-    // Registered BEFORE the first move, so a step() that ends the hold on the spot
-    // finds something to end rather than being swallowed and leaving a run armed.
+    // Watched on `window` rather than on the surface, because the walk moves focus
+    // out from under any element-level listener and a missed keyup is a run that
+    // never stops; `blur` ends it too, since a window that loses focus mid-hold never
+    // delivers the keyup at all. Registered BEFORE the first move, so a step() that
+    // ends the hold on the spot finds something to end rather than being swallowed
+    // and leaving a run armed.
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", stop);
     live = hold;
@@ -124,12 +115,11 @@ export function createKeyRepeat(deps: KeyRepeatDeps = {}): KeyRepeat {
   return { start, stop };
 }
 
-/** The keys a bits-ui `Command` list walks with here, mapped onto the arrow each
- * one means. The arrows map to THEMSELVES, which buys nothing about where the walk
- * goes — the primitive would do the same — and everything about the cadence it goes
- * at: a key claimed here repeats on the app's timer, one left to the primitive
- * repeats on the OS's. Left and right are deliberately absent, since focus sits in a
- * text field where they move the caret. */
+/** The keys a bits-ui `Command` list walks with here, mapped onto the arrow each one
+ * means. The arrows map to THEMSELVES, which buys nothing about where the walk goes
+ * and everything about the cadence: a key claimed here repeats on the app's timer,
+ * one left to the primitive repeats on the OS's. Left and right are deliberately
+ * absent, since focus sits in a text field where they move the caret. */
 const COMMAND_ARROWS: Record<string, string> = {
   ArrowDown: "ArrowDown",
   ArrowUp: "ArrowUp",
@@ -145,21 +135,20 @@ const COMMAND_ARROWS: Record<string, string> = {
  * input, and `null` while it is unmounted.
  *
  * Re-dispatching an arrow rather than writing the selection is the load-bearing
- * choice. bits-ui scrolls a selection into view from its OWN keydown path, so a
+ * choice: bits-ui scrolls a selection into view from its OWN keydown path, so a
  * hand-rolled walk would step the reviewer onto rows below the fold without ever
  * bringing them into sight. It goes out from the FIELD because that is where the
  * keypress really landed, and the primitive listens for it on the root the event
- * bubbles to. With no matches the arrow lands on an empty item set and the key goes
- * quiet — still preferable to the default, which steps focus out of a panel that is
- * portalled to the body with nothing tabbable after it.
+ * bubbles to. With no matches the key goes quiet — still preferable to the default,
+ * which steps focus out of a panel portalled to the body with nothing tabbable after
+ * it.
  *
- * Three things pass through unclaimed, each for its own reason: a modified key,
- * because bits-ui reads ⌘ and ⌥ off its own arrow handling (first/last row,
- * previous/next group) and swallowing them would delete two behaviours; an untrusted
- * arrow, because that is this function's own re-dispatch on its way to the
- * primitive, and answering it again would loop; and a key this list does not walk
- * with. A held key's OS repeats are claimed but not walked — `preventDefault` keeps
- * the browser's own Tab move suppressed for as long as the key is down.
+ * Three things pass through unclaimed: a modified key, because bits-ui reads ⌘ and ⌥
+ * off its own arrow handling (first/last row, previous/next group); an untrusted
+ * arrow, because that is this function's own re-dispatch on its way to the primitive,
+ * and answering it again would loop; and a key this list does not walk with. A held
+ * key's OS repeats are claimed but not walked — `preventDefault` keeps the browser's
+ * own Tab move suppressed for as long as the key is down.
  */
 export function walkCommandList(
   e: KeyboardEvent,

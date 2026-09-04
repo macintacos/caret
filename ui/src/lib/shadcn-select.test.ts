@@ -1,16 +1,15 @@
 // Composition guard for the vendored Select tree (EXC-1109). Select only exists
 // composed — Root → Trigger → Content → Group → Item — so it takes a fixture plus
-// this suite rather than a file beside the component, per
-// doc/agents/shadcn-rules.md § Where the test goes. A type-check cannot tell
+// this suite rather than a file beside the component. A type-check cannot tell
 // whether the copies resolve against the installed bits-ui, whether the
-// @lucide/svelte → Icon.svelte swap renders a glyph, or whether a dropped
-// sub-part quietly takes the listbox semantics with it.
+// @lucide/svelte → Icon.svelte swap renders a glyph, or whether a dropped sub-part
+// quietly takes the listbox semantics with it.
 //
 // Select portals its content, so it behaves exactly as shadcn-foundation.test.ts
-// recorded for Dialog: poll with flushUntil and query document.body, not the
-// mount target. The real interaction semantics — keyboard roving, typeahead,
-// outside-click, focus restoration — are real-browser behaviours and stay e2e
-// per doc/agents/browser-testing.md.
+// recorded for Dialog: poll with flushUntil and query document.body, not the mount
+// target. The real interaction semantics — keyboard roving, typeahead, outside-click,
+// focus restoration — are real-browser behaviours and stay e2e per
+// doc/agents/browser-testing.md.
 import "@ui/support/mount.ts";
 
 import { expect, test } from "bun:test";
@@ -23,12 +22,11 @@ const content = () => document.body.querySelector("[data-slot='select-content']"
 const trigger = (target: HTMLElement) => target.querySelector("[data-slot='select-trigger']");
 
 /** Dismiss the select before the test ends. Load-bearing rather than tidy, and the
- * same guard shadcn-command-popover.test.ts carries: bits-ui's portal presence
- * waits for an `animationend` that never fires under happy-dom, so content left
- * open at unmount keeps its effects alive into the next test, which then reads
- * deriveds whose owner is already destroyed and svelte warns `derived_inert`.
- * mount.ts purges the DOM half of that leak; only closing purges the effect
- * half. Guarded, so it is a no-op if a test never opened.
+ * same guard shadcn-command-popover.test.ts carries: bits-ui's portal presence waits
+ * for an `animationend` that never fires under happy-dom, so content left open at
+ * unmount keeps its effects alive into the next test, which then warns
+ * `derived_inert`. mount.ts purges the DOM half of that leak; only closing purges the
+ * effect half.
  *
  * The gesture is a real `pointerdown`, NOT the `.click()` the Popover suite uses:
  * `SelectTriggerState.onpointerdown` is what toggles, and its `onclick` only calls
@@ -98,10 +96,9 @@ test("the icon swap renders vendored SVGs, not the dropped @lucide/svelte compon
 });
 
 // The one conforming edit the vendoring makes beyond the icon swap: a Select row
-// wears dropdown-menu-item's radius and cursor so it reads as the same control as
-// the menu row EXC-1111 replaces. Pinned here because a registry re-sync reverts
-// it silently, exactly like the Command.Viewport case in
-// doc/agents/shadcn-rules.md § Edits a re-sync will silently undo.
+// wears dropdown-menu-item's radius and cursor so it reads as the same control as the
+// menu row EXC-1111 replaces. Pinned here because a registry re-sync reverts it
+// silently (doc/agents/shadcn-rules.md § Edits a re-sync will silently undo).
 test("select rows carry caret's menu-row geometry", async () => {
   const { target, flush } = render(SelectFixture, { open: true });
   await flushUntil(flush, () => content() !== null);
@@ -113,12 +110,10 @@ test("select rows carry caret's menu-row geometry", async () => {
 });
 
 // The two invariants a mount cannot reach, pinned against select-content.svelte's
-// source the way motion.test.ts pins the four modal surfaces. Both are exactly the
-// re-sync hazard doc/agents/shadcn-rules.md § Edits a re-sync will silently undo
-// describes: an overwrite restores stock and every mounted assertion above stays green.
-// Comment lines are stripped first: a positive `toContain` would otherwise be satisfied by
-// the file's own prose about these utilities rather than by the class string, which is how
-// a re-synced revert could pass vacuously.
+// source the way motion.test.ts pins the four modal surfaces: an overwrite restores
+// stock and every mounted assertion above stays green. Comment lines are stripped
+// first, or a positive `toContain` would be satisfied by the file's own prose about
+// these utilities rather than by the class string — a revert passing vacuously.
 const selectContentSource = (
   await Bun.file(join(import.meta.dir, "components/ui/select/select-content.svelte")).text()
 ).replace(/^\s*\/\/.*$/gm, "");

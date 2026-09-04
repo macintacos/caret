@@ -1,25 +1,14 @@
 <script lang="ts">
-  // Version-compare control bar for the source-view surface. Sits above the
-  // plan view and lets a reviewer enter compare mode, pick any two stored
-  // versions (base vs. target), switch the diff layout between split and unified,
-  // and switch the gutter change markers between vertical bars and classic +/-
-  // glyphs. The "Versions" toggle is always present, but disabled (greyed out)
-  // when fewer than two versions exist, since there is nothing to compare —
-  // shown-but-disabled keeps the affordance discoverable (EXC-664). When there IS
-  // something to compare, the toggle carries a badge counting the other versions
-  // available, and the base/target menus mark the newest row "(current)" so the
-  // reviewer can tell which end of the pair is the plan as it stands (EXC-804).
-  // All state is owned by the parent (the compare state factory); this component is
-  // presentational and reports changes through callback props.
+  // Version-compare control bar for the source-view surface: enter compare mode,
+  // pick any two stored versions (base vs. target), and switch the diff layout and
+  // the gutter change markers. The "Versions" toggle is shown-but-disabled when
+  // fewer than two versions exist, which keeps the affordance discoverable
+  // (EXC-664). All state is owned by the parent (the compare state factory); this
+  // component is presentational and reports changes through callback props.
   //
-  // The controls are composed from the shadcn-svelte catalog (EXC-764): the two
-  // version pickers are a bits-ui DropdownMenu (soft float-chip trigger, chevron
-  // that points right when collapsed and rotates down when open); the
-  // layout/indicator segmented controls are
-  // single-select ToggleGroups (each option a role="radio"); the enter/exit
-  // control is a Button toggle; and the disabled-state explanation is a Tooltip.
-  // Every control shares the topbar's neutral float-chip surface language and one
-  // fixed height, so the bar reads as one row and never changes height between the
+  // The controls are composed from the shadcn-svelte catalog (EXC-764), and every
+  // one shares the topbar's neutral float-chip surface language and one fixed
+  // height, so the bar reads as one row and never changes height between the
   // resting and comparing views. Amber stays reserved for the topbar's Approve
   // primary; here it appears only as the --accent-wash "active-state" marker (the
   // SettingSelect/diff-selection language) on the pressed compare toggle. All colors
@@ -91,27 +80,21 @@
   // How many OTHER versions the current one can be diffed against — the toggle's
   // count badge (EXC-804). N-1, not N: it answers "what is there to compare
   // against", the same framing as the disabled tooltip's "No other versions to
-  // compare yet". Derived here rather than passed down like `canCompare`, whose
-  // rule the parent owns because DiffPlanView gates `showDiff` on it too; this
-  // count has one consumer, and `versions` is already in scope. Can go negative on
-  // an empty set; the render guard reads `> 0`, so that needs no clamp here.
+  // compare yet". Can go negative on an empty set; the render guard reads `> 0`, so
+  // that needs no clamp here.
   const otherCount = $derived(versions.length - 1);
 
-  // The newest version — the plan as it stands now. Annotated in the pickers so a
-  // reviewer choosing a pair can tell which end is current without counting. Reads
-  // `ordered`'s head rather than re-deriving a max: the list is already sorted
-  // newest-first for exactly this reason.
+  // The newest version — the plan as it stands now, annotated in the pickers so a
+  // reviewer choosing a pair can tell which end is current without counting.
+  // `ordered`'s head rather than a re-derived max: it is already sorted newest-first.
   const currentVersion = $derived(ordered[0]?.version);
 
-  // Sliding pill for the segmented ToggleGroups: instead of each option painting
-  // its own background, one shared pill rides behind the options and animates to
-  // whichever is active. A CSS transform/width transition is inherently
-  // interruptible — clicking a third option mid-slide smoothly redirects the pill
-  // from wherever it is — and it wears the --ease-spring easing for a damped-spring
-  // settle. mountSlider injects the pill and keeps it aligned to the active
-  // [data-state="on"] option via measurement (options are content-sized, so a
-  // pure-CSS index offset wouldn't line up). Reduced motion is handled by the
-  // global #app guard, which zeroes the transition so the pill just snaps.
+  // Sliding pill for the segmented ToggleGroups: one shared pill rides behind the
+  // options rather than each painting its own background, so a CSS transform/width
+  // transition carries the selection and redirects mid-slide when a third option is
+  // clicked. mountSlider injects the pill and keeps it aligned to the active
+  // [data-state="on"] option via measurement — options are content-sized, so a
+  // pure-CSS index offset wouldn't line up.
   let layoutTrack = $state<HTMLElement | null>(null);
   let indicatorsTrack = $state<HTMLElement | null>(null);
 
@@ -163,11 +146,9 @@
   $effect(() => (indicatorsTrack ? mountSlider(indicatorsTrack) : undefined));
 </script>
 
-<!-- A version picker, reused for both base and target: a bits-ui DropdownMenu with a
-     float-chip trigger and a portalled radio menu that commits-and-closes on pick.
-     The chevron rotation (right when
-     collapsed, down when open) rides bits-ui's aria-expanded via CSS, so no local
-     open state is needed. -->
+<!-- A version picker, reused for both base and target. The chevron rotation (right
+     when collapsed, down when open) rides bits-ui's aria-expanded via CSS, so no
+     local open state is needed. -->
 {#snippet versionPicker(ariaLabel: string, current: number, onPick: (v: number) => void)}
   <DropdownMenu.Root>
     <DropdownMenu.Trigger>
@@ -211,7 +192,6 @@
                 {#if checked}<Icon name="check" size={15} />{/if}
               </span>
               <span>v{v.version}</span>
-              <!-- Only the newest row is annotated; the rest are history. -->
               {#if v.version === currentVersion}<span class="cur">(current)</span>{/if}
             {/snippet}
           </DropdownMenuPrimitive.RadioItem>
@@ -221,12 +201,10 @@
   </DropdownMenu.Root>
 {/snippet}
 
-<!-- The toggle's leading git-compare glyph + label (EXC-808). Shared by the
-     enabled and disabled buttons so the affordance stays identical; the icon is
-     decorative (aria-hidden via Icon.svelte), so it contributes nothing to the
-     button's name and inherits the button's currentColor. Spacing is the Button's
-     own gap. This text is the visible label; the accessible name is the same
-     string, extended with the version count when there is one (EXC-804). -->
+<!-- The toggle's leading git-compare glyph + label (EXC-808), shared by the enabled
+     and disabled buttons so the affordance stays identical. The icon is decorative
+     (aria-hidden via Icon.svelte), so the accessible name is this text alone —
+     extended with the version count when there is one (EXC-804). -->
 {#snippet compareLabel()}
   <Icon name="git-compare" size={14} />Versions
 {/snippet}
@@ -245,15 +223,12 @@
       onclick={() => onSetComparing(!comparing)}
     >
       {@render compareLabel()}
-      <!-- How many other versions there are to compare against (EXC-804): the
-           TopBar pending-count Badge, shape and hue alike — both are counts doing
-           the novelty job, so both wear .count-attention (atoms.css). Guarded on
-           the count rather than on `canCompare` alone, since canCompare is a
-           parent-owned prop and a "0" tally would be noise. aria-hidden because
-           ARIA prohibits a name on a <span> (role=generic), so an aria-label here
-           would announce unreliably; the count reaches AT through the button's own
-           aria-label above instead — the same split TopBar's .overflow-count
-           uses. -->
+      <!-- How many other versions there are to compare against (EXC-804): the TopBar
+           pending-count Badge, shape and hue alike — both are counts doing the
+           novelty job, so both wear .count-attention (atoms.css). Guarded on the
+           count, since a "0" tally would be noise. aria-hidden because ARIA prohibits
+           a name on a <span> (role=generic); the count reaches AT through the
+           button's own aria-label above instead. -->
       {#if otherCount > 0}
         <Badge variant="secondary" class="count count-attention metric" aria-hidden="true">
           {otherCount}
@@ -326,10 +301,8 @@
         </ToggleGroup.Root>
       {/if}
 
-      <!-- Gutter change markers: vertical bars (the inherited default) or the
-           classic +/- glyphs many reviewers prefer. The glyphs inherit caret's
-           ok/danger hue through the diffview bridge, so this only chooses the
-           affordance, not the color. -->
+      <!-- The gutter markers inherit caret's ok/danger hue through the diffview
+           bridge, so this chooses the affordance, not the color. -->
       <ToggleGroup.Root
         type="single"
         size="sm"
@@ -366,12 +339,10 @@
     font-size: var(--text-base);
   }
 
-  /* Neutral controls follow the topbar's float-chip language: .float-chip
-     (app.css) supplies the resting + hover skin (soft --chip fill, no border,
-     ink-soft label brightening to full ink). The compare toggle adds a pressed
-     state that carries the --accent-wash "active-state" marker (the same amber
-     wash the SettingSelect's active row and the diff selection use) while compare
-     mode is on, so the mode switch is visible at a glance. */
+  /* .float-chip (app.css) supplies the resting + hover skin; the compare toggle adds
+     a pressed state carrying the --accent-wash "active-state" marker — the same amber
+     wash the SettingSelect's active row and the diff selection use — so the mode
+     switch is visible at a glance. */
   .compare-picker :global(.compare-toggle) {
     white-space: nowrap;
   }
@@ -411,9 +382,8 @@
     color: var(--ink-faint);
   }
 
-  /* Version pickers are their own bits-ui DropdownMenu; the trigger wears the same
-     .float-chip skin as every neutral control. Sized to --ctl-h so
-     it lines up with the compare Button and the segmented toggles. */
+  /* Sized to --ctl-h so the trigger lines up with the compare Button and the
+     segmented toggles. */
   .vpick {
     display: inline-flex;
     align-items: center;
@@ -443,10 +413,8 @@
     transform: rotate(0deg);
   }
 
-  /* The portalled version menu carries this scope's classes; rows lay out
-     [check] [label], with the active version's row highlighted on hover/keyboard
-     via --chip-hover and marked with an amber check on --accent, the DropdownMenu's
-     own selection language. */
+  /* The version menu is portalled, so its rows are reached through :global. The
+     amber check on --accent is the DropdownMenu's own selection language. */
   :global(.vmenu .vitem) {
     display: flex;
     align-items: center;
@@ -488,12 +456,10 @@
     margin-left: auto;
   }
 
-  /* Segmented layout/indicator controls read as one recessed track with a lifted
-     pill on the active option — neutral, borderless, no amber. The track is sized
-     to --ctl-h so it matches the compare Button and the version pickers. The
-     active fill is NOT painted per-option; one shared .seg-pill (injected by
-     mountSlider) rides behind the options and slides to the active one, so the
-     selection animates. position: relative anchors that pill. */
+  /* One recessed track with a lifted pill on the active option — neutral, no amber
+     — sized to --ctl-h so it matches the compare Button and the version pickers. The
+     active fill is NOT painted per-option: one shared .seg-pill (injected by
+     mountSlider) rides behind them and slides, and position: relative anchors it. */
   .compare-picker :global([data-slot="toggle-group"]) {
     position: relative;
     gap: 2px;
@@ -502,11 +468,9 @@
     background: var(--paper-sunk);
     border-radius: var(--radius);
   }
-  /* The sliding active-option pill. Its transform + width animate with the
-     damped-spring easing; the transition redirects mid-slide when a new option is
-     clicked, so rapid switches stay fluid. Sits behind the option labels (z-index
-     below the position: relative items). The #app reduced-motion guard zeroes the
-     transition, so under reduced motion it simply snaps. */
+  /* The sliding active-option pill, behind the option labels. Its transition
+     redirects mid-slide when a new option is clicked, so rapid switches stay fluid;
+     the #app reduced-motion guard zeroes it, so it simply snaps. */
   .compare-picker :global(.seg-pill) {
     position: absolute;
     top: 0;
@@ -539,10 +503,8 @@
     color: var(--ink);
   }
 
-  /* Entering compare mode reveals the pickers + display toggles with a quick,
-     subtle slide-in (EXC-664), timed off the shared one-shot motion tokens. Both
-     revealed clusters animate together; the global #app reduced-motion rule
-     neutralizes the movement. */
+  /* Entering compare mode reveals both clusters together with a quick slide-in
+     (EXC-664); the global #app reduced-motion rule neutralizes the movement. */
   .pair,
   .controls {
     animation: compare-reveal var(--dur-enter) var(--ease-out);

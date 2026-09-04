@@ -1,19 +1,17 @@
 #!/usr/bin/env bun
 // Emits app.css's static first-paint palette from THEMES["caret-dark"] (EXC-886),
 // so the caret-dark fallback exists in exactly one place. The output partial is
-// gitignored, and every task that consumes app.css regenerates it first: the vite
-// plugin in vite.config.ts (build + dev server, hence `test e2e`), plus `test
-// unit`, `lint`, `format`, and `setup`. The one path that does NOT is hk invoked
-// directly by the git pre-commit hook, whose Tailwind step loads app.css as its
-// theme — it needs the partial to already exist, which any of those tasks
-// provides.
+// gitignored, and every task that consumes app.css regenerates it first. The one
+// path that does NOT is hk invoked directly by the git pre-commit hook, whose
+// Tailwind step loads app.css as its theme — it needs the partial to already exist,
+// which any of those tasks provides.
 //
 // It lives at the ui/ root rather than under scripts/ because its module graph
 // resolves $lib, an alias only ui/tsconfig.json carries — a root-program script
 // importing it would be dragged into `tsc --noEmit`'s program with $lib unmapped.
 //
 // Split into a pure renderer (renderPaletteCss — unit-tested) and the filesystem
-// effects (writePaletteCss), following scripts/generate-ui-manifest.ts.
+// effects (writePaletteCss).
 
 import { renameSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";

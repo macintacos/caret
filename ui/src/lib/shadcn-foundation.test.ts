@@ -1,8 +1,7 @@
 // Proof-of-life for the shadcn-svelte + Tailwind foundation (EXC-757): a plain
 // component (Button) and a bits-ui component (Dialog) copied from the registry
 // both compile, resolve the `$lib` alias, and mount under the bun-test happy-dom
-// harness. This test also RECORDS the bits-ui-under-happy-dom unit-vs-e2e verdict
-// the ticket asks for:
+// harness. It also RECORDS the bits-ui-under-happy-dom unit-vs-e2e verdict:
 //
 //   • Button (no bits-ui) mounts SYNCHRONOUSLY — structure and its
 //     tailwind-variants class output are unit-assertable.
@@ -11,7 +10,7 @@
 //     it appears only after effects flush AND a timer tick advances. A purely
 //     synchronous assertion sees the trigger, not the panel.
 //
-// Takeaway for later tickets: bits-ui surfaces are unit-mountable for STRUCTURE /
+// Takeaway: bits-ui surfaces are unit-mountable for STRUCTURE /
 // ARIA assertions (with an async flush), but their real interaction semantics —
 // focus trap, Escape-to-close, outside-click, focus restoration, scroll lock —
 // are real-browser behaviors that stay e2e per doc/agents/browser-testing.md.

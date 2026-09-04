@@ -60,10 +60,8 @@
 
 <!-- One caret modal, two roles. The bits-ui primitive differs by kind (Dialog vs
      AlertDialog — different role and backdrop-dismiss semantics), but the visible
-     chrome — eyebrow, title, description, footer band, and the raised-paper surface
-     the shadcn *-content/*-footer components now share — is styled once (below) and
-     worn by both branches, so a future modal reuses this shell instead of hand-
-     rolling a look that drifts. -->
+     chrome is styled once below and worn by both branches, so a future modal reuses
+     this shell instead of hand-rolling a look that drifts. -->
 {#if kind === "confirm"}
   <AlertDialog.Root {open} onOpenChangeComplete={(o) => { if (!o) onClosed?.(); }}>
     <AlertDialog.Content onEscapeKeydown={() => onDismiss()} {onOpenAutoFocus} class={contentClass}>
@@ -105,10 +103,8 @@
 <style>
   /* The shared modal identity. These classes ride this component's scope hash onto
      the elements bits-ui portals into document.body, so the styling reaches the
-     portalled panel; keeping it in one <style> is what stops the two modals drifting.
-     Colors ride caret tokens only. */
-  /* caret's dialog signature: the uppercase eyebrow over the title. Scoped — this
-     span is Modal's own element, so the hash rides it into the portal. */
+     portalled panel; keeping it in one <style> is what stops the two modals drifting. */
+  /* caret's dialog signature: the uppercase eyebrow over the title. */
   .eyebrow {
     font-size: var(--text-xs);
     letter-spacing: 0.08em;
@@ -117,10 +113,9 @@
   }
   /* .m-head / .m-title land on the shadcn Header/Title CHILD components, so they
      carry no Modal scope hash — reached with :global, anchored under the header so
-     the title rule can't leak. .m-head overrides the alert header's small-screen
-     text-center so both roles read start-aligned; .m-title overrides the differing
-     shadcn title sizes (dialog text-base vs alert text-lg) so every modal wears the
-     same heading. */
+     the title rule can't leak. They override the alert header's small-screen
+     text-center and the differing shadcn title sizes (dialog text-base vs alert
+     text-lg), so both roles read start-aligned and wear the same heading. */
   :global(.m-head) {
     text-align: start;
   }

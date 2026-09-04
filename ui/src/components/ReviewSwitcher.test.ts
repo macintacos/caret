@@ -5,9 +5,9 @@ import type { ClientReview } from "@core/lib/types";
 import { render } from "@ui/support/mount.ts";
 import ReviewSwitcher from "@/components/ReviewSwitcher.svelte";
 
-// EXC-760: ReviewSwitcher is now a shadcn DropdownMenu. Its trigger (active
-// title + count Badge + chevron) and the inert single-review label render
-// synchronously and are unit-asserted here. The menu itself — opening, the
+// ReviewSwitcher is a shadcn DropdownMenu (EXC-760). Its trigger (active title +
+// count Badge + chevron) and the inert single-review label render synchronously
+// and are unit-asserted here. The menu itself — opening, the
 // option list, active marking, and picking — is bits-ui overlay interaction
 // (portalled, pointer/keyboard driven), so it lives in
 // test/e2e/review-switcher.e2e.ts per doc/agents/browser-testing.md.

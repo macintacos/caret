@@ -1,12 +1,9 @@
 <script lang="ts">
   // A reusable split button (EXC-760): a primary action fused to a slim options
-  // toggle that opens a shadcn DropdownMenu. It reads as ONE control at rest —
-  // the two halves share a radius with no divider, and the toggle hugs the label
-  // so the chevron sits tight against it rather than stranded at the edge. It
-  // splits on hover, where each half tints just itself — a flat background
-  // highlight, no scale or lift. bits-ui owns the menu's open/Escape/
-  // outside-click. First used by the TopBar's Approve control; the
-  // approve-specific bits (variants, labels) stay with the caller via snippets.
+  // toggle that opens a shadcn DropdownMenu. It reads as ONE control at rest — the
+  // halves share a radius with no divider — and splits on hover, where each half
+  // tints just itself. bits-ui owns the menu's open/Escape/outside-click; the
+  // action-specific bits (variants, labels) stay with the caller via snippets.
   import type { Snippet } from "svelte";
   import { Button, type ButtonVariant } from "$lib/components/ui/button/index.js";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
@@ -75,16 +72,12 @@
 </div>
 
 <style>
-  /* One fused control that splits on hover. The halves abut with a shared radius:
-     the inner corners are squared and their inner (transparent) borders removed
-     so the two fills touch with no gap and no divider line. The primary's right
-     padding is trimmed and the toggle drops its 2rem square (height stays 2rem
-     via size-8) so the chevron hugs the label — a slim disclosure, not a second
-     full-width button. Hovering either half tints only that half (--split-hover-
-     bg, transitioned by the Button's own transition-all) — a flat background
-     highlight (no scale or lift), so the seam surfaces as a soft color edge while
-     hovering and is invisible otherwise. The :global reaches the composed shadcn
-     Buttons but is bounded by `.split`, so nothing leaks. */
+  /* One fused control that splits on hover. The inner corners are squared and their
+     inner (transparent) borders removed so the two fills touch with no gap and no
+     divider line; hovering either half tints only that half (--split-hover-bg), so
+     the seam surfaces as a soft colour edge and is invisible otherwise. The :global
+     reaches the composed shadcn Buttons but is bounded by `.split`, so nothing
+     leaks. */
   .split {
     display: inline-flex;
   }
@@ -111,8 +104,7 @@
 
   /* Mac disclosure affordance on the options toggle: the chevron points RIGHT at
      rest and rotates DOWN while the menu is open. Targets the Icon's .icon wrapper
-     inside the toggle (Icon has no class prop); reduced-motion is caught by the
-     global guard in app.css. */
+     (Icon has no class prop); reduced-motion is caught by the global app.css guard. */
   .split :global(.split-toggle .icon) {
     transform: rotate(-90deg);
     transition: transform var(--dur-micro) var(--ease-out);

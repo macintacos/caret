@@ -14,10 +14,10 @@ describe("VersionBadge", () => {
     expect(badge!.textContent?.trim()).toBe("v0.0.4-222222");
   });
 
-  // EXC-763: the build/commit hint moved from a native title= to a shadcn
-  // Tooltip (matching the TopBar cwd tooltip), so the button is a tooltip
-  // trigger and carries no native title. The tooltip *content* is bits-ui
-  // overlay (portalled, deferred under happy-dom), a visual/e2e concern.
+  // The build/commit hint is a shadcn Tooltip (matching the TopBar cwd tooltip),
+  // so the button is a tooltip trigger and carries no native title (EXC-763). The
+  // tooltip *content* is bits-ui overlay (portalled, deferred under happy-dom), a
+  // visual/e2e concern.
   test("surfaces the build hint via a shadcn Tooltip, not a native title", () => {
     const { target } = render(VersionBadge, { version: "0.0.4", commit: "111111222222" });
     const badge = target.querySelector(".version-badge")!;

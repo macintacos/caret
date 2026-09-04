@@ -8,9 +8,7 @@
 // `bun-svelte:*.css` module whose namespace round-trip is unresolved under
 // `bun test` ("Virtual CSS module not found"). This plugin sidesteps both by
 // calling svelte's own compiler with `generate: "client"` and `css: "injected"`
-// (styles inline into the JS — no virtual module), which is all the component
-// units need: render output, prop wiring, conditional branches, a11y
-// attributes. Pixel layout and real-browser behavior stay in the e2e suite.
+// — styles inline into the JS, so there is no virtual module.
 //
 // Scoped to `.svelte`/`.svelte.ts` onLoad filters, so it is inert for the
 // backend suite. The browser export condition (svelte's client runtime entry)

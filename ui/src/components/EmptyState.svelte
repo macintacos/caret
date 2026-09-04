@@ -1,21 +1,18 @@
 <script lang="ts">
   // Shown when no pending reviews remain (initial load or after resolving all).
   //
-  // EXC-763: rebuilt on the shadcn Empty container (+ EmptyHeader / EmptyMedia
-  // structure), so the empty screen reads as one system with the rest of the
-  // shadcn-migrated UI. The bespoke brand moment stays custom: the ^ hero glyph
-  // (amber, 6rem, floating), the metric status pill, and the connection warning
-  // are authored as scoped elements inside the Empty (a class passed to a shadcn
-  // child component carries no scope hash, so the brand styling lives on our own
-  // elements). The title stays a real <h2> — the correct heading semantics, and
-  // the anchor 8 e2e specs locate via getByRole("heading", …).
+  // EXC-763: rebuilt on the shadcn Empty container, so the empty screen reads as
+  // one system with the rest of the shadcn-migrated UI. The bespoke brand moment
+  // stays custom — a class passed to a shadcn child component carries no scope hash,
+  // so the ^ hero glyph, the status pill and the connection warning are authored as
+  // our own scoped elements inside the Empty. The title stays a real <h2>: the
+  // correct heading semantics, and the anchor 8 e2e specs locate via
+  // getByRole("heading", …).
   //
-  // EXC-381: a sourced carrot fact rotates in a faint line docked above the
-  // status bar. It is our own scoped element for the same reason the glyph and
-  // the pill are, and being `position: fixed` it takes no part in the Empty's
-  // centered flex layout — it renders inside the Empty only because this
-  // component must keep a single root (App.svelte pins `.shell > .empty` to a
-  // grid row).
+  // EXC-381: a sourced carrot fact rotates in a faint line docked above the status
+  // bar. Being `position: fixed` it takes no part in the Empty's centered flex
+  // layout — it renders inside the Empty only because this component must keep a
+  // single root (App.svelte pins `.shell > .empty` to a grid row).
   import { tick } from "svelte";
 
   import { createFactBag, ROTATE_MS } from "$lib/carrotFacts.ts";
@@ -42,9 +39,9 @@
   // immediate. allSettled rather than all: if `connected` flips false mid-rotation
   // the element leaves the DOM and its cancelled transition REJECTS `finished`.
   //
-  // Not reentrancy-guarded, because --dur-exit (140ms) is three orders of
-  // magnitude under ROTATE_MS; a rotateMs below the exit duration would overlap
-  // two calls and burn two facts for one visible swap.
+  // Not reentrancy-guarded, because --dur-exit is three orders of magnitude under
+  // ROTATE_MS; a rotateMs below the exit duration would overlap two calls and burn
+  // two facts for one visible swap.
   async function rotate(): Promise<void> {
     leaving = true;
     await tick();
@@ -144,9 +141,8 @@
     vertical-align: -0.15em;
     margin-right: 0.3rem;
   }
-  /* The status pill shares the badge vocabulary: the same --paper-raised surface
-     on a --rule hairline, mono family + tabular figures from the shared .metric
-     atom (so any digits line up exactly as they do in the badges). */
+  /* The status pill shares the badge vocabulary: --paper-raised on a --rule
+     hairline, with the mono family and tabular figures of the .metric atom. */
   .hint {
     display: inline-flex;
     align-items: center;
@@ -159,20 +155,16 @@
     border-radius: 99px;
     padding: 0.22rem 0.7rem;
   }
-  /* Viewport-pinned to the foot of the screen, docked above the status bar off
-     the same --status-bar-h the comment navigator uses. Deliberately bare — the
-     faintest ink at the smallest size, with no surface of its own — so it reads a
-     clear step quieter than the status pill above it and never competes with the
-     screen's actual job. The measure is capped because a single faint sentence
-     run edge-to-edge reads as a legal footer.
+  /* Viewport-pinned to the foot of the screen, docked above the status bar off the
+     same --status-bar-h the comment navigator uses. Deliberately bare — the faintest
+     ink, no surface of its own — so it never competes with the screen's actual job,
+     and the measure is capped because a faint sentence run edge-to-edge reads as a
+     legal footer.
 
-     Layer: no z-index, i.e. `auto`, and it is the lowest of the pinned surfaces
-     on purpose. AlertHost docks at var(--status-bar-h) + 1rem on z-200 and this
-     line's box reaches into that band, so the approve-the-last-plan route — which
-     mounts this screen and raises a success toast together — paints the toast over
-     the fact's right-hand end until it dismisses. That priority is correct: a
-     resolution message outranks a flourish. App.svelte's .arrival curtain covers it
-     for the same reason, by tree order rather than by layer.
+     No z-index on purpose: AlertHost docks in the same band at z-200, so the
+     approve-the-last-plan route — which mounts this screen and raises a success toast
+     together — paints the toast over the fact's right-hand end until it dismisses. A
+     resolution message outranks a flourish.
 
      text-align/text-wrap are inherited from the shadcn Empty's own
      `text-center text-balance` today, and declared anyway: being `fixed`, this
@@ -202,11 +194,10 @@
     opacity: 0;
     transition: opacity var(--dur-exit) var(--ease-in);
   }
-  /* The source link stays in the faint ink — the accent is for selection and
-     brand — so the underline is its whole affordance, and hover lifts the ink one
-     step rather than colouring it. text-decoration-line is set explicitly because
-     Tailwind's preflight resets it to none: without this the link is a word in the
-     middle of a sentence with nothing at all to mark it. */
+  /* The link stays in the faint ink — the accent is for selection and brand — so
+     the underline is its whole affordance. text-decoration-line is set explicitly
+     because Tailwind's preflight resets it to none, which would leave the link a
+     word in the middle of a sentence with nothing to mark it. */
   .carrot-fact a {
     color: inherit;
     text-decoration-line: underline;

@@ -134,8 +134,7 @@ describe("createKeyRepeat", () => {
   // The move itself can end the hold, and it does so SYNCHRONOUSLY: the breadcrumbs
   // bar's `h` shuts one crumb's menu to open the next, and bits-ui reports that close
   // on the spot — so the surface's own close handler calls stop() from inside step().
-  // A run that re-armed behind that stop would hold a timer nothing has a handle to:
-  // releasing the key could not cancel it, and neither could the next hold.
+  // A run that re-armed behind that stop would hold a timer nothing can cancel.
   test("a step that stops the hold arms no run behind it", () => {
     const { clock, repeat } = makeRepeat();
     let steps = 0;

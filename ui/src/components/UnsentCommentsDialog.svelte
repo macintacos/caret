@@ -65,18 +65,15 @@
   // onConfirm on confirm. Only rendered — and only meaningful — when showNotes.
   let notes = $state("");
 
-  // With queued comments the dialog previews them and guards against dropping
-  // them; with none it's a bare confirmation. The count drives the "won't be
-  // sent" warning; the label, the Request-changes divert, and the "anyway"
-  // wording all key off whether any are pending.
+  // With queued comments the dialog previews them and guards against dropping them;
+  // with none it is a bare confirmation.
   let count = $derived(items.length);
   let hasComments = $derived(count > 0);
 
-  // Without a notes field the primary path is Enter-confirmable (EXC-761 keeps
-  // today's behavior): focus the confirm action on open (via Modal's
-  // onOpenAutoFocus) so a bare Enter activates it, rather than letting bits-ui
-  // land focus on Cancel. With one, the note is what the reviewer came to type, so
-  // the editor takes the on-open focus instead and ⌘↵ confirms (EXC-1212).
+  // Without a notes field the primary path is Enter-confirmable (EXC-761): focus the
+  // confirm action on open so a bare Enter activates it, rather than letting bits-ui
+  // land focus on Cancel. With one, the note is what the reviewer came to type, so the
+  // editor takes the on-open focus instead and ⌘↵ confirms (EXC-1212).
   let confirmEl = $state<HTMLElement | null>(null);
 
   // ⌘↵/Ctrl+Enter confirms from the focused confirm button (the no-notes variant's
@@ -90,11 +87,7 @@
   }
 </script>
 
-<!-- Composes the shared Modal. The role is caller-chosen (`kind`): Reject keeps the
-     default confirm guard (role="alertdialog", no backdrop dismiss — a verdict is
-     deliberate; Escape still cancels, EXC-685); Approve passes "dialog" so a click
-     outside also dismisses (EXC-791). The host mounts this per open (ModalPresence)
-     and keeps it through the exit; the buttons route to the existing callbacks. -->
+<!-- The host mounts this per open (ModalPresence) and keeps it through the exit. -->
 <Modal
   {kind}
   {open}
@@ -120,9 +113,7 @@
 
   {#if hasComments}
     <!-- A preview of exactly what a plain confirm would leave behind, so the
-         reviewer sees their unsent work before deciding. Each row pairs a short
-         anchor (the general note, a line reference, or an unsent draft's range)
-         with the comment text, clamped so a long comment stays a scan-line. -->
+         reviewer sees their unsent work before deciding. -->
     <ul class="comments" aria-label="Your unsent comments">
       {#each items as item, i (i)}
         <li class="comment">
@@ -139,9 +130,6 @@
          sent, folded into the plan the agent works from, with no re-planning. -->
     <div class="field">
       <span class="form-label">Notes for the agent <span class="optional">(optional)</span></span>
-      <!-- The same live-markdown composer as the inline comment editor (EXC-803):
-           styles markdown as the reviewer types. ⌘↵ confirms the approval; Esc
-           dismisses the dialog (the editor intercepts both chords). -->
       <MarkdownEditor
         autofocus
         value={notes}
@@ -177,18 +165,15 @@
 </Modal>
 
 <style>
-  /* Widen the guard past the shadcn Dialog default. The three-button footer (Cancel
-     · Request changes · Approve/Reject anyway) does not fit the dialog-content
-     default max-w-sm (384px), and the shell's overflow-y-auto forces overflow-x to
-     compute to auto — so the surplus width became a horizontal scrollbar that read
-     as the modal being clipped. contentClass rides through Modal to the portalled
-     content, but app.css scans only lib/components/ui for Tailwind, so a max-w
+  /* Widen the guard past the shadcn Dialog default: the three-button footer does not
+     fit max-w-sm, and the shell's overflow-y-auto forces overflow-x to compute to
+     auto, so the surplus width became a horizontal scrollbar that read as the modal
+     being clipped. app.css scans only lib/components/ui for Tailwind, so a max-w
      utility written here would never be generated — this plain :global rule sets the
-     width directly (the rcd-content pattern). Specificity (0,2,0) beats the vendored
-     `.sm:max-w-sm` / `.sm:max-w-lg` (0,1,0); min() keeps the small-screen inset. Both
-     slots so the approve (Dialog) and reject (AlertDialog) guards read as one width.
-     The width itself is the shared --confirm-dialog-width token (app.css), so this
-     and the Request Changes dialog track one value. */
+     width directly. Specificity (0,2,0) beats the vendored `.sm:max-w-sm` (0,1,0);
+     min() keeps the small-screen inset. Both slots, so the approve (Dialog) and
+     reject (AlertDialog) guards read as one width, off the shared
+     --confirm-dialog-width token (app.css) the Request Changes dialog also tracks. */
   :global(
     [data-slot="dialog-content"].guard-content,
     [data-slot="alert-dialog-content"].guard-content
@@ -196,10 +181,9 @@
     max-width: min(var(--confirm-dialog-width), calc(100% - 2rem));
   }
 
-  /* Preview of the unsent feedback: a quiet sunk container — no accent (reserved
-     for actions), muted ink, hairline row dividers — reading as "here's what you'd
-     leave behind". Height-capped and scrollable so a long queue never grows the
-     dialog past the viewport. */
+  /* Preview of the unsent feedback: a quiet sunk container — no accent, which is
+     reserved for actions. Height-capped and scrollable so a long queue never grows
+     the dialog past the viewport. */
   .comments {
     list-style: none;
     margin: 0;
@@ -245,10 +229,8 @@
     white-space: pre-wrap;
   }
 
-  /* Optional reviewer-notes field (EXC-791). Reuses the request-changes form
-     treatment (the eyebrow-style label over the token-styled MarkdownEditor) so
-     the two dialogs read as one system; the top margin sets it off from the
-     description or the comments preview above it. */
+  /* Optional reviewer-notes field (EXC-791), reusing the request-changes form
+     treatment so the two dialogs read as one system. */
   .field {
     display: block;
     margin-top: 1rem;

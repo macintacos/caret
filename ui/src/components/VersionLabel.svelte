@@ -1,11 +1,7 @@
 <script lang="ts">
-  // Shows e.g. "v2" once a plan has been revised. No diff UI (out of scope).
-  // EXC-760: composed from the shadcn Badge wearing the shared `.float-chip`
-  // look (app.css) — a soft, borderless solid fill floating just above the
-  // topbar surface rather than a hard-bordered pill; ink-soft text keeps it
-  // quiet. The ^ brand glyph keeps caret amber — one of the sanctioned amber
-  // spots alongside the wordmark and the primary action
-  // (doc/agents/shadcn-rules.md).
+  // Shows e.g. "v2" once a plan has been revised. The ^ brand glyph keeps caret
+  // amber — one of the sanctioned amber spots alongside the wordmark and the primary
+  // action (doc/agents/shadcn-rules.md § amber-scarcity).
   import { Badge } from "$lib/components/ui/badge/index.js";
 
   let { version }: { version: number } = $props();

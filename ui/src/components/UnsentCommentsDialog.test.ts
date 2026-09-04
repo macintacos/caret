@@ -44,7 +44,7 @@ const content = () => q("[data-slot='alert-dialog-content']");
 const mounted = () => content() !== null;
 const description = () => q("[data-slot='alert-dialog-description']");
 // The confirm action is the last button in the footer band (Cancel, [Request
-// changes], Confirm) — a plain Button now that the Modal shell owns the alertdialog
+// changes], Confirm) — a plain Button, since the Modal shell owns the alertdialog
 // primitive, so it's located positionally rather than by an action-specific slot.
 const confirm = () =>
   [...document.body.querySelectorAll("[data-slot='alert-dialog-footer'] button")].at(-1) ?? null;

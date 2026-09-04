@@ -29,12 +29,10 @@ describe("EmptyState", () => {
   });
 
   // The hint pill shares the badge numeric vocabulary by carrying the shared
-  // .metric atom — the same source VersionBadge/DevBadge draw their tabular
-  // figures from, so empty and populated chrome read as one tabular system. The
-  // sibling DevBadge test pins its own .metric the same way. (.metric is a
-  // global atom in ui/src/styles/atoms.css, and the mount harness loads no
-  // stylesheet — only the component's own scoped block is injected — so the
-  // runtime class, not a resolved font-feature value, is the falsifiable fact.)
+  // .metric atom — the same source VersionBadge/DevBadge draw their tabular figures
+  // from, so empty and populated chrome read as one tabular system. The harness
+  // loads no stylesheet, so the runtime class, not a resolved font-feature value, is
+  // the falsifiable fact.
   test("the hint pill carries the .metric atom (badge numeric vocabulary)", () => {
     for (const connected of [true, false]) {
       const { target } = render(EmptyState, { connected });
@@ -44,12 +42,9 @@ describe("EmptyState", () => {
     }
   });
 
-  // The hint pill keeps its own quiet floating-pill surface — paper-raised fill +
-  // hairline border — the discoverability-hint vocabulary the empty screen shares
-  // with the other floating pills (the safe-mode toast, the comment navigator). It
-  // no longer couples to VersionBadge, which moved into the flat status bar
-  // (EXC-787) and dropped its pill surface. Asserted against the CSS source so a
-  // drift fails the unit suite rather than only showing visually.
+  // The hint pill keeps the floating-pill surface the empty screen shares with the
+  // safe-mode toast and the comment navigator. It no longer couples to VersionBadge,
+  // which moved into the flat status bar (EXC-787) and dropped its pill surface.
   test("the hint pill keeps its floating-pill surface + border tokens", async () => {
     const hintRule = ruleBody(await componentCss("EmptyState.svelte"), ".hint");
     expect(hintRule).toContain("background: var(--paper-raised);");
@@ -161,21 +156,18 @@ describe("EmptyState", () => {
     expect(ruleBody(css, ".carrot-fact a")).toContain("pointer-events: auto;");
   });
 
-  // The source link spends no accent and sits mid-sentence in the same faint ink
-  // as its own text, so the underline is the only thing marking it as a link.
-  // Tailwind's preflight resets text-decoration-line to none, so relying on the
-  // UA default leaves it with no affordance whatsoever — declare it explicitly.
+  // The link spends no accent and sits mid-sentence in the same faint ink as its own
+  // text, so the underline is the only thing marking it. Tailwind's preflight resets
+  // text-decoration-line to none, so the UA default leaves it with no affordance.
   test("the source link declares its own underline (preflight resets the UA one)", async () => {
     const rule = ruleBody(await componentCss("EmptyState.svelte"), ".carrot-fact a");
     expect(rule).toContain("text-decoration-line: underline;");
   });
 });
 
-// Read a component's <style> block from source. Used to pin CSS token references
-// by name: the harness loads no theme sheet, so a var() reference computes to ""
-// — and a resolved value could not pin the token's name even if it did. Matches
-// how type-scale.test.ts / css-bridge.test.ts assert "one system" invariants from
-// the CSS source itself.
+// Read a component's <style> block from source. Token references are pinned by
+// name: the harness loads no theme sheet, so a var() reference computes to "" — and
+// a resolved value could not pin the token's name even if it did.
 async function componentCss(file: string): Promise<string> {
   const src = await Bun.file(join(import.meta.dir, file)).text();
   return src.match(/<style>([\s\S]*)<\/style>/)?.[1] ?? "";

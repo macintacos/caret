@@ -32,11 +32,10 @@ const live: Array<{ instance: Record<string, unknown>; target: HTMLElement }> = 
 // waits for an animationend that never fires under happy-dom, so those nodes
 // never self-remove on unmount. Left alone they accumulate, and a later
 // `document.body.querySelector("[data-slot=…]")` picks up a stale portal from an
-// earlier test (cross-test bleed). Snapshot the body's pre-test children once, so
-// purgeLeakedNodes can drop anything a test (target or leaked portal) added. It
-// runs at the START of every render — not just afterEach — because a top-level
-// afterEach in this import-cached module only fires for the first file that
-// imported it, whereas render() is called by every mounting test in every file.
+// earlier test. Snapshot the body's pre-test children once, so purgeLeakedNodes can
+// drop anything a test added. It runs at the START of every render — not just
+// afterEach — because a top-level afterEach in this import-cached module only fires
+// for the first file that imported it.
 const initialBodyChildren = new Set<Element>(document.body.children);
 function purgeLeakedNodes(): void {
   for (const child of [...document.body.children]) {
@@ -60,8 +59,6 @@ export function render<
   component: Component<Props, Exports, any>,
   props: Props,
 ): Mounted {
-  // Clear any portal a prior test leaked before mounting, so this test's
-  // document.body queries only see its own bits-ui content.
   purgeLeakedNodes();
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -82,7 +79,7 @@ afterEach(() => {
  * (or `tries` iterations elapse). bits-ui portal/presence surfaces (Dialog,
  * AlertDialog, Select content) mount deferred on a timer, so structure/ARIA
  * assertions must poll rather than sleep a fixed interval — a fixed wait risks
- * flaking on a loaded box. Records the verdict recorded by shadcn-foundation.test.ts.
+ * flaking on a loaded box.
  *
  * **A test that opens an overlay by CLICKING must flush once after `render()` and
  * before the click**, or the content never appears however long this polls.

@@ -1,11 +1,9 @@
 <script lang="ts">
   // The per-code-block copy affordance (EXC-692). A caret-owned button shown at the
-  // top-right of the code block the reviewer is hovering (positioning + hover
-  // tracking live in DiffPlanView / lib/diffview/codeCopy.ts). Clicking it writes the
-  // block's code to the clipboard and briefly swaps the copy glyph for a checkmark as
-  // confirmation, then swaps back. It sits in the .diff-plan light DOM (a sibling of
-  // the diff surface), so — unlike the motionless shadow render surface — it may
-  // animate; the app.css reduced-motion kill-switch collapses it for that preference.
+  // top-right of the code block the reviewer is hovering (positioning + hover tracking
+  // live in DiffPlanView / lib/diffview/codeCopy.ts). It sits in the .diff-plan light
+  // DOM, a sibling of the diff surface, so — unlike the motionless shadow render
+  // surface — it may animate; app.css's reduced-motion kill-switch collapses that.
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import { sound } from "$lib/sound.ts";
@@ -48,11 +46,9 @@
   $effect(() => () => clearTimeout(timer));
 </script>
 
-<!-- The affordance is a shadcn Button (icon size) wrapped in a shadcn Tooltip,
-     following the TopBar precedent. The button stays the absolutely-positioned
-     element (inline top/left set by DiffPlanView), so its `.code-copy` surface is
-     molded in place. `{...props}` from the tooltip trigger is spread first so the
-     explicit handlers/label below win. -->
+<!-- The Button stays the absolutely-positioned element (inline top/left set by
+     DiffPlanView), so its `.code-copy` surface is molded in place. `{...props}` from
+     the tooltip trigger is spread first so the explicit handlers/label below win. -->
 <Tooltip.Provider delayDuration={300}>
   <Tooltip.Root>
     <Tooltip.Trigger>
@@ -82,11 +78,10 @@
 
 <style>
   /* `.code-copy` is handed to <Button>, so it carries no Svelte scope hash and is
-     styled via :global. These unlayered rules mold the Button's surface in place —
-     they beat the Button recipe's layered Tailwind utilities, so the resting chip
-     is caret's paper-raised affordance, not the shadcn outline variant. The
-     unlayered box-shadow also suppresses the Button's focus ring, so focus is shown
-     by the explicit outline below. */
+     styled via :global. These unlayered rules beat the Button recipe's layered
+     Tailwind utilities, so the resting chip is caret's paper-raised affordance rather
+     than the shadcn outline variant. The unlayered box-shadow also suppresses the
+     Button's focus ring, so focus is shown by the explicit outline below. */
   :global(.code-copy) {
     position: absolute;
     /* Anchored at the block's top-right corner; translate insets it just inside. */

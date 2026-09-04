@@ -1,12 +1,10 @@
 <script lang="ts">
-  // The in-UI alert/toast surface (EXC-850): a fixed stack pinned bottom-right,
-  // above the status bar. Renders the alert queue App.svelte owns (see
-  // state/alerts.ts) as shadcn Alert cards, oldest on top and newer stacking
-  // underneath, each sliding in on mount and settling out when it leaves. The
-  // queue owns the per-alert dwell + removal timing; this component is the
-  // presentation — it molds Alert.Root into a floating card the same way the
-  // daemon banner does, and the motion draws from the shared --dur-*/--ease-*
-  // tokens (CSS-only, so the global reduced-motion rule governs it).
+  // The in-UI alert/toast surface (EXC-850): a fixed stack pinned bottom-right, above
+  // the status bar, rendering the alert queue App.svelte owns (state/alerts.ts) as
+  // shadcn Alert cards. The queue owns the per-alert dwell + removal timing; this
+  // component is the presentation, molding Alert.Root into a floating card the same
+  // way the daemon banner does. The motion is CSS-only, so the global reduced-motion
+  // rule governs it.
   import type { AlertItem } from "@/state/alerts.ts";
   import type { IconName } from "$lib/icons.ts";
   import * as Alert from "$lib/components/ui/alert/index.js";
@@ -25,11 +23,10 @@
   <div class="alert-host">
     {#each alerts as a (a.id)}
       {@const icon = ICONS[a.variant]}
-      <!-- A destructive alert (a failure the user must act on, often persistent)
-           stays assertive — role="alert" interrupts the screen reader so it isn't
-           missed. Success/default confirmations are polite (role="status"): they
-           shouldn't interrupt, and it avoids nesting an assertive region, matching
-           the safe-mode toast. The urgent daemon banner keeps the assertive default. -->
+      <!-- A destructive alert is a failure the user must act on, so role="alert"
+           interrupts the screen reader. Success/default confirmations are polite
+           (role="status"): they shouldn't interrupt, and it avoids nesting an
+           assertive region. The urgent daemon banner keeps the assertive default. -->
       <Alert.Root
         variant={a.variant}
         data-variant={a.variant}
@@ -41,10 +38,9 @@
           {#if a.title}<span class="alert-title">{a.title}</span>{/if}
           <span class="alert-message" id="alert-message-{a.id}">{a.message}</span>
           <!-- The activate affordance (EXC-1207), after the message so it reads as
-               "here's the news, here's what to do about it" and before the dismiss
-               control. Out of context — a screen reader's button list — a bare verb
-               like "View" says nothing about which alert it acts on, so the message
-               describes it, the same job aria-label does for the icon-only dismiss. -->
+               "here's the news, here's what to do about it". Out of context — a
+               screen reader's button list — a bare verb like "View" says nothing about
+               which alert it acts on, so the message describes it. -->
           {#if a.action}
             <button
               type="button"
@@ -80,11 +76,10 @@
     width: min(22rem, calc(100vw - 2.5rem));
     pointer-events: none;
   }
-  /* Mold Alert.Root (a card by default) into a floating toast: a flex row of
-     [icon] [body] [dismiss] with the raised-paper card lifted on --shadow-card.
-     :global because the class rides the shadcn Alert root, which carries no
-     scope hash (the same reach the daemon banner uses). Enter slides up + fades
-     in; a leaving card reverses it, then the queue removes it. */
+  /* Mold Alert.Root (a card by default) into a floating toast lifted on
+     --shadow-card. :global because the class rides the shadcn Alert root, which
+     carries no scope hash. A leaving card reverses the enter, then the queue removes
+     it. */
   :global(.alert-item) {
     display: flex;
     align-items: flex-start;
@@ -113,13 +108,11 @@
     line-height: var(--leading-snug);
     overflow-wrap: anywhere;
   }
-  /* A text button, not a clickable card: the card already holds the dismiss
-     control, and nesting interactive controls is an accessibility defect. It
-     rides the card's variant color rather than the accent (which is spoken for
-     by selection and brand), so the underline carries the whole affordance —
-     the carrot-fact link's reasoning, and the same explicit text-decoration-line,
-     since a <button> carries no underline of its own to inherit. It self-starts so
-     its hit area is the label, not the card's full width. */
+  /* A text button, not a clickable card: the card already holds the dismiss control,
+     and nesting interactive controls is an accessibility defect. It rides the card's
+     variant colour rather than the accent, so the underline carries the whole
+     affordance — declared explicitly, since a <button> inherits none. It self-starts
+     so its hit area is the label, not the card's full width. */
   .alert-action {
     align-self: flex-start;
     margin-top: 0.2rem;

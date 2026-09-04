@@ -1,19 +1,14 @@
 <script lang="ts">
-  // EXC-561: an always-visible build badge in the bottom status bar so
-  // the running build is unambiguous (handy when verifying an install or filing a
-  // bug against a revision). `version`, `commit`, and `isDev` all come from the
-  // single /api/health probe App.svelte already runs; the commit is shown as its
-  // last 6 chars. The hash is "always there" in practice — baked into a release
-  // binary via --define, git HEAD in dev — but we degrade to "v{version}" rather
-  // than render a garbled "v0.0.4-nknown" when it's absent or the "unknown"
-  // sentinel. Distinct from the TopBar VersionLabel (the per-plan revision pill
-  // ^v2); this is the app build. Mirrors DevBadge.svelte's self-gating shape.
+  // EXC-561: an always-visible build badge in the bottom status bar, so the running
+  // build is unambiguous. `version`, `commit` and `isDev` all come from the single
+  // /api/health probe App.svelte already runs. The hash is "always there" in practice
+  // — baked into a release binary via --define, git HEAD in dev — but it degrades to
+  // "v{version}" rather than render a garbled "v0.0.4-nknown" when it is absent or the
+  // "unknown" sentinel. Distinct from the TopBar VersionLabel (the per-plan revision
+  // pill ^v2); this is the app build. Mirrors DevBadge.svelte's self-gating shape.
   //
-  // EXC-763: the pill uses a shadcn Tooltip (matching the TopBar cwd tooltip) and
-  // wears the tabular .metric badge vocabulary. It stays a real <button> —
-  // click-to-copy needs button semantics, which the shadcn Badge (span/anchor
-  // only) can't give — and reads as a flat metric segment in the status bar
-  // rather than the topbar's louder .float-chip fill.
+  // It stays a real <button> — click-to-copy needs button semantics, which the shadcn
+  // Badge (span/anchor only) can't give (EXC-763).
   import { onDestroy } from "svelte";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
 
@@ -85,11 +80,10 @@
 {/if}
 
 <style>
-  /* Quiet build tag: a flat status-bar segment (EXC-787). The mono family and
-     tabular figures come from the .metric atom (EXC-376); muted at rest,
-     brightening on hover so it stays out of the way until looked at. It's a
-     button (EXC-664: click-to-copy), reset to the bar's flat metric type;
-     StatusBar owns layout, so the badge does not position itself. */
+  /* Quiet build tag: a flat status-bar segment (EXC-787), muted at rest and
+     brightening on hover so it stays out of the way until looked at. The button is
+     reset to the bar's flat metric type; StatusBar owns layout, so the badge does not
+     position itself. */
   .version-badge {
     display: inline-flex;
     align-items: center;

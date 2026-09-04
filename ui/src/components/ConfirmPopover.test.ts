@@ -31,9 +31,8 @@ async function open(target: HTMLElement, flush: () => void): Promise<void> {
 /** Dismiss before the test ends. Load-bearing rather than tidy, and the same guard
  * shadcn-command-popover.test.ts carries: bits-ui's portal presence waits for an
  * `animationend` that never fires under happy-dom, so content left open at unmount
- * keeps its effects alive into the next test, which then reads deriveds whose owner
- * is already destroyed and svelte warns `derived_inert`. mount.ts purges the DOM
- * half of that leak; only closing purges the effect half. */
+ * keeps its effects alive into the next test, which then warns `derived_inert`.
+ * mount.ts purges the DOM half of that leak; only closing purges the effect half. */
 async function close(flush: () => void): Promise<void> {
   if (bubble() === null) return;
   cancelBtn()?.click();

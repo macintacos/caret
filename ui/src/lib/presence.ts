@@ -2,18 +2,15 @@
 // desktop notifier and the read-detection dwell, plus the tab-close retraction
 // beacon below.
 //
-// Tab-close presence retraction (EXC-562). The daemon decides whether a UI tab
-// is already open — and so whether the review hook should skip foregrounding a
-// new browser tab — from how recently a tab polled GET /api/reviews. That poll
-// is throttled by the browser for backgrounded tabs, so the daemon's live-client
-// window has to be generous; the price of a generous window is that a tab which
-// just *closed* would otherwise still count as live. This beacon pays that price
-// down: on `pagehide` the tab tells the daemon it is going away, so a closed tab
-// stops counting at once and the next plan correctly opens a fresh tab.
+// Tab-close retraction (EXC-562): the daemon decides whether a UI tab is already
+// open — and so whether the review hook should skip foregrounding a new browser tab
+// — from how recently a tab polled GET /api/reviews. That poll is throttled for
+// backgrounded tabs, so the live-client window has to be generous, and a tab that
+// just *closed* would otherwise still count as live. On `pagehide` the tab tells the
+// daemon it is going away, so the next plan correctly opens a fresh tab.
 //
 // `pagehide` (not `unload`) is the reliable close hook for sendBeacon.
-// Framework-agnostic and unit-tested in isolation; App.svelte wires it to
-// `window` (cf. safeMode.ts).
+// Framework-agnostic and unit-tested in isolation; App.svelte wires it to `window`.
 
 /** Path the close beacon posts to — the daemon clears UI presence here. */
 export const UI_GONE_PATH = "/api/ui/gone";

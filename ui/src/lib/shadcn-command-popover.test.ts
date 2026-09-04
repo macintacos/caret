@@ -1,16 +1,14 @@
-// Mount proof for the vendored Command + Popover primitives (EXC-1093), and the
-// guard doc/agents/shadcn-rules.md names for the viewport a registry re-sync would
-// drop. A type-check cannot tell whether the copies actually resolve against the
-// installed bits-ui, whether the @lucide/svelte → Icon.svelte swap renders a glyph,
-// or whether the combobox still names the list it controls — so this suite mounts
-// them for real. It asserts the PRIMITIVES; PlanToc.test.ts asserts the one surface
-// composed from them.
+// Mount proof for the vendored Command + Popover primitives (EXC-1093). A
+// type-check cannot tell whether the copies resolve against the installed bits-ui,
+// whether the @lucide/svelte → Icon.svelte swap renders a glyph, or whether the
+// combobox still names the list it controls — so this suite mounts them for real. It
+// asserts the PRIMITIVES; PlanToc.test.ts asserts the one surface composed from them.
 //
 // Popover is portalled, so its content is deferred exactly as
 // shadcn-foundation.test.ts recorded for Dialog: poll with flushUntil and query
-// document.body, not the mount target. The real interaction semantics — focus
-// trap, Escape-to-close, outside-click, filtering as you type — are
-// real-browser behaviours and stay e2e per doc/agents/browser-testing.md.
+// document.body, not the mount target. The real interaction semantics — focus trap,
+// Escape-to-close, outside-click, filtering as you type — are real-browser behaviours
+// and stay e2e per doc/agents/browser-testing.md.
 import "@ui/support/mount.ts";
 
 import { expect, test } from "bun:test";
@@ -24,10 +22,8 @@ const commandInput = () => document.body.querySelector("input[data-slot='command
 /** Dismiss the popover before the test ends. Load-bearing rather than tidy, and the
  * same guard PlanToc.test.ts carries: bits-ui's portal presence waits for an
  * `animationend` that never fires under happy-dom, so content left open at unmount
- * keeps its effects alive into the next test, which then reads deriveds whose owner
- * is already destroyed and svelte warns `derived_inert`. mount.ts purges the DOM
- * half of that leak; only closing purges the effect half. Guarded, so it is a no-op
- * if a test already closed. */
+ * keeps its effects alive into the next test, which then warns `derived_inert`.
+ * mount.ts purges the DOM half of that leak; only closing purges the effect half. */
 async function close(target: HTMLElement, flush: () => void): Promise<void> {
   if (popoverContent() === null) return;
   target.querySelector<HTMLButtonElement>("[data-slot='popover-trigger']")?.click();
@@ -124,11 +120,9 @@ test("the icon swap renders vendored SVGs, not the dropped @lucide/svelte compon
 // above (EXC-1103). The registry's command-group hardcodes its heading's classes and
 // offers no override, so a caret surface wanting its own label vocabulary — the ToC
 // popup dresses the breadcrumb header in the shared `.eyebrow` atom — has nowhere to
-// put one. The guard belongs HERE rather than only on that surface: it is the
-// PRIMITIVE a re-sync reverts, and a guard living on the one consumer disappears the
-// day that consumer restyles, leaving the vendored edit to rot silently — which is
-// the whole failure mode doc/agents/shadcn-rules.md § Edits a re-sync will silently
-// undo exists to prevent.
+// put one. The guard belongs HERE rather than on that surface: it is the PRIMITIVE a
+// re-sync reverts, and a guard on the one consumer disappears the day that consumer
+// restyles (doc/agents/shadcn-rules.md § Edits a re-sync will silently undo).
 //
 // Asserted on `data-command-group-heading`, which is what bits-ui 2.x actually
 // stamps. The `**:[[cmdk-group-heading]]:…` Tailwind variants the registry source
