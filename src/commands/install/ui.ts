@@ -9,11 +9,8 @@
 // nothing on the import path may pull clack in eagerly).
 //
 // Two implementations, chosen once per run: clack's session for a human at a terminal,
-// plain `caret: …` lines everywhere else. clack draws its bars, colors, and cursor
-// escapes unconditionally — it honours neither NO_COLOR nor a piped stdout — so without
-// that split a CI transcript, or any log capturing the install's output, would fill with
-// escape junk. The chooser stays clack either way: NO_COLOR asks for no color, not for a
-// question to go unasked.
+// plain `caret: …` lines everywhere else. The chooser stays clack either way: NO_COLOR
+// asks for no color, not for a question to go unasked.
 
 /** Report sub-status while a step is still running (e.g. the command being spawned). */
 export type StepDetail = (message: string) => void;

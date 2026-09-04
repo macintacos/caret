@@ -6,11 +6,9 @@
 // stored raw with one warn — a plan is never lost to the formatter, and never
 // held by it past FORMAT_BUDGET_MS.
 //
-// The formatter is rumdl (src/plan/rumdl.ts), downloaded into caret's state dir
-// on first use: it reflows prose to caret's 90-col MD013 convention, leaves
-// fenced code verbatim, exempts link URLs from the column measurement, and is
-// idempotent. `doFormat` stays injectable so tests
-// can pin the failure envelope; a missing/failed rumdl throws and is caught here.
+// The formatter is rumdl (src/plan/rumdl.ts), downloaded into caret's state dir on
+// first use. `doFormat` stays injectable so tests can pin the failure envelope; a
+// missing or failed rumdl throws and is caught here.
 
 import { type CaretLogger, noopLogger } from "@/lib/log.ts";
 import { errorMessage } from "@/lib/types.ts";

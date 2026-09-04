@@ -4,21 +4,13 @@
 // array-installable). `--uninstall` reverses both. Either arm also sweeps the plugin and
 // command FILES an older caret deployed into the config dir: OpenCode still loads them,
 // so a leftover plugin file would register a second review tool beside the array entry.
-// The config-array edit is comment-preserving (config-plugin.ts); the command-file writes
-// go through the temp-dir-testable deploy module. Injection seams let the whole target run
-// against a temp dir without resolving the real caret root.
+// The config-array edit is comment-preserving (config-plugin.ts).
 //
-// The entry takes one of two forms, and caret owns exactly one of them at a time: the
-// npm package (@macintacos/caret) for a published install, or `file:<checkout>` under
-// `--from-local`. OpenCode symlinks a `file:` target into its cache, so the local form
-// loads the checkout's own plugin and spawns the checkout's own binary — what makes
-// `mise run build --install` put the developer's build in front of OpenCode rather
-// than whatever npm copy the cache happens to hold.
-//
-// Between the two, a published install checks whether the caret OpenCode would actually
-// load is behind the published one. It has to: OpenCode resolves a `plugin` array entry
-// once and caches it forever, so adding the entry again — all a re-run of this target
-// would otherwise do — never moves anyone off the version they installed on.
+// caret owns exactly one array entry, in one of two forms: the npm package
+// (@macintacos/caret), or `file:<checkout>` under `--from-local`. A published install
+// also checks whether the caret OpenCode would load is behind the published one, because
+// OpenCode resolves an array entry once and caches it forever — re-adding the entry, all
+// a re-run would otherwise do, never moves anyone off the version they installed on.
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -128,8 +120,7 @@ function setCaretPluginEntry(
  * `plugin` array to add/remove `@macintacos/caret`, deploy/remove the `/caret:*`
  * command files, and sweep whatever the file-deploy era left in the config dir.
  * OpenCode installs the package (and the plugin's deps) itself on its next start, so
- * there is no manifest to write and no `bun install` to run here. Each piece is its own
- * step — they fail independently, so a reader can see which one did what. */
+ * there is no manifest to write and no `bun install` to run here. */
 export async function runInstallOpencodeTarget(
   opts: { uninstall: boolean; dryRun: boolean; refresh: boolean; local?: LocalInstall },
   deps: InstallOpencodeDeps = {},
@@ -143,7 +134,6 @@ export async function runInstallOpencodeTarget(
     join(commandDir(dir), namespacedCommandFilename(c.name)),
   );
   const legacy = existingLegacyInstallFiles(dir);
-  // `--from-local` points the array entry at the checkout instead of the npm package.
   // OpenCode symlinks a `file:` target into its cache, so the plugin it loads is the
   // checkout's own — and the `../bin/caret` that plugin spawns is the binary
   // `mise run build` just produced, picked up on every later rebuild with no reinstall.
@@ -227,10 +217,8 @@ export async function runInstallOpencodeTarget(
 }
 
 /** Remove the file-deploy era's leftovers, on both arms. Unlike every other step here it
- * is raised only when there is something to remove: the others describe the command's
- * primary work, so a zero outcome is still information, while this one is a migration
- * concern that would otherwise print an empty line into every install transcript
- * forever. */
+ * is raised only when there is something to remove: a zero outcome is information for the
+ * others, while an empty sweep would print into every install transcript forever. */
 async function sweepLegacy(legacy: string[], dir: string, ui: InstallUI): Promise<void> {
   if (legacy.length === 0) return;
   await ui.step(

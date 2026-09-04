@@ -10,7 +10,7 @@ import { type InstallOpencodeDeps, runInstallOpencodeTarget } from "@/commands/i
 import { type InstallUI, recordingUI } from "@/commands/install/ui.ts";
 
 // Stub packaging so the target never resolves the real caret root. Only the command
-// files + bin path matter now (caret itself installs as a `plugin` array entry).
+// files + bin path matter (caret itself installs as a `plugin` array entry).
 const PACKAGING: OpencodePackaging = {
   binPath: "/opt/caret/bin/caret",
   commands: [{ name: "demo.md", contents: "run __CARET_BIN__" }],
@@ -332,12 +332,10 @@ test("uninstall skips the check: no network call, no cache read, nothing cleared
 });
 
 // --- the local (--from-local) plugin entry ----------------------------------------
-// `--from-local` writes `file:<checkout>` instead of the npm package, which is what makes
-// OpenCode load the developer's build: it symlinks the target into its cache, so the
-// plugin module is the checkout's own and the binary it spawns is the one `mise run build`
-// just produced. These cases pin that the two forms are mutually exclusive — caret owns
-// exactly one entry — because both present would load two caret plugins, each registering
-// the review tool, with the published one answering from a build nobody made.
+// These cases pin that the two entry forms — the npm package and `file:<checkout>` — are
+// mutually exclusive, because caret owns exactly one entry: both present would load two
+// caret plugins, each registering the review tool, with the published one answering from
+// a build nobody made.
 // `isCheckout` is deliberately NOT injected: the fixtures create the real probe file, so
 // the suite exercises the same predicate production uses.
 

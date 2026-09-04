@@ -8,12 +8,6 @@
 // (@/plan/excerpt.ts), so a `../` escape, an absolute path, and a symlink whose
 // target leaves the review's cwd are refused by exactly the code that refuses
 // them for the file routes.
-//
-// What this module adds on top is the descent guard, and it is worth being
-// precise about what it bounds: `root` is client-supplied and unverified, so the
-// guard caps one expansion chain from one anchor — re-anchoring `root` deeper
-// restarts the count. Containment in `cwd`, not this, is what bounds *what* a
-// caller can reach; the guard bounds how far one chain of requests will walk.
 
 import type { Dirent } from "node:fs";
 import { readdir } from "node:fs/promises";
@@ -27,9 +21,9 @@ import { resolveInCwd, SKIP_DIRS, safeRealpath } from "@/plan/excerpt.ts";
 export const MAX_DIR_ENTRIES = 500;
 
 /** How far below the referenced root one level may sit — a cap on a single
- * expansion chain, not a property of any real tree. Client-relative: the anchor
- * it counts from is the caller's own `root`, so this is a guard rail against a
- * runaway expansion, never a confidentiality boundary. */
+ * expansion chain, not a property of any real tree. It counts from the caller's own
+ * unverified `root`, so re-anchoring deeper restarts the count: a guard rail against a
+ * runaway expansion, never a confidentiality boundary (containment in `cwd` is that). */
 export const MAX_DIR_DEPTH = 10;
 
 // Directories first, then by name — what a tree wants, and what makes the cap
@@ -87,9 +81,7 @@ export async function listDirectory(
   // A symlink dirent describes the link, not its target, so its kind is the
   // target's — decided by the same resolver the routes use, which is what keeps
   // a link pointing out of cwd from becoming a row. Resolved together rather
-  // than in sequence, since each costs a realpath. Anything that is neither file
-  // nor directory nor link (a socket, a device, a fifo) is not a reference and
-  // is simply not a row.
+  // than in sequence, since each costs a realpath.
   const entries: DirEntry[] = [];
   const links: Dirent[] = [];
   for (const d of dirents) {

@@ -70,7 +70,6 @@ test("update mutates, bumps updatedAt, and persists", async () => {
 test("update on a missing id returns undefined and persists nothing", async () => {
   expect(await store.update("ghost", (r) => (r.status = "approved"))).toBeUndefined();
   expect(store.size()).toBe(0);
-  // No file is written for an id the store never tracked.
   await expect(readFile(join(dir, "ghost.json"), "utf-8")).rejects.toThrow();
 });
 
@@ -79,7 +78,6 @@ test("remove drops from memory but leaves the file on disk", async () => {
   await store.remove("x1");
   expect(store.get("x1")).toBeUndefined();
   expect(store.size()).toBe(0);
-  // File persists as history.
   const onDisk = JSON.parse(await readFile(join(dir, "x1.json"), "utf-8"));
   expect(onDisk.id).toBe("x1");
 });
@@ -92,7 +90,6 @@ test("remove flushes the final mutated state before dropping the entry", async (
   });
   await store.remove("f1");
   expect(store.get("f1")).toBeUndefined();
-  // The on-disk history reflects the last in-memory state, not the create-time one.
   const onDisk = JSON.parse(await readFile(join(dir, "f1.json"), "utf-8")) as Review;
   expect(onDisk.status).toBe("approved");
   expect(onDisk.decision).toMatchObject({ behavior: "allow" });
@@ -155,7 +152,6 @@ test("rehydrate loads unresolved reviews, skips approved", async () => {
 
   const fresh = createStore(dir);
   await fresh.rehydrate();
-  // Both unresolved reviews are tracked; the approved one is not re-tracked.
   expect(fresh.size()).toBe(2);
   expect(fresh.get("keep-p")?.status).toBe("pending");
   expect(fresh.get("keep-r")?.status).toBe("rejected");
@@ -193,7 +189,6 @@ test("composer scratches round-trip to disk and rehydrate", async () => {
   );
   const onDisk = JSON.parse(await readFile(join(dir, "cs-1.json"), "utf-8")) as Review;
   expect(onDisk.versions[0]?.composerScratches).toEqual(scratches);
-  // The persisted field survives a fresh store's rehydrate (unresolved record).
   const fresh = createStore(dir);
   await fresh.rehydrate();
   expect(fresh.get("cs-1")?.versions[0]?.composerScratches).toEqual(scratches);

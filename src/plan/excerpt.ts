@@ -4,8 +4,7 @@
 // so the daemon does both, keyed off the review record's cwd and never a
 // client-supplied base. Resolution is confined to cwd: a `../` or symlink target
 // that escapes it resolves to null, so the daemon never becomes an arbitrary
-// local-file reader. A reference that resolves to nothing yields null, and the
-// UI then shows no icon and no affordance.
+// local-file reader.
 
 import { type Dirent, readFileSync, type Stats } from "node:fs";
 import { readdir, realpath, stat } from "node:fs/promises";
@@ -14,37 +13,23 @@ import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { EXCERPT_RADIUS, hasKnownFileExtension } from "@/config/constants.ts";
 import type { FileExcerpt, FileRefKind } from "@/lib/types.ts";
 
-// The opening window is sized to show enough of the file to judge a plan against
-// it without leaving the review; the card scrolls internally past that, and its
-// boundary strips expand the window through an explicit range until the reader
-// reaches line 1 and the last line. Only MAX_EXCERPT_BYTES bounds how wide a
-// window can get. EXCERPT_RADIUS lives in @/config/constants.ts because the
-// browser reads it too — this module imports node:fs, so the UI cannot.
+// EXCERPT_RADIUS lives in @/config/constants.ts because the browser reads it too
+// — this module imports node:fs, so the UI cannot.
 /** Lines shown from the top when a reference carries no line number. */
 export const EXCERPT_HEAD_LINES = 60;
 /**
  * Files larger than this are not previewed (skip, don't read).
  *
- * The old 2 MiB ceiling defended against reading and rendering a whole file at
- * once. Neither happens any more: the daemon serves bounded line ranges off one
- * memoized read (`readLines` below), and the client mounts only the rows near
- * the viewport (EXC-970). What is left is memory, and memory is what sets this
- * number.
+ * Memory sets the number, not read or render cost: the daemon serves bounded
+ * line ranges off one memoized read (`readLines` below) and the client mounts
+ * only the rows near the viewport (EXC-970). Measured on ~48-byte source lines,
+ * the memo retains ~1.9x the file's bytes and a reader who scrolls a whole file
+ * accumulates ~6x it in the browser — ~58 MiB in the tab at this ceiling, where
+ * 20 MiB would be ~120 MiB for the same gesture.
  *
- * Measured on ~48-byte source lines: the memo retains ~1.9x the file's bytes
- * here, and a reader who scrolls a whole file accumulates ~6x it in the browser
- * — the raw lines kept for a theme repaint plus shiki's token HTML, which runs
- * ~7.7x the text it colours. At 10 MiB that is ~19 MiB held by the daemon for
- * the one file it has cached, and ~58 MiB in the tab for a reader who went end
- * to end (measured: 57.6 MiB). Both are bounded and both are survivable; 20 MiB
- * would put the tab at ~120 MiB for the same gesture, which is where it stops
- * being a preview and starts being a leak.
- *
- * Highlighting does not enter into it: it is paid per chunk (~127 ms for a
- * ~148-line chunk), so it does not grow with this number. The one cost that
- * does explode is a single very long line — quadratic in the line's length, and
- * invisible to a ceiling counted in file bytes. `MAX_HIGHLIGHT_LINE_CHARS` in
- * `ui/src/lib/diffview/highlight.ts` guards that separately.
+ * A single very long line is the one cost a ceiling counted in file bytes cannot
+ * see — quadratic in the line's length, guarded separately by
+ * `MAX_HIGHLIGHT_LINE_CHARS` in `ui/src/lib/diffview/highlight.ts`.
  */
 export const MAX_EXCERPT_BYTES = 10 * 1024 * 1024;
 /** Upper bound on directory entries the basename fallback will scan. */
@@ -126,10 +111,8 @@ function safeStat(path: string): Promise<Stats | null> {
 }
 
 // What `abs` is when it is a real file or directory inside `cwdReal`, else null.
-// realpath resolves symlinks first, so a link whose target escapes cwd is
-// rejected here rather than followed out of the tree — which now covers a
-// symlinked directory too. Anything that is neither file nor directory (a
-// socket, a device) is refused outright rather than reported as some third kind.
+// realpath runs first, so a symlink whose target escapes cwd is rejected here
+// rather than followed out of the tree.
 async function contained(cwdReal: string, abs: string): Promise<ResolvedRef | null> {
   const real = await safeRealpath(abs);
   if (real === null) return null;
@@ -140,11 +123,10 @@ async function contained(cwdReal: string, abs: string): Promise<ResolvedRef | nu
   return stats.isDirectory() ? { path: real, kind: "directory" } : null;
 }
 
-// Breadth-first search for a file named `name` under cwdReal, returning the
-// shallowest match (BFS visits by depth). Bounded by MAX_SCAN_ENTRIES and blind
-// to symlinked directories (withFileTypes reports the link, not its target), so
-// it can neither loop nor escape the tree. This is the "intelligent guess" for a
-// reference that gives only a basename.
+// Breadth-first search for a file named `name` under cwdReal: the shallowest
+// match wins. Bounded by MAX_SCAN_ENTRIES and blind to symlinked directories
+// (withFileTypes reports the link, not its target), so it can neither loop nor
+// escape the tree.
 async function basenameSearch(cwdReal: string, name: string): Promise<string | null> {
   let scanned = 0;
   const queue: string[] = [cwdReal];
@@ -175,10 +157,9 @@ async function basenameSearch(cwdReal: string, name: string): Promise<string | n
  * null when `cwd` is not an absolute path, when nothing matches, or when the
  * target escapes `cwd`.
  *
- * Async because the file-refs route resolves a whole plan's candidates at once
- * and interleaves them. Each call realpaths `cwd` itself, so that route pays one
- * such walk per candidate rather than one per batch — warm and cached, and not
- * on its own worth a second batch-shaped entry point beside this one.
+ * Each call realpaths `cwd` itself, so a route resolving a whole plan's
+ * candidates pays that walk per candidate rather than once per batch — warm and
+ * cached, and not worth a second batch-shaped entry point beside this one.
  */
 export async function resolveInCwd(cwd: string, candidate: string): Promise<ResolvedRef | null> {
   if (cwd === "" || !isAbsolute(cwd)) return null;
@@ -191,12 +172,11 @@ export async function resolveInCwd(cwd: string, candidate: string): Promise<Reso
   const direct = await contained(cwdReal, resolve(cwdReal, cleaned));
   if (direct !== null) return direct;
 
-  // The fallback walks the tree, so it is spent only where it can pay off: a
-  // bare name that reads like a file. A token carrying a directory hint already
-  // said where to look and missed — guessing past that would land a reference on
-  // a same-named file somewhere else entirely — and an extensionless one would
-  // fire the walk on every `--flag` and `someVariable` a plan mentions, now that
-  // the candidate gate offers those too (EXC-916).
+  // The fallback walks the tree, so it is spent only on a bare name that reads
+  // like a file. A directory hint already said where to look and missed — guessing
+  // past it would land the reference on a same-named file elsewhere — and an
+  // extensionless token would fire the walk on every `--flag` and `someVariable` a
+  // plan mentions (EXC-916).
   if (cleaned.includes("/") || !hasKnownFileExtension(cleaned)) return null;
   const found = await basenameSearch(cwdReal, cleaned);
   return found === null ? null : { path: found, kind: "file" };
@@ -205,10 +185,8 @@ export async function resolveInCwd(cwd: string, candidate: string): Promise<Reso
 /**
  * True when `candidate` resolves to a real file inside `cwd` that exceeds
  * `MAX_EXCERPT_BYTES` — the one case `readFileExcerpt`'s null hides that the UI
- * shows differently. Answered on the error path only, so the common path pays
- * nothing for the extra resolve; on that path a reference that resolves to
- * nothing re-runs `resolveInCwd`'s bounded basename search, which is why this is
- * not called before `readFileExcerpt`. Never throws.
+ * shows differently. Call it on the error path only: it repeats the resolve,
+ * bounded basename search included. Never throws.
  */
 export async function isFileTooLargeToPreview(cwd: string, candidate: string): Promise<boolean> {
   const hit = await resolveInCwd(cwd, candidate);
@@ -217,24 +195,19 @@ export async function isFileTooLargeToPreview(cwd: string, candidate: string): P
   return stats !== null && stats.size > MAX_EXCERPT_BYTES;
 }
 
-// The one file the preview is currently walking, already split. A preview shows
-// one file at a time and grows it a chunk at a time (EXC-969), so successive
-// requests are overwhelmingly the same file: one entry turns a scroll from one
-// whole-file read-and-split *per chunk* into one for the file. A miss costs
-// exactly what every request used to, so switching files degrades to the old
-// behaviour rather than to something worse.
+// The one file the preview is currently walking, already split. A preview grows
+// one file a chunk at a time (EXC-969), so one entry turns a scroll from a
+// whole-file read-and-split *per chunk* into one for the file.
 let memo: { path: string; identity: string; lines: string[] | null } | null = null;
 
-// What a cache hit has to mean: the same bytes on disk. Size and mtime are the
-// usual pair; the inode is what catches an atomic replace (write-temp-then-
-// rename) that happens to land on the same size and timestamp.
+// Size and mtime are the usual pair; the inode catches an atomic replace
+// (write-temp-then-rename) that lands on the same size and timestamp.
 function statIdentity(stats: Stats): string {
   return `${stats.size}:${stats.mtimeMs}:${stats.ino}`;
 }
 
-// Split on newlines, dropping the phantom empty element a trailing newline
-// leaves so the count matches the editor's — but keeping a genuinely empty file
-// as one line.
+// Drops the phantom empty element a trailing newline leaves, so the count
+// matches the editor's — but keeps a genuinely empty file as one line.
 function splitLines(content: string): string[] {
   const lines = content.split("\n");
   if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
@@ -245,13 +218,10 @@ function splitLines(content: string): string[] {
  * The lines of the file at canonical path `abs`, or null when it can't be read
  * or holds binary content — memoized against `stats`.
  *
- * `abs` must be a path `resolveInCwd` just returned. That is what keeps the
- * memo out of the security boundary: containment is re-decided from `cwd` on
- * every request before this is reached, so an entry is only ever *reachable*
- * through a reference that passed the check on that same request — the cache
- * can neither grant a path it would have refused nor outlive the check. And an
- * entry is only *used* when the file's stat identity still matches, so an edit
- * on disk re-reads rather than serving a stale copy.
+ * `abs` must be a path `resolveInCwd` just returned: containment is re-decided
+ * from `cwd` on every request before this is reached, so the memo can never
+ * grant a path the check would have refused. An entry is used only while the
+ * file's stat identity still matches, so an edit on disk re-reads.
  */
 function readLines(abs: string, stats: Stats): string[] | null {
   const identity = statIdentity(stats);
@@ -297,9 +267,8 @@ export async function readFileExcerpt(
     startLine = Math.min(Math.max(1, range.start), totalLines);
     endLine = Math.min(totalLines, Math.max(range.end, startLine));
   } else if (line !== undefined && line >= 1) {
-    // Clamp a past-EOF line to the last line, so a plan citing a line past a file
-    // that has since shrunk still yields a non-empty, correctly-labeled window
-    // (an unclamped line beyond EOF would give startLine > endLine → no lines).
+    // A plan can cite a line past a file that has since shrunk; unclamped, that
+    // gives startLine > endLine and so no lines at all.
     const target = Math.min(line, totalLines);
     startLine = Math.max(1, target - EXCERPT_RADIUS);
     endLine = Math.min(totalLines, target + EXCERPT_RADIUS);

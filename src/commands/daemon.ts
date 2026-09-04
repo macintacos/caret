@@ -39,14 +39,11 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   const startedAt = Date.now();
   // Leveled NDJSON to logs/daemon.log, the path the logger owns and rotates.
   // The level, redact, and rotation thunks re-read svc.current() per emit, so config.toml
-  // edits hot-reload without a restart — and the boot line below doubles as
-  // the EXC-429 settings warm: an invalid config is detected and logged here,
-  // not on first use. The watcher records which keys changed when a reload is
-  // detected (i.e. on the first emit after the edit — detection is as lazy as
-  // the reload itself). NB: a change record is an info emit, so raising
-  // [logging].level above info suppresses it like any other info record.
-  // The change record's msg already carries old → new per key; the full
-  // settings object rides only on the boot record.
+  // edits hot-reload without a restart — and the boot line below doubles as the EXC-429
+  // settings warm: an invalid config is detected and logged here, not on first use.
+  // Reload detection is as lazy as the reload itself: the watcher records what changed
+  // on the first emit after the edit, as an info record, so raising [logging].level
+  // above info suppresses it like any other.
   const svc = watchSettings(settings(), (changes) =>
     log.info("settings", `settings changed: ${changes.join("; ")}`),
   );
@@ -57,13 +54,12 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
     { maxSize: () => logMaxSize(svc.current()), keep: () => logKeep(svc.current()) },
   );
   const cfg = configFile();
-  // The boot snapshot: logged below and reused for the startup-captured
-  // tunables (port/idle/heartbeat), so the boot record provably matches the
-  // values the server binds with — a config edit landing mid-boot can't split
-  // them. The record holds the VALIDATED parse only — schema-constrained
-  // values — never raw config text, which may hold anything (the settings.ts
-  // logValidationFailure invariant). This is also the watcher's baseline read,
-  // so boot never fires a spurious change record.
+  // The boot snapshot: logged below and reused for the startup-captured tunables
+  // (port/idle/heartbeat), so a config edit landing mid-boot can't split the record
+  // from the values the server binds with. It holds the VALIDATED parse only — never
+  // raw config text, which may hold anything (the settings.ts logValidationFailure
+  // invariant). Also the watcher's baseline read, so boot never fires a spurious
+  // change record.
   const boot = svc.current();
   log.info(
     "settings",
@@ -89,7 +85,7 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   // opt-out — whether a newer caret exists (EXC-1205). Fire-and-forget: nothing awaits it,
   // so neither boot nor a prefs write is delayed, and runUpdateCheck never rejects. A null
   // result is the throttle (or the opt-out) saying there is nothing new, so the seeded
-  // verdict stands. Boot and the flip-to-on below share this one call site.
+  // verdict stands.
   function refreshUpdate(): void {
     void runUpdateCheck({
       kind: install,
@@ -130,11 +126,10 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   // impossible to hit — but a loaded box preempts inside it, which is how a
   // contended `mise run preflight` reproduced it about once in twenty boots.
   //
-  // Placement used to carry the invariant that a daemon which LOST the
-  // EADDRINUSE race below never unlinks the winner's lock. Wiring this early
-  // gives that up, so the invariant moves into the code: `server` is undefined
-  // until the bind succeeds, so a loser stops nothing, and removeOwnDaemonLock
-  // unlinks only a lock naming this pid.
+  // A daemon that LOSES the EADDRINUSE race below must not unlink the winner's
+  // lock, and with the handlers this early that rests on the code rather than on
+  // placement: `server` stays undefined until the bind succeeds, so a loser stops
+  // nothing, and removeOwnDaemonLock unlinks only a lock naming this pid.
   let server: CaretServer | undefined;
   const shutdown = (code: number) => {
     server?.stop();
@@ -177,8 +172,7 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
       // GET /api/reviews/:id/skills so the feedback editors can complete `/` names
       // from the reviewing agent's own skills (EXC-1176).
       listSkills: (cwd) => adapter.listSkills(cwd),
-      // The same adapter, one route over: what the skill the reviewer highlighted
-      // in that list actually does, served by
+      // What the skill the reviewer highlighted in that list actually does, served by
       // GET /api/reviews/:id/skill-description for the Ctrl+Space preview panel
       // (EXC-1186).
       readSkillDescription: (cwd, skill) => adapter.readSkillDescription(cwd, skill),

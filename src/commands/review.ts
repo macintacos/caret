@@ -55,11 +55,9 @@ export function prodReviewDeps(s: Settings, adapter: AgentAdapter): ReviewDeps {
 }
 
 export async function runReviewSubcommand(): Promise<void> {
-  // Wire [logging].level and .redact before anything can emit (the signal
-  // handlers below and the review itself both log through the shared logger).
-  // One synchronous read — the same snapshot feeds the review deps below, so
-  // the hook's logging config and tunables can never come from two different
-  // reads of the file.
+  // Wire [logging].level and .redact before anything can emit. One synchronous read —
+  // the same snapshot feeds the review deps below, so the hook's logging config and
+  // tunables can never come from two different reads of the file.
   const loaded = loadSettings();
   bootHookLogging(loaded);
   // Resolve the active adapter once (selected by CARET_AGENT, default claude); a
@@ -70,8 +68,8 @@ export async function runReviewSubcommand(): Promise<void> {
   // The parsed hook input, captured once stdin is read, so `respond` can hand it to
   // emitDecision — the Claude adapter echoes its tool_input back as updatedInput on
   // an allow, without which Claude Code >=2.1.199 drops the approve (EXC-683). The
-  // signal path only ever denies, and a deny needs no echo, so its value here
-  // (undefined if the signal beats the parse, set if it doesn't) never matters.
+  // signal path only ever denies, and a deny needs no echo, so whether the signal
+  // beats the parse never matters.
   let hookInput: PlanInput | undefined;
   // The review's daemon handle, captured via onPosted once the review is created,
   // so a signal-path abandon can expire it (EXC-482). Undefined until then.
@@ -115,8 +113,6 @@ export async function runReviewSubcommand(): Promise<void> {
     hookInput = undefined;
   }
   const deps = prodReviewDeps(loaded, adapter);
-  // Capture the daemon handle so the signal handlers above can expire the review
-  // on an abandon (EXC-482).
   deps.onPosted = (baseUrl, id) => {
     posted = { baseUrl, id };
   };

@@ -7,11 +7,8 @@
 // points at the same line on both sides.
 //
 // Best-effort and never fatal: a plan must survive even when the file can't be
-// rewritten (read-only fs, a races, an older agent that sends no path), so every
-// failure is swallowed with a logged code. The path comes from the hook (the
-// agent's own planFilePath); it is still guarded to an existing regular `.md`
-// file so a malformed path can never make caret clobber something else, and the
-// error log never carries the path or plan text.
+// rewritten (read-only fs, a race, an older agent that sends no path), so every
+// failure is swallowed with a logged code.
 import { appendFileSync, existsSync, statSync, writeFileSync } from "node:fs";
 
 import type { CaretLogger } from "@/lib/log.ts";

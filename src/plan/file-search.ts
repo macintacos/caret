@@ -3,19 +3,13 @@
 // the daemon walks it — and only path strings ever come back, never a byte of
 // file content.
 //
-// The walk is `basenameSearch`'s (@/plan/excerpt.ts), which is the closest thing
-// the codebase already had: breadth-first from the review's cwd, refusing the
-// skip set and dotted directories, and reading dirent kinds WITHOUT following
-// symlinks. It differs in three places — what it does with a hit (that one stops
-// at the first exact name, this collects to a cap), the per-level sort that makes
-// the caps cut deterministically, and the `.git`-by-name skip below.
-//
-// Containment is therefore not re-decided per result the way `listDirectory`
-// re-decides it through `resolveInCwd`. It does not need to be: the walk is
-// rooted at the cwd's own realpath and never follows a link, so every path it
-// can produce is a real descendant. That is strictly stronger than checking each
-// result afterwards, and it is why a symlink is not a row at all — including one
-// pointing back inside the tree, which is the price of the stronger guarantee.
+// The walk mirrors `basenameSearch`'s (@/plan/excerpt.ts): breadth-first from the
+// review's cwd, refusing the skip set and dotted directories, and reading dirent
+// kinds WITHOUT following symlinks. Containment is therefore not re-decided per
+// result the way `listDirectory` does through `resolveInCwd` — rooted at the cwd's
+// own realpath and never following a link, every path it can produce is already a
+// real descendant. A symlink is not a row at all, even one pointing back inside the
+// tree: the price of the stronger guarantee.
 
 import type { Dirent } from "node:fs";
 import { readdir } from "node:fs/promises";
@@ -40,42 +34,33 @@ export interface SearchBudget {
  *
  * `results` is a completion list nobody scrolls past, so a larger number would
  * only cost the browser rows it never paints. `dirents` is what bounds the
- * expensive case — a query matching nothing cannot stop early on results, so
- * only this ends it. It is deliberately far above `basenameSearch`'s own
+ * expensive case — a query matching nothing cannot stop early on results, so only
+ * this ends it. It is deliberately far above `basenameSearch`'s own
  * MAX_SCAN_ENTRIES: that one resolves a single known name and can afford to give
  * up, whereas a completion list that gave up after 5000 dirents would report
  * itself truncated on any repository worth completing in.
  *
- * ponytail: a fresh walk per query, not a cached index. A query is one
- * debounced keystroke against a warm page cache on loopback, and the alternative
- * is an index plus its invalidation. Cache the walk per review if a monorepo
- * ever makes the list feel slow.
+ * ponytail: a fresh walk per query, not a cached index. A query is one debounced
+ * keystroke against a warm page cache on loopback, and the alternative is an index
+ * plus its invalidation. Cache the walk per review if a monorepo ever makes the
+ * list feel slow.
  *
  * ponytail: matches are collected in walk order and cut at `results` — a
- * subsequence FILTER, not a ranked finder. Subsequence matching is permissive, so
- * a short query can fill the cap with shallow near-misses before reaching the
- * obvious answer: measured on caret's own tree, `apits` returns 50 and puts
- * `ui/src/lib/api.ts` at index 36, while every specific query tried (`filesearch`,
- * `server`, `caretheme`) lands its target in the first two rows. Rank before
- * slicing — basename hit first, then shortest path — if the short-query case
- * proves to matter; that is a scoring design of its own and belongs to EXC-390
- * rather than here.
+ * subsequence FILTER, not a ranked finder. Subsequence matching is permissive, so a
+ * short query can fill the cap with shallow near-misses before reaching the obvious
+ * answer (measured: `apits` puts `ui/src/lib/api.ts` at index 36, while specific
+ * queries land their target in the first two rows). Rank before slicing — basename
+ * hit first, then shortest path — if that proves to matter; the scoring design is
+ * EXC-390.
  *
  * ponytail: `dirents` caps what the walk EXAMINES, not what a single `readdir`
  * materializes — a directory holding far more than this is read whole before
- * `partition` sees one entry of it. `opendir` is not an escape: it slurps too, so
- * pulling five entries costs what pulling all of them does (bun 1.4.0: 1.5ms at 1k
- * entries, 14ms at 10k, 100ms at 60k — the cost tracks the directory's SIZE, not
- * how many entries the caller consumes, which is why the cap cannot be literal).
- * The slurp itself runs 274 bytes and 0.38us per entry — a separate figure from
- * those latencies, and the one the projection uses — so a pathological
+ * `partition` sees one entry of it, and `opendir` is no escape because it slurps
+ * too. At ~274 bytes and ~0.38us per entry (bun 1.4.0) a pathological
  * half-million-entry directory costs roughly 130MB and 190ms of the keystroke it
- * lands on: a hiccup rather than a failure, and so a documented ceiling rather
- * than a behaviour change. The rate was re-measured on 1.4.0 (0.32us) and holds;
- * the 274 bytes was not, RSS deltas at these sizes being page-granular noise.
- * End to end, `@` completion over caret's own tree measures 1-6ms through
- * POST /api/reviews/:id/file-search. Re-measure on the next bun bump; an
- * incremental directory reader is what would make the cap literal.
+ * lands on: a hiccup rather than a failure, so a documented ceiling rather than a
+ * behaviour change. An incremental directory reader is what would make the cap
+ * literal.
  */
 export const SEARCH_BUDGET: SearchBudget = { dirents: 20_000, results: 50 };
 

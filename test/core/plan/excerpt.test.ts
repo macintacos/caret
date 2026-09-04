@@ -80,7 +80,6 @@ test("returns null when nothing matches", async () => {
 
 test("falls back to a bounded basename search for a bare file-shaped name", async () => {
   write("ui/src/lib/api.ts", "x");
-  // The plan cites just the basename; the search finds it under cwd.
   expect((await resolveInCwd(cwd, "api.ts"))?.path).toBe(join(cwd, "ui/src/lib/api.ts"));
 });
 
@@ -98,14 +97,13 @@ test("does not search for a slash-bearing token that missed its exact path", asy
 });
 
 test("does not search for a name with no known file extension", async () => {
-  // The candidate gate now offers every inline-code token, so a walk per
-  // `--flag` and `someVariable` is the cost that would otherwise follow.
+  // The candidate gate offers every inline-code token, so a walk per `--flag` and
+  // `someVariable` is the cost that would otherwise follow.
   write("deep/nested/Makefile", "x");
   expect(await resolveInCwd(cwd, "Makefile")).toBeNull();
 });
 
 test("refuses a ../ escape above cwd", async () => {
-  // A real file exists just outside cwd; resolution must still refuse it.
   writeFileSync(join(cwd, "..", "outside.ts"), "secret");
   expect(await resolveInCwd(cwd, "../outside.ts")).toBeNull();
 });
@@ -123,7 +121,7 @@ test("refuses a symlink that escapes cwd", async () => {
 });
 
 test("refuses a symlinked directory that escapes cwd", async () => {
-  // Directories resolve now, so the symlink escape has a second door.
+  // Directories resolve too, so the symlink escape has a second door.
   const outside = mkdtempSync(join(tmpdir(), "caret-planfiles-outdir-"));
   symlinkSync(outside, join(cwd, "linkdir"));
   try {
@@ -201,9 +199,9 @@ test("returns null when the reference does not resolve", async () => {
 });
 
 test("returns null for a directory, and never reports one as too large", async () => {
-  // Directories resolve now, so "only a file is ever read" stopped being a
-  // property of resolution and became one of these two call sites. Both are
-  // pinned here, or the guarantee has no falsifier.
+  // "Only a file is ever read" is a property of these two call sites, not of
+  // resolution, which answers for directories too. Both are pinned here, or the
+  // guarantee has no falsifier.
   mkdirSync(join(cwd, "src/daemon"), { recursive: true });
   expect(await readFileExcerpt(cwd, "src/daemon")).toBeNull();
   expect(await isFileTooLargeToPreview(cwd, "src/daemon")).toBe(false);
@@ -245,10 +243,8 @@ test("reports a file over MAX_EXCERPT_BYTES as too large to preview", async () =
   expect(await readFileExcerpt(cwd, "huge.ts")).toBeNull();
 });
 
-// The ceiling moved from 2 MiB to 10 MiB (EXC-973) once chunked serving and row
-// virtualization stopped a preview from costing a whole file at once. This is
-// the file that changed answer: comfortably past the old ceiling, well under the
-// new one.
+// 3 MiB: comfortably past the 2 MiB ceiling chunked serving and row virtualization
+// replaced, and well under the current one (EXC-973).
 test("previews a file past the old 2 MiB ceiling", async () => {
   const count = Math.ceil((3 * 1024 * 1024) / 100);
   write("mid.ts", `${"x".repeat(99)}\n`.repeat(count));
@@ -277,10 +273,9 @@ test("does not report a small, a missing, or an escaping file as too large", asy
 
 // ----- one read per file, not one per chunk -----
 
-// A preview grows a chunk at a time (EXC-969), so a scroll through a file is
-// many range requests for the same file. Each one used to re-read and re-split
-// the whole thing; at the new ceiling that would have made the daemon the
-// bottleneck the raised ceiling was supposed to remove.
+// A preview grows a chunk at a time (EXC-969), so a scroll is many range requests
+// for one file. Re-reading and re-splitting the whole file per chunk would make the
+// daemon the bottleneck the raised ceiling exists to remove.
 
 // root reads straight through a 0o000 file, so the proof below doesn't hold there.
 const asRoot = process.getuid?.() === 0;

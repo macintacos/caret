@@ -2,7 +2,7 @@
 // tool-agnostic `Decision`. Tool-agnostic throughout — the agent's stdin shape
 // is parsed behind the injected `parseHookInput`, and the command layer renders
 // the returned Decision to the agent's wire string via the adapter's
-// `emitDecision`. This module names no agent's wire protocol.
+// `emitDecision`.
 //
 // FAIL-SAFE = DENY: shipping an unreviewed plan is the one outcome we never
 // allow. Every abnormal path (bad stdin, unreachable daemon, timeout, daemon
@@ -116,11 +116,10 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<Decisi
     // run leaves a record of the request and its session.
     logInfo("review", "review requested", { ...ctx });
 
-    // Reject plans with unhighlightable (untagged) code blocks before any daemon
-    // work, so a format-only reject never spins up a daemon or creates a review.
-    // The format-deny message is distinct from the fail-safe deny below; the
-    // reject is an EXPECTED outcome, logged at info (default-on) so reject
-    // loops stay diagnosable without reading as errors.
+    // Reject unhighlightable (untagged) code blocks before any daemon work, so a
+    // format-only reject never spins up a daemon or creates a review. An EXPECTED
+    // outcome, so it logs at info (default-on) and carries its own message rather
+    // than the fail-safe deny's.
     step = "validatePlan";
     if (hasUntaggedCodeBlock(input.plan)) {
       logInfo(step, "plan rejected: code block missing language marker", ctx);
@@ -130,9 +129,8 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<Decisi
     step = "ensureDaemon";
     baseUrl = await deps.ensureDaemon();
     step = "postReview";
-    // Stamp the originating cmux pane, if any, so the daemon can clear that
-    // pane's unread mark once the plan is reviewed — the daemon is long-lived
-    // and shared, so it never inherits this hook's cmux environment (EXC-961).
+    // Stamp the originating cmux pane, if any: the daemon is long-lived and shared,
+    // so it never inherits this hook's cmux environment (EXC-961).
     const { id, hasLiveClient } = await deps.postReview(baseUrl, {
       ...input,
       cmux: deps.readPane?.(),
@@ -140,9 +138,8 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<Decisi
     // From here every record — decision and error alike — carries the reviewId,
     // stitching this stream against the daemon's review/resolve records.
     ctx.reviewId = id;
-    // Surface the handle so a SIGINT/SIGTERM abandon can expire this review
-    // (EXC-482): the signal fires outside this flow, so the command layer needs
-    // the base URL + id we just computed.
+    // Surface the handle so a SIGINT/SIGTERM abandon can expire this review, from
+    // outside this flow (EXC-482).
     deps.onPosted?.(baseUrl, id);
     logDebug("review", `review created: ${shortId(id)}`, { ...ctx });
     // EXC-426: humans get the vanity origin; internal fetches keep using baseUrl.
@@ -151,8 +148,8 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<Decisi
     const url = `${open.origin}/?review=${id}`;
     // EXC-559: a live UI tab already surfaces the review and runs the notifier;
     // foregrounding the browser would make the tab focused at the poll instant,
-    // pre-empting the away-gated desktop notification. Only open when no tab is
-    // listening (or an older daemon didn't report one — fail-safe to opening).
+    // pre-empting the away-gated desktop notification. An older daemon reports no
+    // such field, which fails safe to opening.
     if (!hasLiveClient) deps.openBrowser(url);
     // Also print the URL to stderr — clickable in the transcript if the browser
     // fails to open. NOTE: the OpenCode plugin (opencode/caret.plugin.ts,
@@ -161,13 +158,10 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<Decisi
     process.stderr.write(`caret: review this plan at ${url}\n`);
 
     step = "longPoll";
-    // Poll until the browser decides: re-poll on each heartbeat (null), and on a
-    // transient drop reconnect and keep going (the decision is served on
-    // reconnect, so nothing is lost). One absolute deadline bounds the whole
-    // loop: each poll is capped at the time remaining until it, so a single hung
-    // request can't outlive the budget and an endless-heartbeat loop denies at
-    // the same instant. A real timeout, or an unreachable daemon (ensureDaemon
-    // throwing), bubbles out to the fail-safe deny below.
+    // Re-poll on each heartbeat (null); on a transient drop reconnect and keep going
+    // — the decision is served on reconnect, so nothing is lost. One absolute
+    // deadline bounds the whole loop, each poll capped at the time remaining until
+    // it, so neither a hung request nor an endless-heartbeat loop outlives it.
     const deadline = Date.now() + deps.timeoutMs;
     let decision: Decision | undefined;
     while (!decision) {
@@ -190,9 +184,8 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<Decisi
       }
     }
     // The reviewer's verdict is normal operation: record it at info. Never the
-    // feedback body (EXC-444; reviewer prose is user-generated content like
-    // plan bodies) — only its length, so reject loops stay distinguishable
-    // from empty-feedback denies.
+    // feedback body (EXC-444; reviewer prose is user-generated content) — only its
+    // length, so reject loops stay distinguishable from empty-feedback denies.
     if (decision.behavior === "deny") {
       logInfo("decision", "plan rejected", { ...ctx, feedbackChars: decision.feedback?.length });
     } else {

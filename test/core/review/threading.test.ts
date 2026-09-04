@@ -79,14 +79,14 @@ test("appending a revision does not carry the prior version's composer scratches
 
 test("rewrites the agent's on-disk plan file with the canonical formatted text", async () => {
   // The plan file Claude reads from must match what the human reviews. Routing a
-  // plan whose prose prettier reflows should leave the canonical text on disk,
+  // plan whose prose the formatter reflows should leave the canonical text on disk,
   // not the raw text the agent first wrote.
   const planFilePath = join(dir, "agent-plan.md");
   writeFileSync(planFilePath, "raw, never read back");
   const raw = `# Title\n\n${"a long sentence that prettier will reflow ".repeat(6)}`;
   await routeIncomingPlan(input({ plan: raw, planFilePath }), store);
   const canonical = await formatPlanMarkdown(raw, recordingLog().log);
-  expect(canonical).not.toBe(raw); // proseWrap actually changed the text
+  expect(canonical).not.toBe(raw); // the reflow actually changed the text
   expect(readFileSync(planFilePath, "utf8")).toBe(canonical);
 });
 

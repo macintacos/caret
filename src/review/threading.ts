@@ -43,9 +43,9 @@ export async function routeIncomingPlan(
   // Canonicalize once, at ingest: both version-creation sites below store this
   // value, and versions already on the review are never reformatted.
   const plan = await formatPlanMarkdown(input.plan ?? "", log);
-  // Mirror the canonical text back onto the on-disk plan file the agent reads
-  // from, so its plan of record matches what the human reviews (see plan-file.ts).
-  // Runs for every incoming version (new thread or revision); best-effort.
+  // Mirror the canonical text back onto the on-disk plan file the agent reads from,
+  // so its plan of record matches what the human reviews. Runs for every incoming
+  // version (new thread or revision); best-effort.
   writeCanonicalPlanFile(input.planFilePath, plan, log);
   const now = Date.now();
 

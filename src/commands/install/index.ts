@@ -6,10 +6,7 @@
 // everything it detected (Claude Code when it detected nothing), so CI never hangs on a
 // prompt. Every install ends by acquiring the rumdl plan formatter: it is part of a
 // working caret, not a step anyone can skip or forget. `--uninstall` / `--dry-run` apply
-// to every selected target, and neither acquires rumdl. Target parsing is a pure function
-// so it is unit-testable, and detection, the chooser, TTY-ness, rumdl, and the target
-// runners are all injectable so selection and dispatch can be tested without touching a
-// real config dir, the `claude` CLI, the network, or a terminal.
+// to every selected target, and neither acquires rumdl.
 
 import { runInstallClaudeTarget } from "@/commands/install/claude.ts";
 import {
@@ -213,12 +210,10 @@ async function prewarmStep(repoDir: string, deps: InstallDeps, ui: InstallUI): P
 /** Acquire rumdl, the plan formatter every reviewed plan is reflowed through. Part of
  * installing caret rather than a step of its own: ensureRumdl puts the pinned version at
  * caret's own path, replacing an older binary a previous caret left there, so plans are
- * always reflowed by the rumdl caret expects. Doing it here is what keeps the first plan
- * off the download latency — the daemon would otherwise fetch it mid-review — so a
- * failure is a warning, not a failed install: the lazy path still keeps the plan from
- * being lost, storing it raw while acquisition is unavailable. It does not retry straight
- * away, though — a failed install cools the daemon's own acquisition down for
- * RUMDL_RETRY_COOLDOWN_MS before it tries again.
+ * always reflowed by the rumdl caret expects. Doing it here keeps the first plan off the
+ * download latency, so a failure is a warning rather than a failed install — the lazy
+ * path stores the plan raw meanwhile, though a failure here also cools the daemon's own
+ * acquisition down for RUMDL_RETRY_COOLDOWN_MS.
  * Uninstalls skip it (nothing is being set up), and dry-run only says it would run. */
 async function rumdlStep(
   opts: { uninstall: boolean; dryRun: boolean },
@@ -235,10 +230,9 @@ async function rumdlStep(
       "Installing the rumdl plan formatter",
       () => (deps.ensureRumdl ?? ensureRumdl)(),
       // Name the version, not just the path: "already present" is a claim about which
-      // rumdl will format your plans, and the pin is the whole point of the check.
-      // `installed` is ensureRumdl's own signal for "this call installed it" — honest
-      // whether the binary was freshly downloaded, already at the pinned version, or a
-      // CARET_RUMDL_BIN override (no guessing at a cache path the override never fills).
+      // rumdl will format your plans. `installed` is ensureRumdl's own signal, so it stays
+      // honest across a fresh download, an already-pinned binary, and a CARET_RUMDL_BIN
+      // override alike.
       ({ bin, installed }) =>
         `rumdl ${RUMDL_VERSION} ${installed ? "installed" : "already present"} at ${bin}`,
     );

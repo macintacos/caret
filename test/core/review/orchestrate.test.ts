@@ -314,9 +314,7 @@ test("a failure logs the step + context to caret.log and surfaces the path", asy
       },
     }),
   );
-  // The deny reason points the user at the log.
   expect(out.feedback).toContain(logFile());
-  // The log captures which step failed, the message, and stdin context.
   const rec = caretLogRecords().find((r) => r.step === "ensureDaemon");
   expect(rec).toMatchObject({ level: 50, msg: "daemon down", sessionId: "S", cwd: "/p" });
 });
