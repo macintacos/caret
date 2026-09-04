@@ -23,9 +23,9 @@
   // lives HERE rather than in the vendored tv() recipe: shadcn-rules.md § Adding a
   // component that collides with the vendored tree makes a re-sync's revert
   // wholesale, so an edit inside field.svelte is undone silently with nothing to
-  // catch it. Note that Svelte does not scope-hash a class handed to a COMPONENT, so
-  // every one of those rules is written in the `.settings :global(…)` form — the
-  // same mechanism the rail rules below already use.
+  // catch it. Svelte does not scope-hash a class handed to a COMPONENT, so every one of
+  // those rules is written in the `.settings :global(…)` form.
+  //
   // The Dialog primitive is composed directly rather than Modal.svelte — Modal's
   // eyebrow/title/footer identity doesn't fit the two-pane layout — keeping a
   // visually-hidden Dialog.Title so the dialog's accessible name is "Settings".
@@ -103,13 +103,10 @@
     updateReport = null,
   }: Props = $props();
 
-  // EXC-849: while Settings owns the view, publish its own keyboard affordances into the
-  // shared registry. SETTINGS_SHORTCUTS is the settings-scoped reservation set from
-  // CANONICAL_KEYMAP (the single source). Display-only (no run) — the modal owns `/`
-  // (focus search) and Esc (close) through its own handlers below; registering the
-  // reservations makes the scoped `?` help list exactly the shortcuts valid here, and their
-  // "settings" scope tells the dispatcher to suppress the review shortcuts while this modal
-  // is open (see App's activeScope + shortcuts/scope.ts).
+  // EXC-849: while Settings owns the view, publish its keyboard affordances into the shared
+  // registry. Display-only (no run) — the modal handles `/` and Esc itself below. Registering
+  // the reservations is what makes the scoped `?` help list exactly the shortcuts valid here,
+  // and their "settings" scope is what suppresses the review shortcuts while this is open.
   $effect(() => {
     const offs = SETTINGS_SHORTCUTS.map((e) => shortcuts.register(e));
     return () => {
@@ -118,16 +115,14 @@
   });
 
   // The search query (EXC-845): filters the registry across categories, mirroring
-  // ShortcutsHelp's filter-then-group. The search input, bound so the `/`-to-focus
-  // handler can move focus into it (added below).
+  // ShortcutsHelp's filter-then-group. The input is bound so the `/`-to-focus handler
+  // can move focus into it.
   let query = $state("");
   let searchInput = $state<HTMLInputElement | null>(null);
 
-  // Filter first, then derive: staged fields carry controls; a live pane
-  // (Notifications, EXC-847) contributes search-only entries and renders a custom pane
-  // instead. A category earns a nav row when it has ANY matching registry entry — staged
-  // or search-only — in SETTINGS_CATEGORIES order, so filtering drops emptied categories
-  // and, at rest (empty query), the full nav is restored.
+  // Filter first, then derive. A category earns a nav row when it has ANY matching entry —
+  // staged or search-only — so filtering drops emptied categories and an empty query
+  // restores the full nav.
   const filtered = $derived(filterSettings(entries, query));
   const staged = $derived(filtered.filter(isStagedField));
   const categories = $derived(
@@ -203,10 +198,8 @@
   }
 </script>
 
-<!-- The host mounts this per open (ModalPresence) and keeps it through the exit;
-     bits-ui's close intents (Escape, backdrop) route through onOpenChange to
-     onClose, and onOpenChangeComplete reports the exit done so the host can drop
-     the component. -->
+<!-- The host mounts this per open (ModalPresence) and keeps it through the exit, so
+     onOpenChangeComplete is what tells it the exit is done and the component may go. -->
 <Dialog.Root
   {open}
   onOpenChange={(o) => { if (!o) onClose(); }}
@@ -224,13 +217,11 @@
 
     <div class="settings">
       <Sidebar.Root collapsible="none" class="settings-rail">
-        <!-- Search atop the rail (EXC-845): filters the nav + fields across categories.
-             The trailing `/` Kbd cap advertises the focus shortcut, mirroring
-             ShortcutsHelp's search field; `/` focuses it from anywhere in the modal. The
-             cap rides an InputGroup inline-end addon (EXC-1113), which reserves its own
-             track beside the control. The addon carries the aria-hidden rather than the
-             cap: it is a role="group", and one holding nothing announceable reads as an
-             empty group. -->
+        <!-- Search atop the rail (EXC-845), mirroring ShortcutsHelp's search field. The
+             `/` cap rides an InputGroup inline-end addon (EXC-1113), which reserves its
+             own track beside the control. The addon carries the aria-hidden rather than
+             the cap: it is a role="group", and one holding nothing announceable reads as
+             an empty group. -->
         <Sidebar.Header>
           <InputGroup.Root>
             <InputGroup.Input
@@ -259,10 +250,8 @@
                     <span class="nav-label">{cat.id}</span>
                   </Sidebar.MenuButton>
                   <!-- The pending-update mark on the Updates row (EXC-1207). MenuBadge is
-                       what the shadcn sidebar composes for exactly this, and it is
-                       pointer-events:none, so it can't shadow the row's own click. The
-                       row's accessible name is unchanged; the badge is decorative here
-                       because the pane it points at states the same thing in words. -->
+                       pointer-events:none, so it can't shadow the row's own click. It stays
+                       decorative because the pane it points at says the same in words. -->
                   {#if updatePending && cat.id === UPDATES_CATEGORY}
                     <Sidebar.MenuBadge aria-hidden="true">
                       <span class="rail-dot"></span>
@@ -273,7 +262,6 @@
             </Sidebar.Menu>
           </Sidebar.Group>
         </Sidebar.Content>
-        <!-- Esc-dismisses hint, pinned bottom-left (mockup). -->
         <Sidebar.Footer>
           <p class="nav-hint"><Kbd aria-hidden="true">esc</Kbd> <span>close</span></p>
         </Sidebar.Footer>
@@ -292,10 +280,9 @@
 
           {#if selected.id === "Notifications"}
             <!-- The live, read-only panes render their own surface instead of staged
-                 fields: Notifications (EXC-847) reflects browser notification state,
-                 Advanced (EXC-848) the read-only install diagnostics. Two id branches
-                 beat a category→component map here — the panes take different props
-                 (Advanced needs the copy callback), which a map can't thread. -->
+                 fields. Two id branches beat a category→component map here: the panes take
+                 different props (Advanced needs the copy callback), which a map can't
+                 thread. -->
             <NotificationsPane />
           {:else if selected.id === "Advanced"}
             <AdvancedPane {onCopyDiagnostic} />
@@ -308,19 +295,16 @@
             {/if}
             {#each paneSections as section, si (si)}
               {#if section.label === THEME_SECTION}
-                <!-- The theme controls render as one composite block rather than three
-                     independent rows: the IN USE marker and the resolved-state line only
-                     mean anything across all three. It carries no section header — the
-                     pane's own "Appearance" header is that header. -->
+                <!-- The composite theme block carries no section header of its own — the
+                     pane's "Appearance" header is that header. -->
                 <div class="section">
                   <ThemeSection fields={section.fields} {values} onApply={apply} />
                 </div>
               {:else if section.label}
-                <!-- Only a LABELLED section becomes a fieldset. A fieldset with no legend
-                     is a group with no accessible name — a grouping boundary announced
-                     for nothing — so the sectionless fields below stay a plain div. The
-                     legend is the fieldset's FIRST child, which is what makes a browser
-                     render it as the group's legend. -->
+                <!-- Only a LABELLED section becomes a fieldset: a fieldset with no legend is
+                     a grouping boundary announced for nothing, so sectionless fields stay a
+                     plain div. The legend must be the fieldset's FIRST child for a browser
+                     to render it as the group's legend. -->
                 <FieldSet class="section">
                   <FieldLegend class="section-head settings-block-label">{section.label}</FieldLegend>
                   {@render rows(section.fields)}
@@ -403,16 +387,11 @@
   .settings :global([data-slot="sidebar-menu"]) {
     gap: 0.25rem;
   }
-  /* Nav row: quiet --ink-soft at rest, transparent. The SELECTED row is the single
-     amber-filled row — a solid amber rail down its leading edge plus an amber wash
-     and bold ink ("amber marks the selection") — so selection reads at a glance.
-     `position: relative` anchors the rail pseudo-element.
-
-     Unselected rows sit at the inherited weight. The vendored
-     `data-[active=true]:font-medium` reaches only the selected row, which the rule
-     below overrides to 600 — so the weight axis carries selection on its own, and
-     the 500 the row would otherwise wear is what made an unselected row read as
-     half-selected. */
+  /* Nav row: quiet --ink-soft at rest. The SELECTED row is the single amber-filled row
+     ("amber marks the selection"), its rail pseudo-element anchored by `position:
+     relative`. Unselected rows must stay at the inherited weight — the vendored
+     `data-[active=true]:font-medium` would leave them at 500, reading as half-selected —
+     so the weight axis carries selection on its own. */
   .settings :global([data-slot="sidebar-menu-button"]) {
     position: relative;
     justify-content: flex-start;
@@ -447,12 +426,9 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* The pending-update mark (EXC-1207): a bare disc rather than a count, because there
-     is nothing to tally — an update either waits or it does not. It wears --attention,
-     the novelty token the TopBar's pending counts already use, so the whole "worth a
-     glance" vocabulary stays one hue; amber is spent on the selected row beside it and
-     must not be spent twice. The badge box is shadcn's h-5 min-w-5, so the disc centres
-     in it rather than sizing it. */
+  /* The pending-update mark (EXC-1207): a bare disc, since an update either waits or it
+     does not. It wears --attention, the novelty token the TopBar's pending counts already
+     use — amber is spent on the selected row beside it and must not be spent twice. */
   .rail-dot {
     width: 0.4375rem;
     height: 0.4375rem;
@@ -469,8 +445,6 @@
     color: var(--ink-faint);
   }
 
-  /* Content pane: the raised popover surface, its own scroll. Sections stack with a
-     comfortable gap; each section hugs its own header. */
   .settings-pane {
     display: flex;
     flex-direction: column;
@@ -495,7 +469,6 @@
     font-size: var(--text-sm);
     color: var(--ink-soft);
   }
-  /* The no-match empty state (EXC-845): quiet, left-aligned with the pane's content. */
   .pane-empty {
     margin: 0;
     padding: 1.5rem 0;
@@ -503,12 +476,10 @@
     color: var(--ink-faint);
   }
 
-  /* A sub-group of settings within the pane (e.g. "Diff view"), hugging its FieldGroup;
-     the pane gap separates one section from the next. A labelled section is a fieldset
-     and an unlabelled one a plain div, so this sets the column layout both need —
-     FieldSet ships it, a div does not. `min-inline-size: 0` cancels the fieldset's own
-     min-content default, which would otherwise let a wide row push the pane's grid
-     track open. */
+  /* A labelled section is a fieldset and an unlabelled one a plain div, so this sets the
+     column layout both need — FieldSet ships it, a div does not. `min-inline-size: 0`
+     cancels the fieldset's min-content default, which would otherwise let a wide row push
+     the pane's grid track open. */
   .settings :global(.section) {
     display: flex;
     flex-direction: column;

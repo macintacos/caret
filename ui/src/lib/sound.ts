@@ -5,9 +5,8 @@
 // uses for the other "announce something happened" surface: the audio backend is
 // an injectable option, so happy-dom's missing Web Audio API never matters to a
 // test — no test here touches a real AudioContext. `createSound` stays exported
-// for those tests; the app uses the `sound` singleton below, which surfaces
-// (CodeCopyButton inside the diff view) read directly rather than through five
-// levels of prop-drilling, exactly as they read `appearance`.
+// for those tests; the app uses the `sound` singleton below, which deep surfaces
+// read directly rather than through prop-drilling, exactly as they read `appearance`.
 //
 // A moment's cue is played from inside the ACTION it belongs to, never at the
 // call site that triggered it (EXC-1126). Both a keyboard binding and a click
@@ -93,7 +92,7 @@ export const SOUND_MAP: Partial<Record<SoundEvent, SoundName>> = {
   toastSuccess: "chime",
   toastError: "error",
   toastNotice: "tick",
-  // Chrome: surfaces opening and closing, and the two one-shot actions.
+  // Chrome.
   filePreviewOpen: "bloom",
   filePreviewClose: "whisper",
   modalOpen: "scan",
@@ -105,7 +104,7 @@ export const SOUND_MAP: Partial<Record<SoundEvent, SoundName>> = {
   commentOpen: "press",
   commentDropped: "release",
   commentDiscarded: "droplet",
-  // The plan's two navigation surfaces opening, by whichever path.
+  // The plan's two navigation surfaces opening.
   contentsOpen: "scan",
   breadcrumbOpen: "page",
   // Reading the plan differently: against another version, against another plan,
@@ -113,7 +112,7 @@ export const SOUND_MAP: Partial<Record<SoundEvent, SoundName>> = {
   compareToggled: "toggle",
   planSwitched: "page",
   commentsToggled: "toggle",
-  // The search HUD's four moments, and visual line-select's two.
+  // The search HUD, and visual line-select.
   searchOpened: "scan",
   searchCommitted: "ready",
   searchClosed: "whisper",
@@ -178,12 +177,10 @@ export function createSound(deps: SoundDeps = {}): Sound {
   const engine: SoundEngine = deps.engine ?? { play: cuelumePlay };
   const target = deps.target ?? (typeof window === "undefined" ? undefined : window);
 
-  // The one place the engine is touched, and the one place a throw is contained.
-  // cuelume guards context creation, but its node graph is built unguarded — a
-  // wedged AudioContext throws synchronously from createOscillator. That throw
-  // would surface as someone else's failure: the poll wraps its consumers in the
-  // same try as its fetch, so a silent cue would be reported as an unreachable
-  // daemon. Logged rather than swallowed, like notify.ts's construct failure.
+  // cuelume guards context creation, but builds its node graph unguarded — a wedged
+  // AudioContext throws synchronously from createOscillator. Uncontained, that throw
+  // would surface as someone else's failure: the poll wraps its consumers in the same
+  // try as its fetch, so a silent cue would be reported as an unreachable daemon.
   function render(name: SoundName, volume: number): void {
     try {
       engine.play(name, { volume });
@@ -218,6 +215,5 @@ export function createSound(deps: SoundDeps = {}): Sound {
 
 /** The app-wide sound service. App.svelte arms `sound.unlock()` and injects
  * `sound.play` into every factory that takes a `sound` dep; the surfaces with no
- * factory seam to inject through read it directly. Which surfaces those are is
- * deliberately not listed — a roster of consumers goes stale on every addition. */
+ * factory seam to inject through read it directly. */
 export const sound = createSound();

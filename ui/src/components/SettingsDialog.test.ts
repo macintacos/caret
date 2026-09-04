@@ -103,12 +103,10 @@ describe("SettingsDialog shell", () => {
 });
 
 describe("SettingsDialog label association (EXC-1112)", () => {
-  // The point of the field/label adoption: the visible row text IS the label element,
-  // so the accessible name and the rendered string are one string rather than two that
-  // can drift. Asserted over every rendered row rather than a hand-picked few — the
-  // invariant is that no row ships unwired, so a field added to the registry later is
-  // covered the day it lands. What the wiring then BUYS (the label click reaching the
-  // control, and the name a browser computes from it) is engine behaviour, and lives in
+  // The visible row text IS the label element, so the accessible name and the rendered
+  // string cannot drift apart. Asserted over EVERY rendered row, so a field added to the
+  // registry later is covered the day it lands. What the wiring buys — the label click
+  // reaching the control, the name a browser computes — is engine behaviour, and lives in
   // test/e2e/settings.e2e.ts.
   test("every row's visible text is a <label> wired to its control", async () => {
     const { flush } = render(SettingsDialog, props());
@@ -122,7 +120,7 @@ describe("SettingsDialog label association (EXC-1112)", () => {
       const target = label?.getAttribute("for") ?? null;
       if (target === null) {
         // `for` binds only to a labelable element, which neither a segmented control's
-        // <div role="group"> nor a slider's <span> root is (UNLABELABLE_CONTROLS in
+        // <div role="group"> nor a slider's <span> root is (settingLabelTarget in
         // settingsRegistry.ts) — both name their control through aria-labelledby instead.
         // Only the segmented case reaches here: the shell renders one category at a time
         // and this mounts on the default (Appearance), so the Sound pane's slider is
@@ -137,8 +135,7 @@ describe("SettingsDialog label association (EXC-1112)", () => {
     }
   });
 
-  // The parallel aria-label string is gone from every control the visible label
-  // now names — that redundancy is what the ticket exists to remove.
+  // No control the visible label names carries a parallel aria-label string.
   test("no control carries a redundant aria-label", async () => {
     const { flush } = render(SettingsDialog, props());
     await flushUntil(flush, mounted);

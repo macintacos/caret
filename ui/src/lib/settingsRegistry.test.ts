@@ -285,11 +285,9 @@ describe("staged fields wrap existing pref modules", () => {
   //
   // ORDERING, and it is load-bearing: daemonField's landed-value shadow is closure state
   // on the module-level registry with no reset seam, so this sweep pins updatesCheck's
-  // read() to the swept value for the rest of the process — `seedUpdatesCheck` cannot
-  // reach past it, and the afterEach that restores the seed does not restore the shadow.
-  // Any case asserting a daemon field's read() must be declared ABOVE this describe, as
-  // the Updates suite is. Giving daemonField a reset seam is the durable fix and is the
-  // second daemon-backed field's problem, not this one's.
+  // read() to the swept value for the rest of the process. Any case asserting a daemon
+  // field's read() must be declared ABOVE this describe, as the Updates suite is.
+  // TODO: give daemonField a reset seam when a second daemon-backed field lands.
   let cap: LogCapture;
   beforeEach(() => {
     cap = logCapture(() =>
@@ -312,9 +310,8 @@ describe("staged fields wrap existing pref modules", () => {
     for (const field of staged) {
       localStorage.clear();
       await field.write(sampleValue(field));
-      // A daemon field stores nothing locally, so it clears this vacuously — which is
-      // the correct result for it, not a gap: owning no browser key is the whole point
-      // of the kind, and the daemonField suite below asserts that emptiness directly.
+      // A daemon field stores nothing locally, so it clears this vacuously. The
+      // daemonField suite below asserts that emptiness directly.
       for (const key of storedKeys()) {
         expect(knownPrefKeys()).toContain(key);
       }

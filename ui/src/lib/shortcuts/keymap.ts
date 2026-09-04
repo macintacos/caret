@@ -1,10 +1,6 @@
-// The canonical keymap: EXC-785's shortcut table encoded as reserved-binding
-// data so downstream tickets (EXC-787/788/789/790) claim non-colliding keys.
-// These entries are a reference/reservation — they carry no `run`; a downstream
-// ticket implementing a binding registers its own live entry with the action.
-// EDITOR_SHORTCUTS are the exception registered now: the two existing composer
-// chords, display-only so they appear in the help modal while the composer
-// (markdownEditor.ts) keeps owning the behavior.
+// The canonical keymap (EXC-785): the shortcut table encoded as reserved-binding data,
+// so every ticket that adds a binding claims a non-colliding key from one place. The
+// entries carry no `run` — a live binding is built from a reservation through `bind`.
 
 import {
   ariaKeyshortcuts,
@@ -67,10 +63,7 @@ export const SETTINGS_SHORTCUTS: ShortcutEntry[] = [
   },
 ];
 
-/** EXC-785's full proposed keymap. Reserved bindings for the vim-shortcut tree —
- * the single source downstream tickets read to claim non-colliding keys. Only
- * EDITOR_SHORTCUTS are registered live here; each other binding gains its `run`
- * when its owning ticket lands. */
+/** Every reserved binding, in help-modal order. */
 export const CANONICAL_KEYMAP: ShortcutEntry[] = [
   // Motion (cursor)
   { id: "motion.down", keys: [{ key: "j" }], group: "motion", label: "Line down" },
@@ -126,12 +119,9 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
     label: "Request changes",
   },
   {
-    // EXC-913: shift+r rejects the plan. A bare shifted key — uppercase `key`, no
-    // command modifier and no cap override — the same shape as V/G/C/N, so keyCaps
-    // derives ["shift", "R"] from the case and ariaKeyshortcuts derives "Shift+R".
-    // Shifted rather than a second bare letter: reject is the one verdict with no
-    // undo, and any free bare letter would sit a key or two from `r` (request
-    // changes), so a slip lands it. Shift on the SAME key makes it deliberate.
+    // EXC-913: shifted rather than a second bare letter — reject is the one verdict with
+    // no undo, and any free bare letter would sit a key or two from `r` (request changes),
+    // so a slip lands it. Shift on the SAME key makes it deliberate.
     id: "actions.reject",
     keys: [{ key: "R" }],
     group: "actions",
@@ -153,40 +143,28 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
     group: "actions",
     label: "Search plan",
   },
-  // EXC-832: cycle to the next / previous search match (wrapping), registered live
-  // only while a committed search HUD is up. n derives its bare capital cap from its
-  // case; N is a bare shifted key (shift + capital), the same shape as V/G.
+  // EXC-832: cycle to the next / previous search match (wrapping), registered live only
+  // while a committed search HUD is up.
   { id: "actions.searchNext", keys: [{ key: "n" }], group: "actions", label: "Next match" },
   { id: "actions.searchPrev", keys: [{ key: "N" }], group: "actions", label: "Previous match" },
   { id: "actions.settings", keys: [{ key: "," }], group: "actions", label: "Open settings" },
   {
-    // EXC-792: summons the comment navigator. Keyed "C" (a bare shifted key —
-    // the case-sensitive matcher fires on it without a modifier flag, like V/G).
-    // No cap override: a bare uppercase key derives its shift + capital from its case
-    // (as V/G do, EXC-831), so C renders ["shift", "C"] straight from the key — one
-    // rendering path for every shifted letter. "shift" draws the global shift icon (caps.ts).
     id: "actions.toggleComments",
     keys: [{ key: "C" }],
     group: "actions",
     label: "Toggle comments",
   },
-  // EXC-947: opens the heading breadcrumbs bar's trailing crumb — the level being
-  // read — so the trail is reachable without the mouse. A bare lowercase letter, no
-  // command modifier and no cap override: keyCaps derives the capital from the key's
-  // case, the same shape `d` and `n` take.
+  // EXC-947: opens the heading breadcrumbs bar's trailing crumb — the level being read —
+  // so the trail is reachable without the mouse.
   { id: "actions.headingNav", keys: [{ key: "b" }], group: "actions", label: "Open breadcrumbs" },
-  // EXC-1097: opens the plan's table-of-contents popup — the see-the-whole-shape
-  // surface beside the breadcrumbs bar's drill-down. `\` has already been rebound
-  // twice (EXC-830's docked rail, then EXC-949's breadcrumbs alias), so a third
-  // move costs reviewers a third relearn. A bare key with no cap override: keyCaps
-  // and ariaKeyshortcuts both derive from `keys`, so the trigger's advertised hint
-  // cannot drift from what the dispatcher fires on.
-  // Unlike `b`, this key only OPENS. The popup puts focus in a text field, so the
-  // dispatcher's editing-context guard suppresses bare keys while it is up and a
-  // second `\` types a backslash into the filter; Escape and the trigger close it.
-  // Both labels read "Open …" for that reason — neither claims to toggle.
+  // EXC-1097: opens the plan's table-of-contents popup. `\` has already been rebound twice
+  // (EXC-830's docked rail, then EXC-949's breadcrumbs alias), so a third move costs
+  // reviewers a third relearn.
+  // Unlike `b`, this key only OPENS: the popup puts focus in a text field, so the
+  // dispatcher's editing-context guard suppresses bare keys while it is up and a second
+  // `\` types a backslash into the filter. Both labels read "Open …" for that reason.
   { id: "actions.contents", keys: [{ key: "\\" }], group: "actions", label: "Open contents" },
-  // Settings — the Settings modal's scoped affordances, display-only (EXC-849/876).
+  // Settings
   ...SETTINGS_SHORTCUTS,
   // Help
   {
@@ -199,13 +177,11 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
     // reservation (EXC-876), so the key AND its global scope flow from the table.
     scope: "global",
   },
-  // Editor (existing) — the read-only chords, registered live for the help modal.
+  // Editor
   ...EDITOR_SHORTCUTS,
 ];
 
-// One lookup of the reservations by id, built once. `bind` and `ariaKeyshortcutsFor` both
-// resolve a shortcut id to its reservation through it, so id → entry lookup lives in one
-// place (EXC-876).
+// The one id → reservation lookup every accessor below resolves through (EXC-876).
 const RESERVED = new Map(CANONICAL_KEYMAP.map((e) => [e.id, e] as const));
 
 /** The reservation for `id`, or a hard error — a typo'd id is a bug, not a silent no-op:
@@ -234,10 +210,9 @@ export function ariaKeyshortcutsFor(id: string): string {
   return ariaKeyshortcuts(reservedEntry(id).keys);
 }
 
-/** The caps a hint draws for the shortcut `id` — one array per chord, one glyph per
- * key — resolved through the same reservation `ariaKeyshortcutsFor` reads, so what a
- * hint SHOWS and what the dispatcher fires on cannot drift apart. The sibling of
- * `ariaKeyshortcutsFor` for a surface that draws keycaps rather than an attribute. */
+/** The caps a hint draws for the shortcut `id` — one array per chord, one glyph per key —
+ * resolved through the same reservation `ariaKeyshortcutsFor` reads, so what a hint SHOWS
+ * and what the dispatcher fires on cannot drift apart. */
 export function keyCapsFor(id: string): string[][] {
   return keyCaps(reservedEntry(id).keys);
 }

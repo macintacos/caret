@@ -82,8 +82,8 @@
   const configText = $derived(diagnostics ? configToToml(diagnostics.settings) : null);
   const configPath = $derived(diagnostics?.config.path ?? "");
 
-  // One descriptor per block, in mockup order. `available` gates the placeholder
-  // and the copy affordance; `text` is both what's shown and what's copied.
+  // One descriptor per block. `available` gates the placeholder and the copy affordance;
+  // `text` is both what's shown and what's copied.
   const blocks = $derived<Block[]>([
     { key: "version", label: "Version", text: versionText ?? "", available: versionText !== null },
     { key: "daemon", label: "Daemon", text: daemonText ?? "", available: daemonText !== null },
@@ -116,7 +116,6 @@
         </div>
 
         {#if block.key === "config" && block.available}
-          <!-- The config file's path on disk, above its block (mockup). -->
           <FieldDescription class="diag-path">{configPath}</FieldDescription>
         {/if}
 
@@ -158,9 +157,8 @@
     gap: 1.15rem;
   }
 
-  /* One diagnostics section: an uppercase label row (label + Copy) above its sunk
-     block. The label mirrors the SettingsDialog section-head vocabulary so an
-     Advanced label reads the same as the Appearance pane's "Diff view" header. */
+  /* The section label mirrors the SettingsDialog section-head vocabulary, so an Advanced
+     label reads the same as the Appearance pane's "Diff view" header. */
   .advanced :global(.diag-section) {
     gap: 0.4rem;
   }
@@ -192,7 +190,6 @@
     background: var(--ink-wash);
   }
 
-  /* The config file path, above its block. */
   .advanced :global(.diag-path) {
     margin: 0;
     font-family: var(--font-mono);

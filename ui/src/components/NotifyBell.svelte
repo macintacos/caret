@@ -3,9 +3,8 @@
   // (EXC-427). It mirrors Notification.permission and, in the undecided state,
   // requests it on click. Presentation is the pure bellPresentation() mapping
   // from notify.ts; this file is only the Svelte shell + styling.
-  // EXC-760: composed from the shadcn Button (ghost icon) with the state help
-  // text moved off a native `title=` onto a shadcn Tooltip. The bell's live
-  // state stays announced via aria-label; the tooltip carries the hover hint.
+  // EXC-760: a shadcn Button (ghost icon) whose state help rides a shadcn Tooltip. The
+  // bell's live state is announced via aria-label; the tooltip carries the hover hint.
   import { uiLog } from "$lib/log.ts";
   import { bellPresentation, fireTestNotification, observePermission } from "$lib/notify.ts";
   import { Button } from "$lib/components/ui/button/index.js";

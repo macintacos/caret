@@ -15,10 +15,9 @@ import NotifyBell from "@/components/NotifyBell.svelte";
 // its click behavior. The component reads the live Notification static, so each
 // test installs a stub with a chosen permission and a requestPermission spy.
 //
-// EXC-760: the state hint moved off a native `title=` onto a shadcn Tooltip
-// (portalled, hover-driven), so the tooltip text is asserted in
-// notifications.e2e.ts (real hover) rather than here. The tone now lives on the
-// inner icon `.stack` (the Button is neutral ghost chrome).
+// EXC-760: the state hint rides a shadcn Tooltip (portalled, hover-driven), so its text
+// is asserted in notifications.e2e.ts under a real hover rather than here. The tone lives
+// on the inner icon `.stack` — the Button itself is neutral ghost chrome.
 
 let stub: NotificationStub;
 const realNotification = (globalThis as { Notification?: unknown }).Notification;

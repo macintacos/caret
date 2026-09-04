@@ -188,16 +188,14 @@ describe("createPlanNotifier", () => {
     const { notifier, fired } = makeNotifier();
     notifier.observe([review("a")]);
     notifier.observe([]); // a resolved away — pruned
-    // Documented trade-off: a pruned id reappearing counts as new again
-    // (acceptable; real review ids are fresh UUIDs).
+    // A pruned id reappearing counts as new again — the deliberate trade-off that
+    // makes a re-pended revision notify.
     notifier.observe([review("a")]);
     expect(fired).toHaveLength(1);
   });
 
-  // EXC-815: returning to caret dismisses EVERY outstanding plan toast, not just
-  // the active plan's — once the user is looking at caret, every desktop alert is
-  // redundant. Gated on presence: mergeReviews auto-selects while away, and a
-  // toast the away user never saw must never be closed out from under them.
+  // EXC-815: every outstanding toast goes, not just the active plan's. Gated on presence,
+  // because a toast the away user never saw must not be closed out from under them.
   test("dismissAllIfPresent() dismisses every fired notification when present", () => {
     const { notifier, fired } = twoFired();
     away = false; // user is back on the tab
@@ -221,12 +219,10 @@ describe("createPlanNotifier", () => {
   });
 });
 
-// EXC-733: two open caret tabs each run their own notifier with a private
-// seen-set. Nothing coordinated them, so a single new review fired one toast
-// per tab. The fix adds a cross-tab `claim` seam; these drive two instances
-// through a shared claim primitive (the Web Locks stand-in) and pin that
-// exactly one wins. Every test above uses a single instance — which is why
-// this class of bug slipped through.
+// EXC-733: each open caret tab runs its own notifier with a private seen-set, so only
+// the cross-tab `claim` seam stops one new review firing a toast per tab. These drive
+// two instances through a shared claim primitive and pin that exactly one wins — the
+// single-instance tests above cannot see this class of bug at all.
 describe("createPlanNotifier cross-tab dedup (EXC-733)", () => {
   // A shared, atomic claim across instances: the first caller to see an id wins
   // (adds it, resolves true); later callers lose (resolve false). Async, like
@@ -645,12 +641,10 @@ describe("fireTestNotification", () => {
   });
 });
 
-// observePermission is the shared Permissions-API subscription (EXC-847): both
-// NotifyBell and the settings NotificationsPane use it to stay truthful when the
-// permission changes outside their own request (the browser's site settings, the
-// onboarding modal, the other surface). It reads the live Notification.permission
-// on each change rather than the PermissionStatus.state — the value the notifier
-// gates on at fire time, which headless engines can diverge from.
+// observePermission is the shared Permissions-API subscription (EXC-847) that keeps
+// NotifyBell and NotificationsPane truthful when the permission changes outside their
+// own request. It reads the live Notification.permission on each change rather than
+// PermissionStatus.state, which headless engines can diverge from.
 describe("observePermission", () => {
   // A fake PermissionStatus that records the single "change" handler so the test
   // can fire it and assert the subscription attaches/detaches.

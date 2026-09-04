@@ -20,11 +20,9 @@ import "$lib/shortcutHintsPref.ts";
 import "$lib/soundPref.ts";
 import "$lib/updatesPref.ts";
 
-// This is the structural guard the three-place key sync used to lack: it scans the
-// source for every persisted caret.* localStorage key and asserts each one is
-// registered, so a pref that forgets to register (as the drag-hint key once did,
-// silently surviving `mise run dev --fresh`) fails the unit suite instead of
-// drifting unnoticed.
+// The structural guard on the key registry: it scans the source for every persisted
+// caret.* localStorage key and asserts each one is registered, so a pref that forgets to
+// register — and would silently survive `mise run dev --fresh` — fails here instead.
 
 const UI_SRC = join(import.meta.dir, "..");
 

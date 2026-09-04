@@ -221,8 +221,7 @@ describe("SettingSelect commit", () => {
     // A listbox is not a menu: bits-ui defaults `allowDeselect` to false, so
     // SelectItemState.handleSelect early-returns to handleClose() when the picked value
     // is already current — the same silence a native <select> keeps when you re-pick an
-    // option. The DropdownMenu this replaced re-fired onSelect for an unchanged value,
-    // and one e2e case depended on that.
+    // option.
     const { flush, picked } = await openWithSelectCapture();
     pointer(option("split"), "pointerup");
     await flushUntil(flush, () => content() === null);

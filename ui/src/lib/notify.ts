@@ -2,10 +2,9 @@
 // while the user is away — tab hidden OR window unfocused — and notification
 // permission is granted, fire a page-context Web Notification whose click
 // focuses the tab and selects that review. A notification click is a user
-// gesture, so window.focus() is the one focus path browsers reliably allow —
-// the OS-level counterpart to opening a new tab per plan. visibilityState
-// alone misses the common case of a visible-but-background window, which is
-// why the away-check also reads document.hasFocus().
+// gesture, so window.focus() is the one focus path browsers reliably allow.
+// visibilityState alone misses the common case of a visible-but-background
+// window, which is why the away-check also reads document.hasFocus().
 //
 // Framework-agnostic and unit-tested in isolation (cf. safeMode.ts): every
 // browser surface (Notification, visibility, focus) is an injectable option,
@@ -69,8 +68,7 @@ export interface PlanNotifier {
   dismissAllIfPresent: () => void;
 }
 
-// The carrot is the brand pun (caret → 🥕) — and an emoji survives the OS
-// toast's bold title styling better than a lowercase wordmark prefix did.
+// An emoji survives the OS toast's bold title styling better than a wordmark prefix.
 const NOTIFICATION_TITLE = "🥕 New Plan Ready";
 
 // Notification construction can throw (e.g. platforms that require a service
@@ -94,13 +92,11 @@ function defaultPermission(): NotificationPermission {
 
 /** Subscribe to notification-permission changes made outside the caller's own
  * request — the browser's site settings, the first-run onboarding modal, or
- * another caret surface. On each Permissions-API "change" event it re-reads the
- * live `Notification.permission` (the value the notifier gates on at fire time,
- * which some engines diverge from `PermissionStatus.state`) and passes it to
- * `onChange`. Returns a cleanup that detaches the listener. An inert no-op where
- * the Notification API or `navigator.permissions.query` is unavailable — the
- * caller's own request path still keeps its badge truthful. Shared by
- * NotifyBell.svelte and the settings NotificationsPane (EXC-847). */
+ * another caret surface. Each "change" event re-reads the live
+ * `Notification.permission` rather than `PermissionStatus.state`, which some
+ * engines diverge from, since the former is what the notifier gates on at fire
+ * time. Returns a cleanup that detaches the listener; an inert no-op where the
+ * Notification API or `navigator.permissions.query` is unavailable. */
 export function observePermission(
   onChange: (permission: NotificationPermission) => void,
 ): () => void {
@@ -127,24 +123,17 @@ export function observePermission(
   };
 }
 
-// Under normal polling, open tabs observe a newly-pending review within one 2s
-// poll interval of each other, so the winning tab holds the per-id lock a few
-// seconds past that window — long enough that a peer polling a beat later finds
-// the id already claimed, yet well short of any request-changes → revision cycle
-// (so a genuine re-pend still notifies). This is best-effort, not a hard
-// guarantee: a tab hidden long enough for the browser to throttle its timers to
-// ~once/minute can poll after the hold expires and still duplicate. Acceptable —
-// it is strictly better than the per-tab firing it replaces; a persistent
-// id→timestamp ledger would be the robust follow-up if that case ever bites.
+// Open tabs observe a newly-pending review within one 2s poll of each other, so the
+// hold must outlast that window yet stay well short of a request-changes → revision
+// cycle, which must still notify. Best-effort only: a hidden tab whose timers the
+// browser throttles to ~once/minute can poll after the hold expires and duplicate.
 const NOTIFY_CLAIM_HOLD_MS = 5000;
 
-// Cross-tab claim via the Web Locks API: among same-origin tabs, exactly one
-// acquires the per-id lock and fires; peers get a null lock and stay silent.
-// The winner resolves true immediately (prompt toast) and holds the lock in the
-// background for NOTIFY_CLAIM_HOLD_MS. Runtimes without navigator.locks claim
-// synchronously and always win — preserving the single-instance behavior every
-// unit test relies on. A rejected request degrades toward firing: a rare
-// duplicate beats a lost notification.
+// Cross-tab claim via the Web Locks API. The winner resolves true immediately — the
+// toast must not wait on the hold — and keeps the lock in the background for
+// NOTIFY_CLAIM_HOLD_MS. Runtimes without navigator.locks claim synchronously and
+// always win. A rejected request degrades toward firing: a rare duplicate beats a
+// lost notification.
 export function defaultClaim(id: string): boolean | Promise<boolean> {
   const locks = globalThis.navigator?.locks;
   if (!locks) return true;
@@ -159,9 +148,8 @@ export function defaultClaim(id: string): boolean | Promise<boolean> {
         return new Promise<void>((release) => setTimeout(release, NOTIFY_CLAIM_HOLD_MS));
       })
       .catch((err) => {
-        // Web Locks rejected (e.g. SecurityError in an unexpected context):
-        // degrade toward firing so the notification is never lost, but log —
-        // a swallowed claim failure would silently revert to duplicate toasts.
+        // Degrade toward firing so the notification is never lost, but log — a
+        // swallowed claim failure would silently revert to duplicate toasts.
         uiLog.warn("ui", `plan notification claim failed: ${shortId(id)}`, {
           reviewId: id,
           reason: String(err),
@@ -178,20 +166,17 @@ export function createPlanNotifier(opts: PlanNotifierOptions): PlanNotifier {
   const focus = opts.focus ?? (() => window.focus());
   const claim = opts.claim ?? defaultClaim;
 
-  // Fired toasts still on screen, keyed by review id (EXC-815). Retained so
-  // opened() / onclick can close one after the fact — a bare new Notification()
-  // handle is otherwise lost the moment fire() returns.
+  // Fired toasts still on screen, keyed by review id (EXC-815). Retained so they can
+  // be closed after the fact — a bare new Notification() handle is otherwise lost the
+  // moment fire() returns.
   const handles = new Map<string, NotificationHandle>();
 
-  // Close a fired toast and forget it. Used by opened() (presence-gated) and by
-  // onclick (unconditional — a click is an explicit dismiss).
   const dismiss = (id: string) => {
     handles.get(id)?.close();
     handles.delete(id);
   };
 
-  // Fire the desktop toast for one genuinely-new review and wire its display /
-  // click feedback. The body renders on the user's own desktop — never log it.
+  // The body renders on the user's own desktop — never log it.
   const fire = (r: PlanReviewLike) => {
     const handle = notify(NOTIFICATION_TITLE, `${r.title} — ${r.cwd}`);
     if (!handle) {
@@ -200,8 +185,6 @@ export function createPlanNotifier(opts: PlanNotifierOptions): PlanNotifier {
     }
     handles.set(r.id, handle);
     uiLog.info("ui", `plan notification fired: ${shortId(r.id)}`, { reviewId: r.id });
-    // Display feedback: the OS suppressing a granted notification is silent at
-    // the constructor — only these events tell the truth.
     handle.onshow = () =>
       uiLog.debug("ui", `plan notification shown: ${shortId(r.id)}`, { reviewId: r.id });
     handle.onerror = () =>
@@ -214,19 +197,17 @@ export function createPlanNotifier(opts: PlanNotifierOptions): PlanNotifier {
     };
   };
 
-  // A peer tab already claimed this id — stay silent, but log so every new id
-  // still resolves to exactly one record and the cross-tab dedup stays visible.
+  // Silent to the user, so log it: every new id must still resolve to exactly one
+  // record.
   const skipDuplicate = (r: PlanReviewLike) =>
     uiLog.debug("ui", `plan notification skipped (duplicate): ${shortId(r.id)}`, {
       reviewId: r.id,
     });
 
-  // null until the first observe seeds it. Pruning to each snapshot bounds the
-  // set to the pending count, and a pruned id reappearing counts as new again.
-  // That reappearance is the revision lifecycle: a request-changes round flips
-  // the review to rejected (it leaves the pending list), and the revised plan
-  // re-pends the SAME id — so a revision the user is waiting on notifies,
-  // deliberately. Only an id continuously present never re-fires.
+  // null until the first observe seeds it. Pruning to each snapshot means a pruned id
+  // reappearing counts as new again, deliberately: a request-changes round drops the
+  // review from the pending list and the revised plan re-pends the SAME id, which the
+  // user is waiting on. Only an id continuously present never re-fires.
   let seen: Set<string> | null = null;
 
   return {
@@ -236,18 +217,12 @@ export function createPlanNotifier(opts: PlanNotifierOptions): PlanNotifier {
       if (prev === null) return; // first poll: seed silently
       const fresh = reviews.filter((r) => !prev.has(r.id));
       if (fresh.length === 0) return;
-      // Every genuinely-new id resolves to exactly one record — fired,
-      // skipped, or unavailable — because a notification the user never sees
-      // is otherwise indistinguishable from a bug. Bounded by new-id arrivals,
-      // never per-tick.
       const skip = !isAway() ? "active" : permission() !== "granted" ? "permission" : null;
       if (skip) {
-        // A skipped notification is otherwise invisible. The permission skip in
-        // the *undecided* (default) state is the one that masquerades as a
-        // broken feature on a fresh per-origin install (EXC-559): log it at info
-        // so it's discoverable without debug logging. `denied` already shows a
-        // prominent danger bell, and `active` means the user is on the tab and
-        // sees the review render — both stay at debug.
+        // The undecided (default) permission skip masquerades as a broken feature on a
+        // fresh per-origin install (EXC-559), so it logs at info — discoverable without
+        // debug logging. `denied` already shows a danger bell and `active` means the
+        // user is watching the review render, so both stay at debug.
         const level = skip === "permission" && permission() === "default" ? "info" : "debug";
         for (const r of fresh) {
           uiLog[level]("ui", `plan notification skipped (${skip}): ${shortId(r.id)}`, {
@@ -257,9 +232,6 @@ export function createPlanNotifier(opts: PlanNotifierOptions): PlanNotifier {
         return;
       }
       for (const r of fresh) {
-        // Cross-tab claim: among same-origin tabs, exactly one fires per id.
-        // The default is async (Web Locks); the sync branch keeps every
-        // no-coordination context (tests, non-browser) firing as before.
         const won = claim(r.id);
         if (won === true) fire(r);
         else if (won === false) skipDuplicate(r);
@@ -267,12 +239,10 @@ export function createPlanNotifier(opts: PlanNotifierOptions): PlanNotifier {
       }
     },
     dismissAllIfPresent() {
-      // The user is back in caret. Every toast we fired while they were away is
-      // now redundant — the bell and switcher already show these plans — so
-      // close them all, not just the active plan's (a toast can be for a
-      // background plan another is selected over). Gated on presence:
-      // mergeReviews auto-selects while away, and closing a toast the away user
-      // never saw is worse than leaving it. isAway() is the single presence gate.
+      // Close every toast, not just the selected plan's: once the user is back, the bell
+      // and switcher show all of them. Gated on presence because mergeReviews
+      // auto-selects while away, and closing a toast the away user never saw is worse
+      // than leaving it.
       if (isAway()) return;
       for (const handle of handles.values()) handle.close();
       handles.clear();

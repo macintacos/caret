@@ -1,21 +1,16 @@
 // The registry of user-facing settings surfaced in the Settings modal (EXC-837),
 // plus the field/control shapes the two-pane shell (EXC-843) renders. Each field
-// wraps a browser-preference module and reads/writes through the key that module
-// owns, never one of its own — so a field over an existing pref (theme, shortcut
-// hints, diff style/indicators) leaves users' stored values untouched, and a field
-// over a new one (sound) registers its key there rather than here. The exception is a
-// daemonField (EXC-1206), which owns no browser key at all: its write is a POST to the
-// daemon. Editing a setting applies it immediately: the shell
-// calls write() the moment a control changes (App confirms with a toast); there
-// is no staged draft.
+// reads/writes through the key its own preference module owns, never one of its own,
+// so registering a setting here never disturbs a stored value. The exception is a
+// daemonField (EXC-1206), which owns no browser key at all: its write is a POST to
+// the daemon. Editing a setting applies it immediately — the shell calls write() the
+// moment a control changes; there is no staged draft.
 //
-// Panes that show live, read-only information (Advanced diagnostics,
-// Notifications, the Updates verdict) contribute search-only entries: they appear
-// in settings search (EXC-845) but carry no read/write.
+// Panes that show live, read-only information contribute search-only entries: they
+// appear in settings search (EXC-845) but carry no read/write.
 //
 // `category` is the sidebar taxonomy (one nav row each); `section` sub-groups a
-// category's fields into labelled blocks within its pane (Diff view lives as a
-// section under Appearance).
+// category's fields into labelled blocks within its pane.
 
 import type { PrefsPatch } from "@core/lib/types";
 import { appearance } from "@/state/appearance.svelte.ts";
@@ -116,11 +111,9 @@ export function stagedField<V>(def: Omit<StagedField<V>, "kind">): StagedField {
  * a daemon-backed setting costs a constructor here rather than a third entry kind
  * threaded through isStagedField and every pane.
  *
- * The constructor owns half of `read`, and that is what makes it usable. The shell
- * re-reads a field the instant its write settles, and a daemon-owned value has no
- * local source of truth to re-read — so the last value the daemon ACCEPTED shadows
- * the registrant's `read`, which then only has to answer for the state before this
- * session wrote anything (a value fetched at load, or a default). A refused write
+ * The constructor owns half of `read`: the shell re-reads a field the instant its
+ * write settles, and a daemon-owned value has no local source of truth to re-read, so
+ * the last value the daemon ACCEPTED shadows the registrant's `read`. A refused write
  * never reaches that shadow, which is what keeps the re-read a snap-back. */
 export function daemonField<V>(
   def: Omit<StagedField<V>, "kind" | "write"> & { patch: (value: V) => PrefsPatch },
@@ -141,12 +134,10 @@ export function daemonField<V>(
   } as StagedField;
 }
 
-// The label↔control wiring for a settings row (EXC-1112). Every pane that renders a
-// row spells these two ids, and the invariant binding them — a row's `<label for>` is
-// its control's `id` — is what supplies the control its accessible name. Spelled
-// inline at each site, a single typo would leave that control silently unnamed with
-// nothing to fail on it, so the convention lives here beside the field shape it keys
-// off.
+// The label↔control wiring for a settings row (EXC-1112): a row's `<label for>` is its
+// control's `id`, and that pairing is what gives the control its accessible name. Spelled
+// inline at each pane instead, one typo would leave a control silently unnamed with
+// nothing to fail on it.
 
 /** A setting control's DOM id — what its row's `<label for>` points at. */
 export const settingControlId = (key: string): string => `setting-${key}`;
@@ -166,7 +157,6 @@ export const settingLabelTarget = (field: StagedField): string | undefined =>
     ? undefined
     : settingControlId(field.key);
 
-/** An entry's searchable text: its label plus its description, lowercased. */
 function searchText(entry: SettingEntry): string {
   return `${entry.label} ${entry.description}`.toLowerCase();
 }
@@ -185,12 +175,10 @@ export function filterSettings(
   return entries.filter((entry) => searchText(entry).includes(q));
 }
 
-// The five tokens every palette supplies (ColorToken makes them mandatory), previewed
-// as dots beside each theme option so a future theme renders its swatch with no extra
-// wiring — background, the raised surface, ink, the accent, and the positive hue. The
-// hover preview (EXC-753) treats this as its floor: the ThemePreviewCard must reference
-// at least these five so the preview never shows fewer colors than the option's dots
-// (ThemePreviewCard.test.ts pins that against the exported list).
+// The tokens every palette must supply (ColorToken makes them mandatory), previewed as
+// dots beside each theme option. ThemePreviewCard must reference at least these, so the
+// hover preview (EXC-753) never shows fewer colors than the option's dots
+// (ThemePreviewCard.test.ts pins that against this list).
 export const SWATCH_TOKENS = ["--paper", "--paper-raised", "--ink", "--accent", "--ok"] as const;
 
 /** A scheme's slot options: only that scheme's palettes, so the light selector
@@ -200,12 +188,10 @@ function slotOptions(scheme: Scheme): SettingOption[] {
     value: theme.id,
     label: theme.label,
     swatch: SWATCH_TOKENS.map((token) => theme.tokens[token]),
-    // The palette the hover preview (EXC-753) paints Caret's chrome in.
     preview: theme.id,
   }));
 }
 
-/** The mode control's three fixed choices, each carrying its glyph. */
 const MODE_ICONS: Record<ThemeMode, IconName> = {
   light: "sun",
   dark: "moon",
@@ -243,9 +229,8 @@ export const THEME_KEYS: readonly string[] = Object.values(THEME_FIELD);
  * opt-out — without re-spelling a literal the registry owns. */
 export const UPDATES_CHECK_KEY = "updatesCheck";
 
-/** The Updates category id, exported for the same reason the key above is: the update
- * toast deep-links to this pane from another module, and a renamed category would
- * otherwise degrade that link to "opens on Appearance" with nothing to fail on it. */
+/** The Updates category id: the update toast deep-links to this pane, and a renamed
+ * category would silently degrade that link to "opens on Appearance". */
 export const UPDATES_CATEGORY = "Updates";
 
 const diffStyleOptions = [
@@ -263,13 +248,11 @@ const diffIndicatorOptions = [
  * its own pref module's localStorage key; search-only entries (contributed by
  * later panes) never apply. */
 export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
-  // The appearance trio (EXC-773). They share the THEME_SECTION label, which the
-  // shell renders as one composite block (ThemeSection.svelte) rather than three
-  // independent rows — the `IN USE` marker and the resolved-state line only make
-  // sense across all three. Each one reads and commands the live appearance
-  // (@/state/appearance.svelte.ts), which owns the persist-then-repaint sequence,
-  // so the change takes effect immediately. Every label/description carries the
-  // word "theme" so a `/`-search for it keeps the block together.
+  // The appearance trio (EXC-773). They share the THEME_SECTION label, which the shell
+  // renders as one composite block (ThemeSection.svelte) rather than three independent
+  // rows — the `IN USE` marker and the resolved-state line only make sense across all
+  // three. Every label/description carries the word "theme" so a `/`-search for it keeps
+  // the block together.
   stagedField<ThemeMode>({
     key: "themeMode",
     category: "Appearance",
@@ -341,17 +324,14 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     read: readSoundEnabled,
     write: writeSoundEnabled,
   }),
-  // How loud those cues are (EXC-1101), read per play by the same sound layer. The
-  // control speaks whole percents and the preference a 0–1 multiplier, so the conversion
-  // sits here — the one place that knows both units.
+  // How loud those cues are (EXC-1101). The control speaks whole percents and the
+  // preference a 0–1 multiplier, so the conversion sits here — the one place that knows
+  // both units.
   //
-  // The read SNAPS to the control's own 5% ladder rather than merely rounding, and that
-  // is load-bearing rather than tidiness: bits-ui's slider watches its value and quietly
-  // rewrites an off-step one to the nearest step, which travels back out through the
-  // binding as if the reviewer had moved it — so a stored volume off the ladder would
-  // write, toast and chime the instant the pane opened. Rounding alone leaves that live
-  // (float drift is real here too: 0.55 * 100 is 55.00000000000001, though 0.25 * 100 is
-  // exactly 25), so the ladder is what actually closes it.
+  // The read must SNAP to the control's own 5% ladder, not merely round: bits-ui's slider
+  // quietly rewrites an off-step value to the nearest step and that travels back out
+  // through the binding as if the reviewer had moved it, so a stored volume off the ladder
+  // would write, toast and chime the instant the pane opened.
   stagedField<number>({
     key: "soundVolume",
     category: "Sound",
@@ -361,9 +341,8 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     read: () => Math.round(readSoundVolume() * 20) * 5,
     write: (percent) => writeSoundVolume(percent / 100),
   }),
-  // Live, browser-owned notification permission (EXC-847): a search-only entry so
-  // /-search (EXC-845) finds it. The pane itself (NotificationsPane) renders the
-  // live state and the enable / test affordance — there is nothing to persist.
+  // Live, browser-owned notification permission (EXC-847): NotificationsPane renders the
+  // state and the enable / test affordance, so there is nothing to persist.
   {
     kind: "search",
     key: "notifications",
@@ -371,11 +350,8 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     label: "Desktop notifications",
     description: "Get alerted when a new plan is ready for review; check the permission state.",
   },
-  // The update check (EXC-1207) — the registry's one daemon-owned field, since the
-  // check runs in the daemon and outlives any browser that flipped it. daemonField
-  // makes that difference a write destination and nothing else: the row renders as an
-  // ordinary toggle, and read() answers from what App seeded at load until a write
-  // lands.
+  // The update check (EXC-1207) — the registry's one daemon-owned field, since the check
+  // runs in the daemon and outlives any browser that flipped it.
   daemonField<boolean>({
     key: UPDATES_CHECK_KEY,
     category: UPDATES_CATEGORY,
@@ -385,9 +361,7 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     read: seededUpdatesCheck,
     patch: (check) => ({ updates: { check } }),
   }),
-  // The pane's verdict block is live and read-only, so — following the Advanced
-  // precedent — it contributes a search-only entry purely so /-search (EXC-845) can
-  // find it. UpdatesPane renders the status; nothing here persists.
+  // UpdatesPane renders the verdict live; nothing here persists.
   {
     kind: "search",
     key: "updateStatus",
@@ -395,10 +369,9 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     label: "Update status",
     description: "Whether this caret is behind, and the command that takes the upgrade.",
   },
-  // Read-only install diagnostics (EXC-848): one search-only entry per block so
-  // /-search (EXC-845) finds each, and — since the shell renders a category only
-  // when it has ≥1 entry — so the Advanced nav row appears at all. AdvancedPane
-  // fetches and renders the live values; nothing here persists.
+  // Read-only install diagnostics (EXC-848). AdvancedPane fetches and renders the live
+  // values; the entries exist so /-search finds each block and — since the shell renders
+  // a category only when it has ≥1 entry — so the Advanced nav row appears at all.
   {
     kind: "search",
     key: "advancedVersion",
@@ -437,13 +410,10 @@ export interface SettingCategory {
   blurb: string;
 }
 
-/** The ordered sidebar taxonomy (EXC-843). The two-pane shell renders a nav item
- * per category that has at least one registry entry, in this order, and shows the
- * blurb beneath the pane title. Later panes append their categories here —
- * Sound (EXC-1100), Notifications (EXC-847), Updates (EXC-1207), Advanced (EXC-848).
- * Sound sits directly before Notifications: both are how caret gets the reviewer's
- * attention, so they read as a pair. Updates sits directly before Advanced, the two
- * install-level panes, and Advanced stays last. */
+/** The ordered sidebar taxonomy (EXC-843). The two-pane shell renders a nav item per
+ * category that has at least one registry entry, in this order. Sound sits beside
+ * Notifications — both are how caret gets the reviewer's attention — and Updates beside
+ * Advanced, the two install-level panes. */
 export const SETTINGS_CATEGORIES: readonly SettingCategory[] = [
   { id: "Appearance", blurb: "How the interface looks, including the diff view." },
   { id: "Sound", blurb: "Short cues when a plan arrives and a decision lands." },

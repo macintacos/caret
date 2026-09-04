@@ -70,10 +70,8 @@ describe("CANONICAL_KEYMAP", () => {
   });
 
   test("reserves Shift+C for the comment navigator, rendered as shift + C caps", () => {
-    // EXC-792: summons the comment navigator. Keyed "C" (a bare shifted key, no command
-    // modifier and no explicit cap: keyCaps derives the shift + capital from the uppercase
-    // key's case, the same path V/G take, EXC-831). "shift" is the token caps.ts resolves to
-    // the global shift icon at render.
+    // EXC-792: a bare shifted key, so keyCaps derives shift + capital from the uppercase
+    // key's case. "shift" is the token caps.ts resolves to the global shift icon at render.
     const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.toggleComments");
     if (!entry) throw new Error("actions.toggleComments missing");
     expect(entry.group).toBe("actions");
@@ -83,12 +81,9 @@ describe("CANONICAL_KEYMAP", () => {
   });
 
   test("reserves Shift+R for Reject, rendered as shift + R caps (EXC-913)", () => {
-    // EXC-913: shift+r fires the top bar's Reject. A bare shifted key (uppercase key,
-    // no command modifier and no cap override), so keyCaps derives ["shift", "R"] from
-    // the case and ariaKeyshortcuts derives "Shift+R" from the same field — the
-    // ADVERTISED hint (aria-keyshortcuts) cannot drift from the key the dispatcher
-    // fires on. The visible cap is still typed by hand at each call site, as the
-    // topbar's a/r caps are, so it does not ride this guarantee.
+    // EXC-913: both the cap and the aria hint derive from the same uppercase `key`, so the
+    // ADVERTISED shortcut cannot drift from what the dispatcher fires on. The VISIBLE cap
+    // is still typed by hand at each call site and does not ride that guarantee.
     const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.reject");
     if (!entry) throw new Error("actions.reject missing");
     expect(entry.group).toBe("actions");
@@ -99,10 +94,6 @@ describe("CANONICAL_KEYMAP", () => {
   });
 
   test("reserves \\ for the contents popup, rendered as a \\ cap (EXC-1097)", () => {
-    // A bare backslash, no command modifier — the cap derives straight from the
-    // key, no explicit override — and the advertised hint derives from the same
-    // field, so the trigger's aria-keyshortcuts cannot drift from what the
-    // dispatcher fires on.
     const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.contents");
     if (!entry) throw new Error("actions.contents missing");
     expect(entry.group).toBe("actions");
@@ -110,15 +101,12 @@ describe("CANONICAL_KEYMAP", () => {
     expect(specSignature(entry.keys)).toBe("\\");
     expect(keyCaps(entry.keys)).toEqual([["\\"]]);
     expect(ariaKeyshortcutsFor("actions.contents")).toBe("\\");
-    // The breadcrumbs alias this key used to be is gone rather than renamed, so
-    // the help modal cannot carry a row still claiming `\` opens the bar.
+    // No second reservation may claim `\`, or the help modal would carry a row saying it
+    // opens the breadcrumbs bar.
     expect(CANONICAL_KEYMAP.some((e) => e.id === "actions.toggleSidebar")).toBe(false);
   });
 
   test("reserves b for the heading breadcrumbs in the Actions group, rendered as a B cap", () => {
-    // EXC-947: `b` invokes the heading breadcrumbs bar. The cap and the advertised
-    // hint are derived from the same `key`, so the bar's aria-keyshortcuts cannot
-    // drift from what the dispatcher fires on.
     const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.headingNav");
     if (!entry) throw new Error("actions.headingNav missing");
     expect(entry.group).toBe("actions");
@@ -129,10 +117,8 @@ describe("CANONICAL_KEYMAP", () => {
   });
 
   test("derives shift + letter caps for the bare shifted vim keys (no cap override)", () => {
-    // EXC-831: V and G are bare shifted keys (uppercase key, no command modifier and
-    // no explicit cap); keyCaps derives the shift affordance from the key's case, so
-    // they render as the shift icon + the capital — the same shape toggleComments
-    // spells out by hand.
+    // EXC-831: V and G are bare shifted keys, so keyCaps derives the shift affordance from
+    // the key's case and they render as the shift icon plus the capital.
     const visual = CANONICAL_KEYMAP.find((e) => e.id === "commenting.visualLine");
     const bottom = CANONICAL_KEYMAP.find((e) => e.id === "motion.bottom");
     if (!visual || !bottom) throw new Error("V/G keymap entries missing");
@@ -141,10 +127,9 @@ describe("CANONICAL_KEYMAP", () => {
   });
 
   test("owns / for plan search (EXC-832), repointed from the contents filter", () => {
-    // EXC-832 repurposes / from "focus contents filter" (EXC-789) to a vim-style
-    // full-text search of the plan; the focus-filter binding is gone. The
-    // breadcrumbs bar's `/` (EXC-948) lives inside an open crumb menu and is handled
-    // there, so it never reaches this table.
+    // EXC-832: `/` is a vim-style full-text search of the plan. The breadcrumbs bar's own
+    // `/` (EXC-948) lives inside an open crumb menu and is handled there, so it never
+    // reaches this table.
     const search = CANONICAL_KEYMAP.find((e) => e.id === "actions.search");
     if (!search) throw new Error("actions.search missing");
     expect(search.group).toBe("actions");
@@ -154,9 +139,7 @@ describe("CANONICAL_KEYMAP", () => {
   });
 
   test("reserves n / N to cycle search matches (EXC-832)", () => {
-    // n / N step to the next / previous match once a search is committed. n derives
-    // its bare capital cap from its case; N is a bare shifted key (shift + capital),
-    // the same shape as V/G.
+    // n / N step to the next / previous match once a search is committed.
     const next = CANONICAL_KEYMAP.find((e) => e.id === "actions.searchNext");
     const prev = CANONICAL_KEYMAP.find((e) => e.id === "actions.searchPrev");
     if (!next || !prev) throw new Error("search n/N keymap entries missing");

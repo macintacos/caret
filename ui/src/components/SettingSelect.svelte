@@ -1,10 +1,9 @@
 <script lang="ts">
-  // A generic setting dropdown (EXC-843, moved onto the vendored shadcn Select in
-  // EXC-1111): a float-chip trigger showing the current option's label, opening a real
-  // listbox that commits and closes on pick. Unlike a live-preview picker that applies
-  // each value as you arrow through it, this fires onSelect only for the chosen value,
-  // then closes — the setting applies immediately on pick. One component renders every
-  // `select` control in the registry (theme, diff layout, diff markers).
+  // A generic setting dropdown over the vendored shadcn Select (EXC-843, EXC-1111): a
+  // float-chip trigger showing the current option's label, opening a real listbox that
+  // commits and closes on pick. Unlike a live-preview picker that applies each value as
+  // you arrow through it, this fires onSelect only for the chosen value. One component
+  // renders every `select` control in the registry.
   //
   // Re-picking the value already selected fires nothing: bits-ui defaults
   // `allowDeselect` to false, so SelectItemState.handleSelect closes without a
@@ -75,22 +74,17 @@
   const CARD_GAP = 10;
   const VIEWPORT_MARGIN = 8;
 
-  // Position the card beside the panel, measuring on the NEXT animation frame rather than
-  // synchronously. The panel is a bits-ui popover positioned ASYNCHRONOUSLY — Floating UI
-  // applies its transform a microtask after mount, so a synchronous measurement taken during
-  // a fast reopen can read the panel at the viewport origin and strand the card in the
-  // top-left corner. Deferring to a frame lands the measurement after that microtask, so the
-  // card anchors to the panel's settled rect (see themePreviewPlacement.ts). Coords stay
-  // undefined until the frame; the card's reveal keyframe fades from opacity 0 so the
-  // pre-measure frame never shows.
+  // Measure on the NEXT animation frame, never synchronously: the panel is a bits-ui
+  // popover positioned ASYNCHRONOUSLY, so Floating UI applies its transform a microtask
+  // after mount and a synchronous measurement during a fast reopen reads the panel at the
+  // viewport origin, stranding the card in the top-left corner. Coords stay undefined
+  // until the frame; the card's reveal keyframe fades from opacity 0, so the pre-measure
+  // frame never shows.
   //
-  // Anything that can move the panel re-places the card rather than backing it out.
-  // bits-ui keeps the panel glued to the trigger (Floating UI's autoUpdate), so
-  // re-measuring is all the card needs. Clearing the highlight instead would strand it:
-  // opening the panel scrolls — focusing the trigger reveals it inside the Settings pane,
-  // and bits-ui scrolls the highlighted row into view — and `highlightedValue` is only
-  // ever written by onHighlight, which does not re-fire for a highlight that never moved,
-  // so the preview would stay dead for as long as the panel was open.
+  // Anything that can move the panel RE-PLACES the card rather than backing it out.
+  // Clearing the highlight instead would strand it: opening the panel scrolls, and
+  // `highlightedValue` is only ever written by onHighlight, which does not re-fire for a
+  // highlight that never moved — so the preview would stay dead as long as the panel was.
   $effect(() => {
     if (!preview || !menuEl || !cardEl) return;
     const menu = menuEl;
@@ -127,7 +121,7 @@
   });
 
   // Portal the card to document.body so the panel's own overflow (Content is
-  // overflow-y-auto) can't clip it. Svelte removes the node on unmount.
+  // overflow-y-auto) can't clip it.
   function portal(node: HTMLElement) {
     document.body.appendChild(node);
     return {

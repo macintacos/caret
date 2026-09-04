@@ -5,10 +5,9 @@
 // and last few words around an ellipsis — so the agent can locate the feedback by
 // content without the full selection's token cost. A legacy annotation cites it
 // inline; a line-anchored annotation pairs it with the annotation's 1-based line
-// reference. A feedback line reference indexes the plan version caret stored, and
-// the abbreviated quote paired with it is what the agent matches against its own
-// text. So it finds the feedback even when its own line numbering differs. (Pinned
-// across its three surfaces by test/structure/line-anchor-claim.test.ts.)
+// reference. That reference indexes the plan version caret stored, so the quote paired
+// with it is what lets the agent locate the feedback when its own numbering differs.
+// (Pinned across its three surfaces by test/structure/line-anchor-claim.test.ts.)
 
 import {
   type Annotation,
@@ -19,7 +18,6 @@ import {
 import { type ComposerScratch, rangeLabel } from "$lib/diffview/commenting.ts";
 import type { DiffSide } from "$lib/diffview/types.ts";
 
-/** Collapses any run of whitespace (incl. newlines) to a single space. */
 function flatten(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
@@ -49,12 +47,10 @@ export function sourceLines(startLine: number, endLine: number, planText: string
 const QUOTE_HEAD_WORDS = 3;
 const QUOTE_TAIL_WORDS = 3;
 
-/** Abbreviates a quote to the line reference's companion: the first and last few
- * words joined by an ellipsis, dropping the middle. The middle is elided because
- * the agent already holds the plan, so those words would only add tokens; the head
- * and tail are what it matches on (see the module header for why that matching is
- * what resolves the anchor). A quote short enough that abbreviation would drop no
- * words is returned whole (whitespace collapsed). */
+/** Abbreviates a quote to the line reference's companion: first and last few words
+ * around an ellipsis. The agent already holds the plan, so the elided middle would
+ * only add tokens — the head and tail are what it matches on. A quote short enough
+ * that abbreviation would drop no words is returned whole. */
 function abbreviate(text: string): string {
   const flat = flatten(text);
   const words = flat.split(" ");
