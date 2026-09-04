@@ -1,11 +1,9 @@
 <script lang="ts">
   // The vim `/` search HUD (EXC-832): a floating pill in caret's float-chip
-  // language, docked (by DiffPlanView) top-right of the plan. A leading `/` glyph,
-  // the query input, a tabular current-of-total counter (the one amber moment),
-  // prev/next chevrons, and a close ✕. It reads as a HUD, not a modal — the plan
-  // stays visible underneath. The pill renders only the surface; DiffPlanView owns
-  // the search state, the highlight, and the cursor/commit behaviour, reaching them
-  // through these callbacks.
+  // language, docked (by DiffPlanView) top-right of the plan. It reads as a HUD, not
+  // a modal — the plan stays visible underneath. The pill renders only the surface;
+  // DiffPlanView owns the search state, the highlight, and the cursor/commit
+  // behaviour, reaching them through these callbacks.
   import { untrack } from "svelte";
   import Icon from "@/components/Icon.svelte";
   import * as InputGroup from "$lib/components/ui/input-group/index.js";
@@ -51,7 +49,6 @@
     onclose,
   }: Props = $props();
 
-  // 1-based current for display; 0 when nothing is active.
   const current = $derived(currentIndex >= 0 ? currentIndex + 1 : 0);
   const hasMatches = $derived(matchCount > 0);
 
@@ -68,11 +65,10 @@
     }
   }
 
-  // `/` opens the pill ready to type: focus the field once it mounts and select any
-  // prefilled query (the remembered last search), so typing replaces it like browser
-  // find. select() is a no-op on an empty field (a fresh, never-run search). Skipped when
-  // the pill opens committed (an n/N resume), where it returns as a blurred HUD.
-  // `committed` is read UNTRACKED so this stays a mount-once effect keyed on `field`.
+  // Focus and select on mount so typing replaces the prefilled last query, like browser
+  // find. Skipped when the pill opens committed (an n/N resume), which returns as a
+  // blurred HUD. `committed` is read UNTRACKED so this stays a mount-once effect keyed
+  // on `field`.
   let field = $state<HTMLInputElement | null>(null);
   $effect(() => {
     if (untrack(() => committed)) return;
@@ -150,11 +146,9 @@
   /* The HUD pill: the sheer --paper-veil surface, so the plan reads faintly through
      it — a HUD, not a modal — lifted on the chip-scale --shadow-chip (the same one the
      "/ to search" chip wears, so the two read as one surface growing) and the larger
-     chip radius. The controls row sits on top; the current-of-total counter sits below it,
-     right-aligned to the pill's edge, so a changing total never reflows the row's
-     width. On open it expands from the top-right
-     corner — where the "/ to search" chip sat (DiffPlanView's dock) — so `/` reads as
-     the chip growing into the field; the global #app reduced-motion guard zeroes it. */
+     chip radius. On open it expands from the top-right corner — where that chip sat
+     (DiffPlanView's dock) — so `/` reads as the chip growing into the field; the global
+     #app reduced-motion guard zeroes it. */
   .plan-search {
     display: inline-flex;
     flex-direction: column;
@@ -176,13 +170,10 @@
       transform: scale(1);
     }
   }
-  /* Closing reverses the expand on the surface tier's exit arm (--dur-exit, against the
-     open's --dur-enter) for a snappy dismiss: the pill collapses back toward the
-     top-right chip while planKeyboard keeps it mounted for one --dur-exit, then unmounts
-     it and the chip reappears.
-     `forwards` holds the shrunk/faded end frame until that unmount so it can't flash back
-     to full size; exit easing (--ease-in) mirrors the enter --ease-out. Higher
-     specificity than the base rule, so this animation wins while closing. */
+  /* Closing reverses the expand on the exit arm (--dur-exit) for a snappy dismiss, while
+     planKeyboard keeps the pill mounted for that long. `forwards` holds the shrunk/faded
+     end frame until the unmount so it can't flash back to full size; higher specificity
+     than the base rule, so this animation wins while closing. */
   .plan-search.closing {
     animation: search-collapse var(--dur-exit) var(--ease-in) forwards;
   }
@@ -197,18 +188,12 @@
     }
   }
 
-  /* The controls row is an InputGroup: the leading `/` addon, the field, then the
-     step / close chips in the trailing addon. The group carries the recessed field
-     surface, so the whole row reads as distinct from the pill — a step off
-     --paper-raised toward --paper-sunk, which recedes in both themes (a touch darker
-     on dark paper, a warm grey on light), with a hairline rule. The radius comes from
-     the group's own rounded-lg, which the bridge maps to --radius. It hugs its content
-     rather than taking the group's stock full width, since the pill is inline and
-     sized by this row. The overrides are reached via :global under the scoped root,
-     since the class is handed to <InputGroup.Root>.
-     The step / close chips ride that sunk ground rather than the pill's veil, so their
-     .float-chip fill — mixed off --paper-raised — sits a shade brighter than its
-     surface; that lift is what keeps them reading as controls inside the field. */
+  /* The controls row's recessed field surface, so the whole row reads as distinct from
+     the pill — a step off --paper-raised toward --paper-sunk, which recedes in both
+     themes, with a hairline rule. It hugs its content rather than taking the group's
+     stock full width, since the pill is inline and sized by this row. The overrides are
+     reached via :global under the scoped root, since the class is handed to
+     <InputGroup.Root>. */
   .plan-search :global(.search-group) {
     height: 1.75rem;
     width: auto;
@@ -228,9 +213,8 @@
     border-color: var(--rule-strong);
   }
 
-  /* The field is a bare control inside the group; only its measure, height and type
-     size are set here. Fixed width rather than the group's stock flex-1, so the pill
-     keeps one measure whatever is typed into it. */
+  /* Fixed width rather than the group's stock flex-1, so the pill keeps one measure
+     whatever is typed into it. */
   .plan-search :global(.search-input) {
     height: 100%;
     width: 12rem;

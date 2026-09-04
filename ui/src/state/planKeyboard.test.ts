@@ -139,7 +139,6 @@ describe("matches", () => {
   test("finds every literal occurrence across the rendered lines", () => {
     store.searchQuery = "alpha";
     const { keyboard } = build(store, { text: PLAN });
-    // Two on line 3, one on line 5.
     expect(keyboard.matches().map((m) => m.line)).toEqual([3, 3, 5]);
   });
 });
@@ -279,11 +278,9 @@ describe("closeSearch", () => {
     store.searchQuery = "alpha";
     const h = build(store, { text: PLAN, hints: true });
     h.keyboard.closeSearch();
-    // Still mounted, now playing the collapse animation.
     expect(store.searchClosing).toBe(true);
     expect(store.searchOpen).toBe(true);
     expect(h.pendingTimers()).toBe(1);
-    // The scheduled teardown tears it down.
     h.runTimers();
     expect(store.searchOpen).toBe(false);
     expect(store.searchClosing).toBe(false);

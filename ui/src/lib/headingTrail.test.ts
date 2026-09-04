@@ -21,9 +21,8 @@ describe("headingTrail", () => {
   });
 
   test("stops at the active heading rather than descending into its children", () => {
-    // "## B" (line 3) encloses "### C" — the most common reading position, and
-    // the one shape where a walk that ran past the active heading still looks
-    // right in every other fixture.
+    // "## B" (line 3) encloses "### C" — the one shape where a walk that ran past the
+    // active heading would still look right in every other fixture.
     const headings = extractHeadings("# A\n\n## B\n\n### C\n");
     expect(headingTrail(headings, 3).map((c) => c.heading.text)).toEqual(["A", "B"]);
   });
@@ -64,9 +63,8 @@ describe("headingTrail", () => {
   });
 
   test("parents a skipped level under the nearest shallower heading", () => {
-    // "### C" (line 3) has no "##" above it, so "# A" is its parent. So is the
-    // later "## D": siblinghood is one parent's children, not one ATX level, so
-    // a plan that skips a level leaves no heading stranded off every menu.
+    // "### C" (line 3) has no "##" above it, so "# A" is its parent — and so is the
+    // later "## D": siblinghood is one parent's children, not one ATX level.
     const headings = extractHeadings("# A\n\n### C\n\n## D\n");
     const trail = headingTrail(headings, 3);
     expect(trail.map((c) => c.heading.text)).toEqual(["A", "C"]);
@@ -150,8 +148,7 @@ describe("headingTree", () => {
   });
 });
 
-// How much of the trail the row can hold. Measured widths come from the bar; the
-// arithmetic over them is pure, so the collapse rule is testable without layout.
+// How much of the trail the row can hold; the widths are what the bar measures.
 describe("visibleDepths", () => {
   test("shows every depth when the whole trail fits the row", () => {
     // 4 × 50 + 3 × 10 = 230, well inside 500.
@@ -177,8 +174,6 @@ describe("visibleDepths", () => {
   });
 
   test("weighs each depth's own width rather than counting levels", () => {
-    // The same four levels the first case shows whole, at a width one long
-    // heading pushes past the row: depth is unchanged, the measurement is not.
     expect(visibleDepths([50, 220, 50, 50], 10, 30, 300)).toEqual([0, 2, 3]);
   });
 
@@ -187,10 +182,9 @@ describe("visibleDepths", () => {
   });
 });
 
-// The flat side of the same tree: where headingTrail answers "what encloses the
-// heading I am reading", these answer "which headings match, and what encloses
-// each of them" — the bar's filter, which spans the whole plan rather than one
-// level's siblings.
+// The flat side of the same tree: where headingTrail answers "what encloses the heading
+// I am reading", these answer "which headings match, and what encloses each of them" —
+// the bar's filter, which spans the whole plan rather than one level's siblings.
 describe("headingMatches", () => {
   test("returns every heading in document order for an empty query", () => {
     const headings = extractHeadings("# A\n\n## B\n\n### C\n");
@@ -245,10 +239,8 @@ describe("headingMatches", () => {
 describe("groupedHeadingMatches", () => {
   // A group written as one line: the trail joined by ` › `, then its matches in
   // brackets. A group with no trail opens on the bracket, which is what the popup
-  // renders headerless. Fixtures therefore keep brackets, commas, and the
-  // separator out of their heading text — rendered here they are ambiguous, and
-  // the mismatch reads as a bug in `groupedHeadingMatches` rather than in this
-  // helper.
+  // renders headerless. Fixtures therefore keep brackets, commas, and the separator
+  // out of their heading text — rendered here they would be ambiguous.
   const shape = (groups: HeadingGroup[]): string[] =>
     groups.map((group) => {
       const trail = group.trail.map((h) => h.text).join(" › ");
@@ -292,8 +284,8 @@ describe("groupedHeadingMatches", () => {
   });
 
   test("does not pull a match's non-matching descendants in with it", () => {
-    // The whole point of filtering: matching "Setup" must not re-admit the
-    // section under it, which is what makes a filtered list shorter than the tree.
+    // The whole point of filtering: matching "Setup" must not re-admit the section
+    // under it.
     const headings = extractHeadings("# Setup\n\n## Details\n");
     expect(shape(groupedHeadingMatches(headings, "setup"))).toEqual(["[Setup]"]);
   });
@@ -332,10 +324,9 @@ describe("groupedHeadingMatches", () => {
     // What makes a group a SET rather than a run, and the model's most surprising
     // property: a query hitting both a section's title and its children puts both
     // titles in the single root group, so the rendered rows stop being one
-    // document-ordered sequence — "B x" is drawn above "A x"'s own subsection,
-    // and "A x" appears twice, once as a row and once as a header. One header per
-    // path is what buys that. The common shape rather than a corner: any query
-    // matching a heading and something beneath it lands here.
+    // document-ordered sequence — "B x" is drawn above "A x"'s own subsection, and
+    // "A x" appears twice, once as a row and once as a header. Any query matching a
+    // heading and something beneath it lands here.
     const headings = extractHeadings("# A x\n\n## A deep x\n\n# B x\n\n## B deep x\n");
     expect(shape(groupedHeadingMatches(headings, "x"))).toEqual([
       "[A x, B x]",
@@ -367,9 +358,9 @@ describe("groupedHeadingMatches", () => {
   });
 
   test("returns the heading objects it was handed, not copies", () => {
-    // The popup keys rows on identity-derived values and EXC-1104 will mark
-    // character offsets on these very objects; a mapped copy anywhere in the path
-    // would leave both reading a different array than the caller holds.
+    // The popup keys rows on identity-derived values and marks character offsets on
+    // these very objects (EXC-1104); a mapped copy anywhere in the path would leave
+    // both reading a different array than the caller holds.
     const headings = extractHeadings("# A\n\n## Target\n");
     const group = groupedHeadingMatches(headings, "target")[0];
     expect(group?.matches[0]).toBe(headings[1]);

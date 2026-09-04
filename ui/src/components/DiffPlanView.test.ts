@@ -253,9 +253,9 @@ describe("DiffPlanView version compare", () => {
     expect(target.querySelector(".pair")).toBeNull();
   });
 
-  // EXC-807: the working-directory path lives in the compare row now, shown
-  // right-aligned while not comparing and dropped once compare mode is on.
-  // EXC-850 made it a click-to-copy button (no hover tooltip).
+  // The working-directory path sits in the compare row (EXC-807), right-aligned
+  // while not comparing and dropped once compare mode is on. It is a click-to-copy
+  // button, with no hover tooltip (EXC-850).
   test("shows the working-directory path in the compare row when not comparing", () => {
     const { target } = render(DiffPlanView, props({ review: reviewFixture() }));
     const cwd = target.querySelector(".control-row .cwd");

@@ -1,10 +1,7 @@
 // The plan source view's keyboard surface: the vim line cursor, visual line-select,
 // and the `/` full-text search HUD, as one deep, unit-testable factory the DiffPlanView
-// shell drives (EXC-875). Like the other state modules (compare, autosave), this is a
-// plain factory over an injected backing store plus a deps bag — the
-// component owns the reactive `$state` store, tests pass a plain object, and every DOM
-// effect (scroll-follow, the shared jump, focus/blur, the composer open) is injected so
-// the transitions stay testable without mounting the view.
+// shell drives (EXC-875). Like the other state modules (compare, autosave), a plain
+// factory over an injected backing store plus a deps bag.
 //
 // The three surfaces are one machine: they share the reading-position seed
 // (`cursorLine ?? readingLine()`), the Esc-priority chain (Esc closes search, THEN exits
@@ -129,11 +126,9 @@ export interface PlanKeyboard {
 const CLOSE_ANIM_MS = 140;
 
 /** The motions that navigate to a named SECTION — the same move a breadcrumb or ToC
- * pick makes — so they take the top-parked shared jump. Every other motion keeps the
- * scrolloff follow, and that exclusion is the load-bearing half: gg/G/{/} step the
- * reader THROUGH the document rather than to a section, and `G` is only right when the
- * last line lands at the bottom. Widening this set on the "navigates somewhere
- * explicit" reading alone would break it. */
+ * pick makes — so they take the top-parked shared jump. Do not widen it on a "navigates
+ * somewhere explicit" reading: gg/G/{/} step the reader THROUGH the document rather than
+ * to a section, and `G` is only right when the last line lands at the bottom. */
 const JUMP_MOTIONS: ReadonlySet<CursorMotion> = new Set(["nextHeading", "prevHeading"]);
 
 export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardDeps): PlanKeyboard {
@@ -147,15 +142,14 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
     return store.searchQuery === "" ? [] : findMatches(deps.lines(), store.searchQuery);
   }
 
-  // The reader's current line: the placed cursor, else the reading position, else line 1.
   // The shared seed every search/motion transition starts from.
   function seedLine(): number {
     return store.cursorLine ?? deps.readingLine() ?? 1;
   }
 
-  // Lines the cursor may occupy: the rendered plan rows, trailing newline trimmed so `G`
-  // lands on a real row. deps.lines() is the text split on "\n", so a trailing newline
-  // leaves a final "" entry that is not a row.
+  // Lines the cursor may occupy. deps.lines() is the text split on "\n", so a trailing
+  // newline leaves a final "" entry that is not a row — trimmed so `G` lands on a real
+  // one.
   function lineCount(): number {
     const lines = deps.lines();
     const n = lines.length;
@@ -173,10 +167,9 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
       .flatMap((line, i) => (line.trim() === "" ? [i + 1] : []));
   }
 
-  // Land the cursor on `line` and scroll to it. `scroll` picks WHICH scroll: the
-  // scrolloff follow by default (a match reveal, the visual-mode anchor, every
-  // stepping motion), or the shared top-parked jump for a heading motion. Single
-  // source for the landing itself, so a rule added here reaches all of them.
+  // `scroll` picks WHICH scroll: the scrolloff follow by default (a match reveal, the
+  // visual-mode anchor, every stepping motion), or the shared top-parked jump for a
+  // heading motion.
   function reveal(line: number, scroll: (line: number) => void = deps.follow): void {
     store.cursorLine = line;
     scroll(line);
@@ -190,10 +183,9 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
     store.searchClosing = false;
   }
 
-  // Reset the search state without touching focus — used on close and content switch.
-  // Also cancels an in-flight close so a version change during the collapse tears down
-  // cleanly rather than leaving a stale timer to fire against the new content. Never
-  // touches lastQuery, so the remembered query survives.
+  // Resets the search state without touching focus, and cancels an in-flight close so a
+  // version change mid-collapse leaves no stale timer to fire against the new content.
+  // Never touches lastQuery, so the remembered query survives.
   function resetSearch(): void {
     cancelClose();
     store.searchOpen = false;
@@ -202,8 +194,7 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
     store.searchIndex = -1;
   }
 
-  // Move the line cursor to the match at searchIndex and scroll it into view.
-  // Reports whether it landed on one, so a step that found nothing stays silent.
+  // Reports whether it landed on a match, so a step that found nothing stays silent.
   function revealMatch(): boolean {
     const m = matches()[store.searchIndex];
     if (m == null) return false;
@@ -214,13 +205,12 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
   // Dismiss the pill. Blur now so focus returns to the plan and the cursor/highlights stay
   // where they landed. With hints on there's a "/ to search" chip to collapse back into,
   // so keep the pill mounted for one --dur-exit playing its collapse animation, then reset;
-  // with hints off there's no chip, so reset immediately. Shared by the Esc chain.
+  // with hints off there's no chip, so reset immediately.
   function closeSearch(): void {
-    // The dismissal is the moment, so it sounds here rather than at the deferred
-    // teardown — and the Esc chain and the pill's ✕ inherit it by routing through.
-    // Silent while already collapsing: the pill stays open for one --dur-exit, and
-    // Esc is a two-stage idiom elsewhere in the plan view, so a second press inside
-    // that window is the same dismissal rather than another one.
+    // Sounds at the dismissal rather than at the deferred teardown, so the Esc chain and
+    // the pill's ✕ inherit it by routing through. Silent while already collapsing: the
+    // pill stays open for one --dur-exit, so a second press inside that window is the
+    // same dismissal rather than another one.
     if (!store.searchClosing) deps.sound?.("searchClosed");
     deps.blur();
     if (!deps.hintsShown()) {
@@ -248,8 +238,6 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
     },
 
     commentCursorLine() {
-      // Visual mode: comment the whole anchored selection (normalized ascending) and exit
-      // visual mode as it opens.
       if (store.visualAnchor != null) {
         const { startLine, endLine } = normalizeRange({
           start: store.visualAnchor,
@@ -264,7 +252,7 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
     },
 
     enterVisualMode() {
-      // Pressing V again exits, as vim's V does, keeping the cursor placed.
+      // Pressing V again exits, as vim's V does.
       if (store.visualAnchor != null) {
         store.visualAnchor = null;
         deps.sound?.("visualExited");
@@ -277,9 +265,8 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
     },
 
     clearSelectionOrCursor() {
-      // Esc priority: close the search HUD first, then exit visual mode. Esc never clears
-      // the line cursor (EXC-834) — the reader keeps their place; a content switch clears
-      // it via clearForContentSwitch, not Esc.
+      // Esc never clears the line cursor (EXC-834) — the reader keeps their place; a
+      // content switch clears it via clearForContentSwitch, not Esc.
       if (store.searchOpen) {
         closeSearch();
         return;
@@ -314,9 +301,8 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
     },
 
     stepSearch(delta) {
-      // Pill closed with a remembered query → RESUME: restore the query, show the pill as
-      // a committed HUD, and seed the match from the reading position (next/previous
-      // relative to where you are).
+      // Pill closed with a remembered query → RESUME, seeding the match from the reading
+      // position (next/previous relative to where you are).
       if (!store.searchOpen) {
         if (store.lastQuery === "") return;
         store.searchQuery = store.lastQuery;

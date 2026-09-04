@@ -1,10 +1,9 @@
 <script lang="ts">
-  // Heading breadcrumbs bar for the source-view plan surface (EXC-946), and since
-  // EXC-949 retired the contents rail, the plan's only heading-navigation surface.
-  // It answers "where am I in this plan": the ancestor chain enclosing the heading
-  // being read, updating as the reviewer scrolls. It reads the line-anchored
-  // heading model in toc.ts through headingTrail.ts, and reports a pick as a source
-  // line, which the parent turns into a scroll.
+  // Heading breadcrumbs bar for the source-view plan surface (EXC-946). It answers
+  // "where am I in this plan": the ancestor chain enclosing the heading being read,
+  // updating as the reviewer scrolls. It reads the line-anchored heading model in
+  // toc.ts through headingTrail.ts, and reports a pick as a source line, which the
+  // parent turns into a scroll.
   //
   // Each crumb opens the headings it can be swapped for at that level. The crumb's
   // OWN heading opens the level below as a submenu instead of jumping in place —
@@ -40,8 +39,6 @@
   // enclosing heading ON the row, one row per match, where the ToC popup gathers
   // matches under a shared breadcrumb header carrying the whole ancestor path.
   // This bar has one row's width to spend, which a path does not fit in.
-  // Drilling down is what the crumb menus are for; the filter is for when the
-  // destination is already known.
   import { type Snippet, untrack } from "svelte";
 
   import Icon from "@/components/Icon.svelte";
@@ -168,12 +165,11 @@
   // they walk whichever level is already open and cross no submenu boundary in
   // either direction: Tab was never one of bits-ui's SUB_OPEN_KEYS or
   // SUB_CLOSE_KEYS, so the arrow it becomes is the only thing it can do here.
-  // Handled here, on the content, rather than as a global
-  // binding, because the dispatcher suppresses nothing just because a menu owns
-  // focus. That is only half of what CommentNavigator does (EXC-792): it ALSO
-  // extends the dispatcher's editing-context check in App.svelte, which buys it
-  // every key at once. This claims eight keys, so the rest of the review keys still
-  // reach the plan while a crumb menu is open.
+  // Handled here, on the content, rather than as a global binding, because the
+  // dispatcher suppresses nothing just because a menu owns focus. Claiming these eight
+  // keys rather than extending the dispatcher's editing-context check the way
+  // CommentNavigator does (EXC-792) is what leaves the rest of the review keys still
+  // reaching the plan while a crumb menu is open.
   //
   // Only bare keys. A command modifier means the reviewer is talking to the
   // browser or the OS (⌘J is Downloads), so those pass straight through — the same
@@ -190,20 +186,15 @@
   //      moves focus to the first tabbable past the root trigger.
   //   2. The window dispatcher yields on defaultPrevented, so the plan's own j/k
   //      line cursor stays put behind the open menu.
-  // The re-dispatch below carries an ARROW, and since EXC-1122 the arrows are in
-  // the map too — so what stops it answering its own event forever is `isTrusted`:
-  // a KeyboardEvent built here is untrusted by construction, a real press never is.
-  // An untrusted arrow therefore returns UNCLAIMED — no preventDefault — and flows
-  // on to the primitive, which is the whole point of dispatching one. That is also
-  // what keeps ArrowLeft's cross-crumb branch reachable on the second pass, which
-  // is where `h` takes its step. (Before EXC-957 portalled the SubContent, a
-  // submenu's keydown also bubbled into the parent Content's copy of this handler,
-  // and defaultPrevented was what stopped that. It no longer reaches there; both
-  // still carry the handler, which is why the walk works at every depth either way.)
-  // Job 2 is vacuous for h, l, Tab and the arrows — none of them is bound in
-  // keymap.ts — but they take the same path as j/k rather than a second, quieter
-  // one, so a later binding on any of them cannot reach the plan from behind an
-  // open menu.
+  // The re-dispatch below carries an ARROW, and the arrows are in the map too — so
+  // what stops it answering its own event forever is `isTrusted`: a KeyboardEvent
+  // built here is untrusted by construction, a real press never is. An untrusted arrow
+  // therefore returns UNCLAIMED — no preventDefault — and flows on to the primitive,
+  // which is the whole point of dispatching one. That is also what keeps ArrowLeft's
+  // cross-crumb branch reachable on the second pass, which is where `h` takes its step.
+  // Job 2 is vacuous for h, l, Tab and the arrows — none is bound in keymap.ts — but
+  // they take the same path as j/k so a later binding on any of them cannot reach the
+  // plan from behind an open menu.
   function onMenuKeydown(e: KeyboardEvent): void {
     if (e.ctrlKey || e.altKey || e.metaKey) return;
     // `/` trades the hierarchy for the flat filter, from whatever depth of the
@@ -357,29 +348,26 @@
     return true;
   }
 
-  // A second Escape leaves the bar (EXC-1120). The first one is the primitive's:
-  // it dismisses the menu and hands focus back to the crumb (onCloseAutoFocus
-  // below). From there nothing was listening — onMenuKeydown rides on menu
-  // content, which is portalled out of the bar — so the ring sat on the crumb
-  // with no way off it from the keyboard.
+  // A second Escape leaves the bar (EXC-1120). The first one is the primitive's: it
+  // dismisses the menu and hands focus back to the crumb (onCloseAutoFocus below),
+  // where nothing else listens — onMenuKeydown rides on menu content, portalled out of
+  // the bar — so without this the ring sits on the crumb with no way off it.
   //
-  // On the bar rather than on each trigger, which is what gives the elision
-  // marker the same behaviour without a second copy of it: both are buttons
-  // inside this element, and both carry aria-expanded.
+  // On the bar rather than on each trigger, which gives the elision marker the same
+  // behaviour without a second copy: both are buttons inside this element, and both
+  // carry aria-expanded.
   //
-  // What keeps the FIRST Escape unchanged is the portal, not the check below.
-  // Every surface the bar opens — Content, SubContent, the filter popover — is
-  // portalled out of this element AND takes focus on open, so a dismissal fires
-  // out there and never bubbles in here at all. The aria-expanded query is a
-  // guard on the invariant rather than the mechanism behind it: nothing in the
-  // bar may blur while the bar still owns an open surface. It costs two lines and
-  // is the only thing standing between a change to that focus model — ours or
-  // bits-ui's — and an Escape that silently does two steps at once.
+  // What keeps the FIRST Escape unchanged is the portal, not the check below: every
+  // surface the bar opens — Content, SubContent, the filter popover — is portalled out
+  // of this element AND takes focus on open, so a dismissal never bubbles in here at
+  // all. The aria-expanded query guards the invariant rather than being the mechanism:
+  // nothing in the bar may blur while the bar still owns an open surface, and it is the
+  // only thing standing between a change to that focus model — ours or bits-ui's — and
+  // an Escape that silently does two steps at once.
   //
-  // Deliberately not preventDefault'ed: an Escape on a focused crumb already
-  // reaches the window dispatcher today, so the blur is the only thing this adds.
-  // The bar itself stays up and `b` re-opens it, which is why leaving nothing
-  // focused costs the reviewer nothing.
+  // Deliberately not preventDefault'ed: an Escape on a focused crumb already reaches
+  // the window dispatcher, so the blur is all this adds. The bar stays up and `b`
+  // re-opens it, so leaving nothing focused costs the reviewer nothing.
   function onBarKeydown(e: KeyboardEvent): void {
     if (e.key !== "Escape" || e.ctrlKey || e.altKey || e.metaKey) return;
     if (barEl?.querySelector('[aria-expanded="true"]')) return;
@@ -492,9 +480,9 @@
   // (EXC-1122) exactly as they join MENU_ARROWS above. The claim itself is
   // walkCommandList's: this panel and the ToC popup are the same primitive over the
   // same kind of field, so the keys they walk with live in one place rather than
-  // twice. What was surface-specific here is now only WHY it had to be claimed —
-  // untouched, Tab fell through to the browser, and with nothing tabbable after a
-  // panel portalled to the body, that stepped off the end of the document.
+  // twice. What is surface-specific here is only WHY Tab had to be claimed — untouched
+  // it falls through to the browser, and with nothing tabbable after a panel portalled
+  // to the body, that steps off the end of the document.
   const onFilterKeydown = (e: KeyboardEvent) => walkCommandList(e, queryEl, repeat);
 
   // Put the hierarchy back with the bar still open: shut the panel, then re-open
@@ -526,9 +514,9 @@
     filterOrigin = null;
   }
 
-  // The bar elides the middle of its trail on the room the row actually gives it
-  // — a measurement, not the depth count it used to be (EXC-957), which shortened
-  // a four-level trail on a 1600px window with the row half empty.
+  // The bar elides the middle of its trail on the room the row actually gives it — a
+  // measurement rather than a depth count, which shortens a four-level trail on a
+  // 1600px window with the row half empty (EXC-957).
   //
   // EVERY level is rendered, whatever the row can hold; the ones it cannot get
   // `.elided`, which takes them out of flow, out of the a11y tree, and out of the
@@ -641,19 +629,17 @@
   // the heading, so that swap keeps the `{#key}` text fade below and never runs an exit.
   //
   // The motion itself stays in CSS — `crumb-out` in the stylesheet — and this directive
-  // does nothing but hold the node in the list while it plays. That split is the point.
+  // does nothing but hold the node in the list while it plays. That split is the point:
   // Svelte drives a transition's own keyframes through the Web Animations API, which the
-  // reduced-motion clamp in styles/base.css cannot reach; a real CSS animation is
-  // governed by it like every other one in the chrome. Returning a duration read back off
-  // the computed style rather than mirroring --dur-exit as a constant follows from the
-  // same choice: there is no number to drift (svelte-rules.md § Motion principles), and
-  // under the preference the clamp collapses the wait along with the motion.
+  // reduced-motion clamp in styles/base.css cannot reach, where a real CSS animation is
+  // governed by it like every other one in the chrome. Reading the duration back off the
+  // computed style rather than mirroring --dur-exit follows from the same choice: there
+  // is no number to drift (svelte-rules.md § Motion principles), and under the preference
+  // the clamp collapses the wait along with the motion.
   //
   // Focus needs nothing here: Svelte's transition manager sets `inert` on an outroing
   // element before it ever calls this, so a crumb stops being reachable — to the pointer,
-  // to Tab, and to assistive tech — the moment it starts leaving. Focus sitting on it
-  // drops to the document exactly as it does when the node is removed today, just 140ms
-  // sooner, which is why the exit needs no focus handling of its own.
+  // to Tab, and to assistive tech — the moment it starts leaving.
   //
   // `|global` at the call sites is not decoration either. The <li> is rendered through
   // the vendored component's `child` snippet, so it sits inside that component's `{#if}`
@@ -696,10 +682,9 @@
 
 <!-- One level of the heading tree. EVERY heading that encloses others nests them
      through a DropdownMenuSub, not just the one on the reader's own trail
-     (EXC-957) — that limiter is what left most of the plan reachable only by
-     jumping to a section and reopening the bar. So the menus recurse the whole
-     hierarchy, bottoming out at the headings that enclose nothing, and any
-     heading in the plan is a walk away from any crumb.
+     (EXC-957): the menus recurse the whole hierarchy, bottoming out at the headings
+     that enclose nothing, so any heading in the plan is a walk away from any crumb
+     rather than reachable only by jumping to a section and reopening the bar.
      A heading on the trail carries aria-current wherever it appears, so "you are
      here" reads at every depth and goes quiet once the walk turns off into a
      branch the reader is not in. -->
@@ -915,9 +900,9 @@
         e.preventDefault();
       }}
       onEscapeKeydown={(e) => {
-        // Escape steps back to the hierarchy rather than dismissing the bar, the
-        // meaning it has had here since EXC-948. bits-ui closes only if this
-        // event was not defaultPrevented, so the swap is ours to perform.
+        // Escape steps back to the hierarchy rather than dismissing the bar
+        // (EXC-948). bits-ui closes only if this event was not defaultPrevented,
+        // so the swap is ours to perform.
         e.preventDefault();
         restoreMenu();
       }}
@@ -937,7 +922,7 @@
            the Tab below — the arrows go with it, which is the point: Tab wrapping
            while the arrows stopped in the same list would read as a bug.
            The ToC popup's Command sets it too (EXC-1122), so the plan's two heading
-           lists now agree at their ends. -->
+           lists agree at their ends. -->
       <Command.Root shouldFilter={false} loop onkeydown={onFilterKeydown}>
         <Command.Input
           bind:ref={queryEl}
@@ -1092,11 +1077,9 @@
      retracting rather than as a jump. The enter's shape run backwards — the crumb sinks
      back the quarter-rem it came from — deliberately NOT a width collapse: the levels
      that stay are not asked to reflow smoothly into the gap, they simply close up.
-     The vocabulary's own asymmetry supplies the rest: --dur-exit against --dur-enter, on
-     --ease-in's accelerate-out against --ease-out's decelerate-in, so leaving is quicker
-     than arriving. `forwards` holds the last frame for the sliver between the animation
-     ending and the node going, which matters most under reduced motion, where the clamp
-     lands the crumb on that frame immediately.
+     `forwards` holds the last frame for the sliver between the animation ending and the
+     node going, which matters most under reduced motion, where the clamp lands the crumb
+     on that frame immediately.
      The class is added by crumbOut() above, which also reads this rule's duration back to
      know how long to keep the node. Declared AFTER the enter rule on purpose: the two tie
      on specificity, so source order is what decides. */

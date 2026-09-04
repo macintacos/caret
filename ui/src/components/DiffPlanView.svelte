@@ -1,22 +1,21 @@
 <script lang="ts">
   // Source-view plan surface: renders the active plan version's stored text as
-  // line-numbered markdown source through the diffview SourceView wrapper, with
-  // a heading breadcrumbs bar in the control row and a line gutter for creating
-  // comments. The bar jumps the source view to a heading's line. Hovering a line
-  // shows the built-in gutter `+`; clicking it opens an inline composer at the
-  // selected line or range, and submitting creates a line-anchored
-  // {startLine, endLine} annotation in the autosave working copy. Saved comments
-  // and the open composer render inline in the library's per-line annotation rows
-  // (see annotationSlot.ts): the wrapper is fed one line annotation per anchored
-  // line so the library reserves the row, and the card/composer DOM is projected
-  // into that row's slot, so a comment sits between the code lines instead of
-  // floating over them. The wrapper owns the @pierre/diffs lifecycle and preserves
-  // the view instance across re-renders when the contentKey is unchanged, so
-  // scroll survives the 2s poll re-delivering the same version.
+  // line-numbered markdown source through the diffview SourceView wrapper, with the
+  // heading-navigation surfaces in the control row and a line gutter for creating
+  // comments. Clicking the gutter `+` opens an inline composer at the selected line
+  // or range, and submitting creates a line-anchored {startLine, endLine} annotation
+  // in the autosave working copy. Saved comments and the open composer render inline
+  // in the library's per-line annotation rows (see annotationSlot.ts): the wrapper is
+  // fed one line annotation per anchored line so the library reserves the row, and
+  // the card/composer DOM is projected into that row's slot, so a comment sits
+  // between the code lines instead of floating over them. The wrapper owns the
+  // @pierre/diffs lifecycle and preserves the view instance across re-renders when
+  // the contentKey is unchanged, so scroll survives the 2s poll re-delivering the
+  // same version.
   //
   // When the review has multiple stored versions, a compare control lets the
   // reviewer diff any two of them (base vs. target) through the SourceDiffView
-  // wrapper, switching the split/unified layout at runtime. The breadcrumbs bar,
+  // wrapper, switching the split/unified layout at runtime. The heading surfaces,
   // gutter, and inline annotation cards belong to the single-version view only —
   // compare mode is a clean diff surface with none of them; the compared versions'
   // comments surface in the docked panel instead, revealing their line on the side
@@ -201,11 +200,9 @@
 
   // Compare state: the component owns the reactive store (runes live here) and
   // the factory mutates it; the layout-preference read/write are injected so the
-  // factory stays pure. Annotation display is never wired into the diff surface —
-  // the compared versions' comments surface in the docked panel, which the host
-  // drives off onCompareChange (EXC-872). The version/style
-  // fields are placeholders — the init effect below sets the real default pair
-  // and persisted layout as soon as the active review is established.
+  // factory stays pure. The version/style fields are placeholders — the init effect
+  // below sets the real default pair and persisted layout as soon as the active
+  // review is established.
   let compareStore = $state<CompareStore>({
     comparing: false,
     baseVersion: 0,
@@ -264,14 +261,12 @@
 
   // Below --w-narrow, split's two side-by-side columns can't fit, so the compare
   // diff is forced to unified (EXC-811). This overrides the rendered layout only —
-  // the persisted diffStyle preference is never written, so widening back above
-  // the breakpoint restores the reviewer's split choice. The matchMedia guard
-  // defends any DOM env lacking matchMedia; the happy-dom unit env provides one
-  // that reports no match, so units stay on the wide default either way. The
-  // effect subscribes once and its listener flips the layout live when a resize
-  // crosses the breakpoint. The px literal mirrors NARROW_WIDTH_PX (layout.ts) —
-  // @media/matchMedia can't read the --w-* token — matching TopBar's
-  // narrow-consolidation query (EXC-810).
+  // the persisted diffStyle preference is never written, so widening back above the
+  // breakpoint restores the reviewer's split choice. The matchMedia guard defends a
+  // DOM env lacking matchMedia (happy-dom's reports no match, so units stay on the
+  // wide default either way). NARROW_WIDTH_PX is a constant rather than the --w-*
+  // token because matchMedia cannot read one, and it is TopBar's own
+  // narrow-consolidation breakpoint (EXC-810).
   let narrow = $state(
     typeof matchMedia === "function" &&
       matchMedia(`(max-width: ${NARROW_WIDTH_PX - 1}px)`).matches,
@@ -292,9 +287,7 @@
 
   // Reader affordances applied to both the single-version source view and the
   // compare diff are fixed (EXC-664): long lines scroll (never wrap) and the
-  // line-number gutter is always shown. These were once user toggles (EXC-606),
-  // but that configurability was removed, so the former defaults are now the only
-  // behavior.
+  // line-number gutter is always shown.
   // Reactive on `themeId` so a theme switch yields a new options reference — both
   // the reader (SourceView) and the compare view (which spreads this) re-apply it
   // through their existing `lifecycle.sync`, re-highlighting in the chosen theme.
@@ -360,10 +353,10 @@
   // preview, a directory draws the folder glyph and opens the folder tree
   // (EXC-918). A path absent from the map resolved to nothing and stays inert.
   // Resolved once per candidate-set change: both dependencies below (the memoized
-  // candidate map and the value-stable reviewId) hold their reference across a
-  // poll tick, so an unchanged plan never re-resolves — which is what kept the
-  // icons and the open hover preview from flickering every 2s. Cleared up front
-  // so a plan edit or review switch drops stale icons at once.
+  // candidate map and the value-stable reviewId) hold their reference across a poll
+  // tick, so an unchanged plan never re-resolves and the icons and the open hover
+  // preview do not flicker every 2s. Cleared up front so a plan edit or review
+  // switch drops stale icons at once.
   let resolvedKinds = $state<Map<string, FileRefKind>>(new Map());
   $effect(() => {
     const candidates = fileRefCandidates;
@@ -403,18 +396,16 @@
 
   // The file the preview is open on, plus the token it was opened from, which the
   // reveal effect below measures so the clicked filename stays visible beside the
-  // drawer. The preview stays put once open; it closes on Escape (the dismissal
-  // effect below) or on the pane's own close button, and a directory reference
-  // opened beside it leaves it alone (EXC-1129). Compare mode hides the lane
-  // without clearing this — the dismissal effect carries the matching guard.
+  // drawer. It closes on Escape (the dismissal effect below) or on the pane's own
+  // close button; compare mode hides the lane without clearing this — the dismissal
+  // effect carries the matching guard.
   //
-  // `token` is optional because there are now two openers. A plan reference
-  // (EXC-687, click-opened since EXC-840) has one, and the excerpt is worth
-  // nothing if the filename it came from is behind the lane. A file row in the
-  // folder card (EXC-1137) has none, and there is nothing to reveal: the row is in
-  // a viewport-fixed card that steps clear of the lane itself. So the tokenless
-  // open is a missing field rather than a synthesized element — the reveal effect
-  // already skips what it cannot measure.
+  // `token` is optional because there are two openers. A plan reference (EXC-687)
+  // has one, and the excerpt is worth nothing if the filename it came from is behind
+  // the lane. A file row in the folder card (EXC-1137) has none, and there is nothing
+  // to reveal: the row is in a viewport-fixed card that steps clear of the lane
+  // itself — so the tokenless open is a missing field rather than a synthesized
+  // element, and the reveal effect skips what it cannot measure.
   type OpenFile = { path: string; line?: number; endLine?: number; token?: HTMLElement };
   let filePreview = $state<OpenFile | undefined>();
 
@@ -532,7 +523,7 @@
   // is open. Every other click is a click away from the card: it closes,
   // and is swallowed so dismissing never also opens a line comment.
   const CARD_EXEMPT = "[data-folder-tree], [data-file-drawer], [data-file-ref], [data-ref-hint]";
-  //
+
   // Gated on `showDiff` as well as the state, matching the card's own render
   // condition below and the lane's effect further down: compare mode takes the
   // card off screen while leaving `folderTree` set, and both handlers here
@@ -772,21 +763,17 @@
   // in place. Deliberately a plain `let`, so reading it below is not a dependency.
   let measured: { host: HTMLElement; key: string } | undefined;
 
-  // Keep the badges anchored, for as long as this document is on screen. The work
-  // is syncRefHints (refHint.ts); this effect only decides WHEN to run it, and the
-  // answer is "whenever anything could have moved a token", because two things can:
+  // Keep the badges anchored, for as long as this document is on screen. The work is
+  // syncRefHints (refHint.ts); this effect only decides WHEN to run it, and the answer
+  // is "whenever anything could have moved a token", because two things can:
   //
-  // The reviewer SCROLLS. The pick only ever anchors to a reference in view, and a
-  // plan puts its citations in the body rather than the opening paragraph, so the
-  // kinds are usually taught one at a time as each comes into view — the file
-  // reference on one screenful, the directory reference several screenfuls later.
+  // The reviewer SCROLLS — the pick only ever anchors to a reference in view.
   //
   // The content RESIZES. Content coordinates survive scrolling by construction, but
   // not a change in the height of anything above the token — a web font arriving,
-  // shiki repainting a row, an over-wide fenced block moving into its own card. Each
-  // shifts every row below it, and a badge holding coordinates from before the shift
-  // sits where its token used to be. Observing the host catches all of them without
-  // caring which: they all change the rendered height.
+  // shiki repainting a row, an over-wide fenced block moving into its own card. A badge
+  // holding coordinates from before such a shift sits where its token used to be, and
+  // observing the host catches all of them: they all change the rendered height.
   //
   // rAF-throttled together, so a flung scroll costs one sync per frame. `refHints` is
   // keyed by kind in the template, so a sync updates the badge's props and leaves the
@@ -1251,9 +1238,8 @@
         }),
       ),
     );
-    // `/` opens the plan search (EXC-832), repurposed from EXC-789's focus-filter.
-    // Plan-content only; not gated on the plan having headings — search is over
-    // text, not structure.
+    // `/` opens the plan search (EXC-832). Plan-content only; not gated on the plan
+    // having headings — search is over text, not structure.
     offs.push(
       shortcuts.register(
         bind("actions.search", {
@@ -1475,11 +1461,11 @@
     onSetDiffIndicators={compare.setDiffIndicators}
   />
   <!-- Heading breadcrumbs (EXC-946): where in the plan the reviewer is, and the
-       menus to move sideways or deeper — the plan's only heading-navigation
-       surface since EXC-949 retired the contents rail. It rides the activeLine
-       the scroll observer below tracks and jumps through scrollToLine. Compare
-       mode tracks no heading (and clears `?heading=`), so the bar is dropped
-       there rather than left showing a stale trail. -->
+       menus to move sideways or deeper — the drill-down surface beside the ToC's
+       whole-shape one. It rides the activeLine the scroll observer below tracks
+       and jumps through scrollToLine. Compare mode tracks no heading (and clears
+       `?heading=`), so the bar is dropped there rather than left showing a stale
+       trail. -->
   {#if !showDiff}
     <PlanBreadcrumbs
       {headings}
@@ -1490,11 +1476,10 @@
     />
   {/if}
   {#if !compareStore.comparing}
-    <!-- Working-directory path (EXC-807 relocated it here from the TopBar; EXC-850
-         makes it click-to-copy). The row shows the abbreviated path and copies the
-         full absolute path on click — no hover popup. Right-aligned by its own
-         margin-left, and dropped in compare mode so the picker's display toggles
-         reclaim the right edge. -->
+    <!-- Working-directory path (EXC-807). The row shows the abbreviated path and
+         copies the full absolute path on click — no hover popup (EXC-850).
+         Right-aligned by its own margin-left, and dropped in compare mode so the
+         picker's display toggles reclaim the right edge. -->
     <button
       type="button"
       class="cwd mono"
@@ -1776,9 +1761,8 @@
   /* The control bar above the surface. Carries the bar chrome (raised paper,
      hairline rule) for the version-compare picker: the "Versions" toggle sits at
      the left, and (in compare mode) the layout / indicator toggles are pushed to
-     the right edge. The horizontal inset is the app's shared --bar-inset
-     (the same the TopBar and the shell use), symmetric now that EXC-949 removed
-     the contents rail the left edge used to align with. */
+     the right edge. The horizontal inset is the app's shared --bar-inset, the same
+     the TopBar and the shell use. */
   .control-row {
     display: flex;
     align-items: center;
@@ -1798,14 +1782,11 @@
        the LEADING contents chip does there (EXC-1097). The chip cannot ellipsise —
        the shadcn Button base is shrink-0 whitespace-nowrap — so it holds its width
        and the two members with min-width:0 give theirs back first. Measured rather
-       than assumed: at the 480 floor with the `\` keycap showing, neither the row
-       nor the body overflows, the breadcrumbs bar having collapsed to its
-       ellipsis by then. So the cap is never dropped at
-       narrow — the width it costs is paid by a neighbour that has somewhere to
-       give. What KEEPS that true is not this comment but
+       than assumed: at the 480 floor with the `\` keycap showing, neither the row nor
+       the body overflows, the breadcrumbs bar having collapsed to its ellipsis by
+       then — so the cap is never dropped at narrow. What KEEPS that true is
        test/e2e/narrow-regression.e2e.ts, whose breakpoint sweep asserts no surface
-       overflows the viewport down to MIN_APP_WIDTH_PX — and it sweeps with the cap
-       present, since showShortcutHints defaults on. */
+       overflows the viewport down to MIN_APP_WIDTH_PX with the cap present. */
     min-width: 0;
   }
 
@@ -1827,25 +1808,21 @@
      It GROWS into that middle rather than sizing to its trail (EXC-957), which
      the bar's own collapse depends on: sized to content, giving a level up would
      shrink the bar, which would free room, which would bring the level back.
-     Nothing moves on screen — the crumbs stay left-aligned inside the wider box,
-     and the free space .cwd's margin used to absorb is now absorbed by the bar,
-     which leaves .cwd on the same right edge either way. */
+     Nothing moves on screen — the crumbs stay left-aligned inside the wider box, and
+     the free space the bar absorbs leaves .cwd on the same right edge either way. */
   .control-row :global(.plan-breadcrumbs) {
     flex: 1 1 auto;
     min-width: 0;
   }
-  /* The working-directory path, relocated from the TopBar (EXC-807). It pins
-     itself to the row's right edge with margin-left: auto rather than relying on a
-     stretched neighbour: the picker stretches only in compare mode, and the
-     breadcrumbs beside it are absent on a heading-less plan. It shrinks to an
-     ellipsis on narrow widths. Muted .mono chrome, matching its former TopBar
-     treatment. */
+  /* The working-directory path (EXC-807). It pins itself to the row's right edge
+     with margin-left: auto rather than relying on a stretched neighbour: the picker
+     stretches only in compare mode, and the breadcrumbs beside it are absent on a
+     heading-less plan. It shrinks to an ellipsis on narrow widths. */
   .cwd {
     flex: 0 1 auto;
     margin-left: auto;
     min-width: 0;
-    /* Button reset — it was an inline div until EXC-850 made it click-to-copy;
-       .mono owns the family, so only the size is inherited here. */
+    /* Button reset; .mono owns the family, so only the size is inherited here. */
     appearance: none;
     background: none;
     border: none;
@@ -1855,15 +1832,13 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    /* Brightens on hover to read as clickable — the affordance that replaces the
-       removed full-path tooltip. */
+    /* Brightens on hover to read as clickable. */
     cursor: pointer;
     transition: color var(--dur-micro) var(--ease-out);
     /* Returning to plan review (leaving compare mode) re-mounts the path, so it
-       reveals with the same quick slide-in the compare controls use when
-       entering (VersionComparePicker's compare-reveal, EXC-808) — the switch now
-       reads symmetric in both directions. The global #app reduced-motion guard
-       zeroes it. */
+       reveals with the same quick slide-in the compare controls use when entering
+       (VersionComparePicker's compare-reveal, EXC-808), and the switch reads
+       symmetric in both directions. The global #app reduced-motion guard zeroes it. */
     animation: cwd-reveal var(--dur-enter) var(--ease-out);
   }
   .cwd:hover {

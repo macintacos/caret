@@ -5,33 +5,26 @@
   // the drill-down surface, this is the see-the-whole-shape-at-once one — and
   // takes the same three props, so both read one heading model and one activeLine.
   //
-  // Built on `command` inside a `popover`, which is the whole point of the epic.
-  // The breadcrumbs bar's own filter is built on the same two primitives for the
-  // same reason; only its hierarchy menus are dropdowns.
-  //
-  // What that buys HERE is both halves (EXC-1096 closed the second). Structurally
-  // the field is a legal sibling of the list and the rows are real options a screen
-  // reader can browse; for narration, the field carries `aria-controls` and
-  // `aria-activedescendant`, so the row the roving walk lands on is announced as the
-  // list narrows without focus ever leaving the field. Those two attributes are
-  // bits-ui's, derived from the command's viewport node — which exists only because
-  // the vendored command-list.svelte renders a `Command.Viewport`. That is caret's
-  // addition to the registry source and the reason the whole vendoring paid off; see
-  // the comment there before touching it.
+  // Built on `command` inside a `popover`, the same two primitives the breadcrumbs
+  // bar's own filter uses; only its hierarchy menus are dropdowns. What that buys is
+  // both halves of the listbox contract (EXC-1096): structurally the field is a legal
+  // sibling of the list and the rows are real options a screen reader can browse; for
+  // narration, the field carries `aria-controls` and `aria-activedescendant`, so the
+  // row the roving walk lands on is announced as the list narrows without focus ever
+  // leaving the field. Those two attributes are bits-ui's, derived from the command's
+  // viewport node — which exists only because the vendored command-list.svelte renders
+  // a `Command.Viewport`; read the comment there before touching it.
   //
   // The popup shows TWO views of one heading model (EXC-1103), and the query picks
-  // between them. Empty, it is the whole plan nested by level — see the shape of a
-  // plan at a glance. Filtered, each ancestor path collapses into ONE breadcrumb
-  // header with its matches flush left beneath it, because a match four levels down
-  // otherwise spends four rows placing itself. The nesting is the browsing view; the
-  // breadcrumb is the searching one.
+  // between them. Empty, it is the whole plan nested by level — the browsing view.
+  // Filtered, each ancestor path collapses into ONE breadcrumb header with its matches
+  // flush left beneath it, because a match four levels down otherwise spends four rows
+  // placing itself.
   //
-  // That header is a `Command.Group` heading rather than markup of caret's own, and
-  // the reason is the same constraint that shaped EXC-1096: a listbox may own
-  // options and groups and NOT loose text. bits-ui wires the heading up as the
-  // group's `aria-labelledby` target, so the ancestor path reaches a screen reader
-  // as the group's name — where EXC-1096's dimmed ancestor rows could only be
-  // `aria-hidden`, sighted-only wayfinding for a reader scanning the indent.
+  // That header is a `Command.Group` heading rather than markup of caret's own: a
+  // listbox may own options and groups and NOT loose text, and bits-ui wires the
+  // heading up as the group's `aria-labelledby` target, so the ancestor path reaches a
+  // screen reader as the group's name.
   //
   // Presentational: the only state is the popup's own — open, query, and the
   // command's selected row — the tree is derived, and the parent owns both the
@@ -115,51 +108,43 @@
   // `filterHeadings`' own notion of empty — a stray space must not swap the view.
   const searching = $derived(query.trim() !== "");
 
-  // The empty-query view: the whole plan, nested by level, exactly as before.
-  // The filtered view: matches gathered under one breadcrumb header per ancestor
-  // path, flush left. Both are built on the same `parentIndices` walk in the same
-  // module, so the two can never disagree about what encloses what. `$derived` is
-  // lazy, so only the view actually rendered below is ever computed.
+  // Both views are built on the same `parentIndices` walk in the same module, so they
+  // can never disagree about what encloses what. `$derived` is lazy, so only the view
+  // actually rendered below is ever computed.
   //
-  // Every heading renders a row, and the ceiling that bounds is the low hundreds
-  // of headings a caret plan carries — agent-authored markdown, not a book. What
-  // costs at that scale is not this recompute (a few linear passes over the
-  // headings, microseconds) but what each row IS: a full bits-ui command item with
-  // its own effects and id, and a Command.List that tears the whole list down and
-  // rebuilds it whenever the query crosses between empty and non-empty. List
-  // virtualization is out of scope until a real plan is measured past that ceiling
-  // — see EXC-1062's Out of scope.
+  // Every heading renders a row, bounded by the low hundreds of headings a caret plan
+  // carries — agent-authored markdown, not a book. What costs at that scale is not this
+  // recompute (a few linear passes, microseconds) but what each row IS: a full bits-ui
+  // command item with its own effects and id, and a Command.List that tears the whole
+  // list down and rebuilds it whenever the query crosses between empty and non-empty.
+  // List virtualization is out of scope until a real plan is measured past that ceiling
+  // (EXC-1062).
   const tree = $derived(headingTree(headings));
   const groups = $derived(groupedHeadingMatches(headings, query));
 
   // The level the PLAN opens at, which is where its indent guides start (EXC-1106).
-  // The indent itself is measured from level 1 and always has been — that absolute
-  // origin is what keeps a section at one indent whatever else is on screen — so a
-  // plan whose top-level headings are `##` renders every row one step in with
-  // nothing at zero. Measuring the GUIDES from that empty column instead would draw
-  // a line down a column the plan never opens. Reading the shallowest level it
-  // actually has is the whole correction, and it is a PLAN-WIDE floor rather than a
-  // per-row one — see the trade the ::before rule records.
-  // The empty arm is unreachable, since a plan with no headings renders no rows to
-  // read it; it is what keeps Math.min() off Infinity. The spread is safe at the low
-  // hundreds of headings this file's header bounds — a plan large enough to threaten
-  // the argument limit dies on one Command.Item per heading long first.
+  // The indent itself is measured from level 1 — that absolute origin is what keeps a
+  // section at one indent whatever else is on screen — so a plan whose top-level
+  // headings are `##` renders every row one step in with nothing at zero, and guides
+  // measured from that empty column would run down a column the plan never opens. A
+  // PLAN-WIDE floor rather than a per-row one — see the trade the ::before rule records.
+  // The empty arm is unreachable (a plan with no headings renders no rows to read it);
+  // it is what keeps Math.min() off Infinity.
   const guideBase = $derived(
     headings.length === 0 ? 1 : Math.min(...headings.map((h) => h.level)),
   );
 
   // What a row marks — the SAME closure `filterHeadings` decides membership with, reached
-  // from beside the filter rather than by transforming what it returns. `filterHeadings`
-  // (toc.ts) carries why deriving the runs from its OUTPUT is the shape that silently
-  // empties the panel; that is where an edit could reintroduce it, so it is written once
-  // there rather than twice.
+  // from beside the filter rather than by transforming what it returns. Why deriving the
+  // runs from its OUTPUT silently empties the panel is written once, in toc.ts, where an
+  // edit could reintroduce it.
   const matcher = $derived(headingMatcher(query));
 
   // What the status line says, empty when the list has rows. Derived rather than
-  // inlined in the markup because the element it feeds is always mounted — see the
-  // comment on it for why a live region cannot be conjured up with its text already
-  // inside it. Read off whichever view is showing, so a query matching nothing and
-  // a plan with no headings stay the two distinct messages they were.
+  // inlined in the markup because the element it feeds is always mounted (a live region
+  // cannot be conjured up with its text already inside it). Read off whichever view is
+  // showing, so a query matching nothing and a plan with no headings stay two distinct
+  // messages.
   const emptyMessage = $derived(
     (searching ? groups.length : tree.length) > 0
       ? ""
@@ -170,10 +155,10 @@
 
   // Whether the popup is closing because the reviewer picked a heading, which
   // onCloseAutoFocus below reads to decide where focus lands. The same flag
-  // PlanBreadcrumbs.svelte spends on the same job, and now on the same terms: a
-  // pick drops focus to the body so the reviewer lands in the plan rather than
-  // ringed on a control they are done with, which is affordable because `\`
-  // summons the popup back (shortcuts/keymap.ts) exactly as `b` does the bar.
+  // PlanBreadcrumbs.svelte spends on the same job and on the same terms: a pick drops
+  // focus to the body so the reviewer lands in the plan rather than ringed on a control
+  // they are done with, which is affordable because `\` summons the popup back
+  // (shortcuts/keymap.ts) exactly as `b` does the bar.
   let leaving = false;
 
   // A popup always opens on the whole plan, looking at the heading being read.
@@ -186,17 +171,16 @@
     // (EXC-1126) — the trigger's onOpenChange and openPopup below both land here, so
     // the `\` key and the click cannot drift onto different sounds. The singleton
     // rather than an injected dep: a component has no factory seam to thread one
-    // through, the carve-out sound.ts names and CodeCopyButton already takes.
+    // through — the carve-out sound.ts names.
     sound.play("contentsOpen");
   }
 
   // The whole open, for callers outside the primitive. bits-ui runs onOpenChange
   // from its OWN box setter only — a trigger click, Escape, an outside click — so
   // a programmatic write to `open` receives none of the seeding the trigger path
-  // gets. Poking the flag alone opens the popup on the first row carrying the
-  // previous session's query, and nothing errors: the heading being read is still
-  // marked, because aria-current is derived from `activeLine` rather than from the
-  // seeded selection. Both entry points go through here so they cannot diverge.
+  // gets, and poking the flag alone opens the popup on the first row carrying the
+  // previous session's query. Both entry points go through here so they cannot
+  // diverge.
   function openPopup(): void {
     seed();
     open = true;
@@ -271,8 +255,7 @@
   <!-- The label as runs, so the characters the query matched can be marked. The fallback
        is the type's, not a case either view reaches: a filtered row matched by
        construction, and the unfiltered view's query is empty, which the matcher answers
-       with the whole label unmarked. It degrades to the plain label rather than to
-       nothing, so a future caller can never blank a row. -->
+       with the whole label unmarked. -->
   {@const parts = matcher(heading.text) ?? [{ text: heading.text, hit: false }]}
   <Command.Item
     value={String(heading.line)}
@@ -280,33 +263,24 @@
     aria-current={heading.line === activeLine ? "location" : undefined}
     onSelect={() => jump(heading.line)}
   >
-    <!-- What level this heading is (EXC-1105). It sits in the shared snippet rather than in
-         either view's branch, which is the whole of why both views get it — and the filtered
-         one, whose rows are all at depth 0, is the view that has nothing else to say it.
+    <!-- What level this heading is (EXC-1105). In the shared snippet so both views get it —
+         and the filtered one, whose rows are all at depth 0, has nothing else to say it.
          No wrapper element of its own: `data-icon` on Icon.svelte's own <span> is the hook
-         the style rule needs, so there is nothing for one to add. -->
+         the style rule needs. -->
     <Icon name={levelIcon(heading.level)} size={14} />
-    <!-- Only a MATCHED run takes an element; unmatched text stays a bare text node. That
-         keeps the unfiltered view's markup byte-identical to a plain `{heading.text}` —
-         no wrapper span on any of a plan's several hundred rows — so this decoration is
-         inert until the reviewer actually types.
-         The row's TEXT is the heading either way, which is what keeps the option's
-         accessible name exactly the heading, since that name is computed from its
-         contents. Splitting the label rather than adding to it is also what keeps the
-         mark out of the accessibility tree: a plain span is invisible to it, where a real
-         `mark` element is narrated by WebKit. -->
+    <!-- Only a MATCHED run takes an element; unmatched text stays a bare text node, so the
+         unfiltered view's markup is byte-identical to a plain `{heading.text}` — no
+         wrapper span on any of a plan's several hundred rows.
+         The row's TEXT is the heading either way, which keeps the option's accessible
+         name exactly the heading. Splitting the label rather than adding to it is what
+         keeps the mark out of the accessibility tree: a plain span is invisible to it,
+         where a real `mark` element is narrated by WebKit. -->
     <span class="toc-label" title={heading.text}>
       {#each parts as part}{#if part.hit}<span class="toc-hit">{part.text}</span>{:else}{part.text}{/if}{/each}
     </span>
   </Command.Item>
 {/snippet}
 
-<!-- The empty-query view: one level of the tree, and then the levels under it. A
-     snippet emits no wrapper element, so this recursion produces a FLAT sequence
-     of rows in document order — which is what role="listbox" needs, since it
-     admits `option` and `group` children and not rows nested inside rows. The
-     tree's depth rides on --toc-depth instead, which the stylesheet turns into an
-     indent. -->
 <!-- One group's matches, all flush left. Both arms of the header/no-header branch
      below render through here, so the two can never drift apart. Keyed on the
      source line: the MODEL keys on reference rather than line, deliberately (see
@@ -320,6 +294,12 @@
   {/each}
 {/snippet}
 
+<!-- The empty-query view: one level of the tree, and then the levels under it. A
+     snippet emits no wrapper element, so this recursion produces a FLAT sequence
+     of rows in document order — which is what role="listbox" needs, since it
+     admits `option` and `group` children and not rows nested inside rows. The
+     tree's depth rides on --toc-depth instead, which the stylesheet turns into an
+     indent. -->
 {#snippet nested(nodes: HeadingNode[])}
   {#each nodes as node (node.heading.line)}
     {@render row(node.heading, node.heading.level - 1, node.heading.level - guideBase)}
@@ -429,11 +409,9 @@
            `searching` rather than bits-ui's own `search === ""`: they agree except on
            a query that is only whitespace, where this stays "outline" while bits-ui
            still remounts. The marker and the rendered branch come off the SAME derived,
-           so the arm can never disagree with what is on screen — "matches" over outline
-           rows is unreachable, and that is the case that would be wrong. What the
-           disagreement does cost is a spurious toc-list-in when a lone space is typed or
-           deleted: the list really did rebuild, so the fade is honest, it just answers a
-           keystroke that changed nothing. -->
+           so "matches" over outline rows — the case that would be wrong — is
+           unreachable. The disagreement costs only a spurious toc-list-in when a lone
+           space is typed or deleted. -->
       <Command.List aria-label="Plan headings" data-toc-view={searching ? "matches" : "outline"}>
         {#if searching}
           <!-- Each ancestor path collapses to one Command.Group, whose heading IS
@@ -448,17 +426,14 @@
                A header is not an item, so the roving walk — a flat DOM-order
                querySelectorAll over the command's items — never lands on one.
 
-               A group with no breadcrumb renders its rows BARE. AC6 asks for no
-               header above a top-level match, and an unlabelled `role="group"`
-               around it would be a level of structure naming nothing.
+               A group with no breadcrumb renders its rows BARE: no header above a
+               top-level match, and no unlabelled `role="group"` naming nothing.
                The branch is on the CRUMB rather than on `trail.length`, and the
                two are not the same test: `# ` on its own line is a real heading
                whose text is empty, so a trail can be non-empty and still have
-               nothing to say. Branching on the length would then render a group
-               the vendored component gives no heading to — an unlabelled one,
-               exactly what this paragraph rules out. Empty segments drop out of
-               the join for the same reason, or the crumb opens on a separator
-               with nothing before it.
+               nothing to say — branching on the length would render exactly the
+               unlabelled group this rules out. Empty segments drop out of the
+               join for the same reason.
 
                `value` is explicit and prefixed rather than left to the vendored
                default of the heading text. bits-ui keys `allGroups` on it and its
@@ -486,15 +461,13 @@
            Deliberately a SIBLING of the list rather than a row inside it, for the
            ownership reason the header gives.
            `role="status"` because this is the one narrowing a screen reader would
-           otherwise miss: a keystroke that changes the first match moves the
-           selection and the field's aria-activedescendant announces the new row,
-           but a query matching nothing leaves no active row to name, so without a
-           live region the list empties in silence.
+           otherwise miss: a query matching nothing leaves no active row for the
+           field's aria-activedescendant to name, so without a live region the list
+           empties in silence.
            Mounted unconditionally, with only its TEXT switched — a live region has
            to be idle in the DOM before the change it announces, and one inserted
            with its content already in it is skipped by some AT outright. Same shape
-           and same reason as FilePreview.svelte's `.fp-range`. Empty, it has no
-           padding and generates no line box, so it costs no height. -->
+           and same reason as FilePreview.svelte's `.fp-range`. -->
       <p class="toc-empty" role="status">{emptyMessage}</p>
     </Command.Root>
   </Popover.Content>
@@ -519,27 +492,20 @@
     gap: 0;
   }
 
-  /* The panel's own arrival and departure (EXC-1107), REFINED rather than replaced.
+  /* The panel's own arrival and departure (EXC-1107), RETIMED rather than replaced.
      The vendored Popover.Content already carries tw-animate-css's `animate-in` /
      `animate-out` keyed on `data-[state=…]`, and that machinery is load-bearing well
      past the look: bits-ui's portal presence waits on the `animationend` those
      keyframes fire, so a shorthand of caret's own here would replace them and strand
      the panel in the DOM on close. What is retimed instead is the pair of custom
      properties the utility itself reads — the compiled `animate-in` resolves its
-     duration from `--tw-duration` and its curve from `--tw-ease` — so the `enter` /
-     `exit` keyframes, the `--tw-enter-*` plumbing and the animationend all survive
-     untouched and only the timing becomes caret's. Both properties are registered
-     `inherits: false`, which is what keeps this override on the panel and off the
-     several hundred rows inside it. Unlayered, so it beats the `duration-100` utility
-     the vendored component ships.
+     duration from `--tw-duration` and its curve from `--tw-ease` — so the keyframes,
+     the `--tw-enter-*` plumbing and the animationend all survive untouched. Both
+     properties are registered `inherits: false`, which keeps this override on the panel
+     and off the several hundred rows inside it. Unlayered, so it beats the
+     `duration-100` utility the vendored component ships.
      The two arms are the motion vocabulary's own enter/exit pairing (tokens.css §
-     Motion) rather than one number used twice: a 20rem panel hanging off the control
-     row is the surface `--dur-enter` is named for, and leaving takes `--dur-exit` on the
-     accelerate-out curve `--ease-in` exists to be — quicker than arriving, which the
-     vocabulary tiers for.
-     No spring and no overshoot — `--ease-spring` is reserved for a control sliding
-     between discrete positions, and a panel that bounces reads as a toy on a surface
-     whose whole register is quiet.
+     Motion) rather than one number used twice.
      Reduced motion is not handled here, deliberately: the single global rule in
      app.css already reaches this panel through its `[data-slot]` anchor, and it
      collapses the duration rather than removing the keyframes — which is exactly what
@@ -558,16 +524,13 @@
      `Command.List` wraps its OWN element in `{#key search === ""}`, so the list — the
      element `data-toc-view` above hangs on — and the viewport under it are both
      destroyed and rebuilt at exactly that crossing (see command-list.svelte, which
-     documents it as the hazard it is for anything reading `viewportNode` back). That
-     the marker is re-created with them is why it can never be read stale against a
-     fresh viewport. A remount restarts a CSS animation on its own, which makes that
-     teardown the trigger: no key of caret's own, no tick counter, nothing to
-     retrigger, and it cannot fire more than once per crossing however fast the
-     reviewer types.
-     Scoped to the OUTLINE arm only. Coming back to the whole plan is the direction
-     that has nothing else to carry it, since the outline's rows deliberately do not
-     animate; going the other way the matches below carry it, and running both would
-     multiply two opacity ramps on nested elements for no gain. */
+     documents it as the hazard it is for anything reading `viewportNode` back). A
+     remount restarts a CSS animation on its own, which makes that teardown the trigger:
+     nothing of caret's own to retrigger, and it cannot fire more than once per crossing
+     however fast the reviewer types.
+     Scoped to the OUTLINE arm only. Coming back to the whole plan is the direction that
+     has nothing else to carry it, since the outline's rows deliberately do not animate;
+     going the other way the matches below carry it. */
   @keyframes toc-list-in {
     from {
       opacity: 0;
@@ -583,35 +546,27 @@
   }
 
   /* A match arriving, and its breadcrumb header arriving with it. ONE declaration for
-     both, which is the whole of the claim: a header cannot pop in above rows that
-     faded when the header and the rows are literally the same animation on the same
-     clock.
+     both, so a header cannot pop in above rows that faded.
      Rows animate IN only. A row that stops matching is removed by Svelte with nothing
      to hang an exit on, and the two mechanisms that could give it one — a Svelte
      `transition` directive, or a FLIP `animate` one — are both element-only, where
      `Command.Item` is a component. Reaching either would mean a wrapper element inside
-     the `role="listbox"`, which takes ownership of the options away from it (the same
-     constraint that put the breadcrumb header in a `Command.Group` rather than in
-     markup of caret's own), or a `child` snippet reimplementing the vendored item. Both
-     are behaviour, which this pass is not, and both put a JS-driven transition on every
-     row of a list that runs to the low hundreds.
+     the `role="listbox"`, which takes ownership of the options away from it, or a
+     `child` snippet reimplementing the vendored item — and both put a JS-driven
+     transition on every row of a list that runs to the low hundreds.
      Scoped to the MATCHES arm, and NOT because that view is always small — measured on
      the dev plan, a one-character query matches 44 of its 64 headings across 15 groups
-     and every one of them mounts at once, so a short query is very nearly the whole
-     list. What the scoping buys is that the filtered view mounts only when the reviewer
-     types, where the outline mounts on every single open. The outline's arrival is
-     already carried by the panel's own zoom above and by the list rule beside it, so
-     animating its rows as well would be a second gesture saying the same thing, on the
-     one path a reviewer takes every time.
-     The 59 concurrent ramps that measurement found cost nothing readable: profiled over
-     that crossing, frame times were median 8.3ms / p95 9.7ms / max 16.6ms with this rule
-     and median 8.3 / p95 9.7 / max 16.7 with it disabled, and no frame over 32ms either
-     way. Mounting 44 rows is the expense; ramping their opacity afterwards is not.
+     and every one of them mounts at once. What the scoping buys is that the filtered
+     view mounts only when the reviewer types, where the outline mounts on every single
+     open and its arrival is already carried by the panel's own zoom and the list rule
+     beside it. Those 59 concurrent ramps cost nothing readable: profiled over that
+     crossing, frame times were median 8.3ms / p95 9.7ms / max 16.6ms with this rule and
+     median 8.3 / p95 9.7 / max 16.7 with it disabled.
      Opacity and transform only, and no `will-change`: a CSS-animated element is
      promoted by the browser on its own, and pinning a layer per row is how a list this
      long turns a cheap animation into a memory problem. The offset is vertical, so
      `--toc-step` — the one source for the indent rhythm and the guide comb — is not
-     involved and cannot be knocked out of agreement with itself. */
+     involved. */
   @keyframes toc-row-in {
     from {
       opacity: 0;
@@ -639,18 +594,15 @@
      panel hangs off the control row with the whole plan under it, so it earns twice
      the run before scrolling.
 
-     Both terms of the min() have to be resolvable when the stylesheet is parsed,
-     which rules out the variable that looks made for this job.
-     --bits-popover-content-available-height is the room floating-ui measures between
-     the trigger and the viewport edge, but it is published a frame LATE, and a min()
-     over an unset variable is invalid at computed-value time — which drops
-     max-height to `unset` rather than falling back to any earlier declaration. The
-     list would then mount at its natural height, and bits-ui — which scrolls the
-     seeded row into view exactly once, on that mount — would correctly find nothing
-     overflowing and scroll nowhere. The variable arrives, the list shrinks, and the
-     popup opens parked at the top with the current heading stranded below the fold.
-     `vh` costs a clamp against the window rather than against the trigger's own
-     room, and is never invalid. */
+     Both terms of the min() have to be resolvable when the stylesheet is parsed, which
+     rules out --bits-popover-content-available-height: floating-ui publishes it a frame
+     LATE, and a min() over an unset variable is invalid at computed-value time, which
+     drops max-height to `unset` rather than to an earlier declaration. The list would
+     mount at its natural height, and bits-ui — which scrolls the seeded row into view
+     exactly once, on that mount — would find nothing overflowing and scroll nowhere,
+     leaving the popup parked at the top with the current heading below the fold. `vh`
+     costs a clamp against the window rather than against the trigger's own room, and is
+     never invalid. */
   :global(.plan-toc-panel [data-slot="command-list"]) {
     padding-block-start: 0.5rem;
     max-height: min(36rem, 70vh);
@@ -695,34 +647,28 @@
      the indent is measured from level 1. A zero width paints nothing, so both
      cases fall out of the same declaration.
 
-     A column marks a LEVEL, not a tree edge, and that is the trade — the same one
-     the indent rule above accepts, for the same reason. A plan that skips from `#`
-     to `###` draws a column at the level in between, and a plan that opens deeper
-     than a heading further down (`## Alpha` before `# Beta`) gives Alpha a column
-     with nothing above it. Accepted: the indent is absolute, so `###` sits two steps
-     in whether or not a `##` exists, and guides drawn from the real ancestors would
-     leave a guide-free channel immediately left of a row that is plainly indented —
-     saying the opposite of what the indent says. What guideBase closes is narrower
-     and is the case the eye actually reads as a claim: a column to the left of
-     EVERY row, down the whole panel, where the plan simply has no such level.
+     A column marks a LEVEL, not a tree edge, and that is the trade — the same one the
+     indent rule above accepts. A plan that skips from `#` to `###` draws a column at the
+     level in between, and a plan that opens deeper than a heading further down
+     (`## Alpha` before `# Beta`) gives Alpha a column with nothing above it. Accepted:
+     the indent is absolute, so `###` sits two steps in whether or not a `##` exists, and
+     guides drawn from the real ancestors would leave a guide-free channel immediately
+     left of a plainly indented row. What guideBase closes is narrower: a column to the
+     left of EVERY row, down the whole panel, where the plan has no such level.
 
-     A ::before rather than the row's own background, for two reasons that both
-     fail silently. The row already takes `background:` — the SHORTHAND — when it
-     is the heading being read, and a shorthand resets background-image, so a
-     background-painted guide would vanish on exactly the row the reviewer is
-     looking at. And border-radius clips an element's own background layers while
-     leaving an absolutely-positioned child alone: the row is rounded-lg, so the
-     leftmost tooth would be nicked at the top and bottom of every row and the
-     line would stripe at each boundary — the one artifact these guides most have
-     to avoid. `inset-block: 0` on an already-relative row is what joins adjacent
-     rows into one line despite their padding-block.
-     content:"" and pointer-events:none: nothing in the accessibility tree, and
-     nothing between the reviewer and the row they are clicking.
-     --rule is caret's quiet hairline (ink at 10%, per palette), and it is already
-     what caret paints an indent guide with: FolderTree.svelte hands it to
-     `--trees-indent-guide-bg-override` for the file tree's own guides. So this is
-     the app's indent-guide ink rather than a hairline that happened to be handy, and
-     it sits below --ink-faint and retints with the theme for free. */
+     A ::before rather than the row's own background, for two reasons that both fail
+     silently. The row already takes `background:` — the SHORTHAND — when it is the
+     heading being read, and a shorthand resets background-image. And border-radius clips
+     an element's own background layers while leaving an absolutely-positioned child
+     alone: the row is rounded-lg, so the leftmost tooth would be nicked top and bottom
+     and the line would stripe at each row boundary. `inset-block: 0` on an
+     already-relative row is what joins adjacent rows into one line despite their
+     padding-block.
+     content:"" and pointer-events:none: nothing in the accessibility tree, and nothing
+     between the reviewer and the row they are clicking.
+     --rule is what caret already paints an indent guide with — FolderTree.svelte hands
+     it to `--trees-indent-guide-bg-override` for the file tree's — so it retints with
+     the theme for free. */
   :global(.plan-toc-panel [data-slot="command-item"])::before {
     content: "";
     position: absolute;
@@ -810,14 +756,10 @@
      is no edge case: the popup seeds its selection to the heading being read on every open,
      and the filtered view always lands on the first match.
      --ink-soft rather than the fainter rung the eyebrow takes, because the ground that
-     decides it is not the panel but the SELECTED row's own bg-accent wash, which is where
-     this marker spends most of its life. Measured on the painted pixels in caret-light:
-     --ink-faint reaches only 2.90:1 there — under the 3:1 a non-text graphic wants — where
-     --ink-soft gives 5.88:1 against a label at 12.69:1, so it stays plainly subordinate
-     without going illegible on the one row the keyboard is always on. Whether 1.4.11
-     strictly binds a marker whose level is also recoverable from the indent is the open
-     question svelte-rules.md leaves open; this picks the rung that does not need it
-     answered. */
+     decides it is not the panel but the SELECTED row's own bg-accent wash. Measured on
+     the painted pixels in caret-light: --ink-faint reaches only 2.90:1 there — under the
+     3:1 a non-text graphic wants — where --ink-soft gives 5.88:1 against a label at
+     12.69:1. */
   :global(.plan-toc-panel [data-slot="command-item"] [data-icon^="heading-"] svg) {
     color: var(--ink-soft);
   }
@@ -839,14 +781,13 @@
      truncates.
      It reads over BOTH marks a row can already wear because it is a different kind of
      thing rather than a different hue — those two fill the whole row, this fills a run
-     inside one. What keeps it legible over the amber one is ALPHA STACKING, and that is
-     the general mechanism: --mark composites on top of whatever the row already paints,
-     so the run is always a step further from the panel than its row is. Do not read this
-     as a hue guarantee — only caret's own palette names a markHue distinct from its
-     washHue; every vendor palette leaves both unset, and recipe.ts then collapses
-     markHue → washHue → accent, so there the mark and the row wash are the same hue at
-     different alphas. Measured on the painted pixels, the run separates from its row by
-     ΔE*ab 8.8–20.3 across both schemes and all three row states. */
+     inside one. What keeps it legible is ALPHA STACKING: --mark composites on top of
+     whatever the row already paints, so the run is always a step further from the panel
+     than its row is. Not a hue guarantee — only caret's own palette names a markHue
+     distinct from its washHue; every vendor palette leaves both unset and recipe.ts
+     collapses markHue → washHue → accent. Measured on the painted pixels, the run
+     separates from its row by ΔE*ab 8.8–20.3 across both schemes and all three row
+     states. */
   :global(.plan-toc-panel .toc-hit) {
     background: var(--mark);
   }

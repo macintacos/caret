@@ -30,7 +30,6 @@ describe("extractHeadings", () => {
   });
 
   test("requires whitespace after the hashes", () => {
-    // "#nospace" is not a heading; "# spaced" is.
     expect(extractHeadings("#nospace\n# spaced\n")).toEqual([
       { level: 1, text: "spaced", line: 2 },
     ]);
@@ -87,7 +86,6 @@ describe("activeHeadingLine", () => {
   });
 
   test("returns the first heading when scrolled above it", () => {
-    // topLine before the first heading still anchors to the first heading.
     expect(activeHeadingLine(headings, 0)).toBe(1);
   });
 
@@ -123,22 +121,20 @@ describe("filterHeadings", () => {
   });
 
   test("hands back the caller's own heading objects, never copies", () => {
-    // Load-bearing, and asserted with `toBe` because every other assertion here
-    // uses `toEqual` and would pass on a mapped copy. `groupedHeadingMatches`
-    // (headingTrail.ts) decides group membership with a Set over this result, so
-    // a copy introduced anywhere in this path makes every query return nothing —
-    // silently, since the shapes still match.
+    // `toBe`, not `toEqual`: a mapped copy passes every other assertion here, but
+    // `groupedHeadingMatches` (headingTrail.ts) decides group membership with a Set
+    // over this result, so a copy anywhere in this path makes every query return
+    // nothing — silently, since the shapes still match.
     expect(filterHeadings(headings, "")[0]).toBe(headings[0]);
     expect(filterHeadings(headings, "app")[0]).toBe(headings[1]);
   });
 });
 
-// The single definition of what the ToC counts as a match, and the reason the filter
-// and the highlight cannot disagree (EXC-1104): `filterHeadings` is built on this, so
-// a row is shown and its characters are marked by the same closure.
+// The single definition of what the ToC counts as a match: `filterHeadings` is built on
+// it, so the filter and the highlight cannot disagree (EXC-1104).
 describe("headingMatcher", () => {
   // Every run rejoins to the input, always — a highlighter that drops or duplicates a
-  // character rewrites the label. Asserted on every case below through this helper.
+  // character rewrites the label.
   function rejoined(runs: { text: string }[] | null): string {
     return (runs ?? []).map((r) => r.text).join("");
   }
@@ -186,8 +182,7 @@ describe("headingMatcher", () => {
   });
 
   // A case fold that changes length shifts every later offset, so the marked run would
-  // land on the WRONG characters — worse than marking none. The heading still matches,
-  // because the filter's semantics are not this issue's to change.
+  // land on the WRONG characters — worse than marking none. Matching itself still holds.
   test("keeps a length-changing case fold matching but marks nothing", () => {
     const runs = headingMatcher("stanbul")("İstanbul");
     expect(runs).toEqual([{ text: "İstanbul", hit: false }]);

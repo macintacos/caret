@@ -2,8 +2,7 @@
 // is shown as formatted markdown source, so navigation is line-based: headings
 // are scanned out of the raw lines (fence-aware) and carry their 1-based source
 // line, which matches the @pierre/diffs `data-line` numbering used to scroll.
-// Pure and DOM-free, so the extractor, active-line, and filter logic are all
-// directly unit-testable.
+// Pure and DOM-free.
 
 /** A heading found in the plan source. */
 export interface TocHeading {
@@ -15,10 +14,7 @@ export interface TocHeading {
   line: number;
 }
 
-// An ATX heading: optional leading whitespace, 1–6 hashes, then required
-// whitespace before the text. The trailing-hash group is stripped separately.
 const ATX = /^\s*(#{1,6})\s+(.*)$/;
-// A fence opener/closer: three or more backticks or tildes (optionally indented).
 const FENCE = /^\s*(`{3,}|~{3,})/;
 
 /**
@@ -72,18 +68,14 @@ export interface MatchRun {
 
 /**
  * A matcher for `query` — the one definition of what the ToC counts as a match, so a
- * surface that filters on it and a surface that highlights on it cannot disagree.
- * Given a heading's text it returns that text cut into runs with the matched ones
- * flagged, or null when the text does not match at all. Matching is case-insensitive
- * substring, and EVERY occurrence is flagged rather than only the first.
+ * surface that filters on it and a surface that highlights on it cannot disagree. It
+ * returns a heading's text cut into runs with the matched ones flagged, or null when the
+ * text does not match. Matching is case-insensitive substring, and EVERY occurrence is
+ * flagged rather than only the first.
  *
- * An empty or whitespace-only query matches every text as a single unflagged run.
- * That one case is what lets `filterHeadings` return everything while a highlighter
- * built on the same closure marks nothing.
- *
- * A third outcome a highlighting caller has to expect: a text whose lowercase differs in
- * LENGTH (`İ`) still matches, but comes back as one unflagged run. The offsets no longer
- * align there, and marking the wrong characters is worse than marking none.
+ * Two texts come back as one UNFLAGGED run: any text under an empty or whitespace-only
+ * query, and a text whose lowercase differs in LENGTH (`İ`), where the run offsets no
+ * longer align.
  */
 export function headingMatcher(query: string): (text: string) => MatchRun[] | null {
   const needle = query.trim().toLowerCase();
@@ -92,14 +84,14 @@ export function headingMatcher(query: string): (text: string) => MatchRun[] | nu
     const haystack = text.toLowerCase();
     // A case fold that changes length (`İ` lowercases to two code units) shifts every
     // offset after it, so the runs below would flag the WRONG characters — worse than
-    // flagging none. The heading still matches; only the decoration is given up.
+    // flagging none.
     if (haystack.length !== text.length) {
       return haystack.includes(needle) ? [{ text, hit: false }] : null;
     }
     const runs: MatchRun[] = [];
     // `at` is both the start of the not-yet-emitted text and where the next search
-    // resumes, so occurrences never overlap. An empty needle — the one value that would
-    // spin this loop — has already returned above.
+    // resumes. An empty needle — the one value that would spin this loop — has already
+    // returned above.
     let at = 0;
     for (let i = haystack.indexOf(needle); i !== -1; i = haystack.indexOf(needle, at)) {
       if (i > at) runs.push({ text: text.slice(at, i), hit: false });
@@ -113,27 +105,21 @@ export function headingMatcher(query: string): (text: string) => MatchRun[] | nu
 }
 
 /**
- * Headings whose text contains `query` (case-insensitive). An empty or
- * whitespace-only query returns every heading, so the pane's hide-non-matches
- * default falls out of rendering only this filtered list.
+ * Headings whose text contains `query` (case-insensitive); an empty or whitespace-only
+ * query returns every heading.
  *
- * Built on `headingMatcher` rather than on a comparison of its own, so the rows a
- * surface shows and the characters it marks are decided by the same closure. Note what
- * this deliberately does NOT do: it filters the caller's array and hands back the
- * caller's own objects. `groupedHeadingMatches` (headingTrail.ts) decides group
- * membership by reference identity over this result, so returning a `{heading, runs}`
- * wrapper here would make every query render nothing — silently, from a module that
- * still looks correct.
+ * Hands back the caller's own objects, never copies: `groupedHeadingMatches`
+ * (headingTrail.ts) decides group membership by reference identity over this result, so
+ * returning a `{heading, runs}` wrapper here would make every query render nothing —
+ * silently, from a module that still looks correct.
  */
 export function filterHeadings(headings: TocHeading[], query: string): TocHeading[] {
   const match = headingMatcher(query);
   return headings.filter((h) => match(h.text) !== null);
 }
 
-// Lowercase the text and collapse runs of non-alphanumerics (unicode-aware) to a
-// single hyphen, trimming hyphens off the ends. A heading with no alphanumerics
-// (e.g. a rule of dashes) yields the empty string, which falls back to "section"
-// so the slug — and the URL it lands in — is never blank.
+// A heading with no alphanumerics (e.g. a rule of dashes) collapses to the empty
+// string; "section" keeps the slug — and the URL it lands in — from ever being blank.
 function slugify(text: string): string {
   const slug = text
     .toLowerCase()
@@ -142,11 +128,10 @@ function slugify(text: string): string {
   return slug === "" ? "section" : slug;
 }
 
-// Slugs for every heading, in document order and aligned by index. Repeated text
-// (and symbol-only fallbacks) collide on the same base slug, so the Nth occurrence
-// after the first earns a `-N` suffix — GitHub-style — keeping every slug unique
-// and stable for a given heading set. The single owner of the slug↔heading mapping
-// the two resolvers below share.
+// Slugs for every heading, in document order and aligned by index. Repeated text (and
+// symbol-only fallbacks) collide on the same base slug, so the Nth occurrence after the
+// first earns a `-N` suffix — GitHub-style — keeping every slug unique and stable for a
+// given heading set.
 function headingSlugs(headings: TocHeading[]): string[] {
   const seen = new Map<string, number>();
   return headings.map((h) => {

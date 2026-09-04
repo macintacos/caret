@@ -10,11 +10,10 @@ import type { TocHeading } from "$lib/toc.ts";
 
 // HEADINGS with a second branch grafted on: "Details" under "Approach" is where
 // the reader is, "Steps" under "Verification" is the branch they are not in —
-// the headings the bar could not reach before EXC-957.
+// the reach EXC-957's menus have to give.
 const BRANCHED: TocHeading[] = [...HEADINGS, { level: 3, text: "Steps", line: 24 }];
 
-// Four nested levels, deeper than the bar used to show before it started
-// measuring the room it has.
+// Four nested levels, deeper than the bar shows without measuring the room it has.
 const DEEP: TocHeading[] = [
   { level: 1, text: "One", line: 1 },
   { level: 2, text: "Two", line: 3 },
@@ -162,9 +161,8 @@ describe("PlanBreadcrumbs menus", () => {
     expect(menuRows().map((r) => r.getAttribute("data-slot"))).toEqual(["dropdown-menu-item"]);
   });
 
-  // EXC-957: the menus recurse the heading tree, not the reader's trail. A
-  // sibling they are NOT on is the case the old `here &&` limiter excluded, and
-  // the reason most of a plan was unreachable from the bar.
+  // EXC-957: the menus recurse the heading tree, not the reader's trail — a sibling
+  // they are NOT on is the case that keeps most of a plan reachable from the bar.
   test("nests a sibling's own headings even when the reader is not in that branch", async () => {
     await openedCrumb(1, { headings: BRANCHED });
     expect(menuRows().map((r) => r.textContent?.trim())).toEqual(["Approach", "Verification"]);
@@ -354,7 +352,7 @@ describe("PlanBreadcrumbs filter", () => {
     return panel()?.querySelector<HTMLElement>("[data-slot='command-list']") ?? null;
   }
 
-  /** The result rows: real options now, not menu items. */
+  /** The result rows: real options, not menu items. */
   function options(): HTMLElement[] {
     return [...(listbox()?.querySelectorAll<HTMLElement>("[role='option']") ?? [])];
   }
