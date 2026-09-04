@@ -594,7 +594,7 @@ test("the real warm runner runs `prewarm` with CARET_AGENT=opencode", async () =
 
   const hooks = await buildRealWarmHooks(shim);
   await hooks["chat.message"]?.(message("plan"), {} as never);
-  // The shim's redirect creates the file empty, so existence isn't the signal — content is.
+  // The `>` creates the file empty and the lone printf lands in one write, so wait on non-empty.
   expect(await until(() => existsSync(out) && readFileSync(out, "utf-8") !== "")).toBe(true);
   expect(readFileSync(out, "utf-8")).toBe("prewarm opencode");
 });
