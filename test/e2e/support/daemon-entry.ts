@@ -101,11 +101,9 @@ const server = createServer({
   // an unwired route 404s, which would put a failed same-origin request into every spec's
   // page load — exactly what assets.e2e.ts exists to catch.
   //
-  // The BUILD verdict comes from the fixture (CARET_E2E_UPDATE_STATUS), defaulting to the
-  // honest quiet answer for a daemon running from source; the reviewer's `updates.check`
-  // is folded over it per request through the same updateReportFor production uses
-  // (EXC-1210), so a spec that flips the opt-out gets the daemon's real behaviour rather
-  // than a stub's.
+  // The reviewer's `updates.check` is folded over the staged build verdict per request,
+  // through the same updateReportFor production uses (EXC-1210), so a spec that flips the
+  // opt-out gets the daemon's real behaviour rather than a stub's.
   //
   // A staged verdict rides on the `install: "dev"` identity below, a pair the real check
   // can never settle on — a dev build short-circuits before it compares anything. Inert:

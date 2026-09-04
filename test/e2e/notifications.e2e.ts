@@ -78,7 +78,6 @@ test("a new plan while the tab is hidden notifies; its click selects the review"
   await page.goto("/");
   await expect(page.locator(PLAN_SURFACE).getByText("Widget Cache Refactor")).toBeVisible();
 
-  // The badge reflects the granted permission (green bell).
   await expect(page.getByRole("button", { name: "Notifications: granted" })).toBeVisible();
 
   // Hide the tab, then seed a second review through the API: the next poll
@@ -97,8 +96,6 @@ test("a new plan while the tab is hidden notifies; its click selects the review"
   expect(note.body).toContain("Gadget Renderer Cleanup");
   expect(note.body).toContain("/tmp/caret-e2e");
 
-  // Click the notification: the handler focuses the window, selects that
-  // review (URL + rendered plan flip), and closes the notification.
   await page.evaluate(() => {
     const [n] = (window as unknown as StubWindow).__notes;
     n?.onclick?.();

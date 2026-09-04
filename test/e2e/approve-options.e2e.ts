@@ -17,7 +17,7 @@ test("the options menu approves the review in a chosen variant", async ({ daemon
   await expect(page.getByRole("menuitem", { name: "Approve & accept edits" })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Approve & auto mode" })).toBeVisible();
 
-  // Picking a variant now opens the approval confirmation (EXC-791); confirming
+  // Picking a variant opens the approval confirmation (EXC-791); confirming
   // resolves the review on that variant's allow path — the same path the primary
   // button takes.
   await approveViaVariant(daemon, page, "Approve & auto mode", id);

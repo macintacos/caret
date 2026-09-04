@@ -111,8 +111,8 @@ test("closing a modal plays its exit before the surface leaves the DOM", async (
 
   await page.keyboard.press("Escape");
 
-  // tw-animate-css's --animate-out keyframe. Before this ticket the dialog's
-  // animation classes keyed on an attribute bits-ui never sets, so nothing ran.
+  // tw-animate-css's --animate-out keyframe. The dialog's animation classes have to
+  // key on an attribute bits-ui actually sets, or no exit runs at all.
   const played = await page.evaluate(() => (window as unknown as ExitWindow).__exitAnimation);
   expect(played).toBe("exit");
 
@@ -360,8 +360,7 @@ test("diverting from a guard to the dialog acknowledges nothing and uncovers not
   // The guard-to-dialog swap wears the SAME choreography as any other modal pair — since
   // EXC-892 both surfaces take the bridge's two arms — but it is not a decision, and this
   // is the assertion that keeps it from becoming one. Nothing resolved, so there is
-  // nothing to confirm; `active` never changed, so there is nothing to uncover. Written as
-  // a guard against this ticket's own change leaking one step further than it should.
+  // nothing to confirm; `active` never changed, so there is nothing to uncover.
   const id = await openWithPendingAnnotation(daemon, page, "explain cold cost");
   await waitPastSafeModeGrace(page);
 
@@ -370,7 +369,6 @@ test("diverting from a guard to the dialog acknowledges nothing and uncovers not
   await recordHandoff(page);
   await guard.getByRole("button", { name: "Request changes" }).click();
 
-  // The swap itself lands: one modal for another, the plan untouched behind both.
   await expect(page.getByRole("dialog", { name: "Send the plan back for revision" })).toBeVisible();
   await expect(guard).toHaveCount(0);
   // Neither half of the hand-off fires. alerts() reads role="status", which is the role

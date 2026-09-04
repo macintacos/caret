@@ -13,7 +13,6 @@ import { planSurface } from "@test/e2e/support/source-view.ts";
 
 const keyboardButton = "button[aria-label='Keyboard shortcuts']";
 const topbarHints = ".topbar [data-slot='kbd']";
-// The ⇧C cap the status-strip comment tally advertises (EXC-792).
 
 // A short multi-line plan so the cursor can move and enter V-mode.
 const PLAN = ["# Alpha", "Alpha one.", "Alpha two.", "Alpha three.", ""].join("\n\n");
@@ -32,7 +31,6 @@ test("the Settings toggle hides the shortcut affordances live and persists", asy
   await expect(page.locator(topbarHints).first()).toBeVisible();
   await expect(commentTally(page).locator("[data-slot='kbd']").first()).toBeVisible();
 
-  // Open Settings; the switch reads on.
   await page.getByRole("button", { name: "Settings" }).click();
   const toggle = page.getByRole("switch", { name: "Shortcut hints" });
   await expect(toggle).toBeVisible();

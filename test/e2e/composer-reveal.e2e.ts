@@ -110,11 +110,8 @@ test("a composer opened on the last visible line scrolls itself fully into view"
 }) => {
   await loadPlan(page, daemon);
 
-  // Park a third of the way down, so there is plan above and below the composer.
   const view = await parkAThirdDown(page);
   const before = await view.evaluate((el) => el.scrollTop);
-
-  // The composer opens in the annotation row BELOW this line, so it starts clipped.
   const composer = await openComposerOnLastVisibleLine(page);
 
   // The whole card ends up on screen — the poll absorbs the settle frames and the
@@ -156,7 +153,6 @@ test("re-opening a saved comment for editing inherits the same reveal", async ({
   await loadPlan(page, daemon);
   const view = await parkAThirdDown(page);
 
-  // Leave a comment anchored near the bottom of the view.
   const composer = await openComposerOnLastVisibleLine(page);
 
   // Park the saved card flush against the bottom edge, so the taller edit

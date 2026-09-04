@@ -40,7 +40,7 @@ test("approving opens a confirmation and resolves on confirm (UI and API)", asyn
   // Still pending until confirmed.
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
 
-  // Confirming resolves the review (the bare confirm button reads "Approve").
+  // The bare confirm button reads "Approve".
   await confirm.getByRole("button", { name: "Approve", exact: true }).click();
   await assertResolved(daemon, page, id);
 });
@@ -69,8 +69,7 @@ test("a reviewer note rides the approval to the agent's decision (EXC-791)", asy
 
   const confirm = await openApproveGuard(page);
 
-  // Type into the optional notes field (a CodeMirror textbox, located by its
-  // accessible name), then confirm.
+  // The notes field is a CodeMirror textbox, located by its accessible name.
   await confirm.getByRole("textbox", { name: /notes for the agent/i }).fill("use the retry helper");
   await confirm.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
@@ -109,7 +108,6 @@ test("a pending inline comment guards approve and routes to request-changes inta
   // Approve opens a confirmation naming the count — it does NOT resolve.
   const guard = await openApproveGuard(page);
   await expect(guard).toContainText("1 pending comment");
-  // The guard previews the inline comment, anchored to its lines.
   await expect(guard.locator(".comments")).toContainText("Lines 7–8");
   await expect(guard.locator(".comments")).toContainText("explain the cold cost");
 
@@ -188,7 +186,6 @@ test("a lone general-comment draft guards approve (EXC-742)", async ({ daemon, p
   // feedback a plain approve would leave behind.
   const guard = await openApproveGuard(page);
   await expect(guard).toContainText("1 pending comment");
-  // The guard previews the draft itself under the General label.
   await expect(guard.locator(".comments")).toContainText("General");
   await expect(guard.locator(".comments")).toContainText("reconsider the migration order");
 
@@ -201,7 +198,6 @@ test("'Approve anyway' on the guard resolves as an allow", async ({ daemon, page
 
   const guard = await openApproveGuard(page);
 
-  // Choosing the deliberate path approves with the allow payload unchanged.
   await guard.getByRole("button", { name: "Approve anyway" }).click();
   await assertResolved(daemon, page, id);
 });
@@ -229,7 +225,6 @@ test("Escape dismisses the approve guard and leaves the review pending", async (
   const guard = await openApproveGuard(page);
   await page.keyboard.press("Escape");
 
-  // The review is untouched and the approve button still works.
   await assertGuardDismissed(daemon, guard, id);
 });
 

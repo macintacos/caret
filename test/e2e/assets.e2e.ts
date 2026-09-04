@@ -30,8 +30,6 @@ test("daemon serves the hashed-asset build with zero failed same-origin requests
 }) => {
   const origin = daemon.url;
 
-  // Collect every failure signal observed during the load: a transport-level
-  // requestfailed and any same-origin response with an HTTP error status.
   const failures: string[] = [];
   page.on("requestfailed", (req) => {
     const url = req.url();
@@ -51,8 +49,6 @@ test("daemon serves the hashed-asset build with zero failed same-origin requests
     if (msg.type() === "error") consoleErrors.push(msg.text());
   });
 
-  // Record the 2xx asset responses so we can assert the build's shape: at least
-  // one hashed JS entry chunk and one hashed CSS file were served.
   const okJs: string[] = [];
   const okCss: string[] = [];
   page.on("response", (res) => {
@@ -95,8 +91,6 @@ test("a code-split shiki grammar chunk is served over the wire and applies", asy
     if (res.status() !== 200) return;
     const path = new URL(res.url()).pathname;
     if (!isSameOrigin(res.url(), origin)) return;
-    // A hashed /assets/*.js chunk that is NOT the index entry bundle: a
-    // code-split grammar chunk.
     if (/^\/assets\/.+\.js$/.test(path) && !/^\/assets\/index-/.test(path)) {
       grammarChunks.push(path);
     }
@@ -135,9 +129,6 @@ test("a code-split shiki grammar chunk is served over the wire and applies", asy
     )
     .toBe(true);
 
-  // A code-split grammar chunk distinct from the entry bundle was fetched 200
-  // over the wire during the highlighter build, and the paint above confirms
-  // it applied.
   expect(grammarChunks.length).toBeGreaterThan(0);
 
   expect(failures).toEqual([]);

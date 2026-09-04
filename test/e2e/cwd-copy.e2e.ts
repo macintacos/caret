@@ -57,7 +57,6 @@ test("success alerts stack and a dismiss removes one", async ({ daemon, page }) 
   await cwd.click();
   await cwd.click();
 
-  // Two copies in quick succession stack (oldest on top, newer underneath).
   await expect(alerts(page)).toHaveCount(2);
 
   await alerts(page).first().getByRole("button", { name: "Dismiss" }).click();

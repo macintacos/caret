@@ -39,11 +39,9 @@ test("? opens and toggles the help; the bar button opens it; search filters", as
   await page.keyboard.press("?");
   await expect(dialog).toHaveCount(0);
 
-  // The status-bar keyboard button opens the same modal.
   await page.locator("button[aria-label='Keyboard shortcuts']").click();
   await expect(dialog).toBeVisible();
 
-  // Escape dismisses it.
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
 });
@@ -93,7 +91,6 @@ test("/ focuses the search input without typing a slash; the field shows a / hin
   await expect(search).toBeFocused();
   await expect(search).toHaveValue("");
 
-  // Once focused, typing filters the list normally.
   await page.keyboard.type("cancel");
   await expect(dialog).toContainText("Cancel editing");
   await expect(dialog).not.toContainText("Submit comment");

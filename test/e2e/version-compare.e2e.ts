@@ -81,19 +81,16 @@ test("entering compare mode diffs a chosen non-default pair", async ({ daemon, p
   await page.goto("/");
   await planSurface(page);
 
-  // The picker is available; compare mode is off by default (single-version
-  // view), so the body shows the current version.
+  // Compare mode is off by default, so the body shows the current version.
   await expect(page.locator(".compare-picker")).toBeVisible();
   await page.getByRole("button", { name: "Versions" }).click();
 
   // Default pair is current (v3) vs previous (v2); pick a non-default pair:
   // base = v3, target = v1, so the diff spans the alpha→gamma change.
-  // The target picker is a bits-ui DropdownMenu.
   await page.getByLabel("Target version").click();
   await page.getByRole("menuitemradio", { name: "v1" }).click();
 
-  // Both ends of the chosen pair are visible (Playwright pierces the library's
-  // shadow root for text).
+  // Playwright pierces the library's shadow root for text.
   await expect(page.getByText("gamma line three")).toBeVisible();
   await expect(page.getByText("alpha line one")).toBeVisible();
 });
@@ -126,7 +123,6 @@ test("toggling layout preserves the diff scroll position", async ({ daemon, page
   await expect.poll(async () => view.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
   const before = await view.evaluate((el) => el.scrollTop);
 
-  // Switch layout in place (setOptions, not a remount); the scroll offset holds.
   await page.getByRole("radio", { name: "Unified" }).click();
   await expect(diffPre(page)).toHaveAttribute("data-diff-type", "single");
   expect(await view.evaluate((el) => el.scrollTop)).toBe(before);
@@ -174,7 +170,6 @@ test("the chosen layout persists across a reload", async ({ daemon, page }) => {
 
   await page.reload();
   await page.getByRole("button", { name: "Versions" }).click();
-  // The remembered layout drives the initial diff style after reload.
   await expect(diffPre(page)).toHaveAttribute("data-diff-type", "single");
 });
 
@@ -210,7 +205,6 @@ test("the chosen gutter indicators persist across a reload", async ({ daemon, pa
 
   await page.reload();
   await page.getByRole("button", { name: "Versions" }).click();
-  // The remembered indicators drive the initial diff markers after reload.
   await expect(diffPre(page)).toHaveAttribute("data-indicators", "classic");
 });
 
@@ -279,11 +273,10 @@ for (const colorScheme of ["light", "dark"] as const) {
       };
     });
 
-    // Both emphasis spans rendered…
     expect(probes.additionSpan).not.toBeNull();
     expect(probes.deletionSpan).not.toBeNull();
-    // …and each carries its semantic token's rgb channels (the wash adds alpha,
-    // so compare channels only). Stock library green/red would not match.
+    // Each emphasis span carries its semantic token's rgb channels — the wash adds
+    // alpha, so compare channels only. Stock library green/red would not match.
     expect(channels(probes.additionSpan as string)).toEqual(channels(probes.ok));
     expect(channels(probes.deletionSpan as string)).toEqual(channels(probes.danger));
   });
@@ -350,14 +343,12 @@ for (const colorScheme of ["light", "dark"] as const) {
       };
     });
 
-    // The collapsed-context band exists with its 'N unmodified lines' label…
     expect(probe.hasBand).toBe(true);
     expect(probe.unmodifiedLabel).toMatch(/unmodified line/);
     expect(probe.bandBg).not.toBeNull();
-    // …the bridge's separator override is set (so the band can't fall back to the
-    // library's stock light-dark separator grey)…
+    // The bridge's separator override is set, so the band can't fall back to the
+    // library's stock light-dark separator grey.
     expect(probe.sepOverrideSet).toBe(true);
-    // …and the expand pill renders at caret's 6px radius with the faint-ink color.
     expect(probe.hasPill).toBe(true);
     expect(probe.pillRadius).toBe("6px");
     expect(probe.pillColor).not.toBeNull();
@@ -381,8 +372,6 @@ test("clicking the expand pill reveals the collapsed context", async ({ daemon, 
       return n;
     });
 
-  // Context is collapsed up front: at least one line-info band with an expand
-  // pill, and most of the shared middle hidden.
   await expect(page.locator(".diffview [data-expand-button]").first()).toBeVisible();
   const before = await visibleContextCount();
   expect(before).toBeLessThan(30);
@@ -393,8 +382,6 @@ test("clicking the expand pill reveals the collapsed context", async ({ daemon, 
   // pierces shadow DOM for locators.
   await page.locator(".diffview [data-expand-button]").first().click();
 
-  // The click revealed previously-hidden context (no collapse regression): the
-  // count of rendered shared-middle lines strictly grew.
   await expect.poll(visibleContextCount).toBeGreaterThan(before);
 });
 
@@ -431,7 +418,6 @@ test("crossing --w-narrow forces unified then restores the split preference", as
   const pre = diffPre(page);
   await expect(pre).toHaveAttribute("data-diff-type", "split");
 
-  // Below the breakpoint: forced to unified, and the layout toggle drops out.
   await page.setViewportSize({ width: 800, height: 900 });
   await expect(pre).toHaveAttribute("data-diff-type", "single");
   await expect(page.getByRole("radio", { name: "Split" })).toHaveCount(0);
@@ -475,9 +461,6 @@ for (const [themeId, scheme] of [
     daemon,
     page,
   }) => {
-    // Pin the mode rather than emulate the OS: this asserts a colour, so the
-    // theme must be settled before first paint and independent of any system
-    // preference the runner happens to carry.
     await page.addInitScript((s) => localStorage.setItem("caret.theme.mode", s), scheme);
     await daemon.seedVersions(3, [V1, V2, V3]);
     await page.goto("/");
@@ -531,7 +514,6 @@ test("the version pickers annotate the current version, and only that one", asyn
   await expect(page.getByRole("menuitemradio", { name: "v3" })).toContainText("(current)");
   await expect(page.getByRole("menuitemradio", { name: "v2" })).not.toContainText("(current)");
   await expect(page.getByRole("menuitemradio", { name: "v1" })).not.toContainText("(current)");
-  // Exactly one row is annotated.
   await expect(page.locator(".vmenu .cur")).toHaveCount(1);
 
   // The annotation reads the head of the same newest-first `ordered` list the rows

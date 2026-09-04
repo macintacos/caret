@@ -162,10 +162,8 @@ test("d toggles the compare/diff view when there are multiple versions", async (
   await expect(toggle).toHaveAttribute("aria-keyshortcuts", "d");
   await expect(toggle).toHaveAttribute("aria-pressed", "false");
 
-  // `d` enters compare mode…
   await page.keyboard.press("d");
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
-  // …and `d` again leaves it.
   await page.keyboard.press("d");
   await expect(toggle).toHaveAttribute("aria-pressed", "false");
 });

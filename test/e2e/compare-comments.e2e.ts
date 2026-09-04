@@ -262,12 +262,8 @@ test("lists every version's comments in the compared range, each badged with its
   daemon,
   page,
 }) => {
-  // Widen the pair to base v3 / target v1 so the range spans all three versions.
   const nav = await openWidenedToV1(page, daemon);
   await expect(nav).toHaveAccessibleName("Comments in v1–v3");
-
-  // Every comment on v1, v2 and v3, ordered by version then by line, each row
-  // tagged with the version it was left on.
   await expect(nav.getByRole("listitem")).toHaveCount(4);
   await expect(nav.locator(".nav-version-tag")).toHaveText(["v1", "v2", "v2", "v3"]);
   await expect(nav.getByRole("listitem").nth(0)).toContainText("alpha needs a rollback path");

@@ -131,7 +131,6 @@ test("discarding an unsent comment asks to confirm before dropping it (EXC-762)"
   await row.getByRole("button", { name: "Discard", exact: true }).click();
   await expect(discardConfirm(page)).toBeVisible();
   await expect(row).toHaveCount(1);
-  // Confirming completes the drop.
   await discardConfirm(page).getByRole("button", { name: "Discard" }).click();
   await expect(row).toHaveCount(0);
 });
@@ -145,14 +144,12 @@ test("marking an inline comment as a draft demotes it into Unsent and out of the
 
   const dialog = await openRequestChangesDialog(page);
 
-  // It starts as a committed inline comment, and Send is enabled.
   await expect(inlineRows(dialog)).toHaveCount(1);
   await expect(unsentRows(dialog)).toHaveCount(0);
   const send = dialog.getByRole("button", { name: "Send for revision" });
   await expect(send).toBeEnabled();
 
-  // Mark as draft demotes it: it leaves the inline list, appears under Unsent, and
-  // with nothing left to include the primary action disables.
+  // With nothing left to include, the primary action disables.
   await inlineRows(dialog).getByRole("button", { name: "Mark as draft", exact: true }).click();
   await expect(dialog.getByRole("region", { name: "Inline comments" })).toHaveCount(0);
   const scratchRow = unsentRows(dialog);

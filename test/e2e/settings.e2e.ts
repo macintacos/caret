@@ -173,17 +173,14 @@ test("opens the Appearance pane with theme, hints, and the folded-in Diff view s
 }) => {
   await openSettingsPane(page, daemon);
 
-  // Appearance is the (only) pane; Diff view is now a section within it, not its own
-  // nav row.
+  // Diff view is a section inside the Appearance pane, not its own nav row.
   await expect(page.locator("[data-category='Appearance']")).toHaveAttribute(
     "aria-current",
     "page",
   );
   await expect(page.locator("[data-category='Diff view']")).toHaveCount(0);
 
-  // Its controls all live in the one pane: the theme block, shortcut hints, and the
-  // diff prefs. All three modes are readable at once — the point of a segmented
-  // control over a dropdown here.
+  // All three modes readable at once — the point of a segmented control over a dropdown.
   await expect(page.getByRole("radio", { name: "Light", exact: true })).toBeVisible();
   await expect(page.getByRole("radio", { name: "Dark", exact: true })).toBeVisible();
   await expect(page.getByRole("radio", { name: "System", exact: true })).toBeVisible();
@@ -386,7 +383,6 @@ test("hovering a theme option previews its palette beside the menu, without appl
   await expect(preview).toHaveAttribute("data-theme", "light");
   await expect(preview).toHaveAttribute("style", /color-scheme:\s*light/i);
 
-  // Beside the menu, fully within the viewport (never clipped).
   await expectBesideMenu(page, preview);
 
   // Exactly one at a time — closing this panel and opening the other slot's swaps the
@@ -435,8 +431,8 @@ test("reopening the theme menu after a switch keeps the preview beside the menu,
 }) => {
   await openSettingsPane(page, daemon);
 
-  // Commit a palette — the panel closes on pick. A palette other than the one already
-  // selected, since re-picking the current value commits nothing (EXC-1111).
+  // A palette other than the one already selected: re-picking the current value commits
+  // nothing (EXC-1111).
   await pickDraculaDark(page);
 
   // Reopen and highlight the first option — the fast reopen that raced the menu's async
@@ -447,7 +443,6 @@ test("reopening the theme menu after a switch keeps the preview beside the menu,
   const preview = page.locator("[data-slot='theme-preview']");
   await expect(preview).toBeVisible();
 
-  // Beside the menu (either side), fully within the viewport.
   const { cardBox, menuBox } = await expectBesideMenu(page, preview);
   if (cardBox && menuBox) {
     // Aligned to the menu top — NOT stranded in the top-left corner, where the glitch left
@@ -479,10 +474,6 @@ test("clicking a row's label reaches its control, and names it", async ({ daemon
   // no Escape to dismiss it with. With nothing to consume it that key reaches the dialog's
   // own dismissable layer and closes Settings out from under the assertions below
   // (EXC-1193).
-  //
-  // The closed state is asserted rather than asserted-in-prose: were bits-ui ever to open
-  // on a forwarded click, every assertion below would still pass and this comment would go
-  // quietly false.
   await dialog.locator("#setting-diffStyle-label").click();
   await expect(dialog.locator("#setting-diffStyle")).toBeFocused();
   await expect(dialog.locator("#setting-diffStyle")).toHaveAttribute("data-state", "closed");
@@ -513,7 +504,6 @@ test("toggling shortcut hints applies immediately and persists", async ({ daemon
   await expect(page.locator(keyboardButton)).toHaveCount(0);
   await expect(page.getByText("Shortcut hints updated")).toBeVisible();
 
-  // Persists across a reload.
   await page.reload();
   await planSurface(page);
   await expect(page.locator(keyboardButton)).toHaveCount(0);
@@ -534,8 +524,8 @@ test("changing the diff Layout in Settings reflows an open compare diff live", a
   const pre = page.locator(".diffview pre").first();
   await expect(pre).toHaveAttribute("data-diff-type", "split");
 
-  // Switch Layout → Unified in Settings: the diff behind the modal reflows at once,
-  // no reload and no in-view picker — the diff prefs honor immediate apply too.
+  // The diff behind the modal reflows at once, no reload and no in-view picker — the
+  // diff prefs honor immediate apply too.
   await openSettings(page);
   await page
     .getByRole("dialog", { name: "Settings" })
@@ -577,9 +567,8 @@ test("the Notifications pane reflects the permission and its test affordance fir
   await page.addInitScript(initGrantedNotification);
   const dialog = await openSettingsPane(page, daemon);
 
-  // Switching to the Notifications category swaps the field pane for the live pane
-  // (the first non-staged pane — a new real-browser flow this shell had no coverage
-  // for). Its header reads Notifications and it reflects the injected grant.
+  // The Notifications category swaps the field pane for the live pane — the first
+  // non-staged one.
   await expectNotificationsPane(dialog, page);
 
   // Granted → the diagnosis affordance; clicking it constructs exactly one toast
@@ -611,10 +600,6 @@ test("the search filters the nav and fields across categories; clearing restores
   await expect(dialog.locator("[data-category='Appearance']")).toBeVisible();
   await expect(dialog.locator("[data-category='Advanced']")).toHaveCount(0);
 
-  // Clearing the query restores the full nav and fields. Emptying the field fires a
-  // bubbling input event (what a real keystroke fires) — Playwright's fill("") /
-  // keyboard-delete don't drive Svelte 5's bind:value to empty in this build, so dispatch
-  // it explicitly. (The two-stage Esc, another clear path, is covered below.)
   await clearSearch(search);
   await expect(search).toHaveValue("");
   await expect(dialog.locator("[data-field='shortcutHints']")).toBeVisible();
@@ -730,8 +715,6 @@ test("drives the full journey: edit Appearance live, search across categories, o
   await expect(dialog.locator("[data-category='Advanced']")).toBeVisible();
   await expect(dialog.locator("[data-field='themeLight']")).toHaveCount(0);
 
-  // Clearing the query restores the full nav. Emptying the field fires a bubbling input
-  // event (Playwright's fill("") doesn't drive Svelte 5's bind:value empty in this build).
   await clearSearch(search);
   await expect(dialog.locator("[data-field='themeLight']")).toBeVisible();
 

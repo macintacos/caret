@@ -36,7 +36,6 @@ test("wide: secondaries are inline and the overflow menu is hidden", async ({ da
   await expect(page.getByRole("button", { name: "Reject" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Request changes" })).toBeVisible();
   await expect(page.getByRole("button", { name: "More actions" })).toHaveCount(0);
-  // The Approve control reads inline at wide width.
   await expect(page.locator(".approve-slot .split-primary")).toBeVisible();
 });
 
@@ -115,11 +114,8 @@ test("tight: Approve moves into the overflow menu", async ({ daemon, page }) => 
   const id = await seedAndOpen(page, daemon);
   await page.setViewportSize({ width: 600, height: 800 }); // below --w-tight (640)
 
-  // The inline Approve control is off; only ⋯ + bell + settings remain right.
   await expect(page.locator(".approve-slot")).toBeHidden();
 
-  // Approve — with its variants — is reachable in the overflow menu, and
-  // approving from there resolves the review through the confirm dialog.
   await page.getByRole("button", { name: "More actions" }).click();
   await expect(page.getByRole("menuitem", { name: "Approve & accept edits" })).toBeVisible();
   await approveViaVariant(daemon, page, "Approve & auto mode", id);
@@ -172,8 +168,6 @@ test("the overflow Reject glyph is red like its label", async ({ daemon, page })
     labelColor: getComputedStyle(el).color,
     glyphColor: getComputedStyle(el.querySelector("svg") as SVGElement).color,
   }));
-  // The glyph matches the red label, not the muted-foreground grey the base rule
-  // gives other menu icons.
   expect(glyphColor).toBe(labelColor);
 });
 

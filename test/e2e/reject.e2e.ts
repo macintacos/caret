@@ -55,11 +55,10 @@ test("a pending inline comment guards reject; 'Reject anyway' sends only the wai
   daemon,
   page,
 }) => {
-  // Seed a non-blank inline comment the same way the UI's autosave would.
   const id = await openWithPendingAnnotation(daemon, page, "explain cold cost");
   await waitPastSafeModeGrace(page);
 
-  // Reject now opens the confirmation naming the count — it does NOT resolve.
+  // Reject opens the confirmation naming the count — it does NOT resolve.
   const guard = await openRejectGuard(page);
   await expect(guard).toContainText("1 pending comment");
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
@@ -83,7 +82,6 @@ test("Escape dismisses the reject guard and leaves the review pending", async ({
   const guard = await openRejectGuard(page);
   await page.keyboard.press("Escape");
 
-  // The review is untouched.
   await assertGuardDismissed(daemon, guard, id);
 });
 

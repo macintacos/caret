@@ -7,11 +7,6 @@
 // (daemon-entry.ts) make fullyParallel workers collision-free. The fixture runs
 // under the Playwright (node) runner; only the daemon child needs Bun, so it is
 // spawned with `bun` explicitly.
-//
-// Boot is not the whole cost a test pays for its daemon: the first seed() adds
-// ~11ms on top, and that figure holds only because pinnedRumdl() below hands the
-// daemon a pre-resolved binary rather than letting it acquire rumdl to format
-// its plan (EXC-1053).
 
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -196,22 +191,17 @@ let resolvedRumdl: string | undefined;
 /**
  * The pinned rumdl to hand every daemon, resolved once per worker process.
  *
- * ensureRumdl() (src/plan/rumdl.ts) is version-gated against $XDG_STATE_HOME, and
- * every test gets a fresh throwaway one — so without this the first POST
- * /api/reviews of every test downloads the pinned 5.6MB release from GitHub,
- * formats one plan with it, and deletes it at teardown. That is ~1.7GB per suite
- * run on the critical path of every test (EXC-1053), and it also makes the suite
- * depend on github.com being reachable.
+ * ensureRumdl() (src/plan/rumdl.ts) is version-gated against $XDG_STATE_HOME and
+ * every test gets a fresh throwaway one, so without this every test's first POST
+ * /api/reviews downloads the pinned 5.6MB release from GitHub — ~1.7GB per suite run
+ * on the critical path of every test, and a dependency on github.com being reachable
+ * (EXC-1053). The bun suite resolves it the same way off PATH, through bunfig.toml's
+ * [test] preload (test/support/rumdl-preload.ts, EXC-828); Playwright doesn't read
+ * bunfig, so this is that resolution for the node runner.
  *
- * The bun suite already solves this the same way: test/support/rumdl-preload.ts
- * (EXC-828) sets CARET_RUMDL_BIN from PATH through bunfig.toml's [test] preload.
- * Playwright doesn't read bunfig, so this is that resolution for the node runner
- * — same source (PATH, i.e. the mise-pinned tool), so they resolve the same
- * binary.
- *
- * Loud on purpose. A binary that is missing or reports the wrong version is NOT
- * an error downstream — ensureRumdl just falls back to the download — so failing
- * quietly here would silently restore the whole cost.
+ * Loud on purpose. A missing or wrong-version binary is NOT an error downstream —
+ * ensureRumdl just falls back to the download — so failing quietly here would
+ * silently restore the whole cost.
  */
 function pinnedRumdl(): string {
   if (resolvedRumdl) return resolvedRumdl;
@@ -315,10 +305,6 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
           if (!res.ok) throw new Error(`setPrefs failed: POST /api/prefs → ${res.status}`);
         },
         async seedVersions(count: number, plans: string[], cwd = "/tmp/caret-e2e") {
-          // One session threads the revisions: post v1, then for each later
-          // version deny the pending review (so the daemon will append) and post
-          // the next plan onto the same session. Leaves the review pending at the
-          // final version.
           const sessionId = randomUUID();
           let id = "";
           for (let v = 0; v < count; v++) {
@@ -334,9 +320,6 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
           return id;
         },
         async addVersion(id: string, plan: string) {
-          // Reuse the review's own session so the daemon threads the new plan onto
-          // it as a fresh version. Deny first so the pending review is resolved and
-          // the next POST appends rather than being deduped.
           const current = await this.getReview(id);
           const sessionId = current.body?.sessionId;
           if (sessionId === undefined) throw new Error(`addVersion: review ${id} has no session`);
