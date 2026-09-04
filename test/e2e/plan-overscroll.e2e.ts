@@ -16,12 +16,10 @@ test("the reader can scroll past the end of the plan", async ({ daemon, page }) 
 
   const view = await planSurface(page);
 
-  // The rows have to be rendered before the scroll below means anything. The
-  // overscroll room is .diff-plan's own ::after, so an unpopulated container is
-  // ~33vh tall, does not overflow the viewport, and satisfies the max-scroll poll
-  // vacuously — on a loaded host that walked the measurement into an empty shadow
-  // root and asserted the miss as a real gap. planSurface waits for the container,
-  // which is rendered unguarded, so it cannot stand in for this.
+  // The rows have to be rendered first: the overscroll room is .diff-plan's own
+  // ::after, so an unpopulated container is ~33vh tall, never overflows the viewport,
+  // and satisfies the max-scroll poll vacuously. planSurface waits only for the
+  // container, which renders unguarded, so it cannot stand in for this.
   await expect(page.locator(".diffview [data-line]").first()).toBeVisible();
 
   await view.evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
@@ -29,15 +27,11 @@ test("the reader can scroll past the end of the plan", async ({ daemon, page }) 
     .poll(() => view.evaluate((el) => Math.round(el.scrollHeight - el.clientHeight - el.scrollTop)))
     .toBeLessThanOrEqual(1);
 
-  // With the bottom fully reached, the last rendered line still sits well above
-  // the scroll viewport's bottom edge — the overscroll room. Measure the gap
-  // between the last [data-line] row and the container bottom as a fraction of
-  // the viewport height (idiom borrowed from headingTopOffset in
-  // diff-surface.e2e.ts).
-  // `null` rather than 0 when the DOM is not ready, and polled rather than read
-  // once — the idiom lineCenterY documents in source-view.ts. A numeric sentinel
-  // reads as a measured gap, which is how a plan that had not rendered failed here
-  // as "Received: 0" rather than saying the rows were missing.
+  // The overscroll room: the gap between the last [data-line] row and the container
+  // bottom, as a fraction of the viewport height. `null` rather than 0 when the DOM is
+  // not ready, and polled rather than read once (the idiom lineCenterY documents in
+  // source-view.ts) — a numeric sentinel reads as a measured gap, so an unrendered plan
+  // fails as "Received: 0" instead of naming the missing rows.
   const read = () =>
     page.evaluate(() => {
       const container = document.querySelector(".diff-plan");

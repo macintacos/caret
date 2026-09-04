@@ -25,20 +25,12 @@
 // idempotence. The sheet's own declarations are coreStyles.test.ts. What only a browser
 // can say is that those declarations produce the right boxes.
 //
-// One case cannot be armed from a seeded plan, and the comment on MALFORMED below says
-// so: the daemon reflows a plan through rumdl on ingest, and rumdl REPAIRS a ragged body
-// row (truncating or padding it to the header's cell count), so "a body row with the
-// wrong number of cells ends the table" is unreachable end to end and stays a unit. What
-// rumdl leaves alone is a DELIMITER row short of the header's count — it pads that to an
-// empty trailing cell, which is not a delimiter, so the table is voided outright. That is
-// the degrade case asserted here. Ragged column WIDTHS survive ingest verbatim, which is
-// what makes the alignment claim below a claim about layout rather than about the source,
-// and the delimiter row's `:---` / `:---:` / `---:` markers survive it verbatim too.
-//
-// One row's constant is NOT its seeded text, and B_WRAPPED says which form it is: the
-// link layer collapses `[label](url)` to its label, the only rewrite between a plan's
-// source and what the view paints. Everything downstream indexes the display text, so
-// the cells are cut on the collapsed columns and the collapse costs the pass nothing.
+// The daemon reflows a plan through rumdl on ingest, so not every case can be armed from
+// a seeded plan — the comment on the malformed-table test says which one cannot, and why
+// the degrade case asserted here is the one that survives. Ragged column WIDTHS do
+// survive verbatim, which is what makes the alignment claim below a claim about layout
+// rather than about the source, and so do the delimiter row's `:---` / `:---:` / `---:`
+// markers.
 
 import type { Page } from "@playwright/test";
 
@@ -598,7 +590,6 @@ test("no pipe glyph paints, and the rules stand where the pipes did", async ({ p
   // both sides being unset.
   expect(surface.fill).not.toBe("rgba(0, 0, 0, 0)");
   expect(surface.fill).toBe(surface.panel);
-  // And it floats.
   expect(surface.shadow).not.toBe("none");
   expect(Number.parseFloat(surface.radius)).toBeGreaterThan(0);
   // The premise of the whole trade: an unbanded row no longer paints over the card, so
@@ -971,7 +962,6 @@ test("a malformed table renders as plain source rows", async ({ page, daemon }) 
     await lineOf(page, text);
     expect(await cellBoxes(page, text)).toEqual([]);
   }
-  // No card claimed them, and the gutter still pairs one number per row.
   const bad = await page.evaluate((want) => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
     const row = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])].find(
@@ -1399,7 +1389,6 @@ test("copying a selection across a table yields the source markdown, pipes and a
     { from: PROSE_ABOVE, to: A_ROW3 },
   );
 
-  // Every source line comes back intact, on a line of its own, pipes included.
   expect(copied.split("\n").map((l) => l.trim())).toEqual([
     PROSE_ABOVE,
     "",

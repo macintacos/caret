@@ -84,15 +84,12 @@ test("j/k place and step the cursor, it reads as distinct, and Esc leaves it pla
 }) => {
   await openPlanForKeys(page, daemon, PLAN);
 
-  // No cursor until a motion places it.
   await expect(cursor(page)).toHaveCount(0);
 
-  // j reveals the cursor at the reading position; the marker carries its line.
   await page.keyboard.press("j");
   await expect(cursor(page)).toHaveCount(1);
   const start = await readCursorLine(page);
 
-  // j steps down one line, k steps back to where it was.
   await page.keyboard.press("j");
   await expectCursorLine(page, start + 1);
   await page.keyboard.press("k");
@@ -117,10 +114,8 @@ test("gg/G and half-page motions move the cursor and scroll it into view", async
 }) => {
   await openPlanForKeys(page, daemon, PLAN);
 
-  // gg goes to the top.
   await goToTop(page);
 
-  // G goes to the last rendered line and scrolls it into view.
   const last = Number(
     await page.locator(".diffview [data-content] [data-line]").last().getAttribute("data-line"),
   );
@@ -128,7 +123,6 @@ test("gg/G and half-page motions move the cursor and scroll it into view", async
   await expectCursorLine(page, last);
   await expect(cursor(page)).toBeInViewport();
 
-  // Ctrl+d jumps down more than one line from the top; Ctrl+u brings it back up.
   await goToTop(page);
   await page.keyboard.press("Control+d");
   const afterHalf = await readCursorLine(page, 1);
@@ -144,8 +138,6 @@ test("]] and [[ jump between headings, and a line click relocates the cursor", a
 }) => {
   await openPlanForKeys(page, daemon, PLAN);
 
-  // From the top (heading Alpha), ]] advances to the next heading (Bravo), then
-  // to Charlie; [[ steps back to Bravo. Line numbers come from the DOM.
   await goToTop(page);
   await page.keyboard.press("]");
   await page.keyboard.press("]");
@@ -168,8 +160,8 @@ test("]] and [[ jump between headings, and a line click relocates the cursor", a
   await page.keyboard.press("[");
   await expectCursorLine(page, bravo);
 
-  // A line click relocates the cursor to the clicked line (keyboard + mouse stay
-  // coherent). Clicking a line also opens its composer; the cursor tracks it.
+  // Keyboard and mouse stay coherent: clicking a line opens its composer, and the
+  // cursor tracks it there.
   await page.locator('.diffview [data-content] [data-line="3"]').click();
   await expectCursorLine(page, 3);
 });
@@ -180,9 +172,8 @@ test("} and { jump the cursor between blank (paragraph-boundary) lines", async (
 }) => {
   await openPlanForKeys(page, daemon, PLAN);
 
-  // From the top, } advances to the next blank line, then to a later one. Line
-  // numbers come from the DOM (the plan is reflowed on ingest). "}" is a shifted
-  // key; press("}") holds Shift → event.key "}" (as press("G") does for G).
+  // "}" is a shifted key; press("}") holds Shift → event.key "}" (as press("G")
+  // does for G).
   await goToTop(page);
   await page.keyboard.press("}");
   const firstBlank = await readCursorLine(page, 1);
@@ -192,8 +183,7 @@ test("} and { jump the cursor between blank (paragraph-boundary) lines", async (
   const secondBlank = await readCursorLine(page, firstBlank);
   expect(secondBlank).toBeGreaterThan(firstBlank);
 
-  // { steps back to the previous blank line (the two } jumps are consecutive
-  // blanks, so the reverse lands on the first).
+  // The two } jumps landed on consecutive blanks, so { lands back on the first.
   await page.keyboard.press("{");
   await expectCursorLine(page, firstBlank);
 });
@@ -206,8 +196,8 @@ test("holding j keeps the cursor on-screen and follows it, never yanking it to t
 
   await goToTop(page);
 
-  // Step far past the first viewport. The cursor must stay on-screen at EVERY
-  // step — the old behavior parked it at the very top once it crossed the fold.
+  // Far past the first viewport, and the cursor must stay on-screen at EVERY step:
+  // crossing the fold must not park it at the very top.
   for (let i = 0; i < 40; i++) {
     await page.keyboard.press("j");
     await expect(cursor(page)).toBeInViewport();
@@ -236,7 +226,6 @@ test("the focused-line cursor band paints the code row, not just its gutter", as
 
   // Walk the cursor down by keyboard only (so it is NEVER selected — selection is
   // amber and would mask the neutral cursor band) until it lands on a code line.
-  // The plan is reflowed, so line numbers come from the DOM.
   await page.keyboard.press("g");
   await page.keyboard.press("g");
   let onCode = -1;

@@ -124,10 +124,8 @@ async function readyLinkForClick(
 }
 
 test("clicking a link token opens its http URL in a new tab", async ({ daemon, page }) => {
-  // A real click on the label runs the library's pointer pipeline, which
-  // hit-tests the pointer against the link span and calls the new-tab opener.
-  // Aimed at the label's own columns. The row is split at those columns, so this
-  // is the label's own element rather than a point inside a sentence-wide token.
+  // Aimed at the label's own columns: the row is split at those columns, so this is
+  // the label's own element rather than a point inside a sentence-wide token.
   const { onLabel } = await readyLinkForClick(page, daemon);
   await page.mouse.click(onLabel.x, onLabel.y);
 
@@ -149,12 +147,9 @@ test("clicking a link token does not also open the line's comment composer", asy
   const { onLabel } = await readyLinkForClick(page, daemon);
   await page.mouse.click(onLabel.x, onLabel.y);
 
-  // The link opened in a new tab…
   await expect
     .poll(async () => (await openCalls(page))[0])
     .toEqual([SAFE_URL, "_blank", "noopener,noreferrer"]);
-
-  // …and the line it sits on did NOT also open a comment composer.
   await expectNoComposerOpens(page);
 });
 
@@ -179,9 +174,7 @@ test("clicking the link's row away from its label opens no tab, only the compose
   const { offLabel } = await readyLinkForClick(page, daemon);
   await page.mouse.click(offLabel.x, offLabel.y);
 
-  // The row's own affordance ran…
   await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
-  // …and no tab was opened for a link the pointer was never over.
   expect(await openCalls(page)).toEqual([]);
 });
 
@@ -207,13 +200,10 @@ test("hovering a link token reveals a caret tooltip with the full href, not a na
 
   const link = page.getByText("the cache docs");
   await expect(link).toBeVisible();
-  // No tooltip until the pointer is over the link.
   expect(await tooltipHref(page)).toBeNull();
 
-  // A real hover runs the library's per-token pointer pipeline, which hit-tests
-  // the pointer against the link span and reveals the caret tooltip carrying the
-  // full URL — inside the shadow root, on caret's surface. Aimed at the label's
-  // own columns, which after the decoration pass are its own element.
+  // The tooltip is caret's own, inside the shadow root. Aimed at the label's own
+  // columns, which after the decoration pass are its own element.
   const { onLabel } = await rowPoints(page);
   await page.mouse.move(onLabel.x, onLabel.y);
   await expect.poll(() => tooltipHref(page)).toBe(SAFE_URL);

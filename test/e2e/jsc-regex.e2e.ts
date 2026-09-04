@@ -21,11 +21,11 @@
 // caret still serves one that does not; once it does not, DELETE
 // ui/src/lib/diffview/jsc-regex.ts, with its callers, this spec, and the webkit
 // project in playwright.config.ts. Deleting on the day the red arrives is the very
-// regression this file exists to prevent — the module is a no-op on a fixed engine,
-// so carrying it through the wait costs nothing, while dropping it early silently
-// mistokenizes every `//` comment for reviewers still on the old engine. During the
-// wait, hold the red with `test.fail()` and the Safari version being waited on —
-// never `test.skip`, which retires the signal instead of recording it.
+// regression this file exists to prevent: the module is a no-op on a fixed engine,
+// while dropping it early silently mistokenizes every `//` comment for reviewers
+// still on the old engine. During the wait, hold the red with `test.fail()` and the
+// Safari version being waited on — never `test.skip`, which retires the signal
+// instead of recording it.
 //
 // Without a red somewhere the workaround is un-deletable in practice: EXC-1156 swept
 // the repo for workarounds its dependency bumps had made obsolete and could not
@@ -36,10 +36,9 @@
 // `_combinedContextOptions`, which reads `baseURL`, which fixtures.ts overrides to
 // depend on `daemon` — so the boot happens for EVERY spec in this tree, including
 // one that declares no fixtures at all. Taking `browser` instead of `page` does not
-// dodge it; that was measured rather than reasoned, by running a no-fixture test
-// with CARET_RUMDL_BIN pointed at nothing and watching it fail in the daemon
-// fixture. Dodging it at all means changing fixtures.ts, which is machinery built
-// for a single spec. So `page` it is — the same fixture every other spec takes.
+// dodge it (measured, not reasoned). Dodging it at all means changing fixtures.ts,
+// which is machinery built for a single spec. So `page` it is — the same fixture
+// every other spec takes.
 //
 // That leaves one caveat worth stating plainly, because this signal is supposed to
 // mean exactly one thing: the daemon fixture hard-fails when no rumdl reporting

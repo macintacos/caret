@@ -26,20 +26,7 @@
 // construct from the showcase is not.
 //
 // Every question below lives here and nowhere else, and each is one of this issue's
-// acceptance criteria:
-//
-//   1. every construct the epic draws still draws, together, on one document; each
-//      replacement marker really hides the character it draws over; and the combined
-//      repaint settles instead of looping;
-//   2. compare mode offers none of them — asserted for the WHOLE attribute set rather
-//      than for the `data-md` subset EXC-867 could see at the time;
-//   3. copy carries the real plan text with its markers;
-//   4. the gutter `+`, a row click, a drag range, the search anchor and the line cursor
-//      all still reach a row that carries decorations, and a row carrying THREE of them
-//      still costs the monospace grid nothing;
-//   5. a vendor palette resolves every decoration's paint.
-//
-// Everything narrower stays where it already is: which characters are a marker is
+// acceptance criteria. Everything narrower stays where it already is: which characters are a marker is
 // inlineSpans.test.ts, which token gets the attribute is inlineDecorate.test.ts, the
 // declarations are coreStyles.test.ts, the contrast floors are theme.test.ts, and each
 // construct's own geometry is its own spec.
@@ -361,8 +348,7 @@ test("a decorated row still opens a comment composer, from the gutter and from t
   await page.keyboard.press("Escape");
   await expect(composer).toHaveCount(0);
 
-  // The row click, the second gesture: pressing the line's own content opens the same
-  // composer for the same line.
+  // The second gesture: the row's own content, not the gutter.
   const y = await lineCenterY(page, line);
   const x = await page
     .locator(".diff-plan")
@@ -430,8 +416,6 @@ test("the search anchor and the line cursor still land on decorated rows", async
   expect(parked).toBeGreaterThan(0);
   expect(((await cursorRow.textContent()) ?? "").toLowerCase()).toContain("rendering showcase");
 
-  // Then walk it down into the section's decorated rows with the vim motion, one row per
-  // press, and land on something the epic drew.
   await page.keyboard.press("Escape");
   const seen: number[] = [];
   for (let i = 0; i < 12; i++) {

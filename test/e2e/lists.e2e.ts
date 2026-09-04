@@ -15,12 +15,9 @@
 // path through Blink and cannot show it, so only navigator.clipboard can say which
 // way it goes.
 //
-// One case here is about neither geometry nor the clipboard: the settle test
-// asserts that the repaint STOPS, which needs the real MutationObserver loop
-// SourceView runs the decoration passes from — a loop that only exists in a
-// mounted browser view. It is cheap insurance rather than a known bug: this change
-// appends nothing, but it does put rows the pass never visited before into its
-// working set.
+// One case here is about neither geometry nor the clipboard: the settle test asserts
+// that the repaint STOPS, which needs the real MutationObserver loop SourceView runs
+// the decoration passes from — a loop that only exists in a mounted browser view.
 //
 // The pure halves stay units. Which characters are a marker, and which look like
 // one and are not, is inlineSpans.test.ts; the attribute landing on the right
@@ -136,8 +133,6 @@ test("each marker is tagged with its kind, over its own characters", async ({ pa
 
 test("the bullet is painted over the dash, which is still in the row", async ({ page, daemon }) => {
   await openPlan(page, daemon, LIST_PLAN);
-  // The decoration passes run from a MutationObserver a frame behind the rows, so
-  // every read of a marker waits for one to exist rather than racing the paint.
   await awaitTagged(page, "data-md-list");
   const drawn = await page.evaluate(
     (ln: number) => {
@@ -168,9 +163,9 @@ test("the bullet is painted over the dash, which is still in the row", async ({ 
   expect(drawn?.position).toBe("absolute");
   expect(drawn?.glyphColor).not.toBe(drawn?.color);
   // Exactly one character cell wide, measured against a prose row rather than
-  // asserted to be merely positive — the tautology this replaced would have passed
-  // on any box at all. Paired with the `position` assertion above it, that is what
-  // holds the zero-advance claim: an in-flow glyph would make this box two cells,
+  // asserted to be merely positive, which would pass on any box at all. Paired with
+  // the `position` assertion above it, that is what holds the zero-advance claim:
+  // an in-flow glyph would make this box two cells,
   // and the left-edge probe in the grid test below cannot see it, because the
   // marker IS the row's first child and an inline box's left edge does not move
   // when content is added inside it.
@@ -273,9 +268,8 @@ test("every row still has exactly one gutter number", async ({ page, daemon }) =
 test("a marked row still opens the comment composer from its gutter", async ({ page, daemon }) => {
   // An acceptance criterion of its own: the marker must not cost the row its hover
   // affordance or its reachability. Nothing here appends a node or changes a row's
-  // height, so the risk is low — but the sibling image pass asserted the same
-  // thing on its affected row, and a criterion nobody checks is a criterion nobody
-  // notices breaking.
+  // height, so the risk is low — but the sibling image pass asserted the same thing
+  // on its affected row.
   await openPlan(page, daemon, LIST_PLAN);
   await awaitTagged(page, "data-md-list");
   const plus = await revealGutterPlus(page, await lineOf(page, BULLET));
