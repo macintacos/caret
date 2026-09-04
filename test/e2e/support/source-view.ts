@@ -36,13 +36,8 @@ export const PLAN_SURFACE = ".diff-plan";
  */
 export const SEAM_STRIP = /-[\d.]+px 0px 0px 0px/;
 
-/**
- * Resolve once the seeded plan has rendered.
- *
- * Nearly every spec opens by waiting for the plan before it does anything else, so
- * the wait lives here rather than being re-derived per spec. Returns the container
- * for the callers that go on to scroll it or scope a query inside it.
- */
+/** Resolve once the seeded plan has rendered, returning the container for the callers
+ * that go on to scroll it or scope a query inside it. */
 export async function planSurface(page: Page): Promise<Locator> {
   const plan = page.locator(PLAN_SURFACE);
   await expect(plan).toBeVisible();
@@ -147,8 +142,7 @@ export async function lineCenterY(page: Page, line: number): Promise<number> {
  * which is what keeps a line number pointing at its own text however tall the row
  * grows. Asserting that means resolving the gutter cell through the library's own
  * `data-line-index` / `data-line-number-content` pairing, the same contract
- * `lineCenterY` above resolves; naming it once means a library rename is one edit
- * rather than every spec (typescript-rules.md § Shared-helper policy). */
+ * `lineCenterY` above resolves. */
 export function rowHeights(page: Page, line: number): Promise<{ row: number; number: number }> {
   return page.evaluate((ln) => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
@@ -173,9 +167,7 @@ export function rowHeights(page: Page, line: number): Promise<{ row: number; num
  * anything taking width inside one shifts the source columns that vim motions,
  * drag-range selection and the search highlights all resolve against. A
  * decoration is proven to cost nothing by reading this on the decorated row and
- * on an ordinary one and finding them equal. Shared rather than copied per spec
- * (typescript-rules.md § Shared-helper policy), the same reason `rowHeights`
- * above is here. */
+ * on an ordinary one and finding them equal. */
 export function firstGlyphX(page: Page, line: number): Promise<number | null> {
   return page.evaluate((ln) => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
@@ -194,8 +186,7 @@ export function firstGlyphX(page: Page, line: number): Promise<number | null> {
  * Rows are addressed by their TEXT rather than by a line number counted off the seeded
  * plan, because the daemon reflows a plan through rumdl on ingest — the stored text is
  * not the seeded text line-for-line, so a constant counted by hand goes stale the next
- * time a reflow rule changes. Shared rather than copied per spec (typescript-rules.md
- * § Shared-helper policy). */
+ * time a reflow rule changes. */
 export async function lineOf(page: Page, text: string): Promise<number> {
   const line = await page.evaluate((want) => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;

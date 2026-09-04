@@ -740,10 +740,9 @@ test("a second Escape leaves the bar with nothing focused", async ({ daemon, pag
   await page.keyboard.press("b");
   await expect(menu).toBeVisible();
 
-  // The first Escape closes the menu with focus back on the crumb; the second
-  // leaves the bar entirely — still on screen, merely unfocused. `BODY` is the
-  // acceptance criterion's own wording, and the spelling the rest of this file and
-  // plan-toc.e2e.ts already use for a focus-landed-here claim.
+  // The first Escape closes the menu with focus back on the crumb; the second leaves the
+  // bar entirely — still on screen, merely unfocused. `BODY` is the spelling the rest of
+  // this file and plan-toc.e2e.ts already use for a focus-landed-here claim.
   await escapesLeaveTheBar(page, menu, page.locator(CRUMB).last());
 
   // Which is the whole point of landing on the body: the plan's window-level keys
@@ -1396,9 +1395,9 @@ test("walking to a sibling swaps the label without firing the exit", async ({ da
 });
 
 test("reduced motion collapses the exit rather than removing it", async ({ daemon, page }) => {
-  // AC5, emulated HERE rather than in playwright.config.ts, for the reason plan-toc.e2e.ts
-  // gives: turning `reduce` on suite-wide would stop this file ever exercising the animated
-  // path that is the whole subject of the change.
+  // Reduced motion is emulated HERE rather than in playwright.config.ts, for the reason
+  // plan-toc.e2e.ts gives: turning `reduce` on suite-wide would stop this file ever
+  // exercising the animated path that is the whole subject of the change.
   //
   // The guard is the global one in styles/base.css, reaching the bar through its `#app *`
   // arm; there is deliberately no reduced-motion block in the component. It collapses the

@@ -216,9 +216,9 @@ const markerNames = (page: Page): Promise<(string | null)[]> =>
     els.map((el) => el.querySelector("[data-icon^='heading-']")?.getAttribute("data-icon") ?? null),
   );
 
-/** Where each row's label starts, rounded to the pixel. Equal across rows at one indent is
- * AC8 — a marker whose width varied with the level would push its label along with it.
- * `null` for a row with no label, on the same terms as `markerNames` above. */
+/** Where each row's label starts, rounded to the pixel. Equal across rows at one indent —
+ * a marker whose width varied with the level would push its label along with it. `null` for
+ * a row with no label, on the same terms as `markerNames` above. */
 const labelLefts = (page: Page): Promise<(number | null)[]> =>
   options(page).evaluateAll((els) =>
     els.map((el) => {
@@ -505,10 +505,10 @@ test("each breadcrumb header names its group in the accessibility tree", async (
   daemon,
   page,
 }) => {
-  // AC11, and the reason the header is a Command.Group heading rather than markup of
-  // caret's own: the ancestor path has to reach a screen reader as the group's NAME.
-  // Real-browser because only the role engine resolves aria-labelledby — the unit mount
-  // can assert the attribute points somewhere, not that the name computes from it.
+  // The reason the header is a Command.Group heading rather than markup of caret's own:
+  // the ancestor path has to reach a screen reader as the group's NAME. Real-browser
+  // because only the role engine resolves aria-labelledby — the unit mount can assert the
+  // attribute points somewhere, not that the name computes from it.
   await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
   await field(page).fill("notes");
 
@@ -517,7 +517,7 @@ test("each breadcrumb header names its group in the accessibility tree", async (
   // The match sits INSIDE the group its breadcrumb names, which is what makes the
   // header wayfinding rather than a caption that happens to be nearby.
   await expect(group(page, "Plan › Setup").getByRole("option")).toHaveText(["Setup notes"]);
-  // The dimmed context rows this view used to render are gone (AC7).
+  // The dimmed context rows this view used to render are gone.
   await expect(panel(page).locator(".toc-context")).toHaveCount(0);
 });
 
@@ -536,8 +536,8 @@ test("the grouping filter drives the list, not the command's own filter engine",
   await expect(crumbs(page)).toHaveText(["Plan › Setup", "Plan › Rollout"]);
   await expect(options(page)).toHaveText(["Setup notes", "Rollout notes"]);
 
-  // Every match row is flush left now, whatever its own heading level: the breadcrumb
-  // above it carries the hierarchy, so the indent no longer repeats it (AC5).
+  // Every match row is flush left now, whatever its own heading level: the breadcrumb above
+  // it carries the hierarchy, so the indent no longer repeats it.
   expect(await rowDepths(page)).toEqual(["0", "0"]);
 });
 
@@ -568,9 +568,9 @@ test("marking the matched characters leaves the option's accessible name alone",
 });
 
 test("clearing the query puts the nested tree back", async ({ daemon, page }) => {
-  // AC8: the breadcrumb form is a search affordance only. Real-browser because it
-  // crosses bits-ui's `{#key search === ""}` boundary, which tears the whole viewport
-  // down and rebuilds it — the one transition a mounted unit cannot exercise honestly.
+  // The breadcrumb form is a search affordance only. Real-browser because it crosses
+  // bits-ui's `{#key search === ""}` boundary, which tears the whole viewport down and
+  // rebuilds it — the one transition a mounted unit cannot exercise honestly.
   await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
   await field(page).fill("notes");
   await expect(crumbs(page)).toHaveCount(2);
@@ -771,14 +771,14 @@ test("every row wears its heading level, in both of the popup's views", async ({
   expect(await rowDepths(page)).toEqual(["0", "0", "0"]);
   expect(await markerNames(page)).toEqual(["heading-3", "heading-2", "heading-3"]);
 
-  // AC8. Three rows at one indent, three different glyphs, one left edge.
+  // Three rows at one indent, three different glyphs, one left edge.
   const lefts = await labelLefts(page);
   expect(lefts).not.toContain(null);
   expect(new Set(lefts).size).toBe(1);
 
-  // AC7, in the engine that actually computes a name. The query splits each label mid-word
-  // as well, so this carries EXC-1104's claim forward over the added marker rather than
-  // replacing it: a separator leaking in from either decoration would show up here.
+  // Asserted in the engine that actually computes a name. The query splits each label
+  // mid-word as well, so this carries EXC-1104's claim forward over the added marker rather
+  // than replacing it: a separator leaking in from either decoration would show up here.
   await expect(options(page).first()).toHaveAccessibleName("Setup notes");
   await expect(options(page).nth(1)).toHaveAccessibleName("Rollout");
   await expect(options(page).nth(2)).toHaveAccessibleName("Rollout notes");
@@ -788,12 +788,12 @@ test("the level marker paints a dimmer rung of the ink ramp than the label", asy
   daemon,
   page,
 }) => {
-  // AC5, read off the element that is actually painted. The glyph strokes with
-  // `currentColor` resolved on the SVG, and the vendored command item declares
+  // Read off the element that is actually painted. The glyph strokes with `currentColor`
+  // resolved on the SVG, and the vendored command item declares
   // `data-selected:[&_svg]:text-accent-foreground` — which the bridge resolves to the
   // label's own --ink — on that same SVG. So the wrapper's `color` is NOT what a reader
-  // sees on the walked-to row: a rule placed on Icon.svelte's wrapper loses there while
-  // the wrapper keeps reporting the dimmed value, which is a green assertion over a bright
+  // sees on the walked-to row: a rule placed on Icon.svelte's wrapper loses there while the
+  // wrapper keeps reporting the dimmed value, which is a green assertion over a bright
   // glyph. The path's `stroke` cannot lie about it.
   //
   // Asserted against the ink-ramp TOKENS rather than by re-deriving a contrast ratio here.
@@ -874,16 +874,16 @@ test("the indent guides sit on the indent's own grid and join across rows", asyn
   expect(bands).toHaveLength(6);
 
   for (const [index, band] of bands.entries()) {
-    // AC3: the band ends exactly where the text begins, so its rightmost hairline sits
-    // one indent step left of the first glyph and every column lines up with the level
-    // that opens it. This is what would catch a guide drawn on a grid of its own.
+    // The band ends exactly where the text begins, so its rightmost hairline sits one
+    // indent step left of the first glyph and every column lines up with the level that
+    // opens it. This is what would catch a guide drawn on a grid of its own.
     expect(band.left + band.width).toBeCloseTo(band.padding, 2);
     // This plan opens at `#`, so every band starts at the indent's origin and a row's
     // guide count is exactly its depth. The `##`-rooted spec below is what makes the
     // --toc-depth term in that offset falsifiable; here it contributes nothing.
     expect(band.left).toBeCloseTo(INDENT_ORIGIN_PX, 2);
-    // AC8: full row height, and rows that meet — so two same-depth neighbours join
-    // instead of striping at the padding-block each row carries.
+    // Full row height, and rows that meet — so two same-depth neighbours join instead of
+    // striping at the padding-block each row carries.
     expect(band.height).toBeCloseTo(band.rowHeight, 2);
     if (index > 0) expect(band.top).toBeCloseTo(bands[index - 1]?.bottom ?? -1, 1);
   }
@@ -920,9 +920,9 @@ test("a plan that opens at `##` draws no guide for the root it does not have", a
 });
 
 test("filtering drops the guides, headers and all", async ({ daemon, page }) => {
-  // AC4 and AC6. A filtered row is flush left under a breadcrumb header that carries the
-  // hierarchy, so a column beside it would mark a nesting this view does not show — and
-  // the header is not a row, so nothing should reach it either.
+  // A filtered row is flush left under a breadcrumb header that carries the hierarchy, so a
+  // column beside it would mark a nesting this view does not show — and the header is not a
+  // row, so nothing should reach it either.
   await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
   await field(page).fill("notes");
   await expect(crumbs(page)).toHaveCount(2);
@@ -986,12 +986,12 @@ test("the panel arrives on the enter token and leaves on the exit one", async ({
   daemon,
   page,
 }) => {
-  // AC1 and AC7 together. The vendored Popover.Content already animates through
-  // tw-animate-css, and that machinery is not decoration: bits-ui's portal presence waits
-  // on the `animationend` its `enter`/`exit` keyframes fire. So the refinement retimes
-  // those keyframes rather than declaring a competing one, and what this spec pins is
-  // exactly that — the animation is still tw-animate-css's, and only its timing is now
-  // caret's, asymmetric in the direction the vocabulary pairs its two easings for.
+  // The vendored Popover.Content already animates through tw-animate-css, and that
+  // machinery is not decoration: bits-ui's portal presence waits on the `animationend` its
+  // `enter`/`exit` keyframes fire. So the refinement retimes those keyframes rather than
+  // declaring a competing one, and what this spec pins is exactly that — the animation is
+  // still tw-animate-css's, and only its timing is now caret's, asymmetric in the direction
+  // the vocabulary pairs its two easings for.
   await daemon.seed({ plan: TALL_PLAN });
   await page.goto("/");
   await readingAt(page, "Delta");
@@ -1026,11 +1026,11 @@ test("the panel arrives on the enter token and leaves on the exit one", async ({
 });
 
 test("every way out of the popup is animated, not cut", async ({ daemon, page }) => {
-  // AC1 names four paths, and they are not four spellings of one: Escape, an outside
-  // click and the trigger are all the primitive's own dismissals — bits-ui runs
-  // onOpenChange from its own box setter for exactly those three — while a pick is
-  // caret's own `open = false` inside jump(). All four have to reach the same
-  // `data-state` flip, or one of them would drop the panel out of the DOM instantly.
+  // Four ways out, and they are not four spellings of one: Escape, an outside click and the
+  // trigger are all the primitive's own dismissals — bits-ui runs onOpenChange from its own
+  // box setter for exactly those three — while a pick is caret's own `open = false` inside
+  // jump(). All four have to reach the same `data-state` flip, or one of them would drop
+  // the panel out of the DOM instantly.
   await daemon.seed({ plan: TALL_PLAN });
   await page.goto("/");
   await readingAt(page, "Delta");
@@ -1059,11 +1059,11 @@ test("every way out of the popup is animated, not cut", async ({ daemon, page })
 });
 
 test("a match and its breadcrumb header arrive on one animation", async ({ daemon, page }) => {
-  // AC2 and AC3. The header being "in step with its rows" is not two constants that
-  // happen to agree — it is one declaration covering both, so the strongest form of the
-  // claim is a single equality between what the cascade handed each of them. A header
-  // given a duration of its own is exactly the drift that would pop it in above rows that
-  // were still fading, and it is what this reds on.
+  // The header being "in step with its rows" is not two constants that happen to agree — it
+  // is one declaration covering both, so the strongest form of the claim is a single
+  // equality between what the cascade handed each of them. A header given a duration of its
+  // own is exactly the drift that would pop it in above rows that were still fading, and it
+  // is what this reds on.
   await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
 
   await field(page).fill("notes");
@@ -1084,8 +1084,8 @@ test("a match and its breadcrumb header arrive on one animation", async ({ daemo
 });
 
 test("the outline carries its motion on the list, never on its rows", async ({ daemon, page }) => {
-  // AC6, and the decision the whole design rests on. The outline is the WHOLE plan — the
-  // low hundreds of rows this popup is bounded at — and it mounts all at once, so a row
+  // The decision the whole design rests on. The outline is the WHOLE plan — the low
+  // hundreds of rows this popup is bounded at — and it mounts all at once, so a row
   // animation scoped to it would start several hundred simultaneous ramps on open and on
   // every clear. The list re-forming carries that direction instead, on one element.
   // TALL_PLAN is the fixture that makes this say something: 25 headings, more than fit.
@@ -1132,7 +1132,7 @@ test("the outline carries its motion on the list, never on its rows", async ({ d
  *
  * The per-element identity is the backlog test proper: one start per element is the
  * design, and two on the same row inside one crossing would be generations stacking,
- * which is the failure AC4 names. A LIVE sample could never make that claim — an element
+ * which is the failure this reds on. A LIVE sample could never make that claim — an element
  * hosts at most one animation per `animation-name`, so `getAnimations()` could only ever
  * agree with itself — where a log records two starts on one element across a crossing.
  * Elements are identified by their seat in an arming-scoped array rather than by a marker
@@ -1193,14 +1193,14 @@ const runningRamps = (page: Page): Promise<number> =>
 const targetsIn = (log: TocMotion): number => new Set(log.map((event) => event.target)).size;
 
 test("typing fast queues no animation behind the reviewer", async ({ daemon, page }) => {
-  // AC4, asserted as a ratio rather than as a ceiling, because the ceiling turned out to
-  // be the wrong intuition. The filtered view is not reliably small: a one-character query
-  // matches most of a plan, and the widest crossing measured on the dev plan mounts 59
-  // rows and headers at once. That is fine — profiled across it, frame times were
-  // indistinguishable from the same burst with this animation disabled (median 8.3ms, p95
-  // 9.7ms, no frame over 32ms either way), because mounting the rows is the expense and
-  // ramping their opacity is not. What would NOT be fine is generations stacking, so that
-  // is what this measures: at most one live ramp per element that could carry one.
+  // Asserted as a ratio rather than as a ceiling, because the ceiling turned out to be the
+  // wrong intuition. The filtered view is not reliably small: a one-character query matches
+  // most of a plan, and the widest crossing measured on the dev plan mounts 59 rows and
+  // headers at once. That is fine — profiled across it, frame times were indistinguishable
+  // from the same burst with this animation disabled (median 8.3ms, p95 9.7ms, no frame
+  // over 32ms either way), because mounting the rows is the expense and ramping their
+  // opacity is not. What would NOT be fine is generations stacking, so that is what this
+  // measures: at most one live ramp per element that could carry one.
   await openTocAt(page, daemon, TALL_PLAN, "Delta");
 
   // A broad query first — a bare "a" takes half of TALL_PLAN's sections plus its root, so
@@ -1233,7 +1233,8 @@ test("typing fast queues no animation behind the reviewer", async ({ daemon, pag
   // the filtered-out items and the survivors keep their boxes — so no row is mounted for
   // the rule to fire on, and an empty log is the whole claim rather than a weaker version
   // of the one above. A per-keystroke retrigger is the one thing that could put a start in
-  // here, which is exactly what AC4 forbids. Measured empty 4/4 unthrottled and 4/4 at 20x.
+  // here, which is exactly what this rules out. Measured empty 4/4 unthrottled and
+  // 4/4 at 20x.
   expect(await tocMotion(page)).toEqual([]);
 
   await page.keyboard.press("Escape");
@@ -1244,11 +1245,11 @@ test("reduced motion collapses the surface and leaves it fully usable", async ({
   daemon,
   page,
 }) => {
-  // AC5, emulated HERE rather than in playwright.config.ts, and that is a decision rather
-  // than a convenience. Turning `reduce` on suite-wide would delete a whole race class
-  // from every geometry assertion in this file — but it would also stop the suite ever
-  // exercising the animated path in a real engine, which is the entire subject of this
-  // change. So the preference is emulated in the one spec that is about it.
+  // Reduced motion is emulated HERE rather than in playwright.config.ts, and that is a
+  // decision rather than a convenience. Turning `reduce` on suite-wide would delete a whole
+  // race class from every geometry assertion in this file — but it would also stop the
+  // suite ever exercising the animated path in a real engine, which is the entire subject
+  // of this change. So the preference is emulated in the one spec that is about it.
   //
   // The guard is global (app.css) and reaches this panel through its `[data-slot]` anchor;
   // there is deliberately no reduced-motion block in the component. It collapses the
