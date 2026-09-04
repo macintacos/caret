@@ -4,14 +4,13 @@
 // embedded or on disk). The daemon serves index documents and hashed assets from
 // this one seam; build-id.ts digests it into the staleness fingerprint.
 //
-// Resolution preserves today's graceful-degradation chain:
+// The resolution chain degrades gracefully, each step covering a distribution
+// the one before it does not:
 //   1. the build-generated manifest module — the compiled binary, and a source
 //      run after `mise run build bin` has emitted it;
-//   2. ui/dist/ enumerated on disk relative to this module — the run-from-source
-//      bundle's sibling tree, and dev/e2e runs that built the UI but not the
-//      manifest (uiDistCandidates covers both layouts);
-//   3. a dist tree copied beside the binary (dirname(execPath)/ui/) — the
-//      safety-net analogue of the former bin/index.html fallback;
+//   2. ui/dist/ on disk relative to this module — the run-from-source bundle,
+//      and dev/e2e runs that built the UI but not the manifest;
+//   3. a dist tree copied beside the binary (dirname(execPath)/ui/);
 //   4. undefined — no UI; the daemon serves its built-in placeholder at /.
 
 import { readdirSync } from "node:fs";
@@ -72,13 +71,11 @@ export function assetsFromDist(distDir: string): UiAssets | undefined {
 }
 
 /** The ui/dist directories to try for the module at `moduleUrl`, nearest first.
- * Two distributions read a dist tree off disk and they put this module at
- * different depths under the caret root, so no single relative path reaches
- * ui/dist from both: the run-from-source bundle collapses to <root>/dist/cli.js —
- * bun leaves `import.meta.url` pointing at the OUTPUT file, not this source — and
- * a checkout keeps it at <root>/src/ui/assets.ts. Whichever candidate does not
- * match the live layout names a directory that does not exist, so offering both
- * costs a failed stat rather than risking the wrong tree. */
+ * No single relative path reaches ui/dist from both disk layouts: bun leaves
+ * `import.meta.url` pointing at the OUTPUT file, so the run-from-source bundle
+ * sees <root>/dist/cli.js where a checkout sees <root>/src/ui/assets.ts. The
+ * candidate that does not match names a directory that does not exist, so
+ * offering both costs a failed stat rather than risking the wrong tree. */
 export function uiDistCandidates(moduleUrl: string): string[] {
   return [
     fileURLToPath(new URL("../ui/dist", moduleUrl)), // bundle: <root>/dist/cli.js
@@ -87,8 +84,7 @@ export function uiDistCandidates(moduleUrl: string): string[] {
 }
 
 /** Resolve the UI assets, or undefined when no UI is available (the daemon then
- * serves its placeholder). Tries the embedded manifest, then ui/dist/ relative to
- * this module, then a dist tree beside the binary. */
+ * serves its placeholder). */
 export async function loadUiAssets(): Promise<UiAssets | undefined> {
   try {
     const mod = await import("@/ui-manifest.generated.ts");

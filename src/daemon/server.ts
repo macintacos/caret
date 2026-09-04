@@ -92,14 +92,12 @@ export interface CreateServerOptions {
   idleMs?: number;
   /** Decision long-poll heartbeat window (ms); defaults to the schema default.
    * runDaemon passes the env/file-resolved value (settings.heartbeatMs)
-   * captured at boot. The pure defaults keep createServer free of config-file
-   * reads, so tests stay hermetic. */
+   * captured at boot. */
   heartbeatMs?: number;
-  /** The resolved UI asset set (ui-assets.ts loadUiAssets): its URL paths form the
+  /** The resolved UI asset set (src/ui/assets.ts loadUiAssets): its URL paths form the
    * exact-match allowlist the daemon serves, and each path reads through Bun.file
    * (carrying its MIME). Omitted (default) means no UI — `GET /` serves the
-   * built-in placeholder and every other UI path 404s, the posture existing tests
-   * pin. */
+   * built-in placeholder and every other UI path 404s. */
   assets?: UiAssets;
   onShutdown?: () => void;
   routePlan?: RoutePlan;
@@ -107,7 +105,7 @@ export interface CreateServerOptions {
   prefsPath?: string;
   /** Single-instance lock file path. When set, the daemon writes the lock on a
    * successful bind and removes it on stop(); omitted (default) means no lock is
-   * managed, so existing call sites/tests are unaffected. */
+   * managed. */
   lockPath?: string;
   /** Build fingerprint (paths.buildHash of the served UI) reported in
    * /api/health and recorded in the lock, so a newer caret can detect staleness. */
@@ -135,31 +133,28 @@ export interface CreateServerOptions {
   source?: string;
   /** Enumerate the skills the active adapter's agent can reach for a review rooted
    * at `cwd`, served by GET /api/reviews/:id/skills (EXC-1176) so the feedback
-   * editors can complete `/` names. Omitted (default) → the route 404s, so a
-   * daemon that wires no adapter capability is unaffected; the e2e fixture daemon
-   * deliberately leaves it unwired rather than enumerating the developer's own
-   * skills. runDaemon wires the active adapter's `listSkills`. */
+   * editors can complete `/` names. Omitted (default) → the route 404s; the e2e
+   * fixture daemon deliberately leaves it unwired rather than enumerating the
+   * developer's own skills. runDaemon wires the active adapter's `listSkills`. */
   listSkills?: (cwd: string) => Promise<SkillRef[]>;
   /** Read one enumerated skill's own description, served by
    * GET /api/reviews/:id/skill-description (EXC-1186) so the `/` completion's
-   * preview panel can say what the highlighted name does. A second capability
-   * beside `listSkills` rather than a field on it: the list names skills, this
-   * opens one. Omitted (default) → the route 404s, and the e2e fixture daemon
-   * leaves it unwired for the reason it leaves `listSkills` unwired. runDaemon
-   * wires the active adapter's `readSkillDescription`. */
+   * preview panel can say what the highlighted name does. Omitted (default) → the
+   * route 404s, and the e2e fixture daemon leaves it unwired for the reason it
+   * leaves `listSkills` unwired. runDaemon wires the active adapter's
+   * `readSkillDescription`. */
   readSkillDescription?: (cwd: string, skill: SkillRef) => Promise<string | null>;
   /** A thunk returning the daemon self-diagnostics served by GET /api/diagnostics
    * (EXC-842): system/runtime identity, uptime, the live parsed settings, and the
-   * config path + env overrides. Omitted (default) → the route 404s, so existing
-   * call sites/tests that don't wire it are unaffected. runDaemon wires the prod
-   * thunk, which reads live settings so a config edit hot-reloads. */
+   * config path + env overrides. Omitted (default) → the route 404s. runDaemon wires
+   * the prod thunk, which reads live settings so a config edit hot-reloads. */
   diagnostics?: () => DaemonDiagnostics;
   /** A thunk returning whether the running caret is behind, served by GET /api/update
    * (EXC-1205): the install kind, the running version/commit, and the verdict. Omitted
-   * (default) → the route 404s, so a bare test daemon is unaffected. runDaemon wires a
-   * thunk over a locally held status — reading it never triggers a network call. The e2e
-   * fixture daemon wires a synthetic one (EXC-1207): the UI reads this route on every
-   * load, so an unwired route there would 404 into every spec's page load. */
+   * (default) → the route 404s. runDaemon wires a thunk over a locally held status —
+   * reading it never triggers a network call. The e2e fixture daemon wires a synthetic
+   * one (EXC-1207): the UI reads this route on every load, so an unwired route there
+   * would 404 into every spec's page load. */
   updateReport?: () => UpdateReport | Promise<UpdateReport>;
   /** Called after a landed POST /api/prefs patch whose `updates.check` is `true`
    * (EXC-1210). A user action is exactly what the 24h throttle's constraint permits a
@@ -167,7 +162,7 @@ export interface CreateServerOptions {
    * who opted out long ago would wait a whole daemon lifetime for a verdict. The daemon
    * does not read the prior value, so a redundant write of `true` fires it too; the
    * throttle is what bounds the cost. Fire-and-forget — it never delays the response.
-   * Omitted (default) → the flip just lands, so a bare test daemon is unaffected. */
+   * Omitted (default) → the flip just lands. */
   onUpdatesEnabled?: () => void;
   /** Clear the unread mark on the cmux pane a review was submitted from
    * (EXC-961). Defaults to the real spawn; injectable so tests assert on the
@@ -182,9 +177,7 @@ export interface CreateServerOptions {
    * Omitted (default) → nobody observes the parking. */
   onDecisionAwaited?: (id: string) => void;
   /** Schedule the idle-shutdown timer; injectable so tests fire it deterministically
-   * instead of racing a real delay. Defaults to setTimeout. (The idle timer is the
-   * only one armed at boot with no request in flight, so it's the one a test must be
-   * able to control.) */
+   * instead of racing a real delay. Defaults to setTimeout. */
   setTimer?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
   /** Cancel a scheduled idle-shutdown timer. Defaults to clearTimeout. */
   clearTimer?: (handle: ReturnType<typeof setTimeout>) => void;
@@ -251,16 +244,11 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
 }
 
 // A request matched to one of the :id sub-routes, with the review id decoded and
-// the optional sub-path (/decision, /resolve, /draft, /expire, /seen, /file-refs,
-// /file-search, /file, /dir, /skills, /skill-description) split out. The trailing
-// `$` is what keeps /file from swallowing the /file-refs and /file-search
-// prefixes: a /file match cannot then reach end-of-input, so the engine
-// backtracks into the longer alternative. The order the literals appear in is
-// therefore NOT load-bearing — a route added in the wrong place still matches,
-// which is why /skill-description sits after /skills rather than being wedged in
-// ahead of it. (Those two do not collide anyway — /skills needs an `s` where
-// /skill-description has a `-` — but relying on that would make the next such
-// pair a trap.)
+// the optional sub-path split out. The trailing `$` is what keeps /file from
+// swallowing the /file-refs and /file-search prefixes: a /file match cannot then
+// reach end-of-input, so the engine backtracks into the longer alternative. The
+// order the literals appear in is therefore NOT load-bearing — a route added in
+// the wrong place still matches.
 interface IdRoute {
   id: string;
   sub: string | undefined;
@@ -283,11 +271,9 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   const { awaitDecision, resolveDecision, clearDecision, openDecisionCount } = createDecisions(log);
 
   // The set of approve-variant ids the resolve route and prefs persistence gate
-  // on, derived from the active adapter's declared variants — the daemon stays
-  // tool-agnostic, recognizing whatever the adapter declares rather than a baked
-  // enum. The fallback is the first declared id (for the Claude adapter that is
-  // "default"); a daemon with no declared variants recognizes only "default", so
-  // a fresh /api/prefs still reads "default".
+  // on: the daemon stays tool-agnostic, recognizing whatever the adapter declares
+  // rather than a baked enum. A daemon with no declared variants recognizes only
+  // "default", so a fresh /api/prefs still reads "default".
   const approveModeSet: ApproveModeSet =
     approveVariants && approveVariants.length > 0
       ? { valid: approveVariants.map((v) => v.id), fallback: approveVariants[0]?.id ?? "default" }
@@ -312,9 +298,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     });
   }
 
-  // Idle-timer scheduling is injectable (default: real timers) so tests drive it
-  // deterministically — see CreateServerOptions.setTimer. Read from opts directly,
-  // like opts.port below, rather than threading through resolveOptions.
+  // Read from opts directly, like opts.port below, rather than threading through
+  // resolveOptions.
   const setTimer = opts.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
   const clearTimer = opts.clearTimer ?? ((h) => clearTimeout(h));
 
@@ -350,12 +335,9 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   }
   function maybeShutdown() {
     idleTimer = null;
-    // Re-check liveness atomically (single-threaded loop): never exit while a
-    // review is pending, a hook is mid-long-poll, a request is in flight, or a
-    // UI tab is still present (EXC-562) — an open tab is the daemon's reason to
-    // stay up. When only a UI holds it open the else-branch re-arms, so the
-    // daemon shuts down once the tab goes away (its close beacon, or a poll that
-    // ages past the live-client window).
+    // Re-check liveness atomically (single-threaded loop). A present UI tab is the
+    // non-obvious term: an open tab is the daemon's reason to stay up (EXC-562),
+    // and the else-branch re-arms so it shuts down once that tab goes away.
     if (store.pendingCount() === 0 && openDecisionCount() === 0 && inFlight === 0 && !uiPresent()) {
       log.info("idle", "idle shutdown");
       stop();
@@ -375,15 +357,9 @@ export function createServer(opts: CreateServerOptions): CaretServer {
 
   // GET /api/health — the daemon's identity signature.
   function handleHealth(): Response {
-    // Undefined fields are dropped from the JSON, so a daemon missing any
-    // reports the bare {service, version}. `commit` is the commit this daemon
-    // runs from (EXC-452), surfaced for a diagnostics client's discovery report;
-    // stateDir (world) and instanceId (boot) are the EXC-461 identity fields
-    // that let a hook and the UI tell daemons apart. `approveVariants` is the
-    // active adapter's declared approve set, which the UI renders its split-
-    // button from (an absent field means the UI uses its built-in fallback).
-    // `isDev` (EXC-556) drives the UI's "local build" badge — always a boolean
-    // (a process-constant), so it's emitted unconditionally rather than dropped.
+    // Undefined fields are dropped from the JSON, so a daemon missing any reports
+    // the bare {service, version}. `isDev` (EXC-556) is the exception: always a
+    // boolean, so it's emitted unconditionally rather than dropped.
     const body: HealthIdentity = {
       ...IDENTITY,
       build: buildId,
@@ -538,15 +514,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   }
 
   // POST /api/ui/gone — a UI tab announces it is closing (sent via
-  // navigator.sendBeacon on pagehide). Retract its presence immediately so the
-  // next plan foregrounds a fresh tab instead of assuming the closed one will
-  // surface it (EXC-562). Clearing to 0 makes isClientLive read not-live at
-  // once, which is what lets LIVE_CLIENT_WINDOW_MS stay long enough to outlast a
-  // throttled background poll without a just-closed tab lingering as "live".
-  // Presence is one shared timestamp, not per-tab: closing one of several open
-  // tabs retracts the shared signal until a surviving tab's next poll re-stamps
-  // it (≤2s foregrounded). Accepted for a single-user laptop — per-tab presence
-  // tracking isn't worth its complexity for the rare two-tabs-open case.
+  // navigator.sendBeacon on pagehide). Retracting immediately is what lets
+  // LIVE_CLIENT_WINDOW_MS stay long enough to outlast a throttled background poll
+  // without a just-closed tab lingering as "live" (EXC-562). Presence is one
+  // shared timestamp, not per-tab: closing one of several open tabs retracts the
+  // shared signal until a surviving tab's next poll re-stamps it (≤2s
+  // foregrounded). Accepted for a single-user laptop.
   function handleUiGone(): Response {
     lastReviewsPollAt = 0;
     log.debug("ui", "ui presence retracted");
@@ -573,20 +546,17 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     const parsed = PrefsPatchSchema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) {
       const error = parsed.error.issues[0]?.message ?? "invalid prefs patch";
-      // warn, and carrying the reason: a refusal is the recoverable oddity this route's
-      // strictness exists to produce, and the browser turns the body into a sentence
-      // that names no key — so the daemon log is the only place WHICH key was refused
-      // survives. Same posture as handleLogs' reject(). The reason is a zod message
-      // about a boolean field, so there is nothing identifying in it.
+      // warn, carrying the reason: the browser turns the body into a sentence that
+      // names no key, so the daemon log is the only place WHICH key was refused
+      // survives. A zod message about a boolean field carries nothing identifying.
       log.warn("prefs", "prefs patch rejected", { reason: error });
       return Response.json({ error }, { status: 400 });
     }
     await prefsWriter.merge(parsed.data);
     log.debug("prefs", "prefs saved");
     // Turning the check back on is a user action, so it is allowed to spend a call
-    // (EXC-1210). The throttle still governs: a re-run inside the 24h window returns null
-    // and the already-held verdict is what gets served. No log line — runUpdateCheck logs
-    // its own verdict, and a second record restating it is per-iteration noise.
+    // (EXC-1210). The throttle still governs: a re-run inside the 24h window returns
+    // null and the already-held verdict is what gets served.
     if (parsed.data.updates?.check === true) cfg.onUpdatesEnabled?.();
     return Response.json({ ok: true });
   }
@@ -604,14 +574,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // reference affordance, which must appear only for something real.
   //
   // De-duped BEFORE the cap, so a plan repeating one path can't crowd out the
-  // ones behind it, and resolved in parallel — the wider candidate gate makes
-  // this a few hundred resolves on a long plan, which a sequential loop would
-  // walk one blocking syscall at a time. In BATCHES, though, not one fan-out
-  // over the lot: MAX_FILE_REFS bounds how many resolves happen, and nothing
-  // bounded how many happen at once, so a plan at the cap put a few thousand
-  // simultaneous realpath+stat pairs on the event loop (resolveInCwd realpaths
-  // the cwd per call by design, src/plan/excerpt.ts). The batch keeps the
-  // parallelism that makes this fast and bounds the burst.
+  // ones behind it, and resolved in parallel — a long plan is a few hundred
+  // resolves a sequential loop would walk one blocking syscall at a time. In
+  // BATCHES, though: MAX_FILE_REFS bounds how many resolves happen, not how many
+  // happen at once, and a plan at the cap put a few thousand simultaneous
+  // realpath+stat pairs on the event loop (resolveInCwd realpaths the cwd per
+  // call by design, src/plan/excerpt.ts).
   //
   // ponytail: a fixed batch, so the slowest resolve in one holds up the next.
   // A sliding window would not, and is the upgrade if a cold filesystem ever
@@ -709,8 +677,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // GET /api/reviews/:id/skills — the skill names the reviewing agent can reach,
   // for the feedback editors' `/` completion (EXC-1176). Reference only: caret
   // never executes one. Enumeration belongs to the active adapter, so this route
-  // is a thin pass-through of an injected capability — 404 when none is wired, the
-  // same posture /api/diagnostics takes for an absent optional capability.
+  // is a thin pass-through of an injected capability — 404 when none is wired.
   //
   // Stateless on purpose: nothing is cached here, because the browser fetches once
   // per review (see ui/src/lib/skillCompletion.ts). A skill added mid-review is
@@ -739,10 +706,9 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // bare name and the list deliberately shows both. A row that never arrived is
   // two empty strings, which no root answers to and the adapter reports as null.
   //
-  // Reading is the adapter's, so this is a
-  // thin pass-through of an injected capability, 404 when none is wired, exactly
-  // as /skills is. A skill with no description is a 200 carrying null: the panel
-  // renders that, and a 404 would make it read as a missing route instead.
+  // Reading is the adapter's, so this is a thin pass-through, 404 when none is
+  // wired, exactly as /skills is. A skill with no description is a 200 carrying
+  // null: a 404 would make it read as a missing route instead.
   //
   // Neither the name nor the description reaches the log: both are the reviewer's
   // own configuration, and a description is prose someone wrote.
@@ -764,12 +730,10 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // (EXC-1175). The browser holds no filesystem, so the search happens here, and
   // only path strings go back — never a byte of file content.
   //
-  // POST rather than GET because the query is a request body: reviewer-typed
-  // text, untrusted like every other body here and parsed through a schema that
-  // degrades rather than rejects. It also puts the route behind the CSRF guard,
-  // which safe methods bypass. The work is bounded the way handleFileRefs bounds
-  // its own — by a cap that stops the WALK and not merely the result — and
-  // `searchFiles` owns both caps; a cwd that no longer resolves is the same
+  // POST rather than GET because the query is a request body: reviewer-typed text,
+  // untrusted like every other body here. It also puts the route behind the CSRF
+  // guard, which safe methods bypass. `searchFiles` owns the caps, which stop the
+  // WALK and not merely the result; a cwd that no longer resolves is the same
   // single 404 the directory listing answers with.
   //
   // Counts only reach the log: the query is reviewer-typed text and the paths
@@ -873,13 +837,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     await store.update(id, (r) => {
       r.decision = decision;
       r.status = decision.behavior === "allow" ? "approved" : "rejected";
-      // A submitted general comment outlives its draft: keep it on the version
-      // it was written against, so a later revision can show what was asked for.
-      // Gated on the deny having actually carried it — Request changes composes
-      // it into the feedback verbatim, while a plain Reject sends a canned
-      // message after telling the reviewer the draft would NOT be sent, so
-      // keeping it there would record feedback they chose to discard. An approve
-      // is terminal (store.remove drops the review), so nothing would list one.
+      // A submitted general comment outlives its draft: keep it on the version it
+      // was written against, so a later revision can show what was asked for.
+      // Gated on the deny having actually carried it — Request changes composes it
+      // into the feedback verbatim, while a plain Reject sends a canned message
+      // after telling the reviewer the draft would NOT be sent, so keeping it
+      // would record feedback they chose to discard.
       const general = r.generalCommentDraft?.trim();
       if (general && decision.behavior === "deny" && decision.feedback?.includes(general)) {
         currentVersion(r).generalComment = general;
@@ -1001,14 +964,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return notFound();
   }
 
-  // `self` is the server Bun passes as fetch's second argument; the guards need
-  // its bound port. Bun declares `readonly port: number | undefined` — undefined
-  // only for a unix-socket server, which this never is. Mirroring that union
-  // rather than writing `port?: number` keeps the field's existence a
-  // compile-time contract: an optional property would still typecheck against a
-  // Bun that dropped `port`, and every request would then 403 silently. `-1` is
-  // the fail-closed fallback — no authority can serialize a port to "-1", where
-  // `0` would match a `Host: localhost:0`.
+  // `self` is the server Bun passes as fetch's second argument; the guards need its
+  // bound port. Mirroring Bun's `readonly port: number | undefined` rather than
+  // writing `port?: number` keeps the field's existence a compile-time contract: an
+  // optional property would still typecheck against a Bun that dropped `port`, and
+  // every request would then 403 silently. `-1` is the fail-closed fallback — no
+  // authority can serialize a port to "-1", where `0` would match `Host: localhost:0`.
   async function handle(
     req: Request,
     self: { readonly port: number | undefined },
@@ -1034,23 +995,21 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       const path = url.pathname;
       const method = req.method;
 
-      // Gate every non-safe (state-changing) method, not a fixed POST/PUT list,
-      // so a future mutating verb is CSRF-protected by default. Safe methods
-      // (GET/HEAD) fall through — the browser's same-origin policy already
-      // blocks a foreign page from reading the response (see the guard's
-      // threat-model note above).
+      // Gate every non-safe (state-changing) method, not a fixed POST/PUT list, so
+      // a future mutating verb is CSRF-protected by default. Safe methods (GET/HEAD)
+      // fall through — the browser's same-origin policy already blocks a foreign
+      // page from reading the response.
       if (!isSafeMethod(method) && isCrossOrigin(req, port)) {
         return new Response("cross-origin request blocked", { status: 403 });
       }
 
       return await dispatch(req, method, path);
     } catch (err) {
-      // Never let a handler exception drop the connection without a response —
-      // and log it first (a genuine failure, so at error level), since a bare
-      // 500 alone is undebuggable. The log call is itself wrapped so a broken
-      // sink can't escape and suppress the 500.
-      // NB: values reaching this sink must not embed plan bodies — today no
-      // handler error message interpolates plan content; keep it that way.
+      // Never let a handler exception drop the connection without a response — and
+      // log it first, since a bare 500 alone is undebuggable. The log call is itself
+      // wrapped so a broken sink can't escape and suppress the 500.
+      // NB: values reaching this sink must not embed plan bodies — today no handler
+      // error message interpolates plan content; keep it that way.
       try {
         log.error("request", err);
       } catch {

@@ -26,7 +26,7 @@ function boom(): never {
 }
 
 // Happy-path fakes for every injected probe; each test overrides only what it
-// exercises (mirrors review.test.ts's reviewDeps factory).
+// exercises.
 function discoveryDeps(over: Partial<DiscoveryDeps> = {}): DiscoveryDeps {
   return {
     now: () => new Date("2026-06-04T12:00:00.000Z"),

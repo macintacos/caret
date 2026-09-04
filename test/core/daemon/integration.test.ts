@@ -28,19 +28,16 @@ import { VERSION } from "@/lib/build-id.ts";
 import { formatPlanMarkdown } from "@/plan/markdown.ts";
 import { createStore } from "@/review/store.ts";
 
-// Many tests here spawn a real `bun src/cli.ts daemon` subprocess (transpile + boot
-// the whole daemon module graph), then wait on the lock file. Standalone that boot is
-// ~tens of ms, but under `mise preflight`'s concurrent load — the unit suite racing
-// `build bin`'s `bun build --compile`, oversubscribing the box — the subprocess is
-// starved of scheduling and a ~100ms boot can stretch to many seconds. A fixed poll
-// ceiling flaked there: EXC-647 kept widening it and 20s still tripped (measured: the
-// transpile is NOT the cost — a prebuilt bundle boots no faster under load — it is raw
-// scheduling starvation, which no magic ceiling reliably clears). So the waits are
-// patient-while-alive instead: untilLockWritten polls only while the daemon PROCESS is
-// alive — a boot that is merely slow still passes, while a process that exits WITHOUT a
-// lock fails fast with its exit code (a real crash, distinguished from slowness) — and
-// the shutdown assertion keys off the actual process exit, not a second cliff.
-// setDefaultTimeout is the single, generous backstop for a genuinely hung subprocess.
+// Many tests here spawn a real `bun src/cli.ts daemon` subprocess, then wait on the
+// lock file. Standalone that boot is ~tens of ms, but under `mise preflight`'s
+// concurrent load the subprocess is starved of scheduling and it can stretch to many
+// seconds. A fixed poll ceiling flaked there: EXC-647 kept widening it and 20s still
+// tripped (measured: the transpile is NOT the cost — a prebuilt bundle boots no faster
+// under load — it is raw scheduling starvation, which no ceiling reliably clears). So
+// the waits are patient-while-alive instead: untilLockWritten polls only while the
+// daemon PROCESS is alive, so a merely-slow boot still passes while a process that
+// exits WITHOUT a lock fails fast with its exit code. setDefaultTimeout is the single,
+// generous backstop for a genuinely hung subprocess.
 setDefaultTimeout(90_000);
 
 /** The daemon's NDJSON log inside a spawned subprocess's XDG_STATE_HOME — the

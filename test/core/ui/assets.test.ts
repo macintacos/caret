@@ -2,7 +2,8 @@
 // assetsFromDist): the dev/e2e path that serves ui/dist/ off disk when no embed
 // manifest is present, and the absent-dir case that degrades to the daemon's
 // placeholder. The embedded-manifest source is exercised end-to-end by the
-// compiled-binary check; the daemon's serving behavior is pinned in daemon.test.
+// compiled-binary check; the daemon's serving behavior is pinned in
+// test/core/daemon/server.test.ts.
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -58,8 +59,7 @@ test("assetsFromDist returns undefined for a path that isn't in the dist (exact 
 // "..", masking the guard). "/assets/../index.html" is the falsifiable case — it
 // names a real fixture file by an escaping path. Exact-match returns undefined;
 // a filesystem-joining implementation (Bun.file(join(dist, urlPath))) would
-// resolve it to dist/index.html and serve it. So this test fails if anyone
-// replaces the exact-match map lookup with a path join.
+// resolve it to dist/index.html and serve it.
 test("assetsFromDist never resolves a traversal path against the filesystem", () => {
   const dist = fakeDist({ "index.html": "secret", "assets/index-AB12.js": "x" });
   try {
@@ -84,13 +84,9 @@ test("assetsFromDist returns undefined for an empty dir", () => {
   }
 });
 
-// The two distributions that read a dist tree off disk put this module at
-// different depths under the caret root, and no single relative path reaches
-// ui/dist from both: the run-from-source bundle collapses to <root>/dist/cli.js
-// (bun leaves import.meta.url pointing at the OUTPUT file), while a checkout
-// keeps it at <root>/src/ui/assets.ts. Each layout is pinned on its own — a
-// resolver offering one candidate serves the daemon's placeholder for whichever
-// layout it isn't. `mise run smoke bundle` is the end-to-end counterpart.
+// The two disk layouts are pinned one at a time: a resolver offering only one
+// candidate serves the daemon's placeholder for whichever layout it isn't.
+// `mise run smoke bundle` is the end-to-end counterpart.
 test("uiDistCandidates reaches <root>/ui/dist from the bundle layout", () => {
   expect(uiDistCandidates("file:///pkg/dist/cli.js")).toContain("/pkg/ui/dist");
 });

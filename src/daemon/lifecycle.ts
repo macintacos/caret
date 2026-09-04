@@ -83,13 +83,12 @@ export interface EnsureOptions {
    * the port. Pass false to ATTACH instead: return whichever same-world daemon is
    * answering, whatever its build, and spawn only when nothing is.
    *
-   * A mid-review reconnect passes false, and the distinction is load-bearing. The
-   * reconnecting client may be an OLD build whose review has outlived an upgrade;
-   * letting it take over would install that old build as the port's owner, and
-   * because it reconnects on every drop it would keep winning against the current
-   * one indefinitely. Recovery must not double as installation. Attaching costs
-   * nothing: reviews are persisted per world, so any same-world daemon can serve
-   * the decision. */
+   * A mid-review reconnect passes false. The reconnecting client may be an OLD
+   * build whose review has outlived an upgrade; letting it take over would install
+   * that old build as the port's owner, and since it reconnects on every drop it
+   * would keep winning against the current one indefinitely. Recovery must not
+   * double as installation. Attaching costs nothing: reviews are persisted per
+   * world, so any same-world daemon can serve the decision. */
   takeover?: boolean;
 }
 
@@ -119,8 +118,8 @@ export async function ensureDaemon(deps: EnsureDeps, opts: EnsureOptions = {}): 
       if (!takeover) return deps.baseUrl;
       const retired = await deps.retire(deps.baseUrl, deps.readLock());
       // A pre-fix daemon (no /api/retire, no lock) can't be retired: reuse it
-      // (stale UI) rather than deny the review or spin retrying — strictly no
-      // worse than before the fix. A retireable daemon is now exiting → re-poll.
+      // (stale UI) rather than deny the review or spin retrying. A retireable
+      // daemon is now exiting → re-poll.
       if (!retired) return deps.baseUrl;
       logDebug("retire", "stale daemon retiring");
       await deps.backoff(attempt);
@@ -145,10 +144,9 @@ export async function ensureDaemon(deps: EnsureDeps, opts: EnsureOptions = {}): 
     }
     await deps.backoff(attempt);
   }
-  // Exhausted: never deny a review on takeover failure. If a live caret daemon
-  // is still answering (even a stale one we couldn't retire), reuse it; only
-  // throw when nothing caret is reachable — or when the answering daemon is a
-  // foreign world's (reusing it would cross-attach; EXC-461).
+  // Exhausted: never deny a review on takeover failure — reuse even a stale
+  // daemon we couldn't retire. The foreign world stays the one exception
+  // (reusing it would cross-attach; EXC-461).
   const final = await deps.health(deps.baseUrl);
   if (final && final.service === "caret") {
     if (isForeignWorld(final, deps.currentStateDir)) throw new Error(FOREIGN_WORLD_ERROR);
@@ -194,9 +192,7 @@ export function removeOwnDaemonLock(): void {
 }
 
 /** Ask a stale daemon to step down. Returns true if a graceful shutdown was
- * initiated; false if nothing could be done (pre-fix daemon: no route, no lock).
- * Exported for the SIGTERM-gating tests; `kill` is injectable for the same
- * reason and defaults to the real signal. */
+ * initiated; false if nothing could be done (pre-fix daemon: no route, no lock). */
 export async function retireDaemon(
   baseUrl: string,
   lock: DaemonLock | null,
@@ -268,15 +264,13 @@ export function openDaemonStderr(s: Settings): number | "ignore" {
  * exec worktree torn down after its PR merged left daemons unable to
  * `Bun.spawn` anything at all — absolute paths included — because posix_spawn
  * needs a live cwd (EXC-1155). Root is chosen because it cannot be unlinked and
- * needs no `ensureStateDir` first. Nothing meaningful resolves against it: every
- * caret path is absolute from `stateDir()`, and the one path arriving from
- * outside — the agent's `planFilePath` — is absolute by that contract and
- * guarded to an existing `.md` file before any write. */
+ * needs no `ensureStateDir` first, and nothing resolves against it: every caret
+ * path is absolute from `stateDir()`, and the one path arriving from outside —
+ * the agent's `planFilePath` — is absolute by contract. */
 export const DAEMON_CWD = "/";
 
 /** Spawn the detached daemon, pinned to `DAEMON_CWD` and with stdout/stderr
- * redirected to daemon-stderr.log. `spawn` is injected so the cwd pin stays
- * assertable without starting a real daemon. */
+ * redirected to daemon-stderr.log. */
 export function spawnDaemon(s: Settings, spawn: typeof Bun.spawn = Bun.spawn): void {
   const out = openDaemonStderr(s);
   spawn(daemonCommand(), {
@@ -298,8 +292,6 @@ export async function prodEnsureDeps(s: Settings): Promise<EnsureDeps> {
   const world = stateDir();
   return {
     baseUrl: `http://localhost:${getPort(s)}`,
-    // The current binary's identity: its build fingerprint + the package version
-    // + the world it serves.
     currentBuild: await currentBuildId(),
     currentVersion: VERSION,
     currentStateDir: world,

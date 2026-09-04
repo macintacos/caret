@@ -12,9 +12,9 @@ import {
 } from "@/ui/log-bridge.ts";
 
 // The browser-safe trust-boundary parser for POST /api/logs (EXC-445). The
-// daemon's route exercises this end-to-end over HTTP in daemon.test.ts; these
-// units pin the pure parser and the wire constants directly — the canonical home
-// the UI log facade will share.
+// daemon's route exercises this end-to-end over HTTP in
+// test/core/daemon/server.test.ts; these units pin the pure parser and the wire
+// constants directly.
 
 test("wire caps match the published contract", () => {
   expect(MAX_BODY_BYTES).toBe(64 * 1024);

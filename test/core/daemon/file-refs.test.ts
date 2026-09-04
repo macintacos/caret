@@ -153,9 +153,9 @@ test("file 404s for an unknown review", async () => {
 });
 
 test("file 404s for a directory rather than reading something else", async () => {
-  // Before kinds, `path=src` fell through to a basename search that could serve
-  // an unrelated FILE named `src`. It resolves as a directory now, and the
-  // excerpt route affords files only.
+  // `path=src` must resolve as the directory it is, not fall through to a
+  // basename search that could serve an unrelated FILE named `src` — the excerpt
+  // route affords files only.
   write("src/a.ts", numbered(10));
   const id = await d.seed({ cwd });
   expect((await fileExcerpt(id, "src")).status).toBe(404);

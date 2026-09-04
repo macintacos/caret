@@ -1,23 +1,13 @@
 // Whether the caret this daemon is, is behind — and what the user should run about it
 // (EXC-1205). Split the way the OpenCode install target's upgrade check is: a pure
 // verdict over gathered facts (`updateStatusFor`), and a throttled runner that gathers
-// them (`runUpdateCheck`). Every effect arrives through UpdateCheckDeps, so the decision
-// logic is unit-testable with fakes and reaches no module global.
+// them (`runUpdateCheck`). Every effect arrives through UpdateCheckDeps.
 //
-// The verdict is PERSISTED, not just held in memory, which is the one place this
-// diverges from the OpenCode plugin's analogous startup nudge. That plugin caches only
-// the last-check stamp because it re-toasts on every un-throttled start; this daemon
-// idle-shuts-down and respawns per review, so an in-memory-only verdict would read
-// `unknown` on nearly every boot and the throttled path would have nothing to report.
-// Caching the verdict beside the stamp is what makes "reading the verdict never
-// triggers a synchronous network call" true without a network call hiding behind the
-// route.
-//
-// A cached verdict is a claim about one specific build, so the record carries the
-// version and commit it was made against. A record that does not match the running
-// process is discarded on read — its `available` number describes a caret that is no
-// longer running — and a build change likewise bypasses the 24h throttle, because the
-// moment right after an upgrade or a rebuild is when the answer matters most.
+// The verdict is PERSISTED, not just held in memory: this daemon idle-shuts-down and
+// respawns per review, so an in-memory-only verdict would read `unknown` on nearly
+// every boot and the throttled path would have nothing to report. Caching it beside
+// the stamp is what makes "reading the verdict never triggers a synchronous network
+// call" true.
 
 import { writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -28,10 +18,8 @@ import type { CaretLogger } from "@/lib/log.ts";
 import { isNewer } from "@/lib/semver.ts";
 import { type BuildKind, errorMessage, type UpdateReport, type UpdateStatus } from "@/lib/types.ts";
 
-/** At most one check per day, the ceiling the issue sets. Not a timer: the daemon
- * idle-shuts-down and respawns per review, so a boot-time throttled check already
- * yields roughly one call a day and a `setInterval` would be a second mechanism doing
- * this one's job. */
+/** At most one check per day. Not a timer: the daemon idle-shuts-down and respawns
+ * per review, so a boot-time throttled check already yields roughly one call a day. */
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /** What takes a published install to the newest release — the same command the README
@@ -43,8 +31,7 @@ const REFRESH_COMMAND = "bunx --no-cache @macintacos/caret@latest install --refr
 const REBUILD_COMMAND = "mise run build --install";
 
 /** The `unknown` reason that means "ask GitHub how far trunk has moved and try again".
- * `gather` matches on it to decide whether the compare call is worth making, which is
- * what keeps the branch order stated once, in `updateStatusFor`. */
+ * `gather` matches on it to decide whether the compare call is worth making. */
 const NEEDS_COMPARE = "could not compare this build against trunk";
 
 /** The verdict for a build no check has settled on yet. Shared by `readCachedStatus`
@@ -54,9 +41,8 @@ const NEVER_CHECKED: UpdateStatus = {
   reason: "no update check has run for this build yet",
 };
 
-/** The verdict served while the reviewer has the check switched off. Not a verdict the
- * daemon ever HOLDS — the held status is always about the build — but the one
- * `updateReportFor` substitutes for it per request. */
+/** The verdict served while the reviewer has the check switched off. Never HELD — the
+ * held status is always about the build — only substituted in per request. */
 const DISABLED: UpdateStatus = { kind: "unavailable", reason: "disabled" };
 
 /** The facts a verdict is decided over. Each upstream side is null when it could not be
@@ -81,9 +67,8 @@ export interface UpdateRecord {
   status: UpdateStatus;
 }
 
-/** The injected seam over the record file, so the throttle is testable without a clock
- * or a filesystem. Both halves are best-effort — a read that fails is "no record", and
- * a write that fails just means the next boot checks again. */
+/** The seam over the record file. Both halves are best-effort — a read that fails is
+ * "no record", and a write that fails just means the next boot checks again. */
 export interface UpdateCache {
   read(): UpdateRecord | null;
   write(entry: UpdateRecord): void;
@@ -137,13 +122,10 @@ export function updateStatusFor(facts: UpdateFacts): UpdateStatus {
 
 /** The report GET /api/update serves: the held verdict when the check is on, and the
  * `disabled` verdict when the reviewer has turned it off. Pure — the caller reads the
- * live switch and hands the answer in — which is what lets the route reflect a flip the
- * moment it lands, without the daemon re-deciding anything or reaching the network.
+ * live switch and hands the answer in, so the route reflects a flip the moment it lands.
  *
- * A dev build is the one verdict the switch does not outrank. It has no upstream at all,
- * so there is nothing for the opt-out to silence — and the `disabled` copy would tell a
- * contributor to turn the check back on to hear about new carets, which on a build that
- * short-circuits to `dev` before it ever reads the switch could never happen. */
+ * A dev build is the one verdict the switch does not outrank: it has no upstream at all,
+ * so there is nothing for the opt-out to silence. */
 export function updateReportFor(
   identity: Omit<UpdateReport, "status" | "checkEnabled">,
   status: UpdateStatus,
@@ -155,9 +137,8 @@ export function updateReportFor(
 
 /** The last persisted verdict, or `NEVER_CHECKED` when nothing usable is cached —
  * absent, unparseable, or recorded against a different version or commit than the one
- * running now. Takes the cache seam rather than a path, so the daemon hands it the same
- * cache the runner writes through, and so a test needs no filesystem. Synchronous: the
- * daemon seeds its reported status from this before it binds. */
+ * running now. Synchronous: the daemon seeds its reported status from this before it
+ * binds. */
 export function readCachedStatus(
   cache: UpdateCache,
   version: string,
@@ -187,20 +168,19 @@ export async function runUpdateCheck(deps: UpdateCheckDeps): Promise<UpdateStatu
     const now = deps.now();
     const prev = deps.cache.read();
     const sameBuild = prev?.version === deps.version && prev?.commit === deps.commit;
-    // A build change runs regardless: a freshly-upgraded user would otherwise have no
-    // verdict at all for up to a day, and the extra call is tied to a user action
-    // (running an install or a rebuild), not to a periodic path. `Math.abs` so a stamp
-    // from the future — an NTP correction, a restored backup, a resumed VM — reads as
-    // stale rather than throttling every later check indefinitely.
+    // A build change bypasses the throttle: a freshly-upgraded user would otherwise
+    // have no verdict at all for up to a day, and the extra call is tied to a user
+    // action, not a periodic path. `Math.abs` so a stamp from the future — an NTP
+    // correction, a restored backup, a resumed VM — reads as stale rather than
+    // throttling every later check indefinitely.
     if (prev && sameBuild && Math.abs(now - prev.checkedAt) < CHECK_INTERVAL_MS) return null;
 
     const record = (status: UpdateStatus): void => {
       deps.cache.write({ checkedAt: now, version: deps.version, commit: deps.commit, status });
     };
-    // Stamp up front so an offline or failed attempt still backs off a full day. The
-    // status carried forward keeps the record whole: the previous verdict when it was
-    // about this same build, and NEVER_CHECKED otherwise — so a record orphaned by a
-    // shutdown mid-check reads back exactly like no record, which is the truth.
+    // Stamp up front so an offline or failed attempt still backs off a full day.
+    // NEVER_CHECKED when the previous verdict was about a different build, so a record
+    // orphaned by a shutdown mid-check reads back exactly like no record.
     record(prev && sameBuild ? prev.status : NEVER_CHECKED);
 
     const status = await gather(deps);
@@ -232,16 +212,15 @@ export function fileUpdateCache(path: string): UpdateCache {
         // 0600: the record shares the state dir with plan bodies; keep it private too.
         writeFileSync(path, JSON.stringify(entry, null, 2), { mode: 0o600 });
       } catch {
-        // best-effort, per the docstring above.
+        // best-effort
       }
     },
   };
 }
 
-/** Read only the upstream sides the verdict will actually consult. The verdict itself
- * decides that: a first pass with no compare either settles outright or comes back
- * asking for one, so the branch order lives in `updateStatusFor` alone and the two can
- * never drift apart. */
+/** Read only the upstream sides the verdict will actually consult: a first pass with no
+ * compare either settles outright or comes back asking for one, so the branch order
+ * lives in `updateStatusFor` alone and the two can never drift apart. */
 async function gather(deps: UpdateCheckDeps): Promise<UpdateStatus> {
   const base = { kind: deps.kind, version: deps.version, commit: deps.commit };
   if (deps.kind === "bundle") {

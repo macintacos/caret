@@ -9,7 +9,6 @@ import type { Behavior, DraftBody, PlanInput, PrefsPatch, ResolveBody } from "@/
 // Request-body schemas at the browser trust boundary. The schemas over routes that
 // predate them are deliberately lenient — a malformed body degrades to the schema's
 // fallback rather than rejecting, matching the cast-and-trust behavior they replace.
-// The win there is a named boundary and per-field validation, not stricter rejection.
 // PrefsPatchSchema is the one exception and says below why it rejects instead.
 
 // POST /api/reviews: an incoming plan. Every field is optional and the whole
@@ -38,20 +37,16 @@ export const PlanInputSchema: z.ZodType<PlanInput> = z
 
 // POST /api/reviews/:id/file-refs: the candidate path strings the UI parsed from
 // a plan, asking what each one resolves to. A non-array or non-object body
-// degrades to an empty list (nothing resolves), matching the lenient boundary
-// the other schemas keep. The handler de-dupes, then caps how many it resolves.
+// degrades to an empty list (nothing resolves). The handler de-dupes, then caps
+// how many it resolves.
 //
-// The cap is roomy because the candidate gate is: since EXC-916 every plausible
-// path token inside inline code is offered, not only the ones ending in a known
-// extension, so a long plan can reach several hundred distinct tokens. A cap
-// that truncated would silently drop real citations from the tail of a plan.
-//
-// What the cap really bounds is the expensive branch, and that is not the stat.
-// A hit costs one realpath and one stat; a MISS costs those plus — when the
-// token is slash-free and file-shaped — a bounded basename walk of up to
-// MAX_SCAN_ENTRIES dirents. That walk is what a large cap buys, so the same
-// EXC-916 narrowing that made the walk rare (a slash or an unknown extension
-// stops it outright) is what makes this number affordable.
+// The cap is roomy because since EXC-916 every plausible path token inside inline
+// code is offered, not only the ones ending in a known extension, so a long plan
+// reaches several hundred distinct tokens and a tighter cap would silently drop
+// citations from its tail. What the cap bounds is the MISS branch — a slash-free,
+// file-shaped token costs a bounded basename walk of up to MAX_SCAN_ENTRIES
+// dirents on top of the realpath and stat — and the same EXC-916 narrowing that
+// made that walk rare is what makes this number affordable.
 export const MAX_FILE_REFS = 1000;
 export const FileRefsBodySchema = z
   .object({ paths: z.array(z.string()).catch([]) })
@@ -59,17 +54,14 @@ export const FileRefsBodySchema = z
 
 // POST /api/reviews/:id/file-search: what the reviewer has typed after the `@`
 // in a feedback editor, asking which files under the review's cwd match it. A
-// non-string query — or a body that is not an object at all — degrades to the
-// empty query, which lists rather than rejects; that is the leniency the schemas
-// above keep, and here it also means a garbled body can only ever cost LESS work
-// than a deliberate one: the empty query matches immediately and trips the result
+// non-string query degrades to the empty query, which lists rather than rejects
+// — and costs LESS work than a deliberate one: the empty query trips the result
 // cap after ~51 files, whereas a query that matches NOTHING is what spends the
 // whole dirent budget.
 //
-// No `.max()` on the string, for the reason FileRefsBodySchema records: a
-// field-level constraint trips the outer `.catch` and degrades the whole body.
-// The length bound is MAX_SEARCH_QUERY_CHARS, applied inside `searchFiles`
-// where it is exercisable without a request.
+// No `.max()` on the string: a field-level constraint trips the outer `.catch`
+// and degrades the whole body. The length bound is MAX_SEARCH_QUERY_CHARS,
+// applied inside `searchFiles` where it is exercisable without a request.
 export const FileSearchBodySchema = z.object({ query: z.string().catch("") }).catch({ query: "" });
 
 const BehaviorSchema: z.ZodType<Behavior> = z.enum(["allow", "deny"]);
@@ -77,9 +69,9 @@ const BehaviorSchema: z.ZodType<Behavior> = z.enum(["allow", "deny"]);
 // POST /api/reviews/:id/resolve. `behavior` falls back to "allow" unless the
 // body explicitly says "deny" (fail-safe: an absent or garbled behavior never
 // denies on its own). `acceptMode` is an opaque approve-variant id carried
-// verbatim — a non-string degrades to undefined at the field, leaving the rest of
-// the decision intact; the handler then gates it against the adapter-declared set
-// before seeding prefs (an id outside the set never moves the remembered value).
+// verbatim — a non-string degrades to undefined at the field; the handler then
+// gates it against the adapter-declared set before seeding prefs, so an id
+// outside the set never moves the remembered value.
 export const ResolveBodySchema: z.ZodType<ResolveBody> = z
   .object({
     behavior: BehaviorSchema.catch("allow"),
@@ -88,16 +80,15 @@ export const ResolveBodySchema: z.ZodType<ResolveBody> = z
   })
   .catch({ behavior: "allow" });
 
-// POST /api/prefs — the ONE schema here that rejects where its neighbours degrade,
-// and deliberately so. The routes above historically tolerated junk, so validating
-// them must not tighten them; this route is new, and it writes into caret's state
-// dir over a loopback endpoint any local page can reach. Silently stripping an
-// unrecognized key would make it a general write primitive that answers 200 to a
-// body it did not honour — so `.strict()`, and the handler answers 400 (EXC-1206).
-// `approveMode` is absent from the accepted set on purpose: the resolve path owns it,
-// and `.strict()` applies at both levels so an unknown key UNDER `updates` is refused
-// like any other. An empty patch is deliberately a success: nothing was stripped and
-// nothing was misreported — the 200 is honest about having honoured every key sent.
+// POST /api/prefs — the ONE schema here that rejects where its neighbours degrade.
+// The routes above historically tolerated junk, so validating them must not tighten
+// them; this route is new, and it writes into caret's state dir over a loopback
+// endpoint any local page can reach. Silently stripping an unrecognized key would
+// make it a general write primitive that answers 200 to a body it did not honour —
+// so `.strict()`, and the handler answers 400 (EXC-1206). `approveMode` is absent
+// from the accepted set on purpose: the resolve path owns it. `.strict()` applies at
+// both levels, so an unknown key UNDER `updates` is refused too; an empty patch is
+// deliberately a success.
 export const PrefsPatchSchema: z.ZodType<PrefsPatch> = z
   .object({ updates: z.object({ check: z.boolean() }).strict().optional() })
   .strict();
@@ -114,8 +105,8 @@ const LineAnnotationSchema = z
     endLine: z.number().int().min(1),
     comment: z.string(),
     // Per-comment lifecycle from the ReviewStatus vocabulary. Optional so a draft
-    // that predates the field round-trips; preserved here (rather than stripped as
-    // an unknown key) so a client that sets it persists it.
+    // that predates the field round-trips; declared so zod does not strip it as an
+    // unknown key.
     state: z.enum(["pending", "approved", "rejected", "expired"]).optional(),
   })
   .refine((a) => a.endLine >= a.startLine, { message: "endLine must be >= startLine" });

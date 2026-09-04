@@ -23,7 +23,7 @@ import { formatPlanMarkdown } from "@/plan/markdown.ts";
 import type { Store } from "@/review/store.ts";
 
 // Resolver injected as a dep — the core daemon stays tool-agnostic and never
-// reaches into ui-assets.ts.
+// reaches into src/ui/assets.ts.
 const { fakeAssets, cleanup: cleanupAssets } = makeFakeUiAssets();
 
 let dir: string;
@@ -1169,7 +1169,7 @@ describe("read-confidentiality posture", () => {
 // document with no-cache (so a redeploy never references stale hashed names),
 // hashed siblings with Bun.file's MIME and a long immutable cache. With no
 // assets injected (the bare daemon) it serves only the built-in placeholder at /
-// and 404s every other UI path — the posture existing tests pin.
+// and 404s every other UI path.
 describe("UI serving", () => {
   // A representative built UI: an index that references its hashed siblings, a JS
   // chunk, and a CSS chunk under /assets/.
@@ -1263,7 +1263,8 @@ describe("UI serving", () => {
   // "/src/cli.ts") — just another unknown key. This pins the runtime's
   // normalization + the dispatcher's fall-through, not caret's allowlist guard
   // itself; the falsifiable exact-match-vs-filesystem-join assertion lives at the
-  // resolver layer (ui-assets.test.ts), where no URL normalization runs first.
+  // resolver layer (test/core/ui/assets.test.ts), where no URL normalization
+  // runs first.
   test("traversal-shaped requests are a clean 404", async () => {
     await bootUi();
     for (const path of [
@@ -1657,7 +1658,7 @@ describe("POST /api/prefs", () => {
 
   test("is CSRF-guarded and Host-guarded like every other write (AC #2)", async () => {
     // The guards run in handle() around every dispatch, so the route inherits them
-    // the moment it exists — this is the proof, not new behavior.
+    // the moment it exists.
     await boot();
     const body = JSON.stringify({ updates: { check: false } });
     const foreignOrigin = await fetch(`${base}/api/prefs`, {

@@ -3,20 +3,12 @@
 // This module assembles the document and renders it; it NEVER mutates anything
 // (no lock cleanup, no file writes) and NEVER logs — its output IS the report.
 //
-// Two design rules shape the surface:
-//
-//   - Every side effect is injected (DiscoveryDeps), so collectReport is a pure
-//     function of its deps and the whole document is unit-testable with fakes —
-//     the same dependency-injection pattern src/review/orchestrate.ts uses for runReview.
-//   - The report is built FLAT on purpose. src/redact/node.ts caps recursion at depth
-//     6 (deeper values become "<depth-capped>"); keeping every leaf shallow
-//     (the deepest is processes.items[i].field at depth 4) means the CLI caller's
-//     scrubValue(report, true) never clips a value. Sections that would nest —
-//     settings, lockAndPort, reviews — are flattened to dotted/prefixed scalar
-//     keys to hold that budget.
-//
-// collectReport does NOT redact: the CLI caller scrubs the finished document
-// (always, regardless of [logging].redact) before printing.
+// The report is built FLAT on purpose. src/redact/node.ts caps recursion at depth
+// 6 (deeper values become "<depth-capped>"); keeping every leaf shallow (the
+// deepest is processes.items[i].field at depth 4) means the CLI caller's
+// scrubValue(report, true) never clips a value. Sections that would nest —
+// settings, lockAndPort, reviews — are flattened to dotted/prefixed scalar keys
+// to hold that budget.
 
 import { readdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -67,7 +59,7 @@ export interface LogStats {
 /** Every side-effecting input the report needs, injected so collectReport is a
  * pure function of its deps (the CLI phase wires the prod readers below). */
 export interface DiscoveryDeps {
-  /** ISO timestamp source (injectable for tests). */
+  /** ISO timestamp source. */
   now: () => Date;
   /** This binary's caret version (VERSION in prod). */
   version: string;
@@ -144,9 +136,8 @@ export interface ReviewsSection {
 // Assembly
 // ---------------------------------------------------------------------------
 
-/** Run one section builder, degrading a throw to { error } so a single failing
- * probe can never reject the whole report. The builder may be sync or async;
- * either way a throw (or rejection) becomes a SectionError. */
+/** Run one section builder, degrading a throw or rejection to { error } so a
+ * single failing probe can never reject the whole report. */
 async function safe<T>(build: () => T | Promise<T>): Promise<T | SectionError> {
   try {
     return await build();
@@ -155,10 +146,10 @@ async function safe<T>(build: () => T | Promise<T>): Promise<T | SectionError> {
   }
 }
 
-/** Assemble the diagnostics document. Never rejects: every section is wrapped
- * in safe()/safeAsync(). Does NOT redact — the CLI caller scrubs. The daemon
- * health is probed ONCE (one bounded network call) and shared between the
- * `daemon` and `lockAndPort` sections. */
+/** Assemble the diagnostics document. Never rejects: every section is wrapped in
+ * safe(). Does NOT redact — the CLI caller scrubs, always and regardless of
+ * [logging].redact. The daemon health is probed ONCE (one bounded network call)
+ * and shared between the `daemon` and `lockAndPort` sections. */
 export async function collectReport(deps: DiscoveryDeps): Promise<Report> {
   // One bounded health probe, shared. Wrapped so a throwing health() can't sink
   // collectReport; both sections see null (treated as unreachable) on failure.
@@ -274,7 +265,6 @@ function buildProcesses(deps: DiscoveryDeps): { count: number; items: ProcessIte
 async function buildLogs(
   deps: DiscoveryDeps,
 ): Promise<{ caret: LogStats; daemon: LogStats; daemonStderr: LogStats }> {
-  // The files are independent — stat/read them concurrently.
   const [caret, daemon, daemonStderr] = await Promise.all([
     deps.logStats(deps.logPaths.caret),
     deps.logStats(deps.logPaths.daemon),
@@ -383,8 +373,7 @@ function formatValue(v: unknown): string {
 // ---------------------------------------------------------------------------
 
 /** Parse `ps -axo pid=,comm=` output into ProcessEntry[]: one `pid comm` pair
- * per line, comm basenamed, filtered to entries named exactly the caret binary.
- * Pure so it's unit-testable without spawning. */
+ * per line, comm basenamed, filtered to entries named exactly the caret binary. */
 export function parsePsLines(text: string): ProcessEntry[] {
   const out: ProcessEntry[] = [];
   for (const line of text.split("\n")) {
@@ -426,7 +415,6 @@ export function listReviewFiles(): ReviewStatusRecord[] {
   for (const file of files) {
     if (!file.endsWith(".json")) continue;
     if (out.length >= 5000) break;
-    // null on a corrupt/unreadable file — skipped, like store.rehydrate.
     const raw = readJsonFileSync(join(dir, file)) as { id?: unknown; status?: unknown } | null;
     if (raw && typeof raw.id === "string" && typeof raw.status === "string") {
       out.push({ id: raw.id, status: raw.status });

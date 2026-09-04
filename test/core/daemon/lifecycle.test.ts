@@ -495,10 +495,9 @@ test("spawnDaemon pins the daemon's cwd to DAEMON_CWD", () => {
 
 // A daemon tearing ITSELF down must remove its own lock and nothing else: the
 // path may hold the lock of whichever daemon won the port race, and unlinking
-// that one strands a live daemon nothing can find. Placement used to carry that
-// invariant (the cleanup was wired only after a successful bind); the ownership
-// check is what lets it be wired BEFORE the bind instead, which is what closes
-// the signal window in runDaemon.
+// that one strands a live daemon nothing can find. The ownership check is what
+// lets the cleanup be wired BEFORE the bind, closing the signal window in
+// runDaemon.
 test("removeOwnDaemonLock removes a lock naming this process", () => {
   mkdirSync(dirname(daemonLock()), { recursive: true });
   writeFileSync(daemonLock(), JSON.stringify({ pid: process.pid, port: 42718 }));

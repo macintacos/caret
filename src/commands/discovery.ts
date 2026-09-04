@@ -1,9 +1,7 @@
 // `caret discovery`: print a one-shot diagnostics snapshot (EXC-464). Wires the
-// production probes — the same primitives the review path uses (httpHealth,
-// readDaemonLock, isPidAlive), the bounded read-only readers from discovery.ts,
-// and the active adapter's install probe — collects the report, and always
-// scrubs it (a deliberate inversion of the raw-by-default logging posture) since
-// the artifact exists to be pasted into bug reports.
+// production probes, collects the report, and always scrubs it — a deliberate
+// inversion of the raw-by-default logging posture (EXC-399), since the artifact
+// exists to be pasted into bug reports.
 
 import { existsSync } from "node:fs";
 import { release } from "node:os";
@@ -32,11 +30,9 @@ import {
 import { isCompiledBinary, VERSION } from "@/lib/build-id.ts";
 import { scrubValue } from "@/redact/node.ts";
 
-/** Production probes for the discovery report (EXC-464): the same primitives
- * the review path already uses (httpHealth, readDaemonLock, isPidAlive), the
- * bounded read-only readers from discovery.ts, and the active adapter's install
- * probe. Deliberately no removeLock or retire — discovery observes, never
- * repairs. */
+/** Production probes for the discovery report, reusing the primitives the review
+ * path already drives. Deliberately no removeLock or retire — discovery
+ * observes, never repairs. */
 function prodDiscoveryDeps(s: Settings): DiscoveryDeps {
   return {
     now: () => new Date(),
@@ -74,16 +70,13 @@ function prodDiscoveryDeps(s: Settings): DiscoveryDeps {
 }
 
 export async function runDiscoverySubcommand(opts: { json: boolean }): Promise<void> {
-  // One-shot diagnostics snapshot (EXC-464). Human-facing output like redact:
-  // human-readable by default, --json for the machine document. ALWAYS redacted
-  // (a deliberate inversion of the raw-by-default logging posture, EXC-399) —
-  // this artifact exists to be pasted into bug reports. Exit 0 whenever a
-  // report was produced, however degraded; non-zero only when none could be.
+  // Exit 0 whenever a report was produced, however degraded; non-zero only when
+  // none could be.
   try {
     const s = loadSettings();
     const report = await collectReport(prodDiscoveryDeps(s));
-    // scrubValue preserves the report's shape (strings scrub in place), so the
-    // cast back to Report is safe for renderReport.
+    // scrubValue scrubs strings in place, preserving the report's shape — so the
+    // cast back to Report is safe.
     const redacted = scrubValue(report, true) as Report;
     const out = opts.json ? JSON.stringify(redacted, null, 2) : renderReport(redacted);
     process.stdout.write(`${out}\n`);

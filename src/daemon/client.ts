@@ -1,8 +1,6 @@
 // The daemon's loopback HTTP client: the fetch wrappers the hooks use to talk to
-// a running daemon — health probe, post a review, expire it, long-poll for the
-// decision, and (for the post-approval reconcile hook) list pending reviews and
-// resolve one. Each is a thin wrapper over the daemon's HTTP surface, kept plain
-// (no client abstraction) so the call sites read as the requests they are.
+// a running daemon. Each is a thin wrapper over the daemon's HTTP surface, kept
+// plain (no client abstraction) so the call sites read as the requests they are.
 
 import type {
   ClientReview,
@@ -40,9 +38,8 @@ export interface WaitForHealthOptions {
 }
 
 /** Poll /api/health until the daemon answers with the caret identity, or throw
- * once the attempt budget is exhausted. The single bounded health-wait the
- * out-of-process callers share (the dev driver and the e2e fixture, which boot
- * a daemon and then wait for it to listen); the in-process takeover loop in
+ * once the attempt budget is exhausted. The bounded health-wait the
+ * out-of-process callers share; the in-process takeover loop in
  * daemon-lifecycle.ts drives httpHealth on its own schedule. */
 export async function waitForHealth(
   baseUrl: string,
@@ -69,8 +66,7 @@ export async function postReview(
   });
   if (!res.ok) throw new Error(`POST /api/reviews failed: ${res.status}`);
   // hasLiveClient is optional: an older daemon (mid-upgrade version skew) omits
-  // it, and the hook treats its absence as "no live client" — i.e. open the
-  // browser, today's behavior (EXC-559).
+  // it, and the hook reads its absence as "no live client" (EXC-559).
   return (await res.json()) as { id: string; hasLiveClient?: boolean };
 }
 
@@ -89,7 +85,7 @@ export async function expireReview(baseUrl: string, id: string): Promise<void> {
  * caller re-polls; the settled Decision otherwise. */
 export async function longPoll(baseUrl: string, id: string): Promise<Decision | null> {
   const res = await fetch(`${baseUrl}/api/reviews/${id}/decision`);
-  if (res.status === 204) return null; // heartbeat: still pending — re-poll
+  if (res.status === 204) return null;
   if (!res.ok) throw new Error(`decision long-poll failed: ${res.status}`);
   return (await res.json()) as Decision;
 }
