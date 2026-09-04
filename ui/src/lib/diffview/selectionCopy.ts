@@ -8,19 +8,10 @@
 // paragraphs comes back with them fused, and the markdown a reviewer pastes back
 // to the agent has lost every block boundary it was written with.
 //
-// The whole markdown epic (EXC-855) rests on the source characters surviving the
-// render, and this is the one place where making that true takes code rather than
-// restraint. Every character is already in the DOM in source order; the only thing
-// wrong is where the browser decides a line ends. So the rebuild changes nothing
-// but that: it concatenates the selection's own text and breaks where the
-// enclosing ROW changes, which is exactly where a line ends in the source.
-//
-// This shipped first as EXC-864's tableCopy.ts, scoped to selections crossing a
-// table cell (grid items are blockified, so the serializer broke a copied table at
-// every cell). The tables came back out, and what remained was the half that was
-// never about tables — so the cell condition went with them and the rebuild now
-// runs for any selection, which is also what fixes the blank-line case above for
-// the plans that never had a table in them.
+// Every character is already in the DOM in source order; the only thing wrong is
+// where the browser decides a line ends. So the rebuild changes nothing but that:
+// it concatenates the selection's own text and breaks where the enclosing ROW
+// changes, which is exactly where a line ends in the source (EXC-855).
 
 // What counts as one line of output: a content row, or a gutter number cell. The
 // gutter is in the list because a drag can cross into it and its cells are not
@@ -50,19 +41,19 @@ export function selectionIn(root: ShadowRoot | null | undefined): Selection | nu
  * lookup needs.
  *
  * A blank source line carries no text at all — the library renders it as a row whose
- * only child is a `<br>` — so a walk over text alone would never reach it, and the
- * blank line would drop out of the copy: the exact fusing this module exists to
- * prevent. The `<br>` is what the walk therefore also visits, and it is a sound proxy
- * for "blank line" rather than a convenient one: the library emits a `<br>` only for a
- * token whose text is empty, or for a line node with no children at all, and never
- * anywhere else inside a row.
+ * only child is a `<br>` — so a walk over text alone would never reach it and the
+ * blank line would drop out of the copy, the exact fusing this module exists to
+ * prevent. The `<br>` the walk therefore also visits is a sound proxy for "blank
+ * line" rather than a convenient one: the library emits one only for a token whose
+ * text is empty, or for a line node with no children at all, and never anywhere else
+ * inside a row.
  *
  * Nothing else in the fragment may open a row. A range that stops at the very start of
  * a row still encloses it, so `cloneContents()` brings that row back carrying only
  * whatever ancestor chain the endpoint sat in — an empty row, an empty token span, or
- * an empty text node, depending on where the drag landed. None of those stands for a
- * line anyone selected, and all three fall out for free: a span is not a `<br>`, and an
- * empty text node is skipped explicitly.
+ * an empty text node. None of those stands for a line anyone selected, and all three
+ * fall out for free: a span is not a `<br>`, and an empty text node is skipped
+ * explicitly.
  */
 export function selectionText(selection: Selection | null): string | null {
   if (selection === null || selection.rangeCount === 0 || selection.isCollapsed) return null;

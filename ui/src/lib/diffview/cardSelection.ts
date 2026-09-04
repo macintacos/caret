@@ -65,13 +65,13 @@ type Marker = [content: string | null, gutter: string | null];
  * The marker each child of a card should carry, by index.
  *
  * Follows InteractionManager.renderSelection's own branch, including where that is
- * asymmetric. Its parallel data-merge-conflict-actions case is left out: a source view
- * renders no merge conflicts, so there is nothing for it to match. A row inside the range takes `single` / `first` / `last` / `""` in both
- * columns; but where the next child is the library's annotation row, the trailing
- * marker moves onto it and the CONTENT row alone is demoted — the gutter cell keeps
- * what it had. Faithful rather than tidied: the point of this pass is that a carded row
- * and an uncarded one are marked identically, so an inconsistency belongs upstream, not
- * here.
+ * asymmetric. Its parallel data-merge-conflict-actions case is left out: a source
+ * view renders no merge conflicts, so there is nothing for it to match. A row inside
+ * the range takes `single` / `first` / `last` / `""` in both columns; but where the
+ * next child is the library's annotation row, the trailing marker moves onto it and
+ * the CONTENT row alone is demoted — the gutter cell keeps what it had. Faithful
+ * rather than tidied: the point of this pass is that a carded row and an uncarded one
+ * are marked identically, so an inconsistency belongs upstream, not here.
  */
 function markers(children: Element[], range: SelectedLines | null): Marker[] {
   const wanted: Marker[] = children.map(() => [null, null]);

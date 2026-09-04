@@ -271,11 +271,11 @@
   // Content-drag range commenting (EXC-639). The @pierre/diffs view only starts a
   // line selection from the gutter and never opens the composer, so caret owns the
   // drag across the code *body*: the pure lineDrag controller decides the range,
-  // this effect feeds it real pointer events, mirrors the live range into the
-  // library's own selection highlight (lifecycle.select) so it reads identically
-  // to a gutter drag, suppresses the competing native text-selection for a plain
-  // drag, and reports preview + commit up. Holding Shift bows out so the browser
-  // selects text natively (the copy escape-hatch).
+  // the effect below feeds it real pointer events, mirrors the live range into the
+  // library's own selection highlight (lifecycle.select) so it reads identically to
+  // a gutter drag, suppresses the competing native text-selection, and reports
+  // preview + commit up.
+  //
   // Range commenting is opt-in: a read-only view passes no onLineRangeComment. The
   // derived (not the raw prop) keeps the effect below tracking a stable boolean, so
   // it sets up once instead of re-running each time the parent re-renders and the
@@ -366,12 +366,10 @@
     };
   });
 
-  // Keep the library's selection highlight tied to the open composer. The library
-  // highlights its own gutter/+ selection but never clears it when caret's composer
-  // closes, so reflect the composer's range (or null) into setSelectedLines here.
-  // This tracks only `selectedRange`, which stays a stable null throughout a gutter
-  // drag, so it never clobbers the library's own in-drag highlight — it acts only as
-  // a composer opens or closes.
+  // Reflect the open composer's range (or null) into setSelectedLines. This tracks
+  // only `selectedRange`, which stays a stable null throughout a gutter drag, so it
+  // never clobbers the library's own in-drag highlight — it acts only as a composer
+  // opens or closes.
   $effect(() => {
     const range =
       selectedRange == null
@@ -406,12 +404,8 @@
 
   // Fenced-code-block panel decoration (EXC-692). The library paints no per-line
   // code marker, so caret tags the shadow-DOM content rows (data-code-line / -start
-  // / -end) that the panel CSS in coreStyles.ts styles. The rows are library-owned
-  // and repaint (async highlight, fenced-code rehighlight, content updates), so this
-  // mirrors bracket.ts's self-contained-observer shape: tag once, then re-tag on any
-  // shadow-content change, rAF-coalesced. Only childList is observed, and tagging
-  // writes attributes (not nodes), so it can never re-trigger itself. Re-runs when
-  // the ranges change (new content) or the container mounts.
+  // / -end) that the panel CSS in coreStyles.ts styles.
+  //
   // Memoize the ranges on the rendered text so an unchanged poll tick yields the
   // SAME array reference — the parent passes a fresh `doc` literal each render, and
   // without this the observer effect below would re-arm (disconnect + reconnect the
@@ -453,8 +447,7 @@
   // let so the repaint observer's tag() below re-applies the cursor tag after a
   // library row rewrite WITHOUT re-arming the observer on every cursor move —
   // reading a rune there would re-run that effect (and disconnect/reconnect the
-  // MutationObserver) on each j/k. This reactive effect owns applying a move; the
-  // observer's tag() only re-applies the mirror after a repaint.
+  // MutationObserver) on each j/k.
   let cursorMirror: number | null = null;
   $effect(() => {
     cursorMirror = cursorLine;
@@ -518,20 +511,13 @@
     // starts each reference (EXC-687), re-applied on every repaint alongside the
     // code-block tagging so it survives the library's row rewrites.
     const refs = fileRefs;
-    // And the inline-markdown runs (EXC-867), which carry the link chip's own
-    // data-md~="link" tag (EXC-859) alongside the emphasis members. Memoized by the
-    // parent alongside the link layer they come from, so this stays a stable
-    // reference and doesn't re-arm the observer each render.
+    // The other layers are snapshotted the same way. Each is memoized — by the
+    // parent for the ones riding the link layer, above for the ones derived from the
+    // rendered text — so none of them re-arms the observer on every render.
     const inlineSpans = inline;
-    // And the thematic breaks (EXC-862), memoized on the same text.
     const breaks = thematicBreaks;
-    // And the tables (EXC-864), likewise.
     const tables = tableSpans;
-    // And the images (EXC-870), snapshotted the same way. Memoized by the parent
-    // alongside the link layer, so this too stays a stable reference.
     const imageSpans = images;
-    // And the per-line blockquote depths (EXC-863), which ride the row rather
-    // than the runs. Memoized by the parent alongside the same link layer.
     const quotes = quoteDepth;
     let raf = 0;
     // Tag the rows, then wrap each overflowing block in its scroll card (EXC-729). Both re-run
@@ -566,14 +552,12 @@
       // Always run — the clear-stale pass lives inside tagFileRefTokens, so a
       // populated→empty transition still drops the prior icons.
       tagFileRefTokens(root, refs ?? EMPTY_FILE_REFS);
-      // Draw the plan's images onto their rows (EXC-870). Ordered last because
-      // it is the only pass here that ADDS a node rather than tagging or
-      // splitting one — not because the token passes above would break on it.
-      // They walk a row through tokenChildren accumulating text length, and an
-      // appended <img> holds no characters at the end of the line, so either
-      // order is safe. Idempotent, so a settled row costs one comparison rather
-      // than an observer loop, and always run so a populated→empty transition
-      // clears the prior images.
+      // Draw the plan's images onto their rows (EXC-870). Ordered last as the only
+      // pass here that ADDS a node rather than tagging or splitting one; the token
+      // passes above are indifferent either way, since an appended <img> holds no
+      // characters at the end of the line. Idempotent, so a settled row costs one
+      // comparison rather than an observer loop, and always run so a
+      // populated→empty transition clears the prior images.
       syncInlineImages(root, imageSpans ?? EMPTY_IMAGES);
       // Re-apply the cursor tag after a repaint from the non-reactive mirror
       // (the reactive effect above owns applying a move).

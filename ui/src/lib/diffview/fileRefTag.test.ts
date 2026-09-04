@@ -76,8 +76,8 @@ test("does not tag a coarse token that starts at the reference but runs past it"
 
 // EXC-918: the daemon says what a reference resolved to, and the tag carries it
 // so the override sheet can draw a folder glyph instead of a file one. A file
-// keeps the valueless attribute it has always had, so its markup is unchanged
-// and every `[data-file-ref]` selector still matches both kinds.
+// keeps the valueless attribute, so every `[data-file-ref]` selector still
+// matches both kinds.
 test("tags a directory reference with the directory kind", () => {
   host = root(row(1, ["open ", "src/lib", " next"]));
   tagFileRefTokens(

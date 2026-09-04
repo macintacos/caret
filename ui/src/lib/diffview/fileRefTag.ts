@@ -68,8 +68,7 @@ export function refTokenAt(rowEl: Element, startCol: number, endCol: number): HT
 // The kind rides on the attribute's VALUE rather than a second attribute, so
 // `[data-file-ref]` — which every selector, hit-test and e2e probe already uses
 // — keeps matching both kinds, and only the one rule that swaps the glyph names
-// a value (coreStyles.ts). A file keeps the valueless attribute it has always
-// had, so its markup is byte-identical to before kinds existed. The mapping
+// a value (coreStyles.ts). A file keeps the valueless attribute. The mapping
 // lives here, in one place, rather than at the call site.
 function tagTokenAt(
   rowEl: Element,

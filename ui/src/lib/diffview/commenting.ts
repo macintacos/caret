@@ -189,8 +189,8 @@ export function createSourceCommenting(deps: SourceCommentingDeps): SourceCommen
     submit(text) {
       if (open == null) return;
       const comment = text.trim();
-      // Either outcome drops the scratch: a successful submit graduates it to an
-      // annotation, and an empty submit means the reviewer cleared the box.
+      // Either outcome drops the scratch: a submit graduates it to an annotation,
+      // an empty one means the reviewer cleared the box.
       if (store.delete(scratchKey(open.startLine, open.endLine))) rebuildSnapshot();
       // Empty submit is a cancel — never persist a blank annotation.
       if (comment === "") {

@@ -63,9 +63,8 @@ describe("selectionText", () => {
     expect(selectionText(selectionOver(host, one, two))).toBe("first\nsecond");
   });
 
-  // The whole reason this module outlived the tables it was written for. The row holds
-  // only a `<br>`, so nothing in it is reachable by a text walk — it is the ROW that has
-  // to register, which is why the walk visits elements as well.
+  // The row holds only a `<br>`, so nothing in it is reachable by a text walk — it is
+  // the ROW that has to register, which is why the walk visits elements as well.
   test("keeps the blank line between two paragraphs", () => {
     const [one, blank, two] = [row(1, "first"), blankRow(2), row(3, "second")];
     const host = content(one, blank, two);

@@ -100,17 +100,15 @@ function tooltipMount(tokenElement: HTMLElement): ParentNode {
 }
 
 /** Reveals the hover tooltip: a caret-surface bubble carrying the full target —
- * a link's href, or a file reference's path when its label hides it —
- * mounted in the token's root (the diffview shadow root) so it renders on
- * caret's surface inside the same tree as the code. Its colors come from the
- * host-level --diffs-link-tooltip-* bridge vars (declared once on the .diffview
- * rule in app.css), which inherit through the shadow boundary; its geometry and
- * type borrow caret's FND/type-scale tokens, which inherit the same way. The
- * reveal is motionless — no transition is set here. That is the integration
- * point for the motion tokens (--dur-micro / --ease-out), a deliberate follow-up.
+ * a link's href, or a file reference's path when its label hides it — mounted in
+ * the token's root (the diffview shadow root) so it renders inside the same tree
+ * as the code. Its colors come from the host-level --diffs-link-tooltip-* bridge
+ * vars (declared once on the .diffview rule in app.css), which inherit through the
+ * shadow boundary, as its FND/type-scale tokens do.
  *
- * The bubble does not reposition on scroll (no scroll listener is added);
- * dismissal relies on hideTooltip from onTokenLeave. */
+ * The reveal is motionless — wiring the motion tokens (--dur-micro / --ease-out)
+ * is a deliberate follow-up. The bubble does not reposition on scroll (no scroll
+ * listener is added); dismissal relies on hideTooltip from onTokenLeave. */
 function showTooltip(tokenElement: HTMLElement, href: string): void {
   const mount = tooltipMount(tokenElement);
   hideTooltip(tokenElement);
@@ -242,20 +240,13 @@ export function createLinkHandlers(spanMap: LinkSpanMap, deps: LinkHandlerDeps):
 
 /**
  * Builds the single token-handler object a source view hands @pierre/diffs.
- * This is the one home for token-affordance composition: the library wires
- * exactly one onTokenEnter/onTokenLeave/onTokenClick, so a future per-token
- * affordance adds its enter/leave/click here, not in the view.
  *
  * Two affordances compose here today: the link layer (click opens the URL, hover
  * shows the tooltip) and the file-reference layer (click opens the excerpt
  * popover — see EXC-687/EXC-840; its highlight is CSS-only in the override
  * sheet, and enter/leave only show the tooltip for a reference whose display
- * text hides its path — a prose-labelled link, EXC-954). onTokenClick records
- * the event when a click lands on either a link span or a file reference; that
- * recorded event drives wasLinkClick, which a view's row-click handler reads to
- * stand down: the library fires this layer's onTokenClick before onLineClick
- * for the same event, so a clicked link opens (or a clicked reference previews)
- * and the line it sits on does not also open a comment composer.
+ * text hides its path — a prose-labelled link, EXC-954). onTokenClick records the
+ * event when a click lands on either, which is what wasLinkClick reports.
  *
  * Returns undefined when neither layer is present — a read-only view then wires
  * no token handlers at all and the library renders plain.

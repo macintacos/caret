@@ -88,8 +88,6 @@ const firstRectReader: RectReader = (el) => {
  * Bring `current` up to date and pick anchors for any requested kind that has
  * none yet. The one entry point the view drives.
  *
- * Two jobs, and both have to keep happening rather than being done once:
- *
  * Coordinates are RE-DERIVED, never stored and trusted. They are content
  * coordinates, so scrolling alone cannot invalidate them — but anything above the
  * token changing height does, and plenty does after first paint: a web font
@@ -97,9 +95,9 @@ const firstRectReader: RectReader = (el) => {
  * into its own card. A badge placed once then left alone drifts off its token by
  * however much the content above it settled.
  *
- * And a kind with no anchor yet keeps being looked for. The pick only ever
- * anchors to a reference ON SCREEN, so the file and the directory reference are
- * rarely both in view at the same moment — placing whichever arrives first and
+ * A kind with no anchor yet keeps being looked for, because the pick only ever
+ * anchors to a reference ON SCREEN: the file and the directory reference are
+ * rarely both in view at the same moment, so placing whichever arrives first and
  * stopping would leave the other kind untaught for the whole session.
  *
  * What is decided once and never revisited is WHICH reference a kind teaches on:

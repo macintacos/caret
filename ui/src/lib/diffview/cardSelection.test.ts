@@ -8,9 +8,10 @@ import { TABLE_CARD_ATTR, TABLE_GUTTER_CARD_ATTR } from "$lib/diffview/tables.ts
 
 // paintCardSelection re-applies the library's own [data-selected-line] marks to the
 // rows a card hides from it. @pierre/diffs' renderSelection walks [data-content]'s
-// DIRECT children and skips anything with no line index, so a card is skipped whole and every row inside it goes unbanded (EXC-865). What is asserted
-// here is the attribute vocabulary and the write discipline; that the band then
-// PAINTS is layout, and lives in test/e2e/diff-surface.e2e.ts.
+// DIRECT children and skips anything with no line index, so a card is skipped whole
+// and every row inside it goes unbanded (EXC-865). What is asserted here is the
+// attribute vocabulary and the write discipline; that the band then PAINTS is
+// layout, and lives in test/e2e/diff-surface.e2e.ts.
 
 /** The library's grid for `total` lines, with `carded` (1-based, inclusive) moved into
  * a card and mirrored into the gutter — the shape codeBlockScroll.ts leaves behind,

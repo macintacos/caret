@@ -8,17 +8,15 @@
 // WHAT MARKS A COLLAPSED LABEL. A path-shaped target specific enough to cite
 // (isCitablePath) emits a FileRefSpan over the label (EXC-954, EXC-956), which
 // the view merges with fileRefs.ts's display-text scan and decorates as a
-// reference.
-// Emission belongs here because fileRefs.ts reads *display* text: once the link
-// collapses, its target is gone and only this layer still knows where the label
-// landed. Any other collapsed label takes a `link` run instead, which EXC-859
-// renders as a chip. A collapsed label whose target does not resolve reads as
-// prose with no visible path — the reason the citable gate is narrow even though
-// the collapse is not.
+// reference. Emission belongs here because fileRefs.ts reads *display* text:
+// once the link collapses, its target is gone and only this layer still knows
+// where the label landed. Any other collapsed label takes a `link` run instead,
+// which EXC-859 renders as a chip. A collapsed label whose target does not
+// resolve reads as prose with no visible path — the reason the citable gate is
+// narrow even though the collapse is not.
 //
-// A FileRefSpan says only where a path was cited, never what it is. A file and a
-// directory emit the identical shape, and the daemon's resolve (EXC-916) is what
-// later decides which glyph the token draws and which surface a click opens.
+// A FileRefSpan says only where a path was cited, never what it is; the daemon's
+// resolve (EXC-916) is what decides file or directory.
 //
 // IMAGES are the exception to the collapse (EXC-870). Only an `http`/`https`
 // target draws — the same isSafeUrl gate the links above use — and every image,
@@ -27,12 +25,10 @@
 // form `![alt](url "title")` matches nothing here at all, because the target
 // grammar allows no space.
 //
-// An image emits NO FileRefSpan, even when its target is a citable path. That is
-// a deliberate loss: before EXC-870 `![d](doc/arch.svg)` collapsed to `!d` and
-// took the reference glyph, so a click opened the excerpt preview — a surface
-// that renders TEXT, and therefore could only ever show an image file as bytes.
-// What replaces it is strictly more information: the path is now visible in the
-// row rather than hidden behind a label.
+// An image emits NO FileRefSpan, even when its target is a citable path: the
+// glyph's click opens the excerpt preview, a surface that renders TEXT and could
+// only ever show an image file as bytes (EXC-870). The path stays visible in the
+// row instead of hiding behind a label.
 
 import { hasKnownFileExtension } from "@core/config/constants";
 import { classify, type FileRefSpan, type FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
@@ -132,10 +128,10 @@ const PATH_TARGET = /^[A-Za-z0-9._/~@-]+$/;
 
 // A scheme-less URL: `github.com/macintacos/caret`. A first segment carrying a
 // dot and followed by more path names a host, not a directory in the review's
-// cwd — and collapsing one is the costliest mistake this layer can make, since
-// the destination survives nowhere: not in the display text, and not in the
-// tooltip either, which only a resolved reference gets. A leading dot
-// (`.github/workflows/`) is not a host, and neither is a dotless first segment.
+// cwd — and collapsing one loses the destination outright: it survives neither in
+// the display text nor in the tooltip, which only a resolved reference gets. A
+// leading dot (`.github/workflows/`) is not a host, and neither is a dotless
+// first segment.
 const HOSTLIKE = /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+\//;
 
 // A target the daemon refuses by construction: `~` is never expanded, and `../`
@@ -178,9 +174,9 @@ function overlaps(ranges: Range[], start: number, end: number): boolean {
 // Whether a path-shaped target is specific enough to cite as a reference. Three
 // narrowings sit on top of classify's shared gate, and they decide only whether a
 // FileRefSpan is emitted — never whether the link collapses, which every safe
-// link does. A target that fails here keeps its label under a `link` run, so the
-// markup it lost is still marked; what it does not get is a glyph, a preview or
-// a resolve request against something that is not a citation.
+// link does. A target that fails here keeps its label under a `link` run: no
+// glyph, no preview, no resolve request against something that is not a
+// citation.
 //
 // PATH_TARGET is the first: a fragment or query makes a target a URL slot however
 // its head reads, so `doc/guide.md#setup` names an anchor rather than a file.
@@ -189,10 +185,9 @@ function overlaps(ranges: Range[], start: number, end: number): boolean {
 // extension. A bare `guide` is a word, not a citation.
 //
 // None of them reads the trailing slash, which is why it comes off before the
-// specificity test — `src` and `src/` name one thing, so they take one branch, and
-// whether that thing is a file or a directory is the daemon's answer to give
-// (EXC-916) rather than this layer's to guess. The path itself keeps the slash,
-// since the resolve response is keyed by the string that was requested.
+// specificity test — `src` and `src/` name one thing, and which of file or
+// directory it is stays the daemon's answer to give (EXC-916). The path itself
+// keeps the slash, since the resolve response is keyed by the string requested.
 function isCitablePath(path: string): boolean {
   if (!PATH_TARGET.test(path) || UNRESOLVABLE.test(path)) return false;
   const bare = path.replace(/\/+$/, "");
@@ -209,9 +204,8 @@ function isCitablePath(path: string): boolean {
  * `[x.ts:10](y.ts)` never frames line 10 in y.ts — and one that merely mentions
  * the path in passing is prose rather than a citation, which is what reading the
  * WHOLE label through `classify` tests: anything around the path leaves a path
- * that no longer matches. That narrowing is the same one mergeFileRefSpans
- * applies to a backticked label; the two layers reach different shapes and agree
- * on the rule. */
+ * that no longer matches. The same narrowing mergeFileRefSpans applies to a
+ * backticked label. */
 function labelCitation(label: string, path: string): { line?: number; endLine?: number } {
   const cited = classify(
     label
@@ -251,10 +245,10 @@ function transformLine(
   const inMaskedCode = (start: number, end: number) =>
     codeRanges.some((r) => start >= r.start && end <= r.end);
 
-  // Collect rewrites as {sourceStart, sourceEnd, display, href}. After
-  // collecting, we rebuild the line left-to-right, tracking display columns so
-  // each span lands at the right place in the *display* text. A rewrite carrying
-  // `file` is a path-target link: it emits a file reference instead of a span.
+  // Collected first, then applied left to right while tracking display columns,
+  // so each span lands at the right place in the *display* text. A rewrite
+  // carrying `file` is a path-target link: it emits a file reference instead of a
+  // span.
   type Rewrite = {
     start: number;
     end: number;
@@ -274,16 +268,14 @@ function transformLine(
     const url = m[2] ?? "";
     // An `!` in front makes this an IMAGE, and an image is the one shape here
     // that keeps its markup: nothing collapses, so display columns stay source
-    // columns and what the reader copies is the real `![alt](url)`. Not
-    // collapsing is also what stops the `!` from being stranded outside a
-    // rewritten label. The rewrite is recorded anyway, with its display text
-    // equal to its source text, because that is what marks the shape consumed —
-    // without it the bare-URL pass would make the target inside the parens
-    // separately clickable — and because a rewrite carrying neither an href nor
-    // a file reference is exactly what the emission loop turns into a `link` run.
-    // A safe target additionally draws the picture (inlineImages.ts); an unsafe
-    // one draws nothing and keeps only the chip, which is the same rung a load
-    // failure lands on.
+    // columns, what the reader copies is the real `![alt](url)`, and the `!` is
+    // never stranded outside a rewritten label. The rewrite is recorded anyway
+    // because that is what marks the shape consumed — without it the bare-URL
+    // pass would make the target inside the parens separately clickable — and
+    // because a rewrite carrying neither an href nor a file reference is what the
+    // emission loop turns into a `link` run. A safe target additionally draws the
+    // picture (inlineImages.ts); an unsafe one keeps only the chip, the same rung
+    // a load failure lands on.
     if (source[start - 1] === "!") {
       const imageStart = start - 1;
       rewrites.push({
@@ -361,10 +353,10 @@ function transformLine(
   const images: ImageSpan[] = [];
   // Every display range a rewrite produced, whichever layer went on to claim it.
   // The blockquote scan needs the whole set where the link layer needs only its
-  // own share, and the difference is not academic: `[> a.ts](a.ts)` collapses to
-  // `> a.ts` exactly as `[> x](url)` collapses to `> x`, but only the second ever
-  // reaches linkRanges. Read as a quote marker, the first would put data-md-quote
-  // and data-file-ref on one element and land two ::before rules on one box.
+  // own share: `[> a.ts](a.ts)` collapses to `> a.ts` exactly as `[> x](url)`
+  // collapses to `> x`, but only the second ever reaches linkRanges. Read as a
+  // quote marker, the first would put data-md-quote and data-file-ref on one
+  // element and land two ::before rules on one box.
   const labelRanges: ColumnRange[] = [];
   for (const rw of rewrites) {
     display += source.slice(cursor, rw.start);
@@ -381,9 +373,8 @@ function transformLine(
       // decoration pass's doing (inlineDecorate.ts): it cuts each row at the
       // reference's own columns before tagFileRefTokens runs, so a bare-path or
       // prose label gets an element bounded by the reference exactly as a
-      // backticked one does. Before that cut existed a collapsed prose label was
-      // one coarse run and tagTokenAt refused it, since the glyph and its hover
-      // chip would have wrapped the whole sentence (EXC-867).
+      // backticked one does — without the cut the glyph and its hover chip would
+      // wrap the whole sentence (EXC-867).
       //
       // The target rides along only when the label hides it. Testing the raw
       // target, not the path, is what keeps `[a/b.md](a/b.md:42)` — whose label

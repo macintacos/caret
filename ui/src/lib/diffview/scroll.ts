@@ -34,12 +34,11 @@ export const FOLLOW_ANIM_MS = 120;
  * so it is directly unit-testable, like followScrollDelta and revealScrollDelta.
  *
  * quadOut decelerates into the target, and the CHOICE OF EXPONENT is the whole
- * design of this animation. --ease-out's curve is quintic-feeling and cubicOut is
- * a step below it; both spend their last frames moving less than a pixel, so the
- * deceleration is real in the maths and invisible on screen — the scroll reads as
- * a fast slide that simply stops. quadOut keeps the final frames moving in
- * perceptible steps, so the view is seen coming to rest. Clamped at both ends, so
- * an early or overrun frame cannot overshoot.
+ * design here: --ease-out's quintic-feeling curve and cubicOut both spend their
+ * last frames moving less than a pixel, so the deceleration is real in the maths
+ * and invisible on screen. quadOut keeps the final frames moving in perceptible
+ * steps, so the view is seen coming to rest. Clamped at both ends, so an early or
+ * overrun frame cannot overshoot.
  */
 export function scrollTweenTop(g: {
   from: number;
@@ -71,9 +70,8 @@ function nearestScrollParent(el: HTMLElement): HTMLElement | undefined {
 
 // The JS-side mirror of app.css's global reduced-motion rule. The CSS guard
 // neutralizes animations and transitions, but scroll position is a JS property no
-// stylesheet can drive from here, so every scroll in this file — the shared tween
-// behind the jump and the follow, the no-scroller fallback, and the composer
-// reveal — reads this directly to fall back to an instant move under the preference.
+// stylesheet can drive from here, so every scroll in this file reads this directly
+// to fall back to an instant move under the preference.
 function prefersReducedMotion(): boolean {
   return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
@@ -105,8 +103,7 @@ let jumpFrame: number | undefined;
  * mover: revealCard's smooth scrollBy advances by less than SCROLL_TAKEOVER_SLOP
  * per frame, so a composer reveal landing inside a flight is overwritten rather
  * than yielded to. Narrow (a line click within one flight of a scroll) and left
- * alone deliberately — routing revealCard through this driver is the real fix and
- * is its own change. */
+ * alone deliberately — routing revealCard through this driver is the real fix. */
 function animateScrollTop(scroller: HTMLElement, top: number, duration: number): void {
   if (jumpFrame !== undefined) cancelAnimationFrame(jumpFrame);
   jumpFrame = undefined;
@@ -251,10 +248,9 @@ export function followScrollDelta(g: {
  * it scrolls by the exact overshoot and only once the cursor reaches the margin,
  * so a held `j`/`k` scrolls the view one row at a time and the cursor never
  * leaves the screen. Animated over FOLLOW_ANIM_MS through the same driver and
- * curve as the jump — WHERE the two land still differs, but how they get there no
- * longer does. A held key retargets the flight rather than restarting it, so the
- * steps read as one continuous glide instead of a stack of hops. Returns whether a
- * matching row was found.
+ * curve as the jump; only where the two land differs. A held key retargets the
+ * flight rather than restarting it, so the steps read as one continuous glide
+ * instead of a stack of hops. Returns whether a matching row was found.
  */
 export function followCursorLine(container: HTMLElement, line: number): boolean {
   const row = container.shadowRoot?.querySelector<HTMLElement>(`[data-line="${line}"]`);
