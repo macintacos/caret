@@ -177,10 +177,11 @@ export function approvedMessage(notes?: string): string {
 /** Tool result returned to the agent on a change request: the reviewer feedback
  * and a resubmit instruction. The plan itself is NOT echoed — the agent already has
  * it in its own `caret_review_plan` tool-call args. A feedback line reference
- * indexes the plan version caret stored, rumdl-reflowed to 90 columns at ingest
- * (src/plan/markdown.ts); the abbreviated quote paired with it is what the agent
- * matches against its own text, because on this path there is no plan file to mirror
- * the numbers back to. (Pinned across its three surfaces by
+ * indexes the plan version caret stored, and the abbreviated quote paired with it is
+ * what the agent matches against its own text. That stored version is rumdl-reflowed to
+ * 90 columns at ingest (src/plan/markdown.ts) and this path has no plan file to mirror
+ * the numbers back to, so they need not line up with the agent's own copy at all.
+ * (Pinned across its three surfaces by
  * test/structure/line-anchor-claim.test.ts.) */
 export function deniedMessage(feedback: string): string {
   return [

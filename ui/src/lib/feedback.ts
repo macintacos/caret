@@ -5,8 +5,9 @@
 // and last few words around an ellipsis — so the agent can locate the feedback by
 // content without the full selection's token cost. A legacy annotation cites it
 // inline; a line-anchored annotation pairs it with the annotation's 1-based line
-// reference. That reference indexes the plan version caret stored, so the quote paired
-// with it is what lets the agent locate the feedback when its own numbering differs.
+// reference. A feedback line reference indexes the plan version caret stored, and the
+// abbreviated quote paired with it is what the agent matches against its own text. So it
+// finds the feedback even when its own line numbering differs.
 // (Pinned across its three surfaces by test/structure/line-anchor-claim.test.ts.)
 
 import {
