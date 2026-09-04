@@ -30,7 +30,7 @@ export const MIN_LOG_MAX_SIZE = 64 * 1024;
  * threshold fails in the one direction that matters: past Buffer's max length
  * the read throws, the swallow catches it, and the log never rotates again —
  * the unbounded growth this exists to prevent, wearing a config knob that looks
- * like it is working. Bounded for the same reason MAX_HEARTBEAT_MS is. */
+ * like it is working. */
 export const MAX_LOG_MAX_SIZE = 256 * 1024 * 1024;
 
 /** The vanity host the hook opens the review UI under (EXC-426). Resolves to
@@ -54,11 +54,9 @@ export const PLAN_REJECTED_MESSAGE =
 /** The PermissionRequest hook's `timeout` budget (seconds) declared in
  * `hooks/hooks.json` (EXC-531). The review-timeout ceiling (`TimeoutS` in
  * settings.ts) is a strict `.lt(...)` of this, so caret's own fail-safe deny
- * always emits before Claude Code can kill the hook. Named once here — the
- * single source the schema bound and the coupling test
- * (test/adapters/claude/hooks-timeout) both reference — so the two numbers can't
- * drift into the dangerous direction
- * (hook killed before the deny ships). */
+ * always emits before Claude Code can kill the hook. Named once here so the two
+ * can't drift into the dangerous direction — hook killed before the deny ships
+ * (coupling test: test/adapters/claude/hooks-timeout). */
 export const HOOK_TIMEOUT_S = 3900;
 
 /** Lines of context on each side of a referenced `:line` — the ± window the
@@ -71,10 +69,9 @@ export const EXCERPT_RADIUS = 30;
 /** Most cited lines an opening file preview fetches at once. Every other excerpt
  * request is bounded by geometry — a ±radius window, a head window, or a chunk
  * sized off the viewport — but a `path:start-end` reference is sized by whatever
- * the plan wrote, and the panel highlights and mounts the opening window whole
- * before it has a row height to window by. A longer citation opens parked at its
- * first line and the rest arrives through the panel's own scroll-driven growth,
- * which is what the reader would do with it anyway. */
+ * the plan wrote, and the panel mounts the opening window whole before it has a
+ * row height to window by. A longer citation opens parked at its first line and
+ * grows through the panel's own scrolling. */
 export const MAX_CITED_SPAN_LINES = 200;
 
 // File extensions a plan's prose is likely to cite. Neither runtime uses this to
@@ -160,14 +157,14 @@ export const NEVER_IDLE_MS = 2147483647;
 // caret's transport stays polling: the daemon long-polls the hook's /decision
 // request and returns a 204 heartbeat after `heartbeatMs`, well before any
 // socket idle timeout can close the connection mid-wait. The invariant the
-// connection depends on is `idleTimeout > heartbeat`. The WebSocket/SSE
-// migration is deliberately DEFERRED (EXC-527): Bun's WebSocket idle is
-// hard-capped at 255s and `sendPings` does not reliably reset idle (a WS still
-// needs app-level heartbeats), so a rewrite relocates rather than removes this
-// timing — for a marginal latency win on a single-user laptop tool and the
-// highest regression risk in the audit. Instead the invariant holds by
+// connection depends on is `idleTimeout > heartbeat`, and it holds by
 // construction: idleTimeout is derived from the heartbeat, and the heartbeat is
 // bounded so the derivation can never breach Bun's cap.
+//
+// The WebSocket/SSE migration is deliberately DEFERRED (EXC-527): Bun's
+// WebSocket idle is hard-capped at 255s and `sendPings` does not reliably reset
+// idle (a WS still needs app-level heartbeats), so a rewrite relocates rather
+// than removes this timing.
 
 /** Bun's hard cap on a server socket's `idleTimeout` (seconds). A larger value
  * passed to `Bun.serve` is silently clamped to this, so the derived idleTimeout

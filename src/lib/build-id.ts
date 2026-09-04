@@ -14,9 +14,8 @@ import { loadUiAssets, type UiAssets } from "@/ui/assets.ts";
 import pkg from "../../package.json" with { type: "json" };
 
 /** The shipped version, read from package.json (one of the release-synced
- * manifests) at build time so it stays honest across releases. Hardcoding it was
- * a root cause of EXC-406: the daemon reported a stale "0.0.1" that could never
- * signal an upgrade. */
+ * manifests) at build time so it stays honest across releases. Never hardcode
+ * it — a stale version can never signal an upgrade (EXC-406). */
 export const VERSION = pkg.version;
 
 /** Identity signature returned by GET /api/health, used to detect a foreign
@@ -29,8 +28,7 @@ export const IDENTITY = { service: "caret", version: VERSION } as const;
  *              execPath is the shared `bun`, argv[1] is the bundled `.js`.
  *  - "binary": a self-contained compiled binary — execPath IS caret and argv[1]
  *              is a subcommand, never a script.
- * The daemon self-spawn vector (does the script path need re-passing?) and the
- * build fingerprint (which file identifies the build?) key off this; the
+ * The daemon self-spawn vector and the build fingerprint key off this; the
  * production-vs-dev signal below collapses "bundle" and "binary" together. */
 export function buildKind(argv1: string | undefined = process.argv[1]): BuildKind {
   if (argv1?.endsWith(".ts")) return "dev";

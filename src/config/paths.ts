@@ -1,8 +1,8 @@
 // State/config directory and file-path resolution. Every path under caret's two
 // XDG roots is resolved here, lazily, so tests can override XDG_STATE_HOME /
 // XDG_CONFIG_HOME per-case. (The CARET_* tunables and their accessors live in
-// src/config/settings.ts since EXC-430; daemon identity/build fingerprinting lives in
-// src/lib/build-id.ts.)
+// src/config/settings.ts (EXC-430); daemon identity/build fingerprinting lives
+// in src/lib/build-id.ts.)
 
 import { chmodSync, existsSync, mkdirSync, renameSync } from "node:fs";
 import { homedir } from "node:os";
@@ -15,8 +15,7 @@ function xdgDir(envVar: string, fallback: string): string {
   return `${base}/caret`;
 }
 
-/** Root state dir: $XDG_STATE_HOME/caret or ~/.local/state/caret. Read lazily
- * so tests can override XDG_STATE_HOME per-case. */
+/** Root state dir: $XDG_STATE_HOME/caret or ~/.local/state/caret. */
 export function stateDir(): string {
   return xdgDir("XDG_STATE_HOME", ".local/state");
 }
@@ -43,19 +42,19 @@ export function rumdlConfig(): string {
   return `${rumdlDir()}/rumdl.toml`;
 }
 
-/** Root config dir: $XDG_CONFIG_HOME/caret or ~/.config/caret. Read lazily so
- * tests can override XDG_CONFIG_HOME per-case. Separate from stateDir(), which
- * `mise run dev` isolates and wipes; which file inside this dir is read is
- * configFile()'s call — dev points CARET_CONFIG_FILE at config.dev.toml. */
+/** Root config dir: $XDG_CONFIG_HOME/caret or ~/.config/caret. Separate from
+ * stateDir(), which `mise run dev` isolates and wipes; which file inside this dir
+ * is read is configFile()'s call — dev points CARET_CONFIG_FILE at
+ * config.dev.toml. */
 export function configDir(): string {
   return xdgDir("XDG_CONFIG_HOME", ".config");
 }
 
-/** User-editable settings file (see src/config/settings.ts). Single source of truth
- * for the path. CARET_CONFIG_FILE overrides it outright — the dev task points that
- * at config.dev.toml (and, under --fresh, at a nonexistent path so loadSettings
- * falls back to defaults), keeping `mise run dev` fully isolated from the
- * production config. A blank value counts as unset. */
+/** User-editable settings file (see src/config/settings.ts). CARET_CONFIG_FILE
+ * overrides it outright — the dev task points that at config.dev.toml (and, under
+ * --fresh, at a nonexistent path so loadSettings falls back to defaults), keeping
+ * `mise run dev` fully isolated from the production config. A blank value counts
+ * as unset. */
 export function configFile(): string {
   return process.env.CARET_CONFIG_FILE || `${configDir()}/config.toml`;
 }
@@ -96,8 +95,7 @@ export function logArchiveDir(): string {
 }
 
 /** Leveled NDJSON log for the short-lived `caret review` hook process (info
- * default; see log.ts). Single source of truth for the path, shared by the
- * writer and `/caret:debug`. */
+ * default; see log.ts), shared by the writer and `/caret:debug`. */
 export function logFile(): string {
   return `${logsDir()}/caret.log`;
 }
@@ -116,8 +114,8 @@ export function daemonStderrLogFile(): string {
 }
 
 /** Single-instance lock file: written atomically on daemon bind and removed on
- * every exit path. Holds { pid, port, build, version, startedAt } so a newer
- * caret can discover and gracefully retire an older one (EXC-406). */
+ * every exit path. Holds a DaemonLock record so a newer caret can discover and
+ * gracefully retire an older one (EXC-406). */
 export function daemonLock(): string {
   return `${stateDir()}/daemon.lock`;
 }

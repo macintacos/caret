@@ -14,10 +14,7 @@
 //
 // The residual trade is the standard logrotate copy-truncate posture: the
 // truncate is one syscall after the read, so the window in which a concurrent
-// writer's record can be discarded unarchived is microseconds. Everything that
-// can fail earlier — claiming the lock, creating the archive dir — happens
-// BEFORE the read, so the common failures are clean no-ops rather than a log
-// emptied into nothing.
+// writer's record can be discarded unarchived is microseconds.
 //
 // Like the logging module it serves, this never throws.
 

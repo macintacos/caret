@@ -6,7 +6,7 @@
 // the UI side); this module adds the node-only string scrub (home paths) and
 // the NDJSON file round-trips.
 //
-// pino's own `redact` option was reviewed and rejected: fast-redact censors
+// pino's own `redact` option is deliberately unused: fast-redact censors
 // whole values at enumerated key paths only — it cannot rewrite substrings
 // inside err.stack/msg (the primary leak), cannot cover unbounded cause-chain
 // depth without path enumeration, is fixed at logger construction so it can't

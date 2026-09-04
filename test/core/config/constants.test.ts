@@ -9,7 +9,7 @@ import {
 } from "@/config/constants.ts";
 import { DEFAULTS } from "@/config/settings.ts";
 
-// The falsifiable invariant the transport audit asks for (EXC-533): the
+// The falsifiable invariant behind the transport timing (EXC-533): the
 // Bun.serve socket idleTimeout, derived from the resolved heartbeat, must always
 // sit strictly above the heartbeat window AND at or below Bun's 255s hard cap —
 // across the whole configurable heartbeat range (min, default, max allowed). If

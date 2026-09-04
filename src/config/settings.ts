@@ -43,18 +43,16 @@ export { DEFAULT_PORT };
 
 // Per-key sub-schemas for the EXC-430 tunables, shared by the config-file
 // tables below and the CARET_* env layer (envValue/invalidEnvVars) so "falls
-// back" and "flagged invalid" can never disagree. Bounds preserve the bespoke
-// predicates that lived in paths.ts. (`int()` is a JS-number check, so a TOML
-// `42718.0` parses to 42718 and passes — there is no int/float distinction.)
+// back" and "flagged invalid" can never disagree. (`int()` is a JS-number check,
+// so a TOML `42718.0` parses to 42718 and passes — there is no int/float
+// distinction.)
 const Port = z.number().int().positive();
 const TimeoutS = z.number().positive().lt(HOOK_TIMEOUT_S); // seconds, strictly below the hooks.json hook budget
 const IdleMs = z.number().int().nonnegative();
 // Upper-bounded (EXC-533): the Bun.serve idleTimeout is derived from the resolved
 // heartbeat (deriveIdleTimeoutSec), and this `.lt(MAX_HEARTBEAT_MS)` keeps that
-// derivation under Bun's 255s socket cap while preserving headroom — so the
-// `idleTimeout > heartbeat` invariant holds by construction. An out-of-range
-// CARET_HEARTBEAT_MS / [daemon].heartbeat_ms falls back like any other invalid
-// value (classifyEnv → null → file/default; safeParse → whole-file revert).
+// derivation under Bun's 255s socket cap while preserving the
+// `idleTimeout > heartbeat` invariant.
 const HeartbeatMs = z.number().int().positive().lt(MAX_HEARTBEAT_MS);
 // EXC-1068: rotation knobs. Floored (not merely positive) so a near-zero
 // max_size can't turn every emit into a read-truncate-gzip cycle; keep is
@@ -65,11 +63,7 @@ const LogKeep = z.number().int().nonnegative();
 // EXC-558: dev-only settings ([dev]). Consumed ONLY by dev tooling
 // (scripts/tasks/dev/*, .mise/tasks/dev), which runs from source under bun;
 // production code never reads [dev], and a prod build resolves it to inert
-// defaults regardless of config.toml (the gate in parseAndValidate). The
-// CARET_DEV_* env vars fold in as overrides via the devPort/devStateDir/
-// devSeeder accessors below — same env > config > default shape as the EXC-430
-// accessors, but kept out of ENV_VARS/invalidEnvVars so a prod boot never warns
-// about dev vars.
+// defaults regardless of config.toml (the gate in parseAndValidate).
 const DevIntervalMs = z.number().int().positive();
 const Dev = z
   .object({
@@ -140,8 +134,7 @@ function logValidationFailure(err: z.ZodError): void {
 }
 
 /** Parse + validate TOML text; null means "unusable" (malformed or invalid)
- * and the caller decides the fallback. Invalid values fall back at whole-file
- * granularity: one bad key reverts the entire file until it is fixed. */
+ * and the caller decides the fallback. */
 function parseAndValidate(text: string, isCompiled: boolean): Settings | null {
   let raw: unknown;
   try {
@@ -212,7 +205,7 @@ export function createSettings(
       // Advance the signature even on failure so a static bad file isn't
       // re-parsed (and re-logged) on every get; a later edit re-triggers.
       lastSig = { mtimeMs: st.mtimeMs, size: st.size };
-      if (next !== null) lastGood = next; // parse into a temp, swap on success
+      if (next !== null) lastGood = next;
       return lastGood;
     },
   };
@@ -303,11 +296,10 @@ function classifyEnv(
   return schema.safeParse(n).success ? n : null;
 }
 
-/** Per-name memo of the last raw string and the classification it yielded.
- * process.env is effectively immutable for a process's lifetime, so an unchanged
- * raw value reuses the prior Number()/safeParse work; a changed value (the
- * per-test env swaps, a hot config) re-resolves. Keyed on the raw string, so the
- * accessors stay a live read of process.env without re-parsing on every call. */
+/** Per-name memo of the last raw string and the classification it yielded. Keyed
+ * on the raw string, so the accessors stay a live read of process.env: an
+ * unchanged value reuses the prior Number()/safeParse work, a changed one (the
+ * per-test env swaps) re-resolves. */
 const envCache = new Map<
   string,
   { raw: string | undefined; resolved: number | null | undefined }
@@ -316,9 +308,7 @@ const envCache = new Map<
 /** Tri-state read of a CARET_* var through its sub-schema (see classifyEnv): a
  * number when set and valid; null when set but unusable (flagged by
  * invalidEnvVars; `??` in the accessors falls through to file, then default);
- * undefined when unset or blank. One classifier serving both the accessors and
- * invalidEnvVars is what keeps "falls back" and "flagged invalid" from ever
- * disagreeing. */
+ * undefined when unset or blank. */
 function envValue(name: string, schema: z.ZodType<number>): number | null | undefined {
   const raw = process.env[name];
   const memo = envCache.get(name);
@@ -339,9 +329,7 @@ export function invalidEnvVars(): string[] {
  * each with its raw string value — or a null value when set-but-invalid (the
  * accessor ignores it, falling through to the file value, then the default). An
  * unset or blank var is omitted. Surfaced by GET /api/diagnostics (EXC-842) so
- * the settings Advanced pane shows which env overrides are in effect; reuses
- * ENV_VARS and the same envValue classifier invalidEnvVars uses, so "in effect"
- * and "flagged invalid" cannot disagree. */
+ * the settings Advanced pane shows which env overrides are in effect. */
 export function envOverrides(): EnvOverride[] {
   const out: EnvOverride[] = [];
   for (const [name, schema] of ENV_VARS) {
@@ -352,9 +340,9 @@ export function envOverrides(): EnvOverride[] {
   return out;
 }
 
-// The four tunable accessors (EXC-430; moved from paths.ts so they can read
-// through the settings service — paths.ts sits below log.ts and settings.ts in
-// the import graph and cannot import either). Callers capture these at startup
+// The tunable accessors (EXC-430). They live here rather than in paths.ts
+// because they read through the settings service, and paths.ts sits below
+// log.ts and settings.ts in the import graph. Callers capture these at startup
 // (daemon boot / review start), so a config edit takes effect on the next
 // daemon start or review, not live.
 
@@ -379,8 +367,7 @@ export function reviewTimeoutMs(s: Settings = settings().current()): number {
  * > 8s. The daemon's Bun.serve idleTimeout is derived from this value
  * (deriveIdleTimeoutSec) to sit strictly above it, so the daemon returns a 204
  * "still pending" after this window and the client re-polls before any socket
- * idle timeout can close the connection. Bounded above by HeartbeatMs's
- * .lt(MAX_HEARTBEAT_MS) so the derived idleTimeout stays under Bun's 255s cap. */
+ * idle timeout can close the connection. */
 export function heartbeatMs(s: Settings = settings().current()): number {
   return envValue("CARET_HEARTBEAT_MS", HeartbeatMs) ?? s.daemon.heartbeat_ms;
 }
@@ -398,11 +385,8 @@ export function logKeep(s: Settings = settings().current()): number {
 }
 
 // --- EXC-558: dev-only accessors ([dev]). Resolve CARET_DEV_* > [dev] key >
-// default — the same env > config > default shape as the EXC-430 accessors
-// above — but consumed ONLY by dev tooling and kept out of ENV_VARS /
-// invalidEnvVars so a prod boot never warns about a dev var. The [dev] table is
-// inert in a prod build (the gate in parseAndValidate), so these resolve to the
-// inert defaults there regardless of config.toml.
+// default, like the EXC-430 accessors above, but kept out of ENV_VARS /
+// invalidEnvVars so a prod boot never warns about a dev var.
 
 /** Fixed dev daemon port: CARET_DEV_PORT > [dev].port > unset (OS-assigned). */
 export function devPort(s: Settings = settings().current()): number | undefined {

@@ -8,13 +8,12 @@
 // Both sinks check their size before each record they actually write and rotate
 // past the threshold (EXC-1068, src/lib/log-rotate.ts).
 //
-// Two hard rules carried over from the old sentinel logger: writes are
-// SYNCHRONOUS (pino.destination({ sync: true }), so a deny logged just before
-// process.exit in the fail-safe/signal paths is durable), and logging NEVER
-// throws — construction and every emit are wrapped, degrading to a silent
-// no-op on failure (a logging failure must not turn an allow into a deny or
-// crash a hook). Error records sit at pino's highest level (50) in our set, so
-// they emit regardless of the configured level for free.
+// Two hard rules: writes are SYNCHRONOUS (pino.destination({ sync: true }), so a
+// deny logged just before process.exit in the fail-safe/signal paths is
+// durable), and logging NEVER throws — construction and every emit are wrapped,
+// degrading to a silent no-op on failure (a logging failure must not turn an
+// allow into a deny or crash a hook). Error records sit at pino's highest level
+// (50) in our set, so they emit regardless of the configured level for free.
 
 import pino from "pino";
 
@@ -75,18 +74,16 @@ const pinoOpts = {
 } as const;
 
 /** Build a CaretLogger over the given pino instance, with never-throw wrapping
- * on every emit. `liveLevel` is re-applied before each gated call so config
- * edits and setLogLevel hot-reload; pino's level setter re-binds every level
- * method, so skip the assignment when the level is unchanged. `liveRedact`
- * (the [logging].redact switch, EXC-399) gates the redact.ts scrub of every
- * outgoing msg/extra/err — re-read per emit so it hot-reloads too. The walk
- * runs even with the switch off (plan/prompt/feedback censoring is
- * unconditional); `step` is attached after it, raw: structural fields always
- * win and a fixed step token is never PII. Errors are serialized here
- * (errWithCause) rather than via a pino serializer so the scrub can cover
- * message/stack/cause — pino's own `redact` option can't rewrite substrings
- * inside those strings, walk an unbounded cause chain, or hot-toggle (see
- * src/redact/node.ts). */
+ * on every emit. `liveLevel` and `liveRedact` (the [logging].redact switch,
+ * EXC-399) are re-read per emit so config edits and setLogLevel/setRedact
+ * hot-reload; pino's level setter re-binds every level method, so skip the
+ * assignment when the level is unchanged. The redact walk runs even with the
+ * switch off (plan/prompt/feedback censoring is unconditional); `step` is
+ * attached after it, raw: structural fields always win and a fixed step token is
+ * never PII. Errors are serialized here (errWithCause) rather than via a pino
+ * serializer so the scrub can cover message/stack/cause — pino's own `redact`
+ * option can't rewrite substrings inside those strings, walk an unbounded cause
+ * chain, or hot-toggle (see src/redact/node.ts). */
 function wrap(
   logger: pino.Logger,
   liveLevel: () => LogLevel,
@@ -101,9 +98,9 @@ function wrap(
     // forwarding a browser event as source="ui", EXC-445): keep that tag and
     // attach NO caller — the call site here is the bridge, not the originator.
     // Otherwise tag the emitting process and stamp the real call site (EXC-451);
-    // the caller is repo-relative so the redact scrub is normally a no-op, but
-    // run it under the toggle for belt-and-braces. == null (not === undefined)
-    // keeps the replaced ??= semantics: an explicit null source reads as unset.
+    // the caller is repo-relative, so its scrub is normally a no-op but still runs
+    // under the toggle. `== null`, not `=== undefined`, so an explicit null source
+    // reads as unset.
     if (out.source == null) {
       out.source = source;
       const caller = callerLocation();
@@ -159,13 +156,11 @@ export const noopLogger: CaretLogger = {
   error: () => {},
 };
 
-/** Build a hook-side CaretLogger over a fresh caret.log destination, mirroring
- * createDaemonLogger's injected-thunk shape so both sinks share one
- * construction path. Opens caret.log at the current logFile() path (creating
- * the 0700 logs dir and 0600 file), and returns the logger paired with the
- * destination and the path it was opened for, so the caller can release the fd
- * and detect a path change. Degrades to noopLogger with a null dest if the
- * dir/file can't be opened — never throws. */
+/** Build a hook-side CaretLogger over a fresh caret.log destination at the
+ * current logFile() path (creating the 0700 logs dir and 0600 file). Returns the
+ * destination and the path it was opened for alongside the logger, so the caller
+ * can release the fd and detect a path change. Degrades to noopLogger with a null
+ * dest if the dir/file can't be opened — never throws. */
 function createHookLogger(
   level: () => LogLevel,
   redact: () => boolean,
@@ -232,8 +227,7 @@ function hook(): CaretLogger {
 /** Reset the hook logger for tests: close any open destination and drop the
  * cached instance and the level/redact overrides, so the next emit rebuilds
  * cleanly under the current XDG_STATE_HOME with default level/redact. Not part
- * of the runtime call-site API — the explicit seam that replaces leaning on
- * path-keyed cache invalidation to avoid cross-test bleed. */
+ * of the runtime call-site API — the explicit seam against cross-test bleed. */
 export function resetHookLogger(): void {
   try {
     hookState.instance?.dest?.destroy();

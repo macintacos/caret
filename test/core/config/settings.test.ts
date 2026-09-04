@@ -51,7 +51,7 @@ afterEach(async () => {
 });
 
 test("a valid config.toml is parsed and validated", async () => {
-  // `debug` is no longer a known key (EXC-400): zod strips it, proving unknown-key handling.
+  // `debug` is not a known key (EXC-400): zod strips it, proving unknown-key handling.
   await Bun.write(file, '[logging]\nlevel = "warn"\ndebug = true\nredact = true\n');
   expect(loadSettings(file)).toEqual({
     ...DEFAULTS,

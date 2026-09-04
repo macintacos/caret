@@ -6,12 +6,8 @@
 // Containment lives HERE and nowhere else. `relative` is built from a name that
 // arrived from the browser, and OpenCode legitimately names a nested command with
 // a `/`, so a `../` in it is ordinary input rather than a hypothetical: every
-// caller passes an untrusted tail, and each gets the same check — including the
-// one that only wants to know whether the file is there, which is why
-// `containedFile` is exported beside the one-shot `readDescriptionUnder`. The
-// posture is `contained()`'s in @/plan/excerpt.ts — realpath first, then require
-// the result under the realpathed root, so a symlink pointing out of the root is
-// refused rather than followed — narrowed to one file under one root.
+// caller passes an untrusted tail, and each gets the same check. The posture is
+// `contained()`'s in @/plan/excerpt.ts, narrowed to one file under one root.
 //
 // The frontmatter parser is deliberately not a YAML engine: it reads the `---`
 // block at the top of the file and the one `description` key in it, in the forms

@@ -31,9 +31,8 @@ const INTERNAL_SUFFIXES = ["src/lib/caller-location.ts", "src/lib/log.ts"];
 /** Walk `stack`'s frames (a `new Error().stack` string), skipping the Error
  * header and the logging machinery's own frames, and return the first external
  * frame as a repo-relative `path:line` against `pkgRoot`. Returns undefined on
- * any parse miss so the `caller` field is omitted. Pure (stack + pkgRoot in,
- * string out) so the normalization branches are unit-testable with synthetic
- * stacks. */
+ * any parse miss so the `caller` field is omitted. Pure, so the normalization
+ * branches are unit-testable with synthetic stacks. */
 export function parseCaller(stack: string | undefined, pkgRoot = PKG_ROOT): string | undefined {
   if (!stack) return undefined;
   for (const line of stack.split("\n")) {

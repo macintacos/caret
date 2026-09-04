@@ -173,7 +173,7 @@ test("saving an approve mode preserves the update-check opt-out", async () => {
 
 // ---- serialized writes (EXC-1206) ----
 //
-// Two writers now reach prefs.json — the resolve path's approve mode and the UI's
+// Two writers reach prefs.json — the resolve path's approve mode and the UI's
 // POST /api/prefs — so the read-modify-write is serialized through one PrefsWriter
 // rather than raced. These cases are what the chain buys: remove it and each merge
 // reads the pre-write file, so the later write drops the earlier one's key.

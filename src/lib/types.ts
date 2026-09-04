@@ -3,9 +3,7 @@
 // no node imports, so the browser bundle stays clean.
 
 /** A thrown value as a string: an Error's message, or String() of anything else.
- * The one coercion used wherever a caught value is rendered into a log line,
- * deny reason, or degraded-section error. Lives here so the browser bundle can
- * import it (no node dependency). */
+ * The one coercion for rendering a caught value. */
 export function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -16,17 +14,15 @@ export type Behavior = "allow" | "deny";
 /**
  * An opaque approve-variant token. The core stores and transports it without
  * interpreting it: the adapter declares the set of valid ids (see
- * `ApproveVariant` / `AgentAdapter.approveVariants`), the UI renders them, and
- * only the adapter maps a token to its tool-specific approve semantics. A second
- * adapter declares its own ids without touching this module.
+ * `ApproveVariant` / `AgentAdapter.approveVariants`) and alone maps a token to
+ * its tool-specific approve semantics.
  */
 export type ApproveVariantId = string;
 
 /**
  * A post-approval approve variant offered to the reviewer — the wire shape the
  * daemon publishes (sourced from the active adapter) and the UI renders. `id` is
- * the opaque token carried on the decision; `label` is its button text;
- * `description` is the optional sub-label note.
+ * the opaque token carried on the decision.
  */
 export interface ApproveVariant {
   id: ApproveVariantId;
@@ -51,10 +47,8 @@ export function isUnresolved(status: ReviewStatus): boolean {
 
 /**
  * A line-anchored inline annotation: the anchor is a 1-based, inclusive line
- * range into the stored plan text of the version that contains it. Line
- * numbers reference the plan version's text verbatim, so the anchor is stable
- * for as long as that version exists (annotations are version-scoped and never
- * re-anchored across versions).
+ * range into the stored plan text of the version that contains it. Annotations
+ * are version-scoped and never re-anchored across versions.
  */
 export interface LineAnnotation {
   id: string;
@@ -63,11 +57,10 @@ export interface LineAnnotation {
   /** Last annotated line (1-based, inclusive; >= startLine). */
   endLine: number;
   comment: string;
-  /** Per-comment lifecycle, drawn from the review's ReviewStatus vocabulary rather
-   * than a parallel one: "pending"/"rejected" are the unresolved working states and
-   * "approved"/"expired" are terminal. Optional — absent on a freshly-created working
-   * draft and on every on-disk record that predates the field, and read as "pending"
-   * by every consumer (see commentState). */
+  /** Per-comment lifecycle, reusing ReviewStatus rather than a parallel vocabulary.
+   * Optional — absent on a freshly-created working draft and on every on-disk record
+   * that predates the field, and read as "pending" by every consumer (see
+   * commentState). */
   state?: ReviewStatus;
 }
 
@@ -147,10 +140,9 @@ export interface Decision {
 /**
  * The on-disk form of an unsent composer "scratch" — the in-memory
  * `ComposerScratch` (ui/src/lib/diffview/commenting.ts) reduced to its persistable
- * fields: the 1-based, inclusive line range it anchors to plus the retained text.
- * The UI type's `key` ("startLine:endLine") is intentionally omitted — it is
- * derivable from the range, so persisting it would only invite the stored key and
- * its own range to drift apart.
+ * fields. The UI type's `key` ("startLine:endLine") is intentionally omitted — it
+ * is derivable from the range, so persisting it would only invite the stored key
+ * and its own range to drift apart.
  */
 export interface PersistedScratch {
   /** First anchored line (1-based, inclusive). */
@@ -255,9 +247,7 @@ export type FileRefKind = "file" | "directory";
 /** Response of POST /api/reviews/:id/file-refs — for each requested candidate
  * path that resolves inside the review's cwd, what it resolved to. Keyed by the
  * path exactly as requested, so a caller can look up the span it came from; a
- * candidate that resolves to nothing is absent rather than present-and-null. The
- * plan view affords files only, so a `directory` here draws no glyph until the
- * folder popover lands (EXC-918). */
+ * candidate that resolves to nothing is absent rather than present-and-null. */
 export interface FileRefsResponse {
   resolved: Record<string, FileRefKind>;
 }
@@ -296,13 +286,10 @@ export interface DirListing {
 }
 
 /**
- * Which of the search's two caps ended it early.
- *
- * The distinction is what the UI has to say out loud, because the remedy differs:
- * `"results"` means more matches exist and narrowing the query reaches them,
- * while `"scan"` means the walk gave up before the end of the tree — narrowing
- * does NOT reach the rest, since the next query gives up in the same place. One
- * flag for both would put a remedy that cannot work in front of the reviewer.
+ * Which of the search's two caps ended it early. The distinction has to reach the
+ * reviewer because the remedy differs: `"results"` means narrowing the query
+ * reaches the remaining matches, while `"scan"` means the walk gave up before the
+ * end of the tree and the next query gives up in the same place.
  */
 export type SearchStop = "results" | "scan";
 
@@ -343,10 +330,9 @@ export interface FileExcerpt {
  * (EXC-1176). Reference only — caret never executes a completed skill.
  *
  * Names only, and deliberately no description field: the list is enumerated for
- * every `/` keystroke, so carrying one would open every skill's file to show one.
- * A highlighted row's description is a second round trip
- * (`SkillDescriptionResponse`), made only when the reviewer opens the preview
- * panel over it. Served by GET /api/reviews/:id/skills. */
+ * every `/` keystroke, so carrying one would open every skill's file. A
+ * highlighted row's description is a second round trip
+ * (`SkillDescriptionResponse`). Served by GET /api/reviews/:id/skills. */
 export interface SkillRef {
   /** The name to insert after `/`, in the exact form the agent must see — a
    * plugin skill carries its `plugin:` namespace, so the insertion identifies
@@ -354,8 +340,7 @@ export interface SkillRef {
   name: string;
   /** An opaque, adapter-supplied label for where the name came from, shown beside
    * it so two sources offering the same bare name are told apart rather than one
-   * silently winning. The core transports it without interpreting it and the UI
-   * renders it verbatim; which labels exist is each adapter's own business. */
+   * silently winning. Which labels exist is each adapter's own business. */
   origin: string;
 }
 

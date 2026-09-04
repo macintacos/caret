@@ -24,10 +24,7 @@ export function createProgram(name: string, description: string): Command {
 /**
  * Parse argv and run the program, routing any thrown error (including an async
  * action's rejection) to `onError`. parseAsync (not parse) so a rejected action
- * propagates to the catch instead of surfacing as an unhandled rejection. The
- * product CLI (src/cli.ts) supplies an onError that denies to fail safe; the
- * tasks CLI's release group scopes its JSON-on-stdout handling per action rather
- * than routing through here.
+ * propagates to the catch instead of surfacing as an unhandled rejection.
  */
 export function runProgram(program: Command, onError: (err: unknown) => void): void {
   program.parseAsync(process.argv).catch(onError);

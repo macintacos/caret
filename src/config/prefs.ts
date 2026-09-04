@@ -86,11 +86,11 @@ export interface PrefsWriter {
 
 /** Build the single writer both prefs write paths share. The queue is closure state
  * rather than a module global so a test can drive a fresh chain — and so the daemon
- * can hold exactly one, over its own prefs path. That the daemon holds only one is
- * what makes the serialization reach across both paths, and it is protected by
- * inspection (`createServer` builds it once) rather than by a test: the two writes
- * cannot be made to overlap deterministically from outside, since the resolve path's
- * is fire-and-forget. */
+ * can hold exactly one, over its own prefs path — which is what makes the
+ * serialization reach across both paths. Protected by inspection (`createServer`
+ * builds it once) rather than by a test: the resolve path's write is
+ * fire-and-forget, so the two cannot be made to overlap deterministically from
+ * outside. */
 export function createPrefsWriter(file = prefsFile()): PrefsWriter {
   // The promise each merge queues behind. Stored already-caught, so one failed write
   // can't reject the next caller's hop; `merge` hands back the uncaught promise, so
@@ -119,9 +119,9 @@ export function createPrefsWriter(file = prefsFile()): PrefsWriter {
   };
 }
 
-/** Persist the remembered approve-variant id (last-write-wins; no per-id locking,
- * per the issue's constraint). An id outside the declared set is ignored so a
- * malformed request can't corrupt the stored value. */
+/** Persist the remembered approve-variant id (last-write-wins; no per-id
+ * locking). An id outside the declared set is ignored so a malformed request
+ * can't corrupt the stored value. */
 export async function writeApproveMode(
   mode: ApproveVariantId,
   writer: PrefsWriter,
@@ -129,7 +129,6 @@ export async function writeApproveMode(
   set: ApproveModeSet = DEFAULT_SET,
 ): Promise<void> {
   if (!set.valid.includes(mode)) {
-    // A malformed request reached us — ignored, but worth attention.
     log.warn("prefs", "ignoring invalid approve mode");
     return;
   }
