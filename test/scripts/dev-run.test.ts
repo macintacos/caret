@@ -53,8 +53,8 @@ test("daemonCommand adds --ephemeral only in ephemeral mode", () => {
   ]);
 });
 
-// A named tripwire for EXC-1219's one adoption: bun only honours the flag ahead
-// of the script path, so the position is the contract, not just the presence.
+// bun only honours the flag ahead of the script path, so the position is the
+// contract, not just the presence (EXC-1219).
 test("daemonCommand passes --no-orphans to bun, not to the daemon", () => {
   for (const mode of [{ kind: "ephemeral" }, { kind: "fixed", port: 5050 }] as const) {
     expect(daemonCommand(mode).indexOf("--no-orphans")).toBe(1);

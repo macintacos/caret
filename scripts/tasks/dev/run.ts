@@ -65,9 +65,9 @@ export interface RunDevOptions {
  * port is passed through the child env instead, via childEnvFor).
  *
  * `--no-orphans` ties this daemon to its spawner's lifetime, covering the SIGKILL
- * the cleanup handlers cannot: it runs CARET_IDLE_MS-exempt, so an orphan would
- * hold its port and state dir forever. Never on the singleton path
- * (src/daemon/lifecycle.ts spawnDaemon) — that daemon must outlive its spawner. */
+ * the cleanup handlers cannot: it is never-idle, so an orphan would hold its port
+ * and state dir indefinitely. Never on the singleton path (src/daemon/lifecycle.ts
+ * spawnDaemon) — that daemon must outlive its spawner. */
 export function daemonCommand(portMode: PortMode): string[] {
   return [
     "bun",
