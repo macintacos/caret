@@ -62,9 +62,20 @@ export interface RunDevOptions {
 }
 
 /** The daemon argv, adding `--ephemeral` only in ephemeral port mode (a fixed
- * port is passed through the child env instead, via childEnvFor). */
+ * port is passed through the child env instead, via childEnvFor).
+ *
+ * `--no-orphans` ties this daemon to its spawner's lifetime, covering the SIGKILL
+ * the cleanup handlers cannot: it runs CARET_IDLE_MS-exempt, so an orphan would
+ * hold its port and state dir forever. Never on the singleton path
+ * (src/daemon/lifecycle.ts spawnDaemon) — that daemon must outlive its spawner. */
 export function daemonCommand(portMode: PortMode): string[] {
-  return ["bun", "src/cli.ts", "daemon", ...(portMode.kind === "ephemeral" ? ["--ephemeral"] : [])];
+  return [
+    "bun",
+    "--no-orphans",
+    "src/cli.ts",
+    "daemon",
+    ...(portMode.kind === "ephemeral" ? ["--ephemeral"] : []),
+  ];
 }
 
 /** The environment every dev child inherits: the isolated state dir, a
