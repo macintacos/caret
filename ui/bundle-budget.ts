@@ -14,7 +14,7 @@ import { join, resolve } from "node:path";
 
 import type { Plugin } from "vite";
 
-/** What ui/dist measured at EXC-1217, each with `bunx vite build` from ui/ and one alias
+/** What ui/dist measured at EXC-1224, each with `bunx vite build` from ui/ and one alias
  * entry of ui/vite.config.ts's `resolve.alias` block deleted. The budget below is derived
  * from these, and bundle-budget.test.ts reds if the two drift apart.
  *
@@ -22,7 +22,7 @@ import type { Plugin } from "vite";
  * number here is its own build. */
 export const MEASURED_BYTES = {
   /** A clean build, all three entries in place, across 417 files. */
-  baseline: 12_735_092,
+  baseline: 12_719_017,
   /** Added by un-aliasing `/^shiki\/wasm$/` alone — the Oniguruma WASM binary, and the
    * break the "~600 KB" claim on package.json's @pierre/diffs pin names. */
   shikiWasmBreak: 622_310,
@@ -43,9 +43,10 @@ export const MEASURED_BYTES = {
  * renamed specifier after a shiki or @pierre/diffs bump) grew the bundle and failed
  * nothing.
  *
- * `baseline + 164_908`: the headroom is half of `pierreThemeBreak`, so ordinary growth has
- * ~161 KiB to move in while that break still overshoots by about as much as it clears. A
- * legitimate raise re-measures and updates MEASURED_BYTES above, not just this number.
+ * `baseline + 180_983`: the headroom is a little over half of `pierreThemeBreak`, so
+ * ordinary growth has ~177 KiB to move in while that break still overshoots by about as
+ * much as it clears. A legitimate raise re-measures and updates MEASURED_BYTES above, not
+ * just this number.
  *
  * What it does NOT protect, deliberately: the bare `/^shiki$/` entry. Un-aliasing it moves
  * dist/ by `shikiBarrelBreak` — well inside the noise any usable headroom has to tolerate
