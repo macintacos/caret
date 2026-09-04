@@ -23,13 +23,7 @@ import { underProgressLine } from "@/tasks/lib/progress.ts";
 // splits a live display from a --json contract: `verbose` is the historical
 // stream, `quiet` is progress without a transcript, and `json` emits one result
 // document and nothing else. Which one applies is decided by one pure function.
-//
-// What `quiet` has to FIX differs by target, because the two runners start from
-// opposite defaults. Playwright is configured with the `list` reporter
-// (playwright.config.ts), a line per spec, so e2e quiet cuts that down to dots.
-// bun's console reporter has the reverse problem: it prints nothing between its
-// banner and its summary, so a green 4900-test run shows no sign of life for a
-// full minute — unit quiet ADDS the progress that was missing, as dots.
+// What `quiet` has to FIX differs by target — see unitModeArgs and e2eModeArgs.
 
 export type TestOutputMode = "verbose" | "quiet" | "json";
 
@@ -304,10 +298,7 @@ async function runTestJson(args: string[]): Promise<never> {
 
 // --- test e2e ---------------------------------------------------------------
 // The Playwright end-to-end suite against an isolated daemon. Extra args (a spec
-// path, --grep, …) are forwarded to `playwright test`. The UI is built first so
-// the suite drives the shipped ui/dist artifact — honouring CARET_SKIP_BUILD_UI
-// (via build.ts's ensureUi, invoked by the `build ui` CLI path) so the preflight
-// gate never double-builds it. This replaces the old `#MISE depends=["build-ui"]`.
+// path, --grep, …) are forwarded to `playwright test`.
 
 /** The argv `test e2e` runs, plus forwarded args. */
 export function e2eCommand(args: string[]): string[] {

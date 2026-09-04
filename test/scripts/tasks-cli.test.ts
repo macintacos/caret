@@ -239,8 +239,6 @@ describe("tasks CLI: test output-mode flags", () => {
   }
 });
 
-// Each task's exact command line — the behavior-preservation contract carried
-// over from the former bash task bodies.
 describe("tasks CLI: task command lines", () => {
   test("build ui runs bunx vite build with forwarded args", () => {
     expect(buildUiCommand([])).toEqual(["bunx", "vite", "build"]);
@@ -350,10 +348,9 @@ describe("tasks CLI: build command", () => {
 });
 
 describe("tasks CLI: build pipeline command lines", () => {
-  // The UI-first ordering that a mise `depends` edge once carried now lives in
-  // build.ts: `build bin`/`build bundle`/`test e2e` build the UI first UNLESS
-  // CARET_SKIP_BUILD_UI is set, which is how the preflight gate keeps the UI
-  // built exactly once (scripts/preflight.ts spawns the dependents with it set).
+  // `build bin`/`build bundle`/`test e2e` build the UI first UNLESS
+  // CARET_SKIP_BUILD_UI is set, which is how the preflight gate keeps the UI built
+  // exactly once (scripts/preflight.ts spawns the dependents with it set).
   test("shouldBuildUi is true by default, false only when CARET_SKIP_BUILD_UI is set", () => {
     expect(shouldBuildUi({})).toBe(true);
     expect(shouldBuildUi({ CARET_SKIP_BUILD_UI: "1" })).toBe(false);

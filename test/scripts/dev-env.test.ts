@@ -28,7 +28,7 @@ test("resolvePortMode pins a fixed port when set", () => {
 });
 
 test("resolvePortMode rejects the production default port", () => {
-  // A CARET_DEV_PORT of 42718 would squat an installed caret (AC5).
+  // A CARET_DEV_PORT of 42718 would squat an installed caret.
   expect(() => resolvePortMode(String(DEFAULT_PORT))).toThrow(/production default/);
 });
 
@@ -136,10 +136,9 @@ test("discoverPort throws after exhausting the attempt budget", async () => {
 });
 
 // ---- CLI consumption of the [dev] settings (EXC-558) ----
-// The task delegates port/state-dir resolution to dev-env.ts, which now sources
-// them from src/config/settings.ts (CARET_DEV_* > [dev] key > default). Drive the real
-// CLI as a subprocess with an isolated XDG_CONFIG_HOME so config and env both
-// exercise the consumption the bash task relies on.
+// dev-env.ts sources port/state-dir from src/config/settings.ts (CARET_DEV_* >
+// [dev] key > default). Drive the real CLI as a subprocess with an isolated
+// XDG_CONFIG_HOME so config and env both exercise that resolution.
 
 const repoRoot = join(import.meta.dir, "..", "..");
 

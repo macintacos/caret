@@ -2,10 +2,10 @@
 
 // Non-supervisory logic for the `mise run dev` task: the port-mode decision,
 // the daemon-lock port discovery (with the dev-specific stateDir guard), and a
-// constants bridge — so the bash task can stay thin process-supervision glue
-// and never embed a TS constant or a hand-rolled lock parser.
+// constants bridge. scripts/tasks/dev/run.ts imports these directly; the
+// supervision it performs is the only thing that stays there.
 //
-// CLI surface the task drives (one line of stdout per success):
+// Standalone CLI surface (one line of stdout per success):
 //   dev-env.ts never-idle-ms → "<NEVER_IDLE_MS>"
 //   dev-env.ts port-mode     → "ephemeral" | "fixed <port>"  (CARET_DEV_PORT > [dev].port)
 //   dev-env.ts state-dir     → "<dir>" | ""                  (CARET_DEV_STATE_DIR > [dev].state_dir)
@@ -14,7 +14,7 @@
 
 import { DEFAULT_PORT, NEVER_IDLE_MS } from "@/config/constants.ts";
 // EXC-558: dev port/state-dir resolve through settings (CARET_DEV_* > [dev] key
-// > default); the bash task passes no port arg — port-mode/state-dir read here.
+// > default), so port-mode/state-dir take no argument and read them here.
 import { devPort, devStateDir, loadSettings } from "@/config/settings.ts";
 import { isPidAlive } from "@/daemon/lifecycle.ts";
 import type { DaemonLock } from "@/lib/build-id.ts";

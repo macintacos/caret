@@ -382,7 +382,7 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
         },
       });
   // Reap the children and drop the ephemeral state dir, so a teardown never
-  // leaves an orphan holding the dev port or stale reviews (AC6). Restoring the
+  // leaves an orphan holding the dev port or stale reviews. Restoring the
   // terminal is first: a cleanup that killed the children but left the alternate
   // screen up would hand back an unusable shell.
   const killChildren = makeCleanup(children, {
@@ -442,9 +442,6 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
       pumpIntoTui(pretty.stderr, tui);
     }
 
-    // Discover the daemon's bound port from its own-world lock (written after a
-    // successful bind). Bounded wait, loud failure — including a daemon that died
-    // on boot (DAEMON_DIED) or that grabbed the production default port.
     const port = await deps.discoverPort({
       readPort: () => readDevLockPort(lockFile, worldDir),
       daemonAlive: () => isPidAlive(daemon.pid),
@@ -454,21 +451,14 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
       `caret dev: port=${port} state=${stateDirPath} config=${configFilePath} fresh=${opts.fresh ? 1 : 0} persistent=${persistState ? 1 : 0}`,
     );
 
-    // Driver: seeds the dev fixtures and plays the agent's protocol side, in this
-    // same process. Its options arrive already parsed (commander), so there is no
-    // subprocess and no argv re-parse; the loop never resolves and dies with this
-    // process on teardown, so it is not among the reaped children. Because it runs
-    // here rather than in a child with `env: childEnv`, point this process's
-    // XDG_STATE_HOME at the isolated dev state dir: the driver's hook-side logging
-    // (runReview → caret.log, read lazily off process.env) would otherwise write
-    // to the real ~/.local/state/caret instead of the dev dir. Safe now — the
-    // daemon and pino-pretty are already spawned (env snapshotted) and Vite below
-    // is spawned with an explicit `env: childEnv`, so this reaches only the driver.
+    // The driver's loop never resolves and dies with this process on teardown, so
+    // it is not among the reaped children. It runs HERE rather than in a child with
+    // `env: childEnv`, so this process's XDG_STATE_HOME has to point at the isolated
+    // dev state dir: the driver's hook-side logging (runReview → caret.log, read
+    // lazily off process.env) would otherwise write to the real ~/.local/state/caret.
+    // Safe at this point — the daemon and pino-pretty are already spawned (env
+    // snapshotted) and Vite below is spawned with an explicit `env: childEnv`.
     process.env.XDG_STATE_HOME = stateDirPath;
-    // Label the daemon port explicitly: the UI url below lands on a *different*
-    // port (Vite's), and an unlabelled number is the one a reader will try to
-    // open. The state dir stays out of the header — the boot line carries it in
-    // full into the log pane.
     daemonPort = port;
     tui?.setStatus(statusLines());
     deps.runDriver({
@@ -487,9 +477,9 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
           : undefined,
     });
 
-    // Vite last; block on it (like the bash `wait "$vite_pid"`) so the process
-    // stays alive until Vite exits, and a teardown signal reaches the handlers
-    // above even if it hits this PID alone rather than the whole group.
+    // Vite last, blocking, so the process stays alive until Vite exits and a
+    // teardown signal reaches the handlers above even if it hits this PID alone
+    // rather than the whole group.
     const vite = deps.spawn(["bunx", "vite"], {
       cwd: "ui",
       stdout: tui ? "pipe" : "inherit",
@@ -500,8 +490,7 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
     });
     children.push(vite);
     if (tui) {
-      // Watch Vite's banner for the URL to open; until it lands the header shows
-      // the daemon port alone.
+      // Until Vite's banner lands, the header shows the daemon port alone.
       const watchForUrl = (line: string) => {
         const url = viteUrlFrom(line);
         if (!url || url === uiUrl) return;

@@ -236,8 +236,8 @@ describe("runDev supervision", () => {
       expect(calls[3]?.cmd).toEqual(["bunx", "vite"]);
 
       // The daemon owns logs/daemon.log (EXC-1068), so pino-pretty is fed by
-      // tailing that file — not by the daemon's stderr, which now carries only
-      // raw crash output and, with no terminal UI, inherits the terminal.
+      // tailing that file — not by the daemon's stderr, which carries only raw
+      // crash output and, with no terminal UI, inherits the terminal.
       expect(calls[1]?.cmd.at(-1)).toBe(
         join(calls[0]?.env?.XDG_STATE_HOME as string, "caret", "logs", "daemon.log"),
       );
@@ -252,7 +252,7 @@ describe("runDev supervision", () => {
       );
 
       // The driver ran in-process with the discovered base and the parsed opts —
-      // no argv round-trip, no re-parse (candidate 1).
+      // no argv round-trip, no re-parse.
       expect(driverCalls).toEqual([
         { base: "http://127.0.0.1:40123", numVersions: 4, notify: true, settings: DEFAULTS },
       ]);

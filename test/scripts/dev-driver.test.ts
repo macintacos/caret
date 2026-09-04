@@ -189,8 +189,8 @@ test("demoVersions makes every consecutive pair a non-empty, varied diff (not ap
   for (let i = 1; i < plans.length; i++) {
     expect(plans[i]).not.toBe(plans[i - 1]);
   }
-  // Unlike the old append-only bootstrap, an earlier draft is NOT a prefix of a
-  // later one: the drafts change text in place rather than only appending.
+  // An earlier draft is NOT a prefix of a later one: the drafts change text in
+  // place rather than only appending.
   expect(plans[3]!.startsWith(plans[0]!.trimEnd())).toBe(false);
 });
 

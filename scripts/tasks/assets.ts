@@ -10,12 +10,6 @@
 // the Playwright LIBRARY (chromium.launch) instead of the test runner, which
 // would need a second config to collect it.
 //
-// Both artifacts are assembled from still captures rather than from Playwright's
-// own video recorder, which captures the screencast at CSS-pixel resolution and
-// ignores deviceScaleFactor — asking it for a bigger frame pads and upscales
-// instead of rendering more detail. page.screenshot honours the scale factor, so
-// it is the only path to a recording whose text is legible.
-//
 // Nothing else here is a new subsystem. The isolated daemon boot is
 // scripts/tasks/dev/run.ts's (childEnvFor, daemonCommand, makeCleanup,
 // discoverPort); the agent's side of the recording is the dev driver's real hook
@@ -24,10 +18,6 @@
 // keyboard-commenting / diff-surface / request-changes / approve specs already
 // drive. The pure halves — the tool lookup, the seam geometry, the argv — are
 // unit-tested in test/scripts/assets.test.ts.
-//
-// ImageMagick and ffmpeg are host tools, not pinned mise dependencies: neither has
-// an `aqua:` entry, and the registry alternatives would put a multi-minute build in
-// front of every fresh clone.
 
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -74,10 +64,8 @@ const VIDEO_PATH = "doc/assets/caret-review-demo.mp4";
  *
  * Narrower than the stitch's frame on purpose. The UI lays out in CSS pixels, so
  * fewer of them across the window makes every glyph a larger fraction of the
- * frame — which is what "bigger" means to someone reading the recording, and no
- * amount of resolution substitutes for it. The multiplier is the separate axis:
- * it decides how many real pixels each of those glyphs is drawn with. Together
- * they give text that is both larger in frame and rendered at 3×.
+ * frame — the axis no amount of resolution substitutes for. The multiplier is the
+ * other axis: how many real pixels each of those glyphs is drawn with.
  */
 const VIDEO_VIEWPORT = { width: 1280, height: 800 } as const;
 
@@ -535,8 +523,6 @@ export async function runAssetsStitch(): Promise<never> {
       const width = FRAME.width * STITCH_SCALE;
       const height = FRAME.height * STITCH_SCALE;
 
-      // Band 0 is the whole frame; each later band is masked to the far side of
-      // its seam and flattened over what is already there.
       const polygons = seamPolygons(width, height, BANDS.length);
       const layers = [join(work, "capture-0.png")];
       for (const [i, polygon] of polygons.entries()) {
@@ -717,8 +703,7 @@ async function playReview(page: Page, base: string, releaseFollowUp: () => void)
   await page.mouse.wheel(0, 220);
   await dwell();
 
-  // Comment: reveal the gutter `+` on the line worth commenting on, open the
-  // composer, type, and commit it.
+  // The gutter `+` appears only on hover, so the pointer travels to the row first.
   const box = await surface.boundingBox();
   if (!box) throw new Error("caret assets: the plan surface has no box on screen");
   await page.mouse.move(box.x + 6, await rowCenterY(page, ANNOTATION_ANCHOR), { steps: 26 });
@@ -751,7 +736,6 @@ async function playReview(page: Page, base: string, releaseFollowUp: () => void)
   await revision.scrollIntoViewIfNeeded();
   await dwell();
 
-  // Approve, through the confirmation every approve routes through.
   await glideClick(page, page.getByRole("button", { name: "Approve", exact: true }));
   const confirm = page.getByRole("dialog", { name: "Approve this plan?" });
   await confirm.waitFor({ state: "visible" });
@@ -763,9 +747,8 @@ async function playReview(page: Page, base: string, releaseFollowUp: () => void)
   await dwell();
   releaseFollowUp();
 
-  // ...and the agent picks back up: its next plan lands in the same window. The
-  // plan opens where the previous one was left, so send it back to its heading —
-  // the closing frame is the payoff, not a half-empty page.
+  // The follow-up opens where the previous plan was left, so send it back to its
+  // heading — the closing frame is the payoff, not a half-empty page.
   await page.getByText(FOLLOW_UP_TITLE).first().waitFor({ state: "visible" });
   await surface.evaluate((el) => el.scrollTo({ top: 0 }));
   await dwell(2);

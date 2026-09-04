@@ -4,7 +4,7 @@
 // gitignored partial app.css @imports, so the raw `bun test --conditions browser`
 // CONTRIBUTING.md documents works on a fresh clone; and `playwright install
 // chromium webkit` fetches both browser binaries the e2e suite drives. Steps run
-// in order and the first failure aborts (matching the former task's `set -e`).
+// in order and the first failure aborts.
 
 import { paletteCssCommand } from "@/tasks/build.ts";
 import { runForward } from "@/tasks/lib/exec.ts";

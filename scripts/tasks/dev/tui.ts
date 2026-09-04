@@ -6,8 +6,8 @@
 // output scroll past: a terminal's scroll region (DECSTBM) reserves ROWS, never
 // COLUMNS, so there is no way to pin a left-hand rail and still let normal
 // output flow. Owning the screen is the price of the split — which means this
-// module also owns the four writers that used to inherit the terminal (the
-// daemon, pino-pretty, Vite, and this process's own stderr) and the scrollback
+// module also owns the four writers that would otherwise inherit the terminal
+// (the daemon, pino-pretty, Vite, and this process's own stderr) and the scrollback
 // the terminal would otherwise have given us for free, hence the scroll keys.
 //
 // It runs only when stdout is a TTY. Piped or redirected — CI, `> log.txt` — the
@@ -295,7 +295,7 @@ export function createTui(opts: TuiOptions, deps: TuiDeps): Tui {
   });
 
   /** The pane width the next frame will use. Scroll bounds have to agree with
-   * what gets drawn, and the rail now sizes itself to its own content. */
+   * what gets drawn, and the rail sizes itself to its own content. */
   const currentPaneWidth = () => paneWidth(size().cols, railLines(frameState()));
 
   const paint = () => {

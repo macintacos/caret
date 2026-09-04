@@ -215,8 +215,6 @@ export async function bootstrapReview(
   fixture: LoadedFixture,
   deps: ReviewDeps,
 ): Promise<DriverState> {
-  // demoVersions returns exactly fixture.versions plans, oldest first, ending at
-  // the fixture's final plan.
   const plans = demoVersions(fixture.plan, fixture.versions, fixture.edits);
   for (let i = 0; i < plans.length; i++) {
     // runReview blocks on the decision long-poll; the deny is what unblocks it.
@@ -226,8 +224,6 @@ export async function bootstrapReview(
     await reviewing;
   }
   log(`bootstrapped ${fixture.file} to ${plans.length} versions`);
-  // The loop resumes by appending its first interactive revision onto the last
-  // bootstrap plan; revision counts continue from the bootstrap total.
   const nextRevision = plans.length;
   const last = plans[plans.length - 1] as string;
   return {
@@ -362,10 +358,8 @@ export async function run(opts: DriverOptions): Promise<void> {
       "extra-review seeder off (pass --notify, set [dev.notify].enabled = true, or set CARET_DEV_NEW_REVIEW_MS)",
     );
   }
-  // Grow each review to several versions up front so the version-compare picker
-  // has something to compare the moment the UI opens, and so the switcher opens
-  // with more than one plan. Sequential and in table order: store.list() sorts by
-  // createdAt, so this is what puts the primary review first in the switcher.
+  // Sequential and in table order: store.list() sorts by createdAt, so this is
+  // what puts the primary review first in the switcher.
   const started: { fixture: LoadedFixture; state: DriverState }[] = [];
   for (const fixture of fixtures) {
     started.push({ fixture, state: await bootstrapReview(base, fixture, deps) });
@@ -379,9 +373,8 @@ export async function run(opts: DriverOptions): Promise<void> {
       void injectKey(key, inject).catch((err) => log(`inject failed: ${err}`));
     });
   }
-  // Each loop resumes from its bootstrapped (rejected) review, appending its next
-  // revision. They run concurrently: a plan revising while you read another one is
-  // the whole point of the fixture set.
+  // Concurrent on purpose: a plan revising while you read another one is the
+  // whole point of the fixture set.
   await Promise.all(started.map(({ fixture, state }) => runFixtureLoop(fixture, state, deps)));
 }
 

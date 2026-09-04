@@ -186,12 +186,9 @@ test("lint failure doesn't stop the others, exits 1, surfaces output and the for
 
 test("preflight's task groups map to real mise task files (consolidated, EXC-738)", async () => {
   // The orchestrator hard-codes its task set (IMMEDIATE/DEPENDENT) and spawns
-  // each as `mise run <words…>`, whose FIRST word is the mise task file. The
-  // UI-first ordering + skip that a mise `depends` edge once carried now live in
-  // the tasks CLI (CARET_SKIP_BUILD_UI, asserted above and in tasks-cli.test.ts),
-  // so there are no `depends` edges left to lockstep-check. This instead guards
-  // the rename: `build ui`/`test e2e`/`build bin` must resolve to the `build` and
-  // `test` group files, and the old per-variant files must be gone.
+  // each as `mise run <words…>`, whose FIRST word is the mise task file. This
+  // guards the rename: `build ui`/`test e2e`/`build bin` must resolve to the
+  // `build` and `test` group files, and the old per-variant files must be gone.
   const taskFile = (name: string): string => join(import.meta.dir, "../../.mise/tasks", name);
   const firstWords = [...new Set(ALL_TASKS.map((t) => t.split(" ", 1)[0] ?? t))];
   for (const group of firstWords) expect(existsSync(taskFile(group))).toBe(true);
@@ -204,9 +201,8 @@ test("the consolidated group task files declare no `#MISE depends` edge (concurr
   // preflight builds the UI exactly once: it runs `build ui` itself and spawns
   // the dependents with CARET_SKIP_BUILD_UI=1. A `#MISE depends` edge on
   // build/test/smoke would run its dependency REGARDLESS of that env var,
-  // re-introducing a second concurrent Vite build that races on ui/dist (the
-  // exact regression the removed mise-depends lockstep assertion once tripped).
-  // Guard against anyone adding one back.
+  // re-introducing a second concurrent Vite build that races on ui/dist. Guard
+  // against anyone adding one back.
   const taskFile = (name: string): string => join(import.meta.dir, "../../.mise/tasks", name);
   for (const group of ["build", "test", "smoke"]) {
     expect(readFileSync(taskFile(group), "utf8")).not.toContain("#MISE depends");
@@ -534,8 +530,8 @@ test("buildStartReport: unset filters render as null/zero", () => {
   expect(start.filters).toEqual({ verbosity: 0, grep: null, tasks: null });
 });
 
-// Criterion 4: a scoped run must never read as a full green run. The start doc
-// carries both the shortened task list and an explicit narrowed flag + reason.
+// A scoped run must never read as a full green run, so the start doc carries both
+// the shortened task list and an explicit narrowed flag + reason.
 test("buildStartReport surfaces a narrowed selection and why", () => {
   const selection = selectTasks(["doc/CONFIGURING.md"]);
   const start = buildStartReport({ json: true, verbosity: 0, full: false, tasks: [] }, selection);
@@ -581,7 +577,6 @@ test("buildResultReport level 0: a small failed output is shown in full (with li
   expect(report.ok).toBe(false);
   const lint = report.tasks.find((t) => t.name === "lint");
   expect(lint?.status).toBe("failed");
-  // Failures show their output by default — small ones in full, untruncated.
   expect(lint?.output).toContain("boom: bad format");
   expect(lint?.output).toContain("mise run format");
   expect(lint?.truncated).toBeUndefined();

@@ -1,16 +1,13 @@
 // `build` task group (EXC-738): the Svelte UI, the standalone binary, the
-// distribution bundle, and the bare umbrella that chains UI -> binary. This
-// consolidates what were the separate build-ui/build-bin/build-bundle/build
-// tasks into one command whose `ui`/`bin`/`bundle` positional targets map to
-// `mise run build <target>`.
+// distribution bundle, and the bare umbrella that chains UI -> binary. Its
+// `ui`/`bin`/`bundle` positional targets map to `mise run build <target>`.
 //
-// UI-first ordering lives here now, not in a mise `depends` edge: the
+// UI-first ordering lives here rather than in a mise `depends` edge: the
 // ui-dependent targets (`bin`, `bundle`, and the umbrella) build the UI first
 // via ensureUi() — UNLESS CARET_SKIP_BUILD_UI is set. That env var is how the
 // preflight gate keeps the UI built exactly once: scripts/preflight.ts runs
 // `build ui` on its own, then spawns `build bin` with CARET_SKIP_BUILD_UI=1 so
-// two concurrent Vite builds can't race on ui/dist (the invariant the old
-// MISE_TASK_SKIP=build-ui dedupe protected).
+// two concurrent Vite builds can't race on ui/dist.
 
 import { mkdirSync, rmSync } from "node:fs";
 
@@ -221,8 +218,8 @@ export async function runBuildBundle(): Promise<never> {
 }
 
 // --- build (umbrella) -------------------------------------------------------
-// Bare `mise run build`: build the UI then the binary (the old build-ui ->
-// build-bin chain), with an optional --install step for the dev loop.
+// Bare `mise run build`: build the UI then the binary, with an optional
+// --install step for the dev loop.
 
 export interface BuildOptions {
   /** After building, install the local checkout + cycle the daemon (dev only). */

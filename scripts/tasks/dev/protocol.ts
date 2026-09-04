@@ -89,10 +89,10 @@ export interface DemoEdit {
 /** The demo review's version history, expressed as reverse edits from the final
  * plan (fake-plan.md). Ordered NEWEST-first: applying group 0 to the final yields
  * the second-newest version, group 1 that yields the next, and so on. Each group
- * is a distinct KIND of change so the compare view has variety to render (EXC-811)
- * instead of the old append-only diffs — and because the groups run newest-first,
- * the default compare pair (current vs. previous) is the smallest, cleanest diff
- * while older pairs get progressively larger:
+ * is a distinct KIND of change so the compare view has variety to render (EXC-811);
+ * because the groups run newest-first, the default compare pair (current vs.
+ * previous) is the smallest, cleanest diff while older pairs get progressively
+ * larger:
  *   0. a single targeted change (one table cell),
  *   1. a few mid-sentence rewrites,
  *   2. a block-shaped change (EXC-1063): whole sub-sections of the rendering
@@ -239,10 +239,9 @@ export function demoVersions(final: string, count: number, edits = DEMO_EDITS): 
 }
 
 /** The demo comments, each pinned to the span of the plan it actually talks
- * about. Positional anchors (a fixed fraction of the way down the file) put the
- * comment on whatever text happened to sit there — a code-fence line, a
- * mid-sentence wrap — so the panel read as nonsense against its own line, and
- * the compare view had nothing meaningful to reveal.
+ * about. A positional anchor (a fixed fraction of the way down the file) would
+ * land on whatever text happened to sit there — a code-fence line, a mid-sentence
+ * wrap — leaving the panel reading as nonsense against its own line.
  *
  * Every `anchor` is a span the 90-col ingest reflow cannot split (a table row, a
  * list item's opening) and that no DEMO_EDITS group rewrites, so it resolves the

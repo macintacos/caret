@@ -5,10 +5,9 @@
 // the preflight gate (EXC-914), where it is the only check that exercises what
 // users actually receive rather than the source tree.
 //
-// Each target builds its own artifact first (replacing the old `#MISE
-// depends=["build"]` / `depends=["build-bundle"]` edges): `smoke bin` invokes
-// `build bin`, `smoke bundle` invokes `build bundle`, via the tasks CLI so the
-// UI-first ordering + skip mechanism in build.ts is reused. Those skips are what
+// Each target builds its own artifact first: `smoke bin` invokes `build bin` and
+// `smoke bundle` invokes `build bundle`, via the tasks CLI, so the UI-first
+// ordering + skip mechanism in build.ts is reused. Those skips are what
 // make smoke cheap enough for a per-push gate: preflight spawns it with
 // CARET_SKIP_BUILD_UI + CARET_SKIP_BUILD_BIN set, so it reuses the ui/dist and
 // bin/caret-native the gate's own `build ui` / `build bin` tasks just produced
@@ -77,9 +76,8 @@ function lockPort(lockFile: string): number | undefined {
 }
 
 export async function runSmokeBin(): Promise<never> {
-  // Build the compiled binary first (ui + compile), replacing the old mise
-  // `depends=["build"]` edge — unless CARET_SKIP_BUILD_BIN says the caller (the
-  // preflight gate) already compiled it.
+  // Build the compiled binary first (ui + compile), unless CARET_SKIP_BUILD_BIN
+  // says the caller (the preflight gate) already compiled it.
   const built = await ensureBin();
   if (built !== 0) process.exit(built);
 
@@ -169,10 +167,10 @@ export async function runSmokeBin(): Promise<never> {
 // ui/dist beside it — works exactly as a user's npm-installed plugin would.
 //
 // Crucially it drives the REAL hook flow: `caret prewarm` → ensureDaemon →
-// daemonCommand() spawns a DETACHED daemon child. Running the daemon in the
-// foreground (an earlier version) never exercised daemonCommand and missed a
-// bundle mis-classified as a compiled binary, whose spawned child was
-// `[bun, "daemon"]` (no script) and never started. The prewarm path catches that.
+// daemonCommand() spawns a DETACHED daemon child. Booting the daemon in the
+// foreground instead would never exercise daemonCommand, and so would miss a
+// bundle mis-classified as a compiled binary, whose spawned child is
+// `[bun, "daemon"]` (no script) and never starts.
 //
 // Isolation: a temp package layout (pkg/dist/cli.js + pkg/ui/dist) the resolver
 // can only serve the shipped ui/dist from, a private XDG_STATE_HOME, and a free
@@ -212,8 +210,7 @@ function dumpDaemonLogs(worldDir: string): void {
 }
 
 export async function runSmokeBundle(): Promise<never> {
-  // Build the distribution bundle first (ui + non-compile bundle), replacing the
-  // old mise `depends=["build-bundle"]` edge.
+  // Build the distribution bundle first (ui + non-compile bundle).
   const built = await runForward(["bun", "scripts/tasks/cli.ts", "build", "bundle"]);
   if (built !== 0) process.exit(built);
 

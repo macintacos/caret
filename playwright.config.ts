@@ -32,7 +32,6 @@ export default defineConfig<E2EOptions>({
   testMatch: "**/*.e2e.ts",
   fullyParallel: true,
   // EXC-1050: no retries — the budgets below absorb gate contention instead.
-  // doc/agents/browser-testing.md § Timeouts are budgets for the loaded host.
   retries: 0,
   forbidOnly: true,
   // EXC-587: bound the fan-out. Each worker drives a browser tree plus a
@@ -84,10 +83,10 @@ export default defineConfig<E2EOptions>({
         // the reference width instead of being coupled to it by prose.
         viewport: { width: REFERENCE_WIDTH_PX + 200, height: 900 },
         // EXC-773: caret's default appearance mode follows the OS, so the
-        // emulated `prefers-color-scheme` now decides what a fresh origin
-        // paints. Pin it rather than inherit Playwright's light default — the
-        // suite's baseline is caret dark, and a spec that cares about system
-        // switching overrides this with page.emulateMedia().
+        // emulated `prefers-color-scheme` decides what a fresh origin paints.
+        // Pin it rather than inherit Playwright's light default — the suite's
+        // baseline is caret dark, and a spec that cares about system switching
+        // overrides this with page.emulateMedia().
         colorScheme: "dark",
       },
     },

@@ -14,8 +14,6 @@
 // let it reuse its gate's artifact: CARET_SKIP_BUILD_UI keeps the UI built at
 // exactly one run per gate (two concurrent Vite builds would otherwise race on
 // ui/dist), and CARET_SKIP_BUILD_BIN keeps smoke from paying a second compile.
-// (This replaces the old MISE_TASK_SKIP=build-ui dedupe of the mise `depends`
-// edge, which is gone now that build/test are single multi-target tasks.)
 //
 // smoke is here because it is the only task that exercises the artifacts users
 // receive rather than the source tree: preflight proves the source works, smoke
@@ -24,8 +22,7 @@
 // Which of those tasks run is scoped to the diff (EXC-1042): a change confined
 // to Markdown runs `lint` alone, plus `test` when it touches Markdown a test
 // reads from disk. Everything else runs all six, as does a diff that cannot be
-// read at all. See § Diff-scoped task selection below — including why the
-// narrowing never extends to the file list a task is handed.
+// read at all.
 //
 // DI mirrors scripts/tasks/release/command.ts: the spawn collaborator is injected so
 // test/scripts/preflight.test.ts can drive the DAG without running real tasks.
@@ -86,11 +83,7 @@ export interface PreflightOutcome {
 
 // --json reports (EXC-471): the documents an LLM/agent consumer reads instead
 // of the human display — one before the run (planned tasks + the filters in
-// effect), one after (per-task results). Failures show their output by default
-// (abbreviated to a tail when large, with `totalLines` + `truncated` so the
-// consumer knows there's more); passing tasks stay status-only. Verbosity turns
-// that up: -v makes failures full and surfaces a snippet of passing tasks, -vv
-// shows everything. --grep / --task narrow or scope further.
+// effect), one after (per-task results, per buildResultReport's rules).
 export interface PreflightStartReport {
   event: "start";
   schemaVersion: number;
@@ -144,10 +137,9 @@ export interface JsonArgs {
   tasks: string[];
 }
 
-// Task identifiers are the multi-word `mise run` invocations (EXC-738/739): the
-// spawner splits each on spaces into `mise run <words…>` (mise task names never
-// contain spaces, so the split is exact). They double as the map keys and the
-// display titles.
+// Task identifiers are the multi-word `mise run` invocations (EXC-738/739), and
+// double as the results-map keys and the display titles. mise task names never
+// contain spaces, so splitting one on spaces is exact.
 
 /** A task that waits on `after` to pass, then spawns with `env` merged over the
  * parent environment — the skips that let it reuse `after`'s artifact. */
@@ -177,14 +169,10 @@ const TASK_ORDER = [...IMMEDIATE, ...DEPENDENT.map((d) => d.name)];
  * that name is also the results map key, the display title, and what `--task`
  * matches — a flag folded into it would break all three.
  *
- * Only `test e2e` runs quiet. The gate pipes every child, which resolves the test
- * task's own default to `verbose`, so the mode has to be asked for; on e2e it earns
- * that, because the configured `list` reporter prints a line per spec and that
- * chatter is what pushes a real failure out of the 20-line tail the result document
- * carries by default. The UNIT task is deliberately left alone: quiet there means
- * bun's dots reporter, whose one-character-per-test progress is for a terminal to
- * animate, and this gate has none — it would only add ~4900 dots on a single line
- * to a log nobody watches live.
+ * Only `test e2e` runs quiet: its `list` reporter prints a line per spec, and that
+ * chatter pushes a real failure out of the 20-line tail the result document carries
+ * by default. The UNIT task is deliberately left alone — quiet there is bun's dots
+ * reporter, ~4900 characters of terminal animation in a log nobody watches live.
  */
 const TASK_ARGS: Readonly<Record<string, readonly string[]>> = {
   "test e2e": ["--quiet"],
@@ -208,14 +196,13 @@ const SCHEMA_VERSION = 2;
 //
 // A change that touches only Markdown cannot be observed by `build ui`,
 // `build bin`, `test e2e`, or `smoke`, so the gate runs only the tasks that
-// could actually fail on it.
-//
-// The narrowing applies to WHICH TASKS RUN, never to which files a task sees:
-// every task is still spawned as a bare `mise run <task>`. That distinction is
-// load-bearing for `lint`. rumdl resolves an MD051 cross-file link fragment only
-// when the file it points into is in the same scan, so a lint handed just the
-// changed files would silently stop checking every cross-file anchor whose
-// target is unchanged — and doc/ is held together almost entirely by those.
+// could actually fail on it. The narrowing applies to WHICH TASKS RUN, never to
+// which files a task sees: every task is still spawned as a bare
+// `mise run <task>`. That distinction is load-bearing for `lint`. rumdl resolves
+// an MD051 cross-file link fragment only when the file it points into is in the
+// same scan, so a lint handed just the changed files would silently stop checking
+// every cross-file anchor whose target is unchanged — and doc/ is held together
+// almost entirely by those.
 
 /** Which tasks this run will spawn, and why that set. */
 export interface TaskSelection {
@@ -354,8 +341,8 @@ export async function resolveSelection(
 // can't drift between the two surfaces.
 const LINT_FORMAT_HINT = "hint: run `mise run format` to fix formatting failures";
 
-// At the default verbosity a large failed output is abbreviated to its last N
-// lines — errors and summaries cluster at the end; `-v` shows the full capture.
+// Errors and summaries cluster at the end of a capture, so a large failed output
+// is abbreviated to its last N lines; `-v` shows the whole thing.
 const DEFAULT_OUTPUT_TAIL_LINES = 20;
 
 export async function runPreflight(deps: {
@@ -399,8 +386,8 @@ export async function runPreflight(deps: {
   // work it will discard, while the real failure stays the only `failed` row.
   const failFast = new AbortController();
 
-  // Spawn one task and record its result. A spawn rejection (e.g. the binary
-  // failing to start) counts as a failure; a fail-fast abort counts as skipped.
+  // A spawn rejection (e.g. the binary failing to start) counts as a failure; a
+  // fail-fast abort counts as skipped.
   const runTask = async (
     name: string,
     env: Record<string, string> | undefined,
@@ -510,17 +497,11 @@ function splitLines(output: string): string[] {
   return trimmed === "" ? [] : trimmed.split("\n");
 }
 
-// Fold the shared lint hint into a failed lint task's output so the JSON output
-// and the human summary surface the same remediation step.
 function withLintHint(name: string, status: TaskStatus, text: string): string {
   return name === "lint" && status === "failed" ? `${text}\n${LINT_FORMAT_HINT}` : text;
 }
 
-// How much of a task's output to inline, given its status, the verbosity level,
-// and whether --task named it. Failures lead passing tasks by one notch: a
-// failure shows a tail at level 0 and full output at -v; a passing task shows
-// nothing at level 0, a tail at -v, and full at -vv. A --task-named task is
-// always shown in full.
+// Failures lead passing tasks by one notch; a --task-named task is always full.
 function outputDetail(
   status: TaskStatus,
   verbosity: number,
@@ -685,17 +666,15 @@ export function createProcessGroupController(graceMs = 2000): ProcessGroupContro
   };
 }
 
-// Real spawner: runs `mise run <task>` as a tracked process group, buffering
-// combined stdout+stderr and reporting the last non-empty line for the live
-// display. On a fail-fast `signal` abort it reaps its own group and resolves
-// `aborted` so runPreflight records it `skipped`, not `failed` (EXC-587).
+// Real spawner: `mise run <task>` as a tracked process group. On a fail-fast
+// `signal` abort it reaps its own group and resolves `aborted`, so runPreflight
+// records it `skipped`, not `failed` (EXC-587).
 function makeSpawnMiseTask(controller: ProcessGroupController): SpawnTask {
   return (name, env, onLine, signal) =>
     new Promise<SpawnOutcome>((resolve) => {
       const child = controller.spawn("mise", miseTaskCommand(name), {
         // Node's spawn accepts `undefined` env values (it drops them), so the
-        // parent env passes through as-is with `extra` (e.g. CARET_SKIP_BUILD_UI)
-        // merged on top.
+        // parent env passes through as-is with the skips merged on top.
         env: env ? { ...process.env, ...env } : process.env,
         stdio: ["ignore", "pipe", "pipe"],
       });
@@ -781,8 +760,6 @@ function installSignalHandlers(controller: ProcessGroupController): void {
  * machine-readable start/result (or error) documents on stdout instead.
  */
 export async function runPreflightCli(args: JsonArgs): Promise<void> {
-  // EXC-587: own a killable process group for every task, and tear it down on a
-  // catchable signal, so an interrupted gate can't orphan its descendants.
   const controller = createProcessGroupController();
   installSignalHandlers(controller);
   const spawnTask = makeSpawnMiseTask(controller);
