@@ -1,15 +1,12 @@
-// The in-UI alert/toast queue (EXC-850). A plain, node-free factory over an
-// injected store — the same state-factory-over-injected-store shape as the rest
-// of ui/src/state/*, and the injectable-timer discipline of lib/safeMode.ts — so
-// the timing logic unit-tests deterministically without mounting or real timers.
-// App.svelte owns the reactive `$state` backing store; AlertHost.svelte renders
-// it; this module owns the lifecycle: push, auto-dismiss dwell, and the two-phase
-// exit (mark `leaving` so the CSS exit animation runs, then remove).
+// The in-UI alert/toast queue (EXC-850). App.svelte owns the reactive `$state`
+// backing store and AlertHost.svelte renders it; this module owns the lifecycle:
+// push, auto-dismiss dwell, and the two-phase exit (mark `leaving` so the CSS exit
+// animation runs, then remove). Timers are injected so the timing unit-tests
+// deterministically without mounting.
 //
-// It is also caret's one funnel for "something just happened", so it is where the
-// sound layer attaches (EXC-1100): a push carries a cue derived from its variant,
-// or an explicit one the caller names. A verdict names its own so it is heard once
-// — as its verdict — rather than sounding twice alongside its confirmation toast.
+// It is also caret's one funnel for "something just happened", so the sound layer
+// attaches here (EXC-1100). A verdict names its own cue so it is heard once — as
+// its verdict — rather than sounding twice alongside its confirmation toast.
 
 import type { SoundEvent } from "$lib/sound.ts";
 
@@ -17,9 +14,9 @@ export type AlertVariant = "default" | "success" | "destructive";
 
 /**
  * An affordance that ACTS on an alert, rendered as a labelled button beside the
- * message (EXC-1207: the update toast opens Settings on its Updates pane). It is
- * a button of its own rather than a clickable card: the card already carries the
- * dismiss control, and nesting interactive controls is an accessibility defect.
+ * message (EXC-1207: the update toast opens Settings on its Updates pane). Its own
+ * button, not a clickable card — the card already carries the dismiss control, and
+ * nesting interactive controls is an accessibility defect.
  */
 export interface AlertAction {
   label: string;
@@ -135,7 +132,6 @@ export function createAlerts(store: AlertStore, deps: AlertDeps = {}): Alerts {
     // `undefined` takes the variant's cue; `null` is a deliberate silence.
     const cue = alert.sound === undefined ? VARIANT_SOUND[variant] : alert.sound;
     if (cue) deps.sound?.(cue);
-    // A persistent alert never auto-dismisses — it waits for the user's click.
     if (!alert.persistent) {
       dwellCancels.set(
         id,

@@ -97,30 +97,23 @@
   // createAlerts (below) mutates it, and AlertHost renders it bottom-right.
   let alertStore = $state<AlertStore>({ alerts: [] });
   // The adapter's declared approve variants, read once from the health probe.
-  // Undefined until the probe lands (or for a daemon that predates the field);
-  // approveVariants() falls back to the built-in set so the split-button always
-  // has options.
+  // Undefined until it lands, or for a daemon predating the field; approveVariants()
+  // then falls back to the built-in set.
   let declaredVariants = $state<ApproveVariant[] | undefined>(undefined);
-  // True when the daemon runs from source (EXC-556); read once from the health
-  // probe to show the "local build" badge. A daemon predating the field omits
-  // it, so this stays false.
+  // True when the daemon runs from source (EXC-556), for the "local build" badge. A
+  // daemon predating the field omits it, so this stays false.
   let isDev = $state(false);
-  // The running build's version + commit (EXC-561), read once from the same
-  // health probe to feed the VersionBadge in the status bar. Undefined until the probe
-  // lands (or for a daemon predating the fields); the badge self-gates on
-  // `version` and degrades when `commit` is absent.
+  // The running build's version + commit (EXC-561), for the status bar's
+  // VersionBadge, which self-gates on `version` and degrades without `commit`.
   let version = $state<string | undefined>(undefined);
   let commit = $state<string | undefined>(undefined);
-  // The active adapter's id (EXC-791), read once from the health probe — the
-  // environment the UI adapts to (e.g. an OpenCode session). Undefined until the
-  // probe lands or for a daemon that predates the field; passed to the TopBar,
-  // which exposes it as data-source.
+  // The active adapter's id (EXC-791) — the environment the UI adapts to (e.g. an
+  // OpenCode session). Undefined until the probe lands, or for a daemon predating it.
   let source = $state<string | undefined>(undefined);
-  // The daemon's update verdict (EXC-1207), read on load and re-read after the Updates
-  // toggle lands. Null until it arrives, and null for good when it can't be read — a
-  // daemon that wires no update thunk 404s the route, and every surface then simply stays
-  // quiet. The `updates.check` opt-out is already folded in daemon-side (EXC-1210), so
-  // this one value is every update surface's whole truth.
+  // The daemon's update verdict (EXC-1207), read on load and re-read after the
+  // Updates toggle lands. Null when it can't be read — a daemon that wires no update
+  // thunk 404s the route — and every surface then stays quiet. The `updates.check`
+  // opt-out is folded in daemon-side (EXC-1210), so this is their whole truth.
   let updateReport = $state<UpdateReport | null>(null);
   let work = $state<{
     annotations: Annotation[];
@@ -147,15 +140,13 @@
   let safeMode = $state(false);
 
   let showSettings = $state(false);
-  // Which category Settings opens on (EXC-1207). Undefined for every existing caller —
-  // the keyboard shortcut and the topbar gear land on Appearance as they always have —
-  // and set only by the update toast's deep link. The host mounts SettingsDialog per
-  // open (ModalPresence), so recording it before showing is what makes the seed apply.
+  // Which category Settings opens on (EXC-1207) — set only by the update toast's deep
+  // link; undefined lands on Appearance. ModalPresence mounts SettingsDialog per open,
+  // so recording it before showing is what makes the seed apply.
   let settingsCategory = $state<string | undefined>(undefined);
-  // Settings and the shortcuts help are the two surfaces the reviewer summons over
-  // a plan; each announces itself once, on the way in, since closing is their own
-  // move. The verdict dialogs also open over a plan but sit this out — they belong
-  // to the decision flow, which sounds through its own verdict cue.
+  // The two surfaces the reviewer summons over a plan announce themselves on the way
+  // in only. The verdict dialogs sit this out — they belong to the decision flow,
+  // which sounds through its own verdict cue.
   function openSettings(category?: string): void {
     sound.play("modalOpen");
     settingsCategory = category;
@@ -165,10 +156,8 @@
     sound.play("modalOpen");
     showHelp = true;
   }
-  // The comment panel's visibility has one writer, so every route to it sounds the
-  // same: the C shortcut and the status-strip tally through toggleComments, the
-  // panel's own ✕ and Escape through setComments(false) (EXC-1126). Sounded on the
-  // flip only, the guard setComparing and setConnected use for the same reason.
+  // One writer, so every route to the panel sounds the same (EXC-1126). On the flip
+  // only, the guard setComparing and setConnected use for the same reason.
   function setComments(visible: boolean): void {
     if (visible !== showComments) sound.play("commentsToggled");
     showComments = visible;
@@ -183,23 +172,18 @@
   let showOnboarding = $state(
     typeof Notification !== "undefined" && shouldShowOnboarding(Notification.permission),
   );
-  // Shortcut-hint affordances (EXC-826). App owns the reactive flag and threads it
-  // to the surfaces that show discoverability chrome (the TopBar key-cap hints, the
-  // status-bar keyboard button, the V-mode chip); applySetting resyncs it after a
-  // Settings edit so flipping it applies in place. The ? help modal stays reachable
-  // by keyboard regardless.
+  // Shortcut-hint affordances (EXC-826), threaded to every surface showing
+  // discoverability chrome; applySetting resyncs it so a Settings edit applies in
+  // place. The ? help modal stays reachable by keyboard regardless.
   let showShortcutHints = $state(readShortcutHints());
 
-  // Settings apply immediately (EXC-843). The two-pane Settings dialog calls this the
-  // moment a control changes: it persists + applies through the registry field's
-  // write(), resyncs the one reactive mirror left here — showShortcutHints (the hint
-  // chrome) — then confirms with a toast. The appearance fields need no resync: they
-  // command the appearance module, which every surface reads live. A failed write
-  // raises a PERSISTENT error toast the user must read and dismiss.
+  // Settings apply immediately (EXC-843): Settings calls this the moment a control
+  // changes. Only showShortcutHints needs a resync — the appearance fields command
+  // the appearance module, which every surface reads live.
   //
   // settingsRev bumps on every applied change; DiffPlanView watches it to re-read the
-  // diff-layout/marker prefs into its compare store so an open diff reflows live too
-  // (those prefs live in the view's own store, not a mirror App can resync).
+  // diff-layout/marker prefs into its compare store, which App cannot resync because
+  // those prefs live in the view's own store.
   let settingsRev = $state(0);
   async function applySetting(field: StagedField, value: unknown) {
     try {
@@ -208,9 +192,8 @@
       // this in turn, so a failure re-reads the field and snaps the control back.
       await field.write(value);
     } catch (err) {
-      // The hint is the write's own message: a localStorage pref can't fail, while a
-      // daemon-backed one says why in a sentence ("The caret daemon isn't
-      // reachable…"). Persistent so a failure isn't missed.
+      // The write's own message: a daemon-backed field says why in a sentence, and a
+      // localStorage pref cannot fail at all. Persistent so it isn't missed.
       const hint =
         err instanceof Error && err.message ? err.message : "The change wasn't saved.";
       alerts.push({
@@ -222,10 +205,8 @@
       return;
     }
     showShortcutHints = readShortcutHints();
-    // The daemon owns this one, and it folds the switch into the verdict it serves
-    // (EXC-1210) — so the way to learn what the write means is to re-read the route that
-    // owns it, exactly as the line above re-reads the shortcut hints. That is what clears
-    // the badges the instant the reviewer turns the check off.
+    // The daemon folds this switch into the verdict it serves (EXC-1210), so re-reading
+    // the route is what clears the badges the instant the check is turned off.
     if (field.key === UPDATES_CHECK_KEY) {
       // Keep the last known verdict when the re-read fails: null is the pane's "could not
       // be read" signal, so blanking it here would empty the Updates pane at the same
@@ -243,23 +224,18 @@
     });
   }
 
-  // The unsent-scratch controller lives here (EXC-877): App owns createSourceCommenting
-  // (created below, once `autosave` exists) and injects it down into both consumers —
-  // DiffPlanView, which renders the composer + Resume markers and drives
-  // open/submit/cancel/resume, and the Request Changes dialog, which Saves/Discards/
-  // demotes scratches. These three runes mirror the controller's non-reactive reads so
-  // both consumers re-render on every change; the factory's onChange writes them.
+  // The unsent-scratch controller lives here (EXC-877) because both DiffPlanView and
+  // the Request Changes dialog consume it. These three runes mirror the controller's
+  // non-reactive reads so both re-render on every change; its onChange writes them.
   let pending = $state<{ startLine: number; endLine: number } | undefined>();
   let pendingText = $state("");
   let scratches = $state<ComposerScratch[]>([]);
 
   // ----- State modules -----
   const selection = createReviewSelection(selStore, { onSound: sound.play });
-  // The reviewer picking another plan from the switcher, which selectReview alone is
-  // not: that is also the funnel for a deep link, mergeReviews' re-select, and
-  // afterResolve's auto-advance, none of which the reviewer asked for. The plan
-  // notifier's click (createPlanNotifier below) is reviewer-initiated but sits out
-  // too — the plan it jumps to already sounded its own arrival. Sounded only on a
+  // The reviewer picking another plan, which selectReview alone is not: that is also
+  // the funnel for a deep link, a re-select and an auto-advance. The notifier's click
+  // sits out too — the plan it jumps to already sounded its own arrival. Only on a
   // real move, since the switcher lists the active plan as a pickable row.
   function switchPlan(id: string): void {
     if (id !== selection.activeId) sound.play("planSwitched");
@@ -283,11 +259,9 @@
     },
     sound: sound.play,
   });
-  // Persist the retained scratches through autosave in a scheduled $effect rather than
-  // synchronously inside onChange, so the write is never re-entrant with the controller
-  // callback that produced it (e.g. DiffPlanView's contentKey reseed, whose onChange
-  // would otherwise write host state mid-flush). setScratches' scratchesEqual guard
-  // absorbs the seed echo, so a reseed of the just-served set schedules no redundant PUT.
+  // A scheduled $effect rather than a synchronous write inside onChange, so the write
+  // is never re-entrant with the callback that produced it (DiffPlanView's contentKey
+  // reseed would otherwise write host state mid-flush).
   $effect(() => {
     autosave.setScratches(scratches);
   });
@@ -299,12 +273,10 @@
     afterResolve: (id) => selection.afterResolve(id),
     onOffline: () => {
       selection.setConnected(false);
-      // Resolve's OWN onOffline — createAutosave's and startPolling's are separate
-      // closures — and it fires only on a genuine network failure, since a daemon non-2xx
-      // means the daemon answered and still advances. So this is exactly the case the
-      // optimistic confirmations below get wrong: nothing advanced, the plan is still on
-      // screen, and this persistent alert is what keeps a failed decision from reading as
-      // a landed one. Same shape as applySetting's failure half above.
+      // Fires only on a genuine network failure, since a daemon non-2xx still advances
+      // — so this is exactly the case the optimistic confirmations below get wrong.
+      // Nothing advanced and the plan is still on screen; the persistent alert is what
+      // keeps a failed decision from reading as a landed one.
       alerts.push({
         variant: "destructive",
         title: "Couldn't send the decision",
@@ -335,36 +307,27 @@
   let reviewContext = $derived(
     active ? { reviewId: active.id, cwd: active.cwd, adapter: source } : undefined,
   );
-  // The variants the split-button renders: the declared set when present, else
-  // the built-in fallback.
   let variants = $derived(approveVariants(declaredVariants));
   // Whether to mark the update surfaces (EXC-1207). The daemon's verdict alone: an
   // opted-out reviewer is served `disabled`, which is not pending.
   let updatePending = $derived(!!updateReport && isUpdatePending(updateReport.status));
-  // Everything a plain Approve would silently leave behind, as a preview list:
-  // the general-comment draft first, then the non-blank committed inline comments,
-  // then the retained-but-unsent composer scratches. The approve/reject guard
-  // renders this list so the reviewer sees what's at stake; the TopBar badge and
-  // status strip read its length. Deriving pendingCount from the same list keeps
-  // every surface in agreement about what's pending — an uncommitted scratch
-  // (EXC-745) and a lone general-comment draft (EXC-742) are both now protected on
-  // Approve exactly like a committed comment.
+  // Everything a plain Approve would silently leave behind, as a preview list the
+  // approve/reject guard renders. Deriving pendingCount from the same list keeps
+  // every surface agreeing on what's pending — an uncommitted scratch (EXC-745) and a
+  // lone general-comment draft (EXC-742) are protected exactly like a committed one.
   let guardItems = $derived(pendingItems(work.annotations, work.generalCommentDraft, scratches));
   let pendingCount = $derived(guardItems.length);
   // Distinct source lines the pending line-anchored comments cover (union of
   // ranges), for the status strip's at-a-glance "N comments · M lines" readout.
   let coveredLines = $derived(coveredLineCount(work.annotations));
-  // The two versions being diffed while compare mode is on screen, null otherwise
-  // — DiffPlanView owns compare state and reports it upward (EXC-872), because the
-  // navigator is a root sibling of .shell rather than a child of the view. Ordered
-  // as the diff renders them (before = the old document), not sorted, so the panel
-  // can tell which side a comment jumps to.
+  // Reported upward by DiffPlanView, which owns compare state (EXC-872), because the
+  // navigator is a root sibling of .shell rather than a child of the view. Ordered as
+  // the diff renders them (before = the old document), not sorted, so the panel can
+  // tell which side a comment jumps to.
   let compareRange = $state<{ before: number; after: number } | null>(null);
-  // The plan's inline comments + unsent drafts as a navigable, searchable index for
-  // the comment navigator — committed line-anchored comments plus the retained
-  // composer scratches (flagged draft), in document order. While comparing, the
-  // panel lists the comments left on every version in the compared range instead,
-  // each badged with its source version; drafts are single-version only.
+  // The navigator's index: committed comments plus retained scratches (flagged
+  // draft), in document order. While comparing it lists every version in the compared
+  // range instead, each badged with its source version; drafts are single-version.
   let comments = $derived(
     compareRange && active
       ? versionCommentIndex(
@@ -388,12 +351,9 @@
       : "Comments",
   );
 
-  // Reveal a comment from the navigator: focus it (the source view highlights the
-  // card in amber and expands it) and scroll the view to its line. A row the index
-  // marked unlinkable has nothing on screen to scroll to, so it does neither.
-  // Focusing is single-version only: a compare entry's id carries a `v3:` prefix
-  // that matches no card, so focusing it would strand a bogus id in the working
-  // copy for the reviewer to find after leaving compare mode.
+  // A row the index marked unlinkable has nothing on screen to scroll to, so it does
+  // neither. Focusing is single-version only: a compare entry's id carries a `v3:`
+  // prefix that matches no card, so it would strand a bogus id in the working copy.
   function revealComment(entry: CommentIndexEntry) {
     if (!entry.linkable || entry.line == null) return;
     if (compareRange === null) autosave.focusAnnotation(entry.id);
@@ -409,17 +369,15 @@
   });
 
   // ----- OS appearance -----
-  // Follow the system light/dark flip (EXC-773). The appearance module owns the one
-  // subscription and re-resolves against the fresh preference, wiping like an in-app
-  // switch when the palette actually moves and staying silent under a pinned mode.
-  // No reactive reads: runs once on mount, returns the disposer.
+  // Follow the system light/dark flip (EXC-773); the appearance module owns the one
+  // subscription and stays silent under a pinned mode. No reactive reads: runs once on
+  // mount, returns the disposer.
   $effect(() => appearance.watch());
 
   // ----- Update verdict -----
-  // Read the daemon's verdict once on mount. No network check is triggered by the UI —
-  // the daemon decided this against its own cache and the route only reports it, with the
-  // reviewer's live opt-out already folded in. No reactive reads, so this runs once. A
-  // failed read is quiet: the report stays null and every surface then says nothing.
+  // Read the daemon's verdict once on mount. No network check is triggered by the UI:
+  // the daemon decided this against its own cache and the route only reports it. A
+  // failed read is quiet — the report stays null and every surface says nothing.
   $effect(() => {
     void getUpdate()
       .catch(() => null)
@@ -431,21 +389,16 @@
       });
   });
 
-  // The once-per-version nudge. Fires when the verdict resolves and the gate holds, and
-  // only when this browser has not already toasted THIS signature — so a reviewer who
-  // dismissed it does not meet it again on every reload, and a newer version still gets
-  // its own. Persistent, because a nudge worth reading should not vanish in four seconds
-  // and it can fire at most once per version so it cannot nag; silent, because a page
-  // load should not chime.
+  // The once-per-version nudge, fired only when this browser has not already toasted
+  // THIS signature. Persistent, because it can fire at most once per version so it
+  // cannot nag; silent, because a page load should not chime.
   //
-  // `toasted` is a plain local rather than the stored marker, and it is what keeps this
-  // effect from re-entering: `alerts.push` READS `alertStore.alerts` to append to it, so
-  // pushing from inside an effect makes the queue one of this effect's own dependencies.
-  // The stored marker cannot stand in, because it is allowed to fail — with storage
-  // blocked, `readToastedUpdate()` keeps answering null and the guard never holds, so the
-  // effect would push, invalidate itself, push again, and take the app down with
-  // `effect_update_depth_exceeded`. The push is untracked besides, so the queue is never a
-  // dependency in the first place (the ModalPresence idiom).
+  // `toasted` is a plain local, not the stored marker, and it is what keeps this effect
+  // from re-entering: the stored marker is allowed to fail, and with storage blocked
+  // `readToastedUpdate()` keeps answering null, so the guard would never hold and the
+  // effect would push, invalidate itself and take the app down with
+  // `effect_update_depth_exceeded`. The push is untracked besides, so the queue is
+  // never a dependency in the first place (the ModalPresence idiom).
   let toasted = false;
   $effect(() => {
     if (toasted || !updatePending || !updateReport) return;
@@ -487,14 +440,11 @@
         version = h.version;
         commit = h.commit;
         source = h.source;
-        // Dev --fresh (EXC-781): reset the browser to a brand-new-user session —
-        // clear saved UI prefs, fall back to the default appearance (main.ts already
-        // painted whatever was stored before this probe resolved, so re-paint here —
-        // instantly, since a reset isn't a switch the user made), and re-open
-        // first-run onboarding. Once per daemon boot only (keyed on
-        // instanceId): the daemon reports fresh on every /api/health for its whole
-        // life, so without this guard each reload would re-clear the onboarded flag
-        // and "Maybe later" would never stick.
+        // Dev --fresh (EXC-781): reset the browser to a brand-new-user session. The
+        // re-paint is needed because main.ts already painted whatever was stored
+        // before this probe resolved. Keyed on instanceId because the daemon reports
+        // fresh on every /api/health for its whole life — without the guard each
+        // reload would re-clear the onboarded flag and "Maybe later" would never stick.
         if (h.fresh && !freshResetApplied(h.instanceId)) {
           clearKnownPrefs();
           appearance.boot();
@@ -524,14 +474,11 @@
   });
 
   // ----- Dismiss plan notifications once the user is back in caret (EXC-815) -----
-  // Toasts fire only while the user is away; the moment they return — focus the
-  // window or the tab becomes visible — every one is redundant (the bell and
-  // switcher show these plans), so close them all. The presence gate lives in
-  // notifier.dismissAllIfPresent(): mergeReviews auto-selects while away, so a
-  // toast the away user never saw must never be closed out from under them.
-  // isAway() is not reactive, hence the focus/visibility listeners; this effect
-  // reads no reactive state, so it runs once and keeps its listeners for the
-  // component's life.
+  // Toasts fire only while the user is away, so the moment they return every one is
+  // redundant. The presence gate lives in notifier.dismissAllIfPresent(): mergeReviews
+  // auto-selects while away, so a toast the away user never saw must never be closed
+  // out from under them. isAway() is not reactive, hence the listeners; this effect
+  // reads no reactive state, so it runs once and keeps them for the component's life.
   $effect(() => {
     const dismiss = () => notifier.dismissAllIfPresent();
     dismiss();
@@ -576,36 +523,26 @@
   });
 
   // ----- Keyboard shortcuts (EXC-786) -----
-  // Stand up the global shortcut dispatcher on window and register the existing
-  // editor chords as read-only entries — they surface in the help modal while
-  // the composer keeps owning ⌘/Ctrl+Enter and Esc on focus. Mount-once: reads
-  // no reactive state, returns its teardown. Downstream tickets register their
-  // own shortcuts into the same `shortcuts` singleton.
+  // The editor chords register as read-only entries — they surface in the help modal
+  // while the composer keeps owning ⌘/Ctrl+Enter and Esc on focus. Mount-once: reads
+  // no reactive state, returns its teardown.
   $effect(() => {
     const unregister = EDITOR_SHORTCUTS.map((entry) => shortcuts.register(entry));
-    // A live binding = EXC-786's reservation (bind spreads key/label/group/cap/scope
-    // from CANONICAL_KEYMAP) + the caller's run/enabled, registered into the shared
-    // singleton. `reg` is the local wrapper over bind + register so each binding is a
-    // single call (EXC-876).
+    // A live binding is EXC-786's reservation (bind spreads key/label/group/cap/scope
+    // from CANONICAL_KEYMAP) plus the caller's run/enabled.
     const reg = (id: string, opts: Parameters<typeof bind>[1]) => shortcuts.register(bind(id, opts));
-    // The ? key toggles the shortcuts help modal (EXC-787). help.show carries scope:
-    // "global" in the table (EXC-849), so binding it lets ? fire from every view —
-    // including over the Settings modal, where the review shortcuts are suppressed. The
-    // key and its global scope come from the reservation.
+    // help.show carries scope: "global" in the table (EXC-849), so ? fires from every
+    // view — including over Settings, where the review shortcuts are suppressed.
     const unregisterHelp = reg("help.show", {
       run: () => {
         if (showHelp) showHelp = false;
         else openHelp();
       },
     });
-    // The review-verdict + chrome shortcuts (EXC-789). Each binds EXC-786's canonical
-    // reservation and adds the live run + enabled here, routing through the SAME guarded
-    // path as its TopBar button — `a` is never a raw approve, always onApprove's
+    // The review-verdict + chrome shortcuts (EXC-789), each routing through the SAME
+    // guarded path as its TopBar button — `a` is never a raw approve, always onApprove's
     // unsent-comments guard, and Shift+R is never a raw deny, always onReject's confirm
-    // (EXC-913). The three verdict actions gate on an active, not-busy review
-    // (matching the buttons' disabled state); Settings is persistent chrome (EXC-730),
-    // reachable with no review. Shift+C toggles the comment navigator (EXC-792), gated on
-    // an active review like the status-strip tally that also toggles it.
+    // (EXC-913). Settings is persistent chrome (EXC-730), reachable with no review.
     const canAct = () => active != null && !resolve.busy;
     const unregisterActions = [
       reg("actions.approve", { run: () => onApprove(resolve.approveMode), enabled: canAct }),
@@ -674,21 +611,16 @@
     // plain approve would drop.
     pendingApproveMode = mode;
   }
-  // The three verdict hand-offs (EXC-894). Each acknowledges BEFORE clearing its modal's
-  // flag, so the confirmation is already sliding in bottom-right while the surface recedes
-  // — the ordering is the point, not the toast. The acknowledgment is optimistic and the
-  // resolve stays fired-not-awaited, so nothing here can delay or block it; the failure it
-  // would otherwise mask is caught by createResolve's onOffline above. Each names its
-  // verdict in the past tense of the button that was pressed, so the action keeps one name
-  // through the whole gesture.
-  // Each of the three opens on its own flag, which is also what makes it idempotent: the
-  // surface stays mounted through its 140ms exit, so its confirm button is still clickable
-  // after the first press cleared the flag. Without the guard a second press inside that
-  // window pushes a second confirmation for one decision.
+  // The three verdict hand-offs (EXC-894). Each acknowledges BEFORE clearing its
+  // modal's flag, so the confirmation is already sliding in while the surface recedes —
+  // the ordering is the point, not the toast. The acknowledgment is optimistic and the
+  // resolve stays fired-not-awaited; the failure that would mask is caught by
+  // createResolve's onOffline above.
+  //
+  // The flag check is what makes each idempotent: the surface stays mounted through its
+  // 140ms exit, so a second press inside that window would push a second confirmation
+  // for one decision.
   function approveAnyway(notes: string) {
-    // `notes` is the optional reviewer note from the confirm dialog (EXC-791); it
-    // rides the allow as feedback and reaches the agent. resolve.approve omits a
-    // blank note.
     const mode = pendingApproveMode;
     if (!mode) return;
     alerts.push({ variant: "success", message: "Plan approved", sound: "approved" });
@@ -702,23 +634,19 @@
   }
   function rejectAnyway() {
     if (!pendingReject) return;
-    // Neutral rather than success, here and on request-changes: both are completed
-    // decisions rather than good outcomes, and AlertHost leads the success variant with a
-    // check glyph that would read as approval on a plan being sent back. Same gesture,
-    // the weight each verdict deserves.
+    // Neutral rather than success, here and on request-changes: AlertHost leads the
+    // success variant with a check glyph that would read as approval on a plan being
+    // sent back.
     alerts.push({ variant: "default", message: "Plan rejected", sound: "rejected" });
     pendingReject = false;
     void resolve.reject();
   }
   function divertToRequestChanges() {
-    // The annotations + general-comment draft are App.svelte's autosaved state,
-    // so they survive the hand-off to the request-changes dialog untouched.
-    // Shared by both guards (approve + reject), so clear both.
+    // The annotations and general-comment draft are autosaved state, so they survive
+    // the hand-off untouched. Shared by both guards, so clear both.
     //
     // Deliberately silent: this swaps one modal for another rather than deciding
-    // anything, so there is no verdict to confirm — and `active` is unchanged, so the
-    // arrival below does not replay either. The surfaces still cross on the shared
-    // choreography (EXC-892); only the two hand-off moves sit this one out.
+    // anything, and `active` is unchanged so the arrival does not replay either.
     pendingApproveMode = null;
     pendingReject = false;
     showDialog = true;
@@ -815,35 +743,27 @@
     <EmptyState connected={selection.connected} />
   {/if}
 
-  <!-- The arrival (EXC-894): the second half of the hand-off a decided modal starts. The
-       guard recedes on --dur-exit while this lifts on --dur-enter, so the departure has
-       cleared before the arrival settles and the two read as one gesture rather than as
-       two events that happened to coincide.
+  <!-- The arrival (EXC-894): the second half of the hand-off a decided modal starts.
+       The guard recedes on --dur-exit while this lifts on --dur-enter, so the two read
+       as one gesture rather than two events that coincided.
 
-       A curtain rather than an animation on the content itself, because the two
-       destinations arrive by different mechanisms: draining the queue MOUNTS EmptyState,
-       where a CSS animation would replay on its own, while a plan stacked behind this one
-       leaves DiffPlanView mounted and re-renders its shadow content through contentKey,
-       where it would not. Keying an element that owns nothing covers both with one rule,
-       and costs nothing — remounting the view to buy a fade would tear down the
-       @pierre/diffs render, re-init the compare store and strand revealLine. Owning
-       nothing is also why the plan under it does not move at all: this lifts off it.
+       A curtain rather than an animation on the content, because the two destinations
+       arrive by different mechanisms: draining the queue MOUNTS EmptyState, where a CSS
+       animation would replay on its own, while a stacked plan leaves DiffPlanView
+       mounted and re-renders through contentKey, where it would not. Keying an element
+       that owns nothing covers both — remounting the view to buy a fade would tear down
+       the @pierre/diffs render, re-init the compare store and strand revealLine.
 
-       Keyed on the review's identity rather than the derived object: the 2s poll bumps the
-       active review to a new version without changing the id, and a revision landing in
-       place is not an arrival. -->
+       Keyed on the review's identity rather than the derived object: the 2s poll bumps
+       the version without changing the id, and a revision in place is not an arrival. -->
   {#key active?.id ?? "none"}
     <div class="arrival" aria-hidden="true"></div>
   {/key}
 
-  <!-- The bottom status bar (EXC-787): the row-4 grid child consolidating the
-       build/version badge (left), the plan-review status (right, when active),
-       and the keyboard ? affordance (far right). While comparing, its tally
-       counts what the panel it toggles actually lists, so the button and its
-       panel can't disagree, and 0 covered lines is how the "· M lines" readout
-       (which measures the current version) is suppressed; the approve guard
-       reads guardItems, not these, so no verdict logic moves. A grid child, so it reserves
-       space at the bottom; the CommentNavigator docks just above it. -->
+  <!-- While comparing, the tally counts what the panel it toggles actually lists, so
+       the two can't disagree, and 0 covered lines is how the "· M lines" readout —
+       which measures the current version — is suppressed. The approve guard reads
+       guardItems, not these, so no verdict logic moves. -->
   <StatusBar
     {version}
     {commit}
@@ -860,11 +780,8 @@
   />
 </div>
 
-<!-- The comment navigator: a searchable index of the plan's inline comments,
-     docked above the bottom status bar. A root sibling of .shell, gated on an
-     active review; its toggle is the bar's comment tally. Reveals a comment by
-     focusing it (the source view highlights + expands the card) and scrolling
-     the plan to its line. -->
+<!-- A root sibling of .shell rather than a child of the view, gated on an active
+     review. -->
 <CommentNavigator
   open={active !== null && showComments}
   {comments}
@@ -989,11 +906,9 @@
   {/snippet}
 </ModalPresence>
 
-<!-- Keyboard shortcuts help (EXC-787): the ? key toggles it, the status bar's
-     keyboard button opens it. Reads the live registry (shortcuts.list()) at open,
-     so it grows as later tickets register — then narrowed (EXC-849) to the shortcuts
-     valid in the current view: over Settings it lists only the settings + global
-     shortcuts, matching what the dispatcher will actually fire. -->
+<!-- Reads the live registry at open, so it grows as later tickets register, then
+     narrows (EXC-849) to the shortcuts valid in the current view — over Settings, only
+     the settings + global ones, matching what the dispatcher will actually fire. -->
 <ModalPresence open={showHelp}>
   {#snippet modal({ open, onClosed })}
     <ShortcutsHelp
@@ -1022,46 +937,31 @@
     grid-row: 4;
   }
 
-  /* The hand-off's arrival, covering the content row it names but deliberately OUT OF
-     FLOW. The grid placement is what gives an absolutely-positioned child its containing
-     block — .shell is positioned for exactly this (layout.css) — and `inset: 0` then
-     stretches it to that area. In flow it could not work: the content row is filled by a
-     single AUTO-PLACED child. DiffPlanView renders `.control-row` and `.diff-surface` as
-     two siblings rather than one root — which is also why the `.diff-plan` arm of the rule
-     above has matched nothing since long before this curtain — and auto-placement drops the
-     first into row 2 (the banner's row, empty in the common case) and the second into row 3.
-     An in-flow item claiming row 3 is placed before either and pushes `.diff-surface` into
-     an implicit fifth row, under the status bar. Out of flow it takes part in no placement
-     at all. Declared after both content branches, so it paints over them with no z-index of
-     its own.
+  /* The hand-off's arrival, covering the content row but deliberately OUT OF FLOW. The
+     grid placement gives this absolutely-positioned child its containing block (.shell
+     is positioned for exactly this, layout.css) and `inset: 0` stretches it to that
+     area. In flow it could not work: DiffPlanView renders `.control-row` and
+     `.diff-surface` as two auto-placed siblings, landing in rows 2 and 3, so an in-flow
+     item claiming row 3 would push `.diff-surface` into an implicit fifth row under the
+     status bar. Declared after both content branches, so it paints over them with no
+     z-index of its own.
 
-     What that costs, stated rather than inherited: the curtain covers row 3, so on an
-     arriving plan `.control-row` — the ToC chip, compare picker, breadcrumbs and cwd — is
-     NOT covered and swaps at once beneath it. Widening to `grid-row: 2 / 4` is not the fix,
-     because row 2 is the daemon banner's when one is present. The real fix is a single
-     DiffPlanView root pinned to row 3, which would also make this boundary a deliberate
-     element rather than a track number; until then the drain-to-empty destination is fully
-     covered (`.empty` is pinned to row 3) and the stacked-plan one is covered from the
-     control row down.
+     What that costs: the curtain covers row 3, so an arriving plan's `.control-row`
+     swaps at once beneath it. Widening to `grid-row: 2 / 4` is not the fix, because row
+     2 is the daemon banner's when one is present — the real fix is a single DiffPlanView
+     root pinned to row 3.
 
      Both ends of the placement are spelled out because out of flow they have to be: an
      `auto` grid line on an absolutely-positioned child resolves to the grid container's
-     PADDING EDGE rather than to "span 1", so a bare `grid-row: 3` would run the curtain
-     down over the status bar as well — and the bar is chrome that stays continuous through
-     the hand-off, because the app did not change, only the plan did.
+     PADDING EDGE rather than "span 1", so a bare `grid-row: 3` would run the curtain
+     over the status bar too — and the bar stays continuous through the hand-off.
 
-     Opacity only, and deliberately not a wipe: the directional sweep is spoken for by the
-     theme switch, where it means "everything was restyled". A plan arriving is a smaller
-     claim, so the page simply develops back in under the curtain. One paper tone serves
-     both destinations: it matches the body's --paper exactly under the empty state, and
-     sits a step above the diff view's --paper-sunk under a plan, so that reveal begins on
-     a slight lift rather than on the same tone. Judged the better trade than tinting the
-     curtain per destination, which would need it to know which one it is. `forwards` is
-     load-bearing rather than cosmetic — without the fill the final opacity is discarded
-     and the curtain snaps back to full paper, blanking the content region for the rest of
-     the session. Reduced motion stays the global rule's job (styles/base.css), which
-     collapses this to 0.01ms and makes the hand-off the instant state change it should be
-     under that preference — hence no @media here. */
+     Opacity only, never a wipe: the directional sweep is spoken for by the theme switch,
+     where it means "everything was restyled". One paper tone serves both destinations —
+     it matches --paper under the empty state and sits a step above --paper-sunk under a
+     plan, so that reveal begins on a slight lift. `forwards` is load-bearing: without
+     the fill the final opacity is discarded and the curtain snaps back to full paper,
+     blanking the content region for the rest of the session. */
   .arrival {
     position: absolute;
     grid-row: 3 / 4;
@@ -1080,16 +980,11 @@
     }
   }
 
-  /* Persistent, dismissible banner shown when the daemon behind the port was
-     replaced (its instanceId flipped). Alert.Root carries only the semantic
-     role="alert" here; the rest re-shapes its card default into a full-width top
-     strip that consumes grid row 2 and pushes the content down rather than
-     overlaying it, so it can't be mistaken for a transient toast. The accent left
-     rule signals urgency without an icon (icon-rules: an icon must earn its place;
-     a one-line message doesn't need one). Reached with :global because the class
-     rides the Alert child component (no scope hash); the overrides win because
-     this scoped component CSS is unlayered and Tailwind's utilities are layered —
-     unlayered always beats layered. */
+  /* Alert.Root's card default re-shaped into a full-width strip that consumes grid
+     row 2 and pushes the content down rather than overlaying it, so it can't be
+     mistaken for a transient toast. :global because the class rides the Alert child
+     component; the overrides win because this scoped CSS is unlayered and Tailwind's
+     utilities are layered. */
   .shell > :global(.daemon-banner) {
     grid-row: 2;
     display: flex;

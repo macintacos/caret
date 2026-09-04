@@ -4,12 +4,6 @@ import { describe, expect, test } from "bun:test";
 import { render } from "@ui/support/mount.ts";
 import SourceScratchMarker from "@/components/SourceScratchMarker.svelte";
 
-// SourceScratchMarker is the quiet, pre-card line affordance for a retained but
-// unsubmitted composer draft (a "scratch"). Clicking it resumes the composer
-// with the text restored. Its badge reads "Resume" — an action — kept
-// deliberately distinct from SourceAnnotationCard's "Draft" state label, so an
-// unsent scratch never reads as a created comment.
-
 function mount(over: Record<string, unknown> = {}) {
   let resumed = 0;
   const { target } = render(SourceScratchMarker, {
@@ -29,8 +23,8 @@ describe("SourceScratchMarker", () => {
     const { target } = mount();
     const text = target.textContent ?? "";
     expect(text).toContain("Resume");
-    // The vocabulary guard: a scratch is not a "Draft" (that is a created,
-    // pending annotation in commentState.ts). They must never read identically.
+    // A scratch is not a "Draft" (a created, pending annotation in
+    // commentState.ts). The two must never read identically.
     expect(text).not.toContain("Draft");
   });
 

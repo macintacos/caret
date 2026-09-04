@@ -1,8 +1,7 @@
-// The per-comment state affordance: maps a comment's ReviewStatus onto the quiet
-// dot+label the SourceAnnotationCard shows, so the card stays presentational and the
-// mapping is unit-testable without mounting. The vocabulary IS ReviewStatus — there
-// is no parallel comment-state set — and an absent state reads as "pending" (a
-// freshly-created working draft, or an on-disk record predating the field).
+// The per-comment state affordance behind SourceAnnotationCard's dot+label. The
+// vocabulary IS ReviewStatus — there is no parallel comment-state set — and an
+// absent state reads as "pending" (a fresh working draft, or an on-disk record
+// predating the field).
 
 import type { ReviewStatus } from "@core/lib/types";
 
@@ -25,9 +24,7 @@ export interface CommentStateView {
   unresolved: boolean;
 }
 
-/** Resolves a comment's (optionally absent) state into its card presentation. The
- * unresolved working states (pending/rejected) share the amber draft tone; the
- * terminal states split into accepted (--ok) and expired (--ink-faint). */
+/** Resolves a comment's (optionally absent) state into its card presentation. */
 export function commentState(state: ReviewStatus | undefined): CommentStateView {
   const status = state ?? "pending";
   switch (status) {

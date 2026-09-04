@@ -6,12 +6,10 @@ import { capture, render } from "@ui/support/mount.ts";
 import TopBar from "@/components/TopBar.svelte";
 import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
 
-// EXC-760: the TopBar is rebuilt on shadcn primitives (Button / Badge /
-// DropdownMenu / Tooltip / Separator). This suite covers the synchronous
-// surface — which buttons render, their labels, the pending-count Badge, and
-// callback wiring. The approve split-button's DropdownMenu is bits-ui overlay
-// interaction (open on click, pick a variant, Escape, outside-click), so it
-// lives in test/e2e/approve-options.e2e.ts per doc/agents/browser-testing.md.
+// This suite covers the synchronous surface — which buttons render, their labels,
+// the pending-count Badge, and callback wiring. The approve split-button's
+// DropdownMenu is bits-ui overlay interaction, so it lives in
+// test/e2e/approve-options.e2e.ts per doc/agents/browser-testing.md.
 
 const variants: ApproveVariant[] = [
   { id: "default", label: "Approve", description: "Approve edits manually" },
@@ -40,8 +38,7 @@ const baseProps = {
 };
 
 describe("TopBar render", () => {
-  // EXC-807: the working-directory path moved out of the header into the compare
-  // row, so the topbar no longer renders it.
+  // The working-directory path belongs to the compare row, not the header (EXC-807).
   test("does not render the working-directory path", () => {
     const { target } = render(TopBar, baseProps);
     expect(target.querySelector(".context")).toBeNull();
@@ -286,12 +283,9 @@ describe("TopBar unread marks (EXC-411)", () => {
 });
 
 describe("TopBar overflow menu (EXC-810)", () => {
-  // Below --w-narrow the secondary actions collapse into a "More actions"
-  // overflow DropdownMenu. The trigger stays in the DOM at every width (CSS
-  // toggles its visibility) and carries the pending count so it stays visible
-  // when Request changes moves into the menu. The trigger renders synchronously
-  // (only DropdownMenu's portalled Content is deferred); the menu's items and
-  // the width-driven visibility swap are real-browser behavior, covered in
+  // The overflow trigger stays in the DOM at every width — CSS toggles its
+  // visibility — and renders synchronously, unlike DropdownMenu's portalled Content.
+  // The menu's items and the width-driven swap are real-browser behavior, covered in
   // test/e2e/topbar-overflow.e2e.ts per doc/agents/browser-testing.md.
 
   test("renders the overflow trigger with an accessible name when a review is active", () => {

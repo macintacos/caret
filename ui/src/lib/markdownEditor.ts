@@ -1,10 +1,6 @@
-// CodeMirror 6 configuration for MarkdownEditor.svelte — the syntax-visible
-// markdown editing surface. Kept as a plain module (not inline in the component
-// script) so tsc type-checks the CodeMirror generics/classes directly; it is the
-// other half of the swap boundary, paired with MarkdownEditor.svelte. Swapping
-// the editor engine means replacing this file and the component together; the
-// composer, the annotation-card edit field, and the saved-comment render path
-// stay untouched.
+// CodeMirror 6 configuration for MarkdownEditor.svelte, the other half of the
+// editor swap boundary. A plain module rather than inline in the component script
+// so tsc type-checks the CodeMirror generics and classes directly.
 import { closeCompletion, completionStatus, startCompletion } from "@codemirror/autocomplete";
 import {
   defaultKeymap,
@@ -69,14 +65,9 @@ export interface MarkdownEditorOptions {
   refDeps?: RefRecognitionDeps;
 }
 
-// The markdown grammar tags structure (strong/emphasis/heading/link) and the
-// syntax markers (meta); the code-* tags below colour fenced-block content once a
-// language parses it (see codeLanguages in markdownExtensions). Colours are caret tokens
-// (hex/var, never oklch): keyword = accent, string = ok/green, comment = faint,
-// names/types/numbers = accent-bright. This is the editor's own scheme, NOT the diff
-// view's — the shiki themes there paint syntax from the named colour set's eleven
-// shiki-only hues (themes/caret.ts, caret-shiki.ts), and those are not ColorTokens,
-// so a `var(--x)` highlight style has no way to name them.
+// The editor's own scheme, NOT the diff view's: the shiki themes there paint from
+// eleven shiki-only hues that are not ColorTokens, so a `var(--x)` highlight style
+// has no way to name them. Tokens only (hex/var, never oklch).
 const highlightStyle = HighlightStyle.define([
   // Markdown structure.
   { tag: tags.strong, fontWeight: "700" },
@@ -140,32 +131,25 @@ const codeBlockLine = Decoration.line({ class: "cm-md-codeblock" });
 const codeBlockOpen = Decoration.line({ class: "cm-md-codeblock cm-md-codeblock-open" });
 const codeBlockClose = Decoration.line({ class: "cm-md-codeblock cm-md-codeblock-close" });
 
-// A reference caret can actually resolve (EXC-1177). The geometry is shared and
-// lives on `.cm-md-ref` in the theme; the tint is per KIND, because a comment
-// routinely carries both and two identical pills make the reviewer read the text
-// to tell which is which. A path keeps `--chip-ref` — the token the rendered plan
-// already spends on a resolved path (diffview/coreStyles.ts), so one reference
-// reads the same on the side that composes it and the side that renders it — and
-// a skill takes `--chip-skill`, which exists for exactly this pairing.
+// A reference caret can actually resolve (EXC-1177). Shared geometry on
+// `.cm-md-ref`, but the tint is per KIND: a comment routinely carries both, and two
+// identical pills make the reviewer read the text to tell which is which.
 const pathChipDeco = Decoration.mark({ class: "cm-md-ref cm-md-ref-path" });
 const skillChipDeco = Decoration.mark({ class: "cm-md-ref cm-md-ref-skill" });
 
 function buildCodeDecorations(view: EditorView): DecorationSet {
   const decos: Range<Decoration>[] = [];
-  // Chips ride this same pass rather than a sibling plugin: one decoration
-  // mechanism, so the code marks and the reference marks are always built from
-  // one view of the document. Empty on an editor with no review, where
-  // refRecognition contributes no field at all.
+  // Chips ride this same pass rather than a sibling plugin, so code marks and
+  // reference marks are always built from one view of the document.
   const recognized = view.state.field(recognizedRefs, false);
   const chips =
     recognized === undefined || recognized.size === 0
       ? []
       : scanRefTokens(view.state).filter((token) => recognized.has(refKey(token)));
-  // A codespan that IS a chip gives up its own pill. Two marks over one range
-  // nest, so their fills composite, their inline padding stacks and their 0.92em
-  // font sizes multiply — which reads as two chips that failed to line up rather
-  // than as one. The rendered-plan side settles the same collision the same way
-  // (svelte-rules.md § CSS-token discipline, on `data-md-cite`).
+  // A codespan that IS a chip gives up its own pill: two marks over one range nest,
+  // so their fills composite, padding stacks and the 0.92em sizes multiply — which
+  // reads as two chips that failed to line up. The rendered plan settles it the same
+  // way (svelte-rules.md § CSS-token discipline, on `data-md-cite`).
   const chipped = new Map(chips.map((token) => [`${token.from}:${token.to}`, token.kind] as const));
 
   for (const { from, to } of view.visibleRanges) {
@@ -206,9 +190,8 @@ const codeHighlighter = ViewPlugin.fromClass(
       this.decorations = buildCodeDecorations(view);
     }
     update(u: ViewUpdate) {
-      // The recognized set is replaced wholesale, so an identity check is the
-      // whole staleness test — and refRecognition skips a dispatch that would
-      // change nothing, so this never rebuilds for an answer that did not move.
+      // The recognized set is replaced wholesale, so identity is the whole staleness
+      // test, and refRecognition skips a dispatch that would change nothing.
       const refsChanged =
         u.state.field(recognizedRefs, false) !== u.startState.field(recognizedRefs, false);
       if (u.docChanged || u.viewportChanged || refsChanged) {
@@ -219,11 +202,9 @@ const codeHighlighter = ViewPlugin.fromClass(
   { decorations: (v) => v.decorations },
 );
 
-// CM-internal styling. Kept here (CM injects it unscoped) rather than the
-// component <style> because Svelte's scoping can't reach CM's own DOM. The
-// scroller sets the prose font (overriding CM's default monospace); min/max
-// height plus overflow is the auto-grow: it grows with content to the cap, then
-// scrolls. Tokens only (hex/var) — the embedded Chromium mangles oklch.
+// CM-internal styling, kept here rather than the component <style> because
+// Svelte's scoping can't reach CM's own DOM. min/max height plus overflow is the
+// auto-grow. Tokens only (hex/var) — the embedded Chromium mangles oklch.
 const theme = EditorView.theme({
   "&": { backgroundColor: "transparent", color: "var(--ink)" },
   ".cm-scroller": {
@@ -265,21 +246,13 @@ const theme = EditorView.theme({
     borderBottomRightRadius: "var(--radius)",
     paddingBottom: "0.2em",
   },
-  // A recognized reference: the geometry both kinds share.
-  //
-  // Mono at the inline-code pill's own scale, because a reference is an
-  // identifier the reviewer is citing — the same reservation every other caret
-  // surface makes for one, and what keeps a path chipped in prose reading like
-  // the same path chipped inside backticks. No transition: the mark is a fresh
-  // element each time the recognized set moves, so there is no from-state to
-  // animate out of, and a pill fading in under the cursor mid-sentence is a
-  // distraction rather than an affordance.
-  // Roomier than the inline-code pill it sits beside, because a chip carries one
-  // character more than it looks like it does: the `@` the completion inserted is
-  // inside the pill (editorRefs.ts § withSigil), and a sigil pressed against the
-  // fill's left edge reads as a chip that started in the wrong place. The vertical
-  // padding rises with it so the box stays a pill rather than a band; `em` keeps
-  // both proportional to the 0.92em face.
+  // A recognized reference: the geometry both kinds share. Mono at the inline-code
+  // pill's own scale, so a path chipped in prose reads like the same path inside
+  // backticks. Roomier than that pill, because the `@` the completion inserted is
+  // inside the fill (editorRefs.ts § withSigil) and a sigil pressed against its left
+  // edge reads as a chip that started in the wrong place; `em` keeps both paddings
+  // proportional to the 0.92em face. Deliberately no transition — the mark is a
+  // fresh element each time the recognized set moves, so there is no from-state.
   ".cm-md-ref": {
     fontFamily: "var(--font-mono)",
     fontSize: "0.92em",
@@ -287,42 +260,29 @@ const theme = EditorView.theme({
     borderRadius: "4px",
     padding: "0.12em 0.32em",
   },
-  // A resolved path. `--chip-ref` is the content-chip family's reference member,
-  // already spent on a resolved path in the rendered plan
-  // (diffview/coreStyles.ts) — so the composing side and the reading side tint
-  // one reference identically, and theme.test.ts's existing pins on that token
-  // (its hue distance from --chip-link, its saturation floor against
-  // --chip-code) cover this surface for free. It is an alpha tint rather than a
-  // lightness step, which is what lets it read on --paper here and on the code
-  // panel's own ground there. Deliberately NOT the neutral --chip: that token is
-  // declared for chrome controls, and a run of the reviewer's own markdown is
-  // content.
+  // A resolved path. `--chip-ref` is what the rendered plan already spends on one
+  // (diffview/coreStyles.ts), so the composing and reading sides tint a reference
+  // identically and theme.test.ts's pins on that token cover this surface too. An
+  // alpha tint rather than a lightness step, so it reads on both grounds.
+  // Deliberately NOT the neutral --chip, which is declared for chrome controls.
   ".cm-md-ref-path": {
     backgroundColor: "var(--chip-ref)",
   },
-  // A skill the reviewing agent can reach. Its own tint, because the two kinds
-  // sit side by side in one sentence and a chip's whole job is to say at a glance
-  // what caret made of a run — which it cannot do if `@src/app.ts` and
-  // `/brainstorming` wear the same pill. `--chip-skill` rides the `attention`
-  // hue, the palette's one colour that is neither the accent (selection) nor
-  // semantic (ok/danger), which is what keeps it a full hue-step from the path's
-  // green in every theme; theme.test.ts pins that distance.
+  // A skill the reviewing agent can reach. `--chip-skill` rides the `attention`
+  // hue — neither the accent (selection) nor semantic (ok/danger) — which keeps it a
+  // full hue-step from the path's green in every theme; theme.test.ts pins that.
   ".cm-md-ref-skill": {
     backgroundColor: "var(--chip-skill)",
   },
-  // The completion list. @codemirror/autocomplete ships a stock light-mode
-  // tooltip: a near-white panel that inherits the editor's own text colour, so
-  // under a dark scheme every unselected row is white on white. These rules paint
-  // it from caret's tokens instead, as the small floating chrome it is — raised
-  // paper, a hairline rule, chip-scale lift. Reachable from here because the stack
-  // configures no `tooltips({ parent })`, so CodeMirror mounts tooltips into
-  // `view.dom` (the same fact `completionListOpen` in editorCompletion.ts relies
-  // on).
+  // The completion list. @codemirror/autocomplete's stock tooltip is light-mode
+  // only — a near-white panel inheriting the editor's text colour, so under a dark
+  // scheme every unselected row is white on white. Reachable from here because the
+  // stack configures no `tooltips({ parent })`, so CodeMirror mounts tooltips into
+  // `view.dom` (the fact `completionListOpen` in editorCompletion.ts relies on).
   //
   // Every selector repeats `.cm-tooltip.cm-tooltip-autocomplete`, matching the
-  // doubled class the base theme nests its own list rules under. Dropping the
-  // first class loses on specificity — not on order — so the rule silently does
-  // nothing however late it mounts.
+  // doubled class the base theme nests its list rules under. Dropping the first
+  // class loses on specificity — not order — so the rule silently does nothing.
   ".cm-tooltip.cm-tooltip-autocomplete": {
     backgroundColor: "var(--paper-raised)",
     color: "var(--ink)",
@@ -331,16 +291,15 @@ const theme = EditorView.theme({
     boxShadow: "var(--shadow-chip)",
     overflow: "hidden",
   },
-  // Mono, because every row is an identifier the reviewer is citing rather than
-  // UI chrome — the same reservation the rendered-code and metadata surfaces make.
+  // Mono: every row is an identifier the reviewer is citing, not UI chrome.
   ".cm-tooltip.cm-tooltip-autocomplete > ul": {
     fontFamily: "var(--font-mono)",
     fontSize: "var(--text-sm)",
     maxHeight: "14rem",
   },
-  // A flex row so the NAME is what truncates when a namespaced skill outruns the
-  // panel. In source order the origin comes last, so the stock block layout clips
-  // exactly the field that exists to tell two same-named skills apart.
+  // A flex row so the NAME truncates when a namespaced skill outruns the panel. The
+  // origin comes last in source order, so the stock block layout would clip exactly
+  // the field that tells two same-named skills apart.
   ".cm-tooltip.cm-tooltip-autocomplete > ul > li": {
     display: "flex",
     alignItems: "baseline",
@@ -353,37 +312,28 @@ const theme = EditorView.theme({
     backgroundColor: "var(--accent-wash)",
     color: "var(--ink)",
   },
-  // What the reviewer's own typing matched. Weight alone carried this while the
-  // only source filtered by prefix, where the match is a leading run; a
-  // subsequence match over a path is single characters scattered the length of
-  // the row (`srlbfoo` against `src/lib/foo.ts`), and bolding seven lone glyphs
-  // in a mono face at this size reads as noise rather than as a signal.
-  //
-  // `--mark` is the token for it rather than a new one: its documented job is a
-  // marked region of the document — plan-search hits — and this is the same job
-  // in a list, the characters a query matched. It is a translucent wash for
-  // exactly this reason, so it composites over the selected row's `--accent-wash`
-  // instead of fighting it, and the stock underline stays off as noise at this
-  // size.
+  // What the reviewer's typing matched. Weight alone carried this while the only
+  // source filtered by prefix; a subsequence match over a path scatters single
+  // characters the length of the row (`srlbfoo` against `src/lib/foo.ts`), and seven
+  // bolded lone glyphs in mono read as noise. `--mark` is the token for a marked
+  // region of the document, and being translucent it composites over the selected
+  // row's `--accent-wash` rather than fighting it.
   ".cm-completionMatchedText": {
     textDecoration: "none",
     fontWeight: "600",
     backgroundColor: "var(--mark)",
   },
-  // Where a name came from is metadata about it, so it recedes — but it never
-  // shrinks away, which is the point of `flex: none` beside the truncating label.
+  // Metadata, so it recedes — but `flex: none` keeps it from shrinking away beside
+  // the truncating label.
   ".cm-completionDetail": {
     color: "var(--ink-faint)",
     fontStyle: "normal",
     flex: "none",
     marginLeft: "0.75rem",
   },
-  // The stale twin of the selected row. `cm-tooltip-autocomplete-disabled` is
-  // toggled onto the SAME element while a source re-queries, and both these
-  // sources re-query per keystroke against the daemon, so a dimmed stale list is
-  // the common case rather than an edge — without its own arm it would paint
-  // identically to a live one. Same length as the rule above, so it wins while
-  // both classes are present by sitting after it, not by accident.
+  // The stale twin of the selected row. Both sources re-query per keystroke against
+  // the daemon, so a dimmed stale list is the common case, not an edge. Same
+  // specificity as the rule above — it wins by sitting after it, not by accident.
   ".cm-tooltip.cm-tooltip-autocomplete-disabled > ul > li[aria-selected]": {
     backgroundColor: "var(--chip)",
     color: "var(--ink-soft)",
@@ -398,16 +348,11 @@ const theme = EditorView.theme({
     padding: "0.3rem 0.5rem",
     opacity: 1,
   },
-  // That the preview window exists at all (EXC-1186). Same treatment as the
-  // stopped-search header above — receded, prose face, a rule under it — because
-  // it is the same kind of thing: a statement ABOUT the list rather than a row in
-  // it. It sits OUTSIDE the `<ul>`, so it stays put while the rows scroll under it.
-  //
-  // A real element rather than generated content, and that is what lets the chord
-  // wear the chrome's own keycaps: `::before` can draw a sentence but not a
-  // `<kbd>`, so the strip used to be the one shortcut hint in the UI that looked
-  // nothing like the others. completionPreview.ts builds it, from the caps the
-  // shortcut registry holds for `editor.previewCompletion`.
+  // That the preview window exists at all (EXC-1186) — a statement ABOUT the list,
+  // like the stopped-search header above, and outside the `<ul>` so it stays put
+  // while the rows scroll under it. A real element rather than generated content,
+  // which is what lets the chord wear the chrome's own keycaps: `::before` can draw
+  // a sentence but not a `<kbd>`. completionPreview.ts builds it.
   ".cm-tooltip.cm-tooltip-autocomplete .caret-completion-hint": {
     display: "flex",
     alignItems: "center",
@@ -424,16 +369,13 @@ const theme = EditorView.theme({
  * Re-arms completion after a deletion.
  *
  * autocomplete only ARMS a source on `input.type` (`getUpdateType`); a
- * `delete.backward` carries no activating bit, so a source that answered null
- * once stays Inactive through every backspace and the list never comes back. That
- * would be an obscure corner for a source with a fixed word list, but a
- * subsequence match is permissive enough that the way a reviewer reaches zero
- * matches is a typo — and backspace is the reflex correction, after which the
- * feature would be silently dead for the rest of that token.
+ * `delete.backward` carries no activating bit, so a source that answered null once
+ * stays Inactive through every backspace and the list never comes back. Under a
+ * subsequence match the usual way to reach zero matches is a typo, and backspace is
+ * the reflex correction — so the feature would go silently dead for that token.
  *
- * Deferred out of the update: `startCompletion` dispatches, and dispatching from
- * inside an update listener is what CodeMirror refuses. Cheap because it does
- * nothing unless a deletion left the completion state genuinely inactive.
+ * Deferred out of the update because `startCompletion` dispatches, which CodeMirror
+ * refuses from inside an update listener.
  */
 const reopenAfterDelete = EditorView.updateListener.of((update) => {
   if (!update.docChanged || completionStatus(update.state) !== null) return;
@@ -473,13 +415,9 @@ export function chordAction(
   return completionOpen ? "closeCompletion" : "cancel";
 }
 
-// Tab indents (indentMore, using the four-space indentUnit) when there is a
-// selection — every line the selection touches shifts one level right, so
-// highlighting several lines and pressing Tab indents them all — or when an empty
-// cursor sits in a list (nesting that item). An empty cursor outside a list just
-// inserts four literal spaces. Shift-Tab outdents so an indent can come back out.
-// Capturing Tab means it no longer tabs focus out of the editor — a deliberate
-// trade for in-field list editing; Esc still dismisses the composer.
+// Tab indents a selection or a list item, and inserts four literal spaces
+// otherwise. Capturing Tab means it no longer tabs focus out of the editor — a
+// deliberate trade for in-field list editing; Esc still dismisses the composer.
 const indentKeymap = keymap.of([
   {
     key: "Tab",
@@ -497,10 +435,9 @@ const indentKeymap = keymap.of([
 
 /** The extension stack for a comment-composer markdown editor. */
 export function markdownExtensions(opts: MarkdownEditorOptions): Extension[] {
-  // Empty for a surface with no review or no registered source, and the re-arm
-  // rides along with it rather than being installed unconditionally: an editor
-  // that offers no completion has nothing to re-arm, and a listener on every
-  // update of every editor is not free.
+  // Empty for a surface with no review or no registered source. The re-arm rides
+  // along with it: an editor offering no completion has nothing to re-arm, and a
+  // listener on every update of every editor is not free.
   const completion = reviewCompletion(opts.reviewContext, opts.completionSources);
   const completionStack = completion.length === 0 ? [] : [...completion, reopenAfterDelete];
   return [
@@ -521,13 +458,10 @@ export function markdownExtensions(opts: MarkdownEditorOptions): Extension[] {
       ...(opts.ariaLabel ? { "aria-label": opts.ariaLabel } : {}),
       ...(opts.ariaRequired !== undefined ? { "aria-required": String(opts.ariaRequired) } : {}),
     }),
-    // Chords first, so Esc/⌘-Enter are intercepted before every key binding. This
-    // outranks the keymaps unconditionally, including autocomplete's own
-    // `Prec.highest` one: a keymap's precedence orders it against other keymaps,
-    // but the dispatcher that runs them all is a single `Prec.default` view plugin
-    // (@codemirror/view), and a facet's `enables` extension is flattened at
-    // `Prec.default` whatever pulled it in (@codemirror/state). A `Prec.highest`
-    // domEventHandlers plugin is therefore always earlier in the handler array.
+    // Chords first, outranking every keymap including autocomplete's own
+    // `Prec.highest` one: a keymap's precedence orders it against other keymaps, but
+    // the dispatcher running them all is a single `Prec.default` view plugin, so a
+    // `Prec.highest` domEventHandlers plugin is always earlier in the array.
     Prec.highest(
       EditorView.domEventHandlers({
         keydown: (e, view) => {
@@ -547,10 +481,8 @@ export function markdownExtensions(opts: MarkdownEditorOptions): Extension[] {
         },
       }),
     ),
-    // Completion. Its own keymap is `Prec.highest`, so an open list claims
-    // ArrowUp/ArrowDown/Enter ahead of the indent and default keymaps below by
-    // precedence rather than by position here. Empty without a review context or a
-    // registered source.
+    // Its own keymap is `Prec.highest`, so an open list claims Arrow keys and Enter
+    // ahead of the keymaps below by precedence, not by position here.
     ...completionStack,
     // Tab indent/outdent, before the default keymap (which leaves Tab unbound).
     indentKeymap,

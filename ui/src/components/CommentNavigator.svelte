@@ -1,20 +1,13 @@
 <script lang="ts">
-  // The comment navigator: a pinned, searchable index of the plan's inline
-  // comments, docked just above the bottom status bar so it stays out of
-  // the plan's way. The strip's comment tally is its toggle. Each row jumps the
-  // source view to that comment's line and highlights it; the search field filters
-  // the list by comment text (never the plan text). It is persistent chrome, not a
-  // modal: clicking a row leaves it open so the reviewer can walk the list while the
-  // plan scrolls behind it, and it dismisses only on Escape, the close button, or a
-  // re-toggle. Mirrors the breadcrumbs bar's filter-then-jump idiom.
+  // A pinned, searchable index of the plan's inline comments, docked above the
+  // bottom status bar; the status strip's comment tally is its toggle. Each row
+  // jumps the source view to that comment's line; the search field filters by
+  // comment text, never the plan text. It is persistent chrome, not a modal:
+  // clicking a row leaves it open so the reviewer can walk the list while the plan
+  // scrolls behind it. Mirrors the breadcrumbs bar's filter-then-jump idiom.
   //
-  // EXC-792: keyboard-driven too — Shift+C summons it (the status-strip tally
-  // advertises the key), j/k walk the rows, Enter reveals a comment while the
-  // panel stays open, / focuses the search field, Esc dismisses. While a row holds
-  // focus the panel captures the keyboard so the plan's own shortcuts don't fire.
-  //
-  // EXC-812: at ≤ --w-tight it widens to a full-bleed bottom sheet so the pinned
-  // chrome reads as an intentional narrow-width surface instead of a cramped card.
+  // Keyboard-driven too (EXC-792). While a row holds focus the panel captures the
+  // keyboard so the plan's own shortcuts don't fire.
   import { type CommentIndexEntry, filterComments, highlightMatches } from "$lib/feedback.ts";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
 
@@ -57,15 +50,12 @@
   let searchEl = $state<HTMLInputElement | null>(null);
   let asideEl = $state<HTMLElement | null>(null);
 
-  // On open, move focus INTO the list so j/k navigate straight away (EXC-792) —
-  // the revealed row if one is shown, else the first row; the search field when
-  // the list is empty (nothing to walk, but "/" still reaches search). Runs on
-  // the open transition (and when the panel's elements mount); revealing a
-  // comment doesn't re-run it, so focus is never yanked mid-navigation. On close,
-  // clear the query so it reopens clean and — if the panel had been open — return
-  // focus to the tally that summoned it (WAI-ARIA dismissable pattern), so a
-  // keyboard close (Esc) doesn't strand focus on document.body. The flag keeps
-  // that restore off the initial mount, where open is already false.
+  // On open, move focus INTO the list so j/k navigate straight away (EXC-792). This
+  // runs on the open transition only — revealing a comment doesn't re-run it, so
+  // focus is never yanked mid-navigation. On close, focus returns to the tally that
+  // summoned it (WAI-ARIA dismissable pattern), so Esc doesn't strand focus on
+  // document.body; the flag keeps that restore off the initial mount, where open is
+  // already false.
   let hadFocus = false;
   $effect(() => {
     if (!open) {
@@ -84,16 +74,15 @@
     (revealed ?? rows()[0] ?? searchEl)?.focus({ preventScroll: true });
   });
 
-  // The rows in filtered order — the roving-focus targets for j/k. A row that can
-  // reveal is a button; one that cannot is a list item. Both carry data-nav-row —
-  // the contract this query, the reveal lookup above, and the e2e rows() helper
-  // all bind to, kept off the styling class so a restyle cannot break j/k.
+  // The roving-focus targets for j/k. A row that can reveal is a button, one that
+  // cannot is a list item, and both carry data-nav-row — the contract this query,
+  // the reveal lookup above and the e2e rows() helper bind to, kept off the styling
+  // class so a restyle cannot break j/k.
   function rows(): HTMLElement[] {
     return asideEl ? ([...asideEl.querySelectorAll("[data-nav-row]")] as HTMLElement[]) : [];
   }
-  // Move roving focus by `delta` from the focused row, clamped to the ends. When
-  // focus isn't on a row yet (e.g. the close button), either direction enters the
-  // list at the top rather than skipping the first row.
+  // Clamped to the ends. With focus not yet on a row (e.g. the close button),
+  // either direction enters the list at the top rather than skipping the first row.
   function focusRelative(delta: number): void {
     const list = rows();
     if (list.length === 0) return;
@@ -102,16 +91,12 @@
     list[next]?.focus();
   }
 
-  // Keyboard-drive the open navigator (EXC-792). Escape dismisses wherever focus
-  // sits (the panel or the plan behind it — unchanged). While focus is inside the
-  // panel: from a row, j/k (or ↑/↓) move the roving focus and "/" jumps to the
-  // search field; Enter/Space fall through to the row's native activation, which
-  // reveals the comment WITHOUT moving focus, so the plan highlights while the
-  // panel stays open. In the search field, Enter hands focus back to the list so
-  // j/k resume on the filtered results. The dispatcher treats a focused navigator
-  // as an editing context (App.svelte), so the plan's own j/k and the a/r verdict
-  // keys stay suppressed while the reviewer walks the list — the panel owns the
-  // keyboard, exactly as a text field or the composer does.
+  // Escape dismisses wherever focus sits; everything else acts only inside the
+  // panel. Enter/Space are deliberately absent — they fall through to the row's
+  // native activation, which reveals WITHOUT moving focus, so the plan highlights
+  // while the panel stays open. The dispatcher treats a focused navigator as an
+  // editing context (App.svelte), so the plan's own j/k and the a/r verdict keys
+  // stay suppressed while the reviewer walks the list.
   function onWindowKeydown(e: KeyboardEvent): void {
     if (!open) return;
     if (e.key === "Escape") {
@@ -170,8 +155,7 @@
     {#snippet rowBody(entry: CommentIndexEntry)}
       <span class="nav-item-head">
         <!-- A general entry has no range to name, so "General" takes the reference
-             slot — the same quiet voice as "Line 3", matching the vocabulary the
-             unsent-comments guard already uses for the same feedback. -->
+             slot — the vocabulary the unsent-comments guard already uses. -->
         <span class="nav-item-ref metric">{entry.general ? "General" : entry.label}</span>
         {#if entry.version != null}<span class="nav-version-tag metric">v{entry.version}</span>{/if}
         <!-- Keyed on the version being absent from the diff, not on the row
@@ -182,9 +166,8 @@
           >{/if}
         {#if entry.draft}<span class="nav-draft-tag metric">draft</span>{/if}
       </span>
-      <!-- Underline the run(s) matching the live search query. Kept on one
-           line so no whitespace text node splits the segments (the text is
-           white-space: pre-wrap). -->
+      <!-- Kept on one line so no whitespace text node splits the segments — the
+           text is white-space: pre-wrap. -->
       <span class="nav-item-text"
         >{#each highlightMatches(entry.text, query) as seg}{#if seg.match}<mark class="nav-match"
               >{seg.text}</mark
@@ -206,13 +189,11 @@
       <ul class="nav-list" aria-label="Comment list">
         {#each visible as entry (entry.id)}
           {#if !entry.linkable}
-            <!-- Nothing on screen to scroll to (a general comment, or one left on a
-                 version in the compared range but rendered on neither side): a
-                 focusable list item, not a button, so j/k still walk the list but
-                 nothing advertises a click that goes nowhere. tabindex="-1" keeps a
-                 non-interactive row out of the tab order (a nonnegative one is the
-                 a11y_no_noninteractive_tabindex anti-pattern); the list is reached
-                 with j/k, or with Enter from the search field. -->
+            <!-- Nothing on screen to scroll to: a focusable list item, not a
+                 button, so j/k still walk the list but nothing advertises a click
+                 that goes nowhere. tabindex="-1" keeps it out of the tab order — a
+                 nonnegative one is the a11y_no_noninteractive_tabindex anti-pattern
+                 — and the list is reached with j/k or Enter from the search. -->
             <li class="nav-item" data-nav-row tabindex="-1">{@render rowBody(entry)}</li>
           {:else}
             <li>
@@ -234,10 +215,8 @@
     {/if}
 
     {#if showShortcutHints}
-      <!-- The in-view key legend (EXC-792), rendered as shadcn Kbd caps and gated
-           on the shortcut-hints setting like the app's other hints. Shift+C — the
-           summon key — rides the status-strip tally that opens the panel, so it is
-           taught there rather than repeated inside the open view. -->
+      <!-- Shift+C, the summon key, is absent deliberately: it rides the status-strip
+           tally that opens the panel, so it is taught there. -->
       <footer class="nav-hints" aria-hidden="true">
         <span class="nav-hint"><Kbd class="kbd-sm">j</Kbd><Kbd class="kbd-sm">k</Kbd> move</span>
         <span class="nav-hint"><Kbd class="kbd-sm">↵</Kbd> reveal</span>
@@ -249,11 +228,9 @@
 {/if}
 
 <style>
-  /* Viewport-pinned, docked just above the bottom status bar (EXC-787). position:
-     fixed keeps it out of the shell grid — a root sibling of .shell — so it never
-     disturbs the layout. z-index sits above the plan surface, below the modal
-     scrim (100) and safe-mode toast (200). A quiet paper-raised card. The bottom
-     offset clears the status bar (its height token plus a small gap). */
+  /* position: fixed keeps it out of the shell grid — a root sibling of .shell — so
+     it never disturbs the layout. z-index sits above the plan surface, below the
+     modal scrim (100) and safe-mode toast (200). */
   .comment-navigator {
     position: fixed;
     right: 0.7rem;
@@ -270,11 +247,9 @@
     overflow: hidden;
     animation: nav-open var(--dur-enter) var(--ease-out);
   }
-  /* At ≤ --w-tight the navigator unpins from the right corner and widens to a
-     full-bleed bottom sheet (EXC-812) — it keeps the base bottom offset, clearing
-     the status bar, and may sit over the plan surface (intended). The px literal
-     mirrors lib/layout.ts's TIGHT_WIDTH_PX (640) minus one — @media can't read the
-     --w-* token. Wide widths keep the right-docked 21rem card. */
+  /* At ≤ --w-tight it unpins and widens to a full-bleed bottom sheet (EXC-812),
+     which may sit over the plan surface (intended). The px literal mirrors
+     lib/layout.ts's TIGHT_WIDTH_PX (640) minus one — @media can't read the token. */
   @media (max-width: 639px) {
     .comment-navigator {
       left: 0.7rem;
@@ -282,8 +257,6 @@
       width: auto;
     }
   }
-  /* One-shot rise-and-fade on open; neutralized by the global #app reduced-motion
-     rule. Opacity + a small translate only — no layout thrash. */
   @keyframes nav-open {
     from {
       opacity: 0;
@@ -302,7 +275,6 @@
     padding: 0.55rem 0.7rem 0.45rem;
     border-bottom: 1px solid var(--rule);
   }
-  /* Eyebrow-quiet title, matching the thread container's tally voice. */
   .nav-title {
     font-size: var(--text-2xs);
     font-weight: 600;
@@ -366,10 +338,6 @@
     padding: 0.3rem;
     overflow-y: auto;
   }
-  /* Each row: an anchor lead (the line reference, tabular via .metric) plus a
-     two-line clamp of the comment text — a scan-line, the full comment one jump
-     away in the plan. A left rule marks the active (revealed) comment in amber,
-     the same brand cue the focused card carries in the plan. */
   .nav-item {
     display: flex;
     flex-direction: column;
@@ -386,9 +354,8 @@
   .nav-item:hover {
     background: var(--paper-sunk);
   }
-  /* A row with nothing to reveal is a list item, not a button: no pointer, no hover
-     lift, so nothing promises a click that leads nowhere. It keeps the focus ring,
-     which j/k still moves. */
+  /* No pointer and no hover lift, so nothing promises a click that leads nowhere.
+     The focus ring stays, since j/k still moves through these rows. */
   li.nav-item {
     cursor: default;
   }
@@ -411,7 +378,6 @@
     outline: 2px solid var(--ring);
     outline-offset: -2px;
   }
-  /* The row's lead line: the range reference and, for a draft, its tag. */
   .nav-item-head {
     display: flex;
     align-items: baseline;
@@ -423,11 +389,9 @@
     letter-spacing: 0.02em;
     color: var(--ink-faint);
   }
-  /* The version tag and the unlinked tag share one solid neutral pill — a
-     version is a fact, so both read as one statement of provenance ("v2" /
-     "v2, not in diff"). The version tag alone tracks its letters wide, which
-     sets off a short token; the unlinked tag strings out a whole phrase, where
-     the same tracking would only make it harder to read. */
+  /* One shared pill, so the pair reads as one statement of provenance ("v2, not in
+     diff"). Only the version tag tracks wide — the same tracking on the unlinked
+     tag's whole phrase would only make it harder to read. */
   .nav-version-tag,
   .nav-unlinked-tag {
     font-size: var(--text-2xs);
@@ -440,8 +404,7 @@
   .nav-version-tag {
     letter-spacing: 0.08em;
   }
-  /* The draft tag: a quiet uppercase pill marking an unsent scratch as provisional,
-     kept neutral so amber stays the navigation cue. */
+  /* Kept neutral so amber stays the navigation cue. */
   .nav-draft-tag {
     font-size: var(--text-2xs);
     font-weight: 600;
@@ -463,8 +426,7 @@
     overflow: hidden;
     white-space: pre-wrap;
   }
-  /* The live search match: underlined and lifted to full ink so the matched
-     substring stands out as the reviewer types, without the <mark> default fill. */
+  /* Underlined rather than filled, so it never wears <mark>'s default ground. */
   .nav-match {
     background: none;
     color: var(--ink);
@@ -482,9 +444,8 @@
     color: var(--ink-faint);
   }
 
-  /* The in-view key legend (EXC-792): a quiet footer band of Kbd caps below the
-     list, set off by a hairline like the header. The mono/ink-faint voice keeps
-     it a legend, not a control, so amber stays reserved for the active comment. */
+  /* A legend, not a control — the quiet voice keeps amber reserved for the active
+     comment. */
   .nav-hints {
     display: flex;
     flex-wrap: wrap;

@@ -5,13 +5,10 @@ import { render } from "@ui/support/mount.ts";
 import StatusStrip from "@/components/StatusStrip.svelte";
 import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
 
-// EXC-763: the StatusStrip readout is rebuilt on shadcn primitives (Badge for
-// the revision pill, Separator for the metric dividers, Tooltip for the hover
-// hints on the revision and connection). This suite covers the synchronous
-// surface — the readout's numbers, gates, and connection state, plus the
-// shadcn structure. The tooltip *content* is bits-ui overlay (portalled,
-// deferred under happy-dom), so it is a visual/e2e concern, not asserted here —
-// the same split TopBar.test.ts uses for its cwd tooltip.
+// This suite covers the synchronous surface — the readout's numbers, gates, and
+// connection state, plus the shadcn structure. The tooltip *content* is bits-ui
+// overlay (portalled, deferred under happy-dom), so it is a visual/e2e concern, the
+// same split TopBar.test.ts uses for its cwd tooltip.
 
 const base = {
   active: true,
@@ -91,9 +88,8 @@ describe("StatusStrip", () => {
 
   // EXC-763 shadcn structure ------------------------------------------------
 
-  // The metric dividers are shadcn Separators, not the old `·` glyph spans —
-  // the same vertical Separator the TopBar cluster uses, so the chrome shares
-  // one divider vocabulary.
+  // The same vertical Separator the TopBar cluster uses, so the chrome shares one
+  // divider vocabulary.
   test("divides the readout with shadcn Separators, not `·` glyphs", () => {
     const { target } = render(StatusStrip, {
       ...base,
@@ -110,11 +106,10 @@ describe("StatusStrip", () => {
     expect(sep!.getAttribute("aria-hidden")).toBe("true");
   });
 
-  // The revision pill is a shadcn Badge, reusing VersionLabel's amber-^ idiom,
-  // so the ^vN marker reads identically whether it appears in the TopBar or the
-  // status strip. It also drives a Tooltip, so bits-ui overwrites its own
-  // data-slot to "tooltip-trigger" — the badge signature (the rounded-full pill
-  // base from badgeVariants) is the stable proof the Badge component rendered it.
+  // The revision pill reuses VersionLabel's amber-^ idiom, so ^vN reads identically
+  // in the TopBar and here. It also drives a Tooltip, so bits-ui overwrites its
+  // data-slot to "tooltip-trigger" — the rounded-full pill base from badgeVariants is
+  // the stable proof the Badge rendered it.
   test("renders the revision as a shadcn Badge", () => {
     const { target } = render(StatusStrip, { ...base, version: 2 });
     const rev = target.querySelector(".rev")!;
@@ -122,9 +117,8 @@ describe("StatusStrip", () => {
     expect(rev.getAttribute("data-slot")).toBe("tooltip-trigger");
   });
 
-  // EXC-763 follow-up: the comment tally is the toggle that opens the comment
-  // navigator, so it must be a real button carrying its expanded state — not the
-  // inert span it started as.
+  // The comment tally is the toggle that opens the comment navigator, so it must be
+  // a real button carrying its expanded state.
   test("renders the comment tally as a toggle button reflecting the open state", () => {
     const closed = render(StatusStrip, { ...base, pendingCount: 2, commentsOpen: false });
     const btn = closed.target.querySelector<HTMLButtonElement>("button.comments-toggle");

@@ -126,9 +126,8 @@ describe("SourceAnnotationCard collapse", () => {
   test("renders collapsed (a chip) when not focused", () => {
     const { target } = render(SourceAnnotationCard, base({ focused: false }));
     expect(target.querySelector(".chip")).not.toBeNull();
-    // Collapsed: the one-line preview stands in for the body (which stays mounted
-    // at row height 0 for the grid reveal), and the Edit / Discard actions are
-    // reachable without expanding first.
+    // The body stays mounted at row height 0 for the grid reveal, so the one-line
+    // preview is what stands in for it.
     expect(target.querySelector(".card.expanded")).toBeNull();
     expect(target.querySelector(".preview")).not.toBeNull();
     expect(target.querySelector(".actions")).not.toBeNull();
@@ -156,8 +155,6 @@ describe("SourceAnnotationCard collapse", () => {
       base({ focused: false, onDelete: deleted.cb }),
     );
     flush();
-    // Same confirm bubble and code path as the expanded Discard: nothing deleted
-    // until the reviewer confirms, and the card never has to expand first.
     await confirmDelete(target, flush, deleted);
     expect(target.querySelector(".card.expanded")).toBeNull();
   });
@@ -166,7 +163,6 @@ describe("SourceAnnotationCard collapse", () => {
     const { target } = render(SourceAnnotationCard, base({ focused: true }));
     expect(target.querySelector(".card.expanded")).not.toBeNull();
     expect(target.querySelector(".comment")?.textContent?.trim()).toBe("needs work");
-    // Expanded drops the preview and reveals the Edit / Discard actions.
     expect(target.querySelector(".preview")).toBeNull();
     expect(target.querySelector(".actions")).not.toBeNull();
   });
@@ -191,8 +187,7 @@ describe("SourceAnnotationCard collapse", () => {
       SourceAnnotationCard,
       base({ focused: true, onEdit: () => (edited = true) }),
     );
-    // The whole header line is the toggle now (no separate collapse control):
-    // clicking the trigger collapses the card back to its chip.
+    // The whole header line is the toggle; there is no separate collapse control.
     click(target, ".chip");
     flush();
     expect(target.querySelector(".card.expanded")).toBeNull();
@@ -203,16 +198,12 @@ describe("SourceAnnotationCard collapse", () => {
   test("clicking the comment body (not a button) collapses the expanded card", () => {
     const { target, flush } = render(SourceAnnotationCard, base({ focused: true }));
     expect(target.querySelector(".card.expanded")).not.toBeNull();
-    // The whole surface is the toggle: clicking anywhere that isn't an action —
-    // here, the rendered comment itself — collapses the card back to a chip.
     click(target, ".comment");
     flush();
     expect(target.querySelector(".card.expanded")).toBeNull();
   });
 
   test("clicking an action button does not toggle the card", () => {
-    // Edit sits in the actions cluster, so its click opens the editor rather
-    // than collapsing the card out from under the reviewer.
     const { target, flush } = render(SourceAnnotationCard, base({ focused: true }));
     click(target, ".edit");
     flush();
@@ -327,8 +318,6 @@ describe("SourceAnnotationCard edit/delete", () => {
       base({ focused: true, onFocus: () => (focused = true), onDelete: deleted.cb }),
     );
     flush();
-    // The confirm pops out of the Discard button; confirming deletes, and the
-    // original click never focused the card.
     await confirmDelete(target, flush, deleted);
     expect(focused).toBe(false);
   });
@@ -351,8 +340,6 @@ describe("SourceAnnotationCard edit/delete", () => {
   test("Discard renders as a trash icon with an accessible label", () => {
     const { target } = render(SourceAnnotationCard, base({ focused: true }));
     const discard = target.querySelector(".actions .danger");
-    // The word "Discard" is gone; the affordance is the trash icon plus a label
-    // that keeps the control named for assistive tech.
     expect(discard?.getAttribute("aria-label")).toBe("Discard comment");
     expect(discard?.querySelector("svg")).not.toBeNull();
     expect(discard?.textContent?.trim()).toBe("");
@@ -397,8 +384,6 @@ describe("SourceAnnotationCard edit/delete", () => {
   test("Escape blurs the field first, keeping the editor open and unsaved", () => {
     const { target, flush, called } = openEditorTracking();
     setEditorText(target, "changed");
-    // First Escape (from the editor) blurs without dismissing: still editing, and
-    // nothing saved yet.
     chord(target, "Escape");
     flush();
     expect(called()).toBe(false);

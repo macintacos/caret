@@ -112,12 +112,10 @@
         <Icon name="x" size={14} />
         Reject
         {#if showShortcutHints}
-          <!-- One combined key: the global shift icon then R, both typed KbdCaps
-               (see caps.ts) so the shift glyph is the shared icon, never a ⇧ char.
-               KbdCap's `size` is px while the cap's text is em-relative (the base
-               [data-slot="kbd"] is 0.8em of this button's 14px), so 9 is not a free
-               number — it is ~0.8 of the resulting 11px glyph, seating the arrow at
-               the letter's cap height. Retune it if the button's font-size moves. -->
+          <!-- Both caps typed, so the shift glyph is the shared icon, never a ⇧
+               char. KbdCap's `size` is px while the cap's text is em-relative, so 9
+               is ~0.8 of the resulting 11px glyph, seating the arrow at the letter's
+               cap height. Retune it if the button's font-size moves. -->
           <Kbd aria-hidden="true"><KbdCap key="shift" size={9} /><KbdCap key="R" /></Kbd>
         {/if}
       </Button>
@@ -132,12 +130,9 @@
         {@render requestChangesLabel()}
       </Button>
 
-      <!-- Below --w-narrow the Reject + Request-changes buttons above collapse
-           into this "More actions" overflow menu (their inline buttons hide via
-           CSS); below --w-tight Approve joins them too, leaving only ⋯ + bell +
-           settings on the right. The trigger carries the pending count so it
-           stays visible once Request changes is in the menu. Hidden above
-           --w-narrow, so the wide layout is unchanged. -->
+      <!-- Below --w-narrow the Reject + Request-changes buttons collapse in here;
+           below --w-tight Approve joins them. Which rows show is CSS, so the trigger
+           carries the pending count that Request changes would otherwise hide. -->
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
           {#snippet child({ props })}
@@ -166,9 +161,8 @@
           {/snippet}
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end">
-          <!-- Approve joins the menu at the tightest widths (the inline Approve
-               control below hides ≤ --w-tight); these rows are CSS-hidden above
-               that width. The remembered/default variant leads. -->
+          <!-- CSS-hidden above --w-tight, where the inline Approve control shows
+               these instead. The remembered/default variant leads. -->
           {#each variants as v (v.id)}
             <!-- Deferred like Request changes below: the approve confirm is a
                  dismissible dialog (Modal kind="dialog"), so it must open after
@@ -184,20 +178,15 @@
             </DropdownMenu.Item>
           {/each}
           <DropdownMenu.Separator class="overflow-approve-sep" />
-          <!-- Defer the open past this menu's close: Request changes is a
-               dismissible dialog (Modal kind="dialog"), and the closing menu's
-               own interact-outside would dismiss a dialog opened on the same
-               tick. Reject is an alertdialog (ignores outside-interaction), so it
-               fires directly. -->
+          <!-- Deferred for the same reason as the approve rows. Reject below is an
+               alertdialog, which ignores outside-interaction, so it fires directly. -->
           <DropdownMenu.Item onSelect={() => setTimeout(onRequestChanges, 0)}>
             {@render requestChangesLabel("menu-key")}
           </DropdownMenu.Item>
           <DropdownMenu.Item variant="destructive" onSelect={() => onReject()}>
             <Icon name="x" size={14} />
             Reject
-            <!-- Same ⇧R cap as the inline button above, in the menu-row placement
-                 Approve and Request changes already use, so all three verdicts carry
-                 a cap once they collapse in here. -->
+            <!-- All three verdicts carry a cap once they collapse in here. -->
             {#if showShortcutHints}
               <Kbd class="menu-key" aria-hidden="true"
                 ><KbdCap key="shift" size={9} /><KbdCap key="R" /></Kbd
@@ -207,16 +196,12 @@
         </DropdownMenu.Content>
       </DropdownMenu.Root>
 
-      <!-- Approve control. With a single variant the approve is binary (e.g. an
-           OpenCode session, EXC-791), so there is nothing to choose between: a
-           plain amber button, matching the split-button's primary half. With more
-           than one variant it is the split-button — the primary approves in the
-           remembered mode and the toggle opens the variant menu (mechanics in
-           SplitButton.svelte). The menu rows stay here (approve-specific) and
-           render into the component's portal, where the scoped .v-* styles still
-           reach them because the scope hash rides the elements. Wrapped in a slot
-           so the whole control hides ≤ --w-tight, where the approve options move
-           into the overflow menu above. -->
+      <!-- A single variant means a binary approve (e.g. an OpenCode session,
+           EXC-791) with nothing to choose between, so it drops the split button's
+           toggle half. The variant rows stay here, approve-specific, and render into
+           SplitButton's portal — the scoped .v-* styles still reach them because the
+           scope hash rides the elements. The slot wrapper is what hides the whole
+           control ≤ --w-tight. -->
       <div class="approve-slot">
         {#if variants.length <= 1}
           <Button
@@ -253,22 +238,17 @@
     </div>
   {/if}
 
-  <!-- Always-visible permission badge + settings, pinned right in both layouts:
-       when a review is active `.actions`'s margin-left:auto eats the slack and
-       carries this cluster right with it; with no review the slot's own
-       margin-left pushes it right. -->
+  <!-- Always visible, pinned right in both layouts (see .bell-slot below). -->
   <div class="bell-slot">
     <NotifyBell />
-    <!-- A pending update marks the gear (EXC-1207), because Settings is where the
-         reviewer acts on it. The state rides the button's own accessible name — a dot a
-         screen reader can't reach is not a notification — so the dot itself is
-         decorative, the same split NotifyBell makes.
+    <!-- The update state rides the button's accessible name — a dot a screen reader
+         can't reach is not a notification — so the dot itself is decorative.
 
-         onclick WRAPS the callback rather than passing it by reference: bare, the click
-         would hand its MouseEvent to whatever optional parameter the callback happens to
-         declare, and this prop's `() => void` type would not catch it. App's openSettings
-         takes an optional category, so unwrapped this deep-links Settings to a category
-         named "[object MouseEvent]". Closed here so every caller inherits the fix. -->
+         onclick WRAPS the callback rather than passing it by reference: bare, the
+         click hands its MouseEvent to whatever optional parameter the callback
+         declares, and a `() => void` prop type does not catch it. App's openSettings
+         takes an optional category, so unwrapped this deep-links Settings to a
+         category named "[object MouseEvent]". -->
     <Button
       variant="secondary"
       size="icon"
@@ -312,9 +292,8 @@
 {/snippet}
 
 <style>
-  /* The header row sits on the raised paper surface with a hairline rule, so it
-     stacks seamlessly with the compare bar (VersionComparePicker) directly below
-     it — the two read as one layered header system over the source view. */
+  /* The hairline rule is what stacks it seamlessly with the compare bar
+     (VersionComparePicker) directly below. */
   .topbar {
     display: flex;
     align-items: center;
@@ -324,16 +303,13 @@
     background: var(--paper-raised);
     position: relative;
     z-index: 30;
-    /* As a grid item of .shell the default min-width:auto lets the topbar expand
-       its track to fit content, so the flex row below never feels shrink pressure
-       and the title stays at its 46vw cap while the right-hand controls overflow
-       off-screen. min-width:0 pins the topbar to the viewport, so the lead
-       shrinks and the title truncates instead (the controls are flex-shrink:0). */
+    /* As a grid item of .shell, the default min-width:auto would expand the track
+       to fit content — the row would feel no shrink pressure and the controls would
+       overflow off-screen. This pins the topbar to the viewport instead. */
     min-width: 0;
   }
-  /* Takes the row's free space and yields it first: when the controls need room
-     the lead shrinks and the plan title (ReviewSwitcher .title) truncates, rather
-     than pushing the right-hand controls off-screen. */
+  /* Yields first: when the controls need room the plan title truncates rather than
+     pushing them off-screen. */
   .lead {
     display: flex;
     align-items: center;
@@ -341,21 +317,15 @@
     min-width: 0;
     flex: 1 1 auto;
   }
-  /* The switcher trigger is a shadcn Button, whose base carries `shrink-0`. Left
-     at that it never yields, so the lead shrank *past* it and the trigger spilled
-     out of its own box and under the action chips (its .title cap is a vw, which
-     knows nothing about how much room the controls left). Making it the row's
-     shrinkable item hands the pressure to .title, which ellipsizes — and the floor
-     below stops the name vanishing entirely before the --w-narrow collapse
-     relieves the row. Everything else in the lead holds its size: the brand is
-     nowrap text and both badges are shrink-0. */
+  /* The trigger is a shadcn Button, whose base carries `shrink-0`. Left at that it
+     never yields, so the lead shrank *past* it and the trigger spilled under the
+     action chips — its .title cap is a vw, which knows nothing about how much room
+     the controls left. Making it shrinkable hands the pressure to .title, which
+     ellipsizes. */
   .lead :global(.switcher-trigger) {
     flex-shrink: 1;
-    /* Roughly a dozen characters plus the count badge and chevron — enough name
-       left to tell two plans apart. Raising it risks the opposite failure: the
-       lead's own min-width:0 lets it shrink past this floor, spilling the trigger
-       back under the controls, so the sweep in topbar-overflow.e2e.ts is what
-       bounds this number. */
+    /* Enough name left to tell two plans apart. Raising it spills the trigger back
+       under the controls, so topbar-overflow.e2e.ts's sweep bounds this number. */
     min-width: 10rem;
   }
   .brand {
@@ -384,12 +354,10 @@
   .actions.busy {
     pointer-events: none;
   }
-  /* Pins the bell + settings cluster to the right edge. With no review active it
-     is the only right-side group, so its own margin-left:auto pushes it right.
-     When a review IS active, `.actions` already owns an auto margin — two auto
-     margins in one flex row split the free space and strand the bell cluster
-     mid-row, so the override below zeroes this one and both groups ride the
-     single `.actions` margin to the right edge together. */
+  /* With no review active this is the only right-side group, so its own auto margin
+     pins it. With a review, `.actions` already owns one — two auto margins in a flex
+     row split the free space and strand this cluster mid-row, which is what the
+     override below prevents. */
   .bell-slot {
     display: inline-flex;
     align-items: center;
@@ -415,11 +383,9 @@
   .actions :global(.reject:not(:disabled):hover .icon) {
     color: inherit;
   }
-  /* The ⇧ inside the key cap is an .icon too, and a keycap has no hue of its own —
-     it derives from currentColor so both glyphs read as one key (see the hue table
-     in doc/agents/svelte-rules.md). Stated as its own positive rule rather than by
-     narrowing the two above to a direct child: `>` would silently drop the X's red
-     the day a shadcn re-sync wraps Button's children in an element. */
+  /* The ⇧ inside the key cap is an .icon too, and a keycap derives its hue from
+     currentColor. A positive rule rather than narrowing the two above to `>`, which
+     would silently drop the X's red the day a re-sync wraps Button's children. */
   .actions :global(.reject [data-slot="kbd"] .icon) {
     color: inherit;
   }
@@ -439,9 +405,8 @@
     color: var(--ink-faint);
     font-size: var(--text-xs);
   }
-  /* The approve options carry the check as a selection cue, not a bullet: reserve
-     its slot on every row (visibility, not display, so the label never shifts) and
-     reveal it only on the highlighted (hovered/keyboard-focused) row. */
+  /* The check is a selection cue, not a bullet: visibility, not display, so
+     reserving its slot never shifts the label. */
   :global(.overflow-approve .icon) {
     visibility: hidden;
   }
@@ -459,14 +424,11 @@
      overflow menu; above it the trigger is hidden, so the wide layout is
      unchanged. The px literals mirror lib/layout.ts's NARROW_WIDTH_PX (960) and
      TIGHT_WIDTH_PX (640) minus one — @media can't read the --w-* tokens. */
-  /* Fluid collapse (EXC-813): a control appearing across these breakpoints fades +
-     scales in (@starting-style gives it its from-state, and this runs once on first
-     mount too). The reverse — fading OUT — is deliberately instant: a hiding control
-     kept in flow to animate would keep stealing width mid-collapse and transiently
-     shove the bell/gear off-screen, defeating the narrow-width collapse. So display
-     flips immediately (no allow-discrete) and only the enter animates. background-
-     color/color stay in the list so the chip's own hover transition survives this
-     override; the global reduced-motion rule in app.css collapses it to one frame. */
+  /* Fluid collapse (EXC-813): a control appearing across these breakpoints fades and
+     scales in. Fading OUT is deliberately instant — a hiding control kept in flow to
+     animate would keep stealing width mid-collapse and transiently shove the
+     bell/gear off-screen. background-color/color stay in the list so the chip's own
+     hover transition survives this override. */
   .actions :global(.reject),
   .actions :global(.request),
   .actions :global(.overflow-trigger),
@@ -505,11 +467,9 @@
       transform: none;
     }
   }
-  /* The pending-update mark on the gear (EXC-1207), following NotifyBell's dot: a small
-     filled disc pinned to the glyph's top-right, lifted off the strokes by a ring in the
-     topbar's own surface. It wears --attention, the same novelty token the pending counts
-     beside it use — amber stays reserved for the Approve primary. The stack is this
-     component's own element, so the scoped rules reach it (they would not pierce Button). */
+  /* The pending-update mark on the gear (EXC-1207), following NotifyBell's dot.
+     --attention, like the pending counts beside it — amber stays reserved for the
+     Approve primary. Its own element, so the scoped rules reach it. */
   .gear-stack {
     position: relative;
     display: inline-flex;
@@ -524,10 +484,7 @@
     background: var(--attention);
     box-shadow: 0 0 0 1.5px var(--paper-raised);
   }
-  /* Pending count pinned to the trigger's top-right corner, lifted off the
-     ellipsis with a paper ring (the NotifyBell dot pattern). The hue is
-     --attention, from the shared .count-attention modifier — the count's job is
-     to be noticed, and amber stays reserved for the Approve primary. */
+  /* Lifted off the ellipsis with a paper ring, the NotifyBell dot pattern. */
   .actions :global(.overflow-count) {
     position: absolute;
     top: -5px;
@@ -536,18 +493,15 @@
     box-shadow: 0 0 0 1.5px var(--paper-raised);
     pointer-events: none;
   }
-  /* At/below --w-tight the inline Approve control hides and the approve options
-     move into the overflow menu, so the header keeps only ⋯ + bell + settings on
-     the right and the plan title truncates to fit. */
+  /* ≤ --w-tight the header keeps only ⋯ + bell + settings on the right. */
   @media (max-width: 639px) {
     .approve-slot {
       display: none;
       opacity: 0;
       transform: scale(0.94);
     }
-    /* Collapsed to just ⋯, it's an icon button like the bell + gear beside it, so
-       tuck it into their 0.35rem rhythm — the topbar's own 1rem gap would otherwise
-       strand ⋯ further from the bell than the bell sits from the gear. */
+    /* Collapsed to ⋯ it is an icon button like the bell and gear, so it joins their
+       0.35rem rhythm rather than the topbar's 1rem gap. */
     .actions + .bell-slot {
       margin-left: calc(0.35rem - 1rem);
     }

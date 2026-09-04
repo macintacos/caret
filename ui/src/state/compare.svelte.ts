@@ -1,26 +1,17 @@
-// Version-compare state for the source-view surface. Like the other state
-// modules (resolve, autosave), this is a plain factory over an injected backing
-// store plus a deps bag — App.svelte owns the reactive `$state` store, tests
-// pass a plain object, and the layout-preference read/write effects are injected
-// so the factory stays unit-testable without a DOM global.
+// Version-compare state for the source-view surface: the selected version pair,
+// whether compare mode is active, the diff layout and the gutter indicators.
 //
-// The factory owns the selected version pair (base = current, target = previous
-// by default), whether compare mode is active, the diff layout, and the gutter
-// indicators. It does NOT render anything and never reads annotations: the diff
-// SURFACE is annotation-free by contract — no gutter, no inline cards — and the
-// comments left on the compared versions surface in the docked comment panel
-// instead, where a comment on either rendered version reveals its line on that
-// side and anything in between lists non-interactively (EXC-872, EXC-1041).
+// It never reads annotations, because the diff SURFACE is annotation-free by
+// contract — no gutter, no inline cards. Comments on the compared versions surface
+// in the docked comment panel instead (EXC-872, EXC-1041).
 
 import type { PlanVersion } from "@core/lib/types";
 import type { DiffIndicators, DiffStyle } from "$lib/diffview/types.ts";
 import type { SoundEvent } from "$lib/sound.ts";
 
-/** Reactive fields the host component owns and the factory mutates through
- * getters. Base is the reference version (default: the current version) and
- * target is what it's compared against (default: the previous version); the view
- * renders base on the diff's "after" side and target on the "before" side, so
- * the default pair reads as the changes that produced the current version. */
+/** Reactive fields the host component owns and the factory mutates. Base defaults
+ * to the current version and target to the previous one, so the default pair reads
+ * as the changes that produced the current version. */
 export interface CompareStore {
   /** Whether the reviewer is in compare mode (vs. the single-version view). */
   comparing: boolean;
@@ -67,8 +58,8 @@ export interface Compare {
   setDiffIndicators(indicators: DiffIndicators): void;
 }
 
-/** The default pair for a version set: base = current (last), target = the one
- * before it. Falls back gracefully for a single-version set (both point at it). */
+/** The default pair: base = current (last), target = the one before it. A
+ * single-version set points both at it. */
 function defaultPair(versions: PlanVersion[]): { base: number; target: number } {
   const current = versions[versions.length - 1]?.version ?? 0;
   const previous = versions[versions.length - 2]?.version ?? current;
@@ -116,9 +107,7 @@ export function createCompare(store: CompareStore, deps: CompareDeps): Compare {
     },
 
     setComparing(comparing) {
-      // Sound the flip only: a re-assert of the flag already held is not a toggle,
-      // and syncVersions' own `comparing = false` is not one either — it writes the
-      // store directly, so it never reaches here.
+      // Sound the flip only — a re-assert of the flag already held is not a toggle.
       if (comparing !== store.comparing) deps.sound?.("compareToggled");
       store.comparing = comparing;
     },

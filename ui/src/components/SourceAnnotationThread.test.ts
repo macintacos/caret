@@ -116,12 +116,10 @@ describe("SourceAnnotationThread stacked comments", () => {
 });
 
 describe("SourceAnnotationThread across a review switch", () => {
-  // The source view reserves one annotation row per line and keys those rows on
-  // the line number, so switching reviews hands this component a different
-  // comment in the same slot rather than a fresh mount. A card seeds its editor
-  // once at mount — the draft text and the review its references resolve against
-  // both — so a card carried across that swap would show the previous review's
-  // text while its save landed on the new comment. Each comment owns its card.
+  // The source view keys its annotation rows on the LINE number, so a review switch
+  // hands this component a different comment in the same slot rather than a fresh
+  // mount. A card seeds its editor once at mount, so one carried across that swap
+  // would show the previous review's text while its save landed on the new comment.
   test("replacing the lone comment builds a new card instead of reusing it", () => {
     const { target, flush } = render(SourceAnnotationThreadFixture, {
       first: ann({ id: "a1", comment: "first review" }),

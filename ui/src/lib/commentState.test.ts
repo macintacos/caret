@@ -3,10 +3,6 @@ import { describe, expect, test } from "bun:test";
 import { isUnresolved, type ReviewStatus } from "@core/lib/types";
 import { commentState } from "$lib/commentState.ts";
 
-// commentState maps a comment's ReviewStatus onto the card's quiet dot+label. The
-// suite pins the per-status presentation, the absent-defaults-to-pending rule, and
-// the invariant that the vocabulary stays ReviewStatus (no fourth, parallel set).
-
 describe("commentState", () => {
   test("absent state reads as a pending draft", () => {
     const v = commentState(undefined);
@@ -45,8 +41,6 @@ describe("commentState", () => {
   });
 
   test("unresolved mirrors the core isUnresolved over the full vocabulary", () => {
-    // The mapping reuses ReviewStatus verbatim — every status resolves, and the
-    // unresolved flag agrees with the core's single source of truth.
     const all: ReviewStatus[] = ["pending", "approved", "rejected", "expired"];
     for (const s of all) {
       expect(commentState(s).unresolved).toBe(isUnresolved(s));

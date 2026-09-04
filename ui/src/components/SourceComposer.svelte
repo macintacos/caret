@@ -1,18 +1,11 @@
 <script lang="ts">
-  // Inline comment composer for the source-view surface. It renders in the source
-  // view's per-line annotation row (the parent projects it into the library's slot
-  // — see annotationSlot.ts) at the line or range the reviewer chose from the
-  // gutter. Submitting (Comment / Cmd/Ctrl+Enter) creates a line-anchored
-  // annotation; Discard (the button or Esc) drops the draft with no residue,
-  // confirming first when it holds text; Keep for later stashes it as a
-  // resumable scratch. The editing surface is
-  // MarkdownEditor (the swappable
-  // CodeMirror boundary): it styles markdown as you type, auto-grows, owns the
-  // autofocus/preventScroll guard, and reports the chords back here.
-  //
-  // The chrome is composed from shadcn primitives (EXC-765): a Card-style surface,
-  // Buttons for Keep / Discard / Comment (Comment is the one amber primary), and the
-  // shared SubmitCap for the ⌘↵ hint. The editor stays MarkdownEditor.
+  // Inline comment composer for the source-view surface, rendered in the per-line
+  // annotation row the parent projects into the library's slot (annotationSlot.ts)
+  // at the line or range chosen from the gutter. Submit creates a line-anchored
+  // annotation; Discard drops the draft, confirming first when it holds text; Keep
+  // for later stashes it as a resumable scratch. The editing surface is
+  // MarkdownEditor, the swappable CodeMirror boundary, which owns the
+  // autofocus/preventScroll guard and reports the chords back here.
   import { untrack } from "svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Card } from "$lib/components/ui/card/index.js";
@@ -70,10 +63,8 @@
 
   const isEdit = $derived(mode === "edit");
 
-  // Seed from `initial` once, at mount: a resumed scratch mounts a fresh composer
-  // with the restored text, and the reviewer edits the local copy from there.
-  // untrack makes the one-time seed explicit so a later `initial` change does not
-  // clobber in-progress edits. MarkdownEditor keeps this in sync via onInput.
+  // Seeded once, at mount: untrack makes that explicit, so a later `initial` change
+  // cannot clobber in-progress edits. MarkdownEditor keeps it in sync via onInput.
   let comment = $state(untrack(() => initial));
 
   // Fires immediately with the seeded value too (Svelte effects run on mount),
@@ -86,23 +77,18 @@
   // dragging and this post-release label always read the same range.
   const label = $derived(rangeLabel(startLine, endLine));
 
-  // "Keep for later" only makes sense with something to keep: an empty box has
-  // nothing to stash (an empty keep and a discard behave identically), so the
-  // button stays disabled until the reviewer has typed.
+  // With an empty box a keep and a discard behave identically, so the button stays
+  // disabled until the reviewer has typed.
   const canKeep = $derived(comment.trim() !== "");
 
   // The composer surface, focused when the first Escape blurs the editor so the
   // card can catch the second Escape (see the two-stage Escape below).
   let cardEl = $state<HTMLElement | null>(null);
 
-  // The composer opens in the annotation row BELOW its anchor line, so a comment
-  // started near the bottom of the plan can leave the card — often the whole
-  // Comment / Keep / Discard row — off screen. This scrolls the plan the minimum
-  // amount that brings the card fully into view, once MarkdownEditor has built
-  // its editor and the height is final. The only reactive read is cardEl, which
-  // changes once at mount, so it is a one-shot: the view does not chase the box
-  // as it grows while the reviewer types. Both parents that mount this component
-  // — the gutter/shortcut composer and the edit-mode one — inherit it from here.
+  // The composer opens in the annotation row BELOW its anchor line, so one started
+  // near the bottom of the plan can leave the action row off screen. The only
+  // reactive read is cardEl, which changes once at mount, so this is a one-shot:
+  // the view does not chase the box as it grows while the reviewer types.
   $effect(() => {
     if (cardEl == null) return;
     return revealCard(cardEl);
@@ -116,12 +102,10 @@
     onKeep?.(comment);
   }
 
-  // Two-stage Escape: the first Escape, fired from the focused editor, blurs the
-  // field into this card WITHOUT dismissing — so a stray keypress can't nuke work
-  // in progress. Focus lands on the card (tabindex -1), whose keydown catches the
-  // SECOND Escape and commits the way clicking away would: an edit saves its
-  // changes, a new draft is kept for later (never silently discarded). Two
-  // presses to leave, never one.
+  // Two-stage Escape: the first, fired from the focused editor, blurs into this card
+  // WITHOUT dismissing, so a stray keypress can't nuke work in progress. The card
+  // (tabindex -1) catches the SECOND and commits the way clicking away would — an
+  // edit saves, a new draft is kept for later, never silently discarded.
   function blurToCard() {
     cardEl?.focus({ preventScroll: true });
   }
@@ -129,18 +113,16 @@
     if (isEdit) submit();
     else keep();
   }
-  // Only when the card ITSELF holds focus (the second Escape) do we dismiss — an
-  // Escape bubbling up from the still-focused editor (the first press) carries the
-  // editor as its target, not the card, and must be ignored here.
+  // The first press bubbles up from the still-focused editor, carrying it as the
+  // target rather than the card — only the second must dismiss.
   function onCardKeydown(e: KeyboardEvent) {
     if (e.key === "Escape" && e.target === e.currentTarget) dismiss();
   }
 </script>
 
-<!-- One Discard button, rendered down whichever branch below applies: as the
-     confirmation's trigger (where it takes bits-ui's props) or on its own. Declared
-     out here rather than inside the Card, since a snippet inside a component's tags
-     is passed to that component as a prop. -->
+<!-- One Discard button for both branches below. Declared out here rather than
+     inside the Card, since a snippet inside a component's tags is passed to that
+     component as a prop. -->
 {#snippet discardButton(props: Record<string, unknown>)}
   <Button {...props} variant="secondary" class="float-chip ghost">Discard</Button>
 {/snippet}
@@ -175,12 +157,10 @@
       </Button>
     {:else}
       <Button variant="ghost" class="keep" onclick={keep} disabled={!canKeep}>Keep for later</Button>
-      <!-- Dropping a non-empty draft loses typed text with no undo, so it routes
-           through a confirmation (EXC-749). An empty box has nothing to lose, so it
-           discards at once — no nag for the "clicked a line, changed my mind" case.
-           The rule lives in the branch rather than inside the click handler because
-           Popover.Trigger opens unconditionally: the empty case never gets a
-           trigger at all. -->
+      <!-- Dropping a non-empty draft loses typed text with no undo, so it confirms
+           (EXC-749); an empty box discards at once. The rule lives in the branch
+           rather than the click handler because Popover.Trigger opens
+           unconditionally — the empty case must never get a trigger. -->
       {#if canKeep}
         <ConfirmPopover
           question="Discard this comment?"
@@ -212,13 +192,9 @@
     border: 1px solid var(--rule-strong);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
-    /* One-shot reveal on the fast tier. Opacity only: the composer opens inside
-       the library-reserved annotation row, so a transform that grew or shifted
-       its box would change the row's measured height mid-reveal and fight the
-       preventScroll guard. Fading in keeps the row's height static and reads as
-       the same considered reveal as the annotation card's expand. The global
-       reduced-motion rule in app.css collapses it to a static frame when the OS
-       asks. */
+    /* Opacity only: this opens inside the library-reserved annotation row, so a
+       transform that grew or shifted the box would change the row's measured
+       height mid-reveal and fight the preventScroll guard. */
     animation: reveal var(--dur-micro) var(--ease-out);
   }
   .label {
@@ -234,10 +210,8 @@
     gap: 0.4rem;
     margin-top: 0.55rem;
   }
-  /* Keep for later is the deliberate "stash for later" opt-in — the quietest
-     control in the row, so its ghost Button drops to the faint ink until hovered.
-     Discard (neutral float-chip) and Comment (the one amber primary) carry more
-     weight, keeping the stash from competing with them. */
+  /* The quietest control in the row, so it drops to faint ink until hovered —
+     Discard and Comment must carry more weight than the stash. */
   :global([data-slot="button"].keep) {
     color: var(--ink-faint);
   }

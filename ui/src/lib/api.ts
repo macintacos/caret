@@ -60,21 +60,16 @@ export async function getDiagnostics(): Promise<DaemonDiagnostics> {
 }
 
 /** The daemon's update verdict (EXC-1207): whether this caret is behind, the command that
- * would take the upgrade, and the live `updates.check` folded in (EXC-1210). Reading it
- * never makes the daemon call out — the held verdict is whatever the throttled background
- * check last settled — so this is a cheap read, called on load and again whenever the
- * Updates toggle lands.
+ * would take the upgrade, and the live `updates.check` folded in (EXC-1210). A cheap read
+ * — it never makes the daemon call out, returning whatever the throttled background check
+ * last settled.
  *
  * Throws on failure, unlike this file's degrading readers: every update surface renders
- * this one value, so there is nothing here to fall back to. App decides what a failure
- * means by which call it was — null on load, so every surface stays quiet, and the
- * last-known verdict on the toggle's re-read.
+ * this one value, so there is nothing here to fall back to.
  *
- * The two failures are logged apart, the way getSkills keeps its own two apart, and for a
- * sharper reason: this fires on EVERY page load, so a daemon that wires no update thunk
- * would otherwise earn a `warn` per page view forever — the per-iteration noise
- * logging-rules.md forbids. A 404 is that daemon and is unremarkable; anything else is a
- * read that should have worked. */
+ * The 404 is logged apart because this fires on EVERY page load: a daemon that wires no
+ * update thunk would otherwise earn a `warn` per page view forever, the per-iteration
+ * noise logging-rules.md forbids. */
 export async function getUpdate(): Promise<UpdateReport> {
   try {
     return await json(await fetch("/api/update"));
@@ -92,9 +87,8 @@ export async function getUpdate(): Promise<UpdateReport> {
  * Deliberately not part of the 2s reviews poll. */
 export async function getApproveMode(): Promise<ApproveVariantId> {
   try {
-    // Typed as the wire contract rather than inline: this is the browser's only reader of
-    // GET /api/prefs, so it is the one place a daemon-side change to PrefsResponse can
-    // still be caught at compile time.
+    // Typed as the wire contract, not inline: the browser's only reader of GET
+    // /api/prefs, so the one place a PrefsResponse change is caught at compile time.
     const { approveMode } = await json<PrefsResponse>(await fetch("/api/prefs"));
     return approveMode;
   } catch (err) {
@@ -105,11 +99,10 @@ export async function getApproveMode(): Promise<ApproveVariantId> {
 
 /** Write the daemon-owned prefs a settings control may change (EXC-1206).
  *
- * The one API function here that rewrites its own failure message. A settings control
- * renders whatever this throws in a persistent toast, and `HttpError`'s message is
- * `"HTTP 400"` — a status line, not something a person can act on. The two failure
- * classes stay apart because only one of them is the reviewer's to fix: an unreachable
- * daemon they can start, a refused body they cannot. */
+ * The one API function here that rewrites its own failure message: a settings control
+ * renders whatever this throws in a persistent toast, and `HttpError`'s "HTTP 400" is not
+ * something a person can act on. The two classes stay apart because only one is the
+ * reviewer's to fix — an unreachable daemon they can start, a refused body they cannot. */
 export async function setPrefs(patch: PrefsPatch): Promise<void> {
   try {
     await json<{ ok: true }>(
@@ -121,8 +114,7 @@ export async function setPrefs(patch: PrefsPatch): Promise<void> {
     );
   } catch (err) {
     uiLog.warn("prefs", "prefs save failed", { reason: String(err) });
-    // The status rides in the sentence rather than being the whole of it, and `cause`
-    // keeps the HttpError for anyone who wants to branch on it.
+    // `cause` keeps the HttpError for anyone who wants to branch on it.
     throw new Error(
       err instanceof HttpError
         ? `The daemon couldn't save the change (HTTP ${err.status}).`
@@ -157,8 +149,7 @@ export async function getReview(id: string): Promise<ClientReview> {
  * cwd and what each one is — the daemon holds the filesystem, so it is both the
  * existence gate and the only thing that can say file vs. directory (EXC-916).
  * A path that resolves to nothing is absent from the result. Non-essential: a
- * failed request degrades to nothing resolved (no icons) rather than throwing,
- * and an empty candidate list skips the round trip entirely. */
+ * failed request degrades to nothing resolved rather than throwing. */
 export async function resolveFileRefs(
   id: string,
   paths: string[],
@@ -187,10 +178,8 @@ export async function resolveFileRefs(
 
 /** The files under the review's cwd whose path matches what the reviewer has
  * typed after an `@` in a feedback editor (EXC-1175) — the daemon holds the
- * filesystem, so it is the only thing that can answer. Non-essential in exactly
- * the way `resolveFileRefs` is: a failed request degrades to no matches rather
- * than throwing, so the editor keeps behaving as it did before completion
- * existed and no error reaches the reviewer. */
+ * filesystem, so it is the only thing that can answer. Non-essential in exactly the
+ * way `resolveFileRefs` is: a failed request degrades to no matches, never throws. */
 export async function searchFiles(id: string, query: string): Promise<FileSearchResponse> {
   try {
     const body = await json<FileSearchResponse>(
@@ -207,11 +196,8 @@ export async function searchFiles(id: string, query: string): Promise<FileSearch
       stoppedAt: body.stoppedAt === "results" || body.stoppedAt === "scan" ? body.stoppedAt : null,
     };
   } catch (err) {
-    // `debug`, not `warn`, and deliberately so: this fires once per debounced
-    // keystroke, and a review whose cwd is gone fails every one of them. A `warn`
-    // per character is the per-iteration noise logging-rules.md forbids, in the
-    // same timeline /caret:debug reads. The daemon logs this exchange at debug
-    // too, and the once-per-render resolveFileRefs is what `warn` is sized for.
+    // `debug`, not `warn`: this fires once per debounced keystroke, and a review whose
+    // cwd is gone fails every one — the per-iteration noise logging-rules.md forbids.
     uiLog.debug("request", `file search failed: ${shortId(id)}`, {
       reviewId: id,
       queryChars: query.length,
@@ -259,9 +245,8 @@ export async function getDirListing(id: string, root: string, path: string): Pro
  * the only thing that can enumerate them. Reference only: caret never executes a
  * completed skill.
  *
- * Non-essential, like `resolveFileRefs`: nothing here throws, so the editor
- * behaves exactly as it did before completion existed. The two ways of having no
- * skills are kept apart, because only one of them is worth asking again:
+ * Non-essential, like `resolveFileRefs`: nothing here throws. The two ways of having
+ * no skills are kept apart, because only one is worth asking again:
  *
  * - **A 404 answers `[]`** — a daemon that wires no skill capability at all (the
  *   e2e fixture daemon 404s this route deliberately). That is a settled answer,
@@ -289,15 +274,12 @@ export async function getSkills(id: string): Promise<SkillRef[] | null> {
  * whole — the origin is what says which skill is meant, since two roots may offer
  * the same bare name and the list deliberately shows both.
  *
- * Null covers both "this skill describes itself nowhere" and every failure,
- * because the panel has one thing to render either way. Non-essential in exactly
- * the way `searchFiles` is: nothing throws, so the list keeps working when the
- * read does not — a 404 from a daemon that wires no such capability included.
+ * Null covers both "this skill describes itself nowhere" and every failure, because
+ * the panel has one thing to render either way. Nothing throws, a 404 from a daemon
+ * that wires no such capability included.
  *
- * `debug` rather than `warn`, and for the same reason `searchFiles` is: this
- * fires once per highlighted row, so a `warn` per arrow key is the per-iteration
- * noise logging-rules.md forbids. A description that simply is not there is not a
- * failure at all and is logged nowhere. */
+ * `debug` rather than `warn`, for the same reason `searchFiles` is: this fires once
+ * per highlighted row. */
 export async function getSkillDescription(id: string, skill: SkillRef): Promise<string | null> {
   const params = new URLSearchParams({ name: skill.name, origin: skill.origin });
   try {
@@ -348,11 +330,10 @@ export async function putDraft(
 }
 
 /** Tell the daemon the reviewer has read this plan, so it can clear the unread
- * mark on the cmux pane that submitted it (EXC-961). Non-essential: a failed
- * mark just leaves the pane unread, so failure is swallowed rather than thrown.
- * Deliberately `debug` rather than the `warn` this file's other swallowed
- * failures use — a dwell that fires just after the review resolved 404s, which
- * is a routine race, and warning on it every time would be noise. */
+ * mark on the cmux pane that submitted it (EXC-961). Non-essential: a failed mark
+ * just leaves the pane unread, so failure is swallowed rather than thrown.
+ * `debug`, not this file's usual `warn` for a swallowed failure — a dwell firing
+ * just after the review resolved 404s, which is a routine race. */
 export async function markSeen(id: string): Promise<void> {
   try {
     const res = await fetch(`/api/reviews/${encodeURIComponent(id)}/seen`, { method: "POST" });

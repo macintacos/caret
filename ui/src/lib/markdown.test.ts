@@ -3,11 +3,6 @@ import { describe, expect, test } from "bun:test";
 
 import { renderMarkdown } from "$lib/markdown.ts";
 
-// renderMarkdown turns a stored comment's markdown source into sanitized HTML
-// for the annotation-card display. The composer stores literal markdown; this is
-// the read-side render. Two concerns: the listed constructs render, and the
-// output is XSS-safe (comment bodies are user-authored and injected with @html).
-
 describe("renderMarkdown formatting", () => {
   test("inline code becomes <code>", () => {
     expect(renderMarkdown("use `please` here")).toContain("<code>please</code>");

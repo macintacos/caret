@@ -1,6 +1,5 @@
-// Deep-link plumbing: the active review id is mirrored into the `?review=`
-// query param so a reload (or a shared URL) reopens the same review. Pure
-// `location`/`history` helpers, no runes — wired by the selection state.
+// The active review id is mirrored into the `?review=` query param so a reload
+// (or a shared URL) reopens the same review.
 
 /** The review id requested by the current URL, or null when none is set. */
 export function deepLinkId(): string | null {

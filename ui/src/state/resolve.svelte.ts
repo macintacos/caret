@@ -70,11 +70,10 @@ export function createResolve(store: ResolveStore, deps: ResolveDeps): Resolve {
   const submit = deps.resolveReview ?? resolveReview;
   const readMode = deps.getApproveMode ?? getApproveMode;
 
-  // A deny: flush, submit, clear the local general-comment mirror (the daemon
-  // cleared the stored draft on resolve, and a deny keeps this review id, so the
-  // sent text would otherwise linger on reopen), advance. The feedback is a thunk
-  // because it must be composed AFTER the flush — a pending draft the flush
-  // commits belongs in it.
+  // The general-comment mirror is cleared because the daemon dropped the stored
+  // draft on resolve, and a deny keeps this review id — the sent text would linger
+  // on reopen. `feedback` is a thunk because it must be composed AFTER the flush:
+  // a pending draft the flush commits belongs in it.
   async function deny(feedback: () => string): Promise<void> {
     const id = deps.activeId();
     if (!id) return;
@@ -111,8 +110,6 @@ export function createResolve(store: ResolveStore, deps: ResolveDeps): Resolve {
       if (!id) return;
       store.busy = true;
       await deps.flushPending();
-      // Optional reviewer notes ride the allow as feedback (EXC-791); a blank note
-      // is omitted so a bare approve stays a bare allow.
       const feedback = notes?.trim();
       try {
         await submit(id, {

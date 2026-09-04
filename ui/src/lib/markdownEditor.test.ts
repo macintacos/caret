@@ -82,12 +82,11 @@ describe("chordAction", () => {
   });
 });
 
-// The Escape contract with a REAL completion list. chordAction's table above is
-// pure; what it gets fed is where the acceptance criterion actually lives, so this
-// drives a live EditorView with a real source rather than asserting on a boolean.
-// The window that matters is the one a status check misses: while a source
-// re-queries, @codemirror/autocomplete keeps the previous list painted (dimmed)
-// and reports "pending" — and Escape there must still belong to the list.
+// The Escape contract with a REAL completion list: chordAction's table above is
+// pure, and what it gets fed is where the acceptance criterion lives. The window
+// that matters is the one a status check misses — while a source re-queries,
+// @codemirror/autocomplete keeps the previous list painted (dimmed) and reports
+// "pending", and Escape there must still belong to the list.
 describe("Escape with a live completion list", () => {
   const REVIEW = { reviewId: "rev-1", cwd: "/w/caret", adapter: "claude" };
 
@@ -144,11 +143,9 @@ describe("Escape with a live completion list", () => {
   });
 
   test("an open list claims Enter ahead of the default keymap's newline", async () => {
-    // What the `Prec.highest` completion keymaps buy, and the reason they sit
-    // there rather than at a lower precedence: without them, Enter would reach
-    // defaultKeymap's insertNewlineAndIndent and split the line instead.
-    // The trailing space is caret's own (editorCompletion.ts) — a citation is a
-    // word in a sentence, so Enter leaves the cursor ready for the next one.
+    // What the `Prec.highest` completion keymaps buy: without them Enter would reach
+    // defaultKeymap's insertNewlineAndIndent and split the line. The trailing space
+    // is caret's own (editorCompletion.ts).
     const source: CompletionSource = async (ctx) => ({
       from: ctx.state.doc.toString().lastIndexOf("@") + 1,
       options: [{ label: "alpha.ts" }],
@@ -186,12 +183,9 @@ describe("Escape with a live completion list", () => {
     }
   });
 
-  // Backspace after over-typing. A source that finds nothing returns null, which
-  // leaves it in autocomplete's Inactive state — and autocomplete only ARMS a
-  // source on `input.type`, so deleting never brings it back on its own.
-  // Subsequence matching is permissive, so the way a reviewer reaches zero
-  // matches is a typo, and backspace is the reflex correction; without the
-  // re-arm the completion is silently dead for the rest of that token.
+  // Backspace after over-typing. A source that finds nothing returns null, leaving
+  // it Inactive, and autocomplete only ARMS on `input.type` — so without the re-arm
+  // a typo plus its reflex backspace kills completion for the rest of that token.
   test("backspacing off a typo reopens the list", async () => {
     const source: CompletionSource = async (ctx) => {
       const trigger = ctx.matchBefore(/@[^\s@]*/);
@@ -219,11 +213,10 @@ describe("Escape with a live completion list", () => {
   });
 });
 
-// The chip layer's decoration half. What lib/editorRefs.ts decides is WHICH runs
-// are recognized (pinned in editorRefs.test.ts, with its own injected gates);
-// what this pins is that the editor turns that decision into marks over the right
-// text and nothing else — and that a chip is presentation only, so the value the
-// host reads back is the literal markdown either way.
+// The chip layer's decoration half. WHICH runs are recognized is editorRefs.ts's
+// call, pinned in editorRefs.test.ts; this pins that the editor turns that decision
+// into marks over the right text and nothing else, and that a chip is presentation
+// only — the host reads back literal markdown either way.
 describe("reference chips", () => {
   /** Mount an editor over `doc` whose daemon resolves exactly `onDisk`. */
   function mountChips(doc: string, onDisk: string[], skills: string[] = []) {
@@ -302,10 +295,8 @@ describe("reference chips", () => {
       editor.timers.fire();
       await drain();
       expect(editor.chips()).toEqual(["`Makefile`"]);
-      // The codespan gives up its own pill rather than pairing with the chip:
-      // two marks over one range nest, so their fills composite, their padding
-      // stacks and their 0.92em multiplies — which reads as two chips that
-      // failed to line up. One range, one mark.
+      // Two marks over one range nest, compositing their fills and multiplying
+      // their 0.92em — so the codespan gives up its own pill. One range, one mark.
       expect(editor.chipWrapsCodePill()).toBe(false);
       expect(editor.view.dom.querySelectorAll(".cm-md-code")).toHaveLength(0);
     } finally {

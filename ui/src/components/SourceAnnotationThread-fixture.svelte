@@ -1,11 +1,9 @@
 <script lang="ts">
-  // Test-only fixture: the mount harness renders once and has no way to set a prop
-  // afterwards, but the contract under test is what a CHANGED annotations prop does
-  // — the review switch that hands one source line a different comment. Owning the
-  // list in $state and swapping it from a button reproduces that update inside the
-  // component tree, which is the only place a keyed block can be observed. Not
-  // shipped; lives beside its test, same shape and reason as
-  // ConfirmPopover-fixture.svelte.
+  // Test-only fixture (not shipped): the mount harness renders once and cannot set
+  // a prop afterwards, but the contract under test is what a CHANGED annotations
+  // prop does. Swapping a $state list from a button reproduces that update inside
+  // the component tree, the only place a keyed block can be observed. Same shape
+  // and reason as ConfirmPopover-fixture.svelte.
   import type { LineAnnotation } from "@core/lib/types";
   import SourceAnnotationThread from "@/components/SourceAnnotationThread.svelte";
 

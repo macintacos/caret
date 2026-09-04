@@ -5,9 +5,8 @@ import type { LegacyAnnotation } from "@core/lib/types";
 import { render } from "@ui/support/mount.ts";
 import LegacyAnnotationList from "@/components/LegacyAnnotationList.svelte";
 
-// LegacyAnnotationList renders selection-anchored (legacy-shape) annotations
-// read-only on the source-view surface, per the union compat contract: they
-// always load and show, but have no edit/delete controls and no line anchor.
+// Per the union compat contract, legacy (selection-anchored) annotations always
+// load and show but carry no edit/delete controls and no line anchor.
 
 const legacy: LegacyAnnotation[] = [
   { id: "g1", blockId: "b0", startOffset: 0, endOffset: 5, quote: "Hello", comment: "old note" },

@@ -1,20 +1,15 @@
 // Review polling, merge, and selection state.
 //
-// `startPolling` is a self-contained closure (no runes): it polls
-// GET /api/reviews on an interval and watches the daemon's identity for a
-// same-port takeover. `createReviewSelection` owns the reactive review list,
-// the active id, the deep-link reflection, and the connection flags; its merge
-// keeps the active review stable across the 2s poll and auto-advances after a
-// resolve. The working-copy reload is driven reactively off the derived active
-// review (App.svelte), not from here.
+// `startPolling` polls GET /api/reviews on an interval and watches the daemon's
+// identity for a same-port takeover. `createReviewSelection` owns the review list,
+// the active id, the deep-link reflection and the connection flags. The
+// working-copy reload is driven reactively off the derived active review
+// (App.svelte), not from here.
 //
-// The selection also reports the moments only it can see (EXC-1100): a plan
-// arriving, one revised in place, one expiring, and the daemon going or coming
-// back. Each is a diff between what the last poll held and what this one carries
-// — data that lives nowhere else — so the detection sits here rather than in a
-// module that would have to keep a second copy of the list. That same diff feeds
-// the unread marks (EXC-411): a plan that arrives or gains a version while you
-// read a different one is marked, and making it active clears it.
+// The selection also reports the moments only it can see (EXC-1100) and raises the
+// unread marks (EXC-411). Both are a diff between what the last poll held and what
+// this one carries — data that lives nowhere else — so the detection sits here
+// rather than in a module that would keep a second copy of the list.
 
 import type { ClientReview, HealthIdentity } from "@core/lib/types";
 import { deepLinkId, setUrl } from "@/state/deepLink.ts";
@@ -55,14 +50,13 @@ export function startPolling(
   // a pre-fix daemon (no instanceId) keeps it undefined, so detection no-ops.
   let lastInstanceId: string | undefined;
 
-  // Fetch /api/health and compare its instanceId against the baseline. Fires
-  // onSwap (and logs one warn) only when a previous id existed and differs;
-  // then advances the baseline so one swap yields one notification, not one per
-  // poll. Opaque ids only — stateDir is identifying and is never read/logged.
-  // No in-flight guard: after the one-time boot seed, every call comes from
-  // inside the serialized tick loop (and the first periodic check is ≥5
-  // intervals out), so two checks can never overlap — keep it that way if you
-  // add a call site.
+  // Advancing the baseline before firing is what makes one swap yield one
+  // notification rather than one per poll. Opaque ids only — stateDir is
+  // identifying and is never read or logged.
+  //
+  // No in-flight guard: after the boot seed every call comes from inside the
+  // serialized tick loop (and the first periodic check is ≥5 intervals out), so
+  // two checks can never overlap — keep it that way if you add a call site.
   const checkIdentity = async () => {
     let health: HealthIdentity;
     try {
@@ -196,27 +190,21 @@ export function createReviewSelection(
 
   const select = (id: string | null) => {
     store.activeId = id;
-    // Making a plan active is what reads it, so clearing keys off this funnel: a
-    // dropdown pick, a deep link, mergeReviews' re-select and afterResolve's
-    // auto-advance all arrive here. Scoped by id, so a plan bumped twice while
-    // unread clears in one select.
+    // Making a plan active is what reads it, and every path that does so funnels
+    // here. Scoped by id, so a plan bumped twice while unread clears in one select.
     if (id !== null && store.unread.includes(id))
       store.unread = store.unread.filter((u) => u !== id);
     setUrl(id);
   };
 
-  // The first snapshot seeds silently: reviews already pending when the page
-  // opened are on screen, not news — the same rule createPlanNotifier's seen-set
-  // follows for desktop notifications.
+  // The first snapshot seeds silently: reviews already pending when the page opened
+  // are on screen, not news — the rule createPlanNotifier's seen-set also follows.
   let seeded = false;
 
-  /** Diff the last snapshot against `incoming`, then do the two jobs that diff
-   * feeds. Announce what changed: at most one cue per kind, so a poll that brings
-   * three plans is one arrival rather than three overlapping sounds — and an
-   * arrival SUPPRESSES a revision in the same poll, since the bigger news wins.
-   * An expiry is not on that ladder: it can sound alongside either, because a
-   * plan leaving and a plan landing are two separate pieces of news. Then mark
-   * every arrival and every revision unread, unless it is the plan being read. */
+  /** Diff the last snapshot against `incoming`, then announce and mark from it.
+   * At most one cue per kind, and an arrival SUPPRESSES a revision in the same poll
+   * — the bigger news wins. An expiry is off that ladder and can sound alongside
+   * either. Arrivals and revisions are marked unread unless already being read. */
   function observeMerge(incoming: readonly ClientReview[]): void {
     if (!seeded) {
       seeded = true;
@@ -299,7 +287,6 @@ export function createReviewSelection(
       const remaining = store.reviews.filter((r) => r.id !== id);
       store.reviews = remaining;
       pruneUnread(remaining);
-      // Auto-advance to the next pending review, or clear.
       select(remaining[0]?.id ?? null);
     },
   };

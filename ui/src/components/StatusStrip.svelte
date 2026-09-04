@@ -1,29 +1,15 @@
 <script lang="ts">
-  // A persistent, low-profile plan-review status readout: a flat row of segments
-  // in the bottom status bar (EXC-787), reporting the live metadata of
-  // the plan under review in the mono/tabular technical voice. In the
-  // single-version view its tally reads the same pending-comment state
-  // RequestChangesDialog and the approve guard consume — the always-on answer to
-  // "how many comments am I about to send". While the reviewer is comparing
-  // versions, the host points it at the compared range's comments instead
-  // (EXC-872), because the tally is the comment panel's toggle and the two must
-  // agree; the approve guard's own count is unaffected either way.
+  // A low-profile plan-review status readout: a flat row of segments in the bottom
+  // status bar (EXC-787). In the single-version view its tally reads the same
+  // pending-comment state RequestChangesDialog and the approve guard consume — the
+  // always-on answer to "how many comments am I about to send". While comparing
+  // versions the host points it at the compared range's comments instead (EXC-872),
+  // because the tally is the comment panel's toggle and the two must agree; the
+  // approve guard's own count is unaffected either way.
   //
   // It self-gates on `active`: absent when no review is up (EmptyState owns that
-  // state), present otherwise. Connection state appears here once — distinct from
-  // the daemon-replaced banner (daemon identity flipped) and VersionBadge (build
-  // identity).
-  //
-  // EXC-763: rebuilt on shadcn primitives — the metric dividers are vertical
-  // Separators (the TopBar cluster's divider), the ^vN revision is a Badge
-  // reusing VersionLabel's amber-^ idiom, and the revision + connection carry
-  // their hover hints on shadcn Tooltips (replacing native title=), matching the
-  // TopBar cwd tooltip. The readout stays quiet flat segments in the status bar,
-  // receding until looked at, rather than the topbar's louder .float-chip fill.
-  //
-  // EXC-787: moved into the full-width status bar, so EXC-812's corner
-  // de-collision (the strip yielding to the navigator) is gone — the navigator
-  // now docks above the bar rather than sharing the bottom-right corner.
+  // state). Connection state appears here once — distinct from the daemon-replaced
+  // banner (daemon identity flipped) and VersionBadge (build identity).
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
@@ -54,8 +40,8 @@
     showShortcutHints?: boolean;
   } = $props();
 
-  // Only worth showing the lines tally once a line-anchored comment covers source
-  // lines; a count of plain comments alone keeps the readout honest.
+  // A count of plain comments covers no source lines, so the lines tally would
+  // read zero beside a non-zero comment count.
   let showCovered = $derived(pendingCount > 0 && coveredLines > 0);
 </script>
 
@@ -75,8 +61,7 @@
         <span class="num" class:has={pendingCount > 0}>{pendingCount}</span>
         <span class="label">{pendingCount === 1 ? "comment" : "comments"}</span>
         {#if showShortcutHints}
-          <!-- One combined key: the global shift icon then C, both typed KbdCaps
-               (see caps.ts) so the shift glyph is the shared icon, never a ⇧ char. -->
+          <!-- Both caps typed, so the shift glyph is the shared icon, never a ⇧ char. -->
           <Kbd class="comments-key kbd-sm" aria-hidden="true"
             ><KbdCap key="shift" size={8} /><KbdCap key="C" /></Kbd
           >
@@ -94,9 +79,8 @@
         <Tooltip.Root>
           <Tooltip.Trigger>
             {#snippet child({ props })}
-              <!-- The ^vN revision marker: a Badge, so it reads as the same chip
-                   the TopBar VersionLabel shows. Only the ^ carries amber
-                   (brand); the rest stays ink-soft, holding amber-scarcity. -->
+              <!-- The same chip the TopBar VersionLabel shows. Only the ^ carries
+                   amber, holding amber-scarcity. -->
               <Badge {...props} variant="secondary" class="rev metric">
                 <span class="caret" aria-hidden="true">^</span>v{version}
               </Badge>
@@ -124,9 +108,7 @@
 {/if}
 
 <style>
-  /* A flat, low-profile row of status-bar segments (EXC-787). StatusBar lays it
-     out; it no longer self-pins. The mono family + tabular figures come from the
-     .metric atom. */
+  /* The mono family and tabular figures come from the .metric atom. */
   .status-strip {
     display: inline-flex;
     align-items: center;
@@ -141,14 +123,10 @@
     align-items: baseline;
     gap: 0.28rem;
   }
-  /* The comment tally doubles as the navigator's trigger, so it is a real button;
-     strip the native chrome back to the strip's inline text and add a quiet
-     underline-on-hover + focus ring so it reads as activatable without shouting.
-     align-items overrides .stat's baseline: this tally alone carries the taller
-     Shift+C key cap, and on a baseline row that cap drags the shared baseline
-     down, sinking "N comments" ~1px below the strip's other segments. Centering
-     the row keeps the count level with them — and, at these sizes, lands the C on
-     the count's baseline too (verified in-browser), so it reads as one line. */
+  /* A real button, stripped back to the strip's inline text. align-items overrides
+     .stat's baseline: this tally alone carries the taller Shift+C cap, which on a
+     baseline row drags the shared baseline down and sinks "N comments" ~1px below
+     the strip's other segments. */
   .comments-toggle {
     align-items: center;
     margin: 0;
@@ -171,11 +149,8 @@
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
-  /* The Shift+C summon-key cap on the tally (EXC-792): the font-size lifts the C
-     off .kbd-sm's tiny 0.68em so it meets the shift icon (KbdCap size) closer to
-     one scale. Vertical placement is the toggle's align-items: center (above), so
-     the cap needs no align-self of its own. Rides the Kbd root (no scope hash →
-     :global, bounded under the scoped strip). */
+  /* Lifts the C off .kbd-sm's 0.68em so it meets the shift icon at closer to one
+     scale. :global because it rides the Kbd root, which carries no scope hash. */
   .status-strip :global(.comments-key) {
     font-size: 0.9em;
   }
@@ -183,15 +158,11 @@
     font-weight: 600;
     color: var(--ink-faint);
   }
-  /* A non-zero pending tally is the metric the reviewer is tracking — lift it to
-     --attention so a populated strip reads at a glance. That is the novelty hue's
-     job, and it is the one the TopBar's pending badge and the compare picker's
-     version count already wear, so all three counts read as one family. The tally
-     borrowed the add hue without ever carrying the add meaning; --ok stays below for
-     the genuinely semantic pair (connection state). Local rather than a derived
-     token: this is a two-step emphasis
-     ramp, and only the pair together carries the "pending reads louder than
-     covered" relation. */
+  /* --attention, the hue the TopBar's pending badge and the compare picker's version
+     count already wear, so all three counts read as one family; --ok stays reserved
+     for the semantic pair below (connection state). Mixed locally rather than
+     tokenised because only the pair together carries the two-step "pending reads
+     louder than covered" ramp. */
   .num.has {
     color: color-mix(in srgb, var(--attention) 80%, var(--ink));
   }
@@ -201,10 +172,8 @@
   .label {
     color: var(--ink-soft);
   }
-  /* The revision Badge is a child component, so its own class carries no scope
-     hash — reach it with :global, bounded under the scoped .status-strip. Tightens
-     the shadcn Badge's default padding/size down to the dense strip's scale and
-     tones the pill neutral (the ^ caret keeps the amber below). */
+  /* :global because the Badge is a child component and its class carries no scope
+     hash. Tightens the shadcn default down to the dense strip's scale. */
   .status-strip :global(.rev) {
     gap: 0.05rem;
     padding: 0.04rem 0.32rem;

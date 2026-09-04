@@ -73,8 +73,7 @@ export interface Autosave {
   /** Clear the local general-comment draft (after a deny clears it server-side). */
   clearGeneralComment: () => void;
   /** Replace the working-copy scratches (mirrored up from the source-view
-   * controller on every change) and schedule a debounced save. The persisted
-   * shape drops the controller's derived `key`. */
+   * controller on every change) and schedule a debounced save. */
   setScratches: (next: readonly PersistedScratch[]) => void;
 }
 
@@ -165,21 +164,16 @@ export function createAutosave(
     syncActive(active) {
       const key = active ? `${active.id}:${active.version}` : null;
       if (active && key !== lastLoadedKey) {
-        // Flush the PREVIOUS review's pending save FIRST (it snapshots the
-        // current annotations + generalCommentDraft + pendingSaveId
-        // synchronously) — before we overwrite them with the new review's, or
-        // we'd save them onto the old id.
+        // Flush the PREVIOUS review's pending save FIRST — before the working
+        // copy below is overwritten, or it would save onto the old id.
         void flushPending();
         lastLoadedKey = key;
         store.annotations = active.annotations.map((a) => ({ ...a }));
         store.focusedAnnotation = null;
-        // Scratches are version-scoped like annotations: reload them on every
-        // id:version change so a fresh plan version starts with its own (which
-        // has none), never a prior version's stale line anchors.
+        // Version-scoped: a fresh plan version starts with its own scratches
+        // (none), never a prior version's stale line anchors.
         store.composerScratches = copyScratches(active.composerScratches);
         currentVersionNum = active.version;
-        // Seed on id change only, via its own guard (see lastDraftLoadedId
-        // above) — independent of the id:version annotation reload around it.
         if (active.id !== lastDraftLoadedId) {
           lastDraftLoadedId = active.id;
           store.generalCommentDraft = active.generalCommentDraft ?? "";
@@ -226,9 +220,9 @@ export function createAutosave(
     },
     setScratches(next) {
       const cleaned = copyScratches(next);
-      // The controller reseeds on load / switch / version change and echoes the
-      // just-served set back through here; an unchanged set must not schedule a
-      // redundant PUT (nor flip pendingSaveId onto the freshly-seeded review).
+      // The controller echoes the just-served set back through here on every
+      // reseed; an unchanged set must not schedule a redundant PUT, nor flip
+      // pendingSaveId onto the freshly-seeded review.
       if (scratchesEqual(cleaned, store.composerScratches)) return;
       store.composerScratches = cleaned;
       scheduleSave();
