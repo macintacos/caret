@@ -1,8 +1,7 @@
-// Shared scaffolding for the per-adapter wire-contract suites (test/adapters/*/
-// wire-contract.test.ts): drive a fixture's raw hook stdin through the real
-// parse -> runReview -> emitDecision path and return the parsed stdout wire
-// object, so each suite's assertions pin what its own adapter actually emits
-// rather than a constant-equality tautology.
+// Shared scaffolding for the per-adapter wire-contract suites: a fixture's raw
+// hook stdin is driven through the real code path, so each suite's assertions
+// pin what its own adapter actually emits rather than a constant-equality
+// tautology.
 import { expect } from "bun:test";
 
 import type { Decision, PlanInput } from "@/lib/types.ts";

@@ -10,8 +10,7 @@ import { logFile } from "@/config/paths.ts";
  *
  * Non-JSON lines are skipped — blank lines, and any raw crash output in a
  * source that carries both (the e2e daemon's stderr, or a log migrated from an
- * install that predates the daemon-stderr split). Only lines starting with `{`
- * are parsed, so a malformed tail never derails the parse.
+ * install that predates the daemon-stderr split).
  */
 export function ndjsonRecords(text: string): Array<Record<string, unknown>> {
   return text

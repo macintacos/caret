@@ -1,10 +1,8 @@
-// The release pipeline's in-memory test harness: builds a `Deps` whose git, gh,
-// npm, rumdl, fs, and clock collaborators are fakes typed against their real
-// interfaces, so each baseline/compute/prepare/finalize step runs with no live
-// repo and no network. Every mutating call is recorded into `calls` so a test can
-// assert exactly what would (or would not) run. It lives in test/support/ (not a
-// *.test.ts file) so bun test never collects it as a suite; release-steps.test.ts
-// and the per-step test files consume it.
+// The release pipeline's in-memory test harness: builds a `Deps` whose every
+// collaborator is a fake typed against its real interface, so each
+// baseline/compute/prepare/finalize step runs with no live repo and no network.
+// Every mutating call is recorded into `calls` so a test can assert exactly what
+// would (or would not) run.
 import type { GitOps, RawCommit } from "@/tasks/release/git.ts";
 import type { GitHubOps, PullRequestSummary } from "@/tasks/release/github.ts";
 import type { NpmOps } from "@/tasks/release/npm.ts";

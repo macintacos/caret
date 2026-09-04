@@ -7,11 +7,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 /**
- * Wire a fresh throwaway CLAUDE_CONFIG_DIR for each test in the calling file: a
- * new temp root is created in beforeEach, CLAUDE_CONFIG_DIR pointed at its
- * "claude" subdirectory, and both removed/restored in afterEach. The returned
- * accessor yields the temp root, so a caller can seed sibling directories (e.g.
- * a reviewed project) beside "claude".
+ * Wire a fresh throwaway CLAUDE_CONFIG_DIR for each test in the calling file.
+ * The returned accessor yields the temp ROOT, not the config dir, so a caller
+ * can seed sibling directories (e.g. a reviewed project) beside "claude".
  */
 export function setupTempClaudeConfigDir(prefix = "caret-claude-"): () => string {
   let tmp: string;

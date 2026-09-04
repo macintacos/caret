@@ -3,10 +3,9 @@
 /**
  * Poll `probe` until it returns a defined value or the budget elapses.
  *
- * The value-returning shape: the probe yields `undefined` while the condition
- * is not yet met and the (awaited) value once it is. The probe may be sync or
- * async. Throws on timeout so a stuck condition fails the test loudly rather
- * than hanging.
+ * The probe yields `undefined` while the condition is not yet met and the value
+ * once it is. Throws on timeout so a stuck condition fails the test loudly
+ * rather than hanging.
  */
 export async function waitFor<T>(
   probe: () => T | undefined | Promise<T | undefined>,

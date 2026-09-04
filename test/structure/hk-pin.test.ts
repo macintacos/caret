@@ -15,8 +15,7 @@ import { join } from "node:path";
 
 import { parse as parseToml } from "smol-toml";
 
-// The suite sits at test/structure/, two levels below the repo root; resolving against
-// import.meta.dir reads the real tree regardless of the runner's cwd.
+// From import.meta.dir, not cwd, so the suite reads the real tree wherever it runs.
 const REPO_ROOT = join(import.meta.dir, "..", "..");
 
 const read = (name: string) => readFileSync(join(REPO_ROOT, name), "utf-8");

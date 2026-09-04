@@ -26,8 +26,7 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 
-// The suite sits at test/structure/, two levels below the repo root; resolving against
-// import.meta.dir reads the real tree regardless of the runner's cwd.
+// From import.meta.dir, not cwd, so the suite reads the real tree wherever it runs.
 const REPO_ROOT = join(import.meta.dir, "..", "..");
 
 const { exitCode, stdout, stderr } = Bun.spawnSync([process.execPath, "dedupe", "--check"], {

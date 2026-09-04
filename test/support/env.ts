@@ -8,10 +8,8 @@ import { join } from "node:path";
 
 /**
  * Run `fn` with the given env vars applied (an `undefined` value deletes the
- * var), restoring every touched key — including ones that were already set —
- * afterward, whether `fn` is sync or async: the restore runs in a `finally`
- * (chained onto the returned promise for an async `fn`), so a throwing or
- * rejecting `fn` still leaves process.env clean.
+ * var), restoring every touched key — including ones that were already set.
+ * Sync or async, throwing or rejecting, process.env comes out clean.
  */
 export function withEnv<T>(vars: Record<string, string | undefined>, fn: () => T): T {
   const saved = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
@@ -40,10 +38,9 @@ export function withEnv<T>(vars: Record<string, string | undefined>, fn: () => T
 }
 
 /**
- * Wire a fresh, isolated XDG_STATE_HOME for each test in the calling file: a new
- * temp dir is created in beforeEach and pointed at by `process.env.XDG_STATE_HOME`,
- * then wiped and the prior value restored in afterEach. The returned accessor
- * yields the current test's state dir (so logFile()/stateDir() resolve under it).
+ * Wire a fresh, isolated XDG_STATE_HOME for each test in the calling file. The
+ * returned accessor yields the current test's state dir (so logFile()/stateDir()
+ * resolve under it).
  *
  * `prefix` names the temp dir for diagnosability (e.g. "caret-cli-").
  */

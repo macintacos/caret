@@ -34,8 +34,7 @@ const CLAIM =
   "A feedback line reference indexes the plan version caret stored, and the " +
   "abbreviated quote paired with it is what the agent matches against its own text.";
 
-// The suite sits at test/structure/, two levels below the repo root; resolving against
-// import.meta.dir reads the real tree regardless of the runner's cwd.
+// From import.meta.dir, not cwd, so the suite reads the real tree wherever it runs.
 const REPO_ROOT = join(import.meta.dir, "..", "..");
 
 const SURFACES = ["ui/src/lib/feedback.ts", "opencode/caret.plugin.ts", "doc/ARCHITECTURE.md"];

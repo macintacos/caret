@@ -20,8 +20,7 @@ import { parse as parseToml } from "smol-toml";
 
 import { RUMDL_VERSION, rumdlAsset } from "@/plan/rumdl.ts";
 
-// The suite sits at test/structure/, two levels below the repo root; resolving
-// against import.meta.dir reads the real tree regardless of the runner's cwd.
+// From import.meta.dir, not cwd, so the suite reads the real tree wherever it runs.
 const REPO_ROOT = join(import.meta.dir, "..", "..");
 
 /** The `[[tools.rumdl]]` entry from mise.lock. Its per-platform sub-tables are

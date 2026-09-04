@@ -38,8 +38,7 @@ import { join } from "node:path";
 // see package.json's `held` block, and port this file before collapsing to one major.
 import ts from "typescript";
 
-// The suite sits at test/structure/, two levels below the repo root; resolving
-// against import.meta.dir reads the real tree regardless of the runner's cwd.
+// From import.meta.dir, not cwd, so the suite reads the real tree wherever it runs.
 const REPO_ROOT = join(import.meta.dir, "..", "..");
 
 /** The two program source roots. shiki lives in the browser program today; `src/`

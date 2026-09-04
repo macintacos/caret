@@ -26,8 +26,7 @@ import semver from "semver";
 
 import pkg from "@root/package.json" with { type: "json" };
 
-// The suite sits at test/structure/, two levels below the repo root; resolving against
-// import.meta.dir reads the real tree regardless of the runner's cwd.
+// From import.meta.dir, not cwd, so the suite reads the real tree wherever it runs.
 const REPO_ROOT = join(import.meta.dir, "..", "..");
 
 /** bun.lock is JSONC — unquoted-safe keys and trailing commas — so it needs a tolerant

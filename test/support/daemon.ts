@@ -48,9 +48,8 @@ const SEED_DEFAULTS = { sessionId: "S", cwd: "/tmp/p", plan: "# Title\n\nbody" }
 
 /**
  * Boot a daemon over a store rooted at `dir`, on an OS-assigned port. `opts`
- * forwards the createServer knobs (idleMs/heartbeatMs/lockPath/buildId/commit/
- * stateDir/instanceId/prefsPath/log/routePlan/onShutdown); idleMs defaults high
- * so the daemon never idle-shuts-down mid-test, and onShutdown to a no-op.
+ * forwards the createServer knobs; idleMs defaults high so the daemon never
+ * idle-shuts-down mid-test, and onShutdown to a no-op.
  */
 export async function bootDaemon(dir: string, opts: BootOptions = {}): Promise<TestDaemon> {
   // The store keeps its own no-op logger: the daemon's lifecycle logger (opts.log)
