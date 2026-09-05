@@ -1065,6 +1065,42 @@ test("the table card and both of the code block's paint paths float as one famil
   expect(seen[2]).toBe(seen[0]);
 });
 
+// EXC-1228: the amber band on a selected code row runs to the same right edge as the band
+// on a selected PROSE row. Needs an engine: a code row has to be stopped from stretching
+// the content column's track — otherwise its block reports no overflow and the surface
+// widens to the longest line — and the question here is whether whatever stops it also
+// shortens the band, which is resolved layout rather than a declaration.
+//
+// The two edges MATCHING is the whole claim. A band measured only against itself passes
+// while ending short of the panel it sits in, which is what reads as a rendering fault.
+// CARD_FAMILY_PLAN because its fitting fence (11-12) never earns a card, so its rows stay
+// direct children of the content column — the state a reader meets on most code blocks.
+test("a selected code row's band ends where a selected prose row's does", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: CARD_FAMILY_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect(page.getByText("Closing prose below both blocks.")).toBeVisible();
+
+  const bandRight = () =>
+    page.evaluate(() => {
+      const sh = document.querySelector(".diffview")?.shadowRoot ?? null;
+      const row = sh?.querySelector("[data-content] > [data-line][data-selected-line]");
+      return row == null ? null : row.getBoundingClientRect().right;
+    });
+
+  // Line 8 is the prose above the fitting fence; 11 is that fence's first code line.
+  await selectGutterRange(page, 8, 8);
+  await expect.poll(bandRight).not.toBeNull();
+  const prose = await bandRight();
+
+  await selectGutterRange(page, 11, 11);
+  await expect.poll(bandRight).not.toBeNull();
+  expect(await bandRight()).toBeCloseTo(prose ?? -1, 0);
+});
+
 // A plan with a fenced code block: heading (1), blank (2), prose (3), blank (4),
 // opening fence (5), two code lines (6–7), closing fence (8), blank (9), prose (10).
 const CODE_PLAN = `# Code Plan

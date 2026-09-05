@@ -326,28 +326,35 @@ describe("the fenced code-block panel (EXC-692)", () => {
       )?.[0] ?? "";
     expect(body).toContain("margin-inline-start:");
     expect(body).toContain("margin-inline-end:");
+    expect(body).toContain("max-width:");
     // The code keeps the library's default 2ch inset — no extra indent past it.
     expect(body).toMatch(/padding-inline-start:\s*2ch\b/);
   });
 
-  test("caps EVERY code row, selected included, and keeps the band's own look guarded", () => {
-    // EXC-1228: the cap is what makes a row report overflow, and codeBlockScroll.ts reads
-    // that to decide whether to card the block — so it cannot sit behind the selection
-    // carve-out. The rest of the panel look must stay behind it, or the amber band loses
-    // the row it owns; asserting both halves is what stops a later tidy-up folding the two
-    // rules back together.
-    const capRule =
-      (overrideDecls.match(/\[data-code-line\][^{}]*\{[^}]*\}/g) ?? []).find((rule) =>
-        /max-width:\s*var\(--caret-read-max\)/.test(rule),
-      ) ?? "";
-    expect(capRule).not.toContain(":not([data-selected-line])");
-    expect(capRule).toContain("overflow-x: clip");
+  test("stops every code row inflating the track, without capping the selected one", () => {
+    // EXC-1228: a code row that stretches the content column's track widens the whole plan
+    // surface AND collapses its own scrollWidth onto its clientWidth, so the block reports
+    // no overflow and never cards. Unselected rows are held by the panel's reading cap;
+    // a selected row is size-contained instead, because capping it would end the amber band
+    // short of the panel it sits in. Both halves are asserted so a later tidy-up cannot
+    // collapse them into one rule and silently take the band or the card decision with it.
+    const selected =
+      overrideDecls.match(
+        /\[data-content\]\s*>\s*\[data-line\]\[data-code-line\]\[data-selected-line\]\s*\{[^}]*\}/,
+      )?.[0] ?? "";
+    expect(selected).toMatch(/contain:\s*inline-size/);
+    expect(selected).not.toContain("max-width");
     const guarded =
       overrideDecls.match(
         /\[data-line\]\[data-code-line\]:not\(\[data-selected-line\]\)\s*\{[^}]*\}/,
       )?.[0] ?? "";
-    expect(guarded).toContain("background-color:");
-    expect(guarded).toContain("box-shadow:");
+    expect(guarded).toMatch(/max-width:\s*var\(--caret-read-max\)/);
+    // The clip stays shared: both states leave the text wider than its box.
+    const shared =
+      overrideDecls.match(
+        /\[data-content\]\s*>\s*\[data-line\]\[data-code-line\]\s*\{[^}]*\}/,
+      )?.[0] ?? "";
+    expect(shared).toMatch(/overflow-x:\s*clip/);
   });
 
   test("pads only the outer edges of the fence lines (they hug the code within)", () => {

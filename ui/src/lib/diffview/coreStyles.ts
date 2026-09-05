@@ -211,23 +211,26 @@ const CARET_OVERRIDES = `
     pointer-events: none;
   }
 
-  /* The reading cap, and the clip that travels with it. Deliberately outside the panel
-     rule's :not() below: an uncapped row's clientWidth equals its scrollWidth, so a
-     SELECTED row would report no overflow and its block would never card (EXC-1228).
-     The clip is the guard for the frame before the scroll card wraps the block, and the
-     floor if the script never runs — without it a capped row's white-space: pre text
-     spills past the panel (EXC-729). Inline axis only, so the fence-glyph nudges below
-     are not shaved.
+  /* A code row's white-space: pre text must never stretch the content column's track to
+     the widest line: that is what widens the whole plan surface, and it also collapses the
+     row's own scrollWidth onto its clientWidth so the block reports no overflow and never
+     cards (EXC-1228). Two ways to stop it, because the two states want different boxes.
 
-     Known, and deliberately not fixed here: a SELECTED row takes the seam-fill pull
-     (margin-inline-start: calc(-1 * var(--caret-seam))) and no end margin, so capped it
-     spans [-20, 700] against an unselected row's [12, 732] — its right edge falls
-     var(--caret-seam) + var(--caret-card-inset) = 32px short of the panel's. That is a
-     large improvement on the full-bleed band this replaced, and squaring the two edges is
-     a change to EXC-664's band rather than to this measurement. */
+     An UNSELECTED row is capped at the reading width — the panel's own look (EXC-692),
+     below. A SELECTED row is size-contained instead: it contributes nothing to the track
+     either way, but keeps its full-bleed box, so the amber band runs to the column's edge
+     the way a selected prose row's does. Capping it would end the band short of the panel
+     it sits in, which reads as a rendering fault rather than as a narrower band.
+
+     The clip is shared. Both states leave the text wider than its box, and without it that
+     text spills across the surface — the guard for the frame before the scroll card wraps
+     the block, and the floor if the script never runs (EXC-729). Inline axis only, so the
+     fence-glyph nudges below are not shaved. */
   [data-content] > [data-line][data-code-line] {
-    max-width: var(--caret-read-max);
     overflow-x: clip;
+  }
+  [data-content] > [data-line][data-code-line][data-selected-line] {
+    contain: inline-size;
   }
 
   /* EXC-692: a fenced code block reads as a slightly-indented, darker, rounded
@@ -240,10 +243,10 @@ const CARET_OVERRIDES = `
      surfaces use, so it carries correct depth in both schemes (a sunk panel on
      light paper, a raised one on dark). The panel is a contained card: inset from
      the gutter (margin-inline-start) and from the right (margin-inline-end), and
-     capped at a comfortable reading width by the rule above — when the content
-     column is narrower than the cap, the right margin still keeps it off the edge.
-     The code keeps the library's default 2ch inset within the card (no extra
-     indent). Only the OUTER edges of the
+     capped at a comfortable reading width (max-width) so it never stretches
+     full-bleed across a wide viewport — when the content column is narrower than the
+     cap, the right margin still keeps it off the edge. The code keeps the library's
+     default 2ch inset within the card (no extra indent). Only the OUTER edges of the
      block are padded — the opening fence's top and the closing fence's bottom — so
      the fence lines hug the code (no gap below the opening markers or above the
      closing markers). The closing fence's bottom pad is smaller than the opening
@@ -260,6 +263,7 @@ const CARET_OVERRIDES = `
     background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
     margin-inline-start: var(--caret-card-inset);
     margin-inline-end: var(--caret-card-inset);
+    max-width: var(--caret-read-max);
     padding-inline-start: 2ch;
     padding-inline-end: 0.75rem;
     /* EXC-1145: the same lift the overflowing block's card carries. A fitting block gets no
