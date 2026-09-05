@@ -32,6 +32,7 @@ import {
   submitForRevision,
 } from "@test/e2e/support/review-state.ts";
 import {
+  composer,
   expectNoComposerOpens,
   firstGlyphX,
   gridCounts,
@@ -773,6 +774,122 @@ test("a drag selection still highlights when the plan has an overflowing code-bl
   expect(pageErrors.filter((m) => /renderSelection|children dont match/.test(m))).toEqual([]);
 });
 
+// EXC-1228: a comment anchored INSIDE an overflowing block. Needs a real browser for the
+// library's own re-render on an annotation change (a changed annotation set makes its
+// partial-render path ineligible, so the content column is replaced wholesale and any card
+// with it), the live layout that decides overflow, and the card the two produce together.
+//
+// Anchored on line 6 — the block's ONLY wide row — so one gesture reaches both halves of the
+// fix. Opening the composer selects that row: only the unguarded reading cap keeps it
+// reporting overflow, so the block re-cards at all, and only the shared slice puts the
+// comment row inside the card that results. On any other line a lost cap would go unnoticed,
+// because a sibling wide row would keep the block carded anyway.
+test("a comment inside an overflowing code block is drawn inside its card", async ({
+  daemon,
+  page,
+}) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (err) => pageErrors.push(err.message));
+
+  await daemon.seed({ plan: WIDE_CODE_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect(page.getByText("Intro prose here.")).toBeVisible();
+
+  const shadowCount = (selector: string) =>
+    page.evaluate(
+      (s) => document.querySelector(".diffview")?.shadowRoot?.querySelectorAll(s).length ?? -1,
+      selector,
+    );
+  const contentScrollWidth = () =>
+    page.evaluate(
+      () =>
+        (
+          document
+            .querySelector(".diffview")
+            ?.shadowRoot?.querySelector("[data-content]") as HTMLElement | null
+        )?.scrollWidth ?? -1,
+    );
+
+  await expect.poll(() => shadowCount("[data-code-card]")).toBe(1);
+  const before = await contentScrollWidth();
+
+  await composer(page, 6);
+
+  // Poll the comment row's arrival FIRST: it is the one predicate that is false before the
+  // library's re-render and true after, so it bounds every read below it. The card count
+  // cannot do that job — its first sample passes against the pre-render DOM too, and the row
+  // moves into the card a frame later still, on caret's own MutationObserver.
+  await expect.poll(() => shadowCount("[data-code-card] > [data-line-annotation]")).toBe(1);
+  // The card survived the composer: uncapped, the selected row reports no overflow and the
+  // block never re-cards at all.
+  await expect.poll(() => shadowCount("[data-code-card]")).toBe(1);
+  await expect.poll(() => shadowCount("[data-content] > [data-line-annotation]")).toBe(0);
+  await expect.poll(() => shadowCount("[data-code-card-gutter] > [data-gutter-buffer]")).toBe(1);
+
+  // Both failures, stated as what a reader sees rather than as a card selector: either one
+  // stretches the surface toward the widest line. Exact equality is deliberate — scrollWidth
+  // is an integer read twice off one page at one viewport, and a stranded comment row moves
+  // it by only ~19px, which any tolerance wide enough to feel safe would wave through.
+  await expect.poll(contentScrollWidth).toBe(before);
+  expect(pageErrors.filter((m) => /renderSelection|children dont match/.test(m))).toEqual([]);
+});
+
+// EXC-1228 follow-up: the two geometry invariants the card's comment row has to hold, both
+// of which only an engine can answer because both are the library's own resolved layout —
+// @pierre/diffs sizes [data-annotation-content] for ITS scrollport (a definite width of the
+// whole content column, and a sticky offset clearing the gutter), and the card is a narrower
+// scrollport nested inside that one.
+//
+// Driven at a NARROW viewport on purpose. The card is capped at --caret-read-max and inset
+// from the column by --caret-card-inset a side, so above a column of roughly
+// 720 + 2 x 12 = 744px the cap makes the two widths coincide and a violation hides. Every
+// other spec in this file runs full-width, which is exactly where this cannot be seen.
+test("a comment inside a code card is never wider than the card, and starts at its edge", async ({
+  daemon,
+  page,
+}) => {
+  await page.setViewportSize({ width: 700, height: 800 });
+  await daemon.seed({ plan: WIDE_CODE_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect(page.getByText("Intro prose here.")).toBeVisible();
+  await composer(page, 6);
+
+  const geometry = () =>
+    page.evaluate(() => {
+      const sh = document.querySelector(".diffview")?.shadowRoot ?? null;
+      const card = sh?.querySelector("[data-code-card]") as HTMLElement | null;
+      const content = card?.querySelector("[data-annotation-content]") as HTMLElement | null;
+      if (card === null || content === null || card === undefined || content === undefined) {
+        return null;
+      }
+      const style = getComputedStyle(card);
+      return {
+        cardInner:
+          card.clientWidth -
+          Number.parseFloat(style.paddingInlineStart) -
+          Number.parseFloat(style.paddingInlineEnd),
+        commentWidth: content.getBoundingClientRect().width,
+        cardX: card.getBoundingClientRect().x,
+        commentX: content.getBoundingClientRect().x,
+      };
+    });
+
+  await expect.poll(async () => (await geometry()) !== null).toBe(true);
+  const box = await geometry();
+
+  // Wider than the card and the card's own scrollWidth exceeds its clientWidth forever, so
+  // the keep-or-retire branch reads permanent overflow and the block can never retire — a
+  // phantom scroll range and an always-visible scrollbar on any commented block.
+  expect(box?.commentWidth).toBeLessThanOrEqual(box?.cardInner ?? 0);
+
+  // And it starts at the card's own edge. The library's sticky offset clears a gutter that
+  // sits outside this scrollport, so left unzeroed it indents the composer by the gutter's
+  // width relative to every code line in its own card.
+  expect(box?.commentX).toBeCloseTo(box?.cardX ?? -1, 0);
+});
+
 // EXC-1145: the two cards a rendered plan puts in front of a reader — the table's
 // (EXC-1136) and the fenced block's — must float at the same height, or the page reads as
 // two elevation languages rather than as one family. The block has TWO paint paths to the
@@ -946,6 +1063,42 @@ test("the table card and both of the code block's paint paths float as one famil
   // dark proves the first reading was not a one-way stamp.
   expect(seen[1]).not.toBe(seen[0]);
   expect(seen[2]).toBe(seen[0]);
+});
+
+// EXC-1228: the amber band on a selected code row runs to the same right edge as the band
+// on a selected PROSE row. Needs an engine: a code row has to be stopped from stretching
+// the content column's track — otherwise its block reports no overflow and the surface
+// widens to the longest line — and the question here is whether whatever stops it also
+// shortens the band, which is resolved layout rather than a declaration.
+//
+// The two edges MATCHING is the whole claim. A band measured only against itself passes
+// while ending short of the panel it sits in, which is what reads as a rendering fault.
+// CARD_FAMILY_PLAN because its fitting fence (11-12) never earns a card, so its rows stay
+// direct children of the content column — the state a reader meets on most code blocks.
+test("a selected code row's band ends where a selected prose row's does", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: CARD_FAMILY_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect(page.getByText("Closing prose below both blocks.")).toBeVisible();
+
+  const bandRight = () =>
+    page.evaluate(() => {
+      const sh = document.querySelector(".diffview")?.shadowRoot ?? null;
+      const row = sh?.querySelector("[data-content] > [data-line][data-selected-line]");
+      return row == null ? null : row.getBoundingClientRect().right;
+    });
+
+  // Line 8 is the prose above the fitting fence; 11 is that fence's first code line.
+  await selectGutterRange(page, 8, 8);
+  await expect.poll(bandRight).not.toBeNull();
+  const prose = await bandRight();
+
+  await selectGutterRange(page, 11, 11);
+  await expect.poll(bandRight).not.toBeNull();
+  expect(await bandRight()).toBeCloseTo(prose ?? -1, 0);
 });
 
 // A plan with a fenced code block: heading (1), blank (2), prose (3), blank (4),

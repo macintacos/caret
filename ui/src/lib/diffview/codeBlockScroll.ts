@@ -9,6 +9,11 @@
 // Per-row scroll with a JS sync is the alternative that does not work: a short line cannot
 // scroll at all, and syncing N ports lags into a visible "jelly".
 //
+// The card takes the contiguous RUN of the column's children across the block rather than its
+// [data-line] rows alone (cardSlice.ts), so an open comment's annotation row — which carries
+// no line index — rides inside the card at its anchor instead of below the whole block,
+// beneath its scrollbar (EXC-1228).
+//
 // The card styling and its scrollbar live in coreStyles.ts (CARD_ATTR selects the card); this
 // module only owns the DOM structure — which blocks are wrapped, kept, or unwrapped. A block
 // that fits is left as plain direct-child rows, which EXC-692's per-row rules still style. The
@@ -18,6 +23,7 @@
 // re-run cannot re-trigger that observer. happy-dom reports 0 for every layout metric, so
 // overflow is read through an injectable `read`.
 
+import { unwrappedSlice } from "$lib/diffview/cardSlice.ts";
 import type { CodeBlockRange } from "$lib/diffview/codeBlocks.ts";
 
 /** Marks a block's scroll card; its value is the block's 1-based start line, the key that
@@ -47,33 +53,27 @@ export interface RowMetrics {
   clientWidth: number;
 }
 
-export type MetricsReader = (el: HTMLElement) => RowMetrics;
+export type MetricsReader = (el: Element) => RowMetrics;
 
 const readMetrics: MetricsReader = (el) => ({
   scrollWidth: el.scrollWidth,
   clientWidth: el.clientWidth,
 });
 
-/** The direct-child content rows of a block, in document order, read by 1-based data-line.
- * Only direct children — a wrapped block is handled through its card, never this path. */
-function directBlockRows(content: Element, range: CodeBlockRange): HTMLElement[] {
-  const rows: HTMLElement[] = [];
-  for (let n = range.start; n <= range.end; n++) {
-    const row = content.querySelector<HTMLElement>(`:scope > [data-line="${n}"]`);
-    if (row != null) rows.push(row);
-  }
-  return rows;
+/** A block's 1-based line numbers — the key sequence its card's slice must cover. */
+function blockLines(range: CodeBlockRange): number[] {
+  return Array.from({ length: range.end - range.start + 1 }, (_, i) => range.start + i);
 }
 
-/** Wraps `rows` in a fresh scroll card at their position, keyed by `key`. The card spans the
- * block's rows (grid-row) so its subgrid maps them to the shared row tracks, keeping the
- * gutter aligned. Rows are moved in document order. */
-function wrapBlock(content: Element, key: string, rows: HTMLElement[]): void {
+/** Wraps `slice` in a fresh scroll card at its position, keyed by `key`. The card spans one
+ * parent row track per child it takes — the block's rows plus any annotation row among them
+ * — so its subgrid maps them back to the shared tracks, keeping the gutter aligned. */
+function wrapBlock(content: Element, key: string, slice: Element[]): void {
   const card = document.createElement("div");
   card.setAttribute(CARD_ATTR, key);
-  card.style.gridRow = `span ${rows.length}`;
-  content.insertBefore(card, rows[0] ?? null);
-  for (const row of rows) card.appendChild(row);
+  card.style.gridRow = `span ${slice.length}`;
+  content.insertBefore(card, slice[0] ?? null);
+  for (const row of slice) card.appendChild(row);
 }
 
 /** Unwraps a card, returning its children to the column in place, then removes it. Used for
@@ -83,23 +83,11 @@ function unwrapCard(column: Element, card: HTMLElement): void {
   card.remove();
 }
 
-/** The direct-child gutter cells for a block, in document order, by 1-based column number —
- * the gutter counterpart of directBlockRows. Only direct children (a wrapped block's cells
- * live inside its gutter card and are handled through that card). */
-function directGutterCells(gutter: Element, range: CodeBlockRange): HTMLElement[] {
-  const cells: HTMLElement[] = [];
-  for (let n = range.start; n <= range.end; n++) {
-    const cell = gutter.querySelector<HTMLElement>(`:scope > [data-column-number="${n}"]`);
-    if (cell != null) cells.push(cell);
-  }
-  return cells;
-}
-
 /** Wraps a block's gutter cells in a display:contents card at their position, keyed like its
  * content card. display:contents keeps the cells mapped to the shared subgrid row tracks (the
  * card has no box), so the mirror is invisible — it exists only to rebalance the column counts
  * the library's selection walk asserts (see GUTTER_CARD_ATTR). */
-function wrapGutterBlock(gutter: Element, key: string, cells: HTMLElement[]): void {
+function wrapGutterBlock(gutter: Element, key: string, cells: Element[]): void {
   const card = document.createElement("div");
   card.setAttribute(GUTTER_CARD_ATTR, key);
   card.style.display = "contents";
@@ -128,20 +116,28 @@ export function syncCodeBlockCards(
     const card = content.querySelector<HTMLElement>(`:scope > [${CARD_ATTR}="${key}"]`);
     if (card != null) {
       // Already wrapped: keep it only while it still overflows; otherwise the retire pass
-      // below unwraps it (e.g. the viewport widened until the block fits).
+      // below unwraps it (e.g. the viewport widened until the block fits). No equivalent of
+      // tables.ts's cardHoldsRange, which re-validates a kept card's span: an annotation
+      // change makes the library's partial render ineligible, so a card never survives one
+      // to hold a stale span.
       const m = read(card);
       if (m.scrollWidth > m.clientWidth) wanted.add(key);
       continue;
     }
-    // Not wrapped: wrap it if any row overflows its capped box.
-    const rows = directBlockRows(content, range);
-    if (rows.length === 0) continue;
-    const overflows = rows.some((row) => {
-      const m = read(row);
+    // Not wrapped: wrap it if any row overflows its capped box. Measured on the slice's
+    // [data-line] members alone — an open composer's annotation row rides in the slice too,
+    // and its scrollWidth would card a block whose code fits.
+    const slice = unwrappedSlice(content, "data-line", blockLines(range));
+    // A partial column is a mid-repaint state, not a block to card: a slice short of the
+    // range would mis-size grid-row, and the next repaint brings this pass back.
+    if (slice === null) continue;
+    const overflows = slice.some((el) => {
+      if (!el.hasAttribute("data-line")) return false;
+      const m = read(el);
       return m.scrollWidth > m.clientWidth;
     });
     if (overflows) {
-      wrapBlock(content, key, rows);
+      wrapBlock(content, key, slice);
       wanted.add(key);
     }
   }
@@ -162,8 +158,8 @@ export function syncCodeBlockCards(
     const key = String(range.start);
     if (!wanted.has(key)) continue;
     if (gutter.querySelector(`:scope > [${GUTTER_CARD_ATTR}="${key}"]`) != null) continue;
-    const cells = directGutterCells(gutter, range);
-    if (cells.length > 0) wrapGutterBlock(gutter, key, cells);
+    const cells = unwrappedSlice(gutter, "data-column-number", blockLines(range));
+    if (cells !== null) wrapGutterBlock(gutter, key, cells);
   }
   for (const card of gutter.querySelectorAll<HTMLElement>(`:scope > [${GUTTER_CARD_ATTR}]`)) {
     if (!wanted.has(card.getAttribute(GUTTER_CARD_ATTR) ?? "")) unwrapCard(gutter, card);
