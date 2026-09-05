@@ -1369,6 +1369,45 @@ describe("UI serving", () => {
     expect((await fetch(`${base}/assets/index-AB12.js`)).headers.get("etag")).toBe(ETAG);
   });
 
+  // ---- HEAD (the other half of the cache vocabulary) ----
+  //
+  // isSafeMethod already admits HEAD through both guards and Bun strips the body
+  // from a response returned to one, so only dispatch has to match it — the
+  // handlers need no HEAD-specific path. `curl -I` is how anyone reads an ETag
+  // off a live daemon, and it 404'd before.
+
+  test("HEAD / returns the index headers with no body", async () => {
+    await bootUi();
+    const res = await fetch(`${base}/`, { method: "HEAD" });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    expect(res.headers.get("etag")).toBe(ETAG);
+    expect(await res.text()).toBe("");
+  });
+
+  test("HEAD on a hashed asset returns its headers with no body", async () => {
+    await bootUi();
+    const res = await fetch(`${base}/assets/index-AB12.js`, { method: "HEAD" });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+    expect(res.headers.get("etag")).toBe(ETAG);
+    expect(await res.text()).toBe("");
+  });
+
+  test("a matching If-None-Match makes a HEAD a 304 too", async () => {
+    await bootUi();
+    const res = await fetch(`${base}/index.html`, {
+      method: "HEAD",
+      headers: { "If-None-Match": ETAG },
+    });
+    expect(res.status).toBe(304);
+  });
+
+  test("HEAD on an unknown asset path is still a clean 404", async () => {
+    await bootUi();
+    expect((await fetch(`${base}/assets/missing-ZZ99.js`, { method: "HEAD" })).status).toBe(404);
+  });
+
   // Bun answers a Range over a BunFile body itself. Pinned so a future rewrite
   // of these handlers cannot drop it silently.
   test("a hashed asset answers a Range request with a 206", async () => {

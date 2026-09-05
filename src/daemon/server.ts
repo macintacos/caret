@@ -971,11 +971,15 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // The wrapper (handle) owns the cross-origin guard, idle/in-flight bookkeeping,
   // and the catch-all 500; dispatch is pure routing + business logic.
   async function dispatch(req: Request, method: string, path: string): Promise<Response> {
+    // The UI routes answer HEAD as well as GET — both guards already admit it
+    // (isSafeMethod), and Bun strips the body from what the handlers return, so
+    // reading an ETag with `curl -I` works without a HEAD-specific path.
+    const readsUi = method === "GET" || method === "HEAD";
     if (method === "GET" && path === "/api/health") return handleHealth();
     if (method === "GET" && path === "/api/diagnostics") return handleDiagnostics();
     if (method === "GET" && path === "/api/update") return handleUpdate();
     if (method === "POST" && path === "/api/retire") return handleRetire();
-    if (method === "GET" && (path === "/" || path === INDEX_PATH)) return handleIndex(req);
+    if (readsUi && (path === "/" || path === INDEX_PATH)) return handleIndex(req);
     if (method === "POST" && path === "/api/reviews") return handleCreateReview(req);
     if (method === "POST" && path === "/api/logs") return handleLogs(req);
     if (method === "POST" && path === "/api/ui/gone") return handleUiGone();
@@ -1005,7 +1009,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     // A hashed sibling asset (exact manifest-key match) — checked after the API
     // routes so a UI build can never shadow one. Unknown paths fall through to
     // the uniform 404.
-    if (method === "GET") {
+    if (readsUi) {
       const asset = handleAsset(req, path);
       if (asset) return asset;
     }
