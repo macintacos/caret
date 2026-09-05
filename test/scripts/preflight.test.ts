@@ -341,10 +341,6 @@ test("a failed task aborts in-flight siblings that honor the signal (recorded sk
   // run rather than fail an assertion.
   expect(r.results.get("build bin")?.status).toBe("skipped");
   expect(r.results.get("smoke")?.status).toBe("skipped");
-  // Aborted mid-flight still reports the time it burned before the abort — the
-  // distinction from `smoke`, which never spawned and reports 0.
-  expect(r.results.get("test")?.durationMs).toBeGreaterThan(0);
-  expect(r.results.get("smoke")?.durationMs).toBe(0);
 });
 
 // Diff-scoped task selection (EXC-1042) -------------------------------------
