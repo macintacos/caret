@@ -180,11 +180,11 @@ const TASK_ORDER = [...IMMEDIATE, ...DEPENDENT.map((d) => d.name)];
  *
  * `test`'s worker cap is the gate's share of the host (EXC-1215). The entry point's own
  * `--parallel` takes every core — a 2.5x win standalone, a loss here: it starves the five
- * siblings, and on a 12-core host the median gate went 156s → 163s (lint 3.4s → 8.9s,
- * `build ui` 3.5s → 7.7s). 2 is a conservative floor rather than a tuned value: on that
- * host nothing regressed and the gate came in at 151s. Raising it costs no wall clock —
- * `test e2e`, not this, is the critical path — and would buy fail-fast latency, since 4
- * workers trip a unit failure's abort some 45s sooner.
+ * siblings, and on a 12-core host the median gate went 156s → 163s. 2 is a conservative
+ * floor rather than a tuned value: on that host nothing regressed and the gate came in
+ * at 151s. Raising it costs no wall clock — `test e2e`, not this, is the critical path —
+ * and would buy fail-fast latency, since 4 workers trip a unit failure's abort some 45s
+ * sooner.
  */
 const TASK_ARGS: Readonly<Record<string, readonly string[]>> = {
   test: ["--parallel=2"],
