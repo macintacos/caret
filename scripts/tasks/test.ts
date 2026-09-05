@@ -213,13 +213,11 @@ async function emitTestReport(
 /**
  * Per-test deadline for the lane, in milliseconds (EXC-1056).
  *
- * bun's own default is 5000, and the slowest test this flag governs sits on it:
- * `ui/src/lib/editorCompletion.test.ts`'s "hints off" case asserts a hint strip never
- * appears, so it spends `until`'s whole 5000ms budget by construction — 5.14s whether
- * the host is idle or loaded. 35s is 6x that, rounded up to the nearest 5s. The multiple
- * is headroom for gate contention, which inside `mise run preflight` — lint, both builds,
- * the Playwright suite and smoke alongside — costs the spawn-heavy
- * `test/scripts/install-shell.test.ts` about 10% (4.7s standalone, 5.1s in-gate).
+ * bun's own default is 5000, which sizes every test against an idle host. The lane's gate
+ * is not one: inside `mise run preflight`, lint, both builds, the Playwright suite and
+ * smoke all run alongside it. The slowest test this flag governs is
+ * `test/scripts/install-shell.test.ts`'s bash suites, which spawn a shell per script —
+ * 4.7s standalone against 5.3s in-gate. 35s is 6x that, rounded up to the nearest 5s.
  *
  * A deadline is not a retry: the test still runs once and asserts the same thing, so
  * nothing is hidden — the budget only stops the suite asserting the machine was idle.
@@ -227,7 +225,7 @@ async function emitTestReport(
  *
  * This flag covers CONTENTION, and only on the entry points that carry it. Intrinsic
  * slowness is a different claim and stays a per-test third argument (the shiki pattern
- * sweep's `60_000`), which every entry point honours — including a bare
+ * sweep's `165_000`), which every entry point honours — including a bare
  * `bun test <file>`, where this flag is absent. A preload calling `setDefaultTimeout`
  * would cover all three at once and does not work: on bun 1.4.0 a preload setting a
  * 50ms default over two 200ms files times out one of them and not the other, so it is
