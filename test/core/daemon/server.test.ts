@@ -1182,7 +1182,7 @@ describe("UI serving", () => {
   const ETAG = `"${DIGEST}"`;
   function bootUi() {
     return boot({
-      assetEtag: DIGEST,
+      assetDigest: DIGEST,
       assets: fakeAssets({
         "/index.html": INDEX,
         "/assets/index-AB12.js": JS,
@@ -1285,11 +1285,8 @@ describe("UI serving", () => {
 
   // ---- conditional GET (ETag / If-None-Match) ----
   //
-  // Every asset response carries the UI asset-set digest as a strong validator.
-  // One digest covers the whole set, so a rebuild invalidates every path at once
-  // — free here, since /assets/* names are content-addressed and change anyway,
-  // and /index.html (served no-cache, therefore revalidated on every load) is
-  // where the saved round trip actually lands.
+  // Every asset response carries the UI asset-set digest as a strong validator,
+  // and a matching If-None-Match is answered with a bodiless 304.
 
   test("GET / carries the asset digest as an ETag", async () => {
     await bootUi();
@@ -1355,6 +1352,21 @@ describe("UI serving", () => {
     const conditional = await fetch(`${base}/index.html`, { headers: { "If-None-Match": ETAG } });
     expect(conditional.status).toBe(200);
     expect(await conditional.text()).toBe(INDEX);
+  });
+
+  test("the placeholder is served unvalidated even when a digest is wired", async () => {
+    await boot({ assetDigest: DIGEST });
+    const res = await fetch(`${base}/`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("etag")).toBeNull();
+  });
+
+  test("an asset set carrying no index leaves the placeholder unvalidated", async () => {
+    // assetsFromDist builds a handle from any non-empty tree, so a set without an
+    // /index.html still wires a digest — which describes the set, not the placeholder.
+    await boot({ assetDigest: DIGEST, assets: fakeAssets({ "/assets/index-AB12.js": JS }) });
+    expect((await fetch(`${base}/`)).headers.get("etag")).toBeNull();
+    expect((await fetch(`${base}/assets/index-AB12.js`)).headers.get("etag")).toBe(ETAG);
   });
 
   // Bun answers a Range over a BunFile body itself. Pinned so a future rewrite

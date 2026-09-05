@@ -159,10 +159,7 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
       assets,
       lockPath: daemonLock(),
       buildId: await currentBuildId(),
-      // The ETag on every asset response. Guarded on `assets` because buildHash
-      // returns the constant "no-ui" for an absent set, which would validate
-      // equal across caret versions whose built-in placeholder differs.
-      assetEtag: assets ? await buildHash(assets) : undefined,
+      assetDigest: await buildHash(assets),
       commit,
       // World + boot identity (EXC-461): stateDir is the world key (never
       // logged — identifying); the per-boot instanceId is the loggable handle.
