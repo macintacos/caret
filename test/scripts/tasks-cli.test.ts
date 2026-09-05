@@ -290,7 +290,7 @@ describe("tasks CLI: task command lines", () => {
       "browser",
       "--parallel",
       "--timeout",
-      "30000",
+      "35000",
     ]);
     expect(testCommand(["--test-name-pattern", "x"])).toEqual([
       "bun",
@@ -299,7 +299,7 @@ describe("tasks CLI: task command lines", () => {
       "browser",
       "--parallel",
       "--timeout",
-      "30000",
+      "35000",
       "--test-name-pattern",
       "x",
     ]);

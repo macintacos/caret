@@ -215,11 +215,11 @@ async function emitTestReport(
  *
  * bun's own default is 5000, which sizes every test against an idle host. The lane's
  * gate is not one: inside `mise run preflight`, lint, both builds, the Playwright
- * suite and smoke all run alongside it. What breaks first there is not the CPU-heavy
- * test but the SPAWN-heavy one — `test/scripts/dev-driver.test.ts` posts several plan
- * versions through the real submit → reflow → store path and each reflow spawns rumdl,
- * so it measures a few hundred ms standalone and crosses 5s in the gate. That is better
- * than 10x, against a suite average nearer 2.8x.
+ * suite and smoke all run alongside it. What breaks first there is a test that waits
+ * on a real deadline rather than on the CPU — `ui/src/lib/editorCompletion.test.ts`'s
+ * "hints off" case polls for a painted completion list, and at 5.1s it is the slowest
+ * in-gate test this flag governs (the 23.7s shiki sweep carries its own budget below).
+ * 35s is 6x that, the same headroom the 30s before it encoded.
  *
  * A deadline is not a retry: the test still runs once and asserts the same thing, so
  * nothing is hidden — the budget only stops the suite asserting the machine was idle.
@@ -235,7 +235,7 @@ async function emitTestReport(
  * silently ignored rather than rejected, so there is no error to go looking for.
  * Re-probe both on the next bun bump.
  */
-const UNIT_TEST_TIMEOUT_MS = 30_000;
+const UNIT_TEST_TIMEOUT_MS = 35_000;
 
 /** The argv `test unit` runs, plus forwarded args. `--parallel` fans the ~270 files
  * across worker processes, each isolated (`--parallel` implies `--isolate`), which is
