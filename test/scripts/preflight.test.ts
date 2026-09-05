@@ -796,7 +796,7 @@ test("preflight caps the unit suite's worker count", () => {
   // The entry point's own `--parallel` fans out across every core; inside the gate
   // that starves the five siblings sharing the host, so a lower count is forwarded
   // after it and wins.
-  expect(miseTaskCommand("test")).toEqual(["run", "test", "--parallel=2"]);
+  expect(miseTaskCommand("test")).toEqual(["run", "test", "--parallel=4"]);
 });
 
 test("preflight leaves every non-test task's argv untouched", () => {
