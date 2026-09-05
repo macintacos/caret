@@ -213,13 +213,13 @@ async function emitTestReport(
 /**
  * Per-test deadline for the lane, in milliseconds (EXC-1056).
  *
- * bun's own default is 5000, which sizes every test against an idle host. The lane's
- * gate is not one: inside `mise run preflight`, lint, both builds, the Playwright
- * suite and smoke all run alongside it. What breaks first there is a test that waits
- * on a real deadline rather than on the CPU — `ui/src/lib/editorCompletion.test.ts`'s
- * "hints off" case polls for a painted completion list, and at 5.1s it is the slowest
- * in-gate test this flag governs (the 23.7s shiki sweep carries its own budget below).
- * 35s is 6x that, the same headroom the 30s before it encoded.
+ * bun's own default is 5000, and the slowest test this flag governs sits on it:
+ * `ui/src/lib/editorCompletion.test.ts`'s "hints off" case asserts a hint strip never
+ * appears, so it spends `until`'s whole 5000ms budget by construction — 5.14s whether
+ * the host is idle or loaded. 35s is 6x that, rounded up to the nearest 5s. The multiple
+ * is headroom for gate contention, which inside `mise run preflight` — lint, both builds,
+ * the Playwright suite and smoke alongside — costs the spawn-heavy
+ * `test/scripts/install-shell.test.ts` about 10% (4.7s standalone, 5.1s in-gate).
  *
  * A deadline is not a retry: the test still runs once and asserts the same thing, so
  * nothing is hidden — the budget only stops the suite asserting the machine was idle.
@@ -240,8 +240,10 @@ const UNIT_TEST_TIMEOUT_MS = 35_000;
 /** The argv `test unit` runs, plus forwarded args. `--parallel` fans the ~270 files
  * across worker processes, each isolated (`--parallel` implies `--isolate`), which is
  * what makes a suite that mutates `process.env` in a dozen files safe to fan out.
- * Both injected flags precede the forwarded args so a caller passing its own
- * `--parallel=N` or `--timeout` still wins. */
+ * Isolation rides only on the entry points carrying the flag, as `--timeout` does: a
+ * bare `bun test <path>` shares one global across files, so cross-file state can make
+ * the two forms disagree. Both injected flags precede the forwarded args so a caller
+ * passing its own `--parallel=N` or `--timeout` still wins. */
 export function testCommand(args: string[]): string[] {
   return [
     "bun",

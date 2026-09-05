@@ -73,8 +73,6 @@ export type TaskStatus = "passed" | "failed" | "skipped";
 export interface TaskResult {
   status: TaskStatus;
   output: string;
-  /** Wall-clock time the task spawn took. A task fail-fast aborted mid-run reports
-   * the time it ran; one skipped before it ever spawned reports 0. */
   durationMs: number;
 }
 
@@ -105,8 +103,8 @@ export interface PreflightStartReport {
 export interface PreflightTaskReport {
   name: string;
   status: TaskStatus;
-  /** How long the task ran. Unconditional, unlike the excerpt fields below: a
-   * duration is a fact about the run, not a slice of output a filter selected. */
+  /** How long the task ran: 0 when it was skipped before ever spawning, and excluding
+   * time queued behind an upstream gate — so the six never sum to the gate's wall clock. */
   durationMs: number;
   /** Captured output, included per the verbosity / --grep / --task selection. */
   output?: string;
@@ -180,11 +178,13 @@ const TASK_ORDER = [...IMMEDIATE, ...DEPENDENT.map((d) => d.name)];
  * by default. The UNIT task is not quiet — quiet there is bun's dots reporter,
  * ~4900 characters of terminal animation in a log nobody watches live.
  *
- * `test`'s worker cap is the gate's share of the host (EXC-1215). The entry point's
- * own `--parallel` takes every core — 2.5x standalone, a loss here: it starves the
- * five siblings, and the median gate went 156s → 163s (lint 3.4s → 8.9s, `build ui`
- * 3.5s → 7.7s). At 2 workers nothing regresses and the gate is 151s. Raising it buys
- * little: `test e2e`, not this, is the gate's critical path.
+ * `test`'s worker cap is the gate's share of the host (EXC-1215). The entry point's own
+ * `--parallel` takes every core — a 2.5x win standalone, a loss here: it starves the five
+ * siblings, and on a 12-core host the median gate went 156s → 163s (lint 3.4s → 8.9s,
+ * `build ui` 3.5s → 7.7s). 2 is a conservative floor rather than a tuned value: on that
+ * host nothing regressed and the gate came in at 151s. Raising it costs no wall clock —
+ * `test e2e`, not this, is the critical path — and would buy fail-fast latency, since 4
+ * workers trip a unit failure's abort some 45s sooner.
  */
 const TASK_ARGS: Readonly<Record<string, readonly string[]>> = {
   test: ["--parallel=2"],
@@ -194,7 +194,9 @@ const TASK_ARGS: Readonly<Record<string, readonly string[]>> = {
 /** The `mise` argv the gate spawns for `name`. A multi-word name (`build ui`,
  * `test e2e`) splits into positional targets, which mise routes to the task's
  * own subcommand path (EXC-738); any TASK_ARGS follow, since caret's flags stop
- * parsing at the first operand. */
+ * parsing at the first operand. A TASK_ARGS entry that is not a caret flag at all —
+ * `test`'s `--parallel=2` — rides through on the subcommand's `allowUnknownOption()`,
+ * so removing that call breaks the gate rather than a test. */
 export function miseTaskCommand(name: string): string[] {
   return ["run", ...name.split(" "), ...(TASK_ARGS[name] ?? [])];
 }
@@ -553,8 +555,8 @@ export function buildStartReport(
 /**
  * Per-task results, emitted to stdout after the run in --json mode (EXC-471).
  * Failures show output by default — in full when small, or a truncated tail
- * (with `totalLines` + `truncated`) when large. Passing tasks are status-only
- * by default. Verbosity turns it up: `-v` makes failures full and adds a
+ * (with `totalLines` + `truncated`) when large. Passing tasks carry status and
+ * duration only by default. Verbosity turns it up: `-v` makes failures full and adds a
  * snippet of passing tasks, `-vv` shows every task in full. `--grep` narrows
  * output to matching lines (with `matchedLines`); `--task` scopes to the named
  * task(s) and shows them in full (or, with `--grep`, the matching lines).

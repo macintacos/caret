@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import pkg from "@root/package.json" with { type: "json" };
 import type { JsonArgs } from "@scripts/preflight.ts";
 import {
   buildBinArtifacts,
@@ -303,6 +304,14 @@ describe("tasks CLI: task command lines", () => {
       "--test-name-pattern",
       "x",
     ]);
+  });
+
+  // Two entry points run the unit suite and both have to carry the same flags —
+  // `--conditions browser` because svelte resolves its server runtime without it, and
+  // the deadline because a suite that reds under one form and not the other is worse
+  // than either budget. Nothing else compares them, so the mirror drifts silently.
+  test("package.json's test script mirrors the lane's own argv", () => {
+    expect(pkg.scripts.test).toBe(testCommand([]).join(" "));
   });
 });
 

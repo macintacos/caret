@@ -341,6 +341,10 @@ test("a failed task aborts in-flight siblings that honor the signal (recorded sk
   // run rather than fail an assertion.
   expect(r.results.get("build bin")?.status).toBe("skipped");
   expect(r.results.get("smoke")?.status).toBe("skipped");
+  // Aborted mid-flight still reports the time it burned before the abort — the
+  // distinction from `smoke`, which never spawned and reports 0.
+  expect(r.results.get("test")?.durationMs).toBeGreaterThan(0);
+  expect(r.results.get("smoke")?.durationMs).toBe(0);
 });
 
 // Diff-scoped task selection (EXC-1042) -------------------------------------
@@ -567,7 +571,7 @@ test("buildResultReport level 0: passing tasks carry status only", async () => {
   }
 });
 
-test("buildResultReport: every task reports how long it ran", async () => {
+test("buildResultReport: a task that ran reports the time it took", async () => {
   const spawnTask: SpawnTask = async (name) => {
     if (name === "test") await Bun.sleep(25);
     return { exitCode: 0, output: "" };
@@ -575,9 +579,19 @@ test("buildResultReport: every task reports how long it ran", async () => {
   const r = await runPreflight({ spawnTask, renderer: "silent" });
   const report = buildResultReport(r.results);
 
-  for (const t of report.tasks) expect(t.durationMs).toBeGreaterThanOrEqual(0);
-  const unit = report.tasks.find((t) => t.name === "test");
-  expect(unit?.durationMs).toBeGreaterThanOrEqual(20);
+  // 20 rather than 25: Bun.sleep guarantees its lower bound on its own clock, while the
+  // duration is measured on Date.now().
+  expect(report.tasks.find((t) => t.name === "test")?.durationMs).toBeGreaterThanOrEqual(20);
+});
+
+test("buildResultReport: a task skipped before it spawned reports no duration", async () => {
+  const { spawnTask } = fakeSpawner({ "build ui": { exitCode: 1, output: "boom" } });
+  const r = await runPreflight({ spawnTask, renderer: "silent" });
+  const report = buildResultReport(r.results);
+
+  const e2e = report.tasks.find((t) => t.name === "test e2e");
+  expect(e2e?.status).toBe("skipped");
+  expect(e2e?.durationMs).toBe(0);
 });
 
 test("buildResultReport level 0: a small failed output is shown in full (with lint hint)", async () => {
@@ -789,9 +803,6 @@ test("preflight caps the unit suite's worker count", () => {
   expect(miseTaskCommand("test")).toEqual(["run", "test", "--parallel=2"]);
 });
 
-// Quiet on the UNIT task means bun's dots reporter, one character per test. The
-// gate has no terminal to animate — it captures — so that would only bloat the
-// log it replays, with ~4900 dots on a single line.
 test("preflight leaves every non-test task's argv untouched", () => {
   expect(miseTaskCommand("lint")).toEqual(["run", "lint"]);
   expect(miseTaskCommand("build ui")).toEqual(["run", "build", "ui"]);
