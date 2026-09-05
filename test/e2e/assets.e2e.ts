@@ -75,6 +75,56 @@ test("daemon serves the hashed-asset build with zero failed same-origin requests
   expect(consoleErrors).toEqual([]);
 });
 
+// The fixture daemon wires the real buildHash digest rather than a synthetic one,
+// so this is the only place the production digest path is exercised end to end:
+// real ui/dist, real digest, real browser, real socket. Every unit test injects a
+// literal.
+//
+// It deliberately does NOT assert that a reload revalidates on its own. Chromium
+// under Playwright sends no If-None-Match on `page.reload()` (verified: the reload
+// request carries no conditional header and the daemon answers a full 200), so
+// browser-driven revalidation is not observable in this harness and an assertion
+// on it would be testing Playwright's cache, not caret. The conditional request
+// here is issued explicitly from page context, which keeps the check deterministic
+// while still crossing a real browser and a real socket.
+test("the daemon serves a real digest as an ETag and answers a conditional GET with 304", async ({
+  daemon,
+  page,
+}) => {
+  const origin = daemon.url;
+  let indexEtag: string | undefined;
+  page.on("response", (res) => {
+    if (!isSameOrigin(res.url(), origin)) return;
+    const path = new URL(res.url()).pathname;
+    if (path === "/" || path === "/index.html") {
+      indexEtag = res.headers().etag;
+    }
+  });
+
+  await daemon.seed();
+  await page.goto("/");
+  await expect((await planSurface(page)).getByText("Widget Cache Refactor")).toBeVisible();
+
+  // A real buildHash over the built tree — not the literal every unit injects.
+  expect(indexEtag).toMatch(/^"[0-9a-f]{12}"$/);
+
+  // no-store forces the network rather than Chromium's own cache, so the daemon
+  // is what answers both requests.
+  const statuses = await page.evaluate(async (etag: string) => {
+    const conditional = await fetch("/index.html", {
+      cache: "no-store",
+      headers: { "If-None-Match": etag },
+    });
+    const stale = await fetch("/index.html", {
+      cache: "no-store",
+      headers: { "If-None-Match": '"stale0000000"' },
+    });
+    return { conditional: conditional.status, stale: stale.status };
+  }, indexEtag as string);
+
+  expect(statuses).toEqual({ conditional: 304, stale: 200 });
+});
+
 test("a code-split shiki grammar chunk is served over the wire and applies", async ({
   daemon,
   page,
