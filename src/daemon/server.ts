@@ -445,10 +445,10 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   function assetResponse(
     req: Request,
     body: BodyInit,
-    cache: string,
+    cacheControl: string,
     contentType?: string,
   ): Response {
-    const headers: Record<string, string> = { "Cache-Control": cache };
+    const headers: Record<string, string> = { "Cache-Control": cacheControl };
     if (etagValue) {
       headers.ETag = etagValue;
       if (ifNoneMatchHit(req.headers.get("If-None-Match"), etagValue)) {
@@ -492,8 +492,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     if (!assets) return null;
     const file = assets.file(path);
     if (!file) return null;
-    const cache = path.startsWith("/assets/") ? ASSET_CACHE_CONTROL : INDEX_CACHE_CONTROL;
-    return assetResponse(req, file, cache);
+    const cacheControl = path.startsWith("/assets/") ? ASSET_CACHE_CONTROL : INDEX_CACHE_CONTROL;
+    return assetResponse(req, file, cacheControl);
   }
 
   // POST /api/reviews — an incoming plan from the hook.
