@@ -782,11 +782,17 @@ test("preflight spawns the e2e task in quiet mode", () => {
   expect(miseTaskCommand("test e2e").indexOf("--quiet")).toBe(3);
 });
 
+test("preflight caps the unit suite's worker count", () => {
+  // The entry point's own `--parallel` fans out across every core; inside the gate
+  // that starves the five siblings sharing the host, so a lower count is forwarded
+  // after it and wins.
+  expect(miseTaskCommand("test")).toEqual(["run", "test", "--parallel=2"]);
+});
+
 // Quiet on the UNIT task means bun's dots reporter, one character per test. The
 // gate has no terminal to animate — it captures — so that would only bloat the
 // log it replays, with ~4900 dots on a single line.
-test("preflight leaves every non-e2e task's argv untouched", () => {
-  expect(miseTaskCommand("test")).toEqual(["run", "test"]);
+test("preflight leaves every non-test task's argv untouched", () => {
   expect(miseTaskCommand("lint")).toEqual(["run", "lint"]);
   expect(miseTaskCommand("build ui")).toEqual(["run", "build", "ui"]);
   expect(miseTaskCommand("build bin")).toEqual(["run", "build", "bin"]);

@@ -177,10 +177,17 @@ const TASK_ORDER = [...IMMEDIATE, ...DEPENDENT.map((d) => d.name)];
  *
  * Only `test e2e` runs quiet: its `list` reporter prints a line per spec, and that
  * chatter pushes a real failure out of the 20-line tail the result document carries
- * by default. The UNIT task is deliberately left alone — quiet there is bun's dots
- * reporter, ~4900 characters of terminal animation in a log nobody watches live.
+ * by default. The UNIT task is not quiet — quiet there is bun's dots reporter,
+ * ~4900 characters of terminal animation in a log nobody watches live.
+ *
+ * `test`'s worker cap is the gate's share of the host (EXC-1215). The entry point's
+ * own `--parallel` takes every core — 2.5x standalone, a loss here: it starves the
+ * five siblings, and the median gate went 156s → 163s (lint 3.4s → 8.9s, `build ui`
+ * 3.5s → 7.7s). At 2 workers nothing regresses and the gate is 151s. Raising it buys
+ * little: `test e2e`, not this, is the gate's critical path.
  */
 const TASK_ARGS: Readonly<Record<string, readonly string[]>> = {
+  test: ["--parallel=2"],
   "test e2e": ["--quiet"],
 };
 

@@ -280,14 +280,15 @@ describe("tasks CLI: task command lines", () => {
   });
 
   // The --timeout is the lane's contention budget (EXC-1056), sized for the loaded
-  // host the preflight gate runs on rather than for an idle one. It precedes the
-  // forwarded args so a caller passing its own still wins.
-  test("test runs bun test --conditions browser under the lane's deadline", () => {
+  // host the preflight gate runs on rather than for an idle one. Both it and
+  // --parallel precede the forwarded args so a caller passing its own still wins.
+  test("test runs bun test --conditions browser in parallel, under the lane's deadline", () => {
     expect(testCommand([])).toEqual([
       "bun",
       "test",
       "--conditions",
       "browser",
+      "--parallel",
       "--timeout",
       "30000",
     ]);
@@ -296,6 +297,7 @@ describe("tasks CLI: task command lines", () => {
       "test",
       "--conditions",
       "browser",
+      "--parallel",
       "--timeout",
       "30000",
       "--test-name-pattern",

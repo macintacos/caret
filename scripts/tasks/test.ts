@@ -237,14 +237,18 @@ async function emitTestReport(
  */
 const UNIT_TEST_TIMEOUT_MS = 30_000;
 
-/** The argv `test unit` runs, plus forwarded args. The timeout precedes them so a
- * caller passing its own `--timeout` still wins. */
+/** The argv `test unit` runs, plus forwarded args. `--parallel` fans the ~270 files
+ * across worker processes, each isolated (`--parallel` implies `--isolate`), which is
+ * what makes a suite that mutates `process.env` in a dozen files safe to fan out.
+ * Both injected flags precede the forwarded args so a caller passing its own
+ * `--parallel=N` or `--timeout` still wins. */
 export function testCommand(args: string[]): string[] {
   return [
     "bun",
     "test",
     "--conditions",
     "browser",
+    "--parallel",
     "--timeout",
     String(UNIT_TEST_TIMEOUT_MS),
     ...args,
