@@ -11,6 +11,7 @@ import { EditorView, keymap } from "@codemirror/view";
 
 import {
   allowCompletionAccept,
+  COMPLETION_PAINT_MS,
   completionListPainted as painted,
   typeInto,
   until,
@@ -275,13 +276,18 @@ describe("the shortcut-hint wiring", () => {
     return (ctx) => ({ from: ctx.pos, options: [{ label: "alpha.ts" }] });
   }
 
-  /** Paint a list and report whether the strip is above it. */
+  /** Paint a list and report whether the strip is above it. The strip is drawn by the
+   * same view update as the list, so `COMPLETION_PAINT_MS` bounds the wait — `until`'s
+   * 5s default would be spent in full every time the answer is legitimately `false`. */
   async function stripWith(deps: CompletionDeps): Promise<boolean> {
     const { view, dispose } = mountWith(alwaysOffers(), deps);
     try {
       typeInto(view, "@a");
       expect(await until(() => painted(view))).toBe(true);
-      return await until(() => view.dom.querySelector(".caret-completion-hint") !== null);
+      return await until(
+        () => view.dom.querySelector(".caret-completion-hint") !== null,
+        COMPLETION_PAINT_MS,
+      );
     } finally {
       dispose();
     }

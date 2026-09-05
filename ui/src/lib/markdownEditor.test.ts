@@ -6,12 +6,15 @@ import { EditorSelection, EditorState } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 
 import {
+  allowCompletionAccept,
   backspaceIn as backspace,
   drainMicrotasks as drain,
   fakeTimers,
   mountEditor,
   completionListPainted as painted,
+  settleCompletion,
   typeInto as type,
+  until,
 } from "@ui/support/helpers.ts";
 
 import { chordAction, cursorInList } from "./markdownEditor.ts";
@@ -100,7 +103,10 @@ describe("Escape with a live completion list", () => {
     });
   }
 
-  const settle = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  /** Wait for a list that should paint. Polled rather than slept: a fixed wait races
+   * CodeMirror's activation deadline under gate contention, painting late enough that
+   * the assertion below it reads the previous state. */
+  const paints = (view: EditorView) => until(() => painted(view));
   const pressEscape = (view: EditorView) =>
     view.contentDOM.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
@@ -125,12 +131,10 @@ describe("Escape with a live completion list", () => {
     const { view, dispose } = mount(source, () => cancels++);
     try {
       type(view, "@a");
-      await settle(400);
-      expect(painted(view)).toBe(true);
+      expect(await paints(view)).toBe(true);
 
       type(view, "l");
-      await settle(200);
-      expect(completionStatus(view.state)).toBe("pending");
+      expect(await until(() => completionStatus(view.state) === "pending")).toBe(true);
       expect(painted(view)).toBe(true);
 
       pressEscape(view);
@@ -153,8 +157,10 @@ describe("Escape with a live completion list", () => {
     const { view, dispose } = mount(source, () => {});
     try {
       type(view, "@a");
-      await settle(400);
-      expect(painted(view)).toBe(true);
+      expect(await paints(view)).toBe(true);
+      // interactionDelay runs from when the list OPENED, so a painted list is not yet an
+      // acceptable one — press Enter inside that window and the default keymap wins.
+      await allowCompletionAccept();
 
       view.contentDOM.dispatchEvent(
         new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
@@ -173,7 +179,7 @@ describe("Escape with a live completion list", () => {
     );
     try {
       type(view, "@a");
-      await settle(400);
+      await settleCompletion();
       expect(painted(view)).toBe(false);
 
       pressEscape(view);
@@ -197,16 +203,14 @@ describe("Escape with a live completion list", () => {
     const { view, dispose } = mount(source, () => {});
     try {
       type(view, "@a");
-      await settle(400);
-      expect(painted(view)).toBe(true);
+      expect(await paints(view)).toBe(true);
 
       type(view, "z");
-      await settle(400);
+      await settleCompletion();
       expect(painted(view)).toBe(false);
 
       backspace(view);
-      await settle(400);
-      expect(painted(view)).toBe(true);
+      expect(await paints(view)).toBe(true);
     } finally {
       dispose();
     }
