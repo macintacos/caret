@@ -12,6 +12,7 @@
 // search still find it, and is taken to `transparent`, while the rule the reader
 // sees is a border the sheet paints on the cell.
 
+import { unwrappedSlice } from "$lib/diffview/cardSlice.ts";
 import type { CodeBlockRange } from "$lib/diffview/codeBlocks.ts";
 import { CELL_ATTR, splitTokens, tokenChildren } from "$lib/diffview/rowTokens.ts";
 
@@ -236,11 +237,10 @@ export const TABLE_CARD_ATTR = "data-table-card";
  * gutter buffer ride inside their card at the same index in both columns. That is
  * what keeps the counts equal by construction rather than by coincidence.
  *
- * codeBlockScroll.ts mirrors its own cards the same way and the two are deliberately
- * NOT folded together: that pass cards a block only while it overflows, measured
- * through an injected reader, where a table is carded unconditionally. Merging them
- * would parameterize the whole wanted-set computation to share a dozen lines of DOM
- * plumbing. */
+ * codeBlockScroll.ts mirrors its own cards the same way and shares the run-gathering
+ * (cardSlice.ts). The wanted-set computations stay apart: that pass cards a block only
+ * while it overflows, measured through an injected reader, where a table is carded
+ * unconditionally. */
 export const TABLE_GUTTER_CARD_ATTR = "data-table-card-gutter";
 
 // Set on the token that IS a cell's opening pipe (and the row's closing pipe). The
@@ -423,60 +423,6 @@ function applyAlign(row: Element, align: (TableAlign | undefined)[]): void {
 /** A range's source lines, the key both columns are walked by. */
 function lineNumbers(range: TableRange): number[] {
   return range.rows.map((row) => row.line);
-}
-
-/** A range's DIRECT children of one column, from its first keyed cell through its
- * last — the whole contiguous run, not just the keyed cells in it.
- *
- * Direct children because that is what the wrap path needs: `insertBefore` places the
- * card relative to a child of the column, and passing it a cell nested somewhere else
- * throws `NotFoundError`, which would escape the repaint pass and take every
- * decoration below this one with it. Returns `null` unless every one of `lines` is
- * present, unwrapped, and in order.
- *
- * The whole run because the library interleaves its own rows between a table's:
- * a comment on line N emits an annotation row right after N's row in the content
- * column and a `data-gutter-buffer` right after N's cell in the gutter
- * (FileRenderer.processFileResult). Moving only the keyed cells would strand those
- * behind the card, so a mid-table comment would render below the whole table. Taking
- * the run also keeps the two columns index-parallel by construction rather than by
- * two separately-derived lists happening to agree, which is the divergence
- * TABLE_GUTTER_CARD_ATTR exists to prevent.
- *
- * Cheap: walked by sibling rather than queried per line — one query plus a walk of
- * the table's own length, where a query per row is what EXC-864 measured at ~2,800
- * selector matches per repaint. */
-function unwrappedSlice(column: Element, attr: string, lines: number[]): Element[] | null {
-  const first = lines[0];
-  const last = lines[lines.length - 1];
-  if (first === undefined || last === undefined) return null;
-  const head = column.querySelector(`:scope > [${attr}="${first}"]`);
-  if (head === null) return null;
-  const slice: Element[] = [];
-  const keyed: string[] = [];
-  for (let el: Element | null = head; el !== null; el = el.nextElementSibling) {
-    slice.push(el);
-    const key = el.getAttribute(attr);
-    if (key !== null) keyed.push(key);
-    if (key !== String(last)) continue;
-    if (keyed.length !== lines.length) return null;
-    if (!keyed.every((k, i) => k === String(lines[i]))) return null;
-    // Past the last row, take any comment anchored TO it: the library emits that row
-    // after its own, so stopping at `last` would leave a comment on the table's final
-    // row outside the card while one on any other row is inside it — two comments on
-    // one table, drawn at two different widths. Nothing else can follow, since the run
-    // is bounded by the table's own lines.
-    while (
-      el.nextElementSibling !== null &&
-      !el.nextElementSibling.hasAttribute(attr) &&
-      el.nextElementSibling.matches("[data-line-annotation], [data-gutter-buffer]")
-    ) {
-      el = el.nextElementSibling;
-      slice.push(el);
-    }
-    return slice;
-  }
-  return null;
 }
 
 /** Whether `card` still holds exactly the range's rows, in order, and is still sized

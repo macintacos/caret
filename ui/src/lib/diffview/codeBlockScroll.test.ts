@@ -1,6 +1,7 @@
 import "@ui/support/setup.ts";
 import { describe, expect, test } from "bun:test";
 
+import { openComment } from "@ui/support/diffview-dom.ts";
 import {
   CARD_ATTR,
   GUTTER_CARD_ATTR,
@@ -327,5 +328,89 @@ describe("syncCodeBlockCards — gutter mirror (keeps the library's selection wa
     expect(gutterCardsIn(gutter)).toHaveLength(1);
     syncCodeBlockCards(root, [], makeReader(rowMetrics, cardOverflows));
     expectGutterUnwrapped(gutter, content, ["1", "2", "3"]);
+  });
+});
+
+// EXC-1228: the library emits a comment's annotation row as a sibling of the row it is
+// anchored to, carrying no data-line — so gathering a block's rows by data-line alone left
+// that row behind, and a comment inside an overflowing block rendered below the whole block,
+// beneath its scrollbar. The card takes the contiguous RUN of its column's children instead,
+// the way tables.ts already did, so the comment rides inside the card at its anchor.
+describe("syncCodeBlockCards — an open comment inside a carded block", () => {
+  /** A column's children as their keying attribute, or `annotation` for the rows the
+   * library interleaves — the shape both columns must agree on. */
+  const slotOrder = (parent: Element | null | undefined, attr: string): string[] =>
+    [...(parent?.children ?? [])].map((el) => el.getAttribute(attr) ?? "annotation");
+
+  const contentCard = (root: HTMLElement) =>
+    root.querySelector<HTMLElement>(`[data-content] > [${CARD_ATTR}="1"]`);
+
+  test("carries a mid-block comment's row into the card, in place", () => {
+    const { root, rowMetrics } = buildColumns(overflowingBlock);
+    // A repaint rebuilds the column flat and re-emits the annotation row, so the pass
+    // always meets this case unwrapped.
+    openComment(root, 2);
+    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics));
+    expect(slotOrder(contentCard(root), "data-line")).toEqual(["1", "2", "annotation", "3"]);
+    expect(root.querySelector("[data-content] > [data-line-annotation]")).toBeNull();
+  });
+
+  test("carries the comment's gutter buffer into the mirror at the same index", () => {
+    const { root, rowMetrics } = buildColumns(overflowingBlock);
+    openComment(root, 2);
+    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics));
+    const mirror = root.querySelector(`[${GUTTER_CARD_ATTR}="1"]`);
+    expect(slotOrder(mirror, "data-column-number")).toEqual(["1", "2", "annotation", "3"]);
+  });
+
+  test("keeps the two columns matching with a comment open", () => {
+    const { root, gutter, content, rowMetrics } = buildColumns(overflowingBlock);
+    openComment(root, 2);
+    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics));
+    expect(gutter.children.length).toBe(content.children.length);
+  });
+
+  test("spans the card across every child it took, not just the block's lines", () => {
+    // grid-row is what maps the card's children onto the parent's row tracks, so a span
+    // short by one drops the extra child into an implicit track and walks the gutter out
+    // of alignment.
+    const { root, rowMetrics } = buildColumns(overflowingBlock);
+    openComment(root, 2);
+    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics));
+    expect(contentCard(root)?.style.gridRow).toBe("span 4");
+  });
+
+  test("does not card a fitting block because the open composer is wide", () => {
+    // The slice now also holds the annotation row, whose composer is far wider than the
+    // cap — so the overflow read must look only at the slice's own code rows.
+    const { root, content, rowMetrics } = buildColumns([
+      { code: true, start: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
+      { code: true, metrics: { clientWidth: 300, scrollWidth: 280 } },
+      { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
+    ]);
+    openComment(root, 2);
+    const annotation = content.querySelector("[data-line-annotation]");
+    if (annotation !== null) rowMetrics.set(annotation, { clientWidth: 300, scrollWidth: 900 });
+    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics));
+    expect(cardsIn(content)).toHaveLength(0);
+  });
+
+  test("returns a carded comment's row to its column when the block is retired", () => {
+    const { root, content, rowMetrics } = buildColumns(overflowingBlock);
+    openComment(root, 2);
+    const read = makeReader(rowMetrics, cardOverflows);
+    syncCodeBlockCards(root, [overflowingRange], read);
+    syncCodeBlockCards(root, [], read);
+    expect(slotOrder(content, "data-line")).toEqual(["1", "2", "annotation", "3"]);
+  });
+
+  test("mutates nothing on a settled pass with a comment open", () => {
+    const { root, rowMetrics } = buildColumns(overflowingBlock);
+    const read = makeReader(rowMetrics, cardOverflows);
+    openComment(root, 2);
+    syncCodeBlockCards(root, [overflowingRange], read);
+    const settled = root.innerHTML;
+    syncCodeBlockCards(root, [overflowingRange], read);
+    expect(root.innerHTML).toBe(settled);
   });
 });
