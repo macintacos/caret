@@ -1208,6 +1208,23 @@ describe("the fenced code-block scroll card (EXC-729)", () => {
     // declaration would degenerate here.
     expect(annotation).not.toContain("grid-column");
   });
+
+  test("draws the comment at the card's width, and drops the library's gutter offset", () => {
+    // The library sizes [data-annotation-content] for its own scrollport: a definite
+    // `width` of the whole content column, and a sticky `left` clearing the gutter. Inside
+    // the card both are wrong — the column is 2x --caret-card-inset wider than the card, so
+    // a comment would overflow it and the keep-or-retire branch would read that forever;
+    // and the card's left edge is already past the gutter. A max-width cannot fix the
+    // first: the library's is a definite width, so this must override it outright.
+    const wrapper =
+      overrideDecls.match(
+        /\[data-code-card\]\s*>\s*\[data-line-annotation\]\s*>\s*\[data-annotation-content\]\s*\{[^}]*\}/,
+      )?.[0] ?? "";
+    expect(wrapper).toMatch(/width:\s*min\(/);
+    expect(wrapper).toContain("var(--caret-read-max)");
+    expect(wrapper).toMatch(/var\(--caret-card-inset\)/);
+    expect(wrapper).toMatch(/inset-inline-start:\s*0/);
+  });
 });
 
 // EXC-729: one scrollbar per block, not one per line. The card is a native scroll container,

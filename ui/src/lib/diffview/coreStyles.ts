@@ -214,9 +214,17 @@ const CARET_OVERRIDES = `
   /* The reading cap, and the clip that travels with it. Deliberately outside the panel
      rule's :not() below: an uncapped row's clientWidth equals its scrollWidth, so a
      SELECTED row would report no overflow and its block would never card (EXC-1228).
-     Without the clip a capped row's white-space: pre text spills past the panel — the
-     floor before, and if, the scroll card wraps it (EXC-729). Inline axis only, so the
-     fence-glyph nudges below are not shaved. */
+     The clip is the guard for the frame before the scroll card wraps the block, and the
+     floor if the script never runs — without it a capped row's white-space: pre text
+     spills past the panel (EXC-729). Inline axis only, so the fence-glyph nudges below
+     are not shaved.
+
+     Known, and deliberately not fixed here: a SELECTED row takes the seam-fill pull
+     (margin-inline-start: calc(-1 * var(--caret-seam))) and no end margin, so capped it
+     spans [-20, 700] against an unselected row's [12, 732] — its right edge falls
+     var(--caret-seam) + var(--caret-card-inset) = 32px short of the panel's. That is a
+     large improvement on the full-bleed band this replaced, and squaring the two edges is
+     a change to EXC-664's band rather than to this measurement. */
   [data-content] > [data-line][data-code-line] {
     max-width: var(--caret-read-max);
     overflow-x: clip;
@@ -233,9 +241,9 @@ const CARET_OVERRIDES = `
      light paper, a raised one on dark). The panel is a contained card: inset from
      the gutter (margin-inline-start) and from the right (margin-inline-end), and
      capped at a comfortable reading width by the rule above — when the content
-     column is narrower than the cap, the right margin still keeps it off the
-     edge. The code keeps the library's
-     default 2ch inset within the card (no extra indent). Only the OUTER edges of the
+     column is narrower than the cap, the right margin still keeps it off the edge.
+     The code keeps the library's default 2ch inset within the card (no extra
+     indent). Only the OUTER edges of the
      block are padded — the opening fence's top and the closing fence's bottom — so
      the fence lines hug the code (no gap below the opening markers or above the
      closing markers). The closing fence's bottom pad is smaller than the opening
@@ -1098,10 +1106,34 @@ const CARET_OVERRIDES = `
   [data-content] > [data-code-card] > [data-line-annotation] {
     contain: inline-size;
   }
-  /* On the library's wrapper, not the row above: a definite width there redistributes back
-     across the tracks the containment just took out of play. */
+  /* Both declarations undo something the library sized for its own scrollport. Under
+     [data-overflow="scroll"] it gives this wrapper width: var(--diffs-column-content-width)
+     and position: sticky with left: var(--diffs-column-number-width) — correct while the
+     scrollport is the whole view, wrong now that the card is one.
+
+     The width has to be the CARD's, not the column's, and nothing inside a scroll container
+     can read that in CSS — a percentage there resolves against the scrolled track, which is
+     as wide as the widest code line. So it is reconstructed from the three insets between
+     the two: the column's own seam padding, and the card's margin either side. Get it wrong
+     and the comment is wider than the card, which makes the card's scrollWidth exceed its
+     clientWidth for good — and that is what the keep-or-retire branch reads, so a commented
+     block would never retire. A cap cannot do this job; the library's is a definite width,
+     so this replaces it. The arithmetic is pinned in diff-surface.e2e.ts, which measures the
+     drawn comment against the drawn card at a viewport narrow enough for the cap not to hide
+     a mismatch.
+
+     The sticky offset clears a gutter that is outside the card, so inside one it indents the
+     composer by the gutter's width and pins it there. Zeroed, the composer sits on the code's
+     own left edge and stays put while the code scrolls under it. */
   [data-content] > [data-code-card] > [data-line-annotation] > [data-annotation-content] {
-    max-width: var(--caret-read-max);
+    width: min(
+      var(--caret-read-max),
+      calc(
+        var(--diffs-column-content-width, 100%) - var(--caret-seam) - 2 *
+          var(--caret-card-inset)
+      )
+    );
+    inset-inline-start: 0;
   }
 
   /* EXC-864: a GFM table renders as a real column-aligned table. This is the one place

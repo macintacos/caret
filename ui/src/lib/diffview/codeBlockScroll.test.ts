@@ -13,9 +13,10 @@ import type { CodeBlockRange } from "$lib/diffview/codeBlocks.ts";
 
 // syncCodeBlockCards wraps an overflowing fenced block's rows in ONE per-block scroll card
 // and leaves a block that fits as plain direct-child rows (EXC-729). This suite pins the
-// wrap / keep / unwrap decisions and the gutter mirror that balances them. Overflow is
-// measured through an injectable reader because happy-dom reports 0 for every layout
-// metric — without it every block would read as fitting and nothing would ever wrap.
+// wrap / keep / unwrap decisions, the gutter mirror that balances them, and the comment row
+// the card carries with its rows (EXC-1228). Overflow is measured through an injectable
+// reader because happy-dom reports 0 for every layout metric — without it every block would
+// read as fitting and nothing would ever wrap.
 
 interface RowSpec {
   code?: boolean;
@@ -87,6 +88,12 @@ const overflowingBlock: RowSpec[] = [
   { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
 ];
 const overflowingRange: CodeBlockRange = { start: 1, end: 3 };
+// The same block (1-3) with every line inside the cap — the wrap decision's other answer.
+const fittingBlock: RowSpec[] = [
+  { code: true, start: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
+  { code: true, metrics: { clientWidth: 300, scrollWidth: 280 } },
+  { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
+];
 // A card that reports overflow, for re-runs on an already-wrapped block.
 const cardOverflows = { "1": { scrollWidth: 800, clientWidth: 300 } };
 
@@ -155,11 +162,7 @@ describe("syncCodeBlockCards", () => {
   });
 
   test("does not wrap a block that fits the card", () => {
-    const { root, content, rowMetrics } = buildContent([
-      { code: true, start: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
-      { code: true, metrics: { clientWidth: 300, scrollWidth: 280 } },
-      { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
-    ]);
+    const { root, content, rowMetrics } = buildContent(fittingBlock);
     syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics));
     expect(cardsIn(content)).toHaveLength(0);
     expect(directRows(content)).toHaveLength(3); // rows stay as direct children
@@ -363,6 +366,18 @@ describe("syncCodeBlockCards — an open comment inside a carded block", () => {
     expect(slotOrder(mirror, "data-column-number")).toEqual(["1", "2", "annotation", "3"]);
   });
 
+  test("carries a comment on the block's LAST line into the card too", () => {
+    // For a fenced block the last line is the closing fence, which a reviewer can comment on
+    // like any other. Left outside, it would land in the right place but at the uncarded
+    // width, so two comments on one block would not match.
+    const { root, rowMetrics } = buildColumns(overflowingBlock);
+    openComment(root, 3);
+    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics));
+    expect(slotOrder(contentCard(root), "data-line")).toEqual(["1", "2", "3", "annotation"]);
+    const mirror = root.querySelector(`[${GUTTER_CARD_ATTR}="1"]`);
+    expect(slotOrder(mirror, "data-column-number")).toEqual(["1", "2", "3", "annotation"]);
+  });
+
   test("keeps the two columns matching with a comment open", () => {
     const { root, gutter, content, rowMetrics } = buildColumns(overflowingBlock);
     openComment(root, 2);
@@ -383,11 +398,7 @@ describe("syncCodeBlockCards — an open comment inside a carded block", () => {
   test("does not card a fitting block because the open composer is wide", () => {
     // The slice now also holds the annotation row, whose composer is far wider than the
     // cap — so the overflow read must look only at the slice's own code rows.
-    const { root, content, rowMetrics } = buildColumns([
-      { code: true, start: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
-      { code: true, metrics: { clientWidth: 300, scrollWidth: 280 } },
-      { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
-    ]);
+    const { root, content, rowMetrics } = buildColumns(fittingBlock);
     openComment(root, 2);
     const annotation = content.querySelector("[data-line-annotation]");
     if (annotation !== null) rowMetrics.set(annotation, { clientWidth: 300, scrollWidth: 900 });

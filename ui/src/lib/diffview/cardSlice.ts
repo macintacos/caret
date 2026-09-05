@@ -1,8 +1,5 @@
 // The run of children a card takes from its column, shared by the two passes that move a
-// range of rows into one (tables.ts and codeBlockScroll.ts). Both need the same answer for
-// the same two reasons: the library interleaves its own annotation rows among a range's, and
-// both mirror their card into the gutter, where two separately-derived lists are exactly the
-// divergence those mirrors exist to prevent.
+// range of rows into one: tables.ts and codeBlockScroll.ts.
 
 /** A range's DIRECT children of one column, from its first keyed cell through its
  * last — the whole contiguous run, not just the keyed cells in it.

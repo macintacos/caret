@@ -801,7 +801,7 @@ test("a comment inside an overflowing code block is drawn inside its card", asyn
       (s) => document.querySelector(".diffview")?.shadowRoot?.querySelectorAll(s).length ?? -1,
       selector,
     );
-  const contentWidth = () =>
+  const contentScrollWidth = () =>
     page.evaluate(
       () =>
         (
@@ -812,23 +812,82 @@ test("a comment inside an overflowing code block is drawn inside its card", asyn
     );
 
   await expect.poll(() => shadowCount("[data-code-card]")).toBe(1);
-  const before = await contentWidth();
+  const before = await contentScrollWidth();
 
   await composer(page, 6);
 
+  // Poll the comment row's arrival FIRST: it is the one predicate that is false before the
+  // library's re-render and true after, so it bounds every read below it. The card count
+  // cannot do that job — its first sample passes against the pre-render DOM too, and the row
+  // moves into the card a frame later still, on caret's own MutationObserver.
+  await expect.poll(() => shadowCount("[data-code-card] > [data-line-annotation]")).toBe(1);
   // The card survived the composer: uncapped, the selected row reports no overflow and the
   // block never re-cards at all.
   await expect.poll(() => shadowCount("[data-code-card]")).toBe(1);
+  await expect.poll(() => shadowCount("[data-content] > [data-line-annotation]")).toBe(0);
+  await expect.poll(() => shadowCount("[data-code-card-gutter] > [data-gutter-buffer]")).toBe(1);
 
-  // And the comment rides inside it in both columns rather than below the whole block.
-  expect(await shadowCount("[data-code-card] > [data-line-annotation]")).toBe(1);
-  expect(await shadowCount("[data-content] > [data-line-annotation]")).toBe(0);
-  expect(await shadowCount("[data-code-card-gutter] > [data-gutter-buffer]")).toBe(1);
-
-  // The same two failures as what a reader actually sees, and the assertion that leans on
-  // no card selector: either one stretches the surface toward the widest line.
-  expect(await contentWidth()).toBe(before);
+  // Both failures, stated as what a reader sees rather than as a card selector: either one
+  // stretches the surface toward the widest line. Exact equality is deliberate — scrollWidth
+  // is an integer read twice off one page at one viewport, and a stranded comment row moves
+  // it by only ~19px, which any tolerance wide enough to feel safe would wave through.
+  await expect.poll(contentScrollWidth).toBe(before);
   expect(pageErrors.filter((m) => /renderSelection|children dont match/.test(m))).toEqual([]);
+});
+
+// EXC-1228 follow-up: the two geometry invariants the card's comment row has to hold, both
+// of which only an engine can answer because both are the library's own resolved layout —
+// @pierre/diffs sizes [data-annotation-content] for ITS scrollport (a definite width of the
+// whole content column, and a sticky offset clearing the gutter), and the card is a narrower
+// scrollport nested inside that one.
+//
+// Driven at a NARROW viewport on purpose. The card is capped at --caret-read-max and inset
+// from the column by --caret-card-inset a side, so above a column of roughly
+// 720 + 2 x 12 = 744px the cap makes the two widths coincide and a violation hides. Every
+// other spec in this file runs full-width, which is exactly where this cannot be seen.
+test("a comment inside a code card is never wider than the card, and starts at its edge", async ({
+  daemon,
+  page,
+}) => {
+  await page.setViewportSize({ width: 700, height: 800 });
+  await daemon.seed({ plan: WIDE_CODE_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect(page.getByText("Intro prose here.")).toBeVisible();
+  await composer(page, 6);
+
+  const geometry = () =>
+    page.evaluate(() => {
+      const sh = document.querySelector(".diffview")?.shadowRoot ?? null;
+      const card = sh?.querySelector("[data-code-card]") as HTMLElement | null;
+      const content = card?.querySelector("[data-annotation-content]") as HTMLElement | null;
+      if (card === null || content === null || card === undefined || content === undefined) {
+        return null;
+      }
+      const style = getComputedStyle(card);
+      return {
+        cardInner:
+          card.clientWidth -
+          Number.parseFloat(style.paddingInlineStart) -
+          Number.parseFloat(style.paddingInlineEnd),
+        commentWidth: content.getBoundingClientRect().width,
+        cardX: card.getBoundingClientRect().x,
+        commentX: content.getBoundingClientRect().x,
+      };
+    });
+
+  await expect.poll(async () => (await geometry()) !== null).toBe(true);
+  const box = await geometry();
+
+  // Wider than the card and the card's own scrollWidth exceeds its clientWidth forever, so
+  // the keep-or-retire branch reads permanent overflow and the block can never retire — a
+  // phantom scroll range and an always-visible scrollbar on any commented block.
+  expect(box?.commentWidth).toBeLessThanOrEqual(box?.cardInner ?? 0);
+
+  // And it starts at the card's own edge. The library's sticky offset clears a gutter that
+  // sits outside this scrollport, so left unzeroed it indents the composer by the gutter's
+  // width relative to every code line in its own card.
+  expect(box?.commentX).toBeCloseTo(box?.cardX ?? -1, 0);
 });
 
 // EXC-1145: the two cards a rendered plan puts in front of a reader — the table's

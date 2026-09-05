@@ -116,7 +116,10 @@ export function syncCodeBlockCards(
     const card = content.querySelector<HTMLElement>(`:scope > [${CARD_ATTR}="${key}"]`);
     if (card != null) {
       // Already wrapped: keep it only while it still overflows; otherwise the retire pass
-      // below unwraps it (e.g. the viewport widened until the block fits).
+      // below unwraps it (e.g. the viewport widened until the block fits). No equivalent of
+      // tables.ts's cardHoldsRange, which re-validates a kept card's span: an annotation
+      // change makes the library's partial render ineligible, so a card never survives one
+      // to hold a stale span.
       const m = read(card);
       if (m.scrollWidth > m.clientWidth) wanted.add(key);
       continue;
@@ -125,6 +128,8 @@ export function syncCodeBlockCards(
     // [data-line] members alone — an open composer's annotation row rides in the slice too,
     // and its scrollWidth would card a block whose code fits.
     const slice = unwrappedSlice(content, "data-line", blockLines(range));
+    // A partial column is a mid-repaint state, not a block to card: a slice short of the
+    // range would mis-size grid-row, and the next repaint brings this pass back.
     if (slice === null) continue;
     const overflows = slice.some((el) => {
       if (!el.hasAttribute("data-line")) return false;
