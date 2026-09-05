@@ -30,6 +30,7 @@ function reviewDeps(over: Partial<Parameters<typeof runReview>[1]> = {}) {
     postReview: async () => ({ id: "rid" }),
     longPoll: async () => allow,
     openBrowser: () => {},
+    announceUrl: () => {},
     timeoutMs: 1000,
     expire: async () => {},
     ...over,
@@ -81,6 +82,20 @@ test("does not open the browser when a live UI client is already polling (EXC-55
     }),
   );
   expect(opened).toBe(false);
+});
+
+test("announces the review URL through the injected sink, never on stderr itself", async () => {
+  let announced: string | undefined;
+  await runReview(
+    stdin,
+    reviewDeps({
+      ensureDaemon: async () => "http://localhost:4242",
+      announceUrl: (u) => {
+        announced = u;
+      },
+    }),
+  );
+  expect(announced).toBe("http://caret.localhost:4242/?review=rid");
 });
 
 test("opens the browser when no live UI client is polling (EXC-559)", async () => {

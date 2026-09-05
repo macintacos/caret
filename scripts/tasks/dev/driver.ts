@@ -45,7 +45,20 @@ import {
   parseNumVersions,
 } from "@/tasks/dev/protocol.ts";
 
-const log = (msg: string) => process.stderr.write(`[caret dev driver] ${msg}\n`);
+/** Where the driver's progress lines go. Injectable because the suites drive these
+ * functions directly, and a review's worth of dev chatter otherwise lands in the
+ * middle of the unit run's output. */
+export type DriverLog = (msg: string) => void;
+
+const log: DriverLog = (msg) => {
+  process.stderr.write(`[caret dev driver] ${msg}\n`);
+};
+
+/** ReviewDeps plus the driver's own sink, so every function below logs through the
+ * one dependency it already takes. */
+export interface DevDeps extends ReviewDeps {
+  log: DriverLog;
+}
 
 /** ReviewDeps for dev — the analog of prodReviewDeps (src/commands/review.ts) with the
  * daemon owned by the mise task: ensureDaemon just waits for health on the
@@ -54,8 +67,12 @@ const log = (msg: string) => process.stderr.write(`[caret dev driver] ${msg}\n`)
  * dev surface), and timeoutMs is NEVER_IDLE_MS (the max setTimeout delay — a
  * larger value overflows and clamps to ~1ms) so an idle session never churns
  * fail-safe denies. */
-export function devReviewDeps(base: string): ReviewDeps {
+export function devReviewDeps(base: string, sink: DriverLog = log): DevDeps {
   return {
+    log: sink,
+    // Prefixed like the driver's other lines rather than reproducing the hook's exact
+    // stderr wording — nothing parses this one, `mise run dev` just shows it.
+    announceUrl: (url) => sink(`review this plan at ${url}`),
     parseHookInput: (stdin) => claudeAdapter.parseHookInput(stdin),
     ensureDaemon: async () => {
       await waitForHealth(base);
@@ -77,7 +94,7 @@ export function devReviewDeps(base: string): ReviewDeps {
 export async function runExtraReview(
   sessionId: string,
   plan: string,
-  deps: ReviewDeps,
+  deps: DevDeps,
 ): Promise<void> {
   let state: DriverState = { plan, revision: 0 };
   for (;;) {
@@ -86,9 +103,9 @@ export async function runExtraReview(
     if (next.action === "reseed") return; // approved: this thread is done
     if (next.action === "wait") return; // rejected (EXC-685): the agent waits — thread done
     if (next.action === "revise") {
-      log(`extra review: changes requested → appending Revision ${next.revision}`);
+      deps.log(`extra review: changes requested → appending Revision ${next.revision}`);
     } else {
-      log("extra review: hook fail-safe deny → resubmitting unchanged");
+      deps.log("extra review: hook fail-safe deny → resubmitting unchanged");
       await Bun.sleep(500);
     }
     state = next;
@@ -102,6 +119,8 @@ export interface ExtraSeederDeps {
   sleep?: (ms: number) => Promise<void>;
   /** Unresolved-extras cap; ticks skip while at it. */
   maxPending?: number;
+  /** Injectable for tests, like `sleep`. Defaults to the driver's stderr sink. */
+  log?: DriverLog;
 }
 
 /** Seed numbered extra reviews forever, one per interval tick, WITHOUT waiting
@@ -112,16 +131,17 @@ export interface ExtraSeederDeps {
 export async function runExtraSeeder(intervalMs: number, deps: ExtraSeederDeps): Promise<never> {
   const sleep = deps.sleep ?? Bun.sleep;
   const maxPending = deps.maxPending ?? 3;
+  const say = deps.log ?? log;
   let pending = 0;
   for (let n = 1; ; ) {
     await sleep(intervalMs);
     if (pending >= maxPending) continue;
     pending++;
     const id = n++;
-    log(`seeding extra review ${id}`);
+    say(`seeding extra review ${id}`);
     void deps
       .seed(id)
-      .then(undefined, (err) => log(`extra review ${id} failed: ${err}`))
+      .then(undefined, (err) => say(`extra review ${id} failed: ${err}`))
       .finally(() => pending--);
   }
 }
@@ -213,7 +233,7 @@ async function loadFixture(fixture: DevFixture): Promise<LoadedFixture> {
 export async function bootstrapReview(
   base: string,
   fixture: LoadedFixture,
-  deps: ReviewDeps,
+  deps: DevDeps,
 ): Promise<DriverState> {
   const plans = demoVersions(fixture.plan, fixture.versions, fixture.edits);
   for (let i = 0; i < plans.length; i++) {
@@ -223,7 +243,7 @@ export async function bootstrapReview(
     await denyPendingReview(base, fixture.session, feedback);
     await reviewing;
   }
-  log(`bootstrapped ${fixture.file} to ${plans.length} versions`);
+  deps.log(`bootstrapped ${fixture.file} to ${plans.length} versions`);
   const nextRevision = plans.length;
   const last = plans[plans.length - 1] as string;
   return {
@@ -260,7 +280,7 @@ export interface DriverOptions {
 async function runFixtureLoop(
   fixture: LoadedFixture,
   initial: DriverState,
-  deps: ReviewDeps,
+  deps: DevDeps,
 ): Promise<void> {
   let state = initial;
   for (;;) {
@@ -272,13 +292,13 @@ async function runFixtureLoop(
       // re-presenting. Stop this fixture's loop — the daemon and UI stay up (run.ts
       // blocks on Vite, not on this driver), so no new plan is sent for it until the
       // dev session is restarted. This is the faithful "rejected → agent waits" demo.
-      log(`${fixture.file}: plan rejected → agent waits for the user (not resubmitting)`);
+      deps.log(`${fixture.file}: plan rejected → agent waits for the user (not resubmitting)`);
       return;
     }
     if (next.action === "revise") {
-      log(`${fixture.file}: changes requested → appending Revision ${next.revision}`);
+      deps.log(`${fixture.file}: changes requested → appending Revision ${next.revision}`);
     } else if (next.action === "reseed") {
-      log(`${fixture.file}: approved → re-seeding a fresh plan`);
+      deps.log(`${fixture.file}: approved → re-seeding a fresh plan`);
     } else {
       // Fail-safe deny from the hook itself (daemon down, poll timeout): back
       // off so a dead daemon can't tight-loop. A fail-safe after a successful
@@ -286,7 +306,7 @@ async function runFixtureLoop(
       // (routeIncomingPlan appends only to a rejected review) and the Revision
       // label can drift from the daemon's version number — both are accepted
       // dev-only noise on an already-broken session.
-      log(`${fixture.file}: hook fail-safe deny → resubmitting the plan unchanged`);
+      deps.log(`${fixture.file}: hook fail-safe deny → resubmitting the plan unchanged`);
       await Bun.sleep(500);
     }
     state = next;
@@ -297,7 +317,7 @@ async function runFixtureLoop(
  * brand-new plan under a fresh session (the arrival rule); `r` requests changes
  * on the last pending review, whose own loop then resubmits a revision onto the
  * same review id (the revision rule). See scripts/tasks/dev/inject.ts. */
-function injectDeps(base: string, basePlan: string, deps: ReviewDeps): InjectDeps {
+function injectDeps(base: string, basePlan: string, deps: DevDeps): InjectDeps {
   let seeded = 0;
   return {
     listReviews: () => listReviews(base),
@@ -313,7 +333,7 @@ function injectDeps(base: string, basePlan: string, deps: ReviewDeps): InjectDep
     // the hook's own fail-safe denies and resubmit unchanged instead of revising.
     requestChanges: (id) =>
       resolveReview(base, id, { behavior: "deny", feedback: "Tighten this before it ships." }),
-    log,
+    log: deps.log,
   };
 }
 
@@ -352,6 +372,7 @@ export async function run(opts: DriverOptions): Promise<void> {
     void runExtraSeeder(seeder.intervalMs, {
       seed: (n) => runExtraReview(`${DEV_SESSION}-extra-${n}`, extraPlan(basePlan, n), deps),
       maxPending: seeder.maxPending,
+      log: deps.log,
     }).catch((err) => log(`extra-review seeder stopped: ${err}`));
   } else {
     log(

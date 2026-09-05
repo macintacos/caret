@@ -31,6 +31,13 @@ export function browserOpenCmd(platform: NodeJS.Platform | string, url: string):
       : ["xdg-open", url];
 }
 
+/** The stderr line that surfaces the review URL. Pure so the wording is pinned by
+ * a test rather than by convention: the OpenCode plugin (opencode/caret.plugin.ts,
+ * parseReviewUrl) regex-parses this exact shape to raise its toast. */
+export function reviewUrlLine(url: string): string {
+  return `caret: review this plan at ${url}\n`;
+}
+
 function openBrowser(url: string): void {
   try {
     Bun.spawn(browserOpenCmd(process.platform, url), {
@@ -48,6 +55,9 @@ export function prodReviewDeps(s: Settings, adapter: AgentAdapter): ReviewDeps {
     postReview,
     longPoll,
     openBrowser,
+    announceUrl: (url) => {
+      process.stderr.write(reviewUrlLine(url));
+    },
     readPane: readCmuxPane,
     timeoutMs: reviewTimeoutMs(s),
     expire: expireReview,
