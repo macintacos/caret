@@ -326,9 +326,28 @@ describe("the fenced code-block panel (EXC-692)", () => {
       )?.[0] ?? "";
     expect(body).toContain("margin-inline-start:");
     expect(body).toContain("margin-inline-end:");
-    expect(body).toContain("max-width:");
     // The code keeps the library's default 2ch inset — no extra indent past it.
     expect(body).toMatch(/padding-inline-start:\s*2ch\b/);
+  });
+
+  test("caps EVERY code row, selected included, and keeps the band's own look guarded", () => {
+    // EXC-1228: the cap is what makes a row report overflow, and codeBlockScroll.ts reads
+    // that to decide whether to card the block — so it cannot sit behind the selection
+    // carve-out. The rest of the panel look must stay behind it, or the amber band loses
+    // the row it owns; asserting both halves is what stops a later tidy-up folding the two
+    // rules back together.
+    const capRule =
+      (overrideDecls.match(/\[data-code-line\][^{}]*\{[^}]*\}/g) ?? []).find((rule) =>
+        /max-width:\s*var\(--caret-read-max\)/.test(rule),
+      ) ?? "";
+    expect(capRule).not.toContain(":not([data-selected-line])");
+    expect(capRule).toContain("overflow-x: clip");
+    const guarded =
+      overrideDecls.match(
+        /\[data-line\]\[data-code-line\]:not\(\[data-selected-line\]\)\s*\{[^}]*\}/,
+      )?.[0] ?? "";
+    expect(guarded).toContain("background-color:");
+    expect(guarded).toContain("box-shadow:");
   });
 
   test("pads only the outer edges of the fence lines (they hug the code within)", () => {
@@ -1089,9 +1108,9 @@ describe("the task-list checkbox (EXC-860)", () => {
 describe("the fenced code-block scroll card (EXC-729)", () => {
   const cardBody =
     overrideDecls.match(/\[data-content\]\s*>\s*\[data-code-card\]\s*\{[^}]*\}/)?.[0] ?? "";
-  const fittingRowBody =
+  const cappedRowBody =
     overrideDecls.match(
-      /\[data-content\]\s*>\s*\[data-line\]\[data-code-line\]:not\(\[data-selected-line\]\)\s*\{[^}]*\}/,
+      /\[data-content\]\s*>\s*\[data-line\]\[data-code-line\]\s*\{[^}]*\}/,
     )?.[0] ?? "";
 
   test("wraps the block in a single subgrid horizontal scroll container", () => {
@@ -1172,8 +1191,22 @@ describe("the fenced code-block scroll card (EXC-729)", () => {
     // block (or if the script never runs): the over-wide line clips at the card's right edge
     // instead of spilling over the surface. Inline axis only, so the block stays visible and
     // the EXC-692 fence-glyph nudges are not shaved.
-    expect(fittingRowBody).toMatch(/overflow-x:\s*clip/);
-    expect(fittingRowBody).not.toMatch(/overflow-x:\s*(?:auto|scroll)/);
+    expect(cappedRowBody).toMatch(/overflow-x:\s*clip/);
+    expect(cappedRowBody).not.toMatch(/overflow-x:\s*(?:auto|scroll)/);
+  });
+
+  test("keeps a comment inside the card from resizing it", () => {
+    // EXC-1228: the comment row rides in the card, and the card is a max-content grid — so
+    // an uncontained composer sizes its implicit track and inflates the very scrollWidth the
+    // keep-or-retire branch measures, leaving a card that can never retire.
+    const annotation =
+      overrideDecls.match(
+        /\[data-content\]\s*>\s*\[data-code-card\]\s*>\s*\[data-line-annotation\]\s*\{[^}]*\}/,
+      )?.[0] ?? "";
+    expect(annotation).toMatch(/contain:\s*inline-size/);
+    // -1 resolves against the card's empty explicit grid, so the table card's spanning
+    // declaration would degenerate here.
+    expect(annotation).not.toContain("grid-column");
   });
 });
 
