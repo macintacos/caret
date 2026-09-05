@@ -110,6 +110,12 @@ export interface CreateServerOptions {
   /** Build fingerprint (paths.buildHash of the served UI) reported in
    * /api/health and recorded in the lock, so a newer caret can detect staleness. */
   buildId?: string;
+  /** Content digest of the served UI asset set (build-id.ts buildHash), emitted
+   * as a strong ETag so a revalidating browser gets a 304. Deliberately not
+   * `buildId`: that one fingerprints the binary, which a UI-only rebuild under
+   * the npm bundle leaves unchanged — serving a 304 for a stale index. Omitted
+   * (default) means no validator and no conditional handling. */
+  assetEtag?: string;
   /** Commit the server runs from (build-id.ts resolveCommit), reported in the listen
    * record so daemon.log ties a boot back to a source revision (EXC-452). */
   commit?: string;
@@ -201,6 +207,7 @@ interface ResolvedOptions {
   prefsPath: string;
   lockPath: string | undefined;
   buildId: string | undefined;
+  assetEtag: string | undefined;
   commit: string | undefined;
   stateDir: string | undefined;
   instanceId: string | undefined;
@@ -227,6 +234,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     prefsPath: opts.prefsPath ?? prefsFile(),
     lockPath: opts.lockPath,
     buildId: opts.buildId,
+    assetEtag: opts.assetEtag,
     commit: opts.commit,
     stateDir: opts.stateDir,
     instanceId: opts.instanceId,
@@ -264,10 +272,19 @@ function matchIdRoute(path: string): IdRoute | null {
   return { id: decodeURIComponent(m[1] as string), sub: m[2] };
 }
 
+/** Whether an If-None-Match header names `etag`. The header is a comma-separated
+ * candidate list, and the comparison it calls for is weak — so a W/ prefix is
+ * stripped rather than honoured. */
+function ifNoneMatchHit(header: string | null, etag: string): boolean {
+  if (!header) return false;
+  return header.split(",").some((t) => t.trim().replace(/^W\//, "") === etag);
+}
+
 export function createServer(opts: CreateServerOptions): CaretServer {
   const cfg = resolveOptions(opts);
   const { store, idle, heartbeat, assets, onShutdown, routePlan, prefsPath, log } = cfg;
-  const { buildId, commit, stateDir, instanceId, approveVariants, source, lockPath } = cfg;
+  const { buildId, assetEtag, commit, stateDir, instanceId } = cfg;
+  const { approveVariants, source, lockPath } = cfg;
   const { awaitDecision, resolveDecision, clearDecision, openDecisionCount } = createDecisions(log);
 
   // The set of approve-variant ids the resolve route and prefs persistence gate
@@ -416,17 +433,34 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return new Response(null, { status: 200 });
   }
 
+  const etagValue = assetEtag ? `"${assetEtag}"` : undefined;
+
+  // The envelope both asset handlers share. A 304 repeats the validator and the
+  // cache policy, which is what lets the client refresh its stored freshness
+  // without a body.
+  function assetResponse(
+    req: Request,
+    body: BodyInit,
+    cache: string,
+    extra?: Record<string, string>,
+  ): Response {
+    const headers: Record<string, string> = { ...extra, "Cache-Control": cache };
+    if (!etagValue) return new Response(body, { headers });
+    headers.ETag = etagValue;
+    if (ifNoneMatchHit(req.headers.get("If-None-Match"), etagValue)) {
+      return new Response(null, { status: 304, headers });
+    }
+    return new Response(body, { headers });
+  }
+
   // GET / or /index.html — the UI's index document, served with no-cache so a
   // redeploy never references stale hashed asset names. Falls back to the
   // built-in placeholder when no UI asset set was injected (dev / fresh checkout).
-  function handleIndex(): Response {
+  function handleIndex(req: Request): Response {
     const file = assets?.file(INDEX_PATH);
     const body: BodyInit = file ?? PLACEHOLDER_HTML;
-    return new Response(body, {
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": INDEX_CACHE_CONTROL,
-      },
+    return assetResponse(req, body, INDEX_CACHE_CONTROL, {
+      "Content-Type": "text/html; charset=utf-8",
     });
   }
 
@@ -437,14 +471,16 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // earn the long immutable cache; any other served file (e.g. a public/-copied
   // favicon, not content-hashed) gets no-cache so a redeploy is re-fetched.
   // Returns null for an unknown path so dispatch falls through to its uniform 404.
-  function handleAsset(path: string): Response | null {
+  //
+  // Not a Bun.serve() directory route: `routes` are matched ahead of `fetch`, so
+  // such a route would never reach the Host guard below, and the compiled binary
+  // embeds its assets with no directory to point `dir` at.
+  function handleAsset(req: Request, path: string): Response | null {
     if (!assets) return null;
     const file = assets.file(path);
     if (!file) return null;
     const cache = path.startsWith("/assets/") ? ASSET_CACHE_CONTROL : INDEX_CACHE_CONTROL;
-    return new Response(file, {
-      headers: { "Cache-Control": cache },
-    });
+    return assetResponse(req, file, cache);
   }
 
   // POST /api/reviews — an incoming plan from the hook.
@@ -926,7 +962,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     if (method === "GET" && path === "/api/diagnostics") return handleDiagnostics();
     if (method === "GET" && path === "/api/update") return handleUpdate();
     if (method === "POST" && path === "/api/retire") return handleRetire();
-    if (method === "GET" && (path === "/" || path === INDEX_PATH)) return handleIndex();
+    if (method === "GET" && (path === "/" || path === INDEX_PATH)) return handleIndex(req);
     if (method === "POST" && path === "/api/reviews") return handleCreateReview(req);
     if (method === "POST" && path === "/api/logs") return handleLogs(req);
     if (method === "POST" && path === "/api/ui/gone") return handleUiGone();
@@ -957,7 +993,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     // routes so a UI build can never shadow one. Unknown paths fall through to
     // the uniform 404.
     if (method === "GET") {
-      const asset = handleAsset(path);
+      const asset = handleAsset(req, path);
       if (asset) return asset;
     }
 

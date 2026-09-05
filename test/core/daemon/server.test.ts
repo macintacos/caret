@@ -1176,8 +1176,13 @@ describe("UI serving", () => {
   const INDEX = '<!doctype html><html><body><div id="app"></div></body></html>';
   const JS = "export const x = 1;\n";
   const CSS = ":root{--paper:#fff}\n";
+  // Stands in for buildHash(assets) so these tests pin the wire behaviour the
+  // digest drives rather than the digest itself.
+  const DIGEST = "deadbeef1234";
+  const ETAG = `"${DIGEST}"`;
   function bootUi() {
     return boot({
+      assetEtag: DIGEST,
       assets: fakeAssets({
         "/index.html": INDEX,
         "/assets/index-AB12.js": JS,
@@ -1276,6 +1281,89 @@ describe("UI serving", () => {
       const res = await fetch(`${base}${path}`);
       expect(res.status).toBe(404);
     }
+  });
+
+  // ---- conditional GET (ETag / If-None-Match) ----
+  //
+  // Every asset response carries the UI asset-set digest as a strong validator.
+  // One digest covers the whole set, so a rebuild invalidates every path at once
+  // — free here, since /assets/* names are content-addressed and change anyway,
+  // and /index.html (served no-cache, therefore revalidated on every load) is
+  // where the saved round trip actually lands.
+
+  test("GET / carries the asset digest as an ETag", async () => {
+    await bootUi();
+    const res = await fetch(`${base}/`);
+    expect(res.headers.get("etag")).toBe(ETAG);
+    expect(res.headers.get("cache-control")).toBe("no-cache");
+  });
+
+  test("GET /index.html carries the same ETag as GET /", async () => {
+    await bootUi();
+    const res = await fetch(`${base}/index.html`);
+    expect(res.headers.get("etag")).toBe(ETAG);
+  });
+
+  test("a hashed asset carries the same ETag alongside its immutable cache", async () => {
+    await bootUi();
+    const res = await fetch(`${base}/assets/index-AB12.js`);
+    expect(res.headers.get("etag")).toBe(ETAG);
+    expect(res.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+  });
+
+  test("a matching If-None-Match makes the index a bodiless 304", async () => {
+    await bootUi();
+    const res = await fetch(`${base}/index.html`, { headers: { "If-None-Match": ETAG } });
+    expect(res.status).toBe(304);
+    expect(await res.text()).toBe("");
+    expect(res.headers.get("etag")).toBe(ETAG);
+    expect(res.headers.get("cache-control")).toBe("no-cache");
+  });
+
+  test("a matching If-None-Match makes a hashed asset a bodiless 304", async () => {
+    await bootUi();
+    const res = await fetch(`${base}/assets/index-AB12.js`, {
+      headers: { "If-None-Match": ETAG },
+    });
+    expect(res.status).toBe(304);
+    expect(await res.text()).toBe("");
+    expect(res.headers.get("etag")).toBe(ETAG);
+    expect(res.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+  });
+
+  test("a stale If-None-Match returns the full 200", async () => {
+    await bootUi();
+    const res = await fetch(`${base}/index.html`, {
+      headers: { "If-None-Match": '"stale0000000"' },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe(INDEX);
+  });
+
+  test("If-None-Match matches inside a candidate list and through a W/ prefix", async () => {
+    await bootUi();
+    for (const header of [`"other1234567", ${ETAG}`, `W/${ETAG}`]) {
+      const res = await fetch(`${base}/index.html`, { headers: { "If-None-Match": header } });
+      expect(res.status).toBe(304);
+    }
+  });
+
+  test("a daemon with no asset digest emits no ETag and ignores If-None-Match", async () => {
+    await boot({ assets: fakeAssets({ "/index.html": INDEX }) });
+    const plain = await fetch(`${base}/index.html`);
+    expect(plain.headers.get("etag")).toBeNull();
+    const conditional = await fetch(`${base}/index.html`, { headers: { "If-None-Match": ETAG } });
+    expect(conditional.status).toBe(200);
+    expect(await conditional.text()).toBe(INDEX);
+  });
+
+  // Bun answers a Range over a BunFile body itself. Pinned so a future rewrite
+  // of these handlers cannot drop it silently.
+  test("a hashed asset answers a Range request with a 206", async () => {
+    await bootUi();
+    const res = await fetch(`${base}/assets/index-AB12.js`, { headers: { Range: "bytes=0-3" } });
+    expect(res.status).toBe(206);
+    expect(await res.text()).toBe(JS.slice(0, 4));
   });
 });
 
