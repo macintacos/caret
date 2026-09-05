@@ -110,6 +110,16 @@ export interface CreateServerOptions {
   /** Build fingerprint (paths.buildHash of the served UI) reported in
    * /api/health and recorded in the lock, so a newer caret can detect staleness. */
   buildId?: string;
+  /** Content digest of the served UI asset set (build-id.ts buildHash), emitted
+   * as a strong ETag so `If-None-Match` can answer 304 (EXC-1218). One digest
+   * covers every path — a rebuild invalidates the whole set, which costs nothing
+   * because /assets/* names are content-addressed and only /index.html is
+   * revalidated. Deliberately not `buildId`: that fingerprints the binary, so a
+   * UI-only rebuild under the npm bundle would 304 a stale index. Snapshotted at
+   * boot though bodies are read per request, so a ui/dist rewritten under a live
+   * daemon serves new bytes under the old validator until it restarts. Omitted
+   * (default) means no validator and no conditional handling. */
+  assetDigest?: string;
   /** Commit the server runs from (build-id.ts resolveCommit), reported in the listen
    * record so daemon.log ties a boot back to a source revision (EXC-452). */
   commit?: string;
@@ -201,6 +211,7 @@ interface ResolvedOptions {
   prefsPath: string;
   lockPath: string | undefined;
   buildId: string | undefined;
+  assetDigest: string | undefined;
   commit: string | undefined;
   stateDir: string | undefined;
   instanceId: string | undefined;
@@ -227,6 +238,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     prefsPath: opts.prefsPath ?? prefsFile(),
     lockPath: opts.lockPath,
     buildId: opts.buildId,
+    assetDigest: opts.assetDigest,
     commit: opts.commit,
     stateDir: opts.stateDir,
     instanceId: opts.instanceId,
@@ -264,10 +276,20 @@ function matchIdRoute(path: string): IdRoute | null {
   return { id: decodeURIComponent(m[1] as string), sub: m[2] };
 }
 
+/** Whether an If-None-Match header names `etag`. The header is a comma-separated
+ * candidate list compared weakly, so `W/"x"` and `"x"` both match `"x"`. `*` is
+ * not honoured — no browser sends it on a GET, and falling through to a 200 is
+ * the safe answer. */
+function ifNoneMatchHit(header: string | null, etag: string): boolean {
+  if (!header) return false;
+  return header.split(",").some((t) => t.trim().replace(/^W\//, "") === etag);
+}
+
 export function createServer(opts: CreateServerOptions): CaretServer {
   const cfg = resolveOptions(opts);
   const { store, idle, heartbeat, assets, onShutdown, routePlan, prefsPath, log } = cfg;
-  const { buildId, commit, stateDir, instanceId, approveVariants, source, lockPath } = cfg;
+  const { buildId, assetDigest, commit, stateDir, instanceId } = cfg;
+  const { approveVariants, source, lockPath } = cfg;
   const { awaitDecision, resolveDecision, clearDecision, openDecisionCount } = createDecisions(log);
 
   // The set of approve-variant ids the resolve route and prefs persistence gate
@@ -416,18 +438,43 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return new Response(null, { status: 200 });
   }
 
+  const etagValue = assetDigest ? `"${assetDigest}"` : undefined;
+
+  // A 304 repeats ETag and Cache-Control so the client can refresh its stored
+  // freshness; Content-Type is representation metadata a bodiless response omits.
+  function assetResponse(
+    req: Request,
+    body: BodyInit,
+    cacheControl: string,
+    contentType?: string,
+  ): Response {
+    const headers: Record<string, string> = { "Cache-Control": cacheControl };
+    if (etagValue) {
+      headers.ETag = etagValue;
+      if (ifNoneMatchHit(req.headers.get("If-None-Match"), etagValue)) {
+        return new Response(null, { status: 304, headers });
+      }
+    }
+    if (contentType) headers["Content-Type"] = contentType;
+    return new Response(body, { headers });
+  }
+
   // GET / or /index.html — the UI's index document, served with no-cache so a
   // redeploy never references stale hashed asset names. Falls back to the
-  // built-in placeholder when no UI asset set was injected (dev / fresh checkout).
-  function handleIndex(): Response {
+  // built-in placeholder when the asset set carries no index (dev / fresh checkout).
+  function handleIndex(req: Request): Response {
     const file = assets?.file(INDEX_PATH);
-    const body: BodyInit = file ?? PLACEHOLDER_HTML;
-    return new Response(body, {
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": INDEX_CACHE_CONTROL,
-      },
-    });
+    // Unvalidated: the placeholder is not in the asset set, so the set's digest
+    // says nothing about it — and its bytes differ across caret versions.
+    if (!file) {
+      return new Response(PLACEHOLDER_HTML, {
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": INDEX_CACHE_CONTROL,
+        },
+      });
+    }
+    return assetResponse(req, file, INDEX_CACHE_CONTROL, "text/html; charset=utf-8");
   }
 
   // GET <path> for a non-index manifest key — a hashed sibling asset (JS/CSS/
@@ -437,14 +484,16 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // earn the long immutable cache; any other served file (e.g. a public/-copied
   // favicon, not content-hashed) gets no-cache so a redeploy is re-fetched.
   // Returns null for an unknown path so dispatch falls through to its uniform 404.
-  function handleAsset(path: string): Response | null {
+  //
+  // Not a Bun.serve() directory route: `routes` are matched ahead of `fetch`, so
+  // such a route would never reach `isForeignHost` in `handle`, and the compiled
+  // binary embeds its assets with no directory to point `dir` at.
+  function handleAsset(req: Request, path: string): Response | null {
     if (!assets) return null;
     const file = assets.file(path);
     if (!file) return null;
-    const cache = path.startsWith("/assets/") ? ASSET_CACHE_CONTROL : INDEX_CACHE_CONTROL;
-    return new Response(file, {
-      headers: { "Cache-Control": cache },
-    });
+    const cacheControl = path.startsWith("/assets/") ? ASSET_CACHE_CONTROL : INDEX_CACHE_CONTROL;
+    return assetResponse(req, file, cacheControl);
   }
 
   // POST /api/reviews — an incoming plan from the hook.
@@ -922,11 +971,15 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // The wrapper (handle) owns the cross-origin guard, idle/in-flight bookkeeping,
   // and the catch-all 500; dispatch is pure routing + business logic.
   async function dispatch(req: Request, method: string, path: string): Promise<Response> {
+    // The UI routes answer HEAD as well as GET — both guards already admit it
+    // (isSafeMethod), and Bun strips the body from what the handlers return, so
+    // reading an ETag with `curl -I` works without a HEAD-specific path.
+    const readsUi = method === "GET" || method === "HEAD";
     if (method === "GET" && path === "/api/health") return handleHealth();
     if (method === "GET" && path === "/api/diagnostics") return handleDiagnostics();
     if (method === "GET" && path === "/api/update") return handleUpdate();
     if (method === "POST" && path === "/api/retire") return handleRetire();
-    if (method === "GET" && (path === "/" || path === INDEX_PATH)) return handleIndex();
+    if (readsUi && (path === "/" || path === INDEX_PATH)) return handleIndex(req);
     if (method === "POST" && path === "/api/reviews") return handleCreateReview(req);
     if (method === "POST" && path === "/api/logs") return handleLogs(req);
     if (method === "POST" && path === "/api/ui/gone") return handleUiGone();
@@ -956,8 +1009,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     // A hashed sibling asset (exact manifest-key match) — checked after the API
     // routes so a UI build can never shadow one. Unknown paths fall through to
     // the uniform 404.
-    if (method === "GET") {
-      const asset = handleAsset(path);
+    if (readsUi) {
+      const asset = handleAsset(req, path);
       if (asset) return asset;
     }
 

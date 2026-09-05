@@ -127,8 +127,9 @@ a generated manifest. `scripts/generate-ui-manifest.ts` enumerates `ui/dist/` in
 gitignored module of `with { type: "file" }` imports (`src/ui-manifest.generated.ts`) that
 `bun build --compile` inlines, mapping each request URL path to its embedded file;
 `src/ui/assets.ts` resolves that asset set and the daemon serves each asset by URL path
-with per-path MIME and cache headers. Dynamic `import()` in the browser bundle is fine —
-the node-free invariant above is the only constraint a shared `@core` module owes.
+with per-path MIME and cache headers, plus a shared ETag (the asset-set digest) that lets
+a matching `If-None-Match` get a bodiless 304. Dynamic `import()` in the browser bundle is
+fine — the node-free invariant above is the only constraint a shared `@core` module owes.
 
 ## Daemon trust model
 

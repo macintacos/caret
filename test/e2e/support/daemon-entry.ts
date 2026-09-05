@@ -33,6 +33,7 @@ import { prefsFile, reviewsDir } from "@/config/paths.ts";
 import { readUpdatesCheck } from "@/config/prefs.ts";
 import { createServer } from "@/daemon/server.ts";
 import { updateReportFor } from "@/daemon/update-check.ts";
+import { buildHash } from "@/lib/build-id.ts";
 import { createDaemonLogger } from "@/lib/log.ts";
 import type { UpdateStatus } from "@/lib/types.ts";
 import { createStore } from "@/review/store.ts";
@@ -96,6 +97,11 @@ const server = createServer({
   // needs either route stubs its own.
   buildId: "e2e-build",
   commit: "e2ecommit0000000",
+  // Real, unlike its synthetic neighbours: this is the one place a browser
+  // exercises the conditional-GET path, and a literal would prove only that the
+  // header plumbing works. Nothing asserts the value, so the digest tracking
+  // ui/dist costs the harness no determinism.
+  assetDigest: await buildHash(assets),
   // The update verdict (EXC-1207), synthetic for the same reason the identity above is.
   // It is wired rather than left absent because App reads GET /api/update on EVERY load:
   // an unwired route 404s, which would put a failed same-origin request into every spec's

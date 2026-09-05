@@ -28,7 +28,7 @@ import {
   runUpdateCheck,
   updateReportFor,
 } from "@/daemon/update-check.ts";
-import { buildKind, currentBuildId, currentCommit, VERSION } from "@/lib/build-id.ts";
+import { buildHash, buildKind, currentBuildId, currentCommit, VERSION } from "@/lib/build-id.ts";
 import { createDaemonLogger } from "@/lib/log.ts";
 import { commitsAheadOfTrunk, latestReleaseTag, publishedCaretVersion } from "@/lib/upstream.ts";
 import { createStore } from "@/review/store.ts";
@@ -159,6 +159,7 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
       assets,
       lockPath: daemonLock(),
       buildId: await currentBuildId(),
+      assetDigest: await buildHash(assets),
       commit,
       // World + boot identity (EXC-461): stateDir is the world key (never
       // logged — identifying); the per-boot instanceId is the loggable handle.
