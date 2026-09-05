@@ -168,15 +168,14 @@ const DEPENDENT: readonly Dependent[] = [
 ];
 const TASK_ORDER = [...IMMEDIATE, ...DEPENDENT.map((d) => d.name)];
 
+/** How a run renders, which is also what a task's argv has to suit: the live display
+ * shows one line of a task's output at a time, `--json` a bounded tail of all of it. */
+export type PreflightDisplay = "live" | "json";
+
 /**
  * Extra argv a task is spawned with (EXC-1146). Separate from the name because
  * that name is also the results map key, the display title, and what `--task`
  * matches — a flag folded into it would break all three.
- *
- * Only `test e2e` runs quiet: its `list` reporter prints a line per spec, and that
- * chatter pushes a real failure out of the 20-line tail the result document carries
- * by default. The UNIT task is not quiet — quiet there is bun's dots reporter,
- * ~4900 characters of terminal animation in a log nobody watches live.
  *
  * `test`'s worker cap is the gate's share of the host (EXC-1215). The entry point's own
  * `--parallel` takes every core — a 2.5x win standalone, a loss here: it starves the five
@@ -185,20 +184,35 @@ const TASK_ORDER = [...IMMEDIATE, ...DEPENDENT.map((d) => d.name)];
  * — `test e2e` sets it, not this task — while the unit lane runs 119s → 72s, which is how
  * much sooner a unit failure trips fail-fast. 2 measured no better a gate and gave the
  * lane back to 117s, so 4 is the floor of the useful range, not a tuned optimum.
+ *
+ * The UNIT task is never quiet: quiet there is bun's dots reporter, ~4900 characters of
+ * terminal animation that says as little on one display line as in a captured log.
  */
 const TASK_ARGS: Readonly<Record<string, readonly string[]>> = {
   test: ["--parallel=4"],
+};
+
+/**
+ * What `--json` adds on top, where the audience is a captured document rather than a
+ * watching human. `test e2e` is quiet only there: Playwright's `list` reporter prints a
+ * line per spec, and that chatter would push a real failure out of the 20-line tail the
+ * result document carries by default. The live display wants exactly that chatter — its
+ * single output line per task is the only progress a human gets, and a dot reports
+ * nothing but that the gate has not hung.
+ */
+const JSON_ONLY_TASK_ARGS: Readonly<Record<string, readonly string[]>> = {
   "test e2e": ["--quiet"],
 };
 
 /** The `mise` argv the gate spawns for `name`. A multi-word name (`build ui`,
  * `test e2e`) splits into positional targets, which mise routes to the task's
- * own subcommand path (EXC-738); any TASK_ARGS follow, since caret's flags stop
- * parsing at the first operand. A TASK_ARGS entry that is not a caret flag at all —
- * `test`'s `--parallel=2` — rides through on the subcommand's `allowUnknownOption()`,
+ * own subcommand path (EXC-738); the extra argv follows, since caret's flags stop
+ * parsing at the first operand. An entry that is not a caret flag at all —
+ * `test`'s `--parallel=4` — rides through on the subcommand's `allowUnknownOption()`,
  * so removing that call breaks the gate rather than a test. */
-export function miseTaskCommand(name: string): string[] {
-  return ["run", ...name.split(" "), ...(TASK_ARGS[name] ?? [])];
+export function miseTaskCommand(name: string, display: PreflightDisplay): string[] {
+  const extra = display === "json" ? (JSON_ONLY_TASK_ARGS[name] ?? []) : [];
+  return ["run", ...name.split(" "), ...(TASK_ARGS[name] ?? []), ...extra];
 }
 
 // Bumpable integer so machine consumers detect a breaking shape change,
@@ -696,10 +710,13 @@ export function createProcessGroupController(graceMs = 2000): ProcessGroupContro
 // Real spawner: `mise run <task>` as a tracked process group. On a fail-fast
 // `signal` abort it reaps its own group and resolves `aborted`, so runPreflight
 // records it `skipped`, not `failed` (EXC-587).
-function makeSpawnMiseTask(controller: ProcessGroupController): SpawnTask {
+function makeSpawnMiseTask(
+  controller: ProcessGroupController,
+  display: PreflightDisplay,
+): SpawnTask {
   return (name, env, onLine, signal) =>
     new Promise<SpawnOutcome>((resolve) => {
-      const child = controller.spawn("mise", miseTaskCommand(name), {
+      const child = controller.spawn("mise", miseTaskCommand(name, display), {
         // Node's spawn accepts `undefined` env values (it drops them), so the
         // parent env passes through as-is with the skips merged on top.
         env: env ? { ...process.env, ...env } : process.env,
@@ -789,7 +806,7 @@ function installSignalHandlers(controller: ProcessGroupController): void {
 export async function runPreflightCli(args: JsonArgs): Promise<void> {
   const controller = createProcessGroupController();
   installSignalHandlers(controller);
-  const spawnTask = makeSpawnMiseTask(controller);
+  const spawnTask = makeSpawnMiseTask(controller, args.json ? "json" : "live");
   const concurrency = parseJobs(process.env.CARET_PREFLIGHT_JOBS);
   // Resolved once, ahead of either output mode, so the human summary and the
   // --json start document always describe the same run (EXC-1042).

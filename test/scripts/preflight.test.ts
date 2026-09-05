@@ -783,25 +783,31 @@ test(
 // The argv the gate spawns per task (EXC-1146). A task's name doubles as the map
 // key, the display title, and the `--task` selector, so a flag the gate wants can
 // live only here — never folded into the name.
-test("preflight spawns the e2e task in quiet mode", () => {
-  // The gate captures every task's output and replays only a failure's tail, so
-  // Playwright's per-spec list reporter would push the real failure out of it.
-  expect(miseTaskCommand("test e2e")).toEqual(["run", "test", "e2e", "--quiet"]);
+test("the e2e task runs quiet for --json and loud for the live display", () => {
+  // Playwright's per-spec list reporter is what the live display wants: its one
+  // output line per task is the whole progress report a human gets, and a dot says
+  // nothing. The same chatter would push a real failure out of the 20-line tail the
+  // result document carries, so --json still asks for dots.
+  expect(miseTaskCommand("test e2e", "live")).toEqual(["run", "test", "e2e"]);
+  expect(miseTaskCommand("test e2e", "json")).toEqual(["run", "test", "e2e", "--quiet"]);
   // The flag must follow the positional target: `test e2e` is a subcommand path,
   // and caret's own flags stop parsing at the first operand.
-  expect(miseTaskCommand("test e2e").indexOf("--quiet")).toBe(3);
+  expect(miseTaskCommand("test e2e", "json").indexOf("--quiet")).toBe(3);
 });
 
-test("preflight caps the unit suite's worker count", () => {
+test("preflight caps the unit suite's worker count in either display", () => {
   // The entry point's own `--parallel` fans out across every core; inside the gate
   // that starves the five siblings sharing the host, so a lower count is forwarded
-  // after it and wins.
-  expect(miseTaskCommand("test")).toEqual(["run", "test", "--parallel=4"]);
+  // after it and wins. Nothing about that depends on how the gate renders.
+  expect(miseTaskCommand("test", "live")).toEqual(["run", "test", "--parallel=4"]);
+  expect(miseTaskCommand("test", "json")).toEqual(["run", "test", "--parallel=4"]);
 });
 
 test("preflight leaves every non-test task's argv untouched", () => {
-  expect(miseTaskCommand("lint")).toEqual(["run", "lint"]);
-  expect(miseTaskCommand("build ui")).toEqual(["run", "build", "ui"]);
-  expect(miseTaskCommand("build bin")).toEqual(["run", "build", "bin"]);
-  expect(miseTaskCommand("smoke")).toEqual(["run", "smoke"]);
+  for (const display of ["live", "json"] as const) {
+    expect(miseTaskCommand("lint", display)).toEqual(["run", "lint"]);
+    expect(miseTaskCommand("build ui", display)).toEqual(["run", "build", "ui"]);
+    expect(miseTaskCommand("build bin", display)).toEqual(["run", "build", "bin"]);
+    expect(miseTaskCommand("smoke", display)).toEqual(["run", "smoke"]);
+  }
 });
