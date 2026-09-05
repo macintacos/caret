@@ -29,7 +29,7 @@
     ".claude-plugin/plugin.json"
   ],
   "scripts": {
-    "test": "bun test --conditions browser --timeout 30000",
+    "test": "bun test --conditions browser --parallel --timeout 35000",
     "lint": "mise run lint",
     "format": "mise run format",
     "build": "mise run build"

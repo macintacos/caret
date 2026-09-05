@@ -513,7 +513,7 @@ test("nextPlan on a Reject deny waits — no revision, no resubmit (EXC-685)", (
 
 test("a revision round-trips through the real runReview hook path and logs to caret.log", async () => {
   await boot();
-  const deps = devReviewDeps(base);
+  const deps = devReviewDeps(base, () => {});
   // First submission: the driver's initial seed, through the real hook.
   const first = runReview(hookStdin(PLAN_V1), deps);
   const id = await waitFor(async () => {
@@ -550,7 +550,7 @@ test("a revision round-trips through the real runReview hook path and logs to ca
 
 test("bootstrapReview grows the primary review to several varied versions before the loop", async () => {
   await boot();
-  const deps = devReviewDeps(base);
+  const deps = devReviewDeps(base, () => {});
   const state = await bootstrapReview(base, { ...PRIMARY, plan: PLAN_V1 }, deps);
   const review = d.store.bySession(DEV_SESSION)[0];
   expect(review).toBeDefined();
@@ -598,7 +598,7 @@ test("bootstrapReview grows the primary review to several varied versions before
 
 test("bootstrapReview honors an explicit --num-versions count", async () => {
   await boot();
-  const deps = devReviewDeps(base);
+  const deps = devReviewDeps(base, () => {});
   const state = await bootstrapReview(base, { ...PRIMARY, plan: PLAN_V1, versions: 5 }, deps);
   const review = d.store.bySession(DEV_SESSION)[0];
   expect(review!.versions).toHaveLength(5);
@@ -608,7 +608,7 @@ test("bootstrapReview honors an explicit --num-versions count", async () => {
 
 test("bootstrapReview with a single version seeds just v1", async () => {
   await boot();
-  const deps = devReviewDeps(base);
+  const deps = devReviewDeps(base, () => {});
   const state = await bootstrapReview(base, { ...PRIMARY, plan: PLAN_V1, versions: 1 }, deps);
   const review = d.store.bySession(DEV_SESSION)[0];
   expect(review!.versions).toHaveLength(1);
@@ -617,7 +617,7 @@ test("bootstrapReview with a single version seeds just v1", async () => {
 
 test("each fixture bootstraps onto its own review, in table order", async () => {
   await boot();
-  const deps = devReviewDeps(base);
+  const deps = devReviewDeps(base, () => {});
   for (const fixture of DEV_FIXTURES) {
     await bootstrapReview(base, { ...fixture, plan: await fixtureText(fixture) }, deps);
   }
@@ -636,7 +636,7 @@ test("each fixture bootstraps onto its own review, in table order", async () => 
 
 test("runExtraReview runs one fresh-session review to resolution and stops", async () => {
   await boot();
-  const deps = devReviewDeps(base);
+  const deps = devReviewDeps(base, () => {});
   const session = "caret-dev-extra-test";
   const done = runExtraReview(session, extraPlan(PLAN_V1, 1), deps);
   // The extra review lands under its OWN session — a genuinely-new review id,
@@ -680,7 +680,7 @@ function makeSeederHarness(maxPending?: number) {
     new Promise<void>((r) => {
       seeds.push({ n, resolve: r });
     });
-  void runExtraSeeder(1, { seed, sleep, maxPending });
+  void runExtraSeeder(1, { seed, sleep, maxPending, log: () => {} });
   const tick = async () => {
     release?.();
     await Bun.sleep(0); // let the loop run to its next sleep

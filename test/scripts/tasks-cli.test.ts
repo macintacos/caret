@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import pkg from "@root/package.json" with { type: "json" };
 import type { JsonArgs } from "@scripts/preflight.ts";
 import {
   buildBinArtifacts,
@@ -280,27 +281,37 @@ describe("tasks CLI: task command lines", () => {
   });
 
   // The --timeout is the lane's contention budget (EXC-1056), sized for the loaded
-  // host the preflight gate runs on rather than for an idle one. It precedes the
-  // forwarded args so a caller passing its own still wins.
-  test("test runs bun test --conditions browser under the lane's deadline", () => {
+  // host the preflight gate runs on rather than for an idle one. Both it and
+  // --parallel precede the forwarded args so a caller passing its own still wins.
+  test("test runs bun test --conditions browser in parallel, under the lane's deadline", () => {
     expect(testCommand([])).toEqual([
       "bun",
       "test",
       "--conditions",
       "browser",
+      "--parallel",
       "--timeout",
-      "30000",
+      "35000",
     ]);
     expect(testCommand(["--test-name-pattern", "x"])).toEqual([
       "bun",
       "test",
       "--conditions",
       "browser",
+      "--parallel",
       "--timeout",
-      "30000",
+      "35000",
       "--test-name-pattern",
       "x",
     ]);
+  });
+
+  // Two entry points run the unit suite and both have to carry the same flags —
+  // `--conditions browser` because svelte resolves its server runtime without it, and
+  // the deadline because a suite that reds under one form and not the other is worse
+  // than either budget. Nothing else compares them, so the mirror drifts silently.
+  test("package.json's test script mirrors the lane's own argv", () => {
+    expect(pkg.scripts.test).toBe(testCommand([]).join(" "));
   });
 });
 

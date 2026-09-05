@@ -43,6 +43,11 @@ export interface ReviewDeps {
    * a transient drop so the caller can reconnect. */
   longPoll: (baseUrl: string, id: string) => Promise<Decision | null>;
   openBrowser: (url: string) => void;
+  /** Show the human the review URL — clickable in the transcript when the browser
+   * doesn't open, and the OpenCode plugin's only source for its toast. Injected
+   * beside openBrowser because the core does no I/O of its own; the wording the
+   * plugin parses is the command layer's (src/commands/review.ts, reviewUrlLine). */
+  announceUrl: (url: string) => void;
   /** The cmux pane this hook process runs in, so the daemon can clear its unread
    * mark once the plan is reviewed (EXC-961). Injected because the pane comes
    * from the environment, which the core never reads itself. Optional: absent
@@ -151,11 +156,9 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<Decisi
     // pre-empting the away-gated desktop notification. An older daemon reports no
     // such field, which fails safe to opening.
     if (!hasLiveClient) deps.openBrowser(url);
-    // Also print the URL to stderr — clickable in the transcript if the browser
-    // fails to open. NOTE: the OpenCode plugin (opencode/caret.plugin.ts,
-    // parseReviewUrl) regex-parses this exact line to surface the link as a toast,
-    // so keep the `caret: review this plan at <url>` wording stable.
-    process.stderr.write(`caret: review this plan at ${url}\n`);
+    // Unconditional: the announcement is the fallback for a browser that never
+    // opened, and the handle a live tab's reader still wants.
+    deps.announceUrl(url);
 
     step = "longPoll";
     // Re-poll on each heartbeat (null); on a transient drop reconnect and keep going

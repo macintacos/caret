@@ -220,5 +220,8 @@ describe("every bundled pattern translates strictly", () => {
     expect(failures).toHaveLength(1);
     // Non-vacuity again: an empty pattern set would pass the checks above.
     expect(patterns.size).toBeGreaterThan(10_000);
-  }, 60_000);
+    // 6x the 27s this costs inside the gate (8.8s standalone) — the same headroom
+    // UNIT_TEST_TIMEOUT_MS encodes, which this test opts out of because its cost is
+    // intrinsic rather than contention.
+  }, 165_000);
 });

@@ -213,13 +213,11 @@ async function emitTestReport(
 /**
  * Per-test deadline for the lane, in milliseconds (EXC-1056).
  *
- * bun's own default is 5000, which sizes every test against an idle host. The lane's
- * gate is not one: inside `mise run preflight`, lint, both builds, the Playwright
- * suite and smoke all run alongside it. What breaks first there is not the CPU-heavy
- * test but the SPAWN-heavy one — `test/scripts/dev-driver.test.ts` posts several plan
- * versions through the real submit → reflow → store path and each reflow spawns rumdl,
- * so it measures a few hundred ms standalone and crosses 5s in the gate. That is better
- * than 10x, against a suite average nearer 2.8x.
+ * bun's own default is 5000, which sizes every test against an idle host. The lane's gate
+ * is not one: inside `mise run preflight`, lint, both builds, the Playwright suite and
+ * smoke all run alongside it. The slowest test this flag governs is
+ * `test/scripts/install-shell.test.ts`'s bash suites, which spawn a shell per script —
+ * 4.7s standalone against 5.3s in-gate. 35s is 6x that, rounded up to the nearest 5s.
  *
  * A deadline is not a retry: the test still runs once and asserts the same thing, so
  * nothing is hidden — the budget only stops the suite asserting the machine was idle.
@@ -227,7 +225,7 @@ async function emitTestReport(
  *
  * This flag covers CONTENTION, and only on the entry points that carry it. Intrinsic
  * slowness is a different claim and stays a per-test third argument (the shiki pattern
- * sweep's `60_000`), which every entry point honours — including a bare
+ * sweep's `165_000`), which every entry point honours — including a bare
  * `bun test <file>`, where this flag is absent. A preload calling `setDefaultTimeout`
  * would cover all three at once and does not work: on bun 1.4.0 a preload setting a
  * 50ms default over two 200ms files times out one of them and not the other, so it is
@@ -235,16 +233,22 @@ async function emitTestReport(
  * silently ignored rather than rejected, so there is no error to go looking for.
  * Re-probe both on the next bun bump.
  */
-const UNIT_TEST_TIMEOUT_MS = 30_000;
+const UNIT_TEST_TIMEOUT_MS = 35_000;
 
-/** The argv `test unit` runs, plus forwarded args. The timeout precedes them so a
- * caller passing its own `--timeout` still wins. */
+/** The argv `test unit` runs, plus forwarded args. `--parallel` fans the ~270 files
+ * across worker processes, each isolated (`--parallel` implies `--isolate`), which is
+ * what makes a suite that mutates `process.env` in a dozen files safe to fan out.
+ * Isolation rides only on the entry points carrying the flag, as `--timeout` does: a
+ * bare `bun test <path>` shares one global across files, so cross-file state can make
+ * the two forms disagree. Both injected flags precede the forwarded args so a caller
+ * passing its own `--parallel=N` or `--timeout` still wins. */
 export function testCommand(args: string[]): string[] {
   return [
     "bun",
     "test",
     "--conditions",
     "browser",
+    "--parallel",
     "--timeout",
     String(UNIT_TEST_TIMEOUT_MS),
     ...args,

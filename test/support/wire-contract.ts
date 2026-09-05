@@ -29,6 +29,7 @@ export function depsReturning(
     postReview: async () => ({ id: "rid" }),
     longPoll: async () => decision,
     openBrowser: () => {},
+    announceUrl: () => {},
     timeoutMs: 1000,
     expire: async () => {},
   };
