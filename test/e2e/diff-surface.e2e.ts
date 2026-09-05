@@ -32,6 +32,7 @@ import {
   submitForRevision,
 } from "@test/e2e/support/review-state.ts";
 import {
+  composer,
   expectNoComposerOpens,
   firstGlyphX,
   gridCounts,
@@ -770,6 +771,63 @@ test("a drag selection still highlights when the plan has an overflowing code-bl
       ),
     )
     .toEqual(["6=first", "7=last"]);
+  expect(pageErrors.filter((m) => /renderSelection|children dont match/.test(m))).toEqual([]);
+});
+
+// EXC-1228: a comment anchored INSIDE an overflowing block. Needs a real browser for the
+// library's own re-render on an annotation change (a changed annotation set makes its
+// partial-render path ineligible, so the content column is replaced wholesale and any card
+// with it), the live layout that decides overflow, and the card the two produce together.
+//
+// Anchored on line 6 — the block's ONLY wide row — so one gesture reaches both halves of the
+// fix. Opening the composer selects that row: only the unguarded reading cap keeps it
+// reporting overflow, so the block re-cards at all, and only the shared slice puts the
+// comment row inside the card that results. On any other line a lost cap would go unnoticed,
+// because a sibling wide row would keep the block carded anyway.
+test("a comment inside an overflowing code block is drawn inside its card", async ({
+  daemon,
+  page,
+}) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (err) => pageErrors.push(err.message));
+
+  await daemon.seed({ plan: WIDE_CODE_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect(page.getByText("Intro prose here.")).toBeVisible();
+
+  const shadowCount = (selector: string) =>
+    page.evaluate(
+      (s) => document.querySelector(".diffview")?.shadowRoot?.querySelectorAll(s).length ?? -1,
+      selector,
+    );
+  const contentWidth = () =>
+    page.evaluate(
+      () =>
+        (
+          document
+            .querySelector(".diffview")
+            ?.shadowRoot?.querySelector("[data-content]") as HTMLElement | null
+        )?.scrollWidth ?? -1,
+    );
+
+  await expect.poll(() => shadowCount("[data-code-card]")).toBe(1);
+  const before = await contentWidth();
+
+  await composer(page, 6);
+
+  // The card survived the composer: uncapped, the selected row reports no overflow and the
+  // block never re-cards at all.
+  await expect.poll(() => shadowCount("[data-code-card]")).toBe(1);
+
+  // And the comment rides inside it in both columns rather than below the whole block.
+  expect(await shadowCount("[data-code-card] > [data-line-annotation]")).toBe(1);
+  expect(await shadowCount("[data-content] > [data-line-annotation]")).toBe(0);
+  expect(await shadowCount("[data-code-card-gutter] > [data-gutter-buffer]")).toBe(1);
+
+  // The same two failures as what a reader actually sees, and the assertion that leans on
+  // no card selector: either one stretches the surface toward the widest line.
+  expect(await contentWidth()).toBe(before);
   expect(pageErrors.filter((m) => /renderSelection|children dont match/.test(m))).toEqual([]);
 });
 
