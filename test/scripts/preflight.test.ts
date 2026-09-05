@@ -567,6 +567,19 @@ test("buildResultReport level 0: passing tasks carry status only", async () => {
   }
 });
 
+test("buildResultReport: every task reports how long it ran", async () => {
+  const spawnTask: SpawnTask = async (name) => {
+    if (name === "test") await Bun.sleep(25);
+    return { exitCode: 0, output: "" };
+  };
+  const r = await runPreflight({ spawnTask, renderer: "silent" });
+  const report = buildResultReport(r.results);
+
+  for (const t of report.tasks) expect(t.durationMs).toBeGreaterThanOrEqual(0);
+  const unit = report.tasks.find((t) => t.name === "test");
+  expect(unit?.durationMs).toBeGreaterThanOrEqual(20);
+});
+
 test("buildResultReport level 0: a small failed output is shown in full (with lint hint)", async () => {
   const { spawnTask } = fakeSpawner({
     lint: { exitCode: 1, output: "boom: bad format" },

@@ -73,6 +73,9 @@ export type TaskStatus = "passed" | "failed" | "skipped";
 export interface TaskResult {
   status: TaskStatus;
   output: string;
+  /** Wall-clock time the task spawn took. A task fail-fast aborted mid-run reports
+   * the time it ran; one skipped before it ever spawned reports 0. */
+  durationMs: number;
 }
 
 export interface PreflightOutcome {
@@ -102,6 +105,9 @@ export interface PreflightStartReport {
 export interface PreflightTaskReport {
   name: string;
   status: TaskStatus;
+  /** How long the task ran. Unconditional, unlike the excerpt fields below: a
+   * duration is a fact about the run, not a slice of output a filter selected. */
+  durationMs: number;
   /** Captured output, included per the verbosity / --grep / --task selection. */
   output?: string;
   /** Total output lines, included when the output isn't fully inlined (a "fetch more" signal). */
@@ -220,6 +226,9 @@ export interface TaskSelection {
  * change. Add an entry whenever a test starts reading a Markdown file at run
  * time — the suite guards that every path listed here still exists, but nothing
  * can guard an omission.
+ *
+ * `bun test --changed` cannot replace this list: it selects test files from the
+ * import graph, and a Markdown file read from disk at run time has no edge in it.
  */
 export const MARKDOWN_READ_BY_TESTS: readonly string[] = [
   "scripts/tasks/dev/fake-plan.md", // test/scripts/dev-driver.test.ts reads it and asserts on its content
@@ -393,18 +402,20 @@ export async function runPreflight(deps: {
     env: Record<string, string> | undefined,
     onLine: (line: string) => void,
   ): Promise<TaskStatus> => {
+    const startedAt = Date.now();
     let outcome: SpawnOutcome;
     try {
       outcome = await deps.spawnTask(name, env, onLine, failFast.signal);
     } catch (err) {
       outcome = { exitCode: 1, output: String(err) };
     }
+    const durationMs = Date.now() - startedAt;
     if (outcome.aborted) {
-      results.set(name, { status: "skipped", output: outcome.output });
+      results.set(name, { status: "skipped", output: outcome.output, durationMs });
       return "skipped";
     }
     const status: TaskStatus = outcome.exitCode === 0 ? "passed" : "failed";
-    results.set(name, { status, output: outcome.output });
+    results.set(name, { status, output: outcome.output, durationMs });
     if (status === "failed") failFast.abort();
     return status;
   };
@@ -434,7 +445,7 @@ export async function runPreflight(deps: {
       task: async (_ctx, task) => {
         task.output = `waiting for ${after}`;
         if (!(await upstream.promise)) {
-          results.set(name, { status: "skipped", output: "" });
+          results.set(name, { status: "skipped", output: "", durationMs: 0 });
           own?.resolve(false);
           return task.skip(`${name} (skipped: ${after} failed)`);
         }
@@ -552,7 +563,11 @@ export function buildResultReport(
   for (const name of TASK_ORDER) {
     const result = results.get(name);
     if (!result) continue;
-    const entry: PreflightTaskReport = { name, status: result.status };
+    const entry: PreflightTaskReport = {
+      name,
+      status: result.status,
+      durationMs: result.durationMs,
+    };
     const lines = splitLines(result.output);
     const inScope = !scope || scope.has(name);
     if (inScope && lines.length > 0) {
