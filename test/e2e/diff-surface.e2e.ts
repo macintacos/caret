@@ -860,8 +860,8 @@ test("a comment inside a code card is never wider than the card, and starts at i
     page.evaluate(() => {
       const sh = document.querySelector(".diffview")?.shadowRoot ?? null;
       const card = sh?.querySelector("[data-code-card]") as HTMLElement | null;
-      const content = card?.querySelector("[data-annotation-content]") as HTMLElement | null;
-      if (card === null || content === null || card === undefined || content === undefined) {
+      const comment = card?.querySelector("[data-annotation-content]") as HTMLElement | null;
+      if (card === null || comment === null || card === undefined || comment === undefined) {
         return null;
       }
       const style = getComputedStyle(card);
@@ -870,9 +870,9 @@ test("a comment inside a code card is never wider than the card, and starts at i
           card.clientWidth -
           Number.parseFloat(style.paddingInlineStart) -
           Number.parseFloat(style.paddingInlineEnd),
-        commentWidth: content.getBoundingClientRect().width,
+        commentWidth: comment.getBoundingClientRect().width,
         cardX: card.getBoundingClientRect().x,
-        commentX: content.getBoundingClientRect().x,
+        commentX: comment.getBoundingClientRect().x,
       };
     });
 

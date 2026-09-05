@@ -28,14 +28,14 @@ export function unwrappedSlice(column: Element, attr: string, lines: number[]): 
   const head = column.querySelector(`:scope > [${attr}="${first}"]`);
   if (head === null) return null;
   const slice: Element[] = [];
-  const keyed: string[] = [];
+  const seenKeys: string[] = [];
   for (let el: Element | null = head; el !== null; el = el.nextElementSibling) {
     slice.push(el);
     const key = el.getAttribute(attr);
-    if (key !== null) keyed.push(key);
+    if (key !== null) seenKeys.push(key);
     if (key !== String(last)) continue;
-    if (keyed.length !== lines.length) return null;
-    if (!keyed.every((k, i) => k === String(lines[i]))) return null;
+    if (seenKeys.length !== lines.length) return null;
+    if (!seenKeys.every((k, i) => k === String(lines[i]))) return null;
     // Past the last row, take any comment anchored TO it: the library emits that row
     // after its own, so stopping at `last` would leave a comment on the range's final
     // row outside the card while one on any other row is inside it — two comments on

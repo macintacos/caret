@@ -1103,8 +1103,7 @@ const CARET_OVERRIDES = `
   /* EXC-1228: a comment anchored inside the block rides in the card (cardSlice.ts), so the
      card has to place it. contain: inline-size keeps the composer out of the card's
      max-content track sizing, and so out of the scrollWidth the keep-or-retire branch
-     measures — without it a viewport that widened until the code fits could never retire
-     the card. The table card's counterpart also carries grid-column: 1 / -1; here -1
+     measures. The table card's counterpart also carries grid-column: 1 / -1; here -1
      resolves against an empty explicit grid, so it is dropped and the row auto-places into
      the card's one implicit column. */
   [data-content] > [data-code-card] > [data-line-annotation] {
@@ -1115,16 +1114,12 @@ const CARET_OVERRIDES = `
      and position: sticky with left: var(--diffs-column-number-width) — correct while the
      scrollport is the whole view, wrong now that the card is one.
 
-     The width has to be the CARD's, not the column's, and nothing inside a scroll container
-     can read that in CSS — a percentage there resolves against the scrolled track, which is
-     as wide as the widest code line. So it is reconstructed from the three insets between
-     the two: the column's own seam padding, and the card's margin either side. Get it wrong
-     and the comment is wider than the card, which makes the card's scrollWidth exceed its
-     clientWidth for good — and that is what the keep-or-retire branch reads, so a commented
-     block would never retire. A cap cannot do this job; the library's is a definite width,
-     so this replaces it. The arithmetic is pinned in diff-surface.e2e.ts, which measures the
-     drawn comment against the drawn card at a viewport narrow enough for the cap not to hide
-     a mismatch.
+     The width must be the CARD's, and nothing inside a scroll container can read that in
+     CSS — a percentage resolves against the scrolled track, as wide as the widest code line
+     — so it is reconstructed from the three insets between the two: the column's own seam
+     padding, and the card's margin either side. Wider than the card and the block can never
+     retire it, which is why diff-surface.e2e.ts measures the drawn comment against the drawn
+     card. A cap cannot do this job: the library's is a definite width, so this replaces it.
 
      The sticky offset clears a gutter that is outside the card, so inside one it indents the
      composer by the gutter's width and pins it there. Zeroed, the composer sits on the code's
