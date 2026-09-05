@@ -6,8 +6,8 @@ import { unwrappedSlice } from "$lib/diffview/cardSlice.ts";
 
 // unwrappedSlice answers "which children does this card take" for both card kinds, so its
 // branches are pinned here rather than twice over in the two caller suites. The refusal
-// branches matter most: they are what the code-block path gained when it moved off
-// directBlockRows, which carded whatever rows it happened to find.
+// branches matter most: an unrecognized DOM shape (a missing, reordered, or nested row)
+// must produce no card rather than a malformed one.
 
 /** A slice's members by their keying attribute, or `annotation` for the rows the library
  * interleaves — `null` passed through, so a refusal is distinguishable from an empty run. */
