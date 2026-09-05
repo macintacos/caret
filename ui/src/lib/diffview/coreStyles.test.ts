@@ -1115,7 +1115,7 @@ describe("the task-list checkbox (EXC-860)", () => {
 describe("the fenced code-block scroll card (EXC-729)", () => {
   const cardBody =
     overrideDecls.match(/\[data-content\]\s*>\s*\[data-code-card\]\s*\{[^}]*\}/)?.[0] ?? "";
-  const cappedRowBody =
+  const sharedRowBody =
     overrideDecls.match(
       /\[data-content\]\s*>\s*\[data-line\]\[data-code-line\]\s*\{[^}]*\}/,
     )?.[0] ?? "";
@@ -1198,8 +1198,8 @@ describe("the fenced code-block scroll card (EXC-729)", () => {
     // block (or if the script never runs): the over-wide line clips at the card's right edge
     // instead of spilling over the surface. Inline axis only, so the block stays visible and
     // the EXC-692 fence-glyph nudges are not shaved.
-    expect(cappedRowBody).toMatch(/overflow-x:\s*clip/);
-    expect(cappedRowBody).not.toMatch(/overflow-x:\s*(?:auto|scroll)/);
+    expect(sharedRowBody).toMatch(/overflow-x:\s*clip/);
+    expect(sharedRowBody).not.toMatch(/overflow-x:\s*(?:auto|scroll)/);
   });
 
   test("keeps a comment inside the card from resizing it", () => {

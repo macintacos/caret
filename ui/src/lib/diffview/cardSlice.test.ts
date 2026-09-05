@@ -16,7 +16,7 @@ function keys(slice: Element[] | null, attr = "data-line"): string[] | null {
 }
 
 /** A content column of `lineCount` rows, with the root `openComment` needs to find them. */
-function content(lineCount: number): { root: HTMLElement; content: HTMLElement } {
+function contentWithLines(lineCount: number): { root: HTMLElement; content: HTMLElement } {
   const parts = gutterContentRoot();
   fillLines(parts.content, lineCount);
   return { root: parts.root, content: parts.content };
@@ -24,12 +24,12 @@ function content(lineCount: number): { root: HTMLElement; content: HTMLElement }
 
 describe("unwrappedSlice", () => {
   test("takes the contiguous run between the range's first and last line", () => {
-    const { content: column } = content(5);
+    const { content: column } = contentWithLines(5);
     expect(keys(unwrappedSlice(column, "data-line", [2, 3, 4]))).toEqual(["2", "3", "4"]);
   });
 
   test("absorbs an annotation row interleaved mid-range", () => {
-    const { root, content: column } = content(5);
+    const { root, content: column } = contentWithLines(5);
     openComment(root, 3);
     expect(keys(unwrappedSlice(column, "data-line", [2, 3, 4]))).toEqual([
       "2",
@@ -43,7 +43,7 @@ describe("unwrappedSlice", () => {
     // The trailing while-loop's whole purpose: the library emits the row after its own, so
     // stopping at `last` would draw a comment on the final line at a different width from
     // one on any other line of the same card.
-    const { root, content: column } = content(5);
+    const { root, content: column } = contentWithLines(5);
     openComment(root, 4);
     expect(keys(unwrappedSlice(column, "data-line", [2, 3, 4]))).toEqual([
       "2",
@@ -54,26 +54,26 @@ describe("unwrappedSlice", () => {
   });
 
   test("stops at a trailing sibling that is not an annotation row", () => {
-    const { content: column } = content(5);
+    const { content: column } = contentWithLines(5);
     const stray = document.createElement("div");
     column.insertBefore(stray, column.children[4] ?? null);
     expect(keys(unwrappedSlice(column, "data-line", [2, 3, 4]))).toEqual(["2", "3", "4"]);
   });
 
   test("refuses a range whose first line is absent", () => {
-    const { content: column } = content(5);
+    const { content: column } = contentWithLines(5);
     column.querySelector('[data-line="2"]')?.remove();
     expect(unwrappedSlice(column, "data-line", [2, 3, 4])).toBeNull();
   });
 
   test("refuses a range with a line missing mid-run", () => {
-    const { content: column } = content(5);
+    const { content: column } = contentWithLines(5);
     column.querySelector('[data-line="3"]')?.remove();
     expect(unwrappedSlice(column, "data-line", [2, 3, 4])).toBeNull();
   });
 
   test("refuses a range whose lines are out of order in the column", () => {
-    const { content: column } = content(5);
+    const { content: column } = contentWithLines(5);
     const third = column.querySelector('[data-line="3"]');
     const fourth = column.querySelector('[data-line="4"]');
     if (third !== null && fourth !== null) column.insertBefore(fourth, third);
@@ -83,7 +83,7 @@ describe("unwrappedSlice", () => {
   test("refuses a range whose rows are not all direct children", () => {
     // A nested row is one insertBefore would throw NotFoundError on, taking every
     // decoration below it down with the repaint pass.
-    const { content: column } = content(5);
+    const { content: column } = contentWithLines(5);
     const third = column.querySelector('[data-line="3"]');
     const wrapper = document.createElement("div");
     if (third !== null) {
@@ -94,7 +94,7 @@ describe("unwrappedSlice", () => {
   });
 
   test("refuses an empty range", () => {
-    const { content: column } = content(5);
+    const { content: column } = contentWithLines(5);
     expect(unwrappedSlice(column, "data-line", [])).toBeNull();
   });
 
