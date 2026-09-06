@@ -21,7 +21,13 @@ import { formatCommand } from "@/tasks/format.ts";
 import { lintCommand } from "@/tasks/lint.ts";
 import { setupCommands } from "@/tasks/setup.ts";
 import { smokePlan } from "@/tasks/smoke.ts";
-import { e2eCommand, resolveTestMode, type TestFlags, testCommand } from "@/tasks/test.ts";
+import {
+  batsCommand,
+  e2eCommand,
+  resolveTestMode,
+  type TestFlags,
+  testCommand,
+} from "@/tasks/test.ts";
 
 // The actions are injectable, so these drive the real commander tree (parsing,
 // defaults, coercion, passthrough) and capture what it would hand each run
@@ -158,6 +164,7 @@ describe("tasks CLI: passthrough forwarding", () => {
     [["test"], "test"],
     [["test", "unit"], "test"],
     [["test", "e2e"], "testE2e"],
+    [["test", "bats"], "testBats"],
     [["caret"], "caret"],
   ];
   for (const [commandPath, key] of cases) {
@@ -180,7 +187,7 @@ describe("tasks CLI: passthrough forwarding", () => {
 // receives: what commander kept, and what it forwarded to the runner.
 async function parseTestArgs(
   commandPath: string[],
-  actionKey: "test" | "testE2e",
+  actionKey: "test" | "testE2e" | "testBats",
   args: string[],
 ): Promise<{ args: string[]; flags: TestFlags }> {
   let captured: { args: string[]; flags: TestFlags } | undefined;
@@ -238,6 +245,26 @@ describe("tasks CLI: test output-mode flags", () => {
       expect(resolveTestMode(flags, true)).toBe("verbose");
     });
   }
+
+  // `bats` carries --json and nothing else. --quiet and --verbose exist on the
+  // other two because each runner's default is wrong in one direction; bats' TAP
+  // stream is already one line per test, so there is nothing to reduce and
+  // nothing to add. An unregistered flag forwards instead of parsing, which is
+  // what these assert.
+  test("test bats: --json parses, and the volume flags forward to bats instead", async () => {
+    expect(await parseTestArgs(["test", "bats"], "testBats", ["--json"])).toEqual({
+      args: [],
+      flags: { json: true },
+    });
+    expect(await parseTestArgs(["test", "bats"], "testBats", ["--quiet"])).toEqual({
+      args: ["--quiet"],
+      flags: {},
+    });
+    expect(await parseTestArgs(["test", "bats"], "testBats", ["--verbose"])).toEqual({
+      args: ["--verbose"],
+      flags: {},
+    });
+  });
 });
 
 describe("tasks CLI: task command lines", () => {
@@ -416,6 +443,31 @@ describe("tasks CLI: build pipeline command lines", () => {
       "test",
       "--grep",
       "smoke",
+    ]);
+  });
+
+  // `mise x --` rather than a bare `bats`: mise computes a task's PATH from the
+  // tools installed when it launched, so on a fresh clone whose bootstrap just
+  // installed bats that PATH is already stale — the same reasoning
+  // scripts/bootstrap.sh gives for `mise exec -- bun`.
+  test("test bats runs every scripts/ suite through mise, with forwarded args", () => {
+    expect(batsCommand([])).toEqual([
+      "mise",
+      "x",
+      "--",
+      "bats",
+      "--print-output-on-failure",
+      "scripts/",
+    ]);
+    expect(batsCommand(["--filter", "cold"])).toEqual([
+      "mise",
+      "x",
+      "--",
+      "bats",
+      "--print-output-on-failure",
+      "scripts/",
+      "--filter",
+      "cold",
     ]);
   });
 

@@ -101,9 +101,12 @@ export function e2eModeArgs(mode: TestOutputMode): string[] {
  * will version separately. */
 const REPORT_SCHEMA_VERSION = 1;
 
+/** The suites a run can target, each with its own runner. */
+export type TestTarget = "unit" | "e2e" | "bats";
+
 export interface TestReport {
   schemaVersion: number;
-  target: "unit" | "e2e";
+  target: TestTarget;
   /** The runner's own verdict — its exit code, never one re-derived from counts. */
   ok: boolean;
   passed: number;
@@ -119,7 +122,7 @@ export interface TestReport {
 }
 
 export interface TestReportInput {
-  target: "unit" | "e2e";
+  target: TestTarget;
   exitCode: number;
   durationMs: number;
   /** The runner's native report as written, read back from the file each runner
@@ -145,21 +148,32 @@ export function buildTestReport(input: TestReportInput): TestReport {
 
 /** Counts plus the report to nest, or null when the text isn't a report at all. */
 function parseNative(
-  target: "unit" | "e2e",
+  target: TestTarget,
   native: string,
 ): Pick<TestReport, "passed" | "failed" | "report"> | null {
-  return target === "unit" ? parseJUnit(native) : parsePlaywrightReport(native);
+  return target === "e2e" ? parsePlaywrightReport(native) : parseJUnit(native);
 }
 
-/** bun's junit reporter puts the whole-run totals on the root `<testsuites>`
- * element, so the counts are its attributes rather than a walk over the cases. */
+/** The JUnit dialect both bun and bats write, counted by summing the per-file
+ * `<testsuite>` elements. bun repeats its totals on the root `<testsuites>`, but
+ * bats leaves the root carrying only a `time` — so the sum is the only reading
+ * that serves both, and it agrees with bun's root by construction.
+ *
+ * The `\s` after `testsuite` is what excludes that root, which stays purely the
+ * "is this a report at all" gate. */
 function parseJUnit(xml: string): Pick<TestReport, "passed" | "failed" | "report"> | null {
-  const root = /<testsuites\b[^>]*>/.exec(xml)?.[0];
-  if (!root) return null;
-  const attr = (name: string): number =>
-    Number(new RegExp(`\\b${name}="(\\d+)"`).exec(root)?.[1] ?? 0);
-  const failed = attr("failures") + attr("errors");
-  return { passed: attr("tests") - failed - attr("skipped"), failed, report: stripAnsi(xml) };
+  if (!/<testsuites\b[^>]*>/.test(xml)) return null;
+  let tests = 0;
+  let failed = 0;
+  let skipped = 0;
+  for (const [suite] of xml.matchAll(/<testsuite\s[^>]*>/g)) {
+    const attr = (name: string): number =>
+      Number(new RegExp(`\\b${name}="(\\d+)"`).exec(suite)?.[1] ?? 0);
+    tests += attr("tests");
+    failed += attr("failures") + attr("errors");
+    skipped += attr("skipped");
+  }
+  return { passed: tests - failed - skipped, failed, report: stripAnsi(xml) };
 }
 
 /** Playwright's json reporter carries the whole-run totals under `stats`. */
@@ -298,6 +312,62 @@ export async function collectUnitJsonRun(
 async function runTestJson(args: string[]): Promise<never> {
   const startedAt = Date.now();
   return emitTestReport({ ...(await collectUnitJsonRun(args)), startedAt });
+}
+
+// --- test bats --------------------------------------------------------------
+// The hermetic shell suites under scripts/, each covering a shipped script the
+// other two runners cannot reach: the plugin entrypoint shim, the service
+// launcher, the dep-free bootstrap preamble.
+
+/** The argv `test bats` runs, plus forwarded args. `mise x --` rather than a bare
+ * `bats`: mise computes a task's PATH from the tools installed when it launched,
+ * so on a fresh clone whose bootstrap just installed bats that PATH is already
+ * stale — the same reasoning scripts/bootstrap.sh gives for `mise exec -- bun`.
+ * --print-output-on-failure adds `$output` to a failing case, which bats
+ * otherwise captures and discards.
+ *
+ * bats collects `*.bats` from a directory it is handed and de-duplicates a file
+ * already covered by one, so a forwarded path does NOT scope the run down —
+ * `--filter <regex>` is what scopes it. */
+export function batsCommand(args: string[]): string[] {
+  return ["mise", "x", "--", "bats", "--print-output-on-failure", "scripts/", ...args];
+}
+
+/**
+ * `collectUnitJsonRun`'s bats twin. One spawn and no more: bats depends on
+ * neither the generated palette nor a UI build, so nothing precedes it.
+ *
+ * bats writes its report INTO a directory rather than to a named file, and given
+ * one that does not exist it writes nothing and reports nothing — which mkdtemp
+ * already prevents.
+ */
+export async function collectBatsJsonRun(
+  args: string[],
+  run: typeof runCapture = runCapture,
+): Promise<Omit<TestReportInput, "durationMs">> {
+  let log = "";
+  const sink = (chunk: string): void => {
+    log += chunk;
+  };
+  const dir = mkdtempSync(join(tmpdir(), "caret-test-json-"));
+  const exitCode = await run(
+    batsCommand(["--report-formatter", "junit", "-o", dir, ...args]),
+    sink,
+  );
+  const reportPath = join(dir, "report.xml");
+  const native = existsSync(reportPath) ? readFileSync(reportPath, "utf8") : null;
+  rmSync(dir, { recursive: true, force: true });
+  return { target: "bats", exitCode, native, output: log };
+}
+
+async function runTestBatsJson(args: string[]): Promise<never> {
+  const startedAt = Date.now();
+  return emitTestReport({ ...(await collectBatsJsonRun(args)), startedAt });
+}
+
+export async function runTestBats(args: string[], flags: TestFlags = {}): Promise<never> {
+  if (flags.json) return runTestBatsJson(args);
+  return execAndExit(batsCommand(args));
 }
 
 // --- test e2e ---------------------------------------------------------------
