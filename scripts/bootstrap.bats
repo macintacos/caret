@@ -7,9 +7,11 @@
 # and asserts on what the fake `mise` was asked to do — and where it was asked to
 # do it.
 #
-#   mise x -- bats scripts/bootstrap.bats
+#   mise run test bats scripts/bootstrap.bats
 #
-# `run -<status>` asserts the exit code inline, which is why 1.5.0 is the floor.
+# No case asserts `run`'s own status: run_bootstrap ends in an `echo`, so that
+# status is the echo's, never the sourced script's. The script's return code
+# reaches the assertions as the `RC=` field of that echo instead.
 
 bats_require_minimum_version 1.5.0
 
@@ -91,14 +93,19 @@ run_bootstrap() {
   ' _ "$2/scripts/bootstrap.sh" "$BASH_BIN" <<<"${3-}"
 }
 
+# Read through `run`, never `$(mise_log)`: a bare command substitution inside `[ ]`
+# leaves a failure printing its own source line and nothing else, and the log it
+# compared against dies with $BATS_TEST_TMPDIR. Via `run` the value is $output, which
+# --print-output-on-failure then puts in front of whoever reads the red.
 mise_log() { cat "$stub/mise.log"; }
 
 @test "cold: installs everything at the root, stamps, and leaves the caller's cwd" {
   root="$(make_root)"
   stub="$(make_stub_path)"
-  run -0 run_bootstrap "$stub" "$root"
+  run run_bootstrap "$stub" "$root"
   [[ "$output" == *"MARKER=1 RC=0 PWD=[/]"* ]]
-  [ "$(mise_log)" = "install @ $root
+  run mise_log
+  [ "$output" = "install @ $root
 exec -- bun install @ $root
 exec -- bun ui/generate-palette-css.ts @ $root" ]
   [ -e "$root/node_modules/.caret-deps" ]
@@ -107,9 +114,10 @@ exec -- bun ui/generate-palette-css.ts @ $root" ]
 @test "cold failure: returns non-zero, marker unset, aborts before the bun steps" {
   root="$(make_root)"
   stub="$(make_stub_path 1)"
-  run -0 run_bootstrap "$stub" "$root"
+  run run_bootstrap "$stub" "$root"
   [[ "$output" == *"MARKER=unset RC=1"* ]]
-  [ "$(mise_log)" = "install @ $root" ]
+  run mise_log
+  [ "$output" = "install @ $root" ]
 }
 
 @test "warm+fresh: returns 0 without the marker and never invokes mise" {
@@ -119,7 +127,7 @@ exec -- bun ui/generate-palette-css.ts @ $root" ]
   touch_at "$root/package.json" "$OLD_MTIME"
   touch_at "$root/node_modules/.caret-deps" "$NEW_MTIME"
   stub="$(make_bun_stub_path)"
-  run -0 run_bootstrap "$stub" "$root"
+  run run_bootstrap "$stub" "$root"
   [[ "$output" == *"MARKER=unset RC=0"* ]]
   [ ! -e "$stub/mise.log" ]
 }
@@ -129,14 +137,14 @@ exec -- bun ui/generate-palette-css.ts @ $root" ]
   root="$(make_root)"
   mkdir -p "$root/node_modules"
   stub="$(make_stub_path)"
-  run -0 run_bootstrap "$stub" "$root"
+  run run_bootstrap "$stub" "$root"
   [[ "$output" == *"MARKER=1 RC=0"* ]]
 }
 
 @test "bun without node_modules still takes the cold path" {
   root="$(make_root)"
   stub="$(make_bun_stub_path)"
-  run -0 run_bootstrap "$stub" "$root"
+  run run_bootstrap "$stub" "$root"
   [[ "$output" == *"MARKER=1 RC=0"* ]]
 }
 
@@ -146,9 +154,10 @@ exec -- bun ui/generate-palette-css.ts @ $root" ]
 @test "cold: the install steps never read the caller's stdin" {
   root="$(make_root)"
   stub="$(make_stub_path)"
-  run -0 run_bootstrap "$stub" "$root" '{"kind":"review"}'
+  run run_bootstrap "$stub" "$root" '{"kind":"review"}'
   [[ "$output" == *"MARKER=1 RC=0"* ]]
-  [[ "$(mise_log)" != *"<stdin:"* ]]
+  run mise_log
+  [[ "$output" != *"<stdin:"* ]]
 }
 
 # A warm checkout with every mtime level; the caller then moves one manifest
@@ -175,9 +184,10 @@ seed_warm_stale() {
 @test "warm+stale (bun.lock): bun install alone at the root, then re-stamps" {
   seed_warm_stale
   touch_at "$root/bun.lock" "$NEW_MTIME"
-  run -0 run_bootstrap "$stub" "$root" '{"kind":"review"}'
+  run run_bootstrap "$stub" "$root" '{"kind":"review"}'
   [[ "$output" == *"MARKER=unset RC=0 PWD=[/]"* ]]
-  [ "$(mise_log)" = "exec -- bun install @ $root" ]
+  run mise_log
+  [ "$output" = "exec -- bun install @ $root" ]
   # Existence proves nothing here — the fixture back-dated a stamp to create the
   # staleness. The guard must have cleared, so the manifest is no longer ahead.
   [ ! "$root/bun.lock" -nt "$root/node_modules/.caret-deps" ]
@@ -186,9 +196,10 @@ seed_warm_stale() {
 @test "warm+stale (package.json): bun install alone at the root, then re-stamps" {
   seed_warm_stale
   touch_at "$root/package.json" "$NEW_MTIME"
-  run -0 run_bootstrap "$stub" "$root" '{"kind":"review"}'
+  run run_bootstrap "$stub" "$root" '{"kind":"review"}'
   [[ "$output" == *"MARKER=unset RC=0 PWD=[/]"* ]]
-  [ "$(mise_log)" = "exec -- bun install @ $root" ]
+  run mise_log
+  [ "$output" = "exec -- bun install @ $root" ]
   [ ! "$root/package.json" -nt "$root/node_modules/.caret-deps" ]
 }
 
@@ -200,9 +211,10 @@ seed_warm_stale() {
   mkdir -p "$root/node_modules"
   touch_at "$root/bun.lock" "$OLD_MTIME"
   stub="$(make_bun_stub_path)"
-  run -0 run_bootstrap "$stub" "$root"
+  run run_bootstrap "$stub" "$root"
   [[ "$output" == *"MARKER=unset RC=0"* ]]
-  [ "$(mise_log)" = "exec -- bun install @ $root" ]
+  run mise_log
+  [ "$output" = "exec -- bun install @ $root" ]
   [ -e "$root/node_modules/.caret-deps" ]
 }
 
@@ -211,7 +223,7 @@ seed_warm_stale() {
   mkdir -p "$root/node_modules"
   touch_at "$root/bun.lock" "$NEW_MTIME"
   stub="$(make_bun_stub_path 1 exec)"
-  run -0 run_bootstrap "$stub" "$root"
+  run run_bootstrap "$stub" "$root"
   [[ "$output" == *"MARKER=unset RC=1"* ]]
   [ ! -e "$root/node_modules/.caret-deps" ]
 }

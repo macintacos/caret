@@ -820,7 +820,7 @@ test("the e2e task runs quiet for --json and loud for the live display", () => {
 
 test("preflight caps the unit suite's worker count in either display", () => {
   // The entry point's own `--parallel` fans out across every core; inside the gate
-  // that starves the five siblings sharing the host, so a lower count is forwarded
+  // that starves the six siblings sharing the host, so a lower count is forwarded
   // after it and wins. Nothing about that depends on how the gate renders.
   expect(miseTaskCommand("test", "live")).toEqual(["run", "test", "--parallel=4"]);
   expect(miseTaskCommand("test", "json")).toEqual(["run", "test", "--parallel=4"]);

@@ -150,6 +150,21 @@ const FAILING_JUNIT = `<?xml version="1.0" encoding="UTF-8"?>
   </testsuite>
 </testsuites>`;
 
+// bun again, verbatim, for the shape the two fixtures above happen not to have: a
+// `describe`. bun nests a <testsuite> INSIDE the file's own for each one, so summing
+// every <testsuite> in the document counts each grouped test twice — 3 tests read as
+// 5. The root is the only element that states the run once.
+const NESTED_JUNIT = `<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="bun test" tests="3" assertions="3" failures="0" skipped="0" time="0.068682">
+  <testsuite name="nested.test.ts" file="nested.test.ts" tests="3" assertions="3" failures="0" skipped="0" time="0.049573" hostname="Mac.localdomain">
+    <testcase name="top level" classname="" time="0.000521" file="nested.test.ts" line="2" assertions="1" />
+    <testsuite name="a group" file="nested.test.ts" line="3" tests="2" assertions="2" failures="0" skipped="0" time="0" hostname="Mac.localdomain">
+      <testcase name="passes" classname="a group" time="0.000188" file="nested.test.ts" line="4" assertions="1" />
+      <testcase name="also passes" classname="a group" time="0.000079" file="nested.test.ts" line="5" assertions="1" />
+    </testsuite>
+  </testsuite>
+</testsuites>`;
+
 // bats 1.13.0's junit reporter, verbatim across two files: 4 tests, one skipped,
 // none failing. The root <testsuites> carries a `time` and NOTHING else — every
 // count sits on the per-file <testsuite> children — so a parser reading the root
@@ -268,6 +283,21 @@ describe("buildTestReport", () => {
       output: "",
     });
     expect(report.ok).toBe(false);
+    expect(report.failed).toBe(0);
+  });
+
+  // The one shape that tells the two readings apart. `mise run test --json` is the
+  // documented agent entry point, so an inflated count is a number a reader trusts
+  // and cannot check — worse than a red run.
+  test("unit: a describe's nested testsuite is not counted twice", () => {
+    const report = buildTestReport({
+      target: "unit",
+      exitCode: 0,
+      durationMs: 68,
+      native: NESTED_JUNIT,
+      output: "",
+    });
+    expect(report.passed).toBe(3);
     expect(report.failed).toBe(0);
   });
 

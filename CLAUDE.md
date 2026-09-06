@@ -143,15 +143,15 @@ README.
 
 `mise run test` (unit), `mise run test e2e` (Playwright) and `mise run test bats` (the
 hermetic shell suites under `scripts/`) are the entry points, and all three forward their
-arguments, so `mise run test <path>` scopes the run to one file. `bats` is the exception
-to that scoping: it collects `*.bats` from `scripts/` and de-duplicates a file already
-covered, so use `mise run test bats --filter <regex>` to narrow it.
+arguments, so `mise run test <path>` scopes the run to one file. On `bats` a named suite
+replaces the default `scripts/` rather than joining it; `--filter <regex>` narrows within
+whatever is selected.
 
 **`mise run test --json` is the call you want when you only need the verdict.** It emits
 one JSON document on stdout and nothing else — every child, the UI build included, runs
 captured — and the exit code is unchanged (`0` pass, non-zero fail):
 
-```json
+```text
 {"schemaVersion": 1, "target": "unit"|"e2e"|"bats", "ok", "passed", "failed", "durationMs", "report"}
 ```
 
@@ -162,9 +162,8 @@ applies. A **passing** run is that envelope and nothing else — about 120 bytes
 ran one file or all 4900. A **failing** run adds two fields: `report`, the runner's native
 report nested unnormalised (JUnit XML as a string for `unit` and `bats`, Playwright's json
 report as an object for `e2e`), and `output`, everything the runner wrote. Read `output`
-first on a `unit` failure — bun's JUnit reporter emits a bare `<failure type="…"/>` with
-no message, so the console stream is the only place the diff and the stack exist; bats'
-own `<failure>` carries the diagnosis. `report` is `null` when the runner produced none,
+first: it is the human-formatted stream. Both runners put the diagnosis in their XML too,
+but out of `&#10;`-escaped attributes. `report` is `null` when the runner produced none,
 and `output` still carries what it wrote, so a run that died early stays diagnosable.
 
 A failing whole-suite run is large — the native report grows with the number of tests, so

@@ -446,10 +446,7 @@ describe("tasks CLI: build pipeline command lines", () => {
     ]);
   });
 
-  // `mise x --` rather than a bare `bats`: mise computes a task's PATH from the
-  // tools installed when it launched, so on a fresh clone whose bootstrap just
-  // installed bats that PATH is already stale — the same reasoning
-  // scripts/bootstrap.sh gives for `mise exec -- bun`.
+  // Asserts the `mise x --` prefix batsCommand documents.
   test("test bats runs every scripts/ suite through mise, with forwarded args", () => {
     expect(batsCommand([])).toEqual([
       "mise",
@@ -469,6 +466,23 @@ describe("tasks CLI: build pipeline command lines", () => {
       "--filter",
       "cold",
     ]);
+  });
+
+  // bats does NOT de-duplicate a file already covered by a directory it was handed:
+  // it runs the file twice and, unfiltered, dies on a $BATS_TEST_TMPDIR collision. So
+  // a named suite REPLACES the directory, which is also what makes
+  // `mise run test <path>` mean the same thing on all three targets.
+  test("test bats: a named suite replaces the directory rather than adding to it", () => {
+    expect(batsCommand(["scripts/bootstrap.bats"])).toEqual([
+      "mise",
+      "x",
+      "--",
+      "bats",
+      "--print-output-on-failure",
+      "scripts/bootstrap.bats",
+    ]);
+    // A flag is not a suite, so the directory stays.
+    expect(batsCommand(["--filter", "cold"])).toContain("scripts/");
   });
 
   // The palette generator sits after `bun install` because it runs through bun;

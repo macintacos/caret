@@ -229,11 +229,15 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
   // contract (EXC-738/739), so these must precede the forwarded args — hence the
   // "(before forwarded args)" each description carries. unit and e2e share one
   // declaration so a reworded description cannot drift between them.
+  // `--json` is split out because all three targets carry it and only two carry the
+  // volume pair — one declaration each, so neither can drift.
+  const withJsonFlag = <Args extends unknown[], Opts extends OptionValues>(
+    cmd: Command<Args, Opts>,
+  ) => cmd.option("--json", "Emit one machine-readable result document (before forwarded args)");
   const withModeFlags = <Args extends unknown[], Opts extends OptionValues>(
     cmd: Command<Args, Opts>,
   ) =>
-    cmd
-      .option("--json", "Emit one machine-readable result document (before forwarded args)")
+    withJsonFlag(cmd)
       .option("--verbose", "Stream the runner's full output (before forwarded args)")
       .option("--quiet", "Show failures only (before forwarded args)");
   const test = program
@@ -259,21 +263,21 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
   ).action(async (args: string[], opts) => {
     await actions.testE2e(args, opts);
   });
-  // --json alone, not withModeFlags. The other two targets carry --quiet and
+  // withJsonFlag, not withModeFlags. The other two targets carry --quiet and
   // --verbose because each runner's default is wrong in one direction — bun
   // prints nothing between banner and summary, Playwright a line per spec. bats'
   // TAP stream is already one line per test, so there is nothing to reduce and
   // nothing to add, and a flag that does nothing is worse than no flag.
-  test
-    .command("bats")
-    .description("Run the hermetic shell suites under scripts/ (bats)")
-    .option("--json", "Emit one machine-readable result document (before forwarded args)")
-    .allowUnknownOption()
-    .passThroughOptions()
-    .argument("[args...]", "forwarded to bats")
-    .action(async (args: string[], opts) => {
-      await actions.testBats(args, opts);
-    });
+  withJsonFlag(
+    test
+      .command("bats")
+      .description("Run the hermetic shell suites under scripts/ (bats)")
+      .allowUnknownOption()
+      .passThroughOptions()
+      .argument("[args...]", "forwarded to bats"),
+  ).action(async (args: string[], opts) => {
+    await actions.testBats(args, opts);
+  });
 
   program
     .command("setup")
@@ -336,7 +340,7 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
   program
     .command("preflight")
     .description(
-      "Pre-push gate: lint, unit + e2e tests, build, and artifact smoke, run concurrently",
+      "Pre-push gate: lint, unit + shell + e2e tests, build, and artifact smoke, run concurrently",
     )
     .option(
       "--json",

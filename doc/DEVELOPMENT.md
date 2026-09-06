@@ -380,12 +380,12 @@ runner's own exit code. What rides along depends on the verdict, the same way
 alone, because a green run's native report says only what `passed` already says and costs
 megabytes to say it. A **failing** run adds `report` — the runner's native report nested
 unnormalised, JUnit XML as a string for `unit` and `bats`, Playwright's json report as an
-object for `e2e` — and `output`, everything the runner wrote. On a `unit` failure `output`
-is the one to read: bun's JUnit reporter writes a bare `<failure type="…"/>`, so the
-message and the stack exist only in the console stream; bats' own `<failure>` carries the
-diagnosis. A runner that produced no report at all yields `report: null` and still carries
-`output`. Everything the run spawns is captured in this mode, the UI build included, so
-the document is the only thing on stdout.
+object for `e2e` — and `output`, everything the runner wrote. `output` is the one to read:
+it is the human-formatted stream. Both JUnit writers put the diagnosis in the XML as well,
+but inside `&#10;`-escaped attributes rather than as something you can scan. A runner that
+produced no report at all yields `report: null` and still carries `output`. Everything the
+run spawns is captured in this mode, the UI build included, so the document is the only
+thing on stdout.
 
 The two JUnit writers split their counts differently, and one parser serves both: bun
 repeats the whole-run totals on the root `<testsuites>`, while bats leaves the root

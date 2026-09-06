@@ -5,7 +5,7 @@
 
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { ensureUi, paletteCssCommand } from "@/tasks/build.ts";
 import {
@@ -93,8 +93,8 @@ export function e2eModeArgs(mode: TestOutputMode): string[] {
 // envelope and the counts, nothing more, because a passing run's native report
 // says only what `passed` already says and costs 1.1MB of <testcase/> rows to say
 // it. A FAILING run carries both the native report and the captured output —
-// output because bun's junit reporter emits a bare `<failure type="…"/>` with no
-// message, so the console stream is the only place the diff and the stack exist.
+// output because it is the human-formatted stream: both runners put the diagnosis in
+// their XML too, but reading a diff out of `&#10;`-escaped attributes is not the job.
 
 /** Bumpable integer so a machine consumer detects a breaking shape change.
  * Numbered independently of scripts/preflight.ts's: separate contracts, which
@@ -116,8 +116,8 @@ export interface TestReport {
    * Playwright's JSON (e2e). Null on a passing run, where the envelope is the
    * whole answer, and on a run whose runner produced no report at all. */
   report: string | Record<string, unknown> | null;
-  /** Everything the runner wrote. Carried on every failing run — for `unit` it is
-   * the only place the failure detail exists — and never on a passing one. */
+  /** Everything the runner wrote. Carried on every failing run — it is where the
+   * failure reads as a human wrote it — and never on a passing one. */
   output?: string;
 }
 
@@ -154,19 +154,27 @@ function parseNative(
   return target === "e2e" ? parsePlaywrightReport(native) : parseJUnit(native);
 }
 
-/** The JUnit dialect both bun and bats write, counted by summing the per-file
- * `<testsuite>` elements. bun repeats its totals on the root `<testsuites>`, but
- * bats leaves the root carrying only a `time` — so the sum is the only reading
- * that serves both, and it agrees with bun's root by construction.
+/** The JUnit dialect both bun and bats write. The two put their counts in different
+ * places, and neither reading serves both:
  *
- * The `\s` after `testsuite` is what excludes that root, which stays purely the
- * "is this a report at all" gate. */
+ * bun states the whole run on the root `<testsuites>` — and also nests a
+ * `<testsuite>` inside the file's own for every `describe`, so summing elements
+ * counts each grouped test twice. bats leaves the root carrying only a `time` and
+ * puts every count on a per-file `<testsuite>`, so there the children are the only
+ * counts there are.
+ *
+ * Hence: read the root where it carries `tests`, sum the children where it does
+ * not. The `\s` after `testsuite` is what keeps the root out of that sum. */
 function parseJUnit(xml: string): Pick<TestReport, "passed" | "failed" | "report"> | null {
-  if (!/<testsuites\b[^>]*>/.test(xml)) return null;
+  const root = /<testsuites\b[^>]*>/.exec(xml)?.[0];
+  if (!root) return null;
+  const counted = /\btests="/.test(root)
+    ? [root]
+    : [...xml.matchAll(/<testsuite\s[^>]*>/g)].map(([suite]) => suite);
   let tests = 0;
   let failed = 0;
   let skipped = 0;
-  for (const [suite] of xml.matchAll(/<testsuite\s[^>]*>/g)) {
+  for (const suite of counted) {
     const attr = (name: string): number =>
       Number(new RegExp(`\\b${name}="(\\d+)"`).exec(suite)?.[1] ?? 0);
     tests += attr("tests");
@@ -207,6 +215,30 @@ function stripAnsiDeep(value: unknown): unknown {
   return value;
 }
 
+/**
+ * Run something that writes its report into a throwaway directory, and read the
+ * report back. All three collectors need this and differ only in how the path
+ * reaches the runner — a `--reporter-outfile` flag, a `-o` directory, an env var —
+ * which is what `spawn` receives it for.
+ *
+ * The `finally` is not decoration: `Bun.spawn` throws synchronously when the binary
+ * is missing, so without it a host lacking `mise` or `bunx` leaks a temp directory
+ * per invocation.
+ */
+async function withReportFile(
+  basename: string,
+  spawn: (path: string) => Promise<number>,
+): Promise<{ exitCode: number; native: string | null }> {
+  const dir = mkdtempSync(join(tmpdir(), "caret-test-json-"));
+  const path = join(dir, basename);
+  try {
+    const exitCode = await spawn(path);
+    return { exitCode, native: existsSync(path) ? readFileSync(path, "utf8") : null };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 /** Write the result document as the only thing on stdout, then exit with the
  * runner's code. The write is flushed first: a failing run's native report clears
  * the pipe buffer many times over, and the exit would truncate it there. */
@@ -230,9 +262,9 @@ async function emitTestReport(
  * bun's own default is 5000, which sizes every test against an idle host. The lane's gate
  * is not one: inside `mise run preflight`, lint, both builds, the shell suites, the
  * Playwright suite and smoke all run alongside it. The slowest test this flag governs is
- * `test/scripts/dev-tui.test.ts`'s bounded-backlog case, which drives a real dev TUI
- * session — 2.7s standalone against 5.4s in-gate, where contention doubles it. 35s is
- * 6.5x the in-gate figure.
+ * `test/scripts/dev-tui.test.ts`'s bounded-backlog case, which writes MAX_LOG_LINES +
+ * 2000 lines through the TUI's ring buffer — 2.7s standalone against 5.4s in-gate,
+ * where contention doubles it. 35s is 6.5x the in-gate figure.
  *
  * A deadline is not a retry: the test still runs once and asserts the same thing, so
  * nothing is hidden — the budget only stops the suite asserting the machine was idle.
@@ -302,11 +334,9 @@ export async function collectUnitJsonRun(
   // it fails rather than reporting a suite that never ran.
   const palette = await run(paletteCssCommand(), sink);
   if (palette !== 0) return { target: "unit", exitCode: palette, native: null, output: log };
-  const dir = mkdtempSync(join(tmpdir(), "caret-test-json-"));
-  const junitPath = join(dir, "report.xml");
-  const exitCode = await run(testCommand([...unitModeArgs("json", junitPath), ...args]), sink);
-  const native = existsSync(junitPath) ? readFileSync(junitPath, "utf8") : null;
-  rmSync(dir, { recursive: true, force: true });
+  const { exitCode, native } = await withReportFile("report.xml", (junitPath) =>
+    run(testCommand([...unitModeArgs("json", junitPath), ...args]), sink),
+  );
   return { target: "unit", exitCode, native, output: log };
 }
 
@@ -327,11 +357,23 @@ async function runTestJson(args: string[]): Promise<never> {
  * --print-output-on-failure adds `$output` to a failing case, which bats
  * otherwise captures and discards.
  *
- * bats collects `*.bats` from a directory it is handed and de-duplicates a file
- * already covered by one, so a forwarded path does NOT scope the run down —
- * `--filter <regex>` is what scopes it. */
+ * A forwarded suite REPLACES `scripts/` rather than joining it: bats does not
+ * de-duplicate a file already covered by a directory it was handed — it runs the
+ * file twice and then dies on a `$BATS_TEST_TMPDIR` collision. Dropping the
+ * directory is also what makes `mise run test <path>` mean the same thing here as
+ * on `unit` and `e2e`. Flags are not suites, so `--filter <regex>` still narrows
+ * the whole directory.
+ *
+ * The lane's floor is ~35s on any host: `caret-launcher.bats` waits out three of the
+ * launcher's real probe windows, which is wall clock rather than CPU, so no amount of
+ * headroom shortens it. That is what makes it an IMMEDIATE lane nothing waits on.
+ *
+ * It carries no deadline, deliberately: bats' own `BATS_TEST_TIMEOUT` shells out to
+ * GNU `timeout`, which a stock macOS does not have. A subject that regresses into an
+ * unbounded wait hangs the gate rather than failing it. */
 export function batsCommand(args: string[]): string[] {
-  return ["mise", "x", "--", "bats", "--print-output-on-failure", "scripts/", ...args];
+  const targets = args.some((a) => a.endsWith(".bats")) ? [] : ["scripts/"];
+  return ["mise", "x", "--", "bats", "--print-output-on-failure", ...targets, ...args];
 }
 
 /**
@@ -350,14 +392,10 @@ export async function collectBatsJsonRun(
   const sink = (chunk: string): void => {
     log += chunk;
   };
-  const dir = mkdtempSync(join(tmpdir(), "caret-test-json-"));
-  const exitCode = await run(
-    batsCommand(["--report-formatter", "junit", "-o", dir, ...args]),
-    sink,
+  // bats names the file itself, so `-o` takes the directory the path sits in.
+  const { exitCode, native } = await withReportFile("report.xml", (reportPath) =>
+    run(batsCommand(["--report-formatter", "junit", "-o", dirname(reportPath), ...args]), sink),
   );
-  const reportPath = join(dir, "report.xml");
-  const native = existsSync(reportPath) ? readFileSync(reportPath, "utf8") : null;
-  rmSync(dir, { recursive: true, force: true });
   return { target: "bats", exitCode, native, output: log };
 }
 
@@ -366,7 +404,11 @@ async function runTestBatsJson(args: string[]): Promise<never> {
   return emitTestReport({ ...(await collectBatsJsonRun(args)), startedAt });
 }
 
-export async function runTestBats(args: string[], flags: TestFlags = {}): Promise<never> {
+/** `flags` is narrowed to what this target registers — the volume pair is not on it. */
+export async function runTestBats(
+  args: string[],
+  flags: Pick<TestFlags, "json"> = {},
+): Promise<never> {
   if (flags.json) return runTestBatsJson(args);
   return execAndExit(batsCommand(args));
 }
@@ -483,13 +525,11 @@ export async function collectE2eJsonRun(
       output: log + missingBrowsersMessage(missing),
     };
   }
-  const dir = mkdtempSync(join(tmpdir(), "caret-test-json-"));
-  const reportPath = join(dir, "report.json");
-  const exitCode = await run(e2eCommand([...e2eModeArgs("json"), ...args]), sink, {
-    env: { ...(process.env as Record<string, string>), PLAYWRIGHT_JSON_OUTPUT_FILE: reportPath },
-  });
-  const native = existsSync(reportPath) ? readFileSync(reportPath, "utf8") : null;
-  rmSync(dir, { recursive: true, force: true });
+  const { exitCode, native } = await withReportFile("report.json", (reportPath) =>
+    run(e2eCommand([...e2eModeArgs("json"), ...args]), sink, {
+      env: { ...(process.env as Record<string, string>), PLAYWRIGHT_JSON_OUTPUT_FILE: reportPath },
+    }),
+  );
   return { target: "e2e", exitCode, native, output: log };
 }
 

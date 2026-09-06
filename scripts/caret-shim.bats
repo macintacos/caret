@@ -5,7 +5,7 @@
 # shim resolves between (compiled bin/caret-native, the bun bundle dist/cli.js,
 # raw src/cli.ts) and asserts the shim execs the right one with argv intact.
 #
-#   mise x -- bats scripts/caret-shim.bats
+#   mise run test bats scripts/caret-shim.bats
 #
 # `run -<status>` asserts the exit code inline, which is why 1.5.0 is the floor.
 

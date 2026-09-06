@@ -394,8 +394,8 @@ on exactly these tests, the fourth green.
   `package.json`'s `test` — a mirror `test/scripts/tasks-cli.test.ts` enforces — exactly
   as `--conditions browser` (see `bunfig.toml`) and `--parallel` are. This is the gate's
   budget, and it rides the entry points the gate uses. 35s is 6.5x the slowest test it
-  governs — `test/scripts/dev-tui.test.ts`'s bounded-backlog case, 2.7s standalone against
-  5.4s in-gate.
+  governs — `test/scripts/dev-tui.test.ts`'s bounded-backlog case, which writes past the
+  TUI ring buffer's cap: 2.7s standalone against 5.4s in-gate.
 - **Intrinsically slow** — a per-test third argument, and one test has one: the shiki
   pattern sweep's `165_000`, 6x its 27s inside the gate at four workers (8.8s standalone),
   the same headroom the lane budget encodes. That form reaches EVERY entry point,
