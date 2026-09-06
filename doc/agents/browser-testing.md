@@ -152,6 +152,12 @@ The split mirrors the test layers:
   than slept through — `ui/src/lib/safeMode.ts` takes `now` / `graceMs` / `durationMs`
   options, which `safeMode.test.ts` drives deterministically. Follow that pattern for new
   timing logic so the behavior is unit-testable without an e2e.
+- **Units poll where the clock cannot be injected.** A fixed `settle(400)` before pressing
+  Enter reddened roughly one gate run in three: under contention the completion list can
+  paint at ~395ms, inside CodeMirror's 75ms `interactionDelay`, so Enter inserted a
+  newline rather than the completion. Poll with `until()` and wait
+  `allowCompletionAccept()` — both in `ui/support/helpers.ts`, called from
+  `ui/src/lib/markdownEditor.test.ts` — and never sleep at a deadline.
 
 ### Timeouts are budgets for the loaded host
 
@@ -161,9 +167,11 @@ own defaults — 30s per test, 5s per assertion — assume the suite owns the ho
 `mise run preflight` it does not: `lint` and `test` (unit) are already running when
 `test e2e` starts, `build bin` and `smoke` land during it, and six e2e workers each
 driving a browser tree plus a spawned daemon saturate the cores before any of that
-arrives. On a 12-core host the unit suite measures 31s standalone against 88s inside the
+arrives. On a 12-core host the unit suite measured 31s standalone against 88s inside the
 gate — 2.8x. That figure is the unit suite's; e2e's own factor was never measured, and
-2.8x is the working number the budgets are sized against.
+2.8x is the working number the budgets are sized against. Under `--parallel` the same pair
+reads 19s against 73s, but the gate caps the lane at four workers where standalone takes
+every core, so that ratio folds the cap into the contention and does not supersede 2.8x.
 
 **The contention is cross-task, landing on top of intra-e2e saturation the worker cap
 deliberately accepts.** Both halves are real and the distinction decides the fix: at the
@@ -373,20 +381,24 @@ transfers — a deadline is a budget for the loaded host, and `retries` is never
 — but the lane's own flake arrived from a direction none of it covers.
 
 **Two deadlines, and which one a slow test wants depends on WHY it is slow.** bun's own
-default is 5000ms, a quiet-host number. What breaks first under the gate is not the
+default is 5000ms, a quiet-host number. What broke first under the gate was not the
 CPU-heavy test but the SPAWN-heavy one: `test/scripts/dev-driver.test.ts` posts several
 plan versions through the real submit → reflow → store path and each reflow spawns rumdl,
-so it measures a few hundred ms standalone and crosses 5s in the gate — better than 10x,
+so it measured a few hundred ms standalone and crossed 5s in the gate — better than 10x,
 against a suite average nearer 2.8x. Observed twice independently: in this issue's own
 ten-run validation, and by EXC-1059, whose diff touched `test/e2e/` and one doc and so
 could not reach the unit suite at all — three of its four runs at one unchanged commit red
 on exactly these tests, the fourth green.
 
-- **Contended** — the lane's `--timeout 30000`, in `scripts/tasks/test.ts` and mirrored on
-  `package.json`'s `test`, exactly as `--conditions browser` is (see `bunfig.toml`). This
-  is the gate's budget, and it rides the entry points the gate uses.
+- **Contended** — the lane's `--timeout 35000`, in `scripts/tasks/test.ts` and mirrored on
+  `package.json`'s `test` — a mirror `test/scripts/tasks-cli.test.ts` enforces — exactly
+  as `--conditions browser` (see `bunfig.toml`) and `--parallel` are. This is the gate's
+  budget, and it rides the entry points the gate uses. 35s is 6x the slowest test it
+  governs — `test/scripts/install-shell.test.ts`'s bash suites, 4.7s standalone against
+  5.3s in-gate — rounded up to the nearest 5s.
 - **Intrinsically slow** — a per-test third argument, and one test has one: the shiki
-  pattern sweep's `60_000`, ~10s of real work. That form reaches EVERY entry point,
+  pattern sweep's `165_000`, 6x its 27s inside the gate at four workers (8.8s standalone),
+  the same headroom the lane budget encodes. That form reaches EVERY entry point,
   including a bare `bun test <file>`, which is what the lane flag cannot do — so a test
   that is genuinely slow needs it, and a test that is merely contended must not use it.
   Reaching for the literal to paper over contention buries the distinction.
@@ -398,7 +410,13 @@ a genuine hang is still bounded.
 **Do not try to unify them into one number.** `bunfig.toml`'s `[test]` has no `timeout`
 key — bun ignores one silently — and a preload calling `setDefaultTimeout`, which would
 reach all three entry points at once, applies to only some files of a multi-file run on
-bun 1.3. Both were tried and reverted.
+bun 1.4.0. Both were tried and reverted.
+
+**Isolation rides the same entry points.** `--parallel` implies `--isolate`, so the two
+flag-carrying forms give each file a fresh global and a bare `bun test <path>` does not: a
+file can pass under one form and fail under the other on cross-file state, and a
+host-level resource — a bound port, a fixed path, an external process — is a cross-file
+race under the flag rather than a sequential no-op.
 
 **A deadline inside a dependency is the same bug, without the error.** shiki defaults
 `tokenizeTimeLimit` to 500ms and spends it as wall clock inside vscode-textmate's scan

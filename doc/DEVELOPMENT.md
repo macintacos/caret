@@ -527,11 +527,12 @@ summary prints the same reason on a `scope:` line. This is also why the report
 `schemaVersion` is `2`: `ok` now means "every task that ran passed", not "all six passed".
 
 **Only _which tasks_ run is scoped — never which files a task sees.** Every task is still
-spawned as a bare `mise run <task>`, and `lint` in particular must keep scanning the whole
-tree: `rumdl` resolves an MD051 cross-file link fragment only when the file it points into
-is in the same scan, so a lint handed just the changed files would quietly stop checking
-every cross-file anchor whose target is unchanged. `doc/` is held together almost entirely
-by those links.
+spawned as `mise run <task>` with no file arguments (the gate's only extra argv is
+`--parallel=4` for `test` and, under `--json`, `--quiet` for `test e2e`), and `lint` in
+particular must keep scanning the whole tree: `rumdl` resolves an MD051 cross-file link
+fragment only when the file it points into is in the same scan, so a lint handed just the
+changed files would quietly stop checking every cross-file anchor whose target is
+unchanged. `doc/` is held together almost entirely by those links.
 
 #### Adding a task
 
