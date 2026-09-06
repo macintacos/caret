@@ -170,13 +170,13 @@ function parseNative(
 function parseJUnit(xml: string): Pick<TestReport, "passed" | "failed" | "report"> | null {
   const root = /<testsuites\b[^>]*>/.exec(xml)?.[0];
   if (!root) return null;
-  const counted = /\btests="/.test(root)
+  const suites = /\btests="/.test(root)
     ? [root]
     : [...xml.matchAll(/<testsuite\s[^>]*>/g)].map(([suite]) => suite);
   let tests = 0;
   let failed = 0;
   let skipped = 0;
-  for (const suite of counted) {
+  for (const suite of suites) {
     const attr = (name: string): number =>
       Number(new RegExp(`\\b${name}="(\\d+)"`).exec(suite)?.[1] ?? 0);
     tests += attr("tests");
