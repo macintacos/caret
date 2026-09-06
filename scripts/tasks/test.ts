@@ -366,13 +366,14 @@ async function runTestJson(args: string[]): Promise<never> {
  * on `unit` and `e2e`. Flags are not suites, so `--filter <regex>` still narrows
  * the whole directory.
  *
- * The lane's floor is ~35s on any host: `caret-launcher.bats` waits out three of the
- * launcher's real probe windows, which is wall clock rather than CPU, so no amount of
- * headroom shortens it. That is what makes it an IMMEDIATE lane nothing waits on.
+ * The lane's floor is ~35s: `caret-launcher.bats` waits out three of the launcher's
+ * real probe windows, which is wall clock rather than CPU, so host headroom does not
+ * shorten it. That is what makes it an IMMEDIATE lane nothing waits on.
  *
- * It carries no deadline, deliberately: bats' own `BATS_TEST_TIMEOUT` shells out to
- * GNU `timeout`, which a stock macOS does not have. A subject that regresses into an
- * unbounded wait hangs the gate rather than failing it. */
+ * It carries no per-test deadline yet, so a subject that regresses into an unbounded
+ * wait hangs the gate rather than failing it. `BATS_TEST_TIMEOUT` is what would bound
+ * it: bats implements the countdown in bash over `ps`/`pkill`, needing nothing a stock
+ * macOS lacks (EXC-1231). */
 export function batsCommand(args: string[]): string[] {
   const targets = args.some((a) => a.endsWith(".bats")) ? [] : ["scripts/"];
   return ["mise", "x", "--", "bats", "--print-output-on-failure", ...targets, ...args];
