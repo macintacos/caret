@@ -10,17 +10,15 @@ import { drainProcess } from "@test/support/cli-process.ts";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..");
 
-// The shell suites, each self-contained (mktemp fixtures, PATH stubs — no network,
-// no real installs). caret-shim covers the bin/caret entrypoint resolver;
-// caret-launcher covers the service launcher that resolves caret and bun at exec
-// time; bootstrap covers the dep-free preamble a task forwarder sources before bun.
-//
-// `.bats` is the target form (EXC-1230 converts the two remaining `.sh` suites);
-// both run here so the conversion lands one suite at a time.
+// The shell suites, each self-contained ($BATS_TEST_TMPDIR fixtures, PATH stubs —
+// no network, no real installs). caret-shim covers the bin/caret entrypoint
+// resolver; caret-launcher covers the service launcher that resolves caret and bun
+// at exec time; bootstrap covers the dep-free preamble a task forwarder sources
+// before bun.
 const SHELL_SUITES = [
   "scripts/caret-shim.bats",
   "scripts/caret-launcher.bats",
-  "scripts/bootstrap.test.sh",
+  "scripts/bootstrap.bats",
 ];
 
 // `mise x` rather than a bare `bats`: mise computes a task's PATH from the tools
@@ -29,10 +27,7 @@ const SHELL_SUITES = [
 // gives for `mise exec -- bun`. --print-output-on-failure adds `$output` to a
 // failing case, which bats otherwise captures and discards.
 function commandFor(rel: string): string[] {
-  const path = join(REPO_ROOT, rel);
-  return rel.endsWith(".bats")
-    ? ["mise", "x", "--", "bats", "--print-output-on-failure", path]
-    : ["bash", path];
+  return ["mise", "x", "--", "bats", "--print-output-on-failure", join(REPO_ROOT, rel)];
 }
 
 // Most of these spawn only short-lived bash subprocesses, but caret-launcher sleeps
