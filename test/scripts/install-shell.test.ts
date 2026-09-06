@@ -21,8 +21,9 @@ const SHELL_SUITES = [
   "scripts/bootstrap.test.sh",
 ];
 
-// Each suite spawns several short-lived bash subprocesses of its own; give a
-// generous ceiling so a busy machine running the suites concurrently never flakes.
+// Most of these spawn only short-lived bash subprocesses, but caret-launcher sleeps
+// through three 10s probe budgets — it tests a real wall-clock window — so its floor is
+// ~32s and it is what this ceiling has to clear on a busy machine.
 const SUITE_TIMEOUT_MS = 60_000;
 
 async function runSuite(rel: string): Promise<{ exit: number; output: string }> {

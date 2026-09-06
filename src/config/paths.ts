@@ -47,7 +47,11 @@ export function launcherPath(): string {
   return `${stateDir()}/bin/caret`;
 }
 
-/** Single-value records the launcher reads at exec time. */
+/** Single-value records the launcher reads at exec time: `bun-path` (written here),
+ * `pinned-root` (EXC-1168), `service` (EXC-1167). One line each, newline-terminated —
+ * the launcher's `read -r` reports EOF without one and treats the record as absent.
+ * `service` is the launchd label WITHOUT `.plist` on macOS and the full unit name WITH
+ * `.service` on Linux; only macOS appends a suffix. */
 export function launcherRecordDir(): string {
   return `${stateDir()}/launcher`;
 }

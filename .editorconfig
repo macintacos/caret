@@ -14,8 +14,9 @@ indent_size = 2
 indent_style = space
 indent_size = 2
 
-# So is the extensionless plugin entrypoint shim.
-[bin/caret]
+# So are the extensionless shims. A glob rather than one section per file: bin/
+# also holds generated binaries, and shfmt only ever reads the shell ones.
+[bin/*]
 indent_style = space
 indent_size = 2
 

@@ -16,7 +16,11 @@
 #
 #   bun-path     absolute `bun`, recorded at service-install time
 #   pinned-root  a caret root to prefer over the highest installed version
-#   service      the launchd label / systemd unit name, for teardown
+#   service      the launchd label WITHOUT `.plist` on macOS; the full unit name
+#                WITH `.service` on Linux. Only macOS appends a suffix below.
+#
+# Each record must end with a newline: `read -r` reports EOF on a file without
+# one, and the read is what decides the record exists.
 
 set -euo pipefail
 
@@ -26,129 +30,148 @@ claude_roots="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache/caret/caret"
 opencode_roots="${XDG_CACHE_HOME:-$HOME/.cache}/opencode/packages/@macintacos"
 
 read_record() {
-	local value
-	[ -f "$1" ] && read -r value <"$1" && [ -n "$value" ] && printf '%s' "$value"
+  local value
+  [ -f "$1" ] && read -r value <"$1" && [ -n "$value" ] && printf '%s' "$value"
 }
 
 # Highest of the `<version><TAB><path>` lines on stdin. A numeric field sort
-# rather than `sort -V`, which BSD sort does not carry everywhere. Ceiling: a
-# prerelease suffix would sort by its numeric prefix.
+# rather than `sort -V`, which BSD sort does not carry everywhere. Ceiling: on an
+# equal numeric prefix the whole-line tiebreak puts a prerelease ABOVE the stable
+# release, so 0.15.0-rc.1 would beat 0.15.0. caret publishes no prereleases.
 highest() { sort -t. -k1,1n -k2,2n -k3,3n | tail -1 | cut -f2-; }
 
-# A candidate is a caret when it ships bin/caret — the one file every install
-# method carries. Version comes from package.json, never the directory name:
-# OpenCode names its dir after the verbatim `plugin` specifier.
+# A candidate is a caret when it ships an executable bin/caret — the one file
+# every install method carries, tested the way it is used, since a non-executable
+# one would exec-fail at 126 and the supervisor would respawn into it forever.
+# Version comes from package.json, never the directory name: OpenCode names its
+# dir after the verbatim `plugin` specifier. The key is anchored so a minified
+# manifest yields nothing rather than a later key's value — a miss falls into the
+# branch that names the directory, a wrong version picks the wrong caret.
 candidate_version() {
-	[ -f "$1/bin/caret" ] || return 1
-	sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$1/package.json" 2>/dev/null | head -1
+  [ -x "$1/bin/caret" ] || return 1
+  sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$1/package.json" 2>/dev/null | head -1
 }
 
 # Every dir either cache offers, runnable caret or not — the difference between
 # a broken install (terminal) and an empty cache (eviction). The OpenCode entry
 # is a two-line npm project, not a caret root; the root is one level down.
 candidate_dirs() {
-	local dir
-	for dir in "$claude_roots"/* "$opencode_roots"/caret*/node_modules/@macintacos/caret; do
-		if [ -d "$dir" ]; then printf '%s\n' "$dir"; fi
-	done
+  local dir
+  for dir in "$claude_roots"/* "$opencode_roots"/caret*/node_modules/@macintacos/caret; do
+    if [ -d "$dir" ]; then printf '%s\n' "$dir"; fi
+  done
 }
 
 candidates() {
-	local dir version
-	candidate_dirs | while read -r dir; do
-		version="$(candidate_version "$dir" || true)"
-		if [ -n "$version" ]; then printf '%s\t%s\n' "$version" "$dir"; fi
-	done
+  local dir version
+  candidate_dirs | while read -r dir; do
+    version="$(candidate_version "$dir" || true)"
+    if [ -n "$version" ]; then printf '%s\t%s\n' "$version" "$dir"; fi
+  done
 }
 
 resolve_root() {
-	local pin
-	pin="$(read_record "$records/pinned-root" || true)"
-	if [ -n "$pin" ] && [ -f "$pin/bin/caret" ]; then
-		printf '%s' "$pin"
-		return 0
-	fi
-	candidates | highest
+  local pin
+  pin="$(read_record "$records/pinned-root" || true)"
+  if [ -n "$pin" ] && [ -x "$pin/bin/caret" ]; then
+    printf '%s' "$pin"
+    return 0
+  fi
+  candidates | highest
 }
 
 # The newest mise-managed bun, for a machine whose mise shims are not on the
 # supervisor's PATH.
 mise_bun_dir() {
-	local dir
-	for dir in "$1"/mise/installs/bun/*/bin; do
-		if [ -x "$dir/bun" ]; then printf '%s\t%s\n' "$(basename "$(dirname "$dir")")" "$dir"; fi
-	done | highest
+  local dir
+  for dir in "$1"/mise/installs/bun/*/bin; do
+    if [ -x "$dir/bun" ]; then printf '%s\t%s\n' "$(basename "$(dirname "$dir")")" "$dir"; fi
+  done | highest
 }
 
 find_bun() {
-	local recorded dir dirs data="${XDG_DATA_HOME:-$HOME/.local/share}"
-	recorded="$(read_record "$records/bun-path" || true)"
-	if [ -n "$recorded" ] && [ -x "$recorded" ]; then
-		printf '%s' "$recorded"
-		return 0
-	fi
-	dirs=("$HOME/.bun/bin" /opt/homebrew/bin /usr/local/bin "$data/mise/shims"
-		"$(mise_bun_dir "$data")" "$HOME/.asdf/shims")
-	for dir in "${dirs[@]}"; do
-		if [ -n "$dir" ] && [ -x "$dir/bun" ]; then
-			printf '%s' "$dir/bun"
-			return 0
-		fi
-	done
-	printf 'caret-launcher: no bun at %s or under %s\n' "$records/bun-path" "${dirs[*]}" >&2
-	return 1
+  local recorded dir dirs data="${XDG_DATA_HOME:-$HOME/.local/share}"
+  recorded="$(read_record "$records/bun-path" || true)"
+  # A record naming something other than bun falls through to the search rather
+  # than short-circuiting it: an install running as the compiled binary records
+  # its own execPath, which is caret, not bun.
+  if [ -x "$recorded" ] && [ "$(basename "$recorded")" = bun ]; then
+    printf '%s' "$recorded"
+    return 0
+  fi
+  dirs=("$HOME/.bun/bin" /opt/homebrew/bin /usr/local/bin "$data/mise/shims"
+    "$(mise_bun_dir "$data")" "$HOME/.asdf/shims")
+  for dir in "${dirs[@]}"; do
+    if [ -n "$dir" ] && [ -x "$dir/bun" ]; then
+      printf '%s' "$dir/bun"
+      return 0
+    fi
+  done
+  printf 'caret-launcher: no bun (record %s: %s); searched %s\n' \
+    "$records/bun-path" "${recorded:-unset}" "${dirs[*]}" >&2
+  printf 'caret-launcher: install bun (https://bun.sh), then run: caret install\n' >&2
+  return 1
 }
 
 # launchd carries no per-status restart allowlist, so a launcher that cannot run
 # stops its own agent rather than being respawned into the same failure. The unit
 # file stays for a later `caret install`; systemd honours 78 on its own.
 stop_agent() {
-	local service
-	[ "$(uname)" = Darwin ] || return 0
-	service="$(read_record "$records/service" || true)"
-	if [ -n "$service" ]; then launchctl bootout "gui/$(id -u)/$service" || true; fi
+  local service
+  [ "$(uname)" = Darwin ] || return 0
+  service="$(read_record "$records/service" || true)"
+  if [ -n "$service" ]; then launchctl bootout "gui/$(id -u)/$service" || true; fi
 }
 
 # caret cannot outlive its own install: with no caret left anywhere, the launcher
-# tears its service down and deletes itself.
+# tears its service down and deletes itself. Returns non-zero without touching
+# anything when there is no `service` record — nothing here installed a
+# supervisor, so this launcher cannot know what still names it, and deleting
+# itself would leave whatever does respawning on ENOENT. Deleting only bin/ and
+# the records leaves prefs and review state for a reinstall.
 evict() {
-	local service unit
-	service="$(read_record "$records/service" || true)"
-	if [ -n "$service" ]; then
-		if [ "$(uname)" = Darwin ]; then
-			launchctl bootout "gui/$(id -u)/$service" || true
-			unit="$HOME/Library/LaunchAgents/$service.plist"
-		else
-			systemctl --user disable --now "$service" || true
-			unit="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/$service"
-		fi
-		rm -f "$unit"
-	fi
-	rm -rf "${state:?}/bin" "${state:?}/launcher"
-	exit 0
+  local service unit
+  service="$(read_record "$records/service" || true)"
+  [ -n "$service" ] || return 1
+  if [ "$(uname)" = Darwin ]; then
+    launchctl bootout "gui/$(id -u)/$service" || true
+    unit="$HOME/Library/LaunchAgents/$service.plist"
+  else
+    systemctl --user disable --now "$service" || true
+    unit="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/$service"
+  fi
+  printf 'caret-launcher: no caret installed anywhere; removing %s and %s.\n' \
+    "$unit" "$state/bin" >&2
+  rm -f "$unit"
+  rm -rf "${state:?}/bin" "${state:?}/launcher"
+  exit 0
 }
 
+# Only a total miss re-probes. A populated version dir with no runnable bin/caret
+# is far more likely a bad install than an extraction caught mid-flight, and that
+# path is recoverable with `caret install`; an empty cache is the one whose branch
+# deletes things, so it is the one worth waiting on.
 root="$(resolve_root)"
-# An empty cache can be an agent mid-upgrade; a cache holding a broken install
-# never is, so only a total miss is worth re-probing.
 for _ in 1 2; do
-	if [ -n "$root" ] || [ -n "$(candidate_dirs)" ]; then break; fi
-	sleep 5
-	root="$(resolve_root)"
+  if [ -n "$root" ] || [ -n "$(candidate_dirs)" ]; then break; fi
+  sleep 5
+  root="$(resolve_root)"
 done
 
 if [ -z "$root" ]; then
-	found="$(candidate_dirs)"
-	if [ -z "$found" ]; then evict; fi
-	printf 'caret-launcher: no bin/caret under any of:\n%s\n' "$found" >&2
-	stop_agent
-	exit 78
+  found="$(candidate_dirs)"
+  if [ -z "$found" ]; then evict || true; fi
+  printf 'caret-launcher: no runnable bin/caret under any of:\n%s\n' \
+    "${found:-(no install directories at all)}" >&2
+  printf 'caret-launcher: run: caret install — to restore the service.\n' >&2
+  stop_agent
+  exit 78
 fi
 
 bun="$(find_bun || true)"
 if [ -z "$bun" ]; then
-	stop_agent
-	exit 78
+  stop_agent
+  exit 78
 fi
 
 # bun's directory and nothing else — no CARET_*, and in particular never

@@ -300,8 +300,8 @@ hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/Ent
 commands/           /caret:demo · /caret:debug · /caret:discovery — Claude-adapter packaging (agent-specific behavioral prose)
 opencode/           the plugin OpenCode loads — the review tool, the planning steer, the config-hook mutation, and commands/ (the same three commands, rewritten for OpenCode) — OpenCode-adapter packaging
 test/               core/ (tool-agnostic suites) · adapters/<tool>/ (per-adapter suites + fixtures) · opencode/ (the repo-root opencode/ package) · e2e/ (Playwright) · structure/ (repo-shape invariants) · scripts/ (release + dev tooling) · support/ (shared scaffolding)
-scripts/            dev and release tooling for the checkout, plus the caret entrypoint shim's test
-bin/                the caret entrypoint shim (bin/caret) — the only tracked file here; a local build drops the compiled binary and the UI assets beside it
+scripts/            dev and release tooling for the checkout, plus the two committed shims' tests
+bin/                the caret entrypoint shim (bin/caret) and the service launcher (bin/caret-launcher) — the only tracked files here; a local build drops the compiled binary and the UI assets beside them
 ```
 
 The polished diff/compare viewer for plan versions is a planned fast-follow.

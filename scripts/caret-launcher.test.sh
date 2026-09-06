@@ -43,14 +43,16 @@ make_home() {
   printf '%s' "$home"
 }
 
-# A fake caret install at $1 declaring version $2. Its bin/caret echoes a tag, so
-# an assertion on the launcher's output names which root was exec'd.
+# A fake caret install at $1 declaring version $2. Its bin/caret echoes a tag and
+# the PATH it inherited, so an assertion names which root was exec'd and proves
+# the launcher's one load-bearing line — bun's dir prepended for a supervisor
+# whose PATH is bare.
 seed_caret() {
   mkdir -p "$1/bin"
   printf '{\n  "version": "%s"\n}\n' "$2" >"$1/package.json"
   cat >"$1/bin/caret" <<CARET
 #!$bash_bin
-echo "CARET $2 \$*"
+echo "CARET $2 \$* PATH=\$PATH"
 CARET
   chmod +x "$1/bin/caret"
 }
@@ -100,6 +102,7 @@ seed_caret "$home/.claude/plugins/cache/caret/caret/0.14.0" "0.14.0"
 seed_caret "$home/.claude/plugins/cache/caret/caret/0.11.1" "0.11.1"
 out="$(run_launcher "$home")"
 assert_contains "$out" "CARET 0.14.0" "highest version wins within one Claude root"
+assert_contains "$out" "PATH=$home/bin:" "bun's directory is prepended to the child's PATH"
 rm -rf "$home"
 
 # --- 2. highest version wins across both agents' roots --------------------
@@ -140,32 +143,40 @@ out="$(run_launcher "$home")"
 assert_contains "$out" "CARET 0.14.0" "a pin whose target is gone falls through to semver-max"
 
 # --- 6. argv reaches the resolved caret intact ----------------------------
+# Reuses case 5's machine, which already holds the 0.14.0 root.
 out="$(run_launcher "$home" daemon --port 42718)"
 assert_contains "$out" "CARET 0.14.0 daemon --port 42718" "argv is forwarded intact"
 rm -rf "$home"
 
 # --- 7. a machine with no bun fails terminally ----------------------------
-# Not hermetic against a real /opt/homebrew/bin/bun or /usr/local/bin/bun: the
-# launcher searches those absolutely, so the sandbox cannot hide them.
-home="$(make_home)"
-seed_caret "$home/.claude/plugins/cache/caret/caret/0.14.0" "0.14.0"
-out="$(run_launcher "$home")"
-rc=$?
-assert_status "$rc" 78 "a machine with no bun exits 78"
-assert_contains "$out" "no bun" "the missing-bun diagnostic names bun"
-assert_contains "$out" "$home/.bun/bin" "the missing-bun diagnostic names what it searched"
-rm -rf "$home"
+# `env -i` relocates HOME and the XDG roots, so four of the six search entries
+# land in the sandbox — but /opt/homebrew/bin and /usr/local/bin are absolute and
+# cannot be hidden. Skip rather than fail on a machine that has a bun there.
+if [ -x /opt/homebrew/bin/bun ] || [ -x /usr/local/bin/bun ]; then
+  ok "no-bun case skipped: a real bun sits on an absolute search path"
+else
+  home="$(make_home)"
+  seed_caret "$home/.claude/plugins/cache/caret/caret/0.14.0" "0.14.0"
+  out="$(run_launcher "$home")"
+  rc=$?
+  assert_status "$rc" 78 "a machine with no bun exits 78"
+  assert_contains "$out" "no bun" "the missing-bun diagnostic names bun"
+  assert_contains "$out" "$home/.bun/bin" "the missing-bun diagnostic names what it searched"
+  rm -rf "$home"
+fi
 
 # --- 8. a broken install fails terminally, without evicting or probing -----
 home="$(make_home)"
 stub_bun "$home"
+stub_service "$home"
+printf 'dev.excessive.caret\n' >"$home/.local/state/caret/launcher/service"
 broken="$home/.claude/plugins/cache/caret/caret/0.14.0"
 mkdir -p "$broken"
-printf '{ "version": "0.14.0" }\n' >"$broken/package.json"
+printf '{\n  "version": "0.14.0"\n}\n' >"$broken/package.json"
 start=$SECONDS
 out="$(run_launcher "$home")"
 rc=$?
-assert_status "$rc" 78 "a version dir with no bin/caret exits 78"
+assert_status "$rc" 78 "a version dir with no runnable bin/caret exits 78"
 assert_contains "$out" "$broken" "the diagnostic names the directory it rejected"
 assert_present "$home/.local/state/caret/launcher" "a broken install is not an eviction"
 if [ $((SECONDS - start)) -lt 5 ]; then
@@ -173,6 +184,17 @@ if [ $((SECONDS - start)) -lt 5 ]; then
 else
   fail "a broken install fails without re-probing (took $((SECONDS - start))s)"
 fi
+rm -rf "$home"
+
+# --- 8b. a bin/caret without the exec bit is as absent as a missing one ----
+# Resolving it would exec-fail at 126, which is neither the terminal nor the
+# eviction status, so the supervisor would respawn into it forever.
+home="$(make_home)"
+stub_bun "$home"
+seed_caret "$home/.claude/plugins/cache/caret/caret/0.14.0" "0.14.0"
+chmod -x "$home/.claude/plugins/cache/caret/caret/0.14.0/bin/caret"
+run_launcher "$home" >/dev/null
+assert_status "$?" 78 "a non-executable bin/caret exits 78 rather than exec-failing"
 rm -rf "$home"
 
 # --- 9. no caret anywhere evicts the launcher and its service -------------
@@ -191,7 +213,20 @@ assert_gone "$home/.local/state/caret/bin" "eviction removes the launcher"
 assert_gone "$home/.local/state/caret/launcher" "eviction removes the launcher records"
 rm -rf "$home"
 
+# --- 9b. without a service record the launcher never deletes itself --------
+# Nothing here installed a supervisor, so this launcher cannot know what still
+# names it; deleting itself would leave whatever does respawning on ENOENT.
+home="$(make_home)"
+stub_service "$home"
+mkdir -p "$home/.local/state/caret/bin"
+run_launcher "$home" >/dev/null
+assert_status "$?" 78 "no caret and no service record exits 78 rather than evicting"
+assert_present "$home/.local/state/caret/bin" "an unattributable launcher is not removed"
+rm -rf "$home"
+
 # --- 10. a caret that appears mid-probe is exec'd, not evicted ------------
+# The sleep has to land between two probes, so it tracks the launcher's own 5s
+# interval — change one and change the other.
 home="$(make_home)"
 stub_bun "$home"
 stub_service "$home"
