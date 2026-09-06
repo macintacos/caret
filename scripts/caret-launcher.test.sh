@@ -17,6 +17,18 @@ bash_bin="$(command -v bash)"
 # shellcheck source=/dev/null
 source "$test_dir/test-harness.sh"
 
+assert_status() {
+  if [ "$1" -eq "$2" ]; then ok "$3"; else fail "$3 (exit $1, want $2)"; fi
+}
+
+assert_gone() {
+  if [ -e "$1" ]; then fail "$2 (still there: $1)"; else ok "$2"; fi
+}
+
+assert_present() {
+  if [ -e "$1" ]; then ok "$2"; else fail "$2 (missing: $1)"; fi
+}
+
 # A throwaway machine with both agent cache roots and caret's state dir. The stub
 # PATH carries only the tools the launcher itself invokes.
 make_home() {
@@ -50,12 +62,31 @@ stub_bun() {
   printf '%s\n' "$1/bin/bun" >"$1/.local/state/caret/launcher/bun-path"
 }
 
+# launchctl / systemctl the launcher can call without touching the real machine.
+stub_service() {
+  local tool
+  for tool in launchctl systemctl; do
+    printf '#!/bin/sh\nexit 0\n' >"$1/bin/$tool"
+    chmod +x "$1/bin/$tool"
+  done
+}
+
+# The unit file the launcher derives from the `service` record on this OS.
+unit_path() {
+  if [ "$(uname)" = Darwin ]; then
+    printf '%s' "$1/Library/LaunchAgents/$2.plist"
+  else
+    printf '%s' "$1/.config/systemd/user/$2"
+  fi
+}
+
 run_launcher() {
   local home="$1"
   shift
   env -i PATH="$home/bin" HOME="$home" \
     XDG_STATE_HOME="$home/.local/state" \
     XDG_CACHE_HOME="$home/.cache" \
+    XDG_CONFIG_HOME="$home/.config" \
     CLAUDE_CONFIG_DIR="$home/.claude" \
     "$bash_bin" "$launcher" "$@" 2>&1
 }
@@ -111,6 +142,65 @@ assert_contains "$out" "CARET 0.14.0" "a pin whose target is gone falls through 
 # --- 6. argv reaches the resolved caret intact ----------------------------
 out="$(run_launcher "$home" daemon --port 42718)"
 assert_contains "$out" "CARET 0.14.0 daemon --port 42718" "argv is forwarded intact"
+rm -rf "$home"
+
+# --- 7. a machine with no bun fails terminally ----------------------------
+# Not hermetic against a real /opt/homebrew/bin/bun or /usr/local/bin/bun: the
+# launcher searches those absolutely, so the sandbox cannot hide them.
+home="$(make_home)"
+seed_caret "$home/.claude/plugins/cache/caret/caret/0.14.0" "0.14.0"
+out="$(run_launcher "$home")"
+rc=$?
+assert_status "$rc" 78 "a machine with no bun exits 78"
+assert_contains "$out" "no bun" "the missing-bun diagnostic names bun"
+assert_contains "$out" "$home/.bun/bin" "the missing-bun diagnostic names what it searched"
+rm -rf "$home"
+
+# --- 8. a broken install fails terminally, without evicting or probing -----
+home="$(make_home)"
+stub_bun "$home"
+broken="$home/.claude/plugins/cache/caret/caret/0.14.0"
+mkdir -p "$broken"
+printf '{ "version": "0.14.0" }\n' >"$broken/package.json"
+start=$SECONDS
+out="$(run_launcher "$home")"
+rc=$?
+assert_status "$rc" 78 "a version dir with no bin/caret exits 78"
+assert_contains "$out" "$broken" "the diagnostic names the directory it rejected"
+assert_present "$home/.local/state/caret/launcher" "a broken install is not an eviction"
+if [ $((SECONDS - start)) -lt 5 ]; then
+  ok "a broken install fails without re-probing"
+else
+  fail "a broken install fails without re-probing (took $((SECONDS - start))s)"
+fi
+rm -rf "$home"
+
+# --- 9. no caret anywhere evicts the launcher and its service -------------
+home="$(make_home)"
+stub_service "$home"
+mkdir -p "$home/.local/state/caret/bin"
+printf 'dev.excessive.caret\n' >"$home/.local/state/caret/launcher/service"
+unit="$(unit_path "$home" dev.excessive.caret)"
+mkdir -p "$(dirname "$unit")"
+touch "$unit"
+run_launcher "$home" >/dev/null
+rc=$?
+assert_status "$rc" 0 "a machine with no caret exits 0"
+assert_gone "$unit" "eviction removes the service unit file"
+assert_gone "$home/.local/state/caret/bin" "eviction removes the launcher"
+assert_gone "$home/.local/state/caret/launcher" "eviction removes the launcher records"
+rm -rf "$home"
+
+# --- 10. a caret that appears mid-probe is exec'd, not evicted ------------
+home="$(make_home)"
+stub_bun "$home"
+stub_service "$home"
+mkdir -p "$home/.local/state/caret/bin"
+(sleep 6 && seed_caret "$home/.claude/plugins/cache/caret/caret/0.14.0" "0.14.0") &
+out="$(run_launcher "$home")"
+wait
+assert_contains "$out" "CARET 0.14.0" "a caret that appears mid-probe is exec'd"
+assert_present "$home/.local/state/caret/bin" "a caret that appears mid-probe cancels the eviction"
 rm -rf "$home"
 
 summary caret-launcher.test.sh

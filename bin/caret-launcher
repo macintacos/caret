@@ -43,11 +43,19 @@ candidate_version() {
 	sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$1/package.json" 2>/dev/null | head -1
 }
 
-# The OpenCode cache entry is a two-line npm project, not a caret root; the root
-# is the dependency one level down.
+# Every dir either cache offers, runnable caret or not — the difference between
+# a broken install (terminal) and an empty cache (eviction). The OpenCode entry
+# is a two-line npm project, not a caret root; the root is one level down.
+candidate_dirs() {
+	local dir
+	for dir in "$claude_roots"/* "$opencode_roots"/caret*/node_modules/@macintacos/caret; do
+		if [ -d "$dir" ]; then printf '%s\n' "$dir"; fi
+	done
+}
+
 candidates() {
 	local dir version
-	for dir in "$claude_roots"/* "$opencode_roots"/caret*/node_modules/@macintacos/caret; do
+	candidate_dirs | while read -r dir; do
 		version="$(candidate_version "$dir" || true)"
 		if [ -n "$version" ]; then printf '%s\t%s\n' "$version" "$dir"; fi
 	done
@@ -73,26 +81,75 @@ mise_bun_dir() {
 }
 
 find_bun() {
-	local recorded dir data="${XDG_DATA_HOME:-$HOME/.local/share}"
+	local recorded dir dirs data="${XDG_DATA_HOME:-$HOME/.local/share}"
 	recorded="$(read_record "$records/bun-path" || true)"
 	if [ -n "$recorded" ] && [ -x "$recorded" ]; then
 		printf '%s' "$recorded"
 		return 0
 	fi
-	for dir in "$HOME/.bun/bin" /opt/homebrew/bin /usr/local/bin "$data/mise/shims" \
-		"$(mise_bun_dir "$data")" "$HOME/.asdf/shims"; do
+	dirs=("$HOME/.bun/bin" /opt/homebrew/bin /usr/local/bin "$data/mise/shims"
+		"$(mise_bun_dir "$data")" "$HOME/.asdf/shims")
+	for dir in "${dirs[@]}"; do
 		if [ -n "$dir" ] && [ -x "$dir/bun" ]; then
 			printf '%s' "$dir/bun"
 			return 0
 		fi
 	done
+	printf 'caret-launcher: no bun at %s or under %s\n' "$records/bun-path" "${dirs[*]}" >&2
 	return 1
 }
 
+# launchd carries no per-status restart allowlist, so a launcher that cannot run
+# stops its own agent rather than being respawned into the same failure. The unit
+# file stays for a later `caret install`; systemd honours 78 on its own.
+stop_agent() {
+	local service
+	[ "$(uname)" = Darwin ] || return 0
+	service="$(read_record "$records/service" || true)"
+	if [ -n "$service" ]; then launchctl bootout "gui/$(id -u)/$service" || true; fi
+}
+
+# caret cannot outlive its own install: with no caret left anywhere, the launcher
+# tears its service down and deletes itself.
+evict() {
+	local service unit
+	service="$(read_record "$records/service" || true)"
+	if [ -n "$service" ]; then
+		if [ "$(uname)" = Darwin ]; then
+			launchctl bootout "gui/$(id -u)/$service" || true
+			unit="$HOME/Library/LaunchAgents/$service.plist"
+		else
+			systemctl --user disable --now "$service" || true
+			unit="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/$service"
+		fi
+		rm -f "$unit"
+	fi
+	rm -rf "${state:?}/bin" "${state:?}/launcher"
+	exit 0
+}
+
 root="$(resolve_root)"
-[ -n "$root" ] || exit 78
+# An empty cache can be an agent mid-upgrade; a cache holding a broken install
+# never is, so only a total miss is worth re-probing.
+for _ in 1 2; do
+	if [ -n "$root" ] || [ -n "$(candidate_dirs)" ]; then break; fi
+	sleep 5
+	root="$(resolve_root)"
+done
+
+if [ -z "$root" ]; then
+	found="$(candidate_dirs)"
+	if [ -z "$found" ]; then evict; fi
+	printf 'caret-launcher: no bin/caret under any of:\n%s\n' "$found" >&2
+	stop_agent
+	exit 78
+fi
+
 bun="$(find_bun || true)"
-[ -n "$bun" ] || exit 78
+if [ -z "$bun" ]; then
+	stop_agent
+	exit 78
+fi
 
 # bun's directory and nothing else — no CARET_*, and in particular never
 # BUN_FEATURE_FLAG_NO_ORPHANS.
