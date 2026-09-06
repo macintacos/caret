@@ -7,6 +7,10 @@
     {
       "path": "../doc/agents/rumdl-rules.md",
       "description": "Read only when the diff touches a rumdl invocation or scripts/tasks/dev/fake-plan.md."
+    },
+    {
+      "path": "../doc/agents/test-layout.md",
+      "description": "Read only when the diff touches a scripts/*.bats shell suite — where each one belongs and why they sit outside test/."
     }
   ]
 }

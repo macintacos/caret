@@ -4,6 +4,7 @@ import { runForward } from "@/tasks/lib/exec.ts";
 import type { underProgressLine } from "@/tasks/lib/progress.ts";
 import {
   buildTestReport,
+  collectBatsJsonRun,
   collectE2eJsonRun,
   collectUnitJsonRun,
   e2eModeArgs,
@@ -118,8 +119,8 @@ describe("ensureUiForE2e", () => {
 });
 
 // The --json result document. A failing run nests the runner's native report
-// UNNORMALISED — JUnit XML text for unit, Playwright's parsed JSON for e2e — plus
-// the captured output; a passing run is the envelope and the counts alone.
+// UNNORMALISED — JUnit XML text for unit and bats, Playwright's parsed JSON for
+// e2e — plus the captured output; a passing run is the envelope and the counts alone.
 const ESC = String.fromCharCode(27);
 
 // bun 1.3.14's junit reporter, verbatim: 3 tests, one skipped, none failing. The
@@ -149,6 +150,54 @@ const FAILING_JUNIT = `<?xml version="1.0" encoding="UTF-8"?>
   </testsuite>
 </testsuites>`;
 
+// bun again, verbatim, for the shape the two fixtures above happen not to have: a
+// `describe`. bun nests a <testsuite> INSIDE the file's own for each one, so summing
+// every <testsuite> in the document counts each grouped test twice — 3 tests read as
+// 5. The root is the only element that states the run once.
+const NESTED_JUNIT = `<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="bun test" tests="3" assertions="3" failures="0" skipped="0" time="0.068682">
+  <testsuite name="nested.test.ts" file="nested.test.ts" tests="3" assertions="3" failures="0" skipped="0" time="0.049573" hostname="Mac.localdomain">
+    <testcase name="top level" classname="" time="0.000521" file="nested.test.ts" line="2" assertions="1" />
+    <testsuite name="a group" file="nested.test.ts" line="3" tests="2" assertions="2" failures="0" skipped="0" time="0" hostname="Mac.localdomain">
+      <testcase name="passes" classname="a group" time="0.000188" file="nested.test.ts" line="4" assertions="1" />
+      <testcase name="also passes" classname="a group" time="0.000079" file="nested.test.ts" line="5" assertions="1" />
+    </testsuite>
+  </testsuite>
+</testsuites>`;
+
+// bats 1.13.0's junit reporter, verbatim across two files: 4 tests, one skipped,
+// none failing. The root <testsuites> carries a `time` and NOTHING else — every
+// count sits on the per-file <testsuite> children — so a parser reading the root
+// reports 0/0 for every bats run, passing or failing.
+const PASSING_BATS_JUNIT = `<?xml version="1.0" encoding="UTF-8"?>
+<testsuites time="0.005">
+<testsuite name="caret-shim.bats" tests="3" failures="0" errors="0" skipped="1" time="0.004" timestamp="2026-09-06T15:02:12" hostname="Mac.localdomain">
+    <testcase classname="caret-shim.bats" name="passes" time="0.002" />
+    <testcase classname="caret-shim.bats" name="also passes" time="0.002" />
+    <testcase classname="caret-shim.bats" name="skipped" time="0">
+        <skipped>nope</skipped>
+    </testcase>
+
+</testsuite>
+<testsuite name="bootstrap.bats" tests="1" failures="0" errors="0" skipped="0" time="0.001" timestamp="2026-09-06T15:02:12" hostname="Mac.localdomain">
+    <testcase classname="bootstrap.bats" name="cold: installs everything" time="0.001" />
+
+</testsuite>
+</testsuites>`;
+
+// Also verbatim. Unlike bun's, bats' failure element carries the diagnosis.
+const FAILING_BATS_JUNIT = `<?xml version="1.0" encoding="UTF-8"?>
+<testsuites time="0.004">
+<testsuite name="caret-shim.bats" tests="2" failures="1" errors="0" skipped="0" time="0.004" timestamp="2026-09-06T15:02:12" hostname="Mac.localdomain">
+    <testcase classname="caret-shim.bats" name="passes" time="0.002" />
+    <testcase classname="caret-shim.bats" name="fails" time="0.002">
+        <failure type="failure">(in test file scripts/caret-shim.bats, line 2)
+  \`@test &quot;fails&quot; { false; }&#39; failed</failure>
+    </testcase>
+
+</testsuite>
+</testsuites>`;
+
 /** Playwright's json reporter, trimmed to the fields the envelope reads, with a
  * colorized failure message of the kind its reporters really emit. */
 const PLAYWRIGHT_REPORT = {
@@ -163,7 +212,7 @@ const PLAYWRIGHT_REPORT = {
 };
 
 describe("buildTestReport", () => {
-  test("unit: counts off the testsuites attributes", () => {
+  test("unit: counts summed off the testsuite elements", () => {
     const report = buildTestReport({
       target: "unit",
       exitCode: 0,
@@ -235,6 +284,53 @@ describe("buildTestReport", () => {
     });
     expect(report.ok).toBe(false);
     expect(report.failed).toBe(0);
+  });
+
+  // The one shape that tells the two readings apart. `mise run test --json` is the
+  // documented agent entry point, so an inflated count is a number a reader trusts
+  // and cannot check — worse than a red run.
+  test("unit: a describe's nested testsuite is not counted twice", () => {
+    const report = buildTestReport({
+      target: "unit",
+      exitCode: 0,
+      durationMs: 68,
+      native: NESTED_JUNIT,
+      output: "",
+    });
+    expect(report.passed).toBe(3);
+    expect(report.failed).toBe(0);
+  });
+
+  // The sum is not a stylistic choice: bats splits its counts across one
+  // <testsuite> per FILE and leaves the root carrying none, so 3 here is a
+  // number no root-attribute read can produce.
+  test("bats: counts summed across every file's testsuite element", () => {
+    const report = buildTestReport({
+      target: "bats",
+      exitCode: 0,
+      durationMs: 500,
+      native: PASSING_BATS_JUNIT,
+      output: "1..4",
+    });
+    expect(report.target).toBe("bats");
+    expect(report.ok).toBe(true);
+    expect(report.passed).toBe(3); // 3 + 1 tests, less the one skipped
+    expect(report.failed).toBe(0);
+  });
+
+  test("bats: a failing run nests the XML as a string and keeps the counts", () => {
+    const report = buildTestReport({
+      target: "bats",
+      exitCode: 1,
+      durationMs: 500,
+      native: FAILING_BATS_JUNIT,
+      output: "not ok 2 fails",
+    });
+    expect(report.ok).toBe(false);
+    expect(report.passed).toBe(1);
+    expect(report.failed).toBe(1);
+    expect(report.report).toBe(FAILING_BATS_JUNIT);
+    expect(report.output).toBe("not ok 2 fails");
   });
 
   test("e2e: counts off stats, report nested as the parsed object", () => {
@@ -309,10 +405,10 @@ describe("buildTestReport", () => {
   });
 });
 
-// The two json run paths, driven through their injected runner so the
-// orchestration is asserted without spawning bun or Playwright. Everything each
-// one spawns must go through that runner: a child that reached this process's
-// stdout would corrupt the document, and the fake would not see it.
+// The three json run paths, driven through their injected runner so the
+// orchestration is asserted without spawning bun, bats, or Playwright. Everything
+// each one spawns must go through that runner: a child that reached this
+// process's stdout would corrupt the document, and the fake would not see it.
 
 /** A `runCapture` stand-in: records each spawn, writes `emits` into the sink, and
  * returns whatever `code` decides for that command. */
@@ -373,6 +469,45 @@ describe("collectUnitJsonRun", () => {
     expect(collected.exitCode).toBe(1);
     expect(collected.native).toBeNull();
     expect(collected.output).toContain("[bun] ran");
+  });
+});
+
+describe("collectBatsJsonRun", () => {
+  // The unit and e2e paths each build something first — a palette, a UI. bats
+  // depends on neither, so its run is one spawn and nothing else.
+  test("runs bats alone, with no palette step and no UI build", async () => {
+    const { calls, run } = capturingCapture();
+    const collected = await collectBatsJsonRun([], run);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.cmd.slice(0, 4)).toEqual(["mise", "x", "--", "bats"]);
+    expect(collected.target).toBe("bats");
+    expect(collected.output).toContain("[mise] ran");
+  });
+
+  // bats writes its report into a DIRECTORY it is handed, and given one that
+  // does not exist it writes nothing and says nothing — so the directory has to
+  // exist before the spawn, which mkdtemp already guarantees.
+  test("points bats' junit reporter at a report directory", async () => {
+    const { calls, run } = capturingCapture();
+    await collectBatsJsonRun([], run);
+    const cmd = calls[0]?.cmd ?? [];
+    expect(cmd).toContain("--report-formatter");
+    expect(cmd).toContain("junit");
+    expect(cmd[cmd.indexOf("-o") + 1]).toMatch(/caret-test-json-/);
+  });
+
+  test("forwards its args to bats", async () => {
+    const { calls, run } = capturingCapture();
+    await collectBatsJsonRun(["--filter", "cold"], run);
+    expect(calls[0]?.cmd.slice(-2)).toEqual(["--filter", "cold"]);
+  });
+
+  test("a runner that wrote no report yields a null native and keeps the log", async () => {
+    const { run } = capturingCapture(() => 1);
+    const collected = await collectBatsJsonRun([], run);
+    expect(collected.exitCode).toBe(1);
+    expect(collected.native).toBeNull();
+    expect(collected.output).toContain("[mise] ran");
   });
 });
 

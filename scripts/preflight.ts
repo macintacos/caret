@@ -7,9 +7,9 @@
 // it). `lint`'s `hk check` step is the read-only one — it is the formatting
 // gate, and a lint failure points at `mise run format`.
 //
-// DAG: lint, test (unit), and `build ui` start immediately; `test e2e` and
-// `build bin` start once `build ui` passes; `smoke` starts once `build bin`
-// passes (EXC-914). The build-first ordering + skip mechanism live in the tasks
+// DAG: lint, test (unit), `build ui` and `test bats` start immediately;
+// `test e2e` and `build bin` start once `build ui` passes; `smoke` starts once
+// `build bin` passes (EXC-914). The build-first ordering + skip mechanism live in the tasks
 // CLI (scripts/tasks/build.ts), so each dependent is spawned with the skips that
 // let it reuse its gate's artifact: CARET_SKIP_BUILD_UI keeps the UI built at
 // exactly one run per gate (two concurrent Vite builds would otherwise race on
@@ -21,8 +21,8 @@
 //
 // Which of those tasks run is scoped to the diff (EXC-1042): a change confined
 // to Markdown runs `lint` alone, plus `test` when it touches Markdown a test
-// reads from disk. Everything else runs all six, as does a diff that cannot be
-// read at all.
+// reads from disk. Everything else runs all seven, as does a diff that cannot
+// be read at all.
 //
 // DI mirrors scripts/tasks/release/command.ts: the spawn collaborator is injected so
 // test/scripts/preflight.test.ts can drive the DAG without running real tasks.
@@ -88,7 +88,7 @@ export interface PreflightOutcome {
 export interface PreflightStartReport {
   event: "start";
   schemaVersion: number;
-  /** The tasks this run will spawn — a subset of the six when `selection.narrowed`. */
+  /** The tasks this run will spawn — a subset of the seven when `selection.narrowed`. */
   tasks: string[];
   /**
    * Why this task set (EXC-1042). A scoped run must never read as a full green
@@ -104,7 +104,7 @@ export interface PreflightTaskReport {
   name: string;
   status: TaskStatus;
   /** How long the task ran: 0 when it was skipped before ever spawning, and excluding
-   * time queued behind an upstream gate — so the six never sum to the gate's wall clock. */
+   * time queued behind an upstream gate — so the seven never sum to the gate's wall clock. */
   durationMs: number;
   /** Captured output, included per the verbosity / --grep / --task selection. */
   output?: string;
@@ -155,7 +155,9 @@ interface Dependent {
 
 const SKIP_UI = { CARET_SKIP_BUILD_UI: "1" } as const;
 
-const IMMEDIATE = ["lint", "test", "build ui"] as const;
+// `test bats` is last within IMMEDIATE: it gates nothing, and `build ui` gates the
+// dependents below.
+const IMMEDIATE = ["lint", "test", "build ui", "test bats"] as const;
 // ORDER IS LOAD-BEARING: listr2 fills its concurrency slots in array order, so a
 // task can only start once every task before it has started. `smoke` therefore
 // stays LAST — a gate capped below the task count (CARET_PREFLIGHT_JOBS=1) would
@@ -178,7 +180,7 @@ export type PreflightDisplay = "live" | "json";
  * matches — a flag folded into it would break all three.
  *
  * `test`'s worker cap is the gate's share of the host (EXC-1215). The entry point's own
- * `--parallel` takes every core — a 2.5x win standalone, a loss here: it starves the five
+ * `--parallel` takes every core — a 2.5x win standalone, a loss here: it starves the six
  * siblings, and on a 12-core host the median gate went 156s → 163s while lint took 2.6x
  * and `build ui` 2.2x longer. At 4 the gate's wall clock is indistinguishable from serial
  * — `test e2e` sets it, not this task — while the unit lane runs 119s → 72s, which is how
@@ -217,8 +219,9 @@ export function miseTaskCommand(name: string, display: PreflightDisplay): string
 
 // Bumpable integer so machine consumers detect a breaking shape change,
 // mirroring scripts/tasks/release/contract.ts. 2 (EXC-1042): the gate can now
-// run a subset, so `ok` means "every task that RAN passed" rather than "all six
-// passed" — a real semantic change for anything keying off the result document.
+// run a subset, so `ok` means "every task that RAN passed" rather than "every
+// task passed" — a real semantic change for anything keying off the result
+// document.
 const SCHEMA_VERSION = 2;
 
 // Diff-scoped task selection (EXC-1042) --------------------------------------

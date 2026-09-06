@@ -72,3 +72,7 @@ side to match the other.
   under `test/`, and its harness is `test/e2e/support/`, distinct from `test/support/`).
   The unit-vs-e2e split is governed by `browser-testing.md`; this file governs only the
   backend `test/` subtrees.
+- **Shell** — `scripts/*.bats`, beside the scripts they cover (`mise run test bats`), one
+  suite per shipped script: the plugin entrypoint shim, the service launcher, the
+  bootstrap preamble. They sit outside `test/` because their subject does, and because
+  bats collects them from the directory it is handed rather than from `test/`'s tree.

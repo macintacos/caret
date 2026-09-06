@@ -7,7 +7,7 @@
 # launcher shells out to. The subject runs under `env -i`, so nothing of the
 # developer's real environment leaks in.
 #
-#   mise x -- bats scripts/caret-launcher.bats
+#   mise run test bats scripts/caret-launcher.bats
 #
 # `run -<status>` asserts the exit code inline, which is why 1.5.0 is the floor.
 

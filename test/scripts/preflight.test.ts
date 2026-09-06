@@ -36,7 +36,7 @@ import {
 import { waitFor } from "@test/support/poll.ts";
 import { DEV_FIXTURES } from "@/tasks/dev/protocol.ts";
 
-const ALL_TASKS = ["build bin", "build ui", "lint", "smoke", "test", "test e2e"];
+const ALL_TASKS = ["build bin", "build ui", "lint", "smoke", "test", "test bats", "test e2e"];
 
 /** Fake spawner that resolves immediately from a per-task plan (default: pass). */
 function fakeSpawner(plan?: Record<string, SpawnOutcome>) {
@@ -77,7 +77,7 @@ async function releaseRemainingAndFinish(
   s: ReturnType<typeof gatedSpawner>,
   run: Promise<{ exitCode: number }>,
 ): Promise<void> {
-  for (const name of ["lint", "test", "test e2e", "smoke"]) s.release(name);
+  for (const name of ["lint", "test", "test bats", "test e2e", "smoke"]) s.release(name);
   const r = await run;
   expect(r.exitCode).toBe(0);
 }
@@ -93,16 +93,16 @@ test("all tasks pass: exit 0, every task reported passed, build ui spawned once"
   for (const name of ALL_TASKS) expect(r.summary).toContain(name);
 });
 
-test("lint, test, build ui start immediately; dependents wait for build ui", async () => {
+test("the immediate tasks start at once; dependents wait for build ui", async () => {
   const s = gatedSpawner();
   const run = runPreflight({ spawnTask: s.spawnTask, renderer: "silent" });
 
-  await waitForCond(() => s.calls.length === 3);
+  await waitForCond(() => s.calls.length === 4);
   await Bun.sleep(20); // would catch eagerly-spawned dependents
-  expect([...s.calls].sort()).toEqual(["build ui", "lint", "test"]);
+  expect([...s.calls].sort()).toEqual(["build ui", "lint", "test", "test bats"]);
 
   s.release("build ui");
-  await waitForCond(() => s.calls.length === 5);
+  await waitForCond(() => s.calls.length === 6);
   expect(s.calls).toContain("test e2e");
   expect(s.calls).toContain("build bin");
 
@@ -118,9 +118,9 @@ test("smoke waits for build bin, not merely build ui", async () => {
   const s = gatedSpawner();
   const run = runPreflight({ spawnTask: s.spawnTask, renderer: "silent" });
 
-  await waitForCond(() => s.calls.length === 3);
+  await waitForCond(() => s.calls.length === 4);
   s.release("build ui");
-  await waitForCond(() => s.calls.length === 5);
+  await waitForCond(() => s.calls.length === 6);
   await Bun.sleep(20); // would catch a smoke gated on `build ui`
   expect(s.calls).not.toContain("smoke");
 
@@ -144,6 +144,7 @@ test("concurrency 1: the whole gate still completes, in array order", async () =
     "lint",
     "test",
     "build ui",
+    "test bats",
     "test e2e",
     "build bin",
     "smoke",
@@ -360,6 +361,19 @@ test("a Markdown-only diff narrows the gate to lint alone", async () => {
   expect(selectTasks(["doc/CONFIGURING.md", "README.md"]).narrowed).toBe(true);
 });
 
+// The shell lane covers three scripts and reads no Markdown, so it has no stake
+// in a docs-only diff. selectTasks builds up from ["lint"], which already gives
+// this — the case is here so a future entry that pulled the lane in for Markdown
+// has to argue with a test rather than slip through.
+test("a Markdown-only diff leaves the shell lane out", async () => {
+  expect(selectTasks(["doc/RUNNING.md"]).tasks).toEqual(["lint"]);
+  expect(await spawnedFor(["doc/RUNNING.md"])).not.toContain("test bats");
+  // Even the entries that DO keep a suite in the narrowed gate leave it out.
+  for (const path of [...MARKDOWN_READ_BY_TESTS, ...MARKDOWN_READ_BY_E2E]) {
+    expect(selectTasks([path]).tasks).not.toContain("test bats");
+  }
+});
+
 // These are the Markdown files a unit test READS FROM DISK, so `test` can
 // observe a change to one even though every changed path is Markdown. One code
 // path, three separate reasons to exist — looping covers a fourth entry for free.
@@ -434,7 +448,7 @@ test("every MARKDOWN_READ_BY_TESTS entry still exists on disk", () => {
   }
 });
 
-test("a single non-Markdown path runs the full six-task gate", async () => {
+test("a single non-Markdown path runs the full seven-task gate", async () => {
   expect(await spawnedFor(["doc/CONFIGURING.md", "src/daemon.ts"])).toEqual(ALL_TASKS);
   expect(selectTasks(["doc/CONFIGURING.md", "src/daemon.ts"]).narrowed).toBe(false);
 });
@@ -519,7 +533,15 @@ test("buildStartReport echoes the parsed filters and lists planned tasks", () =>
   });
   expect(start.event).toBe("start");
   expect(start.schemaVersion).toBe(2);
-  expect(start.tasks).toEqual(["lint", "test", "build ui", "test e2e", "build bin", "smoke"]);
+  expect(start.tasks).toEqual([
+    "lint",
+    "test",
+    "build ui",
+    "test bats",
+    "test e2e",
+    "build bin",
+    "smoke",
+  ]);
   expect(start.filters).toEqual({ verbosity: 2, grep: "err", tasks: ["test"] });
   // No selection argument → the full gate, reported as such.
   expect(start.selection.narrowed).toBe(false);
@@ -555,6 +577,7 @@ test("buildResultReport level 0: passing tasks carry status only", async () => {
     "lint",
     "test",
     "build ui",
+    "test bats",
     "test e2e",
     "build bin",
     "smoke",
@@ -797,10 +820,18 @@ test("the e2e task runs quiet for --json and loud for the live display", () => {
 
 test("preflight caps the unit suite's worker count in either display", () => {
   // The entry point's own `--parallel` fans out across every core; inside the gate
-  // that starves the five siblings sharing the host, so a lower count is forwarded
+  // that starves the six siblings sharing the host, so a lower count is forwarded
   // after it and wins. Nothing about that depends on how the gate renders.
   expect(miseTaskCommand("test", "live")).toEqual(["run", "test", "--parallel=4"]);
   expect(miseTaskCommand("test", "json")).toEqual(["run", "test", "--parallel=4"]);
+});
+
+// The shell lane takes neither: bats has no worker count to cap, and its TAP
+// stream is already one line per test, so there is no volume flag to add either.
+test("preflight spawns the shell lane as a bare positional target", () => {
+  for (const display of ["live", "json"] as const) {
+    expect(miseTaskCommand("test bats", display)).toEqual(["run", "test", "bats"]);
+  }
 });
 
 test("preflight leaves every non-test task's argv untouched", () => {

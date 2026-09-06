@@ -33,7 +33,7 @@ import { runLint } from "@/tasks/lint.ts";
 import { buildReleaseCommand } from "@/tasks/release/command.ts";
 import { runSetup } from "@/tasks/setup.ts";
 import { runSmoke, runSmokeBin, runSmokeBundle } from "@/tasks/smoke.ts";
-import { runTest, runTestE2e, type TestFlags } from "@/tasks/test.ts";
+import { runTest, runTestBats, runTestE2e, type TestFlags } from "@/tasks/test.ts";
 
 import { type JsonArgs, runPreflightCli } from "../../scripts/preflight.ts";
 
@@ -51,6 +51,7 @@ export interface TaskActions {
   caret: (args: string[]) => Promise<unknown>;
   test: (args: string[], flags: TestFlags) => Promise<unknown>;
   testE2e: (args: string[], flags: TestFlags) => Promise<unknown>;
+  testBats: (args: string[], flags: TestFlags) => Promise<unknown>;
   setup: () => Promise<unknown>;
   smoke: () => Promise<unknown>;
   smokeBin: () => Promise<unknown>;
@@ -72,6 +73,7 @@ const realActions: TaskActions = {
   caret: runCaret,
   test: runTest,
   testE2e: runTestE2e,
+  testBats: runTestBats,
   setup: runSetup,
   smoke: runSmoke,
   smokeBin: runSmokeBin,
@@ -218,24 +220,29 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
     });
 
   // `test`: bare and `unit` run the bun unit suite (the default target); `e2e`
-  // runs the Playwright suite (building the UI first). Each forwards its own args
-  // — a path / --test-name-pattern for unit, a spec path / --grep for e2e — and
-  // carries the three output-mode flags (EXC-1146) as REAL options rather than
+  // runs the Playwright suite (building the UI first); `bats` runs the hermetic
+  // shell suites under scripts/. Each forwards its own args — a path /
+  // --test-name-pattern for unit, a spec path / --grep for e2e, --filter for bats
+  // — and carries its output-mode flags (EXC-1146) as REAL options rather than
   // passthrough, the way `preflight` carries its own --json. passThroughOptions
   // stops parsing at the first operand, which is what preserves the forwarding
   // contract (EXC-738/739), so these must precede the forwarded args — hence the
-  // "(before forwarded args)" each description carries. The two targets share one
+  // "(before forwarded args)" each description carries. unit and e2e share one
   // declaration so a reworded description cannot drift between them.
+  // `--json` is split out because all three targets carry it and only two carry the
+  // volume pair — one declaration each, so neither can drift.
+  const withJsonFlag = <Args extends unknown[], Opts extends OptionValues>(
+    cmd: Command<Args, Opts>,
+  ) => cmd.option("--json", "Emit one machine-readable result document (before forwarded args)");
   const withModeFlags = <Args extends unknown[], Opts extends OptionValues>(
     cmd: Command<Args, Opts>,
   ) =>
-    cmd
-      .option("--json", "Emit one machine-readable result document (before forwarded args)")
+    withJsonFlag(cmd)
       .option("--verbose", "Stream the runner's full output (before forwarded args)")
       .option("--quiet", "Show failures only (before forwarded args)");
   const test = program
     .command("test")
-    .description("Run tests: bare/`unit` = bun test, `e2e` = Playwright");
+    .description("Run tests: bare/`unit` = bun test, `e2e` = Playwright, `bats` = shell");
   withModeFlags(
     test
       .command("unit", { isDefault: true })
@@ -255,6 +262,21 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
       .argument("[args...]", "forwarded to playwright test"),
   ).action(async (args: string[], opts) => {
     await actions.testE2e(args, opts);
+  });
+  // withJsonFlag, not withModeFlags. The other two targets carry --quiet and
+  // --verbose because each runner's default is wrong in one direction — bun
+  // prints nothing between banner and summary, Playwright a line per spec. bats'
+  // TAP stream is already one line per test, so there is nothing to reduce and
+  // nothing to add, and a flag that does nothing is worse than no flag.
+  withJsonFlag(
+    test
+      .command("bats")
+      .description("Run the hermetic shell suites under scripts/ (bats)")
+      .allowUnknownOption()
+      .passThroughOptions()
+      .argument("[args...]", "forwarded to bats"),
+  ).action(async (args: string[], opts) => {
+    await actions.testBats(args, opts);
   });
 
   program
@@ -318,7 +340,7 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
   program
     .command("preflight")
     .description(
-      "Pre-push gate: lint, unit + e2e tests, build, and artifact smoke, run concurrently",
+      "Pre-push gate: lint, unit + shell + e2e tests, build, and artifact smoke, run concurrently",
     )
     .option(
       "--json",

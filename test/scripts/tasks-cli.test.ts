@@ -21,7 +21,13 @@ import { formatCommand } from "@/tasks/format.ts";
 import { lintCommand } from "@/tasks/lint.ts";
 import { setupCommands } from "@/tasks/setup.ts";
 import { smokePlan } from "@/tasks/smoke.ts";
-import { e2eCommand, resolveTestMode, type TestFlags, testCommand } from "@/tasks/test.ts";
+import {
+  batsCommand,
+  e2eCommand,
+  resolveTestMode,
+  type TestFlags,
+  testCommand,
+} from "@/tasks/test.ts";
 
 // The actions are injectable, so these drive the real commander tree (parsing,
 // defaults, coercion, passthrough) and capture what it would hand each run
@@ -148,7 +154,7 @@ async function parsePassthrough(
 }
 
 describe("tasks CLI: passthrough forwarding", () => {
-  // The `ui`/`unit`/`e2e` targets are positional subcommands of their group
+  // The `ui`/`unit`/`e2e`/`bats` targets are positional subcommands of their group
   // (`mise run build ui`), and bare `test` defaults to the unit target — all must
   // forward their raw argv (EXC-738/739).
   const cases: Array<[string[], keyof TaskActions]> = [
@@ -158,6 +164,7 @@ describe("tasks CLI: passthrough forwarding", () => {
     [["test"], "test"],
     [["test", "unit"], "test"],
     [["test", "e2e"], "testE2e"],
+    [["test", "bats"], "testBats"],
     [["caret"], "caret"],
   ];
   for (const [commandPath, key] of cases) {
@@ -175,12 +182,13 @@ describe("tasks CLI: passthrough forwarding", () => {
   }
 });
 
-// The `test` targets carry real --json/--verbose/--quiet options alongside their
-// passthrough argv (EXC-1146), so this captures both halves of what the action
-// receives: what commander kept, and what it forwarded to the runner.
+// The `test` targets each carry some of --json/--verbose/--quiet as real options
+// alongside their passthrough argv (EXC-1146), so this captures both halves of
+// what the action receives: what commander kept, and what it forwarded to the
+// runner.
 async function parseTestArgs(
   commandPath: string[],
-  actionKey: "test" | "testE2e",
+  actionKey: "test" | "testE2e" | "testBats",
   args: string[],
 ): Promise<{ args: string[]; flags: TestFlags }> {
   let captured: { args: string[]; flags: TestFlags } | undefined;
@@ -238,6 +246,26 @@ describe("tasks CLI: test output-mode flags", () => {
       expect(resolveTestMode(flags, true)).toBe("verbose");
     });
   }
+
+  // `bats` carries --json and nothing else. --quiet and --verbose exist on the
+  // other two because each runner's default is wrong in one direction; bats' TAP
+  // stream is already one line per test, so there is nothing to reduce and
+  // nothing to add. An unregistered flag forwards instead of parsing, which is
+  // what these assert.
+  test("test bats: --json parses, and the volume flags forward to bats instead", async () => {
+    expect(await parseTestArgs(["test", "bats"], "testBats", ["--json"])).toEqual({
+      args: [],
+      flags: { json: true },
+    });
+    expect(await parseTestArgs(["test", "bats"], "testBats", ["--quiet"])).toEqual({
+      args: ["--quiet"],
+      flags: {},
+    });
+    expect(await parseTestArgs(["test", "bats"], "testBats", ["--verbose"])).toEqual({
+      args: ["--verbose"],
+      flags: {},
+    });
+  });
 });
 
 describe("tasks CLI: task command lines", () => {
@@ -417,6 +445,45 @@ describe("tasks CLI: build pipeline command lines", () => {
       "--grep",
       "smoke",
     ]);
+  });
+
+  // Asserts the `mise x --` prefix batsCommand documents.
+  test("test bats runs every scripts/ suite through mise, with forwarded args", () => {
+    expect(batsCommand([])).toEqual([
+      "mise",
+      "x",
+      "--",
+      "bats",
+      "--print-output-on-failure",
+      "scripts/",
+    ]);
+    expect(batsCommand(["--filter", "cold"])).toEqual([
+      "mise",
+      "x",
+      "--",
+      "bats",
+      "--print-output-on-failure",
+      "scripts/",
+      "--filter",
+      "cold",
+    ]);
+  });
+
+  // bats does NOT de-duplicate a file already covered by a directory it was handed:
+  // it runs the file twice and, unfiltered, dies on a $BATS_TEST_TMPDIR collision. So
+  // a named suite REPLACES the directory, which is also what makes
+  // `mise run test <path>` mean the same thing on all three targets.
+  test("test bats: a named suite replaces the directory rather than adding to it", () => {
+    expect(batsCommand(["scripts/bootstrap.bats"])).toEqual([
+      "mise",
+      "x",
+      "--",
+      "bats",
+      "--print-output-on-failure",
+      "scripts/bootstrap.bats",
+    ]);
+    // A flag is not a suite, so the directory stays.
+    expect(batsCommand(["--filter", "cold"])).toContain("scripts/");
   });
 
   // The palette generator sits after `bun install` because it runs through bun;

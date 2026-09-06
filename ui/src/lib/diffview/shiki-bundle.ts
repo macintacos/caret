@@ -101,7 +101,7 @@ export const createCaretRegexEngine = () =>
  * exactly the wrong dependency for either surface. The first tokenize in a process
  * spends ~800ms translating a grammar's patterns (the engine compiles them lazily, and
  * the transpiler itself is JIT-cold), and under contention — `mise run preflight` runs
- * six tasks at once — even a warmed pass crosses 500ms.
+ * seven tasks at once — even a warmed pass crosses 500ms.
  *
  * `0` disables the check outright rather than raising it, because any finite budget is
  * the same bug with a different threshold. What replaces it is a bound on the INPUT:
