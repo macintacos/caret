@@ -11,9 +11,10 @@ manifest is the only one.)
 
 ## What actually ships
 
-`package.json`'s `files` array publishes `dist/`, `ui/dist/`, `bin/caret`, `hooks/`,
-`commands/`, `opencode/`, and `.claude-plugin/plugin.json`. The last three are JSON and
-Markdown data — they load nothing.
+`package.json`'s `files` array publishes `dist/`, `ui/dist/`, `bin/caret`,
+`bin/caret-launcher`, `hooks/`, `commands/`, `opencode/`, and
+`.claude-plugin/plugin.json`. The last three are JSON and Markdown data — they load
+nothing.
 
 - **`dist/cli.js`** is a `bun build --target=bun` bundle
   ([`../../scripts/tasks/build.ts`](../../scripts/tasks/build.ts)) that inlines every npm
@@ -23,6 +24,9 @@ Markdown data — they load nothing.
 - **`bin/caret`** is a bash shim over `bin/caret-native`, `dist/cli.js`, or `src/cli.ts`.
   Neither `bin/caret-native` nor `src/` is in `files`, so an npm install always lands on
   `dist/cli.js`; the other two branches exist for a build-from-source or dev checkout.
+- **`bin/caret-launcher`** is the only shipped file that is *copied out* of the package
+  rather than run from inside it: `caret install` writes it to a stable path under the
+  state dir, where a service unit names it and it resolves whichever caret is live.
 - **`opencode/`** is the one directory shipped as unbundled TypeScript, so its imports are
   the only ones a consumer's package manager has to resolve.
 

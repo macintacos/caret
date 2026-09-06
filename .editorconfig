@@ -5,7 +5,7 @@ root = true
 # of defaulting to tabs — keeping the repo's existing 2-space shell style. hk detects
 # shell by shebang as well as by extension, so every extensionless script it picks up
 # needs its own section below or shfmt will retab it.
-[*.{sh,bash}]
+[*.{sh,bash,bats}]
 indent_style = space
 indent_size = 2
 
@@ -14,8 +14,9 @@ indent_size = 2
 indent_style = space
 indent_size = 2
 
-# So is the extensionless plugin entrypoint shim.
-[bin/caret]
+# So are the extensionless shims. A glob rather than one section per file: bin/
+# also holds generated binaries, and shfmt only ever reads the shell ones.
+[bin/*]
 indent_style = space
 indent_size = 2
 
