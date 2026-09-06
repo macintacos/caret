@@ -13,8 +13,13 @@ const REPO_ROOT = join(import.meta.dir, "..", "..");
 
 // The bash suites, each self-contained (mktemp fixtures, PATH stubs — no network,
 // no real installs). caret-shim covers the bin/caret entrypoint resolver;
-// bootstrap covers the dep-free preamble a task forwarder sources before bun.
-const SHELL_SUITES = ["scripts/caret-shim.test.sh", "scripts/bootstrap.test.sh"];
+// caret-launcher covers the service launcher that resolves caret and bun at exec
+// time; bootstrap covers the dep-free preamble a task forwarder sources before bun.
+const SHELL_SUITES = [
+  "scripts/caret-shim.test.sh",
+  "scripts/caret-launcher.test.sh",
+  "scripts/bootstrap.test.sh",
+];
 
 // Each suite spawns several short-lived bash subprocesses of its own; give a
 // generous ceiling so a busy machine running the suites concurrently never flakes.

@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+#
+# The stable launcher a launchd plist or systemd unit names (EXC-1160). Those
+# units must name an absolute executable path, but caret's runtime lives at a
+# versioned path that changes on every upgrade — and both Claude Code and
+# OpenCode replace their copy on their own schedule, without running
+# `caret install`. So the unit names this file, which caret owns at
+# $XDG_STATE_HOME/caret/bin/caret, and resolution happens here at exec time.
+#
+# Bash rather than TypeScript for the same reason bin/caret is: it has to locate
+# `bun` before any TypeScript can run.
+#
+# Three single-value records under $XDG_STATE_HOME/caret/launcher/ steer it, each
+# one line, each optional — a missing record degrades to the search path, to no
+# pin, and to skipping service teardown:
+#
+#   bun-path     absolute `bun`, recorded at service-install time
+#   pinned-root  a caret root to prefer over the highest installed version
+#   service      the launchd label / systemd unit name, for teardown
+
+set -euo pipefail
+
+state="${XDG_STATE_HOME:-$HOME/.local/state}/caret"
+records="$state/launcher"
+claude_roots="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache/caret/caret"
+opencode_roots="${XDG_CACHE_HOME:-$HOME/.cache}/opencode/packages/@macintacos"
+
+read_record() {
+	local value
+	[ -f "$1" ] && read -r value <"$1" && [ -n "$value" ] && printf '%s' "$value"
+}
+
+# Highest of the `<version><TAB><path>` lines on stdin. A numeric field sort
+# rather than `sort -V`, which BSD sort does not carry everywhere. Ceiling: a
+# prerelease suffix would sort by its numeric prefix.
+highest() { sort -t. -k1,1n -k2,2n -k3,3n | tail -1 | cut -f2-; }
+
+# A candidate is a caret when it ships bin/caret — the one file every install
+# method carries. Version comes from package.json, never the directory name:
+# OpenCode names its dir after the verbatim `plugin` specifier.
+candidate_version() {
+	[ -f "$1/bin/caret" ] || return 1
+	sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$1/package.json" 2>/dev/null | head -1
+}
+
+# The OpenCode cache entry is a two-line npm project, not a caret root; the root
+# is the dependency one level down.
+candidates() {
+	local dir version
+	for dir in "$claude_roots"/* "$opencode_roots"/caret*/node_modules/@macintacos/caret; do
+		version="$(candidate_version "$dir" || true)"
+		if [ -n "$version" ]; then printf '%s\t%s\n' "$version" "$dir"; fi
+	done
+}
+
+resolve_root() {
+	local pin
+	pin="$(read_record "$records/pinned-root" || true)"
+	if [ -n "$pin" ] && [ -f "$pin/bin/caret" ]; then
+		printf '%s' "$pin"
+		return 0
+	fi
+	candidates | highest
+}
+
+# The newest mise-managed bun, for a machine whose mise shims are not on the
+# supervisor's PATH.
+mise_bun_dir() {
+	local dir
+	for dir in "$1"/mise/installs/bun/*/bin; do
+		if [ -x "$dir/bun" ]; then printf '%s\t%s\n' "$(basename "$(dirname "$dir")")" "$dir"; fi
+	done | highest
+}
+
+find_bun() {
+	local recorded dir data="${XDG_DATA_HOME:-$HOME/.local/share}"
+	recorded="$(read_record "$records/bun-path" || true)"
+	if [ -n "$recorded" ] && [ -x "$recorded" ]; then
+		printf '%s' "$recorded"
+		return 0
+	fi
+	for dir in "$HOME/.bun/bin" /opt/homebrew/bin /usr/local/bin "$data/mise/shims" \
+		"$(mise_bun_dir "$data")" "$HOME/.asdf/shims"; do
+		if [ -n "$dir" ] && [ -x "$dir/bun" ]; then
+			printf '%s' "$dir/bun"
+			return 0
+		fi
+	done
+	return 1
+}
+
+root="$(resolve_root)"
+[ -n "$root" ] || exit 78
+bun="$(find_bun || true)"
+[ -n "$bun" ] || exit 78
+
+# bun's directory and nothing else — no CARET_*, and in particular never
+# BUN_FEATURE_FLAG_NO_ORPHANS.
+PATH="$(dirname "$bun"):$PATH" exec "$root/bin/caret" "$@"

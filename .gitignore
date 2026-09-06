@@ -2,11 +2,13 @@
 node_modules/
 
 # Build artifacts. bin/ holds generated output (the compiled bin/caret-native
-# and its bin/ui sibling) EXCEPT bin/caret, the committed entrypoint shim that
-# every install ships (EXC-643). dist/ is the generated run-from-source bundle
+# and its bin/ui sibling) EXCEPT the two committed shims every install ships:
+# bin/caret, the plugin entrypoint (EXC-643), and bin/caret-launcher, the
+# service launcher (EXC-1160). dist/ is the generated run-from-source bundle
 # (shipped via npm `files`, never committed).
 bin/*
 !bin/caret
+!bin/caret-launcher
 ui/dist/
 dist/
 # Build-generated embed manifest (scripts/generate-ui-manifest.ts, run by
