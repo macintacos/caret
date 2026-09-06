@@ -155,7 +155,11 @@ interface Dependent {
 
 const SKIP_UI = { CARET_SKIP_BUILD_UI: "1" } as const;
 
-const IMMEDIATE = ["lint", "test", "build ui"] as const;
+// `test bats` goes last here for the same reason `smoke` is last overall: listr2
+// fills its slots in array order, and `build ui` gates three dependents, so a
+// gate capped below the task count must not push it behind a lane nothing waits
+// on.
+const IMMEDIATE = ["lint", "test", "build ui", "test bats"] as const;
 // ORDER IS LOAD-BEARING: listr2 fills its concurrency slots in array order, so a
 // task can only start once every task before it has started. `smoke` therefore
 // stays LAST — a gate capped below the task count (CARET_PREFLIGHT_JOBS=1) would
@@ -217,8 +221,9 @@ export function miseTaskCommand(name: string, display: PreflightDisplay): string
 
 // Bumpable integer so machine consumers detect a breaking shape change,
 // mirroring scripts/tasks/release/contract.ts. 2 (EXC-1042): the gate can now
-// run a subset, so `ok` means "every task that RAN passed" rather than "all six
-// passed" — a real semantic change for anything keying off the result document.
+// run a subset, so `ok` means "every task that RAN passed" rather than "every
+// task passed" — a real semantic change for anything keying off the result
+// document.
 const SCHEMA_VERSION = 2;
 
 // Diff-scoped task selection (EXC-1042) --------------------------------------
