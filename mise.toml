@@ -33,6 +33,7 @@ taplo       = "0"      # aqua:tamasfe/taplo
 shellcheck  = "0"      # aqua:koalaman/shellcheck
 shfmt       = "3.13"   # aqua:mvdan/sh
 "npm:jscpd" = "5"      # copy-paste detector; npm is the only distribution
+"npm:bats"  = "1"      # bash test runner
 
 # (Re)register git hooks whenever tools are installed or updated.
 [hooks]
