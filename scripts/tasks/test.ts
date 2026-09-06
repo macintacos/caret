@@ -1,7 +1,8 @@
-// `test` task group (EXC-739): the bun unit suite and the Playwright e2e suite,
-// consolidated into one command whose `unit`/`e2e` positional targets map to
-// `mise run test <target>`. Bare `mise run test` (and `mise run test unit`) run
-// the unit suite, preserving today's `mise run test == unit` behaviour.
+// `test` task group (EXC-739): the bun unit suite, the Playwright e2e suite, and
+// the hermetic bats suites, consolidated into one command whose `unit`/`e2e`/`bats`
+// positional targets map to `mise run test <target>`. Bare `mise run test` (and
+// `mise run test unit`) run the unit suite, preserving today's `mise run test ==
+// unit` behaviour.
 
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -84,9 +85,10 @@ export function e2eModeArgs(mode: TestOutputMode): string[] {
 
 // --- the --json result document ----------------------------------------------
 // One document per run, on stdout, and nothing else. The envelope is shared
-// between the two targets; a runner's native report is nested UNNORMALISED
-// beneath it — JUnit XML text for unit, Playwright's parsed JSON for e2e — so
-// this file never has to model what a "test result" is in two dialects.
+// across all three targets; a runner's native report is nested UNNORMALISED
+// beneath it — JUnit XML text for unit and bats, Playwright's parsed JSON for
+// e2e — so this file never has to model what a "test result" is in more than
+// two dialects.
 //
 // What rides along depends on the verdict, the same discipline
 // scripts/preflight.ts applies to its own --json result: a GREEN run is the
@@ -112,7 +114,7 @@ export interface TestReport {
   passed: number;
   failed: number;
   durationMs: number;
-  /** The runner's native report, unnormalised: JUnit XML text (unit) or
+  /** The runner's native report, unnormalised: JUnit XML text (unit, bats) or
    * Playwright's JSON (e2e). Null on a passing run, where the envelope is the
    * whole answer, and on a run whose runner produced no report at all. */
   report: string | Record<string, unknown> | null;

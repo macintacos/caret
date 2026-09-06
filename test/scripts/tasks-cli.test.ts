@@ -154,7 +154,7 @@ async function parsePassthrough(
 }
 
 describe("tasks CLI: passthrough forwarding", () => {
-  // The `ui`/`unit`/`e2e` targets are positional subcommands of their group
+  // The `ui`/`unit`/`e2e`/`bats` targets are positional subcommands of their group
   // (`mise run build ui`), and bare `test` defaults to the unit target — all must
   // forward their raw argv (EXC-738/739).
   const cases: Array<[string[], keyof TaskActions]> = [
@@ -182,9 +182,10 @@ describe("tasks CLI: passthrough forwarding", () => {
   }
 });
 
-// The `test` targets carry real --json/--verbose/--quiet options alongside their
-// passthrough argv (EXC-1146), so this captures both halves of what the action
-// receives: what commander kept, and what it forwarded to the runner.
+// The `test` targets each carry some of --json/--verbose/--quiet as real options
+// alongside their passthrough argv (EXC-1146), so this captures both halves of
+// what the action receives: what commander kept, and what it forwarded to the
+// runner.
 async function parseTestArgs(
   commandPath: string[],
   actionKey: "test" | "testE2e" | "testBats",

@@ -179,8 +179,8 @@ seed_warm_stale() {
 # far more often than the cold path ever did; a leaked byte shows up in the
 # exact-equality log check.
 #
-# The two manifests are separate cases rather than a loop, so bats isolates them
-# — the loop the .sh suite needed shared a root and a stub across both values.
+# The two manifests are separate cases rather than a loop: each @test gets its
+# own $BATS_TEST_TMPDIR, so nothing forces sharing a root and stub across values.
 @test "warm+stale (bun.lock): bun install alone at the root, then re-stamps" {
   seed_warm_stale
   touch_at "$root/bun.lock" "$NEW_MTIME"

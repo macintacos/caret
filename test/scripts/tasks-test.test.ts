@@ -119,8 +119,8 @@ describe("ensureUiForE2e", () => {
 });
 
 // The --json result document. A failing run nests the runner's native report
-// UNNORMALISED — JUnit XML text for unit, Playwright's parsed JSON for e2e — plus
-// the captured output; a passing run is the envelope and the counts alone.
+// UNNORMALISED — JUnit XML text for unit and bats, Playwright's parsed JSON for
+// e2e — plus the captured output; a passing run is the envelope and the counts alone.
 const ESC = String.fromCharCode(27);
 
 // bun 1.3.14's junit reporter, verbatim: 3 tests, one skipped, none failing. The
@@ -405,10 +405,10 @@ describe("buildTestReport", () => {
   });
 });
 
-// The two json run paths, driven through their injected runner so the
-// orchestration is asserted without spawning bun or Playwright. Everything each
-// one spawns must go through that runner: a child that reached this process's
-// stdout would corrupt the document, and the fake would not see it.
+// The three json run paths, driven through their injected runner so the
+// orchestration is asserted without spawning bun, bats, or Playwright. Everything
+// each one spawns must go through that runner: a child that reached this
+// process's stdout would corrupt the document, and the fake would not see it.
 
 /** A `runCapture` stand-in: records each spawn, writes `emits` into the sink, and
  * returns whatever `code` decides for that command. */
