@@ -18,7 +18,7 @@ const REPO_ROOT = join(import.meta.dir, "..", "..");
 // `.bats` is the target form (EXC-1230 converts the two remaining `.sh` suites);
 // both run here so the conversion lands one suite at a time.
 const SHELL_SUITES = [
-  "scripts/caret-shim.test.sh",
+  "scripts/caret-shim.bats",
   "scripts/caret-launcher.bats",
   "scripts/bootstrap.test.sh",
 ];
