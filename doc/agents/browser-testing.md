@@ -164,11 +164,11 @@ The split mirrors the test layers:
 Every deadline the suite runs under lives in `playwright.config.ts` (EXC-1050), and each
 is sized for the machine the suite actually runs on rather than an idle one. Playwright's
 own defaults — 30s per test, 5s per assertion — assume the suite owns the host, and inside
-`mise run preflight` it does not: `lint` and `test` (unit) are already running when
-`test e2e` starts, `build bin` and `smoke` land during it, and six e2e workers each
-driving a browser tree plus a spawned daemon saturate the cores before any of that
-arrives. On a 12-core host the unit suite measured 31s standalone against 88s inside the
-gate — 2.8x. That figure is the unit suite's; e2e's own factor was never measured, and
+`mise run preflight` it does not: `lint`, `test` (unit) and `test bats` are already
+running when `test e2e` starts, `build bin` and `smoke` land during it, and six e2e
+workers each driving a browser tree plus a spawned daemon saturate the cores before any of
+that arrives. On a 12-core host the unit suite measured 31s standalone against 88s inside
+the gate — 2.8x. That figure is the unit suite's; e2e's own factor was never measured, and
 2.8x is the working number the budgets are sized against. Under `--parallel` the same pair
 reads 19s against 73s, but the gate caps the lane at four workers where standalone takes
 every core, so that ratio folds the cap into the contention and does not supersede 2.8x.

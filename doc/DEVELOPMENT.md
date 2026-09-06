@@ -55,10 +55,11 @@ mise run caret      # caret's own CLI from src/cli.ts, e.g. `mise run caret disc
 mise run test       # bun test (unit); `mise run test unit` is the same target
 mise run test e2e   # Playwright browser e2e (isolated daemon; Chromium, plus WebKit for the JSC probe)
                     # both take --quiet / --verbose / --json, before any forwarded args
+mise run test bats  # the hermetic shell suites under scripts/; --json only
 mise run lint       # read-only gate: formatting + Biome lint + tsc + svelte-check
 mise run format     # Biome (write)
 mise run smoke      # smoke the shipped artifacts; also `smoke bin` / `smoke bundle`
-mise run preflight  # pre-push gate: lint + tests (unit ∥ e2e) + build + smoke, scoped to the diff
+mise run preflight  # pre-push gate: lint + tests (unit ∥ bats ∥ e2e) + build + smoke, scoped to the diff
 ```
 
 ### Bootstrapping a clone
@@ -348,9 +349,11 @@ and any review respawns the fresh build. The second is below.
 
 ### Test output modes
 
-Both test targets take the same three flags, and with none of them the mode follows the
+`unit` and `e2e` take the same three flags, and with none of them the mode follows the
 audience: a terminal gets `quiet`, anything piped keeps the full stream, so no script or
-gate that reads the output today sees a different one.
+gate that reads the output today sees a different one. `bats` takes `--json` alone — its
+TAP stream is already one line per test, so there is no volume to reduce or add, and a
+flag that did nothing would be worse than no flag.
 
 | Flag        | What the runner prints                                              |
 | ----------- | ------------------------------------------------------------------- |
@@ -376,12 +379,18 @@ runner's own exit code. What rides along depends on the verdict, the same way
 `mise run preflight --json` reports a passing task: a **passing** run is that envelope
 alone, because a green run's native report says only what `passed` already says and costs
 megabytes to say it. A **failing** run adds `report` — the runner's native report nested
-unnormalised, JUnit XML as a string for `unit` and Playwright's json report as an object
-for `e2e` — and `output`, everything the runner wrote. On a `unit` failure `output` is the
-one to read: bun's JUnit reporter writes a bare `<failure type="…"/>`, so the message and
-the stack exist only in the console stream. A runner that produced no report at all yields
-`report: null` and still carries `output`. Everything the run spawns is captured in this
-mode, the UI build included, so the document is the only thing on stdout.
+unnormalised, JUnit XML as a string for `unit` and `bats`, Playwright's json report as an
+object for `e2e` — and `output`, everything the runner wrote. On a `unit` failure `output`
+is the one to read: bun's JUnit reporter writes a bare `<failure type="…"/>`, so the
+message and the stack exist only in the console stream; bats' own `<failure>` carries the
+diagnosis. A runner that produced no report at all yields `report: null` and still carries
+`output`. Everything the run spawns is captured in this mode, the UI build included, so
+the document is the only thing on stdout.
+
+The two JUnit writers split their counts differently, and one parser serves both: bun
+repeats the whole-run totals on the root `<testsuites>`, while bats leaves the root
+carrying only a `time` and puts every count on a per-file `<testsuite>` child — so the
+counts are summed across those children, which agrees with bun's root by construction.
 
 The flags must come **before** any argument you are forwarding to the runner:
 `mise run test --json path/to/x.test.ts` is parsed by caret, while
@@ -433,7 +442,7 @@ forwarder sets `#MISE raw_args=true` so mise hands every argument — including 
 | --------------------------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------- |
 | `dev`                                               | `scripts/tasks/dev/`            | The one multi-file task, so it keeps a folder rather than a single module.        |
 | `build` — bare, `ui`, `bin`, `bundle`               | `scripts/tasks/build.ts`        | Bare is the umbrella; `mise run build bin` reaches a target.                      |
-| `test` — bare / `unit`, `e2e`                       | `scripts/tasks/test.ts`         | Bare and `unit` are the same bun target; `e2e` is Playwright. Both carry `--quiet`, `--verbose`, and `--json` ahead of their forwarded args. |
+| `test` — bare / `unit`, `e2e`, `bats`               | `scripts/tasks/test.ts`         | Bare and `unit` are the same bun target; `e2e` is Playwright; `bats` is the shell suites under `scripts/`. The first two carry `--quiet`, `--verbose`, and `--json` ahead of their forwarded args; `bats` carries `--json` alone. |
 | `smoke` — bare, `bin`, `bundle`                     | `scripts/tasks/smoke.ts`        | Bare smokes both artifacts.                                                       |
 | `assets` — bare, `stitch`, `video`                  | `scripts/tasks/assets.ts`       | Regenerates the README hero image and demo recording. Needs ImageMagick and ffmpeg on `PATH`. |
 | `lint`, `format`, `caret`                           | `scripts/tasks/lint.ts` et al.  | Passthroughs: operands and flags reach the underlying tool. Only `caret` forwards a bare `--help`. |
@@ -512,19 +521,20 @@ diff, plus untracked files — and picks a task set from them:
   it). **Add to that list whenever a test starts reading a Markdown file at run time** —
   the suite checks that each listed path still exists, but nothing can catch an omission,
   and an omission silently stops running a real check.
-- **Anything else** → all six, exactly as before. That covers a non-Markdown path, an
+- **Anything else** → all seven, exactly as before. That covers a non-Markdown path, an
   empty diff, and a diff that could not be read at all (no `origin/HEAD`, a shallow
   clone). The default is always the full gate; narrowing is an optimisation, never a
   weakening.
 
-`mise run preflight --full` forces all six regardless. Unlike `-v` / `--grep` / `--task`,
-it is not `--json`-only — the human display narrows too, so it needs the same escape
-hatch.
+`mise run preflight --full` forces all seven regardless. Unlike `-v` / `--grep` /
+`--task`, it is not `--json`-only — the human display narrows too, so it needs the same
+escape hatch.
 
 The narrowing is never silent. In `--json` mode the `start` document carries a `selection`
 object (`narrowed` plus a `reason`) alongside the shortened `tasks` list; the human
 summary prints the same reason on a `scope:` line. This is also why the report
-`schemaVersion` is `2`: `ok` now means "every task that ran passed", not "all six passed".
+`schemaVersion` is `2`: `ok` now means "every task that ran passed", not "every task
+passed".
 
 **Only _which tasks_ run is scoped — never which files a task sees.** Every task is still
 spawned as `mise run <task>` with no file arguments (the gate's only extra argv is

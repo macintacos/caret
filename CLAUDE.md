@@ -98,22 +98,22 @@ after editing a file in the same turn — give it a beat, or trust your edit.
 
 ## Verifying changes
 
-`mise run preflight` is the pre-push gate — lint, unit + e2e tests, build, and artifact
-smoke, run concurrently. When **you** (an agent) run it, pass `--json`.
+`mise run preflight` is the pre-push gate — lint, unit + shell + e2e tests, build, and
+artifact smoke, run concurrently. When **you** (an agent) run it, pass `--json`.
 `mise run preflight --json` replaces the live human display with two compact JSON
 documents on stdout, one per line: a `start` document (the planned tasks, why that set,
 plus the filters in effect) and a `result` document carrying each task's status and
 `durationMs` and an overall `ok` boolean. The exit code is unchanged (`0` pass, `1` fail).
 
-**The gate scopes itself to your diff, so `ok` does not always mean all six tasks ran.** A
-change where every path is Markdown runs `lint` alone — plus `test` when it touches one of
-the Markdown files a test reads from disk (`MARKDOWN_READ_BY_TESTS` in
+**The gate scopes itself to your diff, so `ok` does not always mean all seven tasks ran.**
+A change where every path is Markdown runs `lint` alone — plus `test` when it touches one
+of the Markdown files a test reads from disk (`MARKDOWN_READ_BY_TESTS` in
 `scripts/preflight.ts`: `scripts/tasks/dev/fake-plan.md`, `doc/ARCHITECTURE.md`,
-`THIRD_PARTY_LICENSES.md`, and `doc/DEVELOPMENT.md`). Anything else runs the full six, as
-does an empty or unreadable diff. Read the `start` document's `selection` object before
+`THIRD_PARTY_LICENSES.md`, and `doc/DEVELOPMENT.md`). Anything else runs the full seven,
+as does an empty or unreadable diff. Read the `start` document's `selection` object before
 you report a run as green: `{"narrowed": true, "reason": "…"}` means you proved less than
 the whole gate, and `schemaVersion` is `2` precisely because `ok` now means "every task
-that ran passed". `--full` forces all six — it is the one preflight flag that works
+that ran passed". `--full` forces all seven — it is the one preflight flag that works
 without `--json` too. Note that `lint` always scans the whole tree even when the gate
 narrows, so cross-file link fragments stay checked.
 
@@ -141,24 +141,31 @@ README.
 
 ### Running a suite on its own
 
-`mise run test` (unit) and `mise run test e2e` (Playwright) are the entry points, and both
-forward their arguments, so `mise run test <path>` scopes the run to one file.
+`mise run test` (unit), `mise run test e2e` (Playwright) and `mise run test bats` (the
+hermetic shell suites under `scripts/`) are the entry points, and all three forward their
+arguments, so `mise run test <path>` scopes the run to one file. `bats` is the exception
+to that scoping: it collects `*.bats` from `scripts/` and de-duplicates a file already
+covered, so use `mise run test bats --filter <regex>` to narrow it.
 
 **`mise run test --json` is the call you want when you only need the verdict.** It emits
 one JSON document on stdout and nothing else — every child, the UI build included, runs
 captured — and the exit code is unchanged (`0` pass, non-zero fail):
-`{"schemaVersion": 1, "target": "unit"|"e2e", "ok", "passed", "failed", "durationMs", "report"}`.
+
+```json
+{"schemaVersion": 1, "target": "unit"|"e2e"|"bats", "ok", "passed", "failed", "durationMs", "report"}
+```
+
 `ok` is the runner's own exit code, never re-derived from the counts.
 
 **What rides along depends on the verdict**, the same discipline `preflight --json`
 applies. A **passing** run is that envelope and nothing else — about 120 bytes, whether it
 ran one file or all 4900. A **failing** run adds two fields: `report`, the runner's native
-report nested unnormalised (JUnit XML as a string for `unit`, Playwright's json report as
-an object for `e2e`), and `output`, everything the runner wrote. Read `output` first on a
-`unit` failure — bun's JUnit reporter emits a bare `<failure type="…"/>` with no message,
-so the console stream is the only place the diff and the stack exist. `report` is `null`
-when the runner produced none, and `output` still carries what it wrote, so a run that
-died early stays diagnosable.
+report nested unnormalised (JUnit XML as a string for `unit` and `bats`, Playwright's json
+report as an object for `e2e`), and `output`, everything the runner wrote. Read `output`
+first on a `unit` failure — bun's JUnit reporter emits a bare `<failure type="…"/>` with
+no message, so the console stream is the only place the diff and the stack exist; bats'
+own `<failure>` carries the diagnosis. `report` is `null` when the runner produced none,
+and `output` still carries what it wrote, so a run that died early stays diagnosable.
 
 A failing whole-suite run is large — the native report grows with the number of tests, so
 scope the run when you can. `--verbose` restores the full stream; `--quiet` is a dot per

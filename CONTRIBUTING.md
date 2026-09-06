@@ -29,11 +29,11 @@ includes it.
 
 ```sh
 mise run dev        # dev console: isolated daemon + three fake plans + the Vite UI
-mise run preflight  # the pre-push gate: lint + unit/e2e tests + build + artifact smoke
+mise run preflight  # the pre-push gate: lint + unit/shell/e2e tests + build + artifact smoke
 ```
 
 `mise run preflight` is the gate to pass before pushing. It scopes itself to your diff, so
-a Markdown-only change runs fewer than the full six tasks — `--full` forces all of them.
+a Markdown-only change runs fewer than the full seven tasks — `--full` forces all of them.
 The full task catalog (`build`, `test`, `smoke`, `lint`, `format`) is documented in
 [`doc/DEVELOPMENT.md`](doc/DEVELOPMENT.md#development).
 
@@ -47,6 +47,9 @@ The full task catalog (`build`, `test`, `smoke`, `lint`, `format`) is documented
   from the repo root; `bun test --conditions browser <path>` runs one file directly.
 - `test/e2e/` — Playwright browser end-to-end specs (`mise run test e2e`). When to write
   an e2e spec versus a unit test is covered in `doc/agents/browser-testing.md`.
+- `scripts/*.bats` — hermetic shell suites for the shipped scripts, covering the plugin
+  entrypoint shim, the service launcher, and the bootstrap preamble
+  (`mise run test bats`).
 
 ## Configuration
 
