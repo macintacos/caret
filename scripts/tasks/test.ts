@@ -228,10 +228,11 @@ async function emitTestReport(
  * Per-test deadline for the lane, in milliseconds (EXC-1056).
  *
  * bun's own default is 5000, which sizes every test against an idle host. The lane's gate
- * is not one: inside `mise run preflight`, lint, both builds, the Playwright suite and
- * smoke all run alongside it. The slowest test this flag governs is
- * `test/scripts/install-shell.test.ts`'s bash suites, which spawn a shell per script —
- * 4.7s standalone against 5.3s in-gate. 35s is 6x that, rounded up to the nearest 5s.
+ * is not one: inside `mise run preflight`, lint, both builds, the shell suites, the
+ * Playwright suite and smoke all run alongside it. The slowest test this flag governs is
+ * `test/scripts/dev-tui.test.ts`'s bounded-backlog case, which drives a real dev TUI
+ * session — 2.7s standalone against 5.4s in-gate, where contention doubles it. 35s is
+ * 6.5x the in-gate figure.
  *
  * A deadline is not a retry: the test still runs once and asserts the same thing, so
  * nothing is hidden — the budget only stops the suite asserting the machine was idle.
