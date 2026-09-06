@@ -94,15 +94,24 @@ destroying their comments) all stay.
 
 ## Pinning and holding
 
-Version ranges are the upgrade policy; `bun.lock` is what pins. Two blocks in
-`package.json` annotate a range that is doing something deliberate, each with its own
-gate, and each failing **by name** on an entry that outlived what it described:
+Version ranges are the upgrade policy; `bun.lock` is what pins — everywhere but the
+`dependencies` block: `bun.lock` is not in `files`, so a consumer resolving
+`@opencode-ai/plugin`'s `^1.18.17` has no lock behind it, and that floor is a
+minimum-supported claim, not a pin. Two blocks in `package.json` annotate a range that is
+doing something deliberate, each with its own gate, and each failing **by name** on an
+entry that outlived what it described:
 
 - **`pinned`** — an exact version, meaning "never move this on a sweep". Takes a
   `bun install` afterwards so the lockfile records it, and must carry its reason.
   [`../../test/structure/exact-pin.test.ts`](../../test/structure/exact-pin.test.ts) fails
   on an undocumented pin, an empty reason, or an entry left behind after its package was
-  removed or de-pinned.
+  removed or de-pinned. The `@pierre/diffs` entry has a second gate that lives in the
+  build rather than the unit suite: the `caret-bundle-budget` vite plugin in
+  [`../../ui/bundle-budget.ts`](../../ui/bundle-budget.ts) fails `vite build` once
+  `ui/dist` grows past a recorded budget. That budget covers the `shiki/wasm` and
+  `@pierre/theme/` alias entries — one that stops matching grows the bundle by +622,310 or
+  +334,084 bytes — and deliberately not the bare `/^shiki$/` entry, which grows it by only
+  +10,741 bytes because it swaps behaviour rather than keeping a payload out.
 - **`held`** — a range deliberately stopping below the current major, with the evidence
   and the condition that lifts it. Its one entry, `typescript`, records a
   **peer obligation** rather than a blocked upgrade: the tree type-checks with TypeScript
@@ -114,3 +123,12 @@ gate, and each failing **by name** on an entry that outlived what it described:
 
 Removing or moving a dependency means checking **both** blocks for an entry that no longer
 names anything. Each block's own `//` note is its policy; don't restate them elsewhere.
+
+The lockfile has a falsifier of its own:
+[`../../test/structure/dependency-dedupe.test.ts`](../../test/structure/dependency-dedupe.test.ts)
+runs `bun dedupe --check` and reds on any duplicate version bun can collapse onto a
+version `bun.lock` already names; the fix is `bun dedupe` at the repo root, then commit
+the rewritten `bun.lock`. What no gate catches is the sweep itself: on Bun 1.4
+`bun update` saves to `package.json` by default, rewriting every `^` floor to the version
+it resolved, and `bun dedupe --check` accepts any manifest its lock agrees with — so a
+lockfile-only sweep ends with `git checkout -- package.json && bun install`.
