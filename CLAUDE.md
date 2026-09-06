@@ -102,8 +102,8 @@ after editing a file in the same turn — give it a beat, or trust your edit.
 smoke, run concurrently. When **you** (an agent) run it, pass `--json`.
 `mise run preflight --json` replaces the live human display with two compact JSON
 documents on stdout, one per line: a `start` document (the planned tasks, why that set,
-plus the filters in effect) and a `result` document carrying each task's status and an
-overall `ok` boolean. The exit code is unchanged (`0` pass, `1` fail).
+plus the filters in effect) and a `result` document carrying each task's status and
+`durationMs` and an overall `ok` boolean. The exit code is unchanged (`0` pass, `1` fail).
 
 **The gate scopes itself to your diff, so `ok` does not always mean all six tasks ran.** A
 change where every path is Markdown runs `lint` alone — plus `test` when it touches one of
@@ -120,8 +120,9 @@ narrows, so cross-file link fragments stay checked.
 `mise run preflight --json` is the call you want almost every time.
 **Failures show their output by default**, so you can act immediately — and if a task's
 output is large it's abbreviated to its last 20 lines with `totalLines` and
-`"truncated": true` so you know there's more. Passing tasks stay status-only to keep the
-result small. The flags below turn that up; they compose and only apply with `--json`:
+`"truncated": true` so you know there's more. Passing tasks carry only their status and
+`durationMs`, to keep the result small. The flags below turn that up; they compose and
+only apply with `--json`:
 
 - `-v` / `-vv` — turn up verbosity. `-v` makes any **truncated** failure full and adds a
   snippet of each passing task; `-vv` shows every task's full output. Reach for `-v` when
@@ -171,8 +172,10 @@ contract stops caret's own parsing at the first operand.
 **Never bare `bun test`.** Those entry points carry `--conditions browser`, which bun
 accepts only on the CLI; without it svelte resolves its server runtime and every UI
 component file aborts at import, while the backend suite still passes — so a bare run
-reports dozens of failures that have nothing to do with your change. `bun run test` (the
-`package.json` script) carries the flag and is fine;
-`bun test --conditions browser <path>` is the direct form. Why the flag cannot move into
-`bunfig.toml`, and the guard that raises the actionable error:
+reports dozens of failures that have nothing to do with your change. They also carry
+`--parallel`, which implies `--isolate`: each file gets a fresh global, where a bare run
+shares one across files, so a file can pass under one form and fail under the other on
+cross-file state. `bun run test` (the `package.json` script) carries both flags and is
+fine; `bun test --conditions browser <path>` is the direct form. Why the flag cannot move
+into `bunfig.toml`, and the guard that raises the actionable error:
 `doc/agents/svelte-rules.md` § One runner.

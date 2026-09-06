@@ -43,8 +43,8 @@ The full task catalog (`build`, `test`, `smoke`, `lint`, `format`) is documented
   `src/` uses), `adapters/<tool>/` (per-agent), plus `opencode/`, `scripts/`,
   `structure/`, and `support/`. A suite's path mirrors its module's, so `src/x/y.ts` is
   covered by `test/core/x/y.test.ts`; the full rule is in `doc/agents/test-layout.md`.
-- `ui/src/**/*.test.ts` — Svelte component and UI-logic tests, run with
-  `bun test --conditions browser` from the repo root.
+- `ui/src/**/*.test.ts` — Svelte component and UI-logic tests, run with `mise run test`
+  from the repo root; `bun test --conditions browser <path>` runs one file directly.
 - `test/e2e/` — Playwright browser end-to-end specs (`mise run test e2e`). When to write
   an e2e spec versus a unit test is covered in `doc/agents/browser-testing.md`.
 
