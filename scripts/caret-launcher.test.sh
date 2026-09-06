@@ -32,13 +32,13 @@ assert_present() {
 # A throwaway machine with both agent cache roots and caret's state dir. The stub
 # PATH carries only the tools the launcher itself invokes.
 make_home() {
-  local home tool p
+  local home tool tool_path
   home="$(mktemp -d "${TMPDIR:-/tmp}/caret-launcher.XXXXXX")"
   mkdir -p "$home/bin" "$home/.claude/plugins/cache/caret/caret" \
     "$home/.cache/opencode/packages/@macintacos" "$home/.local/state/caret/launcher"
   for tool in basename cut dirname head id rm sed sleep sort tail uname; do
-    p="$(command -v "$tool" 2>/dev/null || true)"
-    [ -n "$p" ] && ln -s "$p" "$home/bin/$tool"
+    tool_path="$(command -v "$tool" 2>/dev/null || true)"
+    [ -n "$tool_path" ] && ln -s "$tool_path" "$home/bin/$tool"
   done
   printf '%s' "$home"
 }
