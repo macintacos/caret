@@ -42,6 +42,21 @@ export function rumdlConfig(): string {
   return `${rumdlDir()}/rumdl.toml`;
 }
 
+/** The stable launcher a service unit names, forever (EXC-1160). */
+export function launcherPath(): string {
+  return `${stateDir()}/bin/caret`;
+}
+
+/** Single-value records the launcher reads at exec time. */
+export function launcherRecordDir(): string {
+  return `${stateDir()}/launcher`;
+}
+
+/** Absolute `bun`, recorded at service-install time. */
+export function launcherBunFile(): string {
+  return `${launcherRecordDir()}/bun-path`;
+}
+
 /** Root config dir: $XDG_CONFIG_HOME/caret or ~/.config/caret. Separate from
  * stateDir(), which `mise run dev` isolates and wipes; which file inside this dir
  * is read is configFile()'s call — dev points CARET_CONFIG_FILE at

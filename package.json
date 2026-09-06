@@ -23,6 +23,7 @@
     "dist/",
     "ui/dist/",
     "bin/caret",
+    "bin/caret-launcher",
     "hooks/",
     "commands/",
     "opencode/",
