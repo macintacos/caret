@@ -1,27 +1,27 @@
 // The launchd agent definition, as a pure function of a ServiceConfig. No I/O and
 // no platform detection: the macOS ServiceManager writes what this returns.
 
-import { SERVICE_ARGS, type ServiceConfig } from "@/service/manager.ts";
+import { SERVICE_ARGS, type ServiceConfig, sortedEnvironment } from "@/service/manager.ts";
 
-/** Paths and environment values are user-derived, and a raw `&` alone is enough to
- * make a plist launchd refuses to parse. */
+/** Paths, labels and environment entries are user-derived, and a raw `&` alone is
+ * enough to make a plist launchd refuses to parse. */
 function escapeXml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function stringEntry(key: string, value: string, indent: string): string {
-  return `${indent}<key>${key}</key>\n${indent}<string>${escapeXml(value)}</string>`;
+  return `${indent}<key>${escapeXml(key)}</key>\n${indent}<string>${escapeXml(value)}</string>`;
 }
 
-/** `cfg.terminalExitStatus` is deliberately unused here: launchd has no per-status
- * restart allowlist, so the launcher boots its own agent out on that status instead
- * (`stop_agent` in bin/caret-launcher). Only the systemd unit can express it. */
+/** The launchd agent plist for `cfg`, as text. `cfg.terminalExitStatus` is
+ * deliberately unused: launchd has no per-status restart allowlist, so the launcher
+ * boots its own agent out on that status instead (`stop_agent` in
+ * bin/caret-launcher). Only the systemd unit can express it. */
 export function buildLaunchdPlist(cfg: ServiceConfig): string {
   const args = [cfg.launcherPath, ...SERVICE_ARGS]
     .map((arg) => `    <string>${escapeXml(arg)}</string>`)
     .join("\n");
-  const environment = Object.entries(cfg.environment)
-    .sort(([a], [b]) => (a < b ? -1 : 1))
+  const environment = sortedEnvironment(cfg.environment)
     .map(([key, value]) => stringEntry(key, value, "    "))
     .join("\n");
   return `<?xml version="1.0" encoding="UTF-8"?>

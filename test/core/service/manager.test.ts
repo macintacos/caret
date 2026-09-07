@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { serviceEnvironment } from "@/service/manager.ts";
+import { serviceEnvironment, sortedEnvironment } from "@/service/manager.ts";
 
 test("serviceEnvironment always marks the daemon as supervised", () => {
   expect(serviceEnvironment({})).toEqual({ CARET_SUPERVISED: "1" });
@@ -10,17 +10,25 @@ test("serviceEnvironment passes through every world variable that is set", () =>
   expect(
     serviceEnvironment({
       HOME: "/home/ada",
+      CLAUDE_CONFIG_DIR: "/home/ada/.claude-alt",
       XDG_STATE_HOME: "/home/ada/.local/state",
       XDG_CONFIG_HOME: "/home/ada/.config",
+      XDG_CACHE_HOME: "/home/ada/.cache",
+      XDG_DATA_HOME: "/home/ada/.local/share",
       CARET_CONFIG_FILE: "/home/ada/.config/caret/config.toml",
       CARET_PORT: "42718",
+      CARET_AGENT: "opencode",
     }),
   ).toEqual({
     HOME: "/home/ada",
+    CLAUDE_CONFIG_DIR: "/home/ada/.claude-alt",
     XDG_STATE_HOME: "/home/ada/.local/state",
     XDG_CONFIG_HOME: "/home/ada/.config",
+    XDG_CACHE_HOME: "/home/ada/.cache",
+    XDG_DATA_HOME: "/home/ada/.local/share",
     CARET_CONFIG_FILE: "/home/ada/.config/caret/config.toml",
     CARET_PORT: "42718",
+    CARET_AGENT: "opencode",
     CARET_SUPERVISED: "1",
   });
 });
@@ -41,4 +49,12 @@ test("serviceEnvironment carries nothing outside the world set", () => {
     HOME: "/home/ada",
     CARET_SUPERVISED: "1",
   });
+});
+
+test("sortedEnvironment orders by code unit regardless of insertion order", () => {
+  expect(sortedEnvironment({ ZULU: "z", ALPHA: "a", Bravo: "b" })).toEqual([
+    ["ALPHA", "a"],
+    ["Bravo", "b"],
+    ["ZULU", "z"],
+  ]);
 });

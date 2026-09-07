@@ -46,16 +46,23 @@ test("buildLaunchdPlist starts the launcher with the shared service arguments", 
   );
 });
 
-test("buildLaunchdPlist escapes XML metacharacters everywhere they can appear", () => {
+test("buildLaunchdPlist escapes XML metacharacters at every emission site", () => {
   const plist = buildLaunchdPlist(
     fakeServiceConfig({
+      label: "dev.excessive.caret<&>",
+      launcherPath: "/tmp/a&b/<bin>/caret",
       logPath: "/tmp/a&b/<log>.log",
-      environment: { CARET_CONFIG_FILE: "/tmp/x&y/<c>.toml" },
+      workingDirectory: "/tmp/a&b/<wd>",
+      environment: { "A&B<C>": "/tmp/x&y/<c>.toml" },
     }),
   );
+  expect(plist).toContain("<string>dev.excessive.caret&lt;&amp;&gt;</string>");
+  expect(plist).toContain("<string>/tmp/a&amp;b/&lt;bin&gt;/caret</string>");
   expect(plist).toContain("<string>/tmp/a&amp;b/&lt;log&gt;.log</string>");
+  expect(plist).toContain("<string>/tmp/a&amp;b/&lt;wd&gt;</string>");
+  expect(plist).toContain("<key>A&amp;B&lt;C&gt;</key>");
   expect(plist).toContain("<string>/tmp/x&amp;y/&lt;c&gt;.toml</string>");
-  expect(plist).not.toContain("a&b");
-  expect(plist).not.toContain("<log>");
-  expect(plist).not.toContain("<c>");
+  // Nothing survives raw: an unescaped `&` alone is a plist launchd will not parse.
+  expect(plist).not.toMatch(/&(?!amp;|lt;|gt;)/);
+  expect(plist.split("\n").filter((line) => /<(bin|log|wd|C)>/.test(line))).toEqual([]);
 });

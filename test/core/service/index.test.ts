@@ -21,5 +21,5 @@ test("selectServiceManager picks the manager for the running platform", () => {
 
 test("selectServiceManager rejects an unsupported platform by name", () => {
   expect(() => selectServiceManager(managers, "win32")).toThrow(/win32/);
-  expect(() => selectServiceManager(managers, "win32")).toThrow(/macOS.*Linux/);
+  expect(() => selectServiceManager(managers, "win32")).toThrow(/darwin\/linux/);
 });

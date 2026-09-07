@@ -7,14 +7,15 @@ import type { ServiceManager } from "@/service/manager.ts";
 
 export type ServicePlatform = "darwin" | "linux";
 
+/** The manager for a platform, defaulting to the current process. Throws on anything
+ * but darwin/linux — residency has no third implementation, and a silent no-op would
+ * leave the caller believing caret is resident. */
 export function selectServiceManager(
   managers: Record<ServicePlatform, ServiceManager>,
   platform: string = process.platform,
 ): ServiceManager {
   if (platform !== "darwin" && platform !== "linux") {
-    throw new Error(
-      `caret cannot run as a resident service on ${platform} — supported: macOS (launchd) and Linux (systemd user units).`,
-    );
+    throw new Error(`caret service: unsupported platform ${platform} (darwin/linux only)`);
   }
   return managers[platform];
 }
