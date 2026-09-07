@@ -79,16 +79,16 @@ export const WORLD_VARS = [
 export function serviceEnvironment(
   env: Record<string, string | undefined>,
 ): Record<string, string> {
-  const out: Record<string, string> = {};
+  const environment: Record<string, string> = {};
   for (const key of WORLD_VARS) {
     const value = env[key];
-    if (value) out[key] = value;
+    if (value) environment[key] = value;
   }
   // The daemon idle-exits after [daemon].idle_ms with nothing pending
   // (src/daemon/server.ts) — under KeepAlive / Restart=always that's a restart loop,
   // not residency, until the daemon reads this and stays up (EXC-1166).
-  out.CARET_SUPERVISED = "1";
-  return out;
+  environment.CARET_SUPERVISED = "1";
+  return environment;
 }
 
 /** Environment entries in a fixed code-unit order, so regenerating a unit for an
