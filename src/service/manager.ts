@@ -86,7 +86,7 @@ export function serviceEnvironment(
   }
   // The daemon idle-exits after [daemon].idle_ms with nothing pending
   // (src/daemon/server.ts) — under KeepAlive / Restart=always that's a restart loop,
-  // not residency, until the daemon reads this and stays up (EXC-1166).
+  // not residency, until the daemon reads this and stays up (EXC-1164).
   environment.CARET_SUPERVISED = "1";
   return environment;
 }
