@@ -47,8 +47,10 @@ export function createSystemdManager(deps: SystemdDeps = {}): ServiceManager {
   const systemctl = (...args: string[]) => run(["systemctl", "--user", ...args]);
 
   /** Why this host cannot run the unit, or undefined when it can. `show-environment` is
-   * the probe rather than `is-enabled`, which answers off the unit search path on disk
-   * and returns cleanly with no bus at all — it cannot detect the condition. */
+   * the probe because a bus failure is the only thing it can fail with: every other
+   * verb also exits non-zero for an ordinary reason — `is-enabled` reads 4 on an absent
+   * unit, `is-active` 3 on a stopped one — so a non-zero exit from one of those cannot
+   * name its own cause without parsing stderr. */
   async function probeSystemd(): Promise<string | undefined> {
     const shown = await systemctl("show-environment");
     if (shown.code === 0) return undefined;

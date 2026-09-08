@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+#MISE description="Boot a Linux with a real systemd: bare = a shell in it, verify = the unit checks"
+#
+# Hand-run only, deliberately: nothing here joins preflight or CI. The systemd contract
+# src/service/systemd-manager.ts is written against needs a booted Linux, which no CI lane
+# caret has can supply — an environment that has to be maintained to stay green is one
+# that rots, so this is a tool you reach for, not a gate that reaches for you.
+#
+# Unlike every other task here this is not a scripts/tasks/cli.ts forwarder: the whole job
+# is `container build` and `container run`, with no flags worth a CLI.
+set -euo pipefail
+
+image=caret-linux
+uid=1000
+home=/home/caret
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# `bun -e` below resolves @/ from the repo's tsconfig, which it finds from the cwd.
+cd "$here"
+
+if ! command -v container >/dev/null; then
+  printf 'mise run linux needs Apple container on PATH: https://github.com/apple/container\n' >&2
+  exit 1
+fi
+
+container build -t "$image" -f "$here/scripts/linux/Containerfile" "$here/scripts/linux"
+
+# --cap-add ALL is what lets systemd be PID 1 at all: without CAP_SYS_ADMIN it cannot
+# mount /run and exits before reaching a target.
+tmp="$(mktemp -d)"
+cid="$(container run -d --rm --cap-add ALL "$image")"
+cleanup() {
+  container stop "$cid" >/dev/null 2>&1 || true
+  rm -rf "$tmp"
+}
+trap cleanup EXIT
+
+# Lingering is what starts user@1000.service, and the user bus it opens is the thing every
+# check below runs against. Polled because `container run -d` returns before systemd has
+# reached a target that can answer.
+for _ in $(seq 30); do
+  container exec "$cid" loginctl enable-linger caret >/dev/null 2>&1 && break
+  sleep 1
+done
+if ! container exec "$cid" test -S "/run/user/$uid/bus"; then
+  printf 'caret: no user bus at /run/user/%s/bus — systemd never finished booting.\n' "$uid" >&2
+  exit 1
+fi
+
+# The real builder emits the unit, so the checks run against what install() would write
+# rather than a hand-copied approximation. Only the paths are the harness's: caret's own
+# TypeScript never runs in the container, which would cost a Linux node_modules for no
+# added signal.
+unit="$tmp/caret.service"
+CARET_LINUX_HOME="$home" bun -e '
+import {
+  SERVICE_TERMINAL_EXIT_STATUS,
+  serviceEnvironment,
+  SYSTEMD_UNIT,
+} from "@/service/manager.ts";
+import { buildSystemdUnit } from "@/service/systemd.ts";
+
+const home = process.env.CARET_LINUX_HOME;
+process.stdout.write(
+  buildSystemdUnit({
+    launcherPath: home + "/fake-caret",
+    label: SYSTEMD_UNIT,
+    logPath: home + "/daemon-stderr.log",
+    workingDirectory: "/",
+    environment: serviceEnvironment({ HOME: home }),
+    terminalExitStatus: SERVICE_TERMINAL_EXIT_STATUS,
+  }),
+);
+' >"$unit"
+container cp "$unit" "$cid:$home/caret.service"
+container cp "$here/scripts/linux/verify.sh" "$cid:$home/verify.sh"
+container exec "$cid" chown -R "$uid:$uid" "$home"
+
+# The user session the harness works in, spelled once: `container exec` starts a bare
+# process, so nothing hands it the two variables that name the bus.
+session=(
+  container exec -u caret
+  -e "XDG_RUNTIME_DIR=/run/user/$uid"
+  -e "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus"
+)
+
+if [ "${1:-}" = verify ]; then
+  "${session[@]}" "$cid" bash "$home/verify.sh"
+else
+  # awk rather than `head -1 | cut`: head closing the pipe early would SIGPIPE systemctl,
+  # and pipefail would make that the whole task's exit status.
+  printf 'caret: systemd %s in %s — the unit is at %s/caret.service.\n' \
+    "$(container exec "$cid" systemctl --version | awk 'NR == 1 { print $2 }')" "$cid" "$home"
+  "${session[@]}" -it "$cid" bash -l
+fi
