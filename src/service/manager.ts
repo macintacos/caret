@@ -4,9 +4,15 @@
 // selects between them (src/service/index.ts).
 
 export interface ServiceStatus {
-  /** The unit is on disk and the supervisor knows about it. */
+  /** The supervisor has the unit loaded. Not the same as the unit existing on
+   * disk: bin/caret-launcher's stop_agent boots the agent out on terminal failure
+   * and deliberately leaves the plist, so a later `caret install` re-bootstraps it. */
   installed: boolean;
   running: boolean;
+  /** The user turned the service off themselves — Login Items on macOS, a disabled or
+   * masked unit on Linux. Install reads this as an opt-out and never re-enables
+   * (EXC-1167). */
+  disabled: boolean;
 }
 
 export interface ServiceManager {
