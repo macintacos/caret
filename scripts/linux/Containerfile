@@ -1,0 +1,22 @@
+# A booted Ubuntu with a real systemd, so the unit src/service/systemd.ts emits can be
+# loaded by the thing it is written for. Hand-run only (`mise run linux`) — never a
+# preflight or CI lane.
+FROM ubuntu:24.04
+
+# systemd-sysv supplies /sbin/init; dbus-user-session is what gives the unprivileged
+# account a user bus, which is the whole point — every check runs against
+# `systemctl --user`.
+RUN apt-get update \
+  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+  systemd systemd-sysv dbus dbus-user-session \
+  && rm -rf /var/lib/apt/lists/*
+
+# The image ships an `ubuntu` account already holding uid 1000, and the harness needs a
+# fixed one to spell /run/user/<uid> without querying the container first.
+RUN userdel --remove ubuntu \
+  && useradd --create-home --uid 1000 --shell /bin/bash caret
+
+# systemd reads SIGRTMIN+3 as "shut down cleanly"; on the default SIGTERM PID 1 re-execs
+# itself instead, so `container stop` would hang out to its timeout.
+STOPSIGNAL SIGRTMIN+3
+CMD ["/sbin/init"]

@@ -13,21 +13,17 @@ import {
   type ServiceManager,
   type ServiceStatus,
 } from "@/service/manager.ts";
+import { type CommandResult, commandError, runCommand } from "@/service/run.ts";
 
-export interface LaunchctlResult {
-  code: number;
-  stdout: string;
-  stderr: string;
-}
+export type LaunchctlResult = CommandResult;
 
-/** Run `launchctl` with `args`. Never rejects on a non-zero exit — every caller here
- * branches on the status rather than on a throw. */
+/** `launchctl` with `args` — the binary name is spawnLaunchctl's to prepend. */
 export type Launchctl = (args: string[]) => Promise<LaunchctlResult>;
 
 export interface LaunchdDeps {
   /** Defaults to `${homedir()}/Library/LaunchAgents`. Keep in sync with evict() in
    * bin/caret-launcher, which computes the same path in bash —
-   * test/structure/launch-agents-path.test.ts holds the shell half. */
+   * test/structure/service-unit-paths.test.ts holds the shell half. */
   launchAgentsDir?: string;
   /** The `gui/<uid>` domain every target names. Defaults to the current process. */
   uid?: number;
@@ -35,17 +31,7 @@ export interface LaunchdDeps {
   launchctl?: Launchctl;
 }
 
-export const spawnLaunchctl: Launchctl = async (args) => {
-  const proc = Bun.spawn(["launchctl", ...args], { stdout: "pipe", stderr: "pipe" });
-  // Drained alongside proc.exited, never after it: a command that filled either pipe
-  // would block forever waiting for a reader that had not started.
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  return { code, stdout, stderr };
-};
+export const spawnLaunchctl: Launchctl = (args) => runCommand(["launchctl", ...args]);
 
 /** launchd prints `state = running` alongside a `pid` line, and the two have moved
  * relative to each other across releases; either alone is the whole answer. */
@@ -56,13 +42,8 @@ const DISABLED = new RegExp(
   `"${LAUNCHD_LABEL.replace(/\./g, "\\.")}"\\s*=>\\s*(?:true|disabled)\\b`,
 );
 
-/** launchctl's exit codes are stable across releases (113 no such service, 5 I/O error)
- * where its stderr is free-form prose and sometimes empty. */
-function launchctlError(action: string, result: LaunchctlResult): Error {
-  return new Error(
-    `caret service: launchctl ${action} failed (${result.code}): ${result.stderr.trim()}`,
-  );
-}
+const launchctlError = (action: string, result: LaunchctlResult) =>
+  commandError("launchctl", action, result);
 
 /** The launchd user agent manager. Nothing here emits `launchctl enable`: a user who
  * turned caret off under System Settings › Login Items stays opted out, and install
