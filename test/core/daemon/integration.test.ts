@@ -27,6 +27,7 @@ import { createServer } from "@/daemon/server.ts";
 import { VERSION } from "@/lib/build-id.ts";
 import { formatPlanMarkdown } from "@/plan/markdown.ts";
 import { createStore } from "@/review/store.ts";
+import { SERVICE_TERMINAL_EXIT_STATUS } from "@/service/manager.ts";
 
 // Many tests here spawn a real `bun src/cli.ts daemon` subprocess, then wait on the
 // lock file. Standalone that boot is ~tens of ms, but under `mise preflight`'s
@@ -210,6 +211,45 @@ test("a daemon started with CARET_FRESH=1 reports fresh in /api/health", async (
 
 test("the daemon removes the lock on SIGINT", async () => {
   await assertLockRemovedOnSignal("SIGINT");
+});
+
+// EXC-1164: a boot a restart cannot fix exits SERVICE_TERMINAL_EXIT_STATUS, which
+// the systemd unit's RestartPreventExitStatus is keyed on. Losing the port race is
+// not one of those — it stays exit 0, so the winner is left alone.
+
+test("a daemon that cannot bind its configured port exits the terminal status", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-terminal-"));
+  // An out-of-range port passes the schema (a positive integer) but no bind can
+  // ever accept it — a config error a restart cannot fix, which is the class
+  // RestartPreventExitStatus exists for.
+  const proc = spawnCaretDaemon(stateHome, { CARET_PORT: "99999" }, /* pipeStderr */ true);
+  try {
+    expect(await proc.exited).toBe(SERVICE_TERMINAL_EXIT_STATUS);
+    // The units redirect stderr to daemon-stderr.log, so the reason reaches the
+    // supervisor's own log rather than only the daemon's NDJSON sink.
+    expect(await new Response(proc.stderr as ReadableStream).text()).toMatch(/caret:/);
+  } finally {
+    proc.kill("SIGKILL");
+    await proc.exited;
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
+test("the loser of the port race still exits 0, not the terminal status", async () => {
+  const port = String(freePort());
+  const winnerHome = await mkdtemp(join(tmpdir(), "caret-race-win-"));
+  const loserHome = await mkdtemp(join(tmpdir(), "caret-race-lose-"));
+  const winner = spawnCaretDaemon(winnerHome, { CARET_PORT: port });
+  try {
+    await untilLockWritten(winner, join(winnerHome, "caret", "daemon.lock"));
+    const loser = spawnCaretDaemon(loserHome, { CARET_PORT: port });
+    expect(await loser.exited).toBe(0);
+  } finally {
+    winner.kill("SIGKILL");
+    await winner.exited;
+    await rm(winnerHome, { recursive: true, force: true });
+    await rm(loserHome, { recursive: true, force: true });
+  }
 });
 
 // `caret redact` end-to-end: argv routing, stdout report, and the scrubbed

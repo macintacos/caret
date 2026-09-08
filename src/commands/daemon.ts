@@ -34,6 +34,7 @@ import { buildHash, buildKind, currentBuildId, currentCommit, VERSION } from "@/
 import { createDaemonLogger } from "@/lib/log.ts";
 import { commitsAheadOfTrunk, latestReleaseTag, publishedCaretVersion } from "@/lib/upstream.ts";
 import { createStore } from "@/review/store.ts";
+import { SERVICE_TERMINAL_EXIT_STATUS } from "@/service/manager.ts";
 import { loadUiAssets } from "@/ui/assets.ts";
 
 export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
@@ -136,6 +137,14 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   // lock, and with the handlers this early that rests on the code rather than on
   // placement: `server` stays undefined until the bind succeeds, so a loser stops
   // nothing, and removeOwnDaemonLock unlinks only a lock naming this pid.
+  // A boot failure no restart can fix. The status is what
+  // RestartPreventExitStatus is keyed on, and the stderr line is what reaches the
+  // supervisor's own log — the units redirect stderr to daemon-stderr.log (EXC-1164).
+  function exitTerminal(reason: string, err: unknown): never {
+    process.stderr.write(`caret: ${reason}; exiting.\n`);
+    log.error("fatal", err);
+    process.exit(SERVICE_TERMINAL_EXIT_STATUS);
+  }
   let server: CaretServer | undefined;
   const shutdown = (code: number) => {
     server?.stop();
@@ -211,7 +220,11 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
       process.stderr.write("caret: another daemon won the port; exiting.\n");
       process.exit(0);
     }
-    throw e;
+    // Any other bind failure is a configuration problem — an unbindable port, a
+    // privileged one, an address that does not exist — so a supervisor must stop
+    // rather than restart into it. Left to propagate, the CLI's fatal handler would
+    // print the hook fail-safe's deny line and exit 0, which reads as a clean stop.
+    exitTerminal("cannot bind the daemon port", e);
   }
   // The fatal handlers stay BELOW the bind: a boot that dies before this point
   // should surface its stack the way any other startup crash does, rather than
