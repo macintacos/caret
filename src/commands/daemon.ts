@@ -14,6 +14,7 @@ import {
   getPort,
   heartbeatMs,
   idleMs,
+  isResident,
   logKeep,
   logMaxSize,
   settings,
@@ -108,6 +109,9 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
       (err) => log.error("update", err),
     );
   }
+  // Read from the same boot snapshot as the other startup-captured tunables, so a
+  // config edit landing mid-boot cannot split residency from the idle delay it gates.
+  const resident = isResident(boot);
   const store = createStore(reviewsDir(), log);
   await store.rehydrate();
   const assets = await loadUiAssets();
@@ -156,6 +160,7 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
       port: ephemeral ? 0 : getPort(boot),
       idleMs: idleMs(boot),
       heartbeatMs: heartbeatMs(boot),
+      resident,
       assets,
       lockPath: daemonLock(),
       buildId: await currentBuildId(),
