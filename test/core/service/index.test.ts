@@ -7,7 +7,7 @@ function fakeManager(): ServiceManager {
   return {
     install: async () => {},
     uninstall: async () => {},
-    status: async () => ({ installed: false, running: false }),
+    status: async () => ({ installed: false, running: false, disabled: false }),
     restart: async () => {},
   };
 }
