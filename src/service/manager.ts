@@ -41,7 +41,9 @@ export interface ServiceConfig {
   launcherPath: string;
   /** LAUNCHD_LABEL on macOS, SYSTEMD_UNIT on Linux. */
   label: string;
-  /** Where the supervisor sends the daemon's stdout and stderr. */
+  /** Where the supervisor sends the daemon's stdout and stderr. Must be
+   * daemonStderrLogFile(): that is the path the daemon's own upkeep tick rotates
+   * (rotateDaemonStderr, src/daemon/lifecycle.ts), so any other value grows unbounded. */
   logPath: string;
   /** DAEMON_CWD (src/daemon/lifecycle.ts). */
   workingDirectory: string;
@@ -61,6 +63,17 @@ export const SYSTEMD_UNIT = "caret.service";
 /** The launcher's terminal-failure exit — keep in sync with `exit 78` in
  * bin/caret-launcher. */
 export const SERVICE_TERMINAL_EXIT_STATUS = 78;
+
+/** The variable every generated unit's environment block carries, naming a process a
+ * supervisor started rather than a hook (EXC-1161). Written by `serviceEnvironment`
+ * below and read by `isResident` (src/config/settings.ts) and the daemon's upkeep gate,
+ * so the name lives here once rather than as a literal in each. */
+export const SUPERVISED_VAR = "CARET_SUPERVISED";
+
+/** Whether a platform supervisor started this process. */
+export function isSupervised(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[SUPERVISED_VAR] === "1";
+}
 
 /** The arguments the unit passes the launcher, which execs `bin/caret "$@"`.
  * Shared so the plist and the unit file cannot drift into starting different
@@ -99,9 +112,10 @@ export function serviceEnvironment(
     if (value) environment[key] = value;
   }
   // The daemon idle-exits after [daemon].idle_ms with nothing pending
-  // (src/daemon/server.ts) — under KeepAlive / Restart=always that's a restart loop,
-  // not residency, until the daemon reads this and stays up (EXC-1164).
-  environment.CARET_SUPERVISED = "1";
+  // (src/daemon/server.ts) — under KeepAlive / Restart=always that's a restart loop, not
+  // residency. isResident reads this and keeps the daemon up when [daemon].resident is
+  // also set; without that key a supervised daemon still idle-exits (EXC-1164).
+  environment[SUPERVISED_VAR] = "1";
   return environment;
 }
 

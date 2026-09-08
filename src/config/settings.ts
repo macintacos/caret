@@ -35,9 +35,10 @@ import { configFile } from "@/config/paths.ts";
 // EXC-558: the one dev-vs-compiled signal, reused to gate the [dev] table inert
 // in a prod build. Cycle-free: build-id imports only ui-assets/crypto/pkg, and
 // paths.ts (already imported below) itself imports build-id.
-import { buildKind, isCompiledBinary } from "@/lib/build-id.ts";
+import { isCompiledBinary } from "@/lib/build-id.ts";
 import { logError } from "@/lib/log.ts";
-import type { BuildKind, EnvOverride } from "@/lib/types.ts";
+import type { EnvOverride } from "@/lib/types.ts";
+import { isSupervised } from "@/service/manager.ts";
 
 export { DEFAULT_PORT };
 
@@ -365,9 +366,9 @@ export function idleMs(s: Settings = settings().current()): number {
 export function isResident(
   s: Settings = settings().current(),
   env: NodeJS.ProcessEnv = process.env,
-  kind: BuildKind = buildKind(),
+  isProd: boolean = isCompiledBinary(),
 ): boolean {
-  return s.daemon.resident && env.CARET_SUPERVISED === "1" && kind !== "dev";
+  return s.daemon.resident && isSupervised(env) && isProd;
 }
 
 /** Review timeout: CARET_TIMEOUT > [review].timeout_s > 3600s / 1h — all in

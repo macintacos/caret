@@ -21,9 +21,12 @@ function recordingTimer() {
   const arms: number[] = [];
   return {
     arms,
+    // A 1-based handle, like server.test.ts's manualTimer: armIdle's "already armed"
+    // guard and cancelIdle both test the handle's truthiness, so a 0 would make both
+    // dead here and a daemon that re-armed on every refresh would look correct.
     setTimer: (_fn: () => void, ms: number) => {
       arms.push(ms);
-      return 0 as unknown as ReturnType<typeof setTimeout>;
+      return arms.length as unknown as ReturnType<typeof setTimeout>;
     },
     clearTimer: () => {},
   };
@@ -80,7 +83,7 @@ test("/api/health reports resident: false for a resident-aware daemon that is no
   expect("resident" in body).toBe(true);
 });
 
-test("a resident daemon does not churn under systemd's start-limit window", async () => {
+test("residency removes the idle exit that would park a systemd unit", async () => {
   const unit = buildSystemdUnit(fakeServiceConfig());
   const read = (key: string) => {
     const match = unit.match(new RegExp(`^${key}=(\\d+)$`, "m"));
@@ -88,12 +91,19 @@ test("a resident daemon does not churn under systemd's start-limit window", asyn
     return Number(match[1]);
   };
   // Below this, restart delay plus idle exit fits five starts inside the window and
-  // systemd parks the unit in `failed` permanently.
+  // systemd parks the unit in `failed` permanently. Read out of the generated unit so
+  // the test tracks the real constants rather than restating them.
   const churnThresholdMs =
     (read("StartLimitIntervalSec") / read("StartLimitBurst") - read("RestartSec")) * 1000;
   expect(churnThresholdMs).toBeGreaterThan(0);
+  const belowThreshold = Math.floor(churnThresholdMs / 2);
 
-  const timer = await bootResident(true, Math.floor(churnThresholdMs / 2));
+  // The hazard is real: a non-resident daemon does arm at this delay.
+  expect((await bootResident(false, belowThreshold)).arms).toEqual([belowThreshold]);
+  d.stop();
+
+  // Residency removes it.
+  const timer = await bootResident(true, belowThreshold);
   const id = await d.seed();
   await d.resolve(id, { behavior: "allow" });
   expect(timer.arms).toEqual([]);

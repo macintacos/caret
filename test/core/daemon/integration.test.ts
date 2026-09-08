@@ -227,7 +227,11 @@ test("a daemon that cannot bind its configured port exits the terminal status", 
     expect(await proc.exited).toBe(SERVICE_TERMINAL_EXIT_STATUS);
     // The units redirect stderr to daemon-stderr.log, so the reason reaches the
     // supervisor's own log rather than only the daemon's NDJSON sink.
-    expect(await new Response(proc.stderr as ReadableStream).text()).toMatch(/caret:/);
+    // The specific reason, not just the `caret:` prefix — the port-race path writes its
+    // own `caret: …` line, so a bare prefix match would pass on the wrong failure.
+    expect(await new Response(proc.stderr as ReadableStream).text()).toMatch(
+      /bind the daemon port/,
+    );
   } finally {
     proc.kill("SIGKILL");
     await proc.exited;

@@ -629,8 +629,8 @@ export function createCaretPlugin(
       // below gates on. (2) Warm the daemon, for the PLAN AGENT ONLY, so the first
       // caret_review_plan call doesn't pay the cold-spawn cost. Deliberately
       // per-message and unthrottled: the daemon idle-exits after [daemon].idle_ms
-      // (60s default), so a once-per-session warm would be dead long before the plan
-      // lands. The warm stays plan-only even though any primary agent may call the
+      // (60s default; a [daemon].resident install never does), so a once-per-session
+      // warm would be dead long before the plan lands. The warm stays plan-only even though any primary agent may call the
       // tool: the plan agent is the one whose turn reliably ends in a review, and
       // warming on every build message would spawn a process on the session's
       // busiest traffic to save ~0.4s in the rare case.

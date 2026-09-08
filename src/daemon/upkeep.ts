@@ -9,7 +9,7 @@ import { errorMessage } from "@/lib/types.ts";
 
 /** One hour: enough that the 24h-stamped update check gets ~24 chances a day to
  * notice its stamp expiring, and ample for a log that only receives crash output. */
-export const UPKEEP_INTERVAL_MS = 60 * 60 * 1000;
+const UPKEEP_INTERVAL_MS = 60 * 60 * 1000;
 
 export interface UpkeepTask {
   /** Named so a failure says which task failed. */

@@ -34,7 +34,7 @@ import { buildHash, buildKind, currentBuildId, currentCommit, VERSION } from "@/
 import { createDaemonLogger } from "@/lib/log.ts";
 import { commitsAheadOfTrunk, latestReleaseTag, publishedCaretVersion } from "@/lib/upstream.ts";
 import { createStore } from "@/review/store.ts";
-import { SERVICE_TERMINAL_EXIT_STATUS } from "@/service/manager.ts";
+import { isSupervised, SERVICE_TERMINAL_EXIT_STATUS } from "@/service/manager.ts";
 import { loadUiAssets } from "@/ui/assets.ts";
 
 export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
@@ -89,7 +89,7 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   // so neither boot nor a prefs write is delayed, and runUpdateCheck never rejects. A null
   // result is the throttle (or the opt-out) saying there is nothing new, so the seeded
   // verdict stands. Boot fires it once; a resident daemon re-arms it on the upkeep tick,
-  // which the 24h stamp is what bounds.
+  // bounded by the same 24h stamp.
   function refreshUpdate(): void {
     void runUpdateCheck({
       kind: install,
@@ -137,14 +137,6 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   // lock, and with the handlers this early that rests on the code rather than on
   // placement: `server` stays undefined until the bind succeeds, so a loser stops
   // nothing, and removeOwnDaemonLock unlinks only a lock naming this pid.
-  // A boot failure no restart can fix. The status is what
-  // RestartPreventExitStatus is keyed on, and the stderr line is what reaches the
-  // supervisor's own log — the units redirect stderr to daemon-stderr.log (EXC-1164).
-  function exitTerminal(reason: string, err: unknown): never {
-    process.stderr.write(`caret: ${reason}; exiting.\n`);
-    log.error("fatal", err);
-    process.exit(SERVICE_TERMINAL_EXIT_STATUS);
-  }
   let server: CaretServer | undefined;
   const shutdown = (code: number) => {
     server?.stop();
@@ -165,6 +157,22 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   // being assigned, where shutdown() has nothing to stop yet.
   process.once("exit", removeOwnDaemonLock);
 
+  // Stop on a boot failure no restart can fix: SERVICE_TERMINAL_EXIT_STATUS is the status
+  // systemd's RestartPreventExitStatus is keyed on, and the stderr line is what reaches
+  // the supervisor's own log (the units redirect stderr to daemon-stderr.log). launchd has
+  // no per-status allowlist, so a macOS agent still respawns under KeepAlive — throttled
+  // to its ~10s floor, not looping (EXC-1164).
+  function exitTerminal(reason: string, err: unknown): never {
+    process.stderr.write(`caret: ${reason}; exiting.\n`);
+    log.error("fatal", err, { reason, exitStatus: SERVICE_TERMINAL_EXIT_STATUS });
+    process.exit(SERVICE_TERMINAL_EXIT_STATUS);
+  }
+
+  // Resolved before the try, so a read failure in either surfaces as an ordinary startup
+  // crash rather than being reported — and permanently parked — as a bind failure.
+  const buildId = await currentBuildId();
+  const assetDigest = await buildHash(assets);
+
   try {
     server = createServer({
       store,
@@ -174,8 +182,8 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
       resident,
       assets,
       lockPath: daemonLock(),
-      buildId: await currentBuildId(),
-      assetDigest: await buildHash(assets),
+      buildId,
+      assetDigest,
       commit,
       // World + boot identity (EXC-461): stateDir is the world key (never
       // logged — identifying); the per-boot instanceId is the loggable handle.
@@ -238,15 +246,19 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   // Boot's own check, fired last so it cannot delay the bind or the signal handlers.
   refreshUpdate();
   // The periodic work a daemon that respawns per review got for free from its own
-  // restart (EXC-1164). The two gates differ: the update check only matters to a
-  // daemon that stays up, while a supervised-but-not-resident daemon still bypasses
-  // spawnDaemon, so its daemon-stderr.log would otherwise never be rotated at all.
+  // restart (EXC-1164). The two gates differ: the update check only matters to a daemon
+  // that stays up, while any supervised daemon bypasses spawnDaemon, so its
+  // daemon-stderr.log would otherwise never be rotated at all.
   const upkeep: UpkeepTask[] = [];
   if (resident) upkeep.push({ name: "update-check", run: refreshUpdate });
-  if (process.env.CARET_SUPERVISED === "1") {
-    // svc.current() per tick, not the boot snapshot: the rotation knobs are
-    // [logging] keys, which hot-reload.
-    upkeep.push({ name: "stderr-rotate", run: () => rotateDaemonStderr(svc.current(), log) });
+  if (isSupervised()) {
+    // Once at boot as well as on the tick. A supervised but NON-resident daemon still
+    // idle-exits after about a minute, so the hourly tick alone would never fire for it —
+    // and it is the daemon that appends fresh crash output on every restart.
+    // svc.current() rather than the boot snapshot: the rotation knobs are [logging] keys,
+    // which hot-reload.
+    rotateDaemonStderr(svc.current());
+    upkeep.push({ name: "stderr-rotate", run: () => rotateDaemonStderr(svc.current()) });
   }
   startUpkeep({ tasks: upkeep, log });
   // Bun.serve keeps the process alive; the daemon idle-auto-shuts-down.
