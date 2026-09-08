@@ -36,13 +36,13 @@ export function startUpkeep({ tasks, log, everyMs, schedule }: UpkeepDeps): void
       setInterval(fn, every).unref();
     });
   arm(() => {
-    for (const t of tasks) {
+    for (const task of tasks) {
       try {
-        t.run();
+        task.run();
       } catch (e) {
-        log.warn("upkeep", `${t.name} failed`, { detail: errorMessage(e) });
+        log.warn("upkeep", `${task.name} failed`, { detail: errorMessage(e) });
       }
     }
   }, ms);
-  log.info("upkeep", "upkeep armed", { everyMs: ms, tasks: tasks.map((t) => t.name) });
+  log.info("upkeep", "upkeep armed", { everyMs: ms, tasks: tasks.map((task) => task.name) });
 }
