@@ -49,10 +49,12 @@ function plistPath() {
   return join(dir, `${LAUNCHD_LABEL}.plist`);
 }
 
+/** launchd spells a loaded-but-stopped agent `state = not running`, so the running parse
+ * has to reject the very line it keys on. */
 const LOADED = `${LAUNCHD_LABEL} = {
 	active count = 0
 	path = /Users/ada/Library/LaunchAgents/${LAUNCHD_LABEL}.plist
-	program = /Users/ada/.local/state/caret/bin/caret
+	state = not running
 }`;
 
 const RUNNING_STATE = `${LAUNCHD_LABEL} = {
