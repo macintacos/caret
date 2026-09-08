@@ -10,3 +10,9 @@ test("runCommand captures both streams of the command it ran", async () => {
   const result = await runCommand(["sh", "-c", "printf out; printf err >&2"]);
   expect(result).toEqual({ code: 0, stdout: "out", stderr: "err" });
 });
+
+test("runCommand reports a binary that is not installed rather than rejecting", async () => {
+  const result = await runCommand(["caret-no-such-binary"]);
+  expect(result.code).toBe(127);
+  expect(result.stderr).toMatch(/caret-no-such-binary/);
+});

@@ -60,6 +60,7 @@ mise run lint       # read-only gate: formatting + Biome lint + tsc + svelte-che
 mise run format     # Biome (write)
 mise run smoke      # smoke the shipped artifacts; also `smoke bin` / `smoke bundle`
 mise run preflight  # pre-push gate: lint + tests (unit ∥ bats ∥ e2e) + build + smoke, scoped to the diff
+mise run linux      # boot a real systemd in a container; `linux verify` runs the unit checks
 ```
 
 ### Bootstrapping a clone

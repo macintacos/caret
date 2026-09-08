@@ -75,8 +75,32 @@ test("install creates a unit directory the account has never had", async () => {
 test("install reloads, enables, then restarts so a second install replaces a live unit", async () => {
   const fake = fakeRun();
   await manager(fake).install(fakeServiceConfig({ label: SYSTEMD_UNIT }));
-  expect(fake.verbs()).toEqual(["show-environment", "daemon-reload", "enable", "restart"]);
-  expect(fake.calls[2]).toEqual(["systemctl", "--user", "enable", "--now", SYSTEMD_UNIT]);
+  expect(fake.verbs()).toEqual([
+    "show-environment",
+    "daemon-reload",
+    "enable",
+    "reset-failed",
+    "restart",
+  ]);
+});
+
+test("install enables without --now, leaving the one start to restart", async () => {
+  const fake = fakeRun();
+  await manager(fake).install(fakeServiceConfig({ label: SYSTEMD_UNIT }));
+  expect(fake.calls).toContainEqual(["systemctl", "--user", "enable", SYSTEMD_UNIT]);
+  expect(fake.calls.flat()).not.toContain("--now");
+});
+
+test("install clears a parked unit so a crash-burst machine is recoverable", async () => {
+  // A unit systemd parked on its start limit refuses further starts until reset-failed,
+  // and re-running install is what a user does next.
+  const fake = fakeRun((argv) =>
+    argv[2] === "reset-failed" ? { code: 1, stdout: "", stderr: "Unit not loaded.\n" } : OK,
+  );
+  await manager(fake).install(fakeServiceConfig({ label: SYSTEMD_UNIT }));
+  const order = fake.verbs();
+  expect(order).toContain("reset-failed");
+  expect(order.indexOf("reset-failed")).toBeLessThan(order.indexOf("restart"));
 });
 
 test("install enables lingering so the unit survives logout", async () => {
@@ -204,6 +228,47 @@ test("status reads a user's opt-out from a disabled unit", async () => {
 test("status reads a user's opt-out from a masked unit", async () => {
   const fake = statusRun("inactive", "masked", 3, 1);
   expect((await manager(fake).status()).disabled).toBe(true);
+});
+
+test("status reads a runtime mask as the same opt-out", async () => {
+  // `systemctl --user mask --runtime` masks until reboot and reports its own word; read
+  // as enabled it would send a reconcile into an install that can only fail at enable.
+  const fake = statusRun("inactive", "masked-runtime", 3, 1);
+  expect((await manager(fake).status()).disabled).toBe(true);
+});
+
+test("status reads an unanswered is-enabled as not installed", async () => {
+  // The one negative match, so it is the one field an unrecognised answer could flip the
+  // unsafe way: installed:true on silence would have a reconcile skip a machine that has
+  // nothing installed.
+  const fake = statusRun("inactive", "", 3, 1);
+  expect((await manager(fake).status()).installed).toBe(false);
+});
+
+test("status on a host with no systemctl reports it unsupported rather than throwing", async () => {
+  const fake = fakeRun(() => ({
+    code: 127,
+    stdout: "",
+    stderr: 'Executable not found in $PATH: "systemctl"',
+  }));
+  expect(await manager(fake).status()).toEqual({
+    installed: false,
+    running: false,
+    disabled: false,
+    unsupported: expect.stringContaining("systemctl"),
+  });
+});
+
+test("install on a host with no systemctl throws the diagnostic and writes nothing", async () => {
+  const fake = fakeRun(() => ({
+    code: 127,
+    stdout: "",
+    stderr: 'Executable not found in $PATH: "systemctl"',
+  }));
+  await expect(manager(fake).install(fakeServiceConfig({ label: SYSTEMD_UNIT }))).rejects.toThrow(
+    /systemctl/,
+  );
+  expect(existsSync(unitPath())).toBe(false);
 });
 
 test("status on a host with no user bus reports the diagnostic instead of probing further", async () => {

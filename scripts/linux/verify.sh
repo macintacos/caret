@@ -31,6 +31,9 @@ chmod +x "$HOME/fake-caret"
 echo run >"$HOME/mode"
 
 pass() { printf 'ok   %s\n' "$1"; }
+# An observation the run records without passing or failing on it — for behaviour that is
+# genuinely host-dependent, where asserting either outcome would be asserting the host.
+note() { printf 'note %s — %s\n' "$1" "$2"; }
 fail() {
   printf 'FAIL %s — %s\n' "$1" "$2"
   failed=$((failed + 1))
@@ -48,6 +51,20 @@ expect() {
     pass "$name"
   else
     fail "$name" "rc=$rc (want $want_rc), output: ${out//$'\n'/ }"
+  fi
+}
+
+# stdout only. status() reads its answer off stdout, so a check that would also accept the
+# word on stderr proves nothing about what the manager actually sees.
+expect_out() {
+  local name=$1 want_rc=$2 want_out=$3 out rc
+  shift 3
+  out="$("$@" 2>/dev/null)"
+  rc=$?
+  if [ "$rc" = "$want_rc" ] && [[ $out == *"$want_out"* ]]; then
+    pass "$name"
+  else
+    fail "$name" "rc=$rc (want $want_rc), stdout: ${out//$'\n'/ }"
   fi
 }
 
@@ -93,21 +110,51 @@ expect "show-environment fails without a user bus" 1 "Failed to connect to bus" 
 # missing bus AND for a unit that is merely absent, so its status alone cannot say which.
 expect "is-enabled fails without a user bus too" 1 "Failed to connect to bus" \
   busless systemctl --user is-enabled "$unit"
-expect "is-enabled also exits non-zero for a unit that is merely absent" 4 not-found \
+expect_out "is-enabled also exits non-zero for a unit that is merely absent" 4 not-found \
   systemctl --user is-enabled "$unit"
 
-printf -- '--- install: write the unit, reload, enable\n'
+printf -- '--- install: the sequence createSystemdManager performs\n'
 mkdir -p "$unit_dir"
 cp "$HOME/$unit" "$unit_dir/$unit"
 expect "daemon-reload accepts the generated unit" 0 "" systemctl --user daemon-reload
-expect "a unit on disk but not enabled reads disabled" 1 disabled \
+expect_out "a unit on disk but not enabled reads disabled" 1 disabled \
   systemctl --user is-enabled "$unit"
 expect "mask refuses while the unit file exists" 1 "already exists" \
   systemctl --user mask "$unit"
-expect "enable --now loads and starts the quoted-word ExecStart" 0 "" \
-  systemctl --user enable --now "$unit"
-expect "the enabled unit is active" 0 active systemctl --user is-active "$unit"
-expect "StandardOutput=append: created the daemon log" 0 "" test -f "$log"
+expect "enable loads the quoted-word ExecStart" 0 "" systemctl --user enable "$unit"
+systemctl --user reset-failed "$unit"
+expect "restart starts a unit enable left stopped" 0 "" systemctl --user restart "$unit"
+expect_out "the started unit is active" 0 active systemctl --user is-active "$unit"
+expect "StandardError=append: created the daemon log" 0 "" test -f "$log"
+
+# install()'s own linger call, which the mise task's root-run `enable-linger caret` does
+# not stand in for: this is the self-linger polkit gates, and the one branch in the manager
+# that degrades to a warn rather than throwing. Recorded rather than asserted because
+# which way it falls is the host's answer, not systemd's contract — under `container exec`
+# there is no logind session to linger, while a real desktop login permits it.
+linger_out="$(loginctl enable-linger 2>&1)"
+linger_rc=$?
+note "self-linger, the call install() makes" "rc=$linger_rc ${linger_out:-(no output)}"
+
+# The reason install() restarts rather than passing `enable --now`: enable leaves an
+# already-running unit on its old file, so without the restart a second install would keep
+# serving the old one.
+printf -- '--- replace: a second install must land the new unit on a running one\n'
+before="$(prop MainPID)"
+sed 's/^ExecStart=.*/ExecStart="\/bin\/sleep" "1800"/' "$HOME/$unit" >"$unit_dir/$unit"
+systemctl --user daemon-reload
+systemctl --user enable "$unit" >/dev/null 2>&1
+if [ "$(prop MainPID)" = "$before" ]; then
+  pass "enable alone leaves the running unit on its old ExecStart"
+else
+  fail "enable alone leaves the running unit on its old ExecStart" "MainPID moved from $before"
+fi
+systemctl --user restart "$unit"
+until_true 15 state_is active
+expect_out "restart is what picks up the rewritten unit" 0 "/bin/sleep" \
+  systemctl --user show "$unit" -p ExecStart --value
+cp "$HOME/$unit" "$unit_dir/$unit"
+systemctl --user daemon-reload
 
 printf -- '--- restart contract: what each launcher exit does\n'
 echo 78 >"$HOME/mode"
@@ -135,18 +182,24 @@ systemctl --user restart "$unit" 2>/dev/null
 burst="$(sed -n 's/^StartLimitBurst=//p' "$unit_dir/$unit")"
 settled "an exit 1 burst stops at StartLimitBurst=$burst restarts" burst_spent "$burst"
 
-printf -- '--- uninstall: disable, remove, reload\n'
+# The unit is parked on its start limit right here, which is the state a user re-runs
+# `caret install` in. That is why install() resets before it restarts: without the reset
+# systemd refuses the start and install throws with no way back but a hand-typed command.
 echo run >"$HOME/mode"
+expect "a parked unit refuses a start until it is reset" 1 "" systemctl --user start "$unit"
 systemctl --user reset-failed "$unit"
-systemctl --user start "$unit"
+expect "reset-failed makes the parked unit startable again" 0 "" systemctl --user start "$unit"
+
+printf -- '--- uninstall: disable, remove, reload\n'
+until_true 15 state_is active
 until_true 15 state_is active
 systemctl --user stop "$unit"
-expect "a known but stopped unit reads inactive" 3 inactive systemctl --user is-active "$unit"
+expect_out "a known but stopped unit reads inactive" 3 inactive systemctl --user is-active "$unit"
 expect "disable --now succeeds while the unit exists" 0 "" \
   systemctl --user disable --now "$unit"
 rm -f "$unit_dir/$unit"
 systemctl --user daemon-reload
-expect "a removed unit reads not-found" 4 not-found systemctl --user is-enabled "$unit"
+expect_out "a removed unit reads not-found" 4 not-found systemctl --user is-enabled "$unit"
 expect "disable --now on an absent unit fails, so uninstall must be best-effort" 1 \
   "does not exist" systemctl --user disable --now "$unit"
 

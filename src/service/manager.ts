@@ -4,9 +4,13 @@
 // selects between them (src/service/index.ts).
 
 export interface ServiceStatus {
-  /** The supervisor has the unit loaded. Not the same as the unit existing on
-   * disk: bin/caret-launcher's stop_agent boots the agent out on terminal failure
-   * and deliberately leaves the plist, so a later `caret install` re-bootstraps it. */
+  /** The supervisor knows the unit. What that rests on differs by platform, and the
+   * difference is visible after a terminal failure: on macOS it is loadedness, and
+   * bin/caret-launcher's stop_agent boots the agent out while deliberately leaving the
+   * plist, so this reads false with the file still there. On Linux it is the unit file
+   * being on systemd's search path, which `systemctl --user is-enabled` answers — a
+   * file present but never loaded still reads true. Both agree after an eviction, which
+   * removes the file on Linux. */
   installed: boolean;
   running: boolean;
   /** The user turned the service off themselves — Login Items on macOS, a disabled or
