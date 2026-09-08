@@ -1,7 +1,8 @@
 // Size-triggered rotation for the live logs (EXC-1068). One entry point, called
 // by all three sinks: the hook logger and the daemon logger check before each
-// record they actually write, and spawnDaemon checks daemon-stderr.log once at
-// spawn.
+// record they actually write, and daemon-stderr.log — which no logger holds — is
+// checked at spawn, plus on the upkeep tick of a supervised daemon, which never
+// passes through spawnDaemon at all.
 //
 // Rotation is COPY-TRUNCATE, not rename-and-recreate. Every writer opens its
 // sink in append mode (pino.destination defaults SonicBoom to append; spawnDaemon

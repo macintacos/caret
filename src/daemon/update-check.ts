@@ -3,11 +3,11 @@
 // verdict over gathered facts (`updateStatusFor`), and a throttled runner that gathers
 // them (`runUpdateCheck`). Every effect arrives through UpdateCheckDeps.
 //
-// The verdict is PERSISTED, not just held in memory: this daemon idle-shuts-down and
-// respawns per review, so an in-memory-only verdict would read `unknown` on nearly
-// every boot and the throttled path would have nothing to report. Caching it beside
-// the stamp is what makes "reading the verdict never triggers a synchronous network
-// call" true.
+// The verdict is PERSISTED, not just held in memory: unless it is resident the daemon
+// idle-shuts-down and respawns per review, so an in-memory-only verdict would read
+// `unknown` on nearly every boot and the throttled path would have nothing to report.
+// Caching it beside the stamp is what makes "reading the verdict never triggers a
+// synchronous network call" true.
 
 import { writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -18,8 +18,9 @@ import type { CaretLogger } from "@/lib/log.ts";
 import { isNewer } from "@/lib/semver.ts";
 import { type BuildKind, errorMessage, type UpdateReport, type UpdateStatus } from "@/lib/types.ts";
 
-/** At most one check per day. Not a timer: the daemon idle-shuts-down and respawns
- * per review, so a boot-time throttled check already yields roughly one call a day. */
+/** At most one check per day, whoever asks. A daemon that respawns per review reaches
+ * it at boot; a resident one re-arms it on the hourly upkeep tick (src/daemon/upkeep.ts),
+ * and this stamp is what keeps both to roughly one call a day. */
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /** What takes a published install to the newest release — the same command the README

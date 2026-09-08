@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
+  rmSync,
   statSync,
   unlinkSync,
   writeFileSync,
@@ -13,7 +14,14 @@ import { dirname } from "node:path";
 import { ensureDaemonNoOps } from "@test/support/ensure-daemon-deps.ts";
 import { setupTempStateDir } from "@test/support/env.ts";
 import { caretLogRecords } from "@test/support/ndjson.ts";
-import { daemonLock, daemonStderrLogFile, ensureLogsDir, logArchiveDir } from "@/config/paths.ts";
+import { recordingLog } from "@test/support/recording-log.ts";
+import {
+  daemonLock,
+  daemonStderrLogFile,
+  ensureLogsDir,
+  logArchiveDir,
+  logsDir,
+} from "@/config/paths.ts";
 import { DEFAULTS } from "@/config/settings.ts";
 import {
   DAEMON_CWD,
@@ -21,9 +29,10 @@ import {
   openDaemonStderr,
   removeOwnDaemonLock,
   retireDaemon,
+  rotateDaemonStderr,
   spawnDaemon,
 } from "@/daemon/lifecycle.ts";
-import { setLogLevel } from "@/lib/log.ts";
+import { noopLogger, setLogLevel } from "@/lib/log.ts";
 
 // Point the state dir at a throwaway temp dir so the debug-level instrumentation
 // tests append to a disposable caret.log instead of the real ~/.local/state/caret.
@@ -443,6 +452,34 @@ test("openDaemonStderr rotates an oversized stderr log before reopening it", () 
   expect(readdirSync(logArchiveDir())).toEqual([
     expect.stringMatching(/^daemon-stderr-.*\.log\.gz$/),
   ]);
+});
+
+// ---- rotateDaemonStderr (EXC-1164) ----
+
+test("rotateDaemonStderr archives an oversized stderr log in place", () => {
+  ensureLogsDir();
+  writeFileSync(daemonStderrLogFile(), "x".repeat(200_000));
+  const s = { ...DEFAULTS, logging: { ...DEFAULTS.logging, max_size: 65_536 } };
+  rotateDaemonStderr(s, noopLogger);
+  expect(statSync(daemonStderrLogFile()).size).toBe(0);
+  expect(readdirSync(logArchiveDir())).toEqual([
+    expect.stringMatching(/^daemon-stderr-.*\.log\.gz$/),
+  ]);
+});
+
+test("rotateDaemonStderr warns rather than throwing when the logs dir is unusable", () => {
+  // A regular file where logs/ must be: every path under it fails with ENOTDIR,
+  // whatever uid the suite runs as. The upkeep tick must survive that.
+  ensureLogsDir();
+  rmSync(logsDir(), { recursive: true, force: true });
+  writeFileSync(logsDir(), "not a directory");
+  try {
+    const { recs, log } = recordingLog();
+    expect(() => rotateDaemonStderr(DEFAULTS, log)).not.toThrow();
+    expect(recs.filter((r) => r.step === "upkeep" && r.level === "warn")).toHaveLength(1);
+  } finally {
+    unlinkSync(logsDir());
+  }
 });
 
 // ---- daemon cwd (EXC-1155) ----

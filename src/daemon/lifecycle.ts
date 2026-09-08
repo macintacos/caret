@@ -13,8 +13,9 @@ import { getPort, logKeep, logMaxSize, type Settings } from "@/config/settings.t
 import { type HealthBody, httpHealth } from "@/daemon/client.ts";
 import { buildKind, currentBuildId, type DaemonLock, VERSION } from "@/lib/build-id.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
-import { logDebug, logWarn } from "@/lib/log.ts";
+import { type CaretLogger, logDebug, logWarn } from "@/lib/log.ts";
 import { rotateIfOversized } from "@/lib/log-rotate.ts";
+import { errorMessage } from "@/lib/types.ts";
 
 export interface EnsureDeps {
   baseUrl: string;
@@ -255,6 +256,19 @@ export function openDaemonStderr(s: Settings): number | "ignore" {
     // caret.log too).
     logWarn("spawn", "daemon stderr log unopenable; discarding output");
     return "ignore";
+  }
+}
+
+/** Rotate daemon-stderr.log if it has grown past the threshold. The supervised
+ * daemon's own rotation site: a supervisor starts it directly, so it never passes
+ * through spawnDaemon, where the other check lives (EXC-1164). Copy-truncate, so
+ * the supervisor's open descriptor keeps appending across it. */
+export function rotateDaemonStderr(s: Settings, log: CaretLogger): void {
+  try {
+    ensureLogsDir();
+    rotateIfOversized(daemonStderrLogFile(), logMaxSize(s), logKeep(s));
+  } catch (e) {
+    log.warn("upkeep", "stderr log rotation failed", { detail: errorMessage(e) });
   }
 }
 

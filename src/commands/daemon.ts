@@ -21,7 +21,7 @@ import {
   watchSettings,
 } from "@/config/settings.ts";
 import { buildDiagnostics, prodDiagnosticsDeps } from "@/daemon/diagnostics.ts";
-import { isAddrInUse, removeOwnDaemonLock } from "@/daemon/lifecycle.ts";
+import { isAddrInUse, removeOwnDaemonLock, rotateDaemonStderr } from "@/daemon/lifecycle.ts";
 import { type CaretServer, createServer } from "@/daemon/server.ts";
 import {
   fileUpdateCache,
@@ -29,6 +29,7 @@ import {
   runUpdateCheck,
   updateReportFor,
 } from "@/daemon/update-check.ts";
+import { startUpkeep, type UpkeepTask } from "@/daemon/upkeep.ts";
 import { buildHash, buildKind, currentBuildId, currentCommit, VERSION } from "@/lib/build-id.ts";
 import { createDaemonLogger } from "@/lib/log.ts";
 import { commitsAheadOfTrunk, latestReleaseTag, publishedCaretVersion } from "@/lib/upstream.ts";
@@ -78,15 +79,16 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   const install = buildKind();
   const version = VERSION;
   const commit = currentCommit();
-  // Seeded from the last persisted verdict, so a daemon that respawns per review can
-  // answer immediately; the background check below replaces it when it settles.
+  // Seeded from the last persisted verdict, so a daemon that starts fresh can answer
+  // immediately; the background check below replaces it when it settles.
   const updateCache = fileUpdateCache(updateCheckFile());
   let updateStatus = readCachedStatus(updateCache, version, commit);
   // Ask — at most once a day, and never on a dev build or under the `updates.check`
   // opt-out — whether a newer caret exists (EXC-1205). Fire-and-forget: nothing awaits it,
   // so neither boot nor a prefs write is delayed, and runUpdateCheck never rejects. A null
   // result is the throttle (or the opt-out) saying there is nothing new, so the seeded
-  // verdict stands.
+  // verdict stands. Boot fires it once; a resident daemon re-arms it on the upkeep tick,
+  // which the 24h stamp is what bounds.
   function refreshUpdate(): void {
     void runUpdateCheck({
       kind: install,
@@ -222,5 +224,17 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   process.once("unhandledRejection", onFatal("unhandledRejection"));
   // Boot's own check, fired last so it cannot delay the bind or the signal handlers.
   refreshUpdate();
+  // The periodic work a daemon that respawns per review got for free from its own
+  // restart (EXC-1164). The two gates differ: the update check only matters to a
+  // daemon that stays up, while a supervised-but-not-resident daemon still bypasses
+  // spawnDaemon, so its daemon-stderr.log would otherwise never be rotated at all.
+  const upkeep: UpkeepTask[] = [];
+  if (resident) upkeep.push({ name: "update-check", run: refreshUpdate });
+  if (process.env.CARET_SUPERVISED === "1") {
+    // svc.current() per tick, not the boot snapshot: the rotation knobs are
+    // [logging] keys, which hot-reload.
+    upkeep.push({ name: "stderr-rotate", run: () => rotateDaemonStderr(svc.current(), log) });
+  }
+  startUpkeep({ tasks: upkeep, log });
   // Bun.serve keeps the process alive; the daemon idle-auto-shuts-down.
 }
