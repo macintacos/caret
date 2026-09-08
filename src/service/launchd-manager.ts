@@ -58,7 +58,7 @@ const DISABLED = new RegExp(
 
 /** launchctl's exit codes are stable across releases (113 no such service, 5 I/O error)
  * where its stderr is free-form prose and sometimes empty. */
-function failed(action: string, result: LaunchctlResult): Error {
+function launchctlError(action: string, result: LaunchctlResult): Error {
   return new Error(
     `caret service: launchctl ${action} failed (${result.code}): ${result.stderr.trim()}`,
   );
@@ -93,7 +93,7 @@ export function createLaunchdManager(deps: LaunchdDeps = {}): ServiceManager {
       // one a reload rather than a "service already loaded" failure.
       await launchctl(["bootout", target]);
       const bootstrapped = await launchctl(["bootstrap", domain, plist]);
-      if (bootstrapped.code !== 0) throw failed("bootstrap", bootstrapped);
+      if (bootstrapped.code !== 0) throw launchctlError("bootstrap", bootstrapped);
     },
 
     async uninstall(): Promise<void> {
@@ -104,14 +104,14 @@ export function createLaunchdManager(deps: LaunchdDeps = {}): ServiceManager {
     },
 
     async status(): Promise<ServiceStatus> {
-      const [printed, disabled] = await Promise.all([
+      const [printed, printDisabled] = await Promise.all([
         launchctl(["print", target]),
         launchctl(["print-disabled", domain]),
       ]);
       return {
         installed: printed.code === 0,
         running: printed.code === 0 && RUNNING.some((pattern) => pattern.test(printed.stdout)),
-        disabled: DISABLED.test(disabled.stdout),
+        disabled: DISABLED.test(printDisabled.stdout),
       };
     },
 
@@ -120,7 +120,7 @@ export function createLaunchdManager(deps: LaunchdDeps = {}): ServiceManager {
      * must tolerate that. */
     async restart(): Promise<void> {
       const kicked = await launchctl(["kickstart", "-k", target]);
-      if (kicked.code !== 0) throw failed("kickstart", kicked);
+      if (kicked.code !== 0) throw launchctlError("kickstart", kicked);
     },
   };
 }
