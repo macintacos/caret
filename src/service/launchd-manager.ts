@@ -13,12 +13,9 @@ import {
   type ServiceManager,
   type ServiceStatus,
 } from "@/service/manager.ts";
+import { type CommandResult, runCommand } from "@/service/run.ts";
 
-export interface LaunchctlResult {
-  code: number;
-  stdout: string;
-  stderr: string;
-}
+export type LaunchctlResult = CommandResult;
 
 /** Run `launchctl` with `args`. Never rejects on a non-zero exit — every caller here
  * branches on the status rather than on a throw. */
@@ -35,17 +32,7 @@ export interface LaunchdDeps {
   launchctl?: Launchctl;
 }
 
-export const spawnLaunchctl: Launchctl = async (args) => {
-  const proc = Bun.spawn(["launchctl", ...args], { stdout: "pipe", stderr: "pipe" });
-  // Drained alongside proc.exited, never after it: a command that filled either pipe
-  // would block forever waiting for a reader that had not started.
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  return { code, stdout, stderr };
-};
+export const spawnLaunchctl: Launchctl = (args) => runCommand(["launchctl", ...args]);
 
 /** launchd prints `state = running` alongside a `pid` line, and the two have moved
  * relative to each other across releases; either alone is the whole answer. */

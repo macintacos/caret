@@ -13,6 +13,10 @@ export interface ServiceStatus {
    * masked unit on Linux. Install reads this as an opt-out and never re-enables
    * (EXC-1167). */
   disabled: boolean;
+  /** Why this host cannot run the service at all, absent when it can. A stated
+   * outcome rather than a failed install: the composition point branches on it and
+   * leaves the machine non-resident instead of throwing (EXC-1167). */
+  unsupported?: string;
 }
 
 export interface ServiceManager {
