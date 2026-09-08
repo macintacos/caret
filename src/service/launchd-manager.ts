@@ -26,15 +26,19 @@ export type Launchctl = (args: string[]) => Promise<LaunchctlResult>;
 
 export interface LaunchdDeps {
   /** Defaults to `${homedir()}/Library/LaunchAgents`. Keep in sync with evict() in
-   * bin/caret-launcher, which computes the same path in bash. */
+   * bin/caret-launcher, which computes the same path in bash —
+   * test/structure/launch-agents-path.test.ts holds the shell half. */
   launchAgentsDir?: string;
   /** The `gui/<uid>` domain every target names. Defaults to the current process. */
   uid?: number;
+  /** Defaults to spawning the real launchctl. */
   launchctl?: Launchctl;
 }
 
-const spawnLaunchctl: Launchctl = async (args) => {
+export const spawnLaunchctl: Launchctl = async (args) => {
   const proc = Bun.spawn(["launchctl", ...args], { stdout: "pipe", stderr: "pipe" });
+  // Drained alongside proc.exited, never after it: a command that filled either pipe
+  // would block forever waiting for a reader that had not started.
   const [stdout, stderr, code] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
@@ -52,8 +56,12 @@ const DISABLED = new RegExp(
   `"${LAUNCHD_LABEL.replace(/\./g, "\\.")}"\\s*=>\\s*(?:true|disabled)\\b`,
 );
 
+/** launchctl's exit codes are stable across releases (113 no such service, 5 I/O error)
+ * where its stderr is free-form prose and sometimes empty. */
 function failed(action: string, result: LaunchctlResult): Error {
-  return new Error(`caret service: launchctl ${action} failed: ${result.stderr.trim()}`);
+  return new Error(
+    `caret service: launchctl ${action} failed (${result.code}): ${result.stderr.trim()}`,
+  );
 }
 
 /** The launchd user agent manager. Nothing here emits `launchctl enable`: a user who
@@ -62,14 +70,24 @@ function failed(action: string, result: LaunchctlResult): Error {
 export function createLaunchdManager(deps: LaunchdDeps = {}): ServiceManager {
   const launchAgentsDir = deps.launchAgentsDir ?? join(homedir(), "Library", "LaunchAgents");
   const launchctl = deps.launchctl ?? spawnLaunchctl;
-  const domain = `gui/${deps.uid ?? process.getuid?.() ?? 0}`;
+  const uid = deps.uid ?? process.getuid?.();
+  if (uid === undefined) throw new Error("caret service: launchd needs a POSIX uid");
+  const domain = `gui/${uid}`;
   const target = `${domain}/${LAUNCHD_LABEL}`;
   const plist = join(launchAgentsDir, `${LAUNCHD_LABEL}.plist`);
 
   return {
     async install(cfg: ServiceConfig): Promise<void> {
+      // The plist carries cfg.label as its own Label while every target below is the
+      // constant. Diverge and bootstrap registers a job that bootout, kickstart and
+      // print cannot name — a resident daemon caret can no longer see or stop.
+      if (cfg.label !== LAUNCHD_LABEL) {
+        throw new Error(`caret service: plist label ${cfg.label} is not ${LAUNCHD_LABEL}`);
+      }
       // Absent on an account that has never had a login item.
       mkdirSync(launchAgentsDir, { recursive: true });
+      // Written in place, unlike installLauncher's tmp+rename: launchd reads this file
+      // whole at the bootstrap below and at login, never lazily from a live fd.
       writeFileSync(plist, buildLaunchdPlist(cfg));
       // Best-effort: it has nothing to boot out on a first install, and makes a second
       // one a reload rather than a "service already loaded" failure.
@@ -79,16 +97,20 @@ export function createLaunchdManager(deps: LaunchdDeps = {}): ServiceManager {
     },
 
     async uninstall(): Promise<void> {
+      // Best-effort: a missing agent is the ordinary case here. Any other failure leaves
+      // the agent loaded with its plist gone; EXC-1167 owns whether uninstall says so.
       await launchctl(["bootout", target]);
       rmSync(plist, { force: true });
     },
 
     async status(): Promise<ServiceStatus> {
-      const printed = await launchctl(["print", target]);
-      const disabled = await launchctl(["print-disabled", domain]);
+      const [printed, disabled] = await Promise.all([
+        launchctl(["print", target]),
+        launchctl(["print-disabled", domain]),
+      ]);
       return {
         installed: printed.code === 0,
-        running: printed.code === 0 && RUNNING.some((line) => line.test(printed.stdout)),
+        running: printed.code === 0 && RUNNING.some((pattern) => pattern.test(printed.stdout)),
         disabled: DISABLED.test(disabled.stdout),
       };
     },

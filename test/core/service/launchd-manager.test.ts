@@ -73,7 +73,7 @@ function statusLaunchctl(printed: LaunchctlResult, printDisabled: LaunchctlResul
 }
 
 function disabledList(entry: string): LaunchctlResult {
-  return { code: 0, stdout: `{\n\t"com.apple.other" => false\n\t${entry}\n}`, stderr: "" };
+  return { code: 0, stdout: `{\n\t"com.apple.other" => enabled\n\t${entry}\n}`, stderr: "" };
 }
 
 test("install writes exactly the generated plist at the label's path", async () => {
@@ -111,15 +111,23 @@ test("installing twice reloads the agent rather than failing", async () => {
   expect(fake.subcommands()).toEqual(["bootout", "bootstrap", "bootout", "bootstrap"]);
 });
 
-test("install throws with launchctl's own stderr when bootstrap fails", async () => {
+test("install throws with launchctl's own exit code and stderr when bootstrap fails", async () => {
   const fake = fakeLaunchctl((args) =>
     args[0] === "bootstrap"
       ? { code: 5, stdout: "", stderr: "Load failed: 5: Input/output error\n" }
       : OK,
   );
-  await expect(manager(fake).install(fakeServiceConfig())).rejects.toThrow(
-    /Load failed: 5: Input\/output error/,
-  );
+  const install = manager(fake).install(fakeServiceConfig());
+  await expect(install).rejects.toThrow(/Load failed: 5: Input\/output error/);
+  await expect(install).rejects.toThrow(/\(5\)/);
+});
+
+test("install refuses a config whose label the manager's targets cannot name", async () => {
+  const fake = fakeLaunchctl();
+  await expect(
+    manager(fake).install(fakeServiceConfig({ label: "com.example.other" })),
+  ).rejects.toThrow(/com\.example\.other/);
+  expect(fake.calls).toEqual([]);
 });
 
 test("uninstall boots the agent out and removes its plist", async () => {
@@ -173,6 +181,12 @@ test("status reads running from launchd's state line", async () => {
     running: true,
     disabled: false,
   });
+  // The one method whose two reads take different operands: `print` the service,
+  // `print-disabled` the domain. Swapping them keeps every assertion above green.
+  expect(fake.calls).toEqual([
+    ["print", TARGET],
+    ["print-disabled", DOMAIN],
+  ]);
 });
 
 test("status reads running from a pid line with no state line beside it", async () => {
@@ -195,7 +209,7 @@ test("status reads the Ventura-era disabled spelling", async () => {
 });
 
 test("status reports an agent the user has left enabled as not disabled", async () => {
-  const fake = statusLaunchctl(NO_SUCH_SERVICE, disabledList(`"${LAUNCHD_LABEL}" => false`));
+  const fake = statusLaunchctl(NO_SUCH_SERVICE, disabledList(`"${LAUNCHD_LABEL}" => enabled`));
   expect((await manager(fake).status()).disabled).toBe(false);
 });
 

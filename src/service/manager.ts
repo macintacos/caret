@@ -9,8 +9,9 @@ export interface ServiceStatus {
    * and deliberately leaves the plist, so a later `caret install` re-bootstraps it. */
   installed: boolean;
   running: boolean;
-  /** The user turned the service off themselves — System Settings › Login Items on
-   * macOS. Install reads this as an opt-out and never re-enables (EXC-1167). */
+  /** The user turned the service off themselves — Login Items on macOS, a disabled or
+   * masked unit on Linux. Install reads this as an opt-out and never re-enables
+   * (EXC-1167). */
   disabled: boolean;
 }
 
