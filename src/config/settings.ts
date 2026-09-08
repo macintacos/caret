@@ -35,9 +35,9 @@ import { configFile } from "@/config/paths.ts";
 // EXC-558: the one dev-vs-compiled signal, reused to gate the [dev] table inert
 // in a prod build. Cycle-free: build-id imports only ui-assets/crypto/pkg, and
 // paths.ts (already imported below) itself imports build-id.
-import { isCompiledBinary } from "@/lib/build-id.ts";
+import { buildKind, isCompiledBinary } from "@/lib/build-id.ts";
 import { logError } from "@/lib/log.ts";
-import type { EnvOverride } from "@/lib/types.ts";
+import type { BuildKind, EnvOverride } from "@/lib/types.ts";
 
 export { DEFAULT_PORT };
 
@@ -96,6 +96,7 @@ const SettingsSchema = z.object({
       port: Port.default(DEFAULT_PORT), // EXC-430
       idle_ms: IdleMs.default(60_000), // EXC-430
       heartbeat_ms: HeartbeatMs.default(8_000), // EXC-430
+      resident: z.boolean().default(false), // EXC-1164: stay up until told to stop
     })
     .prefault({}),
   review: z
@@ -354,6 +355,19 @@ export function getPort(s: Settings = settings().current()): number {
 /** Idle auto-shutdown delay (ms): CARET_IDLE_MS > [daemon].idle_ms > 60s. */
 export function idleMs(s: Settings = settings().current()): number {
   return envValue("CARET_IDLE_MS", IdleMs) ?? s.daemon.idle_ms;
+}
+
+/** Whether this daemon stays up until told to stop, rather than idle-exiting.
+ * Intent alone is not enough: only a supervisor's own process carries
+ * CARET_SUPERVISED (EXC-1161), so a hook's fallback spawn during a service cycle
+ * keeps the idle shutdown and yields the port back. A dev world has its own state
+ * dir and port and nothing supervising it. */
+export function isResident(
+  s: Settings = settings().current(),
+  env: NodeJS.ProcessEnv = process.env,
+  kind: BuildKind = buildKind(),
+): boolean {
+  return s.daemon.resident && env.CARET_SUPERVISED === "1" && kind !== "dev";
 }
 
 /** Review timeout: CARET_TIMEOUT > [review].timeout_s > 3600s / 1h — all in

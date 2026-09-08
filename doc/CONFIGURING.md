@@ -80,12 +80,13 @@ These hold the tunables the `CARET_*` environment variables also cover (see
 | `daemon.port`         | `42718` | Daemon port.                                                                                                                                                                                          |
 | `daemon.idle_ms`      | `60000` | Idle delay (ms) before the daemon auto-shuts-down with no reviews.                                                                                                                                    |
 | `daemon.heartbeat_ms` | `8000`  | Decision long-poll heartbeat window (ms). The daemon's socket `idleTimeout` is derived from this (heartbeat seconds + headroom), so it must stay below `250000`; values at or above that are rejected. |
+| `daemon.resident`     | `false` | Keep the daemon up until told to stop instead of idle-exiting. Takes effect only when a supervisor started it (`caret install --service`); a `bun run` dev daemon is never resident. |
 | `review.timeout_s`    | `3600`  | Review window in seconds before the hook fail-safe-denies (default 1 hour). The schema rejects values at or above the 3900s hook budget in `hooks/hooks.json`.                                         |
 
 > [!NOTE]
 > Unlike the `[logging]` keys, which hot-reload live, these tunables are captured at
-> startup: `port`, `idle_ms`, and `heartbeat_ms` take effect on the next daemon start, and
-> `timeout_s` on the next review.
+> startup: `port`, `idle_ms`, `heartbeat_ms`, and `resident` take effect on the next
+> daemon start, and `timeout_s` on the next review.
 
 ```toml
 [logging]
@@ -98,6 +99,7 @@ keep = 10
 port = 42718
 idle_ms = 60000
 heartbeat_ms = 8000
+resident = false
 
 [review]
 timeout_s = 3600
