@@ -1,7 +1,7 @@
-// caret's Claude Code install target. `caret install` registers
-// caret's PUBLISHED plugin with Claude Code by driving its CLI: add and refresh caret's
-// marketplace, install and enable the plugin, then update it so re-running the installer
-// after a caret upgrade also upgrades caret-in-Claude-Code. `--uninstall` removes it.
+// caret's Claude Code install target. `caret install` registers caret's PUBLISHED plugin
+// with Claude Code by driving its CLI: add and refresh caret's marketplace, install and
+// enable the plugin, then update it so re-running the installer after a caret upgrade
+// also upgrades caret-in-Claude-Code. `--uninstall` removes it.
 // With `--from-local` the same CLI installs the LOCAL build instead: the marketplace
 // source becomes the generated dev marketplace (see local.ts) rather than the public
 // one, and the update phase is skipped — that path reinstalls the dev build directly,

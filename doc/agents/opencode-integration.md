@@ -240,12 +240,13 @@ so it wants the live check § Verified vs. follow-up already schedules.
   GitHub releases, because `latest` is what OpenCode would re-resolve to — and a stale
   result offers to clear the cached copy, or to bump a user-authored pin. That offer is a
   prompt, since `~/.cache/opencode` is not caret's to delete unasked; `--refresh`
-  pre-answers it, and off a TTY install names the gap and changes nothing. `caret install`
-  registers caret with Claude Code via its plugin CLI too. The command lives in
-  `src/commands/install/`: `index.ts` is the orchestrator (it selects the targets — the
-  chooser or detection — and dispatches), beside the target registry, the chooser, the
-  terminal reporter, and one module per target runner. `paths.ts` is the single source of
-  truth both the probe (reader) and the writer resolve through.
+  pre-answers it, and off a TTY install names the gap and changes nothing. The same run
+  also registers caret with Claude Code via its plugin CLI when Claude Code is among the
+  selected targets. The command lives in `src/commands/install/`: `index.ts` is the
+  orchestrator (it selects the targets — the chooser or detection — and dispatches),
+  beside the target registry, the chooser, the terminal reporter, and one module per
+  target runner. `paths.ts` is the single source of truth both the probe (reader) and the
+  writer resolve through.
 
 ## Distribution choice (amended by EXC-794)
 
@@ -383,13 +384,14 @@ check (toasts when behind, silent on error / opt-out).
 **Confirmed against a live OpenCode 1.18.11 with `@opencode-ai/plugin` 1.18.17 — EXC-1085,
 the array install's LOCAL form, which is what ties the run to that plugin version: a
 `file:` entry loads the checkout's own module, so the dependency under test is the one
-this repo's lockfile resolves.** `caret install --from-local` writes that entry; OpenCode
-symlinks the checkout and loads the plugin with no `failed to load plugin` line; the
-`config` hook's mutation reaches the running config (`experimental.primary_tools` carries
-`caret_review_plan`, and the `plan` agent's `permission` carries its `allow`); the
-planning steer routes the Plan agent to the tool; the envelope reaches `caret review`,
-which serves the plan in caret's UI under the adapter's single `default` approve variant;
-and approving there returns `approvedMessage` to the agent, which proceeds.
+this repo's lockfile resolves.** `caret install --from-local`, with OpenCode selected in
+the chooser, writes that entry; OpenCode symlinks the checkout and loads the plugin with
+no `failed to load plugin` line; the `config` hook's mutation reaches the running config
+(`experimental.primary_tools` carries `caret_review_plan`, and the `plan` agent's
+`permission` carries its `allow`); the planning steer routes the Plan agent to the tool;
+the envelope reaches `caret review`, which serves the plan in caret's UI under the
+adapter's single `default` approve variant; and approving there returns `approvedMessage`
+to the agent, which proceeds.
 
 **Documented manual follow-up (needs a live OpenCode + a model provider):** what that
 round-trip did not reach — the PUBLISHED entry (`@macintacos/caret`) resolving out of npm

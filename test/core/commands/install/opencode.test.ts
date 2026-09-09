@@ -143,8 +143,11 @@ test("uninstall preserves a user's other plugins", async () => {
 test("uninstall with caret never installed reports nothing removed, and is not a failure", async () => {
   // `--uninstall` sweeps every agent, so a machine that only runs the other one lands
   // here; a throw or a non-zero exit would stop the run before the rest of the teardown.
+  // Reset first: the code is a process global, so an absolute assertion on it otherwise
+  // reads whatever ran before — in this file, or in another under a shared-global run.
+  process.exitCode = 0;
   const said = await transcript({}, { uninstall: true });
-  expect(process.exitCode).toBeUndefined();
+  expect(process.exitCode).toBe(0);
   expect(said).toContain("caret was not in opencode.json");
   expect(said).toContain("Removed 0 command file(s)");
 });

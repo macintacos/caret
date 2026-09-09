@@ -70,7 +70,8 @@ interface TargetOpts {
 }
 
 /** Run the install command: resolve the targets (the chooser or detection), then
- * dispatch to each one. */
+ * dispatch to each one. Failure is reported and left in `process.exitCode` — 2 for a
+ * refused invocation, 1 for a target that failed — never thrown. */
 export async function runInstallSubcommand(
   opts: {
     uninstall: boolean;

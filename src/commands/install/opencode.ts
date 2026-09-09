@@ -1,10 +1,10 @@
-// caret's OpenCode install target. `caret install` makes caret a
-// first-class `plugin` array entry — OpenCode installs it and its deps into its own
-// cache and loads it — and deploys the `/caret:*` command files (which aren't
-// array-installable). `--uninstall` reverses both. Either arm also sweeps the plugin and
-// command FILES an older caret deployed into the config dir: OpenCode still loads them,
-// so a leftover plugin file would register a second review tool beside the array entry.
-// The config-array edit is comment-preserving (config-plugin.ts).
+// caret's OpenCode install target. `caret install` makes caret a first-class `plugin`
+// array entry — OpenCode installs it and its deps into its own cache and loads it — and
+// deploys the `/caret:*` command files (which aren't array-installable). `--uninstall`
+// reverses both. Either arm also sweeps the plugin and command FILES an older caret
+// deployed into the config dir: OpenCode still loads them, so a leftover plugin file
+// would register a second review tool beside the array entry. The config-array edit is
+// comment-preserving (config-plugin.ts).
 //
 // caret owns exactly one array entry, in one of two forms: the npm package
 // (@macintacos/caret), or `file:<checkout>` under `--from-local`. A published install

@@ -21,8 +21,10 @@ const resolvedCheckout = () => ({ repoDir: "/checkout", ref: "ref" });
 const devMarketplaceDir = () => "/dev-mp";
 const bothAgents = (): InstallTarget[] => ["claude", "opencode"];
 
-/** The plain install invocation options every rumdl-step case starts from. */
-const INSTALL_CLAUDE = { uninstall: false, dryRun: false };
+/** The plain install invocation options every rumdl-step case starts from. Pair it with
+ * `CLAUDE_ONLY` — without those seams a case reaches the machine's real agents and can
+ * run a real installer against the developer's own config dir. */
+const PLAIN_INSTALL = { uninstall: false, dryRun: false };
 
 /** Selection seams pinning a case to Claude Code alone, so a run is driven by the test
  * rather than by whichever agents the machine running it happens to have. */
@@ -37,8 +39,23 @@ function recordingRunners(calls: string[]): { runOpencode: () => void; runClaude
   };
 }
 
-/** Deps shared by the two `--from-local` prewarm outcomes below — a resolved
- * checkout, a no-op claude runner, and no rumdl download; only `prewarm` differs. */
+/** Claude-only selection with both the target run and the rumdl step recorded into
+ * `calls`, so a case can assert the order the two happen in. */
+function claudeThenRumdlDeps(calls: string[]) {
+  return {
+    ...CLAUDE_ONLY,
+    ui: silentUI,
+    runClaude: () => void calls.push("claude"),
+    ensureRumdl: async () => {
+      calls.push("rumdl");
+      return { bin: "/x/rumdl", installed: false };
+    },
+  };
+}
+
+/** Deps shared by the two `--from-local` prewarm outcomes below — the Claude-only
+ * selection seams, a resolved checkout, a no-op claude runner, and no rumdl download;
+ * only `prewarm` differs. */
 function fromLocalPrewarmDeps(ui: ReturnType<typeof recordingUI>, prewarm: () => Promise<void>) {
   return {
     ...CLAUDE_ONLY,
@@ -196,15 +213,7 @@ test("--uninstall removes caret from every agent in the registry, without asking
 
 test("installing ensures rumdl once, after the targets", async () => {
   const calls: string[] = [];
-  await runInstallSubcommand(INSTALL_CLAUDE, {
-    ...CLAUDE_ONLY,
-    ui: silentUI,
-    runClaude: () => void calls.push("claude"),
-    ensureRumdl: async () => {
-      calls.push("rumdl");
-      return { bin: "/x/rumdl", installed: false };
-    },
-  });
+  await runInstallSubcommand(PLAIN_INSTALL, claudeThenRumdlDeps(calls));
   expect(calls).toEqual(["claude", "rumdl"]);
 });
 
@@ -214,14 +223,8 @@ test("the service is registered after the targets, so a refresh cycles the new b
   // residency this machine's own caret is configured for.
   const absentConfig = join(await mkdtemp(join(tmpdir(), "caret-install-index-")), "config.toml");
   await withEnv({ CARET_CONFIG_FILE: absentConfig }, () =>
-    runInstallSubcommand(INSTALL_CLAUDE, {
-      ...CLAUDE_ONLY,
-      ui: silentUI,
-      runClaude: () => void calls.push("claude"),
-      ensureRumdl: async () => {
-        calls.push("rumdl");
-        return { bin: "/x/rumdl", installed: false };
-      },
+    runInstallSubcommand(PLAIN_INSTALL, {
+      ...claudeThenRumdlDeps(calls),
       service: () => ({
         label: "caret.service",
         optOutSurface: "`systemctl --user`",
@@ -243,7 +246,7 @@ test.each([
   ["an already-cached binary as present, not downloaded", false, "already present at"],
 ])("the rumdl step reports %s", async (_label, installed, phrase) => {
   const ui = recordingUI();
-  await runInstallSubcommand(INSTALL_CLAUDE, {
+  await runInstallSubcommand(PLAIN_INSTALL, {
     ...CLAUDE_ONLY,
     ui,
     runClaude: () => {},
@@ -271,7 +274,7 @@ test("uninstalling and --dry-run never download rumdl", async () => {
 
 test("a failing rumdl download leaves the install successful", async () => {
   const calls: string[] = [];
-  await runInstallSubcommand(INSTALL_CLAUDE, {
+  await runInstallSubcommand(PLAIN_INSTALL, {
     ...CLAUDE_ONLY,
     ui: silentUI,
     runClaude: () => void calls.push("claude"),
@@ -318,7 +321,7 @@ test("--from-local hands every target the resolved checkout and prewarms once, l
 test("without --from-local nothing prewarms and no target sees a checkout", async () => {
   const calls: string[] = [];
   let handed: unknown = "untouched";
-  await runInstallSubcommand(INSTALL_CLAUDE, {
+  await runInstallSubcommand(PLAIN_INSTALL, {
     ...CLAUDE_ONLY,
     ui: silentUI,
     runClaude: (o) => {
@@ -428,7 +431,7 @@ test("a throwing target is reported and fails the run rather than escaping the c
   // An escaping throw reaches the CLI's fail-safe handler, which prints a hook deny line
   // and exits 0 — nonsense from an install command.
   const ui = recordingUI();
-  await runInstallSubcommand(INSTALL_CLAUDE, {
+  await runInstallSubcommand(PLAIN_INSTALL, {
     ...CLAUDE_ONLY,
     ui,
     runClaude: () => {

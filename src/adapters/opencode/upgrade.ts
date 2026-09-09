@@ -2,11 +2,11 @@
 // needed to answer that. OpenCode records a `plugin` array entry's resolution in
 // `packages/<specifier>/package.json` on first install and never re-resolves it, so a
 // bare entry stays frozen at install-day's version — `caret install` is a no-op on the
-// array entry and therefore on the running version. This module is
-// what lets install say so: a pure verdict over (entry, cached, published), plus the
-// cache reads and the cache clear the install target performs on it. The published
-// version itself, and the semver comparison the verdict turns on, are shared with the
-// daemon's own update check and live in `@/lib/upstream.ts` and `@/lib/semver.ts`.
+// array entry and therefore on the running version. This module is what lets install
+// say so: a pure verdict over (entry, cached, published), plus the cache reads and the
+// cache clear the install target performs on it. The published version itself, and the
+// semver comparison the verdict turns on, are shared with the daemon's own update check
+// and live in `@/lib/upstream.ts` and `@/lib/semver.ts`.
 //
 // The two staleness kinds are unfrozen differently. A bare (or unparseable) specifier is
 // unfrozen by deleting its cache dir, so OpenCode re-resolves on next start. A pin

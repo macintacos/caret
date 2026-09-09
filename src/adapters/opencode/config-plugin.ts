@@ -1,10 +1,10 @@
 // The comment-preserving editor for caret's entry in an OpenCode config's `plugin`
 // array. caret installs into OpenCode as a first-class array plugin
-// (`plugin: ["@macintacos/caret"]`), so `caret install` adds this
-// entry and `--uninstall` removes it. Edits run through jsonc-parser's
-// modify/applyEdits so a user's other plugin entries, other config keys, and
-// comments all survive — hand-rolled JSON string munging would corrupt a jsonc
-// config. Pure text-in/text-out, so it is unit-testable without touching disk.
+// (`plugin: ["@macintacos/caret"]`), so `caret install` adds this entry and
+// `--uninstall` removes it. Edits run through jsonc-parser's modify/applyEdits so a
+// user's other plugin entries, other config keys, and comments all survive —
+// hand-rolled JSON string munging would corrupt a jsonc config. Pure text-in/text-out,
+// so it is unit-testable without touching disk.
 
 import { applyEdits, type JSONPath, modify, parse } from "jsonc-parser";
 
