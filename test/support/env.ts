@@ -38,6 +38,28 @@ export function withEnv<T>(vars: Record<string, string | undefined>, fn: () => T
 }
 
 /**
+ * Point CARET_CONFIG_FILE at a fresh path inside each test's own temp dir, so a suite
+ * that reads or writes config.toml never touches the developer's own. Takes the state-dir
+ * accessor `setupTempStateDir` returns, since that dir is already per-test.
+ *
+ * The returned accessor yields the config path (which starts out absent, so loadSettings
+ * resolves to defaults until the test writes one).
+ */
+export function setupTempConfigFile(dir: () => string): () => string {
+  const file = () => join(dir(), "config.toml");
+  let saved: string | undefined;
+  beforeEach(() => {
+    saved = process.env.CARET_CONFIG_FILE;
+    process.env.CARET_CONFIG_FILE = file();
+  });
+  afterEach(() => {
+    if (saved === undefined) delete process.env.CARET_CONFIG_FILE;
+    else process.env.CARET_CONFIG_FILE = saved;
+  });
+  return file;
+}
+
+/**
  * Wire a fresh, isolated XDG_STATE_HOME for each test in the calling file. The
  * returned accessor yields the current test's state dir (so logFile()/stateDir()
  * resolve under it).

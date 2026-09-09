@@ -5,7 +5,9 @@
 // falsifiable.
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
+
+import { launcherPath, launcherRecordDir, launcherServiceFile } from "@/config/paths.ts";
 
 const LAUNCHER = readFileSync(join(import.meta.dir, "..", "..", "bin", "caret-launcher"), "utf8");
 
@@ -15,4 +17,15 @@ test("bin/caret-launcher removes the plist from the directory the manager writes
 
 test("bin/caret-launcher removes the unit from the directory the manager writes it to", () => {
   expect(LAUNCHER).toContain("systemd/user");
+});
+
+test("bin/caret-launcher reads the service record the install writes", () => {
+  expect(LAUNCHER).toContain(`$records/${basename(launcherServiceFile())}`);
+});
+
+test("bin/caret-launcher's self-eviction removes what uninstallLauncher removes", () => {
+  // Both delete the launcher and its records; evict() spells those two directories in
+  // bash, uninstallLauncher() derives them from paths.ts.
+  expect(LAUNCHER).toContain(`\${state:?}/${basename(dirname(launcherPath()))}`);
+  expect(LAUNCHER).toContain(`\${state:?}/${basename(launcherRecordDir())}`);
 });

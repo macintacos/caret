@@ -69,7 +69,7 @@ test("an absent file yields all defaults with no error", () => {
       max_size: DEFAULT_LOG_MAX_SIZE,
       keep: DEFAULT_LOG_KEEP,
     },
-    daemon: { port: 42718, idle_ms: 60_000, heartbeat_ms: 8_000, resident: false },
+    daemon: { port: 42718, idle_ms: 60_000, heartbeat_ms: 8_000, resident: true },
     review: { timeout_s: 3600 },
     dev: { notify: { enabled: false, interval_ms: 15_000, max_pending: 3 } },
   });

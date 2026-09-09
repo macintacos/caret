@@ -3,9 +3,13 @@
 // target runners.
 
 import { afterEach, expect, test } from "bun:test";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
+import { withEnv } from "@test/support/env.ts";
 import { parseTargets, runInstallSubcommand } from "@/commands/install/index.ts";
-import type { InstallTarget } from "@/commands/install/targets.ts";
+import { INSTALL_TARGET_IDS, type InstallTarget } from "@/commands/install/targets.ts";
 import { recordingUI, silentUI } from "@/commands/install/ui.ts";
 import { RUMDL_VERSION } from "@/plan/rumdl.ts";
 
@@ -78,14 +82,14 @@ afterEach(() => {
 test("runInstallSubcommand dispatches to each selected target with the same opts", async () => {
   const calls: string[] = [];
   await runInstallSubcommand(
-    { target: "opencode,claude", uninstall: true, dryRun: false },
+    { target: "opencode,claude", uninstall: false, dryRun: true },
     {
       ui: silentUI,
       runOpencode: (o) => void calls.push(`opencode:${o.uninstall}:${o.dryRun}`),
       runClaude: (o) => void calls.push(`claude:${o.uninstall}:${o.dryRun}`),
     },
   );
-  expect(calls).toEqual(["opencode:true:false", "claude:true:false"]);
+  expect(calls).toEqual(["opencode:false:true", "claude:false:true"]);
 });
 
 test("--refresh reaches every target runner, and defaults to off", async () => {
@@ -201,22 +205,36 @@ test("with no --target, no TTY, and no agent detected, it falls back to Claude C
   expect(calls).toEqual(["claude"]);
 });
 
-test("with no --target, the chooser is told whether this is an uninstall", async () => {
-  let asked: boolean | undefined;
+test("--uninstall removes caret from every agent in the registry, without asking", async () => {
+  const calls: string[] = [];
+  const chooser = decliningPrompt();
   await runInstallSubcommand(
     { uninstall: true, dryRun: false },
     {
+      // A TTY with one agent detected: neither fact may narrow what an uninstall removes.
       detect: () => ["claude"],
       isInteractive: () => true,
-      prompt: async (_detected, uninstall) => {
-        asked = uninstall;
-        return [];
-      },
+      prompt: chooser.prompt,
       ui: silentUI,
-      runClaude: () => {},
+      runOpencode: (o) => void calls.push(`opencode:${o.uninstall}`),
+      runClaude: (o) => void calls.push(`claude:${o.uninstall}`),
     },
   );
-  expect(asked).toBe(true);
+  expect(chooser.wasPrompted()).toBe(false);
+  expect(calls).toEqual(INSTALL_TARGET_IDS.map((id) => `${id}:true`));
+});
+
+test("--target is refused with --uninstall rather than silently scoping it", async () => {
+  const calls: string[] = [];
+  const ui = recordingUI();
+  await runInstallSubcommand(
+    // A valid target value: what is refused is scoping an uninstall at all.
+    { target: "opencode", uninstall: true, dryRun: false },
+    { ui, ...recordingRunners(calls) },
+  );
+  expect(calls).toEqual([]);
+  expect(process.exitCode).toBe(2);
+  expect(ui.events.some((e) => e.startsWith("error:"))).toBe(true);
 });
 
 test("installing ensures rumdl once, after the targets", async () => {
@@ -230,6 +248,35 @@ test("installing ensures rumdl once, after the targets", async () => {
     },
   });
   expect(calls).toEqual(["claude", "rumdl"]);
+});
+
+test("the service is registered after the targets, so a refresh cycles the new build", async () => {
+  const calls: string[] = [];
+  // A config path nobody wrote, so the run reads the schema default rather than whatever
+  // residency this machine's own caret is configured for.
+  const absentConfig = join(await mkdtemp(join(tmpdir(), "caret-install-index-")), "config.toml");
+  await withEnv({ CARET_CONFIG_FILE: absentConfig }, () =>
+    runInstallSubcommand(INSTALL_CLAUDE, {
+      ui: silentUI,
+      runClaude: () => void calls.push("claude"),
+      ensureRumdl: async () => {
+        calls.push("rumdl");
+        return { bin: "/x/rumdl", installed: false };
+      },
+      service: () => ({
+        label: "caret.service",
+        optOutSurface: "`systemctl --user`",
+        manager: {
+          install: async () => void calls.push("service"),
+          uninstall: async () => {},
+          status: async () => ({ installed: false, running: false, disabled: false }),
+          restart: async () => {},
+        },
+      }),
+      installLauncher: () => {},
+    }),
+  );
+  expect(calls).toEqual(["claude", "rumdl", "service"]);
 });
 
 test.each([
@@ -249,13 +296,14 @@ test("uninstalling and --dry-run never download rumdl", async () => {
   const calls: string[] = [];
   const deps = {
     runClaude: () => {},
+    runOpencode: () => {},
     ui: silentUI,
     ensureRumdl: async () => {
       calls.push("rumdl");
       return { bin: "/x/rumdl", installed: false };
     },
   };
-  await runInstallSubcommand({ target: "claude", uninstall: true, dryRun: false }, deps);
+  await runInstallSubcommand({ uninstall: true, dryRun: false }, deps);
   await runInstallSubcommand({ target: "claude", uninstall: false, dryRun: true }, deps);
   expect(calls).toEqual([]);
 });

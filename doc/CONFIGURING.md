@@ -80,7 +80,7 @@ These hold the tunables the `CARET_*` environment variables also cover (see
 | `daemon.port`         | `42718` | Daemon port.                                                                                                                                                                                          |
 | `daemon.idle_ms`      | `60000` | Idle delay (ms) before the daemon auto-shuts-down with no reviews. Ignored when `daemon.resident` is in effect — the timer is never armed at all.                                                     |
 | `daemon.heartbeat_ms` | `8000`  | Decision long-poll heartbeat window (ms). The daemon's socket `idleTimeout` is derived from this (heartbeat seconds + headroom), so it must stay below `250000`; values at or above that are rejected. |
-| `daemon.resident`     | `false` | Keep the daemon up until told to stop instead of idle-exiting. Takes effect only when the process was started by an installed supervisor unit, which sets `CARET_SUPERVISED=1`; a `bun run` dev daemon is never resident. Reported in `/api/health` as `resident`. |
+| `daemon.resident`     | `true`  | Keep the daemon up until told to stop instead of idle-exiting. Takes effect only when the process was started by an installed supervisor unit, which sets `CARET_SUPERVISED=1`; a `bun run` dev daemon is never resident. A machine goes resident when `caret install` registers that unit, and `caret install --no-resident` writes `resident = false` here to opt out for good. Reported in `/api/health` as `resident`. |
 | `review.timeout_s`    | `3600`  | Review window in seconds before the hook fail-safe-denies (default 1 hour). The schema rejects values at or above the 3900s hook budget in `hooks/hooks.json`.                                         |
 
 > [!NOTE]
@@ -99,7 +99,7 @@ keep = 10
 port = 42718
 idle_ms = 60000
 heartbeat_ms = 8000
-resident = false
+resident = true
 
 [review]
 timeout_s = 3600

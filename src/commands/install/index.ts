@@ -5,8 +5,10 @@
 // on this machine and asks — on a TTY through the chooser, otherwise by installing into
 // everything it detected (Claude Code when it detected nothing), so CI never hangs on a
 // prompt. Every install ends by acquiring the rumdl plan formatter: it is part of a
-// working caret, not a step anyone can skip or forget. `--uninstall` / `--dry-run` apply
-// to every selected target, and neither acquires rumdl.
+// working caret, not a step anyone can skip or forget. `--uninstall` is machine-wide — it
+// removes caret from every agent in the registry and refuses `--target`, since the
+// residency it tears down alongside them is one service for the whole machine. Neither it
+// nor `--dry-run` acquires rumdl.
 
 import { runInstallClaudeTarget } from "@/commands/install/claude.ts";
 import {
@@ -17,6 +19,11 @@ import {
 } from "@/commands/install/local.ts";
 import { runInstallOpencodeTarget } from "@/commands/install/opencode.ts";
 import { promptForTargets } from "@/commands/install/prompt.ts";
+import {
+  reconcileService,
+  type ServiceStepDeps,
+  uninstallService,
+} from "@/commands/install/service.ts";
 import {
   detectTargets,
   INSTALL_TARGET_IDS,
@@ -54,16 +61,17 @@ export function parseTargets(
   return { targets };
 }
 
-/** Injection seam for tests: override detection, the chooser, TTY-ness, and each target
- * runner to assert selection and dispatch without touching a real config dir, the
- * `claude` CLI, or a terminal. */
-export interface InstallDeps {
+/** Injection seam for tests: override detection, the chooser, TTY-ness, each target
+ * runner, and — through ServiceStepDeps — the supervisor, to assert selection and
+ * dispatch without touching a real config dir, the `claude` CLI, launchd, or a
+ * terminal. */
+export interface InstallDeps extends ServiceStepDeps {
   /** A runner returns false to report "this target failed" (it has already said why);
    * returning nothing means it got through. */
   runOpencode?: (opts: TargetOpts, deps: { ui: InstallUI }) => unknown;
   runClaude?: (opts: TargetOpts, deps: { ui: InstallUI }) => unknown;
   detect?: () => InstallTarget[];
-  prompt?: (detected: InstallTarget[], uninstall: boolean) => Promise<InstallTarget[] | null>;
+  prompt?: (detected: InstallTarget[]) => Promise<InstallTarget[] | null>;
   isInteractive?: () => boolean;
   /** Narrowed to what the step reports — the real `ensureRumdl` satisfies it, and a test
    * can describe an outcome without the config path it never reads. */
@@ -100,6 +108,8 @@ export async function runInstallSubcommand(
     dryRun: boolean;
     fromLocal?: boolean;
     refresh?: boolean;
+    /** `--no-resident`, already inverted by Commander. */
+    resident?: boolean;
   },
   deps: InstallDeps = {},
 ): Promise<void> {
@@ -157,6 +167,15 @@ export async function runInstallSubcommand(
   }
 
   await rumdlStep(opts, deps, ui);
+  // After the target runners, so `--refresh`'s restart cycles a supervisor that resolves
+  // the plugin cache those runners just updated.
+  if (opts.uninstall) await uninstallService({ dryRun: opts.dryRun }, deps, ui);
+  else
+    await reconcileService(
+      { dryRun: opts.dryRun, refresh: opts.refresh ?? false, resident: opts.resident ?? true },
+      deps,
+      ui,
+    );
   if (local && !opts.dryRun) await prewarmStep(local.repoDir, deps, ui);
   ui.outro(closingLine(targets, opts, local !== undefined));
 }
@@ -265,16 +284,30 @@ function closingLine(
   return `caret${local ? " (local build)" : ""} is installed in ${names}.${reload}${restart}`;
 }
 
-/** Resolve which agents to install into. `null` means "install nothing" — either the
- * `--target` value was invalid (reported, non-zero exit) or the user cancelled the
- * chooser. The prompt is skipped whenever it can't be answered (no TTY) or shouldn't be
- * asked: `--dry-run` previews the detected agents instead of asking about a run that
- * changes nothing. */
+/** Resolve which agents to act on. `null` means "do nothing" — the `--target` value was
+ * rejected (reported, non-zero exit) or the user cancelled the chooser.
+ *
+ * An uninstall takes every registry target and asks nothing: residency is a single
+ * machine-wide service, so removing caret from one agent while leaving it in another
+ * would leave that agent's caret non-resident. The install prompt is skipped whenever it
+ * can't be answered (no TTY) or shouldn't be asked: `--dry-run` previews the detected
+ * agents instead of asking about a run that changes nothing. */
 async function selectTargets(
   opts: { target?: string; uninstall: boolean; dryRun: boolean },
   deps: InstallDeps,
   ui: InstallUI,
 ): Promise<InstallTarget[] | null> {
+  if (opts.uninstall) {
+    if (opts.target !== undefined) {
+      ui.error(
+        "--target cannot scope an uninstall: removing caret removes it from every agent, so the machine-wide service goes with it. Re-run `caret install --uninstall` on its own.",
+      );
+      process.exitCode = 2;
+      return null;
+    }
+    return [...INSTALL_TARGET_IDS];
+  }
+
   if (opts.target !== undefined) {
     const parsed = parseTargets(opts.target);
     if ("error" in parsed) {
@@ -288,7 +321,7 @@ async function selectTargets(
   const detected = (deps.detect ?? detectTargets)();
   const isInteractive = deps.isInteractive ?? isTerminal;
   if (isInteractive() && !opts.dryRun) {
-    const chosen = await (deps.prompt ?? promptForTargets)(detected, opts.uninstall);
+    const chosen = await (deps.prompt ?? promptForTargets)(detected);
     if (chosen === null) {
       ui.cancel("Cancelled — nothing was changed.");
       return null;

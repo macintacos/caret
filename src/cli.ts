@@ -19,6 +19,7 @@ import { fatalDeny } from "@/adapters/index.ts";
 import { runDaemon } from "@/commands/daemon.ts";
 import { runDiscoverySubcommand } from "@/commands/discovery.ts";
 import { runInstallSubcommand } from "@/commands/install/index.ts";
+import { prodService } from "@/commands/install/service.ts";
 import { runPrewarm } from "@/commands/prewarm.ts";
 import { runReconcileSubcommand } from "@/commands/reconcile.ts";
 import { runRedactSubcommand } from "@/commands/redact.ts";
@@ -79,7 +80,10 @@ function buildProgram(): Command {
       "--target <targets>",
       "comma-separated agents to install into: opencode, claude, or opencode,claude",
     )
-    .option("--uninstall", "remove caret from the target(s) instead of installing")
+    .option(
+      "--uninstall",
+      "remove caret from every agent on this machine instead of installing — cannot be scoped with --target",
+    )
     .option("--dry-run", "print what would change without writing")
     .option(
       "--refresh",
@@ -89,14 +93,22 @@ function buildProgram(): Command {
       "--from-local",
       "dev loop: install the built caret checkout this binary runs from, then hand it the daemon",
     )
+    .option(
+      "--no-resident",
+      "don't keep caret's review UI up from login onward — persisted, so later installs leave it off",
+    )
     .action((opts) =>
-      runInstallSubcommand({
-        target: opts.target,
-        uninstall: opts.uninstall ?? false,
-        dryRun: opts.dryRun ?? false,
-        refresh: opts.refresh ?? false,
-        fromLocal: opts.fromLocal ?? false,
-      }),
+      runInstallSubcommand(
+        {
+          target: opts.target,
+          uninstall: opts.uninstall ?? false,
+          dryRun: opts.dryRun ?? false,
+          refresh: opts.refresh ?? false,
+          fromLocal: opts.fromLocal ?? false,
+          resident: opts.resident,
+        },
+        { service: prodService },
+      ),
     );
 
   return program;

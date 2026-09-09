@@ -158,9 +158,9 @@ unconditional, and a third phase runs `plugin update caret@caret --scope user` b
 `plugin list --json` reads, so the settled line reports the version Claude Code actually
 moved from and to. Restart to apply. By hand the equivalents are
 `claude plugin update caret@caret`, or `/plugin marketplace update caret` then
-`/reload-plugins`. `caret install --uninstall --target claude` removes the plugin and
-leaves that marketplace registration behind; `claude plugin marketplace remove caret`
-clears it.
+`/reload-plugins`. `caret install --uninstall` removes the plugin — from every agent, so
+Claude Code among them — and leaves that marketplace registration behind;
+`claude plugin marketplace remove caret` clears it.
 
 ### The OpenCode adapter
 
@@ -193,9 +193,9 @@ in (`CARET_OPENCODE_BIN` overrides the binary — see
 caret's latest GitHub release and toasts an update nudge when you're behind
 (`CARET_OPENCODE_NO_UPDATE_CHECK` opts out). `caret install --target claude` registers
 caret with Claude Code through its plugin CLI, `--target opencode,claude` does both agents
-at once, `--uninstall` reverses any target, and `--dry-run` previews the changes without
-writing. See [`agents/opencode-integration.md`](agents/opencode-integration.md) for the
-design.
+at once, `--uninstall` reverses every agent at once, and `--dry-run` previews the changes
+without writing. See [`agents/opencode-integration.md`](agents/opencode-integration.md)
+for the design.
 
 `caret install --refresh` takes an update: it compares the caret OpenCode would load
 against npm's published one, then either clears the stale cached copy so OpenCode
@@ -222,12 +222,14 @@ Omit `--target` and `caret install` picks for you: it detects which agents you h
 asks which to install into, with the detected ones pre-checked. Off a terminal — CI, a
 pipe — it never waits on that prompt: it installs into every agent it detected, or into
 Claude Code when it detected none, and says which. `--dry-run` previews that same choice
-rather than asking, and `--uninstall` asks (or reports) the same way before removing.
-`--target` is the way to pin the agents non-interactively. One more flag, `--from-local`,
-is dev-only: it installs the caret checkout the binary was built in rather than the
-published one — see [Development](DEVELOPMENT.md#development). Every install (but not
-`--uninstall`) finishes by acquiring the rumdl plan formatter — it is part of installing
-caret, not a step of its own — see
+rather than asking. `--uninstall` makes no choice at all: it removes caret from every
+agent in the registry and refuses `--target`, because the machine-wide service it tears
+down alongside them belongs to no one agent. `--target` is the way to pin the agents
+non-interactively on an install. One more flag, `--from-local`, is dev-only: it installs
+the caret checkout the binary was built in rather than the published one — see
+[Development](DEVELOPMENT.md#development). Every install (but not `--uninstall`) finishes
+by acquiring the rumdl plan formatter — it is part of installing caret, not a step of its
+own — see
 [Plan formatting](CONFIGURING.md#plan-formatting-rumdl).
 
 At a terminal the whole run renders as one

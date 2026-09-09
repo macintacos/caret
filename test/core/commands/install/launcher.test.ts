@@ -7,8 +7,14 @@ import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { setupTempStateDir } from "@test/support/env.ts";
-import { installLauncher } from "@/commands/install/launcher.ts";
-import { launcherBunFile, launcherPath, launcherRecordDir, stateDir } from "@/config/paths.ts";
+import { installLauncher, uninstallLauncher } from "@/commands/install/launcher.ts";
+import {
+  launcherBunFile,
+  launcherPath,
+  launcherRecordDir,
+  launcherServiceFile,
+  stateDir,
+} from "@/config/paths.ts";
 
 const xdgStateHome = setupTempStateDir("caret-launcher-");
 
@@ -64,6 +70,41 @@ test("both destinations sit under the state dir, which stays 0700", () => {
   expect(perms(stateDir())).toBe(0o700);
   expect(perms(dirname(launcherPath()))).toBe(0o700);
   expect(perms(launcherRecordDir())).toBe(0o700);
+});
+
+test("the service record names the unit, newline-terminated like bun-path", () => {
+  installLauncher({
+    bunPath: "/opt/bun/bin/bun",
+    serviceLabel: "caret.service",
+    source: shippedScript,
+  });
+
+  expect(readFileSync(launcherServiceFile(), "utf8")).toBe("caret.service\n");
+  expect(perms(launcherServiceFile())).toBe(0o600);
+});
+
+test("an install naming no unit leaves no service record for the launcher to act on", () => {
+  installLauncher({ bunPath: "/opt/bun/bin/bun", source: shippedScript });
+
+  expect(existsSync(launcherServiceFile())).toBe(false);
+});
+
+test("uninstallLauncher removes the launcher and its records, leaving the state dir", () => {
+  installLauncher({
+    bunPath: "/opt/bun/bin/bun",
+    serviceLabel: "caret.service",
+    source: shippedScript,
+  });
+
+  uninstallLauncher();
+
+  expect(existsSync(launcherPath())).toBe(false);
+  expect(existsSync(launcherRecordDir())).toBe(false);
+  expect(existsSync(stateDir())).toBe(true);
+});
+
+test("uninstallLauncher on a machine that never had one is not an error", () => {
+  expect(() => uninstallLauncher()).not.toThrow();
 });
 
 test("the default source names a script this repo actually ships", () => {
