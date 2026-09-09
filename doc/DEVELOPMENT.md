@@ -329,12 +329,14 @@ which:
 4. Acquires rumdl, and prewarms so the just-built binary takes over the daemon.
 
 `--from-local` is not a reduced install — it takes the same path a user's install takes,
-residency included: a caret login item serving this checkout at `caret.localhost:42718`
-from login onward. Re-running `--install` reuses the agent already registered rather than
-re-registering it, so macOS stops posting its "Background Items Added" notice on every
-rebuild; the new build is picked up by cycling the daemon, not by re-installing. If you
-would rather your machine not carry a login item, run `bin/caret install --no-resident`
-(or set `[daemon] resident = false` in `config.toml` yourself).
+residency included: a caret login item serving `caret.localhost:42718` from login onward.
+That is this checkout as long as it is the highest-versioned caret the launcher finds — an
+installed release that outranks it still wins until the `pinned-root` record lands.
+Re-running `--install` reuses the agent already registered rather than re-registering it,
+so macOS stops posting its "Background Items Added" notice on every rebuild; the new build
+is picked up by cycling the daemon, not by re-installing. If you would rather your machine
+not carry a login item, run `bin/caret install --no-resident` (or set
+`[daemon] resident = false` in `config.toml` yourself).
 
 After a `/reload-plugins` (or a Claude Code restart), `/caret:*` resolves to your local
 build.

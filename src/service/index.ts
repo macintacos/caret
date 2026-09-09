@@ -17,13 +17,17 @@ export const SERVICE_LABELS: Record<ServicePlatform, string> = {
 
 /** The manager for a platform, defaulting to the current process. Throws on anything
  * but darwin/linux — residency has no third implementation, and a silent no-op would
- * leave the caller believing caret is resident. */
+ * leave the caller believing caret is resident.
+ *
+ * The managers arrive as constructors so only the running platform's is built: the
+ * launchd one throws without a POSIX uid, which on Windows would otherwise pre-empt the
+ * unsupported-platform message with a launchd error. */
 export function selectServiceManager(
-  managers: Record<ServicePlatform, ServiceManager>,
+  managers: Record<ServicePlatform, () => ServiceManager>,
   platform: string = process.platform,
 ): ServiceManager {
   if (platform !== "darwin" && platform !== "linux") {
     throw new Error(`caret service: unsupported platform ${platform} (darwin/linux only)`);
   }
-  return managers[platform];
+  return managers[platform]();
 }

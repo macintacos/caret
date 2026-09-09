@@ -237,7 +237,9 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     store: opts.store,
     idle: opts.idleMs ?? DEFAULTS.daemon.idle_ms,
     heartbeat: opts.heartbeatMs ?? DEFAULTS.daemon.heartbeat_ms,
-    resident: opts.resident ?? DEFAULTS.daemon.resident,
+    // Pinned rather than DEFAULTS.daemon.resident: that key defaults to true (EXC-1167),
+    // and a caller who never mentioned residency must still idle-exit.
+    resident: opts.resident ?? false,
     assets: opts.assets,
     onShutdown: opts.onShutdown ?? (() => process.exit(0)),
     routePlan: opts.routePlan ?? routeIncomingPlan,

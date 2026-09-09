@@ -12,11 +12,33 @@ function fakeManager(): ServiceManager {
   };
 }
 
-const managers = { darwin: fakeManager(), linux: fakeManager() };
+const darwin = fakeManager();
+const linux = fakeManager();
+const managers = { darwin: () => darwin, linux: () => linux };
 
 test("selectServiceManager picks the manager for the running platform", () => {
-  expect(selectServiceManager(managers, "darwin")).toBe(managers.darwin);
-  expect(selectServiceManager(managers, "linux")).toBe(managers.linux);
+  expect(selectServiceManager(managers, "darwin")).toBe(darwin);
+  expect(selectServiceManager(managers, "linux")).toBe(linux);
+});
+
+test("only the running platform's manager is constructed", () => {
+  const built: string[] = [];
+
+  selectServiceManager(
+    {
+      darwin: () => {
+        built.push("darwin");
+        return darwin;
+      },
+      linux: () => {
+        built.push("linux");
+        return linux;
+      },
+    },
+    "linux",
+  );
+
+  expect(built).toEqual(["linux"]);
 });
 
 test("each platform's label is the one its manager accepts", () => {

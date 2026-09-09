@@ -106,7 +106,8 @@ export function createLaunchdManager(deps: LaunchdDeps = {}): ServiceManager {
 
     async uninstall(): Promise<void> {
       // Best-effort: a missing agent is the ordinary case here. Any other failure leaves
-      // the agent loaded with its plist gone; EXC-1167 owns whether uninstall says so.
+      // the agent loaded with its plist gone, and nothing reports it — the install's
+      // --uninstall path takes whatever this resolves to.
       await launchctl(["bootout", target]);
       rmSync(plistPath, { force: true });
     },

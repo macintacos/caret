@@ -73,22 +73,37 @@ export async function serviceStep(
     const { manager, label } = deps.service();
 
     if (opts.uninstall) {
+      if (opts.dryRun) {
+        ui.info("Would remove the caret service and the launcher it runs.");
+        return;
+      }
       await manager.uninstall();
       uninstallLauncher();
+      ui.info("Removed the caret service and the launcher it ran.");
       return;
     }
 
     if (!opts.resident && !opts.dryRun) writeDaemonResident(false);
     const settings = loadSettings();
+    // `--no-resident` short-circuits rather than reading the write back, so a dry run
+    // previews the opt-out it would have persisted instead of the install it would not.
+    const resident = opts.resident && settings.daemon.resident;
 
     const status = await manager.status();
     if (status.unsupported) {
       ui.info(`Not registering the caret service: ${status.unsupported}.`);
       return;
     }
-    if (!settings.daemon.resident) {
-      if (status.installed && !opts.dryRun) await manager.uninstall();
-      ui.info("caret is not resident — `caret install` on its own will not change that.");
+    if (!resident) {
+      // The launcher goes with the unit: what it records is the unit's name, and nothing
+      // but a supervisor runs it.
+      if (status.installed && !opts.dryRun) {
+        await manager.uninstall();
+        uninstallLauncher();
+      }
+      ui.info(
+        `caret is not resident${status.installed ? `, so ${opts.dryRun ? "the service would be removed" : "its service was removed"}` : ""} — set \`[daemon] resident = true\` in config.toml to opt back in.`,
+      );
       return;
     }
     if (status.disabled) {
@@ -120,7 +135,7 @@ export async function serviceStep(
     );
   } catch (e) {
     ui.warn(
-      `Could not register the caret service (${errorMessage(e)}) — caret still starts on demand.`,
+      `Could not update the caret service (${errorMessage(e)}) — caret still starts on demand.`,
     );
   }
 }
@@ -130,14 +145,13 @@ export async function serviceStep(
 const OPT_OUT_SURFACE =
   process.platform === "darwin" ? "System Settings › Login Items" : "systemctl --user";
 
-/** The running platform's manager and unit name. Both managers are constructed because
- * selectServiceManager takes the pair; construction only resolves paths and the uid. */
+/** The running platform's manager and unit name. */
 export function prodService(): ServiceTarget {
   const platform = process.platform;
   const manager = selectServiceManager(
-    { darwin: createLaunchdManager(), linux: createSystemdManager() },
+    { darwin: createLaunchdManager, linux: createSystemdManager },
     platform,
   );
-  // Unreachable for anything else: selectServiceManager threw on the line above.
+  // Narrowed by the line above, which threw for anything else.
   return { manager, label: SERVICE_LABELS[platform as ServicePlatform] };
 }

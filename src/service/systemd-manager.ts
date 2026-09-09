@@ -157,8 +157,8 @@ export function createSystemdManager(deps: SystemdDeps = {}): ServiceManager {
 
     async uninstall(): Promise<void> {
       // Best-effort: a missing unit exits 1 here, the ordinary case. Any other failure
-      // leaves the unit loaded with its file gone; EXC-1167 owns whether uninstall says
-      // so.
+      // leaves the unit loaded with its file gone, and nothing reports it — the install's
+      // --uninstall path takes whatever this resolves to.
       await systemctl("disable", "--now", SYSTEMD_UNIT);
       rmSync(unitPath, { force: true });
       // Also best-effort, and after the removal, so systemd forgets a unit whose file

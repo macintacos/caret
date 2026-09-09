@@ -117,13 +117,14 @@ start — a `SessionStart` hook for Claude Code, a plugin-load warm here. Two me
 killed it: a cold daemon spawn costs ~0.4 s (`caret prewarm` cold 0.52 s vs. warm 0.13 s),
 and a warmed daemon **idle-exits after `[daemon].idle_ms`** (60 s by default; the value
 lives in `src/config/settings.ts`, the timer in `src/daemon/server.ts`). A
-`[daemon].resident` install under a supervisor never idle-exits, but that is opt-in and
-orthogonal to the per-message-versus-session-start tradeoff below. A session-start warm
-therefore only pays off when a plan is submitted within 60 s of session start — in any
-real session the daemon has already exited and `caret review` re-spawns cold anyway. The
-proposal bought ~0.4 s in a window that essentially never applies, at the cost of a
-process spawn on every start / resume / clear / compact. Rejected for **both**
-integrations: `hooks/hooks.json` deliberately has no `SessionStart` entry.
+`[daemon].resident` install under a supervisor never idle-exits — what a plain
+`caret install` leaves behind — and that is orthogonal to the
+per-message-versus-session-start tradeoff below. A session-start warm therefore only pays
+off when a plan is submitted within 60 s of session start — in any real session the daemon
+has already exited and `caret review` re-spawns cold anyway. The proposal bought ~0.4 s in
+a window that essentially never applies, at the cost of a process spawn on every start /
+resume / clear / compact. Rejected for **both** integrations: `hooks/hooks.json`
+deliberately has no `SessionStart` entry.
 
 **Why per-message and unthrottled.** The same 60 s idle-exit rules out a once-per-session
 warm here — it would be dead long before the plan lands. Warming on every plan-agent

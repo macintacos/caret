@@ -3,7 +3,7 @@
 // never fails an install over a service that would not register.
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { setupTempStateDir } from "@test/support/env.ts";
@@ -188,6 +188,35 @@ test("--uninstall tears the service down and takes the launcher with it", async 
   expect(service.calls).toEqual(["uninstall"]);
   expect(existsSync(launcherPath())).toBe(false);
   expect(existsSync(launcherRecordDir())).toBe(false);
+});
+
+test("--uninstall --dry-run leaves the service and the launcher where they are", async () => {
+  const service = fakeService({ installed: true, running: true });
+  mkdirSync(dirname(launcherPath()), { recursive: true });
+  writeFileSync(launcherPath(), "#!/usr/bin/env bash\n");
+
+  await serviceStep(
+    { ...INSTALL, uninstall: true, dryRun: true },
+    { service: service.target, installLauncher: () => {} },
+    recordingUI(),
+  );
+
+  expect(service.calls).toEqual([]);
+  expect(existsSync(launcherPath())).toBe(true);
+});
+
+test("--no-resident --dry-run previews the removal rather than an install", async () => {
+  const service = fakeService({ installed: true, running: true });
+  const ui = recordingUI();
+
+  await serviceStep(
+    { ...INSTALL, dryRun: true, resident: false },
+    { service: service.target, installLauncher: () => {} },
+    ui,
+  );
+
+  expect(ui.events.some((e) => e.includes("Would install"))).toBe(false);
+  expect(ui.events.some((e) => e.includes("not resident"))).toBe(true);
 });
 
 test("a supervisor that refuses the unit warns and leaves the install standing", async () => {

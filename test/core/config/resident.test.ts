@@ -2,7 +2,7 @@
 // hand-authored config.toml — comments, spacing, key order — exactly as it found it.
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -47,6 +47,15 @@ test("an existing key is replaced in place, leaving its neighbours alone", () =>
   expect(setDaemonResident(text, false)).toBe(
     "[daemon]\nport = 42718\nresident = false\nidle_ms = 60000\n",
   );
+  expect(setDaemonResident(setDaemonResident(text, false), true)).toBe(text);
+});
+
+test("a header carrying a comment is the same table, not a missing one", () => {
+  const text = "[daemon] # the knobs\nport = 42718\n";
+
+  expect(setDaemonResident(text, true)).toBe(
+    "[daemon] # the knobs\nresident = true\nport = 42718\n",
+  );
 });
 
 test("a `resident` key in another table is left alone", () => {
@@ -67,6 +76,19 @@ test("the edited config parses back to the written value with its comments intac
 
   expect(loadSettings(file).daemon).toMatchObject({ resident: false, port: 4200 });
   expect(await readFile(file, "utf8")).toContain("# keep the port off 42718's neighbours");
+});
+
+test("a config that cannot be read is left alone rather than overwritten", async () => {
+  // Write-only: the read fails for a reason that is not "no config yet", while the write
+  // that would clobber it still succeeds. Only distinguishing the two saves the file.
+  const original = "[daemon]\nport = 4200\n";
+  await writeFile(file, original);
+  await chmod(file, 0o200);
+
+  expect(() => writeDaemonResident(false, file)).toThrow();
+
+  await chmod(file, 0o600);
+  expect(await readFile(file, "utf8")).toBe(original);
 });
 
 test("writing to an absent config creates it with just the key", async () => {

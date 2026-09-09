@@ -102,7 +102,7 @@ function buildProgram(): Command {
           dryRun: opts.dryRun ?? false,
           refresh: opts.refresh ?? false,
           fromLocal: opts.fromLocal ?? false,
-          resident: opts.resident ?? true,
+          resident: opts.resident,
         },
         // The one install effect that can stop a running service, so it is wired here
         // rather than defaulted inside the step — a unit test drives a fake or nothing.
