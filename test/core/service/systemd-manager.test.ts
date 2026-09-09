@@ -72,7 +72,7 @@ test("install creates a unit directory the account has never had", async () => {
   expect(existsSync(join(nested, SYSTEMD_UNIT))).toBe(true);
 });
 
-test("install reloads, enables, then restarts so a second install replaces a live unit", async () => {
+test("install reloads, enables, then restarts so a changed unit replaces a live one", async () => {
   const fake = fakeRun();
   await manager(fake).install(fakeServiceConfig({ label: SYSTEMD_UNIT }));
   expect(fake.verbs()).toEqual([
@@ -107,6 +107,78 @@ test("install enables lingering so the unit survives logout", async () => {
   const fake = fakeRun();
   await manager(fake).install(fakeServiceConfig({ label: SYSTEMD_UNIT }));
   expect(fake.calls.at(-1)).toEqual(["loginctl", "enable-linger"]);
+});
+
+/** What a re-install spends before it can decide: install's own bus probe, then the two
+ * reads the enablement check performs. */
+const PROBE_THEN_READ = ["show-environment", "is-active", "is-enabled"];
+const FULL_INSTALL = ["daemon-reload", "enable", "reset-failed", "restart"];
+
+/** Install, forget those calls, then install the same config again. */
+async function reinstall(fake: ReturnType<typeof fakeRun>) {
+  const mgr = manager(fake);
+  await mgr.install(fakeServiceConfig({ label: SYSTEMD_UNIT }));
+  fake.calls.length = 0;
+  await mgr.install(fakeServiceConfig({ label: SYSTEMD_UNIT }));
+  return fake.verbs();
+}
+
+test("re-installing an unchanged config leaves a running unit alone", async () => {
+  expect(await reinstall(statusRun("active", "enabled"))).toEqual(PROBE_THEN_READ);
+});
+
+test("re-installing an unchanged config enables a unit systemd never loaded", async () => {
+  expect(await reinstall(statusRun("inactive", "not-found", 3, 4))).toEqual([
+    ...PROBE_THEN_READ,
+    ...FULL_INSTALL,
+  ]);
+});
+
+test("re-installing an unchanged config restarts an enabled unit that stopped", async () => {
+  expect(await reinstall(statusRun("inactive", "enabled", 3))).toEqual([
+    ...PROBE_THEN_READ,
+    ...FULL_INSTALL,
+  ]);
+});
+
+test("re-installing an unchanged config re-enables a running unit that lost its symlink", async () => {
+  // `systemctl --user disable` without --now strips the wants symlink and leaves the unit
+  // running, which is also where an install whose enable threw leaves a live machine. It
+  // reads installed — is-enabled answers `disabled`, not `not-found` — so without the
+  // opt-out check the one repair a user has would skip.
+  expect(await reinstall(statusRun("active", "disabled", 0, 1))).toEqual([
+    ...PROBE_THEN_READ,
+    ...FULL_INSTALL,
+  ]);
+});
+
+test("re-installing an unchanged config retries lingering the host may since have allowed", async () => {
+  const fake = statusRun("active", "enabled");
+  await reinstall(fake);
+  expect(fake.calls).toContainEqual(["loginctl", "enable-linger"]);
+});
+
+test("an install that failed after writing the unit is repaired by the next one", async () => {
+  const upgraded = fakeServiceConfig({
+    label: SYSTEMD_UNIT,
+    launcherPath: "/opt/caret/bin/caret",
+  });
+  let reloads = 0;
+  const fake = fakeRun((argv) => {
+    if (argv[2] === "daemon-reload" && ++reloads === 2) {
+      return { code: 1, stdout: "", stderr: "Failed to connect to bus: No medium found\n" };
+    }
+    if (argv[2] === "is-active") return { code: 0, stdout: "active\n", stderr: "" };
+    if (argv[2] === "is-enabled") return { code: 0, stdout: "enabled\n", stderr: "" };
+    return OK;
+  });
+  const mgr = manager(fake);
+  await mgr.install(fakeServiceConfig({ label: SYSTEMD_UNIT }));
+  await expect(mgr.install(upgraded)).rejects.toThrow(/Failed to connect to bus/);
+  fake.calls.length = 0;
+  await mgr.install(upgraded);
+  expect(fake.verbs()).toEqual(["show-environment", ...FULL_INSTALL]);
+  expect(readFileSync(unitPath(), "utf8")).toBe(buildSystemdUnit(upgraded));
 });
 
 test("install refuses a config whose label the manager's targets cannot name", async () => {
@@ -156,6 +228,8 @@ test("installing twice rewrites the unit rather than failing", async () => {
     fakeServiceConfig({ label: SYSTEMD_UNIT, launcherPath: "/opt/caret/bin/caret" }),
   );
   expect(readFileSync(unitPath(), "utf8")).toContain('ExecStart="/opt/caret/bin/caret"');
+  // The file compare gates the enablement reads, so a changed config never pays for them.
+  expect(fake.verbs()).not.toContain("is-active");
 });
 
 test("uninstall disables the unit, removes it, and has systemd forget it", async () => {

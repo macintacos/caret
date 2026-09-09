@@ -24,8 +24,11 @@ export interface ServiceStatus {
 }
 
 export interface ServiceManager {
-  /** Write the unit and hand it to the supervisor. Idempotent: a second install
-   * replaces the unit and reloads it. */
+  /** Write the unit and hand it to the supervisor. A no-op when the generated unit is
+   * byte-identical to the one on disk and status() reports it installed and running —
+   * on Linux, not disabled either; anything else writes and reloads. Every field a unit
+   * carries is version-independent, so an upgrade takes the no-op path and leaves the
+   * supervisor on the old binary: cycling it is restart()'s job. */
   install(cfg: ServiceConfig): Promise<void>;
   /** Stop the service and remove its unit. Idempotent: nothing installed is not
    * an error. */
