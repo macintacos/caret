@@ -35,8 +35,8 @@ opencode_roots="${XDG_CACHE_HOME:-$HOME/.cache}/opencode/packages/@macintacos"
 # which under Restart=always / KeepAlive is a restart loop, so an unwritable state
 # dir degrades to the supervisor's own stream.
 open_daemon_log() {
-  local dir="$state/logs" file
-  file="$dir/daemon-stderr.log"
+  local file="$state/logs/daemon-stderr.log" dir
+  dir="${file%/*}"
   mkdir -p "$dir" 2>/dev/null || return 0
   chmod 700 "$state" "$dir" 2>/dev/null || true
   : >>"$file" 2>/dev/null || return 0

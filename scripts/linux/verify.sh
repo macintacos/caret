@@ -15,14 +15,23 @@ set -uo pipefail
 
 unit=caret.service
 unit_dir="$HOME/.config/systemd/user"
-log="$HOME/daemon-stderr.log"
+log_dir="$HOME/.local/state/caret/logs"
 failed=0
 
-# The unit's ExecStart, standing in for bin/caret-launcher: the restart contract is about
-# what the launcher exits with, so exit status is all this needs to reproduce. `run` is
-# the resident case; any other mode is the status to exit with.
+# The unit's ExecStart, standing in for bin/caret-launcher on both the contracts the
+# unit no longer expresses: the log preamble open_daemon_log() runs, and the exit status
+# the restart directives key off. `run` is the resident case; any other mode is the
+# status to exit with.
 cat >"$HOME/fake-caret" <<'LAUNCHER'
 #!/usr/bin/env bash
+state="${XDG_STATE_HOME:-$HOME/.local/state}/caret"
+file="$state/logs/daemon-stderr.log"
+dir="${file%/*}"
+mkdir -p "$dir" 2>/dev/null || true
+chmod 700 "$state" "$dir" 2>/dev/null || true
+: >>"$file" 2>/dev/null || true
+chmod 600 "$file" 2>/dev/null || true
+exec >>"$file" 2>&1
 mode="$(cat "$HOME/mode")"
 if [ "$mode" = run ]; then exec sleep infinity; fi
 exit "$mode"
@@ -69,6 +78,7 @@ expect_out() {
 }
 
 prop() { systemctl --user show "$unit" -p "$1" --value; }
+mode_of() { stat -c '%a' "$1"; }
 result_is() { [ "$(prop Result)" = "$1" ]; }
 state_is() { [ "$(prop ActiveState)" = "$1" ]; }
 has_restarted() { [ "$(prop NRestarts)" -gt 0 ]; }
@@ -125,7 +135,12 @@ expect "enable loads the quoted-word ExecStart" 0 "" systemctl --user enable "$u
 systemctl --user reset-failed "$unit"
 expect "restart starts a unit enable left stopped" 0 "" systemctl --user restart "$unit"
 expect_out "the started unit is active" 0 active systemctl --user is-active "$unit"
-expect "StandardError=append: created the daemon log" 0 "" test -f "$log"
+# The unit names no log destination, so these are the launcher's own doing — and the
+# directory does not exist when the unit starts, which is the state a wiped state dir
+# leaves behind. Neither may be world-readable: the state dir holds plan bodies.
+until_true 15 test -e "$log_dir/daemon-stderr.log"
+expect "the launcher created the daemon log directory" 0 700 mode_of "$log_dir"
+expect "the launcher opened the daemon log" 0 600 mode_of "$log_dir/daemon-stderr.log"
 
 # install()'s own linger call, which the mise task's root-run `enable-linger caret` does
 # not stand in for: this is the self-linger polkit gates, and the one branch in the manager

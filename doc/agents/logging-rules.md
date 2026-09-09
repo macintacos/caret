@@ -141,8 +141,10 @@ Every log file is created `0600`, inside `0700` directories. The mode is enforce
 `ensureStateDir()` (`src/config/paths.ts`), which every mkdir-of-stateDir site routes
 through (log, store, prefs, lock, spawn) — it chmods an already existing dir, so the mode
 holds regardless of which caller creates the dir first (EXC-539); log writers reach it
-through `ensureLogsDir()`. Writes are synchronous, so a record logged just before
-`process.exit` (fail-safe and signal paths) is durable.
+through `ensureLogsDir()`. `daemon-stderr.log` under a supervisor is the one file that
+does not: the supervisor opens it before any caret code runs, so `bin/caret-launcher`
+makes the same guarantee in bash before it execs caret. Writes are synchronous, so a
+record logged just before `process.exit` (fail-safe and signal paths) is durable.
 
 Both logger sinks check their size before each record they write and, past
 `[logging].max_size`, rotate through `rotateIfOversized` (`src/lib/log-rotate.ts`):
