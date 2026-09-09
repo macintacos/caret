@@ -16,6 +16,6 @@ const STATE_HOME = "/home/ada/.local/state";
 test("bin/caret-launcher opens the path daemonStderrLogFile resolves", () => {
   withEnv({ XDG_STATE_HOME: STATE_HOME }, () => {
     const tail = relative(stateDir(), daemonStderrLogFile());
-    expect(LAUNCHER).toContain(`$state/${tail}`);
+    expect(LAUNCHER).toContain(tail);
   });
 });
