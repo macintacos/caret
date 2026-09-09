@@ -286,6 +286,13 @@ export async function runInstallClaudeTarget(
       if (warning) ui.warn(warning);
     } catch (e) {
       if (!(e instanceof PhaseFailure)) throw e;
+      // A machine with no `claude` cannot have caret in Claude Code, so there is nothing
+      // to remove and nothing to report — and `--uninstall` sweeps every agent, so this is
+      // the ordinary case on a machine that only runs one of them.
+      if (e.missing && opts.uninstall) {
+        ui.info("No `claude` CLI on this machine — nothing to remove from Claude Code.");
+        return true;
+      }
       ui.error(
         e.missing
           ? `The \`claude\` CLI was not found. Install Claude Code (https://claude.com/claude-code) and re-run \`caret install --target claude\`, or add caret in Claude Code via \`/plugin marketplace add ${MARKETPLACE_SOURCE}\`.`

@@ -1,6 +1,7 @@
-// The install step that decides whether this machine is resident: it reconciles the
-// persisted intent against what the supervisor actually holds, in both directions, and
-// never fails an install over a service that would not register.
+// The install steps that decide whether this machine is resident: reconcileService pins
+// the persisted intent against what the supervisor actually holds, in both directions,
+// uninstallService tears both down, and neither fails an install over a service that
+// would not register.
 
 import { expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -8,7 +9,11 @@ import { dirname } from "node:path";
 
 import { setupTempConfigFile, setupTempStateDir } from "@test/support/env.ts";
 import type { LauncherDeps } from "@/commands/install/launcher.ts";
-import { type ServiceTarget, serviceStep } from "@/commands/install/service.ts";
+import {
+  reconcileService,
+  type ServiceTarget,
+  uninstallService,
+} from "@/commands/install/service.ts";
 import { recordingUI } from "@/commands/install/ui.ts";
 import { VANITY_HOST } from "@/config/constants.ts";
 import { launcherPath, launcherRecordDir } from "@/config/paths.ts";
@@ -45,7 +50,7 @@ function fakeService(status: Partial<ServiceStatus> = {}): {
 }
 
 /** A plain install: resident intent, nothing to refresh, nothing to preview. */
-const INSTALL = { uninstall: false, dryRun: false, refresh: false, resident: true };
+const RECONCILE = { dryRun: false, refresh: false, resident: true };
 
 /** The launcher seam every case shares — the real installLauncher needs a resolvable
  * caret root, which no test has. */
@@ -57,8 +62,8 @@ test("a plain install registers the unit, naming the launcher the unit runs", as
   const service = fakeService();
   const calls: string[] = [];
 
-  await serviceStep(
-    INSTALL,
+  await reconcileService(
+    RECONCILE,
     { service: service.target, installLauncher: recordingLauncher(calls) },
     recordingUI(),
   );
@@ -76,7 +81,11 @@ test("a plain install registers the unit, naming the launcher the unit runs", as
 test("the install says where the review UI now lives", async () => {
   const ui = recordingUI();
 
-  await serviceStep(INSTALL, { service: fakeService().target, installLauncher: () => {} }, ui);
+  await reconcileService(
+    RECONCILE,
+    { service: fakeService().target, installLauncher: () => {} },
+    ui,
+  );
 
   expect(ui.events.some((e) => e.includes(VANITY_HOST))).toBe(true);
 });
@@ -84,8 +93,8 @@ test("the install says where the review UI now lives", async () => {
 test("--no-resident persists the opt-out and removes a unit already installed", async () => {
   const service = fakeService({ installed: true, running: true });
 
-  await serviceStep(
-    { ...INSTALL, resident: false },
+  await reconcileService(
+    { ...RECONCILE, resident: false },
     { service: service.target, installLauncher: () => {} },
     recordingUI(),
   );
@@ -96,8 +105,8 @@ test("--no-resident persists the opt-out and removes a unit already installed", 
 
 test("a later install on an opted-out machine registers nothing", async () => {
   const optOut = fakeService();
-  await serviceStep(
-    { ...INSTALL, resident: false },
+  await reconcileService(
+    { ...RECONCILE, resident: false },
     { service: optOut.target, installLauncher: () => {} },
     recordingUI(),
   );
@@ -105,8 +114,8 @@ test("a later install on an opted-out machine registers nothing", async () => {
   // `--no-resident` is not repeated: the plain refresh must read the persisted intent.
   const refresh = fakeService();
   const calls: string[] = [];
-  await serviceStep(
-    { ...INSTALL, refresh: true },
+  await reconcileService(
+    { ...RECONCILE, refresh: true },
     { service: refresh.target, installLauncher: recordingLauncher(calls) },
     recordingUI(),
   );
@@ -118,8 +127,8 @@ test("a later install on an opted-out machine registers nothing", async () => {
 test("--refresh cycles the service so the new build is the one serving", async () => {
   const service = fakeService({ installed: true, running: true });
 
-  await serviceStep(
-    { ...INSTALL, refresh: true },
+  await reconcileService(
+    { ...RECONCILE, refresh: true },
     { service: service.target, installLauncher: () => {} },
     recordingUI(),
   );
@@ -132,7 +141,7 @@ test("a host that cannot run the service is reported, not installed onto", async
   const ui = recordingUI();
   const before = process.exitCode;
 
-  await serviceStep(INSTALL, { service: service.target, installLauncher: () => {} }, ui);
+  await reconcileService(RECONCILE, { service: service.target, installLauncher: () => {} }, ui);
 
   expect(service.calls).toEqual([]);
   expect(ui.events.some((e) => e.includes("systemd is not running"))).toBe(true);
@@ -142,7 +151,11 @@ test("a host that cannot run the service is reported, not installed onto", async
 test("a service the user turned off themselves is never re-enabled", async () => {
   const service = fakeService({ installed: true, disabled: true });
 
-  await serviceStep(INSTALL, { service: service.target, installLauncher: () => {} }, recordingUI());
+  await reconcileService(
+    RECONCILE,
+    { service: service.target, installLauncher: () => {} },
+    recordingUI(),
+  );
 
   expect(service.calls).toEqual([]);
 });
@@ -151,8 +164,8 @@ test("--dry-run writes no config, installs no launcher, and registers no unit", 
   const service = fakeService({ installed: true });
   const calls: string[] = [];
 
-  await serviceStep(
-    { ...INSTALL, dryRun: true, resident: false },
+  await reconcileService(
+    { ...RECONCILE, dryRun: true, resident: false },
     { service: service.target, installLauncher: recordingLauncher(calls) },
     recordingUI(),
   );
@@ -167,8 +180,8 @@ test("--uninstall tears the service down and takes the launcher with it", async 
   mkdirSync(dirname(launcherPath()), { recursive: true });
   mkdirSync(launcherRecordDir(), { recursive: true });
 
-  await serviceStep(
-    { ...INSTALL, uninstall: true },
+  await uninstallService(
+    { dryRun: false },
     { service: service.target, installLauncher: () => {} },
     recordingUI(),
   );
@@ -183,8 +196,8 @@ test("--uninstall --dry-run leaves the service and the launcher where they are",
   mkdirSync(dirname(launcherPath()), { recursive: true });
   writeFileSync(launcherPath(), "#!/usr/bin/env bash\n");
 
-  await serviceStep(
-    { ...INSTALL, uninstall: true, dryRun: true },
+  await uninstallService(
+    { dryRun: true },
     { service: service.target, installLauncher: () => {} },
     recordingUI(),
   );
@@ -197,8 +210,8 @@ test("--no-resident --dry-run previews the removal rather than an install", asyn
   const service = fakeService({ installed: true, running: true });
   const ui = recordingUI();
 
-  await serviceStep(
-    { ...INSTALL, dryRun: true, resident: false },
+  await reconcileService(
+    { ...RECONCILE, dryRun: true, resident: false },
     { service: service.target, installLauncher: () => {} },
     ui,
   );
@@ -213,7 +226,7 @@ test("a supervisor that refuses the unit warns and leaves the install standing",
   const ui = recordingUI();
   const before = process.exitCode;
 
-  await serviceStep(INSTALL, { service: service.target, installLauncher: () => {} }, ui);
+  await reconcileService(RECONCILE, { service: service.target, installLauncher: () => {} }, ui);
 
   expect(ui.events.some((e) => e.startsWith("warn:") && e.includes("bootstrap failed"))).toBe(true);
   expect(process.exitCode).toBe(before);
@@ -223,8 +236,8 @@ test("a platform with no supervisor at all warns rather than throwing", async ()
   const ui = recordingUI();
   const before = process.exitCode;
 
-  await serviceStep(
-    INSTALL,
+  await reconcileService(
+    RECONCILE,
     // What servicePlatform() raises on a host that is neither darwin nor linux.
     {
       service: () => {
@@ -245,8 +258,8 @@ test("a config the opt-out cannot be written to is reported as that, not as the 
   // A directory in the config's place: the write fails, the supervisor never comes up.
   mkdirSync(configFile(), { recursive: true });
 
-  await serviceStep(
-    { ...INSTALL, resident: false },
+  await reconcileService(
+    { ...RECONCILE, resident: false },
     { service: service.target, installLauncher: () => {} },
     ui,
   );
@@ -258,8 +271,8 @@ test("a config the opt-out cannot be written to is reported as that, not as the 
 test("the announcement names where the service shows up outside caret", async () => {
   const ui = recordingUI();
 
-  await serviceStep(
-    INSTALL,
+  await reconcileService(
+    RECONCILE,
     {
       service: () => ({
         ...fakeService().target(),

@@ -80,7 +80,10 @@ function buildProgram(): Command {
       "--target <targets>",
       "comma-separated agents to install into: opencode, claude, or opencode,claude",
     )
-    .option("--uninstall", "remove caret from the target(s) instead of installing")
+    .option(
+      "--uninstall",
+      "remove caret from every agent on this machine instead of installing — cannot be scoped with --target",
+    )
     .option("--dry-run", "print what would change without writing")
     .option(
       "--refresh",

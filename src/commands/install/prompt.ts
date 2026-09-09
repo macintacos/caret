@@ -23,17 +23,13 @@ export function chooserOptions(
   }));
 }
 
-/** Ask which agents to act on, with the detected ones pre-checked. Returns the chosen
- * targets, or null when the user cancels (Ctrl-C / Esc) — the caller then does nothing. */
-export async function promptForTargets(
-  detected: InstallTarget[],
-  uninstall = false,
-): Promise<InstallTarget[] | null> {
+/** Ask which agents to install into, with the detected ones pre-checked. Returns the
+ * chosen targets, or null when the user cancels (Ctrl-C / Esc) — the caller then does
+ * nothing. Only an install asks: an uninstall removes caret from every agent. */
+export async function promptForTargets(detected: InstallTarget[]): Promise<InstallTarget[] | null> {
   const { isCancel, multiselect } = await import("@clack/prompts");
   const chosen = await multiselect({
-    message: uninstall
-      ? "Remove caret from which coding agents?"
-      : "Install caret into which coding agents?",
+    message: "Install caret into which coding agents?",
     options: chooserOptions(detected),
     initialValues: detected,
     required: true,

@@ -1,6 +1,8 @@
 // The install step that makes a machine resident: it registers the platform unit that
 // serves the review UI from login onward, and reconciles that against the user's
-// persisted intent on every run (EXC-1167).
+// persisted intent on every run (EXC-1167). An install and an uninstall share only the
+// supervisor lookup and the never-fail shell, so each is its own entry point rather than
+// a flag the other reads.
 //
 // Two facts are only reliably available here. `serviceEnvironment(process.env)` captures
 // the shell's world-defining variables, which a supervisor-started daemon inherits none
@@ -45,55 +47,73 @@ export interface ServiceTarget {
 
 export interface ServiceStepDeps {
   /** The supervisor to reconcile against, wired by src/cli.ts. A thunk because resolving
-   * the platform throws on a host that is neither darwin nor linux — called inside this
-   * step's own try/catch, that is one warning rather than a stack trace out of an
-   * otherwise-clean install. Absent means there is no supervisor to reconcile and the
-   * step does nothing: this is the one install step whose real effects tear a running
+   * the platform throws on a host that is neither darwin nor linux — called inside
+   * withService's try/catch, that is one warning rather than a stack trace out of an
+   * otherwise-clean install. Absent means there is no supervisor to reconcile and both
+   * steps do nothing: these are the install steps whose real effects tear a running
    * service down, so driving the machine's own launchd is something a caller opts into
    * rather than something a test has to remember to opt out of. */
   service?: () => ServiceTarget;
   installLauncher?: (deps: LauncherDeps) => void;
 }
 
-export interface ServiceStepOpts {
-  uninstall: boolean;
-  dryRun: boolean;
-  refresh: boolean;
-  /** `--no-resident`, already inverted by the CLI. Sugar for the config key rather than
-   * a per-invocation flag, so the next plain `--refresh` cannot overrule someone who
-   * deliberately opted out. */
-  resident: boolean;
-}
-
-/** Register (or tear down) the caret service, reporting through `ui`. Every failure is a
- * warning: a machine that could not go resident still has a working caret. */
-export async function serviceStep(
-  opts: ServiceStepOpts,
+/** Run `body` against the supervisor this machine installs under, if there is one to
+ * drive. Every failure is a warning: a machine that could not go resident still has a
+ * working caret. */
+async function withService(
   deps: ServiceStepDeps,
   ui: InstallUI,
+  body: (target: ServiceTarget) => Promise<void>,
 ): Promise<void> {
   if (deps.service === undefined) return;
   try {
-    const { manager, label, optOutSurface } = deps.service();
+    await body(deps.service());
+  } catch (e) {
+    ui.warn(
+      `Could not update the caret service (${errorMessage(e)}) — caret still starts on demand.`,
+    );
+  }
+}
 
-    if (opts.uninstall) {
-      if (opts.dryRun) {
-        ui.info("Would remove the caret service and the launcher it runs.");
-        return;
-      }
-      await manager.uninstall();
-      uninstallLauncher();
-      ui.info("Removed the caret service and the launcher it ran.");
+/** Remove the caret service and the launcher it ran, reporting through `ui`. */
+export async function uninstallService(
+  opts: { dryRun: boolean },
+  deps: ServiceStepDeps,
+  ui: InstallUI,
+): Promise<void> {
+  await withService(deps, ui, async ({ manager }) => {
+    if (opts.dryRun) {
+      ui.info("Would remove the caret service and the launcher it runs.");
       return;
     }
+    await manager.uninstall();
+    uninstallLauncher();
+    ui.info("Removed the caret service and the launcher it ran.");
+  });
+}
 
+/** Reconcile the caret service against the user's residency intent, in both directions,
+ * reporting through `ui`. */
+export async function reconcileService(
+  opts: {
+    dryRun: boolean;
+    refresh: boolean;
+    /** `--no-resident`, already inverted by the CLI. Sugar for the config key rather than
+     * a per-invocation flag, so the next plain `--refresh` cannot overrule someone who
+     * deliberately opted out. */
+    resident: boolean;
+  },
+  deps: ServiceStepDeps,
+  ui: InstallUI,
+): Promise<void> {
+  await withService(deps, ui, async ({ manager, label, optOutSurface }) => {
     if (!opts.resident && !opts.dryRun) {
       try {
         writeDaemonResident(false);
       } catch (e) {
-        // Its own catch: the outer one reports a supervisor that would not take the unit,
-        // which is the opposite of what failed, and would leave the user believing an
-        // opt-out persisted that the next `--refresh` will overrule.
+        // Its own catch: withService's would report a supervisor that would not take the
+        // unit, which is the opposite of what failed, and would leave the user believing
+        // an opt-out persisted that the next `--refresh` will overrule.
         ui.warn(
           `Could not record the opt-out (${errorMessage(e)}) — set \`[daemon] resident = false\` in config.toml yourself, or a later install registers the service again.`,
         );
@@ -147,11 +167,7 @@ export async function serviceStep(
     ui.info(
       `The review UI is now always up at http://${VANITY_HOST}:${getPort(settings)} — it appears in ${optOutSurface}, and \`caret install --no-resident\` turns it off.`,
     );
-  } catch (e) {
-    ui.warn(
-      `Could not update the caret service (${errorMessage(e)}) — caret still starts on demand.`,
-    );
-  }
+  });
 }
 
 /** Where each platform surfaces the service to the user — macOS posts its own
