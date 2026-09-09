@@ -111,6 +111,33 @@ test("installing twice reloads the agent rather than failing", async () => {
   expect(fake.subcommands()).toEqual(["bootout", "bootstrap", "bootout", "bootstrap"]);
 });
 
+test("re-installing an unchanged config leaves a running agent loaded", async () => {
+  const fake = statusLaunchctl({ code: 0, stdout: RUNNING_STATE, stderr: "" });
+  const mgr = manager(fake);
+  await mgr.install(fakeServiceConfig());
+  fake.calls.length = 0;
+  await mgr.install(fakeServiceConfig());
+  expect(fake.subcommands()).toEqual(["print", "print-disabled"]);
+});
+
+test("re-installing an unchanged config bootstraps an agent launchd no longer knows", async () => {
+  const fake = statusLaunchctl(NO_SUCH_SERVICE);
+  const mgr = manager(fake);
+  await mgr.install(fakeServiceConfig());
+  fake.calls.length = 0;
+  await mgr.install(fakeServiceConfig());
+  expect(fake.subcommands()).toEqual(["print", "print-disabled", "bootout", "bootstrap"]);
+});
+
+test("re-installing an unchanged config bootstraps a loaded agent that stopped", async () => {
+  const fake = statusLaunchctl({ code: 0, stdout: LOADED, stderr: "" });
+  const mgr = manager(fake);
+  await mgr.install(fakeServiceConfig());
+  fake.calls.length = 0;
+  await mgr.install(fakeServiceConfig());
+  expect(fake.subcommands()).toEqual(["print", "print-disabled", "bootout", "bootstrap"]);
+});
+
 test("install throws with launchctl's own exit code and stderr when bootstrap fails", async () => {
   const fake = fakeLaunchctl((args) =>
     args[0] === "bootstrap"

@@ -6,6 +6,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { logDebug } from "@/lib/log.ts";
 import { buildLaunchdPlist } from "@/service/launchd.ts";
 import {
   LAUNCHD_LABEL,
@@ -14,6 +15,7 @@ import {
   type ServiceStatus,
 } from "@/service/manager.ts";
 import { type CommandResult, commandError, runCommand } from "@/service/run.ts";
+import { unitUnchanged } from "@/service/unit-file.ts";
 
 export type LaunchctlResult = CommandResult;
 
@@ -57,6 +59,18 @@ export function createLaunchdManager(deps: LaunchdDeps = {}): ServiceManager {
   const target = `${domain}/${LAUNCHD_LABEL}`;
   const plist = join(launchAgentsDir, `${LAUNCHD_LABEL}.plist`);
 
+  async function readStatus(): Promise<ServiceStatus> {
+    const [printed, printDisabled] = await Promise.all([
+      launchctl(["print", target]),
+      launchctl(["print-disabled", domain]),
+    ]);
+    return {
+      installed: printed.code === 0,
+      running: printed.code === 0 && RUNNING.some((pattern) => pattern.test(printed.stdout)),
+      disabled: DISABLED.test(printDisabled.stdout),
+    };
+  }
+
   return {
     async install(cfg: ServiceConfig): Promise<void> {
       // The plist carries cfg.label as its own Label while every target below is the
@@ -65,11 +79,22 @@ export function createLaunchdManager(deps: LaunchdDeps = {}): ServiceManager {
       if (cfg.label !== LAUNCHD_LABEL) {
         throw new Error(`caret service: plist label ${cfg.label} is not ${LAUNCHD_LABEL}`);
       }
+      const text = buildLaunchdPlist(cfg);
+      // Reusing the loaded agent rather than replacing it is what keeps macOS from
+      // posting "Background Items Added" on every upgrade. Running, not merely
+      // installed: stop_agent boots the agent out and leaves the plist behind.
+      if (unitUnchanged(plist, text)) {
+        const current = await readStatus();
+        if (current.installed && current.running) {
+          logDebug("service", "launchd agent unchanged; install skipped");
+          return;
+        }
+      }
       // Absent on an account that has never had a login item.
       mkdirSync(launchAgentsDir, { recursive: true });
       // Written in place, unlike installLauncher's tmp+rename: launchd reads this file
       // whole at the bootstrap below and at login, never lazily from a live fd.
-      writeFileSync(plist, buildLaunchdPlist(cfg));
+      writeFileSync(plist, text);
       // Best-effort: it has nothing to boot out on a first install, and makes a second
       // one a reload rather than a "service already loaded" failure.
       await launchctl(["bootout", target]);
@@ -84,17 +109,7 @@ export function createLaunchdManager(deps: LaunchdDeps = {}): ServiceManager {
       rmSync(plist, { force: true });
     },
 
-    async status(): Promise<ServiceStatus> {
-      const [printed, printDisabled] = await Promise.all([
-        launchctl(["print", target]),
-        launchctl(["print-disabled", domain]),
-      ]);
-      return {
-        installed: printed.code === 0,
-        running: printed.code === 0 && RUNNING.some((pattern) => pattern.test(printed.stdout)),
-        disabled: DISABLED.test(printDisabled.stdout),
-      };
-    },
+    status: readStatus,
 
     /** The daemon is not back the moment this resolves: launchd's ThrottleInterval (10s
      * by default) bounds how soon it respawns, and anything waiting on the new daemon

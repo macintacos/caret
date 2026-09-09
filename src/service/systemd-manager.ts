@@ -7,7 +7,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { logWarn } from "@/lib/log.ts";
+import { logDebug, logWarn } from "@/lib/log.ts";
 import {
   type ServiceConfig,
   type ServiceManager,
@@ -16,6 +16,7 @@ import {
 } from "@/service/manager.ts";
 import { type CommandResult, commandError, runCommand } from "@/service/run.ts";
 import { buildSystemdUnit } from "@/service/systemd.ts";
+import { unitUnchanged } from "@/service/unit-file.ts";
 
 /** Run a full argv — the binary name included, so systemctl and loginctl share one seam
  * rather than taking a dep each. Never rejects; callers branch on the status. */
@@ -54,6 +55,33 @@ export function createSystemdManager(deps: SystemdDeps = {}): ServiceManager {
     return `caret service: no systemd user session (${shown.code}): ${shown.stderr.trim()}`;
   }
 
+  async function readStatus(): Promise<ServiceStatus> {
+    const unsupported = await probeSystemd();
+    if (unsupported) {
+      return { installed: false, running: false, disabled: false, unsupported };
+    }
+    const [active, enabled] = await Promise.all([
+      systemctl("is-active", SYSTEMD_UNIT),
+      systemctl("is-enabled", SYSTEMD_UNIT),
+    ]);
+    const enablement = enabled.stdout.trim();
+    return {
+      // Both verbs print their answer on stdout at every exit code, so the word is what
+      // is read and the exit status adds nothing. Absent output is systemd failing to
+      // answer rather than an answer: the only negative match here, so it is the only
+      // one an unrecognised word could flip the unsafe way — installed on silence would
+      // have a reconcile skip a machine holding nothing.
+      installed: enablement !== "" && enablement !== "not-found",
+      running: active.stdout.trim() === "active",
+      // startsWith, because `mask --runtime` reports `masked-runtime` and is the same
+      // deliberate opt-out. ponytail: a unit written but never enabled reads `disabled`
+      // too, so this cannot separate it from a real opt-out — install always enables, so
+      // the ambiguous window is an enable that failed after the write. Upgrade path if
+      // it ever matters: compare against default.target.wants.
+      disabled: enablement === "disabled" || enablement.startsWith("masked"),
+    };
+  }
+
   return {
     async install(cfg: ServiceConfig): Promise<void> {
       // cfg.label is otherwise unused on Linux: the filename and every target below are
@@ -64,11 +92,22 @@ export function createSystemdManager(deps: SystemdDeps = {}): ServiceManager {
       }
       const unsupported = await probeSystemd();
       if (unsupported) throw new Error(unsupported);
+      const text = buildSystemdUnit(cfg);
+      // Reusing the loaded unit rather than replacing it keeps an upgrade from cycling
+      // a daemon that is already serving the right thing. Running, not merely installed:
+      // is-enabled reads true for a unit written but never enabled.
+      if (unitUnchanged(unitPath, text)) {
+        const current = await readStatus();
+        if (current.installed && current.running) {
+          logDebug("service", "systemd unit unchanged; install skipped");
+          return;
+        }
+      }
       // Absent on an account that has never had a user unit.
       mkdirSync(unitDir, { recursive: true });
       // Written in place, unlike installLauncher's tmp+rename: systemd reads this file
       // whole at the daemon-reload below and at login, never lazily from a live fd.
-      writeFileSync(unitPath, buildSystemdUnit(cfg));
+      writeFileSync(unitPath, text);
       const reloaded = await systemctl("daemon-reload");
       if (reloaded.code !== 0) throw commandError("systemctl", "daemon-reload", reloaded);
       const enabled = await systemctl("enable", SYSTEMD_UNIT);
@@ -106,32 +145,7 @@ export function createSystemdManager(deps: SystemdDeps = {}): ServiceManager {
       await systemctl("daemon-reload");
     },
 
-    async status(): Promise<ServiceStatus> {
-      const unsupported = await probeSystemd();
-      if (unsupported) {
-        return { installed: false, running: false, disabled: false, unsupported };
-      }
-      const [active, enabled] = await Promise.all([
-        systemctl("is-active", SYSTEMD_UNIT),
-        systemctl("is-enabled", SYSTEMD_UNIT),
-      ]);
-      const enablement = enabled.stdout.trim();
-      return {
-        // Both verbs print their answer on stdout at every exit code, so the word is
-        // what is read and the exit status adds nothing. Absent output is systemd
-        // failing to answer rather than an answer: the only negative match here, so it
-        // is the only one an unrecognised word could flip the unsafe way — installed on
-        // silence would have a reconcile skip a machine holding nothing.
-        installed: enablement !== "" && enablement !== "not-found",
-        running: active.stdout.trim() === "active",
-        // startsWith, because `mask --runtime` reports `masked-runtime` and is the same
-        // deliberate opt-out. ponytail: a unit written but never enabled reads
-        // `disabled` too, so this cannot separate it from a real opt-out — install
-        // always enables, so the ambiguous window is an enable that failed after the
-        // write. Upgrade path if it ever matters: compare against default.target.wants.
-        disabled: enablement === "disabled" || enablement.startsWith("masked"),
-      };
-    },
+    status: readStatus,
 
     /** The daemon is not serving the moment this resolves: Type=simple has no readiness
      * signal, so systemd calls the unit started as soon as ExecStart is forked and

@@ -109,6 +109,39 @@ test("install enables lingering so the unit survives logout", async () => {
   expect(fake.calls.at(-1)).toEqual(["loginctl", "enable-linger"]);
 });
 
+/** What a re-install spends before it can decide: install's own bus probe, then the
+ * probe and two reads status() performs. status() probes for itself, so the bus is
+ * asked twice. */
+const PROBE_THEN_STATUS = ["show-environment", "show-environment", "is-active", "is-enabled"];
+const FULL_INSTALL = ["daemon-reload", "enable", "reset-failed", "restart"];
+
+test("re-installing an unchanged config leaves a running unit alone", async () => {
+  const fake = statusRun("active", "enabled");
+  const mgr = manager(fake);
+  await mgr.install(fakeServiceConfig({ label: SYSTEMD_UNIT }));
+  fake.calls.length = 0;
+  await mgr.install(fakeServiceConfig({ label: SYSTEMD_UNIT }));
+  expect(fake.verbs()).toEqual(PROBE_THEN_STATUS);
+});
+
+test("re-installing an unchanged config enables a unit systemd never loaded", async () => {
+  const fake = statusRun("inactive", "not-found", 3, 4);
+  const mgr = manager(fake);
+  await mgr.install(fakeServiceConfig({ label: SYSTEMD_UNIT }));
+  fake.calls.length = 0;
+  await mgr.install(fakeServiceConfig({ label: SYSTEMD_UNIT }));
+  expect(fake.verbs()).toEqual([...PROBE_THEN_STATUS, ...FULL_INSTALL]);
+});
+
+test("re-installing an unchanged config restarts an enabled unit that stopped", async () => {
+  const fake = statusRun("inactive", "enabled", 3);
+  const mgr = manager(fake);
+  await mgr.install(fakeServiceConfig({ label: SYSTEMD_UNIT }));
+  fake.calls.length = 0;
+  await mgr.install(fakeServiceConfig({ label: SYSTEMD_UNIT }));
+  expect(fake.verbs()).toEqual([...PROBE_THEN_STATUS, ...FULL_INSTALL]);
+});
+
 test("install refuses a config whose label the manager's targets cannot name", async () => {
   const fake = fakeRun();
   await expect(

@@ -24,8 +24,10 @@ export interface ServiceStatus {
 }
 
 export interface ServiceManager {
-  /** Write the unit and hand it to the supervisor. Idempotent: a second install
-   * replaces the unit and reloads it. */
+  /** Write the unit and hand it to the supervisor. Idempotent, and a no-op where it
+   * can be: a second install whose generated unit is byte-identical, against a service
+   * the supervisor has loaded and running, does nothing. Anything else — a changed
+   * unit, a service not loaded, a loaded one that stopped — writes and reloads. */
   install(cfg: ServiceConfig): Promise<void>;
   /** Stop the service and remove its unit. Idempotent: nothing installed is not
    * an error. */
