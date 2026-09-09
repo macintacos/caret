@@ -23,14 +23,14 @@ function fakeService(status: Partial<ServiceStatus> = {}): {
   target: () => ServiceTarget;
   manager: ServiceManager;
   calls: string[];
-  installed: () => ServiceConfig | undefined;
+  installedConfig: () => ServiceConfig | undefined;
 } {
   const calls: string[] = [];
-  let installed: ServiceConfig | undefined;
+  let installedConfig: ServiceConfig | undefined;
   const manager: ServiceManager = {
     install: async (cfg) => {
       calls.push("install");
-      installed = cfg;
+      installedConfig = cfg;
     },
     uninstall: async () => void calls.push("uninstall"),
     status: async () => ({ installed: false, running: false, disabled: false, ...status }),
@@ -40,7 +40,7 @@ function fakeService(status: Partial<ServiceStatus> = {}): {
     target: () => ({ manager, label: "caret.service", optOutSurface: "`systemctl --user`" }),
     manager,
     calls,
-    installed: () => installed,
+    installedConfig: () => installedConfig,
   };
 }
 
@@ -66,7 +66,7 @@ test("a plain install registers the unit, naming the launcher the unit runs", as
   // The launcher must exist before the unit names it.
   expect(calls).toEqual(["launcher:caret.service"]);
   expect(service.calls).toEqual(["install"]);
-  expect(service.installed()).toMatchObject({
+  expect(service.installedConfig()).toMatchObject({
     launcherPath: launcherPath(),
     label: "caret.service",
     environment: expect.objectContaining({ CARET_SUPERVISED: "1" }),
