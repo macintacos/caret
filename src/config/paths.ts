@@ -125,9 +125,11 @@ export function daemonLogFile(): string {
   return `${logsDir()}/daemon.log`;
 }
 
-/** The detached daemon's raw stderr, which spawnDaemon redirects here. Holds
- * whatever the process writes outside the logger — stack traces from a crash
- * before or around the NDJSON sink — so daemon.log stays parseable. */
+/** The detached daemon's raw stderr, which spawnDaemon redirects here — and which
+ * open_daemon_log() in bin/caret-launcher opens in bash for a supervised daemon, which
+ * never reaches spawnDaemon; test/structure/service-log-path.test.ts holds that shell
+ * half. Holds whatever the process writes outside the logger — stack traces from a
+ * crash before or around the NDJSON sink — so daemon.log stays parseable. */
 export function daemonStderrLogFile(): string {
   return `${logsDir()}/daemon-stderr.log`;
 }

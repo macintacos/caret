@@ -20,6 +20,8 @@ test("every environment variable bin/caret-launcher reads is recorded in the uni
   // The launcher rebuilds PATH around the bun it resolved, so carrying the
   // installing shell's would defeat the resolution it just did.
   referenced.delete("PATH");
+  // SUPERVISED_VAR is recorded too, but written by serviceEnvironment rather than
+  // captured from the installing shell.
   const recorded: readonly string[] = [...WORLD_VARS, SUPERVISED_VAR];
   expect([...referenced].filter((name) => !recorded.includes(name))).toEqual([]);
 });

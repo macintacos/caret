@@ -20,8 +20,11 @@ failed=0
 
 # The unit's ExecStart, standing in for bin/caret-launcher on both the contracts the
 # unit no longer expresses: the log preamble open_daemon_log() runs, and the exit status
-# the restart directives key off. `run` is the resident case; any other mode is the
-# status to exit with.
+# the restart directives key off. What is under test here is systemd's half — that it
+# starts a unit naming no log destination and lets the child open one — so this preamble
+# is a stand-in whose exactness is not load-bearing; the launcher's own is pinned by
+# scripts/caret-launcher.bats. `run` is the resident case; any other mode is the status
+# to exit with.
 cat >"$HOME/fake-caret" <<'LAUNCHER'
 #!/usr/bin/env bash
 state="${XDG_STATE_HOME:-$HOME/.local/state}/caret"

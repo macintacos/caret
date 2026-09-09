@@ -90,8 +90,9 @@ launcher() {
     "$BASH_BIN" "$LAUNCHER" "$@"
 }
 
-# The launcher as a generated unit starts it. The variable is what gates the log
-# preamble, so every case below asserts on the file rather than on $output.
+# The launcher as a generated unit starts it. The variable gates the log preamble, so a
+# supervised case reads the log file — unless it is proving the preamble degraded,
+# where the output is back on $output.
 launcher_supervised() { CARET_SUPERVISED=1 launcher "$@"; }
 
 # 0.9.0 alongside 0.14.0 is the pair a lexicographic sort gets wrong.
@@ -244,28 +245,47 @@ launcher_supervised() { CARET_SUPERVISED=1 launcher "$@"; }
   [ "$(stat_mode "$home/.local/state/caret/logs/daemon-stderr.log")" = 600 ]
 }
 
-# The upgraded-install case openDaemonStderr's own explicit chmod covers: a file
-# opened at the supervisor's umask before this launcher carried the preamble.
-@test "a supervised run tightens a log file an older install left world-readable" {
+# Both may already exist at whatever umask created them, so the chmods are not
+# redundant with the create — the case openDaemonStderr's own explicit chmod covers.
+@test "a supervised run tightens an existing world-readable logs/ and file" {
   stub_bun
   seed_caret "$home/.claude/plugins/cache/caret/caret/0.14.0" 0.14.0
   local logs="$home/.local/state/caret/logs"
   mkdir -p "$logs"
+  chmod 755 "$logs"
   touch "$logs/daemon-stderr.log"
   chmod 644 "$logs/daemon-stderr.log"
   run -0 launcher_supervised
+  [ "$(stat_mode "$logs")" = 700 ]
   [ "$(stat_mode "$logs/daemon-stderr.log")" = 600 ]
 }
 
-# Every step of the preamble is guarded so this degrades to the supervisor's own
-# stream; unguarded it would exit under `set -e`, which is a restart loop.
+# The degradation path: an unwritable state dir must not become a restart loop.
 @test "an unwritable state dir still execs caret" {
+  [ "$(id -u)" -ne 0 ] || skip "root ignores the mode bits"
   stub_bun
   seed_caret "$home/.claude/plugins/cache/caret/caret/0.14.0" 0.14.0
   chmod 500 "$home/.local/state/caret"
-  run -0 launcher_supervised
+  run launcher_supervised
+  # Restored before the assertions: `run -0` would abort first and leave a dir bats
+  # cannot remove.
   chmod 700 "$home/.local/state/caret"
+  [ "$status" -eq 0 ]
   [[ "$output" == *"CARET 0.14.0"* ]]
+}
+
+# Nothing under the state dir at all, which is what a wiped state dir leaves a
+# supervisor restarting into — and the launcher's own diagnostics, not a child's,
+# are what has to reach the file.
+@test "a supervised launcher that cannot find bun logs why into a fresh state dir" {
+  if [ -x /opt/homebrew/bin/bun ] || [ -x /usr/local/bin/bun ]; then
+    skip "a real bun sits on an absolute search path"
+  fi
+  seed_caret "$home/.claude/plugins/cache/caret/caret/0.14.0" 0.14.0
+  rm -rf "$home/.local/state/caret"
+  run -78 launcher_supervised
+  [ "$(stat_mode "$home/.local/state/caret/logs")" = 700 ]
+  [[ "$(cat "$home/.local/state/caret/logs/daemon-stderr.log")" == *"no bun"* ]]
 }
 
 @test "an unsupervised run keeps its output on the terminal" {

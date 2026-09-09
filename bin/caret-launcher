@@ -29,17 +29,28 @@ records="$state/launcher"
 claude_roots="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache/caret/caret"
 opencode_roots="${XDG_CACHE_HOME:-$HOME/.cache}/opencode/packages/@macintacos"
 
-# A supervisor opens the daemon's stdout/stderr before any caret code runs, so
-# openDaemonStderr's 0700/0600 guarantee (src/daemon/lifecycle.ts) has to happen
-# here instead. Guarded throughout: under `set -e` an unopenable path would exit,
-# which under Restart=always / KeepAlive is a restart loop, so an unwritable state
-# dir degrades to the supervisor's own stream.
+# The units name no log destination, so nothing opens this before caret does:
+# openDaemonStderr's 0700/0600 guarantee (src/daemon/lifecycle.ts) happens here for a
+# supervised daemon instead. Both modes are set at create time, so a chmod the
+# filesystem refuses cannot leave a umask-derived 0755/0644 pair behind (EXC-539).
+# Best-effort throughout: exiting under `set -e` would be a restart loop under
+# Restart=always / KeepAlive, so an unwritable state dir degrades to the supervisor's
+# own stream.
 open_daemon_log() {
-  local file="$state/logs/daemon-stderr.log" dir
-  dir="${file%/*}"
-  mkdir -p "$dir" 2>/dev/null || return 0
+  # One literal, not "$dir/daemon-stderr.log": test/structure/service-log-path.test.ts
+  # matches the path daemonStderrLogFile() resolves as a substring of this file.
+  local file="$state/logs/daemon-stderr.log"
+  local dir="${file%/*}"
+  (
+    umask 077
+    mkdir -p "$dir"
+  ) 2>/dev/null || return 0
   chmod 700 "$state" "$dir" 2>/dev/null || true
-  : >>"$file" 2>/dev/null || return 0
+  # The probe is what keeps the unguarded exec below from exiting the shell.
+  (
+    umask 077
+    : >>"$file"
+  ) 2>/dev/null || return 0
   chmod 600 "$file" 2>/dev/null || true
   exec >>"$file" 2>&1
 }

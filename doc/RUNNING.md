@@ -283,7 +283,7 @@ Logs live under `$XDG_STATE_HOME/caret/logs` when set, otherwise
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `caret.log`         | NDJSON records from the short-lived `caret review` hook process.                                                                    |
 | `daemon.log`        | The detached daemon's records: the same NDJSON shape, tagged with `pid`.                                                            |
-| `daemon-stderr.log` | Whatever the detached daemon writes outside its logger — raw non-JSON crash output.                                                 |
+| `daemon-stderr.log` | Whatever the daemon writes outside its logger — raw non-JSON crash output — plus `bin/caret-launcher`'s own failures when a supervised start cannot resolve caret or bun. |
 | `archive/`          | Gzipped rotations, named `<log>-<stamp>.log.gz`. A log past `[logging].max_size` is archived here and emptied; the newest `[logging].keep` per log are kept. |
 
 Browser-UI events ship to the daemon in batches (`POST /api/logs`) and land in
