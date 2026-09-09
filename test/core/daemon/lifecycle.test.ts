@@ -21,6 +21,7 @@ import {
   openDaemonStderr,
   removeOwnDaemonLock,
   retireDaemon,
+  rotateDaemonStderr,
   spawnDaemon,
 } from "@/daemon/lifecycle.ts";
 import { setLogLevel } from "@/lib/log.ts";
@@ -439,6 +440,19 @@ test("openDaemonStderr rotates an oversized stderr log before reopening it", () 
   writeFileSync(daemonStderrLogFile(), "x".repeat(200_000));
   const s = { ...DEFAULTS, logging: { ...DEFAULTS.logging, max_size: 65_536 } };
   closeSync(openDaemonStderr(s) as number);
+  expect(statSync(daemonStderrLogFile()).size).toBe(0);
+  expect(readdirSync(logArchiveDir())).toEqual([
+    expect.stringMatching(/^daemon-stderr-.*\.log\.gz$/),
+  ]);
+});
+
+// ---- rotateDaemonStderr (EXC-1164) ----
+
+test("rotateDaemonStderr archives an oversized stderr log in place", () => {
+  ensureLogsDir();
+  writeFileSync(daemonStderrLogFile(), "x".repeat(200_000));
+  const s = { ...DEFAULTS, logging: { ...DEFAULTS.logging, max_size: 65_536 } };
+  rotateDaemonStderr(s);
   expect(statSync(daemonStderrLogFile()).size).toBe(0);
   expect(readdirSync(logArchiveDir())).toEqual([
     expect.stringMatching(/^daemon-stderr-.*\.log\.gz$/),

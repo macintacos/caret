@@ -94,6 +94,10 @@ export interface CreateServerOptions {
    * runDaemon passes the env/file-resolved value (settings.heartbeatMs)
    * captured at boot. */
   heartbeatMs?: number;
+  /** Stay up until told to stop instead of idle-exiting (EXC-1164), published in
+   * /api/health. runDaemon passes the boot-captured settings.isResident().
+   * Defaults false; a daemon that predates the field omits it on the wire. */
+  resident?: boolean;
   /** The resolved UI asset set (src/ui/assets.ts loadUiAssets): its URL paths form the
    * exact-match allowlist the daemon serves, and each path reads through Bun.file
    * (carrying its MIME). Omitted (default) means no UI — `GET /` serves the
@@ -205,6 +209,7 @@ interface ResolvedOptions {
   store: Store;
   idle: number;
   heartbeat: number;
+  resident: boolean;
   assets: UiAssets | undefined;
   onShutdown: () => void;
   routePlan: RoutePlan;
@@ -232,6 +237,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     store: opts.store,
     idle: opts.idleMs ?? DEFAULTS.daemon.idle_ms,
     heartbeat: opts.heartbeatMs ?? DEFAULTS.daemon.heartbeat_ms,
+    resident: opts.resident ?? DEFAULTS.daemon.resident,
     assets: opts.assets,
     onShutdown: opts.onShutdown ?? (() => process.exit(0)),
     routePlan: opts.routePlan ?? routeIncomingPlan,
@@ -287,7 +293,7 @@ function ifNoneMatchHit(header: string | null, etag: string): boolean {
 
 export function createServer(opts: CreateServerOptions): CaretServer {
   const cfg = resolveOptions(opts);
-  const { store, idle, heartbeat, assets, onShutdown, routePlan, prefsPath, log } = cfg;
+  const { store, idle, heartbeat, resident, assets, onShutdown, routePlan, prefsPath, log } = cfg;
   const { buildId, assetDigest, commit, stateDir, instanceId } = cfg;
   const { approveVariants, source, lockPath } = cfg;
   const { awaitDecision, resolveDecision, clearDecision, openDecisionCount } = createDecisions(log);
@@ -345,7 +351,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     }
   }
   function armIdle() {
-    if (idleTimer || stopped || store.pendingCount() !== 0) return;
+    if (resident || idleTimer || stopped || store.pendingCount() !== 0) return;
     idleTimer = setTimer(maybeShutdown, idle);
   }
   // Arm when no review is awaiting a decision; cancel while one is pending.
@@ -380,8 +386,9 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // GET /api/health — the daemon's identity signature.
   function handleHealth(): Response {
     // Undefined fields are dropped from the JSON, so a daemon missing any reports
-    // the bare {service, version}. `isDev` (EXC-556) is the exception: always a
-    // boolean, so it's emitted unconditionally rather than dropped.
+    // the bare {service, version}. `isDev` (EXC-556) and `resident` (EXC-1164) are
+    // the exceptions: both are always booleans, so an absent field means the peer
+    // predates them rather than that this daemon had nothing to say.
     const body: HealthIdentity = {
       ...IDENTITY,
       build: buildId,
@@ -389,6 +396,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       stateDir,
       instanceId,
       isDev: !isCompiledBinary(),
+      resident,
       // Only the dev --fresh boot sets CARET_FRESH; production omits the field
       // entirely so the wire stays byte-identical there (EXC-781).
       ...(process.env.CARET_FRESH === "1" ? { fresh: true } : {}),

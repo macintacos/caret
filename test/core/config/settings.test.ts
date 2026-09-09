@@ -24,6 +24,7 @@ import {
   heartbeatMs,
   idleMs,
   invalidEnvVars,
+  isResident,
   loadSettings,
   logKeep,
   logMaxSize,
@@ -68,7 +69,7 @@ test("an absent file yields all defaults with no error", () => {
       max_size: DEFAULT_LOG_MAX_SIZE,
       keep: DEFAULT_LOG_KEEP,
     },
-    daemon: { port: 42718, idle_ms: 60_000, heartbeat_ms: 8_000 },
+    daemon: { port: 42718, idle_ms: 60_000, heartbeat_ms: 8_000, resident: false },
     review: { timeout_s: 3600 },
     dev: { notify: { enabled: false, interval_ms: 15_000, max_pending: 3 } },
   });
@@ -679,4 +680,28 @@ test("createSettings honors the prod-build gate on every current() read", async 
   await Bun.write(file, "[dev.notify]\nenabled = true\n");
   expect(createSettings(file, /* isCompiled */ true).current().dev).toEqual(DEFAULTS.dev);
   expect(createSettings(file, false).current().dev.notify.enabled).toBe(true);
+});
+
+// EXC-1164: residency is the conjunction of intent, supervision and a prod build.
+// The table is exhaustive over the three legs, so a regression that drops any term
+// surfaces as a named row rather than a bare false.
+function withResident(intent: boolean): Settings {
+  return { ...DEFAULTS, daemon: { ...DEFAULTS.daemon, resident: intent } };
+}
+
+test("a daemon is resident only when intent, supervision and a prod build all hold", () => {
+  expect(isResident(withResident(true), { CARET_SUPERVISED: "1" }, true)).toBe(true);
+});
+
+test("intent alone does not make a daemon resident", () => {
+  expect(isResident(withResident(true), {}, true)).toBe(false);
+  expect(isResident(withResident(true), { CARET_SUPERVISED: "0" }, true)).toBe(false);
+});
+
+test("supervision alone does not make a daemon resident", () => {
+  expect(isResident(withResident(false), { CARET_SUPERVISED: "1" }, true)).toBe(false);
+});
+
+test("a dev world is never resident, however it is configured", () => {
+  expect(isResident(withResident(true), { CARET_SUPERVISED: "1" }, false)).toBe(false);
 });

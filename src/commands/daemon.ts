@@ -14,13 +14,14 @@ import {
   getPort,
   heartbeatMs,
   idleMs,
+  isResident,
   logKeep,
   logMaxSize,
   settings,
   watchSettings,
 } from "@/config/settings.ts";
 import { buildDiagnostics, prodDiagnosticsDeps } from "@/daemon/diagnostics.ts";
-import { isAddrInUse, removeOwnDaemonLock } from "@/daemon/lifecycle.ts";
+import { isAddrInUse, removeOwnDaemonLock, rotateDaemonStderr } from "@/daemon/lifecycle.ts";
 import { type CaretServer, createServer } from "@/daemon/server.ts";
 import {
   fileUpdateCache,
@@ -28,10 +29,12 @@ import {
   runUpdateCheck,
   updateReportFor,
 } from "@/daemon/update-check.ts";
+import { startUpkeep, type UpkeepTask } from "@/daemon/upkeep.ts";
 import { buildHash, buildKind, currentBuildId, currentCommit, VERSION } from "@/lib/build-id.ts";
 import { createDaemonLogger } from "@/lib/log.ts";
 import { commitsAheadOfTrunk, latestReleaseTag, publishedCaretVersion } from "@/lib/upstream.ts";
 import { createStore } from "@/review/store.ts";
+import { isSupervised, SERVICE_TERMINAL_EXIT_STATUS } from "@/service/manager.ts";
 import { loadUiAssets } from "@/ui/assets.ts";
 
 export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
@@ -77,15 +80,16 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   const install = buildKind();
   const version = VERSION;
   const commit = currentCommit();
-  // Seeded from the last persisted verdict, so a daemon that respawns per review can
-  // answer immediately; the background check below replaces it when it settles.
+  // Seeded from the last persisted verdict, so a daemon that starts fresh can answer
+  // immediately; the background check below replaces it when it settles.
   const updateCache = fileUpdateCache(updateCheckFile());
   let updateStatus = readCachedStatus(updateCache, version, commit);
   // Ask — at most once a day, and never on a dev build or under the `updates.check`
   // opt-out — whether a newer caret exists (EXC-1205). Fire-and-forget: nothing awaits it,
   // so neither boot nor a prefs write is delayed, and runUpdateCheck never rejects. A null
   // result is the throttle (or the opt-out) saying there is nothing new, so the seeded
-  // verdict stands.
+  // verdict stands. Boot fires it once; a resident daemon re-arms it on the upkeep tick,
+  // bounded by the same 24h stamp.
   function refreshUpdate(): void {
     void runUpdateCheck({
       kind: install,
@@ -108,6 +112,9 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
       (err) => log.error("update", err),
     );
   }
+  // Read from the same boot snapshot as the other startup-captured tunables, so a
+  // config edit landing mid-boot cannot split residency from the idle delay it gates.
+  const resident = isResident(boot);
   const store = createStore(reviewsDir(), log);
   await store.rehydrate();
   const assets = await loadUiAssets();
@@ -150,16 +157,33 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   // being assigned, where shutdown() has nothing to stop yet.
   process.once("exit", removeOwnDaemonLock);
 
+  // Stop on a boot failure no restart can fix: SERVICE_TERMINAL_EXIT_STATUS is the status
+  // systemd's RestartPreventExitStatus is keyed on, and the stderr line is what reaches
+  // the supervisor's own log (the units redirect stderr to daemon-stderr.log). launchd has
+  // no per-status allowlist, so a macOS agent still respawns under KeepAlive — throttled
+  // to its ~10s floor, not looping (EXC-1164).
+  function exitTerminal(reason: string, err: unknown): never {
+    process.stderr.write(`caret: ${reason}; exiting.\n`);
+    log.error("fatal", err, { reason, exitStatus: SERVICE_TERMINAL_EXIT_STATUS });
+    process.exit(SERVICE_TERMINAL_EXIT_STATUS);
+  }
+
+  // Resolved before the try, so a read failure in either surfaces as an ordinary startup
+  // crash rather than being reported — and permanently parked — as a bind failure.
+  const buildId = await currentBuildId();
+  const assetDigest = await buildHash(assets);
+
   try {
     server = createServer({
       store,
       port: ephemeral ? 0 : getPort(boot),
       idleMs: idleMs(boot),
       heartbeatMs: heartbeatMs(boot),
+      resident,
       assets,
       lockPath: daemonLock(),
-      buildId: await currentBuildId(),
-      assetDigest: await buildHash(assets),
+      buildId,
+      assetDigest,
       commit,
       // World + boot identity (EXC-461): stateDir is the world key (never
       // logged — identifying); the per-boot instanceId is the loggable handle.
@@ -204,7 +228,11 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
       process.stderr.write("caret: another daemon won the port; exiting.\n");
       process.exit(0);
     }
-    throw e;
+    // Any other bind failure is a configuration problem — an unbindable port, a
+    // privileged one, an address that does not exist — so a supervisor must stop
+    // rather than restart into it. Left to propagate, the CLI's fatal handler would
+    // print the hook fail-safe's deny line and exit 0, which reads as a clean stop.
+    exitTerminal("cannot bind the daemon port", e);
   }
   // The fatal handlers stay BELOW the bind: a boot that dies before this point
   // should surface its stack the way any other startup crash does, rather than
@@ -217,5 +245,21 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   process.once("unhandledRejection", onFatal("unhandledRejection"));
   // Boot's own check, fired last so it cannot delay the bind or the signal handlers.
   refreshUpdate();
+  // The periodic work a daemon that respawns per review got for free from its own
+  // restart (EXC-1164). The two gates differ: the update check only matters to a daemon
+  // that stays up, while any supervised daemon bypasses spawnDaemon, so its
+  // daemon-stderr.log would otherwise never be rotated at all.
+  const upkeep: UpkeepTask[] = [];
+  if (resident) upkeep.push({ name: "update-check", run: refreshUpdate });
+  if (isSupervised()) {
+    // Once at boot as well as on the tick. A supervised but NON-resident daemon still
+    // idle-exits after about a minute, so the hourly tick alone would never fire for it —
+    // and it is the daemon that appends fresh crash output on every restart.
+    // svc.current() rather than the boot snapshot: the rotation knobs are [logging] keys,
+    // which hot-reload.
+    rotateDaemonStderr(svc.current());
+    upkeep.push({ name: "stderr-rotate", run: () => rotateDaemonStderr(svc.current()) });
+  }
+  startUpkeep({ tasks: upkeep, log });
   // Bun.serve keeps the process alive; the daemon idle-auto-shuts-down.
 }

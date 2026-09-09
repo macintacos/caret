@@ -1,16 +1,18 @@
 // Size-triggered rotation for the live logs (EXC-1068). One entry point, called
 // by all three sinks: the hook logger and the daemon logger check before each
-// record they actually write, and spawnDaemon checks daemon-stderr.log once at
-// spawn.
+// record they actually write, and daemon-stderr.log — which no logger holds — is
+// checked at spawn, plus on the upkeep tick of a supervised daemon, which never
+// passes through spawnDaemon at all.
 //
-// Rotation is COPY-TRUNCATE, not rename-and-recreate. Every writer opens its
-// sink in append mode (pino.destination defaults SonicBoom to append; spawnDaemon
-// uses openSync(path, "a")), and POSIX O_APPEND re-seeks to EOF before every
-// write — so after a truncation each outstanding fd resumes at offset 0 of the
-// same inode, with no NUL padding. That is what lets the daemon's inherited fd
-// and the several concurrent `caret review` hook writers survive a rotation with
-// no reopen, no inode comparison per emit, and no archived inode for a stale fd
-// to write into.
+// Rotation is COPY-TRUNCATE, not rename-and-recreate. Every writer opens its sink in
+// append mode (pino.destination defaults SonicBoom to append; spawnDaemon uses
+// openSync(path, "a"); a supervisor's own redirect — systemd's StandardError=append:,
+// launchd's StandardErrorPath — is the third, and the only one whose append-mode
+// guarantee lives outside this repo), and POSIX O_APPEND re-seeks to EOF before every
+// write — so after a truncation each outstanding fd resumes at offset 0 of the same
+// inode, with no NUL padding. That is what lets the daemon's inherited fd and the
+// several concurrent `caret review` hook writers survive a rotation with no reopen, no
+// inode comparison per emit, and no archived inode for a stale fd to write into.
 //
 // The residual trade is the standard logrotate copy-truncate posture: the
 // truncate is one syscall after the read, so the window in which a concurrent

@@ -236,9 +236,9 @@ function daemonCommand(): string[] {
 }
 
 /** Open the append-mode fd the detached daemon's stdout/stderr is redirected
- * to, rotating it first if it is already oversized — the one rotation check
- * daemon-stderr.log gets, since nothing holds a path to it afterwards
- * (EXC-1068). The explicit chmod covers an upgraded install, whose existing
+ * to, rotating it first if it is already oversized — the spawn-path rotation check. A
+ * supervised daemon never passes through here and rotates on its own upkeep tick instead
+ * (rotateDaemonStderr below). The explicit chmod covers an upgraded install, whose existing
  * file predates the mode argument (which only applies on create). "ignore"
  * means the log is unopenable and the output is discarded; the daemon still
  * spawns. */
@@ -256,6 +256,14 @@ export function openDaemonStderr(s: Settings): number | "ignore" {
     logWarn("spawn", "daemon stderr log unopenable; discarding output");
     return "ignore";
   }
+}
+
+/** Rotate daemon-stderr.log if it has grown past the threshold. The supervised daemon's
+ * own rotation site: a supervisor starts it directly, so it never passes through
+ * spawnDaemon, where the other check lives (EXC-1164). Copy-truncate, so the supervisor's
+ * open descriptor keeps appending across it. */
+export function rotateDaemonStderr(s: Settings): void {
+  rotateIfOversized(daemonStderrLogFile(), logMaxSize(s), logKeep(s));
 }
 
 /** The working directory the detached daemon is pinned to. The daemon is a

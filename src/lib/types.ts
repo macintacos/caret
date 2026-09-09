@@ -425,6 +425,11 @@ export interface HealthIdentity {
    * capability instead of hard-coding tool mode names. Optional: a daemon that
    * predates this field omits it, and the UI falls back to its built-in set. */
   approveVariants?: ApproveVariant[];
+  /** True when the daemon stays up until told to stop rather than idle-exiting
+   * (EXC-1164), so a peer knows which handoff protocol to speak. Three states:
+   * `true` resident, `false` resident-aware but idle-exiting, absent means the
+   * daemon predates the concept. */
+  resident?: boolean;
   /** The active adapter's id — "claude" | "opencode" | "codex" — the "source"
    * the UI adapts to (EXC-791): e.g. an OpenCode session, whose single approve
    * variant renders a plain button rather than a split-button. Optional: a

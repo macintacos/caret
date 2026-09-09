@@ -80,8 +80,9 @@ Concretely:
 - `step` is a **short fixed lowercase token** naming the operation (`review`, `resolve`,
   `decision`, `idle`, `listen`, `settings`, `signal`, `store`, `prefs`, `draft`, `env`,
   `ui`, `poll`, `render`, `prewarm`, `retire`, `spawn`, `request`, `fatal`, `update`,
-  `service`). Reuse an existing token before minting a new one — and when you do mint one,
-  add it here in the same change, so this stays a registry rather than a snapshot.
+  `service`, `upkeep`). Reuse an existing token before minting a new one — and when you do
+  mint one, add it here in the same change, so this stays a registry rather than a
+  snapshot.
 - Review-scoped records carry structured `reviewId` / `sessionId` fields in `extra` so one
   session stitches across the two log streams (EXC-444).
 - Every record carries a `source` field naming the emitting process — `"hook"`,
@@ -146,5 +147,6 @@ through `ensureLogsDir()`. Writes are synchronous, so a record logged just befor
 Both logger sinks check their size before each record they write and, past
 `[logging].max_size`, rotate through `rotateIfOversized` (`src/lib/log-rotate.ts`):
 copy-truncate, so the live file keeps its inode and every open fd goes on appending.
-`daemon-stderr.log`, which no logger holds, gets that check once, at spawn.
-`[logging].keep` caps the archives retained per log.
+`daemon-stderr.log`, which no logger holds, is checked at spawn — and, under a supervisor,
+on the daemon's own hourly upkeep tick, since a supervised daemon is started directly and
+never passes through `spawnDaemon`. `[logging].keep` caps the archives retained per log.
