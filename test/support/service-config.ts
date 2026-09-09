@@ -10,7 +10,6 @@ export function fakeServiceConfig(overrides: Partial<ServiceConfig> = {}): Servi
   return {
     launcherPath: "/home/ada/.local/state/caret/bin/caret",
     label: LAUNCHD_LABEL,
-    logPath: "/home/ada/.local/state/caret/logs/daemon-stderr.log",
     workingDirectory: "/",
     environment: {
       HOME: "/home/ada",

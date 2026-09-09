@@ -44,10 +44,6 @@ export interface ServiceConfig {
   launcherPath: string;
   /** LAUNCHD_LABEL on macOS, SYSTEMD_UNIT on Linux. */
   label: string;
-  /** Where the supervisor sends the daemon's stdout and stderr. Must be
-   * daemonStderrLogFile(): that is the path the daemon's own upkeep tick rotates
-   * (rotateDaemonStderr, src/daemon/lifecycle.ts), so any other value grows unbounded. */
-  logPath: string;
   /** DAEMON_CWD (src/daemon/lifecycle.ts). */
   workingDirectory: string;
   environment: Record<string, string>;

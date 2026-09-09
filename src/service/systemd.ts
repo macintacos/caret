@@ -21,9 +21,8 @@ function unitValue(value: string): string {
 /** systemd splits unquoted values on whitespace, so anything sharing a line with
  * another argument — an `Environment=` assignment, one `ExecStart` word — is quoted.
  * A raw newline would end the directive and make the remainder a new one; inside
- * double quotes systemd reads the C escape. Single-argument settings
- * (WorkingDirectory, StandardOutput) take the rest of the line and need only
- * unitValue(). */
+ * double quotes systemd reads the C escape. A single-argument setting like
+ * WorkingDirectory takes the rest of the line and needs only unitValue(). */
 function quote(value: string): string {
   const escaped = unitValue(value)
     .replace(/[\\"]/g, (c) => `\\${c}`)
@@ -57,8 +56,6 @@ WorkingDirectory=${unitValue(cfg.workingDirectory)}
 Restart=always
 RestartSec=${RESTART_DELAY_SEC}
 RestartPreventExitStatus=${cfg.terminalExitStatus}
-StandardOutput=append:${unitValue(cfg.logPath)}
-StandardError=append:${unitValue(cfg.logPath)}
 ${environment}
 
 [Install]

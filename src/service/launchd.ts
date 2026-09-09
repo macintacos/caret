@@ -38,8 +38,6 @@ ${args}
   <key>KeepAlive</key>
   <true/>
 ${stringEntry("WorkingDirectory", cfg.workingDirectory, "  ")}
-${stringEntry("StandardOutPath", cfg.logPath, "  ")}
-${stringEntry("StandardErrorPath", cfg.logPath, "  ")}
   <key>EnvironmentVariables</key>
   <dict>
 ${environment}

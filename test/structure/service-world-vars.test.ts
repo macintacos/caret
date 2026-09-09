@@ -7,7 +7,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { WORLD_VARS } from "@/service/manager.ts";
+import { SUPERVISED_VAR, WORLD_VARS } from "@/service/manager.ts";
 
 const LAUNCHER = join(import.meta.dir, "..", "..", "bin", "caret-launcher");
 
@@ -20,6 +20,6 @@ test("every environment variable bin/caret-launcher reads is recorded in the uni
   // The launcher rebuilds PATH around the bun it resolved, so carrying the
   // installing shell's would defeat the resolution it just did.
   referenced.delete("PATH");
-  const recorded: readonly string[] = WORLD_VARS;
+  const recorded: readonly string[] = [...WORLD_VARS, SUPERVISED_VAR];
   expect([...referenced].filter((name) => !recorded.includes(name))).toEqual([]);
 });
