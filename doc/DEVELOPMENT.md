@@ -323,6 +323,13 @@ which:
    (`file:<checkout>`, which OpenCode symlinks — so later rebuilds need no reinstall).
 4. Acquires rumdl, and prewarms so the just-built binary takes over the daemon.
 
+`--from-local` is not a reduced install — it takes the same path a user's install takes,
+residency included. Once the service step lands (EXC-1167) that means a caret login item
+serving this checkout at `caret.localhost:42718` from login onward. Re-running `--install`
+reuses the agent already registered rather than adding a second one, so a rebuild cycles
+the daemon instead of re-adding a login item. If you would rather your machine not carry
+one, `caret install --no-resident` opts out once and persists it to `config.toml`.
+
 After a `/reload-plugins` (or a Claude Code restart), `/caret:*` resolves to your local
 build.
 
