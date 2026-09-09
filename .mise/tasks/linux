@@ -61,10 +61,10 @@ if ! container exec "$cid" test -S "/run/user/$uid/bus"; then
   exit 1
 fi
 
-# The real builder emits the unit, so the checks run against what install() would write
-# rather than a hand-copied approximation. Only the paths are the harness's: caret's own
-# TypeScript never runs in the container, which would cost a Linux node_modules for no
-# added signal.
+# The real builder emits the unit and its ExecStart is the shipped bin/caret-launcher, so
+# the checks run against what install() would write and what it would start; only their
+# paths are the harness's. caret's own TypeScript still never runs here — that would cost a
+# Linux node_modules for no added signal.
 unit="$tmp/caret.service"
 # Passed as an env var rather than interpolated: the body is single-quoted so bash leaves
 # its TypeScript alone, which means $home cannot reach it any other way.
@@ -79,7 +79,7 @@ import { buildSystemdUnit } from "@/service/systemd.ts";
 const home = process.env.CARET_LINUX_HOME;
 process.stdout.write(
   buildSystemdUnit({
-    launcherPath: home + "/fake-caret",
+    launcherPath: home + "/caret-launcher",
     label: SYSTEMD_UNIT,
     workingDirectory: "/",
     environment: serviceEnvironment({ HOME: home }),
@@ -89,7 +89,11 @@ process.stdout.write(
 ' >"$unit"
 container cp "$unit" "$cid:$home/caret.service"
 container cp "$here/scripts/linux/verify.sh" "$cid:$home/verify.sh"
+container cp "$here/bin/caret-launcher" "$cid:$home/caret-launcher"
 container exec "$cid" chown -R "$uid:$uid" "$home"
+# container cp's mode preservation is untested here — nothing else in the container is
+# exec'd directly — and a non-executable ExecStart fails as an opaque status=203/EXEC.
+container exec "$cid" chmod +x "$home/caret-launcher"
 
 # The user session the harness works in, spelled once: `container exec` starts a bare
 # process, so nothing hands it the two variables that name the bus.

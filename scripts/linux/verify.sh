@@ -15,32 +15,39 @@ set -uo pipefail
 
 unit=caret.service
 unit_dir="$HOME/.config/systemd/user"
-log_dir="$HOME/.local/state/caret/logs"
+state="$HOME/.local/state/caret"
+log_dir="$state/logs"
 failed=0
 
-# The unit's ExecStart, standing in for bin/caret-launcher on both the contracts the
-# unit no longer expresses: the log preamble open_daemon_log() runs, and the exit status
-# the restart directives key off. What is under test here is systemd's half — that it
-# starts a unit naming no log destination and lets the child open one — so this preamble
-# is a stand-in whose exactness is not load-bearing; the launcher's own is pinned by
-# scripts/caret-launcher.bats. `run` is the resident case; any other mode is the status
-# to exit with.
-cat >"$HOME/fake-caret" <<'LAUNCHER'
-#!/usr/bin/env bash
-state="${XDG_STATE_HOME:-$HOME/.local/state}/caret"
-file="$state/logs/daemon-stderr.log"
-dir="${file%/*}"
-mkdir -p "$dir" 2>/dev/null || true
-chmod 700 "$state" "$dir" 2>/dev/null || true
-: >>"$file" 2>/dev/null || true
-chmod 600 "$file" 2>/dev/null || true
-exec >>"$file" 2>&1
+# The machine the real bin/caret-launcher resolves against before it execs. `run` is the
+# resident case; any other mode is the status to exit with. $log_dir stays absent, so the
+# log checks below assert against a directory the launcher itself creates.
+caret_root="$HOME/.claude/plugins/cache/caret/caret/0.1.0"
+mkdir -p "$caret_root/bin" "$HOME/bin" "$state/launcher"
+# Multi-line, because candidate_version() anchors its sed at line start.
+printf '{\n  "version": "0.1.0"\n}\n' >"$caret_root/package.json"
+cat >"$caret_root/bin/caret" <<'CARET'
+#!/bin/sh
 mode="$(cat "$HOME/mode")"
 if [ "$mode" = run ]; then exec sleep infinity; fi
 exit "$mode"
-LAUNCHER
-chmod +x "$HOME/fake-caret"
-echo run >"$HOME/mode"
+CARET
+printf '#!/bin/sh\nexit 0\n' >"$HOME/bin/bun"
+chmod +x "$HOME/bin/bun"
+printf '%s\n' "$HOME/bin/bun" >"$state/launcher/bun-path"
+
+# 78 is the launcher's own terminal exit, not one bin/caret hands back: an unrunnable
+# bin/caret leaves resolve_root empty while candidate_dirs is not — the single branch that
+# exits 78 without evicting or waiting out the re-probe.
+set_mode() {
+  if [ "$1" = 78 ]; then
+    chmod -x "$caret_root/bin/caret"
+  else
+    chmod +x "$caret_root/bin/caret"
+    printf '%s\n' "$1" >"$HOME/mode"
+  fi
+}
+set_mode run
 
 pass() { printf 'ok   %s\n' "$1"; }
 # An observation the run records without passing or failing on it — for behaviour that is
@@ -175,22 +182,25 @@ cp "$HOME/$unit" "$unit_dir/$unit"
 systemctl --user daemon-reload
 
 printf -- '--- restart contract: what each launcher exit does\n'
-echo 78 >"$HOME/mode"
+set_mode 78
 systemctl --user reset-failed "$unit"
 systemctl --user restart "$unit" 2>/dev/null
 settled "exit 78 parks the unit (Result=exit-code)" result_is exit-code
+# Read once the unit has stopped moving: systemd spends RestartSec in auto-restart with
+# NRestarts still 0, so an immediate read reads 0 for a status that restarts too.
+until_true 45 state_is failed
 if [ "$(prop NRestarts)" = 0 ]; then
   pass "exit 78 never restarts (NRestarts=0)"
 else
   fail "exit 78 never restarts (NRestarts=0)" "NRestarts=$(prop NRestarts)"
 fi
 
-echo 0 >"$HOME/mode"
+set_mode 0
 systemctl --user reset-failed "$unit"
 systemctl --user restart "$unit"
 settled "exit 0 restarts, so the upgrade drain comes back" has_restarted
 
-echo 1 >"$HOME/mode"
+set_mode 1
 systemctl --user reset-failed "$unit"
 systemctl --user restart "$unit" 2>/dev/null
 # Read from the unit rather than restated here, so moving START_LIMIT_BURST in
@@ -203,7 +213,7 @@ settled "an exit 1 burst stops at StartLimitBurst=$burst restarts" burst_spent "
 # The unit is parked on its start limit right here, which is the state a user re-runs
 # `caret install` in. That is why install() resets before it restarts: without the reset
 # systemd refuses the start and install throws with no way back but a hand-typed command.
-echo run >"$HOME/mode"
+set_mode run
 expect "a parked unit refuses a start until it is reset" 1 "" systemctl --user start "$unit"
 systemctl --user reset-failed "$unit"
 expect "reset-failed makes the parked unit startable again" 0 "" systemctl --user start "$unit"
