@@ -47,14 +47,14 @@ export async function runCaretCli(
 
 /**
  * Spawn a real `caret daemon` subprocess over a throwaway `stateHome` on a
- * free port. `pipeStderr` opts into a piped (rather than discarded) stderr,
- * for a test that needs the child not to block on a full pipe buffer while it
- * reads the daemon's own NDJSON log file for assertions.
+ * free port. The `pipeStderr` option opts into a piped (rather than discarded)
+ * stderr, for a test that needs the child not to block on a full pipe buffer
+ * while it reads the daemon's own NDJSON log file for assertions.
  */
 export function spawnCaretDaemon(
   stateHome: string,
   extraEnv: Record<string, string> = {},
-  pipeStderr = false,
+  { pipeStderr = false }: { pipeStderr?: boolean } = {},
 ) {
   return Bun.spawn([process.execPath, "src/cli.ts", "daemon"], {
     env: {

@@ -222,7 +222,7 @@ test("a daemon that cannot bind its configured port exits the terminal status", 
   // An out-of-range port passes the schema (a positive integer) but no bind can
   // ever accept it — a config error a restart cannot fix, which is the class
   // RestartPreventExitStatus exists for.
-  const proc = spawnCaretDaemon(stateHome, { CARET_PORT: "99999" }, /* pipeStderr */ true);
+  const proc = spawnCaretDaemon(stateHome, { CARET_PORT: "99999" }, { pipeStderr: true });
   try {
     expect(await proc.exited).toBe(SERVICE_TERMINAL_EXIT_STATUS);
     // bin/caret-launcher redirects a supervised daemon's stderr to daemon-stderr.log,
@@ -411,7 +411,7 @@ test("the daemon logs env warns, ui fallback, and the sigterm shutdown", async (
   const stateHome = await mkdtemp(join(tmpdir(), "caret-daemon-logs-"));
   const lockPath = join(stateHome, "caret", "daemon.lock");
   // CARET_TIMEOUT set-but-invalid → one boot warn.
-  const proc = spawnCaretDaemon(stateHome, { CARET_TIMEOUT: "nope" }, true);
+  const proc = spawnCaretDaemon(stateHome, { CARET_TIMEOUT: "nope" }, { pipeStderr: true });
   try {
     await untilLockWritten(proc, lockPath);
     proc.kill("SIGTERM");
@@ -502,7 +502,7 @@ test("the daemon logs the parsed settings at startup", async () => {
     "[logging]\ndebug = true\nredact = true\n",
   );
   const lockPath = join(stateHome, "caret", "daemon.lock");
-  const proc = spawnCaretDaemon(stateHome, { XDG_CONFIG_HOME: configHome }, true);
+  const proc = spawnCaretDaemon(stateHome, { XDG_CONFIG_HOME: configHome }, { pipeStderr: true });
   try {
     // The boot settings line is emitted before the server binds (lock write),
     // so the lock appearing means the line is already flushed (sync writes).
