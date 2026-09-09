@@ -140,6 +140,15 @@ test("uninstall preserves a user's other plugins", async () => {
   expect(JSON.parse(readFileSync(configJson(), "utf-8")).plugin).toEqual(["opencode-wakatime"]);
 });
 
+test("uninstall with caret never installed reports nothing removed, and is not a failure", async () => {
+  // `--uninstall` sweeps every agent, so a machine that only runs the other one lands
+  // here; a throw or a non-zero exit would stop the run before the rest of the teardown.
+  const said = await transcript({}, { uninstall: true });
+  expect(process.exitCode).toBeUndefined();
+  expect(said).toContain("caret was not in opencode.json");
+  expect(said).toContain("Removed 0 command file(s)");
+});
+
 test("dry-run install writes nothing", async () => {
   await install(false, true);
   expect(existsSync(configJson())).toBe(false);

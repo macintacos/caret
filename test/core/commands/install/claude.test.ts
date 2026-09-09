@@ -194,6 +194,20 @@ test("a machine with no claude CLI has nothing to uninstall, and is not a failur
   expect(ui.events.some((e) => e.startsWith("error:"))).toBe(false);
 });
 
+test("uninstall is not a failure when claude has no caret plugin to remove", async () => {
+  // `plugin uninstall` exits non-zero on a plugin Claude never had, which is the ordinary
+  // case on a machine that runs another agent: the command is best-effort for that reason.
+  const { runner, calls } = recorder({ ok: false, detail: "plugin not installed", stdout: "" });
+  const ui = recordingUI();
+  const ok = await runInstallClaudeTarget(
+    { uninstall: true, dryRun: false },
+    { claude: runner, ui },
+  );
+  expect(ok).toBe(true);
+  expect(calls).toEqual([["plugin", "uninstall", "caret@caret"]]);
+  expect(ui.events.some((e) => e.startsWith("error:") || e.startsWith("failed:"))).toBe(false);
+});
+
 test("dry-run prints the commands without spawning claude", async () => {
   const { runner, calls } = recorder();
   const ui = recordingUI();
