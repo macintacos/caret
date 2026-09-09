@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { SERVICE_LABELS, selectServiceManager } from "@/service/index.ts";
+import { SERVICE_LABELS, selectServiceManager, servicePlatform } from "@/service/index.ts";
 import { LAUNCHD_LABEL, type ServiceManager, SYSTEMD_UNIT } from "@/service/manager.ts";
 
 function fakeManager(): ServiceManager {
@@ -12,33 +12,21 @@ function fakeManager(): ServiceManager {
   };
 }
 
-const darwin = fakeManager();
-const linux = fakeManager();
-const managers = { darwin: () => darwin, linux: () => linux };
+const managers = { darwin: fakeManager(), linux: fakeManager() };
 
 test("selectServiceManager picks the manager for the running platform", () => {
-  expect(selectServiceManager(managers, "darwin")).toBe(darwin);
-  expect(selectServiceManager(managers, "linux")).toBe(linux);
+  expect(selectServiceManager(managers, "darwin")).toBe(managers.darwin);
+  expect(selectServiceManager(managers, "linux")).toBe(managers.linux);
 });
 
-test("only the running platform's manager is constructed", () => {
-  const built: string[] = [];
+test("servicePlatform narrows the two platforms residency is implemented for", () => {
+  expect(servicePlatform("darwin")).toBe("darwin");
+  expect(servicePlatform("linux")).toBe("linux");
+});
 
-  selectServiceManager(
-    {
-      darwin: () => {
-        built.push("darwin");
-        return darwin;
-      },
-      linux: () => {
-        built.push("linux");
-        return linux;
-      },
-    },
-    "linux",
-  );
-
-  expect(built).toEqual(["linux"]);
+test("servicePlatform rejects anything else by name, before a manager is built", () => {
+  expect(() => servicePlatform("win32")).toThrow(/win32/);
+  expect(() => servicePlatform("win32")).toThrow(/darwin\/linux/);
 });
 
 test("each platform's label is the one its manager accepts", () => {

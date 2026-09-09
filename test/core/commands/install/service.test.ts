@@ -2,33 +2,20 @@
 // persisted intent against what the supervisor actually holds, in both directions, and
 // never fails an install over a service that would not register.
 
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 
-import { setupTempStateDir } from "@test/support/env.ts";
+import { setupTempConfigFile, setupTempStateDir } from "@test/support/env.ts";
 import type { LauncherDeps } from "@/commands/install/launcher.ts";
 import { type ServiceTarget, serviceStep } from "@/commands/install/service.ts";
 import { recordingUI } from "@/commands/install/ui.ts";
 import { VANITY_HOST } from "@/config/constants.ts";
-import { configFile, launcherPath, launcherRecordDir } from "@/config/paths.ts";
+import { launcherPath, launcherRecordDir } from "@/config/paths.ts";
 import type { ServiceConfig, ServiceManager, ServiceStatus } from "@/service/manager.ts";
 
-const xdgStateHome = setupTempStateDir("caret-install-service-");
-
-let savedConfigFile: string | undefined;
-
-beforeEach(() => {
-  savedConfigFile = process.env.CARET_CONFIG_FILE;
-  // Each test starts from a config nobody has written, so an absent key means default.
-  process.env.CARET_CONFIG_FILE = join(xdgStateHome(), "config.toml");
-});
-
-afterEach(() => {
-  if (savedConfigFile === undefined) delete process.env.CARET_CONFIG_FILE;
-  else process.env.CARET_CONFIG_FILE = savedConfigFile;
-  process.exitCode = 0;
-});
+// Each test starts from a config nobody has written, so an absent key means default.
+const configFile = setupTempConfigFile(setupTempStateDir("caret-install-service-"));
 
 /** A ServiceManager that records the verbs it was asked for and the unit it was handed,
  * reporting whatever status the case describes. */
@@ -50,7 +37,7 @@ function fakeService(status: Partial<ServiceStatus> = {}): {
     restart: async () => void calls.push("restart"),
   };
   return {
-    target: () => ({ manager, label: "caret.service" }),
+    target: () => ({ manager, label: "caret.service", optOutSurface: "`systemctl --user`" }),
     manager,
     calls,
     installed: () => installed,
@@ -143,12 +130,13 @@ test("--refresh cycles the service so the new build is the one serving", async (
 test("a host that cannot run the service is reported, not installed onto", async () => {
   const service = fakeService({ unsupported: "systemd is not running" });
   const ui = recordingUI();
+  const before = process.exitCode;
 
   await serviceStep(INSTALL, { service: service.target, installLauncher: () => {} }, ui);
 
   expect(service.calls).toEqual([]);
   expect(ui.events.some((e) => e.includes("systemd is not running"))).toBe(true);
-  expect(process.exitCode).toBe(0);
+  expect(process.exitCode).toBe(before);
 });
 
 test("a service the user turned off themselves is never re-enabled", async () => {
@@ -223,21 +211,24 @@ test("a supervisor that refuses the unit warns and leaves the install standing",
   const service = fakeService();
   service.manager.install = () => Promise.reject(new Error("bootstrap failed"));
   const ui = recordingUI();
+  const before = process.exitCode;
 
   await serviceStep(INSTALL, { service: service.target, installLauncher: () => {} }, ui);
 
   expect(ui.events.some((e) => e.startsWith("warn:") && e.includes("bootstrap failed"))).toBe(true);
-  expect(process.exitCode).toBe(0);
+  expect(process.exitCode).toBe(before);
 });
 
 test("a platform with no supervisor at all warns rather than throwing", async () => {
   const ui = recordingUI();
+  const before = process.exitCode;
 
   await serviceStep(
     INSTALL,
+    // What servicePlatform() raises on a host that is neither darwin nor linux.
     {
       service: () => {
-        throw new Error("caret service: unsupported platform win32");
+        throw new Error("caret service: unsupported platform win32 (darwin/linux only)");
       },
       installLauncher: () => {},
     },
@@ -245,5 +236,39 @@ test("a platform with no supervisor at all warns rather than throwing", async ()
   );
 
   expect(ui.events.some((e) => e.startsWith("warn:") && e.includes("win32"))).toBe(true);
-  expect(process.exitCode).toBe(0);
+  expect(process.exitCode).toBe(before);
+});
+
+test("a config the opt-out cannot be written to is reported as that, not as the service", async () => {
+  const service = fakeService({ installed: true });
+  const ui = recordingUI();
+  // A directory in the config's place: the write fails, the supervisor never comes up.
+  mkdirSync(configFile(), { recursive: true });
+
+  await serviceStep(
+    { ...INSTALL, resident: false },
+    { service: service.target, installLauncher: () => {} },
+    ui,
+  );
+
+  expect(ui.events.some((e) => e.startsWith("warn:") && e.includes("opt-out"))).toBe(true);
+  expect(service.calls).toEqual([]);
+});
+
+test("the announcement names where the service shows up outside caret", async () => {
+  const ui = recordingUI();
+
+  await serviceStep(
+    INSTALL,
+    {
+      service: () => ({
+        ...fakeService().target(),
+        optOutSurface: "System Settings › Login Items",
+      }),
+      installLauncher: () => {},
+    },
+    ui,
+  );
+
+  expect(ui.events.some((e) => e.includes("System Settings › Login Items"))).toBe(true);
 });

@@ -4,8 +4,8 @@
 //
 // Two facts are only reliably available here. `serviceEnvironment(process.env)` captures
 // the shell's world-defining variables, which a supervisor-started daemon inherits none
-// of; and installLauncher records the absolute `bun` running this install, which a
-// compiled unit has no other way to find.
+// of; and installLauncher records the `bun` this install is running under when there is
+// one — a compiled install records nothing and the launcher searches.
 //
 // Reconciliation runs in both directions. Intent off with a unit present tears the unit
 // down: leaving it would have the supervised daemon read `resident = false`, idle-exit,
@@ -23,7 +23,7 @@ import { writeDaemonResident } from "@/config/resident.ts";
 import { getPort, loadSettings } from "@/config/settings.ts";
 import { DAEMON_CWD } from "@/daemon/lifecycle.ts";
 import { errorMessage } from "@/lib/types.ts";
-import { SERVICE_LABELS, type ServicePlatform, selectServiceManager } from "@/service/index.ts";
+import { SERVICE_LABELS, type ServicePlatform, servicePlatform } from "@/service/index.ts";
 import { createLaunchdManager } from "@/service/launchd-manager.ts";
 import {
   SERVICE_TERMINAL_EXIT_STATUS,
@@ -32,11 +32,15 @@ import {
 } from "@/service/manager.ts";
 import { createSystemdManager } from "@/service/systemd-manager.ts";
 
-/** The supervisor this machine installs under: what to drive, and the unit name that
- * manager accepts. */
+/** The supervisor this machine installs under: what to drive, the unit name that manager
+ * accepts, and where the user sees it outside caret. */
 export interface ServiceTarget {
   manager: ServiceManager;
   label: string;
+  /** Where the user turns this off themselves — Login Items on macOS, systemctl on Linux.
+   * Carried here rather than branched on in the step, so the platform decision stays in
+   * one place and both messages that name it are testable on either host. */
+  optOutSurface: string;
 }
 
 export interface ServiceStepDeps {
@@ -70,7 +74,7 @@ export async function serviceStep(
 ): Promise<void> {
   if (deps.service === undefined) return;
   try {
-    const { manager, label } = deps.service();
+    const { manager, label, optOutSurface } = deps.service();
 
     if (opts.uninstall) {
       if (opts.dryRun) {
@@ -83,7 +87,19 @@ export async function serviceStep(
       return;
     }
 
-    if (!opts.resident && !opts.dryRun) writeDaemonResident(false);
+    if (!opts.resident && !opts.dryRun) {
+      try {
+        writeDaemonResident(false);
+      } catch (e) {
+        // Its own catch: the outer one reports a supervisor that would not take the unit,
+        // which is the opposite of what failed, and would leave the user believing an
+        // opt-out persisted that the next `--refresh` will overrule.
+        ui.warn(
+          `Could not record the opt-out (${errorMessage(e)}) — set \`[daemon] resident = false\` in config.toml yourself, or a later install registers the service again.`,
+        );
+        return;
+      }
+    }
     const settings = loadSettings();
     // `--no-resident` short-circuits rather than reading the write back, so a dry run
     // previews the opt-out it would have persisted instead of the install it would not.
@@ -107,7 +123,7 @@ export async function serviceStep(
       return;
     }
     if (status.disabled) {
-      ui.info(`The caret service is turned off (${OPT_OUT_SURFACE}) — leaving it that way.`);
+      ui.info(`The caret service is turned off in ${optOutSurface} — leaving it that way.`);
       return;
     }
     if (opts.dryRun) {
@@ -129,9 +145,7 @@ export async function serviceStep(
     if (opts.refresh) await manager.restart();
 
     ui.info(
-      `The review UI is now always up at http://${VANITY_HOST}:${getPort(settings)}${
-        process.platform === "darwin" ? ` (${OPT_OUT_SURFACE})` : ""
-      } — run \`caret install --no-resident\` to turn it off.`,
+      `The review UI is now always up at http://${VANITY_HOST}:${getPort(settings)} — it appears in ${optOutSurface}, and \`caret install --no-resident\` turns it off.`,
     );
   } catch (e) {
     ui.warn(
@@ -140,18 +154,19 @@ export async function serviceStep(
   }
 }
 
-/** Where the user turns the service off outside caret, which is also what they see the
- * moment it is registered: macOS posts its own "Background Items Added" notice. */
-const OPT_OUT_SURFACE =
-  process.platform === "darwin" ? "System Settings › Login Items" : "systemctl --user";
+/** Where each platform surfaces the service to the user — macOS posts its own
+ * "Background Items Added" notice naming this the moment it is registered. */
+const OPT_OUT_SURFACES: Record<ServicePlatform, string> = {
+  darwin: "System Settings › Login Items",
+  linux: "`systemctl --user`",
+};
 
-/** The running platform's manager and unit name. */
+/** The running platform's supervisor. */
 export function prodService(): ServiceTarget {
-  const platform = process.platform;
-  const manager = selectServiceManager(
-    { darwin: createLaunchdManager, linux: createSystemdManager },
-    platform,
-  );
-  // Narrowed by the line above, which threw for anything else.
-  return { manager, label: SERVICE_LABELS[platform as ServicePlatform] };
+  const platform = servicePlatform();
+  return {
+    manager: platform === "darwin" ? createLaunchdManager() : createSystemdManager(),
+    label: SERVICE_LABELS[platform],
+    optOutSurface: OPT_OUT_SURFACES[platform],
+  };
 }

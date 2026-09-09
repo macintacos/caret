@@ -61,7 +61,7 @@ export function launcherBunFile(): string {
   return `${launcherRecordDir()}/bun-path`;
 }
 
-/** The unit the launcher stops and, on eviction, deletes. */
+/** The unit's name, in the per-platform form launcherRecordDir() describes. */
 export function launcherServiceFile(): string {
   return `${launcherRecordDir()}/service`;
 }

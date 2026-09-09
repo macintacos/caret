@@ -335,8 +335,9 @@ installed release that outranks it still wins until the `pinned-root` record lan
 Re-running `--install` reuses the agent already registered rather than re-registering it,
 so macOS stops posting its "Background Items Added" notice on every rebuild; the new build
 is picked up by cycling the daemon, not by re-installing. If you would rather your machine
-not carry a login item, run `bin/caret install --no-resident` (or set
-`[daemon] resident = false` in `config.toml` yourself).
+not carry a login item, set `[daemon] resident = false` in `config.toml` — or run
+`bin/caret install --from-local --no-resident`, keeping `--from-local` so the run does not
+swap your local build back to the published caret.
 
 After a `/reload-plugins` (or a Claude Code restart), `/caret:*` resolves to your local
 build.

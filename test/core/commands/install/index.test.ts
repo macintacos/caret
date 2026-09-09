@@ -3,6 +3,7 @@
 // target runners.
 
 import { afterEach, expect, test } from "bun:test";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -239,7 +240,8 @@ test("the service is registered after the targets, so a refresh cycles the new b
   const calls: string[] = [];
   // A config path nobody wrote, so the run reads the schema default rather than whatever
   // residency this machine's own caret is configured for.
-  await withEnv({ CARET_CONFIG_FILE: join(tmpdir(), "caret-install-index-absent.toml") }, () =>
+  const absentConfig = join(await mkdtemp(join(tmpdir(), "caret-install-index-")), "config.toml");
+  await withEnv({ CARET_CONFIG_FILE: absentConfig }, () =>
     runInstallSubcommand(INSTALL_CLAUDE, {
       ui: silentUI,
       runClaude: () => void calls.push("claude"),
@@ -249,6 +251,7 @@ test("the service is registered after the targets, so a refresh cycles the new b
       },
       service: () => ({
         label: "caret.service",
+        optOutSurface: "`systemctl --user`",
         manager: {
           install: async () => void calls.push("service"),
           uninstall: async () => {},

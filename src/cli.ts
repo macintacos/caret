@@ -104,8 +104,6 @@ function buildProgram(): Command {
           fromLocal: opts.fromLocal ?? false,
           resident: opts.resident,
         },
-        // The one install effect that can stop a running service, so it is wired here
-        // rather than defaulted inside the step — a unit test drives a fake or nothing.
         { service: prodService },
       ),
     );

@@ -55,9 +55,10 @@ export function parseTargets(
   return { targets };
 }
 
-/** Injection seam for tests: override detection, the chooser, TTY-ness, and each target
- * runner to assert selection and dispatch without touching a real config dir, the
- * `claude` CLI, or a terminal. */
+/** Injection seam for tests: override detection, the chooser, TTY-ness, each target
+ * runner, and — through ServiceStepDeps — the supervisor, to assert selection and
+ * dispatch without touching a real config dir, the `claude` CLI, launchd, or a
+ * terminal. */
 export interface InstallDeps extends ServiceStepDeps {
   /** A runner returns false to report "this target failed" (it has already said why);
    * returning nothing means it got through. */

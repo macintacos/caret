@@ -18,12 +18,25 @@ function tableName(line: string): string | undefined {
   return /^\s*\[\s*([^\]]*?)\s*\]/.exec(line)?.[1];
 }
 
-/** `text` with `[daemon] resident` set to `resident`, every other line untouched. */
+/** Where the first table opens, or the end — everything before it is top-level. */
+function firstTable(lines: string[]): number {
+  const i = lines.findIndex((line) => tableName(line) !== undefined);
+  return i === -1 ? lines.length : i;
+}
+
+/** `text` with `[daemon] resident` set to `resident`, every other line untouched.
+ * Throws rather than write a file it would corrupt. */
 export function setDaemonResident(text: string, resident: boolean): string {
   const entry = `resident = ${resident}`;
   const lines = text.split("\n");
   const header = lines.findIndex((line) => tableName(line) === TABLE);
   if (header === -1) {
+    // A top-level `daemon.port = …` owns the table without opening one, so appending a
+    // header would redefine it and cost the file its whole parse. Refusing leaves the
+    // config intact and the caller reports why.
+    if (lines.slice(0, firstTable(lines)).some((line) => /^\s*daemon\s*\./.test(line))) {
+      throw new Error("caret config: [daemon] is written as dotted keys; set resident there");
+    }
     const existing = text.trim() === "" ? "" : `${text.trimEnd()}\n\n`;
     return `${existing}[${TABLE}]\n${entry}\n`;
   }
