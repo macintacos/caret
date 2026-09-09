@@ -73,17 +73,8 @@ function buildProgram(): Command {
 
   program
     .command("install")
-    .description(
-      "install caret into a coding agent, plus the rumdl plan formatter (omit --target to choose interactively)",
-    )
-    .option(
-      "--target <targets>",
-      "comma-separated agents to install into: opencode, claude, or opencode,claude",
-    )
-    .option(
-      "--uninstall",
-      "remove caret from every agent on this machine instead of installing — cannot be scoped with --target",
-    )
+    .description("install caret into a coding agent, plus the rumdl plan formatter")
+    .option("--uninstall", "remove caret from every agent on this machine instead of installing")
     .option("--dry-run", "print what would change without writing")
     .option(
       "--refresh",
@@ -100,7 +91,6 @@ function buildProgram(): Command {
     .action((opts) =>
       runInstallSubcommand(
         {
-          target: opts.target,
           uninstall: opts.uninstall ?? false,
           dryRun: opts.dryRun ?? false,
           refresh: opts.refresh ?? false,

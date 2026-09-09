@@ -1,14 +1,12 @@
-// The `caret install` command: install caret into one or more coding agents.
-// `--target` is a comma-separated list of the ids in the install-target registry; each
-// target owns its own mechanism (OpenCode: a `plugin` array entry + command files;
-// Claude Code: the `claude` plugin CLI). Omit `--target` and caret detects the agents
-// on this machine and asks — on a TTY through the chooser, otherwise by installing into
-// everything it detected (Claude Code when it detected nothing), so CI never hangs on a
-// prompt. Every install ends by acquiring the rumdl plan formatter: it is part of a
-// working caret, not a step anyone can skip or forget. `--uninstall` is machine-wide — it
-// removes caret from every agent in the registry and refuses `--target`, since the
-// residency it tears down alongside them is one service for the whole machine. Neither it
-// nor `--dry-run` acquires rumdl.
+// The `caret install` command: install caret into one or more coding agents. Each target
+// owns its own mechanism (OpenCode: a `plugin` array entry + command files; Claude Code:
+// the `claude` plugin CLI). caret detects the agents on this machine and asks — on a TTY
+// through the chooser, otherwise by installing into everything it detected (Claude Code
+// when it detected nothing), so CI never hangs on a prompt. Every install ends by
+// acquiring the rumdl plan formatter: it is part of a working caret, not a step anyone
+// can skip or forget. `--uninstall` is machine-wide — it removes caret from every agent
+// in the registry, since the residency it tears down alongside them is one service for
+// the whole machine. Neither it nor `--dry-run` acquires rumdl.
 
 import { runInstallClaudeTarget } from "@/commands/install/claude.ts";
 import {
@@ -33,33 +31,6 @@ import {
 import { createInstallUI, type InstallUI, isTerminal } from "@/commands/install/ui.ts";
 import { errorMessage } from "@/lib/types.ts";
 import { ensureRumdl, RUMDL_VERSION } from "@/plan/rumdl.ts";
-
-/** Parse a `--target` value ("opencode", "claude", or "opencode,claude") into a
- * deduped, order-preserving target list — or an error message for an empty/unknown
- * value. */
-export function parseTargets(
-  raw: string | undefined,
-): { targets: InstallTarget[] } | { error: string } {
-  const parts = (raw ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (parts.length === 0) {
-    return {
-      error: `--target names no agent (it takes a comma-separated list of: ${INSTALL_TARGET_IDS.join(", ")}) — omit it entirely to choose interactively.`,
-    };
-  }
-  const unknown = parts.filter((p) => !(INSTALL_TARGET_IDS as readonly string[]).includes(p));
-  if (unknown.length > 0) {
-    return {
-      error: `unknown --target value(s): ${unknown.join(", ")}. Valid: ${INSTALL_TARGET_IDS.join(", ")}.`,
-    };
-  }
-  const targets: InstallTarget[] = [];
-  for (const p of parts)
-    if (!targets.includes(p as InstallTarget)) targets.push(p as InstallTarget);
-  return { targets };
-}
 
 /** Injection seam for tests: override detection, the chooser, TTY-ness, each target
  * runner, and — through ServiceStepDeps — the supervisor, to assert selection and
@@ -98,12 +69,10 @@ interface TargetOpts {
   local?: LocalInstall;
 }
 
-/** Run the install command: resolve the targets (from `--target`, the chooser, or
- * detection), then dispatch to each one. On an invalid `--target`, writes the reason to
- * stderr and sets a non-zero exit code (nothing is installed). */
+/** Run the install command: resolve the targets (the chooser or detection), then
+ * dispatch to each one. */
 export async function runInstallSubcommand(
   opts: {
-    target?: string;
     uninstall: boolean;
     dryRun: boolean;
     fromLocal?: boolean;
@@ -284,8 +253,8 @@ function closingLine(
   return `caret${local ? " (local build)" : ""} is installed in ${names}.${reload}${restart}`;
 }
 
-/** Resolve which agents to act on. `null` means "do nothing" — the `--target` value was
- * rejected (reported, non-zero exit) or the user cancelled the chooser.
+/** Resolve which agents to act on. `null` means "do nothing" — the user cancelled the
+ * chooser.
  *
  * An uninstall takes every registry target and asks nothing: residency is a single
  * machine-wide service, so removing caret from one agent while leaving it in another
@@ -293,30 +262,11 @@ function closingLine(
  * can't be answered (no TTY) or shouldn't be asked: `--dry-run` previews the detected
  * agents instead of asking about a run that changes nothing. */
 async function selectTargets(
-  opts: { target?: string; uninstall: boolean; dryRun: boolean },
+  opts: { uninstall: boolean; dryRun: boolean },
   deps: InstallDeps,
   ui: InstallUI,
 ): Promise<InstallTarget[] | null> {
-  if (opts.uninstall) {
-    if (opts.target !== undefined) {
-      ui.error(
-        "--target cannot scope an uninstall: removing caret removes it from every agent, so the machine-wide service goes with it. Re-run `caret install --uninstall` on its own.",
-      );
-      process.exitCode = 2;
-      return null;
-    }
-    return [...INSTALL_TARGET_IDS];
-  }
-
-  if (opts.target !== undefined) {
-    const parsed = parseTargets(opts.target);
-    if ("error" in parsed) {
-      ui.error(parsed.error);
-      process.exitCode = 2;
-      return null;
-    }
-    return parsed.targets;
-  }
+  if (opts.uninstall) return [...INSTALL_TARGET_IDS];
 
   const detected = (deps.detect ?? detectTargets)();
   const isInteractive = deps.isInteractive ?? isTerminal;
