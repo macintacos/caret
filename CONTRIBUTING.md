@@ -50,6 +50,8 @@ The full task catalog (`build`, `test`, `smoke`, `lint`, `format`) is documented
 - `scripts/*.bats` — hermetic shell suites for the shipped scripts, covering the plugin
   entrypoint shim, the service launcher, and the bootstrap preamble
   (`mise run test bats`).
+- `scripts/linux/verify.sh` — the systemd contract, checked against a real systemd booted
+  in a container (`mise run linux verify`). Hand-run: no gate spawns it.
 
 ## Configuration
 

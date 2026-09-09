@@ -63,6 +63,11 @@ mise run preflight  # pre-push gate: lint + tests (unit ∥ bats ∥ e2e) + buil
 mise run linux      # boot a real systemd in a container; `linux verify` runs the unit checks
 ```
 
+`mise run linux` is the one task above no gate runs. It needs
+[Apple container](https://github.com/apple/container), and `linux verify` is the only
+check caret's systemd unit gets against a real systemd — `mise run preflight` never spawns
+it, so run it yourself when you change `src/service/` or `bin/caret-launcher`.
+
 ### Bootstrapping a clone
 
 A fresh clone can go straight to `mise run dev` or `mise run lint` — there is no setup

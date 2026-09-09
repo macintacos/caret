@@ -76,3 +76,10 @@ side to match the other.
   suite per shipped script: the plugin entrypoint shim, the service launcher, the
   bootstrap preamble. They sit outside `test/` because their subject does, and because
   bats collects them from the directory it is handed rather than from `test/`'s tree.
+- **Linux systemd** — `scripts/linux/verify.sh`, run by hand through
+  `mise run linux verify`, which boots a real systemd under Apple `container` and drives
+  the install, restart and uninstall sequence `createSystemdManager` performs against the
+  unit `buildSystemdUnit()` actually emitted. It is the systemd contract's only coverage:
+  `test/core/service/` asserts on the generated unit text, never on what systemd does with
+  it. No gate spawns it — not `mise run preflight`, and caret has no CI — so a change
+  under `src/service/` or to `bin/caret-launcher` is checked only if you run it yourself.
