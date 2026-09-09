@@ -57,7 +57,7 @@ export function createLaunchdManager(deps: LaunchdDeps = {}): ServiceManager {
   if (uid === undefined) throw new Error("caret service: launchd needs a POSIX uid");
   const domain = `gui/${uid}`;
   const target = `${domain}/${LAUNCHD_LABEL}`;
-  const plist = join(launchAgentsDir, `${LAUNCHD_LABEL}.plist`);
+  const plistPath = join(launchAgentsDir, `${LAUNCHD_LABEL}.plist`);
 
   async function readStatus(): Promise<ServiceStatus> {
     const [printed, printDisabled] = await Promise.all([
@@ -83,7 +83,7 @@ export function createLaunchdManager(deps: LaunchdDeps = {}): ServiceManager {
       // Reusing the loaded agent rather than replacing it is what keeps macOS from
       // posting "Background Items Added" on every upgrade. Running, not merely
       // installed: stop_agent boots the agent out and leaves the plist behind.
-      if (unitUnchanged(plist, text)) {
+      if (unitUnchanged(plistPath, text)) {
         const current = await readStatus();
         if (current.installed && current.running) {
           logDebug("service", "launchd agent unchanged; install skipped");
@@ -94,13 +94,13 @@ export function createLaunchdManager(deps: LaunchdDeps = {}): ServiceManager {
       mkdirSync(launchAgentsDir, { recursive: true });
       // Written in place, unlike installLauncher's tmp+rename: launchd reads this file
       // whole at the bootstrap below and at login, never lazily from a live fd.
-      writeFileSync(plist, text);
+      writeFileSync(plistPath, text);
       // Best-effort: it has nothing to boot out on a first install, and makes a second
       // one a reload rather than a "service already loaded" failure. Keep it ahead of
       // bootstrap — that ordering is also what leaves a failed install unloaded rather
       // than matching the skip above with a plist launchd never accepted.
       await launchctl(["bootout", target]);
-      const bootstrapped = await launchctl(["bootstrap", domain, plist]);
+      const bootstrapped = await launchctl(["bootstrap", domain, plistPath]);
       if (bootstrapped.code !== 0) throw launchctlError("bootstrap", bootstrapped);
     },
 
@@ -108,7 +108,7 @@ export function createLaunchdManager(deps: LaunchdDeps = {}): ServiceManager {
       // Best-effort: a missing agent is the ordinary case here. Any other failure leaves
       // the agent loaded with its plist gone; EXC-1167 owns whether uninstall says so.
       await launchctl(["bootout", target]);
-      rmSync(plist, { force: true });
+      rmSync(plistPath, { force: true });
     },
 
     status: readStatus,

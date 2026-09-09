@@ -17,18 +17,18 @@ afterEach(() => {
 
 const UNIT = "[Service]\nExecStart=/bin/caret\n";
 
-function unit(text: string): string {
+function writeUnit(text: string): string {
   const path = join(dir, "caret.service");
   writeFileSync(path, text);
   return path;
 }
 
 test("a unit holding exactly the generated text is unchanged", () => {
-  expect(unitUnchanged(unit(UNIT), UNIT)).toBe(true);
+  expect(unitUnchanged(writeUnit(UNIT), UNIT)).toBe(true);
 });
 
 test("a unit missing only its trailing newline is changed", () => {
-  expect(unitUnchanged(unit(UNIT), UNIT.trimEnd())).toBe(false);
+  expect(unitUnchanged(writeUnit(UNIT), UNIT.trimEnd())).toBe(false);
 });
 
 test("a unit that was never written is changed, so the install writes it", () => {
