@@ -1,5 +1,5 @@
 // The questions `caret install` asks, and the copy that describes what they are about:
-// the agent chooser for a run with no `--target`, and the confirm a stale OpenCode
+// the agent chooser, and the confirm a stale OpenCode
 // raises. The verdict lines live here too, beside the question they turn into, so the
 // prompt, the check's settled line, and the non-interactive nudge all describe a version
 // gap the same way.

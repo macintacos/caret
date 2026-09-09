@@ -2,9 +2,9 @@
 
 Load this when working on caret's OpenCode support — the adapter
 (`src/adapters/opencode/`), the plugin (`opencode/`), or the install path
-(`caret install --target opencode`). It records the spike EXC-339 ran (a review of
-OpenCode's plugin docs + source against what caret does in Claude Code) so the "is this
-even possible, and how" reasoning is not lost.
+(`caret install`). It records the spike EXC-339 ran (a review of OpenCode's plugin docs +
+source against what caret does in Claude Code) so the "is this even possible, and how"
+reasoning is not lost.
 
 ## The headline: OpenCode is plugin-shaped, not command-hook-shaped
 
@@ -215,8 +215,8 @@ so it wants the live check § Verified vs. follow-up already schedules.
   ships in the `@macintacos/caret` npm package and resolves its binary and version at
   runtime from that package (§ Runtime resolution + update check); only the command files
   still carry a substituted `__CARET_BIN__` marker.
-- **Install (`caret install --target opencode`)** — adds caret to the user's OpenCode
-  `plugin` array (comment-preserving, via `jsonc-parser` in `config-plugin.ts`) as either
+- **Install (`caret install`)** — adds caret to the user's OpenCode `plugin` array
+  (comment-preserving, via `jsonc-parser` in `config-plugin.ts`) as either
   `@macintacos/caret` or, under `--from-local`, `file:<checkout>` (§ The local form) and
   deploys the `/caret:*` command **files**; `--uninstall` reverses both. Both arms also
   sweep what the file-deploy era left in the config dir: caret's `caret.ts` in either
@@ -240,13 +240,12 @@ so it wants the live check § Verified vs. follow-up already schedules.
   GitHub releases, because `latest` is what OpenCode would re-resolve to — and a stale
   result offers to clear the cached copy, or to bump a user-authored pin. That offer is a
   prompt, since `~/.cache/opencode` is not caret's to delete unasked; `--refresh`
-  pre-answers it, and off a TTY install names the gap and changes nothing.
-  `caret install --target claude` registers caret with Claude Code via its plugin CLI. The
-  command lives in `src/commands/install/`: `index.ts` is the orchestrator (it parses
-  `--target` — a comma list of the registry's ids — resolves the targets, and dispatches),
-  beside the target registry, the chooser, the terminal reporter, and one module per
-  target runner. `paths.ts` is the single source of truth both the probe (reader) and the
-  writer resolve through.
+  pre-answers it, and off a TTY install names the gap and changes nothing. `caret install`
+  registers caret with Claude Code via its plugin CLI too. The command lives in
+  `src/commands/install/`: `index.ts` is the orchestrator (it selects the targets — the
+  chooser or detection — and dispatches), beside the target registry, the chooser, the
+  terminal reporter, and one module per target runner. `paths.ts` is the single source of
+  truth both the probe (reader) and the writer resolve through.
 
 ## Distribution choice (amended by EXC-794)
 
@@ -312,8 +311,8 @@ is the raw string, a bare `@macintacos/caret` and a pinned `@macintacos/caret@la
 two sibling directories that can coexist — so `existingOpencodeCachePackageDirs`
 (`src/adapters/opencode/paths.ts`) *lists* the parent instead of probing one path, and the
 version reported is the first candidate that resolves (bare first, since that is what
-`caret install --target opencode` writes). And a directory can exist with no manifest
-entry at all after an interrupted install — OpenCode's own installed-check is
+`caret install` writes). And a directory can exist with no manifest entry at all after an
+interrupted install — OpenCode's own installed-check is
 `existsSafe(join(dir, "node_modules", name))`, not the directory itself — so the probe
 treats a resolved version, never directory presence, as proof of install.
 
@@ -377,21 +376,20 @@ never overwrites a user's own review-tool permission); the steer gate (plan agen
 caller — even though it records every session's agent) and the production warm runner it
 hides (survives a bad binary's async spawn error, and runs `prewarm` with
 `CARET_AGENT=opencode`); the entrypoint's `Object.values`-single-Plugin invariant; the
-config-array editor (add/remove, comment-preserving); `--target` parsing + dispatch; the
+config-array editor (add/remove, comment-preserving); target selection + dispatch; the
 `claude` target's CLI command sequence; the runtime bin/version resolvers; and the update
 check (toasts when behind, silent on error / opt-out).
 
 **Confirmed against a live OpenCode 1.18.11 with `@opencode-ai/plugin` 1.18.17 — EXC-1085,
 the array install's LOCAL form, which is what ties the run to that plugin version: a
 `file:` entry loads the checkout's own module, so the dependency under test is the one
-this repo's lockfile resolves.** `caret install --target opencode --from-local` writes
-that entry; OpenCode symlinks the checkout and loads the plugin with no
-`failed to load plugin` line; the `config` hook's mutation reaches the running config
-(`experimental.primary_tools` carries `caret_review_plan`, and the `plan` agent's
-`permission` carries its `allow`); the planning steer routes the Plan agent to the tool;
-the envelope reaches `caret review`, which serves the plan in caret's UI under the
-adapter's single `default` approve variant; and approving there returns `approvedMessage`
-to the agent, which proceeds.
+this repo's lockfile resolves.** `caret install --from-local` writes that entry; OpenCode
+symlinks the checkout and loads the plugin with no `failed to load plugin` line; the
+`config` hook's mutation reaches the running config (`experimental.primary_tools` carries
+`caret_review_plan`, and the `plan` agent's `permission` carries its `allow`); the
+planning steer routes the Plan agent to the tool; the envelope reaches `caret review`,
+which serves the plan in caret's UI under the adapter's single `default` approve variant;
+and approving there returns `approvedMessage` to the agent, which proceeds.
 
 **Documented manual follow-up (needs a live OpenCode + a model provider):** what that
 round-trip did not reach — the PUBLISHED entry (`@macintacos/caret`) resolving out of npm

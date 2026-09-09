@@ -1,4 +1,4 @@
-// caret's Claude Code install target. `caret install --target claude` registers
+// caret's Claude Code install target. `caret install` registers
 // caret's PUBLISHED plugin with Claude Code by driving its CLI: add and refresh caret's
 // marketplace, install and enable the plugin, then update it so re-running the installer
 // after a caret upgrade also upgrades caret-in-Claude-Code. `--uninstall` removes it.
@@ -295,7 +295,7 @@ export async function runInstallClaudeTarget(
       }
       ui.error(
         e.missing
-          ? `The \`claude\` CLI was not found. Install Claude Code (https://claude.com/claude-code) and re-run \`caret install --target claude\`, or add caret in Claude Code via \`/plugin marketplace add ${MARKETPLACE_SOURCE}\`.`
+          ? `The \`claude\` CLI was not found. Install Claude Code (https://claude.com/claude-code) and re-run \`caret install\`, or add caret in Claude Code via \`/plugin marketplace add ${MARKETPLACE_SOURCE}\`.`
           : `Claude Code: ${e.reason}`,
       );
       return false;

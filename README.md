@@ -48,12 +48,11 @@ Two steps finish the job:
 2. **Run `/caret:demo`.** It presents a short fake plan, so you can exercise the whole
    flow before a real one arrives.
 
-| Flag                | What it does                                                      |
-| ------------------- | ----------------------------------------------------------------- |
-| `--target <agents>` | Skip the chooser: `claude`, `opencode`, or both, comma-separated. |
-| `--dry-run`         | Preview the run without changing anything.                        |
-| `--refresh`         | Update an existing install.                                       |
-| `--uninstall`       | Remove caret from every agent, and from this machine.             |
+| Flag          | What it does                                          |
+| ------------- | ----------------------------------------------------- |
+| `--dry-run`   | Preview the run without changing anything.            |
+| `--refresh`   | Update an existing install.                           |
+| `--uninstall` | Remove caret from every agent, and from this machine. |
 
 ### Updating and uninstalling
 
@@ -64,10 +63,10 @@ bunx --no-cache @macintacos/caret@latest install --refresh    # update
 bunx --no-cache @macintacos/caret@latest install --uninstall  # remove
 ```
 
-`--target` pins the agents on an update, exactly as it does on a fresh install; an
-uninstall takes every agent and refuses it. Restarting each agent applies an update. In
-OpenCode, caret toasts you at startup when a newer release is out; a plain `install` at a
-terminal runs its own check against npm and asks before taking it.
+An update picks its agents exactly as a fresh install does — the chooser at a terminal,
+detection otherwise; an uninstall takes every agent. Restarting each agent applies an
+update. In OpenCode, caret toasts you at startup when a newer release is out; a plain
+`install` at a terminal runs its own check against npm and asks before taking it.
 
 caret's daemon runs the same check for itself, at most once a day. The call is
 unauthenticated and sends nothing about you — just a request to npm or GitHub, depending

@@ -1,8 +1,8 @@
 // Whether the caret that OpenCode runs is behind the published one, and the effects
 // needed to answer that. OpenCode records a `plugin` array entry's resolution in
 // `packages/<specifier>/package.json` on first install and never re-resolves it, so a
-// bare entry stays frozen at install-day's version — `caret install --target opencode`
-// is a no-op on the array entry and therefore on the running version. This module is
+// bare entry stays frozen at install-day's version — `caret install` is a no-op on the
+// array entry and therefore on the running version. This module is
 // what lets install say so: a pure verdict over (entry, cached, published), plus the
 // cache reads and the cache clear the install target performs on it. The published
 // version itself, and the semver comparison the verdict turns on, are shared with the

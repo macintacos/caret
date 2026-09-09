@@ -37,10 +37,9 @@ test('package.json entrypoint resolves to the OpenCode plugin so `plugin: ["@mac
 });
 
 test("package.json exposes a `caret` bin so `bunx @macintacos/caret` runs the CLI", () => {
-  // The prebuilt installer's OpenCode step is `bunx @macintacos/caret install
-  // --target opencode`, and `npm i -g @macintacos/caret` must yield a `caret`
-  // command — both resolve this bin entry (the shim picks the native binary or
-  // the bundle at runtime).
+  // The prebuilt installer's OpenCode step is `bunx @macintacos/caret install`,
+  // and `npm i -g @macintacos/caret` must yield a `caret` command — both resolve
+  // this bin entry (the shim picks the native binary or the bundle at runtime).
   expect(pkg.bin?.caret).toBe("./bin/caret");
 });
 

@@ -1,4 +1,4 @@
-// caret's OpenCode install target. `caret install --target opencode` makes caret a
+// caret's OpenCode install target. `caret install` makes caret a
 // first-class `plugin` array entry — OpenCode installs it and its deps into its own
 // cache and loads it — and deploys the `/caret:*` command files (which aren't
 // array-installable). `--uninstall` reverses both. Either arm also sweeps the plugin and

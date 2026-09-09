@@ -148,7 +148,7 @@ function opencodeCachePackagesDir(): string {
   return join(xdg || join(homedir(), ".cache"), "opencode", "packages");
 }
 
-/** The cache dir for the BARE `pkg` specifier — what `caret install --target opencode`'s
+/** The cache dir for the BARE `pkg` specifier — what `caret install`'s OpenCode
  * array entry produces, and the prefix every pinned variant extends. */
 export function opencodeCachePackageDir(pkg: string = CARET_PACKAGE): string {
   return join(opencodeCachePackagesDir(), pkg);

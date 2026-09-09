@@ -1,5 +1,5 @@
 // The comment-preserving editor that adds/removes caret's entry in an OpenCode
-// config's `plugin` array (EXC-794) — how `caret install --target opencode` makes
+// config's `plugin` array (EXC-794) — how `caret install` makes
 // caret a first-class array plugin. Edits go through jsonc-parser so a user's other
 // entries, other keys, and comments survive.
 

@@ -3,7 +3,7 @@
 // it on this machine: `claude` on PATH for Claude Code, `opencode` on PATH or an
 // existing OpenCode config dir for OpenCode.
 //
-// Everything that enumerates targets (--target parsing, the chooser rows, detection)
+// Everything that enumerates targets (the chooser rows, detection, the uninstall sweep)
 // reads this one array, so a future agent is one descriptor, one runner module beside
 // this one, and one dispatch arm in index.ts — no second list to keep in sync, and the
 // arm is not optional: index.ts dispatches through an exhaustive switch, so a descriptor
