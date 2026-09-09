@@ -97,7 +97,10 @@ const SettingsSchema = z.object({
       port: Port.default(DEFAULT_PORT), // EXC-430
       idle_ms: IdleMs.default(60_000), // EXC-430
       heartbeat_ms: HeartbeatMs.default(8_000), // EXC-430
-      resident: z.boolean().default(false), // EXC-1164: stay up until told to stop
+      // EXC-1164: stay up until told to stop. Default true (EXC-1167) because it takes
+      // a unit this machine installed to matter: isResident() also requires
+      // CARET_SUPERVISED, so an absent key means "resident if install registered one".
+      resident: z.boolean().default(true),
     })
     .prefault({}),
   review: z

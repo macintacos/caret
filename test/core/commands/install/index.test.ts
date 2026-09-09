@@ -3,7 +3,10 @@
 // target runners.
 
 import { afterEach, expect, test } from "bun:test";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
+import { withEnv } from "@test/support/env.ts";
 import { parseTargets, runInstallSubcommand } from "@/commands/install/index.ts";
 import type { InstallTarget } from "@/commands/install/targets.ts";
 import { recordingUI, silentUI } from "@/commands/install/ui.ts";
@@ -230,6 +233,33 @@ test("installing ensures rumdl once, after the targets", async () => {
     },
   });
   expect(calls).toEqual(["claude", "rumdl"]);
+});
+
+test("the service is registered after the targets, so a refresh cycles the new build", async () => {
+  const calls: string[] = [];
+  // A config path nobody wrote, so the run reads the schema default rather than whatever
+  // residency this machine's own caret is configured for.
+  await withEnv({ CARET_CONFIG_FILE: join(tmpdir(), "caret-install-index-absent.toml") }, () =>
+    runInstallSubcommand(INSTALL_CLAUDE, {
+      ui: silentUI,
+      runClaude: () => void calls.push("claude"),
+      ensureRumdl: async () => {
+        calls.push("rumdl");
+        return { bin: "/x/rumdl", installed: false };
+      },
+      service: () => ({
+        label: "caret.service",
+        manager: {
+          install: async () => void calls.push("service"),
+          uninstall: async () => {},
+          status: async () => ({ installed: false, running: false, disabled: false }),
+          restart: async () => {},
+        },
+      }),
+      installLauncher: () => {},
+    }),
+  );
+  expect(calls).toEqual(["claude", "rumdl", "service"]);
 });
 
 test.each([

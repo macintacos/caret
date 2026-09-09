@@ -19,6 +19,7 @@ import { fatalDeny } from "@/adapters/index.ts";
 import { runDaemon } from "@/commands/daemon.ts";
 import { runDiscoverySubcommand } from "@/commands/discovery.ts";
 import { runInstallSubcommand } from "@/commands/install/index.ts";
+import { prodService } from "@/commands/install/service.ts";
 import { runPrewarm } from "@/commands/prewarm.ts";
 import { runReconcileSubcommand } from "@/commands/reconcile.ts";
 import { runRedactSubcommand } from "@/commands/redact.ts";
@@ -89,14 +90,24 @@ function buildProgram(): Command {
       "--from-local",
       "dev loop: install the built caret checkout this binary runs from, then hand it the daemon",
     )
+    .option(
+      "--no-resident",
+      "don't keep caret's review UI up from login onward — persisted, so later installs leave it off",
+    )
     .action((opts) =>
-      runInstallSubcommand({
-        target: opts.target,
-        uninstall: opts.uninstall ?? false,
-        dryRun: opts.dryRun ?? false,
-        refresh: opts.refresh ?? false,
-        fromLocal: opts.fromLocal ?? false,
-      }),
+      runInstallSubcommand(
+        {
+          target: opts.target,
+          uninstall: opts.uninstall ?? false,
+          dryRun: opts.dryRun ?? false,
+          refresh: opts.refresh ?? false,
+          fromLocal: opts.fromLocal ?? false,
+          resident: opts.resident ?? true,
+        },
+        // The one install effect that can stop a running service, so it is wired here
+        // rather than defaulted inside the step — a unit test drives a fake or nothing.
+        { service: prodService },
+      ),
     );
 
   return program;

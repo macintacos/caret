@@ -3,9 +3,17 @@
 // from the composition layer (EXC-1167) — the same shape prodReviewDeps uses to
 // hand the core an adapter capability it names nowhere.
 
-import type { ServiceManager } from "@/service/manager.ts";
+import { LAUNCHD_LABEL, type ServiceManager, SYSTEMD_UNIT } from "@/service/manager.ts";
 
 export type ServicePlatform = "darwin" | "linux";
+
+/** The unit name each platform's manager accepts and the launcher's `service` record
+ * holds — the same platform decision selectServiceManager makes, over the other half
+ * of what installing a unit needs. */
+export const SERVICE_LABELS: Record<ServicePlatform, string> = {
+  darwin: LAUNCHD_LABEL,
+  linux: SYSTEMD_UNIT,
+};
 
 /** The manager for a platform, defaulting to the current process. Throws on anything
  * but darwin/linux — residency has no third implementation, and a silent no-op would

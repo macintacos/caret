@@ -61,6 +61,11 @@ export function launcherBunFile(): string {
   return `${launcherRecordDir()}/bun-path`;
 }
 
+/** The unit the launcher stops and, on eviction, deletes. */
+export function launcherServiceFile(): string {
+  return `${launcherRecordDir()}/service`;
+}
+
 /** Root config dir: $XDG_CONFIG_HOME/caret or ~/.config/caret. Separate from
  * stateDir(), which `mise run dev` isolates and wipes; which file inside this dir
  * is read is configFile()'s call — dev points CARET_CONFIG_FILE at

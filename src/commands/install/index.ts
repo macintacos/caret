@@ -17,6 +17,7 @@ import {
 } from "@/commands/install/local.ts";
 import { runInstallOpencodeTarget } from "@/commands/install/opencode.ts";
 import { promptForTargets } from "@/commands/install/prompt.ts";
+import { type ServiceStepDeps, serviceStep } from "@/commands/install/service.ts";
 import {
   detectTargets,
   INSTALL_TARGET_IDS,
@@ -57,7 +58,7 @@ export function parseTargets(
 /** Injection seam for tests: override detection, the chooser, TTY-ness, and each target
  * runner to assert selection and dispatch without touching a real config dir, the
  * `claude` CLI, or a terminal. */
-export interface InstallDeps {
+export interface InstallDeps extends ServiceStepDeps {
   /** A runner returns false to report "this target failed" (it has already said why);
    * returning nothing means it got through. */
   runOpencode?: (opts: TargetOpts, deps: { ui: InstallUI }) => unknown;
@@ -100,6 +101,8 @@ export async function runInstallSubcommand(
     dryRun: boolean;
     fromLocal?: boolean;
     refresh?: boolean;
+    /** `--no-resident`, already inverted by Commander. */
+    resident?: boolean;
   },
   deps: InstallDeps = {},
 ): Promise<void> {
@@ -157,6 +160,18 @@ export async function runInstallSubcommand(
   }
 
   await rumdlStep(opts, deps, ui);
+  // After the target runners, so `--refresh`'s restart cycles a supervisor that resolves
+  // the plugin cache those runners just updated.
+  await serviceStep(
+    {
+      uninstall: opts.uninstall,
+      dryRun: opts.dryRun,
+      refresh: opts.refresh ?? false,
+      resident: opts.resident ?? true,
+    },
+    deps,
+    ui,
+  );
   if (local && !opts.dryRun) await prewarmStep(local.repoDir, deps, ui);
   ui.outro(closingLine(targets, opts, local !== undefined));
 }

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
-import { selectServiceManager } from "@/service/index.ts";
-import type { ServiceManager } from "@/service/manager.ts";
+import { SERVICE_LABELS, selectServiceManager } from "@/service/index.ts";
+import { LAUNCHD_LABEL, type ServiceManager, SYSTEMD_UNIT } from "@/service/manager.ts";
 
 function fakeManager(): ServiceManager {
   return {
@@ -17,6 +17,11 @@ const managers = { darwin: fakeManager(), linux: fakeManager() };
 test("selectServiceManager picks the manager for the running platform", () => {
   expect(selectServiceManager(managers, "darwin")).toBe(managers.darwin);
   expect(selectServiceManager(managers, "linux")).toBe(managers.linux);
+});
+
+test("each platform's label is the one its manager accepts", () => {
+  expect(SERVICE_LABELS.darwin).toBe(LAUNCHD_LABEL);
+  expect(SERVICE_LABELS.linux).toBe(SYSTEMD_UNIT);
 });
 
 test("selectServiceManager rejects an unsupported platform by name", () => {
