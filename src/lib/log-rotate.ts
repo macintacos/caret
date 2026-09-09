@@ -6,9 +6,8 @@
 //
 // Rotation is COPY-TRUNCATE, not rename-and-recreate. Every writer opens its sink in
 // append mode (pino.destination defaults SonicBoom to append; spawnDaemon uses
-// openSync(path, "a"); a supervisor's own redirect — systemd's StandardError=append:,
-// launchd's StandardErrorPath — is the third, and the only one whose append-mode
-// guarantee lives outside this repo), and POSIX O_APPEND re-seeks to EOF before every
+// openSync(path, "a"); a supervised daemon's stderr rides the `exec >>"$file" 2>&1`
+// bin/caret-launcher runs before it), and POSIX O_APPEND re-seeks to EOF before every
 // write — so after a truncation each outstanding fd resumes at offset 0 of the same
 // inode, with no NUL padding. That is what lets the daemon's inherited fd and the
 // several concurrent `caret review` hook writers survive a rotation with no reopen, no

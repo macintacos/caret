@@ -81,7 +81,6 @@ process.stdout.write(
   buildSystemdUnit({
     launcherPath: home + "/fake-caret",
     label: SYSTEMD_UNIT,
-    logPath: home + "/daemon-stderr.log",
     workingDirectory: "/",
     environment: serviceEnvironment({ HOME: home }),
     terminalExitStatus: SERVICE_TERMINAL_EXIT_STATUS,

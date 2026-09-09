@@ -29,6 +29,32 @@ records="$state/launcher"
 claude_roots="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache/caret/caret"
 opencode_roots="${XDG_CACHE_HOME:-$HOME/.cache}/opencode/packages/@macintacos"
 
+# The units name no log destination, so nothing opens this before caret does:
+# openDaemonStderr's 0700/0600 guarantee (src/daemon/lifecycle.ts) happens here for a
+# supervised daemon instead. Both modes are set at create time, so a chmod the
+# filesystem refuses cannot leave a umask-derived 0755/0644 pair behind (EXC-539).
+# Best-effort throughout: exiting under `set -e` would be a restart loop under
+# Restart=always / KeepAlive, so an unwritable state dir degrades to the supervisor's
+# own stream.
+open_daemon_log() {
+  # One literal, not "$dir/daemon-stderr.log": test/structure/service-log-path.test.ts
+  # matches the path daemonStderrLogFile() resolves as a substring of this file.
+  local file="$state/logs/daemon-stderr.log"
+  local dir="${file%/*}"
+  (
+    umask 077
+    mkdir -p "$dir"
+  ) 2>/dev/null || return 0
+  chmod 700 "$state" "$dir" 2>/dev/null || true
+  # The probe is what keeps the unguarded exec below from exiting the shell.
+  (
+    umask 077
+    : >>"$file"
+  ) 2>/dev/null || return 0
+  chmod 600 "$file" 2>/dev/null || true
+  exec >>"$file" 2>&1
+}
+
 read_record() {
   local value
   [ -f "$1" ] && read -r value <"$1" && [ -n "$value" ] && printf '%s' "$value"
@@ -146,6 +172,9 @@ evict() {
   rm -rf "${state:?}/bin" "${state:?}/launcher"
   exit 0
 }
+
+# Only under a supervisor: a hand-run launcher keeps its diagnostics on the terminal.
+if [ "${CARET_SUPERVISED:-}" = 1 ]; then open_daemon_log; fi
 
 # Only a total miss re-probes. A populated version dir with no runnable bin/caret
 # is far more likely a bad install than an extraction caught mid-flight, and that

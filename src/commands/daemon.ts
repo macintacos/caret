@@ -159,7 +159,7 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
 
   // Stop on a boot failure no restart can fix: SERVICE_TERMINAL_EXIT_STATUS is the status
   // systemd's RestartPreventExitStatus is keyed on, and the stderr line is what reaches
-  // the supervisor's own log (the units redirect stderr to daemon-stderr.log). launchd has
+  // the supervisor's own log (bin/caret-launcher redirects stderr there). launchd has
   // no per-status allowlist, so a macOS agent still respawns under KeepAlive — throttled
   // to its ~10s floor, not looping (EXC-1164).
   function exitTerminal(reason: string, err: unknown): never {

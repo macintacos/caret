@@ -21,10 +21,6 @@ test("buildLaunchdPlist emits the whole agent definition", () => {
   <true/>
   <key>WorkingDirectory</key>
   <string>/</string>
-  <key>StandardOutPath</key>
-  <string>/home/ada/.local/state/caret/logs/daemon-stderr.log</string>
-  <key>StandardErrorPath</key>
-  <string>/home/ada/.local/state/caret/logs/daemon-stderr.log</string>
   <key>EnvironmentVariables</key>
   <dict>
     <key>CARET_SUPERVISED</key>
@@ -51,18 +47,16 @@ test("buildLaunchdPlist escapes XML metacharacters at every emission site", () =
     fakeServiceConfig({
       label: "dev.excessive.caret<&>",
       launcherPath: "/tmp/a&b/<bin>/caret",
-      logPath: "/tmp/a&b/<log>.log",
       workingDirectory: "/tmp/a&b/<wd>",
       environment: { "A&B<C>": "/tmp/x&y/<c>.toml" },
     }),
   );
   expect(plist).toContain("<string>dev.excessive.caret&lt;&amp;&gt;</string>");
   expect(plist).toContain("<string>/tmp/a&amp;b/&lt;bin&gt;/caret</string>");
-  expect(plist).toContain("<string>/tmp/a&amp;b/&lt;log&gt;.log</string>");
   expect(plist).toContain("<string>/tmp/a&amp;b/&lt;wd&gt;</string>");
   expect(plist).toContain("<key>A&amp;B&lt;C&gt;</key>");
   expect(plist).toContain("<string>/tmp/x&amp;y/&lt;c&gt;.toml</string>");
   // Nothing survives raw: an unescaped `&` alone is a plist launchd will not parse.
   expect(plist).not.toMatch(/&(?!amp;|lt;|gt;)/);
-  expect(plist.split("\n").filter((line) => /<(bin|log|wd|C)>/.test(line))).toEqual([]);
+  expect(plist.split("\n").filter((line) => /<(bin|wd|C)>/.test(line))).toEqual([]);
 });

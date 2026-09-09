@@ -18,8 +18,6 @@ WorkingDirectory=/
 Restart=always
 RestartSec=5
 RestartPreventExitStatus=78
-StandardOutput=append:/home/ada/.local/state/caret/logs/daemon-stderr.log
-StandardError=append:/home/ada/.local/state/caret/logs/daemon-stderr.log
 Environment="CARET_SUPERVISED=1"
 Environment="HOME=/home/ada"
 Environment="XDG_STATE_HOME=/home/ada/.local/state"
@@ -61,7 +59,6 @@ test("buildSystemdUnit doubles % specifiers at every emission site", () => {
   const unit = buildSystemdUnit(
     fakeServiceConfig({
       launcherPath: "/opt/50%off/bin/caret",
-      logPath: "/var/log/50%off.log",
       workingDirectory: "/srv/50%off",
       environment: { HOME: "/home/50%off" },
     }),
@@ -70,8 +67,6 @@ test("buildSystemdUnit doubles % specifiers at every emission site", () => {
   // it, so an unescaped % either expands or fails the whole unit load.
   expect(unit).toContain('ExecStart="/opt/50%%off/bin/caret" "daemon"');
   expect(unit).toContain("WorkingDirectory=/srv/50%%off");
-  expect(unit).toContain("StandardOutput=append:/var/log/50%%off.log");
-  expect(unit).toContain("StandardError=append:/var/log/50%%off.log");
   expect(unit).toContain('Environment="HOME=/home/50%%off"');
 });
 

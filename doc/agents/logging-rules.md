@@ -133,15 +133,19 @@ Logs live under `$XDG_STATE_HOME/caret/logs` (default `~/.local/state/caret/logs
 
 - `caret.log` — records from the short-lived hook processes.
 - `daemon.log` — the daemon's records, the same NDJSON shape tagged with `pid`.
-- `daemon-stderr.log` — whatever the detached daemon writes outside the logger: raw
-  non-JSON crash output.
+- `daemon-stderr.log` — whatever the daemon writes outside the logger (raw non-JSON crash
+  output), plus `bin/caret-launcher`'s own failures when a supervised start cannot resolve
+  caret or bun.
 - `archive/<name>-<stamp>.log.gz` — the gzipped rotations of the three above.
 
 Every log file is created `0600`, inside `0700` directories. The mode is enforced by
 `ensureStateDir()` (`src/config/paths.ts`), which every mkdir-of-stateDir site routes
 through (log, store, prefs, lock, spawn) — it chmods an already existing dir, so the mode
 holds regardless of which caller creates the dir first (EXC-539); log writers reach it
-through `ensureLogsDir()`. Writes are synchronous, so a record logged just before
+through `ensureLogsDir()`. `daemon-stderr.log` under a supervisor is the one file that
+does not: the units name no log destination at all, so the supervised daemon inherits the
+descriptor from `bin/caret-launcher`, which creates `logs/` at 0700 and opens the file at
+0600 in bash before it execs caret. Writes are synchronous, so a record logged just before
 `process.exit` (fail-safe and signal paths) is durable.
 
 Both logger sinks check their size before each record they write and, past

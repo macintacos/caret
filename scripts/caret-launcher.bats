@@ -27,7 +27,7 @@ setup() {
   mkdir -p "$home/bin" "$home/.claude/plugins/cache/caret/caret" \
     "$home/.cache/opencode/packages/@macintacos" "$home/.local/state/caret/launcher"
   local tool tool_path
-  for tool in basename cut dirname head id rm sed sleep sort tail uname; do
+  for tool in basename chmod cut dirname head id mkdir rm sed sleep sort tail uname; do
     tool_path="$(command -v "$tool" 2>/dev/null || true)"
     [ -n "$tool_path" ] && ln -s "$tool_path" "$home/bin/$tool"
   done
@@ -66,6 +66,11 @@ stub_service() {
   done
 }
 
+# BSD and GNU stat disagree on the flag. GNU first, because its `-f` prints file
+# system status on stdout rather than failing cleanly, which would poison the
+# capture; BSD rejects `-c` outright.
+stat_mode() { stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"; }
+
 # The unit file the launcher derives from the `service` record on this OS.
 unit_path() {
   if [ "$(uname)" = Darwin ]; then
@@ -81,8 +86,14 @@ launcher() {
     XDG_CACHE_HOME="$home/.cache" \
     XDG_CONFIG_HOME="$home/.config" \
     CLAUDE_CONFIG_DIR="$home/.claude" \
+    CARET_SUPERVISED="${CARET_SUPERVISED:-}" \
     "$BASH_BIN" "$LAUNCHER" "$@"
 }
+
+# The launcher as a generated unit starts it. The variable gates the log preamble, so a
+# supervised case reads the log file — unless it is proving the preamble degraded,
+# where the output is back on $output.
+launcher_supervised() { CARET_SUPERVISED=1 launcher "$@"; }
 
 # 0.9.0 alongside 0.14.0 is the pair a lexicographic sort gets wrong.
 @test "highest version wins within one Claude root" {
@@ -216,4 +227,71 @@ launcher() {
   wait
   [[ "$output" == *"CARET 0.14.0"* ]]
   [ -e "$home/.local/state/caret/bin" ]
+}
+
+@test "a supervised run creates logs/ and captures the child's output" {
+  stub_bun
+  seed_caret "$home/.claude/plugins/cache/caret/caret/0.14.0" 0.14.0
+  run -0 launcher_supervised
+  [ -d "$home/.local/state/caret/logs" ]
+  [[ "$(cat "$home/.local/state/caret/logs/daemon-stderr.log")" == *"CARET 0.14.0"* ]]
+}
+
+@test "a supervised run leaves logs/ at 0700 and the log at 0600" {
+  stub_bun
+  seed_caret "$home/.claude/plugins/cache/caret/caret/0.14.0" 0.14.0
+  run -0 launcher_supervised
+  [ "$(stat_mode "$home/.local/state/caret/logs")" = 700 ]
+  [ "$(stat_mode "$home/.local/state/caret/logs/daemon-stderr.log")" = 600 ]
+}
+
+# Both may already exist at whatever umask created them, so the chmods are not
+# redundant with the create — the case openDaemonStderr's own explicit chmod covers.
+@test "a supervised run tightens an existing world-readable logs/ and file" {
+  stub_bun
+  seed_caret "$home/.claude/plugins/cache/caret/caret/0.14.0" 0.14.0
+  local logs="$home/.local/state/caret/logs"
+  mkdir -p "$logs"
+  chmod 755 "$logs"
+  touch "$logs/daemon-stderr.log"
+  chmod 644 "$logs/daemon-stderr.log"
+  run -0 launcher_supervised
+  [ "$(stat_mode "$logs")" = 700 ]
+  [ "$(stat_mode "$logs/daemon-stderr.log")" = 600 ]
+}
+
+# The degradation path: an unwritable state dir must not become a restart loop.
+@test "an unwritable state dir still execs caret" {
+  [ "$(id -u)" -ne 0 ] || skip "root ignores the mode bits"
+  stub_bun
+  seed_caret "$home/.claude/plugins/cache/caret/caret/0.14.0" 0.14.0
+  chmod 500 "$home/.local/state/caret"
+  run launcher_supervised
+  # Restored before the assertions: `run -0` would abort first and leave a dir bats
+  # cannot remove.
+  chmod 700 "$home/.local/state/caret"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"CARET 0.14.0"* ]]
+}
+
+# Nothing under the state dir at all, which is what a wiped state dir leaves a
+# supervisor restarting into — and the launcher's own diagnostics, not a child's,
+# are what has to reach the file.
+@test "a supervised launcher that cannot find bun logs why into a fresh state dir" {
+  if [ -x /opt/homebrew/bin/bun ] || [ -x /usr/local/bin/bun ]; then
+    skip "a real bun sits on an absolute search path"
+  fi
+  seed_caret "$home/.claude/plugins/cache/caret/caret/0.14.0" 0.14.0
+  rm -rf "$home/.local/state/caret"
+  run -78 launcher_supervised
+  [ "$(stat_mode "$home/.local/state/caret/logs")" = 700 ]
+  [[ "$(cat "$home/.local/state/caret/logs/daemon-stderr.log")" == *"no bun"* ]]
+}
+
+@test "an unsupervised run keeps its output on the terminal" {
+  stub_bun
+  seed_caret "$home/.claude/plugins/cache/caret/caret/0.14.0" 0.14.0
+  run -0 launcher
+  [[ "$output" == *"CARET 0.14.0"* ]]
+  [ ! -e "$home/.local/state/caret/logs" ]
 }
