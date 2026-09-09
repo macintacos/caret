@@ -326,9 +326,11 @@ which:
 `--from-local` is not a reduced install — it takes the same path a user's install takes,
 residency included. Once the service step lands (EXC-1167) that means a caret login item
 serving this checkout at `caret.localhost:42718` from login onward. Re-running `--install`
-reuses the agent already registered rather than adding a second one, so a rebuild cycles
-the daemon instead of re-adding a login item. If you would rather your machine not carry
-one, `caret install --no-resident` opts out once and persists it to `config.toml`.
+reuses the agent already registered rather than re-registering it, so macOS stops posting
+its "Background Items Added" notice on every rebuild; the new build is picked up by
+cycling the daemon, not by re-installing. If you would rather your machine not carry a
+login item, set `[daemon] resident = false` in `config.toml` — today's default, and the
+opt-out once that step makes residency the norm.
 
 After a `/reload-plugins` (or a Claude Code restart), `/caret:*` resolves to your local
 build.

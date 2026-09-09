@@ -96,7 +96,9 @@ export function createLaunchdManager(deps: LaunchdDeps = {}): ServiceManager {
       // whole at the bootstrap below and at login, never lazily from a live fd.
       writeFileSync(plist, text);
       // Best-effort: it has nothing to boot out on a first install, and makes a second
-      // one a reload rather than a "service already loaded" failure.
+      // one a reload rather than a "service already loaded" failure. Keep it ahead of
+      // bootstrap — that ordering is also what leaves a failed install unloaded rather
+      // than matching the skip above with a plist launchd never accepted.
       await launchctl(["bootout", target]);
       const bootstrapped = await launchctl(["bootstrap", domain, plist]);
       if (bootstrapped.code !== 0) throw launchctlError("bootstrap", bootstrapped);

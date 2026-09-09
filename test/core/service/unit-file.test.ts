@@ -34,3 +34,8 @@ test("a unit missing only its trailing newline is changed", () => {
 test("a unit that was never written is changed, so the install writes it", () => {
   expect(unitUnchanged(join(dir, "absent.service"), UNIT)).toBe(false);
 });
+
+test("a path that cannot be read is changed, so the install writes it", () => {
+  // EISDIR rather than ENOENT — the branch that lets both managers skip an existsSync.
+  expect(unitUnchanged(dir, UNIT)).toBe(false);
+});
