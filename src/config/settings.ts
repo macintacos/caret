@@ -1,6 +1,8 @@
 // User-editable settings: ~/.config/caret/config.toml (see paths.configFile),
 // parsed with smol-toml and validated by a zod schema that supplies a default
-// for every key. The file is user-authored — caret never writes it.
+// for every key. The file is user-authored: nothing here writes it, and the one
+// key caret does persist is edited textually (src/config/resident.ts) so the
+// comments and layout around it survive.
 //
 // Contract (EXC-429): reads NEVER throw. An absent, malformed, partial, or
 // invalid file falls back to last-known-good, then DEFAULTS. Invalid values
@@ -97,8 +99,8 @@ const SettingsSchema = z.object({
       port: Port.default(DEFAULT_PORT), // EXC-430
       idle_ms: IdleMs.default(60_000), // EXC-430
       heartbeat_ms: HeartbeatMs.default(8_000), // EXC-430
-      // EXC-1164; default true since EXC-1167, which is inert without a unit: isResident()
-      // also requires CARET_SUPERVISED.
+      // EXC-1164: default true, but inert without a supervisor unit — isResident() also
+      // requires CARET_SUPERVISED.
       resident: z.boolean().default(true),
     })
     .prefault({}),
