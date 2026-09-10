@@ -21,6 +21,7 @@ import { createDaemonLogger } from "@/lib/log.ts";
 import type { UpdateReport } from "@/lib/types.ts";
 import { formatPlanMarkdown } from "@/plan/markdown.ts";
 import type { Store } from "@/review/store.ts";
+import { routeIncomingPlan } from "@/review/threading.ts";
 
 // Resolver injected as a dep — the core daemon stays tool-agnostic and never
 // reaches into src/ui/assets.ts.
@@ -397,6 +398,114 @@ test("POST /api/retire from a foreign origin is blocked (403, no shutdown)", asy
   await Bun.sleep(20);
   expect(sig.fired()).toBe(false);
   expect(existsSync(lockPath)).toBe(true);
+});
+
+// ---- drain-and-release on handoff (EXC-1165) ----
+
+// A decision its hook has not read yet: settled on the pipe, never cleared by a
+// GET …/decision — exactly what a drain waits out. Session "A" so the reviews a
+// test seeds afterwards don't thread into it.
+async function holdDrainOpen(): Promise<string> {
+  const id = await d.seed({ sessionId: "A" });
+  await resolve(id, { behavior: "allow" });
+  return id;
+}
+
+test("a decision resolved but unread holds the drain until its hook reads it", async () => {
+  const sig = shutdownSignal();
+  await boot({ onShutdown: sig.onShutdown });
+  const id = await holdDrainOpen();
+  expect((await fetch(`${base}/api/retire`, { method: "POST" })).status).toBe(200);
+  await Bun.sleep(20);
+  expect(sig.fired()).toBe(false);
+  const decision = (await (await fetch(`${base}/api/reviews/${id}/decision`)).json()) as {
+    behavior: string;
+  };
+  expect(decision.behavior).toBe("allow");
+  await sig.shutdown;
+});
+
+test("a draining daemon refuses new reviews with 503", async () => {
+  await boot();
+  await holdDrainOpen();
+  await fetch(`${base}/api/retire`, { method: "POST" });
+  const res = await fetch(`${base}/api/reviews`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sessionId: "B", cwd: "/tmp/p", plan: "# B\n\nbody" }),
+  });
+  expect(res.status).toBe(503);
+  expect((await d.listReviews()).some((r) => r.sessionId === "B")).toBe(false);
+});
+
+test("a long-poll still waiting keeps heartbeating through the drain", async () => {
+  await boot({ heartbeatMs: 30 });
+  await holdDrainOpen();
+  const b = await d.seed({ sessionId: "B" });
+  await fetch(`${base}/api/retire`, { method: "POST" });
+  expect((await fetch(`${base}/api/reviews/${b}/decision`)).status).toBe(204);
+});
+
+test("a pending review's parked long-poll does not hold the drain", async () => {
+  const sig = shutdownSignal();
+  const park = decisionParked();
+  await boot({
+    heartbeatMs: 1_000,
+    drainMs: 60_000,
+    onShutdown: sig.onShutdown,
+    onDecisionAwaited: park.onDecisionAwaited,
+  });
+  const b = await d.seed({ sessionId: "B" });
+  let answered = false;
+  void fetch(`${base}/api/reviews/${b}/decision`).then(
+    () => {
+      answered = true;
+    },
+    () => {},
+  );
+  await park.parked;
+  await fetch(`${base}/api/retire`, { method: "POST" });
+  await sig.shutdown;
+  expect(answered).toBe(false);
+});
+
+test("a write already in flight lands before the drain releases the port", async () => {
+  const sig = shutdownSignal();
+  let entered!: () => void;
+  const inRoute = new Promise<void>((r) => {
+    entered = r;
+  });
+  let release!: () => void;
+  const gate = new Promise<void>((r) => {
+    release = r;
+  });
+  await boot({
+    onShutdown: sig.onShutdown,
+    routePlan: async (input, s, log) => {
+      entered();
+      await gate;
+      return routeIncomingPlan(input, s, log);
+    },
+  });
+  const post = d.seed({ sessionId: "B" });
+  await inRoute;
+  await fetch(`${base}/api/retire`, { method: "POST" });
+  await Bun.sleep(20);
+  expect(sig.fired()).toBe(false);
+  release();
+  expect(await post).toBeTruthy();
+  await sig.shutdown;
+});
+
+test("an unread decision nobody reads cannot hold the drain past its deadline", async () => {
+  const sig = shutdownSignal();
+  const { recs, log } = recordingLog();
+  await boot({ drainMs: 50, log, onShutdown: sig.onShutdown });
+  await holdDrainOpen();
+  await fetch(`${base}/api/retire`, { method: "POST" });
+  await sig.shutdown;
+  const deadline = recs.find((r) => r.step === "drain" && r.level === "warn");
+  expect(deadline?.extra).toMatchObject({ unread: 1 });
 });
 
 test("idle auto-shutdown removes the lock file", async () => {
