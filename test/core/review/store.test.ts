@@ -303,6 +303,16 @@ test("rehydrate tolerates corrupt files among valid and resolved records", async
   expect(fresh.get("done")).toBeUndefined();
 });
 
+test("rehydrate ignores a temp file a crashed write left behind", async () => {
+  await store.create(makeReview({ id: "live", status: "pending" }));
+  await Bun.write(join(dir, "live.json.4242.tmp"), "{ truncated");
+  const { recs, log } = recordingLog();
+  const fresh = createStore(dir, log);
+  await fresh.rehydrate();
+  expect(fresh.get("live")?.status).toBe("pending");
+  expect(recs.some((r) => r.level === "warn")).toBe(false);
+});
+
 test("rehydrate with no state dir logs at debug, not warn", async () => {
   const { recs, log } = recordingLog();
   await createStore(join(dir, "missing"), log).rehydrate();
