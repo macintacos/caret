@@ -209,9 +209,8 @@ test("a daemon started with CARET_FRESH=1 reports fresh in /api/health", async (
   }
 });
 
-// EXC-1253: runDaemon joins residency intent to supervision and hands the verdict to
-// createServer and the upkeep gates. Each end is unit-tested alone; only a real daemon
-// shows they are wired together.
+// EXC-1253: isResident, createServer and the upkeep gates are each unit-tested alone;
+// only a real daemon shows runDaemon wires them together.
 async function bootForResidency(env: Record<string, string>, config = "") {
   const stateHome = await mkdtemp(join(tmpdir(), "caret-residency-"));
   const configHome = await mkdtemp(join(tmpdir(), "caret-residency-cfg-"));
