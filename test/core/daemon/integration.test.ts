@@ -209,6 +209,59 @@ test("a daemon started with CARET_FRESH=1 reports fresh in /api/health", async (
   }
 });
 
+// EXC-1253: runDaemon joins residency intent to supervision and hands the verdict to
+// createServer and the upkeep gates. Each end is unit-tested alone; only a real daemon
+// shows they are wired together.
+async function bootForResidency(env: Record<string, string>, config = "") {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-residency-"));
+  const configHome = await mkdtemp(join(tmpdir(), "caret-residency-cfg-"));
+  // Pinned so the developer's own config.toml cannot decide residency here.
+  await Bun.write(join(configHome, "caret", "config.toml"), config);
+  const { proc, lock } = await spawnEphemeralDaemon(stateHome, {
+    XDG_CONFIG_HOME: configHome,
+    ...env,
+  });
+  try {
+    const h = (await (await fetch(`http://127.0.0.1:${lock.port}/api/health`)).json()) as {
+      resident?: boolean;
+    };
+    // The upkeep record lands in the bind's synchronous tail, which SIGTERM cannot
+    // preempt: after exit, a missing record means none was armed.
+    proc.kill("SIGTERM");
+    await proc.exited;
+    const upkeep = ndjsonRecords(await Bun.file(daemonLog(stateHome)).text()).find(
+      (r) => r.step === "upkeep",
+    );
+    return { resident: h.resident, upkeep: upkeep?.tasks };
+  } finally {
+    proc.kill("SIGKILL");
+    await proc.exited;
+    await rm(stateHome, { recursive: true, force: true });
+    await rm(configHome, { recursive: true, force: true });
+  }
+}
+
+test("a supervised daemon is resident and arms both upkeep tasks", async () => {
+  expect(await bootForResidency({ CARET_SUPERVISED: "1" })).toEqual({
+    resident: true,
+    upkeep: ["update-check", "stderr-rotate"],
+  });
+});
+
+test("an unsupervised daemon is not resident and arms no upkeep", async () => {
+  // Blanked, not omitted: spawnEphemeralDaemon spreads the runner's own env.
+  expect(await bootForResidency({ CARET_SUPERVISED: "" })).toEqual({
+    resident: false,
+    upkeep: undefined,
+  });
+});
+
+test("a supervised daemon opted out of residency still rotates its stderr log", async () => {
+  expect(await bootForResidency({ CARET_SUPERVISED: "1" }, "[daemon]\nresident = false\n")).toEqual(
+    { resident: false, upkeep: ["stderr-rotate"] },
+  );
+});
+
 test("the daemon removes the lock on SIGINT", async () => {
   await assertLockRemovedOnSignal("SIGINT");
 });
