@@ -137,7 +137,8 @@ test("ensureDaemon fails fast against a non-caret server on the port", async () 
 
 // A real detached daemon process — the only way to exercise runDaemon's
 // signal/exit cleanup wiring end-to-end (lock written on start, removed on the
-// signal, EXC-406). SIGTERM and SIGINT share the same shutdown() closure.
+// signal, EXC-406). SIGINT stops at once and SIGTERM drains first; with nothing
+// to flush, both remove the lock and exit.
 async function assertLockRemovedOnSignal(signal: "SIGTERM" | "SIGINT") {
   const stateHome = await mkdtemp(join(tmpdir(), "caret-signal-"));
   const lockPath = join(stateHome, "caret", "daemon.lock");
@@ -160,6 +161,38 @@ async function assertLockRemovedOnSignal(signal: "SIGTERM" | "SIGINT") {
 
 test("the daemon writes the lock on start and removes it on SIGTERM", async () => {
   await assertLockRemovedOnSignal("SIGTERM");
+});
+
+test("SIGTERM drains: an unread decision still reaches its hook, then the daemon exits 0", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-drain-"));
+  const { proc, lock } = await spawnEphemeralDaemon(stateHome);
+  const base = `http://127.0.0.1:${lock.port}`;
+  const post = (path: string, body: object) =>
+    fetch(`${base}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  try {
+    const { id } = (await (
+      await post("/api/reviews", { sessionId: "S", cwd: "/tmp/p", plan: "# Title\n\nbody" })
+    ).json()) as { id: string };
+    await post(`/api/reviews/${id}/resolve`, { behavior: "allow" });
+    proc.kill("SIGTERM");
+    // The drain's own record, not a sleep, proves the daemon is still up to serve the read.
+    const drained = () =>
+      ndjsonRecords(readFileSync(daemonLog(stateHome), "utf-8")).some((r) => r.step === "drain");
+    expect(await until(drained)).toBe(true);
+    const decision = (await (await fetch(`${base}/api/reviews/${id}/decision`)).json()) as {
+      behavior: string;
+    };
+    expect(decision.behavior).toBe("allow");
+    expect(await proc.exited).toBe(0);
+  } finally {
+    proc.kill("SIGKILL");
+    await proc.exited;
+    await rm(stateHome, { recursive: true, force: true });
+  }
 });
 
 // `caret daemon --ephemeral` (EXC-461): the daemon binds an OS-assigned port
