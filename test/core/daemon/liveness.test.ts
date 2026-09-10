@@ -10,7 +10,7 @@ interface Held {
   pending: number;
   open: number;
   unread: number;
-  ui: boolean;
+  uiPresent: boolean;
 }
 
 interface Harness {
@@ -26,7 +26,7 @@ const booted: Liveness[] = [];
 function build(deps: Partial<LivenessDeps> = {}, held: Partial<Held> = {}): Harness {
   const timer = manualTimer();
   const { recs, log } = recordingLog();
-  const state: Held = { pending: 0, open: 0, unread: 0, ui: false, ...held };
+  const state: Held = { pending: 0, open: 0, unread: 0, uiPresent: false, ...held };
   let releases = 0;
   const live = createLiveness({
     idleMs: 30,
@@ -35,7 +35,7 @@ function build(deps: Partial<LivenessDeps> = {}, held: Partial<Held> = {}): Harn
     pendingCount: () => state.pending,
     openDecisionCount: () => state.open,
     unreadDecisionCount: () => state.unread,
-    uiPresent: () => state.ui,
+    uiPresent: () => state.uiPresent,
     release: () => {
       releases++;
     },
@@ -94,7 +94,7 @@ test("a request cancels idle and its end re-arms it", () => {
 
 test.each([
   ["an open decision", (h: Harness) => (h.held.open = 1)],
-  ["a present UI", (h: Harness) => (h.held.ui = true)],
+  ["a present UI", (h: Harness) => (h.held.uiPresent = true)],
   [
     "a request still in flight",
     // A second request's end re-arms idle while the first is still running.

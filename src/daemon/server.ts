@@ -363,7 +363,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // stop()'s own guard, apart from liveness's: runDaemon's signal paths call stop() too,
   // and a repeat must not unlink a lock a successor daemon has written since.
   let stopped = false;
-  const live = createLiveness({
+  const liveness = createLiveness({
     idleMs: idle,
     drainMs: cfg.drainMs,
     resident,
@@ -443,7 +443,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // It steps down through drain(), so a repeat retire mid-drain is a plain 200.
   function handleRetire(): Response {
     log.info("retire", "retire requested");
-    live.drain();
+    liveness.drain();
     return new Response(null, { status: 200 });
   }
 
@@ -507,7 +507,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
 
   // POST /api/reviews — an incoming plan from the hook.
   async function handleCreateReview(req: Request): Promise<Response> {
-    if (live.isDraining()) {
+    if (liveness.isDraining()) {
       // The hook turns this 503 into its fail-safe deny, so leave a trace here.
       log.warn("drain", "review refused: draining");
       return new Response("draining", { status: 503 });
@@ -927,7 +927,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // hook. A bare allow (no acceptMode) leaves prefs as-is; an id outside the
       // adapter-declared set is ignored by writeApproveMode.
       if (decision.acceptMode !== undefined && approveModeSet.valid.includes(decision.acceptMode)) {
-        live.detachedWrite(
+        liveness.detachedWrite(
           writeApproveMode(decision.acceptMode, prefsWriter, log, approveModeSet).catch(() => {
             // Recoverable: prefs only seed the UI's next default.
             log.warn("prefs", "approve mode write failed");
@@ -1044,7 +1044,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     req: Request,
     self: { readonly port: number | undefined },
   ): Promise<Response> {
-    const end = live.begin(req.method);
+    const end = liveness.begin(req.method);
     try {
       const port = self.port ?? -1;
 
@@ -1147,14 +1147,14 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   function stop() {
     if (stopped) return;
     stopped = true;
-    live.stop();
+    liveness.stop();
     server.stop();
     removeLock();
   }
 
   // Startup-if-empty: arm the idle timer when no reviews were rehydrated. Only now:
   // a timer armed before a failed bind would later stop() a server that never existed.
-  live.arm();
+  liveness.arm();
 
-  return { port: server.port ?? 0, stop, drain: () => live.drain() };
+  return { port: server.port ?? 0, stop, drain: () => liveness.drain() };
 }

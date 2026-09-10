@@ -55,11 +55,11 @@ const SEED_DEFAULTS = { sessionId: "S", cwd: "/tmp/p", plan: "# Title\n\nbody" }
 
 /** A client over the daemon at `url` (scheme, host, and port; no trailing slash). */
 export function daemonClient(url: string): DaemonClient {
-  const json = { "Content-Type": "application/json" };
+  const jsonHeaders = { "Content-Type": "application/json" };
   const createReview = (body: Record<string, unknown> = {}) =>
     fetch(`${url}/api/reviews`, {
       method: "POST",
-      headers: json,
+      headers: jsonHeaders,
       body: JSON.stringify({ ...SEED_DEFAULTS, ...body }),
     });
   return {
@@ -82,14 +82,14 @@ export function daemonClient(url: string): DaemonClient {
     resolve(id, body) {
       return fetch(`${url}/api/reviews/${id}/resolve`, {
         method: "POST",
-        headers: json,
+        headers: jsonHeaders,
         body: JSON.stringify(body),
       });
     },
     draft(id, body) {
       return fetch(`${url}/api/reviews/${id}/draft`, {
         method: "PUT",
-        headers: json,
+        headers: jsonHeaders,
         body: JSON.stringify(body),
       });
     },
