@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { statSync } from "node:fs";
+import { chmodSync, statSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -64,6 +64,13 @@ test("a written prefs file and its dir carry private modes (0600 / 0700)", async
   await writeApproveMode("acceptEdits", createPrefsWriter(file), undefined, SET);
   expect(statSync(file).mode & 0o777).toBe(0o600);
   expect(statSync(dir).mode & 0o777).toBe(0o700);
+});
+
+test("a merge over a looser prefs file leaves it 0600", async () => {
+  await Bun.write(file, JSON.stringify({ updates: { check: false } }));
+  chmodSync(file, 0o644);
+  await writeApproveMode("acceptEdits", createPrefsWriter(file), undefined, SET);
+  expect(statSync(file).mode & 0o777).toBe(0o600);
 });
 
 test("defaults to a lone 'default' set when no recognized set is supplied", async () => {

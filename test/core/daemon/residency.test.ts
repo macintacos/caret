@@ -1,5 +1,5 @@
 // EXC-1164: a resident daemon stays up until told to stop. The aspect spans the
-// server's idle machinery, the health body, and the systemd unit's restart window,
+// daemon's idle machinery, the health body, and the systemd unit's restart window,
 // so it keeps a descriptive leaf here rather than mirroring one module.
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -14,16 +14,14 @@ import { buildSystemdUnit } from "@/service/systemd.ts";
 let dir: string;
 let d: TestDaemon;
 
-// Records every arm so a test can assert the idle path was never entered at all —
-// armIdle is the daemon's only setTimer call site, which is what makes "never
-// armed" a statement about idle shutdown rather than about timers in general.
+// Records every idle arm so a test can assert the idle path was never entered at all.
 function recordingTimer() {
   const arms: number[] = [];
   return {
     arms,
-    // A 1-based handle, like server.test.ts's manualTimer: armIdle's "already armed"
-    // guard and cancelIdle both test the handle's truthiness, so a 0 would make both
-    // dead here and a daemon that re-armed on every refresh would look correct.
+    // A 1-based handle, like manualTimer's: armIdle's "already armed" guard and
+    // cancelIdle both test the handle's truthiness, so a 0 would make both dead here
+    // and a daemon that re-armed on every refresh would look correct.
     setTimer: (_fn: () => void, ms: number) => {
       arms.push(ms);
       return arms.length as unknown as ReturnType<typeof setTimeout>;
@@ -38,8 +36,8 @@ async function bootResident(resident: boolean, idleMs: number) {
     resident,
     idleMs,
     prefsPath: join(dir, "prefs.json"),
-    setTimer: timer.setTimer,
-    clearTimer: timer.clearTimer,
+    setIdleTimer: timer.setTimer,
+    clearIdleTimer: timer.clearTimer,
     onShutdown: () => {},
   });
   return timer;

@@ -9,10 +9,11 @@
 // Both writers go through one PrefsWriter, which merges rather than replaces and
 // serializes its read-modify-writes, so neither drops the other's key.
 
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 import { ensureStateDir, prefsFile } from "@/config/paths.ts";
+import { writeFileAtomic } from "@/lib/atomic-write.ts";
 import { readJsonFile } from "@/lib/json-file.ts";
 import { type CaretLogger, noopLogger } from "@/lib/log.ts";
 import type { ApproveVariantId } from "@/lib/types.ts";
@@ -109,7 +110,7 @@ export function createPrefsWriter(file = prefsFile()): PrefsWriter {
         // is when a deep merge earns its keep.
         const existing = ((await readJsonFile(file)) as Record<string, unknown> | null) ?? {};
         // 0600: prefs.json shares the state dir with plan bodies; keep it private too.
-        await writeFile(file, JSON.stringify({ ...existing, ...patch }, null, 2), {
+        await writeFileAtomic(file, JSON.stringify({ ...existing, ...patch }, null, 2), {
           mode: 0o600,
         });
       });

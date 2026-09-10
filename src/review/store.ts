@@ -3,10 +3,11 @@
 // startup, rehydrate() reloads only unresolved (pending/rejected) reviews —
 // approved ones stay on disk as history but are not re-tracked.
 
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { ensureStateDir } from "@/config/paths.ts";
+import { writeFileAtomic } from "@/lib/atomic-write.ts";
 import { readJsonFile } from "@/lib/json-file.ts";
 import { type CaretLogger, noopLogger, shortId } from "@/lib/log.ts";
 import { currentVersion, isUnresolved, type Review } from "@/lib/types.ts";
@@ -44,7 +45,8 @@ export function createStore(dir: string, log: CaretLogger = noopLogger): Store {
   const reviews = new Map<string, Review>();
   // Per-session approval epoch (in-memory; resets when the daemon restarts).
   const epochs = new Map<string, number>();
-  // Serialize writes per id so concurrent mutations never interleave on one file.
+  // Serialize writes per id: mutations land in order, and writeFileAtomic's temp is
+  // shared by every write to one path.
   const writeChains = new Map<string, Promise<void>>();
 
   function persist(review: Review): Promise<void> {
@@ -54,7 +56,7 @@ export function createStore(dir: string, log: CaretLogger = noopLogger): Store {
       .then(async () => {
         ensureStateDir(dir);
         // 0600: the file holds the full unredacted plan body — never world-readable.
-        await writeFile(join(dir, `${review.id}.json`), JSON.stringify(review, null, 2), {
+        await writeFileAtomic(join(dir, `${review.id}.json`), JSON.stringify(review, null, 2), {
           mode: 0o600,
         });
         log.debug("store", `review persisted: ${shortId(review.id)}`, { reviewId: review.id });

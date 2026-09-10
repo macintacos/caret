@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, statSync } from "node:fs";
-import { copyFile, mkdtemp, readFile, rm } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { setupTempStateDir } from "@test/support/env.ts";
 import { recordingLog } from "@test/support/recording-log.ts";
 import { reviewsDir, stateDir } from "@/config/paths.ts";
+import { writeFileAtomic } from "@/lib/atomic-write.ts";
 import type { Annotation, Review } from "@/lib/types.ts";
 import { createStore, type Store } from "@/review/store.ts";
 
@@ -303,6 +304,31 @@ test("rehydrate tolerates corrupt files among valid and resolved records", async
   expect(fresh.get("done")).toBeUndefined();
 });
 
+test("rehydrate ignores a temp file a crashed write left behind", async () => {
+  await store.create(makeReview({ id: "live", status: "pending" }));
+  // A write that dies between its temp and its rename, leaving the real helper's temp.
+  let crashed!: () => void;
+  const tempLeft = new Promise<void>((r) => {
+    crashed = r;
+  });
+  void writeFileAtomic(join(dir, "live.json"), "{ truncated", {
+    mode: 0o600,
+    fs: {
+      writeFile,
+      rename: () => {
+        crashed();
+        return new Promise(() => {});
+      },
+    },
+  });
+  await tempLeft;
+  const { recs, log } = recordingLog();
+  const fresh = createStore(dir, log);
+  await fresh.rehydrate();
+  expect(fresh.get("live")?.status).toBe("pending");
+  expect(recs.some((r) => r.level === "warn")).toBe(false);
+});
+
 test("rehydrate with no state dir logs at debug, not warn", async () => {
   const { recs, log } = recordingLog();
   await createStore(join(dir, "missing"), log).rehydrate();
@@ -343,6 +369,16 @@ describe("at-rest permissions", () => {
     await s.create(makeReview({ id: "perm-1" }));
     expect(perms(reviewsDir())).toBe(0o700);
     expect(perms(join(reviewsDir(), "perm-1.json"))).toBe(0o600);
+  });
+
+  test("a persist over a looser <id>.json leaves it 0600", async () => {
+    const s = createStore(reviewsDir());
+    await s.create(makeReview({ id: "perm-2" }));
+    chmodSync(join(reviewsDir(), "perm-2.json"), 0o644);
+    await s.update("perm-2", (r) => {
+      r.title = "Retitled";
+    });
+    expect(perms(join(reviewsDir(), "perm-2.json"))).toBe(0o600);
   });
 
   test("a persist tightens a pre-existing 0755 state dir (create-order race)", async () => {
