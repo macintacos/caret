@@ -808,15 +808,11 @@ test("the volume slider is keyboard-operable, named, and persists", async ({ dae
   await expect(slider).toHaveAttribute("aria-valuenow", "40");
   await expect(dialog.locator("[data-field='soundVolume'] .readout")).toHaveText("40%");
 
-  // Wait for the confirming toast before reloading — it is the app's own signal that the
-  // write landed. Deliberately NOT a count assertion: toasts dwell 4s then exit, so a
-  // retrying toHaveCount(1) would catch any stack of them mid-decay and pass even with
-  // coalescing removed. It would also demand three CDP round-trips inside the app's own
-  // 200ms window, i.e. a test required to outrun a deadline — the shape
-  // browser-testing.md warns about for a loaded host. SettingSlider.test.ts pins the
-  // coalescing deterministically with an injected timer; this spec owns what only a
-  // browser can prove.
-  await expect(page.getByText("Volume updated").first()).toBeVisible();
+  // Not the toast: under load the presses can straddle the 200ms commit window, so an
+  // earlier commit's toast shows while 40 is still pending, and a reload drops that write.
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("caret.sound.volume")))
+    .toBe("0.4");
 
   // The level survives a reload: it is a persisted preference, not view state.
   const reopenedSlider = await reopenSoundSlider(page);
