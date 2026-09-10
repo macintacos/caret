@@ -1471,7 +1471,14 @@ test("the preview renders code in the plan view's own font, not the browser defa
   // author rule targets them directly (an inherited family loses to `code {}`).
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    await openFileRefPreview(page, daemon, proj.dir, "# Refs\n\nOpen `src/cache.ts` here.\n");
+    const preview = await openFileRefPreview(
+      page,
+      daemon,
+      proj.dir,
+      "# Refs\n\nOpen `src/cache.ts` here.\n",
+    );
+    // The read below runs once, so the excerpt must already be there to read.
+    await expect(preview.locator(".fp-lcode").first()).toBeVisible();
 
     // Read the excerpt code's computed font and a plan source line's, across the
     // light-DOM card and the shadow-root source view.
