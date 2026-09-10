@@ -493,7 +493,7 @@ from its lock, and reap every child on exit. The daemon writes its records to
 `logs/daemon.log`, so the human-readable render tails that file rather than the daemon's
 stderr, which inherits the terminal and carries only crash output. Note that `Bun.spawn`
 snapshots `process.env` at startup and ignores later mutations, so env overrides
-(`XDG_STATE_HOME`, `CARET_IDLE_MS`, `CARET_PORT`) are passed explicitly to each child
+(`XDG_STATE_HOME`, `CARET_SUPERVISED`, `CARET_PORT`) are passed explicitly to each child
 rather than set on `process.env`. The smoke targets (`scripts/tasks/smoke.ts`) follow the
 same daemon-supervision pattern, and their shared over-the-wire probe is unit-tested in
 `test/scripts/smoke-probe.test.ts`.

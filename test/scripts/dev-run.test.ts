@@ -10,7 +10,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { withEnv } from "@test/support/env.ts";
-import { NEVER_IDLE_MS } from "@/config/constants.ts";
 import { DEFAULTS } from "@/config/settings.ts";
 import { DAEMON_DIED } from "@/tasks/dev/dev-env.ts";
 import type { DriverOptions } from "@/tasks/dev/driver.ts";
@@ -63,16 +62,22 @@ test("daemonCommand passes --no-orphans to bun, not to the daemon", () => {
 
 // ---- childEnvFor ----
 
-test("childEnvFor isolates state and never idles; pins CARET_PORT only when fixed", () => {
+test("childEnvFor isolates state and marks the daemon supervised; pins CARET_PORT only when fixed", () => {
   const fixed = childEnvFor("/tmp/world", { kind: "fixed", port: 6060 });
   expect(fixed.XDG_STATE_HOME).toBe("/tmp/world");
-  expect(fixed.CARET_IDLE_MS).toBe(String(NEVER_IDLE_MS));
+  expect(fixed.CARET_SUPERVISED).toBe("1");
   expect(fixed.CARET_PORT).toBe("6060");
   // Ephemeral mode leaves CARET_PORT to be filled after port discovery.
   const eph = childEnvFor("/tmp/world", { kind: "ephemeral" });
   expect(eph.XDG_STATE_HOME).toBe("/tmp/world");
   // No fresh CARET_PORT in ephemeral mode — it only carries whatever process.env had.
   expect(eph.CARET_PORT).toBe(process.env.CARET_PORT);
+});
+
+test("childEnvFor leaves CARET_IDLE_MS alone, so `resident = false` still idle-exits", () => {
+  withEnv({ CARET_IDLE_MS: undefined }, () => {
+    expect(childEnvFor("/tmp/world", { kind: "ephemeral" }).CARET_IDLE_MS).toBeUndefined();
+  });
 });
 
 test("childEnvFor threads the dev config path, and CARET_FRESH only when fresh", () => {

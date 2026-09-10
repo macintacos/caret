@@ -58,6 +58,8 @@ afterEach(async () => {
 });
 
 test("a resident daemon never arms the idle timer", async () => {
+  // Not the same state as an idle timer set very far out: arms stays empty, so no
+  // delay large enough to look like "stays up" can pass for residency here.
   const timer = await bootResident(true, 30);
   const id = await d.seed();
   await d.resolve(id, { behavior: "allow" });
