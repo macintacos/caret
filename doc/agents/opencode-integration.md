@@ -116,7 +116,7 @@ only).
 start — a `SessionStart` hook for Claude Code, a plugin-load warm here. Two measurements
 killed it: a cold daemon spawn costs ~0.4 s (`caret prewarm` cold 0.52 s vs. warm 0.13 s),
 and a warmed daemon **idle-exits after `[daemon].idle_ms`** (60 s by default; the value
-lives in `src/config/settings.ts`, the timer in `src/daemon/server.ts`). A
+lives in `src/config/settings.ts`, the timer in `src/daemon/liveness.ts`). A
 `[daemon].resident` install under a supervisor never idle-exits — what a plain
 `caret install` leaves behind — and that is orthogonal to the
 per-message-versus-session-start tradeoff below. A session-start warm therefore only pays

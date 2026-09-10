@@ -122,7 +122,8 @@ async function resolve(id: string, body: Record<string, unknown>) {
 /**
  * Boot with a manual idle timer and shutdown signal wired in, so a test can
  * fire the timer and await the shutdown deterministically instead of racing a
- * real `idleMs` delay. `opts` merges on top of the idleMs:30 default.
+ * real `idleMs` delay — which, under load, can fire between boot and the test's
+ * first request (EXC-647). `opts` merges on top of the idleMs:30 default.
  */
 async function bootWithManualIdle(
   opts: BootOptions = {},
@@ -366,6 +367,7 @@ test("POST /api/retire from a foreign origin is blocked (403, no shutdown)", asy
 });
 
 // ---- drain-and-release on handoff (EXC-1165) ----
+// liveness.test.ts pins the idle/drain rules; these pin each route's wiring to them.
 
 // A decision its hook has not read yet: settled on the pipe, never cleared by a
 // GET …/decision — exactly what a drain waits out. Session "A" so the reviews a

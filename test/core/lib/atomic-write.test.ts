@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { chmod, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { chmod, mkdtemp, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -68,8 +68,35 @@ test("a failed rename rejects and leaves the old file with no temp behind", asyn
   expect(temps()).toEqual([]);
 });
 
+test("a failed cleanup does not mask the write's own failure", async () => {
+  const write = writeFileAtomic(path, "new", {
+    mode: 0o600,
+    fs: {
+      writeFile,
+      rename: async () => {
+        // The temp can no longer be unlinked from a directory that has lost its write bit.
+        await chmod(dir, 0o500);
+        throw new Error("EXDEV");
+      },
+    },
+  });
+  try {
+    await expect(write).rejects.toThrow("EXDEV");
+  } finally {
+    await chmod(dir, 0o700);
+  }
+});
+
 test("replacing a looser file leaves it at the requested mode", async () => {
   await chmod(path, 0o644);
   await writeFileAtomic(path, "new", { mode: 0o600 });
   expect(modeOf(path)).toBe(0o600);
+});
+
+test("writing through a symlink replaces its target and keeps the link", async () => {
+  const link = join(dir, "link.json");
+  await symlink(path, link);
+  await writeFileAtomic(link, "new", { mode: 0o600 });
+  expect(lstatSync(link).isSymbolicLink()).toBe(true);
+  expect(readFileSync(path, "utf-8")).toBe("new");
 });

@@ -23,7 +23,7 @@ import {
   isSafeMethod,
   LIVE_CLIENT_WINDOW_MS,
 } from "@/daemon/guards.ts";
-import { createLiveness } from "@/daemon/liveness.ts";
+import { createLiveness, type LivenessDeps } from "@/daemon/liveness.ts";
 import {
   DraftBodySchema,
   FileRefsBodySchema,
@@ -207,9 +207,9 @@ export interface CreateServerOptions {
   onDecisionAwaited?: (id: string) => void;
   /** Schedule the idle-shutdown timer; injectable so tests fire it deterministically
    * instead of racing a real delay. Defaults to setTimeout. */
-  setIdleTimer?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
+  setIdleTimer?: LivenessDeps["setIdleTimer"];
   /** Cancel a scheduled idle-shutdown timer. Defaults to clearTimeout. */
-  clearIdleTimer?: (handle: ReturnType<typeof setTimeout>) => void;
+  clearIdleTimer?: LivenessDeps["clearIdleTimer"];
 }
 
 export interface CaretServer {
@@ -360,6 +360,26 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // plan would open a redundant browser tab.
   const uiPresent = () => isClientLive(lastReviewsPollAt, Date.now(), LIVE_CLIENT_WINDOW_MS);
 
+  // stop()'s own guard, apart from liveness's: runDaemon's signal paths call stop() too,
+  // and a repeat must not unlink a lock a successor daemon has written since.
+  let stopped = false;
+  const live = createLiveness({
+    idleMs: idle,
+    drainMs: cfg.drainMs,
+    resident,
+    pendingCount: () => store.pendingCount(),
+    openDecisionCount,
+    unreadDecisionCount,
+    uiPresent,
+    release: () => {
+      stop();
+      onShutdown();
+    },
+    log,
+    setIdleTimer: opts.setIdleTimer,
+    clearIdleTimer: opts.clearIdleTimer,
+  });
+
   function notFound() {
     return new Response("not found", { status: 404 });
   }
@@ -487,7 +507,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
 
   // POST /api/reviews — an incoming plan from the hook.
   async function handleCreateReview(req: Request): Promise<Response> {
-    if (live.draining()) {
+    if (live.isDraining()) {
       // The hook turns this 503 into its fail-safe deny, so leave a trace here.
       log.warn("drain", "review refused: draining");
       return new Response("draining", { status: 503 });
@@ -1124,9 +1144,6 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   }
   writeLock();
 
-  // Guarded apart from liveness because runDaemon's signal paths call stop() too: a
-  // repeat must not unlink a lock a successor daemon has written since.
-  let stopped = false;
   function stop() {
     if (stopped) return;
     stopped = true;
@@ -1135,22 +1152,9 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     removeLock();
   }
 
-  const live = createLiveness({
-    idleMs: idle,
-    drainMs: cfg.drainMs,
-    resident,
-    pendingReviews: () => store.pendingCount(),
-    openDecisions: openDecisionCount,
-    unreadDecisions: unreadDecisionCount,
-    uiPresent,
-    release: () => {
-      stop();
-      onShutdown();
-    },
-    log,
-    setIdleTimer: opts.setIdleTimer,
-    clearIdleTimer: opts.clearIdleTimer,
-  });
+  // Startup-if-empty: arm the idle timer when no reviews were rehydrated. Only now:
+  // a timer armed before a failed bind would later stop() a server that never existed.
+  live.arm();
 
   return { port: server.port ?? 0, stop, drain: () => live.drain() };
 }

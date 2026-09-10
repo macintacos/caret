@@ -23,8 +23,7 @@ interface Harness {
 
 const booted: Liveness[] = [];
 
-// `held` is applied before construction, which is when idle first arms.
-function boot(deps: Partial<LivenessDeps> = {}, held: Partial<Held> = {}): Harness {
+function build(deps: Partial<LivenessDeps> = {}, held: Partial<Held> = {}): Harness {
   const timer = manualTimer();
   const { recs, log } = recordingLog();
   const state: Held = { pending: 0, open: 0, unread: 0, ui: false, ...held };
@@ -33,9 +32,9 @@ function boot(deps: Partial<LivenessDeps> = {}, held: Partial<Held> = {}): Harne
     idleMs: 30,
     drainMs: 60_000,
     resident: false,
-    pendingReviews: () => state.pending,
-    openDecisions: () => state.open,
-    unreadDecisions: () => state.unread,
+    pendingCount: () => state.pending,
+    openDecisionCount: () => state.open,
+    unreadDecisionCount: () => state.unread,
     uiPresent: () => state.ui,
     release: () => {
       releases++;
@@ -49,6 +48,13 @@ function boot(deps: Partial<LivenessDeps> = {}, held: Partial<Held> = {}): Harne
   return { live, timer, held: state, releases: () => releases, recs };
 }
 
+// `held` is applied before arm(), which is when idle first arms.
+function boot(deps: Partial<LivenessDeps> = {}, held: Partial<Held> = {}): Harness {
+  const h = build(deps, held);
+  h.live.arm();
+  return h;
+}
+
 // Drain releases are re-checked a tick later, and timers run FIFO.
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
@@ -56,8 +62,11 @@ afterEach(() => {
   for (const live of booted.splice(0)) live.stop();
 });
 
-test("idle arms at construction when nothing is pending", () => {
-  expect(boot().timer.pending()).toBe(true);
+test("idle arms on arm(), not at construction", () => {
+  const { live, timer } = build();
+  expect(timer.pending()).toBe(false);
+  live.arm();
+  expect(timer.pending()).toBe(true);
 });
 
 test("a resident daemon never arms idle", () => {
@@ -173,6 +182,20 @@ test("a detached write holds the drain until it settles", async () => {
   expect(releases()).toBe(0);
   settle();
   await write;
+  await tick();
+  expect(releases()).toBe(1);
+});
+
+test("a detached write that rejects still lets the drain release", async () => {
+  const { live, releases } = boot();
+  let fail!: (err: Error) => void;
+  const write = new Promise<void>((_, reject) => {
+    fail = reject;
+  });
+  live.detachedWrite(write);
+  live.drain();
+  fail(new Error("disk full"));
+  await write.catch(() => {});
   await tick();
   expect(releases()).toBe(1);
 });

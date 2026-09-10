@@ -45,7 +45,8 @@ export function createStore(dir: string, log: CaretLogger = noopLogger): Store {
   const reviews = new Map<string, Review>();
   // Per-session approval epoch (in-memory; resets when the daemon restarts).
   const epochs = new Map<string, number>();
-  // Serialize writes per id so concurrent mutations never interleave on one file.
+  // Serialize writes per id: mutations land in order, and writeFileAtomic's temp is
+  // shared by every write to one path.
   const writeChains = new Map<string, Promise<void>>();
 
   function persist(review: Review): Promise<void> {

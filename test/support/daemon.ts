@@ -1,9 +1,8 @@
-// Boot a real caret daemon in-process (no browser, no spawned process) for the
-// bun-test suite, with a small typed HTTP client over the public API — the same
-// POST/GET surface a real hook and the browser UI use. The client is
-// tool-agnostic: it speaks the daemon's wire protocol, never Claude's hook
-// stdin shaping (that lives in scripts/tasks/dev/driver.ts). It also stands alone
-// as daemonClient(url), against any daemon — a spawned one included.
+// Boot a real caret daemon in-process for the bun-test suite (no browser, no child
+// process), plus a small typed client over its public API — the same POST/GET surface
+// a real hook and the browser UI use. The client, daemonClient(url), works against any
+// daemon, a spawned one included. It is tool-agnostic: it speaks the daemon's wire
+// protocol, never Claude's hook stdin shaping (that lives in scripts/tasks/dev/driver.ts).
 //
 // The e2e suite has its own daemon launcher (test/e2e/support/daemon-entry.ts): it
 // runs under the Playwright/node runner, binds an OS-assigned port for parallel
