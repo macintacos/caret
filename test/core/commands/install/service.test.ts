@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 import { setupTempConfigFile, setupTempStateDir } from "@test/support/env.ts";
+import { expectCleanExitCode } from "@test/support/exit-code.ts";
 import type { LauncherDeps } from "@/commands/install/launcher.ts";
 import {
   reconcileService,
@@ -139,13 +140,13 @@ test("--refresh cycles the service so the new build is the one serving", async (
 test("a host that cannot run the service is reported, not installed onto", async () => {
   const service = fakeService({ unsupported: "systemd is not running" });
   const ui = recordingUI();
-  const before = process.exitCode;
 
-  await reconcileService(RECONCILE, { service: service.target, installLauncher: () => {} }, ui);
+  await expectCleanExitCode(() =>
+    reconcileService(RECONCILE, { service: service.target, installLauncher: () => {} }, ui),
+  );
 
   expect(service.calls).toEqual([]);
   expect(ui.events.some((e) => e.includes("systemd is not running"))).toBe(true);
-  expect(process.exitCode).toBe(before);
 });
 
 test("a service the user turned off themselves is never re-enabled", async () => {
@@ -224,32 +225,32 @@ test("a supervisor that refuses the unit warns and leaves the install standing",
   const service = fakeService();
   service.manager.install = () => Promise.reject(new Error("bootstrap failed"));
   const ui = recordingUI();
-  const before = process.exitCode;
 
-  await reconcileService(RECONCILE, { service: service.target, installLauncher: () => {} }, ui);
+  await expectCleanExitCode(() =>
+    reconcileService(RECONCILE, { service: service.target, installLauncher: () => {} }, ui),
+  );
 
   expect(ui.events.some((e) => e.startsWith("warn:") && e.includes("bootstrap failed"))).toBe(true);
-  expect(process.exitCode).toBe(before);
 });
 
 test("a platform with no supervisor at all warns rather than throwing", async () => {
   const ui = recordingUI();
-  const before = process.exitCode;
 
-  await reconcileService(
-    RECONCILE,
-    // What servicePlatform() raises on a host that is neither darwin nor linux.
-    {
-      service: () => {
-        throw new Error("caret service: unsupported platform win32 (darwin/linux only)");
+  await expectCleanExitCode(() =>
+    reconcileService(
+      RECONCILE,
+      // What servicePlatform() raises on a host that is neither darwin nor linux.
+      {
+        service: () => {
+          throw new Error("caret service: unsupported platform win32 (darwin/linux only)");
+        },
+        installLauncher: () => {},
       },
-      installLauncher: () => {},
-    },
-    ui,
+      ui,
+    ),
   );
 
   expect(ui.events.some((e) => e.startsWith("warn:") && e.includes("win32"))).toBe(true);
-  expect(process.exitCode).toBe(before);
 });
 
 test("a config the opt-out cannot be written to is reported as that, not as the service", async () => {
