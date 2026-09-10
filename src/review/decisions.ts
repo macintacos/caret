@@ -18,6 +18,8 @@ export interface DecisionRegistry {
   clearDecision(id: string): void;
   /** Count of entries still awaiting a decision (idle-shutdown liveness). */
   openDecisionCount(): number;
+  /** Count of entries settled but not yet read by their long-poll (drain liveness). */
+  unreadDecisionCount(): number;
 }
 
 interface Pending {
@@ -64,6 +66,11 @@ export function createDecisions(log: CaretLogger = noopLogger): DecisionRegistry
     openDecisionCount() {
       let n = 0;
       for (const entry of pending.values()) if (!entry.settled) n++;
+      return n;
+    },
+    unreadDecisionCount() {
+      let n = 0;
+      for (const entry of pending.values()) if (entry.settled) n++;
       return n;
     },
   };

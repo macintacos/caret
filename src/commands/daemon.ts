@@ -144,10 +144,16 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   };
   // Signal deaths leave a record (the synchronous write is durable before the
   // exit); fatal errors log through the daemon's own sink, not caret.log.
-  process.once("SIGTERM", () => {
+  //
+  // SIGTERM is how a supervisor cycles the service, so it drains. `on`, not
+  // `once`: a repeat mid-drain must not take the default disposition and cut the
+  // writes the drain waits for. Before the bind there is nothing to drain.
+  process.on("SIGTERM", () => {
     log.info("signal", "sigterm: shutting down");
-    shutdown(0);
+    if (server) server.drain();
+    else shutdown(0);
   });
+  // SIGINT is a person at a terminal: it stops at once, cutting any drain short.
   process.once("SIGINT", () => {
     log.info("signal", "sigint: shutting down");
     shutdown(0);

@@ -46,6 +46,17 @@ test("openDecisionCount tracks unsettled entries", () => {
   expect(d.openDecisionCount()).toBe(0);
 });
 
+test("unreadDecisionCount counts settled entries until a read clears them", () => {
+  d.awaitDecision("a");
+  expect(d.unreadDecisionCount()).toBe(0);
+  d.resolveDecision("b", decision("allow"));
+  expect(d.unreadDecisionCount()).toBe(1);
+  d.resolveDecision("a", decision("deny"));
+  expect(d.unreadDecisionCount()).toBe(2);
+  d.clearDecision("b");
+  expect(d.unreadDecisionCount()).toBe(1);
+});
+
 test("a double resolve is logged at warn (EXC-444)", () => {
   const { recs, log } = recordingLog();
   const reg = createDecisions(log);

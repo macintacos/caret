@@ -199,7 +199,7 @@ export async function retireDaemon(
   currentStateDir: string,
   kill: (pid: number, signal: "SIGTERM") => void = (pid, sig) => process.kill(pid, sig),
 ): Promise<boolean> {
-  // Preferred: the daemon's own loopback retire endpoint (persists, then exits).
+  // Preferred: the daemon's own loopback retire endpoint (drains, then exits).
   try {
     const res = await fetch(`${baseUrl}/api/retire`, {
       method: "POST",

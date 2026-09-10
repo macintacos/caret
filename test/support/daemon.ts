@@ -27,6 +27,8 @@ export interface TestDaemon {
   store: Store;
   /** Stop the server (removes the lock when one is managed). */
   stop(): void;
+  /** Step down the way a SIGTERM does — outside any request. */
+  drain(): void;
   /**
    * Seed a review through POST /api/reviews. Defaults match a minimal pending
    * review; pass overrides to vary sessionId/cwd/plan. Returns the new id.
@@ -72,6 +74,7 @@ export async function bootDaemon(dir: string, opts: BootOptions = {}): Promise<T
     port: srv.port,
     store,
     stop: () => srv.stop(),
+    drain: () => srv.drain(),
     async seed(body = {}) {
       const res = await fetch(`${url}/api/reviews`, {
         method: "POST",

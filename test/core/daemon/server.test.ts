@@ -6,7 +6,7 @@ import { join } from "node:path";
 
 import { type BootOptions, bootDaemon, type TestDaemon } from "@test/support/daemon.ts";
 import { makeFakeUiAssets } from "@test/support/fake-ui-assets.ts";
-import { recordingLog } from "@test/support/recording-log.ts";
+import { type RecordedEmit, recordingLog } from "@test/support/recording-log.ts";
 import { expectNeverLogsBody } from "@test/support/redaction.ts";
 import { APPROVE_VARIANTS } from "@/adapters/claude/approve.ts";
 import { VANITY_HOST } from "@/config/constants.ts";
@@ -21,6 +21,7 @@ import { createDaemonLogger } from "@/lib/log.ts";
 import type { UpdateReport } from "@/lib/types.ts";
 import { formatPlanMarkdown } from "@/plan/markdown.ts";
 import type { Store } from "@/review/store.ts";
+import { routeIncomingPlan } from "@/review/threading.ts";
 
 // Resolver injected as a dep — the core daemon stays tool-agnostic and never
 // reaches into src/ui/assets.ts.
@@ -397,6 +398,200 @@ test("POST /api/retire from a foreign origin is blocked (403, no shutdown)", asy
   await Bun.sleep(20);
   expect(sig.fired()).toBe(false);
   expect(existsSync(lockPath)).toBe(true);
+});
+
+// ---- drain-and-release on handoff (EXC-1165) ----
+
+// A decision its hook has not read yet: settled on the pipe, never cleared by a
+// GET …/decision — exactly what a drain waits out. Session "A" so the reviews a
+// test seeds afterwards don't thread into it.
+async function holdDrainOpen(): Promise<string> {
+  const id = await d.seed({ sessionId: "A" });
+  await resolve(id, { behavior: "allow" });
+  // Timers run FIFO, so this lands after /resolve's deferred settle: a read before
+  // that settle would leave an orphan entry holding the drain to its deadline.
+  await new Promise((r) => setTimeout(r, 0));
+  return id;
+}
+
+// The drain's deadline is its only warn-level record, so its absence means the
+// drain released because its hold cleared.
+function deadlineRecord(recs: RecordedEmit[]): RecordedEmit | undefined {
+  return recs.find((r) => r.step === "drain" && r.level === "warn");
+}
+
+test("a decision resolved but unread holds the drain until its hook reads it", async () => {
+  const sig = shutdownSignal();
+  const { recs, log } = recordingLog();
+  await boot({ log, onShutdown: sig.onShutdown });
+  const id = await holdDrainOpen();
+  expect((await fetch(`${base}/api/retire`, { method: "POST" })).status).toBe(200);
+  await Bun.sleep(20);
+  expect(sig.fired()).toBe(false);
+  const decision = (await (await fetch(`${base}/api/reviews/${id}/decision`)).json()) as {
+    behavior: string;
+  };
+  expect(decision.behavior).toBe("allow");
+  await sig.shutdown;
+  expect(deadlineRecord(recs)).toBeUndefined();
+});
+
+test("a drain with nothing to wait for releases on the next tick", async () => {
+  const sig = shutdownSignal();
+  await boot({ drainMs: 60_000, onShutdown: sig.onShutdown });
+  d.drain();
+  await sig.shutdown;
+});
+
+test("the idle timer cannot end a drain that is still waiting", async () => {
+  const { sig, timer } = await bootWithManualIdle();
+  const id = await holdDrainOpen();
+  d.drain();
+  // Once for the timer armed before the drain began, once for a request re-arming it.
+  timer.fire();
+  await fetch(`${base}/api/health`);
+  timer.fire();
+  expect(sig.fired()).toBe(false);
+  await fetch(`${base}/api/reviews/${id}/decision`);
+  await sig.shutdown;
+});
+
+test("an approve-mode write detached from its /resolve still holds the drain", async () => {
+  const sig = shutdownSignal();
+  const park = decisionParked();
+  let release!: () => void;
+  const gate = new Promise<void>((r) => {
+    release = r;
+  });
+  await bootClaude({
+    onShutdown: sig.onShutdown,
+    onDecisionAwaited: park.onDecisionAwaited,
+    prefsWriter: { merge: () => gate },
+  });
+  const { id } = await newReview();
+  // The hook is already parked when the decision lands, so its read leaves no
+  // entry behind and the prefs write is the only thing left to hold the drain.
+  const poll = fetch(`${base}/api/reviews/${id}/decision`);
+  await park.parked;
+  await resolve(id, { behavior: "allow", acceptMode: "auto" });
+  await poll;
+  d.drain();
+  await Bun.sleep(20);
+  expect(sig.fired()).toBe(false);
+  release();
+  await sig.shutdown;
+});
+
+test("a draining daemon refuses new reviews with 503", async () => {
+  await boot();
+  await holdDrainOpen();
+  await fetch(`${base}/api/retire`, { method: "POST" });
+  const res = await fetch(`${base}/api/reviews`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sessionId: "B", cwd: "/tmp/p", plan: "# B\n\nbody" }),
+  });
+  expect(res.status).toBe(503);
+  expect((await d.listReviews()).some((r) => r.sessionId === "B")).toBe(false);
+});
+
+test("a long-poll still waiting keeps heartbeating through the drain", async () => {
+  let parked = false;
+  await boot({
+    heartbeatMs: 30,
+    onDecisionAwaited: () => {
+      parked = true;
+    },
+  });
+  await holdDrainOpen();
+  const b = await d.seed({ sessionId: "B" });
+  await fetch(`${base}/api/retire`, { method: "POST" });
+  expect((await fetch(`${base}/api/reviews/${b}/decision`)).status).toBe(204);
+  // A heartbeat rather than an early answer: the poll parked before its 204.
+  expect(parked).toBe(true);
+});
+
+test("a decision made mid-drain reaches the long-poll parked on it", async () => {
+  const sig = shutdownSignal();
+  const park = decisionParked();
+  await boot({
+    heartbeatMs: 60_000,
+    drainMs: 60_000,
+    onShutdown: sig.onShutdown,
+    onDecisionAwaited: park.onDecisionAwaited,
+  });
+  const a = await holdDrainOpen();
+  const b = await d.seed({ sessionId: "B" });
+  await fetch(`${base}/api/retire`, { method: "POST" });
+  const poll = fetch(`${base}/api/reviews/${b}/decision`);
+  await park.parked;
+  expect((await d.resolve(b, { behavior: "allow" })).status).toBe(200);
+  expect(((await (await poll).json()) as { behavior: string }).behavior).toBe("allow");
+  await fetch(`${base}/api/reviews/${a}/decision`);
+  await sig.shutdown;
+});
+
+test("a pending review's parked long-poll does not hold the drain", async () => {
+  const sig = shutdownSignal();
+  const park = decisionParked();
+  // A heartbeat that outlasts the test: a drain waiting on the parked poll never releases.
+  await boot({
+    heartbeatMs: 60_000,
+    drainMs: 60_000,
+    onShutdown: sig.onShutdown,
+    onDecisionAwaited: park.onDecisionAwaited,
+  });
+  const b = await d.seed({ sessionId: "B" });
+  const poll = new AbortController();
+  void fetch(`${base}/api/reviews/${b}/decision`, { signal: poll.signal }).catch(() => {});
+  try {
+    await park.parked;
+    await fetch(`${base}/api/retire`, { method: "POST" });
+    await sig.shutdown;
+  } finally {
+    poll.abort();
+  }
+});
+
+test("a write already in flight lands before the drain releases the port", async () => {
+  const sig = shutdownSignal();
+  const { recs, log } = recordingLog();
+  let entered!: () => void;
+  const inRoute = new Promise<void>((r) => {
+    entered = r;
+  });
+  let release!: () => void;
+  const gate = new Promise<void>((r) => {
+    release = r;
+  });
+  await boot({
+    log,
+    onShutdown: sig.onShutdown,
+    routePlan: async (input, routeStore, routeLog) => {
+      entered();
+      await gate;
+      return routeIncomingPlan(input, routeStore, routeLog);
+    },
+  });
+  const post = d.seed({ sessionId: "B" });
+  await inRoute;
+  await fetch(`${base}/api/retire`, { method: "POST" });
+  await Bun.sleep(20);
+  expect(sig.fired()).toBe(false);
+  release();
+  expect(await post).toBeTruthy();
+  await sig.shutdown;
+  expect(deadlineRecord(recs)).toBeUndefined();
+});
+
+test("an unread decision nobody reads cannot hold the drain past its deadline", async () => {
+  const sig = shutdownSignal();
+  const { recs, log } = recordingLog();
+  await boot({ drainMs: 50, log, onShutdown: sig.onShutdown });
+  await holdDrainOpen();
+  await fetch(`${base}/api/retire`, { method: "POST" });
+  await sig.shutdown;
+  expect(deadlineRecord(recs)?.extra).toMatchObject({ unread: 1 });
 });
 
 test("idle auto-shutdown removes the lock file", async () => {
@@ -1143,8 +1338,8 @@ describe("read-confidentiality posture", () => {
       "POST /api/reviews/:id/expire",
     );
     // /api/retire is terminal for the *daemon*, not just a review: handleRetire
-    // defers stop() by a tick so its 200 can flush, so every later request races
-    // that shutdown. It must therefore be the last request this test makes.
+    // steps down through drain(), so every later request races that shutdown. It
+    // must therefore be the last request this test makes.
     expectNoCorsHeaders(await fetch(`${base}/api/retire`, { method: "POST" }), "POST /api/retire");
   });
 
