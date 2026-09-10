@@ -153,6 +153,7 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
     if (server) server.drain();
     else shutdown(0);
   });
+  // SIGINT is a person at a terminal: it stops at once, cutting any drain short.
   process.once("SIGINT", () => {
     log.info("signal", "sigint: shutting down");
     shutdown(0);

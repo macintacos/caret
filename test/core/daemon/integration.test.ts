@@ -146,7 +146,7 @@ async function assertLockRemovedOnSignal(signal: "SIGTERM" | "SIGINT") {
   try {
     await untilLockWritten(proc, lockPath);
     proc.kill(signal);
-    // The shutdown closure unlinks the lock, then the process exits — so wait for the
+    // Either signal's stop() unlinks the lock, then the process exits — so wait for the
     // exit (again patient under a loaded box, backstopped by setDefaultTimeout), then
     // assert the lock is gone. The unlink runs before exit, so this short poll only
     // absorbs fs latency; a lock still present here is a real cleanup regression.
@@ -177,17 +177,23 @@ test("SIGTERM drains: an unread decision still reaches its hook, then the daemon
     const { id } = (await (
       await post("/api/reviews", { sessionId: "S", cwd: "/tmp/p", plan: "# Title\n\nbody" })
     ).json()) as { id: string };
-    await post(`/api/reviews/${id}/resolve`, { behavior: "allow" });
+    expect((await post(`/api/reviews/${id}/resolve`, { behavior: "allow" })).status).toBe(200);
     proc.kill("SIGTERM");
-    // The drain's own record, not a sleep, proves the daemon is still up to serve the read.
-    const drained = () =>
-      ndjsonRecords(readFileSync(daemonLog(stateHome), "utf-8")).some((r) => r.step === "drain");
-    expect(await until(drained)).toBe(true);
+    const drainRecords = () =>
+      ndjsonRecords(readFileSync(daemonLog(stateHome), "utf-8")).filter((r) => r.step === "drain");
+    // The drain's own record, not a sleep, proves the daemon is up to serve the read.
+    // The read must then land inside DRAIN_DEADLINE_MS, which a spawned daemon
+    // cannot widen: a starved runner fails it with a refused connection.
+    expect(await until(() => drainRecords().length > 0, 60_000)).toBe(true);
+    // Two back-to-back supervisor restarts send a repeat; it must not cut the drain.
+    proc.kill("SIGTERM");
     const decision = (await (await fetch(`${base}/api/reviews/${id}/decision`)).json()) as {
       behavior: string;
     };
     expect(decision.behavior).toBe("allow");
     expect(await proc.exited).toBe(0);
+    // Released by the read, not by the deadline's warn-level record.
+    expect(drainRecords().some((r) => r.level === 40)).toBe(false);
   } finally {
     proc.kill("SIGKILL");
     await proc.exited;

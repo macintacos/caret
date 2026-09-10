@@ -1,7 +1,7 @@
 // The caret daemon: a single Bun.serve that holds reviews in memory, serves the
 // built UI (index document plus its hashed sibling assets), bridges the hook's
 // long-poll to the browser's decision, and idle-auto-shuts-down when no reviews
-// remain.
+// remain — or, told to step down (retire/SIGTERM), drains first.
 
 import { renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -11,6 +11,7 @@ import { ensureStateDir, prefsFile } from "@/config/paths.ts";
 import {
   type ApproveModeSet,
   createPrefsWriter,
+  type PrefsWriter,
   readApproveMode,
   writeApproveMode,
 } from "@/config/prefs.ts";
@@ -80,9 +81,10 @@ const INDEX_PATH = "/index.html";
 const FILE_REF_BATCH = 64;
 
 /** How long a stepping-down daemon waits for in-flight writes and unread decisions
- * before it releases the port anyway. Must stay inside both supervisors'
- * SIGTERM→SIGKILL grace (launchd 20s, systemd 90s) and the legacy retire loop's
- * ~14s backoff budget. */
+ * before it releases the port anyway. Must stay under the supervisors'
+ * SIGTERM→SIGKILL grace (launchd's 20s and systemd's 90s defaults; neither unit
+ * overrides them) and ensureDaemon's retire-and-backoff loop (~14s over
+ * prodEnsureDeps' 12 attempts). */
 const DRAIN_DEADLINE_MS = 5_000;
 
 /** Decides whether an incoming plan starts a new review or appends a version.
@@ -100,7 +102,8 @@ export interface CreateServerOptions {
    * runDaemon passes the env/file-resolved value (settings.heartbeatMs)
    * captured at boot. */
   heartbeatMs?: number;
-  /** Drain deadline (ms); defaults to DRAIN_DEADLINE_MS. */
+  /** Drain deadline (ms); defaults to DRAIN_DEADLINE_MS. A test seam: runDaemon
+   * keeps the default, which is what fits inside the supervisors' stop grace. */
   drainMs?: number;
   /** Stay up until told to stop instead of idle-exiting (EXC-1164), published in
    * /api/health. runDaemon passes the boot-captured settings.isResident().
@@ -115,6 +118,9 @@ export interface CreateServerOptions {
   routePlan?: RoutePlan;
   /** Path to the machine-global prefs file; defaults to paths.prefsFile(). */
   prefsPath?: string;
+  /** The one writer both prefs write paths share; defaults to
+   * createPrefsWriter(prefsPath). Injectable so a test can hold a write open. */
+  prefsWriter?: PrefsWriter;
   /** Single-instance lock file path. When set, the daemon writes the lock on a
    * successful bind and removes it on stop(); omitted (default) means no lock is
    * managed. */
@@ -327,7 +333,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // ONE writer for the two paths that write prefs.json — the resolve path's approve
   // mode and POST /api/prefs. Sharing it is what serializes them: two writers would
   // each hold their own queue and could still interleave a read-modify-write.
-  const prefsWriter = createPrefsWriter(prefsPath);
+  const prefsWriter = opts.prefsWriter ?? createPrefsWriter(prefsPath);
 
   // Wait for a decision but no longer than `ms` — resolves to null on timeout so
   // the handler can return a 204 heartbeat. The pending promise is left intact
@@ -373,7 +379,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     }
   }
   function armIdle() {
-    if (resident || idleTimer || stopped || store.pendingCount() !== 0) return;
+    if (resident || draining || idleTimer || stopped || store.pendingCount() !== 0) return;
     idleTimer = setTimer(maybeShutdown, idle);
   }
   // Arm when no review is awaiting a decision; cancel while one is pending.
@@ -397,32 +403,48 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     }
   }
 
-  // Waits on the complements of the idle counters: an UNSETTLED entry is a hook
-  // waiting on a human, and a parked long-poll is a read, so neither holds a drain.
-  //
-  // ponytail: an unread entry whose hook is gone (killed without /expire, an
-  // approval `caret reconcile` mirrored, a read-before-settle orphan) holds the
-  // drain to its deadline. Tracking which entries still have a polling reader is
-  // the upgrade.
   function drain() {
     if (draining || stopped) return;
     draining = true;
+    // A drain owns the release: an idle shutdown would cut what it waits for.
+    cancelIdle();
     log.info("drain", "drain started", { unread: unreadDecisionCount() });
-    drainTimer = setTimeout(() => {
-      log.warn("drain", "drain deadline reached", {
-        unread: unreadDecisionCount(),
-        writes: writesInFlight,
-      });
-      stop();
-      onShutdown();
-    }, cfg.drainMs);
+    drainTimer = setTimeout(drainDeadline, cfg.drainMs);
+    // SIGTERM arrives outside any request, so no handle() finally re-checks for it.
     setTimeout(checkDrain, 0);
   }
+  // Releases once no write is in flight and no settled decision is unread. Not
+  // openDecisionCount or inFlight, as idle uses: an unsettled entry is a hook
+  // waiting on a human and a parked long-poll is a read, so either would ride out
+  // the deadline.
+  //
+  // ponytail: an unread entry whose hook is gone (killed without /expire, an
+  // approval `caret reconcile` mirrored, a read-before-settle orphan) holds the
+  // drain to its deadline — and an approved one is never reclaimed, so it can date
+  // from anywhere in a resident daemon's uptime. Tracking which entries still have
+  // a polling reader is the upgrade.
   function checkDrain() {
     if (stopped || writesInFlight > 0 || unreadDecisionCount() > 0) return;
     log.info("drain", "drain complete");
     stop();
     onShutdown();
+  }
+  function drainDeadline() {
+    log.warn("drain", "drain deadline reached", {
+      unread: unreadDecisionCount(),
+      writes: writesInFlight,
+    });
+    stop();
+    onShutdown();
+  }
+  // A write detached from its request, so it never delays the response, still
+  // holds a drain until it lands. `write` must not reject.
+  function detachedWrite(write: Promise<void>) {
+    writesInFlight++;
+    void write.finally(() => {
+      writesInFlight--;
+      if (draining) setTimeout(checkDrain, 0);
+    });
   }
 
   function notFound() {
@@ -552,7 +574,11 @@ export function createServer(opts: CreateServerOptions): CaretServer {
 
   // POST /api/reviews — an incoming plan from the hook.
   async function handleCreateReview(req: Request): Promise<Response> {
-    if (draining) return new Response("draining", { status: 503 });
+    if (draining) {
+      // The hook turns this 503 into its fail-safe deny, so leave a trace here.
+      log.warn("drain", "review refused: draining");
+      return new Response("draining", { status: 503 });
+    }
     const body = await parseBody(req, PlanInputSchema);
     // The router logs the review record (created vs appended) itself.
     const routed = await routePlan(body, store, log);
@@ -968,10 +994,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // hook. A bare allow (no acceptMode) leaves prefs as-is; an id outside the
       // adapter-declared set is ignored by writeApproveMode.
       if (decision.acceptMode !== undefined && approveModeSet.valid.includes(decision.acceptMode)) {
-        void writeApproveMode(decision.acceptMode, prefsWriter, log, approveModeSet).catch(() => {
-          // Recoverable: prefs only seed the UI's next default.
-          log.warn("prefs", "approve mode write failed");
-        });
+        detachedWrite(
+          writeApproveMode(decision.acceptMode, prefsWriter, log, approveModeSet).catch(() => {
+            // Recoverable: prefs only seed the UI's next default.
+            log.warn("prefs", "approve mode write failed");
+          }),
+        );
       }
     }
     // The plan has been decided on, so the pane that submitted it no longer
@@ -980,7 +1008,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     // unblocks the long-polling hook is never held on cmux.
     if (existing.cmux) cfg.markPaneRead(existing.cmux);
     // Defer one tick so THIS 200 flushes before the hook's long-poll resolves
-    // (otherwise the browser's POST can appear to race the unblock).
+    // (otherwise the browser's POST can appear to race the unblock). The drain's
+    // re-check, queued after this by handle's finally, relies on it landing first.
     setTimeout(() => resolveDecision(id, decision), 0);
     log.info("resolve", `review ${shortId(id)} resolved: ${decision.behavior}`, {
       reviewId: id,
