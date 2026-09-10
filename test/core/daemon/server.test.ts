@@ -567,10 +567,10 @@ test("a write already in flight lands before the drain releases the port", async
   await boot({
     log,
     onShutdown: sig.onShutdown,
-    routePlan: async (input, s, routeLog) => {
+    routePlan: async (input, routeStore, routeLog) => {
       entered();
       await gate;
-      return routeIncomingPlan(input, s, routeLog);
+      return routeIncomingPlan(input, routeStore, routeLog);
     },
   });
   const post = d.seed({ sessionId: "B" });

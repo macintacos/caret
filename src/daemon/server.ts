@@ -411,7 +411,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     log.info("drain", "drain started", { unread: unreadDecisionCount() });
     drainTimer = setTimeout(drainDeadline, cfg.drainMs);
     // SIGTERM arrives outside any request, so no handle() finally re-checks for it.
-    setTimeout(checkDrain, 0);
+    setTimeout(maybeReleaseDrain, 0);
   }
   // Releases once no write is in flight and no settled decision is unread. Not
   // openDecisionCount or inFlight, as idle uses: an unsettled entry is a hook
@@ -423,7 +423,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // drain to its deadline — and an approved one is never reclaimed, so it can date
   // from anywhere in a resident daemon's uptime. Tracking which entries still have
   // a polling reader is the upgrade.
-  function checkDrain() {
+  function maybeReleaseDrain() {
     if (stopped || writesInFlight > 0 || unreadDecisionCount() > 0) return;
     log.info("drain", "drain complete");
     stop();
@@ -443,7 +443,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     writesInFlight++;
     void write.finally(() => {
       writesInFlight--;
-      if (draining) setTimeout(checkDrain, 0);
+      if (draining) setTimeout(maybeReleaseDrain, 0);
     });
   }
 
@@ -1164,7 +1164,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // A tick later, not inline: the response that settled the drain flushes
       // first, and handleResolve's deferred resolveDecision lands before the
       // unread count is read (timers run FIFO).
-      if (draining) setTimeout(checkDrain, 0);
+      if (draining) setTimeout(maybeReleaseDrain, 0);
     }
   }
 
