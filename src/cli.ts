@@ -18,7 +18,7 @@ import type { Command } from "@commander-js/extra-typings";
 import { fatalDeny } from "@/adapters/index.ts";
 import { runDaemon } from "@/commands/daemon.ts";
 import { runDiscoverySubcommand } from "@/commands/discovery.ts";
-import { runInstallSubcommand } from "@/commands/install/index.ts";
+import { installExitCode, runInstallSubcommand } from "@/commands/install/index.ts";
 import { prodService } from "@/commands/install/service.ts";
 import { runPrewarm } from "@/commands/prewarm.ts";
 import { runReconcileSubcommand } from "@/commands/reconcile.ts";
@@ -73,17 +73,8 @@ function buildProgram(): Command {
 
   program
     .command("install")
-    .description(
-      "install caret into a coding agent, plus the rumdl plan formatter (omit --target to choose interactively)",
-    )
-    .option(
-      "--target <targets>",
-      "comma-separated agents to install into: opencode, claude, or opencode,claude",
-    )
-    .option(
-      "--uninstall",
-      "remove caret from every agent on this machine instead of installing — cannot be scoped with --target",
-    )
+    .description("install caret into a coding agent, plus the rumdl plan formatter")
+    .option("--uninstall", "remove caret from every agent on this machine instead of installing")
     .option("--dry-run", "print what would change without writing")
     .option(
       "--refresh",
@@ -97,10 +88,9 @@ function buildProgram(): Command {
       "--no-resident",
       "don't keep caret's review UI up from login onward — persisted, so later installs leave it off",
     )
-    .action((opts) =>
-      runInstallSubcommand(
+    .action(async (opts) => {
+      const outcome = await runInstallSubcommand(
         {
-          target: opts.target,
           uninstall: opts.uninstall ?? false,
           dryRun: opts.dryRun ?? false,
           refresh: opts.refresh ?? false,
@@ -108,8 +98,11 @@ function buildProgram(): Command {
           resident: opts.resident,
         },
         { service: prodService },
-      ),
-    );
+      );
+      // The command reports every problem itself; this is the only place one becomes an
+      // exit code.
+      process.exitCode = installExitCode(outcome);
+    });
 
   return program;
 }

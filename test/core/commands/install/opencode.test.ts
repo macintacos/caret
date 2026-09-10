@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
+import { expectCleanExitCode } from "@test/support/exit-code.ts";
 import type { OpencodePackaging } from "@/adapters/opencode/packaging.ts";
 import { CARET_PACKAGE } from "@/adapters/opencode/paths.ts";
 import { type InstallOpencodeDeps, runInstallOpencodeTarget } from "@/commands/install/opencode.ts";
@@ -140,6 +141,14 @@ test("uninstall preserves a user's other plugins", async () => {
   expect(JSON.parse(readFileSync(configJson(), "utf-8")).plugin).toEqual(["opencode-wakatime"]);
 });
 
+test("uninstall with caret never installed reports nothing removed, and is not a failure", async () => {
+  // `--uninstall` sweeps every agent, so a machine that only runs the other one lands
+  // here; a throw or a non-zero exit would stop the run before the rest of the teardown.
+  const said = await expectCleanExitCode(() => transcript({}, { uninstall: true }));
+  expect(said).toContain("caret was not in opencode.json");
+  expect(said).toContain("Removed 0 command file(s)");
+});
+
 test("dry-run install writes nothing", async () => {
   await install(false, true);
   expect(existsSync(configJson())).toBe(false);
@@ -217,10 +226,8 @@ test.each([
   "a stale cache the user %s is left alone, and the install is not a failure",
   async (_label, answer) => {
     const cache = cacheDir(CARET_PACKAGE, "0.2.0");
-    const exitCode = process.exitCode;
-    await transcript(staleCacheDeps(cache, async () => answer));
+    await expectCleanExitCode(() => transcript(staleCacheDeps(cache, async () => answer)));
     expect(existsSync(cache)).toBe(true);
-    expect(process.exitCode).toBe(exitCode);
     expect(existsSync(commandFile())).toBe(true);
   },
 );

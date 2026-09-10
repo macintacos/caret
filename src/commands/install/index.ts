@@ -1,14 +1,12 @@
-// The `caret install` command: install caret into one or more coding agents.
-// `--target` is a comma-separated list of the ids in the install-target registry; each
-// target owns its own mechanism (OpenCode: a `plugin` array entry + command files;
-// Claude Code: the `claude` plugin CLI). Omit `--target` and caret detects the agents
-// on this machine and asks — on a TTY through the chooser, otherwise by installing into
-// everything it detected (Claude Code when it detected nothing), so CI never hangs on a
-// prompt. Every install ends by acquiring the rumdl plan formatter: it is part of a
-// working caret, not a step anyone can skip or forget. `--uninstall` is machine-wide — it
-// removes caret from every agent in the registry and refuses `--target`, since the
-// residency it tears down alongside them is one service for the whole machine. Neither it
-// nor `--dry-run` acquires rumdl.
+// The `caret install` command: install caret into one or more coding agents. Each target
+// owns its own mechanism (OpenCode: a `plugin` array entry + command files; Claude Code:
+// the `claude` plugin CLI). caret detects the agents on this machine and asks — on a TTY
+// through the chooser, otherwise by installing into everything it detected (Claude Code
+// when it detected nothing), so CI never hangs on a prompt. Every install ends by
+// acquiring the rumdl plan formatter: it is part of a working caret, not a step anyone
+// can skip or forget. `--uninstall` is machine-wide — it removes caret from every agent
+// in the registry, since the residency it tears down alongside them is one service for
+// the whole machine. Neither it nor `--dry-run` acquires rumdl.
 
 import { runInstallClaudeTarget } from "@/commands/install/claude.ts";
 import {
@@ -33,33 +31,6 @@ import {
 import { createInstallUI, type InstallUI, isTerminal } from "@/commands/install/ui.ts";
 import { errorMessage } from "@/lib/types.ts";
 import { ensureRumdl, RUMDL_VERSION } from "@/plan/rumdl.ts";
-
-/** Parse a `--target` value ("opencode", "claude", or "opencode,claude") into a
- * deduped, order-preserving target list — or an error message for an empty/unknown
- * value. */
-export function parseTargets(
-  raw: string | undefined,
-): { targets: InstallTarget[] } | { error: string } {
-  const parts = (raw ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (parts.length === 0) {
-    return {
-      error: `--target names no agent (it takes a comma-separated list of: ${INSTALL_TARGET_IDS.join(", ")}) — omit it entirely to choose interactively.`,
-    };
-  }
-  const unknown = parts.filter((p) => !(INSTALL_TARGET_IDS as readonly string[]).includes(p));
-  if (unknown.length > 0) {
-    return {
-      error: `unknown --target value(s): ${unknown.join(", ")}. Valid: ${INSTALL_TARGET_IDS.join(", ")}.`,
-    };
-  }
-  const targets: InstallTarget[] = [];
-  for (const p of parts)
-    if (!targets.includes(p as InstallTarget)) targets.push(p as InstallTarget);
-  return { targets };
-}
 
 /** Injection seam for tests: override detection, the chooser, TTY-ness, each target
  * runner, and — through ServiceStepDeps — the supervisor, to assert selection and
@@ -98,12 +69,23 @@ interface TargetOpts {
   local?: LocalInstall;
 }
 
-/** Run the install command: resolve the targets (from `--target`, the chooser, or
- * detection), then dispatch to each one. On an invalid `--target`, writes the reason to
- * stderr and sets a non-zero exit code (nothing is installed). */
+/** How an install run ended. `ok` covers every run that got through without a reported
+ * failure, a chooser the user cancelled included — cancelling changes nothing and is not
+ * an error. `refused` is an invocation the run would not act on at all; `failed` is one
+ * that acted and stopped partway. `src/cli.ts` maps these onto exit codes. */
+export type InstallOutcome = "ok" | "refused" | "failed";
+
+/** The exit code an outcome earns. Separate from the `process.exitCode` write in
+ * `src/cli.ts` so the mapping is assertable without spawning the CLI. */
+export function installExitCode(outcome: InstallOutcome): number {
+  return { ok: 0, refused: 2, failed: 1 }[outcome];
+}
+
+/** Run the install command: resolve the targets (the chooser or detection), then
+ * dispatch to each one. Reports every problem through `ui` and returns how the run
+ * ended — never throws, and never writes `process.exitCode` itself. */
 export async function runInstallSubcommand(
   opts: {
-    target?: string;
     uninstall: boolean;
     dryRun: boolean;
     fromLocal?: boolean;
@@ -112,7 +94,7 @@ export async function runInstallSubcommand(
     resident?: boolean;
   },
   deps: InstallDeps = {},
-): Promise<void> {
+): Promise<InstallOutcome> {
   const ui = deps.ui ?? (await createInstallUI());
   const verb = opts.uninstall ? "uninstall" : "install";
   ui.intro(`${verb}${opts.fromLocal ? " (local build)" : ""}${opts.dryRun ? " (dry run)" : ""}`);
@@ -120,12 +102,12 @@ export async function runInstallSubcommand(
   let local: LocalInstall | undefined;
   if (opts.fromLocal) {
     const resolved = resolveLocal(opts, deps, ui);
-    if (resolved === null) return;
+    if (resolved === null) return "refused";
     local = resolved;
   }
 
   const targets = await selectTargets(opts, deps, ui);
-  if (targets === null) return;
+  if (targets === null) return "ok";
 
   const runOpencode = deps.runOpencode ?? runInstallOpencodeTarget;
   const runClaude = deps.runClaude ?? runInstallClaudeTarget;
@@ -160,9 +142,8 @@ export async function runInstallSubcommand(
     // the void the OpenCode target returns) means it got through. One failure stops the
     // run: the remaining work all assumes caret is installed.
     if (ok === false) {
-      process.exitCode = 1;
       ui.outro(`Stopped — ${targetLabel(target)} was not set up. Nothing further was run.`);
-      return;
+      return "failed";
     }
   }
 
@@ -178,11 +159,13 @@ export async function runInstallSubcommand(
     );
   if (local && !opts.dryRun) await prewarmStep(local.repoDir, deps, ui);
   ui.outro(closingLine(targets, opts, local !== undefined));
+  return "ok";
 }
 
-/** Resolve the checkout `--from-local` installs, or report why it can't and return null
- * (installing nothing, non-zero exit). Runs before target selection so a published binary
- * — or a checkout nobody built — never reaches a target runner. */
+/** Resolve the checkout `--from-local` installs, or report why it can't and return null,
+ * which the caller turns into a `refused` run that installs nothing. Runs before target
+ * selection so a published binary — or a checkout nobody built — never reaches a target
+ * runner. */
 function resolveLocal(
   opts: { uninstall: boolean; dryRun: boolean },
   deps: InstallDeps,
@@ -192,7 +175,6 @@ function resolveLocal(
     ui.error(
       "--from-local installs the checkout caret is running from; it has no uninstall. Run `caret install --uninstall` to remove caret from an agent.",
     );
-    process.exitCode = 2;
     return null;
   }
   try {
@@ -205,7 +187,6 @@ function resolveLocal(
     return { repoDir, marketplaceDir: (deps.marketplaceDir ?? devMarketplaceDir)() };
   } catch (e) {
     ui.error(errorMessage(e));
-    process.exitCode = 2;
     return null;
   }
 }
@@ -284,8 +265,8 @@ function closingLine(
   return `caret${local ? " (local build)" : ""} is installed in ${names}.${reload}${restart}`;
 }
 
-/** Resolve which agents to act on. `null` means "do nothing" — the `--target` value was
- * rejected (reported, non-zero exit) or the user cancelled the chooser.
+/** Resolve which agents to act on. `null` means "do nothing" — the user cancelled the
+ * chooser.
  *
  * An uninstall takes every registry target and asks nothing: residency is a single
  * machine-wide service, so removing caret from one agent while leaving it in another
@@ -293,30 +274,11 @@ function closingLine(
  * can't be answered (no TTY) or shouldn't be asked: `--dry-run` previews the detected
  * agents instead of asking about a run that changes nothing. */
 async function selectTargets(
-  opts: { target?: string; uninstall: boolean; dryRun: boolean },
+  opts: { uninstall: boolean; dryRun: boolean },
   deps: InstallDeps,
   ui: InstallUI,
 ): Promise<InstallTarget[] | null> {
-  if (opts.uninstall) {
-    if (opts.target !== undefined) {
-      ui.error(
-        "--target cannot scope an uninstall: removing caret removes it from every agent, so the machine-wide service goes with it. Re-run `caret install --uninstall` on its own.",
-      );
-      process.exitCode = 2;
-      return null;
-    }
-    return [...INSTALL_TARGET_IDS];
-  }
-
-  if (opts.target !== undefined) {
-    const parsed = parseTargets(opts.target);
-    if ("error" in parsed) {
-      ui.error(parsed.error);
-      process.exitCode = 2;
-      return null;
-    }
-    return parsed.targets;
-  }
+  if (opts.uninstall) return [...INSTALL_TARGET_IDS];
 
   const detected = (deps.detect ?? detectTargets)();
   const isInteractive = deps.isInteractive ?? isTerminal;

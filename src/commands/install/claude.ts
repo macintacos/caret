@@ -1,7 +1,7 @@
-// caret's Claude Code install target. `caret install --target claude` registers
-// caret's PUBLISHED plugin with Claude Code by driving its CLI: add and refresh caret's
-// marketplace, install and enable the plugin, then update it so re-running the installer
-// after a caret upgrade also upgrades caret-in-Claude-Code. `--uninstall` removes it.
+// caret's Claude Code install target. `caret install` registers caret's PUBLISHED plugin
+// with Claude Code by driving its CLI: add and refresh caret's marketplace, install and
+// enable the plugin, then update it so re-running the installer after a caret upgrade
+// also upgrades caret-in-Claude-Code. `--uninstall` removes it.
 // With `--from-local` the same CLI installs the LOCAL build instead: the marketplace
 // source becomes the generated dev marketplace (see local.ts) rather than the public
 // one, and the update phase is skipped — that path reinstalls the dev build directly,
@@ -128,7 +128,14 @@ function phases(
     return [
       {
         label: "Removing the caret plugin",
-        done: `Removed caret from Claude Code (${PLUGIN_REF})`,
+        // The command is best-effort because `--uninstall` sweeps every agent and
+        // `plugin uninstall` exits non-zero on a plugin Claude never had. That makes the
+        // settled line the only place the two outcomes are distinguishable, so it reports
+        // what came back rather than what was attempted.
+        done: ([removed]) =>
+          removed?.ok
+            ? `Removed caret from Claude Code (${PLUGIN_REF})`
+            : "caret was not installed in Claude Code",
         commands: [{ args: ["plugin", "uninstall", PLUGIN_REF], fatal: false }],
       },
     ];
@@ -295,7 +302,7 @@ export async function runInstallClaudeTarget(
       }
       ui.error(
         e.missing
-          ? `The \`claude\` CLI was not found. Install Claude Code (https://claude.com/claude-code) and re-run \`caret install --target claude\`, or add caret in Claude Code via \`/plugin marketplace add ${MARKETPLACE_SOURCE}\`.`
+          ? `The \`claude\` CLI was not found. Install Claude Code (https://claude.com/claude-code) and re-run \`caret install\`, or add caret in Claude Code via \`/plugin marketplace add ${MARKETPLACE_SOURCE}\`.`
           : `Claude Code: ${e.reason}`,
       );
       return false;

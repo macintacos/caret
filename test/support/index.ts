@@ -4,6 +4,7 @@
 // not this list, for what is available.
 export { type BootOptions, bootDaemon, type TestDaemon } from "./daemon.ts";
 export { setupTempStateDir, withEnv } from "./env.ts";
+export { expectCleanExitCode } from "./exit-code.ts";
 export { ndjsonRecords } from "./ndjson.ts";
 export { freePort } from "./net.ts";
 export { until, waitFor } from "./poll.ts";

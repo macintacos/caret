@@ -146,8 +146,8 @@ is therefore a requirement of the hook model — not a limit on how long you may
 raise `review.timeout_s` (up to just under 3900 s) if you want a longer window.
 
 caret ships to Claude Code as the `caret@caret` plugin from its GitHub-based marketplace,
-`macintacos/caret`. `caret install --target claude` drives Claude's own CLI to register
-and install it — `claude plugin marketplace add macintacos/caret`, then
+`macintacos/caret`. `caret install` drives Claude's own CLI to register and install it —
+`claude plugin marketplace add macintacos/caret`, then
 `plugin install caret@caret --scope user` and `plugin enable` — and the same install by
 hand is `/plugin marketplace add macintacos/caret` + `/plugin install caret@caret` from
 inside Claude Code, which is what the installer points you at when the `claude` CLI isn't
@@ -178,8 +178,8 @@ While the Plan agent is working, the plugin also warms the daemon in the backgro
 `caret prewarm` on each plan-agent message, mirroring the `caret prewarm` row in the
 Claude hooks table above — so your first review doesn't wait on a cold start.
 
-caret installs into OpenCode as a `plugin` array entry: `caret install --target opencode`
-adds `@macintacos/caret` to your OpenCode config's `plugin` array (comment-preserving, via
+caret installs into OpenCode as a `plugin` array entry: `caret install` adds
+`@macintacos/caret` to your OpenCode config's `plugin` array (comment-preserving, via
 `jsonc-parser`) and deploys the `/caret:*` command files, or you can add the array entry
 by hand. Install and uninstall both remove the plugin and command files older caret
 versions deployed into that config dir: OpenCode still loads them, so a leftover plugin
@@ -191,9 +191,9 @@ plugin resolves the caret binary and its own version at runtime from the package
 in (`CARET_OPENCODE_BIN` overrides the binary — see
 [Environment variables](CONFIGURING.md#environment-variables)), and on load it checks
 caret's latest GitHub release and toasts an update nudge when you're behind
-(`CARET_OPENCODE_NO_UPDATE_CHECK` opts out). `caret install --target claude` registers
-caret with Claude Code through its plugin CLI, `--target opencode,claude` does both agents
-at once, `--uninstall` reverses every agent at once, and `--dry-run` previews the changes
+(`CARET_OPENCODE_NO_UPDATE_CHECK` opts out). `caret install` registers caret with Claude
+Code through its plugin CLI too, and covers both agents in a single run when both are
+selected; `--uninstall` reverses every agent at once, and `--dry-run` previews the changes
 without writing. See [`agents/opencode-integration.md`](agents/opencode-integration.md)
 for the design.
 
@@ -217,16 +217,15 @@ rm -rf ~/.cache/opencode/packages/@macintacos/caret*
 > separate dirs, and all of them have to go. Drop the `*` and the pinned dirs survive, so
 > OpenCode reloads the stale copy from one of them.
 
-Omit `--target` and `caret install` picks for you: it detects which agents you have
-(`claude` on your PATH; `opencode` on your PATH or an existing OpenCode config dir) and
-asks which to install into, with the detected ones pre-checked. Off a terminal — CI, a
-pipe — it never waits on that prompt: it installs into every agent it detected, or into
-Claude Code when it detected none, and says which. `--dry-run` previews that same choice
-rather than asking. `--uninstall` makes no choice at all: it removes caret from every
-agent in the registry and refuses `--target`, because the machine-wide service it tears
-down alongside them belongs to no one agent. `--target` is the way to pin the agents
-non-interactively on an install. One more flag, `--from-local`, is dev-only: it installs
-the caret checkout the binary was built in rather than the published one — see
+`caret install` picks the agents for you: it detects which agents you have (`claude` on
+your PATH; `opencode` on your PATH or an existing OpenCode config dir) and asks which to
+install into, with the detected ones pre-checked. Off a terminal — CI, a pipe — it never
+waits on that prompt: it installs into every agent it detected, or into Claude Code when
+it detected none, and says which. `--dry-run` previews that same choice rather than
+asking. `--uninstall` makes no choice at all: it removes caret from every agent in the
+registry, because the machine-wide service it tears down alongside them belongs to no one
+agent. One more flag, `--from-local`, is dev-only: it installs the caret checkout the
+binary was built in rather than the published one — see
 [Development](DEVELOPMENT.md#development). Every install (but not `--uninstall`) finishes
 by acquiring the rumdl plan formatter — it is part of installing caret, not a step of its
 own — see
