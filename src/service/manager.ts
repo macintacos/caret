@@ -69,7 +69,8 @@ export const SERVICE_TERMINAL_EXIT_STATUS = 78;
  * name lives here once rather than as a literal in each. */
 export const SUPERVISED_VAR = "CARET_SUPERVISED";
 
-/** Whether a platform supervisor started this process. */
+/** Whether something manages this process's lifetime rather than a hook's fallback
+ * spawn — a platform supervisor, or the dev task's child env. */
 export function isSupervised(env: NodeJS.ProcessEnv = process.env): boolean {
   return env[SUPERVISED_VAR] === "1";
 }
