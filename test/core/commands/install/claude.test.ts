@@ -175,10 +175,12 @@ test("the dry-run preview lists the marketplace refresh and the plugin update", 
   expect(bodies.join("\n")).toContain("claude plugin update caret@caret --scope user");
 });
 
-test("uninstall removes the plugin", async () => {
+test("uninstall removes the plugin, and says so", async () => {
   const { runner, calls } = recorder();
-  await runInstallClaudeTarget({ uninstall: true, dryRun: false }, { claude: runner });
+  const ui = recordingUI();
+  await runInstallClaudeTarget({ uninstall: true, dryRun: false }, { claude: runner, ui });
   expect(calls).toEqual([["plugin", "uninstall", "caret@caret"]]);
+  expect(ui.events).toContain("settled:Removed caret from Claude Code (caret@caret)");
 });
 
 test("a machine with no claude CLI has nothing to uninstall, and is not a failure", async () => {
@@ -206,6 +208,9 @@ test("uninstall is not a failure when claude has no caret plugin to remove", asy
   expect(ok).toBe(true);
   expect(calls).toEqual([["plugin", "uninstall", "caret@caret"]]);
   expect(ui.events.some((e) => e.startsWith("error:") || e.startsWith("failed:"))).toBe(false);
+  // Not a failure, but not a removal either: claiming one caret never made would be a
+  // lie the reader has no way to check.
+  expect(ui.events).toContain("settled:caret was not installed in Claude Code");
 });
 
 test("dry-run prints the commands without spawning claude", async () => {

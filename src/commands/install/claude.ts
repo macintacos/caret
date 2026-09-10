@@ -128,7 +128,14 @@ function phases(
     return [
       {
         label: "Removing the caret plugin",
-        done: `Removed caret from Claude Code (${PLUGIN_REF})`,
+        // The command is best-effort because `--uninstall` sweeps every agent and
+        // `plugin uninstall` exits non-zero on a plugin Claude never had. That makes the
+        // settled line the only place the two outcomes are distinguishable, so it reports
+        // what came back rather than what was attempted.
+        done: ([removed]) =>
+          removed?.ok
+            ? `Removed caret from Claude Code (${PLUGIN_REF})`
+            : "caret was not installed in Claude Code",
         commands: [{ args: ["plugin", "uninstall", PLUGIN_REF], fatal: false }],
       },
     ];
