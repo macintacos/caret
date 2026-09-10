@@ -2,7 +2,8 @@
 // bun-test suite, with a small typed HTTP client over the public API — the same
 // POST/GET surface a real hook and the browser UI use. The client is
 // tool-agnostic: it speaks the daemon's wire protocol, never Claude's hook
-// stdin shaping (that lives in scripts/tasks/dev/driver.ts).
+// stdin shaping (that lives in scripts/tasks/dev/driver.ts). It also stands alone
+// as daemonClient(url), against any daemon — a spawned one included.
 //
 // The e2e suite has its own daemon launcher (test/e2e/support/daemon-entry.ts): it
 // runs under the Playwright/node runner, binds an OS-assigned port for parallel
@@ -18,21 +19,13 @@ import { createStore, type Store } from "@/review/store.ts";
 /** Options forwarded to createServer, minus the store (bootDaemon owns it). */
 export type BootOptions = Omit<CreateServerOptions, "store">;
 
-export interface TestDaemon {
-  /** Base URL of this daemon (http://localhost:<os-assigned-port>). */
-  url: string;
-  /** The OS-assigned port the daemon bound. */
-  port: number;
-  /** The in-process store backing this daemon, for white-box assertions. */
-  store: Store;
-  /** Stop the server (removes the lock when one is managed). */
-  stop(): void;
-  /** Step down the way a SIGTERM does — outside any request. */
-  drain(): void;
+export interface DaemonClient {
   /**
-   * Seed a review through POST /api/reviews. Defaults match a minimal pending
-   * review; pass overrides to vary sessionId/cwd/plan. Returns the new id.
+   * POST /api/reviews, returning the raw Response. Defaults match a minimal
+   * pending review; pass overrides to vary sessionId/cwd/plan.
    */
+  createReview(body?: Record<string, unknown>): Promise<Response>;
+  /** createReview, then the new id (throws on a non-OK status). */
   seed(body?: Record<string, unknown>): Promise<string>;
   /** GET /api/reviews/:id — the parsed ClientReview (throws on a non-OK status). */
   getReview(id: string): Promise<Record<string, unknown>>;
@@ -46,41 +39,35 @@ export interface TestDaemon {
   expire(id: string): Promise<Response>;
 }
 
+export interface TestDaemon extends DaemonClient {
+  /** Base URL of this daemon (http://localhost:<os-assigned-port>). */
+  url: string;
+  /** The OS-assigned port the daemon bound. */
+  port: number;
+  /** The in-process store backing this daemon, for white-box assertions. */
+  store: Store;
+  /** Stop the server (removes the lock when one is managed). */
+  stop(): void;
+  /** Step down the way a SIGTERM does — outside any request. */
+  drain(): void;
+}
+
 const SEED_DEFAULTS = { sessionId: "S", cwd: "/tmp/p", plan: "# Title\n\nbody" };
 
-/**
- * Boot a daemon over a store rooted at `dir`, on an OS-assigned port. `opts`
- * forwards the createServer knobs; idleMs defaults high so the daemon never
- * idle-shuts-down mid-test, and onShutdown to a no-op.
- */
-export async function bootDaemon(dir: string, opts: BootOptions = {}): Promise<TestDaemon> {
-  // The store keeps its own no-op logger: the daemon's lifecycle logger (opts.log)
-  // is for request/route records, and routing store emits through it would add
-  // noise the recording-log assertions don't expect.
-  const store = createStore(dir);
-  await store.rehydrate();
-  const srv: CaretServer = createServer({
-    store,
-    port: 0,
-    idleMs: opts.idleMs ?? 1_000_000,
-    onShutdown: opts.onShutdown ?? (() => {}),
-    ...opts,
-  });
-  const url = `http://localhost:${srv.port}`;
+/** A client over the daemon at `url` (scheme, host, and port; no trailing slash). */
+export function daemonClient(url: string): DaemonClient {
   const json = { "Content-Type": "application/json" };
-
+  const createReview = (body: Record<string, unknown> = {}) =>
+    fetch(`${url}/api/reviews`, {
+      method: "POST",
+      headers: json,
+      body: JSON.stringify({ ...SEED_DEFAULTS, ...body }),
+    });
   return {
-    url,
-    port: srv.port,
-    store,
-    stop: () => srv.stop(),
-    drain: () => srv.drain(),
-    async seed(body = {}) {
-      const res = await fetch(`${url}/api/reviews`, {
-        method: "POST",
-        headers: json,
-        body: JSON.stringify({ ...SEED_DEFAULTS, ...body }),
-      });
+    createReview,
+    async seed(body) {
+      const res = await createReview(body);
+      if (!res.ok) throw new Error(`POST /api/reviews → ${res.status}`);
       return ((await res.json()) as { id: string }).id;
     },
     async getReview(id) {
@@ -110,6 +97,36 @@ export async function bootDaemon(dir: string, opts: BootOptions = {}): Promise<T
     expire(id) {
       return fetch(`${url}/api/reviews/${id}/expire`, { method: "POST" });
     },
+  };
+}
+
+/**
+ * Boot a daemon over a store rooted at `dir`, on an OS-assigned port. `opts`
+ * forwards the createServer knobs; idleMs defaults high so the daemon never
+ * idle-shuts-down mid-test, and onShutdown to a no-op.
+ */
+export async function bootDaemon(dir: string, opts: BootOptions = {}): Promise<TestDaemon> {
+  // The store keeps its own no-op logger: the daemon's lifecycle logger (opts.log)
+  // is for request/route records, and routing store emits through it would add
+  // noise the recording-log assertions don't expect.
+  const store = createStore(dir);
+  await store.rehydrate();
+  const srv: CaretServer = createServer({
+    store,
+    port: 0,
+    idleMs: opts.idleMs ?? 1_000_000,
+    onShutdown: opts.onShutdown ?? (() => {}),
+    ...opts,
+  });
+  const url = `http://localhost:${srv.port}`;
+
+  return {
+    ...daemonClient(url),
+    url,
+    port: srv.port,
+    store,
+    stop: () => srv.stop(),
+    drain: () => srv.drain(),
   };
 }
 

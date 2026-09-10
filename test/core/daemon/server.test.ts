@@ -451,11 +451,7 @@ test("a draining daemon refuses new reviews with 503", async () => {
   await boot();
   await holdDrainOpen();
   await fetch(`${base}/api/retire`, { method: "POST" });
-  const res = await fetch(`${base}/api/reviews`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sessionId: "B", cwd: "/tmp/p", plan: "# B\n\nbody" }),
-  });
+  const res = await d.createReview({ sessionId: "B" });
   expect(res.status).toBe(503);
   expect((await d.listReviews()).some((r) => r.sessionId === "B")).toBe(false);
 });

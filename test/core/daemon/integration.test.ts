@@ -14,6 +14,7 @@ import {
   spawnEphemeralDaemon,
   untilLockWritten,
 } from "@test/support/cli-process.ts";
+import { daemonClient } from "@test/support/daemon.ts";
 import { ensureDaemonNoOps } from "@test/support/ensure-daemon-deps.ts";
 import { ndjsonRecords } from "@test/support/ndjson.ts";
 import { freePort } from "@test/support/net.ts";
@@ -167,17 +168,10 @@ test("SIGTERM drains: an unread decision still reaches its hook, then the daemon
   const stateHome = await mkdtemp(join(tmpdir(), "caret-drain-"));
   const { proc, lock } = await spawnEphemeralDaemon(stateHome);
   const base = `http://127.0.0.1:${lock.port}`;
-  const post = (path: string, body: object) =>
-    fetch(`${base}${path}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
+  const client = daemonClient(base);
   try {
-    const { id } = (await (
-      await post("/api/reviews", { sessionId: "S", cwd: "/tmp/p", plan: "# Title\n\nbody" })
-    ).json()) as { id: string };
-    expect((await post(`/api/reviews/${id}/resolve`, { behavior: "allow" })).status).toBe(200);
+    const id = await client.seed();
+    expect((await client.resolve(id, { behavior: "allow" })).status).toBe(200);
     proc.kill("SIGTERM");
     const drainRecords = () =>
       ndjsonRecords(readFileSync(daemonLog(stateHome), "utf-8")).filter((r) => r.step === "drain");
