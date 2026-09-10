@@ -21,10 +21,10 @@ import { closeSync, mkdirSync, mkdtempSync, openSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { NEVER_IDLE_MS } from "@/config/constants.ts";
 import { devConfigFile } from "@/config/paths.ts";
 import { devPort, devStateDir, loadSettings, type Settings } from "@/config/settings.ts";
 import { isPidAlive } from "@/daemon/lifecycle.ts";
+import { SUPERVISED_VAR } from "@/service/manager.ts";
 import {
   type DiscoverPortDeps,
   type PortMode,
@@ -78,11 +78,11 @@ export function daemonCommand(portMode: PortMode): string[] {
   ];
 }
 
-/** The environment every dev child inherits: the isolated state dir, a
- * never-idle daemon, and (in fixed-port mode) the pinned port. Built off
- * process.env because Bun.spawn snapshots it at startup and ignores later
- * mutations, so the overrides must be passed explicitly to each child. In
- * ephemeral mode CARET_PORT is filled in after port discovery. */
+/** The environment every dev child inherits: the isolated state dir, the
+ * supervision marker a generated unit also carries, and (in fixed-port mode) the
+ * pinned port. Built off process.env because Bun.spawn snapshots it at startup and
+ * ignores later mutations, so the overrides must be passed explicitly to each child.
+ * In ephemeral mode CARET_PORT is filled in after port discovery. */
 export function childEnvFor(
   stateDirPath: string,
   portMode: PortMode,
@@ -91,7 +91,11 @@ export function childEnvFor(
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
     XDG_STATE_HOME: stateDirPath,
-    CARET_IDLE_MS: String(NEVER_IDLE_MS),
+    // Residency the way production reaches it, so the dev loop runs the branch that
+    // ships rather than a never-idle lookalike: this plus [daemon].resident (default
+    // true) is the whole predicate. Write `resident = false` in config.dev.toml to
+    // exercise the idle-exit branch instead.
+    [SUPERVISED_VAR]: "1",
   };
   if (portMode.kind === "fixed") env.CARET_PORT = String(portMode.port);
   // The daemon child reads its own dev config (config.dev.toml, or a nonexistent

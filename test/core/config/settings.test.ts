@@ -682,26 +682,22 @@ test("createSettings honors the prod-build gate on every current() read", async 
   expect(createSettings(file, false).current().dev.notify.enabled).toBe(true);
 });
 
-// EXC-1164: residency is the conjunction of intent, supervision and a prod build.
-// The table is exhaustive over the three legs, so a regression that drops any term
-// surfaces as a named row rather than a bare false.
+// EXC-1164: residency is the conjunction of intent and supervision. The table is
+// exhaustive over both legs, so a regression that drops either term surfaces as a
+// named row rather than a bare false.
 function withResident(intent: boolean): Settings {
   return { ...DEFAULTS, daemon: { ...DEFAULTS.daemon, resident: intent } };
 }
 
-test("a daemon is resident only when intent, supervision and a prod build all hold", () => {
-  expect(isResident(withResident(true), { CARET_SUPERVISED: "1" }, true)).toBe(true);
+test("a daemon is resident only when intent and supervision both hold", () => {
+  expect(isResident(withResident(true), { CARET_SUPERVISED: "1" })).toBe(true);
 });
 
 test("intent alone does not make a daemon resident", () => {
-  expect(isResident(withResident(true), {}, true)).toBe(false);
-  expect(isResident(withResident(true), { CARET_SUPERVISED: "0" }, true)).toBe(false);
+  expect(isResident(withResident(true), {})).toBe(false);
+  expect(isResident(withResident(true), { CARET_SUPERVISED: "0" })).toBe(false);
 });
 
 test("supervision alone does not make a daemon resident", () => {
-  expect(isResident(withResident(false), { CARET_SUPERVISED: "1" }, true)).toBe(false);
-});
-
-test("a dev world is never resident, however it is configured", () => {
-  expect(isResident(withResident(true), { CARET_SUPERVISED: "1" }, false)).toBe(false);
+  expect(isResident(withResident(false), { CARET_SUPERVISED: "1" })).toBe(false);
 });

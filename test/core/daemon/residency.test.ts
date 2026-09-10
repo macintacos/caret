@@ -8,6 +8,7 @@ import { join } from "node:path";
 
 import { bootDaemon, type TestDaemon } from "@test/support/daemon.ts";
 import { fakeServiceConfig } from "@test/support/service-config.ts";
+import { NEVER_IDLE_MS } from "@/config/constants.ts";
 import type { HealthIdentity } from "@/lib/types.ts";
 import { buildSystemdUnit } from "@/service/systemd.ts";
 
@@ -67,6 +68,15 @@ test("a resident daemon never arms the idle timer", async () => {
 test("a non-resident daemon still arms the idle timer", async () => {
   const timer = await bootResident(false, 30);
   expect(timer.arms).toEqual([30]);
+});
+
+test("residency skips the idle path rather than arming it at the never-idle delay", async () => {
+  // Two different states that both look like "stays up": an idle timer set far out,
+  // and no idle timer at all. Only the second is what a supervisor gets, so pin them
+  // apart at the same delay rather than letting a large timeout pass for residency.
+  expect((await bootResident(false, NEVER_IDLE_MS)).arms).toEqual([NEVER_IDLE_MS]);
+  d.stop();
+  expect((await bootResident(true, NEVER_IDLE_MS)).arms).toEqual([]);
 });
 
 test("/api/health reports resident: true when the daemon is resident", async () => {

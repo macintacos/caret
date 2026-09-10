@@ -365,14 +365,12 @@ export function idleMs(s: Settings = settings().current()): number {
 /** Whether this daemon stays up until told to stop, rather than idle-exiting.
  * Intent alone is not enough: only a supervisor's own process carries
  * CARET_SUPERVISED (EXC-1161), so a hook's fallback spawn during a service cycle
- * keeps the idle shutdown and yields the port back. A dev world has its own state
- * dir and port and nothing supervising it. */
+ * keeps the idle shutdown and yields the port back. */
 export function isResident(
   s: Settings = settings().current(),
   env: NodeJS.ProcessEnv = process.env,
-  isProd: boolean = isCompiledBinary(),
 ): boolean {
-  return s.daemon.resident && isSupervised(env) && isProd;
+  return s.daemon.resident && isSupervised(env);
 }
 
 /** Review timeout: CARET_TIMEOUT > [review].timeout_s > 3600s / 1h — all in
