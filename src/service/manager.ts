@@ -63,11 +63,10 @@ export const SYSTEMD_UNIT = "caret.service";
  * bin/caret-launcher. */
 export const SERVICE_TERMINAL_EXIT_STATUS = 78;
 
-/** The variable every generated unit's environment block carries, naming a process a
- * supervisor started rather than a hook (EXC-1161). Written by `serviceEnvironment`
- * below and by the dev task's child env, and read by `isResident`
- * (src/config/settings.ts) and the daemon's upkeep gate, so the name lives here once
- * rather than as a literal in each. */
+/** Marks a process whose lifetime something else owns — a generated unit's environment
+ * block, or the dev task's child env — rather than a hook's fallback spawn (EXC-1161).
+ * Read by `isResident` (src/config/settings.ts) and the daemon's upkeep gate, so the
+ * name lives here once rather than as a literal in each. */
 export const SUPERVISED_VAR = "CARET_SUPERVISED";
 
 /** Whether a platform supervisor started this process. */

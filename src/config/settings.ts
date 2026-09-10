@@ -99,8 +99,7 @@ const SettingsSchema = z.object({
       port: Port.default(DEFAULT_PORT), // EXC-430
       idle_ms: IdleMs.default(60_000), // EXC-430
       heartbeat_ms: HeartbeatMs.default(8_000), // EXC-430
-      // EXC-1164: default true, but inert without a supervisor unit — isResident() also
-      // requires CARET_SUPERVISED.
+      // EXC-1164: default true, but inert without CARET_SUPERVISED — see isResident().
       resident: z.boolean().default(true),
     })
     .prefault({}),
@@ -363,9 +362,9 @@ export function idleMs(s: Settings = settings().current()): number {
 }
 
 /** Whether this daemon stays up until told to stop, rather than idle-exiting.
- * Intent alone is not enough: only a supervisor's own process carries
- * CARET_SUPERVISED (EXC-1161), so a hook's fallback spawn during a service cycle
- * keeps the idle shutdown and yields the port back. */
+ * Intent alone is not enough: a hook's fallback spawn during a service cycle does not
+ * carry CARET_SUPERVISED (EXC-1161), so it keeps the idle shutdown and yields the port
+ * back. */
 export function isResident(
   s: Settings = settings().current(),
   env: NodeJS.ProcessEnv = process.env,

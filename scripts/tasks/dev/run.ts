@@ -65,8 +65,8 @@ export interface RunDevOptions {
  * port is passed through the child env instead, via childEnvFor).
  *
  * `--no-orphans` ties this daemon to its spawner's lifetime, covering the SIGKILL
- * the cleanup handlers cannot: it is never-idle, so an orphan would hold its port
- * and state dir indefinitely. Never on the singleton path (src/daemon/lifecycle.ts
+ * the cleanup handlers cannot: it is resident by default (childEnvFor sets
+ * CARET_SUPERVISED), so an orphan would hold its port and state dir indefinitely. Never on the singleton path (src/daemon/lifecycle.ts
  * spawnDaemon) — that daemon must outlive its spawner. */
 export function daemonCommand(portMode: PortMode): string[] {
   return [
@@ -91,10 +91,8 @@ export function childEnvFor(
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
     XDG_STATE_HOME: stateDirPath,
-    // Residency the way production reaches it, so the dev loop runs the branch that
-    // ships rather than a never-idle lookalike: this plus [daemon].resident (default
-    // true) is the whole predicate. Write `resident = false` in config.dev.toml to
-    // exercise the idle-exit branch instead.
+    // Residency the way production reaches it: this plus [daemon].resident (default true)
+    // is the whole predicate; `resident = false` in config.dev.toml opts back out.
     [SUPERVISED_VAR]: "1",
   };
   if (portMode.kind === "fixed") env.CARET_PORT = String(portMode.port);

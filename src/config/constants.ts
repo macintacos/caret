@@ -148,8 +148,7 @@ export function hasKnownFileExtension(path: string): boolean {
  * setTimeout delay (2^31-1). A larger value overflows the 32-bit timer and
  * clamps to ~1ms, firing the idle shutdown immediately — the trap this guards
  * against. Used where a daemon must stay up for a whole dev/test session
- * regardless of inactivity (the dev task, the e2e daemon, the dev review
- * timeout cap). */
+ * regardless of inactivity (the e2e daemon, the dev review timeout cap). */
 export const NEVER_IDLE_MS = 2147483647;
 
 // --- Decision long-poll socket timing (EXC-533) ---

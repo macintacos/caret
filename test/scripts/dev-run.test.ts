@@ -74,6 +74,12 @@ test("childEnvFor isolates state and marks the daemon supervised; pins CARET_POR
   expect(eph.CARET_PORT).toBe(process.env.CARET_PORT);
 });
 
+test("childEnvFor leaves CARET_IDLE_MS alone, so `resident = false` still idle-exits", () => {
+  withEnv({ CARET_IDLE_MS: undefined }, () => {
+    expect(childEnvFor("/tmp/world", { kind: "ephemeral" }).CARET_IDLE_MS).toBeUndefined();
+  });
+});
+
 test("childEnvFor threads the dev config path, and CARET_FRESH only when fresh", () => {
   // Normal dev: the daemon child reads config.dev.toml, and CARET_FRESH is absent.
   const normal = childEnvFor(
