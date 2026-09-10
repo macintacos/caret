@@ -69,9 +69,21 @@ interface TargetOpts {
   local?: LocalInstall;
 }
 
+/** How an install run ended. `ok` covers every run that got through without a reported
+ * failure, a chooser the user cancelled included — cancelling changes nothing and is not
+ * an error. `refused` is an invocation the run would not act on at all; `failed` is one
+ * that acted and stopped partway. `src/cli.ts` maps these onto exit codes. */
+export type InstallOutcome = "ok" | "refused" | "failed";
+
+/** The exit code an outcome earns. Separate from the `process.exitCode` write in
+ * `src/cli.ts` so the mapping is assertable without spawning the CLI. */
+export function installExitCode(outcome: InstallOutcome): number {
+  return { ok: 0, refused: 2, failed: 1 }[outcome];
+}
+
 /** Run the install command: resolve the targets (the chooser or detection), then
- * dispatch to each one. Failure is reported and left in `process.exitCode` — 2 for a
- * refused invocation, 1 for a target that failed — never thrown. */
+ * dispatch to each one. Reports every problem through `ui` and returns how the run
+ * ended — never throws, and never writes `process.exitCode` itself. */
 export async function runInstallSubcommand(
   opts: {
     uninstall: boolean;
@@ -82,7 +94,7 @@ export async function runInstallSubcommand(
     resident?: boolean;
   },
   deps: InstallDeps = {},
-): Promise<void> {
+): Promise<InstallOutcome> {
   const ui = deps.ui ?? (await createInstallUI());
   const verb = opts.uninstall ? "uninstall" : "install";
   ui.intro(`${verb}${opts.fromLocal ? " (local build)" : ""}${opts.dryRun ? " (dry run)" : ""}`);
@@ -90,12 +102,12 @@ export async function runInstallSubcommand(
   let local: LocalInstall | undefined;
   if (opts.fromLocal) {
     const resolved = resolveLocal(opts, deps, ui);
-    if (resolved === null) return;
+    if (resolved === null) return "refused";
     local = resolved;
   }
 
   const targets = await selectTargets(opts, deps, ui);
-  if (targets === null) return;
+  if (targets === null) return "ok";
 
   const runOpencode = deps.runOpencode ?? runInstallOpencodeTarget;
   const runClaude = deps.runClaude ?? runInstallClaudeTarget;
@@ -130,9 +142,8 @@ export async function runInstallSubcommand(
     // the void the OpenCode target returns) means it got through. One failure stops the
     // run: the remaining work all assumes caret is installed.
     if (ok === false) {
-      process.exitCode = 1;
       ui.outro(`Stopped — ${targetLabel(target)} was not set up. Nothing further was run.`);
-      return;
+      return "failed";
     }
   }
 
@@ -148,11 +159,13 @@ export async function runInstallSubcommand(
     );
   if (local && !opts.dryRun) await prewarmStep(local.repoDir, deps, ui);
   ui.outro(closingLine(targets, opts, local !== undefined));
+  return "ok";
 }
 
-/** Resolve the checkout `--from-local` installs, or report why it can't and return null
- * (installing nothing, non-zero exit). Runs before target selection so a published binary
- * — or a checkout nobody built — never reaches a target runner. */
+/** Resolve the checkout `--from-local` installs, or report why it can't and return null,
+ * which the caller turns into a `refused` run that installs nothing. Runs before target
+ * selection so a published binary — or a checkout nobody built — never reaches a target
+ * runner. */
 function resolveLocal(
   opts: { uninstall: boolean; dryRun: boolean },
   deps: InstallDeps,
@@ -162,7 +175,6 @@ function resolveLocal(
     ui.error(
       "--from-local installs the checkout caret is running from; it has no uninstall. Run `caret install --uninstall` to remove caret from an agent.",
     );
-    process.exitCode = 2;
     return null;
   }
   try {
@@ -175,7 +187,6 @@ function resolveLocal(
     return { repoDir, marketplaceDir: (deps.marketplaceDir ?? devMarketplaceDir)() };
   } catch (e) {
     ui.error(errorMessage(e));
-    process.exitCode = 2;
     return null;
   }
 }

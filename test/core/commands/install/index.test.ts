@@ -1,13 +1,13 @@
 // The `caret install` orchestrator: the selection policy (chooser on a TTY, detected
 // agents otherwise) and dispatch to the injected target runners.
 
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { withEnv } from "@test/support/env.ts";
-import { runInstallSubcommand } from "@/commands/install/index.ts";
+import { installExitCode, runInstallSubcommand } from "@/commands/install/index.ts";
 import { INSTALL_TARGET_IDS, type InstallTarget } from "@/commands/install/targets.ts";
 import { recordingUI, silentUI } from "@/commands/install/ui.ts";
 import { RUMDL_VERSION } from "@/plan/rumdl.ts";
@@ -81,8 +81,10 @@ function decliningPrompt(): { prompt: () => Promise<null>; wasPrompted: () => bo
   };
 }
 
-afterEach(() => {
-  process.exitCode = 0;
+test("every outcome maps to an exit code, and only a problem is non-zero", () => {
+  expect(installExitCode("ok")).toBe(0);
+  expect(installExitCode("refused")).toBe(2);
+  expect(installExitCode("failed")).toBe(1);
 });
 
 test("runInstallSubcommand dispatches to each selected target with the same opts", async () => {
@@ -274,14 +276,14 @@ test("uninstalling and --dry-run never download rumdl", async () => {
 
 test("a failing rumdl download leaves the install successful", async () => {
   const calls: string[] = [];
-  await runInstallSubcommand(PLAIN_INSTALL, {
+  const outcome = await runInstallSubcommand(PLAIN_INSTALL, {
     ...CLAUDE_ONLY,
     ui: silentUI,
     runClaude: () => void calls.push("claude"),
     ensureRumdl: () => Promise.reject(new Error("offline")),
   });
   expect(calls).toEqual(["claude"]);
-  expect(process.exitCode).toBe(0);
+  expect(outcome).toBe("ok");
 });
 
 test("the reporter reaches the real target runners, not just the orchestrator", async () => {
@@ -334,10 +336,10 @@ test("without --from-local nothing prewarms and no target sees a checkout", asyn
   expect(calls).toEqual([]);
 });
 
-test("--from-local outside a built checkout installs nothing and exits non-zero", async () => {
+test("--from-local outside a built checkout installs nothing and is refused", async () => {
   const calls: string[] = [];
   const ui = recordingUI();
-  await runInstallSubcommand(
+  const outcome = await runInstallSubcommand(
     { uninstall: false, dryRun: false, fromLocal: true },
     {
       ui,
@@ -350,13 +352,13 @@ test("--from-local outside a built checkout installs nothing and exits non-zero"
     },
   );
   expect(calls).toEqual([]);
-  expect(process.exitCode).toBe(2);
+  expect(outcome).toBe("refused");
   expect(ui.events.some((e) => e.includes("mise run build"))).toBe(true);
 });
 
 test("--from-local --uninstall is refused: local mode only installs", async () => {
   const calls: string[] = [];
-  await runInstallSubcommand(
+  const outcome = await runInstallSubcommand(
     { uninstall: true, dryRun: false, fromLocal: true },
     {
       ui: silentUI,
@@ -365,7 +367,7 @@ test("--from-local --uninstall is refused: local mode only installs", async () =
     },
   );
   expect(calls).toEqual([]);
-  expect(process.exitCode).toBe(2);
+  expect(outcome).toBe("refused");
 });
 
 test("--from-local --dry-run previews without prewarming", async () => {
@@ -406,7 +408,7 @@ test("a target that reports failure exits non-zero and never claims caret was in
   // this pins against: the exit code is the task's exit code.
   const calls: string[] = [];
   const ui = recordingUI();
-  await runInstallSubcommand(
+  const outcome = await runInstallSubcommand(
     { uninstall: false, dryRun: false, fromLocal: true },
     {
       ...CLAUDE_ONLY,
@@ -421,7 +423,7 @@ test("a target that reports failure exits non-zero and never claims caret was in
       prewarm: async () => void calls.push("prewarm"),
     },
   );
-  expect(process.exitCode).toBe(1);
+  expect(outcome).toBe("failed");
   expect(ui.events.some((e) => e.startsWith("outro:caret"))).toBe(false);
   // Nothing downstream runs: the build never landed, so there is nothing to warm.
   expect(calls).toEqual([]);
@@ -431,7 +433,7 @@ test("a throwing target is reported and fails the run rather than escaping the c
   // An escaping throw reaches the CLI's fail-safe handler, which prints a hook deny line
   // and exits 0 — nonsense from an install command.
   const ui = recordingUI();
-  await runInstallSubcommand(PLAIN_INSTALL, {
+  const outcome = await runInstallSubcommand(PLAIN_INSTALL, {
     ...CLAUDE_ONLY,
     ui,
     runClaude: () => {
@@ -439,7 +441,7 @@ test("a throwing target is reported and fails the run rather than escaping the c
     },
     ensureRumdl: noRumdl,
   });
-  expect(process.exitCode).toBe(1);
+  expect(outcome).toBe("failed");
   expect(ui.events.some((e) => e.includes("EACCES"))).toBe(true);
 });
 
@@ -465,11 +467,11 @@ test("--from-local --dry-run previews from a checkout that was never built", asy
 
 test("a failing prewarm still leaves the install successful", async () => {
   const ui = recordingUI();
-  await runInstallSubcommand(
+  const outcome = await runInstallSubcommand(
     { uninstall: false, dryRun: false, fromLocal: true },
     fromLocalPrewarmDeps(ui, () => Promise.reject(new Error("daemon busy"))),
   );
-  expect(process.exitCode).toBe(0);
+  expect(outcome).toBe("ok");
   expect(ui.events.some((e) => e.startsWith("outro:"))).toBe(true);
 });
 
