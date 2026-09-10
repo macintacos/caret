@@ -1,7 +1,7 @@
 // The caret daemon: a single Bun.serve that holds reviews in memory, serves the
-// built UI (index document plus its hashed sibling assets), bridges the hook's
-// long-poll to the browser's decision, and idle-auto-shuts-down when no reviews
-// remain — or, told to step down (retire/SIGTERM), drains first.
+// built UI (index document plus its hashed sibling assets), and bridges the hook's
+// long-poll to the browser's decision. When it steps down, idle or drained, is
+// liveness.ts's call.
 
 import { renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -23,6 +23,7 @@ import {
   isSafeMethod,
   LIVE_CLIENT_WINDOW_MS,
 } from "@/daemon/guards.ts";
+import { createLiveness } from "@/daemon/liveness.ts";
 import {
   DraftBodySchema,
   FileRefsBodySchema,
@@ -206,9 +207,9 @@ export interface CreateServerOptions {
   onDecisionAwaited?: (id: string) => void;
   /** Schedule the idle-shutdown timer; injectable so tests fire it deterministically
    * instead of racing a real delay. Defaults to setTimeout. */
-  setTimer?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
+  setIdleTimer?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
   /** Cancel a scheduled idle-shutdown timer. Defaults to clearTimeout. */
-  clearTimer?: (handle: ReturnType<typeof setTimeout>) => void;
+  clearIdleTimer?: (handle: ReturnType<typeof setTimeout>) => void;
 }
 
 export interface CaretServer {
@@ -349,19 +350,6 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     });
   }
 
-  // Read from opts directly, like opts.port below, rather than threading through
-  // resolveOptions.
-  const setTimer = opts.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
-  const clearTimer = opts.clearTimer ?? ((h) => clearTimeout(h));
-
-  let idleTimer: ReturnType<typeof setTimeout> | null = null;
-  let inFlight = 0;
-  // The non-safe-method subset of inFlight: what a drain must let land. Reads are
-  // safe to cut — a hook re-polls and the UI reloads.
-  let writesInFlight = 0;
-  let stopped = false;
-  let draining = false;
-  let drainTimer: ReturnType<typeof setTimeout> | undefined;
   // Last time a UI client polled GET /api/reviews — the live-client signal the
   // hook reads to skip foregrounding the browser (EXC-559). 0 = never polled
   // (or retracted by a tab-close beacon, see handleUiGone).
@@ -371,81 +359,6 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // the daemon shut from under it, since a respawn forgets the tab and the next
   // plan would open a redundant browser tab.
   const uiPresent = () => isClientLive(lastReviewsPollAt, Date.now(), LIVE_CLIENT_WINDOW_MS);
-
-  function cancelIdle() {
-    if (idleTimer) {
-      clearTimer(idleTimer);
-      idleTimer = null;
-    }
-  }
-  function armIdle() {
-    if (resident || draining || idleTimer || stopped || store.pendingCount() !== 0) return;
-    idleTimer = setTimer(maybeShutdown, idle);
-  }
-  // Arm when no review is awaiting a decision; cancel while one is pending.
-  // (A `rejected` review persists to disk and rehydrates when its revision
-  // arrives, so it must not keep the daemon alive.)
-  function refreshIdle() {
-    if (store.pendingCount() === 0) armIdle();
-    else cancelIdle();
-  }
-  function maybeShutdown() {
-    idleTimer = null;
-    // Re-check liveness atomically (single-threaded loop). A present UI tab is the
-    // non-obvious term: an open tab is the daemon's reason to stay up (EXC-562),
-    // and the else-branch re-arms so it shuts down once that tab goes away.
-    if (store.pendingCount() === 0 && openDecisionCount() === 0 && inFlight === 0 && !uiPresent()) {
-      log.info("idle", "idle shutdown");
-      stop();
-      onShutdown();
-    } else if (store.pendingCount() === 0) {
-      armIdle();
-    }
-  }
-
-  function drain() {
-    if (draining || stopped) return;
-    draining = true;
-    // A drain owns the release: an idle shutdown would cut what it waits for.
-    cancelIdle();
-    log.info("drain", "drain started", { unread: unreadDecisionCount() });
-    drainTimer = setTimeout(drainDeadline, cfg.drainMs);
-    // SIGTERM arrives outside any request, so no handle() finally re-checks for it.
-    setTimeout(maybeReleaseDrain, 0);
-  }
-  // Releases once no write is in flight and no settled decision is unread. Not
-  // openDecisionCount or inFlight, as idle uses: an unsettled entry is a hook
-  // waiting on a human and a parked long-poll is a read, so either would ride out
-  // the deadline.
-  //
-  // ponytail: an unread entry whose hook is gone (killed without /expire, an
-  // approval `caret reconcile` mirrored, a read-before-settle orphan) holds the
-  // drain to its deadline — and an approved one is never reclaimed, so it can date
-  // from anywhere in a resident daemon's uptime. Tracking which entries still have
-  // a polling reader is the upgrade.
-  function maybeReleaseDrain() {
-    if (stopped || writesInFlight > 0 || unreadDecisionCount() > 0) return;
-    log.info("drain", "drain complete");
-    stop();
-    onShutdown();
-  }
-  function drainDeadline() {
-    log.warn("drain", "drain deadline reached", {
-      unread: unreadDecisionCount(),
-      writes: writesInFlight,
-    });
-    stop();
-    onShutdown();
-  }
-  // A write detached from its request, so it never delays the response, still
-  // holds a drain until it lands. `write` must not reject.
-  function detachedWrite(write: Promise<void>) {
-    writesInFlight++;
-    void write.finally(() => {
-      writesInFlight--;
-      if (draining) setTimeout(maybeReleaseDrain, 0);
-    });
-  }
 
   function notFound() {
     return new Response("not found", { status: 404 });
@@ -510,7 +423,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // It steps down through drain(), so a repeat retire mid-drain is a plain 200.
   function handleRetire(): Response {
     log.info("retire", "retire requested");
-    drain();
+    live.drain();
     return new Response(null, { status: 200 });
   }
 
@@ -574,7 +487,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
 
   // POST /api/reviews — an incoming plan from the hook.
   async function handleCreateReview(req: Request): Promise<Response> {
-    if (draining) {
+    if (live.draining()) {
       // The hook turns this 503 into its fail-safe deny, so leave a trace here.
       log.warn("drain", "review refused: draining");
       return new Response("draining", { status: 503 });
@@ -994,7 +907,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // hook. A bare allow (no acceptMode) leaves prefs as-is; an id outside the
       // adapter-declared set is ignored by writeApproveMode.
       if (decision.acceptMode !== undefined && approveModeSet.valid.includes(decision.acceptMode)) {
-        detachedWrite(
+        live.detachedWrite(
           writeApproveMode(decision.acceptMode, prefsWriter, log, approveModeSet).catch(() => {
             // Recoverable: prefs only seed the UI's next default.
             log.warn("prefs", "approve mode write failed");
@@ -1009,7 +922,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     if (existing.cmux) cfg.markPaneRead(existing.cmux);
     // Defer one tick so THIS 200 flushes before the hook's long-poll resolves
     // (otherwise the browser's POST can appear to race the unblock). The drain's
-    // re-check, queued after this by handle's finally, relies on it landing first.
+    // re-check, queued after this when the request ends, relies on it landing first.
     setTimeout(() => resolveDecision(id, decision), 0);
     log.info("resolve", `review ${shortId(id)} resolved: ${decision.behavior}`, {
       reviewId: id,
@@ -1052,8 +965,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   }
 
   // Resolve a request to its handler by method + path, returning the Response.
-  // The wrapper (handle) owns the cross-origin guard, idle/in-flight bookkeeping,
-  // and the catch-all 500; dispatch is pure routing + business logic.
+  // The wrapper (handle) owns the cross-origin guard, the liveness bracket, and the
+  // catch-all 500; dispatch is pure routing + business logic.
   async function dispatch(req: Request, method: string, path: string): Promise<Response> {
     // The UI routes answer HEAD as well as GET — both guards already admit it
     // (isSafeMethod), and Bun strips the body from what the handlers return, so
@@ -1111,10 +1024,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     req: Request,
     self: { readonly port: number | undefined },
   ): Promise<Response> {
-    inFlight++;
-    const isWrite = !isSafeMethod(req.method);
-    if (isWrite) writesInFlight++;
-    cancelIdle(); // any in-flight request defers an idle shutdown
+    const end = live.begin(req.method);
     try {
       const port = self.port ?? -1;
 
@@ -1156,15 +1066,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       }
       return new Response("internal error", { status: 500 });
     } finally {
-      inFlight--;
-      if (isWrite) writesInFlight--;
-      // Reconcile idle after every request — even a thrown one — so the timer
-      // is never left permanently disarmed.
-      refreshIdle();
-      // A tick later, not inline: the response that settled the drain flushes
-      // first, and handleResolve's deferred resolveDecision lands before the
-      // unread count is read (timers run FIFO).
-      if (draining) setTimeout(maybeReleaseDrain, 0);
+      end();
     }
   }
 
@@ -1222,17 +1124,33 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   }
   writeLock();
 
+  // Guarded apart from liveness because runDaemon's signal paths call stop() too: a
+  // repeat must not unlink a lock a successor daemon has written since.
+  let stopped = false;
   function stop() {
     if (stopped) return;
     stopped = true;
-    cancelIdle();
-    clearTimeout(drainTimer);
+    live.stop();
     server.stop();
     removeLock();
   }
 
-  // Startup-if-empty: arm the idle timer when no reviews were rehydrated.
-  refreshIdle();
+  const live = createLiveness({
+    idleMs: idle,
+    drainMs: cfg.drainMs,
+    resident,
+    pendingReviews: () => store.pendingCount(),
+    openDecisions: openDecisionCount,
+    unreadDecisions: unreadDecisionCount,
+    uiPresent,
+    release: () => {
+      stop();
+      onShutdown();
+    },
+    log,
+    setIdleTimer: opts.setIdleTimer,
+    clearIdleTimer: opts.clearIdleTimer,
+  });
 
-  return { port: server.port ?? 0, stop, drain };
+  return { port: server.port ?? 0, stop, drain: () => live.drain() };
 }

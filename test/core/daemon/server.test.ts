@@ -6,6 +6,7 @@ import { join } from "node:path";
 
 import { type BootOptions, bootDaemon, type TestDaemon } from "@test/support/daemon.ts";
 import { makeFakeUiAssets } from "@test/support/fake-ui-assets.ts";
+import { manualTimer } from "@test/support/manual-timer.ts";
 import { type RecordedEmit, recordingLog } from "@test/support/recording-log.ts";
 import { expectNeverLogsBody } from "@test/support/redaction.ts";
 import { APPROVE_VARIANTS } from "@/adapters/claude/approve.ts";
@@ -114,42 +115,6 @@ function decisionParked(): { onDecisionAwaited: () => void; parked: Promise<void
   return { onDecisionAwaited: () => fire(), parked };
 }
 
-// A controllable stand-in for the daemon's idle timer: captures the scheduled
-// callback so a test fires it on demand (`fire()`) instead of racing a real
-// `idleMs` delay. The idle timer is armed at boot with no request in flight, so
-// under load the real one can fire in the boot->first-request window and shut the
-// daemon down before the test's first request lands (EXC-647). Inject setTimer/
-// clearTimer into boot() and the daemon arms/cancels through them exactly as it
-// would the real timer — the arm/cancel/refresh logic stays real, only the delay
-// is deterministic.
-function manualTimer(): {
-  setTimer: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
-  clearTimer: (handle: ReturnType<typeof setTimeout>) => void;
-  fire: () => void;
-  pending: () => boolean;
-} {
-  let scheduled: (() => void) | null = null;
-  let handle = 0;
-  return {
-    setTimer: (fn) => {
-      scheduled = fn;
-      handle += 1;
-      return handle as unknown as ReturnType<typeof setTimeout>;
-    },
-    clearTimer: (h) => {
-      if ((h as unknown as number) === handle) scheduled = null;
-    },
-    // Run the armed callback (a no-op if nothing is scheduled). Cleared first so a
-    // re-arm inside the callback (maybeShutdown's else-branch) schedules afresh.
-    fire: () => {
-      const fn = scheduled;
-      scheduled = null;
-      fn?.();
-    },
-    pending: () => scheduled !== null,
-  };
-}
-
 async function resolve(id: string, body: Record<string, unknown>) {
   await d.resolve(id, body);
 }
@@ -167,8 +132,8 @@ async function bootWithManualIdle(
   await boot({
     idleMs: 30,
     onShutdown: sig.onShutdown,
-    setTimer: timer.setTimer,
-    clearTimer: timer.clearTimer,
+    setIdleTimer: timer.setTimer,
+    clearIdleTimer: timer.clearTimer,
     ...opts,
   });
   return { sig, timer };
