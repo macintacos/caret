@@ -47,6 +47,8 @@ export function buildSystemdUnit(cfg: ServiceConfig): string {
   const environment = sortedEnvironment(cfg.environment)
     .map(([key, value]) => `Environment=${quote(`${key}=${value}`)}`)
     .join("\n");
+  // The unit sets no TimeoutStopSec, so systemd's 90s default is the SIGTERM→SIGKILL
+  // grace DRAIN_DEADLINE_MS (src/daemon/server.ts) stays under.
   return `[Unit]
 Description=caret review daemon
 After=default.target
