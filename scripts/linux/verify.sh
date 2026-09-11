@@ -30,6 +30,13 @@ cat >"$caret_root/bin/caret" <<'CARET'
 #!/bin/sh
 mode="$(cat "$HOME/mode")"
 if [ "$mode" = run ]; then exec sleep infinity; fi
+# Outlives SIGTERM by a few seconds, as a daemon draining its reviews does.
+if [ "$mode" = drain ]; then
+  trap 'sleep 3; exit 0' TERM
+  : >"$HOME/drain-ready"
+  sleep infinity &
+  wait
+fi
 exit "$mode"
 CARET
 printf '#!/bin/sh\nexit 0\n' >"$HOME/bin/bun"
@@ -121,6 +128,20 @@ settled() {
 # no user manager looks like — the condition probeSystemd() exists to detect.
 busless() { env -u XDG_RUNTIME_DIR -u DBUS_SESSION_BUS_ADDRESS "$@"; }
 
+# Every distinct word is-active answers while a restart job cycles the running unit, polled
+# until a new main process is active.
+restart_words() {
+  local before word words="" deadline=$((SECONDS + 15))
+  before="$(prop MainPID)"
+  systemctl --user restart --no-block "$unit"
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    word="$(systemctl --user is-active "$unit" 2>/dev/null)"
+    [[ " $words " == *" $word "* ]] || words="$words $word"
+    if [ "$word" = active ] && [ "$(prop MainPID)" != "$before" ]; then break; fi
+  done
+  printf '%s\n' "${words# }"
+}
+
 printf -- '--- probe: what answers without a user bus\n'
 expect "show-environment reaches the user bus" 0 XDG_RUNTIME_DIR \
   systemctl --user show-environment
@@ -182,6 +203,21 @@ cp "$HOME/$unit" "$unit_dir/$unit"
 systemctl --user daemon-reload
 
 printf -- '--- restart contract: what each launcher exit does\n'
+# status() reads `inactive` as a unit told to stop, and a hook then spawns into the port
+# rather than waiting. A restart job must not dwell there, or the hook races the restart.
+set_mode drain
+rm -f "$HOME/drain-ready"
+systemctl --user restart "$unit"
+# The launcher resolves caret before it execs it, and a SIGTERM that lands first drains
+# nothing.
+until_true 15 test -e "$HOME/drain-ready"
+words="$(restart_words)"
+if [[ " $words " == *" deactivating "* && " $words " != *" inactive "* ]]; then
+  pass "a restart job drains through deactivating, never inactive"
+else
+  fail "a restart job drains through deactivating, never inactive" "is-active said: $words"
+fi
+
 set_mode 78
 systemctl --user reset-failed "$unit"
 systemctl --user restart "$unit" 2>/dev/null
@@ -231,6 +267,7 @@ printf -- '--- uninstall: disable, remove, reload\n'
 until_true 15 state_is active
 until_true 15 state_is active
 systemctl --user stop "$unit"
+# Still enabled, so only this word tells status() nothing will start the unit again.
 expect_out "a known but stopped unit reads inactive" 3 inactive systemctl --user is-active "$unit"
 expect "disable --now succeeds while the unit exists" 0 "" \
   systemctl --user disable --now "$unit"

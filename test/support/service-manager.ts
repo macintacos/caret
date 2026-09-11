@@ -24,7 +24,13 @@ export function fakeServiceManager(
   const readStatus =
     typeof status === "function"
       ? status
-      : async () => ({ installed: false, running: false, disabled: false, ...status });
+      : async () => ({
+          installed: false,
+          running: false,
+          disabled: false,
+          keepsAlive: false,
+          ...status,
+        });
   const manager: ServiceManager = {
     install: async (cfg) => {
       calls.push("install");

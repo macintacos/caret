@@ -64,10 +64,14 @@ export function createLaunchdManager(deps: LaunchdDeps = {}): ServiceManager {
       launchctl(["print", target]),
       launchctl(["print-disabled", domain]),
     ]);
+    const installed = printed.code === 0;
+    const disabled = DISABLED.test(printDisabled.stdout);
     return {
-      installed: printed.code === 0,
-      running: printed.code === 0 && RUNNING.some((pattern) => pattern.test(printed.stdout)),
-      disabled: DISABLED.test(printDisabled.stdout),
+      installed,
+      running: installed && RUNNING.some((pattern) => pattern.test(printed.stdout)),
+      disabled,
+      // The plist's KeepAlive restarts a loaded agent whenever it exits.
+      keepsAlive: installed && !disabled,
     };
   }
 

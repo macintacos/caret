@@ -17,10 +17,11 @@ export interface ServiceStatus {
    * masked unit on Linux. Install reads this as an opt-out and never re-enables
    * (EXC-1167). */
   disabled: boolean;
-  /** systemd will not start the unit again on its own: it exited terminally or spent its
-   * start limit. Install resets and restarts it. Linux only — on macOS the launcher's
-   * stop_agent boots the agent out instead, so `installed` already reads false. */
-  failed?: boolean;
+  /** The supervisor puts a daemon on the port by itself — it runs one now, or starts one
+   * again once this one exits — so a hook facing an empty port waits for it rather than
+   * spawning its own. False once the user turned it off, and on Linux once systemd parked
+   * the unit (a terminal exit, or its start limit spent) or was told to stop it. */
+  keepsAlive: boolean;
   /** Why this host cannot run the service at all, absent when it can. A stated
    * outcome rather than a failed install: the composition point branches on it and
    * leaves the machine non-resident instead of throwing (EXC-1167). */

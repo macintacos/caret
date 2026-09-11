@@ -64,28 +64,33 @@ export function createSystemdManager(deps: SystemdDeps = {}): ServiceManager {
     ]);
     const enablement = enabled.stdout.trim();
     const activity = active.stdout.trim();
+    // Both verbs print their answer on stdout at every exit code, so the word is what is
+    // read and the exit status adds nothing. Absent output is systemd failing to answer
+    // rather than an answer: the only negative match here, so it is the only one an
+    // unrecognised word could flip the unsafe way — installed on silence would have a
+    // reconcile skip a machine holding nothing.
+    const installed = enablement !== "" && enablement !== "not-found";
+    // startsWith, because `mask --runtime` reports `masked-runtime` and is the same
+    // deliberate opt-out. ponytail: a unit written but never enabled reads `disabled` too,
+    // so this cannot separate it from a real opt-out — install always enables, so the
+    // ambiguous window is an enable that failed after the write. Upgrade path if it ever
+    // matters: compare against default.target.wants.
+    const disabled = enablement === "disabled" || enablement.startsWith("masked");
     return {
-      // Both verbs print their answer on stdout at every exit code, so the word is what
-      // is read and the exit status adds nothing. Absent output is systemd failing to
-      // answer rather than an answer: the only negative match here, so it is the only
-      // one an unrecognised word could flip the unsafe way — installed on silence would
-      // have a reconcile skip a machine holding nothing.
-      installed: enablement !== "" && enablement !== "not-found",
+      installed,
       running: activity === "active",
-      // startsWith, because `mask --runtime` reports `masked-runtime` and is the same
-      // deliberate opt-out. ponytail: a unit written but never enabled reads `disabled`
-      // too, so this cannot separate it from a real opt-out — install always enables, so
-      // the ambiguous window is an enable that failed after the write. Upgrade path if
-      // it ever matters: compare against default.target.wants.
-      disabled: enablement === "disabled" || enablement.startsWith("masked"),
-      failed: activity === "failed",
+      disabled,
+      // Matched on the words that end the restarts rather than those that keep them, so a
+      // word systemd adds later waits on the supervisor instead of racing it for the port.
+      // A restart job shows `inactive` too, but only between two turns of systemd's loop.
+      keepsAlive: installed && !disabled && activity !== "inactive" && activity !== "failed",
     };
   }
 
   async function readStatus(): Promise<ServiceStatus> {
     const unsupported = await probeSystemd();
     if (unsupported) {
-      return { installed: false, running: false, disabled: false, unsupported };
+      return { installed: false, running: false, disabled: false, keepsAlive: false, unsupported };
     }
     return readEnablement();
   }

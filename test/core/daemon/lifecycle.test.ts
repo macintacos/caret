@@ -417,7 +417,10 @@ function recordingHealth(next: () => HealthBody | null) {
 const supervisor = ({ status, ...over }: Parameters<typeof fakeServiceManager>[0] = {}) =>
   fakeServiceManager({
     ...over,
-    status: typeof status === "function" ? status : { installed: true, running: true, ...status },
+    status:
+      typeof status === "function"
+        ? status
+        : { installed: true, running: true, keepsAlive: true, ...status },
   });
 
 test("a resident peer's service is cycled, and the hook attaches to its successor", async () => {
@@ -678,16 +681,13 @@ test("an empty port under a supervisor is left to the supervised daemon", async 
   expect({ calls, spawns }).toEqual({ calls: [], spawns: 0 });
 });
 
-// A service record can outlive a running supervisor: the user turned caret off in Login
-// Items or `systemctl --user disable`, the launcher booted the agent out after a terminal
-// failure, or systemd parked the unit after one. Waiting on a supervisor that is not
-// coming would stall every cold hook.
+// A service record can outlive a running supervisor: the user turned caret off, the
+// launcher booted the agent out after a terminal failure, or systemd parked or stopped the
+// unit. Waiting on a supervisor that is not coming would stall every cold hook.
 test.each<[string, ServiceManager["status"]]>([
-  ["turned off by the user", async () => ({ installed: true, running: false, disabled: true })],
-  ["not loaded", async () => ({ installed: false, running: false, disabled: false })],
   [
-    "parked by systemd after a terminal exit",
-    async () => ({ installed: true, running: false, disabled: false, failed: true }),
+    "not going to start one by itself",
+    async () => ({ installed: true, running: false, disabled: false, keepsAlive: false }),
   ],
   [
     "unreadable",
@@ -719,7 +719,7 @@ test.each<[string, ServiceManager["status"]]>([
 // Each read spawns launchctl or systemctl processes, on the path a cold hook waits on.
 test("the supervisor's status is read once per call", async () => {
   const { statusReads, manager: service } = supervisor({
-    status: async () => ({ installed: true, running: false, disabled: true }),
+    status: async () => ({ installed: true, running: false, disabled: true, keepsAlive: false }),
   });
   let probes = 0;
   await ensureDaemon(

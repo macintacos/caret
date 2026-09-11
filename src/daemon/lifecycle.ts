@@ -270,12 +270,11 @@ async function restartService(service: Supervisor, stale: HealthBody): Promise<b
   }
 }
 
-/** Whether the supervisor will start a daemon on its own: its unit is loaded, the user
- * has not turned it off, and systemd has not parked it. A status that cannot be read
+/** Whether the supervisor will start a daemon on its own. A status that cannot be read
  * counts as no. */
 async function supervisorExpected(service: Supervisor): Promise<boolean> {
   const status = await service.status().catch(() => null);
-  return status?.installed === true && !status.disabled && !status.failed;
+  return status?.keepsAlive === true;
 }
 
 /** Read + validate the daemon lock; null if missing or unparseable. */
