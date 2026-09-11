@@ -3,6 +3,7 @@ import { afterEach, expect, test } from "bun:test";
 import { setupTempStateDir } from "@test/support/env.ts";
 import { caretLogRecords } from "@test/support/ndjson.ts";
 import { logFile } from "@/config/paths.ts";
+import type { EnsureOptions } from "@/daemon/lifecycle.ts";
 import { setLogLevel } from "@/lib/log.ts";
 import type { Decision, PlanInput } from "@/lib/types.ts";
 import { PLAN_FORMAT_DENY_MESSAGE } from "@/plan/format.ts";
@@ -283,6 +284,36 @@ test("the startup ensure takes over, the reconnect only attaches", async () => {
     }),
   );
   expect(takeovers).toEqual([undefined, false]);
+});
+
+// A daemon stepping down refuses new reviews with a 503 while its supervisor brings up
+// the next one. The review goes to that successor — attaching, like any reconnect, and
+// waiting past the instance that refused — rather than being denied.
+test("a review refused by a draining daemon is re-posted to its successor", async () => {
+  const ensures: (EnsureOptions | undefined)[] = [];
+  const posts: string[] = [];
+  const out = await runReview(
+    stdin,
+    reviewDeps({
+      ensureDaemon: async (opts) => {
+        ensures.push(opts);
+        return ensures.length === 1 ? "http://draining" : "http://successor";
+      },
+      postReview: async (baseUrl: string) => {
+        posts.push(baseUrl);
+        return baseUrl === "http://draining" ? null : { id: "rid" };
+      },
+    }),
+  );
+  expect(ensures).toEqual([undefined, { takeover: false, draining: true }]);
+  expect(posts).toEqual(["http://draining", "http://successor"]);
+  expect(out.behavior).toBe("allow");
+});
+
+test("a review refused by two draining daemons is denied, naming the drain", async () => {
+  const out = await runReview(stdin, reviewDeps({ postReview: async () => null }));
+  expect(out.behavior).toBe("deny");
+  expect(out.feedback).toContain("draining");
 });
 
 test("the poll loop is bounded by timeoutMs (endless heartbeats → deny)", async () => {

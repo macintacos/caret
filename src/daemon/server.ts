@@ -84,8 +84,9 @@ const FILE_REF_BATCH = 64;
 /** How long a stepping-down daemon waits for in-flight writes and unread decisions
  * before it releases the port anyway. Must stay under the supervisors'
  * SIGTERM→SIGKILL grace (launchd's 20s and systemd's 90s defaults; neither unit
- * overrides them) and ensureDaemon's retire-and-backoff loop (~14s over
- * prodEnsureDeps' 12 attempts). */
+ * overrides them) and ensureDaemon's per-wait budget (~14s over prodEnsureDeps' 12
+ * attempts) — the retire loop, a cycled service's successor wait, and the re-post
+ * after a 503 each draw against it. */
 const DRAIN_DEADLINE_MS = 5_000;
 
 /** Decides whether an incoming plan starts a new review or appends a version.
@@ -508,7 +509,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // POST /api/reviews — an incoming plan from the hook.
   async function handleCreateReview(req: Request): Promise<Response> {
     if (liveness.isDraining()) {
-      // The hook turns this 503 into its fail-safe deny, so leave a trace here.
+      // 503 is postReview's re-post signal — keep it for draining only. The warn records
+      // the refusal on this side.
       log.warn("drain", "review refused: draining");
       return new Response("draining", { status: 503 });
     }
