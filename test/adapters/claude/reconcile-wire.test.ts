@@ -32,7 +32,6 @@ function pendingReview(over: Partial<ClientReview> = {}): ClientReview {
     cwd: "/Users/dev/projects/widget",
     title: "Add a health-check endpoint",
     status: "pending",
-    planEpoch: 0,
     version: 1,
     currentPlan: "# Add a health-check endpoint\n",
     annotations: [],

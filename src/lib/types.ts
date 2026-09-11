@@ -163,8 +163,6 @@ export interface Review {
   cwd: string;
   title: string;
   status: ReviewStatus;
-  /** Bumps on each approval for the session; drives revision threading. */
-  planEpoch: number;
   versions: PlanVersion[];
   /** Unsent "general comment" draft for the Request Changes dialog. Review-scoped
    * (not version-scoped like annotations): it has no anchor in a specific plan
@@ -185,7 +183,6 @@ export interface ClientReview {
   cwd: string;
   title: string;
   status: ReviewStatus;
-  planEpoch: number;
   version: number;
   currentPlan: string;
   annotations: Annotation[];
@@ -234,7 +231,6 @@ export interface RouteResult {
   id: string;
   action: "new" | "append";
   version: number;
-  planEpoch: number;
   /** Stale pending reviews of the same session this routing expired (EXC-454). */
   expired: string[];
 }
@@ -534,7 +530,6 @@ export function toClientReview(review: Review): ClientReview {
     cwd: review.cwd,
     title: review.title,
     status: review.status,
-    planEpoch: review.planEpoch,
     version: cur.version,
     currentPlan: cur.plan,
     annotations: cur.annotations,

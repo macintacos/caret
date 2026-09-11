@@ -4,8 +4,8 @@
 // would fold into the wrong thread. Rule: a new ExitPlanMode for a session
 // APPENDS a version to its latest review ONLY IF that review is currently
 // `rejected` (changes requested, awaiting revision); otherwise it starts a NEW
-// thread. planEpoch is the session's approval count, stamped on each new thread,
-// so a plan after an approval is provably a fresh thread.
+// thread. Approval removes the review from the store, so the session's next plan
+// never appends to it.
 
 import { randomBytes } from "node:crypto";
 
@@ -88,27 +88,22 @@ export async function routeIncomingPlan(
       sessionId,
       action: "append",
       version,
-      planEpoch: latest.planEpoch,
     });
     return {
       id: latest.id,
       action: "append",
       version,
-      planEpoch: latest.planEpoch,
       expired,
     };
   }
 
-  // Otherwise start a new thread, stamped with the session's current epoch.
   const id = newReviewId();
-  const planEpoch = store.epochOf(sessionId);
   const review: Review = {
     id,
     sessionId,
     cwd: input.cwd ?? "",
     title: input.title?.trim() || deriveTitle(plan),
     status: "pending",
-    planEpoch,
     cmux: input.cmux,
     versions: [{ version: 1, plan, annotations: [], createdAt: now }],
     createdAt: now,
@@ -120,7 +115,6 @@ export async function routeIncomingPlan(
     sessionId,
     action: "new",
     version: 1,
-    planEpoch,
   });
-  return { id, action: "new", version: 1, planEpoch, expired };
+  return { id, action: "new", version: 1, expired };
 }

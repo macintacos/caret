@@ -23,7 +23,6 @@ function makeReview(over: Partial<Review> = {}): Review {
     cwd: over.cwd ?? "/tmp/proj",
     title: over.title ?? "Plan",
     status: over.status ?? "pending",
-    planEpoch: over.planEpoch ?? 0,
     versions: over.versions ?? [
       { version: 1, plan: "# Plan\n\nbody", annotations: [], createdAt: 1 },
     ],
@@ -118,14 +117,6 @@ test("bySession returns a session's reviews newest-first", async () => {
   await store.create(makeReview({ id: "new", sessionId: "S", createdAt: 5 }));
   await store.create(makeReview({ id: "other", sessionId: "T", createdAt: 9 }));
   expect(store.bySession("S").map((r) => r.id)).toEqual(["new", "old"]);
-});
-
-test("session epoch starts at 0 and bumps independently per session", () => {
-  expect(store.epochOf("S")).toBe(0);
-  store.bumpEpoch("S");
-  store.bumpEpoch("S");
-  expect(store.epochOf("S")).toBe(2);
-  expect(store.epochOf("OTHER")).toBe(0);
 });
 
 test("persisted reads a review (incl. decision) from disk, even after remove", async () => {

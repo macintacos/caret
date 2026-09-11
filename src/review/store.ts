@@ -34,10 +34,6 @@ export interface Store {
    * NOT counted — it persists to disk and rehydrates when its revision arrives,
    * so it must not keep the daemon alive forever. */
   pendingCount(): number;
-  /** Current approval epoch for a session (count of approvals so far). */
-  epochOf(sessionId: string): number;
-  /** Increment a session's approval epoch (called on each approval). */
-  bumpEpoch(sessionId: string): void;
   rehydrate(): Promise<void>;
 }
 
@@ -49,8 +45,6 @@ export function createStore(
   writeChains = new Map<string, Promise<void>>(),
 ): Store {
   const reviews = new Map<string, Review>();
-  // Per-session approval epoch (in-memory; resets when the daemon restarts).
-  const epochs = new Map<string, number>();
 
   function persist(review: Review): Promise<void> {
     const prev = writeChains.get(review.id) ?? Promise.resolve();
@@ -136,14 +130,6 @@ export function createStore(
 
     pendingCount() {
       return [...reviews.values()].filter((r) => r.status === "pending").length;
-    },
-
-    epochOf(sessionId) {
-      return epochs.get(sessionId) ?? 0;
-    },
-
-    bumpEpoch(sessionId) {
-      epochs.set(sessionId, (epochs.get(sessionId) ?? 0) + 1);
     },
 
     async rehydrate() {

@@ -38,12 +38,9 @@ async function reject(id: string) {
   });
 }
 async function approve(id: string) {
-  const r = store.get(id);
-  if (!r) throw new Error("no review");
   await store.update(id, (x) => {
     x.status = "approved";
   });
-  store.bumpEpoch(r.sessionId);
   await store.remove(id);
 }
 
@@ -55,9 +52,9 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-test("first plan for a session starts a new thread (v1, epoch 0)", async () => {
+test("first plan for a session starts a new thread at v1", async () => {
   const r = await routeIncomingPlan(input({ plan: "# Hello\n\nx" }), store);
-  expect(r).toMatchObject({ action: "new", version: 1, planEpoch: 0 });
+  expect(r).toMatchObject({ action: "new", version: 1 });
   expect(store.get(r.id)?.title).toBe("Hello");
 });
 
@@ -123,11 +120,11 @@ test("reject/append/reject/append chains on one review", async () => {
   expect(c).toMatchObject({ id: a.id, action: "append", version: 3 });
 });
 
-test("a plan after an approval starts a new thread with a bumped epoch", async () => {
+test("a plan after an approval starts a new thread", async () => {
   const a = await routeIncomingPlan(input(), store);
   await approve(a.id);
   const b = await routeIncomingPlan(input({ plan: "# next\n\ny" }), store);
-  expect(b).toMatchObject({ action: "new", version: 1, planEpoch: 1 });
+  expect(b).toMatchObject({ action: "new", version: 1 });
   expect(b.id).not.toBe(a.id);
 });
 
@@ -162,7 +159,6 @@ test("an orphan pending behind a rejected latest is expired; the revision still 
     cwd: "/p",
     title: "stale",
     status: "pending",
-    planEpoch: 0,
     versions: [{ version: 1, plan: "old", annotations: [], createdAt: 1 }],
     createdAt: 1,
     updatedAt: 1,
@@ -208,7 +204,7 @@ test("routing a new plan logs review created with full threading context", async
     level: "info",
     step: "review",
     msg: `review created: ${r.id.slice(0, 8)}`,
-    extra: { reviewId: r.id, sessionId: "S", action: "new", version: 1, planEpoch: 0 },
+    extra: { reviewId: r.id, sessionId: "S", action: "new", version: 1 },
   });
 });
 
@@ -221,7 +217,7 @@ test("appending a revision logs review appended with the version", async () => {
     level: "info",
     step: "review",
     msg: `review appended: ${a.id.slice(0, 8)} v2`,
-    extra: { reviewId: a.id, sessionId: "S", action: "append", version: 2, planEpoch: 0 },
+    extra: { reviewId: a.id, sessionId: "S", action: "append", version: 2 },
   });
 });
 

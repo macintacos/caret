@@ -919,10 +919,9 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // Same invariant for the persisted composer scratches (version-scoped).
       currentVersion(r).composerScratches = [];
     });
-    // Approval is terminal: bump the session epoch (so a later plan is a fresh
-    // thread) and drop it from the active set so idle can fire.
+    // Approval is terminal: drop the review from the active set, so a later plan
+    // for the session starts a fresh thread and idle can fire.
     if (decision.behavior === "allow") {
-      store.bumpEpoch(existing.sessionId);
       await store.remove(id);
       // Remember the chosen variant for the UI's next load. Fire-and-forget:
       // never awaited, so it can't delay the 200 that unblocks the long-polling
@@ -956,8 +955,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
 
   // POST /api/reviews/:id/expire — the hook is abandoning this review: its
   // timeout fired and it is about to emit the fail-safe deny (EXC-454). No
-  // decision is recorded and the session epoch is untouched: the plan was never
-  // reviewed.
+  // decision is recorded: the plan was never reviewed.
   async function handleExpire(id: string): Promise<Response> {
     // Drop any unsettled long-poll entry unconditionally — even when the review
     // is already gone, a zombie hook's entry would otherwise pin
