@@ -3,6 +3,10 @@
 
 import { SERVICE_ARGS, type ServiceConfig, sortedEnvironment } from "@/service/manager.ts";
 
+// SIGTERM→SIGKILL grace. launchd's default is system-defined (5s on macOS 15), which
+// leaves the daemon's drain (DRAIN_DEADLINE_MS, src/daemon/server.ts) no room.
+const EXIT_TIMEOUT_SEC = 20;
+
 /** Paths, labels and environment entries are user-derived, and a raw `&` alone is
  * enough to make a plist launchd refuses to parse. */
 function escapeXml(value: string): string {
@@ -37,6 +41,8 @@ ${args}
   <true/>
   <key>KeepAlive</key>
   <true/>
+  <key>ExitTimeOut</key>
+  <integer>${EXIT_TIMEOUT_SEC}</integer>
 ${stringEntry("WorkingDirectory", cfg.workingDirectory, "  ")}
   <key>EnvironmentVariables</key>
   <dict>

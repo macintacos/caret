@@ -121,8 +121,7 @@ export function createLaunchdManager(deps: LaunchdDeps = {}): ServiceManager {
     /** The daemon is not back the moment this resolves: launchd's ThrottleInterval (10s
      * by default) bounds how soon it respawns, and anything waiting on the new daemon
      * must tolerate that. `kickstart -k` SIGTERMs the running daemon, which drains for
-     * up to DRAIN_DEADLINE_MS (src/daemon/server.ts) under launchd's 20s ExitTimeOut
-     * default, which the plist leaves in place. */
+     * up to DRAIN_DEADLINE_MS (src/daemon/server.ts) inside the plist's ExitTimeOut. */
     async restart(): Promise<void> {
       const kicked = await launchctl(["kickstart", "-k", target]);
       if (kicked.code !== 0) throw launchctlError("kickstart", kicked);

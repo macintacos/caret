@@ -19,6 +19,8 @@ test("buildLaunchdPlist emits the whole agent definition", () => {
   <true/>
   <key>KeepAlive</key>
   <true/>
+  <key>ExitTimeOut</key>
+  <integer>20</integer>
   <key>WorkingDirectory</key>
   <string>/</string>
   <key>EnvironmentVariables</key>
