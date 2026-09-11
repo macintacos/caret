@@ -83,3 +83,12 @@ side to match the other.
   `test/core/service/` asserts on the generated unit text, never on what systemd does with
   it. No gate spawns it — not `mise run preflight`, and caret has no CI — so a change
   under `src/service/` or to `bin/caret-launcher` is checked only if you run it yourself.
+- **macOS launchd** — `scripts/macos/verify.sh`, run by hand through
+  `mise run macos verify`, the same arrangement one platform over: it bootstraps the plist
+  `buildLaunchdPlist()` actually emitted under a throwaway label and drives the install,
+  reload, restart, drain, opt-out and uninstall sequence `createLaunchdManager` performs,
+  while `test/core/service/launchd-manager.test.ts` asserts only on the argv a fake
+  `launchctl` recorded. It needs a GUI login session rather than a container, so it can
+  never be gated either. Two checks stay out of its reach and are written up as a hand
+  checklist in [`doc/DEVELOPMENT.md`](../DEVELOPMENT.md#development): the Login Items
+  opt-out `status().disabled` reads, and the `caret install --refresh` cycle.
