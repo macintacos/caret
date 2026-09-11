@@ -21,9 +21,10 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { PREWARM_RESERVE_MS } from "@/commands/prewarm.ts";
 import { HOOK_TIMEOUT_S } from "@/config/constants.ts";
 import { DEFAULTS, loadSettings } from "@/config/settings.ts";
-import { SPAWN_RESERVE_MS, SUPERVISOR_WINDOW_MS } from "@/daemon/lifecycle.ts";
+import { SUPERVISOR_WINDOW_MS } from "@/daemon/lifecycle.ts";
 
 // hooks/hooks.json sits at the repo root, two dirs up from src/, four up from here.
 const HOOKS_JSON = join(import.meta.dir, "../../../hooks/hooks.json");
@@ -70,7 +71,7 @@ test("hooks.json's PermissionRequest timeout is the named HOOK_TIMEOUT_S budget"
 test("ensureDaemon's production deadline fits inside the prewarm hook's timeout", async () => {
   const file = JSON.parse(await Bun.file(HOOKS_JSON).text()) as HooksFile;
   const prewarm = { event: "PostToolUse", matcher: "EnterPlanMode", command: "caret prewarm" };
-  expect(SUPERVISOR_WINDOW_MS + SPAWN_RESERVE_MS + OVERRUN_MS).toBeLessThan(
+  expect(SUPERVISOR_WINDOW_MS + PREWARM_RESERVE_MS + OVERRUN_MS).toBeLessThan(
     hookTimeout(file, prewarm) * 1000,
   );
 });

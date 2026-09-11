@@ -13,7 +13,7 @@ import { prodService } from "@/commands/service-target.ts";
 import { logFile } from "@/config/paths.ts";
 import { loadSettings, reviewTimeoutMs, type Settings } from "@/config/settings.ts";
 import { expireReview, longPoll, postReview } from "@/daemon/client.ts";
-import { ensureDaemon, prodEnsureDeps } from "@/daemon/lifecycle.ts";
+import { ensureDaemon, prodEnsureDeps, SUPERVISOR_WINDOW_MS } from "@/daemon/lifecycle.ts";
 import { readCmuxPane } from "@/lib/cmux.ts";
 import { logError, logWarn } from "@/lib/log.ts";
 import type { Decision, PlanInput } from "@/lib/types.ts";
@@ -52,8 +52,13 @@ function openBrowser(url: string): void {
 export function prodReviewDeps(s: Settings, adapter: AgentAdapter): ReviewDeps {
   return {
     parseHookInput: (stdin) => adapter.parseHookInput(stdin),
+    // A denied review costs the user more than a few seconds' wait, so the fallback spawn
+    // gets a whole supervisor window of its own.
     ensureDaemon: async (opts) =>
-      ensureDaemon(await prodEnsureDeps(s, () => prodService().manager), opts),
+      ensureDaemon(
+        await prodEnsureDeps(s, () => prodService().manager, SUPERVISOR_WINDOW_MS),
+        opts,
+      ),
     postReview,
     longPoll,
     openBrowser,

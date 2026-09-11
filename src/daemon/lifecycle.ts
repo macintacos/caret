@@ -56,12 +56,20 @@ export interface EnsureDeps {
   spawn: () => void;
   /** This world's supervisor, absent when the world installed none. */
   service?: Supervisor;
+  timing: EnsureTiming;
+}
+
+/** How a call paces its probes, and how long it may take. */
+export interface EnsureTiming {
   backoff: (attempt: number) => Promise<void>;
   maxAttempts: number;
   /** Monotonic milliseconds, read for the call's deadline. */
   now: () => number;
   /** How long from the call's start the supervisor has to put a daemon on the port. */
   windowMs: number;
+  /** How long past that window the fallback spawn goes on trying, so a window that ran
+   * out still leaves it a turn. No attempt starts after it. */
+  reserveMs: number;
 }
 
 export function isAddrInUse(e: unknown): boolean {
@@ -95,12 +103,6 @@ function isForeignWorld(h: HealthBody, currentStateDir: string): boolean {
 const FOREIGN_WORLD_ERROR =
   "port serves a different caret world (state dir mismatch) — set CARET_PORT to a free port";
 
-/** How long past the supervisor window a call goes on spawning into an empty port, so a
- * window that ran out still leaves the fallback its turn. Keep `SUPERVISOR_WINDOW_MS`,
- * this, and one overrunning iteration under the prewarm hook's `timeout` in
- * `hooks/hooks.json` (coupling test: test/adapters/claude/hooks-timeout). */
-export const SPAWN_RESERVE_MS = 5_000;
-
 /** How a caller wants the port resolved. */
 export interface EnsureOptions {
   /** Whether to retire a different-build daemon and spawn this binary's own.
@@ -125,23 +127,23 @@ export interface EnsureOptions {
  * daemon, gracefully retire a stale one and spawn a fresh daemon, and clean orphan
  * locks (EXC-406). Under this world's supervisor a stale resident daemon is cycled
  * through the service instead — unless it is newer than this hook — and an empty port
- * is left to the supervisor before this hook spawns into it (EXC-1166). The supervisor
- * gets the call's first `windowMs` and the fallback spawn `SPAWN_RESERVE_MS` past that,
- * and no attempt starts past that deadline. `takeover: false` and `draining` —
- * see EnsureOptions. Never denies a review because takeover failed — an unretireable
- * stale daemon, or one whose service will not restart, is reused (serving its old UI)
- * rather than left unreachable. The one exception: a foreign world's daemon (EXC-461) is
- * neither reused nor retired — that's a config conflict, and cross-attaching IS the bug. */
+ * is left to the supervisor before this hook spawns into it (EXC-1166), for at most the
+ * call's first `timing.windowMs`. `takeover: false` and `draining` — see EnsureOptions.
+ * Never denies a review because takeover failed — an unretireable stale daemon, or one
+ * whose service will not restart, is reused (serving its old UI) rather than left
+ * unreachable. The one exception: a foreign world's daemon (EXC-461) is neither reused nor
+ * retired — that's a config conflict, and cross-attaching IS the bug. */
 export async function ensureDaemon(deps: EnsureDeps, opts: EnsureOptions = {}): Promise<string> {
   const takeover = opts.takeover ?? true;
-  const windowEnd = deps.now() + deps.windowMs;
-  const deadline = windowEnd + SPAWN_RESERVE_MS;
+  const { timing } = deps;
+  const windowEnd = timing.now() + timing.windowMs;
+  const deadline = windowEnd + timing.reserveMs;
   // Past the supervisor window, attach to whatever answers and spawn into an empty port,
   // so a launcher resolving another build than this hook's is never cycled twice.
   let windowSpent = opts.draining ? await awaitDrained(deps, windowEnd) : false;
   let supervised: boolean | undefined;
-  for (let attempt = 0; attempt < deps.maxAttempts && deps.now() < deadline; attempt++) {
-    windowSpent ||= deps.now() >= windowEnd;
+  for (let attempt = 0; attempt < timing.maxAttempts && timing.now() < deadline; attempt++) {
+    windowSpent ||= timing.now() >= windowEnd;
     const h = await deps.health(deps.baseUrl);
     if (h && h.service === "caret") {
       // Another world's daemon: refuse before any reuse/retire logic (EXC-461).
@@ -179,7 +181,7 @@ export async function ensureDaemon(deps: EnsureDeps, opts: EnsureOptions = {}): 
       // daemon is now exiting → re-poll.
       if (!retired) return deps.baseUrl;
       logDebug("retire", "stale daemon retiring");
-      await deps.backoff(attempt);
+      await timing.backoff(attempt);
       continue;
     }
     if (h && h.service !== "caret") {
@@ -210,7 +212,7 @@ export async function ensureDaemon(deps: EnsureDeps, opts: EnsureOptions = {}): 
     } catch (e) {
       if (!isAddrInUse(e)) throw e;
     }
-    await deps.backoff(attempt);
+    await timing.backoff(attempt);
   }
   // Exhausted: never deny a review on takeover failure — reuse even a stale
   // daemon we couldn't retire. The foreign world stays the one exception
@@ -241,8 +243,9 @@ async function awaitSuccessor(
   deps: EnsureDeps,
   { prev, step, until }: { prev: HealthBody | null; step: "service" | "drain"; until: number },
 ): Promise<boolean> {
-  for (let attempt = 0; attempt < deps.maxAttempts && deps.now() < until; attempt++) {
-    await deps.backoff(attempt);
+  const { timing } = deps;
+  for (let attempt = 0; attempt < timing.maxAttempts && timing.now() < until; attempt++) {
+    await timing.backoff(attempt);
     const h = await deps.health(deps.baseUrl);
     if (h?.service === "caret") {
       if (prev === null || h.instanceId !== prev.instanceId) return true;
@@ -428,8 +431,13 @@ export const SUPERVISOR_WINDOW_MS = Array.from({ length: PROD_MAX_ATTEMPTS }, (_
 ).reduce((sum, ms) => sum + ms, 0);
 
 /** The production EnsureDeps. `service` builds this world's supervisor, and is called
- * only when this world's install recorded one. */
-export async function prodEnsureDeps(s: Settings, service: () => Supervisor): Promise<EnsureDeps> {
+ * only when this world's install recorded one. `reserveMs` is the caller's: what its hook
+ * can spare the fallback spawn past the supervisor window. */
+export async function prodEnsureDeps(
+  s: Settings,
+  service: () => Supervisor,
+  reserveMs: number,
+): Promise<EnsureDeps> {
   // The hook's own world (resolved state dir, EXC-461) — both its reuse
   // identity and the retire fallback's SIGTERM gate.
   const world = stateDir();
@@ -447,9 +455,12 @@ export async function prodEnsureDeps(s: Settings, service: () => Supervisor): Pr
     retire: (baseUrl, lock) => retireDaemon(baseUrl, lock, world),
     removeLock: removeDaemonLock,
     spawn: () => spawnDaemon(s),
-    backoff,
-    maxAttempts: PROD_MAX_ATTEMPTS,
-    now: () => performance.now(),
-    windowMs: SUPERVISOR_WINDOW_MS,
+    timing: {
+      backoff,
+      maxAttempts: PROD_MAX_ATTEMPTS,
+      now: () => performance.now(),
+      windowMs: SUPERVISOR_WINDOW_MS,
+      reserveMs,
+    },
   };
 }

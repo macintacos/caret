@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { dirname } from "node:path";
 
-import { ensureDaemonNoOps } from "@test/support/ensure-daemon-deps.ts";
+import { ensureDaemonNoOps, noOpTiming } from "@test/support/ensure-daemon-deps.ts";
 import { setupTempStateDir, withEnv } from "@test/support/env.ts";
 import { caretLogRecords } from "@test/support/ndjson.ts";
 import { fakeServiceManager } from "@test/support/service-manager.ts";
@@ -32,7 +32,6 @@ import {
   removeOwnDaemonLock,
   retireDaemon,
   rotateDaemonStderr,
-  SPAWN_RESERVE_MS,
   spawnDaemon,
 } from "@/daemon/lifecycle.ts";
 import { setLogLevel } from "@/lib/log.ts";
@@ -140,7 +139,7 @@ test("ensureDaemon swallows an EADDRINUSE spawn race and connects to the winner"
 
 test("ensureDaemon gives up after maxAttempts", async () => {
   await expect(
-    ensureDaemon(ensureDeps({ health: async () => null, maxAttempts: 3 })),
+    ensureDaemon(ensureDeps({ health: async () => null, timing: noOpTiming(3) })),
   ).rejects.toThrow();
 });
 
@@ -274,7 +273,7 @@ test("ensureDaemon treats a version mismatch as stale even when the build matche
         retires++;
         return true;
       },
-      maxAttempts: 1,
+      timing: noOpTiming(1),
     }),
   );
   expect(retires).toBe(1);
@@ -361,7 +360,7 @@ test("the never-deny fallback refuses a foreign-world daemon", async () => {
   await expect(
     ensureDaemon(
       ensureDeps({
-        maxAttempts: 2,
+        timing: noOpTiming(2),
         // Refused throughout the loop; a foreign daemon answers only at the
         // exhausted-fallback health check.
         health: async () =>
@@ -377,7 +376,7 @@ test("the never-deny fallback still reuses a same-world stale daemon", async () 
   let calls = 0;
   const url = await ensureDaemon(
     ensureDeps({
-      maxAttempts: 2,
+      timing: noOpTiming(2),
       health: async () =>
         ++calls <= 2
           ? null
@@ -780,10 +779,13 @@ test("draining with no supervisor: spawns as soon as the refusing instance frees
     refusals++;
     return null;
   });
-  const url = await ensureDaemon(ensureDeps({ maxAttempts: 12, health, spawn: () => spawns++ }), {
-    takeover: false,
-    draining: true,
-  });
+  const url = await ensureDaemon(
+    ensureDeps({ timing: noOpTiming(12), health, spawn: () => spawns++ }),
+    {
+      takeover: false,
+      draining: true,
+    },
+  );
   expect(url).toBe("http://localhost:42718");
   expect(spawns).toBe(1);
   expect(served.at(-1)?.instanceId).toBe("spawned");
@@ -815,13 +817,14 @@ function steppedClock() {
   const stepMs = 1_000;
   return {
     stepMs,
-    deps: {
+    timing: {
       now: () => t,
       backoff: async () => {
         t += stepMs;
       },
       maxAttempts: 50,
       windowMs: 10_000,
+      reserveMs: 5_000,
     },
   };
 }
@@ -848,10 +851,10 @@ test.each<[string, EnsureOptions, (calls: string[]) => () => HealthBody | null]>
   const { calls, manager: service } = supervisor();
   const next = answers(calls);
   await expect(
-    ensureDaemon(ensureDeps({ ...clock.deps, service, health: async () => next() }), opts),
+    ensureDaemon(ensureDeps({ timing: clock.timing, service, health: async () => next() }), opts),
   ).rejects.toThrow(/did not become healthy in time/);
-  expect(clock.deps.now()).toBeLessThanOrEqual(
-    clock.deps.windowMs + SPAWN_RESERVE_MS + clock.stepMs,
+  expect(clock.timing.now()).toBeLessThanOrEqual(
+    clock.timing.windowMs + clock.timing.reserveMs + clock.stepMs,
   );
 });
 
@@ -861,21 +864,21 @@ test("a supervisor window that runs out still leaves the fallback spawn its turn
   let firstSpawn: number | undefined;
   const url = await ensureDaemon(
     ensureDeps({
-      ...clock.deps,
+      timing: clock.timing,
       service,
       // Slower to bind than one backoff. Each refused probe meanwhile spawns again; in
       // production those extra spawns lose the bind race.
       health: async () =>
-        firstSpawn !== undefined && clock.deps.now() >= firstSpawn + 2 * clock.stepMs
+        firstSpawn !== undefined && clock.timing.now() >= firstSpawn + 2 * clock.stepMs
           ? peer("spawned", { build: "b1", resident: false })
           : null,
       spawn: () => {
-        firstSpawn ??= clock.deps.now();
+        firstSpawn ??= clock.timing.now();
       },
     }),
   );
   expect(url).toBe("http://localhost:42718");
-  expect(firstSpawn).toBeGreaterThanOrEqual(clock.deps.windowMs);
+  expect(firstSpawn).toBeGreaterThanOrEqual(clock.timing.windowMs);
 });
 
 // A cycle past the window has no time left to wait for the successor, so the hook would
@@ -885,10 +888,12 @@ test("a resident peer first met past the supervisor window is attached, not cycl
   const { calls, manager: service } = supervisor();
   const url = await ensureDaemon(
     ensureDeps({
-      ...clock.deps,
+      timing: clock.timing,
       service,
       health: async () =>
-        clock.deps.now() <= clock.deps.windowMs ? peer("old", { resident: false }) : peer("old"),
+        clock.timing.now() <= clock.timing.windowMs
+          ? peer("old", { resident: false })
+          : peer("old"),
     }),
   );
   expect(url).toBe("http://localhost:42718");
@@ -907,12 +912,12 @@ test("prodEnsureDeps wires the supervisor only into the world that installed it"
     built++;
     return service;
   };
-  expect((await prodEnsureDeps(DEFAULTS, manager)).service).toBeUndefined();
+  expect((await prodEnsureDeps(DEFAULTS, manager, 0)).service).toBeUndefined();
   expect(built).toBe(0);
 
   mkdirSync(dirname(launcherServiceFile()), { recursive: true });
   writeFileSync(launcherServiceFile(), "caret.service\n");
-  expect((await prodEnsureDeps(DEFAULTS, manager)).service).toBe(service);
+  expect((await prodEnsureDeps(DEFAULTS, manager, 0)).service).toBe(service);
 });
 
 // ---- retireDaemon: SIGTERM fallback is gated on the lock's world (EXC-461) ----
