@@ -446,6 +446,10 @@ export interface DaemonDiagnostics {
   system: { platform: string; arch: string; runtime: string };
   /** Milliseconds the daemon has been running (now − boot). */
   uptimeMs: number;
+  /** Whether the daemon stays up instead of idle-exiting (EXC-1164). */
+  resident: boolean;
+  /** The upkeep tasks armed on the daemon's hourly tick; empty when none are. */
+  upkeep: string[];
   /** The live, hot-reloaded parsed settings, scrubbed through the shared
    * redact/core.ts DENY_KEYS walk (never a second redaction path). An opaque
    * graph — the pane narrows it. */

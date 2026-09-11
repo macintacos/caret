@@ -257,6 +257,7 @@ async function bootForResidency(env: Record<string, string>, config = "") {
     const h = (await (await fetch(`http://127.0.0.1:${lock.port}/api/health`)).json()) as {
       resident?: boolean;
     };
+    const d = await (await fetch(`http://127.0.0.1:${lock.port}/api/diagnostics`)).json();
     // The upkeep record lands in the bind's synchronous tail, which SIGTERM cannot
     // preempt: after exit, a missing record means none was armed.
     proc.kill("SIGTERM");
@@ -264,6 +265,7 @@ async function bootForResidency(env: Record<string, string>, config = "") {
     const upkeep = ndjsonRecords(await Bun.file(daemonLog(stateHome)).text()).find(
       (r) => r.step === "upkeep",
     );
+    expect(d).toMatchObject({ resident: h.resident, upkeep: upkeep?.tasks ?? [] });
     return { resident: h.resident, upkeep: upkeep?.tasks };
   } finally {
     proc.kill("SIGKILL");

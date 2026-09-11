@@ -178,6 +178,8 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   // crash rather than being reported — and permanently parked — as a bind failure.
   const buildId = await currentBuildId();
   const assetDigest = await buildHash(assets);
+  // Assigned by startUpkeep after the bind; the diagnostics thunk reads it per request.
+  let armedUpkeep: string[] = [];
 
   try {
     server = createServer({
@@ -214,6 +216,8 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
         buildDiagnostics(
           prodDiagnosticsDeps({
             startedAt,
+            resident,
+            upkeep: armedUpkeep,
             settings: () => settings().current(),
             configPath: cfg,
           }),
@@ -266,6 +270,6 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
     rotateDaemonStderr(svc.current());
     upkeep.push({ name: "stderr-rotate", run: () => rotateDaemonStderr(svc.current()) });
   }
-  startUpkeep({ tasks: upkeep, log });
+  armedUpkeep = startUpkeep({ tasks: upkeep, log });
   // Bun.serve keeps the process alive; the daemon idle-auto-shuts-down.
 }

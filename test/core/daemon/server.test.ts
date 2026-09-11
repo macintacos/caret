@@ -262,6 +262,8 @@ test("GET /api/diagnostics returns the injected diagnostics body", async () => {
   const diag = {
     system: { platform: "linux", arch: "x64", runtime: "bun 0.0.0" },
     uptimeMs: 1234,
+    resident: false,
+    upkeep: [],
     settings: { logging: { level: "info" } },
     config: { path: "/x/config.toml", exists: true, env: [] },
   };
@@ -1214,6 +1216,8 @@ describe("read-confidentiality posture", () => {
       diagnostics: () => ({
         system: { platform: "linux", arch: "x64", runtime: "bun 0.0.0" },
         uptimeMs: 0,
+        resident: false,
+        upkeep: [],
         settings: {},
         config: { path: "/x/config.toml", exists: false, env: [] },
       }),

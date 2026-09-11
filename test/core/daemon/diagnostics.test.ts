@@ -13,6 +13,8 @@ function deps(over: Partial<DiagnosticsDeps> = {}): DiagnosticsDeps {
   return {
     now: () => 5000,
     startedAt: 1000,
+    resident: false,
+    upkeep: [],
     system: () => ({ platform: "darwin", arch: "arm64", runtime: "bun 0.0.0" }),
     settings: () => ({ logging: { level: "info" } }),
     configPath: "/home/u/.config/caret/config.toml",
@@ -24,6 +26,11 @@ function deps(over: Partial<DiagnosticsDeps> = {}): DiagnosticsDeps {
 
 test("uptimeMs is now() minus startedAt", () => {
   expect(buildDiagnostics(deps({ now: () => 5000, startedAt: 1000 })).uptimeMs).toBe(4000);
+});
+
+test("residency and the armed upkeep tasks reach the document", () => {
+  const d = buildDiagnostics(deps({ resident: true, upkeep: ["update-check"] }));
+  expect(d).toMatchObject({ resident: true, upkeep: ["update-check"] });
 });
 
 test("system, config path/exists, and env pass through untouched", () => {
@@ -67,6 +74,8 @@ test("systemInfo reads the live process identity and `bun <semver>` runtime", ()
 test("prodDiagnosticsDeps wires the real readers rather than constants", () => {
   const deps = prodDiagnosticsDeps({
     startedAt: 0,
+    resident: false,
+    upkeep: [],
     settings: () => ({}),
     configPath: "/nonexistent/caret/config.toml",
   });
