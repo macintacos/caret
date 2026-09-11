@@ -2,6 +2,7 @@ import "@ui/support/mount.ts";
 import { describe, expect, test } from "bun:test";
 
 import type { DaemonDiagnostics, HealthIdentity } from "@core/lib/types";
+import { fakeDiagnostics } from "@test/support/diagnostics.ts";
 import { capture, flushUntil, render } from "@ui/support/mount.ts";
 import AdvancedPane from "@/components/AdvancedPane.svelte";
 
@@ -19,12 +20,7 @@ const health: HealthIdentity = {
   isDev: false,
 };
 
-const diagnostics: DaemonDiagnostics = {
-  system: { platform: "darwin", arch: "arm64", runtime: "bun 0.0.0" },
-  uptimeMs: 2 * 3_600_000 + 14 * 60_000,
-  settings: { daemon: { port: 42718 }, review: { timeout_s: 3600 } },
-  config: { path: "/Users/x/.config/caret/config.toml", exists: true, env: [] },
-};
+const diagnostics = fakeDiagnostics();
 
 const textOf = (target: HTMLElement, key: string): string =>
   target.querySelector(`[data-diag="${key}"] .diag-text`)?.textContent ?? "";
@@ -58,7 +54,7 @@ describe("AdvancedPane render", () => {
 
     // The config file path sits above its block.
     expect(target.querySelector('[data-diag="config"] .diag-path')?.textContent).toBe(
-      "/Users/x/.config/caret/config.toml",
+      diagnostics.config.path,
     );
     // The daemon block leads with a lit live dot.
     expect(target.querySelector('[data-diag="daemon"] .diag-dot')?.getAttribute("data-live")).toBe(

@@ -243,7 +243,8 @@ test("a daemon started with CARET_FRESH=1 reports fresh in /api/health", async (
 });
 
 // EXC-1253: isResident, createServer and the upkeep gates are each unit-tested alone;
-// only a real daemon shows runDaemon wires them together.
+// only a real daemon shows runDaemon wires them together, and that /api/diagnostics
+// reports exactly what it armed.
 async function bootForResidency(env: Record<string, string>, config = "") {
   const stateHome = await mkdtemp(join(tmpdir(), "caret-residency-"));
   const configHome = await mkdtemp(join(tmpdir(), "caret-residency-cfg-"));
@@ -257,6 +258,7 @@ async function bootForResidency(env: Record<string, string>, config = "") {
     const h = (await (await fetch(`http://127.0.0.1:${lock.port}/api/health`)).json()) as {
       resident?: boolean;
     };
+    const d = await (await fetch(`http://127.0.0.1:${lock.port}/api/diagnostics`)).json();
     // The upkeep record lands in the bind's synchronous tail, which SIGTERM cannot
     // preempt: after exit, a missing record means none was armed.
     proc.kill("SIGTERM");
@@ -264,6 +266,7 @@ async function bootForResidency(env: Record<string, string>, config = "") {
     const upkeep = ndjsonRecords(await Bun.file(daemonLog(stateHome)).text()).find(
       (r) => r.step === "upkeep",
     );
+    expect(d).toMatchObject({ resident: h.resident, upkeep: upkeep?.tasks ?? [] });
     return { resident: h.resident, upkeep: upkeep?.tasks };
   } finally {
     proc.kill("SIGKILL");
@@ -273,10 +276,10 @@ async function bootForResidency(env: Record<string, string>, config = "") {
   }
 }
 
-test("a supervised daemon is resident and arms both upkeep tasks", async () => {
+test("a supervised daemon is resident and arms every upkeep task", async () => {
   expect(await bootForResidency({ CARET_SUPERVISED: "1" })).toEqual({
     resident: true,
-    upkeep: ["update-check", "stderr-rotate"],
+    upkeep: ["update-check", "review-sweep", "stderr-rotate"],
   });
 });
 

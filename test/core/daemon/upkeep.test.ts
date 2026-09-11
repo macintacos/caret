@@ -59,7 +59,7 @@ test("a throwing task neither escapes nor stops its siblings", () => {
 test("an empty task list schedules nothing", () => {
   const { recs, log } = recordingLog();
   const sched = manualSchedule();
-  startUpkeep({ tasks: [], log, schedule: sched.schedule });
+  expect(startUpkeep({ tasks: [], log, schedule: sched.schedule })).toEqual([]);
   expect(sched.armed).toEqual([]);
   expect(recs).toEqual([]);
 });
@@ -67,7 +67,9 @@ test("an empty task list schedules nothing", () => {
 test("arming logs one record naming the tasks", () => {
   const { recs, log } = recordingLog();
   const sched = manualSchedule();
-  startUpkeep({ tasks: [task("a", () => {})], log, schedule: sched.schedule, everyMs: 5 });
+  expect(
+    startUpkeep({ tasks: [task("a", () => {})], log, schedule: sched.schedule, everyMs: 5 }),
+  ).toEqual(["a"]);
   expect(sched.armed).toHaveLength(1);
   expect(sched.armed[0]?.ms).toBe(5);
   const arms = recs.filter((r) => r.step === "upkeep");

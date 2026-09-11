@@ -28,6 +28,7 @@
 // handshake can't be corrupted. The fixture owns the ephemeral XDG_STATE_HOME
 // and tears it down after the test.
 
+import { fakeDiagnostics } from "@test/support/diagnostics.ts";
 import { NEVER_IDLE_MS } from "@/config/constants.ts";
 import { prefsFile, reviewsDir } from "@/config/paths.ts";
 import { readUpdatesCheck } from "@/config/prefs.ts";
@@ -121,12 +122,7 @@ const server = createServer({
       buildStatus,
       await readUpdatesCheck(prefsFile()),
     ),
-  diagnostics: () => ({
-    system: { platform: "darwin", arch: "arm64", runtime: "bun 0.0.0" },
-    uptimeMs: 2 * 3_600_000 + 14 * 60_000,
-    settings: { daemon: { port: 42718 }, review: { timeout_s: 3600 } },
-    config: { path: "/home/e2e/.config/caret/config.toml", exists: true, env: [] },
-  }),
+  diagnostics: fakeDiagnostics,
   log,
 });
 

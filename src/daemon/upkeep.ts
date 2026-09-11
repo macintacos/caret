@@ -1,8 +1,8 @@
 // The periodic work a daemon that respawns per review gets for free from its own
-// restart (EXC-1164): re-arming the throttled update check, and rotating the stderr
-// log spawnDaemon would otherwise be the only one to check. Each task's throw is
-// contained — an hourly timer reaching onFatal would take a resident daemon down
-// over a housekeeping failure.
+// restart (EXC-1164): re-arming the throttled update check, dropping stale reviews
+// from memory, and rotating the stderr log spawnDaemon would otherwise be the only
+// one to check. Each task's throw is contained — an hourly timer reaching onFatal
+// would take a resident daemon down over a housekeeping failure.
 
 import type { CaretLogger } from "@/lib/log.ts";
 import { errorMessage } from "@/lib/types.ts";
@@ -26,9 +26,10 @@ export interface UpkeepDeps {
   schedule?: (fn: () => void, ms: number) => void;
 }
 
-/** Arm the upkeep tick. A no-op when there is nothing to run. */
-export function startUpkeep({ tasks, log, everyMs, schedule }: UpkeepDeps): void {
-  if (tasks.length === 0) return;
+/** Arm the upkeep tick and return the names of the tasks it armed. A no-op
+ * returning [] when there is nothing to run. */
+export function startUpkeep({ tasks, log, everyMs, schedule }: UpkeepDeps): string[] {
+  if (tasks.length === 0) return [];
   const ms = everyMs ?? UPKEEP_INTERVAL_MS;
   const arm =
     schedule ??
@@ -44,5 +45,7 @@ export function startUpkeep({ tasks, log, everyMs, schedule }: UpkeepDeps): void
       }
     }
   }, ms);
-  log.info("upkeep", "upkeep armed", { everyMs: ms, tasks: tasks.map((task) => task.name) });
+  const names = tasks.map((task) => task.name);
+  log.info("upkeep", "upkeep armed", { everyMs: ms, tasks: names });
+  return names;
 }

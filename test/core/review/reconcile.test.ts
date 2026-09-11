@@ -23,7 +23,6 @@ function clientReview(over: Partial<ClientReview> = {}): ClientReview {
     cwd: "/p",
     title: "t",
     status: "pending",
-    planEpoch: 0,
     version: 1,
     currentPlan: "# P",
     annotations: [],

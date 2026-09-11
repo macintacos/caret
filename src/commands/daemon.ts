@@ -178,6 +178,9 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   // crash rather than being reported — and permanently parked — as a bind failure.
   const buildId = await currentBuildId();
   const assetDigest = await buildHash(assets);
+  // Set from startUpkeep's return in the bind's synchronous tail, before any request can
+  // land. Read per request, so prodDiagnosticsDeps must stay inside the thunk.
+  let armedUpkeep: string[] = [];
 
   try {
     server = createServer({
@@ -214,6 +217,8 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
         buildDiagnostics(
           prodDiagnosticsDeps({
             startedAt,
+            resident,
+            upkeep: armedUpkeep,
             settings: () => settings().current(),
             configPath: cfg,
           }),
@@ -252,11 +257,14 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   // Boot's own check, fired last so it cannot delay the bind or the signal handlers.
   refreshUpdate();
   // The periodic work a daemon that respawns per review got for free from its own
-  // restart (EXC-1164). The two gates differ: the update check only matters to a daemon
-  // that stays up, while any supervised daemon bypasses spawnDaemon, so its
-  // daemon-stderr.log would otherwise never be rotated at all.
+  // restart (EXC-1164). The gates differ: the update check and the review sweep only
+  // matter to a daemon that stays up, while any supervised daemon bypasses spawnDaemon,
+  // so its daemon-stderr.log would otherwise never be rotated at all.
   const upkeep: UpkeepTask[] = [];
-  if (resident) upkeep.push({ name: "update-check", run: refreshUpdate });
+  if (resident) {
+    upkeep.push({ name: "update-check", run: refreshUpdate });
+    upkeep.push({ name: "review-sweep", run: () => store.sweep(Date.now()) });
+  }
   if (isSupervised()) {
     // Once at boot as well as on the tick. A supervised but NON-resident daemon still
     // idle-exits after about a minute, so the hourly tick alone would never fire for it —
@@ -266,6 +274,6 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
     rotateDaemonStderr(svc.current());
     upkeep.push({ name: "stderr-rotate", run: () => rotateDaemonStderr(svc.current()) });
   }
-  startUpkeep({ tasks: upkeep, log });
-  // Bun.serve keeps the process alive; the daemon idle-auto-shuts-down.
+  armedUpkeep = startUpkeep({ tasks: upkeep, log });
+  // Bun.serve keeps the process alive; a non-resident daemon idle-auto-shuts-down.
 }

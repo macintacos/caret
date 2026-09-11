@@ -163,8 +163,6 @@ export interface Review {
   cwd: string;
   title: string;
   status: ReviewStatus;
-  /** Bumps on each approval for the session; drives revision threading. */
-  planEpoch: number;
   versions: PlanVersion[];
   /** Unsent "general comment" draft for the Request Changes dialog. Review-scoped
    * (not version-scoped like annotations): it has no anchor in a specific plan
@@ -185,7 +183,6 @@ export interface ClientReview {
   cwd: string;
   title: string;
   status: ReviewStatus;
-  planEpoch: number;
   version: number;
   currentPlan: string;
   annotations: Annotation[];
@@ -234,7 +231,6 @@ export interface RouteResult {
   id: string;
   action: "new" | "append";
   version: number;
-  planEpoch: number;
   /** Stale pending reviews of the same session this routing expired (EXC-454). */
   expired: string[];
 }
@@ -438,18 +434,20 @@ export interface HealthIdentity {
 }
 
 /**
- * GET /api/diagnostics body — the daemon self-diagnostics the settings Advanced
- * pane renders (EXC-842): system/runtime identity, uptime, the live parsed
- * config.toml settings (scrubbed through redact/core.ts's DENY_KEYS walk), and
- * the config file path plus the CARET_* env overrides in effect. Distinct from
- * GET /api/health, which is a cross-daemon identity probe — this is the local
- * daemon describing itself to its own UI.
+ * GET /api/diagnostics body — the local daemon describing itself (EXC-842), to the
+ * settings Advanced pane and to a direct read. Distinct from GET /api/health, a
+ * cross-daemon identity probe.
  */
 export interface DaemonDiagnostics {
   /** OS platform, CPU architecture, and runtime version (the `bun <semver>` string). */
   system: { platform: string; arch: string; runtime: string };
   /** Milliseconds the daemon has been running (now − boot). */
   uptimeMs: number;
+  /** Whether the daemon stays up instead of idle-exiting (EXC-1164) — the value
+   * /api/health also reports, repeated so one read covers residency and upkeep. */
+  resident: boolean;
+  /** Names of the upkeep tasks this daemon armed; empty when it armed none. */
+  upkeep: string[];
   /** The live, hot-reloaded parsed settings, scrubbed through the shared
    * redact/core.ts DENY_KEYS walk (never a second redaction path). An opaque
    * graph — the pane narrows it. */
@@ -534,7 +532,6 @@ export function toClientReview(review: Review): ClientReview {
     cwd: review.cwd,
     title: review.title,
     status: review.status,
-    planEpoch: review.planEpoch,
     version: cur.version,
     currentPlan: cur.plan,
     annotations: cur.annotations,

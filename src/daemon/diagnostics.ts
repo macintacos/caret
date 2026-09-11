@@ -1,6 +1,5 @@
-// Daemon self-diagnostics for GET /api/diagnostics (EXC-842): the system/runtime
-// identity, uptime, live parsed settings, and config path + CARET_* env
-// overrides the settings Advanced pane renders. buildDiagnostics is pure and
+// Daemon self-diagnostics for GET /api/diagnostics (EXC-842): the
+// DaemonDiagnostics document (src/lib/types.ts). buildDiagnostics is pure and
 // dependency-injected; the effectful half (prodDiagnosticsDeps and systemInfo)
 // sits here beside the interface it satisfies, as lifecycle.ts's prodEnsureDeps
 // does, so a test can assert what production reads without booting the daemon.
@@ -21,6 +20,10 @@ export interface DiagnosticsDeps {
   now: () => number;
   /** The daemon's boot time in ms, captured once at startup. */
   startedAt: number;
+  /** isResident's boot-time verdict. */
+  resident: boolean;
+  /** The names startUpkeep armed. */
+  upkeep: string[];
   system: () => { platform: string; arch: string; runtime: string };
   /** The parsed settings, read on every call so the dump reflects a config edit
    * without a restart. */
@@ -40,12 +43,16 @@ export function systemInfo(): DaemonDiagnostics["system"] {
  * that touch the world. */
 export function prodDiagnosticsDeps(boot: {
   startedAt: number;
+  resident: boolean;
+  upkeep: string[];
   settings: () => unknown;
   configPath: string;
 }): DiagnosticsDeps {
   return {
     now: Date.now,
     startedAt: boot.startedAt,
+    resident: boot.resident,
+    upkeep: boot.upkeep,
     system: systemInfo,
     settings: boot.settings,
     configPath: boot.configPath,
@@ -61,6 +68,8 @@ export function buildDiagnostics(deps: DiagnosticsDeps): DaemonDiagnostics {
   return {
     system: deps.system(),
     uptimeMs: deps.now() - deps.startedAt,
+    resident: deps.resident,
+    upkeep: deps.upkeep,
     settings: scrubGraph(deps.settings()) as Record<string, unknown>,
     config: {
       path: deps.configPath,

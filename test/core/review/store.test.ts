@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, statSync } from "node:fs";
-import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -9,7 +9,7 @@ import { recordingLog } from "@test/support/recording-log.ts";
 import { reviewsDir, stateDir } from "@/config/paths.ts";
 import { writeFileAtomic } from "@/lib/atomic-write.ts";
 import type { Annotation, Review } from "@/lib/types.ts";
-import { createStore, type Store } from "@/review/store.ts";
+import { createStore, STALE_AFTER_MS, type Store } from "@/review/store.ts";
 
 let dir: string;
 let store: Store;
@@ -22,7 +22,6 @@ function makeReview(over: Partial<Review> = {}): Review {
     cwd: over.cwd ?? "/tmp/proj",
     title: over.title ?? "Plan",
     status: over.status ?? "pending",
-    planEpoch: over.planEpoch ?? 0,
     versions: over.versions ?? [
       { version: 1, plan: "# Plan\n\nbody", annotations: [], createdAt: 1 },
     ],
@@ -119,14 +118,6 @@ test("bySession returns a session's reviews newest-first", async () => {
   expect(store.bySession("S").map((r) => r.id)).toEqual(["new", "old"]);
 });
 
-test("session epoch starts at 0 and bumps independently per session", () => {
-  expect(store.epochOf("S")).toBe(0);
-  store.bumpEpoch("S");
-  store.bumpEpoch("S");
-  expect(store.epochOf("S")).toBe(2);
-  expect(store.epochOf("OTHER")).toBe(0);
-});
-
 test("persisted reads a review (incl. decision) from disk, even after remove", async () => {
   await store.create(
     makeReview({ id: "d1", status: "approved", decision: { behavior: "allow", decidedAt: 5 } }),
@@ -217,6 +208,56 @@ test("expire clears persisted composer scratches", async () => {
   expect(onDisk.versions[0]?.composerScratches).toEqual([]);
 });
 
+// ---- staleness ----
+
+/** Backdate a review file's mtime to just past the stale limit. */
+async function makeStale(id: string): Promise<void> {
+  const past = (Date.now() - STALE_AFTER_MS) / 1000 - 60;
+  await utimes(join(dir, `${id}.json`), past, past);
+}
+
+test("sweep stops tracking reviews unchanged for longer than the stale limit", async () => {
+  const now = 10 * STALE_AFTER_MS;
+  const cutoff = now - STALE_AFTER_MS;
+  await store.create(makeReview({ id: "old-r", status: "rejected", updatedAt: cutoff - 1 }));
+  await store.create(makeReview({ id: "old-p", status: "pending", updatedAt: cutoff - 1 }));
+  await store.create(makeReview({ id: "edge", status: "rejected", updatedAt: cutoff }));
+  store.sweep(now);
+  expect(store.get("old-r")).toBeUndefined();
+  expect(store.get("old-p")).toBeUndefined();
+  expect(store.get("edge")?.status).toBe("rejected");
+  // Memory only: the file stays as history.
+  expect((await store.persisted("old-r"))?.status).toBe("rejected");
+});
+
+test("sweep logs each review it drops at info, with its id", async () => {
+  const { recs, log } = recordingLog();
+  const s = createStore(dir, log);
+  await s.create(makeReview({ id: "gone", status: "rejected", updatedAt: 1 }));
+  s.sweep(10 * STALE_AFTER_MS);
+  const rec = recs.find((r) => r.level === "info" && r.step === "store");
+  expect(rec?.extra).toMatchObject({ reviewId: "gone" });
+});
+
+test("rehydrate skips a review unchanged for longer than the stale limit", async () => {
+  await store.create(makeReview({ id: "stale", status: "rejected" }));
+  await store.create(makeReview({ id: "live", status: "rejected" }));
+  await makeStale("stale");
+  const fresh = createStore(dir);
+  await fresh.rehydrate();
+  expect(fresh.get("stale")).toBeUndefined();
+  expect(fresh.get("live")?.status).toBe("rejected");
+});
+
+test("rehydrate never opens a file unchanged for longer than the stale limit", async () => {
+  await Bun.write(join(dir, "old.json"), "{ truncated");
+  await makeStale("old");
+  const { recs, log } = recordingLog();
+  await createStore(dir, log).rehydrate();
+  // A read would warn about the corrupt body.
+  expect(recs.some((r) => r.level === "warn")).toBe(false);
+});
+
 test("rehydrate skips expired reviews", async () => {
   // The terminal-on-disk contract the EXC-454 expiry paths rely on: a record
   // persisted as "expired" must never reload as an approvable orphan.
@@ -233,6 +274,8 @@ test("rehydrate loads a committed mixed-shape review fixture with no loss", asyn
   // Falsifiable back-compat: the checked-in fixture carries one legacy
   // (selection-anchored) and one line-anchored annotation, run through the
   // real read path. A schema change that strands either shape fails here.
+  // It also carries `planEpoch`, a key Review does not declare, so a parse that
+  // rejects unknown keys fails here too.
   const src = join(import.meta.dir, "fixtures", "review-mixed-annotations.json");
   const fixture = JSON.parse(await readFile(src, "utf-8"));
   await copyFile(src, join(dir, `${fixture.id}.json`));

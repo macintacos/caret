@@ -39,7 +39,6 @@ function reviewFixture(over: Partial<ClientReview> = {}): ClientReview {
     cwd: "/tmp/p",
     title: "Plan",
     status: "pending",
-    planEpoch: 0,
     version: 1,
     currentPlan: "# Title\n\nhello world\n",
     annotations: [],

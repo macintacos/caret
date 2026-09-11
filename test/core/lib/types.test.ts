@@ -67,7 +67,6 @@ function reviewWithVersions(versions: Review["versions"]): Review {
     cwd: "/p",
     title: "P",
     status: "pending",
-    planEpoch: 0,
     versions,
     createdAt: 1,
     updatedAt: 1,
