@@ -96,9 +96,9 @@ const FOREIGN_WORLD_ERROR =
   "port serves a different caret world (state dir mismatch) — set CARET_PORT to a free port";
 
 /** How long past the supervisor window a call goes on spawning into an empty port, so a
- * window that ran out still leaves the fallback its turn. Keep `windowMs` plus this under
- * the prewarm hook's `timeout` in `hooks/hooks.json` (coupling test:
- * test/adapters/claude/hooks-timeout). */
+ * window that ran out still leaves the fallback its turn. Keep `SUPERVISOR_WINDOW_MS`,
+ * this, and one overrunning iteration under the prewarm hook's `timeout` in
+ * `hooks/hooks.json` (coupling test: test/adapters/claude/hooks-timeout). */
 export const SPAWN_RESERVE_MS = 5_000;
 
 /** How a caller wants the port resolved. */
@@ -127,7 +127,7 @@ export interface EnsureOptions {
  * through the service instead — unless it is newer than this hook — and an empty port
  * is left to the supervisor before this hook spawns into it (EXC-1166). The supervisor
  * gets the call's first `windowMs` and the fallback spawn `SPAWN_RESERVE_MS` past that,
- * so however the call waits it ends by one deadline. `takeover: false` and `draining` —
+ * and no attempt starts past that deadline. `takeover: false` and `draining` —
  * see EnsureOptions. Never denies a review because takeover failed — an unretireable
  * stale daemon, or one whose service will not restart, is reused (serving its old UI)
  * rather than left unreachable. The one exception: a foreign world's daemon (EXC-461) is
@@ -136,13 +136,12 @@ export async function ensureDaemon(deps: EnsureDeps, opts: EnsureOptions = {}): 
   const takeover = opts.takeover ?? true;
   const windowEnd = deps.now() + deps.windowMs;
   const deadline = windowEnd + SPAWN_RESERVE_MS;
-  // The supervisor gets one window per call, closing at windowEnd whichever wait spends
-  // it: a drain, a cycle, or an empty port. Past it, attach to whatever answers and spawn
-  // into an empty port, so a launcher that resolves another build than this hook's is
-  // never cycled a second time.
+  // Past the supervisor window, attach to whatever answers and spawn into an empty port,
+  // so a launcher resolving another build than this hook's is never cycled twice.
   let windowSpent = opts.draining ? await awaitDrained(deps, windowEnd) : false;
   let supervised: boolean | undefined;
   for (let attempt = 0; attempt < deps.maxAttempts && deps.now() < deadline; attempt++) {
+    windowSpent ||= deps.now() >= windowEnd;
     const h = await deps.health(deps.baseUrl);
     if (h && h.service === "caret") {
       // Another world's daemon: refuse before any reuse/retire logic (EXC-461).
@@ -240,10 +239,9 @@ async function awaitDrained(deps: EnsureDeps, until: number): Promise<boolean> {
  * under a supervisor, but with none it is the answer: the caller spawns into it. */
 async function awaitSuccessor(
   deps: EnsureDeps,
-  wait: { prev: HealthBody | null; step: "service" | "drain"; until: number },
+  { prev, step, until }: { prev: HealthBody | null; step: "service" | "drain"; until: number },
 ): Promise<boolean> {
-  const { prev } = wait;
-  for (let attempt = 0; attempt < deps.maxAttempts && deps.now() < wait.until; attempt++) {
+  for (let attempt = 0; attempt < deps.maxAttempts && deps.now() < until; attempt++) {
     await deps.backoff(attempt);
     const h = await deps.health(deps.baseUrl);
     if (h?.service === "caret") {
@@ -252,7 +250,7 @@ async function awaitSuccessor(
       return true;
     }
   }
-  logWarn(wait.step, "no daemon took the port in time", { instanceId: prev?.instanceId });
+  logWarn(step, "no daemon took the port in time", { instanceId: prev?.instanceId });
   return false;
 }
 
@@ -262,8 +260,8 @@ async function restartService(service: Supervisor, stale: HealthBody): Promise<b
   logInfo("service", "restarting service: stale daemon build", ctx);
   try {
     // ponytail: the call's deadline cannot cut short a restart already running. It returns
-    // once the outgoing daemon stops, which the daemon's 5s drain deadline bounds; race it
-    // against the deadline if that ever matters.
+    // once the outgoing daemon stops, which DRAIN_DEADLINE_MS (src/daemon/server.ts)
+    // bounds; race it against the deadline if that ever matters.
     await service.restart();
     return true;
   } catch (e) {
@@ -415,7 +413,7 @@ export function spawnDaemon(s: Settings, spawn: typeof Bun.spawn = Bun.spawn): v
 }
 
 /** `backoff`'s sleep for `attempt`, before its jitter. */
-export function backoffFloorMs(attempt: number): number {
+function backoffFloorMs(attempt: number): number {
   return Math.min(150 * 2 ** attempt, 1500);
 }
 
@@ -423,13 +421,19 @@ export async function backoff(attempt: number): Promise<void> {
   await Bun.sleep(backoffFloorMs(attempt) + Math.floor(Math.random() * 150));
 }
 
+const PROD_MAX_ATTEMPTS = 12;
+
+/** Production's `windowMs`: what `PROD_MAX_ATTEMPTS` backoffs take at the least. */
+export const SUPERVISOR_WINDOW_MS = Array.from({ length: PROD_MAX_ATTEMPTS }, (_, a) =>
+  backoffFloorMs(a),
+).reduce((sum, ms) => sum + ms, 0);
+
 /** The production EnsureDeps. `service` builds this world's supervisor, and is called
  * only when this world's install recorded one. */
 export async function prodEnsureDeps(s: Settings, service: () => Supervisor): Promise<EnsureDeps> {
   // The hook's own world (resolved state dir, EXC-461) — both its reuse
   // identity and the retire fallback's SIGTERM gate.
   const world = stateDir();
-  const maxAttempts = 12;
   return {
     // The supervisor is machine-wide, so only the world that installed it may cycle it.
     // Not `[daemon].resident`: that defaults on in every world, dev ones included.
@@ -445,11 +449,8 @@ export async function prodEnsureDeps(s: Settings, service: () => Supervisor): Pr
     removeLock: removeDaemonLock,
     spawn: () => spawnDaemon(s),
     backoff,
-    maxAttempts,
+    maxAttempts: PROD_MAX_ATTEMPTS,
     now: () => performance.now(),
-    // One full run of backoffs, jitter aside: what maxAttempts polls take at the least.
-    windowMs: Array.from({ length: maxAttempts }, (_, a) => backoffFloorMs(a)).reduce(
-      (sum, ms) => sum + ms,
-    ),
+    windowMs: SUPERVISOR_WINDOW_MS,
   };
 }

@@ -84,9 +84,9 @@ const FILE_REF_BATCH = 64;
 /** How long a stepping-down daemon waits for in-flight writes and unread decisions
  * before it releases the port anyway. Must stay under the supervisors'
  * SIGTERM→SIGKILL grace (launchd's 20s and systemd's 90s defaults; neither unit
- * overrides them) and ensureDaemon's supervisor window (`windowMs`, about 14s from the
- * call's start), which a cycled service's successor and the re-post after a 503 both
- * have to arrive inside. */
+ * overrides them) and ensureDaemon's supervisor window (`SUPERVISOR_WINDOW_MS`,
+ * src/daemon/lifecycle.ts), which a cycled service's successor and the re-post after a
+ * 503 both have to arrive inside. */
 const DRAIN_DEADLINE_MS = 5_000;
 
 /** Decides whether an incoming plan starts a new review or appends a version.

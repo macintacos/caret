@@ -4,7 +4,7 @@ import type { ServiceConfig, ServiceManager, ServiceStatus } from "@/service/man
 
 export function fakeServiceManager(
   over: {
-    /** Fields over a unit that is not installed, or a function for a read that fails. */
+    /** Fields over a unit that is not installed, or the whole read. */
     status?: Partial<ServiceStatus> | ServiceManager["status"];
     restart?: ServiceManager["restart"];
     /** The caller's own list, to order these verbs against its other steps. */

@@ -21,10 +21,9 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { fakeServiceManager } from "@test/support/service-manager.ts";
 import { HOOK_TIMEOUT_S } from "@/config/constants.ts";
 import { DEFAULTS, loadSettings } from "@/config/settings.ts";
-import { prodEnsureDeps, SPAWN_RESERVE_MS } from "@/daemon/lifecycle.ts";
+import { SPAWN_RESERVE_MS, SUPERVISOR_WINDOW_MS } from "@/daemon/lifecycle.ts";
 
 // hooks/hooks.json sits at the repo root, two dirs up from src/, four up from here.
 const HOOKS_JSON = join(import.meta.dir, "../../../hooks/hooks.json");
@@ -42,42 +41,38 @@ interface HooksFile {
   hooks: Record<string, HookMatcher[]>;
 }
 
-/** The PermissionRequest/ExitPlanMode hook's declared `timeout` (seconds) — the
- * budget Claude Code gives `caret review` before it kills the hook. */
-function permissionRequestTimeout(file: HooksFile): number {
-  const matchers = file.hooks.PermissionRequest ?? [];
-  const exitPlanMode = matchers.find((m) => m.matcher === "ExitPlanMode");
-  const entry = exitPlanMode?.hooks.find((h) => h.command.includes("caret review"));
+/** A hook's declared `timeout` (seconds) — the budget Claude Code gives that caret
+ * subcommand before it kills the hook. */
+function hookTimeout(
+  file: HooksFile,
+  { event, matcher, command }: { event: string; matcher: string; command: string },
+): number {
+  const matchers = file.hooks[event] ?? [];
+  const hook = matchers.find((m) => m.matcher === matcher);
+  const entry = hook?.hooks.find((h) => h.command.includes(command));
   if (entry?.timeout === undefined) {
-    throw new Error("no PermissionRequest/ExitPlanMode `caret review` hook timeout in hooks.json");
+    throw new Error(`no ${event}/${matcher} \`${command}\` hook timeout in hooks.json`);
   }
   return entry.timeout;
 }
 
-/** The PostToolUse/EnterPlanMode hook's declared `timeout` (seconds) — the budget
- * Claude Code gives `caret prewarm` before it kills the hook. */
-function prewarmTimeout(file: HooksFile): number {
-  const matchers = file.hooks.PostToolUse ?? [];
-  const enterPlanMode = matchers.find((m) => m.matcher === "EnterPlanMode");
-  const entry = enterPlanMode?.hooks.find((h) => h.command.includes("caret prewarm"));
-  if (entry?.timeout === undefined) {
-    throw new Error("no PostToolUse/EnterPlanMode `caret prewarm` hook timeout in hooks.json");
-  }
-  return entry.timeout;
-}
+// The attempt under way at the deadline still ends (probe, retire, backoff), then a final probe.
+const OVERRUN_MS = 4_000;
 
 test("hooks.json's PermissionRequest timeout is the named HOOK_TIMEOUT_S budget", async () => {
   const file = JSON.parse(await Bun.file(HOOKS_JSON).text()) as HooksFile;
   // Editing the hooks.json number alone fails here: the manifest and the constant
   // the settings ceiling is built from are the same single source.
-  expect(permissionRequestTimeout(file)).toBe(HOOK_TIMEOUT_S);
+  const review = { event: "PermissionRequest", matcher: "ExitPlanMode", command: "caret review" };
+  expect(hookTimeout(file, review)).toBe(HOOK_TIMEOUT_S);
 });
 
 test("ensureDaemon's production deadline fits inside the prewarm hook's timeout", async () => {
   const file = JSON.parse(await Bun.file(HOOKS_JSON).text()) as HooksFile;
-  // A thunk that cannot throw, since this machine may carry a real service record.
-  const { windowMs } = await prodEnsureDeps(DEFAULTS, () => fakeServiceManager().manager);
-  expect(windowMs + SPAWN_RESERVE_MS).toBeLessThan(prewarmTimeout(file) * 1000);
+  const prewarm = { event: "PostToolUse", matcher: "EnterPlanMode", command: "caret prewarm" };
+  expect(SUPERVISOR_WINDOW_MS + SPAWN_RESERVE_MS + OVERRUN_MS).toBeLessThan(
+    hookTimeout(file, prewarm) * 1000,
+  );
 });
 
 // Drive the review-timeout ceiling through its REAL load path so the assertion

@@ -414,8 +414,11 @@ function recordingHealth(next: () => HealthBody | null) {
 }
 
 /** This world's supervisor, its unit installed and running unless a case says otherwise. */
-const supervisor = (over: Parameters<typeof fakeServiceManager>[0] = {}) =>
-  fakeServiceManager({ status: { installed: true, running: true }, ...over });
+const supervisor = ({ status, ...over }: Parameters<typeof fakeServiceManager>[0] = {}) =>
+  fakeServiceManager({
+    ...over,
+    status: typeof status === "function" ? status : { installed: true, running: true, ...status },
+  });
 
 test("a resident peer's service is cycled, and the hook attaches to its successor", async () => {
   const { calls, manager: service } = supervisor();
@@ -809,12 +812,13 @@ test("draining: a port already freed is a cold start, attached on its first answ
  * so only the deadline can end the call. */
 function steppedClock() {
   let t = 0;
+  const stepMs = 1_000;
   return {
-    elapsed: () => t,
+    stepMs,
     deps: {
       now: () => t,
       backoff: async () => {
-        t += 1_000;
+        t += stepMs;
       },
       maxAttempts: 50,
       windowMs: 10_000,
@@ -845,26 +849,50 @@ test.each<[string, EnsureOptions, (calls: string[]) => () => HealthBody | null]>
   const next = answers(calls);
   await expect(
     ensureDaemon(ensureDeps({ ...clock.deps, service, health: async () => next() }), opts),
-  ).rejects.toThrow();
-  expect(clock.elapsed()).toBeLessThanOrEqual(clock.deps.windowMs + SPAWN_RESERVE_MS + 1_000);
+  ).rejects.toThrow(/did not become healthy in time/);
+  expect(clock.deps.now()).toBeLessThanOrEqual(
+    clock.deps.windowMs + SPAWN_RESERVE_MS + clock.stepMs,
+  );
 });
 
 test("a supervisor window that runs out still leaves the fallback spawn its turn", async () => {
   const clock = steppedClock();
   const { manager: service } = supervisor();
-  const spawnedAt: number[] = [];
+  let firstSpawn: number | undefined;
+  const url = await ensureDaemon(
+    ensureDeps({
+      ...clock.deps,
+      service,
+      // Slower to bind than one backoff. Each refused probe meanwhile spawns again; in
+      // production those extra spawns lose the bind race.
+      health: async () =>
+        firstSpawn !== undefined && clock.deps.now() >= firstSpawn + 2 * clock.stepMs
+          ? peer("spawned", { build: "b1", resident: false })
+          : null,
+      spawn: () => {
+        firstSpawn ??= clock.deps.now();
+      },
+    }),
+  );
+  expect(url).toBe("http://localhost:42718");
+  expect(firstSpawn).toBeGreaterThanOrEqual(clock.deps.windowMs);
+});
+
+// A cycle past the window has no time left to wait for the successor, so the hook would
+// spawn into the port the supervisor is restarting into.
+test("a resident peer first met past the supervisor window is attached, not cycled", async () => {
+  const clock = steppedClock();
+  const { calls, manager: service } = supervisor();
   const url = await ensureDaemon(
     ensureDeps({
       ...clock.deps,
       service,
       health: async () =>
-        spawnedAt.length > 0 ? peer("spawned", { build: "b1", resident: false }) : null,
-      spawn: () => void spawnedAt.push(clock.elapsed()),
+        clock.deps.now() <= clock.deps.windowMs ? peer("old", { resident: false }) : peer("old"),
     }),
   );
   expect(url).toBe("http://localhost:42718");
-  expect(spawnedAt).toHaveLength(1);
-  expect(spawnedAt[0]).toBeGreaterThanOrEqual(clock.deps.windowMs);
+  expect(calls).toEqual([]);
 });
 
 // ---- prodEnsureDeps ----

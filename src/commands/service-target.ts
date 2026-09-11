@@ -1,4 +1,5 @@
-// The running platform's supervisor, wired for the install steps and the hooks alike.
+// The platform supervisor as the composition layer builds it — src/service/ names no
+// concrete manager — shared by every subcommand that drives the service.
 
 import { SERVICE_LABELS, type ServicePlatform, servicePlatform } from "@/service/index.ts";
 import { createLaunchdManager } from "@/service/launchd-manager.ts";
@@ -11,8 +12,8 @@ export interface ServiceTarget {
   manager: ServiceManager;
   label: string;
   /** Where the user turns this off themselves — Login Items on macOS, systemctl on Linux.
-   * Carried here rather than branched on in the step, so the platform decision stays in
-   * one place and both messages that name it are testable on either host. */
+   * Carried here rather than branched on in the install step, so the platform decision
+   * stays in one place and both messages that name it are testable on either host. */
   optOutSurface: string;
 }
 
