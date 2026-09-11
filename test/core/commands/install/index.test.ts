@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { withEnv } from "@test/support/env.ts";
+import { fakeServiceManager } from "@test/support/service-manager.ts";
 import { installExitCode, runInstallSubcommand } from "@/commands/install/index.ts";
 import { INSTALL_TARGET_IDS, type InstallTarget } from "@/commands/install/targets.ts";
 import { recordingUI, silentUI } from "@/commands/install/ui.ts";
@@ -230,17 +231,12 @@ test("the service is registered after the targets, so a refresh cycles the new b
       service: () => ({
         label: "caret.service",
         optOutSurface: "`systemctl --user`",
-        manager: {
-          install: async () => void calls.push("service"),
-          uninstall: async () => {},
-          status: async () => ({ installed: false, running: false, disabled: false }),
-          restart: async () => {},
-        },
+        manager: fakeServiceManager({ calls }).manager,
       }),
       installLauncher: () => {},
     }),
   );
-  expect(calls).toEqual(["claude", "rumdl", "service"]);
+  expect(calls).toEqual(["claude", "rumdl", "install"]);
 });
 
 test.each([

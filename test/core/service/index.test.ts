@@ -1,18 +1,10 @@
 import { expect, test } from "bun:test";
 
+import { fakeServiceManager } from "@test/support/service-manager.ts";
 import { SERVICE_LABELS, selectServiceManager, servicePlatform } from "@/service/index.ts";
-import { LAUNCHD_LABEL, type ServiceManager, SYSTEMD_UNIT } from "@/service/manager.ts";
+import { LAUNCHD_LABEL, SYSTEMD_UNIT } from "@/service/manager.ts";
 
-function fakeManager(): ServiceManager {
-  return {
-    install: async () => {},
-    uninstall: async () => {},
-    status: async () => ({ installed: false, running: false, disabled: false }),
-    restart: async () => {},
-  };
-}
-
-const managers = { darwin: fakeManager(), linux: fakeManager() };
+const managers = { darwin: fakeServiceManager().manager, linux: fakeServiceManager().manager };
 
 test("selectServiceManager picks the manager for the running platform", () => {
   expect(selectServiceManager(managers, "darwin")).toBe(managers.darwin);
