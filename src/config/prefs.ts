@@ -15,6 +15,7 @@ import { dirname } from "node:path";
 import { ensureStateDir, prefsFile } from "@/config/paths.ts";
 import { writeFileAtomic } from "@/lib/atomic-write.ts";
 import { readJsonFile } from "@/lib/json-file.ts";
+import { createKeyedQueue } from "@/lib/keyed-queue.ts";
 import { type CaretLogger, noopLogger } from "@/lib/log.ts";
 import type { ApproveVariantId } from "@/lib/types.ts";
 
@@ -93,13 +94,10 @@ export interface PrefsWriter {
  * fire-and-forget, so the two cannot be made to overlap deterministically from
  * outside. */
 export function createPrefsWriter(file = prefsFile()): PrefsWriter {
-  // The promise each merge queues behind. Stored already-caught, so one failed write
-  // can't reject the next caller's hop; `merge` hands back the uncaught promise, so
-  // the failure still reaches whoever asked for the write.
-  let tail: Promise<void> = Promise.resolve();
+  const writes = createKeyedQueue();
   return {
     merge(patch) {
-      const next = tail.then(async () => {
+      return writes.run(file, async () => {
         ensureStateDir(dirname(file));
         // Merge rather than replace. prefs.json is not a one-key file: a whole-file
         // write would erase the user's `updates.check` opt-out on their next
@@ -114,8 +112,6 @@ export function createPrefsWriter(file = prefsFile()): PrefsWriter {
           mode: 0o600,
         });
       });
-      tail = next.catch(() => {});
-      return next;
     },
   };
 }
