@@ -1,9 +1,7 @@
-// Which supervisor caret runs under. The managers arrive as an argument rather
-// than an import so the platform decision stays in one place while the values come
-// from the composition layer (EXC-1167) — the same shape prodReviewDeps uses to
-// hand the core an adapter capability it names nowhere.
+// The platforms caret can run resident on, and the unit name each one's manager takes.
+// Building a manager is the composition layer's job (src/commands/service-target.ts).
 
-import { LAUNCHD_LABEL, type ServiceManager, SYSTEMD_UNIT } from "@/service/manager.ts";
+import { LAUNCHD_LABEL, SYSTEMD_UNIT } from "@/service/manager.ts";
 
 export type ServicePlatform = "darwin" | "linux";
 
@@ -24,12 +22,4 @@ export function servicePlatform(platform: string = process.platform): ServicePla
     throw new Error(`caret service: unsupported platform ${platform} (darwin/linux only)`);
   }
   return platform;
-}
-
-/** The manager for a platform, defaulting to the current process. */
-export function selectServiceManager(
-  managers: Record<ServicePlatform, ServiceManager>,
-  platform: string = process.platform,
-): ServiceManager {
-  return managers[servicePlatform(platform)];
 }

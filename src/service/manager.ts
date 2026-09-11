@@ -1,7 +1,7 @@
 // The supervisor seam: what a platform service manager must do, and the config a
 // unit file is generated from. Nothing here performs I/O or detects a platform —
 // the launchd and systemd implementations layer on top, and the composition point
-// selects between them (src/service/index.ts).
+// selects between them (src/commands/service-target.ts).
 
 export interface ServiceStatus {
   /** The supervisor knows the unit. What that rests on differs by platform, and the

@@ -1,5 +1,5 @@
-// The platform supervisor as the composition layer builds it — src/service/ names no
-// concrete manager — shared by every subcommand that drives the service.
+// The platform supervisor as the composition layer builds it, shared by every subcommand
+// that drives the service.
 
 import { SERVICE_LABELS, type ServicePlatform, servicePlatform } from "@/service/index.ts";
 import { createLaunchdManager } from "@/service/launchd-manager.ts";
