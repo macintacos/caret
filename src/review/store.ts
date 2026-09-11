@@ -41,13 +41,16 @@ export interface Store {
   rehydrate(): Promise<void>;
 }
 
-export function createStore(dir: string, log: CaretLogger = noopLogger): Store {
+export function createStore(
+  dir: string,
+  log: CaretLogger = noopLogger,
+  // Serialize writes per id: mutations land in order, and writeFileAtomic's temp is
+  // shared by every write to one path.
+  writeChains = new Map<string, Promise<void>>(),
+): Store {
   const reviews = new Map<string, Review>();
   // Per-session approval epoch (in-memory; resets when the daemon restarts).
   const epochs = new Map<string, number>();
-  // Serialize writes per id: mutations land in order, and writeFileAtomic's temp is
-  // shared by every write to one path.
-  const writeChains = new Map<string, Promise<void>>();
 
   function persist(review: Review): Promise<void> {
     const prev = writeChains.get(review.id) ?? Promise.resolve();
@@ -62,6 +65,12 @@ export function createStore(dir: string, log: CaretLogger = noopLogger): Store {
         log.debug("store", `review persisted: ${shortId(review.id)}`, { reviewId: review.id });
       });
     writeChains.set(review.id, next);
+    // Only the tail drops itself: deleting a later persist's entry would let the next one
+    // run beside it. Both arms, not finally — finally re-rejects into the daemon's fatal handler.
+    const drop = () => {
+      if (writeChains.get(review.id) === next) writeChains.delete(review.id);
+    };
+    void next.then(drop, drop);
     return next;
   }
 
