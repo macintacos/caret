@@ -141,6 +141,7 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<Decisi
     let created = await deps.postReview(baseUrl, payload);
     if (!created) {
       // Refused by a daemon stepping down: post once more to its successor.
+      logInfo("review", "review refused: daemon draining", { ...ctx });
       step = "reconnect";
       baseUrl = await deps.ensureDaemon({ takeover: false, draining: true });
       step = "postReview";

@@ -1,8 +1,8 @@
 // Unit coverage for src/daemon/client.ts: waitForHealth — the bounded health-wait
 // the out-of-process callers (the dev driver, the e2e fixture) share — and how
 // postReview reads the daemon's refusals. Driven against a real in-process server
-// so each wrapper exercises its actual fetch, with an injected sleep so no real
-// time passes.
+// so each wrapper exercises its actual fetch; waitForHealth takes an injected sleep
+// so no real time passes.
 import { afterEach, expect, test } from "bun:test";
 
 import { postReview, waitForHealth } from "@/daemon/client.ts";
