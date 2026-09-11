@@ -122,9 +122,7 @@ export function createLaunchdManager(deps: LaunchdDeps = {}): ServiceManager {
      * by default) bounds how soon it respawns, and anything waiting on the new daemon
      * must tolerate that. `kickstart -k` SIGTERMs the running daemon, which drains for
      * up to DRAIN_DEADLINE_MS (src/daemon/server.ts) under launchd's 20s ExitTimeOut
-     * default, which the plist leaves in place. `caret install --refresh`
-     * (src/commands/install/service.ts) and ensureDaemon cycling a stale resident daemon
-     * (src/daemon/lifecycle.ts) both arrive here. */
+     * default, which the plist leaves in place. */
     async restart(): Promise<void> {
       const kicked = await launchctl(["kickstart", "-k", target]);
       if (kicked.code !== 0) throw launchctlError("kickstart", kicked);
