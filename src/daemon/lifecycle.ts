@@ -424,8 +424,8 @@ export async function backoff(attempt: number): Promise<void> {
 const PROD_MAX_ATTEMPTS = 12;
 
 /** Production's `windowMs`: what `PROD_MAX_ATTEMPTS` backoffs take at the least. */
-export const SUPERVISOR_WINDOW_MS = Array.from({ length: PROD_MAX_ATTEMPTS }, (_, a) =>
-  backoffFloorMs(a),
+export const SUPERVISOR_WINDOW_MS = Array.from({ length: PROD_MAX_ATTEMPTS }, (_, attempt) =>
+  backoffFloorMs(attempt),
 ).reduce((sum, ms) => sum + ms, 0);
 
 /** The production EnsureDeps. `service` builds this world's supervisor, and is called

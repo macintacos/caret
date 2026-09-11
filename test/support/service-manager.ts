@@ -20,11 +20,11 @@ export function fakeServiceManager(
   const calls = over.calls ?? [];
   let statusReads = 0;
   let installedConfig: ServiceConfig | undefined;
-  const { status: fields, restart = async () => {} } = over;
-  const status =
-    typeof fields === "function"
-      ? fields
-      : async () => ({ installed: false, running: false, disabled: false, ...fields });
+  const { status, restart = async () => {} } = over;
+  const readStatus =
+    typeof status === "function"
+      ? status
+      : async () => ({ installed: false, running: false, disabled: false, ...status });
   const manager: ServiceManager = {
     install: async (cfg) => {
       calls.push("install");
@@ -33,7 +33,7 @@ export function fakeServiceManager(
     uninstall: async () => void calls.push("uninstall"),
     status: () => {
       statusReads++;
-      return status();
+      return readStatus();
     },
     restart: () => {
       calls.push("restart");
