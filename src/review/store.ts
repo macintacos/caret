@@ -1,16 +1,24 @@
 // In-memory review map with write-through JSON persistence. Memory is the source
 // of truth while running; each mutation is mirrored to <dir>/<id>.json. On
 // startup, rehydrate() reloads only unresolved (pending/rejected) reviews —
-// approved ones stay on disk as history but are not re-tracked.
+// approved ones stay on disk as history but are not re-tracked. A review unchanged
+// for a week is past tracking: rehydrate() leaves its file unread, and sweep() drops
+// it from memory.
 
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 import { ensureStateDir } from "@/config/paths.ts";
 import { writeFileAtomic } from "@/lib/atomic-write.ts";
 import { readJsonFile } from "@/lib/json-file.ts";
+import { createKeyedQueue } from "@/lib/keyed-queue.ts";
 import { type CaretLogger, noopLogger, shortId } from "@/lib/log.ts";
 import { currentVersion, isUnresolved, type Review } from "@/lib/types.ts";
+
+/** How long a review stays tracked after its last change: a week, far past any hook's
+ * budget (HOOK_TIMEOUT_S), so no hook still waits on a review this stale. A revision that
+ * arrives later starts a new thread. */
+export const STALE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface Store {
   create(review: Review): Promise<void>;
@@ -34,38 +42,28 @@ export interface Store {
    * NOT counted — it persists to disk and rehydrates when its revision arrives,
    * so it must not keep the daemon alive forever. */
   pendingCount(): number;
-  rehydrate(): Promise<void>;
+  /** Stop tracking every review unchanged for STALE_AFTER_MS before `now`. Its file
+   * stays as history. */
+  sweep(now: number): void;
+  /** Load the unresolved reviews whose files changed within STALE_AFTER_MS of `now`. */
+  rehydrate(now?: number): Promise<void>;
 }
 
-export function createStore(
-  dir: string,
-  log: CaretLogger = noopLogger,
-  // Serialize writes per id: mutations land in order, and writeFileAtomic's temp is
-  // shared by every write to one path.
-  writeChains = new Map<string, Promise<void>>(),
-): Store {
+export function createStore(dir: string, log: CaretLogger = noopLogger): Store {
   const reviews = new Map<string, Review>();
+  // Keyed by id: mutations land in order, and writeFileAtomic's temp is shared by every
+  // write to one path.
+  const writes = createKeyedQueue();
 
   function persist(review: Review): Promise<void> {
-    const prev = writeChains.get(review.id) ?? Promise.resolve();
-    const next = prev
-      .catch(() => {})
-      .then(async () => {
-        ensureStateDir(dir);
-        // 0600: the file holds the full unredacted plan body — never world-readable.
-        await writeFileAtomic(join(dir, `${review.id}.json`), JSON.stringify(review, null, 2), {
-          mode: 0o600,
-        });
-        log.debug("store", `review persisted: ${shortId(review.id)}`, { reviewId: review.id });
+    return writes.run(review.id, async () => {
+      ensureStateDir(dir);
+      // 0600: the file holds the full unredacted plan body — never world-readable.
+      await writeFileAtomic(join(dir, `${review.id}.json`), JSON.stringify(review, null, 2), {
+        mode: 0o600,
       });
-    writeChains.set(review.id, next);
-    // Only the tail drops itself: deleting a later persist's entry would let the next one
-    // run beside it. Both arms, not finally — finally re-rejects into the daemon's fatal handler.
-    const drop = () => {
-      if (writeChains.get(review.id) === next) writeChains.delete(review.id);
-    };
-    void next.then(drop, drop);
-    return next;
+      log.debug("store", `review persisted: ${shortId(review.id)}`, { reviewId: review.id });
+    });
   }
 
   return {
@@ -132,7 +130,20 @@ export function createStore(
       return [...reviews.values()].filter((r) => r.status === "pending").length;
     },
 
-    async rehydrate() {
+    sweep(now) {
+      const cutoff = now - STALE_AFTER_MS;
+      for (const r of reviews.values()) {
+        if (r.updatedAt >= cutoff) continue;
+        reviews.delete(r.id);
+        log.info("store", `stale review dropped: ${shortId(r.id)}`, {
+          reviewId: r.id,
+          sessionId: r.sessionId,
+          status: r.status,
+        });
+      }
+    },
+
+    async rehydrate(now = Date.now()) {
       let files: string[];
       try {
         files = await readdir(dir);
@@ -144,8 +155,12 @@ export function createStore(
       let loaded = 0;
       for (const file of files) {
         if (!file.endsWith(".json")) continue;
+        const path = join(dir, file);
         try {
-          const review = JSON.parse(await readFile(join(dir, file), "utf-8")) as Review;
+          // A stat, not a parse: most files are history, and one this stale is past
+          // tracking whatever its status.
+          if ((await stat(path)).mtimeMs < now - STALE_AFTER_MS) continue;
+          const review = JSON.parse(await readFile(path, "utf-8")) as Review;
           if (isUnresolved(review.status)) {
             reviews.set(review.id, review);
             loaded++;

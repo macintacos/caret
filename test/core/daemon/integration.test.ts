@@ -276,10 +276,10 @@ async function bootForResidency(env: Record<string, string>, config = "") {
   }
 }
 
-test("a supervised daemon is resident and arms both upkeep tasks", async () => {
+test("a supervised daemon is resident and arms every upkeep task", async () => {
   expect(await bootForResidency({ CARET_SUPERVISED: "1" })).toEqual({
     resident: true,
-    upkeep: ["update-check", "stderr-rotate"],
+    upkeep: ["update-check", "review-sweep", "stderr-rotate"],
   });
 });
 

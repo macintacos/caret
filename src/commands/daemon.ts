@@ -257,11 +257,14 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   // Boot's own check, fired last so it cannot delay the bind or the signal handlers.
   refreshUpdate();
   // The periodic work a daemon that respawns per review got for free from its own
-  // restart (EXC-1164). The two gates differ: the update check only matters to a daemon
-  // that stays up, while any supervised daemon bypasses spawnDaemon, so its
-  // daemon-stderr.log would otherwise never be rotated at all.
+  // restart (EXC-1164). The gates differ: the update check and the review sweep only
+  // matter to a daemon that stays up, while any supervised daemon bypasses spawnDaemon,
+  // so its daemon-stderr.log would otherwise never be rotated at all.
   const upkeep: UpkeepTask[] = [];
-  if (resident) upkeep.push({ name: "update-check", run: refreshUpdate });
+  if (resident) {
+    upkeep.push({ name: "update-check", run: refreshUpdate });
+    upkeep.push({ name: "review-sweep", run: () => store.sweep(Date.now()) });
+  }
   if (isSupervised()) {
     // Once at boot as well as on the tick. A supervised but NON-resident daemon still
     // idle-exits after about a minute, so the hourly tick alone would never fire for it —

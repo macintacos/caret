@@ -1,8 +1,8 @@
 // The periodic work a daemon that respawns per review gets for free from its own
-// restart (EXC-1164): re-arming the throttled update check, and rotating the stderr
-// log spawnDaemon would otherwise be the only one to check. Each task's throw is
-// contained — an hourly timer reaching onFatal would take a resident daemon down
-// over a housekeeping failure.
+// restart (EXC-1164): re-arming the throttled update check, dropping stale reviews
+// from memory, and rotating the stderr log spawnDaemon would otherwise be the only
+// one to check. Each task's throw is contained — an hourly timer reaching onFatal
+// would take a resident daemon down over a housekeeping failure.
 
 import type { CaretLogger } from "@/lib/log.ts";
 import { errorMessage } from "@/lib/types.ts";

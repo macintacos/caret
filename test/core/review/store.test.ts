@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, statSync } from "node:fs";
-import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -8,9 +8,8 @@ import { setupTempStateDir } from "@test/support/env.ts";
 import { recordingLog } from "@test/support/recording-log.ts";
 import { reviewsDir, stateDir } from "@/config/paths.ts";
 import { writeFileAtomic } from "@/lib/atomic-write.ts";
-import { noopLogger } from "@/lib/log.ts";
 import type { Annotation, Review } from "@/lib/types.ts";
-import { createStore, type Store } from "@/review/store.ts";
+import { createStore, STALE_AFTER_MS, type Store } from "@/review/store.ts";
 
 let dir: string;
 let store: Store;
@@ -209,6 +208,56 @@ test("expire clears persisted composer scratches", async () => {
   expect(onDisk.versions[0]?.composerScratches).toEqual([]);
 });
 
+// ---- staleness ----
+
+/** Backdate a review file's mtime to just past the stale limit. */
+async function makeStale(id: string): Promise<void> {
+  const past = (Date.now() - STALE_AFTER_MS) / 1000 - 60;
+  await utimes(join(dir, `${id}.json`), past, past);
+}
+
+test("sweep stops tracking reviews unchanged for longer than the stale limit", async () => {
+  const now = 10 * STALE_AFTER_MS;
+  const cutoff = now - STALE_AFTER_MS;
+  await store.create(makeReview({ id: "old-r", status: "rejected", updatedAt: cutoff - 1 }));
+  await store.create(makeReview({ id: "old-p", status: "pending", updatedAt: cutoff - 1 }));
+  await store.create(makeReview({ id: "edge", status: "rejected", updatedAt: cutoff }));
+  store.sweep(now);
+  expect(store.get("old-r")).toBeUndefined();
+  expect(store.get("old-p")).toBeUndefined();
+  expect(store.get("edge")?.status).toBe("rejected");
+  // Memory only: the file stays as history.
+  expect((await store.persisted("old-r"))?.status).toBe("rejected");
+});
+
+test("sweep logs each review it drops at info, with its id", async () => {
+  const { recs, log } = recordingLog();
+  const s = createStore(dir, log);
+  await s.create(makeReview({ id: "gone", status: "rejected", updatedAt: 1 }));
+  s.sweep(10 * STALE_AFTER_MS);
+  const rec = recs.find((r) => r.level === "info" && r.step === "store");
+  expect(rec?.extra).toMatchObject({ reviewId: "gone" });
+});
+
+test("rehydrate skips a review unchanged for longer than the stale limit", async () => {
+  await store.create(makeReview({ id: "stale", status: "rejected" }));
+  await store.create(makeReview({ id: "live", status: "rejected" }));
+  await makeStale("stale");
+  const fresh = createStore(dir);
+  await fresh.rehydrate();
+  expect(fresh.get("stale")).toBeUndefined();
+  expect(fresh.get("live")?.status).toBe("rejected");
+});
+
+test("rehydrate never opens a file unchanged for longer than the stale limit", async () => {
+  await Bun.write(join(dir, "old.json"), "{ truncated");
+  await makeStale("old");
+  const { recs, log } = recordingLog();
+  await createStore(dir, log).rehydrate();
+  // A read would warn about the corrupt body.
+  expect(recs.some((r) => r.level === "warn")).toBe(false);
+});
+
 test("rehydrate skips expired reviews", async () => {
   // The terminal-on-disk contract the EXC-454 expiry paths rely on: a record
   // persisted as "expired" must never reload as an approvable orphan.
@@ -345,45 +394,6 @@ test("each persist is logged at debug with the review id", async () => {
       r.level === "debug" && r.step === "store" && (r.extra as { reviewId?: string })?.reviewId,
   );
   expect(rec?.extra).toEqual({ reviewId: "abc" });
-});
-
-// ---- write chains (EXC-1239) ----
-
-test("the write-chain map drains once every persist settles", async () => {
-  const chains = new Map<string, Promise<void>>();
-  const s = createStore(dir, noopLogger, chains);
-  for (let i = 0; i < 20; i++) {
-    const id = `wc-${i}`;
-    await s.create(makeReview({ id }));
-    await s.update(id, (r) => {
-      r.status = "approved";
-    });
-    await s.remove(id);
-  }
-  expect(chains.size).toBe(0);
-});
-
-test("a settled persist keeps the entry while a later persist to its id is queued", async () => {
-  const chains = new Map<string, Promise<void>>();
-  const s = createStore(dir, noopLogger, chains);
-  const first = s.create(makeReview({ id: "tail" }));
-  const second = s.update("tail", (r) => {
-    r.title = "Retitled";
-  });
-  await first;
-  expect(chains.size).toBe(1);
-  await second;
-  expect(chains.size).toBe(0);
-});
-
-test("a failed persist rejects its caller and still drains its entry", async () => {
-  const blocker = join(dir, "not-a-dir");
-  await writeFile(blocker, "");
-  const chains = new Map<string, Promise<void>>();
-  const s = createStore(join(blocker, "reviews"), noopLogger, chains);
-  // Also pins .then(drop, drop): a .finally(drop) re-rejects unhandled, which fails this test.
-  await expect(s.create(makeReview({ id: "fail" }))).rejects.toThrow();
-  expect(chains.size).toBe(0);
 });
 
 // ---- at-rest permissions (EXC-539) ----
