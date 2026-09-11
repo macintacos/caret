@@ -265,6 +265,7 @@ test("status reports a unit systemd does not know about", async () => {
     installed: false,
     running: false,
     disabled: false,
+    failed: false,
   });
 });
 
@@ -274,6 +275,7 @@ test("status reports an enabled unit that is not running", async () => {
     installed: true,
     running: false,
     disabled: false,
+    failed: false,
   });
 });
 
@@ -283,11 +285,24 @@ test("status reads running from is-active", async () => {
     installed: true,
     running: true,
     disabled: false,
+    failed: false,
   });
   expect(fake.calls.slice(1)).toEqual([
     ["systemctl", "--user", "is-active", SYSTEMD_UNIT],
     ["systemctl", "--user", "is-enabled", SYSTEMD_UNIT],
   ]);
+});
+
+test("status reads a parked unit from is-active's `failed`", async () => {
+  // systemd stops restarting a unit after a terminal exit or its start limit, and
+  // is-enabled still answers `enabled` for it.
+  const fake = statusRun("failed", "enabled", 3);
+  expect(await manager(fake).status()).toEqual({
+    installed: true,
+    running: false,
+    disabled: false,
+    failed: true,
+  });
 });
 
 test("status reads a user's opt-out from a disabled unit", async () => {
@@ -296,6 +311,7 @@ test("status reads a user's opt-out from a disabled unit", async () => {
     installed: true,
     running: false,
     disabled: true,
+    failed: false,
   });
 });
 

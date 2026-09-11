@@ -194,11 +194,18 @@ if [ "$(prop NRestarts)" = 0 ]; then
 else
   fail "exit 78 never restarts (NRestarts=0)" "NRestarts=$(prop NRestarts)"
 fi
+# The word status() reads as parked, so a hook spawns rather than waiting on a restart
+# systemd will never make.
+expect_out "a unit parked by exit 78 reads failed" 3 failed systemctl --user is-active "$unit"
 
 set_mode 0
 systemctl --user reset-failed "$unit"
 systemctl --user restart "$unit"
 settled "exit 0 restarts, so the upgrade drain comes back" has_restarted
+# The other direction: a hook waits out a restart gap, so it must not read as parked.
+until_true 45 state_is activating
+expect_out "a restart gap reads activating, not failed" 3 activating \
+  systemctl --user is-active "$unit"
 
 set_mode 1
 systemctl --user reset-failed "$unit"
@@ -209,6 +216,8 @@ systemctl --user restart "$unit" 2>/dev/null
 # refused start request reports, not what the spent unit settles at.
 burst="$(sed -n 's/^StartLimitBurst=//p' "$unit_dir/$unit")"
 settled "an exit 1 burst stops at StartLimitBurst=$burst restarts" burst_spent "$burst"
+expect_out "a unit parked on its start limit reads failed" 3 failed \
+  systemctl --user is-active "$unit"
 
 # The unit is parked on its start limit right here, which is the state a user re-runs
 # `caret install` in. That is why install() resets before it restarts: without the reset

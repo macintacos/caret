@@ -17,6 +17,10 @@ export interface ServiceStatus {
    * masked unit on Linux. Install reads this as an opt-out and never re-enables
    * (EXC-1167). */
   disabled: boolean;
+  /** systemd stopped restarting the unit after a terminal exit or its start limit, and
+   * only `reset-failed` — which install runs — brings it back. Linux only: launchd boots
+   * a parked agent out, so `installed` already reads false there. */
+  failed?: boolean;
   /** Why this host cannot run the service at all, absent when it can. A stated
    * outcome rather than a failed install: the composition point branches on it and
    * leaves the machine non-resident instead of throwing (EXC-1167). */

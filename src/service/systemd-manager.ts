@@ -63,6 +63,7 @@ export function createSystemdManager(deps: SystemdDeps = {}): ServiceManager {
       systemctl("is-enabled", SYSTEMD_UNIT),
     ]);
     const enablement = enabled.stdout.trim();
+    const activity = active.stdout.trim();
     return {
       // Both verbs print their answer on stdout at every exit code, so the word is what
       // is read and the exit status adds nothing. Absent output is systemd failing to
@@ -70,13 +71,14 @@ export function createSystemdManager(deps: SystemdDeps = {}): ServiceManager {
       // one an unrecognised word could flip the unsafe way — installed on silence would
       // have a reconcile skip a machine holding nothing.
       installed: enablement !== "" && enablement !== "not-found",
-      running: active.stdout.trim() === "active",
+      running: activity === "active",
       // startsWith, because `mask --runtime` reports `masked-runtime` and is the same
       // deliberate opt-out. ponytail: a unit written but never enabled reads `disabled`
       // too, so this cannot separate it from a real opt-out — install always enables, so
       // the ambiguous window is an enable that failed after the write. Upgrade path if
       // it ever matters: compare against default.target.wants.
       disabled: enablement === "disabled" || enablement.startsWith("masked"),
+      failed: activity === "failed",
     };
   }
 

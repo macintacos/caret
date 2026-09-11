@@ -674,11 +674,16 @@ test("an empty port under a supervisor is left to the supervised daemon", async 
 });
 
 // A service record can outlive a running supervisor: the user turned caret off in Login
-// Items or `systemctl --user disable`, or the launcher booted the agent out after a
-// terminal failure. Waiting on a supervisor that is not coming would stall every cold hook.
+// Items or `systemctl --user disable`, the launcher booted the agent out after a terminal
+// failure, or systemd parked the unit after one. Waiting on a supervisor that is not
+// coming would stall every cold hook.
 test.each<[string, ServiceManager["status"]]>([
   ["turned off by the user", async () => ({ installed: true, running: false, disabled: true })],
   ["not loaded", async () => ({ installed: false, running: false, disabled: false })],
+  [
+    "parked by systemd after a terminal exit",
+    async () => ({ installed: true, running: false, disabled: false, failed: true }),
+  ],
   [
     "unreadable",
     async () => {
