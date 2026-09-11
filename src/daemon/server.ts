@@ -85,8 +85,8 @@ const FILE_REF_BATCH = 64;
  * before it releases the port anyway. Must stay under the supervisors'
  * SIGTERM→SIGKILL grace (launchd's 20s and systemd's 90s defaults; neither unit
  * overrides them) and ensureDaemon's per-wait budget (~14s over prodEnsureDeps' 12
- * attempts), which each of its waits on a stepping-down daemon spends: the retire
- * loop, a cycled service's successor, and the re-post after a 503. */
+ * attempts) — the retire loop, a cycled service's successor wait, and the re-post
+ * after a 503 each draw against it. */
 const DRAIN_DEADLINE_MS = 5_000;
 
 /** Decides whether an incoming plan starts a new review or appends a version.
