@@ -9,6 +9,7 @@ import type {
   SkillRef,
   UpdateReport,
 } from "@core/lib/types";
+import { fakeDiagnostics } from "@test/support/diagnostics.ts";
 import type { LogCapture } from "@ui/support/helpers.ts";
 import {
   emptyResponse,
@@ -334,14 +335,7 @@ describe("getHealth instrumentation", () => {
 });
 
 describe("getDiagnostics instrumentation", () => {
-  const doc = {
-    system: { platform: "darwin", arch: "arm64", runtime: "bun 0.0.0" },
-    uptimeMs: 1000,
-    resident: false,
-    upkeep: [],
-    settings: { daemon: { port: 42718 } },
-    config: { path: "/x/config.toml", exists: true, env: [] },
-  };
+  const doc = fakeDiagnostics();
 
   test("returns the diagnostics document on success and emits no record", async () => {
     respond = () => Promise.resolve(jsonResponse(doc));

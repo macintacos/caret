@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { type BootOptions, bootDaemon, type TestDaemon } from "@test/support/daemon.ts";
+import { fakeDiagnostics } from "@test/support/diagnostics.ts";
 import { makeFakeUiAssets } from "@test/support/fake-ui-assets.ts";
 import { manualTimer } from "@test/support/manual-timer.ts";
 import { type RecordedEmit, recordingLog } from "@test/support/recording-log.ts";
@@ -259,14 +260,7 @@ test("GET /api/health omits approveVariants when the adapter declares none", asy
 // ---- daemon diagnostics endpoint (EXC-842) ----
 
 test("GET /api/diagnostics returns the injected diagnostics body", async () => {
-  const diag = {
-    system: { platform: "linux", arch: "x64", runtime: "bun 0.0.0" },
-    uptimeMs: 1234,
-    resident: false,
-    upkeep: [],
-    settings: { logging: { level: "info" } },
-    config: { path: "/x/config.toml", exists: true, env: [] },
-  };
+  const diag = fakeDiagnostics();
   await boot({ diagnostics: () => diag });
   const res = await fetch(`${base}/api/diagnostics`);
   expect(res.status).toBe(200);
@@ -1213,14 +1207,7 @@ describe("read-confidentiality posture", () => {
       heartbeatMs: 30,
       listSkills: async () => [{ name: "git", origin: "user" }],
       readSkillDescription: async () => "a description",
-      diagnostics: () => ({
-        system: { platform: "linux", arch: "x64", runtime: "bun 0.0.0" },
-        uptimeMs: 0,
-        resident: false,
-        upkeep: [],
-        settings: {},
-        config: { path: "/x/config.toml", exists: false, env: [] },
-      }),
+      diagnostics: fakeDiagnostics,
       updateReport: () => ({
         install: "binary" as const,
         version: "0.13.0",
