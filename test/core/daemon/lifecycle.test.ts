@@ -25,7 +25,7 @@ import { DEFAULTS, isResident } from "@/config/settings.ts";
 import type { HealthBody } from "@/daemon/client.ts";
 import {
   DAEMON_CWD,
-  type EnsureOptions,
+  type EnsureMode,
   ensureDaemon,
   openDaemonStderr,
   prodEnsureDeps,
@@ -199,12 +199,12 @@ test("ensureDaemon reuses a same-build daemon (no spawn, no retire)", async () =
   expect(retires).toBe(0);
 });
 
-// `takeover: false` is what a mid-review reconnect passes. The daemon answering may
-// be a NEWER build that took the port during an upgrade; retiring it would put this
-// (older) client's build back in charge, and since a reconnect repeats on every
-// dropped poll it would keep undoing the upgrade. Falsifiable: with the flag ignored,
-// the daemon is retired on every attempt until maxAttempts, so `retires` climbs off 0.
-test("ensureDaemon with takeover:false attaches to a different-build daemon", async () => {
+// `attach` is what a mid-review reconnect passes. The daemon answering may be a NEWER
+// build that took the port during an upgrade; retiring it would put this (older) client's
+// build back in charge, and since a reconnect repeats on every dropped poll it would keep
+// undoing the upgrade. Falsifiable: with the mode ignored, the daemon is retired on every
+// attempt until maxAttempts, so `retires` climbs off 0.
+test("ensureDaemon in attach mode attaches to a different-build daemon", async () => {
   let retires = 0;
   let spawns = 0;
   const url = await ensureDaemon(
@@ -216,7 +216,7 @@ test("ensureDaemon with takeover:false attaches to a different-build daemon", as
       },
       spawn: () => spawns++,
     }),
-    { takeover: false },
+    "attach",
   );
   expect(url).toBe("http://localhost:42718");
   expect(retires).toBe(0);
@@ -225,14 +225,14 @@ test("ensureDaemon with takeover:false attaches to a different-build daemon", as
 
 // Attaching is not "never spawn": a daemon that died with nothing replacing it leaves
 // the review unservable, and this client is then the only candidate.
-test("ensureDaemon with takeover:false still spawns when nothing holds the port", async () => {
+test("ensureDaemon in attach mode still spawns when nothing holds the port", async () => {
   let spawns = 0;
   const url = await ensureDaemon(
     ensureDeps({
       health: async () => (spawns === 0 ? null : { service: "caret", build: "b1", version: "v1" }),
       spawn: () => spawns++,
     }),
-    { takeover: false },
+    "attach",
   );
   expect(spawns).toBe(1);
   expect(url).toBe("http://localhost:42718");
@@ -240,7 +240,7 @@ test("ensureDaemon with takeover:false still spawns when nothing holds the port"
 
 // The foreign-world refusal outranks attaching: cross-attaching another world's
 // daemon writes this world's reviews into its state dir (EXC-461).
-test("ensureDaemon with takeover:false still refuses a foreign world", async () => {
+test("ensureDaemon in attach mode still refuses a foreign world", async () => {
   await expect(
     ensureDaemon(
       ensureDeps({
@@ -251,7 +251,7 @@ test("ensureDaemon with takeover:false still refuses a foreign world", async () 
           stateDir: "/other/world",
         }),
       }),
-      { takeover: false },
+      "attach",
     ),
   ).rejects.toThrow(/different caret world/);
 });
@@ -523,12 +523,13 @@ test("a restart that stops the daemon and then fails is followed by a spawn", as
 });
 
 // A reconnecting client may be an old build whose review outlived an upgrade; cycling
-// the service for it is the same mistake as retiring the daemon (see EnsureOptions).
-test("takeover:false attaches to a resident peer without cycling its service", async () => {
+// the service for it is the same mistake as retiring the daemon (see EnsureMode).
+test("attach mode attaches to a resident peer without cycling its service", async () => {
   const { calls, manager: service } = supervisor();
-  const url = await ensureDaemon(ensureDeps({ service, health: async () => peer("old") }), {
-    takeover: false,
-  });
+  const url = await ensureDaemon(
+    ensureDeps({ service, health: async () => peer("old") }),
+    "attach",
+  );
   expect(url).toBe("http://localhost:42718");
   expect(calls).toEqual([]);
 });
@@ -735,7 +736,7 @@ test("the supervisor's status is read once per call", async () => {
 
 // The refusing daemon keeps answering while it drains, and it may be this very build, so
 // the same-build check alone would hand it straight back to be refused again.
-test("draining: waits past the refusing instance to its supervised successor", async () => {
+test("successor mode waits past the refusing instance to its supervised successor", async () => {
   const { manager: service } = supervisor();
   let spawns = 0;
   const drain: (HealthBody | null)[] = [
@@ -746,30 +747,31 @@ test("draining: waits past the refusing instance to its supervised successor", a
   const { served, health } = recordingHealth(() =>
     drain.length > 0 ? (drain.shift() ?? null) : peer("successor", { build: "b1" }),
   );
-  const url = await ensureDaemon(ensureDeps({ service, health, spawn: () => spawns++ }), {
-    takeover: false,
-    draining: true,
-  });
+  const url = await ensureDaemon(
+    ensureDeps({ service, health, spawn: () => spawns++ }),
+    "successor",
+  );
   expect(url).toBe("http://localhost:42718");
   expect(spawns).toBe(0);
   expect(served.at(-1)?.instanceId).toBe("successor");
 });
 
-// The drain wait is the supervisor's one window for the call, whatever `takeover` says.
-test("draining: a resident successor of another build is attached, not cycled", async () => {
+// The drain wait is the supervisor's one window for the call, so the launcher's build is
+// the one that stays.
+test("successor mode attaches a resident successor of another build, never cycling it", async () => {
   const { calls, manager: service } = supervisor();
   const drain: (HealthBody | null)[] = [peer("draining", { build: "b1" }), null];
   const { served, health } = recordingHealth(() =>
     drain.length > 0 ? (drain.shift() ?? null) : peer("successor", { build: "b2" }),
   );
-  await ensureDaemon(ensureDeps({ service, health }), { draining: true });
+  await ensureDaemon(ensureDeps({ service, health }), "successor");
   expect(calls).toEqual([]);
   expect(served.at(-1)?.instanceId).toBe("successor");
 });
 
 // With no supervisor there is no one else to bind the freed port, so the hook spawns
 // into it straight away rather than waiting out the budget first.
-test("draining with no supervisor: spawns as soon as the refusing instance frees the port", async () => {
+test("successor mode with no supervisor spawns as soon as the refusing instance frees the port", async () => {
   let spawns = 0;
   let drainProbes = 0;
   let refusals = 0;
@@ -781,10 +783,7 @@ test("draining with no supervisor: spawns as soon as the refusing instance frees
   });
   const url = await ensureDaemon(
     ensureDeps({ timing: noOpTiming(12), health, spawn: () => spawns++ }),
-    {
-      takeover: false,
-      draining: true,
-    },
+    "successor",
   );
   expect(url).toBe("http://localhost:42718");
   expect(spawns).toBe(1);
@@ -794,15 +793,12 @@ test("draining with no supervisor: spawns as soon as the refusing instance frees
 
 // The refusal only ever names the daemon that was answering then. Once the port has been
 // seen empty, whatever binds next is the successor, not another instance to wait past.
-test("draining: a port already freed is a cold start, attached on its first answer", async () => {
+test("successor mode reads a port already freed as a cold start, attached on its first answer", async () => {
   let spawns = 0;
   const { served, health } = recordingHealth(() =>
     spawns > 0 ? peer("spawned", { build: "b1", resident: false }) : null,
   );
-  const url = await ensureDaemon(ensureDeps({ health, spawn: () => spawns++ }), {
-    takeover: false,
-    draining: true,
-  });
+  const url = await ensureDaemon(ensureDeps({ health, spawn: () => spawns++ }), "successor");
   expect(url).toBe("http://localhost:42718");
   expect(spawns).toBe(1);
   expect(served.filter((h) => h?.instanceId === "spawned")).toHaveLength(1);
@@ -831,27 +827,27 @@ function steppedClock() {
 
 // A hook killed by its own timeout leaves the review nothing at all, so every way the
 // call can wait has to fit one deadline — the fallback spawn's attempts included.
-test.each<[string, EnsureOptions, (calls: string[]) => () => HealthBody | null]>([
+test.each<[string, EnsureMode, (calls: string[]) => () => HealthBody | null]>([
   [
     "a cycled service that never brings a daemon back",
-    {},
+    "takeover",
     (calls) => () => (calls.includes("restart") ? null : peer("old")),
   ],
-  ["an empty port the supervisor never fills", {}, () => () => null],
+  ["an empty port the supervisor never fills", "takeover", () => () => null],
   [
     "a drain whose successor never comes",
-    { draining: true },
+    "successor",
     () => {
       let probes = 0;
       return () => (++probes === 1 ? peer("draining") : null);
     },
   ],
-])("%s ends by the call's deadline", async (_title, opts, answers) => {
+])("%s ends by the call's deadline", async (_title, mode, answers) => {
   const clock = steppedClock();
   const { calls, manager: service } = supervisor();
   const next = answers(calls);
   await expect(
-    ensureDaemon(ensureDeps({ timing: clock.timing, service, health: async () => next() }), opts),
+    ensureDaemon(ensureDeps({ timing: clock.timing, service, health: async () => next() }), mode),
   ).rejects.toThrow(/did not become healthy in time/);
   expect(clock.timing.now()).toBeLessThanOrEqual(
     clock.timing.windowMs + clock.timing.reserveMs + clock.stepMs,

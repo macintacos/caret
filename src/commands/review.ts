@@ -54,10 +54,10 @@ export function prodReviewDeps(s: Settings, adapter: AgentAdapter): ReviewDeps {
     parseHookInput: (stdin) => adapter.parseHookInput(stdin),
     // A denied review costs the user more than a few seconds' wait, so the fallback spawn
     // gets a whole supervisor window of its own.
-    ensureDaemon: async (opts) =>
+    ensureDaemon: async (mode) =>
       ensureDaemon(
         await prodEnsureDeps(s, () => prodService().manager, SUPERVISOR_WINDOW_MS),
-        opts,
+        mode,
       ),
     postReview,
     longPoll,

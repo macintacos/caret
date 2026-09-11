@@ -3,7 +3,7 @@ import { afterEach, expect, test } from "bun:test";
 import { setupTempStateDir } from "@test/support/env.ts";
 import { caretLogRecords } from "@test/support/ndjson.ts";
 import { logFile } from "@/config/paths.ts";
-import type { EnsureOptions } from "@/daemon/lifecycle.ts";
+import type { EnsureMode } from "@/daemon/lifecycle.ts";
 import { setLogLevel } from "@/lib/log.ts";
 import type { Decision, PlanInput } from "@/lib/types.ts";
 import { PLAN_FORMAT_DENY_MESSAGE } from "@/plan/format.ts";
@@ -265,15 +265,15 @@ test("a transient drop reconnects and keeps polling (no premature deny)", async 
 // whose review outlived a caret upgrade is running the OLD build, and a reconnect
 // that took over would reinstall that old daemon — on every dropped poll, so it wins
 // against the new build indefinitely and every later review is served stale. Pinning
-// the flag per call is what makes "recovery is not installation" falsifiable.
+// the mode per call is what makes "recovery is not installation" falsifiable.
 test("the startup ensure takes over, the reconnect only attaches", async () => {
-  const takeovers: (boolean | undefined)[] = [];
+  const modes: (EnsureMode | undefined)[] = [];
   let calls = 0;
   await runReview(
     stdin,
     reviewDeps({
-      ensureDaemon: async (opts) => {
-        takeovers.push(opts?.takeover);
+      ensureDaemon: async (mode) => {
+        modes.push(mode);
         return "http://x";
       },
       longPoll: async () => {
@@ -283,20 +283,20 @@ test("the startup ensure takes over, the reconnect only attaches", async () => {
       },
     }),
   );
-  expect(takeovers).toEqual([undefined, false]);
+  expect(modes).toEqual([undefined, "attach"]);
 });
 
 // A daemon stepping down refuses new reviews with a 503 while its supervisor brings up
 // the next one. The review goes to that successor — attaching, like any reconnect, and
 // waiting past the instance that refused — rather than being denied.
 test("a review refused by a draining daemon is re-posted to its successor", async () => {
-  const ensures: (EnsureOptions | undefined)[] = [];
+  const ensures: (EnsureMode | undefined)[] = [];
   const posts: string[] = [];
   const out = await runReview(
     stdin,
     reviewDeps({
-      ensureDaemon: async (opts) => {
-        ensures.push(opts);
+      ensureDaemon: async (mode) => {
+        ensures.push(mode);
         return ensures.length === 1 ? "http://draining" : "http://successor";
       },
       postReview: async (baseUrl: string) => {
@@ -305,7 +305,7 @@ test("a review refused by a draining daemon is re-posted to its successor", asyn
       },
     }),
   );
-  expect(ensures).toEqual([undefined, { takeover: false, draining: true }]);
+  expect(ensures).toEqual([undefined, "successor"]);
   expect(posts).toEqual(["http://draining", "http://successor"]);
   expect(out.behavior).toBe("allow");
 });

@@ -103,44 +103,42 @@ function isForeignWorld(h: HealthBody, currentStateDir: string): boolean {
 const FOREIGN_WORLD_ERROR =
   "port serves a different caret world (state dir mismatch) — set CARET_PORT to a free port";
 
-/** How a caller wants the port resolved. */
-export interface EnsureOptions {
-  /** Whether to retire a different-build daemon and spawn this binary's own.
-   * Defaults to true — starting a review, or prewarming, is when a build claims
-   * the port. Pass false to ATTACH instead: return whichever same-world daemon is
-   * answering, whatever its build, and spawn only when nothing is.
-   *
-   * A mid-review reconnect passes false. The reconnecting client may be an OLD
-   * build whose review has outlived an upgrade; letting it take over would install
-   * that old build as the port's owner, and since it reconnects on every drop it
-   * would keep winning against the current one indefinitely. Recovery must not
-   * double as installation. Attaching costs nothing: reviews are persisted per
-   * world, so any same-world daemon can serve the decision. */
-  takeover?: boolean;
-  /** The daemon on the port just refused work while stepping down: wait past it to its
-   * successor. That wait is the call's one supervisor window; a port already empty is a
-   * cold start. */
-  draining?: boolean;
-}
+/** How a caller wants the port resolved.
+ *
+ * - `takeover` retires a different-build daemon and spawns this binary's own — starting a
+ *   review, or prewarming, is when a build claims the port.
+ * - `attach` returns whichever same-world daemon is answering, whatever its build, and
+ *   spawns only when nothing is. A mid-review reconnect attaches: the reconnecting client
+ *   may be an OLD build whose review has outlived an upgrade; letting it take over would
+ *   install that old build as the port's owner, and since it reconnects on every drop it
+ *   would keep winning against the current one indefinitely. Recovery must not double as
+ *   installation. Attaching costs nothing: reviews are persisted per world, so any
+ *   same-world daemon can serve the decision.
+ * - `successor` attaches too, but first waits past the daemon on the port, which just
+ *   refused work while stepping down. That wait is the call's one supervisor window; a
+ *   port already empty is a cold start. */
+export type EnsureMode = "takeover" | "attach" | "successor";
 
 /** Ensure a caret daemon owns the port and return its base URL: reuse a same-build
  * daemon, gracefully retire a stale one and spawn a fresh daemon, and clean orphan
  * locks (EXC-406). Under this world's supervisor a stale resident daemon is cycled
  * through the service instead — unless it is newer than this hook — and an empty port
  * is left to the supervisor before this hook spawns into it (EXC-1166), for at most the
- * call's first `timing.windowMs`. `takeover: false` and `draining` — see EnsureOptions.
- * Never denies a review because takeover failed — an unretireable stale daemon, or one
- * whose service will not restart, is reused (serving its old UI) rather than left
- * unreachable. The one exception: a foreign world's daemon (EXC-461) is neither reused nor
- * retired — that's a config conflict, and cross-attaching IS the bug. */
-export async function ensureDaemon(deps: EnsureDeps, opts: EnsureOptions = {}): Promise<string> {
-  const takeover = opts.takeover ?? true;
+ * call's first `timing.windowMs`. `mode` — see EnsureMode. Never denies a review because
+ * takeover failed — an unretireable stale daemon, or one whose service will not restart,
+ * is reused (serving its old UI) rather than left unreachable. The one exception: a
+ * foreign world's daemon (EXC-461) is neither reused nor retired — that's a config
+ * conflict, and cross-attaching IS the bug. */
+export async function ensureDaemon(
+  deps: EnsureDeps,
+  mode: EnsureMode = "takeover",
+): Promise<string> {
   const { timing } = deps;
   const windowEnd = timing.now() + timing.windowMs;
   const deadline = windowEnd + timing.reserveMs;
   // Past the supervisor window, attach to whatever answers and spawn into an empty port,
   // so a launcher resolving another build than this hook's is never cycled twice.
-  let windowSpent = opts.draining ? await awaitDrained(deps, windowEnd) : false;
+  let windowSpent = mode === "successor" ? await awaitDrained(deps, windowEnd) : false;
   let supervised: boolean | undefined;
   for (let attempt = 0; attempt < timing.maxAttempts && timing.now() < deadline; attempt++) {
     windowSpent ||= timing.now() >= windowEnd;
@@ -157,7 +155,7 @@ export async function ensureDaemon(deps: EnsureDeps, opts: EnsureOptions = {}): 
       }
       // Attaching caller: this daemon is not ours, but it is this world's and it
       // is answering, which is all a resumed poll needs.
-      if (!takeover || windowSpent) return deps.baseUrl;
+      if (mode !== "takeover" || windowSpent) return deps.baseUrl;
       // Retiring a supervised daemon only races the supervisor's restart. Cycle the
       // service instead: the launcher resolves caret at exec time, so the restart is
       // the upgrade. Only a peer reporting `resident: true` is the supervised one;
