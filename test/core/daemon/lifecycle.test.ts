@@ -10,9 +10,10 @@ import {
 } from "node:fs";
 import { dirname } from "node:path";
 
-import { ensureDaemonNoOps } from "@test/support/ensure-daemon-deps.ts";
+import { ensureDaemonNoOps, noOpTiming } from "@test/support/ensure-daemon-deps.ts";
 import { setupTempStateDir, withEnv } from "@test/support/env.ts";
 import { caretLogRecords } from "@test/support/ndjson.ts";
+import { fakeServiceManager } from "@test/support/service-manager.ts";
 import {
   daemonLock,
   daemonStderrLogFile,
@@ -24,6 +25,7 @@ import { DEFAULTS, isResident } from "@/config/settings.ts";
 import type { HealthBody } from "@/daemon/client.ts";
 import {
   DAEMON_CWD,
+  type EnsureMode,
   ensureDaemon,
   openDaemonStderr,
   prodEnsureDeps,
@@ -137,7 +139,7 @@ test("ensureDaemon swallows an EADDRINUSE spawn race and connects to the winner"
 
 test("ensureDaemon gives up after maxAttempts", async () => {
   await expect(
-    ensureDaemon(ensureDeps({ health: async () => null, maxAttempts: 3 })),
+    ensureDaemon(ensureDeps({ health: async () => null, timing: noOpTiming(3) })),
   ).rejects.toThrow();
 });
 
@@ -197,12 +199,12 @@ test("ensureDaemon reuses a same-build daemon (no spawn, no retire)", async () =
   expect(retires).toBe(0);
 });
 
-// `takeover: false` is what a mid-review reconnect passes. The daemon answering may
-// be a NEWER build that took the port during an upgrade; retiring it would put this
-// (older) client's build back in charge, and since a reconnect repeats on every
-// dropped poll it would keep undoing the upgrade. Falsifiable: with the flag ignored,
-// the daemon is retired on every attempt until maxAttempts, so `retires` climbs off 0.
-test("ensureDaemon with takeover:false attaches to a different-build daemon", async () => {
+// `attach` is what a mid-review reconnect passes. The daemon answering may be a NEWER
+// build that took the port during an upgrade; retiring it would put this (older) client's
+// build back in charge, and since a reconnect repeats on every dropped poll it would keep
+// undoing the upgrade. Falsifiable: with the mode ignored, the daemon is retired on every
+// attempt until maxAttempts, so `retires` climbs off 0.
+test("ensureDaemon in attach mode attaches to a different-build daemon", async () => {
   let retires = 0;
   let spawns = 0;
   const url = await ensureDaemon(
@@ -214,7 +216,7 @@ test("ensureDaemon with takeover:false attaches to a different-build daemon", as
       },
       spawn: () => spawns++,
     }),
-    { takeover: false },
+    "attach",
   );
   expect(url).toBe("http://localhost:42718");
   expect(retires).toBe(0);
@@ -223,14 +225,14 @@ test("ensureDaemon with takeover:false attaches to a different-build daemon", as
 
 // Attaching is not "never spawn": a daemon that died with nothing replacing it leaves
 // the review unservable, and this client is then the only candidate.
-test("ensureDaemon with takeover:false still spawns when nothing holds the port", async () => {
+test("ensureDaemon in attach mode still spawns when nothing holds the port", async () => {
   let spawns = 0;
   const url = await ensureDaemon(
     ensureDeps({
       health: async () => (spawns === 0 ? null : { service: "caret", build: "b1", version: "v1" }),
       spawn: () => spawns++,
     }),
-    { takeover: false },
+    "attach",
   );
   expect(spawns).toBe(1);
   expect(url).toBe("http://localhost:42718");
@@ -238,7 +240,7 @@ test("ensureDaemon with takeover:false still spawns when nothing holds the port"
 
 // The foreign-world refusal outranks attaching: cross-attaching another world's
 // daemon writes this world's reviews into its state dir (EXC-461).
-test("ensureDaemon with takeover:false still refuses a foreign world", async () => {
+test("ensureDaemon in attach mode still refuses a foreign world", async () => {
   await expect(
     ensureDaemon(
       ensureDeps({
@@ -249,7 +251,7 @@ test("ensureDaemon with takeover:false still refuses a foreign world", async () 
           stateDir: "/other/world",
         }),
       }),
-      { takeover: false },
+      "attach",
     ),
   ).rejects.toThrow(/different caret world/);
 });
@@ -271,7 +273,7 @@ test("ensureDaemon treats a version mismatch as stale even when the build matche
         retires++;
         return true;
       },
-      maxAttempts: 1,
+      timing: noOpTiming(1),
     }),
   );
   expect(retires).toBe(1);
@@ -358,7 +360,7 @@ test("the never-deny fallback refuses a foreign-world daemon", async () => {
   await expect(
     ensureDaemon(
       ensureDeps({
-        maxAttempts: 2,
+        timing: noOpTiming(2),
         // Refused throughout the loop; a foreign daemon answers only at the
         // exhausted-fallback health check.
         health: async () =>
@@ -374,7 +376,7 @@ test("the never-deny fallback still reuses a same-world stale daemon", async () 
   let calls = 0;
   const url = await ensureDaemon(
     ensureDeps({
-      maxAttempts: 2,
+      timing: noOpTiming(2),
       health: async () =>
         ++calls <= 2
           ? null
@@ -410,29 +412,15 @@ function recordingHealth(next: () => HealthBody | null) {
   return { served, health };
 }
 
-type Supervisor = Pick<ServiceManager, "restart" | "status">;
-
-/** This world's supervisor: counts restarts and status reads, and reports its unit
- * installed, running and enabled unless a test overrides status(). */
-function fakeService(over: Partial<Supervisor> = {}) {
-  const counts = { restarts: 0, statusReads: 0 };
-  const status = over.status ?? (async () => ({ installed: true, running: true, disabled: false }));
-  const restart = over.restart ?? (async () => {});
-  const service: Supervisor = {
-    status: () => {
-      counts.statusReads++;
-      return status();
-    },
-    restart: () => {
-      counts.restarts++;
-      return restart();
-    },
-  };
-  return { counts, service };
-}
+/** This world's supervisor, its unit installed and running unless a case says otherwise. */
+const supervisor = ({ status, ...over }: Parameters<typeof fakeServiceManager>[0] = {}) =>
+  fakeServiceManager({
+    ...over,
+    status: typeof status === "function" ? status : { installed: true, running: true, ...status },
+  });
 
 test("a resident peer's service is cycled, and the hook attaches to its successor", async () => {
-  const { counts, service } = fakeService();
+  const { calls, manager: service } = supervisor();
   let retires = 0;
   let spawns = 0;
   // After the cycle the outgoing daemon answers once more while it drains, the port
@@ -440,7 +428,7 @@ test("a resident peer's service is cycled, and the hook attaches to its successo
   // resolved, which the hook attaches to rather than cycling a second time.
   const afterCycle: (HealthBody | null)[] = [peer("old"), null];
   const { served, health } = recordingHealth(() =>
-    counts.restarts === 0
+    !calls.includes("restart")
       ? peer("old")
       : afterCycle.length > 0
         ? (afterCycle.shift() ?? null)
@@ -458,11 +446,7 @@ test("a resident peer's service is cycled, and the hook attaches to its successo
     }),
   );
   expect(url).toBe("http://localhost:42718");
-  expect({ restarts: counts.restarts, retires, spawns }).toEqual({
-    restarts: 1,
-    retires: 0,
-    spawns: 0,
-  });
+  expect({ calls, retires, spawns }).toEqual({ calls: ["restart"], retires: 0, spawns: 0 });
   expect(served.at(-1)?.instanceId).toBe("new");
 });
 
@@ -470,7 +454,7 @@ test("a resident peer's service is cycled, and the hook attaches to its successo
 // hook brings that same build back under a new instance — on every call such a hook
 // makes. OpenCode's pinned plugin, or a session that outlived an update, is that hook.
 test("a hook older than the resident daemon attaches instead of cycling it", async () => {
-  const { counts, service } = fakeService();
+  const { calls, manager: service } = supervisor();
   let retires = 0;
   const url = await ensureDaemon(
     ensureDeps({
@@ -484,13 +468,13 @@ test("a hook older than the resident daemon attaches instead of cycling it", asy
     }),
   );
   expect(url).toBe("http://localhost:42718");
-  expect({ restarts: counts.restarts, retires }).toEqual({ restarts: 0, retires: 0 });
+  expect({ calls, retires }).toEqual({ calls: [], retires: 0 });
 });
 
 // A restart that answers with nothing new leaves the stale daemon on the port; serving it
 // beats denying the review over a takeover that did not happen.
 test("a cycle that never takes effect leaves the stale daemon serving", async () => {
-  const { counts, service } = fakeService();
+  const { calls, manager: service } = supervisor();
   let retires = 0;
   let spawns = 0;
   const url = await ensureDaemon(
@@ -505,11 +489,7 @@ test("a cycle that never takes effect leaves the stale daemon serving", async ()
     }),
   );
   expect(url).toBe("http://localhost:42718");
-  expect({ restarts: counts.restarts, retires, spawns }).toEqual({
-    restarts: 1,
-    retires: 0,
-    spawns: 0,
-  });
+  expect({ calls, retires, spawns }).toEqual({ calls: ["restart"], retires: 0, spawns: 0 });
 });
 
 // `systemctl restart` stops the unit before it starts it, so a start the unit's start
@@ -517,7 +497,7 @@ test("a cycle that never takes effect leaves the stale daemon serving", async ()
 test("a restart that stops the daemon and then fails is followed by a spawn", async () => {
   let stopped = false;
   let spawns = 0;
-  const { service } = fakeService({
+  const { manager: service } = supervisor({
     restart: async () => {
       stopped = true;
       throw new Error("systemctl restart failed: start-limit-hit");
@@ -540,14 +520,15 @@ test("a restart that stops the daemon and then fails is followed by a spawn", as
 });
 
 // A reconnecting client may be an old build whose review outlived an upgrade; cycling
-// the service for it is the same mistake as retiring the daemon (see EnsureOptions).
-test("takeover:false attaches to a resident peer without cycling its service", async () => {
-  const { counts, service } = fakeService();
-  const url = await ensureDaemon(ensureDeps({ service, health: async () => peer("old") }), {
-    takeover: false,
-  });
+// the service for it is the same mistake as retiring the daemon (see EnsureMode).
+test("attach mode attaches to a resident peer without cycling its service", async () => {
+  const { calls, manager: service } = supervisor();
+  const url = await ensureDaemon(
+    ensureDeps({ service, health: async () => peer("old") }),
+    "attach",
+  );
   expect(url).toBe("http://localhost:42718");
-  expect(counts.restarts).toBe(0);
+  expect(calls).toEqual([]);
 });
 
 // Only a peer that says it is resident is the supervised one. Anything else holding the
@@ -558,7 +539,7 @@ test.each<[string, Partial<HealthBody>]>([
   ["a peer that predates residency", { resident: undefined }],
   ["an idle-exiting peer", { resident: false }],
 ])("%s is retired and the port left to the supervised daemon", async (_title, over) => {
-  const { counts, service } = fakeService();
+  const { calls, manager: service } = supervisor();
   let retires = 0;
   let spawns = 0;
   let refusals = 0;
@@ -578,11 +559,7 @@ test.each<[string, Partial<HealthBody>]>([
     }),
   );
   expect(url).toBe("http://localhost:42718");
-  expect({ restarts: counts.restarts, retires, spawns }).toEqual({
-    restarts: 0,
-    retires: 1,
-    spawns: 0,
-  });
+  expect({ calls, retires, spawns }).toEqual({ calls: [], retires: 1, spawns: 0 });
 });
 
 // A dev or test world installed no supervisor of its own — the machine's one belongs to
@@ -613,7 +590,7 @@ test("with no supervisor, a resident peer is retired and the freed port spawned 
 });
 
 test("a foreign world's resident daemon is refused before the service is touched", async () => {
-  const { counts, service } = fakeService();
+  const { calls, manager: service } = supervisor();
   let retires = 0;
   await expect(
     ensureDaemon(
@@ -627,13 +604,13 @@ test("a foreign world's resident daemon is refused before the service is touched
       }),
     ),
   ).rejects.toThrow(/different caret world/);
-  expect({ restarts: counts.restarts, retires }).toEqual({ restarts: 0, retires: 0 });
+  expect({ calls, retires }).toEqual({ calls: [], retires: 0 });
 });
 
 // The fallback spawn inherits the hook's environment, which carries no CARET_SUPERVISED,
 // so the daemon it starts idle-exits and hands the port back to the supervisor.
 test("a cycle whose daemon never returns falls back to a spawn that does not claim residency", async () => {
-  const { counts, service } = fakeService();
+  const { calls, manager: service } = supervisor();
   let spawnedEnv: NodeJS.ProcessEnv | undefined;
   const fakeSpawn = ((_argv: string[], opts: { env?: NodeJS.ProcessEnv; stdio?: unknown[] }) => {
     spawnedEnv = { ...opts.env };
@@ -642,7 +619,7 @@ test("a cycle whose daemon never returns falls back to a spawn that does not cla
     return { unref: () => {} };
   }) as unknown as typeof Bun.spawn;
   const { served, health } = recordingHealth(() => {
-    if (counts.restarts === 0) return peer("old");
+    if (!calls.includes("restart")) return peer("old");
     if (spawnedEnv === undefined) return null;
     return peer("fallback", { build: "b1", resident: isResident(DEFAULTS, spawnedEnv) });
   });
@@ -656,12 +633,12 @@ test("a cycle whose daemon never returns falls back to a spawn that does not cla
     ),
   );
   expect(url).toBe("http://localhost:42718");
-  expect(counts.restarts).toBe(1);
+  expect(calls).toEqual(["restart"]);
   expect(served.at(-1)?.resident).toBe(false);
 });
 
 test("a service that will not restart leaves the resident peer serving", async () => {
-  const { service } = fakeService({
+  const { manager: service } = supervisor({
     restart: async () => {
       throw new Error("launchctl kickstart failed: exit 113");
     },
@@ -685,7 +662,7 @@ test("a service that will not restart leaves the resident peer serving", async (
 });
 
 test("an empty port under a supervisor is left to the supervised daemon", async () => {
-  const { counts, service } = fakeService();
+  const { calls, manager: service } = supervisor();
   let probes = 0;
   let spawns = 0;
   const url = await ensureDaemon(
@@ -698,15 +675,17 @@ test("an empty port under a supervisor is left to the supervised daemon", async 
     }),
   );
   expect(url).toBe("http://localhost:42718");
-  expect({ restarts: counts.restarts, spawns }).toEqual({ restarts: 0, spawns: 0 });
+  expect({ calls, spawns }).toEqual({ calls: [], spawns: 0 });
 });
 
-// A service record can outlive a running supervisor: the user turned caret off in Login
-// Items or `systemctl --user disable`, or the launcher booted the agent out after a
-// terminal failure. Waiting on a supervisor that is not coming would stall every cold hook.
-test.each<[string, Supervisor["status"]]>([
-  ["turned off by the user", async () => ({ installed: true, running: false, disabled: true })],
-  ["not loaded", async () => ({ installed: false, running: false, disabled: false })],
+// A service record can outlive a running supervisor: the user turned caret off, the
+// launcher booted the agent out after a terminal failure, or systemd parked or stopped the
+// unit. Waiting on a supervisor that is not coming would stall every cold hook.
+test.each<[string, ServiceManager["status"]]>([
+  [
+    "not going to start one by itself",
+    async () => ({ installed: true, running: false, disabled: false, keepsAlive: false }),
+  ],
   [
     "unreadable",
     async () => {
@@ -716,7 +695,7 @@ test.each<[string, Supervisor["status"]]>([
 ])(
   "an empty port under a supervisor that is %s is spawned into at once",
   async (_title, status) => {
-    const { service } = fakeService({ status });
+    const { manager: service } = supervisor({ status });
     let refusals = 0;
     let spawns = 0;
     await ensureDaemon(
@@ -736,8 +715,8 @@ test.each<[string, Supervisor["status"]]>([
 
 // Each read spawns launchctl or systemctl processes, on the path a cold hook waits on.
 test("the supervisor's status is read once per call", async () => {
-  const { counts, service } = fakeService({
-    status: async () => ({ installed: true, running: false, disabled: true }),
+  const { statusReads, manager: service } = supervisor({
+    status: async () => ({ installed: true, running: false, disabled: true, keepsAlive: false }),
   });
   let probes = 0;
   await ensureDaemon(
@@ -747,15 +726,15 @@ test("the supervisor's status is read once per call", async () => {
         ++probes <= 3 ? null : peer("spawned", { build: "b1", resident: false }),
     }),
   );
-  expect(counts.statusReads).toBe(1);
+  expect(statusReads()).toBe(1);
 });
 
 // ---- ensureDaemon after a draining daemon refused a review ----
 
 // The refusing daemon keeps answering while it drains, and it may be this very build, so
 // the same-build check alone would hand it straight back to be refused again.
-test("draining: waits past the refusing instance to its supervised successor", async () => {
-  const { service } = fakeService();
+test("successor mode waits past the refusing instance to its supervised successor", async () => {
+  const { manager: service } = supervisor();
   let spawns = 0;
   const drain: (HealthBody | null)[] = [
     peer("draining", { build: "b1" }),
@@ -765,30 +744,45 @@ test("draining: waits past the refusing instance to its supervised successor", a
   const { served, health } = recordingHealth(() =>
     drain.length > 0 ? (drain.shift() ?? null) : peer("successor", { build: "b1" }),
   );
-  const url = await ensureDaemon(ensureDeps({ service, health, spawn: () => spawns++ }), {
-    takeover: false,
-    draining: true,
-  });
+  const url = await ensureDaemon(
+    ensureDeps({ service, health, spawn: () => spawns++ }),
+    "successor",
+  );
   expect(url).toBe("http://localhost:42718");
   expect(spawns).toBe(0);
   expect(served.at(-1)?.instanceId).toBe("successor");
 });
 
-// The drain wait is the supervisor's one window for the call, whatever `takeover` says.
-test("draining: a resident successor of another build is attached, not cycled", async () => {
-  const { counts, service } = fakeService();
+// A successor never takes over: whatever build the launcher brought up is the one the call
+// attaches to, and its service is left alone.
+test("successor mode attaches a resident successor of another build, never cycling it", async () => {
+  const { calls, manager: service } = supervisor();
   const drain: (HealthBody | null)[] = [peer("draining", { build: "b1" }), null];
   const { served, health } = recordingHealth(() =>
     drain.length > 0 ? (drain.shift() ?? null) : peer("successor", { build: "b2" }),
   );
-  await ensureDaemon(ensureDeps({ service, health }), { draining: true });
-  expect(counts.restarts).toBe(0);
+  await ensureDaemon(ensureDeps({ service, health }), "successor");
+  expect(calls).toEqual([]);
   expect(served.at(-1)?.instanceId).toBe("successor");
+});
+
+// The drain wait was the call's one supervisor window, so a port the successor answered
+// on and then left empty is spawned into rather than left to the supervisor again.
+test("successor mode spawns into the port when its successor answers once and then vanishes", async () => {
+  const { statusReads, manager: service } = supervisor();
+  let spawns = 0;
+  const drain = [peer("draining"), peer("successor")];
+  const { health } = recordingHealth(() => {
+    if (drain.length > 0) return drain.shift() ?? null;
+    return spawns > 0 ? peer("spawned", { build: "b1", resident: false }) : null;
+  });
+  await ensureDaemon(ensureDeps({ service, health, spawn: () => spawns++ }), "successor");
+  expect({ spawns, statusReads: statusReads() }).toEqual({ spawns: 1, statusReads: 0 });
 });
 
 // With no supervisor there is no one else to bind the freed port, so the hook spawns
 // into it straight away rather than waiting out the budget first.
-test("draining with no supervisor: spawns as soon as the refusing instance frees the port", async () => {
+test("successor mode with no supervisor spawns as soon as the refusing instance frees the port", async () => {
   let spawns = 0;
   let drainProbes = 0;
   let refusals = 0;
@@ -798,10 +792,10 @@ test("draining with no supervisor: spawns as soon as the refusing instance frees
     refusals++;
     return null;
   });
-  const url = await ensureDaemon(ensureDeps({ maxAttempts: 12, health, spawn: () => spawns++ }), {
-    takeover: false,
-    draining: true,
-  });
+  const url = await ensureDaemon(
+    ensureDeps({ timing: noOpTiming(12), health, spawn: () => spawns++ }),
+    "successor",
+  );
   expect(url).toBe("http://localhost:42718");
   expect(spawns).toBe(1);
   expect(served.at(-1)?.instanceId).toBe("spawned");
@@ -810,18 +804,109 @@ test("draining with no supervisor: spawns as soon as the refusing instance frees
 
 // The refusal only ever names the daemon that was answering then. Once the port has been
 // seen empty, whatever binds next is the successor, not another instance to wait past.
-test("draining: a port already freed is a cold start, attached on its first answer", async () => {
+test("successor mode reads a port already freed as a cold start, attached on its first answer", async () => {
   let spawns = 0;
   const { served, health } = recordingHealth(() =>
     spawns > 0 ? peer("spawned", { build: "b1", resident: false }) : null,
   );
-  const url = await ensureDaemon(ensureDeps({ health, spawn: () => spawns++ }), {
-    takeover: false,
-    draining: true,
-  });
+  const url = await ensureDaemon(ensureDeps({ health, spawn: () => spawns++ }), "successor");
   expect(url).toBe("http://localhost:42718");
   expect(spawns).toBe(1);
   expect(served.filter((h) => h?.instanceId === "spawned")).toHaveLength(1);
+});
+
+// ---- ensureDaemon's overall time bound ----
+
+/** A clock that moves a second per backoff, over more attempts than the deadline allows,
+ * so only the deadline can end the call. */
+function steppedClock() {
+  let t = 0;
+  const stepMs = 1_000;
+  return {
+    stepMs,
+    timing: {
+      now: () => t,
+      backoff: async () => {
+        t += stepMs;
+      },
+      maxAttempts: 50,
+      windowMs: 10_000,
+      reserveMs: 7_000,
+    },
+  };
+}
+
+// A hook killed by its own timeout leaves the review nothing at all, so every way the
+// call can wait has to fit one deadline — the fallback spawn's attempts included. The
+// reserve past the window is the caller's, and the call spends all of it.
+test.each<[string, EnsureMode, (calls: string[]) => () => HealthBody | null]>([
+  [
+    "a cycled service that never brings a daemon back",
+    "takeover",
+    (calls) => () => (calls.includes("restart") ? null : peer("old")),
+  ],
+  ["an empty port the supervisor never fills", "takeover", () => () => null],
+  [
+    "a drain whose successor never comes",
+    "successor",
+    () => {
+      let probes = 0;
+      return () => (++probes === 1 ? peer("draining") : null);
+    },
+  ],
+])("%s ends by the call's deadline", async (_title, mode, answers) => {
+  const clock = steppedClock();
+  const { calls, manager: service } = supervisor();
+  const next = answers(calls);
+  await expect(
+    ensureDaemon(ensureDeps({ timing: clock.timing, service, health: async () => next() }), mode),
+  ).rejects.toThrow(/did not become healthy in time/);
+  expect(clock.timing.now()).toBeGreaterThanOrEqual(clock.timing.windowMs + clock.timing.reserveMs);
+  expect(clock.timing.now()).toBeLessThanOrEqual(
+    clock.timing.windowMs + clock.timing.reserveMs + clock.stepMs,
+  );
+});
+
+test("a supervisor window that runs out still leaves the fallback spawn its turn", async () => {
+  const clock = steppedClock();
+  const { manager: service } = supervisor();
+  let firstSpawn: number | undefined;
+  const url = await ensureDaemon(
+    ensureDeps({
+      timing: clock.timing,
+      service,
+      // Slower to bind than one backoff. Each refused probe meanwhile spawns again; in
+      // production those extra spawns lose the bind race.
+      health: async () =>
+        firstSpawn !== undefined && clock.timing.now() >= firstSpawn + 2 * clock.stepMs
+          ? peer("spawned", { build: "b1", resident: false })
+          : null,
+      spawn: () => {
+        firstSpawn ??= clock.timing.now();
+      },
+    }),
+  );
+  expect(url).toBe("http://localhost:42718");
+  expect(firstSpawn).toBeGreaterThanOrEqual(clock.timing.windowMs);
+});
+
+// A cycle past the window has no time left to wait for the successor, so the hook would
+// spawn into the port the supervisor is restarting into.
+test("a resident peer first met past the supervisor window is attached, not cycled", async () => {
+  const clock = steppedClock();
+  const { calls, manager: service } = supervisor();
+  const url = await ensureDaemon(
+    ensureDeps({
+      timing: clock.timing,
+      service,
+      health: async () =>
+        clock.timing.now() <= clock.timing.windowMs
+          ? peer("old", { resident: false })
+          : peer("old"),
+    }),
+  );
+  expect(url).toBe("http://localhost:42718");
+  expect(calls).toEqual([]);
 });
 
 // ---- prodEnsureDeps ----
@@ -829,19 +914,20 @@ test("draining: a port already freed is a cold start, attached on its first answ
 // The supervisor is machine-wide — one constant label — so a dev or test world with its
 // own XDG_STATE_HOME must never cycle it. Only the world whose install wrote the
 // launcher's service record owns it.
-test("prodEnsureDeps wires the supervisor only into the world that installed it", async () => {
-  const { service } = fakeService();
+test("prodEnsureDeps wires the supervisor only into the world that installed it, and the caller's reserve", async () => {
+  const { manager: service } = supervisor();
   let built = 0;
   const manager = () => {
     built++;
     return service;
   };
-  expect((await prodEnsureDeps(DEFAULTS, manager)).service).toBeUndefined();
+  expect((await prodEnsureDeps(DEFAULTS, manager, 0)).service).toBeUndefined();
   expect(built).toBe(0);
 
   mkdirSync(dirname(launcherServiceFile()), { recursive: true });
   writeFileSync(launcherServiceFile(), "caret.service\n");
-  expect((await prodEnsureDeps(DEFAULTS, manager)).service).toBe(service);
+  expect((await prodEnsureDeps(DEFAULTS, manager, 0)).service).toBe(service);
+  expect((await prodEnsureDeps(DEFAULTS, manager, 1234)).timing.reserveMs).toBe(1234);
 });
 
 // ---- retireDaemon: SIGTERM fallback is gated on the lock's world (EXC-461) ----

@@ -1,7 +1,7 @@
 // The supervisor seam: what a platform service manager must do, and the config a
 // unit file is generated from. Nothing here performs I/O or detects a platform —
 // the launchd and systemd implementations layer on top, and the composition point
-// selects between them (src/service/index.ts).
+// selects between them (src/commands/service-target.ts).
 
 export interface ServiceStatus {
   /** The supervisor knows the unit. What that rests on differs by platform, and the
@@ -17,6 +17,11 @@ export interface ServiceStatus {
    * masked unit on Linux. Install reads this as an opt-out and never re-enables
    * (EXC-1167). */
   disabled: boolean;
+  /** The supervisor puts a daemon on the port by itself — it runs one now, or starts one
+   * again once this one exits — so a hook facing an empty port waits for it rather than
+   * spawning its own. False once the user turned it off, and on Linux once systemd parked
+   * the unit (a terminal exit, or its start limit spent) or was told to stop it. */
+  keepsAlive: boolean;
   /** Why this host cannot run the service at all, absent when it can. A stated
    * outcome rather than a failed install: the composition point branches on it and
    * leaves the machine non-resident instead of throwing (EXC-1167). */

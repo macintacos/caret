@@ -20,8 +20,9 @@ log_dir="$state/logs"
 failed=0
 
 # The machine the real bin/caret-launcher resolves against before it execs. `run` is the
-# resident case; any other mode is the status to exit with. $log_dir stays absent, so the
-# log checks below assert against a directory the launcher itself creates.
+# resident case and `drain` a resident daemon slow to stop; any other mode is the status
+# to exit with. $log_dir stays absent, so the log checks below assert against a directory
+# the launcher itself creates.
 caret_root="$HOME/.claude/plugins/cache/caret/caret/0.1.0"
 mkdir -p "$caret_root/bin" "$HOME/bin" "$state/launcher"
 # Multi-line, because candidate_version() anchors its sed at line start.
@@ -30,6 +31,13 @@ cat >"$caret_root/bin/caret" <<'CARET'
 #!/bin/sh
 mode="$(cat "$HOME/mode")"
 if [ "$mode" = run ]; then exec sleep infinity; fi
+# Outlives SIGTERM by a few seconds, as a daemon draining its reviews does.
+if [ "$mode" = drain ]; then
+  trap ': >"$HOME/draining"; sleep 3; exit 0' TERM
+  : >"$HOME/drain-ready"
+  sleep infinity &
+  wait
+fi
 exit "$mode"
 CARET
 printf '#!/bin/sh\nexit 0\n' >"$HOME/bin/bun"
@@ -182,6 +190,23 @@ cp "$HOME/$unit" "$unit_dir/$unit"
 systemctl --user daemon-reload
 
 printf -- '--- restart contract: what each launcher exit does\n'
+# status() counts a draining restart's `deactivating` as kept alive. The `inactive` a
+# restart job passes through between its stop and its start is systemd-manager.ts's
+# ponytail, not something this check can see.
+set_mode drain
+rm -f "$HOME/drain-ready"
+systemctl --user restart "$unit"
+# The launcher resolves caret before it execs it, and a SIGTERM that lands first drains
+# nothing.
+until_true 15 test -e "$HOME/drain-ready"
+rm -f "$HOME/draining"
+systemctl --user restart --no-block "$unit"
+until_true 15 test -e "$HOME/draining"
+expect_out "a restart job reads deactivating while the daemon drains" 3 deactivating \
+  systemctl --user is-active "$unit"
+# The check passes mid-job; wait it out before set_mode 78 restarts the unit again.
+until_true 15 state_is active
+
 set_mode 78
 systemctl --user reset-failed "$unit"
 systemctl --user restart "$unit" 2>/dev/null
@@ -194,11 +219,18 @@ if [ "$(prop NRestarts)" = 0 ]; then
 else
   fail "exit 78 never restarts (NRestarts=0)" "NRestarts=$(prop NRestarts)"
 fi
+# The word status() reads as parked, so a hook spawns rather than waiting on a restart
+# systemd will never make.
+expect_out "a unit parked by exit 78 reads failed" 3 failed systemctl --user is-active "$unit"
 
 set_mode 0
 systemctl --user reset-failed "$unit"
 systemctl --user restart "$unit"
 settled "exit 0 restarts, so the upgrade drain comes back" has_restarted
+# The other direction: a hook waits out a restart gap, so it must not read as parked.
+until_true 45 state_is activating
+expect_out "a restart gap reads activating, not failed" 3 activating \
+  systemctl --user is-active "$unit"
 
 set_mode 1
 systemctl --user reset-failed "$unit"
@@ -209,6 +241,8 @@ systemctl --user restart "$unit" 2>/dev/null
 # refused start request reports, not what the spent unit settles at.
 burst="$(sed -n 's/^StartLimitBurst=//p' "$unit_dir/$unit")"
 settled "an exit 1 burst stops at StartLimitBurst=$burst restarts" burst_spent "$burst"
+expect_out "a unit parked on its start limit reads failed" 3 failed \
+  systemctl --user is-active "$unit"
 
 # The unit is parked on its start limit right here, which is the state a user re-runs
 # `caret install` in. That is why install() resets before it restarts: without the reset
@@ -220,8 +254,8 @@ expect "reset-failed makes the parked unit startable again" 0 "" systemctl --use
 
 printf -- '--- uninstall: disable, remove, reload\n'
 until_true 15 state_is active
-until_true 15 state_is active
 systemctl --user stop "$unit"
+# Still enabled, so only this word tells status() nothing will start the unit again.
 expect_out "a known but stopped unit reads inactive" 3 inactive systemctl --user is-active "$unit"
 expect "disable --now succeeds while the unit exists" 0 "" \
   systemctl --user disable --now "$unit"

@@ -9,11 +9,11 @@
 import type { AgentAdapter } from "@/adapters/adapter.ts";
 import { selectAdapter } from "@/adapters/index.ts";
 import { bootHookLogging } from "@/commands/boot.ts";
-import { prodService } from "@/commands/install/service.ts";
+import { prodService } from "@/commands/service-target.ts";
 import { logFile } from "@/config/paths.ts";
 import { loadSettings, reviewTimeoutMs, type Settings } from "@/config/settings.ts";
 import { expireReview, longPoll, postReview } from "@/daemon/client.ts";
-import { ensureDaemon, prodEnsureDeps } from "@/daemon/lifecycle.ts";
+import { ensureDaemon, prodEnsureDeps, SUPERVISOR_WINDOW_MS } from "@/daemon/lifecycle.ts";
 import { readCmuxPane } from "@/lib/cmux.ts";
 import { logError, logWarn } from "@/lib/log.ts";
 import type { Decision, PlanInput } from "@/lib/types.ts";
@@ -49,11 +49,15 @@ function openBrowser(url: string): void {
   }
 }
 
+/** A denied review costs the user more than a few seconds' wait, so the fallback spawn
+ * gets a whole supervisor window of its own. */
+const REVIEW_RESERVE_MS = SUPERVISOR_WINDOW_MS;
+
 export function prodReviewDeps(s: Settings, adapter: AgentAdapter): ReviewDeps {
   return {
     parseHookInput: (stdin) => adapter.parseHookInput(stdin),
-    ensureDaemon: async (opts) =>
-      ensureDaemon(await prodEnsureDeps(s, () => prodService().manager), opts),
+    ensureDaemon: async (mode) =>
+      ensureDaemon(await prodEnsureDeps(s, () => prodService().manager, REVIEW_RESERVE_MS), mode),
     postReview,
     longPoll,
     openBrowser,

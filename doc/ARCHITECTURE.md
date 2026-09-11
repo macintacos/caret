@@ -288,13 +288,14 @@ go in front of a human the same way.
 ```text
 src/                tool-agnostic core, grouped by domain; the CLI entrypoint (cli.ts) and discovery report (discovery.ts) sit at the root
 src/daemon/         the loopback HTTP daemon — request server, body validation, host/origin/CSRF/live-client guards, idle and drain liveness, lifecycle, and client
+src/service/        the platform supervisor that keeps the daemon up from login — the ServiceManager seam, its launchd and systemd implementations, and the plist and unit text they install
 src/review/         plan-review orchestration and the revision-threading state machine, with their store and decision/reconcile helpers
 src/plan/           plan handling — the on-disk canonical plan, file-ref excerpts, cwd-rooted file search, fenced-block validation, and markdown reflow
 src/redact/         log redaction — the browser-safe key walk and the node-side home-path scrub
 src/ui/             the daemon's bridge to the embedded Svelte UI — asset resolution and the log endpoint
 src/config/         settings, preferences, resolved paths, and shared constants
 src/lib/            cross-cutting foundation — wire-contract types, logging, and small shared utilities
-src/commands/       per-subcommand entrypoints (one file per subcommand)
+src/commands/       per-subcommand entrypoints (one file per subcommand), plus the wiring they share
 src/adapters/       the coding-agent adapter axis — the AgentAdapter interface and registry, plus one directory per tool (claude · opencode · codex)
 ui/                 Svelte 5 multi-asset SPA (Vite) embedded into the binary via the build-generated asset manifest, served by the daemon by URL path · src/state/ runes state modules · src/icons/ vendored Lucide SVGs
 hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode + PostToolUse/ExitPlanMode) — Claude-adapter packaging

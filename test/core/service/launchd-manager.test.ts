@@ -191,15 +191,18 @@ test("status reports an agent launchd does not know about", async () => {
     installed: false,
     running: false,
     disabled: false,
+    keepsAlive: false,
   });
 });
 
+// KeepAlive restarts a loaded agent whenever it exits, throttle permitting.
 test("status reports a loaded agent that is not running", async () => {
   const fake = statusLaunchctl({ code: 0, stdout: LOADED, stderr: "" });
   expect(await manager(fake).status()).toEqual({
     installed: true,
     running: false,
     disabled: false,
+    keepsAlive: true,
   });
 });
 
@@ -209,6 +212,7 @@ test("status reads running from launchd's state line", async () => {
     installed: true,
     running: true,
     disabled: false,
+    keepsAlive: true,
   });
   // The one method whose two reads take different operands: `print` the service,
   // `print-disabled` the domain. Swapping them keeps every assertion above green.
@@ -224,7 +228,16 @@ test("status reads running from a pid line with no state line beside it", async 
     installed: true,
     running: true,
     disabled: false,
+    keepsAlive: true,
   });
+});
+
+test("status reads an agent the user opted out of as not kept alive, even while loaded", async () => {
+  const fake = statusLaunchctl(
+    { code: 0, stdout: RUNNING_STATE, stderr: "" },
+    disabledList(`"${LAUNCHD_LABEL}" => disabled`),
+  );
+  expect((await manager(fake).status()).keepsAlive).toBe(false);
 });
 
 test("status reads the pre-Ventura disabled spelling", async () => {

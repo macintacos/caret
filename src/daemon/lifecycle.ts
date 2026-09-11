@@ -56,8 +56,22 @@ export interface EnsureDeps {
   spawn: () => void;
   /** This world's supervisor, absent when the world installed none. */
   service?: Supervisor;
+  timing: EnsureTiming;
+}
+
+/** How a call paces its probes, and how long it may take. */
+export interface EnsureTiming {
   backoff: (attempt: number) => Promise<void>;
+  /** Probes per wait — the main loop and each wait for a successor count their own, so the
+   * deadline, not this, bounds the call. */
   maxAttempts: number;
+  /** Monotonic milliseconds, read for the call's deadline. */
+  now: () => number;
+  /** How long from the call's start the supervisor has to put a daemon on the port. */
+  windowMs: number;
+  /** How long past that window the fallback spawn goes on trying, so a window that ran
+   * out still leaves it a turn. No attempt starts after it. */
+  reserveMs: number;
 }
 
 export function isAddrInUse(e: unknown): boolean {
@@ -91,44 +105,45 @@ function isForeignWorld(h: HealthBody, currentStateDir: string): boolean {
 const FOREIGN_WORLD_ERROR =
   "port serves a different caret world (state dir mismatch) — set CARET_PORT to a free port";
 
-/** How a caller wants the port resolved. */
-export interface EnsureOptions {
-  /** Whether to retire a different-build daemon and spawn this binary's own.
-   * Defaults to true — starting a review, or prewarming, is when a build claims
-   * the port. Pass false to ATTACH instead: return whichever same-world daemon is
-   * answering, whatever its build, and spawn only when nothing is.
-   *
-   * A mid-review reconnect passes false. The reconnecting client may be an OLD
-   * build whose review has outlived an upgrade; letting it take over would install
-   * that old build as the port's owner, and since it reconnects on every drop it
-   * would keep winning against the current one indefinitely. Recovery must not
-   * double as installation. Attaching costs nothing: reviews are persisted per
-   * world, so any same-world daemon can serve the decision. */
-  takeover?: boolean;
-  /** The daemon on the port just refused work while stepping down: wait past it to its
-   * successor. That wait is the call's one supervisor window; a port already empty is a
-   * cold start. */
-  draining?: boolean;
-}
+/** How a caller wants the port resolved.
+ *
+ * - `takeover` retires a different-build daemon and spawns this binary's own — starting a
+ *   review, or prewarming, is when a build claims the port.
+ * - `attach` returns whichever same-world daemon is answering, whatever its build, and
+ *   spawns only when nothing is. A mid-review reconnect attaches: the reconnecting client
+ *   may be an OLD build whose review has outlived an upgrade; letting it take over would
+ *   install that old build as the port's owner, and since it reconnects on every drop it
+ *   would keep winning against the current one indefinitely. Recovery must not double as
+ *   installation. Attaching costs nothing: reviews are persisted per world, so any
+ *   same-world daemon can serve the decision.
+ * - `successor` attaches too, but first waits past the daemon on the port, which just
+ *   refused work while stepping down. That wait is the call's one supervisor window; a
+ *   port already empty is a cold start. */
+export type EnsureMode = "takeover" | "attach" | "successor";
 
 /** Ensure a caret daemon owns the port and return its base URL: reuse a same-build
  * daemon, gracefully retire a stale one and spawn a fresh daemon, and clean orphan
  * locks (EXC-406). Under this world's supervisor a stale resident daemon is cycled
  * through the service instead — unless it is newer than this hook — and an empty port
- * is left to the supervisor before this hook spawns into it (EXC-1166). `takeover:
- * false` and `draining` — see EnsureOptions. Never denies a review because takeover
- * failed — an unretireable stale daemon, or one whose service will not restart, is
- * reused (serving its old UI) rather than left unreachable. The one exception: a
+ * is left to the supervisor before this hook spawns into it (EXC-1166), for at most the
+ * call's first `timing.windowMs`. `mode` — see EnsureMode. Never denies a review because
+ * takeover failed — an unretireable stale daemon, or one whose service will not restart,
+ * is reused (serving its old UI) rather than left unreachable. The one exception: a
  * foreign world's daemon (EXC-461) is neither reused nor retired — that's a config
  * conflict, and cross-attaching IS the bug. */
-export async function ensureDaemon(deps: EnsureDeps, opts: EnsureOptions = {}): Promise<string> {
-  const takeover = opts.takeover ?? true;
-  // The supervisor gets one window per call: a drain wait, a cycle, or an empty-port
-  // wait. Past it, attach to whatever answers and spawn into an empty port, so a
-  // launcher that resolves another build than this hook's is never cycled a second time.
-  let windowSpent = opts.draining ? await awaitDrained(deps) : false;
+export async function ensureDaemon(
+  deps: EnsureDeps,
+  mode: EnsureMode = "takeover",
+): Promise<string> {
+  const { timing } = deps;
+  const windowEnd = timing.now() + timing.windowMs;
+  const deadline = windowEnd + timing.reserveMs;
+  // Past the supervisor window, attach to whatever answers and spawn into an empty port,
+  // so a launcher resolving another build than this hook's is never cycled twice.
+  let windowSpent = mode === "successor" ? await awaitDrained(deps, windowEnd) : false;
   let supervised: boolean | undefined;
-  for (let attempt = 0; attempt < deps.maxAttempts; attempt++) {
+  for (let attempt = 0; attempt < timing.maxAttempts && timing.now() < deadline; attempt++) {
+    windowSpent ||= timing.now() >= windowEnd;
     const h = await deps.health(deps.baseUrl);
     if (h && h.service === "caret") {
       // Another world's daemon: refuse before any reuse/retire logic (EXC-461).
@@ -140,9 +155,9 @@ export async function ensureDaemon(deps: EnsureDeps, opts: EnsureOptions = {}): 
       if (h.build === deps.currentBuild && h.version === deps.currentVersion) {
         return deps.baseUrl;
       }
-      // Attaching caller: this daemon is not ours, but it is this world's and it
-      // is answering, which is all a resumed poll needs.
-      if (!takeover || windowSpent) return deps.baseUrl;
+      // Not taking over — an attach, a successor, or a takeover whose window is spent:
+      // this world's daemon is answering, which is all the caller needs.
+      if (mode !== "takeover" || windowSpent) return deps.baseUrl;
       // Retiring a supervised daemon only races the supervisor's restart. Cycle the
       // service instead: the launcher resolves caret at exec time, so the restart is
       // the upgrade. Only a peer reporting `resident: true` is the supervised one;
@@ -155,7 +170,9 @@ export async function ensureDaemon(deps: EnsureDeps, opts: EnsureOptions = {}): 
         windowSpent = true;
         // A failed restart may already have stopped the daemon: probe again rather
         // than hand back a port nothing answers on.
-        if (await restartService(deps.service, h)) await awaitSuccessor(deps, h, "service");
+        if (await restartService(deps.service, h)) {
+          await awaitSuccessor(deps, { prev: h, step: "service", until: windowEnd });
+        }
         continue;
       }
       const retired = await deps.retire(deps.baseUrl, deps.readLock());
@@ -164,7 +181,7 @@ export async function ensureDaemon(deps: EnsureDeps, opts: EnsureOptions = {}): 
       // daemon is now exiting → re-poll.
       if (!retired) return deps.baseUrl;
       logDebug("retire", "stale daemon retiring");
-      await deps.backoff(attempt);
+      await timing.backoff(attempt);
       continue;
     }
     if (h && h.service !== "caret") {
@@ -176,7 +193,9 @@ export async function ensureDaemon(deps: EnsureDeps, opts: EnsureOptions = {}): 
       supervised ??= await supervisorExpected(deps.service);
       if (supervised) {
         windowSpent = true;
-        if (await awaitSuccessor(deps, null, "service")) continue;
+        if (await awaitSuccessor(deps, { prev: null, step: "service", until: windowEnd })) {
+          continue;
+        }
       }
     }
     // Connection refused → drop an orphan lock (dead PID) if present, then spawn.
@@ -193,7 +212,7 @@ export async function ensureDaemon(deps: EnsureDeps, opts: EnsureOptions = {}): 
     } catch (e) {
       if (!isAddrInUse(e)) throw e;
     }
-    await deps.backoff(attempt);
+    await timing.backoff(attempt);
   }
   // Exhausted: never deny a review on takeover failure — reuse even a stale
   // daemon we couldn't retire. The foreign world stays the one exception
@@ -209,25 +228,24 @@ export async function ensureDaemon(deps: EnsureDeps, opts: EnsureOptions = {}): 
 /** Wait past the daemon that just refused work while stepping down. True when one was
  * answering, since that wait spends the call's supervisor window; false on a port
  * already empty, which is a cold start. */
-async function awaitDrained(deps: EnsureDeps): Promise<boolean> {
+async function awaitDrained(deps: EnsureDeps, until: number): Promise<boolean> {
   const h = await deps.health(deps.baseUrl);
   if (h?.service !== "caret") return false;
-  await awaitSuccessor(deps, h, "drain");
+  await awaitSuccessor(deps, { prev: h, step: "drain", until });
   return true;
 }
 
-/** Wait, on a budget the size of the takeover loop's (`maxAttempts` polls under
- * `backoff`), for the port to change hands from `prev` (null: nothing was answering).
- * True once another instance answers — never the outgoing one, which keeps answering
- * while it drains. An empty port is the cycle's gap under a supervisor, but with none
- * it is the answer: the caller spawns into it. */
+/** Wait, until the supervisor window closes at `until`, for the port to change hands from
+ * `prev` (null: nothing was answering). True once another instance answers — never the
+ * outgoing one, which keeps answering while it drains. An empty port is the cycle's gap
+ * under a supervisor, but with none it is the answer: the caller spawns into it. */
 async function awaitSuccessor(
   deps: EnsureDeps,
-  prev: HealthBody | null,
-  step: "service" | "drain",
+  { prev, step, until }: { prev: HealthBody | null; step: "service" | "drain"; until: number },
 ): Promise<boolean> {
-  for (let attempt = 0; attempt < deps.maxAttempts; attempt++) {
-    await deps.backoff(attempt);
+  const { timing } = deps;
+  for (let attempt = 0; attempt < timing.maxAttempts && timing.now() < until; attempt++) {
+    await timing.backoff(attempt);
     const h = await deps.health(deps.baseUrl);
     if (h?.service === "caret") {
       if (prev === null || h.instanceId !== prev.instanceId) return true;
@@ -244,6 +262,9 @@ async function restartService(service: Supervisor, stale: HealthBody): Promise<b
   const ctx = { instanceId: stale.instanceId, build: stale.build };
   logInfo("service", "restarting service: stale daemon build", ctx);
   try {
+    // ponytail: the call's deadline cannot cut short a restart already running. It returns
+    // once the outgoing daemon stops, which DRAIN_DEADLINE_MS (src/daemon/server.ts)
+    // bounds; race it against the deadline if that ever matters.
     await service.restart();
     return true;
   } catch (e) {
@@ -252,11 +273,11 @@ async function restartService(service: Supervisor, stale: HealthBody): Promise<b
   }
 }
 
-/** Whether the supervisor will start a daemon on its own: its unit is loaded and the
- * user has not turned it off. A status that cannot be read counts as no. */
+/** Whether the supervisor will start a daemon on its own. A status that cannot be read
+ * counts as no. */
 async function supervisorExpected(service: Supervisor): Promise<boolean> {
   const status = await service.status().catch(() => null);
-  return status?.installed === true && !status.disabled;
+  return status?.keepsAlive === true;
 }
 
 /** Read + validate the daemon lock; null if missing or unparseable. */
@@ -393,14 +414,30 @@ export function spawnDaemon(s: Settings, spawn: typeof Bun.spawn = Bun.spawn): v
   }).unref();
 }
 
-export async function backoff(attempt: number): Promise<void> {
-  const ms = Math.min(150 * 2 ** attempt, 1500) + Math.floor(Math.random() * 150);
-  await Bun.sleep(ms);
+/** `backoff`'s sleep for `attempt`, before its jitter. */
+function backoffFloorMs(attempt: number): number {
+  return Math.min(150 * 2 ** attempt, 1500);
 }
 
+export async function backoff(attempt: number): Promise<void> {
+  await Bun.sleep(backoffFloorMs(attempt) + Math.floor(Math.random() * 150));
+}
+
+const PROD_MAX_ATTEMPTS = 12;
+
+/** Production's `windowMs`: what `PROD_MAX_ATTEMPTS` backoffs take at the least. */
+export const SUPERVISOR_WINDOW_MS = Array.from({ length: PROD_MAX_ATTEMPTS }, (_, attempt) =>
+  backoffFloorMs(attempt),
+).reduce((sum, ms) => sum + ms, 0);
+
 /** The production EnsureDeps. `service` builds this world's supervisor, and is called
- * only when this world's install recorded one. */
-export async function prodEnsureDeps(s: Settings, service: () => Supervisor): Promise<EnsureDeps> {
+ * only when this world's install recorded one. `reserveMs` is the caller's: what its hook
+ * can spare the fallback spawn past the supervisor window. */
+export async function prodEnsureDeps(
+  s: Settings,
+  service: () => Supervisor,
+  reserveMs: number,
+): Promise<EnsureDeps> {
   // The hook's own world (resolved state dir, EXC-461) — both its reuse
   // identity and the retire fallback's SIGTERM gate.
   const world = stateDir();
@@ -418,7 +455,12 @@ export async function prodEnsureDeps(s: Settings, service: () => Supervisor): Pr
     retire: (baseUrl, lock) => retireDaemon(baseUrl, lock, world),
     removeLock: removeDaemonLock,
     spawn: () => spawnDaemon(s),
-    backoff,
-    maxAttempts: 12,
+    timing: {
+      backoff,
+      maxAttempts: PROD_MAX_ATTEMPTS,
+      now: () => performance.now(),
+      windowMs: SUPERVISOR_WINDOW_MS,
+      reserveMs,
+    },
   };
 }

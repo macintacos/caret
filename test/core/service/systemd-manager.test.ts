@@ -265,6 +265,7 @@ test("status reports a unit systemd does not know about", async () => {
     installed: false,
     running: false,
     disabled: false,
+    keepsAlive: false,
   });
 });
 
@@ -274,6 +275,7 @@ test("status reports an enabled unit that is not running", async () => {
     installed: true,
     running: false,
     disabled: false,
+    keepsAlive: false,
   });
 });
 
@@ -283,6 +285,7 @@ test("status reads running from is-active", async () => {
     installed: true,
     running: true,
     disabled: false,
+    keepsAlive: true,
   });
   expect(fake.calls.slice(1)).toEqual([
     ["systemctl", "--user", "is-active", SYSTEMD_UNIT],
@@ -290,12 +293,33 @@ test("status reads running from is-active", async () => {
   ]);
 });
 
+// is-enabled answers `enabled` whatever the unit is doing, so only is-active can say
+// whether systemd will start the daemon again by itself.
+test.each<[string, boolean]>([
+  ["active", true],
+  // RestartSec's gap between an exit and the restart.
+  ["activating", true],
+  // A drain, which ends in a restart as often as in a stop.
+  ["deactivating", true],
+  // Told to stop.
+  ["inactive", false],
+  // Parked: a terminal exit, or its start limit spent.
+  ["failed", false],
+  // No answer: waiting on a supervisor beats racing one for the port.
+  ["", true],
+])("status reads is-active `%s` as keepsAlive %p", async (activity, keepsAlive) => {
+  const fake = statusRun(activity, "enabled", activity === "active" ? 0 : 3);
+  expect((await manager(fake).status()).keepsAlive).toBe(keepsAlive);
+});
+
 test("status reads a user's opt-out from a disabled unit", async () => {
-  const fake = statusRun("inactive", "disabled", 3, 1);
+  // `disable` without `--now` leaves the unit running, and it is an opt-out all the same.
+  const fake = statusRun("active", "disabled", 0, 1);
   expect(await manager(fake).status()).toEqual({
     installed: true,
-    running: false,
+    running: true,
     disabled: true,
+    keepsAlive: false,
   });
 });
 
@@ -329,6 +353,7 @@ test("status on a host with no systemctl reports it unsupported rather than thro
     installed: false,
     running: false,
     disabled: false,
+    keepsAlive: false,
     unsupported: expect.stringContaining("systemctl"),
   });
 });
@@ -352,6 +377,7 @@ test("status on a host with no user bus reports the diagnostic instead of probin
     installed: false,
     running: false,
     disabled: false,
+    keepsAlive: false,
     unsupported: expect.stringContaining("Failed to connect to bus"),
   });
   expect(fake.verbs()).toEqual(["show-environment"]);
