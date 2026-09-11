@@ -265,7 +265,6 @@ expect "reset-failed makes the parked unit startable again" 0 "" systemctl --use
 
 printf -- '--- uninstall: disable, remove, reload\n'
 until_true 15 state_is active
-until_true 15 state_is active
 systemctl --user stop "$unit"
 # Still enabled, so only this word tells status() nothing will start the unit again.
 expect_out "a known but stopped unit reads inactive" 3 inactive systemctl --user is-active "$unit"
