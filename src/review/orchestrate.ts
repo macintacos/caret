@@ -28,10 +28,9 @@ export interface ReviewDeps {
   /** Normalize the agent's raw hook stdin into a core PlanInput. Throws on input
    * that can't be parsed — the throw becomes the fail-safe deny. */
   parseHookInput: (stdin: string) => PlanInput;
-  /** Ensure a daemon is up and return its base URL. `attach` joins whichever daemon is
-   * already serving this world instead of replacing it with this binary's own (see
-   * EnsureMode) — what a mid-review reconnect wants. */
-  ensureDaemon: (mode?: EnsureMode) => Promise<string>;
+  /** Ensure a daemon is up and return its base URL, resolving the port as `mode` says
+   * (see EnsureMode). */
+  ensureDaemon: (mode: EnsureMode) => Promise<string>;
   /** Create the review, or null when the daemon refused it while stepping down.
    * `hasLiveClient` (EXC-559) reports whether a UI tab is already polling the
    * daemon; when true the hook skips opening the browser so an open backgrounded
@@ -133,7 +132,7 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<Decisi
     }
 
     step = "ensureDaemon";
-    baseUrl = await deps.ensureDaemon();
+    baseUrl = await deps.ensureDaemon("takeover");
     step = "postReview";
     // Stamp the originating cmux pane, if any: the daemon is long-lived and shared,
     // so it never inherits this hook's cmux environment (EXC-961).

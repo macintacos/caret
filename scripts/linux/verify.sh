@@ -20,8 +20,9 @@ log_dir="$state/logs"
 failed=0
 
 # The machine the real bin/caret-launcher resolves against before it execs. `run` is the
-# resident case; any other mode is the status to exit with. $log_dir stays absent, so the
-# log checks below assert against a directory the launcher itself creates.
+# resident case and `drain` a resident daemon slow to stop; any other mode is the status
+# to exit with. $log_dir stays absent, so the log checks below assert against a directory
+# the launcher itself creates.
 caret_root="$HOME/.claude/plugins/cache/caret/caret/0.1.0"
 mkdir -p "$caret_root/bin" "$HOME/bin" "$state/launcher"
 # Multi-line, because candidate_version() anchors its sed at line start.
@@ -32,7 +33,7 @@ mode="$(cat "$HOME/mode")"
 if [ "$mode" = run ]; then exec sleep infinity; fi
 # Outlives SIGTERM by a few seconds, as a daemon draining its reviews does.
 if [ "$mode" = drain ]; then
-  trap 'sleep 3; exit 0' TERM
+  trap ': >"$HOME/draining"; sleep 3; exit 0' TERM
   : >"$HOME/drain-ready"
   sleep infinity &
   wait
@@ -128,20 +129,6 @@ settled() {
 # no user manager looks like — the condition probeSystemd() exists to detect.
 busless() { env -u XDG_RUNTIME_DIR -u DBUS_SESSION_BUS_ADDRESS "$@"; }
 
-# Every distinct word is-active answers while a restart job cycles the running unit, polled
-# until a new main process is active.
-restart_words() {
-  local before word words="" deadline=$((SECONDS + 15))
-  before="$(prop MainPID)"
-  systemctl --user restart --no-block "$unit"
-  while [ "$SECONDS" -lt "$deadline" ]; do
-    word="$(systemctl --user is-active "$unit" 2>/dev/null)"
-    [[ " $words " == *" $word "* ]] || words="$words $word"
-    if [ "$word" = active ] && [ "$(prop MainPID)" != "$before" ]; then break; fi
-  done
-  printf '%s\n' "${words# }"
-}
-
 printf -- '--- probe: what answers without a user bus\n'
 expect "show-environment reaches the user bus" 0 XDG_RUNTIME_DIR \
   systemctl --user show-environment
@@ -203,20 +190,22 @@ cp "$HOME/$unit" "$unit_dir/$unit"
 systemctl --user daemon-reload
 
 printf -- '--- restart contract: what each launcher exit does\n'
-# status() reads `inactive` as a unit told to stop, and a hook then spawns into the port
-# rather than waiting. A restart job must not dwell there, or the hook races the restart.
+# status() counts a draining restart's `deactivating` as kept alive. The `inactive` a
+# restart job passes through between its stop and its start is systemd-manager.ts's
+# ponytail, not something this check can see.
 set_mode drain
 rm -f "$HOME/drain-ready"
 systemctl --user restart "$unit"
 # The launcher resolves caret before it execs it, and a SIGTERM that lands first drains
 # nothing.
 until_true 15 test -e "$HOME/drain-ready"
-words="$(restart_words)"
-if [[ " $words " == *" deactivating "* && " $words " != *" inactive "* ]]; then
-  pass "a restart job drains through deactivating, never inactive"
-else
-  fail "a restart job drains through deactivating, never inactive" "is-active said: $words"
-fi
+rm -f "$HOME/draining"
+systemctl --user restart --no-block "$unit"
+until_true 15 test -e "$HOME/draining"
+expect_out "a restart job reads deactivating while the daemon drains" 3 deactivating \
+  systemctl --user is-active "$unit"
+# The check passes mid-job; wait it out before set_mode 78 restarts the unit again.
+until_true 15 state_is active
 
 set_mode 78
 systemctl --user reset-failed "$unit"

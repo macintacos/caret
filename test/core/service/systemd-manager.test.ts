@@ -299,7 +299,7 @@ test.each<[string, boolean]>([
   ["active", true],
   // RestartSec's gap between an exit and the restart.
   ["activating", true],
-  // A drain, which a restart follows as often as a stop does.
+  // A drain, which ends in a restart as often as in a stop.
   ["deactivating", true],
   // Told to stop.
   ["inactive", false],

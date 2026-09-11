@@ -267,7 +267,7 @@ test("a transient drop reconnects and keeps polling (no premature deny)", async 
 // against the new build indefinitely and every later review is served stale. Pinning
 // the mode per call is what makes "recovery is not installation" falsifiable.
 test("the startup ensure takes over, the reconnect only attaches", async () => {
-  const modes: (EnsureMode | undefined)[] = [];
+  const modes: EnsureMode[] = [];
   let calls = 0;
   await runReview(
     stdin,
@@ -283,14 +283,14 @@ test("the startup ensure takes over, the reconnect only attaches", async () => {
       },
     }),
   );
-  expect(modes).toEqual([undefined, "attach"]);
+  expect(modes).toEqual(["takeover", "attach"]);
 });
 
 // A daemon stepping down refuses new reviews with a 503 while its supervisor brings up
 // the next one. The review goes to that successor — attaching, like any reconnect, and
 // waiting past the instance that refused — rather than being denied.
 test("a review refused by a draining daemon is re-posted to its successor", async () => {
-  const ensures: (EnsureMode | undefined)[] = [];
+  const ensures: EnsureMode[] = [];
   const posts: string[] = [];
   const out = await runReview(
     stdin,
@@ -305,7 +305,7 @@ test("a review refused by a draining daemon is re-posted to its successor", asyn
       },
     }),
   );
-  expect(ensures).toEqual([undefined, "successor"]);
+  expect(ensures).toEqual(["takeover", "successor"]);
   expect(posts).toEqual(["http://draining", "http://successor"]);
   expect(out.behavior).toBe("allow");
 });

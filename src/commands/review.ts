@@ -49,16 +49,15 @@ function openBrowser(url: string): void {
   }
 }
 
+/** A denied review costs the user more than a few seconds' wait, so the fallback spawn
+ * gets a whole supervisor window of its own. */
+const REVIEW_RESERVE_MS = SUPERVISOR_WINDOW_MS;
+
 export function prodReviewDeps(s: Settings, adapter: AgentAdapter): ReviewDeps {
   return {
     parseHookInput: (stdin) => adapter.parseHookInput(stdin),
-    // A denied review costs the user more than a few seconds' wait, so the fallback spawn
-    // gets a whole supervisor window of its own.
     ensureDaemon: async (mode) =>
-      ensureDaemon(
-        await prodEnsureDeps(s, () => prodService().manager, SUPERVISOR_WINDOW_MS),
-        mode,
-      ),
+      ensureDaemon(await prodEnsureDeps(s, () => prodService().manager, REVIEW_RESERVE_MS), mode),
     postReview,
     longPoll,
     openBrowser,

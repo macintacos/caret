@@ -4,7 +4,8 @@ import type { ServiceConfig, ServiceManager, ServiceStatus } from "@/service/man
 
 export function fakeServiceManager(
   over: {
-    /** Fields over a unit that is not installed, or the whole read. */
+    /** Fields over a unit that is not installed — `keepsAlive` follows
+     * `installed && !disabled` unless the case states it — or the whole read. */
     status?: Partial<ServiceStatus> | ServiceManager["status"];
     restart?: ServiceManager["restart"];
     /** The caller's own list, to order these verbs against its other steps. */
@@ -24,13 +25,10 @@ export function fakeServiceManager(
   const readStatus =
     typeof status === "function"
       ? status
-      : async () => ({
-          installed: false,
-          running: false,
-          disabled: false,
-          keepsAlive: false,
-          ...status,
-        });
+      : async () => {
+          const s = { installed: false, running: false, disabled: false, ...status };
+          return { ...s, keepsAlive: status?.keepsAlive ?? (s.installed && !s.disabled) };
+        };
   const manager: ServiceManager = {
     install: async (cfg) => {
       calls.push("install");

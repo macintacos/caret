@@ -66,9 +66,9 @@ export function createSystemdManager(deps: SystemdDeps = {}): ServiceManager {
     const activity = active.stdout.trim();
     // Both verbs print their answer on stdout at every exit code, so the word is what is
     // read and the exit status adds nothing. Absent output is systemd failing to answer
-    // rather than an answer: the only negative match here, so it is the only one an
-    // unrecognised word could flip the unsafe way — installed on silence would have a
-    // reconcile skip a machine holding nothing.
+    // rather than an answer. `installed` matches `not-found` negatively, so silence has to
+    // be excluded by hand — installed on silence would have a reconcile skip a machine
+    // holding nothing.
     const installed = enablement !== "" && enablement !== "not-found";
     // startsWith, because `mask --runtime` reports `masked-runtime` and is the same
     // deliberate opt-out. ponytail: a unit written but never enabled reads `disabled` too,
@@ -80,9 +80,14 @@ export function createSystemdManager(deps: SystemdDeps = {}): ServiceManager {
       installed,
       running: activity === "active",
       disabled,
-      // Matched on the words that end the restarts rather than those that keep them, so a
-      // word systemd adds later waits on the supervisor instead of racing it for the port.
-      // A restart job shows `inactive` too, but only between two turns of systemd's loop.
+      // Matched on the words that end the restarts, so a word systemd adds later, or no
+      // answer, waits on the supervisor instead of racing it for the port. ponytail: a
+      // unit with a start still queued reads `inactive` too — for one turn of systemd's
+      // loop inside a restart job, and at login until default.target — and a hook reading
+      // it then takes the port the start is about to bind, whose EADDRINUSE restarts can
+      // spend StartLimitBurst and park the unit. Read the queued job beside the state
+      // (`systemctl --user show caret.service -p ActiveState -p Job`) and count `inactive`
+      // with a job as kept alive if that ever shows.
       keepsAlive: installed && !disabled && activity !== "inactive" && activity !== "failed",
     };
   }

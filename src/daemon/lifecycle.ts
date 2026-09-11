@@ -62,6 +62,8 @@ export interface EnsureDeps {
 /** How a call paces its probes, and how long it may take. */
 export interface EnsureTiming {
   backoff: (attempt: number) => Promise<void>;
+  /** Probes per wait — the main loop and each wait for a successor count their own, so the
+   * deadline, not this, bounds the call. */
   maxAttempts: number;
   /** Monotonic milliseconds, read for the call's deadline. */
   now: () => number;
@@ -153,8 +155,8 @@ export async function ensureDaemon(
       if (h.build === deps.currentBuild && h.version === deps.currentVersion) {
         return deps.baseUrl;
       }
-      // Attaching caller: this daemon is not ours, but it is this world's and it
-      // is answering, which is all a resumed poll needs.
+      // Not taking over — an attach, a successor, or a takeover whose window is spent:
+      // this world's daemon is answering, which is all the caller needs.
       if (mode !== "takeover" || windowSpent) return deps.baseUrl;
       // Retiring a supervised daemon only races the supervisor's restart. Cycle the
       // service instead: the launcher resolves caret at exec time, so the restart is

@@ -21,10 +21,10 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { PREWARM_RESERVE_MS } from "@/commands/prewarm.ts";
+import { setupTempStateDir } from "@test/support/env.ts";
+import { prewarmEnsureDeps } from "@/commands/prewarm.ts";
 import { HOOK_TIMEOUT_S } from "@/config/constants.ts";
 import { DEFAULTS, loadSettings } from "@/config/settings.ts";
-import { SUPERVISOR_WINDOW_MS } from "@/daemon/lifecycle.ts";
 
 // hooks/hooks.json sits at the repo root, two dirs up from src/, four up from here.
 const HOOKS_JSON = join(import.meta.dir, "../../../hooks/hooks.json");
@@ -68,10 +68,15 @@ test("hooks.json's PermissionRequest timeout is the named HOOK_TIMEOUT_S budget"
   expect(hookTimeout(file, review)).toBe(HOOK_TIMEOUT_S);
 });
 
-test("ensureDaemon's production deadline fits inside the prewarm hook's timeout", async () => {
+// Prewarm's deps are built under a throwaway state dir: no launcher record there, so no
+// supervisor is wired, and the developer's real state dir is never read.
+setupTempStateDir("caret-hooks-timeout-state-");
+
+test("prewarm's ensureDaemon deadline fits inside its hook timeout", async () => {
   const file = JSON.parse(await Bun.file(HOOKS_JSON).text()) as HooksFile;
   const prewarm = { event: "PostToolUse", matcher: "EnterPlanMode", command: "caret prewarm" };
-  expect(SUPERVISOR_WINDOW_MS + PREWARM_RESERVE_MS + OVERRUN_MS).toBeLessThan(
+  const { timing } = await prewarmEnsureDeps(DEFAULTS);
+  expect(timing.windowMs + timing.reserveMs + OVERRUN_MS).toBeLessThan(
     hookTimeout(file, prewarm) * 1000,
   );
 });

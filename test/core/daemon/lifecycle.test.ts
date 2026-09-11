@@ -416,10 +416,7 @@ function recordingHealth(next: () => HealthBody | null) {
 const supervisor = ({ status, ...over }: Parameters<typeof fakeServiceManager>[0] = {}) =>
   fakeServiceManager({
     ...over,
-    status:
-      typeof status === "function"
-        ? status
-        : { installed: true, running: true, keepsAlive: true, ...status },
+    status: typeof status === "function" ? status : { installed: true, running: true, ...status },
   });
 
 test("a resident peer's service is cycled, and the hook attaches to its successor", async () => {
@@ -756,8 +753,8 @@ test("successor mode waits past the refusing instance to its supervised successo
   expect(served.at(-1)?.instanceId).toBe("successor");
 });
 
-// The drain wait is the supervisor's one window for the call, so the launcher's build is
-// the one that stays.
+// A successor never takes over: whatever build the launcher brought up is the one the call
+// attaches to, and its service is left alone.
 test("successor mode attaches a resident successor of another build, never cycling it", async () => {
   const { calls, manager: service } = supervisor();
   const drain: (HealthBody | null)[] = [peer("draining", { build: "b1" }), null];
@@ -767,6 +764,20 @@ test("successor mode attaches a resident successor of another build, never cycli
   await ensureDaemon(ensureDeps({ service, health }), "successor");
   expect(calls).toEqual([]);
   expect(served.at(-1)?.instanceId).toBe("successor");
+});
+
+// The drain wait was the call's one supervisor window, so a port the successor answered
+// on and then left empty is spawned into rather than left to the supervisor again.
+test("successor mode spawns into the port when its successor answers once and then vanishes", async () => {
+  const { statusReads, manager: service } = supervisor();
+  let spawns = 0;
+  const drain = [peer("draining"), peer("successor")];
+  const { health } = recordingHealth(() => {
+    if (drain.length > 0) return drain.shift() ?? null;
+    return spawns > 0 ? peer("spawned", { build: "b1", resident: false }) : null;
+  });
+  await ensureDaemon(ensureDeps({ service, health, spawn: () => spawns++ }), "successor");
+  expect({ spawns, statusReads: statusReads() }).toEqual({ spawns: 1, statusReads: 0 });
 });
 
 // With no supervisor there is no one else to bind the freed port, so the hook spawns
@@ -820,13 +831,14 @@ function steppedClock() {
       },
       maxAttempts: 50,
       windowMs: 10_000,
-      reserveMs: 5_000,
+      reserveMs: 7_000,
     },
   };
 }
 
 // A hook killed by its own timeout leaves the review nothing at all, so every way the
-// call can wait has to fit one deadline — the fallback spawn's attempts included.
+// call can wait has to fit one deadline — the fallback spawn's attempts included. The
+// reserve past the window is the caller's, and the call spends all of it.
 test.each<[string, EnsureMode, (calls: string[]) => () => HealthBody | null]>([
   [
     "a cycled service that never brings a daemon back",
@@ -849,6 +861,7 @@ test.each<[string, EnsureMode, (calls: string[]) => () => HealthBody | null]>([
   await expect(
     ensureDaemon(ensureDeps({ timing: clock.timing, service, health: async () => next() }), mode),
   ).rejects.toThrow(/did not become healthy in time/);
+  expect(clock.timing.now()).toBeGreaterThanOrEqual(clock.timing.windowMs + clock.timing.reserveMs);
   expect(clock.timing.now()).toBeLessThanOrEqual(
     clock.timing.windowMs + clock.timing.reserveMs + clock.stepMs,
   );
@@ -901,7 +914,7 @@ test("a resident peer first met past the supervisor window is attached, not cycl
 // The supervisor is machine-wide — one constant label — so a dev or test world with its
 // own XDG_STATE_HOME must never cycle it. Only the world whose install wrote the
 // launcher's service record owns it.
-test("prodEnsureDeps wires the supervisor only into the world that installed it", async () => {
+test("prodEnsureDeps wires the supervisor only into the world that installed it, and the caller's reserve", async () => {
   const { manager: service } = supervisor();
   let built = 0;
   const manager = () => {
@@ -914,6 +927,7 @@ test("prodEnsureDeps wires the supervisor only into the world that installed it"
   mkdirSync(dirname(launcherServiceFile()), { recursive: true });
   writeFileSync(launcherServiceFile(), "caret.service\n");
   expect((await prodEnsureDeps(DEFAULTS, manager, 0)).service).toBe(service);
+  expect((await prodEnsureDeps(DEFAULTS, manager, 1234)).timing.reserveMs).toBe(1234);
 });
 
 // ---- retireDaemon: SIGTERM fallback is gated on the lock's world (EXC-461) ----
