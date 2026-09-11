@@ -25,12 +25,14 @@ import { DEFAULTS, isResident } from "@/config/settings.ts";
 import type { HealthBody } from "@/daemon/client.ts";
 import {
   DAEMON_CWD,
+  type EnsureOptions,
   ensureDaemon,
   openDaemonStderr,
   prodEnsureDeps,
   removeOwnDaemonLock,
   retireDaemon,
   rotateDaemonStderr,
+  SPAWN_RESERVE_MS,
   spawnDaemon,
 } from "@/daemon/lifecycle.ts";
 import { setLogLevel } from "@/lib/log.ts";
@@ -799,6 +801,70 @@ test("draining: a port already freed is a cold start, attached on its first answ
   expect(url).toBe("http://localhost:42718");
   expect(spawns).toBe(1);
   expect(served.filter((h) => h?.instanceId === "spawned")).toHaveLength(1);
+});
+
+// ---- ensureDaemon's overall time bound ----
+
+/** A clock that moves a second per backoff, over more attempts than the deadline allows,
+ * so only the deadline can end the call. */
+function steppedClock() {
+  let t = 0;
+  return {
+    elapsed: () => t,
+    deps: {
+      now: () => t,
+      backoff: async () => {
+        t += 1_000;
+      },
+      maxAttempts: 50,
+      windowMs: 10_000,
+    },
+  };
+}
+
+// A hook killed by its own timeout leaves the review nothing at all, so every way the
+// call can wait has to fit one deadline — the fallback spawn's attempts included.
+test.each<[string, EnsureOptions, (calls: string[]) => () => HealthBody | null]>([
+  [
+    "a cycled service that never brings a daemon back",
+    {},
+    (calls) => () => (calls.includes("restart") ? null : peer("old")),
+  ],
+  ["an empty port the supervisor never fills", {}, () => () => null],
+  [
+    "a drain whose successor never comes",
+    { draining: true },
+    () => {
+      let probes = 0;
+      return () => (++probes === 1 ? peer("draining") : null);
+    },
+  ],
+])("%s ends by the call's deadline", async (_title, opts, answers) => {
+  const clock = steppedClock();
+  const { calls, manager: service } = supervisor();
+  const next = answers(calls);
+  await expect(
+    ensureDaemon(ensureDeps({ ...clock.deps, service, health: async () => next() }), opts),
+  ).rejects.toThrow();
+  expect(clock.elapsed()).toBeLessThanOrEqual(clock.deps.windowMs + SPAWN_RESERVE_MS + 1_000);
+});
+
+test("a supervisor window that runs out still leaves the fallback spawn its turn", async () => {
+  const clock = steppedClock();
+  const { manager: service } = supervisor();
+  const spawnedAt: number[] = [];
+  const url = await ensureDaemon(
+    ensureDeps({
+      ...clock.deps,
+      service,
+      health: async () =>
+        spawnedAt.length > 0 ? peer("spawned", { build: "b1", resident: false }) : null,
+      spawn: () => void spawnedAt.push(clock.elapsed()),
+    }),
+  );
+  expect(url).toBe("http://localhost:42718");
+  expect(spawnedAt).toHaveLength(1);
+  expect(spawnedAt[0]).toBeGreaterThanOrEqual(clock.deps.windowMs);
 });
 
 // ---- prodEnsureDeps ----

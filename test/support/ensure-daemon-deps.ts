@@ -4,7 +4,15 @@ import type { EnsureDeps } from "@/daemon/lifecycle.ts";
 
 type EnsureDaemonNoOps = Pick<
   EnsureDeps,
-  "readLock" | "isAlive" | "retire" | "removeLock" | "spawn" | "backoff" | "maxAttempts"
+  | "readLock"
+  | "isAlive"
+  | "retire"
+  | "removeLock"
+  | "spawn"
+  | "backoff"
+  | "maxAttempts"
+  | "now"
+  | "windowMs"
 >;
 
 export function ensureDaemonNoOps(maxAttempts = 5): EnsureDaemonNoOps {
@@ -16,5 +24,8 @@ export function ensureDaemonNoOps(maxAttempts = 5): EnsureDaemonNoOps {
     spawn: () => {},
     backoff: async () => {},
     maxAttempts,
+    // No deadline: the attempt caps alone bound the call.
+    now: () => 0,
+    windowMs: Number.POSITIVE_INFINITY,
   };
 }

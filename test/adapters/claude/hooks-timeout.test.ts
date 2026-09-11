@@ -9,6 +9,9 @@
 // and the review-timeout ceiling enforced by the settings schema — so this suite
 // reads BOTH and fails if either drifts.
 //
+// The prewarm hook's budget is coupled the same way to ensureDaemon's deadline: a
+// prewarm killed while it still waits on the supervisor never reaches its fallback spawn.
+//
 // It reads the Claude plugin's hook manifest and matches Claude's PermissionRequest
 // /ExitPlanMode vocabulary, so it lives beside the Claude adapter (test-layout),
 // not in test/core.
@@ -18,8 +21,10 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { fakeServiceManager } from "@test/support/service-manager.ts";
 import { HOOK_TIMEOUT_S } from "@/config/constants.ts";
 import { DEFAULTS, loadSettings } from "@/config/settings.ts";
+import { prodEnsureDeps, SPAWN_RESERVE_MS } from "@/daemon/lifecycle.ts";
 
 // hooks/hooks.json sits at the repo root, two dirs up from src/, four up from here.
 const HOOKS_JSON = join(import.meta.dir, "../../../hooks/hooks.json");
@@ -49,11 +54,30 @@ function permissionRequestTimeout(file: HooksFile): number {
   return entry.timeout;
 }
 
+/** The PostToolUse/EnterPlanMode hook's declared `timeout` (seconds) — the budget
+ * Claude Code gives `caret prewarm` before it kills the hook. */
+function prewarmTimeout(file: HooksFile): number {
+  const matchers = file.hooks.PostToolUse ?? [];
+  const enterPlanMode = matchers.find((m) => m.matcher === "EnterPlanMode");
+  const entry = enterPlanMode?.hooks.find((h) => h.command.includes("caret prewarm"));
+  if (entry?.timeout === undefined) {
+    throw new Error("no PostToolUse/EnterPlanMode `caret prewarm` hook timeout in hooks.json");
+  }
+  return entry.timeout;
+}
+
 test("hooks.json's PermissionRequest timeout is the named HOOK_TIMEOUT_S budget", async () => {
   const file = JSON.parse(await Bun.file(HOOKS_JSON).text()) as HooksFile;
   // Editing the hooks.json number alone fails here: the manifest and the constant
   // the settings ceiling is built from are the same single source.
   expect(permissionRequestTimeout(file)).toBe(HOOK_TIMEOUT_S);
+});
+
+test("ensureDaemon's production deadline fits inside the prewarm hook's timeout", async () => {
+  const file = JSON.parse(await Bun.file(HOOKS_JSON).text()) as HooksFile;
+  // A thunk that cannot throw, since this machine may carry a real service record.
+  const { windowMs } = await prodEnsureDeps(DEFAULTS, () => fakeServiceManager().manager);
+  expect(windowMs + SPAWN_RESERVE_MS).toBeLessThan(prewarmTimeout(file) * 1000);
 });
 
 // Drive the review-timeout ceiling through its REAL load path so the assertion
