@@ -13,8 +13,10 @@ import { getPort, logKeep, logMaxSize, type Settings } from "@/config/settings.t
 import { type HealthBody, httpHealth } from "@/daemon/client.ts";
 import { buildKind, currentBuildId, type DaemonLock, VERSION } from "@/lib/build-id.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
-import { logDebug, logWarn } from "@/lib/log.ts";
+import { logDebug, logInfo, logWarn } from "@/lib/log.ts";
 import { rotateIfOversized } from "@/lib/log-rotate.ts";
+import { errorMessage } from "@/lib/types.ts";
+import type { ServiceManager } from "@/service/manager.ts";
 
 export interface EnsureDeps {
   baseUrl: string;
@@ -41,6 +43,8 @@ export interface EnsureDeps {
   removeLock: () => void;
   /** Spawn a detached daemon. May throw EADDRINUSE if it loses a race. */
   spawn: () => void;
+  /** This world's supervisor, absent when the world installed none. */
+  service?: ServiceManager;
   backoff: (attempt: number) => Promise<void>;
   maxAttempts: number;
 }
@@ -94,13 +98,20 @@ export interface EnsureOptions {
 
 /** Ensure a caret daemon owns the port and return its base URL: reuse a same-build
  * daemon, gracefully retire a stale one and spawn a fresh daemon, and clean orphan
- * locks (EXC-406). `takeover: false` skips the retire-and-replace half — see
- * EnsureOptions. Never denies a review because takeover failed — an unretireable
- * stale daemon is reused (serving its old UI) rather than left unreachable. The
- * one exception: a foreign world's daemon (EXC-461) is neither reused nor
- * retired — that's a config conflict, and cross-attaching IS the bug. */
+ * locks (EXC-406). Under this world's supervisor a stale resident daemon is cycled
+ * through the service instead, and an empty port is left to the supervisor before
+ * this hook spawns into it (EXC-1166). `takeover: false` skips the
+ * retire-and-replace half — see EnsureOptions. Never denies a review because
+ * takeover failed — an unretireable stale daemon, or one whose service will not
+ * restart, is reused (serving its old UI) rather than left unreachable. The one
+ * exception: a foreign world's daemon (EXC-461) is neither reused nor retired —
+ * that's a config conflict, and cross-attaching IS the bug. */
 export async function ensureDaemon(deps: EnsureDeps, opts: EnsureOptions = {}): Promise<string> {
-  const takeover = opts.takeover ?? true;
+  let takeover = opts.takeover ?? true;
+  // The supervisor gets one window per call. Past it, attach to whatever answers and
+  // spawn into an empty port, so a launcher that resolves another build than this
+  // hook's is never cycled a second time.
+  let waited = false;
   for (let attempt = 0; attempt < deps.maxAttempts; attempt++) {
     const h = await deps.health(deps.baseUrl);
     if (h && h.service === "caret") {
@@ -116,6 +127,16 @@ export async function ensureDaemon(deps: EnsureDeps, opts: EnsureOptions = {}): 
       // Attaching caller: this daemon is not ours, but it is this world's and it
       // is answering, which is all a resumed poll needs.
       if (!takeover) return deps.baseUrl;
+      // Retiring a supervised daemon only races the supervisor's restart. Cycle the
+      // service instead: the launcher resolves caret at exec time, so the restart is
+      // the upgrade.
+      if (deps.service && h.resident === true) {
+        if (!(await restartService(deps.service))) return deps.baseUrl;
+        waited = true;
+        takeover = false;
+        await awaitSuccessor(deps, h.instanceId);
+        continue;
+      }
       const retired = await deps.retire(deps.baseUrl, deps.readLock());
       // A pre-fix daemon (no /api/retire, no lock) can't be retired: reuse it
       // (stale UI) rather than deny the review or spin retrying. A retireable
@@ -127,6 +148,13 @@ export async function ensureDaemon(deps: EnsureDeps, opts: EnsureOptions = {}): 
     }
     if (h && h.service !== "caret") {
       throw new Error(`port is held by a non-caret process — set CARET_PORT to a free port`);
+    }
+    // An empty port under a supervisor is its restart window: a daemon spawned into it
+    // is unsupervised, and takes the port from the one that should hold it.
+    if (!waited && deps.service && (await supervisorExpected(deps.service))) {
+      waited = true;
+      takeover = false;
+      if (await awaitSuccessor(deps, undefined)) continue;
     }
     // Connection refused → drop an orphan lock (dead PID) if present, then spawn.
     // A lost spawn race is fine: swallow EADDRINUSE and re-poll, connecting to
@@ -153,6 +181,39 @@ export async function ensureDaemon(deps: EnsureDeps, opts: EnsureOptions = {}): 
     return deps.baseUrl;
   }
   throw new Error("caret daemon did not become healthy in time");
+}
+
+/** Wait, on the takeover loop's own budget, for the port to change hands from `prev`
+ * (undefined: nothing was answering). True once another instance answers — never the
+ * outgoing one, which keeps answering while it drains. */
+async function awaitSuccessor(deps: EnsureDeps, prev: string | undefined): Promise<boolean> {
+  for (let attempt = 0; attempt < deps.maxAttempts; attempt++) {
+    await deps.backoff(attempt);
+    const h = await deps.health(deps.baseUrl);
+    if (h?.service === "caret" && (prev === undefined || h.instanceId !== prev)) return true;
+  }
+  logWarn("service", "no daemon took the port in time", { instanceId: prev });
+  return false;
+}
+
+/** Cycle the service. False when the supervisor refused, so the caller keeps the daemon
+ * it has rather than deny a review over a failed takeover. */
+async function restartService(service: ServiceManager): Promise<boolean> {
+  logInfo("service", "restarting service: stale daemon build");
+  try {
+    await service.restart();
+    return true;
+  } catch (e) {
+    logWarn("service", "service restart failed; reusing daemon", { reason: errorMessage(e) });
+    return false;
+  }
+}
+
+/** Whether the supervisor will start a daemon on its own: its unit is loaded and the
+ * user has not turned it off. A status that cannot be read counts as no. */
+async function supervisorExpected(service: ServiceManager): Promise<boolean> {
+  const status = await service.status().catch(() => null);
+  return status?.installed === true && !status.disabled;
 }
 
 /** Read + validate the daemon lock; null if missing or unparseable. */

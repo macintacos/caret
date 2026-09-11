@@ -84,8 +84,9 @@ const FILE_REF_BATCH = 64;
 /** How long a stepping-down daemon waits for in-flight writes and unread decisions
  * before it releases the port anyway. Must stay under the supervisors'
  * SIGTERM→SIGKILL grace (launchd's 20s and systemd's 90s defaults; neither unit
- * overrides them) and ensureDaemon's retire-and-backoff loop (~14s over
- * prodEnsureDeps' 12 attempts). */
+ * overrides them) and ensureDaemon's wait budget (~14s over prodEnsureDeps' 12
+ * attempts), which bounds both its retire-and-backoff loop and its wait for a
+ * cycled service's daemon. */
 const DRAIN_DEADLINE_MS = 5_000;
 
 /** Decides whether an incoming plan starts a new review or appends a version.
