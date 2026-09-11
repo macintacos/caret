@@ -275,5 +275,5 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
     upkeep.push({ name: "stderr-rotate", run: () => rotateDaemonStderr(svc.current()) });
   }
   armedUpkeep = startUpkeep({ tasks: upkeep, log });
-  // Bun.serve keeps the process alive; the daemon idle-auto-shuts-down.
+  // Bun.serve keeps the process alive; a non-resident daemon idle-auto-shuts-down.
 }

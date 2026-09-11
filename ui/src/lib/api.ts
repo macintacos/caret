@@ -46,10 +46,9 @@ export async function getHealth(): Promise<HealthIdentity> {
   }
 }
 
-/** The daemon's self-diagnostics for the settings Advanced pane (EXC-842):
- * system/runtime identity, uptime, the live parsed settings, and the config path.
- * Failure is a UI-worthy record (the pane degrades those blocks); a healthy probe
- * is silent, like getHealth. */
+/** The daemon's self-diagnostics (DaemonDiagnostics) for the settings Advanced pane
+ * (EXC-842). Failure is a UI-worthy record (the pane degrades those blocks); a healthy
+ * probe is silent, like getHealth. */
 export async function getDiagnostics(): Promise<DaemonDiagnostics> {
   try {
     return await json(await fetch("/api/diagnostics"));
