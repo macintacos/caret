@@ -294,7 +294,7 @@ src/redact/         log redaction — the browser-safe key walk and the node-sid
 src/ui/             the daemon's bridge to the embedded Svelte UI — asset resolution and the log endpoint
 src/config/         settings, preferences, resolved paths, and shared constants
 src/lib/            cross-cutting foundation — wire-contract types, logging, and small shared utilities
-src/commands/       per-subcommand entrypoints (one file per subcommand)
+src/commands/       per-subcommand entrypoints (one file per subcommand), plus the wiring they share
 src/adapters/       the coding-agent adapter axis — the AgentAdapter interface and registry, plus one directory per tool (claude · opencode · codex)
 ui/                 Svelte 5 multi-asset SPA (Vite) embedded into the binary via the build-generated asset manifest, served by the daemon by URL path · src/state/ runes state modules · src/icons/ vendored Lucide SVGs
 hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode + PostToolUse/ExitPlanMode) — Claude-adapter packaging

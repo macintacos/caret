@@ -10,12 +10,9 @@ import { dirname } from "node:path";
 import { setupTempConfigFile, setupTempStateDir } from "@test/support/env.ts";
 import { expectCleanExitCode } from "@test/support/exit-code.ts";
 import type { LauncherDeps } from "@/commands/install/launcher.ts";
-import {
-  reconcileService,
-  type ServiceTarget,
-  uninstallService,
-} from "@/commands/install/service.ts";
+import { reconcileService, uninstallService } from "@/commands/install/service.ts";
 import { recordingUI } from "@/commands/install/ui.ts";
+import type { ServiceTarget } from "@/commands/service-target.ts";
 import { VANITY_HOST } from "@/config/constants.ts";
 import { launcherPath, launcherRecordDir } from "@/config/paths.ts";
 import type { ServiceConfig, ServiceManager, ServiceStatus } from "@/service/manager.ts";

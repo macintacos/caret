@@ -19,31 +19,14 @@ import {
   uninstallLauncher,
 } from "@/commands/install/launcher.ts";
 import type { InstallUI } from "@/commands/install/ui.ts";
+import type { ServiceTarget } from "@/commands/service-target.ts";
 import { VANITY_HOST } from "@/config/constants.ts";
 import { launcherPath } from "@/config/paths.ts";
 import { writeDaemonResident } from "@/config/resident.ts";
 import { getPort, loadSettings } from "@/config/settings.ts";
 import { DAEMON_CWD } from "@/daemon/lifecycle.ts";
 import { errorMessage } from "@/lib/types.ts";
-import { SERVICE_LABELS, type ServicePlatform, servicePlatform } from "@/service/index.ts";
-import { createLaunchdManager } from "@/service/launchd-manager.ts";
-import {
-  SERVICE_TERMINAL_EXIT_STATUS,
-  type ServiceManager,
-  serviceEnvironment,
-} from "@/service/manager.ts";
-import { createSystemdManager } from "@/service/systemd-manager.ts";
-
-/** The supervisor this machine installs under: what to drive, the unit name that manager
- * accepts, and where the user sees it outside caret. */
-export interface ServiceTarget {
-  manager: ServiceManager;
-  label: string;
-  /** Where the user turns this off themselves — Login Items on macOS, systemctl on Linux.
-   * Carried here rather than branched on in the step, so the platform decision stays in
-   * one place and both messages that name it are testable on either host. */
-  optOutSurface: string;
-}
+import { SERVICE_TERMINAL_EXIT_STATUS, serviceEnvironment } from "@/service/manager.ts";
 
 export interface ServiceStepDeps {
   /** The supervisor to reconcile against, wired by src/cli.ts. A thunk because resolving
@@ -168,21 +151,4 @@ export async function reconcileService(
       `The review UI is now always up at http://${VANITY_HOST}:${getPort(settings)} — it appears in ${optOutSurface}, and \`caret install --no-resident\` turns it off.`,
     );
   });
-}
-
-/** Where each platform surfaces the service to the user — macOS posts its own
- * "Background Items Added" notice naming this the moment it is registered. */
-const OPT_OUT_SURFACES: Record<ServicePlatform, string> = {
-  darwin: "System Settings › Login Items",
-  linux: "`systemctl --user`",
-};
-
-/** The running platform's supervisor. */
-export function prodService(): ServiceTarget {
-  const platform = servicePlatform();
-  return {
-    manager: platform === "darwin" ? createLaunchdManager() : createSystemdManager(),
-    label: SERVICE_LABELS[platform],
-    optOutSurface: OPT_OUT_SURFACES[platform],
-  };
 }

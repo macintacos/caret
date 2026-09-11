@@ -9,7 +9,7 @@
 import type { AgentAdapter } from "@/adapters/adapter.ts";
 import { selectAdapter } from "@/adapters/index.ts";
 import { bootHookLogging } from "@/commands/boot.ts";
-import { prodService } from "@/commands/install/service.ts";
+import { prodService } from "@/commands/service-target.ts";
 import { logFile } from "@/config/paths.ts";
 import { loadSettings, reviewTimeoutMs, type Settings } from "@/config/settings.ts";
 import { expireReview, longPoll, postReview } from "@/daemon/client.ts";
