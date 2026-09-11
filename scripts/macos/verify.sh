@@ -170,21 +170,21 @@ printf -- '--- reload: the bootout/bootstrap pair a caret install --refresh take
 # Back to back against a running agent, which is where `Bootstrap failed: 5: Input/output
 # error` comes from: bootout returns before launchd has finished tearing the job down, and
 # the bootstrap behind it lands on a domain still holding the old one.
-reload_broke=""
+reload_failure=""
 for i in $(seq 1 10); do
   bootout_out="$(launchctl bootout "$target" 2>&1)"
   bootout_rc=$?
   bootstrap_out="$(launchctl bootstrap "$domain" "$plist" 2>&1)"
   bootstrap_rc=$?
   if [ "$bootout_rc" != 0 ] || [ "$bootstrap_rc" != 0 ]; then
-    reload_broke="iteration $i: bootout rc=$bootout_rc ${bootout_out:-(silent)}, bootstrap rc=$bootstrap_rc ${bootstrap_out:-(silent)}"
+    reload_failure="iteration $i: bootout rc=$bootout_rc ${bootout_out:-(silent)}, bootstrap rc=$bootstrap_rc ${bootstrap_out:-(silent)}"
     break
   fi
 done
-if [ -z "$reload_broke" ]; then
+if [ -z "$reload_failure" ]; then
   pass "ten bootout/bootstrap cycles against a running agent"
 else
-  fail "ten bootout/bootstrap cycles against a running agent" "$reload_broke"
+  fail "ten bootout/bootstrap cycles against a running agent" "$reload_failure"
 fi
 
 printf -- '--- keepalive: what an exited agent costs the hook waiting on its successor\n'
