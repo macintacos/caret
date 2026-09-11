@@ -106,8 +106,8 @@ plus the filters in effect) and a `result` document carrying each task's status 
 `durationMs` and an overall `ok` boolean. The exit code is unchanged (`0` pass, `1` fail).
 
 **The gate scopes itself to your diff, so `ok` does not always mean all seven tasks ran.**
-A change where every path is Markdown runs `lint` alone — plus `test` when it touches one
-of the Markdown files a test reads from disk (`MARKDOWN_READ_BY_TESTS` in
+A change where every path is Markdown runs `lint` alone — plus `test unit` when it touches
+one of the Markdown files a test reads from disk (`MARKDOWN_READ_BY_TESTS` in
 `scripts/preflight.ts`: `scripts/tasks/dev/fake-plan.md`, `doc/ARCHITECTURE.md`,
 `THIRD_PARTY_LICENSES.md`, and `doc/DEVELOPMENT.md`). Anything else runs the full seven,
 as does an empty or unreadable diff. Read the `start` document's `selection` object before

@@ -1,6 +1,6 @@
 // Drives the preflight orchestrator's task DAG through an injected fake
 // spawner — no real mise tasks run. Asserts the scheduling contract from
-// EXC-462: lint/test/`build ui` start immediately, dependents wait on their gate
+// EXC-462: lint/`test unit`/`build ui` start immediately, dependents wait on their gate
 // and dedupe its artifact via CARET_SKIP_BUILD_UI / CARET_SKIP_BUILD_BIN,
 // `smoke` gates on `build bin` one level down (EXC-914), failures don't hide
 // other results, and the summary surfaces failed output plus the `mise run
@@ -36,7 +36,7 @@ import {
 import { waitFor } from "@test/support/poll.ts";
 import { DEV_FIXTURES } from "@/tasks/dev/protocol.ts";
 
-const ALL_TASKS = ["build bin", "build ui", "lint", "smoke", "test", "test bats", "test e2e"];
+const ALL_TASKS = ["build bin", "build ui", "lint", "smoke", "test bats", "test e2e", "test unit"];
 
 /** Fake spawner that resolves immediately from a per-task plan (default: pass). */
 function fakeSpawner(plan?: Record<string, SpawnOutcome>) {
@@ -77,7 +77,7 @@ async function releaseRemainingAndFinish(
   s: ReturnType<typeof gatedSpawner>,
   run: Promise<{ exitCode: number }>,
 ): Promise<void> {
-  for (const name of ["lint", "test", "test bats", "test e2e", "smoke"]) s.release(name);
+  for (const name of ["lint", "test unit", "test bats", "test e2e", "smoke"]) s.release(name);
   const r = await run;
   expect(r.exitCode).toBe(0);
 }
@@ -99,7 +99,7 @@ test("the immediate tasks start at once; dependents wait for build ui", async ()
 
   await waitForCond(() => s.calls.length === 4);
   await Bun.sleep(20); // would catch eagerly-spawned dependents
-  expect([...s.calls].sort()).toEqual(["build ui", "lint", "test", "test bats"]);
+  expect([...s.calls].sort()).toEqual(["build ui", "lint", "test bats", "test unit"]);
 
   s.release("build ui");
   await waitForCond(() => s.calls.length === 6);
@@ -142,13 +142,25 @@ test("concurrency 1: the whole gate still completes, in array order", async () =
   expect(r.exitCode).toBe(0);
   expect(calls.map((c) => c.name)).toEqual([
     "lint",
-    "test",
+    "test unit",
     "build ui",
     "test bats",
     "test e2e",
     "build bin",
     "smoke",
   ]);
+});
+
+// Cosmetic only: tasks still START in the order the test above pins.
+test("the summary lists tasks alphabetically", async () => {
+  const { spawnTask } = fakeSpawner();
+  const r = await runPreflight({ spawnTask, renderer: "silent" });
+
+  const listed = r.summary
+    .split("\n")
+    .slice(1)
+    .map((line) => line.replace(/^\s*✔ /, "").replace(/\s+passed$/, ""));
+  expect(listed).toEqual(ALL_TASKS);
 });
 
 test("dependents get their gate's skip env; immediate tasks get none", async () => {
@@ -165,7 +177,7 @@ test("dependents get their gate's skip env; immediate tasks get none", async () 
   for (const name of ["test e2e", "build bin"]) {
     expect(envByName.get(name)?.CARET_SKIP_BUILD_BIN).toBeUndefined();
   }
-  for (const name of ["lint", "test", "build ui"]) {
+  for (const name of ["lint", "test unit", "build ui"]) {
     expect(envByName.get(name)?.CARET_SKIP_BUILD_UI).toBeUndefined();
   }
 });
@@ -179,7 +191,7 @@ test("lint failure doesn't stop the others, exits 1, surfaces output and the for
   expect(r.exitCode).toBe(1);
   expect(calls.map((c) => c.name).sort()).toEqual(ALL_TASKS);
   expect(r.results.get("lint")?.status).toBe("failed");
-  expect(r.results.get("test")?.status).toBe("passed");
+  expect(r.results.get("test unit")?.status).toBe("passed");
   expect(r.results.get("build bin")?.status).toBe("passed");
   expect(r.summary).toContain("biome: src/x.ts needs formatting");
   expect(r.summary).toContain("mise run format");
@@ -325,7 +337,7 @@ test("a failed task aborts in-flight siblings that honor the signal (recorded sk
     new Promise<SpawnOutcome>((resolve) => {
       if (name === "lint") return resolve({ exitCode: 1, output: "lint boom" });
       if (name === "build ui") return resolve({ exitCode: 0, output: "" });
-      // test, test e2e, build bin: stay in-flight until fail-fast aborts them.
+      // test unit, test e2e, build bin: stay in-flight until fail-fast aborts them.
       const abort = () => resolve({ exitCode: 143, output: "", aborted: true });
       if (signal.aborted) abort();
       else signal.addEventListener("abort", abort, { once: true });
@@ -334,7 +346,7 @@ test("a failed task aborts in-flight siblings that honor the signal (recorded sk
 
   expect(r.exitCode).toBe(1);
   expect(r.results.get("lint")?.status).toBe("failed");
-  expect(r.results.get("test")?.status).toBe("skipped");
+  expect(r.results.get("test unit")?.status).toBe("skipped");
   expect(r.results.get("test e2e")?.status).toBe("skipped");
   // `build bin` aborted mid-flight is the third of its four gate exit paths, and
   // the one with no other coverage. Without these two the path is exercised but
@@ -374,15 +386,15 @@ test("a Markdown-only diff leaves the shell lane out", async () => {
   }
 });
 
-// These are the Markdown files a unit test READS FROM DISK, so `test` can
+// These are the Markdown files a unit test READS FROM DISK, so `test unit` can
 // observe a change to one even though every changed path is Markdown. One code
 // path, three separate reasons to exist — looping covers a fourth entry for free.
-test("Markdown a test reads from disk keeps `test` in the narrowed gate", async () => {
+test("Markdown a test reads from disk keeps `test unit` in the narrowed gate", async () => {
   for (const path of MARKDOWN_READ_BY_TESTS) {
-    // `test` is the claim here; a path an e2e spec ALSO reads brings its own
+    // `test unit` is the claim here; a path an e2e spec ALSO reads brings its own
     // suite along (asserted below), so this checks membership rather than the
     // exact set.
-    expect(await spawnedFor(["doc/CONFIGURING.md", path])).toContain("test");
+    expect(await spawnedFor(["doc/CONFIGURING.md", path])).toContain("test unit");
     expect(await spawnedFor(["doc/CONFIGURING.md", path])).toContain("lint");
     expect(selectTasks(["doc/CONFIGURING.md", path]).narrowed).toBe(true);
   }
@@ -394,12 +406,12 @@ test("Markdown a test reads from disk keeps `test` in the narrowed gate", async 
 // Markdown, so the naive "all changed paths are Markdown → skip `test`" rule
 // would skip exactly the diffs that guard exists for. Either path must reach it,
 // alone or together.
-test("a docs-only diff touching the fake plan or the dev guide still runs `test`", async () => {
-  expect(await spawnedFor(["doc/DEVELOPMENT.md"])).toEqual(["lint", "test"]);
+test("a docs-only diff touching the fake plan or the dev guide still runs `test unit`", async () => {
+  expect(await spawnedFor(["doc/DEVELOPMENT.md"])).toEqual(["lint", "test unit"]);
   // The fake plan is read by BOTH suites — dev-driver.test.ts asserts on its
   // content, and ref-hint.e2e.ts seeds it as a real plan — so it pulls `test e2e`
   // in as well, and `build ui` with it (EXC-1061).
-  const withPlan = ["build ui", "lint", "test", "test e2e"];
+  const withPlan = ["build ui", "lint", "test e2e", "test unit"];
   expect(await spawnedFor(["scripts/tasks/dev/fake-plan.md"])).toEqual(withPlan);
   expect(await spawnedFor(["doc/DEVELOPMENT.md", "scripts/tasks/dev/fake-plan.md"])).toEqual(
     withPlan,
@@ -440,7 +452,7 @@ test("every DEV_FIXTURES plan file is in MARKDOWN_READ_BY_TESTS", () => {
 });
 
 // A renamed or deleted fixture would silently orphan its entry, and the gate
-// would quietly stop running `test` for the file that replaced it.
+// would quietly stop running `test unit` for the file that replaced it.
 test("every MARKDOWN_READ_BY_TESTS entry still exists on disk", () => {
   expect(MARKDOWN_READ_BY_TESTS.length).toBeGreaterThan(0);
   for (const path of MARKDOWN_READ_BY_TESTS) {
@@ -529,20 +541,20 @@ test("buildStartReport echoes the parsed filters and lists planned tasks", () =>
     verbosity: 2,
     full: false,
     grep: "err",
-    tasks: ["test"],
+    tasks: ["test unit"],
   });
   expect(start.event).toBe("start");
   expect(start.schemaVersion).toBe(2);
   expect(start.tasks).toEqual([
     "lint",
-    "test",
+    "test unit",
     "build ui",
     "test bats",
     "test e2e",
     "build bin",
     "smoke",
   ]);
-  expect(start.filters).toEqual({ verbosity: 2, grep: "err", tasks: ["test"] });
+  expect(start.filters).toEqual({ verbosity: 2, grep: "err", tasks: ["test unit"] });
   // No selection argument → the full gate, reported as such.
   expect(start.selection.narrowed).toBe(false);
 });
@@ -575,7 +587,7 @@ test("buildResultReport level 0: passing tasks carry status only", async () => {
   expect(report.ok).toBe(true);
   expect(report.tasks.map((t) => t.name)).toEqual([
     "lint",
-    "test",
+    "test unit",
     "build ui",
     "test bats",
     "test e2e",
@@ -592,7 +604,7 @@ test("buildResultReport level 0: passing tasks carry status only", async () => {
 
 test("buildResultReport: a task that ran reports the time it took", async () => {
   const spawnTask: SpawnTask = async (name) => {
-    if (name === "test") await Bun.sleep(25);
+    if (name === "test unit") await Bun.sleep(25);
     return { exitCode: 0, output: "" };
   };
   const r = await runPreflight({ spawnTask, renderer: "silent" });
@@ -600,7 +612,7 @@ test("buildResultReport: a task that ran reports the time it took", async () => 
 
   // 20 rather than 25: Bun.sleep guarantees its lower bound on its own clock, while the
   // duration is measured on Date.now().
-  expect(report.tasks.find((t) => t.name === "test")?.durationMs).toBeGreaterThanOrEqual(20);
+  expect(report.tasks.find((t) => t.name === "test unit")?.durationMs).toBeGreaterThanOrEqual(20);
 });
 
 test("buildResultReport: a task skipped before it spawned reports no duration", async () => {
@@ -631,11 +643,11 @@ test("buildResultReport level 0: a small failed output is shown in full (with li
 
 test("buildResultReport level 0: a large failed output is truncated to a tail", async () => {
   const big = Array.from({ length: 30 }, (_, i) => `line ${i + 1}`).join("\n");
-  const { spawnTask } = fakeSpawner({ test: { exitCode: 1, output: big } });
+  const { spawnTask } = fakeSpawner({ "test unit": { exitCode: 1, output: big } });
   const r = await runPreflight({ spawnTask, renderer: "silent" });
   const report = buildResultReport(r.results);
 
-  const test = report.tasks.find((t) => t.name === "test");
+  const test = report.tasks.find((t) => t.name === "test unit");
   expect(test?.status).toBe("failed");
   expect(test?.truncated).toBe(true);
   expect(test?.totalLines).toBe(30);
@@ -649,13 +661,13 @@ test("buildResultReport -v: failures become full output, passing tasks gain a sn
   const big = Array.from({ length: 30 }, (_, i) => `fail ${i + 1}`).join("\n");
   const { spawnTask } = fakeSpawner({
     lint: { exitCode: 1, output: big },
-    test: { exitCode: 0, output: "test detail" },
+    "test unit": { exitCode: 0, output: "test detail" },
   });
   const r = await runPreflight({ spawnTask, renderer: "silent" });
   const report = buildResultReport(r.results, { verbosity: 1 });
 
   const lint = report.tasks.find((t) => t.name === "lint");
-  const test = report.tasks.find((t) => t.name === "test");
+  const test = report.tasks.find((t) => t.name === "test unit");
   // -v turns the failure up to full, untruncated.
   expect(lint?.output).toContain("fail 1");
   expect(lint?.output).toContain("fail 30");
@@ -667,24 +679,24 @@ test("buildResultReport -v: failures become full output, passing tasks gain a sn
 
 test("buildResultReport -vv: passing tasks carry their output too", async () => {
   const { spawnTask } = fakeSpawner({
-    test: { exitCode: 0, output: "ran 42 tests" },
+    "test unit": { exitCode: 0, output: "ran 42 tests" },
   });
   const r = await runPreflight({ spawnTask, renderer: "silent" });
   const report = buildResultReport(r.results, { verbosity: 2 });
 
-  const test = report.tasks.find((t) => t.name === "test");
+  const test = report.tasks.find((t) => t.name === "test unit");
   expect(test?.status).toBe("passed");
   expect(test?.output).toContain("ran 42 tests");
 });
 
 test("buildResultReport --grep: reduces output to matching lines with counts", async () => {
   const { spawnTask } = fakeSpawner({
-    test: { exitCode: 1, output: "line a\nerror x\nline b\nerror y" },
+    "test unit": { exitCode: 1, output: "line a\nerror x\nline b\nerror y" },
   });
   const r = await runPreflight({ spawnTask, renderer: "silent" });
   const report = buildResultReport(r.results, { grep: /error/ });
 
-  const test = report.tasks.find((t) => t.name === "test");
+  const test = report.tasks.find((t) => t.name === "test unit");
   expect(test?.output).toBe("error x\nerror y");
   expect(test?.matchedLines).toBe(2);
   expect(test?.totalLines).toBe(4);
@@ -692,12 +704,12 @@ test("buildResultReport --grep: reduces output to matching lines with counts", a
 
 test("buildResultReport --grep with no matches: matchedLines 0, no output text", async () => {
   const { spawnTask } = fakeSpawner({
-    test: { exitCode: 1, output: "line a\nline b" },
+    "test unit": { exitCode: 1, output: "line a\nline b" },
   });
   const r = await runPreflight({ spawnTask, renderer: "silent" });
   const report = buildResultReport(r.results, { grep: /nope/ });
 
-  const test = report.tasks.find((t) => t.name === "test");
+  const test = report.tasks.find((t) => t.name === "test unit");
   expect(test?.matchedLines).toBe(0);
   expect(test?.output).toBeUndefined();
   expect(test?.totalLines).toBe(2);
@@ -706,13 +718,13 @@ test("buildResultReport --grep with no matches: matchedLines 0, no output text",
 test("buildResultReport --task: scope alone surfaces the named task's output", async () => {
   const { spawnTask } = fakeSpawner({
     lint: { exitCode: 1, output: "lint boom" },
-    test: { exitCode: 1, output: "test boom" },
+    "test unit": { exitCode: 1, output: "test boom" },
   });
   const r = await runPreflight({ spawnTask, renderer: "silent" });
   // No verbosity: --task alone shows the named task in full.
-  const report = buildResultReport(r.results, { tasks: ["test"] });
+  const report = buildResultReport(r.results, { tasks: ["test unit"] });
 
-  const test = report.tasks.find((t) => t.name === "test");
+  const test = report.tasks.find((t) => t.name === "test unit");
   const lint = report.tasks.find((t) => t.name === "lint");
   expect(test?.output).toContain("test boom");
   expect(lint?.output).toBeUndefined();
@@ -722,12 +734,12 @@ test("buildResultReport --task: scope alone surfaces the named task's output", a
 test("buildResultReport --task: out-of-scope tasks stay quiet even at -vv", async () => {
   const { spawnTask } = fakeSpawner({
     lint: { exitCode: 0, output: "lint chatter" },
-    test: { exitCode: 0, output: "test chatter" },
+    "test unit": { exitCode: 0, output: "test chatter" },
   });
   const r = await runPreflight({ spawnTask, renderer: "silent" });
-  const report = buildResultReport(r.results, { tasks: ["test"], verbosity: 2 });
+  const report = buildResultReport(r.results, { tasks: ["test unit"], verbosity: 2 });
 
-  const test = report.tasks.find((t) => t.name === "test");
+  const test = report.tasks.find((t) => t.name === "test unit");
   const lint = report.tasks.find((t) => t.name === "lint");
   expect(test?.output).toContain("test chatter"); // named + passing → shown
   expect(lint?.output).toBeUndefined(); // out of scope → quiet despite -vv
@@ -735,12 +747,12 @@ test("buildResultReport --task: out-of-scope tasks stay quiet even at -vv", asyn
 
 test("buildResultReport --grep: surfaces matching lines from a passing task too", async () => {
   const { spawnTask } = fakeSpawner({
-    test: { exitCode: 0, output: "ok line\nwarn: deprecated api\nok line 2" },
+    "test unit": { exitCode: 0, output: "ok line\nwarn: deprecated api\nok line 2" },
   });
   const r = await runPreflight({ spawnTask, renderer: "silent" });
   const report = buildResultReport(r.results, { grep: /warn/ });
 
-  const test = report.tasks.find((t) => t.name === "test");
+  const test = report.tasks.find((t) => t.name === "test unit");
   expect(test?.status).toBe("passed");
   expect(test?.output).toBe("warn: deprecated api");
   expect(test?.matchedLines).toBe(1);
@@ -749,12 +761,12 @@ test("buildResultReport --grep: surfaces matching lines from a passing task too"
 test("buildResultReport: --grep composes within --task scope", async () => {
   const { spawnTask } = fakeSpawner({
     lint: { exitCode: 1, output: "lint error one\nlint clean" },
-    test: { exitCode: 1, output: "test error two\ntest clean" },
+    "test unit": { exitCode: 1, output: "test error two\ntest clean" },
   });
   const r = await runPreflight({ spawnTask, renderer: "silent" });
-  const report = buildResultReport(r.results, { grep: /error/, tasks: ["test"] });
+  const report = buildResultReport(r.results, { grep: /error/, tasks: ["test unit"] });
 
-  const test = report.tasks.find((t) => t.name === "test");
+  const test = report.tasks.find((t) => t.name === "test unit");
   const lint = report.tasks.find((t) => t.name === "lint");
   expect(test?.output).toBe("test error two");
   expect(test?.matchedLines).toBe(1);
@@ -822,8 +834,8 @@ test("preflight caps the unit suite's worker count in either display", () => {
   // The entry point's own `--parallel` fans out across every core; inside the gate
   // that starves the six siblings sharing the host, so a lower count is forwarded
   // after it and wins. Nothing about that depends on how the gate renders.
-  expect(miseTaskCommand("test", "live")).toEqual(["run", "test", "--parallel=4"]);
-  expect(miseTaskCommand("test", "json")).toEqual(["run", "test", "--parallel=4"]);
+  expect(miseTaskCommand("test unit", "live")).toEqual(["run", "test", "unit", "--parallel=4"]);
+  expect(miseTaskCommand("test unit", "json")).toEqual(["run", "test", "unit", "--parallel=4"]);
 });
 
 // The shell lane takes neither: bats has no worker count to cap, and its TAP

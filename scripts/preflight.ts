@@ -7,7 +7,7 @@
 // it). `lint`'s `hk check` step is the read-only one — it is the formatting
 // gate, and a lint failure points at `mise run format`.
 //
-// DAG: lint, test (unit), `build ui` and `test bats` start immediately;
+// DAG: lint, `test unit`, `build ui` and `test bats` start immediately;
 // `test e2e` and `build bin` start once `build ui` passes; `smoke` starts once
 // `build bin` passes (EXC-914). The build-first ordering + skip mechanism live in the tasks
 // CLI (scripts/tasks/build.ts), so each dependent is spawned with the skips that
@@ -20,7 +20,7 @@
 // proves the binary and the npm bundle do.
 //
 // Which of those tasks run is scoped to the diff (EXC-1042): a change confined
-// to Markdown runs `lint` alone, plus `test` when it touches Markdown a test
+// to Markdown runs `lint` alone, plus `test unit` when it touches Markdown a test
 // reads from disk. Everything else runs all seven, as does a diff that cannot
 // be read at all.
 //
@@ -41,7 +41,7 @@ import { availableParallelism } from "node:os";
 import type { Readable } from "node:stream";
 import { $ } from "bun";
 
-import { Listr, type ListrTask } from "listr2";
+import { DefaultRenderer, Listr, type ListrTask } from "listr2";
 
 import { lastDisplayLine } from "@/tasks/lib/exec.ts";
 
@@ -157,7 +157,7 @@ const SKIP_UI = { CARET_SKIP_BUILD_UI: "1" } as const;
 
 // `test bats` is last within IMMEDIATE: it gates nothing, and `build ui` gates the
 // dependents below.
-const IMMEDIATE = ["lint", "test", "build ui", "test bats"] as const;
+const IMMEDIATE = ["lint", "test unit", "build ui", "test bats"] as const;
 // ORDER IS LOAD-BEARING: listr2 fills its concurrency slots in array order, so a
 // task can only start once every task before it has started. `smoke` therefore
 // stays LAST — a gate capped below the task count (CARET_PREFLIGHT_JOBS=1) would
@@ -169,6 +169,8 @@ const DEPENDENT: readonly Dependent[] = [
   { name: "smoke", after: "build bin", env: { ...SKIP_UI, CARET_SKIP_BUILD_BIN: "1" } },
 ];
 const TASK_ORDER = [...IMMEDIATE, ...DEPENDENT.map((d) => d.name)];
+// How the live display and the summary list tasks. Cosmetic only: they still START in TASK_ORDER.
+const DISPLAY_ORDER = [...TASK_ORDER].sort();
 
 /** How a run renders, which is also what a task's argv has to suit: the live display
  * shows one line of a task's output at a time, `--json` a bounded tail of all of it. */
@@ -179,7 +181,7 @@ export type PreflightDisplay = "live" | "json";
  * that name is also the results map key, the display title, and what `--task`
  * matches — a flag folded into it would break all three.
  *
- * `test`'s worker cap is the gate's share of the host (EXC-1215). The entry point's own
+ * `test unit`'s worker cap is the gate's share of the host (EXC-1215). The entry point's own
  * `--parallel` takes every core — a 2.5x win standalone, a loss here: it starves the six
  * siblings, and on a 12-core host the median gate went 156s → 163s while lint took 2.6x
  * and `build ui` 2.2x longer. At 4 the gate's wall clock is indistinguishable from serial
@@ -191,7 +193,7 @@ export type PreflightDisplay = "live" | "json";
  * terminal animation that says as little on one display line as in a captured log.
  */
 const TASK_ARGS: Readonly<Record<string, readonly string[]>> = {
-  test: ["--parallel=4"],
+  "test unit": ["--parallel=4"],
 };
 
 /**
@@ -210,7 +212,7 @@ const JSON_ONLY_TASK_ARGS: Readonly<Record<string, readonly string[]>> = {
  * `test e2e`) splits into positional targets, which mise routes to the task's
  * own subcommand path (EXC-738); the extra argv follows, since caret's flags stop
  * parsing at the first operand. An entry that is not a caret flag at all —
- * `test`'s `--parallel=4` — rides through on the subcommand's `allowUnknownOption()`,
+ * `test unit`'s `--parallel=4` — rides through on the subcommand's `allowUnknownOption()`,
  * so removing that call breaks the gate rather than a test. */
 export function miseTaskCommand(name: string, display: PreflightDisplay): string[] {
   const extra = display === "json" ? (JSON_ONLY_TASK_ARGS[name] ?? []) : [];
@@ -248,8 +250,8 @@ export interface TaskSelection {
 
 /**
  * Markdown files a unit test READS FROM DISK. A diff confined to Markdown still
- * has to run `test` when it touches one of these, because `test` can observe the
- * change. Add an entry whenever a test starts reading a Markdown file at run
+ * has to run `test unit` when it touches one of these, because `test unit` can observe
+ * the change. Add an entry whenever a test starts reading a Markdown file at run
  * time — the suite guards that every path listed here still exists, but nothing
  * can guard an omission.
  *
@@ -315,7 +317,7 @@ export function selectTasks(changed: readonly string[] | null): TaskSelection {
   // TASK_ORDER decides the running order, so the set is built by filtering it
   // rather than by pushing — a task can never land out of sequence here.
   const suites = new Set<string>(["lint"]);
-  if (readByTests.length > 0) suites.add("test");
+  if (readByTests.length > 0) suites.add("test unit");
   if (readByE2e.length > 0) suites.add("test e2e");
   // Pull in whatever a selected task waits on, transitively. A dependent spawns
   // only once its gate PASSES, so selecting `test e2e` without `build ui` would
@@ -325,7 +327,7 @@ export function selectTasks(changed: readonly string[] | null): TaskSelection {
     if (suites.has(dep.name)) suites.add(dep.after);
   }
   const reads = [
-    readByTests.length > 0 ? `\`test\` reads ${readByTests.join(", ")}` : "",
+    readByTests.length > 0 ? `\`test unit\` reads ${readByTests.join(", ")}` : "",
     readByE2e.length > 0 ? `\`test e2e\` reads ${readByE2e.join(", ")}` : "",
   ].filter(Boolean);
   const also = reads.length > 0 ? `, and ${reads.join(", and ")}` : "";
@@ -351,7 +353,7 @@ export async function changedPaths(): Promise<string[] | null> {
   // covers committed, staged and unstaged changes alike. `--no-renames` is
   // load-bearing: rename detection is on by default and reports only the
   // destination, so renaming a MARKDOWN_READ_BY_TESTS entry would hide the old
-  // path and skip the very `test` run that would catch the break.
+  // path and skip the very `test unit` run that would catch the break.
   const diff = await $`git diff --no-renames --name-only ${base}`.nothrow().quiet();
   const untracked = await $`git ls-files --others --exclude-standard`.nothrow().quiet();
   if (diff.exitCode !== 0 || untracked.exitCode !== 0) return null;
@@ -379,6 +381,19 @@ const LINT_FORMAT_HINT = "hint: run `mise run format` to fix formatting failures
 // Errors and summaries cluster at the end of a capture, so a large failed output
 // is abbreviated to its last N lines; `-v` shows the whole thing.
 const DEFAULT_OUTPUT_TAIL_LINES = 20;
+
+/** listr2's live display in DISPLAY_ORDER. It sorts a copy of the task array listr2 runs,
+ * so what starts first is untouched. */
+class DisplayOrderRenderer extends DefaultRenderer {
+  constructor(...[tasks, ...rest]: ConstructorParameters<typeof DefaultRenderer>) {
+    super(
+      [...tasks].sort(
+        (a, b) => DISPLAY_ORDER.indexOf(a.title ?? "") - DISPLAY_ORDER.indexOf(b.title ?? ""),
+      ),
+      ...rest,
+    );
+  }
+}
 
 export async function runPreflight(deps: {
   spawnTask: SpawnTask;
@@ -497,7 +512,7 @@ export async function runPreflight(deps: {
     // task groups — the exact failure this work prevents. Disable it so our
     // installSignalHandlers is the sole authority on interruption.
     registerSignalListeners: false,
-    renderer: deps.renderer ?? "default",
+    renderer: deps.renderer === "silent" ? "silent" : DisplayOrderRenderer,
     // Non-TTY (CI, pipes) auto-falls back to verbose: line-per-event, no
     // cursor-control sequences — color codes may still appear; that's expected.
     fallbackRenderer: "verbose",
@@ -514,12 +529,12 @@ function buildSummary(results: Map<string, TaskResult>, selection: TaskSelection
   // A narrowed run prints why, so a short green summary is never mistaken for
   // the whole gate having passed (the human twin of the start doc's `selection`).
   if (selection.narrowed) lines.push(`  scope: ${selection.reason}`);
-  for (const name of TASK_ORDER) {
+  for (const name of DISPLAY_ORDER) {
     const result = results.get(name);
     if (!result) continue;
     lines.push(`  ${icons[result.status]} ${name.padEnd(10)} ${result.status}`);
   }
-  for (const name of TASK_ORDER) {
+  for (const name of DISPLAY_ORDER) {
     const result = results.get(name);
     if (result?.status !== "failed") continue;
     lines.push("", `--- ${name} output ---`, result.output.trimEnd());

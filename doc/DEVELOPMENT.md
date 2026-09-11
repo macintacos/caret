@@ -527,9 +527,9 @@ diff, plus untracked files — and picks a task set from them:
 - **Every changed path is Markdown, and none is on the exception list below** → `lint`
   alone. `build ui`, `build bin`, `test e2e` and `smoke` cannot see docs at all, and the
   remaining Markdown is read by no test.
-- **…and one of them is on the exception list** → `lint` and `test`. A handful of Markdown
-  files really are read from disk at test time, so `test` can observe a change to them.
-  They are listed as `MARKDOWN_READ_BY_TESTS` in `scripts/preflight.ts`:
+- **…and one of them is on the exception list** → `lint` and `test unit`. A handful of
+  Markdown files really are read from disk at test time, so `test unit` can observe a
+  change to them. They are listed as `MARKDOWN_READ_BY_TESTS` in `scripts/preflight.ts`:
   `scripts/tasks/dev/fake-plan.md` (`test/scripts/dev-driver.test.ts` asserts on its
   content), `doc/ARCHITECTURE.md` (`test/adapters/opencode/docs-cache-path.test.ts` checks
   the `rm -rf` cache path it prints), `THIRD_PARTY_LICENSES.md`
@@ -555,8 +555,8 @@ passed".
 
 **Only _which tasks_ run is scoped — never which files a task sees.** Every task is still
 spawned as `mise run <task>` with no file arguments (the gate's only extra argv is
-`--parallel=4` for `test` and, under `--json`, `--quiet` for `test e2e`), and `lint` in
-particular must keep scanning the whole tree: `rumdl` resolves an MD051 cross-file link
+`--parallel=4` for `test unit` and, under `--json`, `--quiet` for `test e2e`), and `lint`
+in particular must keep scanning the whole tree: `rumdl` resolves an MD051 cross-file link
 fragment only when the file it points into is in the same scan, so a lint handed just the
 changed files would quietly stop checking every cross-file anchor whose target is
 unchanged. `doc/` is held together almost entirely by those links.
