@@ -38,8 +38,8 @@ async function reject(id: string) {
   });
 }
 async function approve(id: string) {
-  await store.update(id, (x) => {
-    x.status = "approved";
+  await store.update(id, (r) => {
+    r.status = "approved";
   });
   await store.remove(id);
 }
