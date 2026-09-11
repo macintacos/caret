@@ -5,10 +5,16 @@
 // read/write/liveness primitives the takeover loop and the discovery command
 // share.
 
-import { chmodSync, openSync, unlinkSync } from "node:fs";
+import { chmodSync, existsSync, openSync, unlinkSync } from "node:fs";
 import { normalize } from "node:path";
 
-import { daemonLock, daemonStderrLogFile, ensureLogsDir, stateDir } from "@/config/paths.ts";
+import {
+  daemonLock,
+  daemonStderrLogFile,
+  ensureLogsDir,
+  launcherServiceFile,
+  stateDir,
+} from "@/config/paths.ts";
 import { getPort, logKeep, logMaxSize, type Settings } from "@/config/settings.ts";
 import { type HealthBody, httpHealth } from "@/daemon/client.ts";
 import { buildKind, currentBuildId, type DaemonLock, VERSION } from "@/lib/build-id.ts";
@@ -355,11 +361,16 @@ export async function backoff(attempt: number): Promise<void> {
   await Bun.sleep(ms);
 }
 
-export async function prodEnsureDeps(s: Settings): Promise<EnsureDeps> {
+export async function prodEnsureDeps(
+  s: Settings,
+  service: () => ServiceManager,
+): Promise<EnsureDeps> {
   // The hook's own world (resolved state dir, EXC-461) — both its reuse
   // identity and the retire fallback's SIGTERM gate.
   const world = stateDir();
   return {
+    // The supervisor is machine-wide, so only the world that installed it may cycle it.
+    service: existsSync(launcherServiceFile()) ? service() : undefined,
     baseUrl: `http://localhost:${getPort(s)}`,
     currentBuild: await currentBuildId(),
     currentVersion: VERSION,

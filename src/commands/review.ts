@@ -9,6 +9,7 @@
 import type { AgentAdapter } from "@/adapters/adapter.ts";
 import { selectAdapter } from "@/adapters/index.ts";
 import { bootHookLogging } from "@/commands/boot.ts";
+import { prodService } from "@/commands/install/service.ts";
 import { logFile } from "@/config/paths.ts";
 import { loadSettings, reviewTimeoutMs, type Settings } from "@/config/settings.ts";
 import { expireReview, longPoll, postReview } from "@/daemon/client.ts";
@@ -51,7 +52,8 @@ function openBrowser(url: string): void {
 export function prodReviewDeps(s: Settings, adapter: AgentAdapter): ReviewDeps {
   return {
     parseHookInput: (stdin) => adapter.parseHookInput(stdin),
-    ensureDaemon: async (opts) => ensureDaemon(await prodEnsureDeps(s), opts),
+    ensureDaemon: async (opts) =>
+      ensureDaemon(await prodEnsureDeps(s, () => prodService().manager), opts),
     postReview,
     longPoll,
     openBrowser,

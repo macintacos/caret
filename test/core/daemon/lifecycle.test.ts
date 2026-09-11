@@ -13,13 +13,20 @@ import { dirname } from "node:path";
 import { ensureDaemonNoOps } from "@test/support/ensure-daemon-deps.ts";
 import { setupTempStateDir, withEnv } from "@test/support/env.ts";
 import { caretLogRecords } from "@test/support/ndjson.ts";
-import { daemonLock, daemonStderrLogFile, ensureLogsDir, logArchiveDir } from "@/config/paths.ts";
+import {
+  daemonLock,
+  daemonStderrLogFile,
+  ensureLogsDir,
+  launcherServiceFile,
+  logArchiveDir,
+} from "@/config/paths.ts";
 import { DEFAULTS, isResident } from "@/config/settings.ts";
 import type { HealthBody } from "@/daemon/client.ts";
 import {
   DAEMON_CWD,
   ensureDaemon,
   openDaemonStderr,
+  prodEnsureDeps,
   removeOwnDaemonLock,
   retireDaemon,
   rotateDaemonStderr,
@@ -642,6 +649,26 @@ test.each<[string, ServiceManager["status"]]>([
     expect({ refusals, spawns }).toEqual({ refusals: 1, spawns: 1 });
   },
 );
+
+// ---- prodEnsureDeps ----
+
+// The supervisor is machine-wide — one constant label — so a dev or test world with its
+// own XDG_STATE_HOME must never cycle it. Only the world whose install wrote the
+// launcher's service record owns it.
+test("prodEnsureDeps wires the supervisor only into the world that installed it", async () => {
+  const { service } = fakeService();
+  let built = 0;
+  const manager = () => {
+    built++;
+    return service;
+  };
+  expect((await prodEnsureDeps(DEFAULTS, manager)).service).toBeUndefined();
+  expect(built).toBe(0);
+
+  mkdirSync(dirname(launcherServiceFile()), { recursive: true });
+  writeFileSync(launcherServiceFile(), "caret.service\n");
+  expect((await prodEnsureDeps(DEFAULTS, manager)).service).toBe(service);
+});
 
 // ---- retireDaemon: SIGTERM fallback is gated on the lock's world (EXC-461) ----
 
