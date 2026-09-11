@@ -55,15 +55,18 @@ export async function waitForHealth(
   throw new Error("caret daemon did not become healthy in time");
 }
 
+/** Create the review. Null on a 503, the refusal of a daemon stepping down, so the
+ * caller can post to its successor; any other failure throws. */
 export async function postReview(
   baseUrl: string,
   input: PlanInput,
-): Promise<{ id: string; hasLiveClient?: boolean }> {
+): Promise<{ id: string; hasLiveClient?: boolean } | null> {
   const res = await fetch(`${baseUrl}/api/reviews`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
+  if (res.status === 503) return null;
   if (!res.ok) throw new Error(`POST /api/reviews failed: ${res.status}`);
   // hasLiveClient is optional: an older daemon (mid-upgrade version skew) omits
   // it, and the hook reads its absence as "no live client" (EXC-559).

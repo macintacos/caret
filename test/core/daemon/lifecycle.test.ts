@@ -650,6 +650,85 @@ test.each<[string, ServiceManager["status"]]>([
   },
 );
 
+// ---- ensureDaemon after a draining daemon refused a review ----
+
+// The refusing daemon keeps answering while it drains, and it may be this very build, so
+// the same-build check alone would hand it straight back to be refused again.
+test("draining: waits past the refusing instance to its supervised successor", async () => {
+  const { service } = fakeService();
+  let spawns = 0;
+  const drain: (HealthBody | null)[] = [
+    peer("draining", { build: "b1" }),
+    peer("draining", { build: "b1" }),
+    null,
+  ];
+  const served: (string | undefined)[] = [];
+  const url = await ensureDaemon(
+    ensureDeps({
+      service,
+      health: async () => {
+        const h = drain.length > 0 ? (drain.shift() ?? null) : peer("successor", { build: "b1" });
+        served.push(h?.instanceId);
+        return h;
+      },
+      spawn: () => spawns++,
+    }),
+    { takeover: false, draining: true },
+  );
+  expect(url).toBe("http://localhost:42718");
+  expect(spawns).toBe(0);
+  expect(served.at(-1)).toBe("successor");
+});
+
+// With no supervisor there is no one else to bind the freed port, so the hook spawns
+// into it straight away rather than waiting out the budget first.
+test("draining with no supervisor: spawns as soon as the refusing instance frees the port", async () => {
+  let spawns = 0;
+  let drainProbes = 0;
+  let refusals = 0;
+  const served: (string | undefined)[] = [];
+  const url = await ensureDaemon(
+    ensureDeps({
+      maxAttempts: 12,
+      health: async () => {
+        let h: HealthBody | null = null;
+        if (spawns > 0) h = peer("spawned", { build: "b1", resident: false });
+        else if (++drainProbes <= 2) h = peer("draining", { build: "b1", resident: false });
+        else refusals++;
+        served.push(h?.instanceId);
+        return h;
+      },
+      spawn: () => spawns++,
+    }),
+    { takeover: false, draining: true },
+  );
+  expect(url).toBe("http://localhost:42718");
+  expect(spawns).toBe(1);
+  expect(served.at(-1)).toBe("spawned");
+  expect(refusals).toBeLessThanOrEqual(2);
+});
+
+// The refusal only ever names the daemon that was answering then. Once the port has been
+// seen empty, whatever binds next is the successor, not another instance to wait past.
+test("draining: a port already freed is a cold start, attached on its first answer", async () => {
+  let spawns = 0;
+  const served: (string | undefined)[] = [];
+  const url = await ensureDaemon(
+    ensureDeps({
+      health: async () => {
+        const h = spawns > 0 ? peer("spawned", { build: "b1", resident: false }) : null;
+        served.push(h?.instanceId);
+        return h;
+      },
+      spawn: () => spawns++,
+    }),
+    { takeover: false, draining: true },
+  );
+  expect(url).toBe("http://localhost:42718");
+  expect(spawns).toBe(1);
+  expect(served.filter((id) => id === "spawned")).toHaveLength(1);
+});
+
 // ---- prodEnsureDeps ----
 
 // The supervisor is machine-wide — one constant label — so a dev or test world with its

@@ -32,13 +32,14 @@ export interface ReviewDeps {
    * whichever daemon is already serving this world instead of replacing it with
    * this binary's own (see EnsureOptions) — what a mid-review reconnect wants. */
   ensureDaemon: (opts?: EnsureOptions) => Promise<string>;
-  /** Create the review. `hasLiveClient` (EXC-559) reports whether a UI tab is
-   * already polling the daemon; when true the hook skips opening the browser so
-   * an open backgrounded tab's away-gated notification isn't pre-empted. */
+  /** Create the review, or null when the daemon refused it while stepping down.
+   * `hasLiveClient` (EXC-559) reports whether a UI tab is already polling the
+   * daemon; when true the hook skips opening the browser so an open backgrounded
+   * tab's away-gated notification isn't pre-empted. */
   postReview: (
     baseUrl: string,
     input: PlanInput,
-  ) => Promise<{ id: string; hasLiveClient?: boolean }>;
+  ) => Promise<{ id: string; hasLiveClient?: boolean } | null>;
   /** One bounded poll: a Decision, or null on a heartbeat (re-poll). Throws on
    * a transient drop so the caller can reconnect. */
   longPoll: (baseUrl: string, id: string) => Promise<Decision | null>;
@@ -136,10 +137,17 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<Decisi
     step = "postReview";
     // Stamp the originating cmux pane, if any: the daemon is long-lived and shared,
     // so it never inherits this hook's cmux environment (EXC-961).
-    const { id, hasLiveClient } = await deps.postReview(baseUrl, {
-      ...input,
-      cmux: deps.readPane?.(),
-    });
+    const payload = { ...input, cmux: deps.readPane?.() };
+    let created = await deps.postReview(baseUrl, payload);
+    if (!created) {
+      // Refused by a daemon stepping down: post once more to its successor.
+      step = "reconnect";
+      baseUrl = await deps.ensureDaemon({ takeover: false, draining: true });
+      step = "postReview";
+      created = await deps.postReview(baseUrl, payload);
+      if (!created) throw new Error("daemon draining; review not created");
+    }
+    const { id, hasLiveClient } = created;
     // From here every record — decision and error alike — carries the reviewId,
     // stitching this stream against the daemon's review/resolve records.
     ctx.reviewId = id;

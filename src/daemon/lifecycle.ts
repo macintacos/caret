@@ -100,6 +100,9 @@ export interface EnsureOptions {
    * double as installation. Attaching costs nothing: reviews are persisted per
    * world, so any same-world daemon can serve the decision. */
   takeover?: boolean;
+  /** The daemon on the port just refused work while stepping down: wait for it to hand
+   * the port over before attaching. */
+  draining?: boolean;
 }
 
 /** Ensure a caret daemon owns the port and return its base URL: reuse a same-build
@@ -118,6 +121,15 @@ export async function ensureDaemon(deps: EnsureDeps, opts: EnsureOptions = {}): 
   // spawn into an empty port, so a launcher that resolves another build than this
   // hook's is never cycled a second time.
   let waited = false;
+  if (opts.draining) {
+    // Only the instance answering now refused; a port already empty has nothing to
+    // wait past.
+    const h = await deps.health(deps.baseUrl);
+    if (h?.service === "caret") {
+      waited = true;
+      await awaitSuccessor(deps, h.instanceId);
+    }
+  }
   for (let attempt = 0; attempt < deps.maxAttempts; attempt++) {
     const h = await deps.health(deps.baseUrl);
     if (h && h.service === "caret") {
@@ -191,12 +203,15 @@ export async function ensureDaemon(deps: EnsureDeps, opts: EnsureOptions = {}): 
 
 /** Wait, on the takeover loop's own budget, for the port to change hands from `prev`
  * (undefined: nothing was answering). True once another instance answers — never the
- * outgoing one, which keeps answering while it drains. */
+ * outgoing one, which keeps answering while it drains. An empty port is the cycle's
+ * gap under a supervisor, but with none it is the answer: the caller spawns into it. */
 async function awaitSuccessor(deps: EnsureDeps, prev: string | undefined): Promise<boolean> {
   for (let attempt = 0; attempt < deps.maxAttempts; attempt++) {
     await deps.backoff(attempt);
     const h = await deps.health(deps.baseUrl);
-    if (h?.service === "caret" && (prev === undefined || h.instanceId !== prev)) return true;
+    if (h?.service === "caret" ? prev === undefined || h.instanceId !== prev : !deps.service) {
+      return true;
+    }
   }
   logWarn("service", "no daemon took the port in time", { instanceId: prev });
   return false;

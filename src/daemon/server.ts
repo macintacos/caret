@@ -509,7 +509,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // POST /api/reviews — an incoming plan from the hook.
   async function handleCreateReview(req: Request): Promise<Response> {
     if (liveness.isDraining()) {
-      // The hook turns this 503 into its fail-safe deny, so leave a trace here.
+      // The hook re-posts to this daemon's successor, so leave a trace of the refusal.
       log.warn("drain", "review refused: draining");
       return new Response("draining", { status: 503 });
     }

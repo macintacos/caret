@@ -1,11 +1,11 @@
-// Unit coverage for the consolidated health probe in src/daemon/client.ts:
-// waitForHealth — the bounded health-wait the out-of-process callers (the dev
-// driver, the e2e fixture) share. Driven against a real in-process server so
-// the probe exercises the actual httpHealth fetch, with an injected sleep so no
-// real time passes.
+// Unit coverage for src/daemon/client.ts: waitForHealth — the bounded health-wait
+// the out-of-process callers (the dev driver, the e2e fixture) share — and how
+// postReview reads the daemon's refusals. Driven against a real in-process server
+// so each wrapper exercises its actual fetch, with an injected sleep so no real
+// time passes.
 import { afterEach, expect, test } from "bun:test";
 
-import { waitForHealth } from "@/daemon/client.ts";
+import { postReview, waitForHealth } from "@/daemon/client.ts";
 
 const servers: Array<{ stop(): void }> = [];
 afterEach(() => {
@@ -67,4 +67,16 @@ test("waitForHealth bounds its attempts (a dead address gives up, not loops fore
   // attempts probes, one sleep between each pair that fails (the loop sleeps
   // after every failed probe, including the last).
   expect(probes).toBe(5);
+});
+
+test("postReview reads a draining daemon's 503 as no review created", async () => {
+  const srv = Bun.serve({ port: 0, fetch: () => new Response("draining", { status: 503 }) });
+  servers.push(srv);
+  expect(await postReview(`http://localhost:${srv.port}`, { plan: "# P" })).toBeNull();
+});
+
+test("postReview rejects any other failed status", async () => {
+  const srv = Bun.serve({ port: 0, fetch: () => new Response("boom", { status: 500 }) });
+  servers.push(srv);
+  await expect(postReview(`http://localhost:${srv.port}`, { plan: "# P" })).rejects.toThrow(/500/);
 });
