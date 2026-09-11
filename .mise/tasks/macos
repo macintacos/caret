@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Drive the launchd agent against this Mac's real launchctl: verify = the agent checks"
+#MISE description="Drive the launchd agent against this Mac's real launchctl: verify is the only mode, and the default"
 #
 # Hand-run only, deliberately: nothing here joins preflight or CI. The launchd contract
 # src/service/launchd-manager.ts is written against needs launchctl's `gui/<uid>` domain,
@@ -46,7 +46,8 @@ plist="$home/$label.plist"
 cleanup() {
   launchctl bootout "$target" >/dev/null 2>&1 || true
   # A `launchctl disable` outlives the job it named, so without this the throwaway label
-  # stays opted out in the per-user database and the next run starts disabled.
+  # stays opted out in the per-user database and the next run starts disabled; the
+  # `=> enabled` row it leaves is permanent — launchctl has no way to unset one.
   launchctl enable "$target" >/dev/null 2>&1 || true
   rm -rf "$home"
 }
@@ -72,7 +73,19 @@ process.stdout.write(
     launcherPath: home + "/caret-launcher",
     label: process.env.CARET_VERIFY_LABEL,
     workingDirectory: "/",
-    environment: serviceEnvironment({ HOME: home }),
+    // Every WORLD_VAR, not HOME alone: the plist overrides nothing it does not name, so
+    // a stray launchctl setenv of CLAUDE_CONFIG_DIR would resolve the real caret install
+    // under this throwaway HOME. Keep the roots in step with where
+    // scripts/macos/verify.sh plants the fake one. No apostrophes or backticks in here:
+    // the body is single-quoted, and bash reads both as its own.
+    environment: serviceEnvironment({
+      HOME: home,
+      CLAUDE_CONFIG_DIR: home + "/.claude",
+      XDG_STATE_HOME: home + "/.local/state",
+      XDG_CONFIG_HOME: home + "/.config",
+      XDG_CACHE_HOME: home + "/.cache",
+      XDG_DATA_HOME: home + "/.local/share",
+    }),
     terminalExitStatus: SERVICE_TERMINAL_EXIT_STATUS,
   }),
 );
@@ -85,5 +98,14 @@ import { SUPERVISOR_WINDOW_MS } from "@/daemon/lifecycle.ts";
 process.stdout.write(String(SUPERVISOR_WINDOW_MS));
 ')"
 
-CARET_VERIFY_HOME="$home" CARET_VERIFY_LABEL="$label" CARET_VERIFY_WINDOW_MS="$window_ms" \
+# The real agent's label, read rather than restated: the opt-out near miss asserts that
+# this run's disabled throwaway label does not satisfy the real one's pattern, and a
+# hand-copied label would quietly stop colliding and pass on nothing.
+real_label="$(bun -e '
+import { LAUNCHD_LABEL } from "@/service/manager.ts";
+process.stdout.write(LAUNCHD_LABEL);
+')"
+
+CARET_VERIFY_HOME="$home" CARET_VERIFY_LABEL="$label" CARET_VERIFY_PLIST="$plist" \
+  CARET_VERIFY_REAL_LABEL="$real_label" CARET_VERIFY_WINDOW_MS="$window_ms" \
   bash "$here/scripts/macos/verify.sh"

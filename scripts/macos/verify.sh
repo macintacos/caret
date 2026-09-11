@@ -7,10 +7,6 @@
 # Every check states what launchd answered, because these answers are what
 # src/service/launchd-manager.ts is written against — a release that changes one should
 # fail here rather than in a user's login.
-#
-# The predicates and command wrappers below are all invoked as `"$@"` by expect(),
-# matches() and until_true(), which shellcheck cannot follow — hence the file-wide SC2329.
-# shellcheck disable=SC2329
 set -uo pipefail
 
 # Never $HOME: everything below builds a fake caret install and hands it to launchd, and
@@ -18,7 +14,8 @@ set -uo pipefail
 home="${CARET_VERIFY_HOME:?set by .mise/tasks/macos}"
 label="${CARET_VERIFY_LABEL:?set by .mise/tasks/macos}"
 window_ms="${CARET_VERIFY_WINDOW_MS:?set by .mise/tasks/macos}"
-plist="$home/$label.plist"
+real_label="${CARET_VERIFY_REAL_LABEL:?set by .mise/tasks/macos}"
+plist="${CARET_VERIFY_PLIST:?set by .mise/tasks/macos}"
 uid="$(id -u)"
 domain="gui/$uid"
 target="$domain/$label"
@@ -27,9 +24,9 @@ failed=0
 
 # The machine the real bin/caret-launcher resolves against before it execs. `run` is the
 # resident case and `drain` a resident daemon slow to stop; any other mode is the status
-# to exit with. No `service` record is written: that record is what the launcher's
-# stop_agent and evict() act on, and leaving it absent is what keeps a failed resolve from
-# booting out or deleting anything.
+# to exit with. The `service` record names the throwaway label, which is what arms the
+# launcher's stop_agent for the terminal-exit section below; evict() cannot fire beside it,
+# since its branch needs candidate_dirs empty and the version directory here populates it.
 caret_root="$home/.claude/plugins/cache/caret/caret/0.1.0"
 mkdir -p "$caret_root/bin" "$home/bin" "$home/.local/state/caret/launcher"
 : >"$home/spawns"
@@ -58,6 +55,7 @@ chmod +x "$caret_root/bin/caret"
 printf '#!/bin/sh\nexit 0\n' >"$home/bin/bun"
 chmod +x "$home/bin/bun"
 printf '%s\n' "$home/bin/bun" >"$home/.local/state/caret/launcher/bun-path"
+printf '%s\n' "$label" >"$home/.local/state/caret/launcher/service"
 
 set_mode() { printf '%s\n' "$1" >"$home/mode"; }
 set_mode run
@@ -100,6 +98,21 @@ matches() {
   fi
 }
 
+# The ERE form of the DISABLED regex in launchd-manager.ts for one label: its dots
+# escaped as the TypeScript escapes them, the same whitespace tolerance, and anchored at
+# `$` where the TypeScript ends on `\b` — BSD grep has no `\b`, and print-disabled puts
+# nothing after the word. One derivation, so the pattern under test and the near miss
+# beside it cannot drift apart.
+disabled_re() {
+  printf '"%s"[[:space:]]*=>[[:space:]]*(true|disabled)$' "${1//./\\.}"
+}
+
+# A label's own print-disabled row, for the notes that record what a release spelled
+# without asserting it.
+spelling_of() {
+  launchctl print-disabled "$domain" | grep -F "\"$1\"" | sed 's/^[[:space:]]*//'
+}
+
 # until_true <deadline-secs> <predicate...>. launchd answers these over time — a throttled
 # respawn, a drain — so they are polled to a deadline rather than slept past.
 until_true() {
@@ -112,8 +125,20 @@ until_true() {
   return 1
 }
 
-job_running() { launchctl print "$target" 2>/dev/null | grep -qE '^[[:space:]]*state = running$'; }
+# readStatus's `state = running` pattern (launchd-manager.ts) as an ERE, carrying that
+# regex's own whitespace tolerance and anchored at `$` where it ends on `\b` — BSD grep has
+# no `\b`. Spelled once, because the check below and this predicate must not drift apart.
+running_re='^[[:space:]]*state[[:space:]]*=[[:space:]]*running$'
+# job_running, job_gone and spawns_past reach until_true only as `"$@"`, which shellcheck
+# cannot follow.
+# shellcheck disable=SC2329
+job_running() { launchctl print "$target" 2>/dev/null | grep -qE "$running_re"; }
+# The negation lives in the predicate: bash does not recognise `!` as the reserved word
+# once it arrives through until_true's `"$@"`.
+# shellcheck disable=SC2329
+job_gone() { ! launchctl print "$target" >/dev/null 2>&1; }
 spawn_count() { awk 'END { print NR }' "$home/spawns"; }
+# shellcheck disable=SC2329
 spawns_past() { [ "$(spawn_count)" -ge "$1" ]; }
 last_spawn() { tail -1 "$home/spawns"; }
 
@@ -121,7 +146,7 @@ printf -- '--- host: what this release answers as\n'
 note "the host these answers came from" \
   "macOS $(sw_vers -productVersion), domain $domain, window ${window_s}s"
 
-printf -- '--- install: the sequence install() performs\n'
+printf -- '--- install: what launchd makes of the generated plist\n'
 expect "bootstrap accepts the generated plist" 0 "" launchctl bootstrap "$domain" "$plist"
 # launchd reports `state = xpcproxy` for the moment before it execs the job, so the two
 # RUNNING patterns are read once the agent has settled rather than immediately.
@@ -129,12 +154,17 @@ until_true 20 job_running
 # Read from the plist rather than restated here, so moving EXIT_TIMEOUT_SEC in
 # src/service/launchd.ts moves what this asserts.
 exit_timeout="$(awk '/<key>ExitTimeOut<\/key>/ { getline; gsub(/[^0-9]/, ""); print }' "$plist")"
+# The getline assumes the integer sits on the next line; without this the pattern below
+# would go unsatisfiable and blame launchd for a layout change in the builder.
+[ -n "$exit_timeout" ] ||
+  fail "read ExitTimeOut out of the generated plist" "no <integer> after the key"
 matches "print reports the plist's ExitTimeOut of ${exit_timeout}s" \
-  "^[[:space:]]*exit timeout = $exit_timeout\$" launchctl print "$target"
+  "^[[:space:]]*exit[[:space:]]+timeout[[:space:]]*=[[:space:]]*$exit_timeout\$" \
+  launchctl print "$target"
 matches "print reports a running state, one of readStatus's two RUNNING patterns" \
-  '^[[:space:]]*state = running$' launchctl print "$target"
+  "$running_re" launchctl print "$target"
 matches "print reports a pid, the other one" \
-  '^[[:space:]]*pid = [0-9]+$' launchctl print "$target"
+  '^[[:space:]]*pid[[:space:]]*=[[:space:]]*[0-9]+$' launchctl print "$target"
 
 printf -- '--- reload: the bootout/bootstrap pair a caret install --refresh takes\n'
 # Back to back against a running agent, which is where `Bootstrap failed: 5: Input/output
@@ -200,38 +230,69 @@ set_mode drain
 rm -f "$home/drain-ready" "$home/draining" "$home/drained"
 launchctl kickstart -k "$target" >/dev/null
 # The launcher resolves caret before it execs it, and a SIGTERM that lands first drains
-# nothing.
-until_true 45 test -e "$home/drain-ready"
-launchctl kickstart -k "$target" >/dev/null
-if until_true 30 test -e "$home/drained"; then
-  pass "an 8s drain runs to completion under the ${exit_timeout}s ExitTimeOut"
+# nothing — a precondition rather than a settle-wait, so it reports itself instead of
+# letting the check below blame ExitTimeOut for an agent that never started.
+if until_true 45 test -e "$home/drain-ready"; then
+  before="$(spawn_count)"
+  launchctl kickstart -k "$target" >/dev/null
+  # After the kickstart, not before: the mode file is read at start, so the instance now
+  # draining keeps `drain` while the successor launchd brings up gets `run` — the sections
+  # below are then not timing against a drain, and no drain goes unmeasured.
+  set_mode run
+  if until_true 30 test -e "$home/drained"; then
+    pass "an 8s drain runs to completion under the ${exit_timeout}s ExitTimeOut"
+  else
+    fail "an 8s drain runs to completion under the ${exit_timeout}s ExitTimeOut" \
+      "no completion marker 30s after kickstart -k"
+  fi
+  # A new spawn rather than `state = running`: the drainer's own pid stays alive for all 8s
+  # of its trap, so a state read here would be answered by the predecessor.
+  until_true 45 spawns_past "$((before + 1))"
 else
-  fail "an 8s drain runs to completion under the ${exit_timeout}s ExitTimeOut" \
-    "no completion marker 30s after kickstart -k"
+  fail "a drain-mode agent starts, so the drain below is a drain" \
+    "no drain-ready marker 45s after kickstart -k"
+  set_mode run
 fi
-# Back to a plain long-running agent, so the checks below are not timing against a drain.
-set_mode run
+
+printf -- '--- terminal exit: what the launcher does where launchd has no allowlist\n'
+# An unrunnable bin/caret with candidate_dirs still populated: the one launcher branch that
+# exits 78 without evicting, so stop_agent is what has to take the agent down. KeepAlive is
+# unconditional in the plist — systemd's RestartPreventExitStatus has no launchd spelling —
+# which makes this the only brake on a respawn loop in a user's login session.
+chmod -x "$caret_root/bin/caret"
 launchctl kickstart -k "$target" >/dev/null
-until_true 45 job_running
+if until_true 45 job_gone; then
+  pass "exit 78 boots the agent out, since KeepAlive would otherwise respawn into it"
+else
+  fail "exit 78 boots the agent out" "still loaded 45s after the kickstart"
+fi
+chmod +x "$caret_root/bin/caret"
+launchctl bootstrap "$domain" "$plist" ||
+  fail "the agent bootstraps again after booting itself out" "rc=$?"
 
 printf -- '--- disabled: the opt-out readStatus reads, and the near miss beside it\n'
 launchctl disable "$target"
-# The ERE form of the DISABLED regex in launchd-manager.ts with this run's label
-# substituted, anchored at `$` where the TypeScript ends on `\b` — BSD grep has no `\b`,
-# and print-disabled puts nothing after the word.
-matches "print-disabled reports a disabled label" \
-  "\"$label\" => (true|disabled)\$" launchctl print-disabled "$domain"
-note "the spelling this release used" \
-  "$(launchctl print-disabled "$domain" | grep -F "\"$label\"" | sed 's/^[[:space:]]*//')"
-launchctl enable "$target"
-matches "enable puts the label back" \
-  "\"$label\" => enabled\$" launchctl print-disabled "$domain"
-# The near miss the DISABLED pattern has to survive: every enabled agent on the machine
-# reads as opted out if it ever matches the word inside `enabled`.
-if launchctl print-disabled "$domain" 2>/dev/null | grep -qE "\"$label\" => (true|disabled)\$"; then
-  fail "an enabled label does not also read as disabled" "the DISABLED pattern matched it"
+matches "print-disabled reports a disabled label" "$(disabled_re "$label")" \
+  launchctl print-disabled "$domain"
+note "the spelling this release used for a disabled label" "$(spelling_of "$label")"
+# The near miss this run creates for itself: the throwaway label is the real one plus a
+# suffix, so only the pattern's closing quote keeps the developer's own agent from reading
+# as opted out while this one is disabled. Read only — nothing here touches that label.
+if launchctl print-disabled "$domain" 2>/dev/null | grep -qE "$(disabled_re "$real_label")"; then
+  note "the prefix-collision near miss" \
+    "$real_label is itself opted out on this host, so the collision cannot be told apart"
 else
-  pass "an enabled label does not also read as disabled"
+  pass "$real_label's DISABLED pattern does not match the disabled $label"
+fi
+launchctl enable "$target"
+# Not asserted: pre-Ventura prints `=> false` and Ventura-era `=> enabled`, and no caret
+# code reads either — the check below already proves the enable took effect, because a
+# label still disabled would satisfy the DISABLED pattern.
+note "the spelling this release used for an enabled label" "$(spelling_of "$label")"
+if launchctl print-disabled "$domain" 2>/dev/null | grep -qE "$(disabled_re "$label")"; then
+  fail "enable puts the label back" "the DISABLED pattern still matches it"
+else
+  pass "enable puts the label back"
 fi
 
 printf -- '--- uninstall: what uninstall() gets back, loaded and not\n'

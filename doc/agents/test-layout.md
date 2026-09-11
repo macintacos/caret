@@ -86,9 +86,13 @@ side to match the other.
 - **macOS launchd** — `scripts/macos/verify.sh`, run by hand through
   `mise run macos verify`, the same arrangement one platform over: it bootstraps the plist
   `buildLaunchdPlist()` actually emitted under a throwaway label and drives the install,
-  reload, restart, drain, opt-out and uninstall sequence `createLaunchdManager` performs,
-  while `test/core/service/launchd-manager.test.ts` asserts only on the argv a fake
-  `launchctl` recorded. It needs a GUI login session rather than a container, so it can
-  never be gated either. Two checks stay out of its reach and are written up as a hand
-  checklist in [`doc/DEVELOPMENT.md`](../DEVELOPMENT.md#development): the Login Items
-  opt-out `status().disabled` reads, and the `caret install --refresh` cycle.
+  reload, keepalive, restart, drain, disabled and uninstall sequence
+  `createLaunchdManager` performs, plus a terminal-exit section for the launcher's own
+  Darwin-only `stop_agent`, while `test/core/service/launchd-manager.test.ts` asserts on
+  the generated plist, on the argv a fake `launchctl` recorded, and on the parse of
+  launchctl output it scripts itself — never on what launchd does with any of it. It needs
+  a GUI login session rather than a container, so it can never be gated either. What stays
+  out of its reach is written up as a hand checklist in
+  [`doc/DEVELOPMENT.md`](../DEVELOPMENT.md#development): the exit timeout on the plist
+  already installed, the Login Items opt-out `status().disabled` reads, the
+  `caret install --refresh` cycle, and load-at-login.

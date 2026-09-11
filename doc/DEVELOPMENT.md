@@ -61,7 +61,7 @@ mise run format     # Biome (write)
 mise run smoke      # smoke the shipped artifacts; also `smoke bin` / `smoke bundle`
 mise run preflight  # pre-push gate: lint + tests (unit ∥ bats ∥ e2e) + build + smoke, scoped to the diff
 mise run linux      # boot a real systemd in a container; `linux verify` runs the unit checks
-mise run macos      # drive this Mac's own launchctl; `macos verify` runs the agent checks
+mise run macos      # drive this Mac's own launchctl; `verify` is the only mode, and the default
 ```
 
 `mise run linux` and `mise run macos` are the two tasks above no gate runs, and between
@@ -71,17 +71,23 @@ you change `src/service/` or `bin/caret-launcher`. `linux verify` needs
 [Apple container](https://github.com/apple/container); `macos verify` needs a GUI login
 session, because launchctl's `gui/<uid>` domain does not exist over ssh.
 
-`macos verify` works on a throwaway label, so two things stay a hand check against your
-own `dev.excessive.caret` agent. Both disturb your login item, so do them when you can
-watch:
+`macos verify` works on a throwaway label, so these stay a hand check against your own
+`dev.excessive.caret` agent. Each disturbs your login item, so do them when you can watch:
 
-1. `launchctl print gui/$(id -u)/dev.excessive.caret` reports `exit timeout = 20`.
+1. `launchctl print gui/$(id -u)/dev.excessive.caret` reports `exit timeout = 20`. The
+   script asserts that against a plist it generates now; this asserts it against the plist
+   already installed, which may predate a change to `EXIT_TIMEOUT_SEC`.
 2. Turn caret off under System Settings › Login Items & Extensions.
 3. Run `caret install`: it reports the service as turned off there and leaves it that way.
 4. Turn it back on, run `caret install --refresh`, then take one review, and confirm the
    refresh left a single resident daemon on the port —
-   `curl -s http://127.0.0.1:<port>/api/diagnostics | jq '{resident, upkeep}'`.
-5. Restore with `caret install`.
+   `curl -s http://127.0.0.1:<port>/api/diagnostics | jq '{resident, upkeep}'` answers
+   `resident: true` with all three upkeep tasks armed, `update-check`, `review-sweep` and
+   `stderr-rotate`. `<port>` is `[daemon].port`, `42718` unless you have moved it.
+5. Log out and back in: `launchctl print gui/$(id -u)/dev.excessive.caret` reports a pid,
+   and the review UI answers on that port. Nothing else covers load-at-login — not the
+   unit suite, and not `verify.sh`, which bootstraps its own label by hand.
+6. Restore with `caret install`.
 
 ### Bootstrapping a clone
 
