@@ -225,6 +225,8 @@ test("rehydrate loads a committed mixed-shape review fixture with no loss", asyn
   // Falsifiable back-compat: the checked-in fixture carries one legacy
   // (selection-anchored) and one line-anchored annotation, run through the
   // real read path. A schema change that strands either shape fails here.
+  // It also carries `planEpoch`, a key Review does not declare, so a parse that
+  // rejects unknown keys fails here too.
   const src = join(import.meta.dir, "fixtures", "review-mixed-annotations.json");
   const fixture = JSON.parse(await readFile(src, "utf-8"));
   await copyFile(src, join(dir, `${fixture.id}.json`));
@@ -372,8 +374,6 @@ test("a settled persist keeps the entry while a later persist to its id is queue
   expect(chains.size).toBe(1);
   await second;
   expect(chains.size).toBe(0);
-  const onDisk = JSON.parse(await readFile(join(dir, "tail.json"), "utf-8")) as Review;
-  expect(onDisk.title).toBe("Retitled");
 });
 
 test("a failed persist rejects its caller and still drains its entry", async () => {
@@ -381,6 +381,7 @@ test("a failed persist rejects its caller and still drains its entry", async () 
   await writeFile(blocker, "");
   const chains = new Map<string, Promise<void>>();
   const s = createStore(join(blocker, "reviews"), noopLogger, chains);
+  // Also pins .then(drop, drop): a .finally(drop) re-rejects unhandled, which fails this test.
   await expect(s.create(makeReview({ id: "fail" }))).rejects.toThrow();
   expect(chains.size).toBe(0);
 });

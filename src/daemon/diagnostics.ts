@@ -1,10 +1,8 @@
-// Daemon self-diagnostics for GET /api/diagnostics (EXC-842): the system/runtime
-// identity, uptime, residency and armed upkeep tasks, live parsed settings, and
-// config path + CARET_* env overrides the settings Advanced pane renders.
-// buildDiagnostics is pure and dependency-injected; the effectful half
-// (prodDiagnosticsDeps and systemInfo) sits here beside the interface it
-// satisfies, as lifecycle.ts's prodEnsureDeps does, so a test can assert what
-// production reads without booting the daemon.
+// Daemon self-diagnostics for GET /api/diagnostics (EXC-842): the
+// DaemonDiagnostics document (src/lib/types.ts). buildDiagnostics is pure and
+// dependency-injected; the effectful half (prodDiagnosticsDeps and systemInfo)
+// sits here beside the interface it satisfies, as lifecycle.ts's prodEnsureDeps
+// does, so a test can assert what production reads without booting the daemon.
 // The settings dump rides redact/core.ts's scrubGraph — censor-only (no
 // home-path scrub) since this serves the user's own loopback UI, not a
 // pasteable bug report.
@@ -22,6 +20,7 @@ export interface DiagnosticsDeps {
   now: () => number;
   /** The daemon's boot time in ms, captured once at startup. */
   startedAt: number;
+  /** isResident's boot-time verdict. */
   resident: boolean;
   /** The names startUpkeep armed. */
   upkeep: string[];

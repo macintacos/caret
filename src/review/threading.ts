@@ -4,8 +4,8 @@
 // would fold into the wrong thread. Rule: a new ExitPlanMode for a session
 // APPENDS a version to its latest review ONLY IF that review is currently
 // `rejected` (changes requested, awaiting revision); otherwise it starts a NEW
-// thread. Approval removes the review from the store, so the session's next plan
-// never appends to it.
+// thread. An approved review never returns to `rejected`, so the plan after an
+// approval starts a new thread.
 
 import { randomBytes } from "node:crypto";
 

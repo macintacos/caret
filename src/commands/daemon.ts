@@ -178,7 +178,8 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   // crash rather than being reported — and permanently parked — as a bind failure.
   const buildId = await currentBuildId();
   const assetDigest = await buildHash(assets);
-  // Assigned by startUpkeep after the bind; the diagnostics thunk reads it per request.
+  // Set from startUpkeep's return in the bind's synchronous tail, before any request can
+  // land. Read per request, so prodDiagnosticsDeps must stay inside the thunk.
   let armedUpkeep: string[] = [];
 
   try {

@@ -174,10 +174,9 @@ export interface CreateServerOptions {
    * leaves `listSkills` unwired. runDaemon wires the active adapter's
    * `readSkillDescription`. */
   readSkillDescription?: (cwd: string, skill: SkillRef) => Promise<string | null>;
-  /** A thunk returning the daemon self-diagnostics served by GET /api/diagnostics
-   * (EXC-842): system/runtime identity, uptime, the live parsed settings, and the
-   * config path + env overrides. Omitted (default) → the route 404s. runDaemon wires
-   * the prod thunk, which reads live settings so a config edit hot-reloads. */
+  /** A thunk returning the DaemonDiagnostics served by GET /api/diagnostics (EXC-842).
+   * Omitted (default) → the route 404s. runDaemon wires the prod thunk, which reads
+   * live settings so a config edit hot-reloads. */
   diagnostics?: () => DaemonDiagnostics;
   /** A thunk returning whether the running caret is behind, served by GET /api/update
    * (EXC-1205): the install kind, the running version/commit, and the verdict. Omitted
@@ -414,12 +413,10 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return Response.json(body);
   }
 
-  // GET /api/diagnostics — the daemon's self-diagnostics for the settings
-  // Advanced pane (EXC-842): system/runtime identity, uptime, the live parsed
-  // settings (scrubbed), and the config path + env overrides in effect. Distinct
-  // from /api/health, a cross-daemon identity probe — this is the local daemon
-  // describing itself to its own UI. With no diagnostics thunk wired (default;
-  // e.g. a bare test daemon) the route 404s, like any absent optional capability.
+  // GET /api/diagnostics — the daemon describing itself (DaemonDiagnostics, EXC-842).
+  // Distinct from /api/health, a cross-daemon identity probe. With no diagnostics thunk
+  // wired (default; e.g. a bare test daemon) the route 404s, like any absent optional
+  // capability.
   function handleDiagnostics(): Response {
     if (!cfg.diagnostics) return notFound();
     return Response.json(cfg.diagnostics());
@@ -919,8 +916,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // Same invariant for the persisted composer scratches (version-scoped).
       currentVersion(r).composerScratches = [];
     });
-    // Approval is terminal: drop the review from the active set, so a later plan
-    // for the session starts a fresh thread and idle can fire.
+    // Approval is terminal: drop the review from memory (its file stays as history),
+    // so a resident daemon never accumulates approved reviews.
     if (decision.behavior === "allow") {
       await store.remove(id);
       // Remember the chosen variant for the UI's next load. Fire-and-forget:

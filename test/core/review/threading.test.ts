@@ -126,6 +126,8 @@ test("a plan after an approval starts a new thread", async () => {
   const b = await routeIncomingPlan(input({ plan: "# next\n\ny" }), store);
   expect(b).toMatchObject({ action: "new", version: 1 });
   expect(b.id).not.toBe(a.id);
+  // A review left pending would be superseded here rather than approved.
+  expect(b.expired).toEqual([]);
 });
 
 test("a plan arriving while a review is still pending starts a new thread", async () => {
