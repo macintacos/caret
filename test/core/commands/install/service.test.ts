@@ -63,7 +63,7 @@ test("a plain install registers the unit, naming the launcher the unit runs", as
   });
 });
 
-test("the install says where the review UI now lives", async () => {
+test("the install says where the review UI now lives, with no dangling caveat", async () => {
   const ui = recordingUI();
 
   await reconcileService(
@@ -72,7 +72,9 @@ test("the install says where the review UI now lives", async () => {
     ui,
   );
 
-  expect(ui.events.some((e) => e.includes(VANITY_HOST))).toBe(true);
+  const announcement = ui.events.find((e) => e.includes(VANITY_HOST));
+  expect(announcement).toBeDefined();
+  expect(announcement).not.toContain("undefined");
 });
 
 test("--no-resident persists the opt-out and removes a unit already installed", async () => {
@@ -289,19 +291,7 @@ test("the announcement carries the caveat for a switch caret cannot read", async
   expect(ui.events.some((e) => e.includes("That switch is not one caret can read."))).toBe(true);
 });
 
-test("a platform that sets no caveat is announced without one", async () => {
-  const ui = recordingUI();
-
-  await reconcileService(
-    RECONCILE,
-    { service: recordingService().target, installLauncher: () => {} },
-    ui,
-  );
-
-  expect(ui.events.some((e) => e.includes(VANITY_HOST) && e.includes("undefined"))).toBe(false);
-});
-
-test("the message that leaves an opted-out service alone names what can undo it", async () => {
+test("the message that leaves an opted-out service alone names what turned it off", async () => {
   const ui = recordingUI();
 
   await reconcileService(

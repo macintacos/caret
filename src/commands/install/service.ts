@@ -148,8 +148,7 @@ export async function reconcileService(
     // supervisor keeps running the old binary until it is cycled.
     if (opts.refresh) await manager.restart();
 
-    ui.info(
-      `The review UI is now always up at http://${VANITY_HOST}:${getPort(settings)} — it appears in ${visibleIn}, and \`caret install --no-resident\` turns it off.${visibleToggleCaveat ? ` ${visibleToggleCaveat}` : ""}`,
-    );
+    const announcement = `The review UI is now always up at http://${VANITY_HOST}:${getPort(settings)} — it appears in ${visibleIn}, and \`caret install --no-resident\` turns it off.`;
+    ui.info([announcement, visibleToggleCaveat].filter(Boolean).join(" "));
   });
 }

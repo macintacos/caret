@@ -279,7 +279,7 @@ Two commands turn caret off, and they turn off different amounts of it:
 | Command | What it does |
 | --- | --- |
 | `caret install --no-resident` | Stops caret being resident: the review UI is no longer up from login onward. Your agent still reaches caret, and caret starts on demand. |
-| `caret install --uninstall` | Removes caret from this machine altogether. |
+| `caret install --uninstall` | Removes caret from every agent, and from this machine. |
 
 `--no-resident` writes `resident = false` into `config.toml`'s `[daemon]` table, and that
 value is what decides — a later `caret install` reads it rather than overruling it. To

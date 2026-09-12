@@ -15,12 +15,11 @@ export interface ServiceStatus {
   running: boolean;
   /** The user turned the service off themselves — `launchctl disable` on macOS, a
    * disabled or masked unit on Linux. Install reads this as an opt-out and never
-   * re-enables. The macOS System Settings › Login Items switch writes a different store
-   * and never reaches this field (EXC-1262). */
+   * re-enables (EXC-1167). */
   disabled: boolean;
   /** The supervisor puts a daemon on the port by itself — it runs one now, or starts one
    * again once this one exits — so a hook facing an empty port waits for it rather than
-   * spawning its own. False once the user turned it off, and on Linux once systemd parked
+   * spawning its own. False once `disabled` reads true, and on Linux once systemd parked
    * the unit (a terminal exit, or its start limit spent) or was told to stop it. */
   keepsAlive: boolean;
   /** Why this host cannot run the service at all, absent when it can. A stated
