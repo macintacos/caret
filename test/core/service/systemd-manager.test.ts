@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { setupTempStateDir } from "@test/support/env.ts";
 import { fakeServiceConfig } from "@test/support/service-config.ts";
 import { SYSTEMD_UNIT } from "@/service/manager.ts";
 import type { CommandResult } from "@/service/run.ts";
@@ -16,6 +17,10 @@ const NO_BUS: CommandResult = {
   stdout: "",
   stderr: "Failed to connect to bus: No medium found\n",
 };
+
+// The lingering warning goes through the hook logger, which would otherwise append to the
+// developer's real caret.log.
+setupTempStateDir("caret-systemd-state-");
 
 let dir: string;
 
