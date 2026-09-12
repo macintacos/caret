@@ -28,6 +28,7 @@ function recordingService(status: Partial<ServiceStatus> = {}) {
   const target = (): ServiceTarget => ({
     manager: fake.manager,
     label: "caret.service",
+    visibleIn: "`systemctl --user`",
     optOutSurface: "`systemctl --user`",
   });
   return { ...fake, target };
@@ -260,7 +261,7 @@ test("the announcement names where the service shows up outside caret", async ()
     {
       service: () => ({
         ...recordingService().target(),
-        optOutSurface: "System Settings › Login Items",
+        visibleIn: "System Settings › Login Items",
       }),
       installLauncher: () => {},
     },
@@ -268,4 +269,55 @@ test("the announcement names where the service shows up outside caret", async ()
   );
 
   expect(ui.events.some((e) => e.includes("System Settings › Login Items"))).toBe(true);
+});
+
+test("the announcement carries the caveat for a switch caret cannot read", async () => {
+  const ui = recordingUI();
+
+  await reconcileService(
+    RECONCILE,
+    {
+      service: () => ({
+        ...recordingService().target(),
+        visibleToggleCaveat: "That switch is not one caret can read.",
+      }),
+      installLauncher: () => {},
+    },
+    ui,
+  );
+
+  expect(ui.events.some((e) => e.includes("That switch is not one caret can read."))).toBe(true);
+});
+
+test("a platform that sets no caveat is announced without one", async () => {
+  const ui = recordingUI();
+
+  await reconcileService(
+    RECONCILE,
+    { service: recordingService().target, installLauncher: () => {} },
+    ui,
+  );
+
+  expect(ui.events.some((e) => e.includes(VANITY_HOST) && e.includes("undefined"))).toBe(false);
+});
+
+test("the message that leaves an opted-out service alone names what can undo it", async () => {
+  const ui = recordingUI();
+
+  await reconcileService(
+    RECONCILE,
+    {
+      service: () => ({
+        ...recordingService({ installed: true, disabled: true }).target(),
+        visibleIn: "System Settings › Login Items",
+        optOutSurface: "`launchctl disable`",
+      }),
+      installLauncher: () => {},
+    },
+    ui,
+  );
+
+  const left = ui.events.find((e) => e.includes("leaving it that way"));
+  expect(left).toContain("`launchctl disable`");
+  expect(left).not.toContain("System Settings › Login Items");
 });

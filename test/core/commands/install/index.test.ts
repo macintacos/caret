@@ -230,6 +230,7 @@ test("the service is registered after the targets, so a refresh cycles the new b
       ...claudeThenRumdlDeps(calls),
       service: () => ({
         label: "caret.service",
+        visibleIn: "`systemctl --user`",
         optOutSurface: "`systemctl --user`",
         manager: fakeServiceManager({ calls }).manager,
       }),

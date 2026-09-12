@@ -13,9 +13,10 @@ export interface ServiceStatus {
    * removes the file on Linux. */
   installed: boolean;
   running: boolean;
-  /** The user turned the service off themselves — Login Items on macOS, a disabled or
-   * masked unit on Linux. Install reads this as an opt-out and never re-enables
-   * (EXC-1167). */
+  /** The user turned the service off themselves — `launchctl disable` on macOS, a
+   * disabled or masked unit on Linux. Install reads this as an opt-out and never
+   * re-enables. The macOS System Settings › Login Items switch writes a different store
+   * and never reaches this field (EXC-1262). */
   disabled: boolean;
   /** The supervisor puts a daemon on the port by itself — it runs one now, or starts one
    * again once this one exits — so a hook facing an empty port waits for it rather than
