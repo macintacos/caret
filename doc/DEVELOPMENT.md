@@ -72,7 +72,10 @@ you change `src/service/` or `bin/caret-launcher`. `linux verify` needs
 session, because launchctl's `gui/<uid>` domain does not exist over ssh.
 
 `macos verify` works on a throwaway label, so these stay a hand check against your own
-`dev.excessive.caret` agent. Each disturbs your login item, so do them when you can watch:
+`dev.excessive.caret` agent. They need one to exist: `caret install` registers it from a
+build carrying `src/service/`, which is `mise run build --install` from a checkout until a
+release has it, and `launchctl print gui/$(id -u)/dev.excessive.caret` is how you confirm
+it landed. Each step disturbs your login item, so do them when you can watch:
 
 1. `launchctl print gui/$(id -u)/dev.excessive.caret` reports `exit timeout = 20`. The
    script asserts that against a plist it generates now; this asserts it against the plist
