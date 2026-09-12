@@ -307,7 +307,7 @@ test("the message that leaves an opted-out service alone names what turned it of
     ui,
   );
 
-  const left = ui.events.find((e) => e.includes("leaving it that way"));
-  expect(left).toContain("`launchctl disable`");
-  expect(left).not.toContain("System Settings › Login Items");
+  const message = ui.events.find((e) => e.includes("leaving it that way"));
+  expect(message).toContain("`launchctl disable`");
+  expect(message).not.toContain("System Settings › Login Items");
 });
