@@ -12,6 +12,7 @@ import {
   ensureStateDir,
   launcherBunFile,
   launcherPath,
+  launcherPinnedRootFile,
   launcherRecordDir,
   launcherServiceFile,
 } from "@/config/paths.ts";
@@ -27,6 +28,9 @@ export interface LauncherDeps {
    * and deletes on eviction. Absent when no supervisor was installed — the launcher
    * treats a missing record as "nothing here to tear down". */
   serviceLabel?: string;
+  /** The checkout the launcher should exec over the highest installed caret. Absent for a
+   * published install, which removes any pin an earlier `--from-local` left. */
+  pinnedRoot?: string;
   bunPath?: string;
   source?: () => string;
 }
@@ -48,11 +52,15 @@ export function installLauncher(deps: LauncherDeps = {}): void {
   // Under a compiled binary execPath is caret itself, not bun, so there is nothing worth
   // recording and the launcher is left to its own search.
   const bunPath = deps.bunPath ?? (buildKind() === "binary" ? undefined : process.execPath);
-  if (bunPath === undefined && deps.serviceLabel === undefined) return;
+  if (deps.pinnedRoot === undefined) rmSync(launcherPinnedRootFile(), { force: true });
+  if (bunPath === undefined && deps.serviceLabel === undefined && deps.pinnedRoot === undefined) {
+    return;
+  }
 
   ensureStateDir(launcherRecordDir());
   if (bunPath !== undefined) writeRecord(launcherBunFile(), bunPath);
   if (deps.serviceLabel !== undefined) writeRecord(launcherServiceFile(), deps.serviceLabel);
+  if (deps.pinnedRoot !== undefined) writeRecord(launcherPinnedRootFile(), deps.pinnedRoot);
 }
 
 /** The launcher's `read -r` reports EOF on a file with no trailing newline, and that read
