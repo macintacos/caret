@@ -89,7 +89,8 @@ export async function reconcileService(
   deps: ServiceStepDeps,
   ui: InstallUI,
 ): Promise<void> {
-  await withService(deps, ui, async ({ manager, label, optOutSurface }) => {
+  await withService(deps, ui, async (target) => {
+    const { manager, label, visibleIn, optOutSurface, visibleToggleCaveat } = target;
     if (!opts.resident && !opts.dryRun) {
       try {
         writeDaemonResident(false);
@@ -126,7 +127,7 @@ export async function reconcileService(
       return;
     }
     if (status.disabled) {
-      ui.info(`The caret service is turned off in ${optOutSurface} — leaving it that way.`);
+      ui.info(`The caret service is turned off with ${optOutSurface} — leaving it that way.`);
       return;
     }
     if (opts.dryRun) {
@@ -147,8 +148,7 @@ export async function reconcileService(
     // supervisor keeps running the old binary until it is cycled.
     if (opts.refresh) await manager.restart();
 
-    ui.info(
-      `The review UI is now always up at http://${VANITY_HOST}:${getPort(settings)} — it appears in ${optOutSurface}, and \`caret install --no-resident\` turns it off.`,
-    );
+    const announcement = `The review UI is now always up at http://${VANITY_HOST}:${getPort(settings)} — it appears in ${visibleIn}, and \`caret install --no-resident\` turns it off.`;
+    ui.info([announcement, visibleToggleCaveat].filter(Boolean).join(" "));
   });
 }

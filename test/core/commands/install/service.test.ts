@@ -28,6 +28,7 @@ function recordingService(status: Partial<ServiceStatus> = {}) {
   const target = (): ServiceTarget => ({
     manager: fake.manager,
     label: "caret.service",
+    visibleIn: "`systemctl --user`",
     optOutSurface: "`systemctl --user`",
   });
   return { ...fake, target };
@@ -62,7 +63,7 @@ test("a plain install registers the unit, naming the launcher the unit runs", as
   });
 });
 
-test("the install says where the review UI now lives", async () => {
+test("the install says where the review UI now lives, with no dangling caveat", async () => {
   const ui = recordingUI();
 
   await reconcileService(
@@ -71,7 +72,9 @@ test("the install says where the review UI now lives", async () => {
     ui,
   );
 
-  expect(ui.events.some((e) => e.includes(VANITY_HOST))).toBe(true);
+  const announcement = ui.events.find((e) => e.includes(VANITY_HOST));
+  expect(announcement).toBeDefined();
+  expect(announcement).not.toContain("undefined");
 });
 
 test("--no-resident persists the opt-out and removes a unit already installed", async () => {
@@ -260,7 +263,7 @@ test("the announcement names where the service shows up outside caret", async ()
     {
       service: () => ({
         ...recordingService().target(),
-        optOutSurface: "System Settings › Login Items",
+        visibleIn: "System Settings › Login Items",
       }),
       installLauncher: () => {},
     },
@@ -268,4 +271,43 @@ test("the announcement names where the service shows up outside caret", async ()
   );
 
   expect(ui.events.some((e) => e.includes("System Settings › Login Items"))).toBe(true);
+});
+
+test("the announcement carries the caveat for a switch caret cannot read", async () => {
+  const ui = recordingUI();
+
+  await reconcileService(
+    RECONCILE,
+    {
+      service: () => ({
+        ...recordingService().target(),
+        visibleToggleCaveat: "That switch is not one caret can read.",
+      }),
+      installLauncher: () => {},
+    },
+    ui,
+  );
+
+  expect(ui.events.some((e) => e.includes("That switch is not one caret can read."))).toBe(true);
+});
+
+test("the message that leaves an opted-out service alone names what turned it off", async () => {
+  const ui = recordingUI();
+
+  await reconcileService(
+    RECONCILE,
+    {
+      service: () => ({
+        ...recordingService({ installed: true, disabled: true }).target(),
+        visibleIn: "System Settings › Login Items",
+        optOutSurface: "`launchctl disable`",
+      }),
+      installLauncher: () => {},
+    },
+    ui,
+  );
+
+  const message = ui.events.find((e) => e.includes("leaving it that way"));
+  expect(message).toContain("`launchctl disable`");
+  expect(message).not.toContain("System Settings › Login Items");
 });

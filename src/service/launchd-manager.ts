@@ -47,9 +47,10 @@ const DISABLED = new RegExp(
 const launchctlError = (action: string, result: LaunchctlResult) =>
   commandError("launchctl", action, result);
 
-/** The launchd user agent manager. Nothing here emits `launchctl enable`: a user who
- * turned caret off under System Settings › Login Items stays opted out, and install
- * reads that back through status().disabled instead (EXC-1167). */
+/** The launchd user agent manager. Nothing here emits `launchctl enable`, so a
+ * `launchctl disable` stays in force and install reads it back through status().disabled.
+ * That is launchd's own disabled store; the System Settings › Login Items switch writes a
+ * Background Task Management disposition instead, which nothing here can see (EXC-1262). */
 export function createLaunchdManager(deps: LaunchdDeps = {}): ServiceManager {
   const launchAgentsDir = deps.launchAgentsDir ?? join(homedir(), "Library", "LaunchAgents");
   const launchctl = deps.launchctl ?? spawnLaunchctl;
