@@ -81,7 +81,8 @@ it landed. Each step disturbs your login item, so do them when you can watch:
    script asserts that against a plist it generates now; this asserts it against the plist
    already installed, which may predate a change to `EXIT_TIMEOUT_SEC`.
 2. Turn caret off under System Settings › Login Items & Extensions.
-3. Run `caret install`: it reports the service as turned off there and leaves it that way.
+3. Run `caret install`: it registers the service again, and the announcement says that
+   switch does not stick, naming `caret install --uninstall`.
 4. Turn it back on, run `caret install --refresh`, then take one review, and confirm the
    refresh left a single resident daemon on the port —
    `curl -s http://127.0.0.1:<port>/api/diagnostics | jq '{resident, upkeep}'` answers

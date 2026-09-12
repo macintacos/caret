@@ -272,6 +272,26 @@ only at startup, so turning it off stops the toast and both marks immediately. T
 back on asks again on the spot — subject to the same once-a-day throttle as any other
 check — and reports the answer on your next load.
 
+## Turning caret off
+
+Two commands turn caret off, and they turn off different amounts of it:
+
+| Command | What it does |
+| --- | --- |
+| `caret install --no-resident` | Stops caret being resident: the review UI is no longer up from login onward. Your agent still reaches caret, and caret starts on demand. |
+| `caret install --uninstall` | Removes caret from this machine altogether. |
+
+`--no-resident` writes `resident = false` into `config.toml`'s `[daemon]` table, and that
+value is what decides — a later `caret install` reads it rather than overruling it. To
+become resident again, set it back to `true` (see
+[Config file](CONFIGURING.md#config-file)) and run `caret install`.
+
+> [!IMPORTANT]
+> On macOS caret also appears under **System Settings › Login Items**, but that switch is
+> neither of these. caret cannot read it, so the next `caret install` registers the
+> service again and reports success while the switch still reads off. Use `--no-resident`
+> or `--uninstall` instead.
+
 ## Logging & Debugging
 
 ### Where the logs live

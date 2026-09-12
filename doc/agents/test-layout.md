@@ -94,5 +94,5 @@ side to match the other.
   a GUI login session rather than a container, so it can never be gated either. What stays
   out of its reach is written up as a hand checklist in
   [`doc/DEVELOPMENT.md`](../DEVELOPMENT.md#development): the exit timeout on the plist
-  already installed, the Login Items opt-out `status().disabled` reads, the
+  already installed, the Login Items switch `status().disabled` cannot read, the
   `caret install --refresh` cycle, and load-at-login.
