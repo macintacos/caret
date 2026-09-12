@@ -353,16 +353,23 @@ which:
    reinstalls the caret plugin through Claude Code's native plugin system.
 3. Installs into OpenCode by pointing its `plugin` array at the checkout
    (`file:<checkout>`, which OpenCode symlinks — so later rebuilds need no reinstall).
-4. Acquires rumdl, and prewarms so the just-built binary takes over the daemon.
+4. Acquires rumdl, then hands the daemon to the just-built binary. Where caret is
+   resident, it pins the service's launcher to this checkout and cycles the service onto
+   it. Where caret is not resident, nothing is pinned or cycled: the prewarm every
+   `--from-local` install ends with, which takes the daemon over on the fresh build, is
+   the whole hand-off.
 
 `--from-local` is not a reduced install — it takes the same path a user's install takes,
 residency included: a caret login item serving `caret.localhost:42718` from login onward.
-That is this checkout as long as it is the highest-versioned caret the launcher finds — an
-installed release that outranks it still wins until the `pinned-root` record lands.
-Re-running `--install` reuses the agent already registered rather than re-registering it,
-so macOS stops posting its "Background Items Added" notice on every rebuild; the new build
-is picked up by cycling the daemon, not by re-installing. If you would rather your machine
-not carry a login item, set `[daemon] resident = false` in `config.toml` — or run
+It serves this checkout even when a higher-versioned release is installed, because
+`--from-local` records the checkout in the launcher's `pinned-root` file. A plain
+`caret install` clears that pin and cycles back to the highest-versioned installed caret,
+and `--uninstall` removes the pin. While the pin holds, a review never cycles the daemon,
+so a rebuild reaches the login item only through `--install`. Re-running `--install`
+reuses the agent already registered rather than re-registering it, so macOS stops posting
+its "Background Items Added" notice on every rebuild; the new build is picked up by
+cycling the daemon, not by re-installing. If you would rather your machine not carry a
+login item, set `[daemon] resident = false` in `config.toml` — or run
 `bin/caret install --from-local --no-resident`, keeping `--from-local` so the run does not
 swap your local build back to the published caret.
 
