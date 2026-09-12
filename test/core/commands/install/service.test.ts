@@ -10,12 +10,12 @@ import { dirname } from "node:path";
 import { setupTempConfigFile, setupTempStateDir } from "@test/support/env.ts";
 import { expectCleanExitCode } from "@test/support/exit-code.ts";
 import { fakeServiceManager } from "@test/support/service-manager.ts";
-import type { LauncherDeps } from "@/commands/install/launcher.ts";
+import { installLauncher, type LauncherDeps } from "@/commands/install/launcher.ts";
 import { reconcileService, uninstallService } from "@/commands/install/service.ts";
 import { recordingUI } from "@/commands/install/ui.ts";
 import type { ServiceTarget } from "@/commands/service-target.ts";
 import { VANITY_HOST } from "@/config/constants.ts";
-import { launcherPath, launcherRecordDir } from "@/config/paths.ts";
+import { launcherPath, launcherPinnedRootFile, launcherRecordDir } from "@/config/paths.ts";
 import type { ServiceStatus } from "@/service/manager.ts";
 
 // Each test starts from a config nobody has written, so an absent key means default.
@@ -120,6 +120,47 @@ test("--refresh cycles the service so the new build is the one serving", async (
     recordingUI(),
   );
 
+  expect(service.calls).toEqual(["install", "restart"]);
+});
+
+test("--from-local pins the launcher to the checkout and cycles the service onto it", async () => {
+  const service = recordingService({ installed: true, running: true });
+  let pinned: string | undefined;
+
+  await reconcileService(
+    { ...RECONCILE, pinnedRoot: "/checkout" },
+    {
+      service: service.target,
+      installLauncher: (deps) => {
+        pinned = deps.pinnedRoot;
+      },
+    },
+    recordingUI(),
+  );
+
+  expect(pinned).toBe("/checkout");
+  expect(service.calls).toEqual(["install", "restart"]);
+});
+
+test("a published install clears a pin and cycles off the checkout", async () => {
+  const service = recordingService({ installed: true, running: true });
+  mkdirSync(launcherRecordDir(), { recursive: true });
+  writeFileSync(launcherPinnedRootFile(), "/checkout\n");
+  const script = `${launcherRecordDir()}/caret-launcher`;
+  writeFileSync(script, "#!/usr/bin/env bash\n");
+
+  await reconcileService(
+    RECONCILE,
+    {
+      service: service.target,
+      // The real launcher, so the pin it removes is gone before the restart is decided.
+      installLauncher: (deps) =>
+        installLauncher({ ...deps, bunPath: "/bun", source: () => script }),
+    },
+    recordingUI(),
+  );
+
+  expect(existsSync(launcherPinnedRootFile())).toBe(false);
   expect(service.calls).toEqual(["install", "restart"]);
 });
 

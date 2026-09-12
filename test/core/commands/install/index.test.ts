@@ -222,10 +222,10 @@ test("installing ensures rumdl once, after the targets", async () => {
 
 test("the service is registered after the targets, so a refresh cycles the new build", async () => {
   const calls: string[] = [];
-  // A config path nobody wrote, so the run reads the schema default rather than whatever
-  // residency this machine's own caret is configured for.
-  const absentConfig = join(await mkdtemp(join(tmpdir(), "caret-install-index-")), "config.toml");
-  await withEnv({ CARET_CONFIG_FILE: absentConfig }, () =>
+  // A config and state dir nobody wrote, so the run reads the schema default and no pin
+  // rather than whatever this machine's own caret has.
+  const dir = await mkdtemp(join(tmpdir(), "caret-install-index-"));
+  await withEnv({ CARET_CONFIG_FILE: join(dir, "config.toml"), XDG_STATE_HOME: dir }, () =>
     runInstallSubcommand(PLAIN_INSTALL, {
       ...claudeThenRumdlDeps(calls),
       service: () => ({
@@ -381,6 +381,29 @@ test("--from-local --dry-run previews without prewarming", async () => {
     },
   );
   expect(calls).toEqual(["claude"]);
+});
+
+test("--from-local hands the checkout to the service step as its pinned root", async () => {
+  let pinned: string | undefined;
+  const dir = await mkdtemp(join(tmpdir(), "caret-install-index-"));
+  await withEnv({ CARET_CONFIG_FILE: join(dir, "config.toml"), XDG_STATE_HOME: dir }, () =>
+    runInstallSubcommand(
+      { uninstall: false, dryRun: false, fromLocal: true },
+      {
+        ...fromLocalPrewarmDeps(recordingUI(), async () => {}),
+        service: () => ({
+          label: "caret.service",
+          visibleIn: "`systemctl --user`",
+          optOutSurface: "`systemctl --user`",
+          manager: fakeServiceManager().manager,
+        }),
+        installLauncher: (deps) => {
+          pinned = deps.pinnedRoot;
+        },
+      },
+    ),
+  );
+  expect(pinned).toBe("/checkout");
 });
 
 test("the prewarm step reports that prewarm ran, not that the daemon was swapped", async () => {

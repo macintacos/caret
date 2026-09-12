@@ -153,7 +153,12 @@ export async function runInstallSubcommand(
   if (opts.uninstall) await uninstallService({ dryRun: opts.dryRun }, deps, ui);
   else
     await reconcileService(
-      { dryRun: opts.dryRun, refresh: opts.refresh ?? false, resident: opts.resident ?? true },
+      {
+        dryRun: opts.dryRun,
+        refresh: opts.refresh ?? false,
+        resident: opts.resident ?? true,
+        pinnedRoot: local?.repoDir,
+      },
       deps,
       ui,
     );
@@ -191,10 +196,12 @@ function resolveLocal(
   }
 }
 
-/** Hand the daemon to the freshly built binary. Best-effort like every other part of the
- * hand-off: a hiccup here leaves an otherwise-clean install standing, and the next review
- * spawns the daemon anyway. The step reports only that prewarm ran — it cannot know
- * whether the running daemon was retired or merely reused (see local.ts). */
+/** Warm the daemon on the freshly built binary. On a resident machine the service step has
+ * already cycled onto the checkout, so this only attaches to that daemon; it is the whole
+ * hand-off only where nothing is resident (opted out, unsupported, or disabled).
+ * Best-effort either way: a hiccup here leaves an otherwise-clean install standing, and
+ * the next review spawns the daemon anyway. The step reports only that prewarm ran — it
+ * cannot know whether the running daemon was retired or merely reused (see local.ts). */
 async function prewarmStep(repoDir: string, deps: InstallDeps, ui: InstallUI): Promise<void> {
   try {
     await ui.step(
