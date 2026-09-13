@@ -240,9 +240,10 @@ Three details worth knowing:
 
 ## Update notices
 
-The daemon asks once a day whether a newer caret is out (see the README for what that call
-sends and how to turn it off in `prefs.json`). This is what you see when the answer is
-yes.
+The daemon asks whether a newer caret is out (see the README for what that call sends and
+how to turn it off in `prefs.json`). An on-demand daemon asks when it starts, a resident
+one asks again on an hourly tick, and a 24-hour stamp keeps either to about once a day.
+This is what you see when the answer is yes.
 
 A toast arrives on your next page load, and it names the version rather than just saying
 one exists. It waits until you read or dismiss it instead of fading, and it appears
@@ -272,6 +273,62 @@ only at startup, so turning it off stops the toast and both marks immediately. T
 back on asks again on the spot — subject to the same once-a-day throttle as any other
 check — and reports the answer on your next load.
 
+## The caret service
+
+Answer **Keep it running** when `caret install` asks (`mise run build --install` included)
+and the install registers the caret service: a login service that keeps a resident daemon
+— one that stays up until told to stop — on the port, so the review UI it serves is up
+before any plan arrives. Windows has no service, and neither does a Linux host without a
+systemd user session; there, install says so and caret runs on demand.
+
+|  | macOS | Linux |
+| --- | --- | --- |
+| **Service** | launchd agent `dev.excessive.caret`, in `~/Library/LaunchAgents/dev.excessive.caret.plist` | systemd user unit `caret.service`, in `~/.config/systemd/user/` |
+| **Status** | `launchctl print gui/$(id -u)/dev.excessive.caret` | `systemctl --user status caret.service` |
+| **Restart** | `launchctl kickstart -k gui/$(id -u)/dev.excessive.caret` | `systemctl --user restart caret.service` |
+| **Stop** | `launchctl bootout gui/$(id -u)/dev.excessive.caret` — stopped until your next login | `systemctl --user stop caret.service` — stopped until your next login, or with lingering your next boot |
+
+On either platform, the daemon reports whether it is resident and which upkeep tasks it
+runs (`42718` is `[daemon].port`):
+
+```sh
+curl -s http://127.0.0.1:42718/api/diagnostics | jq '{resident, upkeep}'
+```
+
+While the service is stopped, the next review starts an on-demand daemon, which exits once
+it has sat idle for `[daemon].idle_ms` with no review pending and no review UI tab open.
+
+### What the service runs
+
+Every unit runs `$XDG_STATE_HOME/caret/bin/caret daemon`. That file is
+`bin/caret-launcher`, which chooses what to run each time it starts:
+
+- **caret** — the version a `--from-local` build pinned, else the newest one installed
+  across Claude Code's plugin cache and OpenCode's package cache.
+- **bun** — the one recorded at install, else the first found in `~/.bun/bin`,
+  `/opt/homebrew/bin`, `/usr/local/bin`, mise's shims and installs, then `~/.asdf/shims`.
+
+So restarting the service is how its daemon takes an upgrade. `caret install --refresh`
+restarts it, and so does the first review from a newer caret unless a local build is
+pinned. The daemon also sees only the environment captured at install — see
+[Runtime](CONFIGURING.md#runtime).
+
+### When the daemon exits
+
+The supervisor starts it again: launchd after its throttle of about 10 seconds, systemd
+after 5. systemd gives up after five starts inside 60 seconds and parks the unit.
+
+When the launcher cannot run anything — no runnable caret, or no bun — it exits with
+status 78, and the service stops instead of restarting into the same failure. systemd
+honours that status itself; on macOS the launcher boots the agent out, and the plist loads
+again at your next login. `caret install` restores it. The launcher's reason lands in
+`logs/daemon-stderr.log` (see [Where the logs live](#where-the-logs-live)).
+
+On Linux, install also runs `loginctl enable-linger` so the service outlives your logout.
+Some distributions refuse that without admin rights; install then logs
+`lingering not enabled; caret stops at logout` and carries on, and caret stops when you
+log out.
+
 ## Turning caret off
 
 Two commands turn caret off, and they turn off different amounts of it:
@@ -295,6 +352,12 @@ registers none where there isn't one.
 > off. Run `caret install` and answer **I'll run it myself**, or use `--uninstall`,
 > instead.
 
+Alongside the agents, `--uninstall` removes the service's unit file, the launcher, and the
+records the launcher reads, keeping your prefs and reviews. The launcher removes the same
+things itself when it finds no caret installed anywhere, after looking twice more, five
+seconds apart. When caret is installed but can't run, it stops the service instead (see
+[When the daemon exits](#when-the-daemon-exits)). `caret install` brings back either.
+
 ## Logging & Debugging
 
 ### Where the logs live
@@ -305,7 +368,7 @@ Logs live under `$XDG_STATE_HOME/caret/logs` when set, otherwise
 | File                | What's in it                                                                                                                        |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `caret.log`         | NDJSON records from the short-lived `caret review` hook process.                                                                    |
-| `daemon.log`        | The detached daemon's records: the same NDJSON shape, tagged with `pid`.                                                            |
+| `daemon.log`        | The daemon's records: the same NDJSON shape, tagged with `pid`.                                                            |
 | `daemon-stderr.log` | Whatever the daemon writes outside its logger — raw non-JSON crash output — plus `bin/caret-launcher`'s own failures when a supervised start cannot resolve caret or bun. |
 | `archive/`          | Gzipped rotations, named `<log>-<stamp>.log.gz`. A log past `[logging].max_size` is archived here and emptied; the newest `[logging].keep` per log are kept. |
 

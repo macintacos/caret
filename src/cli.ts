@@ -82,12 +82,17 @@ function buildProgram(): Command {
 
   program
     .command("install")
-    .description("install caret into a coding agent, plus the rumdl plan formatter")
-    .option("--uninstall", "remove caret from every agent on this machine instead of installing")
+    .description(
+      "install caret into a coding agent, plus the rumdl plan formatter, and choose whether the review UI runs as a service",
+    )
+    .option(
+      "--uninstall",
+      "remove caret from every agent on this machine, and its service, instead of installing",
+    )
     .option("--dry-run", "print what would change without writing")
     .option(
       "--refresh",
-      "take the published caret in every target without asking — clears OpenCode's cached copy, or bumps a pinned entry (Claude Code always takes an update)",
+      "take the published caret in every target without asking — clears OpenCode's cached copy, or bumps a pinned entry (Claude Code always takes an update) — and cycles caret's service onto it",
     )
     .option(
       "--from-local",

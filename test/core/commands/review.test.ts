@@ -5,8 +5,8 @@ import { browserOpenCmd, reviewUrlLine } from "@/commands/review.ts";
 
 // browserOpenCmd is the pure platform→argv selection extracted from openBrowser
 // so the branch choice is testable without spawning (the spawn-and-swallow stays
-// at the call site). caret is macOS-first; the non-darwin branches ship but are
-// exercised primarily on macOS — these assertions pin each branch's exact argv.
+// at the call site). The non-darwin branches ship but are exercised primarily on
+// macOS — these assertions pin each branch's exact argv.
 
 const URL = "http://caret.localhost:4242/?review=rid";
 

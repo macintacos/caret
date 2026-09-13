@@ -117,7 +117,7 @@ export function serviceEnvironment(
     if (value) environment[key] = value;
   }
   // The daemon idle-exits after [daemon].idle_ms with nothing pending
-  // (src/daemon/server.ts) — under KeepAlive / Restart=always that's a restart loop, not
+  // (src/daemon/liveness.ts) — under KeepAlive / Restart=always that's a restart loop, not
   // residency. `caret daemon` reads this and keeps the daemon up (EXC-1164).
   environment[SUPERVISED_VAR] = "1";
   return environment;

@@ -11,7 +11,8 @@ import { VANITY_HOST } from "@/config/constants.ts";
  * background-tab throttle floor — Chrome caps a hidden tab's timers to roughly
  * one run per minute — or a backgrounded-but-open tab reads as gone and the hook
  * opens a redundant browser tab. The long window is safe because a closed tab
- * retracts its presence at once via the close beacon (POST /api/ui/gone). */
+ * retracts its presence at once via the close beacon (POST /api/ui/gone). The same window
+ * holds an on-demand daemon's idle shutdown off while a tab is open. */
 export const LIVE_CLIENT_WINDOW_MS = 120_000;
 
 /** Whether a UI client polled the reviews list recently enough to count as live

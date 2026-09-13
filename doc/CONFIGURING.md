@@ -8,19 +8,19 @@ install it, and basic usage, start there.
 
 ## Platform support
 
-caret is **macOS-first**. It runs on Linux and Windows, but those paths are best-effort:
-the platform-specific branches below are exercised primarily on macOS, and the
-process-discovery probe behind `caret discovery` (`src/discovery.ts`) shells out to the
-BSD-flavored `ps -axo pid=,comm=` everywhere.
+caret supports macOS and Linux; Windows is best-effort. What differs is the background
+service that keeps the review UI up (see
+[The caret service](RUNNING.md#the-caret-service)) and the review-URL opener
+(`openBrowser` in `src/commands/review.ts`):
 
-The review-URL opener (`openBrowser` in `src/commands/review.ts`) ships one branch per
-platform:
+| Platform | Background service | Review-URL opener |
+| --- | --- | --- |
+| macOS | launchd agent `dev.excessive.caret`, started at login | `open` |
+| Linux | systemd user unit `caret.service`. Needs a systemd user session; lingering keeps it running past logout | `xdg-open` |
+| Windows | none — caret runs on demand | `cmd /c start` |
 
-| Platform | Opener         |
-| -------- | -------------- |
-| macOS    | `open`         |
-| Linux    | `xdg-open`     |
-| Windows  | `cmd /c start` |
+The process-discovery probe behind `caret discovery` (`src/discovery.ts`) shells out to
+the BSD-flavored `ps -axo pid=,comm=` everywhere.
 
 > [!NOTE]
 > If the browser doesn't open, or discovery shows no processes, on Linux or Windows: the
@@ -85,7 +85,9 @@ These hold the tunables the `CARET_*` environment variables also cover (see
 > [!NOTE]
 > Unlike the `[logging]` keys, which hot-reload live, these tunables are captured at
 > startup: `port`, `idle_ms`, and `heartbeat_ms` take effect on the next daemon start, and
-> `timeout_s` on the next review.
+> `timeout_s` on the next review. For the caret service's daemon, the next start means
+> `caret install --refresh` or a
+> [service restart](RUNNING.md#the-caret-service).
 
 ```toml
 [logging]
@@ -148,6 +150,18 @@ bounds — is ignored with one boot-time warning in the logs, and resolution fal
 to the config file, then the default.
 
 ### Runtime
+
+> [!IMPORTANT]
+> The [caret service](RUNNING.md#the-caret-service)'s daemon doesn't see your shell. It
+> runs with only the environment `caret install` captured when you chose to keep it
+> running — `HOME`, `CLAUDE_CONFIG_DIR`, `XDG_STATE_HOME`, `XDG_CONFIG_HOME`,
+> `XDG_CACHE_HOME`, `XDG_DATA_HOME`, `CARET_CONFIG_FILE`, `CARET_PORT` and `CARET_AGENT` —
+> plus `CARET_SUPERVISED=1`. A later export of `CARET_PORT`, `XDG_STATE_HOME`,
+> `XDG_CONFIG_HOME` or `CARET_CONFIG_FILE` reaches hooks and `caret serve`, but not that
+> daemon: re-run `caret install` from that shell, keeping caret running, to rewrite and
+> reload the unit. The other daemon-side variables below (`CARET_HEARTBEAT_MS`,
+> `CARET_LOG_MAX_SIZE`, `CARET_LOG_KEEP`) never reach it; set their `config.toml` keys
+> instead.
 
 | Env var              | Config key            | Default          | Purpose                                                                                                                                                                                                                                                                                                 |
 | -------------------- | --------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -131,6 +131,37 @@ with per-path MIME and cache headers, plus a shared ETag (the asset-set digest) 
 a matching `If-None-Match` get a bodiless 304. Dynamic `import()` in the browser bundle is
 fine — the node-free invariant above is the only constraint a shared `@core` module owes.
 
+## Daemon lifecycle
+
+How long a daemon stays up, and who may replace it.
+[`../ARCHITECTURE.md`](../ARCHITECTURE.md) § The daemon's lifecycle is the narrative.
+
+- **Residency is decided by what starts the daemon, not by a setting.**
+  `CARET_SUPERVISED=1` (the service's unit, `mise run dev`) or `caret serve` makes it
+  resident. `spawnDaemon` is the on-demand fallback, and it idle-exits.
+- **The platform decision stays at composition.** `src/service/manager.ts` declares
+  `ServiceManager`; `launchd-manager.ts` and `systemd-manager.ts` implement it over the
+  pure unit-text builders `launchd.ts` and `systemd.ts`. `prodService()`
+  (`src/commands/service-target.ts`) selects one. The core takes it injected:
+  `prodEnsureDeps(s, service, …)` receives it as a thunk into `EnsureDeps.service`, so
+  `src/daemon/` imports no platform manager.
+- **A unit names the launcher, never a versioned caret path, and carries no
+  version-dependent field.** `install()` is a no-op on a byte-identical unit, so
+  `restart()` is the upgrade. Keep in sync: `isLauncherPinned` ↔ `resolve_root()` in
+  `bin/caret-launcher`; `SERVICE_TERMINAL_EXIT_STATUS` ↔ its `exit 78`; `WORLD_VARS` ↔ the
+  variables the launcher reads, which `test/structure/service-world-vars.test.ts`
+  enforces.
+- **A hook cycles the service rather than retiring its daemon**, which would only race the
+  supervisor's restart. The gate is `/api/health`'s `supervised` plus the hook's state dir
+  holding the service record (`launcherServiceFile()`); without the record there is no
+  supervisor to cycle, and a supervised peer is retired like any other. `caret serve`
+  refuses a supervised port instead. Never spawn into an empty port within
+  `SUPERVISOR_WINDOW_MS` while the service `keepsAlive`.
+- **SIGTERM drains; SIGINT stops at once.** SIGTERM is how a supervisor cycles the
+  service, so `DRAIN_DEADLINE_MS` stays under its stop grace.
+- **Only hand-run tasks exercise a real supervisor:** `mise run linux verify` and
+  `mise run macos verify`. See [`test-layout.md`](test-layout.md) § Where else tests live.
+
 ## Daemon trust model
 
 The daemon binds **loopback only** (`127.0.0.1`) and runs with **no auth**, sized for a

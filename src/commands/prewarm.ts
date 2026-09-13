@@ -1,5 +1,6 @@
-// `caret prewarm`: warm-start the daemon ahead of the first review. A PostToolUse
-// hook — best-effort, it never blocks or denies.
+// `caret prewarm`: make sure a daemon of this build holds the port ahead of the first
+// review — a cold start when none does, a takeover or service cycle when a stale build
+// does. A PostToolUse hook — best-effort, it never blocks or denies.
 
 import { prodService } from "@/commands/service-target.ts";
 import { loadSettings, type Settings } from "@/config/settings.ts";

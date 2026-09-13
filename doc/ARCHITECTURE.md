@@ -21,7 +21,7 @@ sequenceDiagram
 
     A->>H: the plan, on stdin
     Note over H: caret normalizes it into its own tool-agnostic form
-    H->>D: POST /api/reviews, starting the daemon if it is not already up
+    H->>D: POST /api/reviews to the daemon on the port — see The daemon's lifecycle
     H->>U: opens the plan in your browser
     U->>D: loads the review
     H->>D: long-polls for a decision
@@ -44,6 +44,66 @@ subcommands: Claude Code fires it as a hook, OpenCode's plugin spawns it from a 
 shim execs the platform-native compiled binary (`bin/caret-native`) when a
 `mise run build` produced one, and otherwise runs the `bun` bundle (`dist/cli.js`) that
 the marketplace and npm installs ship.
+
+### The daemon's lifecycle
+
+What starts a daemon decides how long it stays up. There are three ways:
+
+- **The caret service.** `caret install`, answered **Keep it running**, registers a
+  launchd agent on macOS or a systemd user unit on Linux. The supervisor starts the daemon
+  at login and restarts it when it exits. That daemon is **resident**: it stays up until
+  told to stop.
+- **`caret serve`.** Also resident, but in your terminal's foreground with no supervisor
+  behind it.
+- **On demand.** When nothing holds the port and no service will, the hook spawns a daemon
+  itself. That **on-demand daemon** exits after `daemon.idle_ms` with no pending review,
+  no open long-poll, and no live UI tab.
+
+The service never names a caret build. Its unit runs the launcher, `bin/caret-launcher`,
+copied to `$XDG_STATE_HOME/caret/bin/caret`, which picks caret each time it starts: the
+checkout a `--from-local` install pinned, else the highest-versioned caret across the
+Claude Code plugin cache and the OpenCode package cache. Nothing in the unit depends on
+the version, so restarting the service is the upgrade.
+
+Every review and prewarm hook first makes sure a current daemon holds the port
+(`ensureDaemon`, `src/daemon/lifecycle.ts`):
+
+- A daemon of the hook's own build is reused.
+- A daemon of another build that `/api/health` reports as `supervised` belongs to the
+  service. When the install that registered that service shares the hook's state
+  directory, the hook restarts the service and waits for a daemon with a new `instanceId`,
+  since retiring it would only race the supervisor. It leaves the daemon alone when that
+  daemon is newer than the hook or the launcher is pinned.
+- Any other stale daemon gets `POST /api/retire`, and the hook spawns its own. That covers
+  an on-demand daemon, `caret serve`, and a supervised daemon whose service another state
+  directory registered.
+- When nothing holds the port but the service will start a daemon, the hook leaves it to
+  the supervisor for `SUPERVISOR_WINDOW_MS` before spawning one.
+- A review hook whose long-poll drops mid-review only reattaches, to whatever daemon of
+  its state directory answers, whatever its build.
+
+`caret serve` retires an unsupervised daemon on its way in, and refuses to start when the
+service holds the port.
+
+A daemon steps down by draining, on `POST /api/retire` or SIGTERM, which is how a
+supervisor stops it. It answers new reviews with `503`, lets in-flight writes land and
+unread decisions reach their hooks, then releases the port and exits 0, within
+`DRAIN_DEADLINE_MS` (5 s, `src/daemon/server.ts`). A hook refused with that `503` posts
+once more, to the successor. SIGINT stops the daemon at once. Idle exit and drain both
+live in `src/daemon/liveness.ts`.
+
+A resident daemon never gets the fresh start a respawn would give it, so an hourly upkeep
+tick (`src/daemon/upkeep.ts`) does that work instead:
+
+- `update-check` re-runs the update check, which its 24-hour stamp still keeps to about
+  once a day.
+- `review-sweep` drops reviews unchanged for a week from memory. A starting daemon's
+  reload of unresolved reviews from disk skips those too, so a revision that arrives more
+  than a week after a rejection opens a new review.
+- `stderr-rotate` rotates `logs/daemon-stderr.log`, for a supervised daemon only.
+
+To check, restart, or stop the service, see
+[The caret service](RUNNING.md#the-caret-service).
 
 ### Architecture: tool-agnostic core + agent adapter
 
@@ -80,11 +140,11 @@ behavior.
 
 caret wires into Claude Code through three plan-mode hooks:
 
-| Hook                | Matcher         | Command           | Purpose                                                     |
-| ------------------- | --------------- | ----------------- | ----------------------------------------------------------- |
-| `PostToolUse`       | `EnterPlanMode` | `caret prewarm`   | Warm-start the daemon when the model enters plan mode.      |
-| `PermissionRequest` | `ExitPlanMode`  | `caret review`    | Block, open the plan in the browser, return the decision.   |
-| `PostToolUse`       | `ExitPlanMode`  | `caret reconcile` | Reconcile a plan decided in the terminal into the daemon.   |
+| Hook                | Matcher         | Command           | Purpose                                                                     |
+| ------------------- | --------------- | ----------------- | --------------------------------------------------------------------------- |
+| `PostToolUse`       | `EnterPlanMode` | `caret prewarm`   | Make sure a current daemon holds the port when the model enters plan mode.  |
+| `PermissionRequest` | `ExitPlanMode`  | `caret review`    | Block, open the plan in the browser, return the decision.                   |
+| `PostToolUse`       | `ExitPlanMode`  | `caret reconcile` | Reconcile a plan decided in the terminal into the daemon.                   |
 
 The `PermissionRequest`/`ExitPlanMode` hook intercepts the plan-approval request itself,
 so an **approve** auto-answers it (no native dialog) and a **request changes** returns the

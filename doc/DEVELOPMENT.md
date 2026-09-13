@@ -95,6 +95,31 @@ it landed. Each step disturbs your login item, so do them when you can watch:
    unit suite, and not `verify.sh`, which bootstraps its own label by hand.
 6. Restore with the install you started from — `mise run build --install` from a checkout.
 
+`linux verify` runs against Ubuntu 24.04's systemd (`scripts/linux/Containerfile`),
+loading the unit `buildSystemdUnit()` emits over the real launcher and a stub caret, and
+drives the user-bus probe, install's reload, enable and restart, a second install onto a
+running unit, the restart contract (a draining stop, exit 78, exit 0, the start-limit
+burst) and uninstall. The container has no login session and no real daemon, so these stay
+a hand check on a real systemd login whose `caret install` registered `caret.service`,
+from a build carrying `src/service/` as above:
+
+1. `systemctl --user cat caret.service` shows the launcher as `ExecStart`,
+   `Restart=always`, `RestartPreventExitStatus=78`, and the `Environment=` lines captured
+   from the installing shell, `CARET_SUPERVISED=1` among them.
+2. `loginctl show-user "$USER" -p Linger` reports `Linger=yes`. On `Linger=no`,
+   `logs/caret.log` carries the `lingering not enabled` warning: self-linger is
+   polkit-gated, and whether it is allowed varies by distribution.
+3. `systemctl --user disable caret.service`, then run `caret install` and keep the review
+   UI running: it reports the service turned off with `systemctl --user` and leaves it off
+   — unlike the macOS Login Items switch, this one caret can read. Re-enable it with
+   `systemctl --user enable caret.service`.
+4. Run `caret install --refresh`, take one review, and the `/api/diagnostics` curl from
+   macOS step 4 answers `resident: true` with all three upkeep tasks armed.
+5. Log out and back in, and with lingering on, reboot too:
+   `systemctl --user is-active caret.service` reports `active`, and the review UI answers
+   on that port.
+6. Restore with the install you started from.
+
 ### Bootstrapping a clone
 
 A fresh clone can go straight to `mise run dev` or `mise run lint` — there is no setup
@@ -371,7 +396,7 @@ through `--install`.
 
 Re-running `--install` reuses the agent already registered rather than re-registering it,
 so macOS stops posting its "Background Items Added" notice on every rebuild; the new build
-is picked up by cycling the daemon, not by re-installing. If you would rather your machine
+is picked up by the service cycle `--install` performs. If you would rather your machine
 not carry a login item, answer the install prompt with **I'll run it myself**, then run
 `bin/caret serve` whenever you want the review UI up.
 
@@ -383,7 +408,8 @@ development only, never CI. `bin/caret install --from-local --dry-run` previews 
 install steps without performing them.
 
 Two things can leave an old build serving after a successful `--install`, and both look
-identical from the browser. The first: the handoff retires a current-build daemon
+identical from the browser. The first applies where caret is not resident — a resident
+daemon is cycled through its service instead: the handoff retires a current-build daemon
 automatically, but a long-running daemon from an _older_ build — no retire endpoint, no
 lock file — can't be retired and keeps serving until you restart it once. `kill` its pid,
 and any review respawns the fresh build. The second is below.
