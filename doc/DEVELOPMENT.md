@@ -81,7 +81,7 @@ it landed. Each step disturbs your login item, so do them when you can watch:
    script asserts that against a plist it generates now; this asserts it against the plist
    already installed, which may predate a change to `EXIT_TIMEOUT_SEC`.
 2. Turn caret off under System Settings › Login Items & Extensions.
-3. Run `caret install`: it registers the service again —
+3. Run `caret install` and keep the review UI running: it registers the service again —
    `launchctl print gui/$(id -u)/dev.excessive.caret` reports it loaded — while the switch
    in System Settings still reads off. The announcement says so rather than reporting the
    service as left alone.
@@ -355,8 +355,9 @@ which:
    (`file:<checkout>`, which OpenCode symlinks — so later rebuilds need no reinstall).
 4. Acquires rumdl, then hands the daemon to the just-built binary. Where caret is
    resident, it pins the service's launcher to this checkout and cycles the service onto
-   it. Where caret is not resident, nothing is pinned or cycled, and the closing prewarm,
-   which takes the daemon over on the fresh build, is the whole hand-off.
+   it. Where there is no service to cycle — you chose to run caret yourself, the host is
+   unsupported, or the service is turned off — nothing is pinned or cycled, and the
+   closing prewarm, which takes the daemon over on the fresh build, is the whole hand-off.
 
 `--from-local` is not a reduced install — it takes the same path a user's install takes,
 residency included: a caret login item serving `caret.localhost:42718` from login onward.
@@ -370,9 +371,8 @@ daemon, so a rebuild reaches the login item only through `--install`.
 Re-running `--install` reuses the agent already registered rather than re-registering it,
 so macOS stops posting its "Background Items Added" notice on every rebuild; the new build
 is picked up by cycling the daemon, not by re-installing. If you would rather your machine
-not carry a login item, set `[daemon] resident = false` in `config.toml` — or run
-`bin/caret install --from-local --no-resident`, keeping `--from-local` so the run does not
-swap your local build back to the published caret.
+not carry a login item, answer the install prompt with **I'll run it myself**, then run
+`bin/caret serve` whenever you want the review UI up.
 
 After a `/reload-plugins` (or a Claude Code restart), `/caret:*` resolves to your local
 build.
