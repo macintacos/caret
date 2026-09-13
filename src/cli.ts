@@ -98,10 +98,6 @@ function buildProgram(): Command {
       "--from-local",
       "dev loop: install the built caret checkout this binary runs from, then hand it the daemon",
     )
-    .option(
-      "--no-resident",
-      "don't keep caret's review UI up from login onward — persisted, so later installs leave it off",
-    )
     .action(async (opts) => {
       const outcome = await runInstallSubcommand(
         {
@@ -109,7 +105,6 @@ function buildProgram(): Command {
           dryRun: opts.dryRun ?? false,
           refresh: opts.refresh ?? false,
           fromLocal: opts.fromLocal ?? false,
-          resident: opts.resident,
         },
         { service: prodService },
       );

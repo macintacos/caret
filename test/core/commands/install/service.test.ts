@@ -1,10 +1,10 @@
-// The install steps that decide whether this machine is resident: reconcileService pins
-// the persisted intent against what the supervisor actually holds, in both directions,
+// The install steps that decide whether this machine is resident: reconcileService acts on
+// the install's service choice against what the supervisor actually holds,
 // uninstallService tears both down, and neither fails an install over a service that
 // would not register.
 
 import { expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 import { setupTempConfigFile, setupTempStateDir } from "@test/support/env.ts";
@@ -19,7 +19,7 @@ import { launcherPath, launcherRecordDir } from "@/config/paths.ts";
 import type { ServiceStatus } from "@/service/manager.ts";
 
 // Each test starts from a config nobody has written, so an absent key means default.
-const configFile = setupTempConfigFile(setupTempStateDir("caret-install-service-"));
+setupTempConfigFile(setupTempStateDir("caret-install-service-"));
 
 /** A recording supervisor reporting whatever status the case describes, and the target
  * that installs under it. */
@@ -34,8 +34,14 @@ function recordingService(status: Partial<ServiceStatus> = {}) {
   return { ...fake, target };
 }
 
-/** A plain install: resident intent, nothing to refresh, nothing to preview. */
-const RECONCILE = { dryRun: false, refresh: false, resident: true };
+/** A plain install: the service kept running, nothing to refresh, nothing to preview. */
+const RECONCILE = { dryRun: false, refresh: false, choice: "always-on" } as const;
+
+/** A launcher on disk where the real uninstallLauncher looks for one. */
+function writeLauncher(): void {
+  mkdirSync(dirname(launcherPath()), { recursive: true });
+  writeFileSync(launcherPath(), "#!/usr/bin/env bash\n");
+}
 
 /** The launcher seam every case shares — the real installLauncher needs a resolvable
  * caret root, which no test has. */
@@ -80,40 +86,6 @@ test("the install says where the review UI now lives, with no dangling caveat", 
   const announcement = ui.events.find((e) => e.includes(VANITY_HOST));
   expect(announcement).toBeDefined();
   expect(announcement).not.toContain("undefined");
-});
-
-test("--no-resident persists the opt-out and removes a unit already installed", async () => {
-  const service = recordingService({ installed: true, running: true });
-
-  await reconcileService(
-    { ...RECONCILE, resident: false },
-    { service: service.target, installLauncher: stubLauncher },
-    recordingUI(),
-  );
-
-  expect(readFileSync(configFile(), "utf8")).toContain("resident = false");
-  expect(service.calls).toEqual(["uninstall"]);
-});
-
-test("a later install on an opted-out machine registers nothing", async () => {
-  const optOut = recordingService();
-  await reconcileService(
-    { ...RECONCILE, resident: false },
-    { service: optOut.target, installLauncher: stubLauncher },
-    recordingUI(),
-  );
-
-  // `--no-resident` is not repeated: the plain refresh must read the persisted intent.
-  const refresh = recordingService();
-  const calls: string[] = [];
-  await reconcileService(
-    { ...RECONCILE, refresh: true },
-    { service: refresh.target, installLauncher: recordingLauncher(calls) },
-    recordingUI(),
-  );
-
-  expect(refresh.calls).toEqual([]);
-  expect(calls).toEqual([]);
 });
 
 test("--refresh cycles the service so the new build is the one serving", async () => {
@@ -184,17 +156,16 @@ test("a service the user turned off themselves is never re-enabled", async () =>
   expect(service.calls).toEqual([]);
 });
 
-test("--dry-run writes no config, installs no launcher, and registers no unit", async () => {
+test("--dry-run installs no launcher and registers no unit", async () => {
   const service = recordingService({ installed: true });
   const calls: string[] = [];
 
   await reconcileService(
-    { ...RECONCILE, dryRun: true, resident: false },
+    { ...RECONCILE, dryRun: true },
     { service: service.target, installLauncher: recordingLauncher(calls) },
     recordingUI(),
   );
 
-  expect(existsSync(configFile())).toBe(false);
   expect(calls).toEqual([]);
   expect(service.calls).toEqual([]);
 });
@@ -217,8 +188,7 @@ test("--uninstall tears the service down and takes the launcher with it", async 
 
 test("--uninstall --dry-run leaves the service and the launcher where they are", async () => {
   const service = recordingService({ installed: true, running: true });
-  mkdirSync(dirname(launcherPath()), { recursive: true });
-  writeFileSync(launcherPath(), "#!/usr/bin/env bash\n");
+  writeLauncher();
 
   await uninstallService(
     { dryRun: true },
@@ -230,18 +200,101 @@ test("--uninstall --dry-run leaves the service and the launcher where they are",
   expect(existsSync(launcherPath())).toBe(true);
 });
 
-test("--no-resident --dry-run previews the removal rather than an install", async () => {
+test("running caret yourself removes a registered service and its launcher", async () => {
   const service = recordingService({ installed: true, running: true });
+  writeLauncher();
+
+  await reconcileService(
+    { ...RECONCILE, choice: "run-yourself" },
+    { service: service.target, installLauncher: stubLauncher },
+    recordingUI(),
+  );
+
+  expect(service.calls).toEqual(["uninstall"]);
+  expect(existsSync(launcherPath())).toBe(false);
+});
+
+test("running caret yourself says how to serve the review UI by hand", async () => {
   const ui = recordingUI();
 
   await reconcileService(
-    { ...RECONCILE, dryRun: true, resident: false },
-    { service: service.target, installLauncher: stubLauncher },
+    { ...RECONCILE, choice: "run-yourself" },
+    { service: recordingService().target, installLauncher: stubLauncher },
     ui,
   );
 
-  expect(ui.events.some((e) => e.includes("Would install"))).toBe(false);
-  expect(ui.events.some((e) => e.includes("not resident"))).toBe(true);
+  expect(ui.events.some((e) => e.includes("caret@latest serve") && e.includes(VANITY_HOST))).toBe(
+    true,
+  );
+});
+
+test("running a local build yourself names that checkout's caret serve", async () => {
+  const ui = recordingUI();
+
+  await reconcileService(
+    { ...RECONCILE, choice: "run-yourself", pinnedRoot: "/checkout" },
+    { service: recordingService().target, installLauncher: stubLauncher },
+    ui,
+  );
+
+  expect(ui.events.some((e) => e.includes("/checkout/bin/caret serve"))).toBe(true);
+});
+
+test("the serve instructions still print when the supervisor cannot be looked up", async () => {
+  const ui = recordingUI();
+
+  await reconcileService(
+    { ...RECONCILE, choice: "run-yourself" },
+    {
+      service: () => {
+        throw new Error("caret service: unsupported platform win32 (darwin/linux only)");
+      },
+      installLauncher: stubLauncher,
+    },
+    ui,
+  );
+
+  expect(ui.events.some((e) => e.includes("caret@latest serve"))).toBe(true);
+});
+
+test("running caret yourself under --dry-run removes nothing", async () => {
+  const service = recordingService({ installed: true, running: true });
+  writeLauncher();
+
+  await reconcileService(
+    { ...RECONCILE, dryRun: true, choice: "run-yourself" },
+    { service: service.target, installLauncher: stubLauncher },
+    recordingUI(),
+  );
+
+  expect(service.calls).toEqual([]);
+  expect(existsSync(launcherPath())).toBe(true);
+});
+
+test("an install nobody was asked about registers no service where there is none", async () => {
+  const service = recordingService();
+  const calls: string[] = [];
+
+  await reconcileService(
+    { ...RECONCILE, choice: "as-found" },
+    { service: service.target, installLauncher: recordingLauncher(calls) },
+    recordingUI(),
+  );
+
+  expect(service.calls).toEqual([]);
+  expect(calls).toEqual([]);
+});
+
+test("an install nobody was asked about refreshes a service already registered", async () => {
+  const service = recordingService({ installed: true, running: true });
+
+  await reconcileService(
+    { ...RECONCILE, choice: "as-found" },
+    { service: service.target, installLauncher: stubLauncher },
+    recordingUI(),
+  );
+
+  expect(service.calls).toEqual(["install"]);
 });
 
 test("a supervisor that refuses the unit warns and leaves the install standing", async () => {
@@ -274,22 +327,6 @@ test("a platform with no supervisor at all warns rather than throwing", async ()
   );
 
   expect(ui.events.some((e) => e.startsWith("warn:") && e.includes("win32"))).toBe(true);
-});
-
-test("a config the opt-out cannot be written to is reported as that, not as the service", async () => {
-  const service = recordingService({ installed: true });
-  const ui = recordingUI();
-  // A directory in the config's place: the write fails, the supervisor never comes up.
-  mkdirSync(configFile(), { recursive: true });
-
-  await reconcileService(
-    { ...RECONCILE, resident: false },
-    { service: service.target, installLauncher: stubLauncher },
-    ui,
-  );
-
-  expect(ui.events.some((e) => e.startsWith("warn:") && e.includes("opt-out"))).toBe(true);
-  expect(service.calls).toEqual([]);
 });
 
 test("the announcement names where the service shows up outside caret", async () => {

@@ -258,8 +258,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     idle: opts.idleMs ?? DEFAULTS.daemon.idle_ms,
     heartbeat: opts.heartbeatMs ?? DEFAULTS.daemon.heartbeat_ms,
     drainMs: opts.drainMs ?? DRAIN_DEADLINE_MS,
-    // Pinned rather than DEFAULTS.daemon.resident: that key defaults to true (EXC-1167),
-    // and a caller who never mentioned residency must still idle-exit.
+    // A caller that never mentions residency idle-exits: runDaemon decides it.
     resident: opts.resident ?? false,
     assets: opts.assets,
     onShutdown: opts.onShutdown ?? (() => process.exit(0)),

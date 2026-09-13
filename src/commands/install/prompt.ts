@@ -1,5 +1,6 @@
 // The questions `caret install` asks, and the copy that describes what they are about:
-// the agent chooser, and the confirm a stale OpenCode raises. The verdict lines live
+// the agent chooser, whether caret keeps the review UI running, and the confirm a stale
+// OpenCode raises. The verdict lines live
 // here too, beside the question they turn into, so the prompt, the check's settled line,
 // and the non-interactive nudge all describe a version gap the same way.
 //
@@ -8,6 +9,7 @@
 // subcommand branch that ever renders a prompt.
 
 import type { UpgradeVerdict } from "@/adapters/opencode/upgrade.ts";
+import type { ServiceChoice } from "@/commands/install/service.ts";
 import { INSTALL_TARGETS, type InstallTarget } from "@/commands/install/targets.ts";
 
 /** The chooser's rows: every registry target, with the detected ones marked so the
@@ -34,6 +36,22 @@ export async function promptForTargets(detected: InstallTarget[]): Promise<Insta
     required: true,
   });
   return isCancel(chosen) ? null : chosen;
+}
+
+type AskedServiceChoice = Exclude<ServiceChoice, "as-found">;
+
+/** Ask whether caret keeps the review UI running or the user runs it themselves. Returns
+ * the answer, or null when the user cancels (Ctrl-C / Esc) — the caller then does nothing. */
+export async function promptForServiceChoice(): Promise<AskedServiceChoice | null> {
+  const { isCancel, select } = await import("@clack/prompts");
+  const choice = await select<AskedServiceChoice>({
+    message: "Keep caret's review UI running all the time?",
+    options: [
+      { value: "always-on", label: "Keep it running", hint: "recommended — starts at login" },
+      { value: "run-yourself", label: "I'll run it myself", hint: "with `caret serve`" },
+    ],
+  });
+  return isCancel(choice) ? null : choice;
 }
 
 /** The two verdicts with a remedy to offer — the only ones anyone is asked about. Spelled

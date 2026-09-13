@@ -472,7 +472,7 @@ export async function prodEnsureDeps(
   const world = stateDir();
   return {
     // The supervisor is machine-wide, so only the world that installed it may cycle it.
-    // Not `[daemon].resident`: that defaults on in every world, dev ones included.
+    // Not residency: a dev daemon is resident too.
     service: existsSync(launcherServiceFile()) ? service() : undefined,
     pinned: isLauncherPinned(),
     baseUrl: `http://localhost:${getPort(s)}`,

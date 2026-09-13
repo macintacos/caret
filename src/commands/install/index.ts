@@ -16,9 +16,10 @@ import {
   resolveLocalCheckout,
 } from "@/commands/install/local.ts";
 import { runInstallOpencodeTarget } from "@/commands/install/opencode.ts";
-import { promptForTargets } from "@/commands/install/prompt.ts";
+import { promptForServiceChoice, promptForTargets } from "@/commands/install/prompt.ts";
 import {
   reconcileService,
+  type ServiceChoice,
   type ServiceStepDeps,
   uninstallService,
 } from "@/commands/install/service.ts";
@@ -43,6 +44,7 @@ export interface InstallDeps extends ServiceStepDeps {
   runClaude?: (opts: TargetOpts, deps: { ui: InstallUI }) => unknown;
   detect?: () => InstallTarget[];
   prompt?: (detected: InstallTarget[]) => Promise<InstallTarget[] | null>;
+  promptService?: () => Promise<ServiceChoice | null>;
   isInteractive?: () => boolean;
   /** Narrowed to what the step reports — the real `ensureRumdl` satisfies it, and a test
    * can describe an outcome without the config path it never reads. */
@@ -90,8 +92,6 @@ export async function runInstallSubcommand(
     dryRun: boolean;
     fromLocal?: boolean;
     refresh?: boolean;
-    /** `--no-resident`, already inverted by Commander. */
-    resident?: boolean;
   },
   deps: InstallDeps = {},
 ): Promise<InstallOutcome> {
@@ -108,6 +108,8 @@ export async function runInstallSubcommand(
 
   const targets = await selectTargets(opts, deps, ui);
   if (targets === null) return "ok";
+  const choice = await selectServiceChoice(opts, deps, ui);
+  if (choice === null) return "ok";
 
   const runOpencode = deps.runOpencode ?? runInstallOpencodeTarget;
   const runClaude = deps.runClaude ?? runInstallClaudeTarget;
@@ -156,7 +158,7 @@ export async function runInstallSubcommand(
       {
         dryRun: opts.dryRun,
         refresh: opts.refresh ?? false,
-        resident: opts.resident ?? true,
+        choice,
         pinnedRoot: local?.repoDir,
       },
       deps,
@@ -198,7 +200,7 @@ function resolveLocal(
 
 /** Warm the daemon on the freshly built binary. On a resident machine the service step has
  * already cycled onto the checkout, so this only attaches to that daemon; it is the whole
- * hand-off only where nothing is resident (opted out, unsupported, or disabled).
+ * hand-off only where nothing is resident (run yourself, unsupported, or disabled).
  * Best-effort either way: a hiccup here leaves an otherwise-clean install standing, and
  * the next review spawns the daemon anyway. The step reports only that prewarm ran — it
  * cannot know whether the running daemon was retired or merely reused (see local.ts). */
@@ -304,4 +306,19 @@ async function selectTargets(
   const names = targets.map(targetLabel).join(", ");
   ui.info(detected.length > 0 ? `Detected ${names}.` : `No agent detected — using ${names}.`);
   return targets;
+}
+
+/** Ask what the install does about the caret service. `null` means "do nothing" — the user
+ * cancelled. Asked under the same conditions as the chooser, and never on an uninstall,
+ * which removes the service regardless; an install nobody can ask leaves it as found. */
+async function selectServiceChoice(
+  opts: { uninstall: boolean; dryRun: boolean },
+  deps: InstallDeps,
+  ui: InstallUI,
+): Promise<ServiceChoice | null> {
+  const isInteractive = deps.isInteractive ?? isTerminal;
+  if (opts.uninstall || opts.dryRun || !isInteractive()) return "as-found";
+  const choice = await (deps.promptService ?? promptForServiceChoice)();
+  if (choice === null) ui.cancel("Cancelled — nothing was changed.");
+  return choice;
 }
