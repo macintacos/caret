@@ -27,6 +27,18 @@ const REGISTRY: Record<string, AgentAdapter> = {
   // daemon-side review pipeline is reused unchanged. Both ends of its wire are
   // caret-owned.
   opencode: opencodeAdapter,
+  // Set by caret's own MCP server, never by users. It speaks OpenCode's
+  // caret-owned envelope and flat allow/deny, because a tool result can't change
+  // Claude Code's permission mode — an accept-edits or auto choice is dropped. It
+  // keeps Claude's approve variants, skills and install probe so a daemon spawned
+  // from either Claude path looks the same to later reviews (EXC-1338).
+  "claude-mcp": {
+    ...claudeAdapter,
+    id: "claude-mcp",
+    parseHookInput: opencodeAdapter.parseHookInput,
+    emitDecision: opencodeAdapter.emitDecision,
+    fatalDenyLine: opencodeAdapter.fatalDenyLine,
+  },
 };
 
 /** The registered tool ids, in registration order. */
