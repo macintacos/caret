@@ -11,10 +11,11 @@ import { type InstallOpencodeDeps, runInstallOpencodeTarget } from "@/commands/i
 import { type InstallUI, recordingUI } from "@/commands/install/ui.ts";
 
 // Stub packaging so the target never resolves the real caret root. Only the command
-// files + bin path matter (caret itself installs as a `plugin` array entry).
+// files, root, and bin path matter (caret itself installs as a `plugin` array entry).
 const PACKAGING: OpencodePackaging = {
+  root: "/opt/caret",
   binPath: "/opt/caret/bin/caret",
-  commands: [{ name: "demo.md", contents: "run __CARET_BIN__" }],
+  commands: [{ name: "demo.md", contents: "run __CARET_BIN__ from __CARET_ROOT__" }],
 };
 
 let dir: string;
@@ -86,8 +87,8 @@ test("install adds caret to the plugin array (creating opencode.json) and deploy
   expect(JSON.parse(readFileSync(configJson(), "utf-8")).plugin).toEqual([CARET_PACKAGE]);
   expect(existsSync(commandFile())).toBe(true);
   expect(existsSync(join(dir, "commands", "demo.md"))).toBe(false);
-  // The command's __CARET_BIN__ marker is substituted with the running caret binary.
-  expect(readFileSync(commandFile(), "utf-8")).toBe("run /opt/caret/bin/caret");
+  // The command's markers are substituted with the running caret's binary and root.
+  expect(readFileSync(commandFile(), "utf-8")).toBe("run /opt/caret/bin/caret from /opt/caret");
 });
 
 test("install is idempotent (re-adding leaves the config unchanged)", async () => {

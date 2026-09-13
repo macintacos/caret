@@ -6,23 +6,24 @@ import { join } from "node:path";
 
 import { deployFiles, removeFiles, renderPlugin } from "@/adapters/opencode/deploy.ts";
 
-test("renderPlugin substitutes the version and bin markers (all occurrences)", () => {
-  const out = renderPlugin(`v="__CARET_VERSION__"; bin="__CARET_BIN__"; again="__CARET_BIN__"`, {
-    version: "1.2.3",
-    binPath: "/x/bin/caret",
-  });
-  expect(out).toBe(`v="1.2.3"; bin="/x/bin/caret"; again="/x/bin/caret"`);
+test("renderPlugin substitutes the version, bin, and root markers (all occurrences)", () => {
+  const out = renderPlugin(
+    `v="__CARET_VERSION__"; bin="__CARET_BIN__"; again="__CARET_BIN__"; root="__CARET_ROOT__"`,
+    { version: "1.2.3", binPath: "/x/bin/caret", root: "/x" },
+  );
+  expect(out).toBe(`v="1.2.3"; bin="/x/bin/caret"; again="/x/bin/caret"; root="/x"`);
 });
 
 test("renderPlugin substitutes values literally even when they contain $-sequences", () => {
   // A filesystem path may legally contain `$&`, `$$`, `$\``; a plain string
   // replacement would reinterpret those as String.replace substitution patterns
   // and corrupt the deployed binary path in a command file.
-  const out = renderPlugin(`bin="__CARET_BIN__"; v="__CARET_VERSION__"`, {
+  const out = renderPlugin(`bin="__CARET_BIN__"; v="__CARET_VERSION__"; root="__CARET_ROOT__"`, {
     version: "1.0$$beta",
     binPath: "/home/a$&b/bin/caret",
+    root: "/home/a$&b",
   });
-  expect(out).toBe(`bin="/home/a$&b/bin/caret"; v="1.0$$beta"`);
+  expect(out).toBe(`bin="/home/a$&b/bin/caret"; v="1.0$$beta"; root="/home/a$&b"`);
 });
 
 let dir: string;

@@ -28,6 +28,8 @@ export function resolveCaretRoot(): string {
 }
 
 export interface OpencodePackaging {
+  /** caret's root — what the command files' `__CARET_ROOT__` becomes. */
+  root: string;
   /** The caret shim the deployed command files invoke (their `__CARET_BIN__`). */
   binPath: string;
   /** Command files (basename + contents) from opencode/commands/, if any. */
@@ -48,5 +50,5 @@ export function loadOpencodePackaging(root: string = resolveCaretRoot()): Openco
     // No command files shipped (or unreadable) — the array entry alone is a valid install.
     commands = [];
   }
-  return { binPath, commands };
+  return { root, binPath, commands };
 }

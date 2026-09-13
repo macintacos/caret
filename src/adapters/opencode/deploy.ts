@@ -10,15 +10,20 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-/** Substitute a command file's install-time marker (`__CARET_BIN__`, e.g. in
- * discovery.md) with the running caret binary's path (and `__CARET_VERSION__` when
- * present). Pure. The replacements use a function replacer so the substituted value
- * is taken LITERALLY: a binary path containing `$&` / `$$` / `$\`` (legal in a
- * filesystem path) must not be reinterpreted as a `String.replace` pattern. */
-export function renderPlugin(source: string, opts: { version: string; binPath: string }): string {
+/** Substitute a command file's install-time markers (`__CARET_BIN__`, e.g. in
+ * discovery.md, and `__CARET_ROOT__`) with the running caret binary's path and caret's
+ * root (and `__CARET_VERSION__` when present). Pure. The replacements use a function
+ * replacer so the substituted value is taken LITERALLY: a path containing `$&` / `$$` /
+ * `$\`` (legal in a filesystem path) must not be reinterpreted as a `String.replace`
+ * pattern. */
+export function renderPlugin(
+  source: string,
+  opts: { version: string; binPath: string; root: string },
+): string {
   return source
     .replaceAll("__CARET_VERSION__", () => opts.version)
-    .replaceAll("__CARET_BIN__", () => opts.binPath);
+    .replaceAll("__CARET_BIN__", () => opts.binPath)
+    .replaceAll("__CARET_ROOT__", () => opts.root);
 }
 
 export interface DeployFile {

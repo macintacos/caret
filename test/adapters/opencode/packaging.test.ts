@@ -23,8 +23,9 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-test("loadOpencodePackaging reads the bin path and sorted command files", () => {
+test("loadOpencodePackaging reads the root, bin path, and sorted command files", () => {
   const pkg = loadOpencodePackaging(root);
+  expect(pkg.root).toBe(root);
   expect(pkg.binPath).toBe(join(root, "bin", "caret"));
   expect(pkg.commands.map((c) => c.name)).toEqual(["demo.md", "discovery.md"]);
   expect(pkg.commands[0]?.contents).toContain("demo");
