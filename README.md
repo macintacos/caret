@@ -27,7 +27,8 @@ where you left it.
 caret needs [`bun`](https://bun.sh) on your `PATH` — it runs from a `bun` bundle.
 
 > [!NOTE]
-> caret is **macOS-first**; Linux and Windows are best-effort. See
+> caret supports macOS and Linux, where the review UI can run as a login service (launchd
+> or systemd). Windows is best-effort and runs caret on demand only. See
 > [`doc/CONFIGURING.md`](doc/CONFIGURING.md#platform-support) for what differs on each
 > platform and what to fall back on.
 
@@ -46,7 +47,10 @@ Every install at a terminal also asks whether to keep caret's review UI running 
 time, and doesn't remember the answer. Keeping it running registers a service that starts
 at login and serves the UI at `http://caret.localhost:42718`; the other answer is
 [running caret yourself](#running-caret-yourself). Off a terminal it doesn't ask, and
-leaves the service however it finds it.
+leaves the service however it finds it. To turn the service off later, run `caret install`
+and answer **I'll run it myself**, or use `--uninstall` — see
+[turning caret off](doc/RUNNING.md#turning-caret-off) and
+[the caret service](doc/RUNNING.md#the-caret-service).
 
 Two steps finish the job:
 
@@ -90,9 +94,10 @@ bunx --no-cache @macintacos/caret@latest install --uninstall  # remove
 
 An update picks its agents exactly as a fresh install does — the chooser at a terminal,
 detection otherwise — and at a terminal asks the review-UI question again; an uninstall
-takes every agent. Restarting each agent applies an update. In OpenCode, caret toasts you
-at startup when a newer release is out; a plain `install` at a terminal runs its own check
-against npm and asks before taking it.
+takes every agent. Where caret's service stays registered, `--refresh` also cycles it onto
+the new version, and restarting each agent loads that agent's own updated copy. In
+OpenCode, caret toasts you at startup when a newer release is out; a plain `install` at a
+terminal runs its own check against npm and asks before taking it.
 
 caret's daemon runs the same check for itself, at most once a day. The call is
 unauthenticated and sends nothing about you — just a request to npm or GitHub, depending
