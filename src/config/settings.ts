@@ -351,7 +351,8 @@ export function getPort(s: Settings = settings().current()): number {
   return envValue("CARET_PORT", Port) ?? s.daemon.port;
 }
 
-/** Idle auto-shutdown delay (ms): CARET_IDLE_MS > [daemon].idle_ms > 60s. */
+/** Idle auto-shutdown delay (ms): CARET_IDLE_MS > [daemon].idle_ms > 60s. Ignored by a
+ * resident daemon. */
 export function idleMs(s: Settings = settings().current()): number {
   return envValue("CARET_IDLE_MS", IdleMs) ?? s.daemon.idle_ms;
 }

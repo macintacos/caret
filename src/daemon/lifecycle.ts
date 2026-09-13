@@ -1,9 +1,9 @@
-// Daemon takeover + lifecycle: discover whether a caret daemon of THIS build
-// already owns the port, gracefully retire a stale one, spawn a fresh one, and
-// clean orphan locks (EXC-406) — never denying a review because takeover failed.
-// This module also owns the world-identity guards (EXC-461) and the lock
-// read/write/liveness primitives the takeover loop and the discovery command
-// share.
+// Daemon takeover + lifecycle: resolve the port for hooks and `caret serve` — reuse a
+// daemon of THIS build, cycle a stale supervised one through its service, retire a stale
+// unsupervised one, spawn the on-demand fallback, and clean orphan locks (EXC-406) —
+// never denying a review because takeover failed. This module also owns the
+// world-identity guards (EXC-461) and the lock read/write/liveness primitives the
+// takeover loop and the discovery command share.
 
 import {
   accessSync,
@@ -119,8 +119,9 @@ const FOREIGN_WORLD_ERROR =
 
 /** How a caller wants the port resolved.
  *
- * - `takeover` retires a different-build daemon and spawns this binary's own — starting a
- *   review, or prewarming, is when a build claims the port.
+ * - `takeover` retires a different-build daemon and spawns this binary's own — or cycles
+ *   the service, for its daemon. Starting a review, or prewarming, is when a build claims
+ *   the port.
  * - `attach` returns whichever same-world daemon is answering, whatever its build, and
  *   spawns only when nothing is. A mid-review reconnect attaches: the reconnecting client
  *   may be an OLD build whose review has outlived an upgrade; letting it take over would
@@ -443,7 +444,8 @@ export function rotateDaemonStderr(s: Settings): void {
   rotateIfOversized(daemonStderrLogFile(), logMaxSize(s), logKeep(s));
 }
 
-/** The working directory the detached daemon is pinned to. The daemon is a
+/** The working directory `spawnDaemon`'s child and the service unit's
+ * `WorkingDirectory` pin the daemon to. The daemon is a
  * machine-wide singleton that outlives whatever project directory happened to
  * start it, and an inherited cwd is a directory it has no business holding: an
  * exec worktree torn down after its PR merged left daemons unable to
@@ -454,8 +456,9 @@ export function rotateDaemonStderr(s: Settings): void {
  * the agent's `planFilePath` — is absolute by contract. */
 export const DAEMON_CWD = "/";
 
-/** Spawn the detached daemon, pinned to `DAEMON_CWD` and with stdout/stderr
- * redirected to daemon-stderr.log. */
+/** Spawn the on-demand daemon a hook falls back to when no service keeps one up; it
+ * idle-exits. Pinned to `DAEMON_CWD`, with stdout/stderr redirected to
+ * daemon-stderr.log. */
 export function spawnDaemon(s: Settings, spawn: typeof Bun.spawn = Bun.spawn): void {
   const out = openDaemonStderr(s);
   spawn(daemonCommand(), {

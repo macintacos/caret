@@ -104,8 +104,8 @@ export function prefsFile(): string {
 
 /** The daemon's update-check record: when it last asked whether a newer caret
  * exists, and what it concluded (EXC-1205). A small machine-global marker beside
- * prefs.json — the daemon dies on idle, so the verdict has to outlive the process
- * that computed it. */
+ * prefs.json — an on-demand daemon exits on idle and every daemon restarts on an upgrade,
+ * so the verdict has to outlive the process that computed it. */
 export function updateCheckFile(): string {
   return `${stateDir()}/update-check.json`;
 }
@@ -146,7 +146,8 @@ export function daemonStderrLogFile(): string {
 
 /** Single-instance lock file: written atomically on daemon bind and removed on
  * every exit path. Holds a DaemonLock record so a newer caret can discover and
- * gracefully retire an older one (EXC-406). */
+ * gracefully retire an older unsupervised one (EXC-406); a supervised one is cycled
+ * through its service instead. */
 export function daemonLock(): string {
   return `${stateDir()}/daemon.lock`;
 }

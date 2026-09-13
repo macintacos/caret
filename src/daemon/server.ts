@@ -98,8 +98,8 @@ export type RoutePlan = (input: PlanInput, store: Store, log?: CaretLogger) => P
 export interface CreateServerOptions {
   store: Store;
   port?: number;
-  /** Idle auto-shutdown delay (ms); defaults to the schema default. runDaemon
-   * passes the env/file-resolved value (settings.idleMs) captured at boot. */
+  /** Idle auto-shutdown delay (ms), ignored when `resident`; defaults to the schema default.
+   * runDaemon passes the env/file-resolved value (settings.idleMs) captured at boot. */
   idleMs?: number;
   /** Decision long-poll heartbeat window (ms); defaults to the schema default.
    * runDaemon passes the env/file-resolved value (settings.heartbeatMs)
@@ -355,9 +355,9 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // (or retracted by a tab-close beacon, see handleUiGone).
   let lastReviewsPollAt = 0;
   // A UI tab counts as present while its last poll is within the live-client
-  // window. Gates idle shutdown (EXC-562): a throttled-but-open tab must not get
-  // the daemon shut from under it, since a respawn forgets the tab and the next
-  // plan would open a redundant browser tab.
+  // window. Gates idle shutdown (an on-demand daemon's; EXC-562): a throttled-but-open
+  // tab must not get the daemon shut from under it, since a respawn forgets the tab and
+  // the next plan would open a redundant browser tab.
   const uiPresent = () => isClientLive(lastReviewsPollAt, Date.now(), LIVE_CLIENT_WINDOW_MS);
 
   // stop()'s own guard, apart from liveness's: runDaemon's signal paths call stop() too,

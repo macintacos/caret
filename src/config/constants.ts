@@ -37,7 +37,8 @@ export const MAX_LOG_MAX_SIZE = 256 * 1024 * 1024;
  * loopback per RFC 6761 (mDNSResponder system-wide; Chrome/Firefox special-case
  * it internally), so the 127.0.0.1 bind needs no change. Shared here because the
  * daemon's Host and cross-origin guards (which allow it) and review
- * orchestration (which opens it) all reference the one host. */
+ * orchestration (which opens it) all reference the one host, and the install step and
+ * `caret serve` print the review URL under it. */
 export const VANITY_HOST = "caret.localhost";
 
 /**
@@ -147,8 +148,8 @@ export function hasKnownFileExtension(path: string): boolean {
 /** "Never idle out" sentinel for the idle-shutdown delay (ms): the max
  * setTimeout delay (2^31-1). A larger value overflows the 32-bit timer and
  * clamps to ~1ms, firing the idle shutdown immediately — the trap this guards
- * against. Used where a daemon must stay up for a whole dev/test session
- * regardless of inactivity (the e2e daemon, the dev review timeout cap). */
+ * against. A resident daemon never arms idle, so this serves a non-resident daemon that
+ * must stay up for a whole test session (the e2e daemon), and the dev review timeout cap. */
 export const NEVER_IDLE_MS = 2147483647;
 
 // --- Decision long-poll socket timing (EXC-533) ---

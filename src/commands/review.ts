@@ -21,9 +21,8 @@ import { appendReviewerNotesToPlanFile } from "@/plan/canonical-file.ts";
 import { expireAbandoned, type ReviewDeps, runReview } from "@/review/orchestrate.ts";
 
 /** Select the platform's URL-opening argv: darwin `open`, win32 `cmd /c start`,
- * anything else `xdg-open`. caret is macOS-first — the non-darwin branches ship
- * but are exercised primarily on macOS (see README support posture). Pure so the
- * branch selection is unit-testable without spawning. */
+ * anything else `xdg-open` (support per platform: doc/CONFIGURING.md § Platform support).
+ * Pure so the branch selection is unit-testable without spawning. */
 export function browserOpenCmd(platform: NodeJS.Platform | string, url: string): string[] {
   return platform === "darwin"
     ? ["open", url]

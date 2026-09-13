@@ -3,7 +3,8 @@
 // `caret review` hook appends to logs/caret.log (see paths.logFile); the daemon
 // appends to logs/daemon.log, a path it owns so it can stat and rotate its own
 // sink (its raw stderr goes to logs/daemon-stderr.log instead, redirected by
-// spawnDaemon). /caret:debug reads both.
+// spawnDaemon, or by bin/caret-launcher for a supervised daemon). /caret:debug reads
+// both.
 //
 // Both sinks check their size before each record they actually write and rotate
 // past the threshold (EXC-1068, src/lib/log-rotate.ts).
