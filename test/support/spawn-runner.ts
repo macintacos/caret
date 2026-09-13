@@ -1,3 +1,5 @@
+// Stub SpawnRunners for the review-bridge callers' suites: the OpenCode plugin and caret mcp.
+
 import type { SpawnRunner } from "@opencode/review-bridge.ts";
 
 /** A SpawnRunner that resolves `stdout` at once, handing each call's arguments to

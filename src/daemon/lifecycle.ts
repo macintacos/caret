@@ -408,8 +408,8 @@ export async function retireDaemon(
 export function selfCommand(subcommand: string): string[] {
   // Compiled binary: process.execPath IS the caret binary. Dev (`bun run
   // src/cli.ts`) AND the npm bundle (`bun dist/cli.js`) run under bun and must
-  // re-pass the script path — otherwise the spawned child is `[bun, "daemon"]`,
-  // which has no script to run and never starts the daemon (EXC-643).
+  // re-pass the script path — otherwise the spawned child is `[bun, subcommand]`,
+  // which has no script to run (EXC-643).
   if (buildKind() === "binary") return [process.execPath, subcommand];
   return [process.execPath, process.argv[1] as string, subcommand];
 }

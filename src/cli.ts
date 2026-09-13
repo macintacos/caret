@@ -19,7 +19,6 @@ import { fatalDeny } from "@/adapters/index.ts";
 import { runDaemon } from "@/commands/daemon.ts";
 import { runDiscoverySubcommand } from "@/commands/discovery.ts";
 import { installExitCode, runInstallSubcommand } from "@/commands/install/index.ts";
-import { runMcpSubcommand } from "@/commands/mcp.ts";
 import { runPrewarm } from "@/commands/prewarm.ts";
 import { runReconcileSubcommand } from "@/commands/reconcile.ts";
 import { runRedactSubcommand } from "@/commands/redact.ts";
@@ -66,7 +65,7 @@ function buildProgram(): Command {
   program
     .command("mcp")
     .description("serve caret's plan-review tool over MCP stdio (Claude Code plugin)")
-    .action(() => runMcpSubcommand());
+    .action(async () => (await import("@/commands/mcp.ts")).runMcpSubcommand());
 
   program
     .command("reconcile")

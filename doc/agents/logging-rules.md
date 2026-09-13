@@ -80,9 +80,9 @@ Concretely:
 - `step` is a **short fixed lowercase token** naming the operation (`review`, `resolve`,
   `decision`, `idle`, `listen`, `settings`, `signal`, `store`, `prefs`, `draft`, `env`,
   `ui`, `poll`, `render`, `prewarm`, `retire`, `drain`, `spawn`, `request`, `fatal`,
-  `update`, `service`, `upkeep`). Reuse an existing token before minting a new one — and
-  when you do mint one, add it here in the same change, so this stays a registry rather
-  than a snapshot.
+  `update`, `service`, `upkeep`, `mcp`). Reuse an existing token before minting a new one
+  — and when you do mint one, add it here in the same change, so this stays a registry
+  rather than a snapshot.
 - Review-scoped records carry structured `reviewId` / `sessionId` fields in `extra` so one
   session stitches across the two log streams (EXC-444).
 - Every record carries a `source` field naming the emitting process — `"hook"`,

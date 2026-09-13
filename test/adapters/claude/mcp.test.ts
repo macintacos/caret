@@ -1,21 +1,27 @@
 // `caret mcp`: the review_plan tool Claude Code reaches through the plugin's MCP server.
-// The handler is driven through an injected SpawnRunner; the server itself is driven
-// over real stdio with the SDK's own client, so the tool listing is what Claude Code
-// would see.
+// The handler is driven through an injected SpawnRunner, the server over the SDK's
+// in-memory transport, and the entry point over real stdio with the SDK's own client, so
+// the tool listing is what Claude Code would see.
 
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 import { approvedMessage, deniedMessage, type SpawnRunner } from "@opencode/review-bridge.ts";
-import { setupTempStateDir } from "@test/support/env.ts";
+import { setupTempConfigFile, setupTempStateDir } from "@test/support/env.ts";
+import { until } from "@test/support/poll.ts";
 import { stubRunner } from "@test/support/spawn-runner.ts";
-import { createReviewPlanHandler, REVIEW_PLAN_TOOL } from "@/commands/mcp.ts";
+import { CLAUDE_MCP_AGENT } from "@/adapters/index.ts";
+import { createCaretMcpServer, createReviewPlanHandler, REVIEW_PLAN_TOOL } from "@/commands/mcp.ts";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
+
+const stateDir = setupTempStateDir("caret-mcp-");
+setupTempConfigFile(stateDir);
 
 function handlerWith(run: SpawnRunner) {
   return createReviewPlanHandler({
@@ -55,7 +61,7 @@ test("the review runs this caret's review command under the claude-mcp adapter",
   await review("# Add rate limiting\n\nsteps", signal());
   const [command, env, stdin] = seen ?? [];
   expect(command).toEqual(["/bin/caret", "review"]);
-  expect(env?.CARET_AGENT).toBe("claude-mcp");
+  expect(env?.CARET_AGENT).toBe(CLAUDE_MCP_AGENT);
   expect(JSON.parse(stdin ?? "")).toEqual({
     session_id: "mcp-S",
     cwd: "/proj",
@@ -68,8 +74,7 @@ test("the call's abort signal reaches the runner", async () => {
   const review = handlerWith(stubRunner(`{"behavior":"allow"}`, (...args) => (seen = args[4])));
   const abort = new AbortController();
   await review("# Plan", abort.signal);
-  abort.abort();
-  expect(seen?.aborted).toBe(true);
+  expect(seen).toBe(abort.signal);
 });
 
 test("a second call while a review is pending is refused without spawning", async () => {
@@ -96,7 +101,49 @@ test("a second call while a review is pending is refused without spawning", asyn
   expect((await third).isError).toBeFalsy();
 });
 
-const stateDir = setupTempStateDir("caret-mcp-");
+/** A runner whose review never decides: it settles only once its signal aborts. */
+function undecidedRunner(onSpawn: (signal: AbortSignal | undefined) => void): SpawnRunner {
+  return (_command, _env, _stdin, _onStderr, signal) => {
+    onSpawn(signal);
+    return new Promise((_resolve, reject) => {
+      signal?.addEventListener("abort", () => reject(signal.reason));
+    });
+  };
+}
+
+async function connectedClient(run: SpawnRunner): Promise<Client> {
+  const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+  await createCaretMcpServer(handlerWith(run)).connect(serverSide);
+  const client = new Client({ name: "caret-test", version: "0" });
+  await client.connect(clientSide);
+  return client;
+}
+
+const planCall = { name: REVIEW_PLAN_TOOL, arguments: { plan: "# Plan" } };
+
+test("closing the connection aborts the in-flight review", async () => {
+  let reviewSignal: AbortSignal | undefined;
+  const client = await connectedClient(undecidedRunner((s) => (reviewSignal = s)));
+  const call = client.callTool(planCall).catch(() => {});
+  expect(await until(() => reviewSignal !== undefined)).toBe(true);
+
+  await client.close();
+  expect(await until(() => reviewSignal?.aborted === true, 1000)).toBe(true);
+  await call;
+});
+
+test("the client cancelling its call aborts the in-flight review", async () => {
+  let reviewSignal: AbortSignal | undefined;
+  const client = await connectedClient(undecidedRunner((s) => (reviewSignal = s)));
+  const abort = new AbortController();
+  const call = client.callTool(planCall, undefined, { signal: abort.signal }).catch(() => {});
+  expect(await until(() => reviewSignal !== undefined)).toBe(true);
+
+  abort.abort();
+  expect(await until(() => reviewSignal?.aborted === true, 1000)).toBe(true);
+  await call;
+  await client.close();
+});
 
 test("the MCP server lists exactly the review_plan tool, taking a plan", async () => {
   const client = new Client({ name: "caret-test", version: "0" });
@@ -105,11 +152,7 @@ test("the MCP server lists exactly the review_plan tool, taking a plan", async (
       command: process.execPath,
       args: ["src/cli.ts", "mcp"],
       cwd: REPO_ROOT,
-      env: {
-        ...(process.env as Record<string, string>),
-        XDG_STATE_HOME: stateDir(),
-        CARET_CONFIG_FILE: join(stateDir(), "config.toml"),
-      },
+      env: process.env as Record<string, string>,
       stderr: "ignore",
     }),
   );

@@ -123,7 +123,7 @@ so the shipped Claude plugin keeps working unchanged.
 
 | Adapter | `CARET_AGENT` | How it wires in | What ships | Status |
 | ------- | ------------- | --------------- | ---------- | ------ |
-| **Claude Code** — `src/adapters/claude/` | `claude` (the default) | Three plan-mode hooks; the `PermissionRequest`/`ExitPlanMode` one intercepts the plan | The `caret@caret` plugin, from caret's own marketplace | Stable (default) |
+| **Claude Code** — `src/adapters/claude/` | `claude` (the default) | Three plan-mode hooks; the `PermissionRequest`/`ExitPlanMode` one intercepts the plan. The plugin also serves a `review_plan` MCP tool (`caret mcp`) | The `caret@caret` plugin, from caret's own marketplace | Stable (default) |
 | **OpenCode** — `src/adapters/opencode/` | `opencode` | An in-process plugin registering a `caret_review_plan` tool — OpenCode has no plan hook to intercept | The `@macintacos/caret` npm package, plus its own installer | Stable |
 | **Codex CLI** — `src/adapters/codex/` | `codex` | A `PermissionRequest` hook | Nothing — no installer, no hook manifests | Provisional, default-off |
 

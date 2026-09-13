@@ -11,7 +11,7 @@ import { setupTempStateDir } from "@test/support/env.ts";
 import { emitWire as emitWireVia } from "@test/support/wire-contract.ts";
 import { APPROVE_VARIANTS } from "@/adapters/claude/approve.ts";
 import { claudeAdapter } from "@/adapters/claude/index.ts";
-import { fatalDeny, selectAdapter } from "@/adapters/index.ts";
+import { CLAUDE_MCP_AGENT, fatalDeny, selectAdapter } from "@/adapters/index.ts";
 import type { Decision } from "@/lib/types.ts";
 
 const FIXTURE = join(import.meta.dir, "..", "opencode", "fixtures", "review-request-stdin.json");
@@ -26,7 +26,7 @@ afterEach(() => {
 });
 
 function emitWire(decision: Decision): Promise<unknown> {
-  return emitWireVia(stdin, decision, selectAdapter("claude-mcp"));
+  return emitWireVia(stdin, decision, selectAdapter(CLAUDE_MCP_AGENT));
 }
 
 test("plain approve over the envelope emits a flat allow", async () => {
@@ -55,17 +55,17 @@ test("a deny over the envelope carries the reviewer feedback", async () => {
 });
 
 test("offers Claude's approve variants", () => {
-  expect(selectAdapter("claude-mcp").approveVariants).toBe(APPROVE_VARIANTS);
+  expect(selectAdapter(CLAUDE_MCP_AGENT).approveVariants).toBe(APPROVE_VARIANTS);
 });
 
 test("lists skills, reads skill descriptions and probes the install as Claude does", () => {
-  const mcp = selectAdapter("claude-mcp");
+  const mcp = selectAdapter(CLAUDE_MCP_AGENT);
   expect(mcp.listSkills).toBe(claudeAdapter.listSkills);
   expect(mcp.readSkillDescription).toBe(claudeAdapter.readSkillDescription);
   expect(mcp.readInstallState).toBe(claudeAdapter.readInstallState);
 });
 
 test("fatalDeny under CARET_AGENT=claude-mcp ships a flat deny line", () => {
-  process.env.CARET_AGENT = "claude-mcp";
+  process.env.CARET_AGENT = CLAUDE_MCP_AGENT;
   expect(JSON.parse(fatalDeny("boom"))).toEqual({ behavior: "deny", feedback: "boom" });
 });

@@ -32,9 +32,8 @@ import { fileURLToPath } from "node:url";
 import { type Hooks, type Plugin, tool } from "@opencode-ai/plugin";
 
 import {
-  approvedMessage,
   buildEnvelope,
-  deniedMessage,
+  decisionText,
   nodeSpawnRunner,
   runReviewViaCaret,
   type SpawnRunner,
@@ -482,7 +481,7 @@ export function createCaretPlugin(
       tool: {
         [REVIEW_TOOL]: tool({
           description:
-            "Submit the current plan to caret for human review in a local browser UI. Blocks until the user approves or requests changes. On a change request, revise the plan and call this tool again with the updated plan.",
+            "Submit the current plan to caret for human review in a local browser UI. For plans only: caret presents what it receives as a plan, so do not use it for other documents or questions. Blocks until the user approves or requests changes. On a change request, revise the plan and call this tool again with the updated plan. Do not implement the plan until a call returns an approval.",
           args: {
             plan: tool.schema
               .string()
@@ -530,9 +529,7 @@ export function createCaretPlugin(
                     },
               );
             }
-            return decision.behavior === "allow"
-              ? approvedMessage(decision.feedback)
-              : deniedMessage(decision.feedback ?? "Plan changes requested.", REVIEW_TOOL);
+            return decisionText(decision, REVIEW_TOOL);
           },
         }),
       },

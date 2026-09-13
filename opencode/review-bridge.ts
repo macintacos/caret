@@ -6,10 +6,9 @@
 
 import { spawn } from "node:child_process";
 
-export interface CaretDecision {
-  behavior: "allow" | "deny";
-  feedback?: string;
-}
+export type CaretDecision =
+  | { behavior: "allow"; feedback?: string }
+  | { behavior: "deny"; feedback: string };
 
 /** The first markdown heading in the plan, used as the review title — or
  * undefined when the plan has no `# ` heading. */
@@ -111,6 +110,14 @@ export function deniedMessage(feedback: string, tool: string): string {
   ].join("\n");
 }
 
+/** The tool result an agent reads for `decision`; `tool` is the name to call again on a
+ * change request. */
+export function decisionText(decision: CaretDecision, tool: string): string {
+  return decision.behavior === "allow"
+    ? approvedMessage(decision.feedback)
+    : deniedMessage(decision.feedback, tool);
+}
+
 /** Extract caret's review URL from the child's stderr text. Core writes
  * `caret: review this plan at <url>\n` (src/review/orchestrate.ts); both ends are caret-owned,
  * so this regex is coupled to that one line by design. The trailing `\s` match
@@ -123,7 +130,9 @@ export function parseReviewUrl(stderr: string): string | undefined {
 /** Runs `command` (a `caret review` argv), returning its captured stdout. Injected so
  * the review tool is unit-testable without spawning a real process. `onStderr` streams
  * the child's stderr chunks as they arrive, so the caller can surface the review URL
- * the core prints there while the review is still pending. */
+ * the core prints there while the review is still pending. An aborted `signal` must
+ * terminate the child and settle (reject) promptly: `caret mcp` refuses a new call until
+ * the aborted one settles. */
 export type SpawnRunner = (
   command: string[],
   env: Record<string, string | undefined>,
@@ -134,8 +143,8 @@ export type SpawnRunner = (
 
 /** Spawn `command` with the review envelope on stdin and CARET_AGENT set to `agent`,
  * then parse its decision line. Any spawn failure fails safe to a deny. `onUrl`, if
- * given, fires once with the review URL the moment core prints it on stderr — the
- * caller surfaces it inside the tool block so it clears on decision (EXC-691). */
+ * given, fires once with the review URL the moment core prints it on stderr, so a caller
+ * can surface it while the review is pending. */
 export async function runReviewViaCaret(
   envelope: string,
   opts: {
@@ -186,12 +195,12 @@ export async function runReviewViaCaret(
 }
 
 /** Production runner: spawn `command[0]` with the rest of the argv. stderr is
- * PIPED (not inherited) and streamed to `onStderr`: inheriting it leaked core's
- * "review this plan at <url>" line straight into OpenCode's TUI scrollback, where
- * the renderer never owns it and it lingered after the decision (EXC-691). The child
- * logs diagnostics to caret.log, so dropping the rest of stderr loses nothing. An
- * aborted `signal` SIGTERMs the child, which `caret review` answers by expiring the
- * review it holds, and rejects with an AbortError. */
+ * PIPED (not inherited) and streamed to `onStderr`: in OpenCode, inheriting it leaked
+ * core's "review this plan at <url>" line straight into the TUI scrollback, where the
+ * renderer never owns it and it lingered after the decision (EXC-691). The child logs
+ * diagnostics to caret.log, so dropping the rest of stderr loses nothing. An aborted
+ * `signal` SIGTERMs the child, which `caret review` answers by expiring its review; the
+ * returned promise rejects with an AbortError. */
 export const nodeSpawnRunner: SpawnRunner = (command, env, stdin, onStderr, signal) =>
   new Promise((resolve, reject) => {
     const child = spawn(command[0] as string, command.slice(1), {
@@ -206,6 +215,9 @@ export const nodeSpawnRunner: SpawnRunner = (command, env, stdin, onStderr, sign
     child.stderr.on("data", (chunk) => onStderr?.(chunk.toString()));
     child.on("error", reject);
     child.on("close", (code) => resolve({ stdout, exitCode: code ?? 0 }));
+    // A child killed before reading stdin EPIPEs the write; unhandled, that crashes the
+    // host. The 'error'/'close' handlers above already settle.
+    child.stdin.on("error", () => {});
     child.stdin.write(stdin);
     child.stdin.end();
   });

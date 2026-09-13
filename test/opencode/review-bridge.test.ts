@@ -3,14 +3,15 @@
 // hands back to the agent, and the spawn itself — through an injected runner, and through
 // the production runner against a shim child.
 
-import { expect, test } from "bun:test";
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { afterAll, expect, test } from "bun:test";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
   approvedMessage,
   buildEnvelope,
+  decisionText,
   deniedMessage,
   nodeSpawnRunner,
   parseDecision,
@@ -21,10 +22,15 @@ import {
 } from "@opencode/review-bridge.ts";
 import { until } from "@test/support/poll.ts";
 import { streamingRunner, stubRunner } from "@test/support/spawn-runner.ts";
+import { isPidAlive } from "@/daemon/lifecycle.ts";
 
-/** An executable `/bin/sh` script with `body` as its contents, in a fresh temp dir. */
+const tmp = mkdtempSync(join(tmpdir(), "caret-bridge-"));
+afterAll(() => rmSync(tmp, { recursive: true, force: true }));
+
+let shims = 0;
+/** An executable `/bin/sh` script with `body` as its contents, in the suite's temp dir. */
 function shim(body: string): string {
-  const path = join(mkdtempSync(join(tmpdir(), "caret-bridge-")), "shim");
+  const path = join(tmp, `shim-${shims++}`);
   writeFileSync(path, `#!/bin/sh\n${body}\n`);
   chmodSync(path, 0o755);
   return path;
@@ -114,6 +120,18 @@ test("deniedMessage carries the feedback and resubmit instruction, without echoi
 
 test("deniedMessage names the given tool as the one to call again", () => {
   expect(deniedMessage("narrow step 2", "submit_plan")).toContain("`submit_plan`");
+});
+
+test("decisionText returns the approved message, notes included, for an allow", () => {
+  expect(decisionText({ behavior: "allow", feedback: "use the retry helper" }, "submit_plan")).toBe(
+    approvedMessage("use the retry helper"),
+  );
+});
+
+test("decisionText returns the change request naming the tool for a deny", () => {
+  expect(decisionText({ behavior: "deny", feedback: "narrow step 2" }, "submit_plan")).toBe(
+    deniedMessage("narrow step 2", "submit_plan"),
+  );
 });
 
 // --- parseReviewUrl (review-link surfacing, EXC-691) ---
@@ -254,15 +272,6 @@ test("nodeSpawnRunner spawns the argv's first entry with the rest as its argumen
   expect(stdout).toBe("review|--flag|");
 });
 
-function isAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /** Settles with "hung" if `p` has not settled within `ms` — well short of the sleep the
  * shims below would otherwise run to. */
 function settlesWithin(p: Promise<unknown>, ms: number): Promise<"settled" | "hung"> {
@@ -276,23 +285,29 @@ function settlesWithin(p: Promise<unknown>, ms: number): Promise<"settled" | "hu
 test("nodeSpawnRunner kills a running child when the signal aborts", async () => {
   // `exec` so the pid the shim reports is the sleeper itself, not a shell that would
   // leave it orphaned holding the pipes open.
-  const dir = mkdtempSync(join(tmpdir(), "caret-bridge-"));
-  const pidFile = join(dir, "pid");
+  const pidFile = join(tmp, "pid-live");
   const bin = shim(`echo $$ > ${pidFile}\necho started >&2\nexec sleep 10`);
   const controller = new AbortController();
   const run = nodeSpawnRunner([bin], process.env, "", () => controller.abort(), controller.signal);
   expect(await settlesWithin(run, 3_000)).toBe("settled");
   const pid = Number(readFileSync(pidFile, "utf-8"));
-  expect(await until(() => !isAlive(pid))).toBe(true);
+  expect(await until(() => !isPidAlive(pid))).toBe(true);
 });
 
 test("nodeSpawnRunner kills the child at once when the signal is already aborted", async () => {
+  // A non-empty stdin, as every real call pipes: the child dies before reading it.
+  const pidFile = join(tmp, "pid-aborted");
   const run = nodeSpawnRunner(
-    [shim("exec sleep 10")],
+    [shim(`echo $$ > ${pidFile}\nexec sleep 10`)],
     process.env,
-    "",
+    "{}",
     undefined,
     AbortSignal.abort(),
   );
   expect(await settlesWithin(run, 3_000)).toBe("settled");
+  // Killed at spawn, the shim usually never writes its pid; once settled, any it wrote is final.
+  if (existsSync(pidFile)) {
+    const pid = Number(readFileSync(pidFile, "utf-8"));
+    expect(await until(() => !isPidAlive(pid))).toBe(true);
+  }
 });

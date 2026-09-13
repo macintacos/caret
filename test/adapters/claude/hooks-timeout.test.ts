@@ -7,7 +7,8 @@
 // greater than the review ceiling). They live in two files Claude Code's plugin
 // system keeps apart — `hooks/hooks.json` (the plugin's on-disk hook manifest)
 // and the review-timeout ceiling enforced by the settings schema — so this suite
-// reads BOTH and fails if either drifts.
+// reads BOTH and fails if either drifts. It also reads `.claude-plugin/plugin.json`,
+// whose MCP server request `timeout` is the same budget in milliseconds.
 //
 // The prewarm hook's budget is coupled the same way to ensureDaemon's deadline: a
 // prewarm killed while it still waits on the supervisor never reaches its fallback spawn.

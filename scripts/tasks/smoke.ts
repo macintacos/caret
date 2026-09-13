@@ -75,6 +75,49 @@ function lockPort(lockFile: string): number | undefined {
   return typeof lock?.port === "number" ? lock.port : undefined;
 }
 
+const MCP_TOOLS_LIST = [
+  {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "initialize",
+    params: {
+      protocolVersion: "2025-06-18",
+      capabilities: {},
+      clientInfo: { name: "smoke", version: "0" },
+    },
+  },
+  { jsonrpc: "2.0", method: "notifications/initialized" },
+  { jsonrpc: "2.0", id: 2, method: "tools/list" },
+]
+  .map((message) => `${JSON.stringify(message)}\n`)
+  .join("");
+
+/** Whether `argv` (an artifact's `caret mcp`) answers `tools/list` with `review_plan`
+ * within ~5s — the only gate that runs the MCP SDK as bundled rather than from source. */
+async function mcpListsReviewPlan(argv: string[], env: Record<string, string>): Promise<boolean> {
+  const child = Bun.spawn(argv, { stdin: "pipe", stdout: "pipe", stderr: "inherit", env });
+  // stdin stays open: the server shuts down on EOF, which could race the reply.
+  child.stdin.write(MCP_TOOLS_LIST);
+  child.stdin.flush();
+  const timer = setTimeout(() => child.kill(), 5000);
+  const decoder = new TextDecoder();
+  let out = "";
+  try {
+    for await (const chunk of child.stdout) {
+      out += decoder.decode(chunk, { stream: true });
+      const reply = out
+        .split("\n")
+        .slice(0, -1)
+        .find((line) => line.includes('"id":2'));
+      if (reply !== undefined) return reply.includes('"name":"review_plan"');
+    }
+    return false;
+  } finally {
+    clearTimeout(timer);
+    child.kill();
+  }
+}
+
 export async function runSmokeBin(): Promise<never> {
   // Build the compiled binary first (ui + compile), unless CARET_SKIP_BUILD_BIN
   // says the caller (the preflight gate) already compiled it.
@@ -118,10 +161,11 @@ export async function runSmokeBin(): Promise<never> {
   // Boot the copied binary on an OS-assigned port (--ephemeral) with the
   // isolated state dir. Env is passed explicitly (Bun.spawn snapshots
   // process.env); the cwd doesn't affect asset resolution (it keys off execPath).
+  const env = { ...(process.env as Record<string, string>), XDG_STATE_HOME: stateDir };
   daemon = Bun.spawn([bin, "daemon", "--ephemeral"], {
     stdout: "inherit",
     stderr: "inherit",
-    env: { ...(process.env as Record<string, string>), XDG_STATE_HOME: stateDir },
+    env,
   });
   const daemonPid = daemon.pid;
 
@@ -156,6 +200,12 @@ export async function runSmokeBin(): Promise<never> {
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     process.exit(1);
   }
+
+  if (!(await mcpListsReviewPlan([bin, "mcp"], env))) {
+    process.stderr.write("smoke bin: `caret mcp` did not list review_plan within ~5s\n");
+    process.exit(1);
+  }
+  console.log("smoke bin: mcp lists review_plan");
 
   console.log("smoke bin: PASS — compiled binary serves the embedded multi-asset UI");
   process.exit(0);
@@ -263,14 +313,16 @@ export async function runSmokeBundle(): Promise<never> {
   // daemon. Env is passed explicitly (Bun.spawn snapshots process.env). A
   // non-zero prewarm aborts here — nothing will bind, so there is no point
   // polling for a lock that can't appear.
-  const prewarmCode = await Bun.spawn(["bun", join(pkgDir, "dist", "cli.js"), "prewarm"], {
+  const env = {
+    ...(process.env as Record<string, string>),
+    CARET_PORT: String(port),
+    XDG_STATE_HOME: stateDir,
+  };
+  const cli = join(pkgDir, "dist", "cli.js");
+  const prewarmCode = await Bun.spawn(["bun", cli, "prewarm"], {
     stdout: "inherit",
     stderr: "inherit",
-    env: {
-      ...(process.env as Record<string, string>),
-      CARET_PORT: String(port),
-      XDG_STATE_HOME: stateDir,
-    },
+    env,
   }).exited;
   if (prewarmCode !== 0) {
     process.stderr.write(`smoke bundle: prewarm exited ${prewarmCode}\n`);
@@ -307,6 +359,12 @@ export async function runSmokeBundle(): Promise<never> {
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     process.exit(1);
   }
+
+  if (!(await mcpListsReviewPlan(["bun", cli, "mcp"], env))) {
+    process.stderr.write("smoke bundle: `caret mcp` did not list review_plan within ~5s\n");
+    process.exit(1);
+  }
+  console.log("smoke bundle: mcp lists review_plan");
 
   console.log(
     "smoke bundle: PASS — prewarm spawned a bundle daemon that serves the multi-asset UI",
