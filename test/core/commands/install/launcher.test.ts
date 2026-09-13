@@ -101,9 +101,20 @@ test("an install naming no pin removes the pin an earlier install left", () => {
   mkdirSync(launcherRecordDir(), { recursive: true });
   writeFileSync(launcherPinnedRootFile(), "/checkout\n");
 
-  installLauncher({ bunPath: "/opt/bun/bin/bun", source: shippedScript });
+  const { unpinned } = installLauncher({ bunPath: "/opt/bun/bin/bun", source: shippedScript });
 
   expect(existsSync(launcherPinnedRootFile())).toBe(false);
+  expect(unpinned).toBe(true);
+});
+
+test("an install with no pin to remove, or naming one, reports nothing unpinned", () => {
+  expect(installLauncher({ bunPath: "/opt/bun/bin/bun", source: shippedScript }).unpinned).toBe(
+    false,
+  );
+  expect(
+    installLauncher({ bunPath: "/opt/bun/bin/bun", pinnedRoot: "/checkout", source: shippedScript })
+      .unpinned,
+  ).toBe(false);
 });
 
 test("uninstallLauncher removes the launcher and its records, leaving the state dir", () => {

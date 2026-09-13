@@ -222,10 +222,10 @@ test("installing ensures rumdl once, after the targets", async () => {
 
 test("the service is registered after the targets, so a refresh cycles the new build", async () => {
   const calls: string[] = [];
-  // A config and state dir nobody wrote, so the run reads the schema default and no pin
-  // rather than whatever this machine's own caret has.
-  const dir = await mkdtemp(join(tmpdir(), "caret-install-index-"));
-  await withEnv({ CARET_CONFIG_FILE: join(dir, "config.toml"), XDG_STATE_HOME: dir }, () =>
+  // A config path nobody wrote, so the run reads the schema default rather than whatever
+  // residency this machine's own caret is configured for.
+  const absentConfig = join(await mkdtemp(join(tmpdir(), "caret-install-index-")), "config.toml");
+  await withEnv({ CARET_CONFIG_FILE: absentConfig }, () =>
     runInstallSubcommand(PLAIN_INSTALL, {
       ...claudeThenRumdlDeps(calls),
       service: () => ({
@@ -234,7 +234,7 @@ test("the service is registered after the targets, so a refresh cycles the new b
         optOutSurface: "`systemctl --user`",
         manager: fakeServiceManager({ calls }).manager,
       }),
-      installLauncher: () => {},
+      installLauncher: () => ({ unpinned: false }),
     }),
   );
   expect(calls).toEqual(["claude", "rumdl", "install"]);
@@ -399,6 +399,7 @@ test("--from-local hands the checkout to the service step as its pinned root", a
         }),
         installLauncher: (deps) => {
           pinned = deps.pinnedRoot;
+          return { unpinned: false };
         },
       },
     ),

@@ -176,8 +176,8 @@ export async function ensureDaemon(
       // anything else on the port — a build that predates residency, a hook's
       // idle-exiting fallback — is retired below, since a cycle cannot free it.
       if (deps.service && h.resident === true) {
-        // The launcher execs the pinned root, else the highest installed caret, so a cycle
-        // can only bring back that build.
+        // The launcher execs the pinned root, else the highest installed caret, so a cycle brings
+        // back the build already chosen. A rebuilt pin reaches the service through `--from-local`.
         if (deps.pinned || isNewer(h.version ?? "", deps.currentVersion)) return deps.baseUrl;
         windowSpent = true;
         // A failed restart may already have stopped the daemon: probe again rather
@@ -442,11 +442,15 @@ export const SUPERVISOR_WINDOW_MS = Array.from({ length: PROD_MAX_ATTEMPTS }, (_
   backoffFloorMs(attempt),
 ).reduce((sum, ms) => sum + ms, 0);
 
-/** Whether the launcher execs a pinned root: the pin record names a checkout whose
- * `bin/caret` is executable. Keep in sync with `resolve_root()` in bin/caret-launcher. */
-function launcherPinned(): boolean {
+/** Whether the launcher execs a pinned root: the pin record's newline-terminated first line
+ * names a checkout whose `bin/caret` is executable. Keep in sync with `resolve_root()` in
+ * bin/caret-launcher, whose `read` rejects a last line with no newline. */
+function isLauncherPinned(): boolean {
   try {
-    const root = readFileSync(launcherPinnedRootFile(), "utf8").split("\n")[0]?.trim();
+    const text = readFileSync(launcherPinnedRootFile(), "utf8");
+    const nl = text.indexOf("\n");
+    if (nl < 0) return false;
+    const root = text.slice(0, nl).trim();
     if (!root) return false;
     accessSync(join(root, "bin", "caret"), constants.X_OK);
     return true;
@@ -470,7 +474,7 @@ export async function prodEnsureDeps(
     // The supervisor is machine-wide, so only the world that installed it may cycle it.
     // Not `[daemon].resident`: that defaults on in every world, dev ones included.
     service: existsSync(launcherServiceFile()) ? service() : undefined,
-    pinned: launcherPinned(),
+    pinned: isLauncherPinned(),
     baseUrl: `http://localhost:${getPort(s)}`,
     currentBuild: await currentBuildId(),
     currentVersion: VERSION,

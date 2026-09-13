@@ -13,8 +13,6 @@
 // down: leaving it would have the supervised daemon read `resident = false`, idle-exit,
 // and be respawned about once a minute.
 
-import { existsSync } from "node:fs";
-
 import {
   type LauncherDeps,
   installLauncher as realInstallLauncher,
@@ -23,7 +21,7 @@ import {
 import type { InstallUI } from "@/commands/install/ui.ts";
 import type { ServiceTarget } from "@/commands/service-target.ts";
 import { VANITY_HOST } from "@/config/constants.ts";
-import { launcherPath, launcherPinnedRootFile } from "@/config/paths.ts";
+import { launcherPath } from "@/config/paths.ts";
 import { writeDaemonResident } from "@/config/resident.ts";
 import { getPort, loadSettings } from "@/config/settings.ts";
 import { DAEMON_CWD } from "@/daemon/lifecycle.ts";
@@ -39,7 +37,7 @@ export interface ServiceStepDeps {
    * service down, so driving the machine's own launchd is something a caller opts into
    * rather than something a test has to remember to opt out of. */
   service?: () => ServiceTarget;
-  installLauncher?: (deps: LauncherDeps) => void;
+  installLauncher?: (deps: LauncherDeps) => { unpinned: boolean };
 }
 
 /** Run `body` against the supervisor this machine installs under, if there is one to
@@ -140,9 +138,8 @@ export async function reconcileService(
       return;
     }
 
-    const unpinning = opts.pinnedRoot === undefined && existsSync(launcherPinnedRootFile());
     // The unit names the launcher, so the launcher has to be there first.
-    (deps.installLauncher ?? realInstallLauncher)({
+    const { unpinned } = (deps.installLauncher ?? realInstallLauncher)({
       serviceLabel: label,
       pinnedRoot: opts.pinnedRoot,
     });
@@ -153,10 +150,10 @@ export async function reconcileService(
       environment: serviceEnvironment(process.env),
       terminalExitStatus: SERVICE_TERMINAL_EXIT_STATUS,
     });
-    // install() is a no-op on a unit that did not change, which is every upgrade and every
-    // pin change: the supervisor keeps running the old root until it is cycled. Unpinning
-    // cycles too, since hooks attach to a newer daemon rather than replace it.
-    if (opts.refresh || opts.pinnedRoot !== undefined || unpinning) await manager.restart();
+    // install() is a no-op on an unchanged unit, so a new build or pin serves only once the
+    // supervisor cycles. `--from-local` cycles even onto the same pin: hooks never cycle a
+    // pinned daemon. Unpinning cycles because hooks attach to a checkout newer than them.
+    if (opts.refresh || opts.pinnedRoot !== undefined || unpinned) await manager.restart();
 
     const announcement = `The review UI is now always up at http://${VANITY_HOST}:${getPort(settings)} — it appears in ${visibleIn}, and \`caret install --no-resident\` turns it off.`;
     ui.info([announcement, visibleToggleCaveat].filter(Boolean).join(" "));

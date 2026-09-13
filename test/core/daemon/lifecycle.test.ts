@@ -473,7 +473,7 @@ test("a hook older than the resident daemon attaches instead of cycling it", asy
   expect({ calls, retires }).toEqual({ calls: [], retires: 0 });
 });
 
-// A pinned launcher execs the pin whatever the versions, so a cycle only brings it back.
+// A published plugin's hook running ahead of the pinned checkout is that hook.
 test("under a pinned launcher, a hook newer than the resident daemon attaches instead of cycling it", async () => {
   const { calls, manager: service } = supervisor();
   let retires = 0;
@@ -491,6 +491,29 @@ test("under a pinned launcher, a hook newer than the resident daemon attaches in
   );
   expect(url).toBe("http://localhost:42718");
   expect({ calls, retires }).toEqual({ calls: [], retires: 0 });
+});
+
+test("under a pinned launcher, a stale non-resident peer is still retired", async () => {
+  const { calls, manager: service } = supervisor();
+  let retires = 0;
+  let refusals = 0;
+  const url = await ensureDaemon(
+    ensureDeps({
+      service,
+      pinned: true,
+      health: async () => {
+        if (retires === 0) return peer("fallback", { resident: false });
+        if (++refusals <= 2) return null;
+        return peer("supervised", { build: "b1" });
+      },
+      retire: async () => {
+        retires++;
+        return true;
+      },
+    }),
+  );
+  expect(url).toBe("http://localhost:42718");
+  expect({ calls, retires }).toEqual({ calls: [], retires: 1 });
 });
 
 // A restart that answers with nothing new leaves the stale daemon on the port; serving it
@@ -963,6 +986,9 @@ test("prodEnsureDeps is pinned only while the pin names a runnable caret", async
   mkdirSync(dirname(launcherPinnedRootFile()), { recursive: true });
   writeFileSync(launcherPinnedRootFile(), `${root}\n`);
   expect((await prodEnsureDeps(DEFAULTS, () => service, 0)).pinned).toBe(true);
+
+  writeFileSync(launcherPinnedRootFile(), root);
+  expect((await prodEnsureDeps(DEFAULTS, () => service, 0)).pinned).toBe(false);
 
   writeFileSync(launcherPinnedRootFile(), `${join(tempDir(), "gone")}\n`);
   expect((await prodEnsureDeps(DEFAULTS, () => service, 0)).pinned).toBe(false);
