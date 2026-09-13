@@ -13,6 +13,7 @@ import { fakeServiceTarget } from "@test/support/service-manager.ts";
 import type { LauncherDeps } from "@/commands/install/launcher.ts";
 import { reconcileService, uninstallService } from "@/commands/install/service.ts";
 import { recordingUI } from "@/commands/install/ui.ts";
+import { SURFACES } from "@/commands/service-target.ts";
 import { VANITY_HOST } from "@/config/constants.ts";
 import { launcherPath, launcherRecordDir } from "@/config/paths.ts";
 
@@ -382,6 +383,25 @@ test("the announcement carries the caveat for a switch caret cannot read", async
   );
 
   expect(ui.events.some((e) => e.includes("That switch is not one caret can read."))).toBe(true);
+});
+
+// clack draws its 3-column gutter only on explicit line breaks, so a line the terminal
+// soft-wraps spills out of the frame.
+test("the announcement fits an 80-column terminal line by line", async () => {
+  const ui = recordingUI();
+
+  await reconcileService(
+    RECONCILE,
+    {
+      service: () => ({ ...fakeServiceTarget().target(), ...SURFACES.darwin }),
+      installLauncher: stubLauncher,
+    },
+    ui,
+  );
+
+  const announcement = ui.events.find((e) => e.includes(VANITY_HOST)) ?? "";
+  const lines = announcement.replace(/^info:/, "").split("\n");
+  expect(lines.filter((l) => l.length > 77)).toEqual([]);
 });
 
 test("the message that leaves an opted-out service alone names what turned it off", async () => {

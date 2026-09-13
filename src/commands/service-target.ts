@@ -29,7 +29,7 @@ export const SURFACES: Record<ServicePlatform, Omit<ServiceTarget, "manager" | "
     visibleIn: "System Settings › Login Items",
     optOutSurface: "`launchctl disable`",
     visibleToggleCaveat:
-      "The System Settings switch is not one caret can read: a later `caret install` registers the service again. `caret install --uninstall` removes caret from every agent and this machine.",
+      "Skip the System Settings switch: caret can't read it.\n`caret install --uninstall` removes caret entirely.",
   },
   linux: {
     visibleIn: "`systemctl --user`",

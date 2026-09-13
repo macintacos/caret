@@ -134,8 +134,14 @@ export async function reconcileService(
     // pinned daemon. Unpinning cycles because hooks attach to a checkout newer than them.
     if (opts.refresh || opts.pinnedRoot !== undefined || unpinned) await manager.restart();
 
-    const announcement = `The review UI is now always up at ${reviewUrl} — it appears in ${visibleIn}. To turn it off, run \`caret install\` again and answer "I'll run it myself".`;
-    ui.info([announcement, visibleToggleCaveat].filter(Boolean).join(" "));
+    // One short line per fact: clack draws its gutter only on explicit breaks.
+    const announcement = [
+      `The review UI now stays up at ${reviewUrl}`,
+      `It's listed in ${visibleIn}.`,
+      `To turn it off, run \`caret install\` and answer "I'll run it myself".`,
+      visibleToggleCaveat,
+    ];
+    ui.info(announcement.filter(Boolean).join("\n"));
   });
 }
 
