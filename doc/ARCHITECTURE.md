@@ -132,6 +132,11 @@ so the shipped Claude plugin keeps working unchanged.
 > verified against a live Codex session. It is there to prove the boundary is real, not to
 > be relied on.
 
+One more id, `claude-mcp`, is not yours to set: caret's own MCP server sets it for plans
+submitted through Claude Code's `review_plan` tool. It reads OpenCode's envelope and
+returns a flat allow or deny, and keeps the Claude adapter's approve variants, skill
+listing, and install probe.
+
 The hooks table and decision-JSON block below, and the behavioral prose in
 `commands/*.md`, describe **Claude-adapter** surface — they are agent-specific, not core
 behavior.
@@ -157,6 +162,11 @@ If the approval happened in Claude's own interface rather than caret's UI — so
 still holds the review as pending — it resolves that review to keep the two surfaces in
 sync. When the UI already resolved the plan (the normal case) it is a no-op, and it never
 gates: any failure is silent, so a stalled reconcile can't block the agent.
+
+Beside the hooks, the plugin starts a stdio MCP server, `caret mcp`, declared in
+`.claude-plugin/plugin.json`. It serves one tool, `review_plan`, which a skill can call to
+put a plan in front of you without going through plan mode — see
+[Calling the review tool from your own skill](#calling-the-review-tool-from-your-own-skill).
 
 The reviewer's approve choice is an opaque variant id the core stores and the UI renders;
 the Claude adapter declares its variants (`default` / `acceptEdits` / `auto`) and rides
@@ -301,47 +311,83 @@ CI transcripts and captured logs stay readable.
 
 ### Calling the review tool from your own skill
 
-The review tool is **OpenCode-only** — it exists because caret wires into OpenCode as a
-plugin, and a plugin can register tools, where Claude Code's adapter is a command hook
-(`PermissionRequest`/`ExitPlanMode`) with nothing to call. Within OpenCode it is a plain
-tool: a skill that wants a human decision before its work proceeds can ask for one
-directly rather than waiting to be intercepted.
+Both agents have a review tool a skill can call directly, rather than waiting for caret to
+intercept a plan. A skill that wants a human decision on its plan before the work proceeds
+can ask for one.
 
-The call is `caret_review_plan`, and it takes a single argument, `plan` — the complete
-plan, as markdown, to put in front of the reviewer. Session and working directory come
-from the tool context, so there is nothing else to thread through.
+| Agent       | Tool                | Where it comes from                                    |
+| ----------- | ------------------- | ------------------------------------------------------ |
+| Claude Code | `review_plan`       | The plugin's MCP server, `caret mcp`                   |
+| OpenCode    | `caret_review_plan` | The in-process plugin                                  |
+
+Claude Code prefixes a plugin's MCP tools with the plugin and server names, so the model
+sees `review_plan` as `mcp__plugin_caret_caret__review_plan`. Either tool takes a single
+argument, `plan` — the complete plan, as markdown, to put in front of the reviewer. The
+agent passes nothing else: the review's session and working directory come from the
+calling session (OpenCode) or from the MCP server (Claude Code).
+
+**It is for plans only.** caret reflows whatever it receives into its own plan layout and
+presents it as a plan, so a checklist, a schema, or a question put through it arrives
+looking like something it isn't. The tool's name and description are the only steer the
+model gets, and both say so.
 
 It **blocks until you decide**. A change request comes back as the tool result: the
-reviewer's feedback, plus an instruction to revise and call again. The plan itself is
-deliberately not echoed back — the agent still holds it in its own tool-call arguments. A
-feedback line reference indexes the plan version caret stored, and the abbreviated quote
-paired with it is what the agent matches against its own text. That stored version is
-reflowed to caret's 90-column shape at ingest (see
-[Plan formatting](CONFIGURING.md#plan-formatting-rumdl)), so the numbers are caret's, not
-yours. So the loop is call, read the feedback, revise, call again, until an approval
-returns. An approval may carry reviewer notes of its own, in a clearly labeled section, to
-fold in as the work proceeds; that is not another round, the plan is already approved.
+reviewer's feedback, plus an instruction to revise and call again and not to implement
+anything until a call returns an approval. The plan itself is deliberately not echoed back
+— the agent still holds it in its own tool-call arguments. A feedback line reference
+indexes the plan version caret stored, and the abbreviated quote paired with it is what
+the agent matches against its own text. That stored version is reflowed to caret's
+90-column shape at ingest (see [Plan formatting](CONFIGURING.md#plan-formatting-rumdl)),
+so the numbers are caret's, not yours. So the loop is call, read the feedback, revise,
+call again, until an approval returns. An approval may carry reviewer notes of its own, in
+a clearly labeled section, to fold in as the work proceeds; that is not another round, the
+plan is already approved.
+
+On Claude Code a long wait has two more wrinkles. From Claude Code v2.1.212 a tool call
+still running after two minutes can move to the background; the tool's description tells
+the model not to act on the plan until the result arrives. And the plugin gives the server
+a request timeout of `3900000` ms, the same 3900 s budget as the `ExitPlanMode` hook,
+which sits above the highest `review.timeout_s` caret accepts (it must stay below 3900 s)
+— so caret's own timeout always answers first.
 
 The same **fail-safe = deny** rule holds where it matters, on the review decision itself:
 a spawn failure, an unparseable decision, or a timeout (`review.timeout_s`, 1 hour by
 default — see [Config file](CONFIGURING.md#config-file)) all come back as a change request
-rather than an approval.
+rather than an approval. Cancelling a pending call on Claude Code (Esc), or quitting
+Claude Code, expires its review undecided: it leaves the UI's pending list rather than
+waiting out the timeout, and no agent is waiting on its result.
 
-**Any primary agent may call it; subagents may not.** OpenCode doesn't fire plugin hooks
-for subagent tool calls, so caret marks the review tool primary-only
-(`experimental.primary_tools`, which OpenCode turns into a deny rule on every subagent
-session) and re-checks in the tool body that the call didn't come from a subagent's child
-session. Only the Plan agent is _steered_ toward the tool; every other primary agent has
-to reach for it deliberately. One exception is worth knowing about: caret writes the
-permission rescue for the `plan` agent alone, so a config with a global
-`permission: { "*": "deny" }` keeps the tool there and loses it everywhere else. If your
-skill is pinned to a non-plan agent, `caret_review_plan` is the route — OpenCode's own
-`plan_exit` is permitted on the `plan` agent alone, so there is nothing to fall back on.
+**Who may call it differs by agent.**
 
-What you submit need not be a plan, and it need not come from a skill — mid-session on
-`build`, you can simply ask for a review. The review UI renders any markdown, so a
-migration checklist, a proposed schema, or a summary of what the agent is about to do all
-go in front of a human the same way.
+- **OpenCode: any primary agent; subagents may not.** OpenCode doesn't fire plugin hooks
+  for subagent tool calls, so caret marks the review tool primary-only
+  (`experimental.primary_tools`, which OpenCode turns into a deny rule on every subagent
+  session) and re-checks in the tool body that the call didn't come from a subagent's
+  child session. Only the Plan agent is _steered_ toward the tool; every other primary
+  agent has to reach for it deliberately. One exception is worth knowing about: caret
+  writes the permission rescue for the `plan` agent alone, so a config with a global
+  `permission: { "*": "deny" }` keeps the tool there and loses it everywhere else. If your
+  skill is pinned to a non-plan agent, `caret_review_plan` is the route — OpenCode's own
+  `plan_exit` is permitted on the `plan` agent alone, so there is nothing to fall back on.
+- **Claude Code: any agent, subagents included.** The tool grants no permission and gates
+  no edit, so there is nothing a subagent could bypass by calling it.
+
+On Claude Code, three more behaviors follow from how the server is built:
+
+- **One review at a time.** The server mints its own session id when it starts and uses it
+  for every call for the life of the Claude Code process. A second review under that id
+  would replace the pending one, so the server refuses a call made while a review is
+  pending: it returns an error at once, telling the agent to wait for the pending
+  decision.
+- **Resubmissions thread.** Because every call from that process shares the one id, a
+  revised plan sent after a change request lands as the next version of the same review.
+  The id is not Claude Code's session id, so a tool review and a review intercepted from
+  plan mode (`ExitPlanMode`) never replace each other. The one oddity: after `/clear`, a
+  submission can still land as a new version of a review from before the clear that was
+  waiting on changes.
+- **Approve is always plain.** A tool result cannot change Claude Code's permission mode,
+  so choosing accept-edits or auto when approving a tool-submitted plan approves it
+  without switching modes.
 
 ## Layout
 
@@ -360,7 +406,7 @@ src/adapters/       the coding-agent adapter axis — the AgentAdapter interface
 ui/                 Svelte 5 multi-asset SPA (Vite) embedded into the binary via the build-generated asset manifest, served by the daemon by URL path · src/state/ runes state modules · src/icons/ vendored Lucide SVGs
 hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode + PostToolUse/ExitPlanMode) — Claude-adapter packaging
 commands/           /caret:demo · /caret:debug · /caret:discovery — Claude-adapter packaging (agent-specific behavioral prose)
-opencode/           the plugin OpenCode loads — the review tool, the planning steer, the config-hook mutation, and commands/ (the same three commands, rewritten for OpenCode) — OpenCode-adapter packaging
+opencode/           the plugin OpenCode loads — the review tool, the planning steer, the config-hook mutation, and commands/ (the same three commands, rewritten for OpenCode) — OpenCode-adapter packaging; review-bridge.ts, its bridge to caret review, is shared with caret mcp
 templates/          demo.md — the /caret:demo plan both adapters' commands fill and present
 test/               core/ (tool-agnostic suites) · adapters/<tool>/ (per-adapter suites + fixtures) · opencode/ (the repo-root opencode/ package) · e2e/ (Playwright) · structure/ (repo-shape invariants) · scripts/ (release + dev tooling) · support/ (shared scaffolding)
 scripts/            dev and release tooling for the checkout, plus the two committed shims' tests

@@ -97,13 +97,20 @@ to `caret review` rather than a command hook; see
 [`opencode-integration.md`](opencode-integration.md) for the spike and the design. Note it
 as plugin-shaped before assuming a new tool slots into the command-hook mold.
 
+**A registry entry may be composed from two adapters.** `claude-mcp`, set only by
+`caret mcp` for plans submitted through Claude Code's `review_plan` tool, is Claude's
+adapter with OpenCode's envelope parse and flat allow/deny swapped in, built inline in
+`src/adapters/index.ts` rather than in an adapter directory, so no adapter imports
+another.
+
 **What does NOT move to the adapter directory:** the Claude plugin packaging —
-`hooks/hooks.json`, `.claude-plugin/*`, `commands/*.md` — sits where Claude Code's plugin
-system requires it on disk. It is adapter-owned *surface* (Claude-contractual file
-locations), documented as such, but not parameterized for hypothetical future tools. The
-Codex adapter likewise ships no packaging today; Codex hook installation
-(`~/.codex/hooks.json` / `config.toml [hooks]` behind `[features] codex_hooks`) is a
-documented future ship step, not built here.
+`hooks/hooks.json`, `.claude-plugin/*` (including `plugin.json`'s `mcpServers` entry for
+`caret mcp`), `commands/*.md` — sits where Claude Code's plugin system requires it on
+disk. It is adapter-owned *surface* (Claude-contractual file locations), documented as
+such, but not parameterized for hypothetical future tools. The Codex adapter likewise
+ships no packaging today; Codex hook installation (`~/.codex/hooks.json` /
+`config.toml [hooks]` behind `[features] codex_hooks`) is a documented future ship step,
+not built here.
 
 ## Browser-safe shared modules
 

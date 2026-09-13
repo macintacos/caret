@@ -78,7 +78,11 @@ third-party):
   different directories that a bare `./support/x` could not distinguish. These are
   top-level rather than grafted under `@/` deliberately — `@/` means "this program's
   source root", and widening it to "any root" would cost the one alias with a crisp
-  definition.
+  definition. `@opencode/*` has exactly one production importer: `src/commands/mcp.ts`
+  reaches `opencode/review-bridge.ts` through it. The shared bridge has to live in
+  `opencode/`, the one directory that ships as unbundled source, because the OpenCode
+  plugin can import only relative siblings; `bun build` inlines it into `dist/cli.js`.
+  Keep any other `src/` import of `opencode/` out.
 - **`@root/package.json`** — exact rather than a `@root/*` wildcard, because the repo root
   is not a source root: `@root/*` would alias the whole tree at once, including every root
   above that already has its own alias, making it a second spelling for all of them. One
