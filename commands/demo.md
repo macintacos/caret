@@ -1,14 +1,14 @@
 ---
-description: Demo caret by presenting a short fake plan via ExitPlanMode
+description: Demo caret by presenting a short plan about this repo via ExitPlanMode
 ---
 
-Read the short demo-plan fixture at `${CLAUDE_PLUGIN_ROOT}/scripts/tasks/dev/demo-plan.md`
-and present its contents **verbatim** to the user by calling `ExitPlanMode` with that
-markdown as the `plan` argument. This is a small, self-contained plan meant only to show
-off the review flow — `mise run dev` seeds a different, larger fixture. Do **not** do any
-real work, research, or file edits — this is only to exercise the review flow. If the
-fixture can't be read, fall back to inventing a short, plausible-but-fake plan (a Context
-section, an Approach section, and a couple of Steps).
+Call `EnterPlanMode` first: `ExitPlanMode` is refused outside plan mode. Then read
+`${CLAUDE_PLUGIN_ROOT}/templates/demo.md` and follow its leading HTML comment exactly to
+fill the slots. Write everything after that comment to the plan file your plan-mode
+instructions name, then call `ExitPlanMode` with that same text as its `plan` argument —
+caret reviews the argument, so a call without it reaches the review UI empty. Do **no**
+other research and edit **no** file but the plan file — this is only to exercise the
+review flow.
 
 This triggers caret's `PermissionRequest`/`ExitPlanMode` hook, which opens the plan in a
 local browser UI for inline review. When the user approves or requests changes there, the
@@ -17,5 +17,6 @@ decision flows back to you:
 - **Approved** → proceed (this is just a demo, so simply acknowledge that caret approved
   the plan and stop).
 - **Changes requested** → the feedback arrives as the denial reason. Revise the plan
-  accordingly and present it again via `ExitPlanMode` (caret captures it as a new
-  version).
+  accordingly, keeping it about the same size, update the plan file, and call
+  `ExitPlanMode` again with the revised text as its `plan` argument (caret captures it as
+  a new version).

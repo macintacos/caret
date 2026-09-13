@@ -27,9 +27,14 @@ export function resolveCaretRoot(): string {
   );
 }
 
+/** The demo plan template, relative to caret's root. */
+export const DEMO_TEMPLATE = "templates/demo.md";
+
 export interface OpencodePackaging {
   /** The caret shim the deployed command files invoke (their `__CARET_BIN__`). */
   binPath: string;
+  /** The demo template's contents — what the command files' `__CARET_DEMO_TEMPLATE__` becomes. */
+  demoTemplate: string;
   /** Command files (basename + contents) from opencode/commands/, if any. */
   commands: { name: string; contents: string }[];
 }
@@ -37,6 +42,7 @@ export interface OpencodePackaging {
 /** Read caret's OpenCode packaging from the resolved root. */
 export function loadOpencodePackaging(root: string = resolveCaretRoot()): OpencodePackaging {
   const binPath = join(root, "bin", "caret");
+  const demoTemplate = readFileSync(join(root, DEMO_TEMPLATE), "utf-8");
   const commandsDir = join(root, "opencode", "commands");
   let commands: { name: string; contents: string }[] = [];
   try {
@@ -48,5 +54,5 @@ export function loadOpencodePackaging(root: string = resolveCaretRoot()): Openco
     // No command files shipped (or unreadable) — the array entry alone is a valid install.
     commands = [];
   }
-  return { binPath, commands };
+  return { binPath, demoTemplate, commands };
 }

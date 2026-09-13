@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { loadOpencodePackaging } from "@/adapters/opencode/packaging.ts";
+import { DEMO_TEMPLATE, loadOpencodePackaging } from "@/adapters/opencode/packaging.ts";
 
 // loadOpencodePackaging is tested with an explicit root (the resolveCaretRoot
 // argv/execPath detection is exercised by real `caret install` runs, not unit
@@ -18,16 +18,24 @@ beforeEach(async () => {
   );
   await writeFile(join(root, "opencode", "commands", "demo.md"), "# demo\n");
   await writeFile(join(root, "opencode", "commands", "discovery.md"), "# discovery\n");
+  await mkdir(join(root, "templates"), { recursive: true });
+  await writeFile(join(root, DEMO_TEMPLATE), "<!-- fill the slots -->\n# Demo plan\n");
 });
 afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-test("loadOpencodePackaging reads the bin path and sorted command files", () => {
+test("loadOpencodePackaging reads the bin path, demo template, and sorted command files", () => {
   const pkg = loadOpencodePackaging(root);
   expect(pkg.binPath).toBe(join(root, "bin", "caret"));
+  expect(pkg.demoTemplate).toBe("<!-- fill the slots -->\n# Demo plan\n");
   expect(pkg.commands.map((c) => c.name)).toEqual(["demo.md", "discovery.md"]);
   expect(pkg.commands[0]?.contents).toContain("demo");
+});
+
+test("loadOpencodePackaging throws when the demo template is missing", async () => {
+  await rm(join(root, DEMO_TEMPLATE));
+  expect(() => loadOpencodePackaging(root)).toThrow();
 });
 
 test("loadOpencodePackaging tolerates a missing commands dir (the array entry alone is valid)", async () => {

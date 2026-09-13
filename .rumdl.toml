@@ -41,3 +41,11 @@ code-blocks = false
 tables      = false
 reflow      = true
 reflow-mode = "normalize"
+
+# The demo template's placeholder link resolves in the user's repo, not this one; an inline
+# disable would be presented with the plan.
+[per-file-ignores]
+"templates/demo.md" = ["MD057"]
+# OpenCode's demo command ends in an install-time `__…__` marker rumdl would rewrite as
+# emphasis; an inline disable would be deployed into the command.
+"opencode/commands/demo.md" = ["MD050"]

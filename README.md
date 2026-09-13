@@ -55,8 +55,8 @@ and answer **I'll run it myself**, or use `--uninstall` — see
 Two steps finish the job:
 
 1. **Restart the agent.** OpenCode installs the plugin package on its next start.
-2. **Run `/caret:demo`.** It presents a short fake plan, so you can exercise the whole
-   flow before a real one arrives.
+2. **Run `/caret:demo`.** It presents a short demo plan that points at files in the repo
+   you run it from, so you can exercise the whole flow before a real one arrives.
 
 | Flag          | What it does                                          |
 | ------------- | ----------------------------------------------------- |

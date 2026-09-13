@@ -27,6 +27,7 @@
     "hooks/",
     "commands/",
     "opencode/",
+    "templates/",
     ".claude-plugin/plugin.json"
   ],
   "scripts": {
