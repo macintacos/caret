@@ -41,3 +41,7 @@ code-blocks = false
 tables      = false
 reflow      = true
 reflow-mode = "normalize"
+
+# The demo template's placeholder link is filled in against the user's repo, not this one.
+[per-file-ignores]
+"templates/demo.md" = ["MD057"]
