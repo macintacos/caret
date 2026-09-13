@@ -123,8 +123,9 @@ export function writeDevMarketplace(repoDir: string, outDir: string): void {
  * cycled onto it, so this only attaches. Elsewhere the just-built binary's `prewarm` runs
  * ensureDaemon, whose build fingerprint differs from the running daemon's, so its
  * same-world takeover retires the old daemon and spawns this build — there is no explicit
- * "kill the daemon" step. Spawned rather than run in-process so the daemon that takes over is always the
- * BUILT binary, even when `caret install --from-local` itself runs from source.
+ * "kill the daemon" step. Spawned rather than run in-process so the daemon that takes over
+ * is always the BUILT binary, even when `caret install --from-local` itself runs from
+ * source.
  *
  * Best-effort by design, and it deliberately cannot report which path it took: ensureDaemon
  * REUSES (rather than retires) a daemon it can't step down — a legacy build with no
