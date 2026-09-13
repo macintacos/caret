@@ -1,6 +1,6 @@
 <!--
-caret demo template. Fill the four slots, then present everything after this comment as
-the plan. Never include this comment.
+caret demo template. Fill the slots listed below, then present everything after this
+comment as the plan. Never include this comment.
 
 Look at the working directory in exactly two ways: one non-recursive listing of its top
 level, and one read of the first 40 lines of the file you pick for the first file slot. No
@@ -8,13 +8,14 @@ recursion, no content search, no other reads, no edits.
 
 Skip hidden entries (a leading `.`), dependency and build output (`node_modules`, `vendor`,
 `dist`, `build`, `out`, `target`, `coverage`, `__pycache__`), lockfiles, and binaries.
-Prefer entries a reader recognises: a README, a manifest, a source entry point.
+Prefer entries a reader recognizes: a README, a manifest, a source entry point.
 
 Replace every occurrence of each placeholder:
 
 - `path/to/folder/` → a top-level directory, keeping the trailing `/`
-- `path/to/first-file` → a top-level file
-- `path/to/second-file` → a different top-level file
+- `path/to/first-file` → a README or other prose doc if one exists, else any top-level
+  file
+- `path/to/second-file` → a manifest or entry point, else any other top-level file
 - `path/to/cited-file:1` → `<first file>:<n>`, where `n` is a non-blank line among the
   lines you read
 

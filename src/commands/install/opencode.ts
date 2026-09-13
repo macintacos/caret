@@ -204,11 +204,13 @@ export async function runInstallOpencodeTarget(
   await sweepLegacy(legacy, dir, ui);
   const files: DeployFile[] = pkg.commands.map((c) => ({
     // Namespace the command file (`demo.md` -> `caret:demo.md`) so OpenCode exposes
-    // it as `/caret:demo`. The command files' `__CARET_BIN__` and `__CARET_ROOT__` markers
-    // are substituted with the running caret's binary and root (the caret invoking
-    // `caret install`).
+    // it as `/caret:demo`. Its markers are filled from the caret running this install.
     path: join(commandDir(dir), namespacedCommandFilename(c.name)),
-    contents: renderPlugin(c.contents, { version: VERSION, binPath: pkg.binPath, root: pkg.root }),
+    contents: renderPlugin(c.contents, {
+      version: VERSION,
+      binPath: pkg.binPath,
+      demoTemplate: pkg.demoTemplate,
+    }),
   }));
   await ui.step(
     "Deploying the /caret:* command files",

@@ -6,24 +6,23 @@ import { join } from "node:path";
 
 import { deployFiles, removeFiles, renderPlugin } from "@/adapters/opencode/deploy.ts";
 
-test("renderPlugin substitutes the version, bin, and root markers (all occurrences)", () => {
+test("renderPlugin substitutes the version, bin, and demo-template markers (all occurrences)", () => {
   const out = renderPlugin(
-    `v="__CARET_VERSION__"; bin="__CARET_BIN__"; again="__CARET_BIN__"; root="__CARET_ROOT__"`,
-    { version: "1.2.3", binPath: "/x/bin/caret", root: "/x" },
+    `v="__CARET_VERSION__"; bin="__CARET_BIN__"; again="__CARET_BIN__"; t="__CARET_DEMO_TEMPLATE__"`,
+    { version: "1.2.3", binPath: "/x/bin/caret", demoTemplate: "# plan" },
   );
-  expect(out).toBe(`v="1.2.3"; bin="/x/bin/caret"; again="/x/bin/caret"; root="/x"`);
+  expect(out).toBe(`v="1.2.3"; bin="/x/bin/caret"; again="/x/bin/caret"; t="# plan"`);
 });
 
 test("renderPlugin substitutes values literally even when they contain $-sequences", () => {
-  // A filesystem path may legally contain `$&`, `$$`, `$\``; a plain string
-  // replacement would reinterpret those as String.replace substitution patterns
-  // and corrupt the deployed binary path in a command file.
-  const out = renderPlugin(`bin="__CARET_BIN__"; v="__CARET_VERSION__"; root="__CARET_ROOT__"`, {
-    version: "1.0$$beta",
-    binPath: "/home/a$&b/bin/caret",
-    root: "/home/a$&b",
-  });
-  expect(out).toBe(`bin="/home/a$&b/bin/caret"; v="1.0$$beta"; root="/home/a$&b"`);
+  // A filesystem path may legally contain `$&`, `$$`, `$\``, and so may a template;
+  // a plain string replacement would reinterpret those as String.replace
+  // substitution patterns and corrupt the deployed command file.
+  const out = renderPlugin(
+    `bin="__CARET_BIN__"; v="__CARET_VERSION__"; t="__CARET_DEMO_TEMPLATE__"`,
+    { version: "1.0$$beta", binPath: "/home/a$&b/bin/caret", demoTemplate: "cost: $& $$ $`" },
+  );
+  expect(out).toBe(`bin="/home/a$&b/bin/caret"; v="1.0$$beta"; t="cost: $& $$ $\`"`);
 });
 
 let dir: string;

@@ -1,5 +1,5 @@
 // The file-write side of caret's OpenCode install: substitute the command files'
-// install-time marker and deploy / uninstall them in OpenCode's command dir. caret
+// install-time markers and deploy / uninstall them in OpenCode's command dir. caret
 // itself installs as a `plugin` array entry (@macintacos/caret; the array edit lives
 // in config-plugin.ts) — OpenCode installs the package + its deps — but the
 // `/caret:*` command files aren't array-installable, so they still ship as files.
@@ -10,20 +10,18 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-/** Substitute a command file's install-time markers (`__CARET_BIN__`, e.g. in
- * discovery.md, and `__CARET_ROOT__`) with the running caret binary's path and caret's
- * root (and `__CARET_VERSION__` when present). Pure. The replacements use a function
- * replacer so the substituted value is taken LITERALLY: a path containing `$&` / `$$` /
- * `$\`` (legal in a filesystem path) must not be reinterpreted as a `String.replace`
- * pattern. */
+/** Substitute a command file's install-time markers — `__CARET_BIN__` → `binPath`,
+ * `__CARET_DEMO_TEMPLATE__` → `demoTemplate`, `__CARET_VERSION__` → `version`. Pure.
+ * Each value is taken LITERALLY (a function replacer): a path or template may contain
+ * `$&` / `$$` / `$\``, which `String.replace` would otherwise reinterpret. */
 export function renderPlugin(
   source: string,
-  opts: { version: string; binPath: string; root: string },
+  opts: { version: string; binPath: string; demoTemplate: string },
 ): string {
   return source
     .replaceAll("__CARET_VERSION__", () => opts.version)
     .replaceAll("__CARET_BIN__", () => opts.binPath)
-    .replaceAll("__CARET_ROOT__", () => opts.root);
+    .replaceAll("__CARET_DEMO_TEMPLATE__", () => opts.demoTemplate);
 }
 
 export interface DeployFile {

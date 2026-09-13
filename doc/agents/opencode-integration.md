@@ -213,7 +213,9 @@ so it wants the live check § Verified vs. follow-up already schedules.
   (`index.ts`, see § The export surface), and command files (`commands/*.md`). The plugin
   ships in the `@macintacos/caret` npm package and resolves its binary and version at
   runtime from that package (§ Runtime resolution + update check); only the command files
-  still carry substituted markers — `__CARET_BIN__` and `__CARET_ROOT__`.
+  still carry substituted markers — `__CARET_BIN__` and `__CARET_DEMO_TEMPLATE__`, the
+  template embedded rather than read because under `bunx` the install-time root is a temp
+  dir.
 - **Install (`caret install`)** — adds caret to the user's OpenCode `plugin` array
   (comment-preserving, via `jsonc-parser` in `config-plugin.ts`) as either
   `@macintacos/caret` or, under `--from-local`, `file:<checkout>` (§ The local form) and

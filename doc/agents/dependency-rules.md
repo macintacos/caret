@@ -12,9 +12,9 @@ manifest is the only one.)
 ## What actually ships
 
 `package.json`'s `files` array publishes `dist/`, `ui/dist/`, `bin/caret`,
-`bin/caret-launcher`, `hooks/`, `commands/`, `opencode/`, and
-`.claude-plugin/plugin.json`. The last three are JSON and Markdown data — they load
-nothing.
+`bin/caret-launcher`, `hooks/`, `commands/`, `opencode/`, `templates/`, and
+`.claude-plugin/plugin.json`. `hooks/`, `commands/`, `templates/`, and `plugin.json` are
+JSON and Markdown data — they load nothing.
 
 - **`dist/cli.js`** is a `bun build --target=bun` bundle
   ([`../../scripts/tasks/build.ts`](../../scripts/tasks/build.ts)) that inlines every npm
