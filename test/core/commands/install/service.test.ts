@@ -130,21 +130,21 @@ test("--refresh cycles the service so the new build is the one serving", async (
 
 test("--from-local pins the launcher to the checkout and cycles the service onto it", async () => {
   const service = recordingService({ installed: true, running: true });
-  let pinned: string | undefined;
+  let pinnedRoot: string | undefined;
 
   await reconcileService(
     { ...RECONCILE, pinnedRoot: "/checkout" },
     {
       service: service.target,
       installLauncher: (deps) => {
-        pinned = deps.pinnedRoot;
+        pinnedRoot = deps.pinnedRoot;
         return { unpinned: false };
       },
     },
     recordingUI(),
   );
 
-  expect(pinned).toBe("/checkout");
+  expect(pinnedRoot).toBe("/checkout");
   expect(service.calls).toEqual(["install", "restart"]);
 });
 

@@ -384,7 +384,7 @@ test("--from-local --dry-run previews without prewarming", async () => {
 });
 
 test("--from-local hands the checkout to the service step as its pinned root", async () => {
-  let pinned: string | undefined;
+  let pinnedRoot: string | undefined;
   const dir = await mkdtemp(join(tmpdir(), "caret-install-index-"));
   await withEnv({ CARET_CONFIG_FILE: join(dir, "config.toml"), XDG_STATE_HOME: dir }, () =>
     runInstallSubcommand(
@@ -398,13 +398,13 @@ test("--from-local hands the checkout to the service step as its pinned root", a
           manager: fakeServiceManager().manager,
         }),
         installLauncher: (deps) => {
-          pinned = deps.pinnedRoot;
+          pinnedRoot = deps.pinnedRoot;
           return { unpinned: false };
         },
       },
     ),
   );
-  expect(pinned).toBe("/checkout");
+  expect(pinnedRoot).toBe("/checkout");
 });
 
 test("the prewarm step reports that prewarm ran, not that the daemon was swapped", async () => {

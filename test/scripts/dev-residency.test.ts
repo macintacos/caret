@@ -29,7 +29,7 @@ interface Health {
 }
 
 const procs: Array<ReturnType<typeof Bun.spawn>> = [];
-const tmp: string[] = [];
+const tempDirs: string[] = [];
 /** State homes whose daemon was spawned detached, so only its lock names it. */
 const detachedHomes: string[] = [];
 
@@ -46,15 +46,15 @@ afterEach(async () => {
   }
   for (const p of procs) p.kill("SIGKILL");
   await Promise.all(procs.map((p) => p.exited));
-  await Promise.all(tmp.map((d) => rm(d, { recursive: true, force: true })));
+  await Promise.all(tempDirs.map((d) => rm(d, { recursive: true, force: true })));
   procs.length = 0;
-  tmp.length = 0;
+  tempDirs.length = 0;
   detachedHomes.length = 0;
 });
 
 async function tempHome(prefix: string): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), prefix));
-  tmp.push(dir);
+  tempDirs.push(dir);
   return dir;
 }
 
