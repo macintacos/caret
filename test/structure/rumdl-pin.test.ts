@@ -40,12 +40,13 @@ if (!lock) throw new Error("mise.lock carries no [[tools.rumdl]] entry to pin ag
 
 /** ASSETS keys (`${process.platform}-${process.arch}`) against the mise.lock
  * platform whose archive they name. mise says `macos` where node says `darwin`,
- * which is the whole reason this mapping is written out rather than derived. */
+ * and its bare `linux-*` entries name glibc archives while ASSETS ships musl,
+ * which is why this mapping is written out rather than derived. */
 const PLATFORMS = [
   ["darwin", "arm64", "macos-arm64"],
   ["darwin", "x64", "macos-x64"],
-  ["linux", "arm64", "linux-arm64"],
-  ["linux", "x64", "linux-x64"],
+  ["linux", "arm64", "linux-arm64-musl"],
+  ["linux", "x64", "linux-x64-musl"],
 ] as const;
 
 test("RUMDL_VERSION matches the release mise.lock resolved", () => {

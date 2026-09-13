@@ -107,10 +107,11 @@ mise run test test/structure/rumdl-pin.test.ts # red once the lock actually move
 
 Then, in `src/plan/rumdl.ts`, set `RUMDL_VERSION` to the resolved version and replace all
 four `ASSETS` checksums — darwin and linux, each arm64 and x64 — with the ones `mise.lock`
-now carries. mise says `macos` where node says `darwin`, which is why `rumdl-pin.test.ts`
-writes that mapping out rather than deriving it. Update the hard-coded version in
-`doc/CONFIGURING.md` too — it appears in the `CARET_RUMDL_BIN` row and again in § Plan
-formatting (rumdl).
+now carries. mise says `macos` where node says `darwin`, and caret's linux assets are the
+static musl builds, so they mirror the lock's `linux-*-musl` entries rather than the bare
+`linux-*` ones (glibc) — which is why `rumdl-pin.test.ts` writes that mapping out rather
+than deriving it. Update the hard-coded version in `doc/CONFIGURING.md` too — it appears
+in the `CARET_RUMDL_BIN` row and again in § Plan formatting (rumdl).
 
 Re-run the pin suite until green, then `mise run preflight --json --full`. A rumdl bump
 can reformat markdown across the whole tree, and the whole-tree lint is what surfaces
