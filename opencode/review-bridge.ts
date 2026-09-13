@@ -46,16 +46,16 @@ export function parseDecision(stdout: string): CaretDecision {
       .filter(Boolean)
       .at(-1) ?? "";
   try {
-    const d = JSON.parse(line) as { behavior?: unknown; feedback?: unknown };
-    if (d.behavior === "allow") {
+    const parsed = JSON.parse(line) as { behavior?: unknown; feedback?: unknown };
+    if (parsed.behavior === "allow") {
       // Reviewer notes (EXC-791) ride the allow; surface them to the agent below.
-      const notes = typeof d.feedback === "string" ? d.feedback.trim() : "";
+      const notes = typeof parsed.feedback === "string" ? parsed.feedback.trim() : "";
       return notes ? { behavior: "allow", feedback: notes } : { behavior: "allow" };
     }
-    if (d.behavior === "deny") {
+    if (parsed.behavior === "deny") {
       return {
         behavior: "deny",
-        feedback: typeof d.feedback === "string" ? d.feedback : "Plan changes requested.",
+        feedback: typeof parsed.feedback === "string" ? parsed.feedback : "Plan changes requested.",
       };
     }
     return failsafeDeny("caret: unrecognized review decision — denying to fail safe.");
