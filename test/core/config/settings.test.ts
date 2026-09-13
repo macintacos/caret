@@ -24,7 +24,6 @@ import {
   heartbeatMs,
   idleMs,
   invalidEnvVars,
-  isResident,
   loadSettings,
   logKeep,
   logMaxSize,
@@ -680,24 +679,4 @@ test("createSettings honors the prod-build gate on every current() read", async 
   await Bun.write(file, "[dev.notify]\nenabled = true\n");
   expect(createSettings(file, /* isCompiled */ true).current().dev).toEqual(DEFAULTS.dev);
   expect(createSettings(file, false).current().dev.notify.enabled).toBe(true);
-});
-
-// EXC-1164: residency is the conjunction of intent and supervision. The table is
-// exhaustive over both legs, so a regression that drops either term surfaces as a
-// named row rather than a bare false.
-function withResident(intent: boolean): Settings {
-  return { ...DEFAULTS, daemon: { ...DEFAULTS.daemon, resident: intent } };
-}
-
-test("a daemon is resident only when intent and supervision both hold", () => {
-  expect(isResident(withResident(true), { CARET_SUPERVISED: "1" })).toBe(true);
-});
-
-test("intent alone does not make a daemon resident", () => {
-  expect(isResident(withResident(true), {})).toBe(false);
-  expect(isResident(withResident(true), { CARET_SUPERVISED: "0" })).toBe(false);
-});
-
-test("supervision alone does not make a daemon resident", () => {
-  expect(isResident(withResident(false), { CARET_SUPERVISED: "1" })).toBe(false);
 });

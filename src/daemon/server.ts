@@ -108,7 +108,7 @@ export interface CreateServerOptions {
    * keeps the default, which is what fits inside the supervisors' stop grace. */
   drainMs?: number;
   /** Stay up until told to stop instead of idle-exiting (EXC-1164), published in
-   * /api/health. runDaemon passes the boot-captured settings.isResident().
+   * /api/health. runDaemon passes what its entry point decided.
    * Defaults false; a daemon that predates the field omits it on the wire. */
   resident?: boolean;
   /** The resolved UI asset set (src/ui/assets.ts loadUiAssets): its URL paths form the

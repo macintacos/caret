@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// caret hook CLI. Subcommands: daemon | prewarm | review | reconcile | redact |
+// caret hook CLI. Subcommands: daemon | serve | prewarm | review | reconcile | redact |
 // discovery | install.
 //
 // This file is only the composition point: it assembles the Commander tree and
@@ -24,24 +24,38 @@ import { runReconcileSubcommand } from "@/commands/reconcile.ts";
 import { runRedactSubcommand } from "@/commands/redact.ts";
 import { runReviewSubcommand } from "@/commands/review.ts";
 import { prodService } from "@/commands/service-target.ts";
+import { VANITY_HOST } from "@/config/constants.ts";
 import { logFile } from "@/config/paths.ts";
 import { VERSION } from "@/lib/build-id.ts";
 import { logError } from "@/lib/log.ts";
 import { createProgram, runProgram } from "@/lib/program.ts";
+import { isSupervised } from "@/service/manager.ts";
 
 // The CLI command tree (EXC-472). The daemon self-spawn vector (daemonCommand)
 // and runReviewSubcommand's fail-safe are independent of this layer.
 function buildProgram(): Command {
   const program = createProgram(
     "caret",
-    "caret hook CLI: daemon | prewarm | review | reconcile | redact | discovery | install",
+    "caret hook CLI: daemon | serve | prewarm | review | reconcile | redact | discovery | install",
   ).version(VERSION);
 
   program
     .command("daemon")
     .description("run the review daemon")
     .option("--ephemeral", "bind an OS-assigned port instead of the configured one")
-    .action((opts) => runDaemon({ ephemeral: opts.ephemeral ?? false }));
+    .action(async (opts) => {
+      await runDaemon({ ephemeral: opts.ephemeral ?? false, resident: isSupervised() });
+    });
+
+  program
+    .command("serve")
+    .description("keep the review UI up in this terminal until Ctrl+C")
+    .action(async () => {
+      const port = await runDaemon({ ephemeral: false, resident: true });
+      process.stdout.write(
+        `caret is serving the review UI at http://${VANITY_HOST}:${port} — Ctrl+C stops it.\n`,
+      );
+    });
 
   program
     .command("prewarm")

@@ -40,7 +40,6 @@ import { configFile } from "@/config/paths.ts";
 import { isCompiledBinary } from "@/lib/build-id.ts";
 import { logError } from "@/lib/log.ts";
 import type { EnvOverride } from "@/lib/types.ts";
-import { isSupervised } from "@/service/manager.ts";
 
 export { DEFAULT_PORT };
 
@@ -359,17 +358,6 @@ export function getPort(s: Settings = settings().current()): number {
 /** Idle auto-shutdown delay (ms): CARET_IDLE_MS > [daemon].idle_ms > 60s. */
 export function idleMs(s: Settings = settings().current()): number {
   return envValue("CARET_IDLE_MS", IdleMs) ?? s.daemon.idle_ms;
-}
-
-/** Whether this daemon stays up until told to stop, rather than idle-exiting.
- * Intent alone is not enough: a hook's fallback spawn during a service cycle does not
- * carry CARET_SUPERVISED (EXC-1161), so it keeps the idle shutdown and yields the port
- * back. */
-export function isResident(
-  s: Settings = settings().current(),
-  env: NodeJS.ProcessEnv = process.env,
-): boolean {
-  return s.daemon.resident && isSupervised(env);
 }
 
 /** Review timeout: CARET_TIMEOUT > [review].timeout_s > 3600s / 1h — all in

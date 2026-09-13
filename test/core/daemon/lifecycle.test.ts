@@ -23,7 +23,7 @@ import {
   launcherServiceFile,
   logArchiveDir,
 } from "@/config/paths.ts";
-import { DEFAULTS, isResident } from "@/config/settings.ts";
+import { DEFAULTS } from "@/config/settings.ts";
 import type { HealthBody } from "@/daemon/client.ts";
 import {
   DAEMON_CWD,
@@ -37,7 +37,7 @@ import {
   spawnDaemon,
 } from "@/daemon/lifecycle.ts";
 import { setLogLevel } from "@/lib/log.ts";
-import { type ServiceManager, SUPERVISED_VAR } from "@/service/manager.ts";
+import { isSupervised, type ServiceManager, SUPERVISED_VAR } from "@/service/manager.ts";
 
 // Point the state dir at a throwaway temp dir so the debug-level instrumentation
 // tests append to a disposable caret.log instead of the real ~/.local/state/caret.
@@ -666,7 +666,7 @@ test("a cycle whose daemon never returns falls back to a spawn that does not cla
   const { served, health } = recordingHealth(() => {
     if (!calls.includes("restart")) return peer("old");
     if (spawnedEnv === undefined) return null;
-    return peer("fallback", { build: "b1", resident: isResident(DEFAULTS, spawnedEnv) });
+    return peer("fallback", { build: "b1", resident: isSupervised(spawnedEnv) });
   });
   const url = await withEnv({ [SUPERVISED_VAR]: undefined }, () =>
     ensureDaemon(
