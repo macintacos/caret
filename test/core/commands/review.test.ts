@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { parseReviewUrl } from "@opencode/caret.plugin.ts";
+import { parseReviewUrl } from "@opencode/review-bridge.ts";
 import { browserOpenCmd, reviewUrlLine } from "@/commands/review.ts";
 
 // browserOpenCmd is the pure platform→argv selection extracted from openBrowser

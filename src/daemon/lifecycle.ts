@@ -404,13 +404,14 @@ export async function retireDaemon(
   return false;
 }
 
-function daemonCommand(): string[] {
+/** The argv that re-invokes this caret with `subcommand`. */
+export function selfCommand(subcommand: string): string[] {
   // Compiled binary: process.execPath IS the caret binary. Dev (`bun run
   // src/cli.ts`) AND the npm bundle (`bun dist/cli.js`) run under bun and must
   // re-pass the script path — otherwise the spawned child is `[bun, "daemon"]`,
   // which has no script to run and never starts the daemon (EXC-643).
-  if (buildKind() === "binary") return [process.execPath, "daemon"];
-  return [process.execPath, process.argv[1] as string, "daemon"];
+  if (buildKind() === "binary") return [process.execPath, subcommand];
+  return [process.execPath, process.argv[1] as string, subcommand];
 }
 
 /** Open the append-mode fd the detached daemon's stdout/stderr is redirected
@@ -461,7 +462,7 @@ export const DAEMON_CWD = "/";
  * daemon-stderr.log. */
 export function spawnDaemon(s: Settings, spawn: typeof Bun.spawn = Bun.spawn): void {
   const out = openDaemonStderr(s);
-  spawn(daemonCommand(), {
+  spawn(selfCommand("daemon"), {
     cwd: DAEMON_CWD,
     stdio: ["ignore", out, out],
     detached: true,

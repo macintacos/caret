@@ -41,7 +41,7 @@ export function buildKind(argv1: string | undefined = process.argv[1]): BuildKin
  * flag, and the discovery prod/dev label. NOT the same as "runs from a script":
  * the bundle is production yet runs under `bun` with a script arg, so the daemon
  * spawn and the build fingerprint use buildKind() instead (the bundle must not
- * be treated as a self-contained binary there — see daemonCommand). */
+ * be treated as a self-contained binary there — see selfCommand). */
 export function isCompiledBinary(): boolean {
   return buildKind() !== "dev";
 }

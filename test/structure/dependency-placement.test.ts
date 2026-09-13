@@ -31,7 +31,7 @@ const REPO_ROOT = join(import.meta.dir, "..", "..");
 const SHIPPED_DIR = "opencode";
 
 // The scan boundary is the publish boundary: `files` ships `opencode/` entire, so every
-// module extension a consumer could resolve is read, not just the two `.ts` files here
+// module extension a consumer could resolve is read, not just the three `.ts` files here
 // today. A shipped file this glob missed would go silently underived — the one failure
 // direction that leaves the gate green while a consumer's install breaks.
 const SHIPPED_GLOB = "**/*.{ts,mts,cts,js,mjs,cjs}";

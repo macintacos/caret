@@ -31,7 +31,7 @@ import { logError } from "@/lib/log.ts";
 import { createProgram, runProgram } from "@/lib/program.ts";
 import { isSupervised } from "@/service/manager.ts";
 
-// The CLI command tree (EXC-472). The daemon self-spawn vector (daemonCommand)
+// The CLI command tree (EXC-472). The daemon self-spawn vector (selfCommand)
 // and runReviewSubcommand's fail-safe are independent of this layer.
 function buildProgram(): Command {
   const program = createProgram(

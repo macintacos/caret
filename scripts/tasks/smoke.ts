@@ -167,8 +167,8 @@ export async function runSmokeBin(): Promise<never> {
 // ui/dist beside it — works exactly as a user's npm-installed plugin would.
 //
 // Crucially it drives the REAL hook flow: `caret prewarm` → ensureDaemon →
-// daemonCommand() spawns a DETACHED daemon child. Booting the daemon in the
-// foreground instead would never exercise daemonCommand, and so would miss a
+// selfCommand("daemon") spawns a DETACHED daemon child. Booting the daemon in the
+// foreground instead would never exercise selfCommand, and so would miss a
 // bundle mis-classified as a compiled binary, whose spawned child is
 // `[bun, "daemon"]` (no script) and never starts.
 //
@@ -259,7 +259,7 @@ export async function runSmokeBundle(): Promise<never> {
 
   const port = freePort();
 
-  // Drive the real hook: prewarm → ensureDaemon → daemonCommand spawns the
+  // Drive the real hook: prewarm → ensureDaemon → selfCommand spawns the
   // daemon. Env is passed explicitly (Bun.spawn snapshots process.env). A
   // non-zero prewarm aborts here — nothing will bind, so there is no point
   // polling for a lock that can't appear.
