@@ -70,9 +70,11 @@ want the review UI up, run:
 bunx --no-cache @macintacos/caret@latest serve
 ```
 
-It keeps the UI up at `http://caret.localhost:42718` until you press Ctrl+C. Without it,
-caret still works: it starts when your agent submits a plan, and stops about a minute
-after the last review is resolved.
+It keeps the UI up at `http://caret.localhost:42718` until you press Ctrl+C. If caret
+already started on demand, `serve` stops that copy and takes the port; if caret's service
+still holds it, `serve` says so and exits. Without `serve`, caret still works: it starts
+when your agent submits a plan, and stops about a minute after the last review is
+resolved.
 
 After updating caret, run `caret serve` again yourself: the first plan from the new
 version stops the old one, and nothing brings it back.

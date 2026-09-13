@@ -18,7 +18,7 @@ import { daemonClient } from "@test/support/daemon.ts";
 import { ensureDaemonNoOps } from "@test/support/ensure-daemon-deps.ts";
 import { ndjsonRecords } from "@test/support/ndjson.ts";
 import { freePort } from "@test/support/net.ts";
-import { until } from "@test/support/poll.ts";
+import { until, waitFor } from "@test/support/poll.ts";
 import { recordingLog } from "@test/support/recording-log.ts";
 import { expectNeverLogsBody } from "@test/support/redaction.ts";
 import { VANITY_HOST } from "@/config/constants.ts";
@@ -326,6 +326,65 @@ test("caret serve stays up without a supervisor and prints where it serves", asy
     proc.kill("SIGKILL");
     await proc.exited;
     await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
+/** `caret serve` started on the port an already-running daemon holds, in the same world. */
+async function serveBeside(daemonEnv: Record<string, string>) {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-serve-beside-"));
+  const port = freePort();
+  const env = { CARET_PORT: String(port), CARET_CONFIG_FILE: noConfig(stateHome) };
+  const daemon = spawnCaretDaemon(stateHome, { ...env, ...daemonEnv });
+  await untilLockWritten(daemon, join(stateHome, "caret", "daemon.lock"));
+  const health = async () =>
+    (await (await fetch(`http://127.0.0.1:${port}/api/health`)).json()) as {
+      instanceId?: string;
+      resident?: boolean;
+    };
+  const before = await health();
+  const serve = spawnCaretDaemon(
+    stateHome,
+    { ...env, CARET_SUPERVISED: "" },
+    { command: "serve", pipeStdout: true },
+  );
+  const cleanup = async () => {
+    for (const proc of [daemon, serve]) {
+      proc.kill("SIGKILL");
+      await proc.exited;
+    }
+    await rm(stateHome, { recursive: true, force: true });
+  };
+  return { daemon, serve, health, before, port, cleanup };
+}
+
+test("caret serve stops an on-demand daemon holding the port and takes it", async () => {
+  const { daemon, serve, health, before, port, cleanup } = await serveBeside({
+    CARET_SUPERVISED: "",
+  });
+  try {
+    expect(await daemon.exited).toBe(0);
+    const after = await waitFor(async () => {
+      const h = await health().catch(() => undefined);
+      return h?.instanceId !== before.instanceId ? h : undefined;
+    }, 30_000);
+    expect(after.resident).toBe(true);
+    serve.kill("SIGTERM");
+    await serve.exited;
+    expect(await new Response(serve.stdout as ReadableStream).text()).toContain(
+      `http://${VANITY_HOST}:${port}`,
+    );
+  } finally {
+    await cleanup();
+  }
+});
+
+test("caret serve leaves a supervised daemon serving and exits non-zero", async () => {
+  const { serve, health, before, cleanup } = await serveBeside({ CARET_SUPERVISED: "1" });
+  try {
+    expect(await serve.exited).not.toBe(0);
+    expect((await health()).instanceId).toBe(before.instanceId);
+  } finally {
+    await cleanup();
   }
 });
 

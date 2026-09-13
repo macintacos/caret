@@ -293,6 +293,45 @@ async function supervisorExpected(service: Supervisor): Promise<boolean> {
   return status?.keepsAlive === true;
 }
 
+export interface VacateDeps {
+  baseUrl: string;
+  currentStateDir: string;
+  /** How long the daemon on the port has to let it go once asked. */
+  deadlineMs: number;
+  health: (baseUrl: string) => Promise<HealthBody | null>;
+  /** Ask the daemon at `baseUrl` to step down; false when it cannot be asked. */
+  retire: (baseUrl: string) => Promise<boolean>;
+  now: () => number;
+  sleep: (ms: number) => Promise<void>;
+}
+
+/** Free the port for a daemon about to bind it in the foreground: retire the same-world,
+ * unsupervised caret holding it, and wait until nothing answers. Resolves null once the
+ * port is free — or holds something that is not caret, which the bind reports — and
+ * otherwise the reason it was left alone. */
+export async function vacatePort(deps: VacateDeps): Promise<string | null> {
+  const deadline = deps.now() + deps.deadlineMs;
+  let retired: string | undefined;
+  for (;;) {
+    const h = await deps.health(deps.baseUrl);
+    if (h?.service !== "caret") return null;
+    if (isForeignWorld(h, deps.currentStateDir)) return FOREIGN_WORLD_ERROR;
+    // Retiring it would only have its supervisor start another to fight for the port.
+    if ((h.supervised ?? h.resident) === true) {
+      return "caret's service already serves the review UI on this port — run `caret install` and answer \"I'll run it myself\" to serve it from a terminal instead";
+    }
+    if (deps.now() >= deadline) return "the caret daemon on this port did not stop in time";
+    // Once per instance: a draining daemon keeps answering until it lets the port go.
+    if (h.instanceId === undefined || h.instanceId !== retired) {
+      if (!(await deps.retire(deps.baseUrl))) {
+        return "the caret daemon on this port could not be asked to stop";
+      }
+      retired = h.instanceId;
+    }
+    await deps.sleep(100);
+  }
+}
+
 /** Read + validate the daemon lock; null if missing or unparseable. */
 export function readDaemonLock(): DaemonLock | null {
   const lock = readJsonFileSync(daemonLock()) as DaemonLock | null;
