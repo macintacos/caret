@@ -93,7 +93,7 @@ it landed. Each step disturbs your login item, so do them when you can watch:
 5. Log out and back in: `launchctl print gui/$(id -u)/dev.excessive.caret` reports a pid,
    and the review UI answers on that port. Nothing else covers load-at-login — not the
    unit suite, and not `verify.sh`, which bootstraps its own label by hand.
-6. Restore with `caret install`.
+6. Restore with the install you started from — `mise run build --install` from a checkout.
 
 ### Bootstrapping a clone
 
@@ -353,12 +353,20 @@ which:
    reinstalls the caret plugin through Claude Code's native plugin system.
 3. Installs into OpenCode by pointing its `plugin` array at the checkout
    (`file:<checkout>`, which OpenCode symlinks — so later rebuilds need no reinstall).
-4. Acquires rumdl, and prewarms so the just-built binary takes over the daemon.
+4. Acquires rumdl, then hands the daemon to the just-built binary. Where caret is
+   resident, it pins the service's launcher to this checkout and cycles the service onto
+   it. Where caret is not resident, nothing is pinned or cycled, and the closing prewarm,
+   which takes the daemon over on the fresh build, is the whole hand-off.
 
 `--from-local` is not a reduced install — it takes the same path a user's install takes,
 residency included: a caret login item serving `caret.localhost:42718` from login onward.
-That is this checkout as long as it is the highest-versioned caret the launcher finds — an
-installed release that outranks it still wins until the `pinned-root` record lands.
+It serves this checkout even when a higher-versioned release is installed, because
+`--from-local` records the checkout in the launcher's `pinned-root` file. A plain
+`caret install` clears that pin and cycles back to the highest-versioned installed caret —
+unless the service is turned off, which leaves the pin until an install after it is back
+on — and `--uninstall` removes the pin. While the pin holds, a review never cycles the
+daemon, so a rebuild reaches the login item only through `--install`.
+
 Re-running `--install` reuses the agent already registered rather than re-registering it,
 so macOS stops posting its "Background Items Added" notice on every rebuild; the new build
 is picked up by cycling the daemon, not by re-installing. If you would rather your machine

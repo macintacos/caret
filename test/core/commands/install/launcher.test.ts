@@ -3,7 +3,7 @@
 // looks for it. The source is a fixture, so none of this needs a resolvable caret root.
 
 import { expect, test } from "bun:test";
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { setupTempStateDir } from "@test/support/env.ts";
@@ -11,6 +11,7 @@ import { installLauncher, uninstallLauncher } from "@/commands/install/launcher.
 import {
   launcherBunFile,
   launcherPath,
+  launcherPinnedRootFile,
   launcherRecordDir,
   launcherServiceFile,
   stateDir,
@@ -89,16 +90,45 @@ test("an install naming no unit leaves no service record for the launcher to act
   expect(existsSync(launcherServiceFile())).toBe(false);
 });
 
+test("pinned-root records the given checkout, newline-terminated like bun-path", () => {
+  installLauncher({ bunPath: "/opt/bun/bin/bun", pinnedRoot: "/checkout", source: shippedScript });
+
+  expect(readFileSync(launcherPinnedRootFile(), "utf8")).toBe("/checkout\n");
+  expect(perms(launcherPinnedRootFile())).toBe(0o600);
+});
+
+test("an install naming no pin removes the pin an earlier install left", () => {
+  mkdirSync(launcherRecordDir(), { recursive: true });
+  writeFileSync(launcherPinnedRootFile(), "/checkout\n");
+
+  const { unpinned } = installLauncher({ bunPath: "/opt/bun/bin/bun", source: shippedScript });
+
+  expect(existsSync(launcherPinnedRootFile())).toBe(false);
+  expect(unpinned).toBe(true);
+});
+
+test("an install with no pin to remove, or naming one, reports nothing unpinned", () => {
+  expect(installLauncher({ bunPath: "/opt/bun/bin/bun", source: shippedScript }).unpinned).toBe(
+    false,
+  );
+  expect(
+    installLauncher({ bunPath: "/opt/bun/bin/bun", pinnedRoot: "/checkout", source: shippedScript })
+      .unpinned,
+  ).toBe(false);
+});
+
 test("uninstallLauncher removes the launcher and its records, leaving the state dir", () => {
   installLauncher({
     bunPath: "/opt/bun/bin/bun",
     serviceLabel: "caret.service",
+    pinnedRoot: "/checkout",
     source: shippedScript,
   });
 
   uninstallLauncher();
 
   expect(existsSync(launcherPath())).toBe(false);
+  expect(existsSync(launcherPinnedRootFile())).toBe(false);
   expect(existsSync(launcherRecordDir())).toBe(false);
   expect(existsSync(stateDir())).toBe(true);
 });

@@ -39,9 +39,14 @@ const RECONCILE = { dryRun: false, refresh: false, resident: true };
 
 /** The launcher seam every case shares — the real installLauncher needs a resolvable
  * caret root, which no test has. */
-function recordingLauncher(calls: string[]): (deps: LauncherDeps) => void {
-  return (deps) => void calls.push(`launcher:${deps.serviceLabel}`);
+function recordingLauncher(calls: string[]): (deps: LauncherDeps) => { unpinned: boolean } {
+  return (deps) => {
+    calls.push(`launcher:${deps.serviceLabel}`);
+    return { unpinned: false };
+  };
 }
+
+const stubLauncher = () => ({ unpinned: false });
 
 test("a plain install registers the unit, naming the launcher the unit runs", async () => {
   const service = recordingService();
@@ -68,7 +73,7 @@ test("the install says where the review UI now lives, with no dangling caveat", 
 
   await reconcileService(
     RECONCILE,
-    { service: recordingService().target, installLauncher: () => {} },
+    { service: recordingService().target, installLauncher: stubLauncher },
     ui,
   );
 
@@ -82,7 +87,7 @@ test("--no-resident persists the opt-out and removes a unit already installed", 
 
   await reconcileService(
     { ...RECONCILE, resident: false },
-    { service: service.target, installLauncher: () => {} },
+    { service: service.target, installLauncher: stubLauncher },
     recordingUI(),
   );
 
@@ -94,7 +99,7 @@ test("a later install on an opted-out machine registers nothing", async () => {
   const optOut = recordingService();
   await reconcileService(
     { ...RECONCILE, resident: false },
-    { service: optOut.target, installLauncher: () => {} },
+    { service: optOut.target, installLauncher: stubLauncher },
     recordingUI(),
   );
 
@@ -116,7 +121,39 @@ test("--refresh cycles the service so the new build is the one serving", async (
 
   await reconcileService(
     { ...RECONCILE, refresh: true },
-    { service: service.target, installLauncher: () => {} },
+    { service: service.target, installLauncher: stubLauncher },
+    recordingUI(),
+  );
+
+  expect(service.calls).toEqual(["install", "restart"]);
+});
+
+test("--from-local pins the launcher to the checkout and cycles the service onto it", async () => {
+  const service = recordingService({ installed: true, running: true });
+  let pinnedRoot: string | undefined;
+
+  await reconcileService(
+    { ...RECONCILE, pinnedRoot: "/checkout" },
+    {
+      service: service.target,
+      installLauncher: (deps) => {
+        pinnedRoot = deps.pinnedRoot;
+        return { unpinned: false };
+      },
+    },
+    recordingUI(),
+  );
+
+  expect(pinnedRoot).toBe("/checkout");
+  expect(service.calls).toEqual(["install", "restart"]);
+});
+
+test("a published install clears a pin and cycles off the checkout", async () => {
+  const service = recordingService({ installed: true, running: true });
+
+  await reconcileService(
+    RECONCILE,
+    { service: service.target, installLauncher: () => ({ unpinned: true }) },
     recordingUI(),
   );
 
@@ -128,7 +165,7 @@ test("a host that cannot run the service is reported, not installed onto", async
   const ui = recordingUI();
 
   await expectCleanExitCode(() =>
-    reconcileService(RECONCILE, { service: service.target, installLauncher: () => {} }, ui),
+    reconcileService(RECONCILE, { service: service.target, installLauncher: stubLauncher }, ui),
   );
 
   expect(service.calls).toEqual([]);
@@ -140,7 +177,7 @@ test("a service the user turned off themselves is never re-enabled", async () =>
 
   await reconcileService(
     RECONCILE,
-    { service: service.target, installLauncher: () => {} },
+    { service: service.target, installLauncher: stubLauncher },
     recordingUI(),
   );
 
@@ -169,7 +206,7 @@ test("--uninstall tears the service down and takes the launcher with it", async 
 
   await uninstallService(
     { dryRun: false },
-    { service: service.target, installLauncher: () => {} },
+    { service: service.target, installLauncher: stubLauncher },
     recordingUI(),
   );
 
@@ -185,7 +222,7 @@ test("--uninstall --dry-run leaves the service and the launcher where they are",
 
   await uninstallService(
     { dryRun: true },
-    { service: service.target, installLauncher: () => {} },
+    { service: service.target, installLauncher: stubLauncher },
     recordingUI(),
   );
 
@@ -199,7 +236,7 @@ test("--no-resident --dry-run previews the removal rather than an install", asyn
 
   await reconcileService(
     { ...RECONCILE, dryRun: true, resident: false },
-    { service: service.target, installLauncher: () => {} },
+    { service: service.target, installLauncher: stubLauncher },
     ui,
   );
 
@@ -213,7 +250,7 @@ test("a supervisor that refuses the unit warns and leaves the install standing",
   const ui = recordingUI();
 
   await expectCleanExitCode(() =>
-    reconcileService(RECONCILE, { service: service.target, installLauncher: () => {} }, ui),
+    reconcileService(RECONCILE, { service: service.target, installLauncher: stubLauncher }, ui),
   );
 
   expect(ui.events.some((e) => e.startsWith("warn:") && e.includes("bootstrap failed"))).toBe(true);
@@ -230,7 +267,7 @@ test("a platform with no supervisor at all warns rather than throwing", async ()
         service: () => {
           throw new Error("caret service: unsupported platform win32 (darwin/linux only)");
         },
-        installLauncher: () => {},
+        installLauncher: stubLauncher,
       },
       ui,
     ),
@@ -247,7 +284,7 @@ test("a config the opt-out cannot be written to is reported as that, not as the 
 
   await reconcileService(
     { ...RECONCILE, resident: false },
-    { service: service.target, installLauncher: () => {} },
+    { service: service.target, installLauncher: stubLauncher },
     ui,
   );
 
@@ -265,7 +302,7 @@ test("the announcement names where the service shows up outside caret", async ()
         ...recordingService().target(),
         visibleIn: "System Settings › Login Items",
       }),
-      installLauncher: () => {},
+      installLauncher: stubLauncher,
     },
     ui,
   );
@@ -283,7 +320,7 @@ test("the announcement carries the caveat for a switch caret cannot read", async
         ...recordingService().target(),
         visibleToggleCaveat: "That switch is not one caret can read.",
       }),
-      installLauncher: () => {},
+      installLauncher: stubLauncher,
     },
     ui,
   );
@@ -302,7 +339,7 @@ test("the message that leaves an opted-out service alone names what turned it of
         visibleIn: "System Settings › Login Items",
         optOutSurface: "`launchctl disable`",
       }),
-      installLauncher: () => {},
+      installLauncher: stubLauncher,
     },
     ui,
   );

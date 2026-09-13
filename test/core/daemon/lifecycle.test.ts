@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import {
+  chmodSync,
   closeSync,
   existsSync,
   mkdirSync,
@@ -8,7 +9,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 
 import { ensureDaemonNoOps, noOpTiming } from "@test/support/ensure-daemon-deps.ts";
 import { setupTempStateDir, withEnv } from "@test/support/env.ts";
@@ -18,6 +19,7 @@ import {
   daemonLock,
   daemonStderrLogFile,
   ensureLogsDir,
+  launcherPinnedRootFile,
   launcherServiceFile,
   logArchiveDir,
 } from "@/config/paths.ts";
@@ -39,7 +41,7 @@ import { type ServiceManager, SUPERVISED_VAR } from "@/service/manager.ts";
 
 // Point the state dir at a throwaway temp dir so the debug-level instrumentation
 // tests append to a disposable caret.log instead of the real ~/.local/state/caret.
-setupTempStateDir("caret-daemon-lifecycle-");
+const tempDir = setupTempStateDir("caret-daemon-lifecycle-");
 afterEach(() => setLogLevel("info")); // undo any per-test level change
 
 // ---- ensureDaemon ----
@@ -469,6 +471,49 @@ test("a hook older than the resident daemon attaches instead of cycling it", asy
   );
   expect(url).toBe("http://localhost:42718");
   expect({ calls, retires }).toEqual({ calls: [], retires: 0 });
+});
+
+// A published plugin's hook running ahead of the pinned checkout is that hook.
+test("under a pinned launcher, a hook newer than the resident daemon attaches instead of cycling it", async () => {
+  const { calls, manager: service } = supervisor();
+  let retires = 0;
+  const url = await ensureDaemon(
+    ensureDeps({
+      service,
+      pinned: true,
+      currentVersion: "0.17.0",
+      health: async () => peer("pinned", { version: "0.16.0" }),
+      retire: async () => {
+        retires++;
+        return true;
+      },
+    }),
+  );
+  expect(url).toBe("http://localhost:42718");
+  expect({ calls, retires }).toEqual({ calls: [], retires: 0 });
+});
+
+test("under a pinned launcher, a stale non-resident peer is still retired", async () => {
+  const { calls, manager: service } = supervisor();
+  let retires = 0;
+  let refusals = 0;
+  const url = await ensureDaemon(
+    ensureDeps({
+      service,
+      pinned: true,
+      health: async () => {
+        if (retires === 0) return peer("fallback", { resident: false });
+        if (++refusals <= 2) return null;
+        return peer("supervised", { build: "b1" });
+      },
+      retire: async () => {
+        retires++;
+        return true;
+      },
+    }),
+  );
+  expect(url).toBe("http://localhost:42718");
+  expect({ calls, retires }).toEqual({ calls: [], retires: 1 });
 });
 
 // A restart that answers with nothing new leaves the stale daemon on the port; serving it
@@ -928,6 +973,28 @@ test("prodEnsureDeps wires the supervisor only into the world that installed it,
   writeFileSync(launcherServiceFile(), "caret.service\n");
   expect((await prodEnsureDeps(DEFAULTS, manager, 0)).service).toBe(service);
   expect((await prodEnsureDeps(DEFAULTS, manager, 1234)).timing.reserveMs).toBe(1234);
+});
+
+test("prodEnsureDeps is pinned only while the pin names a runnable caret", async () => {
+  const { manager: service } = supervisor();
+  expect((await prodEnsureDeps(DEFAULTS, () => service, 0)).pinned).toBe(false);
+
+  const root = join(tempDir(), "checkout");
+  mkdirSync(join(root, "bin"), { recursive: true });
+  writeFileSync(join(root, "bin", "caret"), "#!/bin/sh\n");
+  chmodSync(join(root, "bin", "caret"), 0o755);
+  mkdirSync(dirname(launcherPinnedRootFile()), { recursive: true });
+  writeFileSync(launcherPinnedRootFile(), `${root}\n`);
+  expect((await prodEnsureDeps(DEFAULTS, () => service, 0)).pinned).toBe(true);
+
+  writeFileSync(launcherPinnedRootFile(), root);
+  expect((await prodEnsureDeps(DEFAULTS, () => service, 0)).pinned).toBe(false);
+
+  writeFileSync(launcherPinnedRootFile(), `${join(tempDir(), "gone")}\n`);
+  expect((await prodEnsureDeps(DEFAULTS, () => service, 0)).pinned).toBe(false);
+
+  writeFileSync(launcherPinnedRootFile(), "\n");
+  expect((await prodEnsureDeps(DEFAULTS, () => service, 0)).pinned).toBe(false);
 });
 
 // ---- retireDaemon: SIGTERM fallback is gated on the lock's world (EXC-461) ----

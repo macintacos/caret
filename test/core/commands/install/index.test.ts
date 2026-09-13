@@ -234,7 +234,7 @@ test("the service is registered after the targets, so a refresh cycles the new b
         optOutSurface: "`systemctl --user`",
         manager: fakeServiceManager({ calls }).manager,
       }),
-      installLauncher: () => {},
+      installLauncher: () => ({ unpinned: false }),
     }),
   );
   expect(calls).toEqual(["claude", "rumdl", "install"]);
@@ -381,6 +381,30 @@ test("--from-local --dry-run previews without prewarming", async () => {
     },
   );
   expect(calls).toEqual(["claude"]);
+});
+
+test("--from-local hands the checkout to the service step as its pinned root", async () => {
+  let pinnedRoot: string | undefined;
+  const dir = await mkdtemp(join(tmpdir(), "caret-install-index-"));
+  await withEnv({ CARET_CONFIG_FILE: join(dir, "config.toml"), XDG_STATE_HOME: dir }, () =>
+    runInstallSubcommand(
+      { uninstall: false, dryRun: false, fromLocal: true },
+      {
+        ...fromLocalPrewarmDeps(recordingUI(), async () => {}),
+        service: () => ({
+          label: "caret.service",
+          visibleIn: "`systemctl --user`",
+          optOutSurface: "`systemctl --user`",
+          manager: fakeServiceManager().manager,
+        }),
+        installLauncher: (deps) => {
+          pinnedRoot = deps.pinnedRoot;
+          return { unpinned: false };
+        },
+      },
+    ),
+  );
+  expect(pinnedRoot).toBe("/checkout");
 });
 
 test("the prewarm step reports that prewarm ran, not that the daemon was swapped", async () => {

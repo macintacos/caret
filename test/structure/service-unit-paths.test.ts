@@ -7,7 +7,12 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
-import { launcherPath, launcherRecordDir, launcherServiceFile } from "@/config/paths.ts";
+import {
+  launcherPath,
+  launcherPinnedRootFile,
+  launcherRecordDir,
+  launcherServiceFile,
+} from "@/config/paths.ts";
 
 const LAUNCHER = readFileSync(join(import.meta.dir, "..", "..", "bin", "caret-launcher"), "utf8");
 
@@ -21,6 +26,10 @@ test("bin/caret-launcher removes the unit from the directory the manager writes 
 
 test("bin/caret-launcher reads the service record the install writes", () => {
   expect(LAUNCHER).toContain(`$records/${basename(launcherServiceFile())}`);
+});
+
+test("bin/caret-launcher reads the pinned-root record the install writes", () => {
+  expect(LAUNCHER).toContain(`$records/${basename(launcherPinnedRootFile())}`);
 });
 
 test("bin/caret-launcher's self-eviction removes what uninstallLauncher removes", () => {

@@ -61,6 +61,11 @@ export function launcherBunFile(): string {
   return `${launcherRecordDir()}/bun-path`;
 }
 
+/** The checkout `caret install --from-local` pins the launcher to. */
+export function launcherPinnedRootFile(): string {
+  return `${launcherRecordDir()}/pinned-root`;
+}
+
 /** The unit's name, in the per-platform form launcherRecordDir() describes. */
 export function launcherServiceFile(): string {
   return `${launcherRecordDir()}/service`;

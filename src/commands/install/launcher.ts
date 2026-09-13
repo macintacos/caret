@@ -4,7 +4,7 @@
 // (EXC-1160). The install's service step is the caller: the launcher lands before the unit
 // that names it, and goes with it on `--uninstall`.
 
-import { chmodSync, copyFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { resolveCaretRoot } from "@/adapters/opencode/packaging.ts";
@@ -12,6 +12,7 @@ import {
   ensureStateDir,
   launcherBunFile,
   launcherPath,
+  launcherPinnedRootFile,
   launcherRecordDir,
   launcherServiceFile,
 } from "@/config/paths.ts";
@@ -27,13 +28,17 @@ export interface LauncherDeps {
    * and deletes on eviction. Absent when no supervisor was installed — the launcher
    * treats a missing record as "nothing here to tear down". */
   serviceLabel?: string;
+  /** The checkout the launcher should exec over the highest installed caret. Absent for a
+   * published install, which removes any pin an earlier `--from-local` left. */
+  pinnedRoot?: string;
   bunPath?: string;
   source?: () => string;
 }
 
-/** Install the shipped launcher to the path a service unit names, recording the `bun` it
- * should prefer over the ones it searches for. */
-export function installLauncher(deps: LauncherDeps = {}): void {
+/** Install the shipped launcher to the path a service unit names, and record what it reads:
+ * the `bun` to prefer, the unit, and the pinned root — removing a pin when none is given,
+ * and reporting whether it did. */
+export function installLauncher(deps: LauncherDeps = {}): { unpinned: boolean } {
   const source = (deps.source ?? (() => join(resolveCaretRoot(), "bin", "caret-launcher")))();
 
   ensureStateDir(dirname(launcherPath()));
@@ -48,11 +53,17 @@ export function installLauncher(deps: LauncherDeps = {}): void {
   // Under a compiled binary execPath is caret itself, not bun, so there is nothing worth
   // recording and the launcher is left to its own search.
   const bunPath = deps.bunPath ?? (buildKind() === "binary" ? undefined : process.execPath);
-  if (bunPath === undefined && deps.serviceLabel === undefined) return;
+  const unpinned = deps.pinnedRoot === undefined && existsSync(launcherPinnedRootFile());
+  if (unpinned) rmSync(launcherPinnedRootFile(), { force: true });
+  if (bunPath === undefined && deps.serviceLabel === undefined && deps.pinnedRoot === undefined) {
+    return { unpinned };
+  }
 
   ensureStateDir(launcherRecordDir());
   if (bunPath !== undefined) writeRecord(launcherBunFile(), bunPath);
   if (deps.serviceLabel !== undefined) writeRecord(launcherServiceFile(), deps.serviceLabel);
+  if (deps.pinnedRoot !== undefined) writeRecord(launcherPinnedRootFile(), deps.pinnedRoot);
+  return { unpinned };
 }
 
 /** The launcher's `read -r` reports EOF on a file with no trailing newline, and that read

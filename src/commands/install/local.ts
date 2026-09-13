@@ -1,7 +1,7 @@
 // What `caret install --from-local` needs and a published install never does: the guard
 // that proves caret is running from a built checkout, the private dev marketplace that
-// points Claude Code at that checkout, and the prewarm hand-off that retires the running
-// daemon in favour of the fresh build.
+// points Claude Code at that checkout, and the prewarm that retires the running daemon in
+// favour of the fresh build where no supervisor holds it.
 //
 // `--from-local` is an explicit flag, never inferred, and the guard here is its second
 // line of defence: a published install ships neither `.claude-plugin/marketplace.json`

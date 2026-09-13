@@ -37,7 +37,7 @@ export interface ServiceStepDeps {
    * service down, so driving the machine's own launchd is something a caller opts into
    * rather than something a test has to remember to opt out of. */
   service?: () => ServiceTarget;
-  installLauncher?: (deps: LauncherDeps) => void;
+  installLauncher?: (deps: LauncherDeps) => { unpinned: boolean };
 }
 
 /** Run `body` against the supervisor this machine installs under, if there is one to
@@ -85,6 +85,9 @@ export async function reconcileService(
      * a per-invocation flag, so the next plain `--refresh` cannot overrule someone who
      * deliberately opted out. */
     resident: boolean;
+    /** The checkout `--from-local` pins the service's launcher to. Absent for a published
+     * install, which clears any pin. */
+    pinnedRoot?: string;
   },
   deps: ServiceStepDeps,
   ui: InstallUI,
@@ -136,7 +139,10 @@ export async function reconcileService(
     }
 
     // The unit names the launcher, so the launcher has to be there first.
-    (deps.installLauncher ?? realInstallLauncher)({ serviceLabel: label });
+    const { unpinned } = (deps.installLauncher ?? realInstallLauncher)({
+      serviceLabel: label,
+      pinnedRoot: opts.pinnedRoot,
+    });
     await manager.install({
       launcherPath: launcherPath(),
       label,
@@ -144,9 +150,10 @@ export async function reconcileService(
       environment: serviceEnvironment(process.env),
       terminalExitStatus: SERVICE_TERMINAL_EXIT_STATUS,
     });
-    // install() is a no-op on a unit that did not change, which is every upgrade: the
-    // supervisor keeps running the old binary until it is cycled.
-    if (opts.refresh) await manager.restart();
+    // install() is a no-op on an unchanged unit, so a new build or pin serves only once the
+    // supervisor cycles. `--from-local` cycles even onto the same pin: hooks never cycle a
+    // pinned daemon. Unpinning cycles because hooks attach to a checkout newer than them.
+    if (opts.refresh || opts.pinnedRoot !== undefined || unpinned) await manager.restart();
 
     const announcement = `The review UI is now always up at http://${VANITY_HOST}:${getPort(settings)} — it appears in ${visibleIn}, and \`caret install --no-resident\` turns it off.`;
     ui.info([announcement, visibleToggleCaveat].filter(Boolean).join(" "));

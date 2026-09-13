@@ -5,13 +5,22 @@
 // read/write/liveness primitives the takeover loop and the discovery command
 // share.
 
-import { chmodSync, existsSync, openSync, unlinkSync } from "node:fs";
-import { normalize } from "node:path";
+import {
+  accessSync,
+  chmodSync,
+  constants,
+  existsSync,
+  openSync,
+  readFileSync,
+  unlinkSync,
+} from "node:fs";
+import { join, normalize } from "node:path";
 
 import {
   daemonLock,
   daemonStderrLogFile,
   ensureLogsDir,
+  launcherPinnedRootFile,
   launcherServiceFile,
   stateDir,
 } from "@/config/paths.ts";
@@ -56,6 +65,9 @@ export interface EnsureDeps {
   spawn: () => void;
   /** This world's supervisor, absent when the world installed none. */
   service?: Supervisor;
+  /** The world's launcher execs a pinned root, so a cycle brings that root back whatever
+   * this hook's version. */
+  pinned?: boolean;
   timing: EnsureTiming;
 }
 
@@ -124,13 +136,13 @@ export type EnsureMode = "takeover" | "attach" | "successor";
 /** Ensure a caret daemon owns the port and return its base URL: reuse a same-build
  * daemon, gracefully retire a stale one and spawn a fresh daemon, and clean orphan
  * locks (EXC-406). Under this world's supervisor a stale resident daemon is cycled
- * through the service instead — unless it is newer than this hook — and an empty port
- * is left to the supervisor before this hook spawns into it (EXC-1166), for at most the
- * call's first `timing.windowMs`. `mode` — see EnsureMode. Never denies a review because
- * takeover failed — an unretireable stale daemon, or one whose service will not restart,
- * is reused (serving its old UI) rather than left unreachable. The one exception: a
- * foreign world's daemon (EXC-461) is neither reused nor retired — that's a config
- * conflict, and cross-attaching IS the bug. */
+ * through the service instead — unless it is newer than this hook, or the launcher is
+ * pinned — and an empty port is left to the supervisor before this hook spawns into it
+ * (EXC-1166), for at most the call's first `timing.windowMs`. `mode` — see EnsureMode.
+ * Never denies a review because takeover failed — an unretireable stale daemon, or one
+ * whose service will not restart, is reused (serving its old UI) rather than left
+ * unreachable. The one exception: a foreign world's daemon (EXC-461) is neither reused
+ * nor retired — that's a config conflict, and cross-attaching IS the bug. */
 export async function ensureDaemon(
   deps: EnsureDeps,
   mode: EnsureMode = "takeover",
@@ -164,9 +176,9 @@ export async function ensureDaemon(
       // anything else on the port — a build that predates residency, a hook's
       // idle-exiting fallback — is retired below, since a cycle cannot free it.
       if (deps.service && h.resident === true) {
-        // The launcher execs the highest installed caret, so cycling a newer daemon
-        // only brings that same build back.
-        if (isNewer(h.version ?? "", deps.currentVersion)) return deps.baseUrl;
+        // The launcher execs the pinned root, else the highest installed caret, so a cycle brings
+        // back the build already chosen. A rebuilt pin reaches the service through `--from-local`.
+        if (deps.pinned || isNewer(h.version ?? "", deps.currentVersion)) return deps.baseUrl;
         windowSpent = true;
         // A failed restart may already have stopped the daemon: probe again rather
         // than hand back a port nothing answers on.
@@ -430,6 +442,23 @@ export const SUPERVISOR_WINDOW_MS = Array.from({ length: PROD_MAX_ATTEMPTS }, (_
   backoffFloorMs(attempt),
 ).reduce((sum, ms) => sum + ms, 0);
 
+/** Whether the launcher execs a pinned root: the pin record's newline-terminated first line
+ * names a checkout whose `bin/caret` is executable. Keep in sync with `resolve_root()` in
+ * bin/caret-launcher, whose `read` rejects a last line with no newline. */
+function isLauncherPinned(): boolean {
+  try {
+    const text = readFileSync(launcherPinnedRootFile(), "utf8");
+    const nl = text.indexOf("\n");
+    if (nl < 0) return false;
+    const root = text.slice(0, nl).trim();
+    if (!root) return false;
+    accessSync(join(root, "bin", "caret"), constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** The production EnsureDeps. `service` builds this world's supervisor, and is called
  * only when this world's install recorded one. `reserveMs` is the caller's: what its hook
  * can spare the fallback spawn past the supervisor window. */
@@ -445,6 +474,7 @@ export async function prodEnsureDeps(
     // The supervisor is machine-wide, so only the world that installed it may cycle it.
     // Not `[daemon].resident`: that defaults on in every world, dev ones included.
     service: existsSync(launcherServiceFile()) ? service() : undefined,
+    pinned: isLauncherPinned(),
     baseUrl: `http://localhost:${getPort(s)}`,
     currentBuild: await currentBuildId(),
     currentVersion: VERSION,
