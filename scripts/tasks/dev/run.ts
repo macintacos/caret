@@ -92,8 +92,7 @@ export function childEnvFor(
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
     XDG_STATE_HOME: stateDirPath,
-    // Residency the way production reaches it: this plus [daemon].resident (default true)
-    // is the whole predicate; `resident = false` in config.dev.toml opts back out.
+    // Residency the way production reaches it: CARET_SUPERVISED is the whole predicate.
     [SUPERVISED_VAR]: "1",
   };
   if (portMode.kind === "fixed") env.CARET_PORT = String(portMode.port);

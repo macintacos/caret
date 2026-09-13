@@ -2,11 +2,12 @@
 // owns its own mechanism (OpenCode: a `plugin` array entry + command files; Claude Code:
 // the `claude` plugin CLI). caret detects the agents on this machine and asks — on a TTY
 // through the chooser, otherwise by installing into everything it detected (Claude Code
-// when it detected nothing), so CI never hangs on a prompt. Every install ends by
-// acquiring the rumdl plan formatter: it is part of a working caret, not a step anyone
-// can skip or forget. `--uninstall` is machine-wide — it removes caret from every agent
-// in the registry, since the residency it tears down alongside them is one service for
-// the whole machine. Neither it nor `--dry-run` acquires rumdl.
+// when it detected nothing), so CI never hangs on a prompt. The same TTY is then asked
+// whether caret keeps the review UI running; without one, the service is left as found.
+// Every install ends by acquiring the rumdl plan formatter: it is part of a working
+// caret, not a step anyone can skip or forget. `--uninstall` is machine-wide — it removes
+// caret from every agent in the registry, since the residency it tears down alongside
+// them is one service for the whole machine. Neither it nor `--dry-run` acquires rumdl.
 
 import { runInstallClaudeTarget } from "@/commands/install/claude.ts";
 import {
@@ -16,9 +17,14 @@ import {
   resolveLocalCheckout,
 } from "@/commands/install/local.ts";
 import { runInstallOpencodeTarget } from "@/commands/install/opencode.ts";
-import { promptForTargets } from "@/commands/install/prompt.ts";
+import {
+  type AskedServiceChoice,
+  promptForServiceChoice,
+  promptForTargets,
+} from "@/commands/install/prompt.ts";
 import {
   reconcileService,
+  type ServiceChoice,
   type ServiceStepDeps,
   uninstallService,
 } from "@/commands/install/service.ts";
@@ -32,10 +38,10 @@ import { createInstallUI, type InstallUI, isTerminal } from "@/commands/install/
 import { errorMessage } from "@/lib/types.ts";
 import { ensureRumdl, RUMDL_VERSION } from "@/plan/rumdl.ts";
 
-/** Injection seam for tests: override detection, the chooser, TTY-ness, each target
- * runner, and — through ServiceStepDeps — the supervisor, to assert selection and
- * dispatch without touching a real config dir, the `claude` CLI, launchd, or a
- * terminal. */
+/** Injection seam for tests: override detection, the chooser, the service question,
+ * TTY-ness, each target runner, and — through ServiceStepDeps — the supervisor, to assert
+ * selection and dispatch without touching a real config dir, the `claude` CLI, launchd,
+ * or a terminal. */
 export interface InstallDeps extends ServiceStepDeps {
   /** A runner returns false to report "this target failed" (it has already said why);
    * returning nothing means it got through. */
@@ -43,6 +49,7 @@ export interface InstallDeps extends ServiceStepDeps {
   runClaude?: (opts: TargetOpts, deps: { ui: InstallUI }) => unknown;
   detect?: () => InstallTarget[];
   prompt?: (detected: InstallTarget[]) => Promise<InstallTarget[] | null>;
+  promptService?: () => Promise<AskedServiceChoice | null>;
   isInteractive?: () => boolean;
   /** Narrowed to what the step reports — the real `ensureRumdl` satisfies it, and a test
    * can describe an outcome without the config path it never reads. */
@@ -81,17 +88,16 @@ export function installExitCode(outcome: InstallOutcome): number {
   return { ok: 0, refused: 2, failed: 1 }[outcome];
 }
 
-/** Run the install command: resolve the targets (the chooser or detection), then
- * dispatch to each one. Reports every problem through `ui` and returns how the run
- * ended — never throws, and never writes `process.exitCode` itself. */
+/** Run the install command: resolve the targets (the chooser or detection) and the
+ * service choice (the question, or the machine as found), then dispatch to each target.
+ * Reports every problem through `ui` and returns how the run ended — never throws, and
+ * never writes `process.exitCode` itself. */
 export async function runInstallSubcommand(
   opts: {
     uninstall: boolean;
     dryRun: boolean;
     fromLocal?: boolean;
     refresh?: boolean;
-    /** `--no-resident`, already inverted by Commander. */
-    resident?: boolean;
   },
   deps: InstallDeps = {},
 ): Promise<InstallOutcome> {
@@ -108,6 +114,8 @@ export async function runInstallSubcommand(
 
   const targets = await selectTargets(opts, deps, ui);
   if (targets === null) return "ok";
+  const choice = await selectServiceChoice(opts, deps, ui);
+  if (choice === null) return "ok";
 
   const runOpencode = deps.runOpencode ?? runInstallOpencodeTarget;
   const runClaude = deps.runClaude ?? runInstallClaudeTarget;
@@ -156,7 +164,7 @@ export async function runInstallSubcommand(
       {
         dryRun: opts.dryRun,
         refresh: opts.refresh ?? false,
-        resident: opts.resident ?? true,
+        choice,
         pinnedRoot: local?.repoDir,
       },
       deps,
@@ -198,7 +206,7 @@ function resolveLocal(
 
 /** Warm the daemon on the freshly built binary. On a resident machine the service step has
  * already cycled onto the checkout, so this only attaches to that daemon; it is the whole
- * hand-off only where nothing is resident (opted out, unsupported, or disabled).
+ * hand-off only where nothing is resident (run yourself, unsupported, or disabled).
  * Best-effort either way: a hiccup here leaves an otherwise-clean install standing, and
  * the next review spawns the daemon anyway. The step reports only that prewarm ran — it
  * cannot know whether the running daemon was retired or merely reused (see local.ts). */
@@ -304,4 +312,19 @@ async function selectTargets(
   const names = targets.map(targetLabel).join(", ");
   ui.info(detected.length > 0 ? `Detected ${names}.` : `No agent detected — using ${names}.`);
   return targets;
+}
+
+/** Ask what the install does about the caret service. `null` means "do nothing" — the user
+ * cancelled. Asked under the same conditions as the chooser, and never on an uninstall,
+ * which removes the service regardless; an install nobody can ask leaves it as found. */
+async function selectServiceChoice(
+  opts: { uninstall: boolean; dryRun: boolean },
+  deps: InstallDeps,
+  ui: InstallUI,
+): Promise<ServiceChoice | null> {
+  const isInteractive = deps.isInteractive ?? isTerminal;
+  if (opts.uninstall || opts.dryRun || !isInteractive()) return "as-found";
+  const choice = await (deps.promptService ?? promptForServiceChoice)();
+  if (choice === null) ui.cancel("Cancelled — nothing was changed.");
+  return choice;
 }

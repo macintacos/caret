@@ -172,10 +172,11 @@ export async function ensureDaemon(
       if (mode !== "takeover" || windowSpent) return deps.baseUrl;
       // Retiring a supervised daemon only races the supervisor's restart. Cycle the
       // service instead: the launcher resolves caret at exec time, so the restart is
-      // the upgrade. Only a peer reporting `resident: true` is the supervised one;
-      // anything else on the port — a build that predates residency, a hook's
-      // idle-exiting fallback — is retired below, since a cycle cannot free it.
-      if (deps.service && h.resident === true) {
+      // the upgrade. Only a peer reporting `supervised: true` is the service's daemon
+      // (`resident` stands in for a peer predating the field); anything else on the
+      // port — a build that predates residency, a hook's idle-exiting fallback, a
+      // foreground `caret serve` — is retired below, since a cycle cannot free it.
+      if (deps.service && (h.supervised ?? h.resident) === true) {
         // The launcher execs the pinned root, else the highest installed caret, so a cycle brings
         // back the build already chosen. A rebuilt pin reaches the service through `--from-local`.
         if (deps.pinned || isNewer(h.version ?? "", deps.currentVersion)) return deps.baseUrl;
@@ -290,6 +291,45 @@ async function restartService(service: Supervisor, stale: HealthBody): Promise<b
 async function supervisorExpected(service: Supervisor): Promise<boolean> {
   const status = await service.status().catch(() => null);
   return status?.keepsAlive === true;
+}
+
+export interface VacateDeps {
+  baseUrl: string;
+  currentStateDir: string;
+  /** How long the daemon on the port has to let it go once asked. */
+  deadlineMs: number;
+  health: (baseUrl: string) => Promise<HealthBody | null>;
+  /** Ask the daemon at `baseUrl` to step down; false when it cannot be asked. */
+  retire: (baseUrl: string) => Promise<boolean>;
+  now: () => number;
+  sleep: (ms: number) => Promise<void>;
+}
+
+/** Free the port for a daemon about to bind it in the foreground: retire the same-world,
+ * unsupervised caret holding it, and wait until nothing answers. Resolves null once the
+ * port is free — or holds something that is not caret, which the bind reports — and
+ * otherwise the reason it was left alone. */
+export async function vacatePort(deps: VacateDeps): Promise<string | null> {
+  const deadline = deps.now() + deps.deadlineMs;
+  let retired: string | undefined;
+  for (;;) {
+    const h = await deps.health(deps.baseUrl);
+    if (h?.service !== "caret") return null;
+    if (isForeignWorld(h, deps.currentStateDir)) return FOREIGN_WORLD_ERROR;
+    // Retiring it would only have its supervisor start another to fight for the port.
+    if ((h.supervised ?? h.resident) === true) {
+      return "caret's service already serves the review UI on this port — run `caret install` and answer \"I'll run it myself\" to serve it from a terminal instead";
+    }
+    if (deps.now() >= deadline) return "the caret daemon on this port did not stop in time";
+    // Once per instance: a draining daemon keeps answering until it lets the port go.
+    if (h.instanceId === undefined || h.instanceId !== retired) {
+      if (!(await deps.retire(deps.baseUrl))) {
+        return "the caret daemon on this port could not be asked to stop";
+      }
+      retired = h.instanceId;
+    }
+    await deps.sleep(100);
+  }
 }
 
 /** Read + validate the daemon lock; null if missing or unparseable. */
@@ -472,7 +512,7 @@ export async function prodEnsureDeps(
   const world = stateDir();
   return {
     // The supervisor is machine-wide, so only the world that installed it may cycle it.
-    // Not `[daemon].resident`: that defaults on in every world, dev ones included.
+    // Not residency: a dev daemon is resident too.
     service: existsSync(launcherServiceFile()) ? service() : undefined,
     pinned: isLauncherPinned(),
     baseUrl: `http://localhost:${getPort(s)}`,

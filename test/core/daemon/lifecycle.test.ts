@@ -23,7 +23,7 @@ import {
   launcherServiceFile,
   logArchiveDir,
 } from "@/config/paths.ts";
-import { DEFAULTS, isResident } from "@/config/settings.ts";
+import { DEFAULTS } from "@/config/settings.ts";
 import type { HealthBody } from "@/daemon/client.ts";
 import {
   DAEMON_CWD,
@@ -35,9 +35,10 @@ import {
   retireDaemon,
   rotateDaemonStderr,
   spawnDaemon,
+  vacatePort,
 } from "@/daemon/lifecycle.ts";
 import { setLogLevel } from "@/lib/log.ts";
-import { type ServiceManager, SUPERVISED_VAR } from "@/service/manager.ts";
+import { isSupervised, type ServiceManager, SUPERVISED_VAR } from "@/service/manager.ts";
 
 // Point the state dir at a throwaway temp dir so the debug-level instrumentation
 // tests append to a disposable caret.log instead of the real ~/.local/state/caret.
@@ -576,13 +577,15 @@ test("attach mode attaches to a resident peer without cycling its service", asyn
   expect(calls).toEqual([]);
 });
 
-// Only a peer that says it is resident is the supervised one. Anything else holding the
-// port — a build that predates residency, or a hook's idle-exiting fallback — is retired,
+// Only a peer that says it is supervised is the service's daemon; `resident` stands in
+// for one predating the field. Anything else holding the port — a build that predates
+// residency, a hook's idle-exiting fallback, a foreground `caret serve` — is retired,
 // and the port is left to the supervisor, which is already restarting on its throttle.
 // Cycling the service would not free a port someone else holds.
 test.each<[string, Partial<HealthBody>]>([
   ["a peer that predates residency", { resident: undefined }],
   ["an idle-exiting peer", { resident: false }],
+  ["a resident peer no supervisor manages", { supervised: false }],
 ])("%s is retired and the port left to the supervised daemon", async (_title, over) => {
   const { calls, manager: service } = supervisor();
   let retires = 0;
@@ -666,7 +669,7 @@ test("a cycle whose daemon never returns falls back to a spawn that does not cla
   const { served, health } = recordingHealth(() => {
     if (!calls.includes("restart")) return peer("old");
     if (spawnedEnv === undefined) return null;
-    return peer("fallback", { build: "b1", resident: isResident(DEFAULTS, spawnedEnv) });
+    return peer("fallback", { build: "b1", resident: isSupervised(spawnedEnv) });
   });
   const url = await withEnv({ [SUPERVISED_VAR]: undefined }, () =>
     ensureDaemon(
@@ -1156,4 +1159,55 @@ test("removeOwnDaemonLock tolerates a missing or unreadable lock", () => {
   expect(() => removeOwnDaemonLock()).not.toThrow();
   expect(existsSync(daemonLock())).toBe(true);
   unlinkSync(daemonLock());
+});
+
+// `caret serve` clears the port before it binds: a same-world, unsupervised daemon is
+// retired, and anything a retire cannot move is a reason to give up instead.
+function vacateDeps(answers: (HealthBody | null)[], retire: () => Promise<boolean>) {
+  let clock = 0;
+  return {
+    baseUrl: "http://localhost:1",
+    currentStateDir: "/my/world",
+    deadlineMs: 1_000,
+    // Each probe takes the next answer; the last one repeats.
+    health: async () => (answers.length > 1 ? (answers.shift() ?? null) : (answers[0] ?? null)),
+    retire,
+    now: () => clock,
+    sleep: async (ms: number) => {
+      clock += ms;
+    },
+  };
+}
+
+test("vacatePort retires a draining daemon once, then reports the port free", async () => {
+  let retires = 0;
+  const onDemand = peer("od", { resident: false, supervised: false });
+  const result = await vacatePort(
+    vacateDeps([onDemand, onDemand, onDemand, null], async () => {
+      retires++;
+      return true;
+    }),
+  );
+  expect(result).toBeNull();
+  expect(retires).toBe(1);
+});
+
+test.each([
+  ["a supervised daemon", peer("svc", { supervised: true })],
+  ["another world's daemon", peer("far", { resident: false, stateDir: "/other/world" })],
+])("vacatePort leaves %s alone and gives a reason", async (_label, holder) => {
+  let retires = 0;
+  const result = await vacatePort(
+    vacateDeps([holder], async () => {
+      retires++;
+      return true;
+    }),
+  );
+  expect(result).toEqual(expect.any(String));
+  expect(retires).toBe(0);
+});
+
+test("vacatePort gives up on a daemon that never lets the port go", async () => {
+  const stuck = peer("stuck", { resident: false, supervised: false });
+  expect(await vacatePort(vacateDeps([stuck], async () => true))).toEqual(expect.any(String));
 });

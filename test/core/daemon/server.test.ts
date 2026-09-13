@@ -6,6 +6,7 @@ import { join } from "node:path";
 
 import { type BootOptions, bootDaemon, type TestDaemon } from "@test/support/daemon.ts";
 import { fakeDiagnostics } from "@test/support/diagnostics.ts";
+import { withEnv } from "@test/support/env.ts";
 import { makeFakeUiAssets } from "@test/support/fake-ui-assets.ts";
 import { manualTimer } from "@test/support/manual-timer.ts";
 import { type RecordedEmit, recordingLog } from "@test/support/recording-log.ts";
@@ -24,6 +25,7 @@ import type { UpdateReport } from "@/lib/types.ts";
 import { formatPlanMarkdown } from "@/plan/markdown.ts";
 import type { Store } from "@/review/store.ts";
 import { routeIncomingPlan } from "@/review/threading.ts";
+import { SUPERVISED_VAR } from "@/service/manager.ts";
 
 // Resolver injected as a dep — the core daemon stays tool-agnostic and never
 // reaches into src/ui/assets.ts.
@@ -191,6 +193,22 @@ test("GET /api/health reports isDev as a boolean", async () => {
   await boot();
   const body = (await (await fetch(`${base}/api/health`)).json()) as { isDev?: unknown };
   expect(typeof body.isDev).toBe("boolean");
+});
+
+// ---- supervision in health (EXC-1251) ----
+
+// A hook cycles the service for its supervised daemon and retires any other, so the
+// daemon says which it is rather than leaving the peer to infer it from `resident`.
+test.each<[string, string | undefined, boolean]>([
+  ["true under a supervisor", "1", true],
+  ["false with none", undefined, false],
+])("GET /api/health reports supervised %s", async (_title, env, expected) => {
+  await boot();
+  const body = await withEnv(
+    { [SUPERVISED_VAR]: env },
+    async () => (await (await fetch(`${base}/api/health`)).json()) as { supervised?: unknown },
+  );
+  expect(body.supervised).toBe(expected);
 });
 
 // ---- active adapter "source" in health (EXC-791) ----

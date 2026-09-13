@@ -42,6 +42,12 @@ prebuilt artifacts, the `/caret:*` slash commands, and the [rumdl](https://rumdl
 plan formatter. Where it can't ask — off a terminal — it installs into every agent it
 detected.
 
+Every install at a terminal also asks whether to keep caret's review UI running all the
+time, and doesn't remember the answer. Keeping it running registers a service that starts
+at login and serves the UI at `http://caret.localhost:42718`; the other answer is
+[running caret yourself](#running-caret-yourself). Off a terminal it doesn't ask, and
+leaves the service however it finds it.
+
 Two steps finish the job:
 
 1. **Restart the agent.** OpenCode installs the plugin package on its next start.
@@ -54,6 +60,25 @@ Two steps finish the job:
 | `--refresh`   | Update an existing install.                           |
 | `--uninstall` | Remove caret from every agent, and from this machine. |
 
+### Running caret yourself
+
+If you'd rather caret not start at login, answer **I'll run it myself** when
+`caret install` asks. That removes the service if one is registered. Then, whenever you
+want the review UI up, run:
+
+```sh
+bunx --no-cache @macintacos/caret@latest serve
+```
+
+It keeps the UI up at `http://caret.localhost:42718` until you press Ctrl+C. If caret
+already started on demand, `serve` stops that copy and takes the port; if caret's service
+still holds it, `serve` says so and exits. Without `serve`, caret still works: it starts
+when your agent submits a plan, and stops about a minute after the last review is
+resolved.
+
+After updating caret, run `caret serve` again yourself: the first plan from the new
+version stops the old one, and nothing brings it back.
+
 ### Updating and uninstalling
 
 Both are the install command with one flag:
@@ -64,9 +89,10 @@ bunx --no-cache @macintacos/caret@latest install --uninstall  # remove
 ```
 
 An update picks its agents exactly as a fresh install does — the chooser at a terminal,
-detection otherwise; an uninstall takes every agent. Restarting each agent applies an
-update. In OpenCode, caret toasts you at startup when a newer release is out; a plain
-`install` at a terminal runs its own check against npm and asks before taking it.
+detection otherwise — and at a terminal asks the review-UI question again; an uninstall
+takes every agent. Restarting each agent applies an update. In OpenCode, caret toasts you
+at startup when a newer release is out; a plain `install` at a terminal runs its own check
+against npm and asks before taking it.
 
 caret's daemon runs the same check for itself, at most once a day. The call is
 unauthenticated and sends nothing about you — just a request to npm or GitHub, depending

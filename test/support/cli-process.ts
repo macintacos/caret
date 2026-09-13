@@ -46,17 +46,22 @@ export async function runCaretCli(
 }
 
 /**
- * Spawn a real `caret daemon` subprocess over a throwaway `stateHome` on a
- * free port. The `pipeStderr` option opts into a piped (rather than discarded)
- * stderr, for a test that needs the child not to block on a full pipe buffer
- * while it reads the daemon's own NDJSON log file for assertions.
+ * Spawn a real `caret daemon` subprocess — or `caret serve`, via `command` — over a
+ * throwaway `stateHome` on a free port. `pipeStdout` opts into a piped stdout, for a
+ * test that reads what the child prints. The `pipeStderr` option opts into a piped
+ * (rather than discarded) stderr, for a test that needs the child not to block on a
+ * full pipe buffer while it reads the daemon's own NDJSON log file for assertions.
  */
 export function spawnCaretDaemon(
   stateHome: string,
   extraEnv: Record<string, string> = {},
-  { pipeStderr = false }: { pipeStderr?: boolean } = {},
+  {
+    command = "daemon",
+    pipeStdout = false,
+    pipeStderr = false,
+  }: { command?: "daemon" | "serve"; pipeStdout?: boolean; pipeStderr?: boolean } = {},
 ) {
-  return Bun.spawn([process.execPath, "src/cli.ts", "daemon"], {
+  return Bun.spawn([process.execPath, "src/cli.ts", command], {
     env: {
       ...process.env,
       CARET_PORT: String(freePort()),
@@ -64,7 +69,7 @@ export function spawnCaretDaemon(
       CARET_IDLE_MS: "600000", // don't idle-shutdown mid-test
       ...extraEnv,
     },
-    stdio: pipeStderr ? ["ignore", "ignore", "pipe"] : ["ignore", "ignore", "ignore"],
+    stdio: ["ignore", pipeStdout ? "pipe" : "ignore", pipeStderr ? "pipe" : "ignore"],
   });
 }
 

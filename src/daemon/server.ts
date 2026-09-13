@@ -63,6 +63,7 @@ import { searchFiles } from "@/plan/file-search.ts";
 import { createDecisions } from "@/review/decisions.ts";
 import type { Store } from "@/review/store.ts";
 import { routeIncomingPlan } from "@/review/threading.ts";
+import { isSupervised } from "@/service/manager.ts";
 import type { UiAssets } from "@/ui/assets.ts";
 import { MAX_BODY_BYTES, parseUiLogBatch } from "@/ui/log-bridge.ts";
 
@@ -108,7 +109,7 @@ export interface CreateServerOptions {
    * keeps the default, which is what fits inside the supervisors' stop grace. */
   drainMs?: number;
   /** Stay up until told to stop instead of idle-exiting (EXC-1164), published in
-   * /api/health. runDaemon passes the boot-captured settings.isResident().
+   * /api/health. runDaemon passes what its entry point decided.
    * Defaults false; a daemon that predates the field omits it on the wire. */
   resident?: boolean;
   /** The resolved UI asset set (src/ui/assets.ts loadUiAssets): its URL paths form the
@@ -258,8 +259,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     idle: opts.idleMs ?? DEFAULTS.daemon.idle_ms,
     heartbeat: opts.heartbeatMs ?? DEFAULTS.daemon.heartbeat_ms,
     drainMs: opts.drainMs ?? DRAIN_DEADLINE_MS,
-    // Pinned rather than DEFAULTS.daemon.resident: that key defaults to true (EXC-1167),
-    // and a caller who never mentioned residency must still idle-exit.
+    // A caller that never mentions residency idle-exits: runDaemon decides it.
     resident: opts.resident ?? false,
     assets: opts.assets,
     onShutdown: opts.onShutdown ?? (() => process.exit(0)),
@@ -391,9 +391,9 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // GET /api/health — the daemon's identity signature.
   function handleHealth(): Response {
     // Undefined fields are dropped from the JSON, so a daemon missing any reports
-    // the bare {service, version}. `isDev` (EXC-556) and `resident` (EXC-1164) are
-    // the exceptions: both are always booleans, so an absent field means the peer
-    // predates them rather than that this daemon had nothing to say.
+    // the bare {service, version}. `isDev` (EXC-556), `resident` (EXC-1164) and
+    // `supervised` (EXC-1251) are the exceptions: always booleans, so an absent field
+    // means the peer predates them rather than that this daemon had nothing to say.
     const body: HealthIdentity = {
       ...IDENTITY,
       build: buildId,
@@ -402,6 +402,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       instanceId,
       isDev: !isCompiledBinary(),
       resident,
+      supervised: isSupervised(),
       // Only the dev --fresh boot sets CARET_FRESH; production omits the field
       // entirely so the wire stays byte-identical there (EXC-781).
       ...(process.env.CARET_FRESH === "1" ? { fresh: true } : {}),

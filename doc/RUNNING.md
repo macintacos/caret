@@ -278,19 +278,22 @@ Two commands turn caret off, and they turn off different amounts of it:
 
 | Command | What it does |
 | --- | --- |
-| `caret install --no-resident` | Stops caret being resident: the review UI is no longer up from login onward. Your agent still reaches caret, and caret starts on demand. |
+| `caret install`, answering **I'll run it myself** | Stops caret being resident: the review UI is no longer up from login onward. Your agent still reaches caret, and caret starts on demand. |
 | `caret install --uninstall` | Removes caret from every agent, and from this machine. |
 
-`--no-resident` writes `resident = false` into `config.toml`'s `[daemon]` table, and that
-value is what decides — a later `caret install` reads it rather than overruling it. To
-become resident again, set it back to `true` (see
-[Config file](CONFIGURING.md#config-file)) and run `caret install`.
+Answering **I'll run it myself** removes the service, and the install prints how to bring
+the review UI up by hand: `caret serve` keeps it up until you stop it with Ctrl+C (see
+[Running caret yourself](../README.md#running-caret-yourself)). The choice isn't saved
+anywhere. A later `caret install` at a terminal asks again. One off a terminal can't ask,
+so it leaves things as they are: it refreshes a service that is already registered, and
+registers none where there isn't one.
 
 > [!IMPORTANT]
 > On macOS caret also appears under **System Settings › Login Items**, but that switch is
-> neither of these. caret cannot read it, so the next `caret install` registers the
-> service again and reports success while the switch still reads off. Use `--no-resident`
-> or `--uninstall` instead.
+> neither of these. caret cannot read it, so a later `caret install` that keeps the review
+> UI running registers the service again and reports success while the switch still reads
+> off. Run `caret install` and answer **I'll run it myself**, or use `--uninstall`,
+> instead.
 
 ## Logging & Debugging
 

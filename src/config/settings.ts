@@ -1,8 +1,6 @@
 // User-editable settings: ~/.config/caret/config.toml (see paths.configFile),
 // parsed with smol-toml and validated by a zod schema that supplies a default
-// for every key. The file is user-authored: nothing here writes it, and the one
-// key caret does persist is edited textually (src/config/resident.ts) so the
-// comments and layout around it survive.
+// for every key. The file is user-authored: caret never writes it.
 //
 // Contract (EXC-429): reads NEVER throw. An absent, malformed, partial, or
 // invalid file falls back to last-known-good, then DEFAULTS. Invalid values
@@ -40,7 +38,6 @@ import { configFile } from "@/config/paths.ts";
 import { isCompiledBinary } from "@/lib/build-id.ts";
 import { logError } from "@/lib/log.ts";
 import type { EnvOverride } from "@/lib/types.ts";
-import { isSupervised } from "@/service/manager.ts";
 
 export { DEFAULT_PORT };
 
@@ -99,8 +96,6 @@ const SettingsSchema = z.object({
       port: Port.default(DEFAULT_PORT), // EXC-430
       idle_ms: IdleMs.default(60_000), // EXC-430
       heartbeat_ms: HeartbeatMs.default(8_000), // EXC-430
-      // EXC-1164: default true, but inert without CARET_SUPERVISED — see isResident().
-      resident: z.boolean().default(true),
     })
     .prefault({}),
   review: z
@@ -359,17 +354,6 @@ export function getPort(s: Settings = settings().current()): number {
 /** Idle auto-shutdown delay (ms): CARET_IDLE_MS > [daemon].idle_ms > 60s. */
 export function idleMs(s: Settings = settings().current()): number {
   return envValue("CARET_IDLE_MS", IdleMs) ?? s.daemon.idle_ms;
-}
-
-/** Whether this daemon stays up until told to stop, rather than idle-exiting.
- * Intent alone is not enough: a hook's fallback spawn during a service cycle does not
- * carry CARET_SUPERVISED (EXC-1161), so it keeps the idle shutdown and yields the port
- * back. */
-export function isResident(
-  s: Settings = settings().current(),
-  env: NodeJS.ProcessEnv = process.env,
-): boolean {
-  return s.daemon.resident && isSupervised(env);
 }
 
 /** Review timeout: CARET_TIMEOUT > [review].timeout_s > 3600s / 1h — all in

@@ -70,8 +70,8 @@ export const SERVICE_TERMINAL_EXIT_STATUS = 78;
 
 /** Marks a process whose lifetime something else owns — a generated unit's environment
  * block, or the dev task's child env — rather than a hook's fallback spawn (EXC-1161).
- * Read by `isResident` (src/config/settings.ts) and the daemon's upkeep gate, so the
- * name lives here once rather than as a literal in each. */
+ * Read by `caret daemon`'s residency and the daemon's upkeep gate, so the name lives
+ * here once rather than as a literal in each. */
 export const SUPERVISED_VAR = "CARET_SUPERVISED";
 
 /** Whether something manages this process's lifetime rather than a hook's fallback
@@ -118,8 +118,7 @@ export function serviceEnvironment(
   }
   // The daemon idle-exits after [daemon].idle_ms with nothing pending
   // (src/daemon/server.ts) — under KeepAlive / Restart=always that's a restart loop, not
-  // residency. isResident reads this and keeps the daemon up when [daemon].resident is
-  // also set; without that key a supervised daemon still idle-exits (EXC-1164).
+  // residency. `caret daemon` reads this and keeps the daemon up (EXC-1164).
   environment[SUPERVISED_VAR] = "1";
   return environment;
 }

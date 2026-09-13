@@ -14,7 +14,6 @@ import {
   getPort,
   heartbeatMs,
   idleMs,
-  isResident,
   logKeep,
   logMaxSize,
   settings,
@@ -37,7 +36,9 @@ import { createStore } from "@/review/store.ts";
 import { isSupervised, SERVICE_TERMINAL_EXIT_STATUS } from "@/service/manager.ts";
 import { loadUiAssets } from "@/ui/assets.ts";
 
-export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
+/** Boots the daemon and resolves with the port it bound. `resident` keeps it up until
+ * told to stop rather than idle-exiting. */
+export async function runDaemon(opts: { ephemeral: boolean; resident: boolean }): Promise<number> {
   // The daemon's boot time, captured once for the /api/diagnostics uptime (EXC-842).
   const startedAt = Date.now();
   // Leveled NDJSON to logs/daemon.log, the path the logger owns and rotates.
@@ -112,9 +113,6 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
       (err) => log.error("update", err),
     );
   }
-  // Read from the same boot snapshot as the other startup-captured tunables, so a
-  // config edit landing mid-boot cannot split residency from the idle delay it gates.
-  const resident = isResident(boot);
   const store = createStore(reviewsDir(), log);
   await store.rehydrate();
   const assets = await loadUiAssets();
@@ -123,7 +121,7 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
   // the configured one. A process flag, not a setting — the dev task owns the
   // daemon and discovers the bound port from the lock, so port resolution for
   // hooks (getPort) is untouched.
-  const ephemeral = opts.ephemeral;
+  const { ephemeral, resident } = opts;
 
   // Signal cleanup goes up BEFORE the bind, because until a handler exists
   // SIGTERM and SIGINT take their DEFAULT disposition: the kernel kills the
@@ -266,14 +264,14 @@ export async function runDaemon(opts: { ephemeral: boolean }): Promise<void> {
     upkeep.push({ name: "review-sweep", run: () => store.sweep(Date.now()) });
   }
   if (isSupervised()) {
-    // Once at boot as well as on the tick. A supervised but NON-resident daemon still
-    // idle-exits after about a minute, so the hourly tick alone would never fire for it —
-    // and it is the daemon that appends fresh crash output on every restart.
-    // svc.current() rather than the boot snapshot: the rotation knobs are [logging] keys,
-    // which hot-reload.
+    // Once at boot as well as on the tick: a supervisor restarting a crashing daemon
+    // appends fresh crash output each time, and the hourly tick alone would never fire
+    // between those restarts. svc.current() rather than the boot snapshot: the rotation
+    // knobs are [logging] keys, which hot-reload.
     rotateDaemonStderr(svc.current());
     upkeep.push({ name: "stderr-rotate", run: () => rotateDaemonStderr(svc.current()) });
   }
   armedUpkeep = startUpkeep({ tasks: upkeep, log });
   // Bun.serve keeps the process alive; a non-resident daemon idle-auto-shuts-down.
+  return server.port;
 }

@@ -20,7 +20,7 @@ export interface DiagnosticsDeps {
   now: () => number;
   /** The daemon's boot time in ms, captured once at startup. */
   startedAt: number;
-  /** isResident's boot-time verdict. */
+  /** Whether this daemon stays up until told to stop, as its entry point decided. */
   resident: boolean;
   /** The names startUpkeep armed. */
   upkeep: string[];

@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { withEnv } from "@test/support/env.ts";
-import { fakeServiceManager } from "@test/support/service-manager.ts";
+import { fakeServiceTarget } from "@test/support/service-manager.ts";
 import { installExitCode, runInstallSubcommand } from "@/commands/install/index.ts";
 import { INSTALL_TARGET_IDS, type InstallTarget } from "@/commands/install/targets.ts";
 import { recordingUI, silentUI } from "@/commands/install/ui.ts";
@@ -135,6 +135,7 @@ test("on a TTY, the chooser sees the detected agents and drives dispatch", async
         offered = detected;
         return ["opencode", "claude"];
       },
+      promptService: async () => "always-on",
       ui: silentUI,
       ...recordingRunners(calls),
       ensureRumdl: noRumdl,
@@ -205,6 +206,7 @@ test("--uninstall removes caret from every agent in the registry, without asking
       detect: () => ["claude"],
       isInteractive: () => true,
       prompt: chooser.prompt,
+      promptService: chooser.prompt,
       ui: silentUI,
       runOpencode: (o) => void calls.push(`opencode:${o.uninstall}`),
       runClaude: (o) => void calls.push(`claude:${o.uninstall}`),
@@ -222,22 +224,56 @@ test("installing ensures rumdl once, after the targets", async () => {
 
 test("the service is registered after the targets, so a refresh cycles the new build", async () => {
   const calls: string[] = [];
-  // A config path nobody wrote, so the run reads the schema default rather than whatever
-  // residency this machine's own caret is configured for.
-  const absentConfig = join(await mkdtemp(join(tmpdir(), "caret-install-index-")), "config.toml");
-  await withEnv({ CARET_CONFIG_FILE: absentConfig }, () =>
-    runInstallSubcommand(PLAIN_INSTALL, {
-      ...claudeThenRumdlDeps(calls),
-      service: () => ({
-        label: "caret.service",
-        visibleIn: "`systemctl --user`",
-        optOutSurface: "`systemctl --user`",
-        manager: fakeServiceManager({ calls }).manager,
-      }),
-      installLauncher: () => ({ unpinned: false }),
-    }),
-  );
+  await runInstallSubcommand(PLAIN_INSTALL, {
+    ...claudeThenRumdlDeps(calls),
+    service: fakeServiceTarget({ calls, status: { installed: true } }).target,
+    installLauncher: () => ({ unpinned: false }),
+  });
   expect(calls).toEqual(["claude", "rumdl", "install"]);
+});
+
+test("on a TTY, the service question follows the targets and its answer reaches the service", async () => {
+  const calls: string[] = [];
+  await runInstallSubcommand(PLAIN_INSTALL, {
+    ...claudeThenRumdlDeps(calls),
+    isInteractive: () => true,
+    prompt: async () => {
+      calls.push("targets");
+      return ["claude"];
+    },
+    promptService: async () => {
+      calls.push("service");
+      return "always-on";
+    },
+    // Nothing registered, so only the always-on answer installs one.
+    service: fakeServiceTarget({ calls }).target,
+    installLauncher: () => ({ unpinned: false }),
+  });
+  expect(calls).toEqual(["targets", "service", "claude", "rumdl", "install"]);
+});
+
+test("a cancelled service question installs nothing", async () => {
+  const calls: string[] = [];
+  const outcome = await runInstallSubcommand(PLAIN_INSTALL, {
+    ...claudeThenRumdlDeps(calls),
+    isInteractive: () => true,
+    prompt: async () => ["claude"],
+    promptService: async () => null,
+    service: fakeServiceTarget({ calls }).target,
+  });
+  expect(outcome).toBe("ok");
+  expect(calls).toEqual([]);
+});
+
+test("with no TTY or under --dry-run, the service question is never asked", async () => {
+  const question = decliningPrompt();
+  const deps = { ...CLAUDE_ONLY, ui: silentUI, runClaude: () => {}, ensureRumdl: noRumdl };
+  await runInstallSubcommand(PLAIN_INSTALL, { ...deps, promptService: question.prompt });
+  await runInstallSubcommand(
+    { uninstall: false, dryRun: true },
+    { ...deps, isInteractive: () => true, promptService: question.prompt },
+  );
+  expect(question.wasPrompted()).toBe(false);
 });
 
 test.each([
@@ -391,12 +427,7 @@ test("--from-local hands the checkout to the service step as its pinned root", a
       { uninstall: false, dryRun: false, fromLocal: true },
       {
         ...fromLocalPrewarmDeps(recordingUI(), async () => {}),
-        service: () => ({
-          label: "caret.service",
-          visibleIn: "`systemctl --user`",
-          optOutSurface: "`systemctl --user`",
-          manager: fakeServiceManager().manager,
-        }),
+        service: fakeServiceTarget({ status: { installed: true } }).target,
         installLauncher: (deps) => {
           pinnedRoot = deps.pinnedRoot;
           return { unpinned: false };

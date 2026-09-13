@@ -1,17 +1,13 @@
 // The install step that makes a machine resident: it registers the platform unit that
-// serves the review UI from login onward, and reconciles that against the user's
-// persisted intent on every run (EXC-1167). An install and an uninstall share only the
-// supervisor lookup and the never-fail shell, so each is its own entry point rather than
-// a flag the other reads.
+// serves the review UI from login onward, or removes it for someone who runs caret
+// themselves (EXC-1167). The choice is asked on every install at a terminal and saved
+// nowhere, so an install nobody could ask leaves the machine as it found it.
+// `--uninstall` stays its own entry point because it removes caret from every agent too.
 //
 // Two facts are only reliably available here. `serviceEnvironment(process.env)` captures
 // the shell's world-defining variables, which a supervisor-started daemon inherits none
 // of; and installLauncher records the `bun` this install is running under when there is
 // one — a compiled install records nothing and the launcher searches.
-//
-// Reconciliation runs in both directions. Intent off with a unit present tears the unit
-// down: leaving it would have the supervised daemon read `resident = false`, idle-exit,
-// and be respawned about once a minute.
 
 import {
   type LauncherDeps,
@@ -22,7 +18,6 @@ import type { InstallUI } from "@/commands/install/ui.ts";
 import type { ServiceTarget } from "@/commands/service-target.ts";
 import { VANITY_HOST } from "@/config/constants.ts";
 import { launcherPath } from "@/config/paths.ts";
-import { writeDaemonResident } from "@/config/resident.ts";
 import { getPort, loadSettings } from "@/config/settings.ts";
 import { DAEMON_CWD } from "@/daemon/lifecycle.ts";
 import { errorMessage } from "@/lib/types.ts";
@@ -42,19 +37,21 @@ export interface ServiceStepDeps {
 
 /** Run `body` against the supervisor this machine installs under, if there is one to
  * drive. Every failure is a warning: a machine that could not go resident still has a
- * working caret. */
-async function withService(
+ * working caret. Resolves to what `body` returned — undefined where there was no
+ * supervisor to drive, or looking it up or driving it threw. */
+async function withService<T>(
   deps: ServiceStepDeps,
   ui: InstallUI,
-  body: (target: ServiceTarget) => Promise<void>,
-): Promise<void> {
-  if (deps.service === undefined) return;
+  body: (target: ServiceTarget) => Promise<T>,
+): Promise<T | undefined> {
+  if (deps.service === undefined) return undefined;
   try {
-    await body(deps.service());
+    return await body(deps.service());
   } catch (e) {
     ui.warn(
       `Could not update the caret service (${errorMessage(e)}) — caret still starts on demand.`,
     );
+    return undefined;
   }
 }
 
@@ -75,16 +72,20 @@ export async function uninstallService(
   });
 }
 
-/** Reconcile the caret service against the user's residency intent, in both directions,
- * reporting through `ui`. */
+/** What this install does about the caret service: the prompt's two answers, or — when
+ * nobody was asked — the machine left as found. */
+export type ServiceChoice = "always-on" | "run-yourself" | "as-found";
+
+/** `caret serve` from the published package — the same command README § Running caret
+ * yourself documents. */
+const SERVE_COMMAND = "bunx --no-cache @macintacos/caret@latest serve";
+
+/** Bring the caret service in line with this install's choice, reporting through `ui`. */
 export async function reconcileService(
   opts: {
     dryRun: boolean;
     refresh: boolean;
-    /** `--no-resident`, already inverted by the CLI. Sugar for the config key rather than
-     * a per-invocation flag, so the next plain `--refresh` cannot overrule someone who
-     * deliberately opted out. */
-    resident: boolean;
+    choice: ServiceChoice;
     /** The checkout `--from-local` pins the service's launcher to. Absent for a published
      * install, which clears any pin. */
     pinnedRoot?: string;
@@ -92,40 +93,18 @@ export async function reconcileService(
   deps: ServiceStepDeps,
   ui: InstallUI,
 ): Promise<void> {
+  const reviewUrl = `http://${VANITY_HOST}:${getPort(loadSettings())}`;
+  if (opts.choice === "run-yourself") return runYourself({ ...opts, reviewUrl }, deps, ui);
   await withService(deps, ui, async (target) => {
     const { manager, label, visibleIn, optOutSurface, visibleToggleCaveat } = target;
-    if (!opts.resident && !opts.dryRun) {
-      try {
-        writeDaemonResident(false);
-      } catch (e) {
-        // Its own catch: withService's would report a supervisor that would not take the
-        // unit, which is the opposite of what failed, and would leave the user believing
-        // an opt-out persisted that the next `--refresh` will overrule.
-        ui.warn(
-          `Could not record the opt-out (${errorMessage(e)}) — set \`[daemon] resident = false\` in config.toml yourself, or a later install registers the service again.`,
-        );
-        return;
-      }
-    }
-    const settings = loadSettings();
-    // `--no-resident` short-circuits rather than reading the write back, so a dry run
-    // previews the opt-out it would have persisted instead of the install it would not.
-    const resident = opts.resident && settings.daemon.resident;
-
     const status = await manager.status();
     if (status.unsupported) {
       ui.info(`Not registering the caret service: ${status.unsupported}.`);
       return;
     }
-    if (!resident) {
-      // The launcher goes with the unit: what it records is the unit's name, and nothing
-      // but a supervisor runs it.
-      if (status.installed && !opts.dryRun) {
-        await manager.uninstall();
-        uninstallLauncher();
-      }
+    if (opts.choice === "as-found" && !status.installed) {
       ui.info(
-        `caret is not resident${status.installed ? `, so ${opts.dryRun ? "the service would be removed" : "its service was removed"}` : ""} — set \`[daemon] resident = true\` in config.toml to opt back in.`,
+        "No caret service is registered — a `caret install` at a terminal, without `--dry-run`, asks whether caret keeps the review UI running.",
       );
       return;
     }
@@ -155,7 +134,38 @@ export async function reconcileService(
     // pinned daemon. Unpinning cycles because hooks attach to a checkout newer than them.
     if (opts.refresh || opts.pinnedRoot !== undefined || unpinned) await manager.restart();
 
-    const announcement = `The review UI is now always up at http://${VANITY_HOST}:${getPort(settings)} — it appears in ${visibleIn}, and \`caret install --no-resident\` turns it off.`;
+    const announcement = `The review UI is now always up at ${reviewUrl} — it appears in ${visibleIn}. To turn it off, run \`caret install\` again and answer "I'll run it myself".`;
     ui.info([announcement, visibleToggleCaveat].filter(Boolean).join(" "));
   });
+}
+
+/** Leave the review UI to the user: take down whatever service a previous install
+ * registered, then say how to serve it by hand. */
+async function runYourself(
+  opts: { dryRun: boolean; pinnedRoot?: string; reviewUrl: string },
+  deps: ServiceStepDeps,
+  ui: InstallUI,
+): Promise<void> {
+  const removed = await withService(deps, ui, async ({ manager }) => {
+    const status = await manager.status();
+    if (status.unsupported) return false;
+    if (opts.dryRun) {
+      if (status.installed) ui.info("Would remove the caret service and the launcher it runs.");
+      return false;
+    }
+    // Not gated on `installed`: on macOS that is loadedness, and a plist the launcher's
+    // terminal exit booted out is still on disk to load at the next login. Both managers
+    // tolerate a unit that is not there. The launcher goes with the unit: nothing but a
+    // supervisor runs it.
+    await manager.uninstall();
+    uninstallLauncher();
+    return status.installed;
+  });
+  // Outside withService, so a supervisor that cannot even be looked up still leaves the
+  // user knowing how to reach the review UI.
+  const serve =
+    opts.pinnedRoot === undefined ? SERVE_COMMAND : `${opts.pinnedRoot}/bin/caret serve`;
+  ui.info(
+    `caret will not keep the review UI running${removed ? " — its service was removed" : ""}. Run \`${serve}\` in a terminal to keep it up at ${opts.reviewUrl} until you stop it with Ctrl+C; without it, caret still starts when your agent submits a plan.`,
+  );
 }
