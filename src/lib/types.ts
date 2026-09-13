@@ -426,6 +426,11 @@ export interface HealthIdentity {
    * `true` resident, `false` resident-aware but idle-exiting, absent means the
    * daemon predates the concept. */
   resident?: boolean;
+  /** True when a supervisor manages the daemon's lifetime (CARET_SUPERVISED=1): the
+   * service `caret install` registers, or the dev task. A hook cycles that service
+   * rather than retiring its daemon; `caret serve` is resident without it. Absent means
+   * the peer predates the field, and `resident` stands in. */
+  supervised?: boolean;
   /** The active adapter's id — "claude" | "opencode" | "codex" — the "source"
    * the UI adapts to (EXC-791): e.g. an OpenCode session, whose single approve
    * variant renders a plain button rather than a split-button. Optional: a

@@ -23,8 +23,8 @@ import { runPrewarm } from "@/commands/prewarm.ts";
 import { runReconcileSubcommand } from "@/commands/reconcile.ts";
 import { runRedactSubcommand } from "@/commands/redact.ts";
 import { runReviewSubcommand } from "@/commands/review.ts";
+import { runServe } from "@/commands/serve.ts";
 import { prodService } from "@/commands/service-target.ts";
-import { VANITY_HOST } from "@/config/constants.ts";
 import { logFile } from "@/config/paths.ts";
 import { VERSION } from "@/lib/build-id.ts";
 import { logError } from "@/lib/log.ts";
@@ -50,12 +50,7 @@ function buildProgram(): Command {
   program
     .command("serve")
     .description("keep the review UI up in this terminal until Ctrl+C")
-    .action(async () => {
-      const port = await runDaemon({ ephemeral: false, resident: true });
-      process.stdout.write(
-        `caret is serving the review UI at http://${VANITY_HOST}:${port} — Ctrl+C stops it.\n`,
-      );
-    });
+    .action(() => runServe());
 
   program
     .command("prewarm")

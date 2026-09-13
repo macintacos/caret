@@ -63,6 +63,7 @@ import { searchFiles } from "@/plan/file-search.ts";
 import { createDecisions } from "@/review/decisions.ts";
 import type { Store } from "@/review/store.ts";
 import { routeIncomingPlan } from "@/review/threading.ts";
+import { isSupervised } from "@/service/manager.ts";
 import type { UiAssets } from "@/ui/assets.ts";
 import { MAX_BODY_BYTES, parseUiLogBatch } from "@/ui/log-bridge.ts";
 
@@ -390,9 +391,9 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // GET /api/health — the daemon's identity signature.
   function handleHealth(): Response {
     // Undefined fields are dropped from the JSON, so a daemon missing any reports
-    // the bare {service, version}. `isDev` (EXC-556) and `resident` (EXC-1164) are
-    // the exceptions: both are always booleans, so an absent field means the peer
-    // predates them rather than that this daemon had nothing to say.
+    // the bare {service, version}. `isDev` (EXC-556), `resident` (EXC-1164) and
+    // `supervised` (EXC-1251) are the exceptions: always booleans, so an absent field
+    // means the peer predates them rather than that this daemon had nothing to say.
     const body: HealthIdentity = {
       ...IDENTITY,
       build: buildId,
@@ -401,6 +402,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       instanceId,
       isDev: !isCompiledBinary(),
       resident,
+      supervised: isSupervised(),
       // Only the dev --fresh boot sets CARET_FRESH; production omits the field
       // entirely so the wire stays byte-identical there (EXC-781).
       ...(process.env.CARET_FRESH === "1" ? { fresh: true } : {}),

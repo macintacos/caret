@@ -1,5 +1,6 @@
-// A ServiceManager that records what it was asked to do, for the suites that drive a
-// supervisor without touching the machine's own launchd or systemd.
+// A ServiceManager that records what it was asked to do, and a ServiceTarget over it, for
+// the suites that drive a supervisor without touching the machine's own launchd or systemd.
+import type { ServiceTarget } from "@/commands/service-target.ts";
 import type { ServiceConfig, ServiceManager, ServiceStatus } from "@/service/manager.ts";
 
 export function fakeServiceManager(
@@ -45,4 +46,17 @@ export function fakeServiceManager(
     },
   };
   return { manager, calls, statusReads: () => statusReads, installedConfig: () => installedConfig };
+}
+
+/** A ServiceTarget over fakeServiceManager, wearing systemd's surfaces, with the fake's
+ * recorders beside it — for the suites that drive the install steps. */
+export function fakeServiceTarget(over: Parameters<typeof fakeServiceManager>[0] = {}) {
+  const fake = fakeServiceManager(over);
+  const target = (): ServiceTarget => ({
+    manager: fake.manager,
+    label: "caret.service",
+    visibleIn: "`systemctl --user`",
+    optOutSurface: "`systemctl --user`",
+  });
+  return { ...fake, target };
 }

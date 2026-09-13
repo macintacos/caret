@@ -1,5 +1,5 @@
-// The install steps that decide whether this machine is resident: reconcileService acts on
-// the install's service choice against what the supervisor actually holds,
+// The install steps that decide whether this machine is resident: reconcileService acts
+// on the install's service choice against what the supervisor actually holds,
 // uninstallService tears both down, and neither fails an install over a service that
 // would not register.
 
@@ -9,30 +9,15 @@ import { dirname } from "node:path";
 
 import { setupTempConfigFile, setupTempStateDir } from "@test/support/env.ts";
 import { expectCleanExitCode } from "@test/support/exit-code.ts";
-import { fakeServiceManager } from "@test/support/service-manager.ts";
+import { fakeServiceTarget } from "@test/support/service-manager.ts";
 import type { LauncherDeps } from "@/commands/install/launcher.ts";
 import { reconcileService, uninstallService } from "@/commands/install/service.ts";
 import { recordingUI } from "@/commands/install/ui.ts";
-import type { ServiceTarget } from "@/commands/service-target.ts";
 import { VANITY_HOST } from "@/config/constants.ts";
 import { launcherPath, launcherRecordDir } from "@/config/paths.ts";
-import type { ServiceStatus } from "@/service/manager.ts";
 
 // Each test starts from a config nobody has written, so an absent key means default.
 setupTempConfigFile(setupTempStateDir("caret-install-service-"));
-
-/** A recording supervisor reporting whatever status the case describes, and the target
- * that installs under it. */
-function recordingService(status: Partial<ServiceStatus> = {}) {
-  const fake = fakeServiceManager({ status });
-  const target = (): ServiceTarget => ({
-    manager: fake.manager,
-    label: "caret.service",
-    visibleIn: "`systemctl --user`",
-    optOutSurface: "`systemctl --user`",
-  });
-  return { ...fake, target };
-}
 
 /** A plain install: the service kept running, nothing to refresh, nothing to preview. */
 const RECONCILE = { dryRun: false, refresh: false, choice: "always-on" } as const;
@@ -55,7 +40,7 @@ function recordingLauncher(calls: string[]): (deps: LauncherDeps) => { unpinned:
 const stubLauncher = () => ({ unpinned: false });
 
 test("a plain install registers the unit, naming the launcher the unit runs", async () => {
-  const service = recordingService();
+  const service = fakeServiceTarget();
   const calls: string[] = [];
 
   await reconcileService(
@@ -79,7 +64,7 @@ test("the install says where the review UI now lives, with no dangling caveat", 
 
   await reconcileService(
     RECONCILE,
-    { service: recordingService().target, installLauncher: stubLauncher },
+    { service: fakeServiceTarget().target, installLauncher: stubLauncher },
     ui,
   );
 
@@ -89,7 +74,7 @@ test("the install says where the review UI now lives, with no dangling caveat", 
 });
 
 test("--refresh cycles the service so the new build is the one serving", async () => {
-  const service = recordingService({ installed: true, running: true });
+  const service = fakeServiceTarget({ status: { installed: true, running: true } });
 
   await reconcileService(
     { ...RECONCILE, refresh: true },
@@ -101,7 +86,7 @@ test("--refresh cycles the service so the new build is the one serving", async (
 });
 
 test("--from-local pins the launcher to the checkout and cycles the service onto it", async () => {
-  const service = recordingService({ installed: true, running: true });
+  const service = fakeServiceTarget({ status: { installed: true, running: true } });
   let pinnedRoot: string | undefined;
 
   await reconcileService(
@@ -121,7 +106,7 @@ test("--from-local pins the launcher to the checkout and cycles the service onto
 });
 
 test("a published install clears a pin and cycles off the checkout", async () => {
-  const service = recordingService({ installed: true, running: true });
+  const service = fakeServiceTarget({ status: { installed: true, running: true } });
 
   await reconcileService(
     RECONCILE,
@@ -133,7 +118,7 @@ test("a published install clears a pin and cycles off the checkout", async () =>
 });
 
 test("a host that cannot run the service is reported, not installed onto", async () => {
-  const service = recordingService({ unsupported: "systemd is not running" });
+  const service = fakeServiceTarget({ status: { unsupported: "systemd is not running" } });
   const ui = recordingUI();
 
   await expectCleanExitCode(() =>
@@ -145,7 +130,7 @@ test("a host that cannot run the service is reported, not installed onto", async
 });
 
 test("a service the user turned off themselves is never re-enabled", async () => {
-  const service = recordingService({ installed: true, disabled: true });
+  const service = fakeServiceTarget({ status: { installed: true, disabled: true } });
 
   await reconcileService(
     RECONCILE,
@@ -157,7 +142,7 @@ test("a service the user turned off themselves is never re-enabled", async () =>
 });
 
 test("--dry-run installs no launcher and registers no unit", async () => {
-  const service = recordingService({ installed: true });
+  const service = fakeServiceTarget({ status: { installed: true } });
   const calls: string[] = [];
 
   await reconcileService(
@@ -171,7 +156,7 @@ test("--dry-run installs no launcher and registers no unit", async () => {
 });
 
 test("--uninstall tears the service down and takes the launcher with it", async () => {
-  const service = recordingService({ installed: true, running: true });
+  const service = fakeServiceTarget({ status: { installed: true, running: true } });
   mkdirSync(dirname(launcherPath()), { recursive: true });
   mkdirSync(launcherRecordDir(), { recursive: true });
 
@@ -187,7 +172,7 @@ test("--uninstall tears the service down and takes the launcher with it", async 
 });
 
 test("--uninstall --dry-run leaves the service and the launcher where they are", async () => {
-  const service = recordingService({ installed: true, running: true });
+  const service = fakeServiceTarget({ status: { installed: true, running: true } });
   writeLauncher();
 
   await uninstallService(
@@ -201,7 +186,7 @@ test("--uninstall --dry-run leaves the service and the launcher where they are",
 });
 
 test("running caret yourself removes a registered service and its launcher", async () => {
-  const service = recordingService({ installed: true, running: true });
+  const service = fakeServiceTarget({ status: { installed: true, running: true } });
   writeLauncher();
 
   await reconcileService(
@@ -214,12 +199,44 @@ test("running caret yourself removes a registered service and its launcher", asy
   expect(existsSync(launcherPath())).toBe(false);
 });
 
+test("running caret yourself clears the unit and launcher even when none is loaded", async () => {
+  // On macOS `installed` is loadedness, and the launcher's terminal exit boots the agent
+  // out while leaving the plist to load at the next login.
+  const service = fakeServiceTarget();
+  writeLauncher();
+  const ui = recordingUI();
+
+  await reconcileService(
+    { ...RECONCILE, choice: "run-yourself" },
+    { service: service.target, installLauncher: stubLauncher },
+    ui,
+  );
+
+  expect(service.calls).toEqual(["uninstall"]);
+  expect(existsSync(launcherPath())).toBe(false);
+  expect(ui.events.find((e) => e.includes("caret@latest serve"))).not.toContain("was removed");
+});
+
+test("running caret yourself on a host that cannot run the service removes nothing", async () => {
+  const service = fakeServiceTarget({ status: { unsupported: "systemd is not running" } });
+  const ui = recordingUI();
+
+  await reconcileService(
+    { ...RECONCILE, choice: "run-yourself" },
+    { service: service.target, installLauncher: stubLauncher },
+    ui,
+  );
+
+  expect(service.calls).toEqual([]);
+  expect(ui.events.some((e) => e.includes("caret@latest serve"))).toBe(true);
+});
+
 test("running caret yourself says how to serve the review UI by hand", async () => {
   const ui = recordingUI();
 
   await reconcileService(
     { ...RECONCILE, choice: "run-yourself" },
-    { service: recordingService().target, installLauncher: stubLauncher },
+    { service: fakeServiceTarget().target, installLauncher: stubLauncher },
     ui,
   );
 
@@ -233,7 +250,7 @@ test("running a local build yourself names that checkout's caret serve", async (
 
   await reconcileService(
     { ...RECONCILE, choice: "run-yourself", pinnedRoot: "/checkout" },
-    { service: recordingService().target, installLauncher: stubLauncher },
+    { service: fakeServiceTarget().target, installLauncher: stubLauncher },
     ui,
   );
 
@@ -257,22 +274,24 @@ test("the serve instructions still print when the supervisor cannot be looked up
   expect(ui.events.some((e) => e.includes("caret@latest serve"))).toBe(true);
 });
 
-test("running caret yourself under --dry-run removes nothing", async () => {
-  const service = recordingService({ installed: true, running: true });
+test("running caret yourself under --dry-run previews the removal without performing it", async () => {
+  const service = fakeServiceTarget({ status: { installed: true, running: true } });
   writeLauncher();
+  const ui = recordingUI();
 
   await reconcileService(
     { ...RECONCILE, dryRun: true, choice: "run-yourself" },
     { service: service.target, installLauncher: stubLauncher },
-    recordingUI(),
+    ui,
   );
 
   expect(service.calls).toEqual([]);
   expect(existsSync(launcherPath())).toBe(true);
+  expect(ui.events.some((e) => e.includes("Would remove the caret service"))).toBe(true);
 });
 
 test("an install nobody was asked about registers no service where there is none", async () => {
-  const service = recordingService();
+  const service = fakeServiceTarget();
   const calls: string[] = [];
 
   await reconcileService(
@@ -286,7 +305,7 @@ test("an install nobody was asked about registers no service where there is none
 });
 
 test("an install nobody was asked about refreshes a service already registered", async () => {
-  const service = recordingService({ installed: true, running: true });
+  const service = fakeServiceTarget({ status: { installed: true, running: true } });
 
   await reconcileService(
     { ...RECONCILE, choice: "as-found" },
@@ -298,7 +317,7 @@ test("an install nobody was asked about refreshes a service already registered",
 });
 
 test("a supervisor that refuses the unit warns and leaves the install standing", async () => {
-  const service = recordingService();
+  const service = fakeServiceTarget();
   service.manager.install = () => Promise.reject(new Error("bootstrap failed"));
   const ui = recordingUI();
 
@@ -336,7 +355,7 @@ test("the announcement names where the service shows up outside caret", async ()
     RECONCILE,
     {
       service: () => ({
-        ...recordingService().target(),
+        ...fakeServiceTarget().target(),
         visibleIn: "System Settings › Login Items",
       }),
       installLauncher: stubLauncher,
@@ -354,7 +373,7 @@ test("the announcement carries the caveat for a switch caret cannot read", async
     RECONCILE,
     {
       service: () => ({
-        ...recordingService().target(),
+        ...fakeServiceTarget().target(),
         visibleToggleCaveat: "That switch is not one caret can read.",
       }),
       installLauncher: stubLauncher,
@@ -372,7 +391,7 @@ test("the message that leaves an opted-out service alone names what turned it of
     RECONCILE,
     {
       service: () => ({
-        ...recordingService({ installed: true, disabled: true }).target(),
+        ...fakeServiceTarget({ status: { installed: true, disabled: true } }).target(),
         visibleIn: "System Settings › Login Items",
         optOutSurface: "`launchctl disable`",
       }),

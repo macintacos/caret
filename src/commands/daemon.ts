@@ -113,7 +113,6 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
       (err) => log.error("update", err),
     );
   }
-  const { resident } = opts;
   const store = createStore(reviewsDir(), log);
   await store.rehydrate();
   const assets = await loadUiAssets();
@@ -122,7 +121,7 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
   // the configured one. A process flag, not a setting — the dev task owns the
   // daemon and discovers the bound port from the lock, so port resolution for
   // hooks (getPort) is untouched.
-  const ephemeral = opts.ephemeral;
+  const { ephemeral, resident } = opts;
 
   // Signal cleanup goes up BEFORE the bind, because until a handler exists
   // SIGTERM and SIGINT take their DEFAULT disposition: the kernel kills the

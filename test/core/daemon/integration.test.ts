@@ -50,6 +50,13 @@ function daemonLog(stateHome: string): string {
   return join(stateHome, "caret", "logs", "daemon.log");
 }
 
+/** A config path the daemon finds absent, so it boots from defaults rather than the
+ * developer's own config.toml — whose [logging] level could hide the records a test
+ * reads from daemon.log. */
+function noConfig(stateHome: string): string {
+  return join(stateHome, "none.toml");
+}
+
 // In-process health/discovery probe servers (a bare createServer + fixed-path
 // store, distinct from bootDaemon's full boot+client). Stopped after each test.
 const servers: Array<{ stop(): void }> = [];
@@ -245,10 +252,14 @@ test("a daemon started with CARET_FRESH=1 reports fresh in /api/health", async (
 
 // EXC-1253: the entry points, createServer and the upkeep gates are each unit-tested
 // alone; only a real daemon shows runDaemon wires them together, and that
-// /api/diagnostics reports exactly what it armed. Stops the daemon to read the upkeep
-// record: it lands in the bind's synchronous tail, which SIGTERM cannot preempt, so
-// after exit a missing record means none was armed.
-async function residencyOf(proc: ReturnType<typeof Bun.spawn>, port: number, stateHome: string) {
+// /api/diagnostics reports exactly what it armed.
+/** The upkeep record lands in the bind's synchronous tail, which SIGTERM cannot preempt,
+ * so after exit a missing record means none was armed. */
+async function stopAndReadResidency(
+  proc: ReturnType<typeof Bun.spawn>,
+  port: number,
+  stateHome: string,
+) {
   const h = (await (await fetch(`http://127.0.0.1:${port}/api/health`)).json()) as {
     resident?: boolean;
   };
@@ -264,9 +275,12 @@ async function residencyOf(proc: ReturnType<typeof Bun.spawn>, port: number, sta
 
 async function bootForResidency(env: Record<string, string>) {
   const stateHome = await mkdtemp(join(tmpdir(), "caret-residency-"));
-  const { proc, lock } = await spawnEphemeralDaemon(stateHome, env);
+  const { proc, lock } = await spawnEphemeralDaemon(stateHome, {
+    CARET_CONFIG_FILE: noConfig(stateHome),
+    ...env,
+  });
   try {
-    return await residencyOf(proc, lock.port, stateHome);
+    return await stopAndReadResidency(proc, lock.port, stateHome);
   } finally {
     proc.kill("SIGKILL");
     await proc.exited;
@@ -292,24 +306,22 @@ test("an unsupervised daemon is not resident and arms no upkeep", async () => {
 test("caret serve stays up without a supervisor and prints where it serves", async () => {
   const stateHome = await mkdtemp(join(tmpdir(), "caret-serve-"));
   const port = freePort();
-  const proc = Bun.spawn([process.execPath, "src/cli.ts", "serve"], {
-    env: {
-      ...process.env,
-      XDG_STATE_HOME: stateHome,
-      CARET_PORT: String(port),
-      CARET_SUPERVISED: "",
-    },
-    stdio: ["ignore", "pipe", "ignore"],
-  });
+  const proc = spawnCaretDaemon(
+    stateHome,
+    { CARET_PORT: String(port), CARET_SUPERVISED: "", CARET_CONFIG_FILE: noConfig(stateHome) },
+    { command: "serve", pipeStdout: true },
+  );
   try {
     await untilLockWritten(proc, join(stateHome, "caret", "daemon.lock"));
     // No supervisor restarts it and nothing writes its stderr to a log, so there is no
     // stderr-rotate.
-    expect(await residencyOf(proc, port, stateHome)).toEqual({
+    expect(await stopAndReadResidency(proc, port, stateHome)).toEqual({
       resident: true,
       upkeep: ["update-check", "review-sweep"],
     });
-    expect(await new Response(proc.stdout).text()).toContain(`http://${VANITY_HOST}:${port}`);
+    expect(await new Response(proc.stdout as ReadableStream).text()).toContain(
+      `http://${VANITY_HOST}:${port}`,
+    );
   } finally {
     proc.kill("SIGKILL");
     await proc.exited;

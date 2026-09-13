@@ -278,10 +278,10 @@ Two commands turn caret off, and they turn off different amounts of it:
 
 | Command | What it does |
 | --- | --- |
-| `caret install`, choosing to run caret yourself | Stops caret being resident: the review UI is no longer up from login onward. Your agent still reaches caret, and caret starts on demand. |
+| `caret install`, answering **I'll run it myself** | Stops caret being resident: the review UI is no longer up from login onward. Your agent still reaches caret, and caret starts on demand. |
 | `caret install --uninstall` | Removes caret from every agent, and from this machine. |
 
-Choosing to run caret yourself removes the service, and the install prints how to bring
+Answering **I'll run it myself** removes the service, and the install prints how to bring
 the review UI up by hand: `caret serve` keeps it up until you stop it with Ctrl+C (see
 [Running caret yourself](../README.md#running-caret-yourself)). The choice isn't saved
 anywhere. A later `caret install` at a terminal asks again. One off a terminal can't ask,
@@ -292,7 +292,7 @@ registers none where there isn't one.
 > On macOS caret also appears under **System Settings › Login Items**, but that switch is
 > neither of these. caret cannot read it, so a later `caret install` that keeps the review
 > UI running registers the service again and reports success while the switch still reads
-> off. Run `caret install` and choose to run caret yourself, or use `--uninstall`,
+> off. Run `caret install` and answer **I'll run it myself**, or use `--uninstall`,
 > instead.
 
 ## Logging & Debugging

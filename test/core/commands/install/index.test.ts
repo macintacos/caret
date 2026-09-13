@@ -7,12 +7,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { withEnv } from "@test/support/env.ts";
-import { fakeServiceManager } from "@test/support/service-manager.ts";
+import { fakeServiceTarget } from "@test/support/service-manager.ts";
 import { installExitCode, runInstallSubcommand } from "@/commands/install/index.ts";
 import { INSTALL_TARGET_IDS, type InstallTarget } from "@/commands/install/targets.ts";
 import { recordingUI, silentUI } from "@/commands/install/ui.ts";
 import { RUMDL_VERSION } from "@/plan/rumdl.ts";
-import type { ServiceStatus } from "@/service/manager.ts";
 
 /** Keep a test off the real rumdl download: without this seam the command falls through
  * to the production acquisition, which reaches the network and writes to the state dir. */
@@ -68,17 +67,6 @@ function fromLocalPrewarmDeps(ui: ReturnType<typeof recordingUI>, prewarm: () =>
     ensureRumdl: noRumdl,
     prewarm,
   };
-}
-
-/** A service target over a fake supervisor reporting `status` — by default one that
- * already holds caret's unit — recording its verbs into `calls`. */
-function serviceTarget(calls: string[], status: Partial<ServiceStatus> = { installed: true }) {
-  return () => ({
-    label: "caret.service",
-    visibleIn: "`systemctl --user`",
-    optOutSurface: "`systemctl --user`",
-    manager: fakeServiceManager({ calls, status }).manager,
-  });
 }
 
 /** A chooser prompt that always cancels, recording whether it was ever invoked — the
@@ -218,6 +206,7 @@ test("--uninstall removes caret from every agent in the registry, without asking
       detect: () => ["claude"],
       isInteractive: () => true,
       prompt: chooser.prompt,
+      promptService: chooser.prompt,
       ui: silentUI,
       runOpencode: (o) => void calls.push(`opencode:${o.uninstall}`),
       runClaude: (o) => void calls.push(`claude:${o.uninstall}`),
@@ -237,7 +226,7 @@ test("the service is registered after the targets, so a refresh cycles the new b
   const calls: string[] = [];
   await runInstallSubcommand(PLAIN_INSTALL, {
     ...claudeThenRumdlDeps(calls),
-    service: serviceTarget(calls),
+    service: fakeServiceTarget({ calls, status: { installed: true } }).target,
     installLauncher: () => ({ unpinned: false }),
   });
   expect(calls).toEqual(["claude", "rumdl", "install"]);
@@ -257,7 +246,7 @@ test("on a TTY, the service question follows the targets and its answer reaches 
       return "always-on";
     },
     // Nothing registered, so only the always-on answer installs one.
-    service: serviceTarget(calls, {}),
+    service: fakeServiceTarget({ calls }).target,
     installLauncher: () => ({ unpinned: false }),
   });
   expect(calls).toEqual(["targets", "service", "claude", "rumdl", "install"]);
@@ -270,7 +259,7 @@ test("a cancelled service question installs nothing", async () => {
     isInteractive: () => true,
     prompt: async () => ["claude"],
     promptService: async () => null,
-    service: serviceTarget(calls),
+    service: fakeServiceTarget({ calls }).target,
   });
   expect(outcome).toBe("ok");
   expect(calls).toEqual([]);
@@ -438,7 +427,7 @@ test("--from-local hands the checkout to the service step as its pinned root", a
       { uninstall: false, dryRun: false, fromLocal: true },
       {
         ...fromLocalPrewarmDeps(recordingUI(), async () => {}),
-        service: serviceTarget([]),
+        service: fakeServiceTarget({ status: { installed: true } }).target,
         installLauncher: (deps) => {
           pinnedRoot = deps.pinnedRoot;
           return { unpinned: false };

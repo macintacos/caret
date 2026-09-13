@@ -75,7 +75,7 @@ function noConfig(dir: string): string {
 /** Boot world A the way a supervisor runs caret, and record the launcher `service` record
  * its install would have written — which makes A the world that owns the supervisor. */
 async function bootResident(stateHome: string) {
-  // Pinned so the developer's own config.toml cannot decide residency.
+  // Pinned so the developer's own config.toml stays out of this daemon.
   const configFile = join(stateHome, "config.toml");
   writeFileSync(configFile, "");
   const { proc, lock } = await spawnEphemeralDaemon(stateHome, {

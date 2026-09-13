@@ -576,13 +576,15 @@ test("attach mode attaches to a resident peer without cycling its service", asyn
   expect(calls).toEqual([]);
 });
 
-// Only a peer that says it is resident is the supervised one. Anything else holding the
-// port — a build that predates residency, or a hook's idle-exiting fallback — is retired,
+// Only a peer that says it is supervised is the service's daemon; `resident` stands in
+// for one predating the field. Anything else holding the port — a build that predates
+// residency, a hook's idle-exiting fallback, a foreground `caret serve` — is retired,
 // and the port is left to the supervisor, which is already restarting on its throttle.
 // Cycling the service would not free a port someone else holds.
 test.each<[string, Partial<HealthBody>]>([
   ["a peer that predates residency", { resident: undefined }],
   ["an idle-exiting peer", { resident: false }],
+  ["a resident peer no supervisor manages", { supervised: false }],
 ])("%s is retired and the port left to the supervised daemon", async (_title, over) => {
   const { calls, manager: service } = supervisor();
   let retires = 0;

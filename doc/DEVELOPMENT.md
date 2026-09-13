@@ -360,13 +360,14 @@ which:
    closing prewarm, which takes the daemon over on the fresh build, is the whole hand-off.
 
 `--from-local` is not a reduced install — it takes the same path a user's install takes,
-residency included: a caret login item serving `caret.localhost:42718` from login onward.
-It serves this checkout even when a higher-versioned release is installed, because
-`--from-local` records the checkout in the launcher's `pinned-root` file. A plain
-`caret install` clears that pin and cycles back to the highest-versioned installed caret —
-unless the service is turned off, which leaves the pin until an install after it is back
-on — and `--uninstall` removes the pin. While the pin holds, a review never cycles the
-daemon, so a rebuild reaches the login item only through `--install`.
+residency included: answer **Keep it running** and a caret login item serves
+`caret.localhost:42718` from login onward. It serves this checkout even when a
+higher-versioned release is installed, because `--from-local` records the checkout in the
+launcher's `pinned-root` file. A plain `caret install` clears that pin and cycles back to
+the highest-versioned installed caret — unless the service is turned off, which leaves the
+pin until an install after it is back on — and `--uninstall` removes the pin. While the
+pin holds, a review never cycles the daemon, so a rebuild reaches the login item only
+through `--install`.
 
 Re-running `--install` reuses the agent already registered rather than re-registering it,
 so macOS stops posting its "Background Items Added" notice on every rebuild; the new build

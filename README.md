@@ -87,9 +87,10 @@ bunx --no-cache @macintacos/caret@latest install --uninstall  # remove
 ```
 
 An update picks its agents exactly as a fresh install does — the chooser at a terminal,
-detection otherwise; an uninstall takes every agent. Restarting each agent applies an
-update. In OpenCode, caret toasts you at startup when a newer release is out; a plain
-`install` at a terminal runs its own check against npm and asks before taking it.
+detection otherwise — and at a terminal asks the review-UI question again; an uninstall
+takes every agent. Restarting each agent applies an update. In OpenCode, caret toasts you
+at startup when a newer release is out; a plain `install` at a terminal runs its own check
+against npm and asks before taking it.
 
 caret's daemon runs the same check for itself, at most once a day. The call is
 unauthenticated and sends nothing about you — just a request to npm or GitHub, depending

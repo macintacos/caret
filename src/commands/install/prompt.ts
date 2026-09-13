@@ -1,8 +1,8 @@
 // The questions `caret install` asks, and the copy that describes what they are about:
 // the agent chooser, whether caret keeps the review UI running, and the confirm a stale
-// OpenCode raises. The verdict lines live
-// here too, beside the question they turn into, so the prompt, the check's settled line,
-// and the non-interactive nudge all describe a version gap the same way.
+// OpenCode raises. The verdict lines live here too, beside the question they turn into,
+// so the prompt, the check's settled line, and the non-interactive nudge all describe a
+// version gap the same way.
 //
 // @clack/prompts is loaded through a dynamic import so only these paths pay for it —
 // src/cli.ts is the review hook's entrypoint on every plan, and install is the one
@@ -38,7 +38,8 @@ export async function promptForTargets(detected: InstallTarget[]): Promise<Insta
   return isCancel(chosen) ? null : chosen;
 }
 
-type AskedServiceChoice = Exclude<ServiceChoice, "as-found">;
+/** What the service question can answer: everything but leaving the machine as found. */
+export type AskedServiceChoice = Exclude<ServiceChoice, "as-found">;
 
 /** Ask whether caret keeps the review UI running or the user runs it themselves. Returns
  * the answer, or null when the user cancels (Ctrl-C / Esc) — the caller then does nothing. */
@@ -48,7 +49,7 @@ export async function promptForServiceChoice(): Promise<AskedServiceChoice | nul
     message: "Keep caret's review UI running all the time?",
     options: [
       { value: "always-on", label: "Keep it running", hint: "recommended — starts at login" },
-      { value: "run-yourself", label: "I'll run it myself", hint: "with `caret serve`" },
+      { value: "run-yourself", label: "I'll run it myself", hint: "with caret serve" },
     ],
   });
   return isCancel(choice) ? null : choice;

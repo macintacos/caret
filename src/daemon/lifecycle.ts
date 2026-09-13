@@ -172,10 +172,11 @@ export async function ensureDaemon(
       if (mode !== "takeover" || windowSpent) return deps.baseUrl;
       // Retiring a supervised daemon only races the supervisor's restart. Cycle the
       // service instead: the launcher resolves caret at exec time, so the restart is
-      // the upgrade. Only a peer reporting `resident: true` is the supervised one;
-      // anything else on the port — a build that predates residency, a hook's
-      // idle-exiting fallback — is retired below, since a cycle cannot free it.
-      if (deps.service && h.resident === true) {
+      // the upgrade. Only a peer reporting `supervised: true` is the service's daemon
+      // (`resident` stands in for a peer predating the field); anything else on the
+      // port — a build that predates residency, a hook's idle-exiting fallback, a
+      // foreground `caret serve` — is retired below, since a cycle cannot free it.
+      if (deps.service && (h.supervised ?? h.resident) === true) {
         // The launcher execs the pinned root, else the highest installed caret, so a cycle brings
         // back the build already chosen. A rebuilt pin reaches the service through `--from-local`.
         if (deps.pinned || isNewer(h.version ?? "", deps.currentVersion)) return deps.baseUrl;
