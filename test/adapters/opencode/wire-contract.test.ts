@@ -20,6 +20,10 @@ import type { Decision } from "@/lib/types.ts";
 
 const FIXTURE = join(import.meta.dir, "fixtures", "review-request-stdin.json");
 const stdin = readFileSync(FIXTURE, "utf-8");
+const pathStdin = readFileSync(
+  join(import.meta.dir, "fixtures", "review-request-path-stdin.json"),
+  "utf-8",
+);
 
 setupTempStateDir("caret-opencode-wire-contract-");
 
@@ -48,5 +52,21 @@ test("an approve variant over the fixture emits a plain allow (no escalation in 
 test("a deny over the fixture carries the reviewer feedback", async () => {
   expect(
     await emitWire({ behavior: "deny", feedback: "narrow step 2 to one route", decidedAt: 1 }),
+  ).toEqual({ behavior: "deny", feedback: "narrow step 2 to one route" });
+});
+
+test("a plan-file envelope parses to a PlanInput carrying the file's path", () => {
+  expect(opencodeAdapter.parseHookInput(pathStdin).planFilePath).toBe(
+    "/Users/dev/projects/gadget/plans/status-endpoint.md",
+  );
+});
+
+test("a deny over a plan-file envelope emits the same flat wire", async () => {
+  expect(
+    await emitWireVia(
+      pathStdin,
+      { behavior: "deny", feedback: "narrow step 2 to one route", decidedAt: 1 },
+      opencodeAdapter,
+    ),
   ).toEqual({ behavior: "deny", feedback: "narrow step 2 to one route" });
 });

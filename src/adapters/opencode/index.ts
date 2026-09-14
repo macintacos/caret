@@ -21,12 +21,13 @@ import type { Decision, PlanInput, SkillRef } from "@/lib/types.ts";
  * Mirrors the snake_case session/cwd convention the Claude/Codex parsers use so the
  * three stay structurally parallel; the plugin builds this shape directly from its
  * tool args. Every field is optional — a payload missing any of them still parses
- * to a PlanInput, and the downstream guards handle the gaps. OpenCode has no
- * on-disk plan file to rewrite, so there is no planFilePath. */
+ * to a PlanInput, and the downstream guards handle the gaps. planFilePath is set
+ * only when the agent submitted a plan file rather than inline text; caret then
+ * rewrites that file with the canonical plan. */
 interface HookStdin {
   session_id?: string;
   cwd?: string;
-  tool_input?: { plan?: string; title?: string };
+  tool_input?: { plan?: string; title?: string; planFilePath?: string };
 }
 
 export const opencodeAdapter: AgentAdapter = {
@@ -40,6 +41,7 @@ export const opencodeAdapter: AgentAdapter = {
       cwd: hook.cwd,
       plan: hook.tool_input?.plan,
       title: hook.tool_input?.title,
+      planFilePath: hook.tool_input?.planFilePath,
     };
   },
 
