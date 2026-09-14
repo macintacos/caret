@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
-// caret hook CLI. Subcommands: daemon | serve | prewarm | review | reconcile | redact |
-// discovery | install.
+// caret hook CLI. Subcommands: daemon | serve | prewarm | review | mcp | reconcile |
+// redact | discovery | install.
 //
 // This file is only the composition point: it assembles the Commander tree and
 // threads each subcommand's parsed options into its run function (the actions in
@@ -31,12 +31,12 @@ import { logError } from "@/lib/log.ts";
 import { createProgram, runProgram } from "@/lib/program.ts";
 import { isSupervised } from "@/service/manager.ts";
 
-// The CLI command tree (EXC-472). The daemon self-spawn vector (daemonCommand)
+// The CLI command tree (EXC-472). The daemon self-spawn vector (selfCommand)
 // and runReviewSubcommand's fail-safe are independent of this layer.
 function buildProgram(): Command {
   const program = createProgram(
     "caret",
-    "caret hook CLI: daemon | serve | prewarm | review | reconcile | redact | discovery | install",
+    "caret hook CLI: daemon | serve | prewarm | review | mcp | reconcile | redact | discovery | install",
   ).version(VERSION);
 
   program
@@ -61,6 +61,11 @@ function buildProgram(): Command {
     .command("review")
     .description("review a plan from stdin (ExitPlanMode hook)")
     .action(() => runReviewSubcommand());
+
+  program
+    .command("mcp")
+    .description("serve caret's plan-review tool over MCP stdio (Claude Code plugin)")
+    .action(async () => (await import("@/commands/mcp.ts")).runMcpSubcommand());
 
   program
     .command("reconcile")

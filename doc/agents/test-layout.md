@@ -22,7 +22,10 @@ from the mapping rule; prefer the mapping.
   `src/adapters/<tool>/` module it exercises: the adapter contract, decision emission,
   approve-variant mapping, the install probe, and any back-compat fixtures. Anything that
   names a tool's wire shape or mode vocabulary lives here. A new agent adapter gets its
-  own directory; it never edits `test/core/`.
+  own directory; it never edits `test/core/`. A `src/commands/` module that exists for one
+  agent (e.g. `src/commands/mcp.ts`, Claude Code's MCP server) is tested here too, not
+  under `test/core/commands/`: its suite carries that agent's vocabulary, and the boundary
+  rule wins over the mapping rule.
 - **`test/opencode/`** — coverage for the repo-root `opencode/` program, the package
   entrypoint OpenCode loads. It mirrors `opencode/`, not `src/`, which is why it sits
   outside the core/adapter split — the OpenCode *adapter* is tested under

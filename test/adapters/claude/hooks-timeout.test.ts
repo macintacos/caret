@@ -7,7 +7,8 @@
 // greater than the review ceiling). They live in two files Claude Code's plugin
 // system keeps apart — `hooks/hooks.json` (the plugin's on-disk hook manifest)
 // and the review-timeout ceiling enforced by the settings schema — so this suite
-// reads BOTH and fails if either drifts.
+// reads BOTH and fails if either drifts. It also reads `.claude-plugin/plugin.json`,
+// whose MCP server request `timeout` is the same budget in milliseconds.
 //
 // The prewarm hook's budget is coupled the same way to ensureDaemon's deadline: a
 // prewarm killed while it still waits on the supervisor never reaches its fallback spawn.
@@ -28,6 +29,7 @@ import { DEFAULTS, loadSettings } from "@/config/settings.ts";
 
 // hooks/hooks.json sits at the repo root, two dirs up from src/, four up from here.
 const HOOKS_JSON = join(import.meta.dir, "../../../hooks/hooks.json");
+const PLUGIN_JSON = join(import.meta.dir, "../../../.claude-plugin/plugin.json");
 
 interface HookEntry {
   type: string;
@@ -66,6 +68,15 @@ test("hooks.json's PermissionRequest timeout is the named HOOK_TIMEOUT_S budget"
   // the settings ceiling is built from are the same single source.
   const review = { event: "PermissionRequest", matcher: "ExitPlanMode", command: "caret review" };
   expect(hookTimeout(file, review)).toBe(HOOK_TIMEOUT_S);
+});
+
+// The review_plan tool call waits out the same review, so its MCP request timeout is the
+// same budget, in milliseconds.
+test("plugin.json's caret MCP server timeout is the HOOK_TIMEOUT_S budget", async () => {
+  const manifest = JSON.parse(await Bun.file(PLUGIN_JSON).text()) as {
+    mcpServers?: { caret?: { timeout?: number } };
+  };
+  expect(manifest.mcpServers?.caret?.timeout).toBe(HOOK_TIMEOUT_S * 1000);
 });
 
 // Prewarm's deps are built under a throwaway state dir: no launcher record there, so no

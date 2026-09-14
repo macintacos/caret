@@ -30,7 +30,7 @@ test("IDENTITY names the caret service at the current version", () => {
 // ---- isCompiledBinary: the one dev-vs-compiled signal ----
 
 test("buildKind classifies the runtime off argv[1]'s extension", () => {
-  // The signal daemonCommand / currentBuildId / isCompiledBinary key off: a
+  // The signal selfCommand / currentBuildId / isCompiledBinary key off: a
   // `.ts` entry is `bun run` dev; a `.js` entry is the npm bundle (under bun);
   // anything else is the self-contained compiled binary.
   expect(buildKind("/some/path/src/cli.ts")).toBe("dev");

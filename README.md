@@ -130,9 +130,10 @@ prompt. There you:
   and re-present.
 
 > [!TIP]
-> **In OpenCode**, you don't have to wait to be intercepted: caret registers a
-> `caret_review_plan` tool your agent can call directly, so a skill of your own can route
-> its approval step through the same review UI. Claude Code has no equivalent — see
+> You don't have to wait to be intercepted: caret gives both agents a plan-review tool
+> they can call directly — `review_plan` in Claude Code (from the plugin's MCP server) and
+> `caret_review_plan` in OpenCode — so a skill of your own can route its plan through the
+> same review UI. The tool is for plans only; see
 > [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md#calling-the-review-tool-from-your-own-skill).
 
 ## Configuration

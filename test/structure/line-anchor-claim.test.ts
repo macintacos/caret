@@ -1,6 +1,6 @@
 // Standing gate for the line-anchor feedback claim (EXC-940). Three surfaces tell a
 // reader how line-anchored feedback resolves — the module header of ui/src/lib/feedback.ts,
-// `deniedMessage` in opencode/caret.plugin.ts, and doc/ARCHITECTURE.md's § Calling the
+// `deniedMessage` in opencode/review-bridge.ts, and doc/ARCHITECTURE.md's § Calling the
 // review tool from your own skill. EXC-939 found the causality inverted in two of them:
 // a wrong docstring had already propagated into a docs draft. It corrected the prose but
 // added no mechanism, so this suite is the mechanism.
@@ -37,7 +37,7 @@ const CLAIM =
 // From import.meta.dir, not cwd, so the suite reads the real tree wherever it runs.
 const REPO_ROOT = join(import.meta.dir, "..", "..");
 
-const SURFACES = ["ui/src/lib/feedback.ts", "opencode/caret.plugin.ts", "doc/ARCHITECTURE.md"];
+const SURFACES = ["ui/src/lib/feedback.ts", "opencode/review-bridge.ts", "doc/ARCHITECTURE.md"];
 
 /** The prose of a file with its markup and line breaks removed: drop leading line-comment,
  * block-comment, and blockquote markers, then collapse every whitespace run to one space.

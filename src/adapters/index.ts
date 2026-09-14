@@ -14,6 +14,10 @@ import { permissionRequestDenyLine } from "@/adapters/wire.ts";
  * Claude plugin packaging keeps working unchanged. */
 export const DEFAULT_AGENT = "claude";
 
+/** Set by `caret mcp` on the `caret review` child it spawns for Claude Code's review_plan
+ * tool. */
+export const CLAUDE_MCP_AGENT = "claude-mcp";
+
 /** Registered adapters keyed by tool id. */
 const REGISTRY: Record<string, AgentAdapter> = {
   claude: claudeAdapter,
@@ -27,6 +31,18 @@ const REGISTRY: Record<string, AgentAdapter> = {
   // daemon-side review pipeline is reused unchanged. Both ends of its wire are
   // caret-owned.
   opencode: opencodeAdapter,
+  // Set by caret's own MCP server, never by users. It speaks OpenCode's
+  // caret-owned envelope and flat allow/deny, because a tool result can't change
+  // Claude Code's permission mode — an accept-edits or auto choice is dropped. It
+  // keeps Claude's approve variants, skills and install probe, but `source` on
+  // /api/health reads claude-mcp when this path started the daemon (EXC-1338).
+  [CLAUDE_MCP_AGENT]: {
+    ...claudeAdapter,
+    id: CLAUDE_MCP_AGENT,
+    parseHookInput: opencodeAdapter.parseHookInput,
+    emitDecision: opencodeAdapter.emitDecision,
+    fatalDenyLine: opencodeAdapter.fatalDenyLine,
+  },
 };
 
 /** The registered tool ids, in registration order. */

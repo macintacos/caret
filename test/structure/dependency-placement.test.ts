@@ -31,7 +31,7 @@ const REPO_ROOT = join(import.meta.dir, "..", "..");
 const SHIPPED_DIR = "opencode";
 
 // The scan boundary is the publish boundary: `files` ships `opencode/` entire, so every
-// module extension a consumer could resolve is read, not just the two `.ts` files here
+// module extension a consumer could resolve is read, not just the three `.ts` files here
 // today. A shipped file this glob missed would go silently underived — the one failure
 // direction that leaves the gate green while a consumer's install breaks.
 const SHIPPED_GLOB = "**/*.{ts,mts,cts,js,mjs,cjs}";
@@ -103,6 +103,25 @@ test("opencode/ still has imports to derive the expected set from", () => {
   // plugin's imports are inlined — finding nothing would read as "dependencies is empty
   // and correct" rather than as a broken scan.
   expect(shipped.size).toBeGreaterThan(0);
+});
+
+test("review-bridge.ts, which the CLI bundles, imports node builtins only and no sibling module", () => {
+  // A relative import could reach caret.plugin.ts and inline @opencode-ai/plugin into
+  // dist/cli.js — which the dependencies check above cannot see, since it is declared.
+  const source = readFileSync(join(REPO_ROOT, SHIPPED_DIR, "review-bridge.ts"), "utf-8");
+  expect(importedPackages(source)).toEqual([]);
+  expect(source).not.toMatch(/\b(?:from|import)\s*\(?\s*"\.\.?\//);
+});
+
+test("src/ reaches opencode/ only through review-bridge.ts, so the CLI bundle never pulls in the plugin SDK", () => {
+  const specifiers = [...new Bun.Glob("**/*.ts").scanSync({ cwd: join(REPO_ROOT, "src") })].flatMap(
+    (file) =>
+      [
+        ...readFileSync(join(REPO_ROOT, "src", file), "utf-8").matchAll(/"(@opencode\/[^"]+)"/g),
+      ].map((match) => match[1]),
+  );
+  expect(specifiers.length).toBeGreaterThan(0);
+  expect(new Set(specifiers)).toEqual(new Set(["@opencode/review-bridge.ts"]));
 });
 
 test("the extractor reduces a subpath to its package name and keeps the scope", () => {

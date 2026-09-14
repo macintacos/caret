@@ -15,78 +15,16 @@ import type { PluginInput, ToolContext } from "@opencode-ai/plugin";
 
 import {
   applyCaretConfig,
-  approvedMessage,
-  buildEnvelope,
   createCaretPlugin,
-  deniedMessage,
   isPlanningAgent,
-  parseDecision,
-  parseReviewUrl,
   planningSteer,
-  planTitle,
   REVIEW_TOOL,
-  runReviewViaCaret,
-  type SpawnRunner,
   type WarmRunner,
 } from "@opencode/caret.plugin.ts";
+import type { SpawnRunner } from "@opencode/review-bridge.ts";
 import { recordingClient } from "@test/support/opencode-toast-client.ts";
 import { until } from "@test/support/poll.ts";
-
-// --- buildEnvelope / planTitle ---
-
-test("buildEnvelope produces the caret review envelope the opencode adapter parses", () => {
-  const env = JSON.parse(
-    buildEnvelope("# Ship it\n\nbody", { sessionID: "S", directory: "/proj" }),
-  );
-  expect(env).toEqual({
-    session_id: "S",
-    cwd: "/proj",
-    tool_input: { plan: "# Ship it\n\nbody", title: "Ship it" },
-  });
-});
-
-test("planTitle pulls the first markdown heading, else undefined", () => {
-  expect(planTitle("# Add status endpoint\n\nsteps")).toBe("Add status endpoint");
-  expect(planTitle("no heading here")).toBeUndefined();
-});
-
-// --- parseDecision (fail-safe) ---
-
-test("parseDecision reads an allow decision", () => {
-  expect(parseDecision(`{"behavior":"allow"}`)).toEqual({ behavior: "allow" });
-});
-
-test("parseDecision reads a deny decision with feedback", () => {
-  expect(parseDecision(`{"behavior":"deny","feedback":"tighten scope"}`)).toEqual({
-    behavior: "deny",
-    feedback: "tighten scope",
-  });
-});
-
-test("parseDecision uses the LAST json line (ignores stray earlier output)", () => {
-  expect(parseDecision(`some noise\n{"behavior":"allow"}\n`)).toEqual({ behavior: "allow" });
-});
-
-test("parseDecision preserves reviewer notes on an allow (EXC-791)", () => {
-  expect(parseDecision(`{"behavior":"allow","feedback":"use the retry helper"}`)).toEqual({
-    behavior: "allow",
-    feedback: "use the retry helper",
-  });
-});
-
-test("parseDecision drops a blank note on an allow", () => {
-  expect(parseDecision(`{"behavior":"allow","feedback":"  "}`)).toEqual({ behavior: "allow" });
-});
-
-test("parseDecision fails safe to a deny on unparseable output", () => {
-  const d = parseDecision("not json at all");
-  expect(d.behavior).toBe("deny");
-  expect(d.feedback).toBeTruthy();
-});
-
-test("parseDecision fails safe to a deny on empty output", () => {
-  expect(parseDecision("   \n").behavior).toBe("deny");
-});
+import { streamingRunner, stubRunner } from "@test/support/spawn-runner.ts";
 
 // --- isPlanningAgent (steer + warm gate) ---
 
@@ -97,55 +35,12 @@ test("isPlanningAgent matches the plan agent only", () => {
   expect(isPlanningAgent("general")).toBe(false);
 });
 
-// --- messages ---
-
-test("approvedMessage tells the agent to proceed", () => {
-  expect(approvedMessage().toLowerCase()).toContain("approv");
-});
-
-test("approvedMessage folds reviewer notes into the proceed message (EXC-791)", () => {
-  const msg = approvedMessage("use the retry helper");
-  expect(msg.toLowerCase()).toContain("approv");
-  expect(msg).toContain("## Notes from the user");
-  expect(msg).toContain("use the retry helper");
-  // The plan is already approved — the agent folds the notes in without re-planning.
-  expect(msg.toLowerCase()).toContain("no need to re-plan");
-});
-
-test("approvedMessage without notes stays the bare proceed message", () => {
-  expect(approvedMessage()).not.toContain("Notes from the user");
-});
-
-test("deniedMessage carries the feedback and resubmit instruction, without echoing the plan", () => {
-  const msg = deniedMessage("narrow step 2");
-  expect(msg).toContain("narrow step 2");
-  expect(msg).toContain("requested CHANGES");
-  expect(msg).toContain(REVIEW_TOOL);
-  expect(msg).not.toContain("Current plan");
-});
+// --- planning steer ---
 
 test("planningSteer names the review tool and steers away from plan_exit", () => {
   const s = planningSteer();
   expect(s).toContain(REVIEW_TOOL);
   expect(s.toLowerCase()).toContain("plan_exit");
-});
-
-// --- parseReviewUrl (review-link surfacing, EXC-691) ---
-
-test("parseReviewUrl extracts the review URL from caret's stderr line", () => {
-  const url = "http://caret.localhost:42718/?review=abc123";
-  expect(parseReviewUrl(`caret: review this plan at ${url}\n`)).toBe(url);
-});
-
-test("parseReviewUrl returns undefined when the line is absent", () => {
-  expect(parseReviewUrl("some unrelated stderr\n")).toBeUndefined();
-  expect(parseReviewUrl("")).toBeUndefined();
-});
-
-test("parseReviewUrl waits for the whole line — a URL not yet newline-terminated does not match", () => {
-  // A mid-stream stderr chunk cut off before the trailing newline must not yield a
-  // truncated URL; the match requires the whitespace core always writes after it.
-  expect(parseReviewUrl("caret: review this plan at http://caret.localhost:4271")).toBeUndefined();
 });
 
 // --- applyCaretConfig (subagent-bypass mitigation) ---
@@ -201,120 +96,6 @@ test("applyCaretConfig defensively replaces a non-object agent permission", () =
   expect(plan.permission[REVIEW_TOOL]).toBe("allow");
 });
 
-// --- runReviewViaCaret (the spawn bridge) ---
-
-function stubRunner(
-  stdout: string,
-  capture?: (bin: string, env: Record<string, string | undefined>, stdin: string) => void,
-): SpawnRunner {
-  return async (bin, env, stdin) => {
-    capture?.(bin, env, stdin);
-    return { stdout, exitCode: 0 };
-  };
-}
-
-test("runReviewViaCaret spawns caret with CARET_AGENT=opencode and the envelope on stdin", async () => {
-  let seenBin = "";
-  let seenAgent: string | undefined;
-  let seenStdin = "";
-  const run = stubRunner(`{"behavior":"allow"}`, (bin, env, stdin) => {
-    seenBin = bin;
-    seenAgent = env.CARET_AGENT;
-    seenStdin = stdin;
-  });
-  const decision = await runReviewViaCaret(`{"x":1}`, { bin: "/path/to/caret", run });
-  expect(decision).toEqual({ behavior: "allow" });
-  expect(seenBin).toBe("/path/to/caret");
-  expect(seenAgent).toBe("opencode");
-  expect(seenStdin).toBe(`{"x":1}`);
-});
-
-test("runReviewViaCaret returns the deny+feedback decision", async () => {
-  const decision = await runReviewViaCaret("{}", {
-    bin: "caret",
-    run: stubRunner(`{"behavior":"deny","feedback":"redo"}`),
-  });
-  expect(decision).toEqual({ behavior: "deny", feedback: "redo" });
-});
-
-test("runReviewViaCaret fails safe to a deny when the spawn throws", async () => {
-  const run: SpawnRunner = async () => {
-    throw new Error("ENOENT");
-  };
-  const decision = await runReviewViaCaret("{}", { bin: "caret", run });
-  expect(decision.behavior).toBe("deny");
-  expect(decision.feedback).toContain("ENOENT");
-});
-
-// A runner that streams the given stderr chunks (as the real child does) before
-// resolving with the decision on stdout — exercises the review-link surfacing.
-function streamingRunner(stdout: string, stderrChunks: string[]): SpawnRunner {
-  return async (_bin, _env, _stdin, onStderr) => {
-    for (const chunk of stderrChunks) onStderr?.(chunk);
-    return { stdout, exitCode: 0 };
-  };
-}
-
-test("runReviewViaCaret surfaces the review URL via onUrl when the child streams it on stderr", async () => {
-  const url = "http://caret.localhost:42718/?review=xyz";
-  const seen: string[] = [];
-  const decision = await runReviewViaCaret("{}", {
-    bin: "caret",
-    run: streamingRunner(`{"behavior":"allow"}`, [`caret: review this plan at ${url}\n`]),
-    onUrl: (u) => seen.push(u),
-  });
-  expect(seen).toEqual([url]);
-  expect(decision).toEqual({ behavior: "allow" });
-});
-
-test("runReviewViaCaret fires onUrl once even when the URL line arrives split across chunks", async () => {
-  const url = "http://caret.localhost:42718/?review=split";
-  const seen: string[] = [];
-  await runReviewViaCaret("{}", {
-    bin: "caret",
-    run: streamingRunner(`{"behavior":"allow"}`, ["caret: review this ", `plan at ${url}\n`]),
-    onUrl: (u) => seen.push(u),
-  });
-  expect(seen).toEqual([url]);
-});
-
-test("runReviewViaCaret never calls onUrl when no review URL appears on stderr", async () => {
-  const seen: string[] = [];
-  await runReviewViaCaret("{}", {
-    bin: "caret",
-    run: streamingRunner(`{"behavior":"allow"}`, ["unrelated diagnostic noise\n"]),
-    onUrl: (u) => seen.push(u),
-  });
-  expect(seen).toEqual([]);
-});
-
-test("runReviewViaCaret reassembles a URL split mid-URL across stderr chunks", async () => {
-  const url = "http://caret.localhost:42718/?review=midsplit";
-  const seen: string[] = [];
-  await runReviewViaCaret("{}", {
-    bin: "caret",
-    run: streamingRunner(`{"behavior":"allow"}`, [
-      "caret: review this plan at http://caret.localhost:42718/?rev",
-      "iew=midsplit\n",
-    ]),
-    onUrl: (u) => seen.push(u),
-  });
-  expect(seen).toEqual([url]);
-});
-
-test("runReviewViaCaret still returns the decision when onUrl throws (never crashes the review)", async () => {
-  const decision = await runReviewViaCaret("{}", {
-    bin: "caret",
-    run: streamingRunner(`{"behavior":"allow"}`, [
-      "caret: review this plan at http://caret.localhost:42718/?review=boom\n",
-    ]),
-    onUrl: () => {
-      throw new Error("toast surface blew up");
-    },
-  });
-  expect(decision).toEqual({ behavior: "allow" });
-});
-
 // --- the assembled plugin: tool.execute end-to-end with a stubbed runner ---
 
 async function buildHooks(run: SpawnRunner, client?: PluginInput["client"]) {
@@ -326,6 +107,23 @@ async function buildHooks(run: SpawnRunner, client?: PluginInput["client"]) {
 function ctx(agent: string): ToolContext {
   return { agent, sessionID: "S", directory: "/p" } as unknown as ToolContext;
 }
+
+test("the review tool runs `<bin> review` as the opencode agent", async () => {
+  const calls: Array<{ command: string[]; agent: string | undefined }> = [];
+  const hooks = await buildHooks(
+    stubRunner(`{"behavior":"allow"}`, (command, env) => {
+      calls.push({ command, agent: env.CARET_AGENT });
+    }),
+  );
+  await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, ctx("plan"));
+  expect(calls).toEqual([{ command: ["caret", "review"], agent: "opencode" }]);
+});
+
+test("the review tool denies by naming itself as the tool to call again", async () => {
+  const hooks = await buildHooks(stubRunner(`{"behavior":"deny","feedback":"narrow it"}`));
+  const out = await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, ctx("plan"));
+  expect(String(out)).toContain(`\`${REVIEW_TOOL}\``);
+});
 
 test("the review tool approves: a plan-agent call returns the approved message", async () => {
   const hooks = await buildHooks(stubRunner(`{"behavior":"allow"}`));

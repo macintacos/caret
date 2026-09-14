@@ -14,5 +14,12 @@
     "hooks",
     "approval",
     "annotation"
-  ]
+  ],
+  "mcpServers": {
+    "caret": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/caret",
+      "args": ["mcp"],
+      "timeout": 3900000
+    }
+  }
 }

@@ -39,7 +39,7 @@ function prodDiscoveryDeps(s: Settings): DiscoveryDeps {
     version: VERSION,
     system: () => ({ platform: process.platform, os: release(), arch: process.arch }),
     install: () => ({
-      // The same dev-vs-compiled signal daemonCommand/currentBuildId key off.
+      // The same dev-vs-compiled signal selfCommand/currentBuildId key off.
       kind: isCompiledBinary() ? "prod" : "dev",
       binaryPath: process.execPath,
       bunVersion: Bun.version,

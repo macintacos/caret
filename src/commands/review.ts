@@ -32,8 +32,8 @@ export function browserOpenCmd(platform: NodeJS.Platform | string, url: string):
 }
 
 /** The stderr line that surfaces the review URL. Pure so the wording is pinned by
- * a test rather than by convention: the OpenCode plugin (opencode/caret.plugin.ts,
- * parseReviewUrl) regex-parses this exact shape to raise its toast. */
+ * a test rather than by convention: the review bridge (opencode/review-bridge.ts,
+ * parseReviewUrl) regex-parses this exact shape to surface the review URL. */
 export function reviewUrlLine(url: string): string {
   return `caret: review this plan at ${url}\n`;
 }

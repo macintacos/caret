@@ -89,10 +89,13 @@ Because both ends of this wire are caret-owned (the plugin writes the envelope, 
 `opencode` adapter renders the decision the plugin reads), the OpenCode adapter is the
 *least* speculative of the three — there is no foreign agent wire format to model. The
 pure logic (envelope build, fail-safe decision parse, the spawn bridge) lives in
-`opencode/caret.plugin.ts` behind a `createCaretPlugin({ run })` DI seam and is
-unit-tested in `test/opencode/`. Config mutation is the adapter's, not the plugin's, so it
-lives in `src/adapters/opencode/config-plugin.ts` and is covered from
-`test/adapters/opencode/`.
+`opencode/review-bridge.ts`, which `opencode/caret.plugin.ts` wires behind a
+`createCaretPlugin({ run })` DI seam, and is unit-tested in `test/opencode/`. The bridge
+is shared: `caret mcp` (`src/commands/mcp.ts`) runs Claude Code's `review_plan` tool
+through the same module, passing its own argv, `CARET_AGENT=claude-mcp`, and tool name, so
+keep `review-bridge.ts` free of anything OpenCode-specific and of any import but node
+builtins. Config mutation is the adapter's, not the plugin's, so it lives in
+`src/adapters/opencode/config-plugin.ts` and is covered from `test/adapters/opencode/`.
 
 ## Daemon warm-up: plan-agent only, not session start (EXC-838)
 
@@ -169,7 +172,9 @@ edit, so a narrow permission never prevented unreviewed work — a `build` agent
 always ship without calling it. All a narrow permission did was stop an agent from
 *voluntarily* asking for a review, which is the opposite of what caret wants. The workflow
 this unblocks: skills that must run under `build` (they write outside what OpenCode's
-`plan` agent permits) can hand any markdown to caret's review UI, not just a plan.
+`plan` agent permits) can hand their plan to caret's review UI. It stays a plan-review
+tool: caret reflows what it receives into its plan layout, so other markdown does not
+belong there.
 
 **The in-body check's failure fallback is `allow`,** deliberately inverting this file's
 usual fail-safe-deny rule. That rule governs review *decisions*, where a deny stops

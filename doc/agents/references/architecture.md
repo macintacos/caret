@@ -11,8 +11,8 @@ When to edit it:
 
 - The core/adapter boundary moves, a new adapter lands, or an adapter's wire contract,
   install flow, or packaging changes.
-- The `caret_review_plan` tool's contract changes — who may call it, what it takes, what
-  comes back.
+- A review tool's contract changes — OpenCode's `caret_review_plan` or Claude Code's
+  `review_plan` — who may call it, what it takes, what comes back.
 - A new top-level directory appears, or one changes what it holds (the § Layout block).
 
 Three couplings to respect. The `rm -rf` cache path in the OpenCode-adapter section is
@@ -22,7 +22,7 @@ in the file — don't add a second and don't drop it. The line-anchor claim in �
 review tool from your own skill — the sentence beginning "A feedback line reference
 indexes…" — is pinned verbatim and **exactly once** by
 `test/structure/line-anchor-claim.test.ts`, which requires the same sentence in
-`ui/src/lib/feedback.ts` and `opencode/caret.plugin.ts`: reword it in all three or in
+`ui/src/lib/feedback.ts` and `opencode/review-bridge.ts`: reword it in all three or in
 none, and keep emphasis and links out of the sentence, which break the match too. And the
 adapter design detail lives in [`opencode-integration.md`](../opencode-integration.md);
 this page is the human-facing narrative, not the rule file.

@@ -34,6 +34,7 @@ import {
   removeOwnDaemonLock,
   retireDaemon,
   rotateDaemonStderr,
+  selfCommand,
   spawnDaemon,
   vacatePort,
 } from "@/daemon/lifecycle.ts";
@@ -1110,6 +1111,12 @@ test("a spawn from DAEMON_CWD survives the spawning process losing its own cwd",
     stdio: ["ignore", "ignore", "ignore"],
   });
   expect(await probe.exited).toBe(0);
+});
+
+test("selfCommand re-invokes this caret with the given subcommand", () => {
+  const argv = selfCommand("mcp");
+  expect(argv[0]).toBe(process.execPath);
+  expect(argv.at(-1)).toBe("mcp");
 });
 
 test("spawnDaemon pins the daemon's cwd to DAEMON_CWD", () => {
