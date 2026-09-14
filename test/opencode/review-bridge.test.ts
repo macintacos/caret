@@ -142,13 +142,12 @@ test("approvedMessage with a plan file says the plan is already saved there, wit
   );
 });
 
-test("deniedMessage with a plan file asks for a re-read and targeted edits, then a call with the same path", () => {
+test("deniedMessage with a plan file names it and asks for a re-read rather than an updated plan", () => {
   const msg = deniedMessage("narrow step 2", "caret_review_plan", "/proj/plan.md");
   expect(msg).toContain("requested CHANGES");
   expect(msg).toContain("narrow step 2");
   expect(msg).toContain("/proj/plan.md");
   expect(msg.toLowerCase()).toContain("re-read");
-  expect(msg).toContain("same `path`");
   expect(msg).not.toContain("updated plan");
   expect(msg).toContain("Do not implement");
 });

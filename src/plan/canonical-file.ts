@@ -1,7 +1,7 @@
-// Canonicalize the on-disk plan file the agent reads from. Claude Code writes
-// each plan to `~/.claude/plans/<name>.md` and reads it back via
-// normalizeToolInput, so that file — not caret's review store — is the plan of
-// record the agent references. caret reformats the plan for human review; this
+// Canonicalize the on-disk plan file the agent reads from: Claude Code's
+// `~/.claude/plans/<name>.md`, read back via normalizeToolInput, or the file an
+// OpenCode `path` review names. That file — not caret's review store — is the
+// plan of record the agent references. caret reformats the plan for human review; this
 // rewrites the same file with the canonical text so what the agent references is
 // byte-identical to what the human reviews, and a reviewer's "Line N" comment
 // points at the same line on both sides.
@@ -19,9 +19,12 @@ import { reviewerNotesSection } from "@/plan/reviewer-notes.ts";
  * existing regular `.md` file is touched (a malformed path can never make caret
  * clobber something else), and every failure is swallowed with a logged `.code`
  * (never the path or plan text). `write` performs the fs op inside the guard.
- * The path is the agent's own planFilePath — it runs as this user and already
- * wrote the file, so following a symlink grants no access it lacks; the guard is
- * about not clobbering a non-plan path, not a privilege boundary. Never throws.
+ * Not a privilege boundary: caret runs as the agent's user, so following a symlink
+ * grants no access it lacks; the guard only keeps a non-plan path unclobbered. A
+ * model-chosen path (OpenCode's `path`) is vetted by the plugin, which asks
+ * OpenCode for edit permission before sending it. `resolvePlanSource`
+ * (opencode/caret.plugin.ts) repeats the `.md` + regular-file check — keep the two
+ * in sync. Never throws.
  */
 function guardedPlanFileWrite(
   planFilePath: string,

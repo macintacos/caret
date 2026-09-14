@@ -71,15 +71,22 @@ function failsafeDeny(feedback: string): CaretDecision {
 /** Tool result returned to the agent on approval. Optional reviewer notes
  * (EXC-791) ride along — the plan is already approved, so no re-planning round. Without
  * `planFilePath` the agent holds the plan only in its own tool args, so this tool result
- * is the notes' sole delivery channel; with one, `caret review` has already appended
- * them to that file. */
+ * is the notes' sole delivery channel; with one, `caret review` has already appended any
+ * notes to that file (best-effort). */
 export function approvedMessage(notes?: string, planFilePath?: string): string {
-  const saved = planFilePath
-    ? `\nThe approved plan (with any notes appended) is already saved at ${planFilePath}, so do not write it again.`
-    : "";
   const trimmed = notes?.trim();
-  if (!trimmed)
-    return `caret: the user APPROVED this plan. Proceed with the implementation as planned.${saved}`;
+  if (!trimmed) {
+    const base = "caret: the user APPROVED this plan. Proceed with the implementation as planned.";
+    const saved = planFilePath
+      ? [`The approved plan is already saved at ${planFilePath}, so do not write it again.`]
+      : [];
+    return [base, ...saved].join("\n");
+  }
+  const saved = planFilePath
+    ? [
+        `The approved plan, with these notes appended, is already saved at ${planFilePath}, so do not write it again.`,
+      ]
+    : [];
   return [
     "caret: the user APPROVED this plan.",
     "",
@@ -89,7 +96,8 @@ export function approvedMessage(notes?: string, planFilePath?: string): string {
     "",
     trimmed,
     "",
-    `Proceed with the implementation.${saved}`,
+    "Proceed with the implementation.",
+    ...saved,
   ].join("\n");
 }
 
@@ -100,14 +108,15 @@ export function approvedMessage(notes?: string, planFilePath?: string): string {
  * with it is what the agent matches against its own text. That stored version is
  * rumdl-reflowed to 90 columns at ingest (src/plan/markdown.ts). With a plan file, caret
  * mirrors that canonical text onto it, so once the agent re-reads the file the numbers
- * line up; without one, they need not line up with the agent's own copy at all.
+ * usually line up (the write-back is best-effort); without one, they need not line up with
+ * the agent's own copy at all.
  * (Pinned across its three surfaces by
  * test/structure/line-anchor-claim.test.ts.) */
 export function deniedMessage(feedback: string, tool: string, planFilePath?: string): string {
   const revise = planFilePath
     ? [
-        `Re-read the plan file at ${planFilePath} before editing it: caret rewrote it in its reformatted shape, so line breaks may have moved, and its line numbers now match the feedback above.`,
-        `Revise it with targeted edits rather than rewriting the whole plan, then call \`${tool}\` again with the same \`path\`.`,
+        `Re-read the plan file at ${planFilePath} before editing it: caret may have rewritten it in its reformatted shape, so line breaks may have moved, and its line numbers should now match the feedback above.`,
+        `Revise it with targeted edits rather than rewriting the whole plan, then call \`${tool}\` again with the same file.`,
       ]
     : [`Revise the plan accordingly, then call \`${tool}\` again with the updated plan.`];
   return [

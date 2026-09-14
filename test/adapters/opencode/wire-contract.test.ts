@@ -13,6 +13,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { buildEnvelope } from "@opencode/review-bridge.ts";
 import { setupTempStateDir } from "@test/support/env.ts";
 import { emitWire as emitWireVia } from "@test/support/wire-contract.ts";
 import { opencodeAdapter } from "@/adapters/opencode/index.ts";
@@ -20,10 +21,6 @@ import type { Decision } from "@/lib/types.ts";
 
 const FIXTURE = join(import.meta.dir, "fixtures", "review-request-stdin.json");
 const stdin = readFileSync(FIXTURE, "utf-8");
-const pathStdin = readFileSync(
-  join(import.meta.dir, "fixtures", "review-request-path-stdin.json"),
-  "utf-8",
-);
 
 setupTempStateDir("caret-opencode-wire-contract-");
 
@@ -55,18 +52,11 @@ test("a deny over the fixture carries the reviewer feedback", async () => {
   ).toEqual({ behavior: "deny", feedback: "narrow step 2 to one route" });
 });
 
-test("a plan-file envelope parses to a PlanInput carrying the file's path", () => {
-  expect(opencodeAdapter.parseHookInput(pathStdin).planFilePath).toBe(
-    "/Users/dev/projects/gadget/plans/status-endpoint.md",
-  );
-});
-
-test("a deny over a plan-file envelope emits the same flat wire", async () => {
-  expect(
-    await emitWireVia(
-      pathStdin,
-      { behavior: "deny", feedback: "narrow step 2 to one route", decidedAt: 1 },
-      opencodeAdapter,
-    ),
-  ).toEqual({ behavior: "deny", feedback: "narrow step 2 to one route" });
+test("the envelope the plugin builds for a plan file parses to that planFilePath", () => {
+  const envelope = buildEnvelope("# P", {
+    sessionID: "S",
+    directory: "/proj",
+    planFilePath: "/proj/.opencode/plans/p.md",
+  });
+  expect(opencodeAdapter.parseHookInput(envelope).planFilePath).toBe("/proj/.opencode/plans/p.md");
 });

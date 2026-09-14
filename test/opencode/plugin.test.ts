@@ -6,15 +6,8 @@
 // These tests exercise the pure logic + the tool's execute() through an injected
 // spawn runner (no real OpenCode, no real `caret review` process).
 
-import { expect, test } from "bun:test";
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
+import { afterAll, expect, test } from "bun:test";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -30,6 +23,7 @@ import {
   type WarmRunner,
 } from "@opencode/caret.plugin.ts";
 import type { SpawnRunner } from "@opencode/review-bridge.ts";
+import { fakeDistDir } from "@test/support/fs-tree.ts";
 import { recordingClient } from "@test/support/opencode-toast-client.ts";
 import { until } from "@test/support/poll.ts";
 import { streamingRunner, stubRunner } from "@test/support/spawn-runner.ts";
@@ -107,6 +101,15 @@ test.each([
   expect("error" in out && out.error).toContain(REVIEW_TOOL);
 });
 
+test.each([
+  ["plan", { path: "p.md", plan: "" }, { plan: "# P", planFilePath: "/proj/p.md" }],
+  ["path", { plan: "# P", path: "" }, { plan: "# P" }],
+])("resolvePlanSource treats an empty-string %s as absent", (_label, args, expected) => {
+  expect(resolvePlanSource(args, "/proj", fakeReader({ "/proj/p.md": "# P" }).read)).toEqual(
+    expected,
+  );
+});
+
 test("resolvePlanSource passes an inline plan through with no plan file", () => {
   expect(resolvePlanSource({ plan: "# P" }, "/proj", fakeReader({}).read)).toEqual({
     plan: "# P",
@@ -173,7 +176,7 @@ async function buildHooks(run: SpawnRunner, client?: PluginInput["client"]) {
   return await plugin({ client } as unknown as PluginInput);
 }
 
-// Minimal ToolContext stub — execute() only reads agent/sessionID/directory.
+// Minimal ToolContext stub — an inline-plan execute() only reads agent/sessionID/directory.
 function ctx(agent: string): ToolContext {
   return { agent, sessionID: "S", directory: "/p" } as unknown as ToolContext;
 }
@@ -210,23 +213,35 @@ test("the review tool denies: a plan-agent call returns the feedback without ech
   expect(String(out)).not.toContain("body");
 });
 
-/** A session directory holding `plans/plan.md` with `text`, for path-arg reviews. */
-function planDir(text: string): { directory: string; planFilePath: string } {
-  const directory = mkdtempSync(join(tmpdir(), "caret-plan-path-"));
-  const planFilePath = join(directory, "plans", "plan.md");
-  mkdirSync(join(directory, "plans"));
-  writeFileSync(planFilePath, text);
-  return { directory, planFilePath };
+const planDirs: string[] = [];
+afterAll(() => {
+  for (const dir of planDirs) rmSync(dir, { recursive: true, force: true });
+});
+
+/** A throwaway session directory holding `rel` with `text`, for path-arg reviews. */
+function planDir(text: string, rel = "plans/plan.md"): { directory: string; planFilePath: string } {
+  const directory = fakeDistDir("caret-plan-path-", { [rel]: text });
+  planDirs.push(directory);
+  return { directory, planFilePath: join(directory, rel) };
+}
+
+type AskInput = Parameters<ToolContext["ask"]>[0];
+
+/** A plan-agent ToolContext for a path review: `directory` doubles as the worktree
+ * unless one is given, and OpenCode's permission `ask` grants unless stubbed. */
+function pathCtx(
+  directory: string,
+  ask: ToolContext["ask"] = async () => {},
+  worktree = directory,
+): ToolContext {
+  return { ...ctx("plan"), directory, worktree, ask };
 }
 
 test("a path review sends the file's text and its absolute path in the envelope", async () => {
   const { directory, planFilePath } = planDir("# From disk\n");
   const stdins: string[] = [];
   const hooks = await buildHooks(stubRunner(`{"behavior":"allow"}`, (_c, _e, s) => stdins.push(s)));
-  await hooks.tool?.[REVIEW_TOOL]?.execute?.(
-    { path: "plans/plan.md" },
-    { ...ctx("plan"), directory },
-  );
+  await hooks.tool?.[REVIEW_TOOL]?.execute?.({ path: "plans/plan.md" }, pathCtx(directory));
   expect(JSON.parse(stdins[0] ?? "{}").tool_input).toMatchObject({
     plan: "# From disk\n",
     planFilePath,
@@ -237,28 +252,77 @@ test("a path review's change request names the file and asks for a re-read", asy
   const { directory, planFilePath } = planDir("# P\n");
   const hooks = await buildHooks(stubRunner(`{"behavior":"deny","feedback":"narrow it"}`));
   const out = String(
-    await hooks.tool?.[REVIEW_TOOL]?.execute?.(
-      { path: planFilePath },
-      { ...ctx("plan"), directory },
-    ),
+    await hooks.tool?.[REVIEW_TOOL]?.execute?.({ path: planFilePath }, pathCtx(directory)),
   );
   expect(out).toContain(planFilePath);
   expect(out.toLowerCase()).toContain("re-read");
 });
 
+test("a path review asks OpenCode for edit permission on the file, relative to the worktree", async () => {
+  const { directory: worktree, planFilePath } = planDir("# P\n", "sub/plans/plan.md");
+  const asks: AskInput[] = [];
+  const hooks = await buildHooks(stubRunner(`{"behavior":"allow"}`));
+  await hooks.tool?.[REVIEW_TOOL]?.execute?.(
+    { path: "plans/plan.md" },
+    pathCtx(join(worktree, "sub"), async (input) => void asks.push(input), worktree),
+  );
+  expect(asks).toEqual([
+    {
+      permission: "edit",
+      patterns: ["sub/plans/plan.md"],
+      always: ["*"],
+      metadata: { filepath: planFilePath },
+    },
+  ]);
+});
+
+test("a path review denied edit permission returns an error without spawning caret", async () => {
+  const { directory, planFilePath } = planDir("# P\n");
+  const spawns: unknown[] = [];
+  const hooks = await buildHooks(stubRunner(`{"behavior":"allow"}`, () => spawns.push(1)));
+  const out = await hooks.tool?.[REVIEW_TOOL]?.execute?.(
+    { path: "plans/plan.md" },
+    pathCtx(directory, () => Promise.reject(new Error("rejected"))),
+  );
+  expect(spawns).toEqual([]);
+  expect(String(out)).toContain(planFilePath);
+});
+
+test("an inline plan review never asks for a permission", async () => {
+  const asks: AskInput[] = [];
+  const hooks = await buildHooks(stubRunner(`{"behavior":"allow"}`));
+  await hooks.tool?.[REVIEW_TOOL]?.execute?.(
+    { plan: "# P" },
+    { ...ctx("plan"), ask: async (input) => void asks.push(input) },
+  );
+  expect(asks).toEqual([]);
+});
+
 test("a path review of an unreadable file returns the error without spawning caret", async () => {
-  let spawned = false;
-  const run: SpawnRunner = async () => {
-    spawned = true;
-    return { stdout: `{"behavior":"allow"}`, exitCode: 0 };
-  };
-  const hooks = await buildHooks(run);
+  const spawns: unknown[] = [];
+  const hooks = await buildHooks(stubRunner(`{"behavior":"allow"}`, () => spawns.push(1)));
   const out = await hooks.tool?.[REVIEW_TOOL]?.execute?.(
     { path: "/nonexistent/plan.md" },
-    ctx("plan"),
+    pathCtx("/p"),
   );
-  expect(spawned).toBe(false);
+  expect(spawns).toEqual([]);
   expect(String(out)).toContain("/nonexistent/plan.md");
+});
+
+test("a path review of a FIFO returns the error without spawning caret", async () => {
+  // Reading a FIFO blocks until a writer opens it, which would freeze OpenCode's event loop.
+  const directory = fakeDistDir("caret-plan-fifo-", {});
+  planDirs.push(directory);
+  const fifo = join(directory, "plan.md");
+  expect(Bun.spawnSync(["mkfifo", fifo]).exitCode).toBe(0);
+  // A waiting writer, so a regression that reads the FIFO fails here instead of hanging the suite.
+  const writer = Bun.spawn(["sh", "-c", `printf '# P' > '${fifo}'`]);
+  const spawns: unknown[] = [];
+  const hooks = await buildHooks(stubRunner(`{"behavior":"allow"}`, () => spawns.push(1)));
+  const out = await hooks.tool?.[REVIEW_TOOL]?.execute?.({ path: "plan.md" }, pathCtx(directory));
+  writer.kill();
+  expect(spawns).toEqual([]);
+  expect(String(out)).toContain(fifo);
 });
 
 // A plugin client whose `session.get` is `get` — the one call the review tool's

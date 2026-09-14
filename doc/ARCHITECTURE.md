@@ -347,12 +347,13 @@ An approval may carry reviewer notes of its own, in a clearly labeled section, t
 as the work proceeds; that is not another round, the plan is already approved.
 
 With `path`, that loop runs on the file instead of regenerating the plan. Write the plan
-once. On a change request, re-read the file (caret has rewritten it in its reformatted
-shape), make targeted edits, and call again with the same `path`. On approval there is
-nothing left to save: the file already holds the approved plan, with any reviewer notes
-appended (the notes still come back in the tool result too). OpenCode's `plan` agent may
-write only under `.opencode/plans/`, so caret's planning steer tells it to put the file
-there; any other agent can use whatever `.md` file it is able to write.
+once. On a change request, re-read the file, make targeted edits, and call again with the
+same `path`. On approval there is nothing left to save: the file already holds the
+approved plan, with any reviewer notes appended (the notes still come back in the tool
+result too). Because caret rewrites the file, it first asks OpenCode for edit permission
+on it, and a denied ask comes back as an error with no review. So OpenCode's `plan` agent,
+which may edit only under `.opencode/plans/`, must keep its file there, and caret's
+planning steer tells it to; any other agent can use any `.md` file its edit rules allow.
 
 On Claude Code a long wait has two more wrinkles. From Claude Code v2.1.212 a tool call
 still running after two minutes can move to the background; the tool's description tells

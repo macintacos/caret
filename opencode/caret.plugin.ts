@@ -26,7 +26,7 @@
 import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { type Hooks, type Plugin, tool } from "@opencode-ai/plugin";
@@ -166,6 +166,48 @@ async function isSubagentSession(client: SessionClient, sessionID: string): Prom
     return typeof res?.data?.parentID === "string";
   } catch {
     return false;
+  }
+}
+
+type PlanSource = { plan: string; planFilePath?: string };
+
+/** The plan the review tool submits, from exactly one of its `plan` / `path` args (an
+ * empty string counts as absent). A `path` resolves against the session directory and
+ * must be a readable `.md` file — the same check the core's plan-file write-back makes,
+ * repeated here because this plugin cannot import src/. `readPlanFile` returns the
+ * text, or undefined when absPath is not a readable regular file. */
+export function resolvePlanSource(
+  args: { plan?: string; path?: string },
+  directory: string,
+  readPlanFile: (absPath: string) => string | undefined,
+): PlanSource | { error: string } {
+  const plan = args.plan || undefined;
+  const path = args.path || undefined;
+  const notExactlyOne = {
+    error: `caret: ${REVIEW_TOOL} takes exactly one of \`plan\` or \`path\`. Pass the plan file as \`path\`, or the plan inline as \`plan\`.`,
+  };
+  if (path === undefined) return plan === undefined ? notExactlyOne : { plan };
+  if (plan !== undefined) return notExactlyOne;
+  const planFilePath = resolve(directory, path);
+  if (!planFilePath.endsWith(".md")) {
+    return {
+      error: `caret: ${REVIEW_TOOL} needs a markdown (.md) file as \`path\`, not ${planFilePath}. Write the plan to a .md file, or pass it inline as \`plan\`.`,
+    };
+  }
+  const text = readPlanFile(planFilePath);
+  if (text === undefined) {
+    return {
+      error: `caret: ${REVIEW_TOOL} could not read ${planFilePath} as a regular file. Write the plan there first, or pass it inline as \`plan\`.`,
+    };
+  }
+  return { plan: text, planFilePath };
+}
+
+function readRegularFile(absPath: string): string | undefined {
+  try {
+    return statSync(absPath).isFile() ? readFileSync(absPath, "utf-8") : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -323,48 +365,13 @@ export async function realUpdateChecker(
   }
 }
 
-export type PlanSource = { plan: string; planFilePath?: string };
-
-/** The plan the review tool submits, from exactly one of its `plan` / `path` args. A
- * `path` resolves against the session directory and must be a readable `.md` file —
- * the same check the core's plan-file write-back makes, repeated here because this
- * plugin cannot import src/. `readPlanFile` returns the text, or undefined when
- * absPath is not a readable regular file. */
-export function resolvePlanSource(
-  args: { plan?: string; path?: string },
-  directory: string,
-  readPlanFile: (absPath: string) => string | undefined,
-): PlanSource | { error: string } {
-  const { plan, path } = args;
-  const notExactlyOne = { error: `${REVIEW_TOOL} takes exactly one of \`plan\` or \`path\`.` };
-  if (path === undefined) return plan === undefined ? notExactlyOne : { plan };
-  if (plan !== undefined) return notExactlyOne;
-  const planFilePath = resolve(directory, path);
-  if (!planFilePath.endsWith(".md")) {
-    return { error: `${REVIEW_TOOL}: \`path\` must be a markdown (.md) file: ${planFilePath}` };
-  }
-  const text = readPlanFile(planFilePath);
-  if (text === undefined) {
-    return { error: `${REVIEW_TOOL}: could not read ${planFilePath} as a regular file.` };
-  }
-  return { plan: text, planFilePath };
-}
-
-function readRegularFile(absPath: string): string | undefined {
-  try {
-    return statSync(absPath).isFile() ? readFileSync(absPath, "utf-8") : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 /** The planning-prompt steer appended to the system array so the Plan agent
  * submits its plan to caret instead of calling the native plan_exit. */
 export function planningSteer(): string {
   return [
     "## Plan review (caret)",
     "",
-    `When you have a plan ready for the user, do NOT call plan_exit. Instead write the plan as markdown to a file under \`.opencode/plans/\` (for example \`.opencode/plans/<short-name>.md\`, the one place you may write) and call the \`${REVIEW_TOOL}\` tool with that file as the \`path\` argument.`,
+    `When you have a plan ready for the user, do NOT call plan_exit. Instead write the plan as markdown to a file under \`.opencode/plans/\` (the one place you may write), for example \`.opencode/plans/<short-name>.md\`, and call the \`${REVIEW_TOOL}\` tool with that file as the \`path\` argument.`,
     "It opens caret's visual review UI in the browser; the user approves or requests changes. A change request comes back as the tool result: re-read the file, revise it with targeted edits rather than rewriting it, and call the tool again with the same `path` until it is approved. An approved plan is already saved in that file.",
   ].join("\n");
 }
@@ -528,7 +535,7 @@ export function createCaretPlugin(
               .string()
               .optional()
               .describe(
-                "A markdown (.md) file holding the complete plan, absolute or relative to the session directory; preferred.",
+                "Preferred. A markdown (.md) file holding the complete plan, absolute or relative to the session directory. (OpenCode's plan agent may write only under .opencode/plans/.)",
               ),
           },
           async execute(args, context) {
@@ -537,6 +544,20 @@ export function createCaretPlugin(
             }
             const source = resolvePlanSource(args, context.directory, readRegularFile);
             if ("error" in source) return source.error;
+            if (source.planFilePath) {
+              // caret rewrites this file, and the model chose the path, so OpenCode's own
+              // edit permission must allow it.
+              try {
+                await context.ask({
+                  permission: "edit",
+                  patterns: [relative(context.worktree, source.planFilePath)],
+                  always: ["*"],
+                  metadata: { filepath: source.planFilePath },
+                });
+              } catch {
+                return `caret: ${REVIEW_TOOL} was not permitted to edit ${source.planFilePath}, which a path review rewrites. Write the plan under \`.opencode/plans/\` and pass that file as \`path\`, or pass the plan inline as \`plan\`.`;
+              }
+            }
             const envelope = buildEnvelope(source.plan, {
               sessionID: context.sessionID,
               directory: context.directory,
