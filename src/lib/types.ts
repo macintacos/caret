@@ -219,7 +219,8 @@ export interface PlanInput {
    * Absent otherwise — the integration is silently inert outside cmux. */
   cmux?: CmuxPane;
   /** Absolute path to the on-disk plan file the agent reads its plan from
-   * (Claude Code's `~/.claude/plans/<name>.md`, surfaced as `tool_input.planFilePath`).
+   * (Claude Code's `~/.claude/plans/<name>.md`, surfaced as `tool_input.planFilePath`,
+   * or the file passed as `path` to OpenCode's `caret_review_plan`).
    * caret rewrites this file with the canonical formatted plan so the agent's
    * plan of record matches the reviewed text. Absent for agents without a plan
    * file (e.g. Codex). */

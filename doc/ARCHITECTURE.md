@@ -321,10 +321,12 @@ can ask for one.
 | OpenCode    | `caret_review_plan` | The in-process plugin                                  |
 
 Claude Code prefixes a plugin's MCP tools with the plugin and server names, so the model
-sees `review_plan` as `mcp__plugin_caret_caret__review_plan`. Either tool takes a single
-argument, `plan` — the complete plan, as markdown, to put in front of the reviewer. The
-agent passes nothing else: the review's session and working directory come from the
-calling session (OpenCode) or from the MCP server (Claude Code).
+sees `review_plan` as `mcp__plugin_caret_caret__review_plan`. Claude Code's tool takes a
+single argument, `plan`: the complete plan, as markdown, to put in front of the reviewer.
+OpenCode's tool takes exactly one of `plan` or `path`, and `path` is preferred. `path`
+names a markdown (`.md`) file holding the complete plan, either absolute or relative to
+the session's directory. The agent passes nothing else: the review's session and working
+directory come from the calling session (OpenCode) or from the MCP server (Claude Code).
 
 **It is for plans only.** caret reflows whatever it receives into its own plan layout and
 presents it as a plan, so a checklist, a schema, or a question put through it arrives
@@ -334,14 +336,23 @@ model gets, and both say so.
 It **blocks until you decide**. A change request comes back as the tool result: the
 reviewer's feedback, plus an instruction to revise and call again and not to implement
 anything until a call returns an approval. The plan itself is deliberately not echoed back
-— the agent still holds it in its own tool-call arguments. A feedback line reference
-indexes the plan version caret stored, and the abbreviated quote paired with it is what
-the agent matches against its own text. That stored version is reflowed to caret's
+— the agent still holds it, in its own tool-call arguments or in its file. A feedback line
+reference indexes the plan version caret stored, and the abbreviated quote paired with it
+is what the agent matches against its own text. That stored version is reflowed to caret's
 90-column shape at ingest (see [Plan formatting](CONFIGURING.md#plan-formatting-rumdl)),
-so the numbers are caret's, not yours. So the loop is call, read the feedback, revise,
-call again, until an approval returns. An approval may carry reviewer notes of its own, in
-a clearly labeled section, to fold in as the work proceeds; that is not another round, the
-plan is already approved.
+so the numbers are caret's, not yours — unless the plan came in by `path`, where caret
+writes that reflowed text back onto the file, so the numbers match once the agent re-reads
+it. So the loop is call, read the feedback, revise, call again, until an approval returns.
+An approval may carry reviewer notes of its own, in a clearly labeled section, to fold in
+as the work proceeds; that is not another round, the plan is already approved.
+
+With `path`, that loop runs on the file instead of regenerating the plan. Write the plan
+once. On a change request, re-read the file (caret has rewritten it in its reformatted
+shape), make targeted edits, and call again with the same `path`. On approval there is
+nothing left to save: the file already holds the approved plan, with any reviewer notes
+appended (the notes still come back in the tool result too). OpenCode's `plan` agent may
+write only under `.opencode/plans/`, so caret's planning steer tells it to put the file
+there; any other agent can use whatever `.md` file it is able to write.
 
 On Claude Code a long wait has two more wrinkles. From Claude Code v2.1.212 a tool call
 still running after two minutes can move to the background; the tool's description tells
