@@ -25,12 +25,12 @@ export function planTitle(plan: string): string | undefined {
  * reads — both ends are caret-owned. */
 export function buildEnvelope(
   plan: string,
-  ctx: { sessionID?: string; directory?: string },
+  ctx: { sessionID?: string; directory?: string; planFilePath?: string },
 ): string {
   return JSON.stringify({
     session_id: ctx.sessionID,
     cwd: ctx.directory,
-    tool_input: { plan, title: planTitle(plan) },
+    tool_input: { plan, title: planTitle(plan), planFilePath: ctx.planFilePath },
   });
 }
 
@@ -69,13 +69,17 @@ function failsafeDeny(feedback: string): CaretDecision {
 }
 
 /** Tool result returned to the agent on approval. Optional reviewer notes
- * (EXC-791) ride along — the plan is already approved, so no re-planning round. The
- * agent holds the plan in its own tool args (there is no plan file to append to), so
- * this tool result is the delivery channel. */
-export function approvedMessage(notes?: string): string {
-  const base = "caret: the user APPROVED this plan. Proceed with the implementation as planned.";
+ * (EXC-791) ride along — the plan is already approved, so no re-planning round. Without
+ * `planFilePath` the agent holds the plan only in its own tool args, so this tool result
+ * is the notes' sole delivery channel; with one, `caret review` has already appended
+ * them to that file. */
+export function approvedMessage(notes?: string, planFilePath?: string): string {
+  const saved = planFilePath
+    ? `\nThe approved plan (with any notes appended) is already saved at ${planFilePath}, so do not write it again.`
+    : "";
   const trimmed = notes?.trim();
-  if (!trimmed) return base;
+  if (!trimmed)
+    return `caret: the user APPROVED this plan. Proceed with the implementation as planned.${saved}`;
   return [
     "caret: the user APPROVED this plan.",
     "",
@@ -85,37 +89,44 @@ export function approvedMessage(notes?: string): string {
     "",
     trimmed,
     "",
-    "Proceed with the implementation.",
+    `Proceed with the implementation.${saved}`,
   ].join("\n");
 }
 
 /** Tool result returned to the agent on a change request: the reviewer feedback
  * and a resubmit instruction. The plan itself is NOT echoed — the agent already has
- * it in the args of its own call to `tool`. A feedback line reference
- * indexes the plan version caret stored, and the abbreviated quote paired with it is
- * what the agent matches against its own text. That stored version is rumdl-reflowed to
- * 90 columns at ingest (src/plan/markdown.ts) and this path has no plan file to mirror
- * the numbers back to, so they need not line up with the agent's own copy at all.
+ * it in the args of its own call to `tool`, or in the file at `planFilePath`. A feedback
+ * line reference indexes the plan version caret stored, and the abbreviated quote paired
+ * with it is what the agent matches against its own text. That stored version is
+ * rumdl-reflowed to 90 columns at ingest (src/plan/markdown.ts). With a plan file, caret
+ * mirrors that canonical text onto it, so once the agent re-reads the file the numbers
+ * line up; without one, they need not line up with the agent's own copy at all.
  * (Pinned across its three surfaces by
  * test/structure/line-anchor-claim.test.ts.) */
-export function deniedMessage(feedback: string, tool: string): string {
+export function deniedMessage(feedback: string, tool: string, planFilePath?: string): string {
+  const revise = planFilePath
+    ? [
+        `Re-read the plan file at ${planFilePath} before editing it: caret rewrote it in its reformatted shape, so line breaks may have moved, and its line numbers now match the feedback above.`,
+        `Revise it with targeted edits rather than rewriting the whole plan, then call \`${tool}\` again with the same \`path\`.`,
+      ]
+    : [`Revise the plan accordingly, then call \`${tool}\` again with the updated plan.`];
   return [
     "caret: the user requested CHANGES to this plan.",
     "",
     "Feedback:",
     feedback,
     "",
-    `Revise the plan accordingly, then call \`${tool}\` again with the updated plan.`,
+    ...revise,
     `Do not implement the plan until a call to \`${tool}\` returns an approval.`,
   ].join("\n");
 }
 
 /** The tool result an agent reads for `decision`; `tool` is the name to call again on a
  * change request. */
-export function decisionText(decision: CaretDecision, tool: string): string {
+export function decisionText(decision: CaretDecision, tool: string, planFilePath?: string): string {
   return decision.behavior === "allow"
-    ? approvedMessage(decision.feedback)
-    : deniedMessage(decision.feedback, tool);
+    ? approvedMessage(decision.feedback, planFilePath)
+    : deniedMessage(decision.feedback, tool, planFilePath);
 }
 
 /** Extract caret's review URL from the child's stderr text. Core writes
