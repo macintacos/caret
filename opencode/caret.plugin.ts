@@ -24,9 +24,9 @@
 // doc/agents/opencode-integration.md § Verified vs. follow-up.
 
 import { spawn } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { type Hooks, type Plugin, tool } from "@opencode-ai/plugin";
@@ -323,14 +323,49 @@ export async function realUpdateChecker(
   }
 }
 
+export type PlanSource = { plan: string; planFilePath?: string };
+
+/** The plan the review tool submits, from exactly one of its `plan` / `path` args. A
+ * `path` resolves against the session directory and must be a readable `.md` file —
+ * the same check the core's plan-file write-back makes, repeated here because this
+ * plugin cannot import src/. `readPlanFile` returns the text, or undefined when
+ * absPath is not a readable regular file. */
+export function resolvePlanSource(
+  args: { plan?: string; path?: string },
+  directory: string,
+  readPlanFile: (absPath: string) => string | undefined,
+): PlanSource | { error: string } {
+  const { plan, path } = args;
+  const notExactlyOne = { error: `${REVIEW_TOOL} takes exactly one of \`plan\` or \`path\`.` };
+  if (path === undefined) return plan === undefined ? notExactlyOne : { plan };
+  if (plan !== undefined) return notExactlyOne;
+  const planFilePath = resolve(directory, path);
+  if (!planFilePath.endsWith(".md")) {
+    return { error: `${REVIEW_TOOL}: \`path\` must be a markdown (.md) file: ${planFilePath}` };
+  }
+  const text = readPlanFile(planFilePath);
+  if (text === undefined) {
+    return { error: `${REVIEW_TOOL}: could not read ${planFilePath} as a regular file.` };
+  }
+  return { plan: text, planFilePath };
+}
+
+function readRegularFile(absPath: string): string | undefined {
+  try {
+    return statSync(absPath).isFile() ? readFileSync(absPath, "utf-8") : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** The planning-prompt steer appended to the system array so the Plan agent
  * submits its plan to caret instead of calling the native plan_exit. */
 export function planningSteer(): string {
   return [
     "## Plan review (caret)",
     "",
-    `When you have a plan ready for the user, do NOT call plan_exit. Instead call the \`${REVIEW_TOOL}\` tool with your full plan (markdown) as the \`plan\` argument.`,
-    "It opens caret's visual review UI in the browser; the user approves or requests changes. Any change request comes back as the tool result — revise the plan and call the tool again until it is approved.",
+    `When you have a plan ready for the user, do NOT call plan_exit. Instead write the plan as markdown to a file under \`.opencode/plans/\` (for example \`.opencode/plans/<short-name>.md\`, the one place you may write) and call the \`${REVIEW_TOOL}\` tool with that file as the \`path\` argument.`,
+    "It opens caret's visual review UI in the browser; the user approves or requests changes. A change request comes back as the tool result: re-read the file, revise it with targeted edits rather than rewriting it, and call the tool again with the same `path` until it is approved. An approved plan is already saved in that file.",
   ].join("\n");
 }
 
@@ -481,19 +516,31 @@ export function createCaretPlugin(
       tool: {
         [REVIEW_TOOL]: tool({
           description:
-            "Submit the current plan to caret for human review in a local browser UI. For plans only: caret presents what it receives as a plan, so do not use it for other documents or questions. Blocks until the user approves or requests changes. On a change request, revise the plan and call this tool again with the updated plan. Do not implement the plan until a call returns an approval.",
+            "Submit the current plan to caret for human review in a local browser UI. For plans only: caret presents what it receives as a plan, so do not use it for other documents or questions. Pass exactly one of `path` (preferred: a markdown file you write once and revise with edits) or `plan` (the plan inline). Blocks until the user approves or requests changes. On a change request, follow the result's instructions and call this tool again. Do not implement the plan until a call returns an approval.",
           args: {
             plan: tool.schema
               .string()
-              .describe("The complete plan, as markdown, to present for human review."),
+              .optional()
+              .describe(
+                "The complete plan, as markdown, to present for human review. The inline alternative to `path`.",
+              ),
+            path: tool.schema
+              .string()
+              .optional()
+              .describe(
+                "A markdown (.md) file holding the complete plan, absolute or relative to the session directory; preferred.",
+              ),
           },
           async execute(args, context) {
             if (await isSubagentSession(client, context.sessionID)) {
               return `${REVIEW_TOOL} is available to primary agents only; this call came from a subagent session. Continue without caret review, or hand the plan back to the primary agent to submit.`;
             }
-            const envelope = buildEnvelope(args.plan, {
+            const source = resolvePlanSource(args, context.directory, readRegularFile);
+            if ("error" in source) return source.error;
+            const envelope = buildEnvelope(source.plan, {
               sessionID: context.sessionID,
               directory: context.directory,
+              planFilePath: source.planFilePath,
             });
             let linkShown = false;
             const decision = await runReviewViaCaret(envelope, {
@@ -529,7 +576,7 @@ export function createCaretPlugin(
                     },
               );
             }
-            return decisionText(decision, REVIEW_TOOL);
+            return decisionText(decision, REVIEW_TOOL, source.planFilePath);
           },
         }),
       },

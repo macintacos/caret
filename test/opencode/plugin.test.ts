@@ -7,7 +7,14 @@
 // spawn runner (no real OpenCode, no real `caret review` process).
 
 import { expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -19,6 +26,7 @@ import {
   isPlanningAgent,
   planningSteer,
   REVIEW_TOOL,
+  resolvePlanSource,
   type WarmRunner,
 } from "@opencode/caret.plugin.ts";
 import type { SpawnRunner } from "@opencode/review-bridge.ts";
@@ -41,6 +49,68 @@ test("planningSteer names the review tool and steers away from plan_exit", () =>
   const s = planningSteer();
   expect(s).toContain(REVIEW_TOOL);
   expect(s.toLowerCase()).toContain("plan_exit");
+});
+
+test("planningSteer points the plan agent at a file under .opencode/plans/, submitted as `path`", () => {
+  const s = planningSteer();
+  expect(s).toContain(".opencode/plans/");
+  expect(s).toContain("`path`");
+});
+
+// --- resolvePlanSource (the tool's plan / path args) ---
+
+/** A plan-file reader over an in-memory map, recording every path it is asked for. */
+function fakeReader(files: Record<string, string>) {
+  const asked: string[] = [];
+  const read = (absPath: string) => {
+    asked.push(absPath);
+    return files[absPath];
+  };
+  return { read, asked };
+}
+
+test("resolvePlanSource reads an absolute .md path and carries it as planFilePath", () => {
+  const { read } = fakeReader({ "/abs/plan.md": "# P" });
+  expect(resolvePlanSource({ path: "/abs/plan.md" }, "/proj", read)).toEqual({
+    plan: "# P",
+    planFilePath: "/abs/plan.md",
+  });
+});
+
+test("resolvePlanSource resolves a relative path against the session directory", () => {
+  const { read, asked } = fakeReader({ "/proj/.opencode/plans/p.md": "# P" });
+  expect(resolvePlanSource({ path: ".opencode/plans/p.md" }, "/proj", read)).toEqual({
+    plan: "# P",
+    planFilePath: "/proj/.opencode/plans/p.md",
+  });
+  expect(asked).toEqual(["/proj/.opencode/plans/p.md"]);
+});
+
+test("resolvePlanSource rejects a path that is not a markdown file without reading it", () => {
+  const { read, asked } = fakeReader({ "/proj/plan.txt": "# P" });
+  const out = resolvePlanSource({ path: "plan.txt" }, "/proj", read);
+  expect("error" in out && out.error).toContain(".md");
+  expect(asked).toEqual([]);
+});
+
+test("resolvePlanSource reports a path it cannot read as a regular file", () => {
+  const { read } = fakeReader({});
+  const out = resolvePlanSource({ path: "missing.md" }, "/proj", read);
+  expect("error" in out && out.error).toContain("/proj/missing.md");
+});
+
+test.each([
+  ["both", { plan: "# P", path: "p.md" }],
+  ["neither", {}],
+])("resolvePlanSource requires exactly one of plan or path (%s given)", (_label, args) => {
+  const out = resolvePlanSource(args, "/proj", fakeReader({ "/proj/p.md": "# P" }).read);
+  expect("error" in out && out.error).toContain(REVIEW_TOOL);
+});
+
+test("resolvePlanSource passes an inline plan through with no plan file", () => {
+  expect(resolvePlanSource({ plan: "# P" }, "/proj", fakeReader({}).read)).toEqual({
+    plan: "# P",
+  });
 });
 
 // --- applyCaretConfig (subagent-bypass mitigation) ---
@@ -138,6 +208,57 @@ test("the review tool denies: a plan-agent call returns the feedback without ech
   const out = await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P\nbody" }, ctx("plan"));
   expect(String(out)).toContain("narrow it");
   expect(String(out)).not.toContain("body");
+});
+
+/** A session directory holding `plans/plan.md` with `text`, for path-arg reviews. */
+function planDir(text: string): { directory: string; planFilePath: string } {
+  const directory = mkdtempSync(join(tmpdir(), "caret-plan-path-"));
+  const planFilePath = join(directory, "plans", "plan.md");
+  mkdirSync(join(directory, "plans"));
+  writeFileSync(planFilePath, text);
+  return { directory, planFilePath };
+}
+
+test("a path review sends the file's text and its absolute path in the envelope", async () => {
+  const { directory, planFilePath } = planDir("# From disk\n");
+  const stdins: string[] = [];
+  const hooks = await buildHooks(stubRunner(`{"behavior":"allow"}`, (_c, _e, s) => stdins.push(s)));
+  await hooks.tool?.[REVIEW_TOOL]?.execute?.(
+    { path: "plans/plan.md" },
+    { ...ctx("plan"), directory },
+  );
+  expect(JSON.parse(stdins[0] ?? "{}").tool_input).toMatchObject({
+    plan: "# From disk\n",
+    planFilePath,
+  });
+});
+
+test("a path review's change request names the file and asks for a re-read", async () => {
+  const { directory, planFilePath } = planDir("# P\n");
+  const hooks = await buildHooks(stubRunner(`{"behavior":"deny","feedback":"narrow it"}`));
+  const out = String(
+    await hooks.tool?.[REVIEW_TOOL]?.execute?.(
+      { path: planFilePath },
+      { ...ctx("plan"), directory },
+    ),
+  );
+  expect(out).toContain(planFilePath);
+  expect(out.toLowerCase()).toContain("re-read");
+});
+
+test("a path review of an unreadable file returns the error without spawning caret", async () => {
+  let spawned = false;
+  const run: SpawnRunner = async () => {
+    spawned = true;
+    return { stdout: `{"behavior":"allow"}`, exitCode: 0 };
+  };
+  const hooks = await buildHooks(run);
+  const out = await hooks.tool?.[REVIEW_TOOL]?.execute?.(
+    { path: "/nonexistent/plan.md" },
+    ctx("plan"),
+  );
+  expect(spawned).toBe(false);
+  expect(String(out)).toContain("/nonexistent/plan.md");
 });
 
 // A plugin client whose `session.get` is `get` — the one call the review tool's
