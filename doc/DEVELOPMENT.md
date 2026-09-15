@@ -61,15 +61,15 @@ mise run format     # Biome (write)
 mise run smoke      # smoke the shipped artifacts; also `smoke bin` / `smoke bundle`
 mise run preflight  # pre-push gate: lint + tests (unit ∥ bats ∥ e2e) + build + smoke, scoped to the diff
 mise run verify     # check the service unit against a real supervisor: `verify macos` or `verify linux`
-                    # `verify linux shell` boots the same systemd container into a shell instead
+                    # macos drives this Mac's own launchctl; linux boots a real systemd in a container
 ```
 
-`mise run verify` is the one task above no gate runs, and it is the only check caret's
+`mise run verify` is the one check above that no gate runs, and the only one caret's
 service units get against a real supervisor — `mise run preflight` never spawns it, so run
 it for your platform yourself when you change `src/service/` or `bin/caret-launcher`.
 `verify linux` needs [Apple container](https://github.com/apple/container); `verify macos`
 needs a GUI login session, because launchctl's `gui/<uid>` domain does not exist over ssh.
-`verify linux shell` boots the same container into a shell as `caret` instead.
+`verify linux shell` opens a login shell as `caret` in that container; exiting stops it.
 
 `verify macos` works on a throwaway label, so these stay a hand check against your own
 `dev.excessive.caret` agent. They need one to exist: `caret install` registers it from a
