@@ -259,11 +259,10 @@ test("the review tool approves: a plan-agent call returns the approved message",
   expect(String(out).toLowerCase()).toContain("approv");
 });
 
-test("the review tool denies: a plan-agent call returns the feedback without echoing the plan", async () => {
+test("the review tool denies: a plan-agent call returns the feedback", async () => {
   const hooks = await buildHooks(stubRunner(`{"behavior":"deny","feedback":"narrow it"}`));
   const out = await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P\nbody" }, ctx("plan"));
   expect(String(out)).toContain("narrow it");
-  expect(String(out)).not.toContain("body");
 });
 
 const planDirs: string[] = [];

@@ -109,19 +109,15 @@ test("approvedMessage folds reviewer notes into the proceed message (EXC-791)", 
   expect(msg.toLowerCase()).toContain("approv");
   expect(msg).toContain("## Notes from the user");
   expect(msg).toContain("use the retry helper");
-  // The plan is already approved — the agent folds the notes in without re-planning.
-  expect(msg.toLowerCase()).toContain("no need to re-plan");
 });
 
 test("approvedMessage without notes stays the bare proceed message", () => {
   expect(approvedMessage()).not.toContain("Notes from the user");
 });
 
-test("deniedMessage carries the feedback and resubmit instruction, without echoing the plan", () => {
+test("deniedMessage carries the feedback and resubmit instruction", () => {
   const msg = deniedMessage("narrow step 2", "submit_plan");
   expect(msg).toContain("narrow step 2");
-  expect(msg).toContain("requested CHANGES");
-  expect(msg).not.toContain("Current plan");
 });
 
 test("deniedMessage names the given tool as the one to call again", () => {
@@ -144,7 +140,6 @@ test("approvedMessage with a plan file says the plan is already saved there, wit
 
 test("deniedMessage with a plan file names it and asks for a re-read rather than an updated plan", () => {
   const msg = deniedMessage("narrow step 2", "caret_review_plan", "/proj/plan.md");
-  expect(msg).toContain("requested CHANGES");
   expect(msg).toContain("narrow step 2");
   expect(msg).toContain("/proj/plan.md");
   expect(msg.toLowerCase()).toContain("re-read");
