@@ -502,6 +502,19 @@ describe("the inline emphasis chips (EXC-867)", () => {
     expect(endRule).toMatch(/padding-inline-end:\s*var\(--chip-pad-inline\)/);
   });
 
+  test("keeps the inline room at a row break without rounding it", () => {
+    // A span the reflow wrapped carries no cap at the break, but its glyphs still need the
+    // room a cap would give them, or the squared edge sits tight against the text.
+    const wrapStart =
+      overrideDecls.match(/\[data-content\][^{}]*\[data-md-wrap-start\]\s*\{[^}]*\}/)?.[0] ?? "";
+    const wrapEnd =
+      overrideDecls.match(/\[data-content\][^{}]*\[data-md-wrap-end\]\s*\{[^}]*\}/)?.[0] ?? "";
+    expect(wrapStart).toMatch(/padding-inline-start:\s*var\(--chip-pad-inline\)/);
+    expect(wrapEnd).toMatch(/padding-inline-end:\s*var\(--chip-pad-inline\)/);
+    expect(wrapStart).not.toMatch(/radius/);
+    expect(wrapEnd).not.toMatch(/radius/);
+  });
+
   test("shifts its neighbours rather than cancelling the padding under them", () => {
     // The shift is intended: nothing resolves a column in pixels (anchors and motions are
     // character-indexed, the search marks paint over DOM ranges), and a cancelled pair

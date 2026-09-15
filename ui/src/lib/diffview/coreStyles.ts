@@ -503,6 +503,14 @@ const CARET_OVERRIDES = `
     border-end-end-radius: var(--radius);
     padding-inline-end: var(--chip-pad-inline);
   }
+  /* A pill the reflow broke across rows has no cap at the break, but its glyphs still
+     want the room a cap gives them: the square edge keeps the padding, not the radius. */
+  [data-content] [data-line] [data-md-wrap-start] {
+    padding-inline-start: var(--chip-pad-inline);
+  }
+  [data-content] [data-line] [data-md-wrap-end] {
+    padding-inline-end: var(--chip-pad-inline);
+  }
 
   /* The NESTED member's own corners, and the whole reason this block exists. The rule
      above rounds the outermost pill and the pass withholds the cap from a member nested

@@ -41,7 +41,9 @@
 // rounded hole where the code run sits. The outermost pill wins on the ELEMENT.
 // Where a member is alone on the child, "every member" is just itself and it caps
 // normally. A member the run marks as wrapping (`continues` / `continued`) never caps
-// at the row break, so a span the reflow split still reads as one pill (EXC-1342).
+// at the row break, so a span the reflow split still reads as one pill (EXC-1342);
+// the break edge gets data-md-wrap-start / -end instead, the chip's inline room
+// without the radius.
 //
 // A nested member gets its corners all the same, from a second BOX: data-md-inner
 // names the members whose group sits inside another's on this child, and
@@ -86,6 +88,8 @@ const ATTRS = [
   "data-md-inner",
   "data-md-inner-start",
   "data-md-inner-end",
+  "data-md-wrap-start",
+  "data-md-wrap-end",
   "data-md-cite",
   "data-md-checkbox",
   "data-md-quote",
@@ -181,6 +185,22 @@ function tagRow(
     // spends on a pseudo-element rather than on this box.
     setAttr(child, "data-md-start", opens.length === members.length ? list(opens) : undefined);
     setAttr(child, "data-md-end", closes.length === members.length ? list(closes) : undefined);
+    const wrapsAt = (edge: readonly Member[] | undefined, atEdge: (g: ColumnRange) => boolean) =>
+      members.some((m) => edge?.some((w) => w === m)) &&
+      members.every((m) => {
+        const g = group.get(m);
+        return g !== undefined && atEdge(g);
+      });
+    setAttr(
+      child,
+      "data-md-wrap-start",
+      wrapsAt(run.continued, (g) => g.startCol === start) ? "" : undefined,
+    );
+    setAttr(
+      child,
+      "data-md-wrap-end",
+      wrapsAt(run.continues, (g) => g.endCol === col) ? "" : undefined,
+    );
     setAttr(child, "data-md-inner", list(inner));
     if (inner.length > 0) {
       setAttr(child, "data-md-inner-start", inner.every((m) => opens.includes(m)) ? "" : undefined);

@@ -477,6 +477,31 @@ test("a span wrapped onto the next row caps only at its real ends", () => {
   ]);
 });
 
+test("marks the break edges of a wrapped span, and only those", () => {
+  // data-md-wrap-start / -end are where the sheet keeps the chip's inline room without
+  // a radius. The span's real ends carry caps instead, and a token the pill merely runs
+  // through carries neither.
+  const layer = buildLinkLayer("x **a `c`\nd e** y");
+  const [first = "", second = ""] = layer.text.split("\n");
+  host = root(row(1, [first]), row(2, [second]));
+  decorateInlineRuns(host, layer.inline, layer.fileRefs);
+  const wraps = (line: number) =>
+    rowChildren(host, line).map((child) => ({
+      text: child.textContent ?? "",
+      start: child.hasAttribute("data-md-wrap-start"),
+      end: child.hasAttribute("data-md-wrap-end"),
+    }));
+  expect(wraps(1)).toEqual([
+    { text: "x ", start: false, end: false },
+    { text: "**a ", start: false, end: false },
+    { text: "`c`", start: false, end: true },
+  ]);
+  expect(wraps(2)).toEqual([
+    { text: "d e**", start: true, end: false },
+    { text: " y", start: false, end: false },
+  ]);
+});
+
 test("a nested span that closes before the wrap keeps its inner end", () => {
   // In ``**a `c`⏎d**`` bold runs on past the break but code closes on the first row, so
   // the `c` child drops only bold's cap: the outer pill stays open while the inner one
