@@ -20,6 +20,7 @@ import {
   planningSteer,
   REVIEW_TOOL,
   resolvePlanSource,
+  resolvePlansDir,
   type WarmRunner,
 } from "@opencode/caret.plugin.ts";
 import type { SpawnRunner } from "@opencode/review-bridge.ts";
@@ -40,15 +41,65 @@ test("isPlanningAgent matches the plan agent only", () => {
 // --- planning steer ---
 
 test("planningSteer names the review tool and steers away from plan_exit", () => {
-  const s = planningSteer();
+  const s = planningSteer("/data/opencode/plans");
   expect(s).toContain(REVIEW_TOOL);
   expect(s.toLowerCase()).toContain("plan_exit");
 });
 
-test("planningSteer points the plan agent at a file under .opencode/plans/, submitted as `path`", () => {
-  const s = planningSteer();
-  expect(s).toContain(".opencode/plans/");
+test("planningSteer points the plan agent at a file in the plans directory, submitted as `path`", () => {
+  const s = planningSteer("/data/opencode/plans");
+  expect(s).toContain("/data/opencode/plans/");
   expect(s).toContain("`path`");
+});
+
+// --- resolvePlansDir (where the steer tells the plan agent to write) ---
+
+/** A readFile over an in-memory map that throws for any other path, as readFileSync does. */
+function fakeFiles(files: Record<string, string>) {
+  return (path: string) => {
+    const text = files[path];
+    if (text === undefined) throw new Error(`ENOENT: ${path}`);
+    return text;
+  };
+}
+
+test("resolvePlansDir defaults to OpenCode's data-dir plans folder", () => {
+  expect(resolvePlansDir({ env: {}, home: "/h", readFile: fakeFiles({}) })).toBe(
+    "/h/.local/share/opencode/plans",
+  );
+  expect(
+    resolvePlansDir({ env: { XDG_DATA_HOME: "/xdg" }, home: "/h", readFile: fakeFiles({}) }),
+  ).toBe("/xdg/opencode/plans");
+});
+
+test("resolvePlansDir takes [opencode] plans_dir from caret's config.toml, expanding ~", () => {
+  const readFile = fakeFiles({
+    "/h/.config/caret/config.toml": '[opencode]\nplans_dir = "~/notes/plans"\n',
+  });
+  expect(resolvePlansDir({ env: {}, home: "/h", readFile })).toBe("/h/notes/plans");
+});
+
+test("resolvePlansDir reads the config file caret itself reads", () => {
+  const toml = '[opencode]\nplans_dir = "/elsewhere"\n';
+  expect(
+    resolvePlansDir({
+      env: { XDG_CONFIG_HOME: "/cfg" },
+      home: "/h",
+      readFile: fakeFiles({ "/cfg/caret/config.toml": toml }),
+    }),
+  ).toBe("/elsewhere");
+  expect(
+    resolvePlansDir({
+      env: { CARET_CONFIG_FILE: "/x/config.dev.toml" },
+      home: "/h",
+      readFile: fakeFiles({ "/x/config.dev.toml": toml }),
+    }),
+  ).toBe("/elsewhere");
+});
+
+test("resolvePlansDir falls back to the default on an unreadable or malformed config", () => {
+  const readFile = fakeFiles({ "/h/.config/caret/config.toml": "[opencode\nplans_dir =" });
+  expect(resolvePlansDir({ env: {}, home: "/h", readFile })).toBe("/h/.local/share/opencode/plans");
 });
 
 // --- resolvePlanSource (the tool's plan / path args) ---
@@ -171,8 +222,10 @@ test("applyCaretConfig defensively replaces a non-object agent permission", () =
 
 // --- the assembled plugin: tool.execute end-to-end with a stubbed runner ---
 
+const PLANS_DIR = "/data/opencode/plans";
+
 async function buildHooks(run: SpawnRunner, client?: PluginInput["client"]) {
-  const plugin = createCaretPlugin({ bin: "caret", run });
+  const plugin = createCaretPlugin({ bin: "caret", run, plansDir: PLANS_DIR });
   return await plugin({ client } as unknown as PluginInput);
 }
 
@@ -288,6 +341,7 @@ test("a path review denied edit permission returns an error without spawning car
   );
   expect(spawns).toEqual([]);
   expect(String(out)).toContain(planFilePath);
+  expect(String(out)).toContain(PLANS_DIR);
 });
 
 test("an inline plan review never asks for a permission", async () => {
@@ -463,7 +517,9 @@ async function steeredSystem(
 test("the system-transform hook injects the planning steer for a plan-agent session", async () => {
   const hooks = await buildHooks(stubRunner("{}"));
   await hooks["chat.message"]?.({ sessionID: "S", agent: "plan" } as never, {} as never);
-  expect((await steeredSystem(hooks, "S")).join("\n")).toContain(REVIEW_TOOL);
+  const steer = (await steeredSystem(hooks, "S")).join("\n");
+  expect(steer).toContain(REVIEW_TOOL);
+  expect(steer).toContain(PLANS_DIR);
 });
 
 test.each([

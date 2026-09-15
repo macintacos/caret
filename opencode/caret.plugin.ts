@@ -365,13 +365,37 @@ export async function realUpdateChecker(
   }
 }
 
+/** Where the planning steer sends the plan agent's plan file: `[opencode] plans_dir`
+ * from caret's config.toml (a leading `~` expanded), else OpenCode's data-dir
+ * `plans/`, which OpenCode's plan agent may edit. The config path mirrors
+ * src/config/paths.ts configFile() by hand, since the plugin cannot import src/. */
+export function resolvePlansDir(opts: {
+  env: Record<string, string | undefined>;
+  home: string;
+  readFile: (path: string) => string;
+}): string {
+  const configFile =
+    opts.env.CARET_CONFIG_FILE ||
+    `${opts.env.XDG_CONFIG_HOME || `${opts.home}/.config`}/caret/config.toml`;
+  try {
+    const config = Bun.TOML.parse(opts.readFile(configFile)) as {
+      opencode?: { plans_dir?: unknown };
+    };
+    const dir = config.opencode?.plans_dir;
+    if (typeof dir === "string" && dir) return dir.replace(/^~(?=\/|$)/, opts.home);
+  } catch {
+    // An absent or malformed config.toml leaves the default.
+  }
+  return `${opts.env.XDG_DATA_HOME || `${opts.home}/.local/share`}/opencode/plans`;
+}
+
 /** The planning-prompt steer appended to the system array so the Plan agent
  * submits its plan to caret instead of calling the native plan_exit. */
-export function planningSteer(): string {
+export function planningSteer(plansDir: string): string {
   return [
     "## Plan review (caret)",
     "",
-    `When you have a plan ready for the user, do NOT call plan_exit. Instead write the plan as markdown to a file under \`.opencode/plans/\` (the one place you may write), for example \`.opencode/plans/<short-name>.md\`, and call the \`${REVIEW_TOOL}\` tool with that file as the \`path\` argument.`,
+    `When you have a plan ready for the user, do NOT call plan_exit. Instead write the plan as markdown to a file in \`${plansDir}/\` (a directory you may write to), for example \`${plansDir}/<short-name>.md\`, and call the \`${REVIEW_TOOL}\` tool with that file as the \`path\` argument.`,
     "It opens caret's visual review UI in the browser; the user approves or requests changes. A change request comes back as the tool result: re-read the file, revise it with targeted edits rather than rewriting it, and call the tool again with the same `path` until it is approved. An approved plan is already saved in that file.",
   ].join("\n");
 }
@@ -449,16 +473,17 @@ const nodeWarmRunner: WarmRunner = (bin) => {
 // The plugin
 // ---------------------------------------------------------------------------
 
-/** Build the caret OpenCode plugin. The DI seam (bin/run/warm/checkUpdate) keeps
- * the tool's execute(), the daemon warm, and the startup update check
- * unit-testable; the default export wires the production runners and update
- * checker. */
+/** Build the caret OpenCode plugin. The DI seam (bin/run/warm/checkUpdate/plansDir)
+ * keeps the tool's execute(), the daemon warm, the planning steer, and the startup
+ * update check unit-testable; the default export wires the production runners and
+ * update checker. */
 export function createCaretPlugin(
   opts: {
     bin?: string;
     run?: SpawnRunner;
     warm?: WarmRunner;
     checkUpdate?: (client: ToastClient) => void;
+    plansDir?: string;
   } = {},
 ): Plugin {
   const bin =
@@ -466,6 +491,13 @@ export function createCaretPlugin(
     resolveCaretBin({ env: process.env, marker: CARET_BIN, importMetaUrl: import.meta.url });
   const run = opts.run ?? nodeSpawnRunner;
   const warm = opts.warm ?? nodeWarmRunner;
+  const plansDir =
+    opts.plansDir ??
+    resolvePlansDir({
+      env: process.env,
+      home: homedir(),
+      readFile: (p) => readFileSync(p, "utf-8"),
+    });
 
   return async (input) => {
     // The SDK client OpenCode hands every plugin — caret uses it for the review-link
@@ -513,7 +545,7 @@ export function createCaretPlugin(
       // it points plan_exit — permitted only on the plan agent — at caret.
       "experimental.chat.system.transform": async (input, output) => {
         const agent = input.sessionID ? sessionAgents.get(input.sessionID) : undefined;
-        if (isPlanningAgent(agent)) output.system.push(planningSteer());
+        if (isPlanningAgent(agent)) output.system.push(planningSteer(plansDir));
       },
       "tool.definition": async (input, output) => {
         if (input.toolID === "plan_exit") {
@@ -535,7 +567,7 @@ export function createCaretPlugin(
               .string()
               .optional()
               .describe(
-                "Preferred. A markdown (.md) file holding the complete plan, absolute or relative to the session directory. (OpenCode's plan agent may write only under .opencode/plans/.)",
+                `Preferred. A markdown (.md) file holding the complete plan, absolute or relative to the session directory. (OpenCode's plan agent writes its plan files in ${plansDir}/.)`,
               ),
           },
           async execute(args, context) {
@@ -555,7 +587,7 @@ export function createCaretPlugin(
                   metadata: { filepath: source.planFilePath },
                 });
               } catch {
-                return `caret: ${REVIEW_TOOL} was not permitted to edit ${source.planFilePath}, which a path review rewrites. Write the plan under \`.opencode/plans/\` and pass that file as \`path\`, or pass the plan inline as \`plan\`.`;
+                return `caret: ${REVIEW_TOOL} was not permitted to edit ${source.planFilePath}, which a path review rewrites. Write the plan in \`${plansDir}/\` and pass that file as \`path\`, or pass the plan inline as \`plan\`.`;
               }
             }
             const envelope = buildEnvelope(source.plan, {

@@ -41,13 +41,17 @@ this:
   — the agent revises and resubmits on a change request. Returning the string *is* the
   block; OpenCode has no separate "pause" primitive.
 - The tool takes the plan as **exactly one of `path` or `plan`**. `path` is a `.md` file,
-  resolved against the session directory; the steer asks for it, pointing the plan agent
-  at `.opencode/plans/`, the one place that agent may write. `plan` is the inline text. A
-  `path` review gets the same plan-file treatment as Claude Code's: caret writes its
-  canonical, reformatted text back onto the file at ingest and appends approval notes to
-  it. So the change request tells the agent to re-read the file, edit it, and call again
-  with the same `path`, and the approval tells it the plan is already saved. Each revision
-  round then costs the agent targeted edits rather than a regenerated plan.
+  resolved against the session directory. The steer asks for it and points the plan agent
+  at a plans directory it may edit: OpenCode's data-dir `plans/` (OpenCode's `agent.ts`
+  allows that and a project's `.opencode/plans/`), or caret's `[opencode] plans_dir`. The
+  plugin reads that key from caret's `config.toml` itself when OpenCode loads it
+  (`resolvePlansDir`, mirroring `configFile()`), since it cannot import `src/`. `plan` is
+  the inline text. A `path` review gets the same plan-file treatment as Claude Code's:
+  caret writes its canonical, reformatted text back onto the file at ingest and appends
+  approval notes to it. So the change request tells the agent to re-read the file, edit
+  it, and call again with the same `path`, and the approval tells it the plan is already
+  saved. Each revision round then costs the agent targeted edits rather than a regenerated
+  plan.
 
 This matches caret's "review the whole plan" semantic far better than OpenCode's
 per-action `permission.ask` hook, which fires per edit/bash and would gate individual
@@ -400,16 +404,19 @@ three shapes); the `path` branch (resolution against the session directory, the 
 readable-file, and exactly-one-of checks, an unreadable file or a denied `edit` permission
 ask never spawning caret, that ask's pattern being relative to the worktree, an inline
 `plan` never asking, and the envelope and result text carrying the path) and the adapter
-parsing that path into `PlanInput`; the config hook (writes `primary_tools`, leaves other
-agents untouched, never overwrites a user's own review-tool permission); the steer gate
-(plan agent yes, `build` no, no `sessionID` no, unseen session no, agent switching
-mid-session); the `chat.message` warm hook (warms for the plan agent only — not for a
-build or unknown caller — even though it records every session's agent) and the production
-warm runner it hides (survives a bad binary's async spawn error, and runs `prewarm` with
-`CARET_AGENT=opencode`); the entrypoint's `Object.values`-single-Plugin invariant; the
-config-array editor (add/remove, comment-preserving); target selection + dispatch; the
-`claude` target's CLI command sequence; the runtime bin/version resolvers; and the update
-check (toasts when behind, silent on error / opt-out).
+parsing that path into `PlanInput`; the plans-dir resolver the steer names (OpenCode's
+data-dir default, `XDG_DATA_HOME`, `[opencode] plans_dir` from the config file caret
+reads, a leading `~`, a malformed config falling back); the config hook (writes
+`primary_tools`, leaves other agents untouched, never overwrites a user's own review-tool
+permission); the steer gate (plan agent yes, `build` no, no `sessionID` no, unseen session
+no, agent switching mid-session); the `chat.message` warm hook (warms for the plan agent
+only — not for a build or unknown caller — even though it records every session's agent)
+and the production warm runner it hides (survives a bad binary's async spawn error, and
+runs `prewarm` with `CARET_AGENT=opencode`); the entrypoint's
+`Object.values`-single-Plugin invariant; the config-array editor (add/remove,
+comment-preserving); target selection + dispatch; the `claude` target's CLI command
+sequence; the runtime bin/version resolvers; and the update check (toasts when behind,
+silent on error / opt-out).
 
 **Confirmed against a live OpenCode 1.18.11 with `@opencode-ai/plugin` 1.18.17 — EXC-1085,
 the array install's LOCAL form, which is what ties the run to that plugin version: a
@@ -427,13 +434,13 @@ to the agent, which proceeds.
 round-trip did not reach — the PUBLISHED entry (`@macintacos/caret`) resolving out of npm
 into OpenCode's cache on restart, a **`build`-agent** call being offered rather than
 denied while that session receives no unprompted steer, the update toast firing when the
-plugin is behind, a live `path` round-trip (the plan agent writing its plan under
-`.opencode/plans/`, re-reading and editing that file on a change request, and the approved
-file ending with the reviewer notes), and the `path` ask's worktree-relative `edit`
-pattern matching OpenCode's own edit rules, including in a session started from a repo
-subdirectory, where `context.directory` and `context.worktree` differ. This mirrors the
-Codex adapter's live-contract follow-up (EXC-549) and the upgrade story tracked in
-EXC-383.
+plugin is behind, a live `path` round-trip (the plan agent writing its plan to OpenCode's
+data-dir `plans/` and being allowed to, re-reading and editing that file on a change
+request, and the approved file ending with the reviewer notes), and the `path` ask's
+worktree-relative `edit` pattern matching OpenCode's own edit rules, including in a
+session started from a repo subdirectory, where `context.directory` and `context.worktree`
+differ. This mirrors the Codex adapter's live-contract follow-up (EXC-549) and the upgrade
+story tracked in EXC-383.
 
 ## Sources
 
