@@ -151,7 +151,7 @@ caret wires into Claude Code through five plan-mode hooks:
 | `PostToolUse`       | `EnterPlanMode` | `caret steer`     | Tell the model to open its plan with a `# <title>` line.                    |
 | `PermissionRequest` | `ExitPlanMode`  | `caret review`    | Block, open the plan in the browser, return the decision.                   |
 | `PostToolUse`       | `ExitPlanMode`  | `caret reconcile` | Reconcile a plan decided in the terminal into the daemon.                   |
-| `UserPromptSubmit`  | —               | `caret steer`     | The same title steer, for a prompt sent while the session is in plan mode. |
+| `UserPromptSubmit`  | —               | `caret steer`     | The same title steer, for a prompt sent while the session is in plan mode.  |
 
 The `PermissionRequest`/`ExitPlanMode` hook intercepts the plan-approval request itself,
 so an **approve** auto-answers it (no native dialog) and a **request changes** returns the
