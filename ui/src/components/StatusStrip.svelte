@@ -89,7 +89,7 @@
           <Tooltip.Content>Revision {version} of this plan</Tooltip.Content>
         </Tooltip.Root>
       {/if}
-      <Separator orientation="vertical" style="height: 0.9em; min-height: 0" />
+      <Separator orientation="vertical" decorative style="height: 0.9em; min-height: 0" />
       <Tooltip.Root>
         <Tooltip.Trigger>
           {#snippet child({ props })}
