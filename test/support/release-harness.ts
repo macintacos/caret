@@ -17,7 +17,7 @@ export const market = (v: string) =>
   `{\n  "plugins": [\n    {\n      "version": "${v}"\n    }\n  ]\n}\n`;
 
 /** A one-commit history the compute step parses for issue/PR refs. */
-export const COMMITS: RawCommit[] = [
+const COMMITS: RawCommit[] = [
   { sha: "a".repeat(40), shortSha: "aaaaaaa", subject: "EXC-1 Did a thing (#2)" },
 ];
 

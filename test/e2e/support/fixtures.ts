@@ -456,7 +456,7 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
  * deliberately, and it warms the keyboard before doing so rather than letting
  * this probe be the keystroke its guard sees.
  */
-export async function awaitKeyboardReady(
+async function awaitKeyboardReady(
   page: Page,
   press: (key: string) => Promise<void>,
 ): Promise<void> {
