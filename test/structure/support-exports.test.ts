@@ -74,8 +74,8 @@ function valueExportNames(statement: ts.Statement): string[] {
     return [statement.name.text];
   }
   if (ts.isVariableStatement(statement)) {
-    return statement.declarationList.declarations.flatMap((d) =>
-      ts.isIdentifier(d.name) ? [d.name.text] : [],
+    return statement.declarationList.declarations.flatMap((declaration) =>
+      ts.isIdentifier(declaration.name) ? [declaration.name.text] : [],
     );
   }
   return [];
@@ -170,14 +170,16 @@ function unusedSupport(
   importers: ReadonlyMap<string, string>,
   preloads: readonly string[],
 ): string[] {
-  const used = new Map<string, Set<string>>(preloads.map((p) => [normalize(p), new Set([WHOLE])]));
+  const used = new Map<string, Set<string>>(
+    preloads.map((preload) => [normalize(preload), new Set([WHOLE])]),
+  );
   for (const [path, source] of importers) {
     for (const { specifier, names } of referencesIn(path, source)) {
       const target = resolveSpecifier(path, specifier);
       if (target === null || !modules.has(target)) continue;
-      const set = used.get(target) ?? new Set<string>();
-      for (const name of names) set.add(name);
-      used.set(target, set);
+      const usedNames = used.get(target) ?? new Set<string>();
+      for (const name of names) usedNames.add(name);
+      used.set(target, usedNames);
     }
   }
 

@@ -157,7 +157,7 @@ export async function ensureDaemon(
   // so a launcher resolving another build than this hook's is never cycled twice.
   let windowSpent = mode === "successor" ? await awaitDrained(deps, windowEnd) : false;
   let supervised: boolean | undefined;
-  let spawned: number | undefined;
+  let spawnedPid: number | undefined;
   for (let attempt = 0; attempt < timing.maxAttempts && timing.now() < deadline; attempt++) {
     windowSpent ||= timing.now() >= windowEnd;
     const h = await deps.health(deps.baseUrl);
@@ -225,10 +225,10 @@ export async function ensureDaemon(
     }
     // A daemon this call spawned may still be booting, and a second would bind the port
     // once the first is gone.
-    if (spawned === undefined || !deps.isAlive(spawned)) {
+    if (spawnedPid === undefined || !deps.isAlive(spawnedPid)) {
       try {
-        spawned = deps.spawn();
-        logDebug("spawn", "daemon spawned", { pid: spawned });
+        spawnedPid = deps.spawn();
+        logDebug("spawn", "daemon spawned", { pid: spawnedPid });
       } catch (e) {
         if (!isAddrInUse(e)) throw e;
       }

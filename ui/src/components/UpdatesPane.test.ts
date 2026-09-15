@@ -35,7 +35,7 @@ const COMMIT: UpdateStatus = {
 
 const text = (target: HTMLElement, sel: string): string =>
   target.querySelector(sel)?.textContent?.trim() ?? "";
-const command = (target: HTMLElement): HTMLInputElement | null =>
+const commandInput = (target: HTMLElement): HTMLInputElement | null =>
   target.querySelector<HTMLInputElement>("input.update-command");
 const tone = (target: HTMLElement): string | null =>
   target.querySelector(".update-dot")?.getAttribute("data-tone") ?? null;
@@ -45,14 +45,14 @@ describe("UpdatesPane render", () => {
     const { target } = render(UpdatesPane, { report: report(RELEASE) });
     expect(text(target, ".update-headline")).toContain("1.5.0");
     expect(text(target, ".update-detail")).toContain("1.4.0");
-    expect(command(target)?.value).toBe(RELEASE.command);
-    expect(command(target)?.readOnly).toBe(true);
+    expect(commandInput(target)?.value).toBe(RELEASE.command);
+    expect(commandInput(target)?.readOnly).toBe(true);
   });
 
   test("a commit verdict shows the distance and its own rebuild command", () => {
     const { target } = render(UpdatesPane, { report: report(COMMIT) });
     expect(text(target, ".update-headline")).toContain("3 commits");
-    expect(command(target)?.value).toBe(COMMIT.command);
+    expect(commandInput(target)?.value).toBe(COMMIT.command);
   });
 
   test("an up-to-date caret renders no command field", () => {
@@ -60,7 +60,7 @@ describe("UpdatesPane render", () => {
     expect(text(target, ".update-headline")).toBeTruthy();
     // Boolean assertion (never `.toBeNull()` — a live happy-dom node serializes
     // circularly and hangs bun on failure).
-    expect(command(target) === null).toBe(true);
+    expect(commandInput(target) === null).toBe(true);
   });
 
   test("the two off states and the unknown verdict render copy but no command", () => {
@@ -72,7 +72,7 @@ describe("UpdatesPane render", () => {
       const { target } = render(UpdatesPane, { report: report(status) });
       expect(text(target, ".update-headline"), status.kind).toBeTruthy();
       expect(text(target, ".update-detail"), status.kind).toBeTruthy();
-      expect(command(target) === null, status.kind).toBe(true);
+      expect(commandInput(target) === null, status.kind).toBe(true);
     }
   });
 
@@ -93,7 +93,7 @@ describe("UpdatesPane render", () => {
     const { target } = render(UpdatesPane, { report: null });
     expect(target.querySelector("[data-updates-pane]") === null).toBe(false);
     expect(text(target, ".update-placeholder")).toBeTruthy();
-    expect(command(target) === null).toBe(true);
+    expect(commandInput(target) === null).toBe(true);
     expect(target.textContent?.toLowerCase()).not.toContain("error");
   });
 });
