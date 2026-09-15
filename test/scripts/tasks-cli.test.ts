@@ -665,9 +665,9 @@ describe("tasks CLI: preflight command", () => {
 
 // --- orchestration ordering + the CARET_SKIP_BUILD_UI skip (EXC-738/739/740) ---
 // The UI-first ordering + build-once dedupe live in the run functions, not in
-// `#MISE depends` edges. Inject a capturing runner to pin the command SEQUENCE (not just each command string): the UI is
-// built before the artifact that needs it, and skipped when the caller (the
-// preflight gate) already built it.
+// `#MISE depends` edges. Inject a capturing runner to pin the command SEQUENCE
+// (not just each command string): the UI is built before the artifact that needs
+// it, and skipped when the caller (the preflight gate) already built it.
 
 /** A `runForward` stand-in that records each spawn instead of running it. */
 function capturingRun() {

@@ -46,7 +46,6 @@ describe("UpdatesPane render", () => {
     expect(text(target, ".update-headline")).toContain("1.5.0");
     expect(text(target, ".update-detail")).toContain("1.4.0");
     expect(command(target)?.value).toBe(RELEASE.command);
-    // Read-only, so the reader can focus, scroll and select it but never edit it.
     expect(command(target)?.readOnly).toBe(true);
   });
 
@@ -56,12 +55,12 @@ describe("UpdatesPane render", () => {
     expect(command(target)?.value).toBe(COMMIT.command);
   });
 
-  test("an up-to-date caret renders no command block", () => {
+  test("an up-to-date caret renders no command field", () => {
     const { target } = render(UpdatesPane, { report: report({ kind: "current" }) });
     expect(text(target, ".update-headline")).toBeTruthy();
     // Boolean assertion (never `.toBeNull()` — a live happy-dom node serializes
     // circularly and hangs bun on failure).
-    expect(target.querySelector(".update-command") === null).toBe(true);
+    expect(command(target) === null).toBe(true);
   });
 
   test("the two off states and the unknown verdict render copy but no command", () => {
@@ -73,7 +72,7 @@ describe("UpdatesPane render", () => {
       const { target } = render(UpdatesPane, { report: report(status) });
       expect(text(target, ".update-headline"), status.kind).toBeTruthy();
       expect(text(target, ".update-detail"), status.kind).toBeTruthy();
-      expect(target.querySelector(".update-command") === null, status.kind).toBe(true);
+      expect(command(target) === null, status.kind).toBe(true);
     }
   });
 
@@ -94,7 +93,7 @@ describe("UpdatesPane render", () => {
     const { target } = render(UpdatesPane, { report: null });
     expect(target.querySelector("[data-updates-pane]") === null).toBe(false);
     expect(text(target, ".update-placeholder")).toBeTruthy();
-    expect(target.querySelector(".update-command") === null).toBe(true);
+    expect(command(target) === null).toBe(true);
     expect(target.textContent?.toLowerCase()).not.toContain("error");
   });
 });

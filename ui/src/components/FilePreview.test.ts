@@ -817,8 +817,6 @@ describe("FilePreview settling", () => {
   }
 
   test("the outgoing file stays on screen, marked leaving, while the next loads", async () => {
-    // A reference change keeps the outgoing rows up while the next file loads, as
-    // expand() does while a chunk is in flight, so the panel never empties mid-load.
     const served = serveGated(20, 300);
     cap = served;
     const { target, flush, live } = await openLive();

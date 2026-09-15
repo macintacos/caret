@@ -57,9 +57,9 @@
              There is no copy button here, deliberately — the reader is at a terminal, and
              the Advanced pane's copy affordance is a click away if one is ever wanted.
 
-             A read-only field rather than a <code>: the release command overflows the
-             pane, and a field is focusable, scrolls under the caret keys, and selects just
-             the command on select-all, all natively. -->
+             A read-only field: the release command overflows the pane, and a field is
+             focusable, scrolls under the arrow keys, and selects only the command on
+             select-all, all natively. -->
         <Input
           class="update-command settings-copy-box settings-copy-text"
           readonly
@@ -121,12 +121,14 @@
     background: var(--ok);
   }
 
-  /* The upgrade command, on the recessed surface the Advanced blocks use. It scrolls
-     rather than wrapping: a wrapped shell command invites a half-copied paste. The
-     copy-box padding sets its height, over the field's fixed one. */
+  /* The copy-box padding sets the field's height, over the Input's fixed one. */
   .updates :global(.update-command) {
     height: auto;
     margin-top: 0.35rem;
+  }
+  .updates :global(.update-command:focus-visible) {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
 
   /* A degraded pane reads muted — it is a placeholder, not data, and not a failure. */

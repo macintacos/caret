@@ -6,9 +6,9 @@
 // Imports are read from the TypeScript AST, as e2e-conventions.test.ts reads them, so a
 // comment or a string that names a helper is never mistaken for a use. Type-only exports
 // are exempt: a support module exports the types its exported signatures name, whether or
-// not a caller names one yet. A module wired in by config rather than by an import counts
-// as referenced — a `bunfig.toml` preload, or a `new URL("./x.ts", import.meta.url)` path,
-// which is how fixtures.ts hands daemon-entry.ts to its spawn.
+// not a caller names one yet. A module wired in without an import counts as referenced — a
+// `bunfig.toml` preload, or a `new URL("./x.ts", import.meta.url)` path, which is how
+// fixtures.ts hands daemon-entry.ts to its spawn.
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
@@ -22,8 +22,9 @@ const REPO_ROOT = join(import.meta.dir, "..", "..");
 
 const SUPPORT_DIRS = ["test/support", "test/e2e/support", "ui/support"];
 
-/** Every directory a support module's importer can live in, plus the repo root's own
- * `*.ts` (the Playwright config). */
+/** The `.ts` trees a support import can come from. `.svelte` files are not read, so an
+ * import from one reds as unused — a loud miss, never a silent one. A support module's own
+ * `*.test.ts` counts as an importer. */
 const IMPORTER_DIRS = ["test", "ui/src", "ui/support", "scripts", "src", "opencode"];
 
 /** The aliases a support module is imported through, as `tsconfig.json` maps them. */
@@ -49,38 +50,35 @@ function hasModifier(statement: ts.Statement, kind: ts.SyntaxKind): boolean {
   );
 }
 
-/** The names a module exports that exist at runtime. */
-function valueExports(sf: ts.SourceFile): string[] {
-  const names: string[] = [];
-  for (const statement of sf.statements) {
-    if (ts.isExportAssignment(statement)) names.push("default");
-    if (ts.isExportDeclaration(statement) && !statement.isTypeOnly) {
-      const clause = statement.exportClause;
-      if (clause && ts.isNamedExports(clause)) {
-        names.push(...clause.elements.filter((e) => !e.isTypeOnly).map((e) => e.name.text));
-      }
-    }
-    if (
-      !hasModifier(statement, ts.SyntaxKind.ExportKeyword) ||
-      hasModifier(statement, ts.SyntaxKind.DeclareKeyword)
-    ) {
-      continue;
-    }
-    if (hasModifier(statement, ts.SyntaxKind.DefaultKeyword)) names.push("default");
-    else if (
-      (ts.isFunctionDeclaration(statement) ||
-        ts.isClassDeclaration(statement) ||
-        ts.isEnumDeclaration(statement)) &&
-      statement.name
-    ) {
-      names.push(statement.name.text);
-    } else if (ts.isVariableStatement(statement)) {
-      for (const declaration of statement.declarationList.declarations) {
-        if (ts.isIdentifier(declaration.name)) names.push(declaration.name.text);
-      }
-    }
+/** The names a top-level statement exports that exist at runtime. */
+function valueExportNames(statement: ts.Statement): string[] {
+  if (ts.isExportAssignment(statement)) return ["default"];
+  if (ts.isExportDeclaration(statement)) {
+    const clause = statement.exportClause;
+    if (statement.isTypeOnly || !clause || !ts.isNamedExports(clause)) return [];
+    return clause.elements.filter((e) => !e.isTypeOnly).map((e) => e.name.text);
   }
-  return names;
+  if (
+    !hasModifier(statement, ts.SyntaxKind.ExportKeyword) ||
+    hasModifier(statement, ts.SyntaxKind.DeclareKeyword)
+  ) {
+    return [];
+  }
+  if (hasModifier(statement, ts.SyntaxKind.DefaultKeyword)) return ["default"];
+  if (
+    (ts.isFunctionDeclaration(statement) ||
+      ts.isClassDeclaration(statement) ||
+      ts.isEnumDeclaration(statement)) &&
+    statement.name
+  ) {
+    return [statement.name.text];
+  }
+  if (ts.isVariableStatement(statement)) {
+    return statement.declarationList.declarations.flatMap((d) =>
+      ts.isIdentifier(d.name) ? [d.name.text] : [],
+    );
+  }
+  return [];
 }
 
 /** A module an import names, and what it takes from it: export names, or WHOLE. */
@@ -125,7 +123,13 @@ function referenceIn(node: ts.Node): Reference | null {
     ts.isIdentifier(node.expression) &&
     node.expression.text === "URL"
   ) {
-    return wholeModule(node.arguments?.[0]);
+    const [path, base] = node.arguments ?? [];
+    const fromThisModule =
+      base &&
+      ts.isPropertyAccessExpression(base) &&
+      ts.isMetaProperty(base.expression) &&
+      base.name.text === "url";
+    return fromThisModule ? wholeModule(path) : null;
   }
   return null;
 }
@@ -171,7 +175,9 @@ function unusedSupport(
     for (const { specifier, names } of referencesIn(path, source)) {
       const target = resolveSpecifier(path, specifier);
       if (target === null || !modules.has(target)) continue;
-      used.set(target, new Set([...(used.get(target) ?? []), ...names]));
+      const set = used.get(target) ?? new Set<string>();
+      for (const name of names) set.add(name);
+      used.set(target, set);
     }
   }
 
@@ -180,7 +186,9 @@ function unusedSupport(
     const names = used.get(path);
     if (!names) found.push(path);
     else if (!names.has(WHOLE)) {
-      const unused = valueExports(parse(path, source)).filter((name) => !names.has(name));
+      const unused = parse(path, source)
+        .statements.flatMap(valueExportNames)
+        .filter((name) => !names.has(name));
       found.push(...unused.map((name) => `${path}: ${name}`));
     }
   }
@@ -206,6 +214,7 @@ test("every shared test helper is imported by something", () => {
   const importers = new Map([
     ...IMPORTER_DIRS.flatMap((dir) => [...readTree(dir, "**/*.ts")]),
     ...readTree("", "*.ts"),
+    ...readTree("ui", "*.ts"),
   ]);
   // Without these the walk goes vacuous if a directory moves: an empty scan passes the
   // assertion below while covering nothing.
@@ -270,7 +279,7 @@ test("resolves sibling, extensionless, renamed and default imports", () => {
   expect(unusedSupport(modules, importers, [])).toEqual([]);
 });
 
-test("reports a module nothing references, unless config wires it in", () => {
+test("reports a module nothing references, unless something wires it in without an import", () => {
   const modules = files({
     "ui/support/orphan.ts": "globalThis.x = 1;",
     "test/support/rumdl-preload.ts": 'process.env.X = "1";',
@@ -282,6 +291,15 @@ test("reports a module nothing references, unless config wires it in", () => {
   expect(unusedSupport(modules, importers, ["./test/support/rumdl-preload.ts"])).toEqual([
     "ui/support/orphan.ts",
   ]);
+});
+
+test("a URL resolved against anything but import.meta.url is not a reference", () => {
+  const modules = files({ "test/e2e/support/daemon-entry.ts": "console.log(1);" });
+  const importers = files({
+    "test/e2e/support/fixtures.ts":
+      'const ENTRY = new URL("./daemon-entry.ts", "file:///elsewhere/");',
+  });
+  expect(unusedSupport(modules, importers, [])).toEqual(["test/e2e/support/daemon-entry.ts"]);
 });
 
 test("a comment or a string naming a helper is not a use", () => {

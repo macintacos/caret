@@ -153,6 +153,6 @@ test("the fixture daemon answers the update route with a quiet verdict", async (
   await expect(page.locator("[data-updates-pane] .update-headline")).toBeVisible();
   await expect(page.locator("[data-updates-pane] .update-placeholder")).toHaveCount(0);
   // And quiet: nothing pending, so no command and no mark on the gear.
-  await expect(page.locator("[data-updates-pane] .update-command")).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "Upgrade command" })).toHaveCount(0);
   await expect(markedGear(page)).toHaveCount(0);
 });

@@ -14,6 +14,7 @@ import { dirname, join } from "node:path";
 import { ensureDaemonNoOps, noOpTiming } from "@test/support/ensure-daemon-deps.ts";
 import { setupTempStateDir, withEnv } from "@test/support/env.ts";
 import { caretLogRecords } from "@test/support/ndjson.ts";
+import { until } from "@test/support/poll.ts";
 import { fakeServiceManager } from "@test/support/service-manager.ts";
 import {
   daemonLock,
@@ -29,6 +30,7 @@ import {
   DAEMON_CWD,
   type EnsureMode,
   ensureDaemon,
+  isPidAlive,
   openDaemonStderr,
   prodEnsureDeps,
   removeOwnDaemonLock,
@@ -943,14 +945,14 @@ test("a supervisor window that runs out still leaves the fallback spawn its turn
     ensureDeps({
       timing: clock.timing,
       service,
-      // Slower to bind than one backoff. The no-op isAlive reports the spawned daemon dead,
-      // so each refused probe meanwhile spawns again; `??=` keeps the first spawn's time.
+      // Slower to bind than one backoff.
       health: async () =>
         firstSpawn !== undefined && clock.timing.now() >= firstSpawn + 2 * clock.stepMs
           ? peer("spawned", { build: "b1", resident: false })
           : null,
+      isAlive: () => true,
       spawn: () => {
-        firstSpawn ??= clock.timing.now();
+        firstSpawn = clock.timing.now();
         return 1;
       },
     }),
@@ -1143,10 +1145,10 @@ test("spawnDaemon pins the daemon's cwd to DAEMON_CWD", () => {
   const calls: Array<{ cwd?: string; stdio?: unknown[] }> = [];
   const spawn = ((_argv: string[], opts: { cwd?: string; stdio?: unknown[] }) => {
     calls.push(opts);
-    return { unref: () => {} };
+    return { pid: 4242, unref: () => {} };
   }) as unknown as typeof Bun.spawn;
 
-  spawnDaemon(DEFAULTS, spawn);
+  expect(spawnDaemon(DEFAULTS, spawn)).toBe(4242);
 
   expect(calls).toHaveLength(1);
   expect(calls[0]?.cwd).toBe(DAEMON_CWD);
@@ -1155,6 +1157,18 @@ test("spawnDaemon pins the daemon's cwd to DAEMON_CWD", () => {
   // openDaemonStderr handed the fake a real fd, as the sibling tests above do.
   const out = calls[0]?.stdio?.[1];
   if (typeof out === "number") closeSync(out);
+});
+
+// ensureDaemon spawns again once isAlive reads its daemon dead, which a zombie never does.
+// Awaiting `exited` would reap the child itself, so only the pid is kept.
+test("a detached, unref'd child that exits is reaped without being awaited", async () => {
+  const child = Bun.spawn([process.execPath, "-e", "process.exit(0)"], {
+    stdio: ["ignore", "ignore", "ignore"],
+    detached: true,
+  });
+  child.unref();
+  const { pid } = child;
+  expect(await until(() => !isPidAlive(pid))).toBe(true);
 });
 
 // ---- removeOwnDaemonLock ----

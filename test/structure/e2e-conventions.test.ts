@@ -25,9 +25,8 @@
 // exception for real code (the `waitForFunction((t) => performance.now() > t +
 // N, t0)` construct, whose call sites split into honest app-clock waits and
 // fixed sleeps; the per-call `toPass` budgets in file-refs.e2e.ts that raise
-// above the config) the rule needs judgment, so it
-// stays prose in browser-testing.md instead of shipping here with a list to
-// append to.
+// above the config) the rule needs judgment, so it stays prose in
+// browser-testing.md instead of shipping here with a list to append to.
 //
 // What it deliberately does not catch: a banned call reached indirectly —
 // `page["waitForTimeout"](5)`, a destructured `const { waitForTimeout } = page`,

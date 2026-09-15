@@ -51,7 +51,9 @@ export interface EnsureDeps {
   health: (baseUrl: string) => Promise<HealthBody | null>;
   /** Read the daemon lock, or null if absent/unreadable. */
   readLock: () => DaemonLock | null;
-  /** Is a PID alive? (false ⇒ an orphan lock can be removed.) */
+  /** Is a PID alive? False lets an orphan lock be removed, and lets ensureDaemon spawn
+   * again once the daemon it spawned has exited — which relies on the runtime reaping
+   * that detached child, since a zombie still answers signal 0. */
   isAlive: (pid: number) => boolean;
   /** Ask a stale daemon to step down. Returns true when a graceful shutdown was
    * initiated (POST /api/retire accepted, or SIGTERM sent to a live lock PID —
@@ -226,7 +228,7 @@ export async function ensureDaemon(
     if (spawned === undefined || !deps.isAlive(spawned)) {
       try {
         spawned = deps.spawn();
-        logDebug("spawn", "daemon spawned");
+        logDebug("spawn", "daemon spawned", { pid: spawned });
       } catch (e) {
         if (!isAddrInUse(e)) throw e;
       }
@@ -464,7 +466,7 @@ export const DAEMON_CWD = "/";
 
 /** Spawn the on-demand daemon a hook falls back to when no service keeps one up; it
  * idle-exits. Pinned to `DAEMON_CWD`, with stdout/stderr redirected to
- * daemon-stderr.log. Returns the daemon's pid. */
+ * daemon-stderr.log. */
 export function spawnDaemon(s: Settings, spawn: typeof Bun.spawn = Bun.spawn): number {
   const out = openDaemonStderr(s);
   const child = spawn(selfCommand("daemon"), {

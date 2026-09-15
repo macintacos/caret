@@ -2,9 +2,9 @@
 // with TypeScript 7 — the Go port, installed as the `@typescript/native` alias — while
 // keeping `typescript` at ^6 alongside it. The 6.x install is load-bearing twice over:
 // svelte-check refuses to run against a plain 7 (its bin/ts-version-check.js throws with
-// exactly this recipe), and e2e-conventions.test.ts, tokenize-conventions.test.ts and
-// support-exports.test.ts in this directory import the compiler API as a parsing library,
-// which 7.x moves behind ./unstable/* subpaths that expose no standalone parse.
+// exactly this recipe), and the suites in this directory that import `typescript` use its
+// compiler API as a parsing library, which 7.x moves behind ./unstable/* subpaths that
+// expose no standalone parse.
 //
 // Both halves of the arrangement fail SILENTLY when they decay, which is why this file
 // asserts the invocations rather than trusting them. Neither checker announces which
@@ -15,8 +15,8 @@
 //
 // Expect a red on the last test to mean "simplify", not "broken": it fires when upstream
 // widens svelte-check's peer range to admit 7.x. That clears only the first of the two
-// reasons above — collapsing to a single `typescript@7` also means porting those three
-// suites off the compiler API, in the same pass.
+// reasons above — collapsing to a single `typescript@7` also means porting those suites
+// off the compiler API, in the same pass.
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

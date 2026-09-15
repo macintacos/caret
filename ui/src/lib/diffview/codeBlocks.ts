@@ -82,8 +82,9 @@ function tagLanguageToken(row: Element): void {
  * a fence (codeBlockRanges), so its `data-code-end` row is ordinary prose, and
  * scanning that for a marker glyph would dress an inline backtick as a delimiter.
  * The span must then be markers and whitespace ALONE — the same FENCE_ONLY test
- * tagLanguageToken inverts — so that if shiki ever merges ``` and its language into
- * one token, the language is never tagged as a fence. */
+ * tagLanguageToken inverts. FENCE is unanchored, so a ```ts line can close a block;
+ * if shiki ever merges ``` and its language into one token, that token is left
+ * untagged rather than nudged down with its language. */
 function tagFenceToken(row: Element): void {
   if (!FENCE.test(row.textContent ?? "")) return;
   for (const span of row.children) {

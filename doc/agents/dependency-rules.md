@@ -120,8 +120,8 @@ entry that outlived what it described:
   and the condition that lifts it. Its one entry, `typescript`, records a
   **peer obligation** rather than a blocked upgrade: the tree type-checks with TypeScript
   7 through the `@typescript/native` alias, and `^6` stays because svelte-check needs both
-  majors installed and because two suites under `test/structure/` import the compiler API
-  as a parser.
+  majors installed and because the `test/structure/` suites that import `typescript` use
+  its compiler API as a parser.
   [`../../test/structure/typescript-arrangement.test.ts`](../../test/structure/typescript-arrangement.test.ts)
   is its falsifier, and it reds when that peer range widens.
 

@@ -315,10 +315,6 @@ const CARET_OVERRIDES = `
     top: -0.12em;
   }
 
-  /* The fence markers take no chip: a chip tints a span of CONTENT, and a fence row is all
-     marker, so a tint would draw an empty pill in the code panel. They keep the --ink-faint
-     ink caret-theme.ts gives them, and the panel says where the block begins and ends. */
-
   /* EXC-867: the inline emphasis chips, the first prose members of the chip family
      (EXC-855). inlineDecorate.ts splits each row's tokens so none straddles an element
      boundary and tags them data-md; these rules are the whole visual treatment, and the
@@ -340,10 +336,10 @@ const CARET_OVERRIDES = `
      EXC-868 is the code member, and it needed nothing beyond one line here and one layer
      above: the pass already tags a codespan and already closes its pill once per element,
      so the backticks stay visible and subdued (caret-theme.ts colours them apart from the
-     code between them) inside one chip. Its tint is --chip-code. A backticked citation is the
-     one place that tint is not what the layer resolves to: the reference rebinds it for the
-     whole group at the bottom of this sheet, so the pill reads as one reference chip rather
-     than a green middle with code-coloured caps.
+     code between them) inside one chip. A backticked citation is the one place its tint is
+     not what the layer resolves to: the reference rebinds it for the whole group at the
+     bottom of this sheet, so the pill reads as one reference chip rather than a green
+     middle with code-coloured caps.
 
      No backtick appears in this comment, or anywhere else in CARET_OVERRIDES: the sheet is
      a template literal, so one would close it early.
@@ -383,9 +379,9 @@ const CARET_OVERRIDES = `
      attributes exist rather than a blanket border-radius, and it is the same
      shape data-code-start / data-code-end already draw for fenced blocks. Logical
      longhands so the ends follow the writing direction. The selection guard that drops
-     these chips on a drag-selected row sits on
-     the per-member tint variables below rather than on the shared fill, so the link chip
-     can keep the opposite policy; see the note there. */
+     these chips on a drag-selected row sits on the per-member tint variables below
+     rather than on the shared fill, so the link chip can keep the opposite policy; see
+     the note there. */
   /* The weight and slant themselves, which have to be declared HERE rather than coming
      from shiki, and this is the one surprise in the whole ticket. shiki does resolve the
      emphasis font style (caret-theme.ts appends the rules, and they win), and @pierre/diffs
@@ -436,8 +432,8 @@ const CARET_OVERRIDES = `
      below, because the members disagree about it. Bold, italic and code are decoration, so
      they drop on a row the reviewer has drag-selected and the band reads as one flat shape.
      Code sides with them rather than with the link because it marks a span instead of
-     offering an action (EXC-868); the file reference inside a codespan keeps its own fill either
-     way, so a selected citation still shows where it can be opened.
+     offering an action (EXC-868); the file reference inside a codespan keeps its own
+     fill either way, so a selected citation still shows where it can be opened.
      The link chip does not, and the reason is consistency across the family rather than
      necessity: EXC-880 keeps the file-reference chip lit under a selection because an
      affordance's chip is not decoration to be tidied away, and a link chip vanishing
@@ -2020,11 +2016,11 @@ const CARET_OVERRIDES = `
      fill moves. The swap is instant: the diff surface is motionless by design, so no
      transition here. The icon sharpens from faint to full ink alongside it.
 
-     Unlike the decoration chips above, this one is NOT suppressed on a selected row.
-     They are decoration, so dropping them lets a drag-selection read as one flat
-     band; this one is an affordance, and hiding it on selection would claim the span
-     stopped being clickable when it hasn't. A green pill inside the selection band is
-     the deliberate cost. */
+     Unlike the bold, italic and code chips above, this one is NOT suppressed on a
+     selected row. Those are decoration, so dropping them lets a drag-selection read as
+     one flat band; this one is an affordance, and hiding it on selection would claim
+     the span stopped being clickable when it hasn't. A green pill inside the selection
+     band is the deliberate cost. */
   [data-content] [data-file-ref] {
     cursor: pointer;
     padding: var(--chip-pad-block) var(--chip-pad-inline);

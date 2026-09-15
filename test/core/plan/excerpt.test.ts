@@ -243,7 +243,6 @@ test("reports a file over MAX_EXCERPT_BYTES as too large to preview", async () =
   expect(await readFileExcerpt(cwd, "huge.ts")).toBeNull();
 });
 
-// 3 MiB: multi-megabyte, and well under MAX_EXCERPT_BYTES (EXC-973).
 test("previews a multi-megabyte file under the size ceiling", async () => {
   const count = Math.ceil((3 * 1024 * 1024) / 100);
   write("mid.ts", `${"x".repeat(99)}\n`.repeat(count));

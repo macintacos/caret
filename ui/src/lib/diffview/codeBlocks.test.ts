@@ -253,8 +253,8 @@ describe("tagCodeBlockRows token tagging", () => {
 
   test("tags no markers when shiki merges the fence and its language into one token", () => {
     // The marker span must be markers alone. Were the two ever to tokenize as one
-    // (they do not today — caret-theme.ts colors them apart), skipping the tag beats
-    // marking the language tag as a fence, which keeps its own prominent treatment.
+    // (they do not today — caret-theme.ts colors them apart), leaving the span
+    // untagged beats nudging the language with the markers.
     const root = buildContent(2);
     setRowTokens(root, 1, ["```ts"]);
     setRowTokens(root, 2, ["```"]);
