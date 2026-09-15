@@ -1,10 +1,5 @@
 # 🥕 caret
 
-> [!WARNING]
-> caret is an early prototype and may change substantially over the next little while —
-> interfaces, hooks, storage, and the install flow are all still settling. Expect rough
-> edges and breaking changes.
-
 caret is a Claude Code (and OpenCode) plugin that replaces the terminal plan-approval
 prompt with a local web UI. When your agent presents a plan, caret opens it in your
 browser so you can read it as rendered HTML, **annotate passages inline** (Google-Docs
