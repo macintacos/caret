@@ -15,6 +15,7 @@ import {
   buildEnvelope,
   decisionText,
   nodeSpawnRunner,
+  PLAN_TITLE_INSTRUCTION,
   runReviewViaCaret,
   type SpawnRunner,
 } from "@opencode/review-bridge.ts";
@@ -33,6 +34,7 @@ const REVIEW_PLAN_DESCRIPTION = [
   "Submit your implementation plan to the user for review in caret's browser UI. For plans only: caret renders the markdown as a plan, so do not use it for other documents or questions.",
   "The call blocks until the user approves or requests changes, which can take many minutes. If the call moves to the background, do not act on the plan until its result arrives.",
   `On a change request, revise the plan and call ${REVIEW_PLAN_TOOL} again. Do not implement the plan until a call returns an approval.`,
+  PLAN_TITLE_INSTRUCTION,
 ].join(" ");
 
 export interface ReviewPlanDeps {

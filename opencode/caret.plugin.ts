@@ -35,6 +35,7 @@ import {
   buildEnvelope,
   decisionText,
   nodeSpawnRunner,
+  PLAN_TITLE_INSTRUCTION,
   runReviewViaCaret,
   type SpawnRunner,
 } from "./review-bridge.ts";
@@ -397,6 +398,7 @@ export function planningSteer(plansDir: string): string {
     "",
     `When you have a plan ready for the user, do NOT call plan_exit. Instead write the plan as markdown to a file in \`${plansDir}/\` (a directory you may write to), for example \`${plansDir}/<short-name>.md\`, and call the \`${REVIEW_TOOL}\` tool with that file as the \`path\` argument.`,
     "It opens caret's visual review UI in the browser; the user approves or requests changes. A change request comes back as the tool result: re-read the file, revise it with targeted edits rather than rewriting it, and call the tool again with the same `path` until it is approved. An approved plan is already saved in that file.",
+    PLAN_TITLE_INSTRUCTION,
   ].join("\n");
 }
 

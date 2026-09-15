@@ -10,6 +10,11 @@ export type CaretDecision =
   | { behavior: "allow"; feedback?: string }
   | { behavior: "deny"; feedback: string };
 
+/** The steer every agent-facing surface appends so the plan opens on the heading
+ * caret derives the review title from. */
+export const PLAN_TITLE_INSTRUCTION =
+  "Start the plan with a single `# <title>` heading that names the change in a few words; caret shows it as the plan's title in the review UI.";
+
 /** Build the caret review envelope `caret review` parses.
  * Mirrors the snake_case session/cwd shape the opencode adapter's parseHookInput
  * reads — both ends are caret-owned. */

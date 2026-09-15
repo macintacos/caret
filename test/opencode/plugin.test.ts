@@ -23,7 +23,7 @@ import {
   resolvePlansDir,
   type WarmRunner,
 } from "@opencode/caret.plugin.ts";
-import type { SpawnRunner } from "@opencode/review-bridge.ts";
+import { PLAN_TITLE_INSTRUCTION, type SpawnRunner } from "@opencode/review-bridge.ts";
 import { fakeDistDir } from "@test/support/fs-tree.ts";
 import { recordingClient } from "@test/support/opencode-toast-client.ts";
 import { until } from "@test/support/poll.ts";
@@ -50,6 +50,10 @@ test("planningSteer points the plan agent at a file in the plans directory, subm
   const s = planningSteer("/data/opencode/plans");
   expect(s).toContain("/data/opencode/plans/");
   expect(s).toContain("`path`");
+});
+
+test("planningSteer asks the plan agent to open its plan with a title heading", () => {
+  expect(planningSteer("/data/opencode/plans")).toContain(PLAN_TITLE_INSTRUCTION);
 });
 
 // --- resolvePlansDir (where the steer tells the plan agent to write) ---
