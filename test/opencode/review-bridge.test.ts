@@ -16,7 +16,6 @@ import {
   nodeSpawnRunner,
   parseDecision,
   parseReviewUrl,
-  planTitle,
   runReviewViaCaret,
   type SpawnRunner,
 } from "@opencode/review-bridge.ts";
@@ -36,7 +35,7 @@ function shim(body: string): string {
   return path;
 }
 
-// --- buildEnvelope / planTitle ---
+// --- buildEnvelope ---
 
 test("buildEnvelope produces the caret review envelope the opencode adapter parses", () => {
   const env = JSON.parse(
@@ -45,7 +44,7 @@ test("buildEnvelope produces the caret review envelope the opencode adapter pars
   expect(env).toEqual({
     session_id: "S",
     cwd: "/proj",
-    tool_input: { plan: "# Ship it\n\nbody", title: "Ship it" },
+    tool_input: { plan: "# Ship it\n\nbody" },
   });
 });
 
@@ -53,11 +52,6 @@ test("buildEnvelope carries the plan file path in tool_input when given, and no 
   const withPath = JSON.parse(buildEnvelope("# P", { planFilePath: "/proj/plan.md" }));
   expect(withPath.tool_input.planFilePath).toBe("/proj/plan.md");
   expect("planFilePath" in JSON.parse(buildEnvelope("# P", {})).tool_input).toBe(false);
-});
-
-test("planTitle pulls the first markdown heading, else undefined", () => {
-  expect(planTitle("# Add status endpoint\n\nsteps")).toBe("Add status endpoint");
-  expect(planTitle("no heading here")).toBeUndefined();
 });
 
 // --- parseDecision (fail-safe) ---

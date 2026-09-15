@@ -11,7 +11,12 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
-import { approvedMessage, deniedMessage, type SpawnRunner } from "@opencode/review-bridge.ts";
+import {
+  approvedMessage,
+  deniedMessage,
+  PLAN_TITLE_INSTRUCTION,
+  type SpawnRunner,
+} from "@opencode/review-bridge.ts";
 import { setupTempConfigFile, setupTempStateDir } from "@test/support/env.ts";
 import { until } from "@test/support/poll.ts";
 import { stubRunner } from "@test/support/spawn-runner.ts";
@@ -65,7 +70,7 @@ test("the review runs this caret's review command under the claude-mcp adapter",
   expect(JSON.parse(stdin ?? "")).toEqual({
     session_id: "mcp-S",
     cwd: "/proj",
-    tool_input: { plan: "# Add rate limiting\n\nsteps", title: "Add rate limiting" },
+    tool_input: { plan: "# Add rate limiting\n\nsteps" },
   });
 });
 
@@ -162,6 +167,7 @@ test("the MCP server lists exactly the review_plan tool, taking a plan", async (
     const [tool] = tools;
     expect(tool?.description).toMatch(/plans? only|only for .*plans?/i);
     expect(tool?.description).toMatch(/background/i);
+    expect(tool?.description).toContain(PLAN_TITLE_INSTRUCTION);
     expect(tool?.inputSchema.required).toEqual(["plan"]);
   } finally {
     await client.close();

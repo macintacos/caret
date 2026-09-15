@@ -1,9 +1,6 @@
 # caret dev — markdown rendering stress test
 
 <!--
-Keep this comment BELOW the h1: review titles derive from the plan's first non-empty line
-(deriveTitle, src/review/threading.ts), so a comment above the heading becomes the title.
-
 Write this file the way an agent writes a plan: every paragraph and every list item on
 ONE long line, wrapped nowhere. Do not hand-wrap it, and do not run rumdl over it.
 

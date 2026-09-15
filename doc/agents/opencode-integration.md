@@ -90,7 +90,7 @@ model that never considers `plan_exit` is exactly the case the rewrite cannot ca
 
 caret does **not** re-implement the daemon round-trip inside the plugin. The tool's
 `execute()` builds a small caret-defined envelope
-(`{ session_id, cwd, tool_input: { plan, title, planFilePath? } }`) and
+(`{ session_id, cwd, tool_input: { plan, planFilePath? } }`) and
 **spawns `caret review` with `CARET_AGENT=opencode`**, piping the envelope on stdin and
 reading the flat decision JSON (`{ behavior, feedback? }`) on stdout. That reuses the
 entire existing daemon/review pipeline unchanged — the OpenCode plugin is the
@@ -118,8 +118,10 @@ pure logic (envelope build, fail-safe decision parse, the spawn bridge) lives in
 is shared: `caret mcp` (`src/commands/mcp.ts`) runs Claude Code's `review_plan` tool
 through the same module, passing its own argv, `CARET_AGENT=claude-mcp`, and tool name, so
 keep `review-bridge.ts` free of anything OpenCode-specific and of any import but node
-builtins. Config mutation is the adapter's, not the plugin's, so it lives in
-`src/adapters/opencode/config-plugin.ts` and is covered from `test/adapters/opencode/`.
+builtins. `caret steer` (`src/adapters/claude/steer.ts`), Claude Code's title-steer hook,
+is a third consumer: it imports only `PLAN_TITLE_INSTRUCTION`, the title steer the plugin
+and `caret mcp` send too. Config mutation is the adapter's, not the plugin's, so it lives
+in `src/adapters/opencode/config-plugin.ts` and is covered from `test/adapters/opencode/`.
 
 ## Daemon warm-up: plan-agent only, not session start (EXC-838)
 

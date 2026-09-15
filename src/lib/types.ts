@@ -213,7 +213,6 @@ export interface CmuxPane {
 export interface PlanInput {
   sessionId?: string;
   cwd?: string;
-  title?: string;
   plan?: string;
   /** The cmux pane this plan was submitted from, when the hook ran under cmux.
    * Absent otherwise — the integration is silently inert outside cmux. */

@@ -2,7 +2,9 @@
 // plugin and `caret mcp`: build caret's review envelope, spawn the review, and turn the
 // flat decision it prints into the tool's result text. It sits in opencode/ because that
 // directory ships as unbundled source the plugin can reach only by relative import, and
-// it imports node builtins only, so bundling it into the CLI pulls in no plugin SDK.
+// it imports node builtins only, so bundling it into the CLI pulls in no plugin SDK. It
+// also holds PLAN_TITLE_INSTRUCTION, since this is the one module the plugin, `caret mcp`
+// and `caret steer` can all import.
 
 import { spawn } from "node:child_process";
 
@@ -10,15 +12,11 @@ export type CaretDecision =
   | { behavior: "allow"; feedback?: string }
   | { behavior: "deny"; feedback: string };
 
-/** The first markdown heading in the plan, used as the review title — or
- * undefined when the plan has no `# ` heading. */
-export function planTitle(plan: string): string | undefined {
-  for (const line of plan.split("\n")) {
-    const m = line.match(/^#\s+(.+?)\s*$/);
-    if (m?.[1]) return m[1];
-  }
-  return undefined;
-}
+/** Asks the model to open its plan on a `#` heading, which deriveTitle
+ * (src/review/threading.ts) prefers as the review title — keep the two in sync. Sent by
+ * the OpenCode planning steer, the MCP review_plan description, and `caret steer`. */
+export const PLAN_TITLE_INSTRUCTION =
+  "Start the plan with a single `# <title>` heading that names the change in a few words; caret shows it as the plan's title in the review UI.";
 
 /** Build the caret review envelope `caret review` parses.
  * Mirrors the snake_case session/cwd shape the opencode adapter's parseHookInput
@@ -30,7 +28,7 @@ export function buildEnvelope(
   return JSON.stringify({
     session_id: ctx.sessionID,
     cwd: ctx.directory,
-    tool_input: { plan, title: planTitle(plan), planFilePath: ctx.planFilePath },
+    tool_input: { plan, planFilePath: ctx.planFilePath },
   });
 }
 

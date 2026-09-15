@@ -5,6 +5,7 @@
 import type { Locator, Page } from "@playwright/test";
 
 import { reviewSwitcher } from "@test/e2e/support/chrome.ts";
+import { titledPlan } from "@test/e2e/support/fixture-plan.ts";
 import { type Daemon, expect } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
@@ -104,8 +105,8 @@ export async function approveViaVariant(
 /** Seed two pending plans ("Plan Alpha" / "Plan Beta", distinct sessions), open
  * the page, and return the review switcher trigger. */
 export async function seedTwoPlansAndOpen(daemon: Daemon, page: Page): Promise<Locator> {
-  await daemon.seed({ title: "Plan Alpha", cwd: "/tmp/proj-alpha" });
-  await daemon.seed({ title: "Plan Beta", cwd: "/tmp/proj-beta" });
+  await daemon.seed({ plan: titledPlan("Plan Alpha"), cwd: "/tmp/proj-alpha" });
+  await daemon.seed({ plan: titledPlan("Plan Beta"), cwd: "/tmp/proj-beta" });
   await page.goto("/");
   await planSurface(page);
   return reviewSwitcher(page);

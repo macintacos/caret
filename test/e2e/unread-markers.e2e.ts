@@ -10,6 +10,7 @@
 // description are ui/src/components/ReviewSwitcher.test.ts.
 
 import { seedTwoPlansAndOpen } from "@test/e2e/support/decision.ts";
+import { titledPlan } from "@test/e2e/support/fixture-plan.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 
 test("marks a plan arriving mid-review, and clears the mark on opening it", async ({
@@ -25,7 +26,7 @@ test("marks a plan arriving mid-review, and clears the mark on opening it", asyn
 
   // seed() defaults to a fresh session per call, which is what makes this a third
   // pending plan rather than a supersede of one already on screen.
-  await daemon.seed({ title: "Plan Gamma", cwd: "/tmp/proj-gamma" });
+  await daemon.seed({ plan: titledPlan("Plan Gamma"), cwd: "/tmp/proj-gamma" });
 
   // The 2s poll delivers it into the open page; the web-first assertions absorb
   // that window rather than sleeping through it.

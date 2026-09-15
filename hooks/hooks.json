@@ -20,6 +20,11 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/bin/caret prewarm",
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/caret steer",
+            "timeout": 10
           }
         ]
       },
@@ -30,6 +35,17 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/bin/caret reconcile",
             "timeout": 15
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/caret steer",
+            "timeout": 10
           }
         ]
       }

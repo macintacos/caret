@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
-// caret hook CLI. Subcommands: daemon | serve | prewarm | review | mcp | reconcile |
-// redact | discovery | install.
+// caret CLI.
 //
 // This file is only the composition point: it assembles the Commander tree and
 // threads each subcommand's parsed options into its run function (the actions in
@@ -25,6 +24,7 @@ import { runRedactSubcommand } from "@/commands/redact.ts";
 import { runReviewSubcommand } from "@/commands/review.ts";
 import { runServe } from "@/commands/serve.ts";
 import { prodService } from "@/commands/service-target.ts";
+import { runSteerSubcommand } from "@/commands/steer.ts";
 import { logFile } from "@/config/paths.ts";
 import { VERSION } from "@/lib/build-id.ts";
 import { logError } from "@/lib/log.ts";
@@ -34,10 +34,7 @@ import { isSupervised } from "@/service/manager.ts";
 // The CLI command tree (EXC-472). The daemon self-spawn vector (selfCommand)
 // and runReviewSubcommand's fail-safe are independent of this layer.
 function buildProgram(): Command {
-  const program = createProgram(
-    "caret",
-    "caret hook CLI: daemon | serve | prewarm | review | mcp | reconcile | redact | discovery | install",
-  ).version(VERSION);
+  const program = createProgram("caret", "caret CLI").version(VERSION);
 
   program
     .command("daemon")
@@ -73,6 +70,13 @@ function buildProgram(): Command {
       "reconcile a terminal plan approval into the daemon (ExitPlanMode PostToolUse hook)",
     )
     .action(() => runReconcileSubcommand());
+
+  program
+    .command("steer")
+    .description(
+      "steer the model to title its plan (EnterPlanMode PostToolUse / UserPromptSubmit hook)",
+    )
+    .action(() => runSteerSubcommand());
 
   program
     .command("redact")

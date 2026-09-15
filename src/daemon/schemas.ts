@@ -19,7 +19,6 @@ export const PlanInputSchema: z.ZodType<PlanInput> = z
   .object({
     sessionId: z.string().optional(),
     cwd: z.string().optional(),
-    title: z.string().optional(),
     plan: z.string().optional(),
     // The agent's on-disk plan file, rewritten with the canonical text so the
     // agent's plan of record matches the review (see plan-file.ts). zod strips
