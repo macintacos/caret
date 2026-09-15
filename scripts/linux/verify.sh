@@ -2,7 +2,7 @@
 #
 # Drives the systemd sequence createSystemdManager performs, against the unit
 # buildSystemdUnit() really emitted, inside a booted Linux. Runs as the unprivileged
-# account in its own user session; `mise run linux verify` puts it there.
+# account in its own user session; `mise run verify linux` puts it there.
 #
 # Every check states what systemd answered, because these answers are what
 # src/service/systemd-manager.ts is written against — a release that changes one should

@@ -1,5 +1,5 @@
 # A booted Ubuntu with a real systemd, so the unit src/service/systemd.ts emits can be
-# loaded by the thing it is written for. Hand-run only (`mise run linux`) — never a
+# loaded by the thing it is written for. Hand-run only (`mise run verify linux`) — never a
 # preflight or CI lane.
 FROM ubuntu:24.04
 

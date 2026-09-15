@@ -2,7 +2,7 @@
 // platform detection: the Linux ServiceManager writes what this returns.
 //
 // The unit tests assert on this text, not on what systemd does with it. The only thing
-// that checks the difference is `mise run linux verify`, by hand, and it reads
+// that checks the difference is `mise run verify linux`, by hand, and it reads
 // StartLimitBurst back out of the unit — run it when you change what this emits.
 
 import { SERVICE_ARGS, type ServiceConfig, sortedEnvironment } from "@/service/manager.ts";

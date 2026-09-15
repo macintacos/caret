@@ -41,6 +41,7 @@ postinstall = "hk install --mise"
 
 # Every task is a file task in .mise/tasks/, and all but one is a thin forwarder into the
 # caret tasks CLI (scripts/tasks/cli.ts), which owns each task's flags and --help. The
-# exception is `linux`, whose whole job is two container commands with no flags worth a
-# CLI. Each one sources scripts/bootstrap.sh first, so a task run from a fresh clone
-# installs the tools and deps it needs instead of dying on them.
+# exception is `verify`, whose whole job is container, launchctl and one script per
+# platform, with no flags worth a CLI. Each one sources scripts/bootstrap.sh first, so a
+# task run from a fresh clone installs the tools and deps it needs instead of dying on
+# them.
