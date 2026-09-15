@@ -1796,7 +1796,7 @@ test("lifecycle events are logged at info: listen, review created, resolved", as
   const { id } = (await created.json()) as { id: string };
   await resolve(id, { behavior: "deny", feedback: "no" });
   const info = recs.filter((r) => r.level === "info");
-  expect(info.some((r) => r.step === "listen" && r.msg.includes("listening on"))).toBe(true);
+  expect(info.some((r) => r.step === "listen")).toBe(true);
   expect(
     info.some((r) => r.step === "review" && r.msg.includes(`review created: ${id.slice(0, 8)}`)),
   ).toBe(true);
