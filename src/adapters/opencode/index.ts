@@ -20,10 +20,10 @@ import type { Decision, PlanInput, SkillRef } from "@/lib/types.ts";
 /** The caret-defined review envelope the OpenCode plugin pipes to `caret review`.
  * Mirrors the snake_case session/cwd convention the Claude/Codex parsers use so the
  * three stay structurally parallel; the plugin builds this shape from its tool args,
- * reading the plan file on a `path` call. Every field is optional — a payload missing any of them still parses
- * to a PlanInput, and the downstream guards handle the gaps. planFilePath is set
- * only when the agent submitted a plan file rather than inline text; caret then
- * rewrites that file with the canonical plan. */
+ * reading the plan file on a `path` call. Every field is optional — a payload missing
+ * any of them still parses to a PlanInput, and the downstream guards handle the gaps.
+ * planFilePath is set only when the agent submitted a plan file rather than inline
+ * text; caret then rewrites that file with the canonical plan. */
 interface HookStdin {
   session_id?: string;
   cwd?: string;
