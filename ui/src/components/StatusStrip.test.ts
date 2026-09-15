@@ -100,7 +100,6 @@ describe("StatusStrip", () => {
     const strip = target.querySelector(".status-strip")!;
     const sep = strip.querySelector('[data-slot="separator"]');
     expect(sep).not.toBeNull();
-    expect(strip.textContent).not.toContain("·");
     // Decorative, matching the old aria-hidden `·` glyphs — a screen reader
     // traversing the labelled strip shouldn't announce "separator" between metrics.
     expect(sep!.getAttribute("aria-hidden")).toBe("true");

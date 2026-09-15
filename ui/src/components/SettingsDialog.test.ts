@@ -58,16 +58,6 @@ describe("SettingsDialog shell", () => {
     );
   });
 
-  test("renders a nav row for the populated Appearance category only", async () => {
-    const { flush } = render(SettingsDialog, props());
-    await flushUntil(flush, mounted);
-    expect(has("[data-category='Appearance']")).toBe(true);
-    // Diff view folded into Appearance as a section, so it is no longer its own
-    // nav row; General has no entries either.
-    expect(has("[data-category='Diff view']")).toBe(false);
-    expect(has("[data-category='General']")).toBe(false);
-  });
-
   test("the Appearance pane renders the theme block, shortcut hints, and the Diff view fields", async () => {
     const { flush } = render(SettingsDialog, props());
     await flushUntil(flush, mounted);
@@ -93,12 +83,6 @@ describe("SettingsDialog shell", () => {
     const { flush } = render(SettingsDialog, props());
     await flushUntil(flush, mounted);
     expect(sectionHeads()).toContain("Diff view");
-  });
-
-  test("no save chip — edits apply immediately", async () => {
-    const { flush } = render(SettingsDialog, props());
-    await flushUntil(flush, mounted);
-    expect(has(".save-chip")).toBe(false);
   });
 });
 

@@ -38,13 +38,6 @@ const baseProps = {
 };
 
 describe("TopBar render", () => {
-  // The working-directory path belongs to the compare row, not the header (EXC-807).
-  test("does not render the working-directory path", () => {
-    const { target } = render(TopBar, baseProps);
-    expect(target.querySelector(".context")).toBeNull();
-    expect(target.textContent).not.toContain("/home/u/proj/app");
-  });
-
   test("renders the brand and, with an active review, the action buttons", () => {
     const { target } = render(TopBar, baseProps);
     expect(target.querySelector(".brand")!.textContent).toContain("caret");

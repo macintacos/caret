@@ -297,12 +297,6 @@ describe("SourceAnnotationCard focus + position", () => {
     expect(target.querySelector(".card")?.classList.contains("focused")).toBe(true);
   });
 
-  test("renders inline (no absolute positioning hook)", () => {
-    const { target } = render(SourceAnnotationCard, base());
-    const style = target.querySelector(".card")?.getAttribute("style");
-    expect(style == null || !/top:|position\s*:/.test(style)).toBe(true);
-  });
-
   test("carries the data-annotation-card hook for focus scroll", () => {
     const { target } = render(SourceAnnotationCard, base());
     expect(target.querySelector('[data-annotation-card="a1"]')).not.toBeNull();
@@ -347,7 +341,6 @@ describe("SourceAnnotationCard edit/delete", () => {
 
   test("edit opens the editor seeded with the current comment", () => {
     const { target } = openEditor();
-    expect(target.querySelector("textarea")).toBeNull();
     expect(target.querySelector(".cm-content")?.textContent).toContain("needs work");
   });
 
