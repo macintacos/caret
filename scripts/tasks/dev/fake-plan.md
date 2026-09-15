@@ -503,6 +503,26 @@ Read each link case as a whole sentence: the prose around the link should stay w
 
 [reflow-ref]: https://example.com/reflow/reference-definition?cols=90&mode=normalize
 
+## Wrapped inline spans
+
+EXC-1342: the 90-column reflow breaks inside a span too long for one line, so each case below arrives on one line and settles across two rows with the break falling mid-span. Every wrapped span should stay styled on both rows and read as one continuous pill — no rounded cap, end padding or gap at the break, and the rounded ends only at the span's real start and end.
+
+**1. Bold clause in a paragraph.** Some intro words and **a bold clause that is far too long to ever fit on a single line of ninety columns, so the reflow has to break it** and prose after.
+
+**2. Italic list item.**
+
+- An item that goes *italic for a very long stretch of words that keeps going well past the ninety column limit of the reflow* and ends; its second row resumes past the hanging indent.
+
+**3. Bold clause in a blockquote.**
+
+> Quoted words and **a bold clause that is far too long to ever fit on a single line of ninety columns, so it must break** and done; the second row starts past the quote prefix.
+
+**4. Nested code in a soft-wrapped table cell.** A table row is never reflowed, so this cell wraps visually inside its column instead. The code chip nested inside the bold span should keep its tint on its own characters across every visual line, inside the bold pill.
+
+| Case   | Notes |
+| ------ | ----- |
+| Nested | Prose ahead of the span, then **a bold stretch carrying `a long nested code span that the column has to wrap through` before it closes** with more prose after it. |
+
 ## Sanitizer probes
 
 The block below is shown **as source** (inside a tagged `html` fence) so you can read what is being attempted — it is highlighted, not executed:

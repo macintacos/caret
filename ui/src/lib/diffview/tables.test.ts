@@ -181,8 +181,8 @@ describe("the seed plan's tables", () => {
 
   test("covers the showcase's narrow, wide, wrapping and inline-markup shapes", () => {
     // The `### Tabular data` trio plus the four tables that predate it, plus the
-    // wrapping one under `## Tables`.
-    expect(found).toHaveLength(8);
+    // wrapping ones under `## Tables` and `## Wrapped inline spans`.
+    expect(found).toHaveLength(9);
     // The widest is what drives the horizontal-scroll path in a real browser.
     expect(Math.max(...found.map((t) => t.align.length))).toBe(10);
     // And one cell runs past the sheet's 64ch per-column cap, which is the only thing
