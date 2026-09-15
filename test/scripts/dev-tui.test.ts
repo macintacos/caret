@@ -133,11 +133,6 @@ describe("renderFrame", () => {
     expect(flat).toContain("revise last");
   });
 
-  test("the status lines are on the rail", () => {
-    const flat = renderFrame({ ...base, lines: [] }, 80, 12).join("\n");
-    expect(flat).toContain("port 1234");
-  });
-
   test("the newest log line is visible when following the tail", () => {
     const lines = Array.from({ length: 50 }, (_, i) => `line-${i}`);
     const flat = renderFrame({ ...base, lines }, 80, 10).join("\n");

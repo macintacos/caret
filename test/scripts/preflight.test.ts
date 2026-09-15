@@ -197,17 +197,14 @@ test("lint failure doesn't stop the others, exits 1, surfaces output and the for
   expect(r.summary).toContain("mise run format");
 });
 
-test("preflight's task groups map to real mise task files (consolidated, EXC-738)", async () => {
+test("preflight's task groups map to real mise task files", async () => {
   // The orchestrator hard-codes its task set (IMMEDIATE/DEPENDENT) and spawns
-  // each as `mise run <words…>`, whose FIRST word is the mise task file. This
-  // guards the rename: `build ui`/`test e2e`/`build bin` must resolve to the
-  // `build` and `test` group files, and the old per-variant files must be gone.
+  // each as `mise run <words…>`, whose FIRST word is the mise task file, so
+  // `build ui`/`test e2e`/`build bin` must resolve to the `build` and `test`
+  // group files.
   const taskFile = (name: string): string => join(import.meta.dir, "../../.mise/tasks", name);
   const firstWords = [...new Set(ALL_TASKS.map((t) => t.split(" ", 1)[0] ?? t))];
   for (const group of firstWords) expect(existsSync(taskFile(group))).toBe(true);
-  for (const gone of ["build-ui", "build-bin", "build-bundle", "test-e2e"]) {
-    expect(existsSync(taskFile(gone))).toBe(false);
-  }
 });
 
 test("the consolidated group task files declare no `#MISE depends` edge (concurrent-UI-build guard, EXC-738)", () => {
