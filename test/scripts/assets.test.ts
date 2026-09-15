@@ -1,8 +1,8 @@
 // The pure halves of the `assets` task (EXC-805): the host-tool lookup, the seam
-// geometry the four-theme stitch is cut along, and the magick / ffmpeg argv the
-// composite and the encode run. Everything here is a plain function — the browser
-// driving and the daemon boot are effects that live in the task's run functions,
-// so this suite runs with none of Chromium, ImageMagick or ffmpeg installed.
+// geometry the four-theme stitch is cut along, and the magick argv the composite
+// runs. Everything here is a plain function — the browser driving and the daemon
+// boot are effects that live in the task's run function, so this suite runs with
+// neither Chromium nor ImageMagick installed.
 //
 // test/scripts/ mirrors scripts/ (doc/agents/test-layout.md).
 
@@ -11,11 +11,8 @@ import { expect, test } from "bun:test";
 import { MARKDOWN_READ_BY_TESTS } from "@scripts/preflight.ts";
 import {
   ANNOTATION_ANCHOR,
-  assetsPlan,
   bandCommand,
-  encodeCommand,
   FRAME,
-  PLAN_TITLE_FRAGMENT,
   resolveTool,
   seamLines,
   seamPolygons,
@@ -36,7 +33,6 @@ test("resolveTool throws with the install hint when the tool is absent", () => {
   expect(() => resolveTool(() => null, "magick", "imagemagick")).toThrow(
     /brew install imagemagick/,
   );
-  expect(() => resolveTool(() => null, "ffmpeg", "ffmpeg")).toThrow(/brew install ffmpeg/);
 });
 
 // ---- seam geometry ----
@@ -179,89 +175,16 @@ test("stitchCommand flattens the bands then strokes the seams in the accent", ()
   );
 });
 
-test("encodeCommand builds a browser-playable H.264 mp4 at the measured rate", () => {
-  // yuv420p + faststart is what makes it play in a browser and in QuickTime
-  // rather than only in a developer's media player; the rate is measured from
-  // the capture so playback is real time.
-  const cmd = encodeCommand("ffmpeg", 12.5, "/tmp/f-%05d.jpg", "out.mp4");
-  expect(cmd.slice(0, 2)).toEqual(["ffmpeg", "-y"]);
-  expect(cmd).toContain("12.500");
-  expect(cmd).toContain("/tmp/f-%05d.jpg");
-  expect(cmd.join(" ")).toContain("-c:v libx264");
-  expect(cmd.join(" ")).toContain("-pix_fmt yuv420p");
-  expect(cmd.join(" ")).toContain("-movflags +faststart");
-  expect(cmd.at(-1)).toBe("out.mp4");
-});
-
-test("the README shows the stitch by path and the recording by attachment URL", async () => {
-  // The README is the only reason either artifact exists, so a rename that misses
-  // it ships a broken front page. The two are referenced differently on purpose:
-  // the stitch is committed and embedded by repo path, while the recording is
-  // uploaded to GitHub and linked by its attachment URL — a repo path would be a
-  // download rather than something a reader can watch.
-  const readme = await Bun.file(`${import.meta.dir}/../../README.md`).text();
-  expect(readme).toContain("doc/assets/caret-review-ui.png");
-  expect(readme).toMatch(/https:\/\/github\.com\/user-attachments\/assets\/[0-9a-f-]+/);
-  // Not an embed: GitHub's markdown sanitizer strips `<video>` however its src is
-  // written — relative, absolute, and attachment URL alike all render as an empty
-  // paragraph — so a link is the only form that survives.
-  expect(readme).not.toContain("<video");
-});
-
-test("the recording is never committed", async () => {
-  // It is uploaded rather than versioned, so nothing should add a multi-megabyte
-  // blob to history on every regeneration.
-  const ignored = await Bun.file(`${import.meta.dir}/../../.gitignore`).text();
-  expect(ignored).toContain("/doc/assets/caret-review-demo.mp4");
-});
-
-// ---- the umbrella's sequence ----
-
-/** Capture what assetsPlan would spawn, without spawning it. */
-function fakeRunner(codes: number[] = []) {
-  const calls: { cmd: string[]; env?: Record<string, string> }[] = [];
-  const run = async (cmd: string[], opts: { env?: Record<string, string> } = {}) => {
-    calls.push({ cmd, env: opts.env });
-    return codes[calls.length - 1] ?? 0;
-  };
-  return { calls, run };
-}
-
-test("bare assets builds the UI once, then runs stitch before video with the skip set", async () => {
-  // Both targets call ensureUi through their own prerequisites, so without the
-  // skip a bare run pays the full Vite build twice. Stitch leads because it is
-  // the target that needs ImageMagick — a missing host tool has to fail before
-  // the recording, not after it.
-  const { calls, run } = fakeRunner();
-  expect(await assetsPlan(run)).toBe(0);
-  expect(calls.map((c) => c.cmd.slice(2).join(" "))).toEqual([
-    "build ui",
-    "assets stitch",
-    "assets video",
-  ]);
-  expect(calls[1]?.env?.CARET_SKIP_BUILD_UI).toBe("1");
-  expect(calls[2]?.env?.CARET_SKIP_BUILD_UI).toBe("1");
-});
-
-test("a failed stitch stops the umbrella before it records anything", async () => {
-  const { calls, run } = fakeRunner([0, 1]);
-  expect(await assetsPlan(run)).toBe(1);
-  expect(calls.map((c) => c.cmd.slice(2).join(" "))).toEqual(["build ui", "assets stitch"]);
-});
-
 // ---- fixture drift ----
 
-// The task resolves both of these against scripts/tasks/dev/demo-plan.md at run
-// time, in a browser, outside every gate — so an edit that strands one is only
-// caught here. preflight's MARKDOWN_READ_BY_TESTS is what makes that true for a
-// Markdown-only change, which would otherwise narrow the gate to `lint` alone.
+// The task resolves this against scripts/tasks/dev/demo-plan.md at run time, in a
+// browser, outside every gate — so an edit that strands it is only caught here.
+// preflight's MARKDOWN_READ_BY_TESTS is what makes that true for a Markdown-only
+// change, which would otherwise narrow the gate to `lint` alone.
 const DEMO_PLAN = await Bun.file(`${import.meta.dir}/../../scripts/tasks/dev/demo-plan.md`).text();
 
-test("the demo plan carries the anchors the assets task resolves against it", () => {
+test("the demo plan carries the anchor the assets task resolves against it", () => {
   expect(DEMO_PLAN.split(ANNOTATION_ANCHOR)).toHaveLength(2);
-  expect(DEMO_PLAN).toContain(PLAN_TITLE_FRAGMENT);
-  // The recording retitles the plan's h1 for the agent's follow-up.
-  expect(DEMO_PLAN).toMatch(/^# .+$/m);
 });
 
 test("preflight runs this suite when only the demo plan changed", () => {

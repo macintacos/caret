@@ -427,8 +427,8 @@ export function e2eCommand(args: string[]): string[] {
 
 /** Whether Playwright's Chromium binary is installed. The `assets` task
  * (scripts/tasks/assets.ts) is the only caller: it drives Chromium through the
- * library API for a recording of its own, so it asks about that one browser
- * rather than the e2e matrix's list below. Dynamic-imports @playwright/test so a
+ * library API for its screenshots, so it asks about that one browser rather than
+ * the e2e matrix's list below. Dynamic-imports @playwright/test so a
  * plain `caret-tasks lint`/`dev` invocation never loads Playwright. */
 export async function chromiumInstalled(): Promise<boolean> {
   const { chromium } = await import("@playwright/test");

@@ -1,8 +1,6 @@
-// `assets` task (EXC-805): regenerate the README's hero artifacts — a four-theme
-// diagonal stitch of the plan view, and a screen recording of the review arc
-// (read a plan, annotate it, send it back, approve, watch the agent pick up).
-// Both come out of this one command, so refreshing them after the UI moves is a
-// task run rather than a hand-composed screenshot.
+// `assets` task (EXC-805): regenerate the README's hero image — a four-theme
+// diagonal stitch of the plan view — so refreshing it after the UI moves is a task
+// run rather than a hand-composed screenshot.
 //
 // It lives under scripts/tasks/ rather than test/e2e/ deliberately: a generator
 // is not a spec, and a file under test/e2e/ matching `**/*.e2e.ts` would be swept
@@ -12,12 +10,8 @@
 //
 // Nothing else here is a new subsystem. The isolated daemon boot is
 // scripts/tasks/dev/run.ts's (childEnvFor, daemonCommand, makeCleanup,
-// discoverPort); the agent's side of the recording is the dev driver's real hook
-// path (devReviewDeps + runReview + nextPlan), so Request changes really appends a
-// revision and Approve really unblocks; the gestures are the ones test/e2e's
-// keyboard-commenting / diff-surface / request-changes / approve specs already
-// drive. The pure halves — the tool lookup, the seam geometry, the argv — are
-// unit-tested in test/scripts/assets.test.ts.
+// discoverPort). The pure halves — the tool lookup, the seam geometry, the argv —
+// are unit-tested in test/scripts/assets.test.ts.
 
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -27,11 +21,8 @@ import type { Browser, BrowserContext, Locator, Page } from "@playwright/test";
 
 import { isPidAlive } from "@/daemon/lifecycle.ts";
 import type { ClientReview, RouteResult } from "@/lib/types.ts";
-import { runReview } from "@/review/orchestrate.ts";
-import { ensureUi, runTargetsAfterUi } from "@/tasks/build.ts";
+import { ensureUi } from "@/tasks/build.ts";
 import { discoverPort, readDevLockPort } from "@/tasks/dev/dev-env.ts";
-import { devReviewDeps } from "@/tasks/dev/driver.ts";
-import { type DriverState, hookStdin, nextPlan } from "@/tasks/dev/protocol.ts";
 import { childEnvFor, daemonCommand, makeCleanup } from "@/tasks/dev/run.ts";
 import { runForward } from "@/tasks/lib/exec.ts";
 import { installCleanupHandlers } from "@/tasks/lib/signals.ts";
@@ -51,49 +42,18 @@ const STITCH_SCALE = 2;
 
 const STITCH_PATH = "doc/assets/caret-review-ui.png";
 
-/** The recording. Gitignored, unlike the stitch: it is uploaded to GitHub and
- * linked from the README by its attachment URL, which is the form a reader can
- * actually watch — a repo path only offers a download, and a file this size is
- * past what GitHub's own file viewer will preview. H.264 in an mp4 rather than
- * Playwright's native webm, so it opens in any player without a plugin.
- * doc/DEVELOPMENT.md carries the upload step. */
-const VIDEO_PATH = "doc/assets/caret-review-demo.mp4";
-
-/**
- * The recording's viewport, in CSS pixels, and its device-pixel multiplier.
- *
- * Narrower than the stitch's frame on purpose. The UI lays out in CSS pixels, so
- * fewer of them across the window makes every glyph a larger fraction of the
- * frame — the axis no amount of resolution substitutes for. The multiplier is the
- * other axis: how many real pixels each of those glyphs is drawn with.
- */
-const VIDEO_VIEWPORT = { width: 1280, height: 800 } as const;
-
-/**
- * Two, not three, and the constraint is frame rate rather than storage.
- *
- * A screenshot's cost tracks its pixel count, and it contends with the gestures
- * for the same CDP session — at 3× the loop settles around 6fps, which is too
- * choppy to watch a pointer move through. 2× lands near 15fps and still renders
- * every glyph with four device pixels per CSS pixel, which is past the point
- * where more resolution is visible on any display that will play this.
- */
-const VIDEO_SCALE = 2;
-
 /** The cwd the reviewed plan claims to come from. Two segments, so `shortCwd`
  * (ui/src/lib/cwd.ts) renders it whole rather than eliding to `…/parent/leaf` —
  * and no contributor path, hostname, or project name can reach a committed asset. */
 const DEMO_CWD = "~/acme-web";
 
-/** The line of the demo plan the still's inline comment anchors to, and the plan
- * title the recording waits on before it touches anything. Both are matched
+/** The line of the demo plan the still's inline comment anchors to. Matched
  * against the STORED plan (the daemon reflows every plan at ingest), and a miss
  * is fatal so a fixture edit can't silently drop the comment card from the hero.
- * Exported because `test/scripts/assets.test.ts` pins them against
+ * Exported because `test/scripts/assets.test.ts` pins it against
  * `scripts/tasks/dev/demo-plan.md` — that file is listed in preflight's
  * MARKDOWN_READ_BY_TESTS, so editing it alone still runs the guard. */
 export const ANNOTATION_ANCHOR = '3. Keep the closing "published vX.Y.Z" line unconditional.';
-export const PLAN_TITLE_FRAGMENT = "Add a `--quiet` flag";
 
 const ANNOTATION_BODY = "say what `--quiet` does to this line when the publish step fails.";
 
@@ -122,7 +82,7 @@ const BANDS = [
 
 /** Resolve a host tool, naming the install when it is absent. Without this the
  * failure surfaces as an ENOENT from a spawn deep inside the pipeline, which says
- * nothing about what to install. Neither tool is pinned in `mise.toml`: both have
+ * nothing about what to install. ImageMagick is not pinned in `mise.toml`: it has
  * no `aqua:` entry, and the registry alternatives would put a multi-minute build
  * in front of every fresh clone. */
 export function resolveTool(
@@ -271,39 +231,6 @@ export function stitchCommand(
     "-strokewidth",
     String(strokeWidth),
     ...lines.flatMap((line) => ["-draw", `line ${line}`]),
-    out,
-  ];
-}
-
-/** Encode the captured frames into an H.264 mp4. `fps` is measured from the run
- * rather than assumed, so the result plays back at real time however the capture
- * loop actually paced. `yuv420p` plus `+faststart` is what makes it playable in a
- * browser and in QuickTime rather than only in a developer's media player. */
-export function encodeCommand(
-  ffmpeg: string,
-  fps: number,
-  framePattern: string,
-  out: string,
-): string[] {
-  return [
-    ffmpeg,
-    "-y",
-    "-loglevel",
-    "error",
-    "-framerate",
-    fps.toFixed(3),
-    "-i",
-    framePattern,
-    "-c:v",
-    "libx264",
-    "-preset",
-    "slow",
-    "-crf",
-    "20",
-    "-pix_fmt",
-    "yuv420p",
-    "-movflags",
-    "+faststart",
     out,
   ];
 }
@@ -484,7 +411,7 @@ async function captureBand(
   }
 }
 
-export async function runAssetsStitch(): Promise<never> {
+export async function runAssets(): Promise<never> {
   const magick = resolveTool(Bun.which, "magick", "imagemagick");
   await ensurePrereqs();
   const { chromium } = await import("@playwright/test");
@@ -548,313 +475,6 @@ async function run(cmd: string[]): Promise<void> {
   if (code !== 0) throw new Error(`caret assets: \`${cmd[0]} …\` exited ${code}`);
 }
 
-// --- assets video ------------------------------------------------------------
-
-/** The recording's session id — one thread, so the revision the agent appends
- * lands on the review the reviewer is already looking at. */
-const DEMO_SESSION = "caret-assets-demo";
-
-/** The plan the agent comes back with once the first one is approved: the same
- * fixture under a follow-up title, so the closing frame reads as the agent
- * picking up rather than as the same plan re-appearing. */
-const FOLLOW_UP_TITLE = "Wire the `--quiet` flag into the CI release job";
-// A function replacement, not a template string: `$&` and friends in a title
-// would otherwise be expanded as replacement patterns (the same reason
-// `extraPlan` in scripts/tasks/dev/protocol.ts takes one).
-const followUpPlan = (plan: string): string =>
-  plan.replace(/^# .*$/m, () => `# ${FOLLOW_UP_TITLE}`);
-
-/** A one-shot latch: a promise plus the call that resolves it. The recording uses
- * one to hold a frame the agent would otherwise race past. */
-function latch(): { held: Promise<void>; release: () => void } {
-  let release = (): void => {};
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  return { held, release };
-}
-
-/**
- * Play the agent's side of the recording through the real hook path, forever.
- *
- * This is the dev driver's loop (scripts/tasks/dev/driver.ts) with the recording's
- * session and cwd: Request changes really appends a `## Revision N` section quoting
- * the reviewer and reposts as v2, and Approve really unblocks and lets the agent
- * send its next plan. Never resolves under normal operation — it dies with the
- * process at teardown, like the dev driver it mirrors.
- *
- * `emptyStateSeen` is the one departure, and it buys determinism rather than
- * cosmetics: a real agent reposts the instant its plan is approved, but the UI
- * only learns the queue emptied on its next 2s poll tick, so the empty state can
- * be skipped entirely — and a beat that sometimes does not render is a beat the
- * recording cannot wait on. Holding the follow-up until the recording has the
- * frame makes it evidence again.
- */
-async function playAgent(base: string, plan: string, emptyStateSeen: Promise<void>): Promise<void> {
-  const deps = devReviewDeps(base);
-  const followUp = followUpPlan(plan);
-  let state: DriverState = { plan, revision: 0 };
-  for (;;) {
-    const out = await runReview(hookStdin(state.plan, DEMO_SESSION, DEMO_CWD), deps);
-    const next = nextPlan(state, out, followUp);
-    if (next.action === "wait") return;
-    if (next.action === "reseed") await emptyStateSeen;
-    state = next;
-  }
-}
-
-/** A fixed dot that follows the pointer, with a press pulse. Playwright renders
- * no cursor of its own, so without this the recording shows dialogs opening with
- * nothing visible causing them. */
-const POINTER_OVERLAY = () => {
-  const dot = document.createElement("div");
-  dot.style.cssText = [
-    "position:fixed;left:0;top:0;z-index:2147483647;pointer-events:none",
-    "width:20px;height:20px;margin:-10px 0 0 -10px;border-radius:50%",
-    "background:rgba(255,143,61,.45);border:2px solid rgba(255,255,255,.92)",
-    "box-shadow:0 1px 6px rgba(0,0,0,.45);transition:transform .08s ease-out",
-  ].join(";");
-  const attach = () => {
-    document.body.appendChild(dot);
-    addEventListener(
-      "mousemove",
-      (event: MouseEvent) => {
-        dot.style.left = `${event.clientX}px`;
-        dot.style.top = `${event.clientY}px`;
-      },
-      true,
-    );
-    addEventListener("mousedown", () => (dot.style.transform = "scale(1.7)"), true);
-    addEventListener("mouseup", () => (dot.style.transform = "scale(1)"), true);
-  };
-  if (document.body) attach();
-  else addEventListener("DOMContentLoaded", attach);
-};
-
-/** How long the recording rests on a beat that just landed, so a viewer can read
- * the state change before the next gesture starts; `beats` lengthens the hold for
- * the ones worth reading. Deliberate pacing, not a wait for a condition — every
- * beat below already waits on its own evidence. */
-const dwell = (beats = 1): Promise<void> => Bun.sleep(1_200 * beats);
-
-/** Move to a target and click it at human speed, so the recording shows the
- * pointer travel rather than teleporting between gestures. */
-async function glideClick(page: Page, target: Locator): Promise<void> {
-  await target.waitFor({ state: "visible" });
-  // `visible` is a DOM predicate, not a viewport one, so an off-screen target
-  // would hand back coordinates the mouse then clicks something else at.
-  await target.scrollIntoViewIfNeeded();
-  const box = await target.boundingBox();
-  if (!box) throw new Error("caret assets: the click target has no box on screen");
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 26 });
-  await page.mouse.down();
-  await page.mouse.up();
-}
-
-/** The viewport y of the plan row carrying `needle`. Resolved through the
- * library's own row contract (test/e2e/support/source-view.ts resolves the same
- * one), and fatal on a miss so a fixture edit fails here rather than as a click
- * that lands on whatever happened to sit at those coordinates. */
-async function rowCenterY(page: Page, needle: string): Promise<number> {
-  const y = await page.evaluate((want) => {
-    const shadow = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-    const row = [...(shadow?.querySelectorAll("[data-content] [data-line]") ?? [])].find((r) =>
-      (r.textContent ?? "").includes(want),
-    );
-    const rect = row?.getBoundingClientRect();
-    return rect ? rect.y + rect.height / 2 : null;
-  }, needle);
-  if (y === null) throw new Error(`caret assets: no plan row carries ${JSON.stringify(needle)}`);
-  return y;
-}
-
-/** Poll until a pending review has reached `version`. The agent's repost is a
- * round trip through the daemon, so the UI beat that follows has something real
- * to wait on rather than a sleep. */
-async function waitForVersion(base: string, version: number): Promise<void> {
-  for (let i = 0; i < 400; i++) {
-    const list = await json<ClientReview[]>(await fetch(`${base}/api/reviews`), "GET /api/reviews");
-    if (list.some((r) => r.status === "pending" && r.version >= version)) return;
-    await Bun.sleep(50);
-  }
-  throw new Error(`caret assets: no pending review reached version ${version}`);
-}
-
-/**
- * Drive the review arc, one beat at a time.
- *
- * Every beat waits on the DOM evidence that it landed rather than on a sleep, so
- * each leaves proof it happened: a beat that silently did nothing fails here
- * instead of producing a recording of an idle window. Where a beat's evidence is
- * inside the plan's own scroll container, the wheel gesture that puts it on
- * screen is followed by `scrollIntoViewIfNeeded` — a Playwright locator counts as
- * visible off-viewport, so the wheel amount alone would be a silent bet on the
- * fixture's current length. Settings, theme switching and the compare view stay
- * out of shot.
- */
-async function playReview(page: Page, base: string, releaseFollowUp: () => void): Promise<void> {
-  await page.goto(base);
-  const surface = await planSurface(page);
-  await page.getByText(PLAN_TITLE_FRAGMENT).first().waitFor({ state: "visible" });
-
-  // A short read before touching anything — the reviewer skimming the plan.
-  await dwell();
-  await surface.hover();
-  await page.mouse.wheel(0, 220);
-  await dwell();
-
-  // The gutter `+` appears only on hover, so the pointer travels to the row first.
-  const box = await surface.boundingBox();
-  if (!box) throw new Error("caret assets: the plan surface has no box on screen");
-  await page.mouse.move(box.x + 6, await rowCenterY(page, ANNOTATION_ANCHOR), { steps: 26 });
-  await glideClick(page, page.locator(".diffview [data-utility-button]"));
-
-  const composer = page.getByRole("dialog", { name: "Add a comment" });
-  await composer.waitFor({ state: "visible" });
-  await composer.getByRole("textbox", { name: "Comment" }).click();
-  await page.keyboard.type(ANNOTATION_BODY, { delay: 45 });
-  await glideClick(page, composer.getByRole("button", { name: "Comment", exact: true }));
-  await oneComment(page).waitFor({ state: "visible" });
-  await dwell();
-
-  // Send it back: the inline comment rides the request-changes dialog to the agent.
-  await glideClick(page, page.getByRole("button", { name: "Request changes" }));
-  const dialog = page.getByRole("dialog", { name: "Send the plan back for revision" });
-  await dialog.waitFor({ state: "visible" });
-  await dwell();
-  await dialog.getByRole("textbox", { name: "General comment" }).click();
-  await page.keyboard.type("Otherwise this reads well — one more pass.", { delay: 45 });
-  await glideClick(page, dialog.getByRole("button", { name: "Send for revision" }));
-
-  // The agent revises and reposts: v2 arrives in the still-open window, carrying
-  // a Revision section that quotes the feedback back.
-  await waitForVersion(base, 2);
-  const revision = page.getByText("Revision 1").first();
-  await revision.waitFor({ state: "visible" });
-  await surface.hover();
-  await page.mouse.wheel(0, 3000);
-  await revision.scrollIntoViewIfNeeded();
-  await dwell();
-
-  await glideClick(page, page.getByRole("button", { name: "Approve", exact: true }));
-  const confirm = page.getByRole("dialog", { name: "Approve this plan?" });
-  await confirm.waitFor({ state: "visible" });
-  await dwell();
-  await glideClick(page, confirm.getByRole("button", { name: "Approve", exact: true }));
-  await page
-    .getByRole("heading", { name: "No plans awaiting review" })
-    .waitFor({ state: "visible" });
-  await dwell();
-  releaseFollowUp();
-
-  // The follow-up opens where the previous plan was left, so send it back to its
-  // heading — the closing frame is the payoff, not a half-empty page.
-  await page.getByText(FOLLOW_UP_TITLE).first().waitFor({ state: "visible" });
-  await surface.evaluate((el) => el.scrollTo({ top: 0 }));
-  await dwell(2);
-}
-
-/**
- * Capture frames for as long as `body` runs, and report the rate they landed at.
- *
- * A screenshot loop rather than Playwright's own `recordVideo`, because the
- * recorder captures the screencast at CSS-pixel resolution and ignores
- * `deviceScaleFactor` — asking it for a larger frame pads and upscales rather
- * than rendering more detail, so 13px monospace can never come out sharp.
- * `page.screenshot` does honour the scale factor, so this is the only path to a
- * genuinely high-resolution recording.
- *
- * The rate is measured rather than assumed: a screenshot at this size costs
- * ~50ms and the gestures contend for the same CDP session, so the real interval
- * drifts. Handing the measured rate to the encoder is what keeps playback at
- * real time instead of subtly fast or slow.
- */
-async function captureFrames(
-  page: Page,
-  dir: string,
-  body: () => Promise<void>,
-): Promise<{ frames: number; fps: number }> {
-  let capturing = true;
-  let frames = 0;
-  const started = Bun.nanoseconds();
-  const loop = (async () => {
-    while (capturing) {
-      try {
-        const shot = await page.screenshot({ type: "jpeg", quality: 90 });
-        await Bun.write(join(dir, `f-${String(frames++).padStart(5, "0")}.jpg`), shot);
-      } catch {
-        // The page is closing, or a gesture holds the session — drop the frame
-        // rather than failing a recording over one.
-      }
-      // No pacing sleep: a screenshot at this size already costs more than a
-      // frame's worth of wall clock, so the loop's own latency IS the interval.
-      // Yielding keeps it from starving the gestures it is recording.
-      await Bun.sleep(0);
-    }
-  })();
-  try {
-    await body();
-  } finally {
-    capturing = false;
-    await loop;
-  }
-  const seconds = Number(Bun.nanoseconds() - started) / 1e9;
-  if (frames < 2) throw new Error("caret assets: the capture loop produced no frames");
-  return { frames, fps: frames / seconds };
-}
-
-export async function runAssetsVideo(): Promise<never> {
-  const ffmpeg = resolveTool(Bun.which, "ffmpeg", "ffmpeg");
-  await ensurePrereqs();
-  const { chromium } = await import("@playwright/test");
-  const work = mkdtempSync(join(tmpdir(), "caret-assets-video."));
-  let seconds = "0.0";
-  try {
-    await withDaemon(async (base, stateDir) => {
-      // The agent side runs in THIS process, so point it at the isolated state
-      // dir before it starts: the hook's own logging (runReview → caret.log, read
-      // lazily off process.env) would otherwise write to the real
-      // ~/.local/state/caret. Same reason scripts/tasks/dev/run.ts does it.
-      process.env.XDG_STATE_HOME = stateDir;
-      const followUp = latch();
-      void playAgent(base, await demoPlan(), followUp.held).catch((err) => {
-        process.stderr.write(`assets video: agent side stopped: ${err}\n`);
-      });
-
-      const browser = await chromium.launch({ slowMo: 260 });
-      const context = await browser.newContext({
-        viewport: { ...VIDEO_VIEWPORT },
-        deviceScaleFactor: VIDEO_SCALE,
-        colorScheme: BANDS[0].scheme,
-      });
-      await pinAppearance(context, BANDS[0]);
-      await context.addInitScript(POINTER_OVERLAY);
-      const page = await context.newPage();
-      let captured: { frames: number; fps: number };
-      try {
-        captured = await captureFrames(page, work, () => playReview(page, base, followUp.release));
-      } finally {
-        // A failed beat must not leave the agent parked on the latch forever.
-        followUp.release();
-        await context.close();
-        await browser.close();
-      }
-      seconds = (captured.frames / captured.fps).toFixed(1);
-      await run(encodeCommand(ffmpeg, captured.fps, join(work, "f-%05d.jpg"), VIDEO_PATH));
-      console.log(
-        `assets video: ${captured.frames} frames at ${captured.fps.toFixed(1)}fps, ` +
-          `${VIDEO_VIEWPORT.width * VIDEO_SCALE}x${VIDEO_VIEWPORT.height * VIDEO_SCALE}`,
-      );
-    });
-  } finally {
-    rmSync(work, { recursive: true, force: true });
-  }
-  // The one criterion no assertion covers — "no longer than about a minute" — is
-  // checkable from this line without adding an ffprobe dependency.
-  console.log(`assets video: wrote ${VIDEO_PATH} (${seconds}s of recording)`);
-  process.exit(0);
-}
-
 // --- prerequisites -----------------------------------------------------------
 
 /** Build the UI (so the daemon serves a current ui/dist) and prove Chromium is
@@ -868,17 +488,4 @@ async function ensurePrereqs(): Promise<void> {
         "(or: bunx playwright install chromium)",
     );
   }
-}
-
-// --- assets (umbrella) -------------------------------------------------------
-
-/** Bare `mise run assets`. Stitch runs first because it is the cheap one: a
- * failure there costs seconds, where the same failure after the recording costs
- * the recording. */
-export async function assetsPlan(run: typeof runForward = runForward): Promise<number> {
-  return await runTargetsAfterUi("assets", ["stitch", "video"], run);
-}
-
-export async function runAssets(): Promise<never> {
-  process.exit(await assetsPlan());
 }

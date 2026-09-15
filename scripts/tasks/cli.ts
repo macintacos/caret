@@ -23,7 +23,7 @@
 import { type Command, InvalidArgumentError, type OptionValues } from "@commander-js/extra-typings";
 
 import { createProgram } from "@/lib/program.ts";
-import { runAssets, runAssetsStitch, runAssetsVideo } from "@/tasks/assets.ts";
+import { runAssets } from "@/tasks/assets.ts";
 import { runBuild, runBuildBin, runBuildBundle, runBuildUi } from "@/tasks/build.ts";
 import { runCaret } from "@/tasks/caret.ts";
 import { DEFAULT_NUM_VERSIONS, parsePositiveInt } from "@/tasks/dev/protocol.ts";
@@ -57,8 +57,6 @@ export interface TaskActions {
   smokeBin: () => Promise<unknown>;
   smokeBundle: () => Promise<unknown>;
   assets: () => Promise<unknown>;
-  assetsStitch: () => Promise<unknown>;
-  assetsVideo: () => Promise<unknown>;
   preflight: (args: JsonArgs) => Promise<unknown>;
 }
 
@@ -79,8 +77,6 @@ const realActions: TaskActions = {
   smokeBin: runSmokeBin,
   smokeBundle: runSmokeBundle,
   assets: runAssets,
-  assetsStitch: runAssetsStitch,
-  assetsVideo: runAssetsVideo,
   preflight: runPreflightCli,
 };
 
@@ -309,26 +305,13 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
       await actions.smokeBundle();
     });
 
-  // `assets`: regenerate the README's hero artifacts. Bare runs both; the
-  // `stitch`/`video` targets exist because iterating on the stitch's seam geometry
-  // must not re-record a minute of video.
-  const assets = program
+  program
     .command("assets")
-    .description("Regenerate the README hero assets: bare = stitch + video, or a target")
+    .description(
+      "Regenerate the README hero image: the plan view in four themes, stitched diagonally",
+    )
     .action(async () => {
       await actions.assets();
-    });
-  assets
-    .command("stitch")
-    .description("Capture the plan view in four themes and composite the diagonal stitch")
-    .action(async () => {
-      await actions.assetsStitch();
-    });
-  assets
-    .command("video")
-    .description("Record the review arc — annotate, request changes, approve — as a .webm")
-    .action(async () => {
-      await actions.assetsVideo();
     });
 
   // `preflight`: the pre-push gate. Its --json output flags are real commander

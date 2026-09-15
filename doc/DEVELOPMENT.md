@@ -523,7 +523,7 @@ forwarder sets `#MISE raw_args=true` so mise hands every argument — including 
 | `build` — bare, `ui`, `bin`, `bundle`               | `scripts/tasks/build.ts`        | Bare is the umbrella; `mise run build bin` reaches a target.                      |
 | `test` — bare / `unit`, `e2e`, `bats`               | `scripts/tasks/test.ts`         | Bare and `unit` are the same bun target; `e2e` is Playwright; `bats` is the shell suites under `scripts/`. The first two carry `--quiet`, `--verbose`, and `--json` ahead of their forwarded args; `bats` carries `--json` alone. |
 | `smoke` — bare, `bin`, `bundle`                     | `scripts/tasks/smoke.ts`        | Bare smokes both artifacts.                                                       |
-| `assets` — bare, `stitch`, `video`                  | `scripts/tasks/assets.ts`       | Regenerates the README hero image and demo recording. Needs ImageMagick and ffmpeg on `PATH`. |
+| `assets`                                            | `scripts/tasks/assets.ts`       | Regenerates the README hero image. Needs ImageMagick on `PATH`.                   |
 | `lint`, `format`, `caret`                           | `scripts/tasks/lint.ts` et al.  | Passthroughs: operands and flags reach the underlying tool. Only `caret` forwards a bare `--help`. |
 | `setup`                                             | `scripts/tasks/setup.ts`        | The bootstrap's three steps, plus the e2e browsers (Chromium and WebKit).         |
 | `preflight`                                         | `scripts/preflight.ts`          | Real Commander options rather than passthrough: `--json`, `-v`, `--grep`, `--task`, `--full`. |
@@ -651,18 +651,12 @@ that whole class of footgun.
 
 ### Regenerating the README assets
 
-The two artifacts under `doc/assets/` — the hero image and the demo recording — come out
-of `mise run assets`, so refreshing them after the UI moves is a task run rather than a
-hand-composed screenshot. It builds the UI, boots an isolated daemon on an ephemeral port,
-and drives the shipped `ui/dist` through the Playwright library:
+The hero image, `doc/assets/caret-review-ui.png`, comes out of `mise run assets`, so
+refreshing it after the UI moves is a task run rather than a hand-composed screenshot. It
+builds the UI, boots an isolated daemon on an ephemeral port, and drives the shipped
+`ui/dist` through the Playwright library.
 
-```sh
-mise run assets          # both artifacts
-mise run assets stitch   # just doc/assets/caret-review-ui.png
-mise run assets video    # just doc/assets/caret-review-demo.mp4
-```
-
-`stitch` captures the plan view in four palettes — caret-dark, caret-light, dracula,
+It captures the plan view in four palettes — caret-dark, caret-light, dracula,
 catppuccin-latte — and composites them into bands cut along parallel seams, stroked in the
 live `--accent`. Two choices there are load-bearing rather than decorative. The palettes
 **alternate dark and light**, because four of one scheme sit within a few RGB points of
@@ -671,44 +665,12 @@ steep enough that every one enters the frame's top edge and leaves its bottom ed
 shallower cut exits through a side instead, which turns the outer bands into corner
 triangles and makes evenly spaced seams produce visibly uneven bands.
 
-`video` records the review arc, with the dev driver playing the agent's side through the
-real hook path, so **Request changes** really appends a revision and **Approve** really
-unblocks. It prints its frame count, rate and resolution; keep the duration under about a
-minute.
+The image renders at **2× device pixels** so it stays crisp on a high-DPI display.
 
-Both artifacts render at **2× device pixels** so they stay crisp on a high-DPI display,
-and the recording uses a narrower CSS viewport than the still — the UI lays out in CSS
-pixels, so fewer of them across the window makes every glyph a larger fraction of the
-frame. That is what makes a recording readable; resolution alone only makes small text
-sharp.
-
-Two host tools are required — **ImageMagick** for the stitch (`brew install imagemagick`)
-and **ffmpeg** for the recording (`brew install ffmpeg`). Neither is pinned in
-`mise.toml`: neither has an `aqua:` entry, and the registry alternatives would put a
-multi-minute build in front of every fresh clone. Each target names its own missing tool
-and the formula that installs it.
-
-#### Publishing the recording
-
-Only the stitch is committed. The recording is uploaded to GitHub and linked from the
-README by its **attachment URL**, which keeps a multi-megabyte blob out of history on
-every regeneration — and is the only form a reader can watch, since a repo path offers a
-download and a file this size is past what GitHub's own file viewer will preview.
-`caret-review-demo.mp4` is gitignored for that reason. To publish a new one:
-
-1. Run `mise run assets video`.
-2. Open any pull request or issue on the repo, and drag `doc/assets/caret-review-demo.mp4`
-   into the comment box. GitHub uploads it and writes a
-   `https://github.com/user-attachments/assets/…` URL into the box.
-3. Put that URL in the README's link and **do not post the comment** — the upload has
-   already happened, and the URL is permanent whether or not the comment is.
-
-A **link**, not an embed: GitHub's markdown sanitizer strips `<video>` outright — relative
-`src`, absolute `src`, and an attachment URL alike all render as an empty paragraph.
-
-The old attachment stays live when a new one is uploaded, so a stale README shows the
-previous recording rather than a broken link. Run the regeneration when the UI has
-actually changed, not as a matter of course.
+It needs **ImageMagick** on `PATH` (`brew install imagemagick`). It isn't pinned in
+`mise.toml`: it has no `aqua:` entry, and the registry alternatives would put a
+multi-minute build in front of every fresh clone. The task names the formula when
+ImageMagick is missing.
 
 ### Icons
 

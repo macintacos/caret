@@ -262,7 +262,7 @@ export const MARKDOWN_READ_BY_TESTS: readonly string[] = [
   "scripts/tasks/dev/fake-plan.md", // test/scripts/dev-driver.test.ts reads it and asserts on its content
   "scripts/tasks/dev/short-plan-a.md", // test/scripts/dev-driver.test.ts resolves its DEV_FIXTURES edits against it
   "scripts/tasks/dev/short-plan-b.md", // test/scripts/dev-driver.test.ts resolves its DEV_FIXTURES edits against it
-  "scripts/tasks/dev/demo-plan.md", // test/scripts/assets.test.ts pins the anchors the assets task resolves against it
+  "scripts/tasks/dev/demo-plan.md", // test/scripts/assets.test.ts pins the anchor the assets task resolves against it
   "commands/demo.md", // test/structure/demo-template.test.ts checks every path it reads ships
   "opencode/commands/demo.md", // test/structure/demo-template.test.ts checks it carries the template marker
   "templates/demo.md", // test/structure/demo-template.test.ts checks it exists and ships
