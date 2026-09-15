@@ -595,6 +595,39 @@ const CARET_OVERRIDES = `
     border-start-end-radius: var(--radius);
     border-end-end-radius: var(--radius);
   }
+  /* A table cell soft-wraps, and on an inline element split across lines the pseudo above
+     resolves to ONE rectangle from the first fragment's start to the last one's end — the
+     tint lands on the wrong characters. So inside a cell the nested member paints on the
+     token again, where every fragment takes its own slice of the background, and gives up
+     only its inner corners. These out-rank the nested rules on selector weight, the table
+     scope adding attribute selectors, rather than on source order. */
+  [data-content] > [data-table-card] [data-table-cell] [data-md-inner]::after {
+    content: none;
+  }
+  [data-content]
+    > [data-table-card]
+    > [data-line]:not([data-selected-line])
+    [data-table-cell]
+    [data-md~="bold"][data-md-inner~="bold"] {
+    --md-bold: var(--chip-bold);
+  }
+  [data-content]
+    > [data-table-card]
+    > [data-line]:not([data-selected-line])
+    [data-table-cell]
+    [data-md~="italic"][data-md-inner~="italic"] {
+    --md-italic: var(--chip-italic);
+  }
+  [data-content]
+    > [data-table-card]
+    > [data-line]:not([data-selected-line])
+    [data-table-cell]
+    [data-md~="code"][data-md-inner~="code"] {
+    --md-code: var(--chip-code);
+  }
+  [data-content] > [data-table-card] [data-table-cell] [data-md~="link"][data-md-inner~="link"] {
+    --md-link: var(--chip-link);
+  }
 
   /* EXC-861: the list markers. This is the epic's transform-in-place stance (EXC-855) at
      its most literal — the marker characters are never removed, and the bullet is drawn

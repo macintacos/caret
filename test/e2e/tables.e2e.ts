@@ -9,7 +9,9 @@
 // continuation lines as much as on its first; that the card grows past the prose measure
 // with no scrollbar while a cell over the 64ch cap wraps inside its own column; that the
 // inline layers — code, bold, italic, a collapsing link, a file reference — still find
-// their columns once a row's tokens sit one level down inside cells; that the pipes
+// their columns once a row's tokens sit one level down inside cells; that a chip nested
+// inside another keeps its tint on every fragment when the cell's soft wrap splits it,
+// which only a real engine's inline box fragmentation can show; that the pipes
 // compute to
 // transparent and the rules that stand in for them paint as background layers whose
 // `var()` inks resolve ACROSS the shadow boundary; that a table's rows and its gutter
@@ -172,6 +174,17 @@ ${WRAP_PROSE}
 | ---- | ----- |
 | 1 | Drain the queue before the cutover, then hold the relay closed until the health probe has reported two consecutive green intervals. |
 | 2 | Short. |
+`;
+
+/** A bold span whose nested codespan starts well inside the 64ch cap and runs far past
+ * it, so the cell's soft wrap lands between the code's own words. The code has spaces in
+ * it on purpose: `pre-wrap` breaks only at a space, so an identifier with none would move
+ * to the next line whole and never fragment. */
+const NESTED_WRAP = `# Nested
+
+| Step | Notes |
+| ---- | ----- |
+| 1 | Cutover waits **until \`the health probe has reported two consecutive green intervals\` holds** and then drains. |
 `;
 
 /** The three tables on the page, by their header row's text. */
@@ -1144,6 +1157,57 @@ test("a cell past the cap wraps inside its own column", async ({ page, daemon })
   expect(heights.row).toBe(Math.round(note?.height ?? 0));
   // The first column kept its natural width beside the wrapped one.
   expect(wrapped[0]?.width).toBe(short[0]?.width);
+});
+
+test("a nested chip keeps its tint on every line the cell's wrap splits it across", async ({
+  page,
+  daemon,
+}) => {
+  // Outside a table a nested member's tint rides an absolutely positioned ::after, and on
+  // an inline element the wrap fragments, that pseudo resolves to ONE rectangle from the
+  // first fragment's start to the last one's end: the tint lands on the wrong characters
+  // and part of the span gets none. Inside a cell the member paints on the token itself,
+  // where every fragment takes its own slice of the background.
+  await openPlan(page, daemon, NESTED_WRAP);
+  await carded(page, 1);
+
+  const [chipCode, chipBold] = await Promise.all([
+    probeColor(page, "--chip-code"),
+    probeColor(page, "--chip-bold"),
+  ]);
+  // Not vacuous: were the two tints one colour, the bold layer alone would carry the fill.
+  expect(chipCode).not.toBe(chipBold);
+
+  const read = () =>
+    page.evaluate(() => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+      const cell = [...(sh?.querySelectorAll("[data-content] [data-table-cell]") ?? [])].find((c) =>
+        (c.textContent ?? "").includes("health probe"),
+      );
+      const code = [...(cell?.querySelectorAll('[data-md-inner~="code"]') ?? [])].sort(
+        (a, b) => (b.textContent?.length ?? 0) - (a.textContent?.length ?? 0),
+      )[0];
+      return {
+        fragments: code?.getClientRects().length ?? 0,
+        weights: [
+          ...new Set(
+            [...(cell?.querySelectorAll('[data-md~="bold"]') ?? [])].map(
+              (t) => getComputedStyle(t).fontWeight,
+            ),
+          ),
+        ],
+        after: code == null ? null : getComputedStyle(code, "::after").content,
+        fill: code == null ? "" : getComputedStyle(code).backgroundImage,
+      };
+    });
+
+  // The premise: the wrap really goes through the nested code rather than around it.
+  await expect.poll(async () => (await read()).fragments).toBeGreaterThan(1);
+  await expect.poll(read).toMatchObject({
+    weights: ["700"],
+    after: "none",
+    fill: expect.stringContaining(chipCode),
+  });
 });
 
 test("vim motion and `/` search reach every table line", async ({ page, daemon }) => {

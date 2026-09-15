@@ -811,6 +811,46 @@ describe("the nested chip's own corners", () => {
     }
     expect(nestTint("link")).not.toMatch(/:not\(\[data-selected-line\]\)/);
   });
+
+  describe("inside a table cell", () => {
+    const cellFill = rulesFor(String.raw`\[data-table-cell\]\s+\[data-md-inner\]::after`)[0] ?? "";
+    const cellTint = (member: string) =>
+      rulesFor(
+        String.raw`\[data-table-cell\]\s+\[data-md~="${member}"\]\[data-md-inner~="${member}"\]`,
+      )[0] ?? "";
+    /** Attribute selectors in a rule's prelude, :not()'s argument included. Every rule here
+     * shares its other components, so this is the specificity that decides the cascade. */
+    const weight = (rule: string) => rule.slice(0, rule.indexOf("{")).split("[").length - 1;
+
+    // A cell soft-wraps, and on an inline element split across lines the absolutely
+    // positioned pseudo resolves to one rectangle from the first fragment's start to the
+    // last one's end — the tint lands on the wrong characters. Painted on the token, each
+    // fragment takes its own slice of the background.
+    test("paints the nested member on the token rather than the pseudo", () => {
+      expect(cellFill).toContain("[data-table-card]");
+      expect(cellFill).toMatch(/content:\s*none/);
+      for (const member of ["bold", "italic", "code", "link"]) {
+        expect(cellTint(member)).toContain("[data-table-card]");
+        expect(cellTint(member)).toMatch(
+          new RegExp(String.raw`--md-${member}:\s*var\(--chip-${member}\)`),
+        );
+      }
+    });
+
+    test("out-ranks the rules it overrides, whatever their source order", () => {
+      expect(weight(cellFill)).toBeGreaterThan(weight(nestFill));
+      for (const member of ["bold", "italic", "code", "link"]) {
+        expect(weight(cellTint(member))).toBeGreaterThan(weight(nestTint(member)));
+      }
+    });
+
+    test("keeps the family's selection split", () => {
+      for (const member of ["bold", "italic", "code"]) {
+        expect(cellTint(member)).toMatch(/:not\(\[data-selected-line\]\)/);
+      }
+      expect(cellTint("link")).not.toMatch(/:not\(\[data-selected-line\]\)/);
+    });
+  });
 });
 
 // EXC-870: the one element on this surface that is content rather than decoration. It is
