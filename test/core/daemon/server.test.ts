@@ -55,31 +55,6 @@ async function bootClaude(opts: BootOptions = {}) {
   await boot({ approveVariants: APPROVE_VARIANTS, ...opts });
 }
 
-async function prefMode(): Promise<string> {
-  return ((await (await fetch(`${base}/api/prefs`)).json()) as { approveMode: string }).approveMode;
-}
-
-// The prefs write on /resolve is fire-and-forget (off the hook's blocking path),
-// so poll briefly for it to land rather than asserting on a single fixed sleep.
-async function waitForPrefMode(want: string): Promise<string> {
-  let last = "";
-  for (let i = 0; i < 20; i++) {
-    last = await prefMode();
-    if (last === want) return last;
-    await Bun.sleep(10);
-  }
-  return last;
-}
-
-/** Seed a review, approve it with acceptMode "auto", and wait for the
- * remembered approve mode to land — the common precondition for a test that
- * then exercises prefs merge or restart persistence. */
-async function approveWithAutoMode(): Promise<string> {
-  const { id } = await newReview();
-  await resolve(id, { behavior: "allow", acceptMode: "auto" });
-  return waitForPrefMode("auto");
-}
-
 // A promise that resolves the first time the daemon's idle/retire shutdown fires,
 // plus the onShutdown callback to hand to boot(). Awaiting the signal is the
 // deterministic alternative to sleeping past idleMs and then polling a counter:
@@ -434,32 +409,6 @@ test("the idle timer cannot end a drain that is still waiting", async () => {
   timer.fire();
   expect(sig.fired()).toBe(false);
   await fetch(`${base}/api/reviews/${id}/decision`);
-  await sig.shutdown;
-});
-
-test("an approve-mode write detached from its /resolve still holds the drain", async () => {
-  const sig = shutdownSignal();
-  const park = decisionParked();
-  let release!: () => void;
-  const gate = new Promise<void>((r) => {
-    release = r;
-  });
-  await bootClaude({
-    onShutdown: sig.onShutdown,
-    onDecisionAwaited: park.onDecisionAwaited,
-    prefsWriter: { merge: () => gate },
-  });
-  const { id } = await newReview();
-  // The hook is already parked when the decision lands, so its read leaves no
-  // entry behind and the prefs write is the only thing left to hold the drain.
-  const poll = fetch(`${base}/api/reviews/${id}/decision`);
-  await park.parked;
-  await resolve(id, { behavior: "allow", acceptMode: "auto" });
-  await poll;
-  d.drain();
-  await Bun.sleep(20);
-  expect(sig.fired()).toBe(false);
-  release();
   await sig.shutdown;
 });
 
@@ -1259,7 +1208,6 @@ describe("read-confidentiality posture", () => {
         "GET /api/reviews/:id/skill-description",
         () => fetch(`${base}/api/reviews/${id}/skill-description?name=git&origin=user`),
       ],
-      ["GET /api/prefs", () => fetch(`${base}/api/prefs`)],
       [
         "POST /api/prefs",
         () =>
@@ -1884,16 +1832,6 @@ test("a revision re-pends the review and clears the prior decision (no stale re-
   expect(res.status).toBe(204);
 });
 
-// The read half serves `approveMode` and nothing else: `updates.check` reaches the
-// browser on GET /api/update, folded into the verdict it qualifies (EXC-1210), so there
-// is exactly one read path for it rather than two that can drift.
-test("GET /api/prefs defaults to 'default' on a fresh daemon", async () => {
-  await boot();
-  const res = await fetch(`${base}/api/prefs`);
-  expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ approveMode: "default" });
-});
-
 // ---- POST /api/prefs (EXC-1206) ----
 //
 // The write half of the prefs route, and the one schema in the daemon that REJECTS
@@ -1953,15 +1891,6 @@ describe("POST /api/prefs", () => {
     expect(existsSync(join(dir, "prefs.json"))).toBe(false);
   });
 
-  test("a write preserves a sibling key it did not name", async () => {
-    // The merge, exercised through the route: the remembered approve mode is what a
-    // whole-file write here would erase.
-    await bootClaude();
-    expect(await approveWithAutoMode()).toBe("auto");
-    expect((await setPrefs({ updates: { check: false } })).status).toBe(200);
-    expect(prefsOnDisk()).toEqual({ approveMode: "auto", updates: { check: false } });
-  });
-
   test("is CSRF-guarded and Host-guarded like every other write (AC #2)", async () => {
     // The guards run in handle() around every dispatch, so the route inherits them
     // the moment it exists.
@@ -1982,47 +1911,6 @@ describe("POST /api/prefs", () => {
     // Neither reached the handler.
     expect(existsSync(join(dir, "prefs.json"))).toBe(false);
   });
-});
-
-test("an allow remembers the chosen acceptMode (incl. auto)", async () => {
-  await bootClaude();
-  for (const mode of ["acceptEdits", "auto"] as const) {
-    const { id } = await newReview();
-    await resolve(id, { behavior: "allow", acceptMode: mode });
-    expect(await waitForPrefMode(mode)).toBe(mode);
-  }
-});
-
-test("a deny does not change the remembered approve mode", async () => {
-  await bootClaude();
-  const { id: a } = await newReview();
-  await resolve(a, { behavior: "allow", acceptMode: "acceptEdits" });
-  expect(await waitForPrefMode("acceptEdits")).toBe("acceptEdits");
-
-  const { id: d } = await newReview();
-  // Even a deny that carries an acceptMode must not move the remembered value —
-  // the write is gated on behavior === "allow", not on the token's absence.
-  await resolve(d, { behavior: "deny", acceptMode: "auto", feedback: "redo" });
-  await Bun.sleep(30); // give any (erroneous) write a chance to land
-  expect(await prefMode()).toBe("acceptEdits");
-});
-
-test("an allow with an unrecognized acceptMode leaves prefs at 'default'", async () => {
-  await bootClaude();
-  const { id } = await newReview();
-  await resolve(id, { behavior: "allow", acceptMode: "turbo" });
-  await Bun.sleep(30); // an id outside the declared set must not seed prefs
-  expect(await prefMode()).toBe("default");
-});
-
-test("the remembered approve mode survives a daemon restart", async () => {
-  await bootClaude();
-  expect(await approveWithAutoMode()).toBe("auto");
-
-  // Restart: stop the server, boot a fresh one against the same state dir.
-  srv.stop();
-  await bootClaude();
-  expect(await prefMode()).toBe("auto");
 });
 
 // ---- instrumentation (EXC-444) ----
@@ -2313,23 +2201,6 @@ test("a real daemon logger censors a forged plan body on the wire path", async (
   expect(text).toContain('"source":"ui"');
   expect(text).toContain('"plan":"<redacted>"');
   expectNeverLogsBody(text, "secret plan body");
-});
-
-test("a failed fire-and-forget prefs write is logged at warn", async () => {
-  const { recs, log } = recordingLog();
-  // prefsPath nested under a regular FILE so the writer's ensureStateDir mkdir fails.
-  const blocker = join(dir, "blocker");
-  await Bun.write(blocker, "i am a file, not a directory");
-  await bootClaude({ log, prefsPath: join(blocker, "prefs.json") });
-  const { id } = await newReview();
-  await resolve(id, { behavior: "allow", acceptMode: "auto" });
-  // Fire-and-forget: poll briefly for the warn to land.
-  let warn: (typeof recs)[number] | undefined;
-  for (let i = 0; i < 20 && !warn; i++) {
-    warn = recs.find((r) => r.level === "warn" && r.step === "prefs");
-    await Bun.sleep(10);
-  }
-  expect(warn?.msg).toBe("approve mode write failed");
 });
 
 // ---- cmux unread marks (EXC-961) ----

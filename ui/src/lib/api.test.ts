@@ -18,7 +18,6 @@ import {
   type Respond,
 } from "@ui/support/routed-fetch.ts";
 import {
-  getApproveMode,
   getDiagnostics,
   getDirListing,
   getFileExcerpt,
@@ -298,17 +297,6 @@ describe("putDraft instrumentation", () => {
     const scratches = [{ startLine: 2, endLine: 3, text: "wip" }];
     await putDraft(ID, { annotations, generalCommentDraft: "", composerScratches: scratches });
     expect(body).toMatchObject({ composerScratches: scratches });
-  });
-});
-
-describe("getApproveMode instrumentation", () => {
-  test("failure warns at step prefs and rejects", async () => {
-    respond = () => Promise.reject(new Error("offline"));
-
-    await expect(getApproveMode()).rejects.toThrow("offline");
-    flush();
-
-    expectLoggedAt("warn", "prefs");
   });
 });
 

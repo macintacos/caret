@@ -3,7 +3,6 @@
 
 import type {
   Annotation,
-  ApproveVariantId,
   ClientReview,
   DaemonDiagnostics,
   DirListing,
@@ -14,7 +13,6 @@ import type {
   HealthIdentity,
   PersistedScratch,
   PrefsPatch,
-  PrefsResponse,
   ResolveBody,
   SkillDescriptionResponse,
   SkillRef,
@@ -78,20 +76,6 @@ export async function getUpdate(): Promise<UpdateReport> {
     } else {
       uiLog.warn("request", "update report read failed", { reason: String(err) });
     }
-    throw err;
-  }
-}
-
-/** One-time read (on UI load) of the machine-global remembered approve variant.
- * Deliberately not part of the 2s reviews poll. */
-export async function getApproveMode(): Promise<ApproveVariantId> {
-  try {
-    // Typed as the wire contract, not inline: the browser's only reader of GET
-    // /api/prefs, so the one place a PrefsResponse change is caught at compile time.
-    const { approveMode } = await json<PrefsResponse>(await fetch("/api/prefs"));
-    return approveMode;
-  } catch (err) {
-    uiLog.warn("prefs", "approve mode read failed", { reason: String(err) });
     throw err;
   }
 }

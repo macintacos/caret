@@ -34,3 +34,14 @@ export function approveVariants(declared: ApproveVariant[] | undefined): Approve
 export function approveLabel(id: ApproveVariantId, variants: ApproveVariant[]): string {
   return variants.find((v) => v.id === id)?.label ?? variants[0]?.label ?? "Approve";
 }
+
+/** The variant id to drive the primary Approve button: what this browser remembered,
+ * gated against the live set so an id from another adapter (or an older caret) can
+ * never resolve to a variant this daemon does not declare. */
+export function pickApproveMode(
+  remembered: ApproveVariantId | null,
+  variants: ApproveVariant[],
+): ApproveVariantId {
+  if (remembered !== null && variants.some((v) => v.id === remembered)) return remembered;
+  return variants[0]?.id ?? "default";
+}

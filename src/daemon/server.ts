@@ -8,13 +8,7 @@ import { dirname } from "node:path";
 
 import { deriveIdleTimeoutSec } from "@/config/constants.ts";
 import { ensureStateDir, prefsFile } from "@/config/paths.ts";
-import {
-  type ApproveModeSet,
-  createPrefsWriter,
-  type PrefsWriter,
-  readApproveMode,
-  writeApproveMode,
-} from "@/config/prefs.ts";
+import { createPrefsWriter, type PrefsWriter } from "@/config/prefs.ts";
 import { DEFAULTS } from "@/config/settings.ts";
 import {
   isClientLive,
@@ -49,7 +43,6 @@ import {
   type FileRefsResponse,
   type HealthIdentity,
   type PlanInput,
-  type PrefsResponse,
   type ResolveBody,
   type RouteResult,
   type SkillDescriptionResponse,
@@ -322,18 +315,6 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   const { awaitDecision, resolveDecision, clearDecision, openDecisionCount, unreadDecisionCount } =
     createDecisions(log);
 
-  // The set of approve-variant ids the resolve route and prefs persistence gate
-  // on: the daemon stays tool-agnostic, recognizing whatever the adapter declares
-  // rather than a baked enum. A daemon with no declared variants recognizes only
-  // "default", so a fresh /api/prefs still reads "default".
-  const approveModeSet: ApproveModeSet =
-    approveVariants && approveVariants.length > 0
-      ? { valid: approveVariants.map((v) => v.id), fallback: approveVariants[0]?.id ?? "default" }
-      : { valid: ["default"], fallback: "default" };
-
-  // ONE writer for the two paths that write prefs.json — the resolve path's approve
-  // mode and POST /api/prefs. Sharing it is what serializes them: two writers would
-  // each hold their own queue and could still interleave a read-modify-write.
   const prefsWriter = opts.prefsWriter ?? createPrefsWriter(prefsPath);
 
   // Wait for a decision but no longer than `ms` — resolves to null on timeout so
@@ -587,18 +568,6 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     lastReviewsPollAt = 0;
     log.debug("ui", "ui presence retracted");
     return new Response(null, { status: 204 });
-  }
-
-  // GET /api/prefs — machine-global UI prefs, read once on UI load (deliberately
-  // not part of the 2s /api/reviews poll). Fails safe to "default" for an unreadable
-  // approve mode. `updates.check` is writable through the POST half but reaches the
-  // browser on GET /api/update instead (EXC-1210), folded into the verdict it qualifies,
-  // so the switch has exactly one read path rather than two that can drift.
-  async function handlePrefs(): Promise<Response> {
-    const body: PrefsResponse = {
-      approveMode: await readApproveMode(prefsPath, log, approveModeSet),
-    };
-    return Response.json(body);
   }
 
   // POST /api/prefs — the write half (EXC-1206). Unlike the daemon's other bodies
@@ -921,18 +890,6 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     // so a resident daemon never accumulates approved reviews.
     if (decision.behavior === "allow") {
       await store.remove(id);
-      // Remember the chosen variant for the UI's next load. Fire-and-forget:
-      // never awaited, so it can't delay the 200 that unblocks the long-polling
-      // hook. A bare allow (no acceptMode) leaves prefs as-is; an id outside the
-      // adapter-declared set is ignored by writeApproveMode.
-      if (decision.acceptMode !== undefined && approveModeSet.valid.includes(decision.acceptMode)) {
-        liveness.detachedWrite(
-          writeApproveMode(decision.acceptMode, prefsWriter, log, approveModeSet).catch(() => {
-            // Recoverable: prefs only seed the UI's next default.
-            log.warn("prefs", "approve mode write failed");
-          }),
-        );
-      }
     }
     // The plan has been decided on, so the pane that submitted it no longer
     // needs the reviewer (EXC-961). Fire-and-forget: markPaneRead returns as soon
@@ -999,7 +956,6 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     if (method === "POST" && path === "/api/logs") return handleLogs(req);
     if (method === "POST" && path === "/api/ui/gone") return handleUiGone();
     if (method === "GET" && path === "/api/reviews") return handleListReviews();
-    if (method === "GET" && path === "/api/prefs") return handlePrefs();
     if (method === "POST" && path === "/api/prefs") return handleSetPrefs(req);
 
     const route = matchIdRoute(path);

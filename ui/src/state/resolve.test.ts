@@ -20,6 +20,7 @@ let advanced: string[];
 let flushOrder: string[];
 let offline: boolean;
 let cleared: number;
+let saved: ApproveVariantId[];
 
 function makeStore(over: Partial<ResolveStore> = {}): ResolveStore {
   return { approveMode: "default", busy: false, ...over };
@@ -35,6 +36,7 @@ function build(
       submits.push({ id, body });
       return submitResult();
     },
+    saveApproveMode: (mode) => saved.push(mode),
     activeId: () => activeId,
     annotations: () => opts.annotations ?? [],
     planText: () => opts.planText ?? "",
@@ -59,6 +61,7 @@ beforeEach(() => {
   flushOrder = [];
   offline = false;
   cleared = 0;
+  saved = [];
 });
 
 const TIGHTEN_ANNOTATION: Annotation = {
@@ -265,36 +268,17 @@ describe("reject", () => {
   });
 });
 
-describe("loadApproveMode", () => {
-  function loadApproveModeWith(getApproveMode: () => Promise<ApproveVariantId>) {
-    const store = makeStore();
-    const resolve = createResolve(store, {
-      getApproveMode,
-      activeId: () => null,
-      annotations: () => [],
-      planText: () => "",
-      flushPending: async () => {},
-      afterResolve: () => {},
-      onOffline: () => {},
-      clearGeneralComment: () => {},
-    });
-    return { store, resolve };
-  }
-
-  test("reads the remembered mode into the store", async () => {
-    const { store, resolve } = loadApproveModeWith(async () => "auto" as ApproveVariantId);
-    resolve.loadApproveMode();
-    // Resolve the microtask queue so the .then() lands.
-    await Promise.resolve();
-    expect(store.approveMode).toBe("auto");
+describe("remembering the approve mode", () => {
+  test("persists the mode once the allow lands", async () => {
+    const resolve = build(makeStore());
+    await resolve.approve("auto");
+    expect(saved).toEqual(["auto"]);
   });
 
-  test("a failure leaves the current default", async () => {
-    const { store, resolve } = loadApproveModeWith(async () => {
-      throw new Error("offline");
-    });
-    resolve.loadApproveMode();
-    await Promise.resolve();
-    expect(store.approveMode).toBe("default");
+  test("persists nothing when the submit fails, so the next plan keeps the old default", async () => {
+    submitResult = () => Promise.reject(new Error("offline"));
+    const resolve = build(makeStore());
+    await resolve.approve("auto");
+    expect(saved).toEqual([]);
   });
 });
