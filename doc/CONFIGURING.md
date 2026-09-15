@@ -49,7 +49,8 @@ The file and every key in it are optional:
 - An invalid file never crashes caret: it keeps the last valid parse, or the defaults if
   there has never been one.
 - Settings hot-reload — the file is re-read on change, with no daemon restart needed. The
-  `[daemon]`, `[review]`, and `[dev]` tunables are the exceptions; see below.
+  `[daemon]`, `[review]`, `[opencode]`, and `[dev]` tunables are the exceptions; see
+  below.
 
 ### The `[logging]` table
 
@@ -103,6 +104,20 @@ heartbeat_ms = 8000
 
 [review]
 timeout_s = 3600
+```
+
+### The `[opencode]` table
+
+Settings for caret's OpenCode plugin. The plugin reads them when OpenCode loads it, so a
+change takes effect after you restart OpenCode.
+
+| Key                  | Default                          | Purpose                                                                                                                                                                                                                                    |
+| -------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `opencode.plans_dir` | `~/.local/share/opencode/plans`  | Where the Plan agent is told to write the plan file it submits for review. A leading `~` means your home directory. The default is OpenCode's own data-dir `plans/` (under `$XDG_DATA_HOME` when that is set), which the Plan agent is allowed to edit. OpenCode must also let the Plan agent edit a directory you choose instead, or caret refuses the review. |
+
+```toml
+[opencode]
+plans_dir = "~/.local/share/opencode/plans"
 ```
 
 ### The `[dev]` table

@@ -134,9 +134,9 @@ export async function runReviewSubcommand(): Promise<void> {
   const out = await runReview(stdin, deps);
   // Fold an approval's reviewer notes onto the agent's plan of record (EXC-791)
   // before emitting the decision, so the agent reads them when it proceeds. The
-  // guard on planFilePath scopes this to agents with a plan file (Claude); the
-  // Claude wire echo carries the notes too, and OpenCode surfaces them via its
-  // tool result. Best-effort and never fatal.
+  // guard on planFilePath scopes this to reviews with a plan file (Claude, and an
+  // OpenCode `path` review); the Claude wire echo carries the notes too, and
+  // OpenCode surfaces them via its tool result. Best-effort and never fatal.
   if (out.behavior === "allow" && out.feedback && hookInput?.planFilePath) {
     appendReviewerNotesToPlanFile(hookInput.planFilePath, out.feedback, { warn: logWarn });
   }

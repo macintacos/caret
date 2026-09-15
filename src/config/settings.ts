@@ -103,6 +103,13 @@ const SettingsSchema = z.object({
       timeout_s: TimeoutS.default(3600), // EXC-430: seconds — reviewTimeoutMs converts to ms, once
     })
     .prefault({}),
+  opencode: z
+    .object({
+      // EXC-1340: read by the OpenCode plugin (resolvePlansDir), never the daemon; unset →
+      // OpenCode's data-dir plans/
+      plans_dir: z.string().min(1).optional(),
+    })
+    .prefault({}),
   dev: Dev, // EXC-558: build-gated dev-only settings (see Dev above)
 });
 
@@ -114,6 +121,7 @@ function freeze(s: Settings): Settings {
   Object.freeze(s.logging);
   Object.freeze(s.daemon);
   Object.freeze(s.review);
+  Object.freeze(s.opencode); // EXC-1340
   Object.freeze(s.dev.notify); // EXC-558
   Object.freeze(s.dev); // EXC-558
   return Object.freeze(s);

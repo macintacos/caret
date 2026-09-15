@@ -49,6 +49,12 @@ test("buildEnvelope produces the caret review envelope the opencode adapter pars
   });
 });
 
+test("buildEnvelope carries the plan file path in tool_input when given, and no such key otherwise", () => {
+  const withPath = JSON.parse(buildEnvelope("# P", { planFilePath: "/proj/plan.md" }));
+  expect(withPath.tool_input.planFilePath).toBe("/proj/plan.md");
+  expect("planFilePath" in JSON.parse(buildEnvelope("# P", {})).tool_input).toBe(false);
+});
+
 test("planTitle pulls the first markdown heading, else undefined", () => {
   expect(planTitle("# Add status endpoint\n\nsteps")).toBe("Add status endpoint");
   expect(planTitle("no heading here")).toBeUndefined();
@@ -120,6 +126,38 @@ test("deniedMessage carries the feedback and resubmit instruction, without echoi
 
 test("deniedMessage names the given tool as the one to call again", () => {
   expect(deniedMessage("narrow step 2", "submit_plan")).toContain("`submit_plan`");
+});
+
+test("approvedMessage with a plan file says the plan is already saved there, with and without notes", () => {
+  for (const msg of [
+    approvedMessage(undefined, "/proj/plan.md"),
+    approvedMessage("use the retry helper", "/proj/plan.md"),
+  ]) {
+    expect(msg.toLowerCase()).toContain("approv");
+    expect(msg).toContain("/proj/plan.md");
+    expect(msg).toContain("already saved");
+  }
+  expect(approvedMessage("use the retry helper", "/proj/plan.md")).toContain(
+    "use the retry helper",
+  );
+});
+
+test("deniedMessage with a plan file names it and asks for a re-read rather than an updated plan", () => {
+  const msg = deniedMessage("narrow step 2", "caret_review_plan", "/proj/plan.md");
+  expect(msg).toContain("requested CHANGES");
+  expect(msg).toContain("narrow step 2");
+  expect(msg).toContain("/proj/plan.md");
+  expect(msg.toLowerCase()).toContain("re-read");
+  expect(msg).not.toContain("updated plan");
+  expect(msg).toContain("Do not implement");
+});
+
+test("decisionText threads the plan file path into both messages", () => {
+  const path = "/proj/plan.md";
+  expect(decisionText({ behavior: "allow" }, "caret_review_plan", path)).toContain(path);
+  expect(decisionText({ behavior: "deny", feedback: "x" }, "caret_review_plan", path)).toContain(
+    path,
+  );
 });
 
 test("decisionText returns the approved message, notes included, for an allow", () => {

@@ -13,6 +13,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { buildEnvelope } from "@opencode/review-bridge.ts";
 import { setupTempStateDir } from "@test/support/env.ts";
 import { emitWire as emitWireVia } from "@test/support/wire-contract.ts";
 import { opencodeAdapter } from "@/adapters/opencode/index.ts";
@@ -49,4 +50,13 @@ test("a deny over the fixture carries the reviewer feedback", async () => {
   expect(
     await emitWire({ behavior: "deny", feedback: "narrow step 2 to one route", decidedAt: 1 }),
   ).toEqual({ behavior: "deny", feedback: "narrow step 2 to one route" });
+});
+
+test("the envelope the plugin builds for a plan file parses to that planFilePath", () => {
+  const envelope = buildEnvelope("# P", {
+    sessionID: "S",
+    directory: "/proj",
+    planFilePath: "/proj/.opencode/plans/p.md",
+  });
+  expect(opencodeAdapter.parseHookInput(envelope).planFilePath).toBe("/proj/.opencode/plans/p.md");
 });

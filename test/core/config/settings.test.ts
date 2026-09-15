@@ -70,8 +70,14 @@ test("an absent file yields all defaults with no error", () => {
     },
     daemon: { port: 42718, idle_ms: 60_000, heartbeat_ms: 8_000 },
     review: { timeout_s: 3600 },
+    opencode: {},
     dev: { notify: { enabled: false, interval_ms: 15_000, max_pending: 3 } },
   });
+});
+
+test("[opencode] plans_dir is a recognized key", async () => {
+  await Bun.write(file, '[opencode]\nplans_dir = "~/notes/plans"\n');
+  expect(loadSettings(file).opencode.plans_dir).toBe("~/notes/plans");
 });
 
 test("malformed TOML falls back to defaults without throwing", async () => {

@@ -5,14 +5,14 @@
 // a wrong docstring had already propagated into a docs draft. It corrected the prose but
 // added no mechanism, so this suite is the mechanism.
 //
-// What is pinned is only the half that is TRUE ON BOTH ADAPTERS — the one sentence in
-// CLAIM below. The adapter-specific half around it (whether the numbers line up with the
-// agent's own copy: they usually do on the Claude path, where writeCanonicalPlanFile
-// mirrors the canonical text back onto the agent's plan file — best-effort, see
-// src/plan/canonical-file.ts; they need not on OpenCode, which has no plan file) stays
-// each surface's own prose, in its own voice for its own audience. A gate demanding three
-// byte-identical paragraphs would flatten that, so this one never reads past the shared
-// sentence.
+// What is pinned is only the half that is TRUE ON EVERY REVIEW PATH — the one sentence in
+// CLAIM below. The path-specific half around it (whether the numbers line up with the
+// agent's own copy: they usually do on a review with a plan file, where
+// writeCanonicalPlanFile mirrors the canonical text back onto it — best-effort, see
+// src/plan/canonical-file.ts; they need not on a text-only review, which has no plan
+// file) stays each surface's own prose, in its own voice for its own audience. A gate
+// demanding three byte-identical paragraphs would flatten that, so this one never reads
+// past the shared sentence.
 //
 // Exactly-once rather than at-least-once: one file restating the claim in two places is
 // how the two copies drift apart, so a second copy reds here.

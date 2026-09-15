@@ -37,9 +37,21 @@ this:
 - The tool's `execute()` runs the review **synchronously and blocks** until the human
   decides, then returns an approval string or a change-request string (the reviewer
   feedback plus a resubmit instruction; the plan itself is not echoed back — the agent
-  already has it in its own `caret_review_plan` args) as the tool result — the agent
-  revises and resubmits on a change request. Returning the string *is* the block; OpenCode
-  has no separate "pause" primitive.
+  already has it, in its own `caret_review_plan` args or its plan file) as the tool result
+  — the agent revises and resubmits on a change request. Returning the string *is* the
+  block; OpenCode has no separate "pause" primitive.
+- The tool takes the plan as **exactly one of `path` or `plan`**. `path` is a `.md` file,
+  resolved against the session directory. The steer asks for it and points the plan agent
+  at a plans directory it may edit: OpenCode's data-dir `plans/` (OpenCode's `agent.ts`
+  allows that and a project's `.opencode/plans/`), or caret's `[opencode] plans_dir`. The
+  plugin reads that key from caret's `config.toml` itself when OpenCode loads it
+  (`resolvePlansDir`, mirroring `configFile()`), since it cannot import `src/`. `plan` is
+  the inline text. A `path` review gets the same plan-file treatment as Claude Code's:
+  caret writes its canonical, reformatted text back onto the file at ingest and appends
+  approval notes to it. So the change request tells the agent to re-read the file, edit
+  it, and call again with the same `path`, and the approval tells it the plan is already
+  saved. Each revision round then costs the agent targeted edits rather than a regenerated
+  plan.
 
 This matches caret's "review the whole plan" semantic far better than OpenCode's
 per-action `permission.ask` hook, which fires per edit/bash and would gate individual
@@ -78,12 +90,24 @@ model that never considers `plan_exit` is exactly the case the rewrite cannot ca
 
 caret does **not** re-implement the daemon round-trip inside the plugin. The tool's
 `execute()` builds a small caret-defined envelope
-(`{ session_id, cwd, tool_input: { plan, title } }`) and
+(`{ session_id, cwd, tool_input: { plan, title, planFilePath? } }`) and
 **spawns `caret review` with `CARET_AGENT=opencode`**, piping the envelope on stdin and
 reading the flat decision JSON (`{ behavior, feedback? }`) on stdout. That reuses the
 entire existing daemon/review pipeline unchanged — the OpenCode plugin is the
 OpenCode-side counterpart to Claude Code's `hooks.json`, which likewise spawns
 `caret review`.
+
+On a `path` call the plugin reads the file itself and sends its text along with the
+resolved absolute path as `planFilePath`, which gives the envelope the same shape Claude
+Code's hook sends. The core's plan-file guard, write-back, and notes append then run
+unchanged. The plugin can't import `src/`, so it repeats the core's "`.md`, existing
+regular file" check. It then asks OpenCode for `edit` permission on the file, the pattern
+being the path relative to the session worktree. The core's plan-file guard assumes the
+agent wrote the file itself, as Claude Code's does; here the model picks the string, so
+without the ask caret's write-back would bypass OpenCode's edit rules and rewrite a file
+the agent may not edit. When the check fails or the ask is denied, the plugin returns an
+error string to the agent without spawning `caret review`. That is an error, not a deny:
+no review happened.
 
 Because both ends of this wire are caret-owned (the plugin writes the envelope, the
 `opencode` adapter renders the decision the plugin reads), the OpenCode adapter is the
@@ -263,7 +287,7 @@ cache and loads. The **package entrypoint is the plugin** (`package.json` `expor
 support subpath imports, and OpenCode's `parsePluginSpecifier` yields only
 `{ pkg, version }`, so a `@macintacos/caret/opencode` subpath is not viable. The plugin's
 runtime import (`@opencode-ai/plugin`, for `tool.schema`'s zod — zod is not
-cross-instance-compatible, so the `plan` arg must use OpenCode's zod) is a real
+cross-instance-compatible, so the tool's args must use OpenCode's zod) is a real
 `dependency` now, so OpenCode's install provides it. The compiled caret binary stays lean
 regardless: `src/` never imports `@opencode-ai/plugin`, so the bundler doesn't pull it in.
 
@@ -376,16 +400,23 @@ it.
 adapter's parse/emit/probe/fatal-deny; the plugin's pure logic + the tool's `execute()`
 through a stubbed spawn runner (approve / deny / a child-session refusal / a `build` and a
 user-defined agent proceeding / the allow-on-unreadable-session fallback in each of its
-three shapes); the config hook (writes `primary_tools`, leaves other agents untouched,
-never overwrites a user's own review-tool permission); the steer gate (plan agent yes,
-`build` no, no `sessionID` no, unseen session no, agent switching mid-session); the
-`chat.message` warm hook (warms for the plan agent only — not for a build or unknown
-caller — even though it records every session's agent) and the production warm runner it
-hides (survives a bad binary's async spawn error, and runs `prewarm` with
-`CARET_AGENT=opencode`); the entrypoint's `Object.values`-single-Plugin invariant; the
-config-array editor (add/remove, comment-preserving); target selection + dispatch; the
-`claude` target's CLI command sequence; the runtime bin/version resolvers; and the update
-check (toasts when behind, silent on error / opt-out).
+three shapes); the `path` branch (resolution against the session directory, the `.md`,
+readable-file, and exactly-one-of checks, an unreadable file or a denied `edit` permission
+ask never spawning caret, that ask's pattern being relative to the worktree, an inline
+`plan` never asking, and the envelope and result text carrying the path) and the adapter
+parsing that path into `PlanInput`; the plans-dir resolver the steer names (OpenCode's
+data-dir default, `XDG_DATA_HOME`, `[opencode] plans_dir` from the config file caret
+reads, a leading `~`, a malformed config falling back); the config hook (writes
+`primary_tools`, leaves other agents untouched, never overwrites a user's own review-tool
+permission); the steer gate (plan agent yes, `build` no, no `sessionID` no, unseen session
+no, agent switching mid-session); the `chat.message` warm hook (warms for the plan agent
+only — not for a build or unknown caller — even though it records every session's agent)
+and the production warm runner it hides (survives a bad binary's async spawn error, and
+runs `prewarm` with `CARET_AGENT=opencode`); the entrypoint's
+`Object.values`-single-Plugin invariant; the config-array editor (add/remove,
+comment-preserving); target selection + dispatch; the `claude` target's CLI command
+sequence; the runtime bin/version resolvers; and the update check (toasts when behind,
+silent on error / opt-out).
 
 **Confirmed against a live OpenCode 1.18.11 with `@opencode-ai/plugin` 1.18.17 — EXC-1085,
 the array install's LOCAL form, which is what ties the run to that plugin version: a
@@ -402,9 +433,14 @@ to the agent, which proceeds.
 **Documented manual follow-up (needs a live OpenCode + a model provider):** what that
 round-trip did not reach — the PUBLISHED entry (`@macintacos/caret`) resolving out of npm
 into OpenCode's cache on restart, a **`build`-agent** call being offered rather than
-denied while that session receives no unprompted steer, and the update toast firing when
-the plugin is behind. This mirrors the Codex adapter's live-contract follow-up (EXC-549)
-and the upgrade story tracked in EXC-383.
+denied while that session receives no unprompted steer, the update toast firing when the
+plugin is behind, a live `path` round-trip (the plan agent writing its plan to OpenCode's
+data-dir `plans/` and being allowed to, re-reading and editing that file on a change
+request, and the approved file ending with the reviewer notes), and the `path` ask's
+worktree-relative `edit` pattern matching OpenCode's own edit rules, including in a
+session started from a repo subdirectory, where `context.directory` and `context.worktree`
+differ. This mirrors the Codex adapter's live-contract follow-up (EXC-549) and the upgrade
+story tracked in EXC-383.
 
 ## Sources
 
