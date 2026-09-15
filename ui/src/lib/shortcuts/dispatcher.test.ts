@@ -43,7 +43,7 @@ function mount() {
 function spyEntry(
   id: string,
   keys: KeySpec,
-  opts: { enabled?: () => boolean } = {},
+  opts: { enabled?: () => boolean; repeat?: boolean } = {},
 ): { entry: ShortcutEntry; calls: () => number } {
   let n = 0;
   const entry: ShortcutEntry = {
@@ -55,6 +55,7 @@ function spyEntry(
       n += 1;
     },
     enabled: opts.enabled,
+    repeat: opts.repeat,
   };
   return { entry, calls: () => n };
 }
@@ -122,6 +123,35 @@ describe("createShortcutDispatcher", () => {
     expect(gg.calls()).toBe(0);
     keydown("g"); // completes
     expect(gg.calls()).toBe(1);
+  });
+
+  test("a held key's OS repeats do not re-run its shortcut", () => {
+    const a = spyEntry("approve", [{ key: "a" }]);
+    registry.register(a.entry);
+    mount();
+    keydown("a");
+    keydown("a", { repeat: true });
+    keydown("a", { repeat: true });
+    expect(a.calls()).toBe(1);
+  });
+
+  test("an entry that opts into repeat re-runs on every OS repeat", () => {
+    const j = spyEntry("down", [{ key: "j" }], { repeat: true });
+    registry.register(j.entry);
+    mount();
+    keydown("j");
+    keydown("j", { repeat: true });
+    keydown("j", { repeat: true });
+    expect(j.calls()).toBe(3);
+  });
+
+  test("a held first key does not complete a sequence that does not opt in", () => {
+    const gg = spyEntry("top", [{ key: "g" }, { key: "g" }]);
+    registry.register(gg.entry);
+    mount();
+    keydown("g");
+    keydown("g", { repeat: true });
+    expect(gg.calls()).toBe(0);
   });
 
   test("does not complete a bare sequence once an editing context takes focus", () => {

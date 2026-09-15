@@ -66,19 +66,21 @@ export const SETTINGS_SHORTCUTS: ShortcutEntry[] = [
 /** Every reserved binding, in help-modal order. */
 export const CANONICAL_KEYMAP: ShortcutEntry[] = [
   // Motion (cursor)
-  { id: "motion.down", keys: [{ key: "j" }], group: "motion", label: "Line down" },
-  { id: "motion.up", keys: [{ key: "k" }], group: "motion", label: "Line up" },
+  { id: "motion.down", keys: [{ key: "j" }], group: "motion", label: "Line down", repeat: true },
+  { id: "motion.up", keys: [{ key: "k" }], group: "motion", label: "Line up", repeat: true },
   {
     id: "motion.halfPageDown",
     keys: [{ key: "d", mods: ["ctrl"] }],
     group: "motion",
     label: "Half-page down",
+    repeat: true,
   },
   {
     id: "motion.halfPageUp",
     keys: [{ key: "u", mods: ["ctrl"] }],
     group: "motion",
     label: "Half-page up",
+    repeat: true,
   },
   { id: "motion.top", keys: [{ key: "g" }, { key: "g" }], group: "motion", label: "Go to top" },
   { id: "motion.bottom", keys: [{ key: "G" }], group: "motion", label: "Go to bottom" },
@@ -87,15 +89,29 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
     keys: [{ key: "]" }, { key: "]" }],
     group: "motion",
     label: "Next heading",
+    repeat: true,
   },
   {
     id: "motion.prevHeading",
     keys: [{ key: "[" }, { key: "[" }],
     group: "motion",
     label: "Previous heading",
+    repeat: true,
   },
-  { id: "motion.nextBlank", keys: [{ key: "}" }], group: "motion", label: "Next blank line" },
-  { id: "motion.prevBlank", keys: [{ key: "{" }], group: "motion", label: "Previous blank line" },
+  {
+    id: "motion.nextBlank",
+    keys: [{ key: "}" }],
+    group: "motion",
+    label: "Next blank line",
+    repeat: true,
+  },
+  {
+    id: "motion.prevBlank",
+    keys: [{ key: "{" }],
+    group: "motion",
+    label: "Previous blank line",
+    repeat: true,
+  },
   // Commenting
   { id: "commenting.comment", keys: [{ key: "c" }], group: "commenting", label: "Comment line" },
   {

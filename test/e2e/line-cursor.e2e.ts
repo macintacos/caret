@@ -188,6 +188,23 @@ test("} and { jump the cursor between blank (paragraph-boundary) lines", async (
   await expectCursorLine(page, firstBlank);
 });
 
+test("a held j steps the cursor on every repeat", async ({ daemon, page }) => {
+  await openPlanForKeys(page, daemon, PLAN);
+
+  await goToTop(page);
+  let pressed = 1;
+  for (let i = 0; i < 4; i++) {
+    await page.keyboard.press("j");
+    pressed = await readCursorLine(page, pressed);
+  }
+
+  // A `down` on a key already held sends `repeat: true`: one press plus three repeats.
+  await goToTop(page);
+  for (let i = 0; i < 4; i++) await page.keyboard.down("j");
+  await page.keyboard.up("j");
+  await expectCursorLine(page, pressed);
+});
+
 test("holding j keeps the cursor on-screen and follows it, never yanking it to the top", async ({
   daemon,
   page,

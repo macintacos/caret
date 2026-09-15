@@ -168,6 +168,23 @@ test("d toggles the compare/diff view when there are multiple versions", async (
   await expect(toggle).toHaveAttribute("aria-pressed", "false");
 });
 
+test("a held d toggles compare once", async ({ daemon, page }) => {
+  await daemon.seedVersions(2, [
+    `# Alpha\n\n${filler("alpha")}\n`,
+    `# Alpha\n\n${filler("beta")}\n`,
+  ]);
+  await page.goto("/");
+  await loadPlan(page);
+
+  const toggle = page.getByRole("button", { name: "Versions" });
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  // A `down` on a key already held sends `repeat: true`. Four keydowns: an even count
+  // lands a per-repeat toggle back where it started.
+  for (let i = 0; i < 4; i++) await page.keyboard.down("d");
+  await page.keyboard.up("d");
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+});
+
 test("slash opens the plan search, not the contents filter (EXC-832)", async ({ daemon, page }) => {
   await daemon.seed({ plan: PLAN });
   await page.goto("/");
