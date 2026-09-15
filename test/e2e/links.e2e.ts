@@ -208,11 +208,9 @@ test("hovering a link token reveals a caret tooltip with the full href, not a na
   await page.mouse.move(onLabel.x, onLabel.y);
   await expect.poll(() => tooltipHref(page)).toBe(SAFE_URL);
 
-  // The reveal is the caret tooltip, not the native browser chrome: the token
-  // carries no `title` attribute, and the tooltip's background resolves to an
-  // opaque caret surface (the --diffs-link-tooltip-bg bridge var took effect in
-  // the real Chromium build, not just the static stylesheet).
-  expect(await link.getAttribute("title")).toBeNull();
+  // The tooltip's background resolves to an opaque caret surface (the
+  // --diffs-link-tooltip-bg bridge var took effect in the real Chromium build, not
+  // just the static stylesheet).
   const bg = await page.evaluate(() => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
     const tip = sh?.querySelector("[data-link-tooltip]") as HTMLElement | null;

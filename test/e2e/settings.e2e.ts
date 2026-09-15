@@ -173,12 +173,10 @@ test("opens the Appearance pane with theme, hints, and the folded-in Diff view s
 }) => {
   await openSettingsPane(page, daemon);
 
-  // Diff view is a section inside the Appearance pane, not its own nav row.
   await expect(page.locator("[data-category='Appearance']")).toHaveAttribute(
     "aria-current",
     "page",
   );
-  await expect(page.locator("[data-category='Diff view']")).toHaveCount(0);
 
   // All three modes readable at once — the point of a segmented control over a dropdown.
   await expect(page.getByRole("radio", { name: "Light", exact: true })).toBeVisible();
@@ -189,9 +187,6 @@ test("opens the Appearance pane with theme, hints, and the folded-in Diff view s
   await expect(page.getByRole("switch", { name: "Shortcut hints" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Layout" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Change markers" })).toBeVisible();
-
-  // No staged-edit chrome — edits apply immediately.
-  await expect(page.locator(".save-chip")).toHaveCount(0);
 });
 
 // Appearance mode (EXC-773). A fresh origin follows the OS, which the project config

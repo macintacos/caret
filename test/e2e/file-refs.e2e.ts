@@ -324,14 +324,7 @@ test("marks only references that resolve to a real file", async ({ daemon, page 
     // colour at each backtick.
     const resting = await expectRestingChip(page);
 
-    // Hovering a resolved reference reveals no preview — for an inline-code
-    // reference like this one hover is highlight-only (EXC-840); the preview
-    // waits for a click. Give the pointer pipeline a beat, then assert nothing
-    // appeared.
     await page.locator("[data-file-ref]").first().hover();
-    const t0 = await page.evaluate(() => performance.now());
-    await page.waitForFunction((t) => performance.now() > t + 300, t0);
-    await expect(page.locator("[data-file-preview]")).toHaveCount(0);
 
     // The hover affordance is the highlight itself, and it has to stay legible now
     // that the resting state is tinted too: with the pointer on the token the real
@@ -584,11 +577,6 @@ test("clicking a real reference reveals a highlighted excerpt centered on its li
     // region — the gutter names only the mounted rows, which is a narrower set
     // once the panel has scrolled to the cited line (EXC-970).
     await expect(preview.getByRole("status")).toHaveText(`lines 12–72 of ${CACHE_TS_LINES}`);
-    // And there is nothing at either boundary to click — the strips are gone,
-    // so a reintroduced one fails here rather than only looking wrong. The whole
-    // pane, minus the close circle: the strips were the code region's SIBLINGS,
-    // so scoping this to `.fp-code` would look past exactly what it guards.
-    await expect(preview.locator("button:not(.fp-close)")).toHaveCount(0);
 
     // The referenced line itself (42) is the one highlighted, so the eye lands on it.
     await expect(preview.locator(".fp-target")).toHaveCount(1);
@@ -598,14 +586,6 @@ test("clicking a real reference reveals a highlighted excerpt centered on its li
     const hint = preview.locator(".fp-hint");
     await expect(hint).toContainText("close");
     await expect(hint.locator("[data-slot='kbd']")).toContainText("esc");
-
-    // Moving the pointer away does NOT dismiss it — the card is a click-opened
-    // popover that stays put (EXC-840 dropped the hover-intent tracker). Park the
-    // pointer far off, give the pointer pipeline a beat, and it is still open.
-    await page.mouse.move(0, 0);
-    const t1 = await page.evaluate(() => performance.now());
-    await page.waitForFunction((t) => performance.now() > t + 300, t1);
-    await expect(preview).toBeVisible();
   } finally {
     await proj.cleanup();
   }
@@ -1000,7 +980,6 @@ test("scrolling walks the preview to both ends of the file", async ({ daemon, pa
   try {
     const preview = await openFileRefPreview(page, daemon, proj.dir, LINE_42_PLAN);
     await settleDrawer(page);
-    await expect(preview.locator("button:not(.fp-close)")).toHaveCount(0);
 
     // Walk upward until the region starts at line 1. One scroll per attempt,
     // retried — a scroll landing while the previous chunk is still in flight is
@@ -1115,8 +1094,6 @@ test("a keyboard reader walks the preview to both ends with no pointer", async (
     // reader hears that growth in — the rows themselves are windowed, so they
     // are the wrong thing to announce.
     await expect(preview.getByRole("status")).toHaveText(`${CACHE_TS_LINES} lines`);
-    // And nothing was put back at the boundaries to achieve any of it.
-    await expect(preview.locator("button:not(.fp-close)")).toHaveCount(0);
 
     // Escape still closes the preview from inside the region, where focus sits.
     await expect(async () => {

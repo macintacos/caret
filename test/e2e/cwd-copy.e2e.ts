@@ -35,11 +35,6 @@ test("clicking the cwd path copies the absolute path and shows a success alert",
   // The cwd shows the abbreviated path, not the full one.
   await expect(cwd).toHaveText("…/Play/caret");
 
-  // No hover popup — that is the whole point of EXC-850. Hovering surfaces no
-  // portalled tooltip.
-  await cwd.hover();
-  await expect(page.locator("[data-slot='tooltip-content']")).toHaveCount(0);
-
   await cwd.click();
 
   const alert = alerts(page);

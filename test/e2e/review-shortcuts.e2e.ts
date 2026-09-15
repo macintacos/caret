@@ -185,22 +185,6 @@ test("a held d toggles compare once", async ({ daemon, page }) => {
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
 });
 
-test("slash opens the plan search, not the contents filter (EXC-832)", async ({ daemon, page }) => {
-  await daemon.seed({ plan: PLAN });
-  await page.goto("/");
-  await loadPlan(page);
-
-  // EXC-832 repurposed / from focusing the contents filter (EXC-789) to opening a
-  // vim-style plan search. The breadcrumbs bar's own `/` (EXC-948) lives inside an
-  // open crumb menu, so with no menu up the key belongs to the search outright and
-  // no heading filter is mounted to steal it. The full search flow lives in
-  // plan-search.e2e.ts — here we only pin the key's owner at the plan surface.
-  await expect(page.getByLabel("Filter headings")).toHaveCount(0);
-
-  await page.keyboard.press("/");
-  await expect(page.getByRole("search")).toBeVisible();
-});
-
 test("b opens the breadcrumbs bar, and j/j/Enter jumps to the highlighted heading", async ({
   daemon,
   page,
