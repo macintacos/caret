@@ -125,7 +125,7 @@ plans_dir = "~/.local/share/opencode/plans"
 
 | Key             | Default | Purpose                                                                                                                                    |
 | --------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `updates.check` | `true`  | Whether the daemon asks GitHub once a day if a newer caret is out. Hot-reloads, so turning it off takes effect without a daemon restart. |
+| `updates.check` | `true`  | Whether the daemon asks once a day whether a newer caret is out — the npm registry for an installed caret, GitHub instead for a build from source. Hot-reloads, so turning it off takes effect without a daemon restart. |
 
 ```toml
 [updates]
@@ -136,6 +136,11 @@ This is the one key caret writes itself. **Settings → Updates** edits that sin
 leaves the rest of your file — comments, ordering, formatting — alone. When it cannot do
 that safely, which it can't if you spelled the key as a dotted `updates.check = true` or
 as an inline table, it changes nothing and says so, so you can set it by hand.
+
+That same refusal blocks the one-time move of an opt-out out of the retired `prefs.json`
+(`~/.local/state/caret/prefs.json`, or under `$XDG_STATE_HOME/caret`): caret keeps that
+file and warns on every daemon boot until your `config.toml` spells the key as an
+`[updates]` table. Writing `check = false` under that header by hand finishes the move.
 
 ### The `[dev]` table
 
@@ -206,7 +211,7 @@ to the config file, then the default.
 | `CARET_SUPERVISED`   | —                     | —                | Set to `1` by the generated launchd/systemd unit and by `mise run dev`, naming a process started by something that manages its lifetime rather than by a hook. It makes the daemon resident, reported as `resident` by `/api/health` and `/api/diagnostics`, and is itself reported as `supervised` by `/api/health`; it also arms the daemon's own `daemon-stderr.log` rotation, which a supervised start otherwise skips, and tells `bin/caret-launcher` to open that log itself rather than leave its diagnostics on the terminal.                                            |
 | `CARET_AGENT`        | —                     | `claude`         | Which coding-agent adapter to drive. `claude` (default) or `codex` (provisional, default-off — see [Architecture](ARCHITECTURE.md#architecture-tool-agnostic-core--agent-adapter)).                                                                                                                      |
 | `XDG_STATE_HOME`     | —                     | `~/.local/state` | Unresolved reviews persist under `$XDG_STATE_HOME/caret/reviews/` and rehydrate on restart for a week after their last change.                                                                                                                                                                          |
-| `CARET_CONFIG_FILE`  | —                     | _(see [Config file](#config-file))_ | Absolute path to the settings file, overriding the resolved `config.toml` location. `mise run dev` sets it to `config.dev.toml`; `--fresh` sets it to a nonexistent path so dev boots from built-in defaults.                                                                                             |
+| `CARET_CONFIG_FILE`  | —                     | _(see [Config file](#config-file))_ | Absolute path to the settings file, overriding the resolved `config.toml` location. `mise run dev` sets it to `config.dev.toml`; `--fresh` sets it into that run's own ephemeral state dir, which starts empty so dev boots from built-in defaults.                                                                                             |
 | `CARET_RUMDL_BIN`    | —                     | _(downloads)_    | Absolute path to an existing rumdl binary for plan formatting, overriding the on-first-use download of the pinned v0.2.73 into `$XDG_STATE_HOME/caret/rumdl/`. Taken only when it reports that same pinned version; anything else falls back to the download. Blank counts as unset. Useful for offline / air-gapped installs or reusing a system rumdl. |
 | `CARET_OPENCODE_BIN` | —                     | _(packaged)_     | Absolute path to the caret binary the OpenCode plugin spawns — for `caret review` and the daemon prewarm alike — overriding the one shipped beside the plugin in the `@macintacos/caret` package. Blank counts as unset. The way to point a published-package OpenCode install at a local build.          |
 

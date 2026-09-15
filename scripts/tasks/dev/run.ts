@@ -97,9 +97,10 @@ export function childEnvFor(
     [SUPERVISED_VAR]: "1",
   };
   if (portMode.kind === "fixed") env.CARET_PORT = String(portMode.port);
-  // The daemon child reads its own dev config (config.dev.toml, or a nonexistent
-  // path under --fresh); CARET_FRESH surfaces through /api/health so the UI resets
-  // its saved preferences. Both are omitted in normal (non-dev) contexts (EXC-781).
+  // The daemon child reads its own dev config (config.dev.toml, or one inside the
+  // run's state dir under --fresh); CARET_FRESH surfaces through /api/health so the
+  // UI resets its saved preferences. Both are omitted in normal (non-dev) contexts
+  // (EXC-781).
   if (extra.configFile) env.CARET_CONFIG_FILE = extra.configFile;
   if (extra.fresh) env.CARET_FRESH = "1";
   return env;
@@ -318,16 +319,12 @@ function pumpIntoTui(
  * process.exit with Vite's code on the normal path. */
 export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): Promise<never> {
   // Dev reads its own config.dev.toml, never the user's production config.toml
-  // (EXC-781). --fresh instead boots from built-in defaults by pointing at a path
-  // that does not exist (loadSettings falls back to DEFAULTS on a missing file),
-  // and CARET_FRESH tells the UI to reset its saved preferences. The daemon child
-  // inherits the same choice through childEnv below.
+  // (EXC-781). --fresh instead boots from built-in defaults by reading a path that
+  // does not exist (loadSettings falls back to DEFAULTS on a missing file); the state
+  // dir the child's own config lands in is not planned yet, hence the sentinel here.
   const configFilePath = opts.fresh
     ? join(tmpdir(), "caret-dev-fresh-no-config.toml")
     : devConfigFile();
-  // The Updates toggle can create that path, and a leftover copy would make the next
-  // --fresh boot read someone else's settings instead of the built-in defaults.
-  if (opts.fresh) rmSync(configFilePath, { force: true });
   const settings = deps.loadSettings(configFilePath);
 
   // Port mode (EXC-461): ephemeral by default (OS-assigned, discovered from the
@@ -353,14 +350,19 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
   }
   const persistState = !wipeOnExit;
 
+  const worldDir = join(stateDirPath, "caret");
+  // Under --fresh the child writes into this run's own state dir rather than the
+  // sentinel above: the Updates toggle creates whatever CARET_CONFIG_FILE names, and a
+  // shared path would leak one session's flip into the next --fresh boot. CARET_FRESH
+  // tells the UI to reset its saved preferences.
+  const childConfig = opts.fresh ? join(worldDir, "config.toml") : configFilePath;
   const childEnv = childEnvFor(stateDirPath, portMode, {
-    configFile: configFilePath,
+    configFile: childConfig,
     fresh: opts.fresh,
   });
 
   // A persistent dir may hold a stale lock from a crashed run; the boot writes
   // its own, so clear it first or port discovery would read the stale port.
-  const worldDir = join(stateDirPath, "caret");
   const daemonLogDir = join(worldDir, "logs");
   const daemonLogPath = join(daemonLogDir, "daemon.log");
   const lockFile = join(worldDir, "daemon.lock");
@@ -465,7 +467,7 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
     });
     childEnv.CARET_PORT = String(port);
     deps.log(
-      `caret dev: port=${port} state=${stateDirPath} config=${configFilePath} fresh=${opts.fresh ? 1 : 0} persistent=${persistState ? 1 : 0}`,
+      `caret dev: port=${port} state=${stateDirPath} config=${childConfig} fresh=${opts.fresh ? 1 : 0} persistent=${persistState ? 1 : 0}`,
     );
 
     // The driver's loop never resolves and dies with this process on teardown, so

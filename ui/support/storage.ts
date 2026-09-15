@@ -14,3 +14,25 @@ export function withBlockedStorage(body: () => void): void {
     Object.defineProperty(globalThis, "localStorage", { configurable: true, value: original });
   }
 }
+
+/** Run `body` with a `localStorage` that is present but whose accessors throw — the
+ * failure a quota or a disabled origin actually produces, and a different branch from
+ * `withBlockedStorage`, where the store itself is unreachable. Restores the original
+ * afterward. */
+export function withThrowingStorage(body: () => void): void {
+  const original = globalThis.localStorage;
+  const poisoned = {
+    getItem() {
+      throw new Error("blocked");
+    },
+    setItem() {
+      throw new Error("blocked");
+    },
+  };
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: poisoned });
+  try {
+    body();
+  } finally {
+    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: original });
+  }
+}

@@ -37,7 +37,7 @@ import {
 import { flush } from "$lib/log.ts";
 
 // Shared URL-routing fetch double (routed-fetch.ts): /api/logs POSTs are
-// captured; the review/prefs endpoints answer from the per-test `respond` so
+// captured; the review/config endpoints answer from the per-test `respond` so
 // each case can pick success, a non-2xx Response, or a rejected promise.
 let respond: Respond;
 let cap: LogCapture;
@@ -593,6 +593,16 @@ describe("getSkillDescription", () => {
 // readers it THROWS, because a settings control has to snap back and say why — so
 // the message is written for a person rather than being HttpError's "HTTP 400".
 describe("setConfig", () => {
+  /** The message `setConfig` rejects with when the daemon answers `answer`. */
+  async function saveFailureMessage(answer: Respond): Promise<string> {
+    respond = answer;
+    let message = "";
+    await setConfig({ updates: { check: false } }).catch((err: unknown) => {
+      message = err instanceof Error ? err.message : String(err);
+    });
+    return message;
+  }
+
   test("POSTs the patch as the request body", async () => {
     let seen: { url: string; options: RequestInit | undefined } | undefined;
     respond = (url, options) => {
@@ -615,11 +625,7 @@ describe("setConfig", () => {
       () => Promise.resolve(new Response(null, { status: 500 })),
       () => Promise.reject(new Error("offline")),
     ]) {
-      respond = answer;
-      let message = "";
-      await setConfig({ updates: { check: false } }).catch((err: unknown) => {
-        message = err instanceof Error ? err.message : String(err);
-      });
+      const message = await saveFailureMessage(answer);
       expect(message).not.toBe("");
       expect(message).not.toMatch(/^HTTP \d+$/);
       // A sentence, not a status line.
@@ -630,12 +636,21 @@ describe("setConfig", () => {
   test("a refused config.toml rewrite (409) tells the reviewer to edit it by hand", async () => {
     // The one failure the reviewer can actually act on, so it must not read like the
     // generic "the daemon couldn't save it".
-    respond = () => Promise.resolve(new Response(null, { status: 409 }));
-    let message = "";
-    await setConfig({ updates: { check: false } }).catch((err: unknown) => {
-      message = err instanceof Error ? err.message : String(err);
-    });
+    const message = await saveFailureMessage(() =>
+      Promise.resolve(new Response(null, { status: 409 })),
+    );
     expect(message).toContain("config.toml");
+  });
+
+  test("no failure message carries markdown — the toast renders it as text", async () => {
+    // AlertHost renders the message verbatim, so a backtick or an asterisk reaches the
+    // reviewer literally.
+    for (const status of [400, 409, 500]) {
+      const message = await saveFailureMessage(() =>
+        Promise.resolve(new Response(null, { status })),
+      );
+      expect(message).not.toMatch(/[`*_]/);
+    }
   });
 
   test("a rejected save warns at step settings", async () => {

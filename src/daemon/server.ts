@@ -405,8 +405,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // GET /api/update — whether the caret this daemon is, is behind (EXC-1205): the
   // install kind, the running version/commit, whether the check is on, and the verdict
   // with the command that would take the upgrade. The thunk reads a verdict the daemon
-  // already holds, so serving this never makes a network call — but it does fold in the
-  // LIVE `updates.check` (EXC-1210), which is why it may be async.
+  // already holds, so serving this never makes a network call — it is allowed to be
+  // async so a future source may do I/O.
   // With no thunk wired (default; e.g. a bare test daemon) the route 404s, like any
   // absent optional capability.
   async function handleUpdate(): Promise<Response> {
@@ -582,10 +582,23 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       log.warn("settings", "config patch rejected", { reason: error });
       return Response.json({ error }, { status: 400 });
     }
-    const check = parsed.data.updates?.check;
-    if (check === undefined) return Response.json({ ok: true }); // nothing to write
-    if (!(await configWriter.setUpdatesCheck(check))) {
-      log.warn("settings", "config.toml edit refused");
+    const { updates } = parsed.data;
+    if (updates === undefined) {
+      // An empty patch is deliberately a success (ConfigPatchSchema): it asked for
+      // nothing, so nothing was written. Anything else reaching here is a ConfigPatch key
+      // nobody wired, and this route must not answer 200 to a body it did not honour.
+      if (Object.keys(parsed.data).length > 0) {
+        return Response.json({ error: "unhandled config patch" }, { status: 400 });
+      }
+      return Response.json({ ok: true });
+    }
+    const { check } = updates;
+    const wrote = await configWriter.setUpdatesCheck(check);
+    if (!wrote.ok) {
+      // Carrying the reason for the same reason the 400 above does: the toast tells the
+      // user to hand-edit but not what in their file blocked the write, so the daemon log
+      // is the only place it survives. The reasons are a closed set of tokens.
+      log.warn("settings", "config.toml edit refused", { reason: wrote.reason });
       return Response.json({ error: "config.toml cannot be edited safely" }, { status: 409 });
     }
     log.debug("settings", "config saved");

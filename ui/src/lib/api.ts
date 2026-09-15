@@ -108,7 +108,7 @@ function configSaveMessage(err: unknown): string {
     return "The caret daemon isn't reachable, so the change wasn't saved.";
   }
   if (err.status === 409) {
-    return "caret couldn't edit config.toml safely — set `[updates] check` there by hand.";
+    return "caret couldn't edit config.toml safely — set the [updates] check line there by hand.";
   }
   return `The daemon couldn't save the change (HTTP ${err.status}).`;
 }

@@ -452,6 +452,7 @@
         if (h.fresh && !freshResetApplied(h.instanceId)) {
           clearKnownPrefs();
           appearance.boot();
+          resStore.approveMode = null;
           showShortcutHints = readShortcutHints();
           showOnboarding =
             typeof Notification !== "undefined" && shouldShowOnboarding(Notification.permission);

@@ -1889,14 +1889,34 @@ describe("POST /api/config", () => {
     expect(existsSync(configPath())).toBe(false);
   });
 
-  test("a config.toml the rewrite refuses answers 409 and stays byte-identical", async () => {
+  test("an empty patch is a success that writes nothing", async () => {
+    // ConfigPatchSchema calls this out as deliberate: a body asking for nothing is
+    // honoured in full by writing nothing.
     await boot();
+    const res = await setConfig({});
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(existsSync(configPath())).toBe(false);
+  });
+
+  test("a config.toml the rewrite refuses answers 409 and stays byte-identical", async () => {
+    const { recs, log } = recordingLog();
+    await boot({ log });
     const original = "updates.check = true\n";
     await Bun.write(configPath(), original);
     const res = await setConfig({ updates: { check: false } });
     expect(res.status).toBe(409);
     expect((await res.json()).error).toBeTruthy();
     expect(configOnDisk()).toBe(original);
+    // The toast names no key, so the daemon log is the only place the refusal's reason
+    // survives for the user who has to go hand-edit the file.
+    expect(recs).toContainEqual(
+      expect.objectContaining({
+        level: "warn",
+        step: "settings",
+        extra: { reason: "unverifiable" },
+      }),
+    );
   });
 
   test("is CSRF-guarded and Host-guarded like every other write (AC #2)", async () => {

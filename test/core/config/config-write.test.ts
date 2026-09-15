@@ -12,6 +12,9 @@ import { createConfigWriter, withUpdatesCheck } from "@/config/config-write.ts";
 // parse-verified net — a rewrite that would change anything but `updates.check`
 // refuses, leaving the file untouched, and the toggle tells the user to edit by hand.
 
+// root reads and writes straight through the mode bits the refusal proofs below rely on.
+const asRoot = process.getuid?.() === 0;
+
 let dir: string;
 let file: string;
 
@@ -45,10 +48,16 @@ describe("withUpdatesCheck", () => {
     expect(out).toBe('[updates]\ncheck = false\n[logging]\nlevel = "warn"\n');
   });
 
-  test("keeps a CRLF file readable", () => {
-    const out = withUpdatesCheck("[updates]\r\ncheck = true\r\n", false);
-    expect(out).toContain("check = false");
-    expect(withUpdatesCheck(out as string, false)).toBe(out);
+  test("keeps the CRLF endings when it swaps the value in place", () => {
+    expect(withUpdatesCheck("[updates]\r\ncheck = true\r\n", false)).toBe(
+      "[updates]\r\ncheck = false\r\n",
+    );
+  });
+
+  test("keeps the CRLF endings when it inserts the key", () => {
+    expect(withUpdatesCheck("[updates]\r\nother = 1\r\n", false)).toBe(
+      "[updates]\r\ncheck = false\r\nother = 1\r\n",
+    );
   });
 
   test("returns the text unchanged when the value is already set", () => {
@@ -81,21 +90,58 @@ describe("the config writer", () => {
 
   test("creates an absent file and its parent directory", async () => {
     const nested = join(dir, "deeper", "config.toml");
-    expect(await createConfigWriter(nested).setUpdatesCheck(false)).toBe(true);
+    expect(await createConfigWriter(nested).setUpdatesCheck(false)).toEqual({ ok: true });
     expect(await read(nested)).toBe("[updates]\ncheck = false\n");
   });
 
   test("keeps an existing file's mode", async () => {
     await writeFile(file, '[logging]\nlevel = "warn"\n', { mode: 0o600 });
     chmodSync(file, 0o640);
-    expect(await createConfigWriter(file).setUpdatesCheck(false)).toBe(true);
+    expect(await createConfigWriter(file).setUpdatesCheck(false)).toEqual({ ok: true });
     expect(statSync(file).mode & 0o777).toBe(0o640);
   });
 
-  test("a refused edit answers false and leaves the file byte-identical", async () => {
+  test("an unverifiable edit refuses and leaves the file byte-identical", async () => {
     const original = "updates.check = true\n";
     await writeFile(file, original);
-    expect(await createConfigWriter(file).setUpdatesCheck(false)).toBe(false);
+    expect(await createConfigWriter(file).setUpdatesCheck(false)).toEqual({
+      ok: false,
+      reason: "unverifiable",
+    });
+    expect(await read(file)).toBe(original);
+  });
+
+  test.skipIf(asRoot)("an unreadable file refuses rather than being overwritten", async () => {
+    // The refusal net compares two parses of the file, so a read that silently
+    // yielded "" would compare against nothing and replace the whole file.
+    const original = '# my config\n[logging]\nlevel = "debug"\n';
+    await writeFile(file, original);
+    chmodSync(file, 0o000);
+    try {
+      expect(await createConfigWriter(file).setUpdatesCheck(false)).toEqual({
+        ok: false,
+        reason: "unreadable",
+      });
+    } finally {
+      chmodSync(file, 0o600);
+    }
+    expect(await read(file)).toBe(original);
+  });
+
+  test.skipIf(asRoot)("a failed write refuses rather than throwing", async () => {
+    // Both callers treat a refusal as recoverable; a throw escapes the boot
+    // migration and takes the daemon down with it.
+    const original = "[updates]\ncheck = true\n";
+    await writeFile(file, original);
+    chmodSync(dir, 0o500);
+    try {
+      expect(await createConfigWriter(file).setUpdatesCheck(false)).toEqual({
+        ok: false,
+        reason: "unwritable",
+      });
+    } finally {
+      chmodSync(dir, 0o700);
+    }
     expect(await read(file)).toBe(original);
   });
 

@@ -21,8 +21,8 @@ import { createKeyedQueue } from "@/lib/keyed-queue.ts";
 /** Mode for a config.toml caret creates itself; an existing file keeps its own. */
 const NEW_FILE_MODE = 0o644;
 
-// `[\s\S]` rather than `.` throughout: lines are split on \n, so a CRLF file leaves a
-// trailing \r that `.` and `$` will not cross.
+// `[\s\S]` rather than `.` in the value-capturing group: lines are split on \n, so a CRLF
+// file leaves a trailing \r that `.` and `$` will not cross.
 const TABLE_HEADER = /^\s*\[\[?[^\]]*\]\]?\s*(#[^\n]*)?$/;
 const UPDATES_HEADER = /^\s*\[updates\]\s*(#[^\n]*)?$/;
 const CHECK_LINE = /^(\s*check\s*=\s*)(true|false)([\s\S]*)$/;
@@ -69,7 +69,7 @@ export function withUpdatesCheck(text: string, check: boolean): string | null {
     const stop = end === -1 ? lines.length : end;
     const at = lines.findIndex((l, i) => i > header && i < stop && CHECK_LINE.test(l));
     if (at === -1) {
-      lines.splice(header + 1, 0, `check = ${check}`);
+      lines.splice(header + 1, 0, `check = ${check}${eol === "\r\n" ? "\r" : ""}`);
     } else {
       lines[at] = (lines[at] as string).replace(CHECK_LINE, `$1${check}$3`);
     }
@@ -83,10 +83,13 @@ export function withUpdatesCheck(text: string, check: boolean): string | null {
   return next;
 }
 
+/** Why a config.toml rewrite did not land. */
+export type ConfigRefusal = "unreadable" | "unverifiable" | "unwritable";
+
 export interface ConfigWriter {
-  /** Flip `[updates] check` in the user's config.toml. False when the rewrite was
-   * refused; the file is left untouched. */
-  setUpdatesCheck(check: boolean): Promise<boolean>;
+  /** Flip `[updates] check` in the user's config.toml. On a refusal the file is left
+   * untouched. */
+  setUpdatesCheck(check: boolean): Promise<{ ok: true } | { ok: false; reason: ConfigRefusal }>;
 }
 
 /** Build the writer the config write path uses. Writes queue per file, so two flips
@@ -95,12 +98,23 @@ export function createConfigWriter(file = configFile()): ConfigWriter {
   const writes = createKeyedQueue();
   return {
     async setUpdatesCheck(check) {
-      let ok = false;
+      let refusal: ConfigRefusal | null = null;
       await writes.run(file, async () => {
-        const current = await readFile(file, "utf-8").catch(() => "");
+        // ENOENT alone reads as empty — that is a first write creating the file. Any
+        // other failure would leave the net below comparing against nothing, and replace
+        // a file caret cannot see.
+        const current = await readFile(file, "utf-8").catch((e: NodeJS.ErrnoException) =>
+          e.code === "ENOENT" ? "" : null,
+        );
+        if (current === null) {
+          refusal = "unreadable";
+          return;
+        }
         const next = withUpdatesCheck(current, check);
-        if (next === null) return;
-        ok = true;
+        if (next === null) {
+          refusal = "unverifiable";
+          return;
+        }
         if (next === current) return;
         // A config.toml caret creates itself is ordinary user-editable config, unlike
         // the 0600 state dir; an existing one keeps whatever mode its owner gave it.
@@ -108,10 +122,16 @@ export function createConfigWriter(file = configFile()): ConfigWriter {
           (s) => s.mode & 0o777,
           () => NEW_FILE_MODE,
         );
-        await mkdir(dirname(file), { recursive: true });
-        await writeFileAtomic(file, next, { mode });
+        try {
+          await mkdir(dirname(file), { recursive: true });
+          await writeFileAtomic(file, next, { mode });
+        } catch {
+          // Reported, not thrown: this runs on the boot path, where an escaping error
+          // would take the daemon down rather than leave prefs.json for the next boot.
+          refusal = "unwritable";
+        }
       });
-      return ok;
+      return refusal === null ? { ok: true } : { ok: false, reason: refusal };
     },
   };
 }

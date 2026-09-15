@@ -32,7 +32,7 @@
 import { fakeDiagnostics } from "@test/support/diagnostics.ts";
 import { NEVER_IDLE_MS } from "@/config/constants.ts";
 import { configFile, reviewsDir } from "@/config/paths.ts";
-import { loadSettings } from "@/config/settings.ts";
+import { createSettings } from "@/config/settings.ts";
 import { createServer } from "@/daemon/server.ts";
 import { updateReportFor } from "@/daemon/update-check.ts";
 import { buildHash } from "@/lib/build-id.ts";
@@ -70,6 +70,9 @@ if (!assets) {
 // message (test/e2e/support/fixtures.ts), so the NDJSON must stay on stderr
 // rather than going to the daemon log the default now owns.
 const log = createDaemonLogger(() => "info", 2);
+// Held rather than re-read per request, so the opt-out specs exercise the stat-gated
+// hot-reload production serves `updates.check` through, not just the file round-trip.
+const settings = createSettings(configFile());
 const store = createStore(reviewsDir(), log);
 await store.rehydrate();
 
@@ -127,7 +130,7 @@ const server = createServer({
     updateReportFor(
       { install: "dev", version: "0.0.0-e2e", commit: "e2ecommit0000000" },
       buildStatus,
-      loadSettings(configFile()).updates.check,
+      settings.current().updates.check,
     ),
   diagnostics: fakeDiagnostics,
   log,

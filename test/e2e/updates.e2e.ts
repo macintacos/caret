@@ -67,8 +67,8 @@ test.describe("with a pending update", () => {
   });
 
   test("the opt-out silences a pending verdict — no toast, no marks", async ({ daemon, page }) => {
-    // The gate the whole design rests on, and it is the DAEMON'S now: prefs say the check
-    // is off, so /api/update serves `disabled` over the pending build verdict it holds.
+    // The gate the whole design rests on, and it is the DAEMON'S now: config.toml says the
+    // check is off, so /api/update serves `disabled` over the pending build verdict it holds.
     await daemon.seed();
     await daemon.setConfig({ updates: { check: false } });
     await page.goto("/");
@@ -107,7 +107,7 @@ test.describe("with a pending update", () => {
     await page.getByRole("switch", { name: "Check for updates" }).click();
 
     // End to end: the real toggle POSTs, App re-reads /api/update, and the daemon answers
-    // `disabled` because prefs now say so. Nothing in the browser second-guesses it.
+    // `disabled` because config.toml now says so. Nothing in the browser second-guesses it.
     await expect(page.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
     await expect(markedGear(page)).toHaveCount(0);
     await expect(page.locator("[data-slot='sidebar-menu-badge']")).toHaveCount(0);

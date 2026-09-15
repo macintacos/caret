@@ -72,8 +72,8 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
   // (port/idle/heartbeat), so a config edit landing mid-boot can't split the record
   // from the values the server binds with. It holds the VALIDATED parse only — never
   // raw config text, which may hold anything (the settings.ts logValidationFailure
-  // invariant). Also the watcher's baseline read, so boot never fires a spurious
-  // change record.
+  // invariant). Also the watcher's baseline read, so the only change record boot can
+  // fire is the migration's own write below.
   const boot = svc.current();
   log.info(
     "settings",
@@ -82,7 +82,15 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
   );
   // Before anything reads `updates.check`: a legacy prefs.json opt-out becomes an
   // `[updates] check` line, so a reviewer who turned the daily check off keeps it off.
-  await migratePrefsFile(prefsFile(), createConfigWriter(cfg), log);
+  // The daemon's other writer over this file lives in createServer, and each writer
+  // queues only its own writes; awaiting this one before the server is built is what
+  // keeps the two from interleaving a read-modify-write.
+  await migratePrefsFile({
+    prefs: prefsFile(),
+    config: cfg,
+    writer: createConfigWriter(cfg),
+    log,
+  });
   warnInvalidEnvVars((msg) => log.warn("env", msg));
   // The active adapter (CARET_AGENT, default claude). Its declared approve
   // variants are published in /api/health so the UI renders its approve
@@ -100,10 +108,10 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
   let updateStatus = readCachedStatus(updateCache, version, commit);
   // Ask — at most once a day, and never on a dev build or under the `updates.check`
   // opt-out — whether a newer caret exists (EXC-1205). Fire-and-forget: nothing awaits it,
-  // so boot is never delayed, and runUpdateCheck never rejects. A null
-  // result is the throttle (or the opt-out) saying there is nothing new, so the seeded
-  // verdict stands. Boot fires it once; a resident daemon re-arms it on the upkeep tick,
-  // bounded by the same 24h stamp.
+  // so boot is never delayed, and runUpdateCheck never rejects. A null result is the
+  // throttle (or the opt-out) saying there is nothing new, so the seeded verdict stands.
+  // Boot fires it once; a resident daemon re-arms it on the upkeep tick, bounded by the
+  // same 24h stamp.
   function refreshUpdate(): void {
     void runUpdateCheck({
       kind: install,

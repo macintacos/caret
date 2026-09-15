@@ -351,8 +351,7 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     description: "Get alerted when a new plan is ready for review; check the permission state.",
   },
   // The update check (EXC-1207) — the registry's one daemon-owned field, since the check
-  // runs in the daemon and outlives any browser that flipped it. It is the one line
-  // caret writes into the user's config.toml.
+  // runs in the daemon and outlives any browser that flipped it.
   daemonField<boolean>({
     key: UPDATES_CHECK_KEY,
     category: UPDATES_CATEGORY,

@@ -1,6 +1,7 @@
 import "@ui/support/setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { withThrowingStorage } from "@ui/support/storage.ts";
 import { APPROVE_MODE_KEY, readApproveMode, writeApproveMode } from "$lib/approveModePref.ts";
 import { knownPrefKeys } from "$lib/definePref.ts";
 
@@ -33,21 +34,9 @@ describe("the remembered approve mode", () => {
   test("never throws when storage itself does", () => {
     // Private mode, disabled storage, quota. A forgotten default is the worst this may
     // cost — never a thrown load.
-    const storage = globalThis.localStorage;
-    const poisoned = {
-      getItem() {
-        throw new Error("blocked");
-      },
-      setItem() {
-        throw new Error("blocked");
-      },
-    };
-    Object.defineProperty(globalThis, "localStorage", { value: poisoned, configurable: true });
-    try {
+    withThrowingStorage(() => {
       expect(readApproveMode()).toBeNull();
       expect(() => writeApproveMode("auto")).not.toThrow();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", { value: storage, configurable: true });
-    }
+    });
   });
 });

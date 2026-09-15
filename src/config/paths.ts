@@ -81,9 +81,9 @@ export function configDir(): string {
 
 /** User-editable settings file (see src/config/settings.ts). CARET_CONFIG_FILE
  * overrides it outright — the dev task points that at config.dev.toml (and, under
- * --fresh, at a nonexistent path so loadSettings falls back to defaults), keeping
- * `mise run dev` fully isolated from the production config. A blank value counts
- * as unset. */
+ * --fresh, into that run's own ephemeral state dir, which starts empty so the boot
+ * read falls back to defaults), keeping `mise run dev` fully isolated from the
+ * production config. A blank value counts as unset. */
 export function configFile(): string {
   return process.env.CARET_CONFIG_FILE || `${configDir()}/config.toml`;
 }

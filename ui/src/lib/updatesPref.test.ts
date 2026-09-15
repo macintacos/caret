@@ -1,6 +1,7 @@
 import "@ui/support/setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { withThrowingStorage } from "@ui/support/storage.ts";
 import { knownPrefKeys } from "$lib/definePref.ts";
 import {
   readToastedUpdate,
@@ -43,27 +44,10 @@ describe("the toasted-update marker", () => {
   test("never throws when storage itself does", () => {
     // Private mode, disabled storage, quota. A marker that cannot persist must degrade
     // to re-toasting once, never to a thrown load.
-    //
-    // Bespoke rather than `withBlockedStorage`: that helper makes the `localStorage`
-    // GETTER throw, so the object is unreachable. Here the store is present and its
-    // methods fail — the failure a quota or a disabled origin actually produces, and a
-    // separate branch through the accessors.
-    const storage = globalThis.localStorage;
-    const poisoned = {
-      getItem() {
-        throw new Error("blocked");
-      },
-      setItem() {
-        throw new Error("blocked");
-      },
-    };
-    Object.defineProperty(globalThis, "localStorage", { value: poisoned, configurable: true });
-    try {
+    withThrowingStorage(() => {
       expect(readToastedUpdate()).toBeNull();
       expect(() => writeToastedUpdate("release:1.5.0")).not.toThrow();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", { value: storage, configurable: true });
-    }
+    });
   });
 });
 

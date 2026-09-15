@@ -5,7 +5,7 @@
 // daemon. The pure protocol side lives in dev-driver.test.ts; the port-mode /
 // lock guards in dev-env.test.ts.
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -83,8 +83,8 @@ test("childEnvFor threads the dev config path, and CARET_FRESH only when fresh",
   );
   expect(normal.CARET_CONFIG_FILE).toBe("/cfg/config.dev.toml");
   expect(normal.CARET_FRESH).toBeUndefined();
-  // --fresh: config points at a nonexistent path (→ defaults) and CARET_FRESH=1
-  // signals the UI to reset its saved prefs.
+  // --fresh: the caller hands a config path of its own — runDev's is inside the run's
+  // state dir — and CARET_FRESH=1 signals the UI to reset its saved prefs.
   const fresh = childEnvFor(
     "/tmp/world",
     { kind: "ephemeral" },
@@ -290,20 +290,20 @@ describe("runDev supervision", () => {
     });
   });
 
-  test("--fresh clears a stale config at the no-config path before boot", async () => {
+  test("--fresh points the child's config inside the run's own state dir", async () => {
     await withCleanDevEnv(async () => {
-      // The Updates toggle writes config.toml, so an earlier --fresh session can leave
-      // a real file at the path --fresh points at — and the next one would boot from it
-      // instead of the built-in defaults.
-      const stale = join(tmpdir(), "caret-dev-fresh-no-config.toml");
-      writeFileSync(stale, "[updates]\ncheck = false\n");
-      const { spawn } = capturingSpawn(0);
+      // The Updates toggle writes whatever CARET_CONFIG_FILE names, so --fresh cannot
+      // hand the daemon a shared-tmpdir sentinel: two sessions would share it, and the
+      // next --fresh boot would read it back instead of the built-in defaults.
+      const { spawn, calls } = capturingSpawn(0);
 
       await expect(
         runDev({ numVersions: 3, notify: false, persist: false, fresh: true }, baseDeps({ spawn })),
       ).rejects.toBeInstanceOf(ExitSignal);
 
-      expect(existsSync(stale)).toBe(false);
+      const stateDir = calls[0]?.env?.XDG_STATE_HOME as string;
+      expect(calls[0]?.env?.CARET_CONFIG_FILE).toBe(join(stateDir, "caret", "config.toml"));
+      expect(calls[0]?.env?.CARET_FRESH).toBe("1");
     });
   });
 
