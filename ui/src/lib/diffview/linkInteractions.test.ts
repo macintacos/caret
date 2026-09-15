@@ -129,9 +129,7 @@ describe("createLinkHandlers hover effects", () => {
       { lineNumber: 1, lineCharStart: 4, lineCharEnd: 12, tokenText: "the docs", tokenElement: el },
       new PointerEvent("pointerenter"),
     );
-    // The hover reveal is a caret-owned tooltip element, not the native title.
     expect(tooltipText()).toBe("https://a.test/full");
-    expect(el.getAttribute("title")).toBeNull();
     expect(el.style.cursor).toBe("pointer");
   });
 

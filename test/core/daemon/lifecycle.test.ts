@@ -14,6 +14,7 @@ import { dirname, join } from "node:path";
 import { ensureDaemonNoOps, noOpTiming } from "@test/support/ensure-daemon-deps.ts";
 import { setupTempStateDir, withEnv } from "@test/support/env.ts";
 import { caretLogRecords } from "@test/support/ndjson.ts";
+import { until } from "@test/support/poll.ts";
 import { fakeServiceManager } from "@test/support/service-manager.ts";
 import {
   daemonLock,
@@ -29,6 +30,7 @@ import {
   DAEMON_CWD,
   type EnsureMode,
   ensureDaemon,
+  isPidAlive,
   openDaemonStderr,
   prodEnsureDeps,
   removeOwnDaemonLock,
@@ -139,6 +141,25 @@ test("ensureDaemon swallows an EADDRINUSE spawn race and connects to the winner"
     }),
   );
   expect(url).toBe("http://localhost:42718");
+});
+
+test("ensureDaemon spawns again only once the daemon it spawned has exited", async () => {
+  let checks = 0;
+  const spawned: number[] = [];
+  await ensureDaemon(
+    ensureDeps({
+      health: async () => (++checks <= 4 ? null : { service: "caret", build: "b1", version: "v1" }),
+      spawn: () => {
+        const pid = spawned.length + 1;
+        spawned.push(pid);
+        return pid;
+      },
+      // Daemon 1 is still booting at the second check and gone by the third; daemon 2
+      // is still booting when the port first answers.
+      isAlive: (pid) => pid === 2 || checks < 3,
+    }),
+  );
+  expect(spawned).toEqual([1, 2]);
 });
 
 test("ensureDaemon gives up after maxAttempts", async () => {
@@ -665,7 +686,7 @@ test("a cycle whose daemon never returns falls back to a spawn that does not cla
     spawnedEnv = { ...opts.env };
     const out = opts.stdio?.[1];
     if (typeof out === "number") closeSync(out);
-    return { unref: () => {} };
+    return { pid: 1, unref: () => {} };
   }) as unknown as typeof Bun.spawn;
   const { served, health } = recordingHealth(() => {
     if (!calls.includes("restart")) return peer("old");
@@ -924,14 +945,15 @@ test("a supervisor window that runs out still leaves the fallback spawn its turn
     ensureDeps({
       timing: clock.timing,
       service,
-      // Slower to bind than one backoff. Each refused probe meanwhile spawns again; in
-      // production those extra spawns lose the bind race.
+      // Slower to bind than one backoff.
       health: async () =>
         firstSpawn !== undefined && clock.timing.now() >= firstSpawn + 2 * clock.stepMs
           ? peer("spawned", { build: "b1", resident: false })
           : null,
+      isAlive: () => true,
       spawn: () => {
-        firstSpawn ??= clock.timing.now();
+        firstSpawn = clock.timing.now();
+        return 1;
       },
     }),
   );
@@ -1123,10 +1145,10 @@ test("spawnDaemon pins the daemon's cwd to DAEMON_CWD", () => {
   const calls: Array<{ cwd?: string; stdio?: unknown[] }> = [];
   const spawn = ((_argv: string[], opts: { cwd?: string; stdio?: unknown[] }) => {
     calls.push(opts);
-    return { unref: () => {} };
+    return { pid: 4242, unref: () => {} };
   }) as unknown as typeof Bun.spawn;
 
-  spawnDaemon(DEFAULTS, spawn);
+  expect(spawnDaemon(DEFAULTS, spawn)).toBe(4242);
 
   expect(calls).toHaveLength(1);
   expect(calls[0]?.cwd).toBe(DAEMON_CWD);
@@ -1135,6 +1157,18 @@ test("spawnDaemon pins the daemon's cwd to DAEMON_CWD", () => {
   // openDaemonStderr handed the fake a real fd, as the sibling tests above do.
   const out = calls[0]?.stdio?.[1];
   if (typeof out === "number") closeSync(out);
+});
+
+// ensureDaemon spawns again once isAlive reads its daemon dead, which a zombie never does.
+// Awaiting `exited` would reap the child itself, so only the pid is kept.
+test("a detached, unref'd child that exits is reaped without being awaited", async () => {
+  const child = Bun.spawn([process.execPath, "-e", "process.exit(0)"], {
+    stdio: ["ignore", "ignore", "ignore"],
+    detached: true,
+  });
+  child.unref();
+  const { pid } = child;
+  expect(await until(() => !isPidAlive(pid))).toBe(true);
 });
 
 // ---- removeOwnDaemonLock ----

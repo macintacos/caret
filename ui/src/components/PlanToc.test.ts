@@ -435,8 +435,8 @@ describe("PlanToc surface", () => {
     await close(target, flush);
   });
 
-  // AC8: the breadcrumb form is a search affordance only. Clearing the query puts
-  // the nested tree back, headers and all gone.
+  // The breadcrumb form is a search affordance only. Clearing the query puts the
+  // nested tree back, with no group headers.
   test("returns to the nested tree when the query is cleared", async () => {
     const { target, flush } = await openToc();
     await typeQuery("details", flush);

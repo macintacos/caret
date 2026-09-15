@@ -194,9 +194,8 @@ function setRowTokens(root: HTMLElement, line: number, tokens: string[]): void {
 // The fence line carries two distinct tokens once the theme splits their colors:
 // the backtick/tilde markers and, on the opening line, the language tag. shiki
 // attaches no classes, so tagCodeBlockRows marks the language token (data-code-lang)
-// and BOTH fences' markers (data-code-fence) imperatively. The panel CSS draws the
-// marker chip off data-code-fence (EXC-869) and nudges the closing markers and the
-// language tag to their row's vertical center (EXC-692).
+// and BOTH fences' markers (data-code-fence) imperatively. The panel CSS nudges the
+// closing markers and the language tag to their row's vertical center (EXC-692).
 describe("tagCodeBlockRows token tagging", () => {
   const langOf = (root: HTMLElement, line: number) =>
     root.querySelector(`[data-content] > [data-line="${line}"] [data-code-lang]`);
@@ -211,7 +210,7 @@ describe("tagCodeBlockRows token tagging", () => {
     tagCodeBlockRows(root, [{ start: 1, end: 3 }]);
 
     expect(langOf(root, 1)?.textContent).toBe("ts");
-    // Both delimiters carry the chip hook; the language token is not the fence.
+    // Both delimiters carry the fence tag; the language token is not the fence.
     expect(fenceOf(root, 1)?.textContent).toBe("```");
     expect(fenceOf(root, 3)?.textContent).toBe("```");
     // The code line's own token is never mistaken for a language or fence.
@@ -232,7 +231,7 @@ describe("tagCodeBlockRows token tagging", () => {
 
   test("tags a longer fence's delimiters, and leaves an interior fence alone", () => {
     // Only a block's own start/end rows are scanned, so the ``` shown INSIDE a ````
-    // block is content and never takes the chip.
+    // block is content and never tagged.
     const root = buildContent(3);
     setRowTokens(root, 1, ["````", "md"]);
     setRowTokens(root, 2, ["```"]);
@@ -254,8 +253,8 @@ describe("tagCodeBlockRows token tagging", () => {
 
   test("tags no markers when shiki merges the fence and its language into one token", () => {
     // The marker span must be markers alone. Were the two ever to tokenize as one
-    // (they do not today — caret-theme.ts colors them apart), skipping the chip beats
-    // painting it under the language tag, which keeps its own prominent treatment.
+    // (they do not today — caret-theme.ts colors them apart), leaving the span
+    // untagged beats nudging the language with the markers.
     const root = buildContent(2);
     setRowTokens(root, 1, ["```ts"]);
     setRowTokens(root, 2, ["```"]);

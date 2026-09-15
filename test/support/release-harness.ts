@@ -57,7 +57,7 @@ export interface IoOptions {
 export type HarnessOptions = GitOptions & GitHubOptions & NpmOptions & IoOptions;
 
 /** The fake git/fs mutable world a harness exposes for assertions. */
-interface HarnessState {
+export interface HarnessState {
   branch: string;
   head: string;
   root: string;

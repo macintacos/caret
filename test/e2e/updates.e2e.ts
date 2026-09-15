@@ -61,7 +61,7 @@ test.describe("with a pending update", () => {
     // The pane states the verdict and offers the exact command — the whole reason the
     // daemon puts `command` on the wire rather than letting the browser derive one.
     await expect(page.locator("[data-updates-pane] .update-headline")).toContainText(AVAILABLE);
-    await expect(page.locator("[data-updates-pane] .update-command")).toHaveText(COMMAND);
+    await expect(page.getByRole("textbox", { name: "Upgrade command" })).toHaveValue(COMMAND);
     // And the toggle sits beneath it — the pane does not replace the category's fields.
     await expect(page.getByRole("switch", { name: "Check for updates" })).toBeVisible();
   });
@@ -153,6 +153,6 @@ test("the fixture daemon answers the update route with a quiet verdict", async (
   await expect(page.locator("[data-updates-pane] .update-headline")).toBeVisible();
   await expect(page.locator("[data-updates-pane] .update-placeholder")).toHaveCount(0);
   // And quiet: nothing pending, so no command and no mark on the gear.
-  await expect(page.locator("[data-updates-pane] .update-command")).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "Upgrade command" })).toHaveCount(0);
   await expect(markedGear(page)).toHaveCount(0);
 });

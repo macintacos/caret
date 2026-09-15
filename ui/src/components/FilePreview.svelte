@@ -782,8 +782,7 @@
   }
   /* Inset the app-wide focus ring (base.css) rather than restyling it: the drawer
      lane clips the panel, and the region runs flush to its edges, so an outset
-     ring would be cut off on three sides. Same treatment .fp-edge carried before
-     EXC-969 retired it. */
+     ring would be cut off on three sides. */
   .fp-code:focus-visible {
     outline-offset: -2px;
   }

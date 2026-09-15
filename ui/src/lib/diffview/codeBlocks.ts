@@ -75,16 +75,16 @@ function tagLanguageToken(row: Element): void {
 }
 
 /** Tags the fence-marker token on a fence line's row (the first span that is
- * markers alone) so the panel CSS can draw the marker chip on it, and nudge the
- * closing glyphs down to center.
+ * markers alone) so the panel CSS can nudge the closing glyphs down to center.
  *
  * Two conditions, each ruling out a different mis-tag. The row's own text must be a
  * fence line: an unclosed block ends at the last line of the document rather than at
  * a fence (codeBlockRanges), so its `data-code-end` row is ordinary prose, and
  * scanning that for a marker glyph would dress an inline backtick as a delimiter.
  * The span must then be markers and whitespace ALONE — the same FENCE_ONLY test
- * tagLanguageToken inverts — so that if shiki ever merges ``` and its language into
- * one token, the chip is skipped rather than painted under the language tag. */
+ * tagLanguageToken inverts. FENCE is unanchored, so a ```ts line can close a block;
+ * if shiki ever merges ``` and its language into one token, that token is left
+ * untagged rather than nudged down with its language. */
 function tagFenceToken(row: Element): void {
   if (!FENCE.test(row.textContent ?? "")) return;
   for (const span of row.children) {

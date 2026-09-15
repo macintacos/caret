@@ -7,8 +7,7 @@ import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
 
 // This suite covers the synchronous surface — the readout's numbers, gates, and
 // connection state, plus the shadcn structure. The tooltip *content* is bits-ui
-// overlay (portalled, deferred under happy-dom), so it is a visual/e2e concern, the
-// same split TopBar.test.ts uses for its cwd tooltip.
+// overlay (portalled, deferred under happy-dom), so it is a visual/e2e concern.
 
 const base = {
   active: true,
@@ -86,7 +85,7 @@ describe("StatusStrip", () => {
     expect(offConn.textContent).toContain("offline");
   });
 
-  // EXC-763 shadcn structure ------------------------------------------------
+  // shadcn structure ---------------------------------------------------------
 
   // The same vertical Separator the TopBar cluster uses, so the chrome shares one
   // divider vocabulary.
@@ -98,11 +97,11 @@ describe("StatusStrip", () => {
       version: 2,
     });
     const strip = target.querySelector(".status-strip")!;
-    const sep = strip.querySelector('[data-slot="separator"]');
-    expect(sep).not.toBeNull();
+    const seps = [...strip.querySelectorAll('[data-slot="separator"]')];
+    expect(seps).toHaveLength(3);
     // Decorative — a screen reader traversing the labelled strip shouldn't announce
     // "separator" between metrics.
-    expect(sep!.getAttribute("aria-hidden")).toBe("true");
+    for (const sep of seps) expect(sep.getAttribute("aria-hidden")).toBe("true");
   });
 
   // The revision pill reuses VersionLabel's amber-^ idiom, so ^vN reads identically

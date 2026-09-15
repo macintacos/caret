@@ -119,7 +119,7 @@ describe("CANONICAL_KEYMAP", () => {
     expect(keyCaps(bottom.keys)).toEqual([["shift", "G"]]);
   });
 
-  test("owns / for plan search (EXC-832), repointed from the contents filter", () => {
+  test("owns / for plan search (EXC-832)", () => {
     // EXC-832: `/` is a vim-style full-text search of the plan. The breadcrumbs bar's own
     // `/` (EXC-948) lives inside an open crumb menu and is handled there, so it never
     // reaches this table.

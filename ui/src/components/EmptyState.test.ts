@@ -52,8 +52,8 @@ describe("EmptyState", () => {
     expect(glyphRule).toContain("font-size: 6rem;");
   });
 
-  // EXC-763: the screen is rebuilt on the shadcn Empty container, so its
-  // structure now reads as one system with the rest of the shadcn-migrated UI.
+  // EXC-763: the screen composes the shadcn Empty container, so its structure
+  // reads as one system with the rest of the shadcn UI.
   test("renders inside a shadcn Empty container", () => {
     const { target } = render(EmptyState, { connected: true });
     expect(target.querySelector('[data-slot="empty"]')).not.toBeNull();
@@ -61,8 +61,8 @@ describe("EmptyState", () => {
 
   // The title stays a real <h2>: 8 e2e specs anchor on
   // getByRole("heading", { name: "No plans awaiting review" }), and the heading
-  // is the correct semantics for the empty screen. Guards the migration from
-  // silently demoting it to shadcn's EmptyTitle <div>.
+  // is the correct semantics for the empty screen. Guards against silently
+  // demoting it to shadcn's EmptyTitle <div>.
   test("keeps the title as a level-2 heading (the e2e anchor)", () => {
     const { target } = render(EmptyState, { connected: true });
     const h2 = target.querySelector("h2");

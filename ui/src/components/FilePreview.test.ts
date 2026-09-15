@@ -660,10 +660,10 @@ describe("FilePreview scroll loading", () => {
 
 describe("FilePreview keyboard reach", () => {
   test("the code region takes a tab stop and names the file it holds", async () => {
-    // EXC-972: with the boundary strips gone (EXC-969) the panel had no focusable
-    // control left, and Chrome and Safari keep a plain overflow:auto div out of
-    // the tab order — so the file past the opening window was unreachable without
-    // a pointer. The tab stop is what the browser's own key scrolling hangs off.
+    // EXC-972: the panel has no other focusable control, and Chrome and Safari keep
+    // a plain overflow:auto div out of the tab order — so without this stop the file
+    // past the opening window is unreachable without a pointer. The tab stop is what
+    // the browser's own key scrolling hangs off.
     cap = serveExcerpt(excerptFixture(25, 5, 122));
     const { target } = render(FilePreview, props({ line: 30 }));
     await until(() => target.querySelector(".fp-code") != null);
@@ -817,9 +817,6 @@ describe("FilePreview settling", () => {
   }
 
   test("the outgoing file stays on screen, marked leaving, while the next loads", async () => {
-    // The blank the reader used to get here was the one place the panel emptied
-    // mid-load — expand() already keeps the rows up while a chunk is in flight,
-    // and a reference change is the switch they trigger most deliberately.
     const served = serveGated(20, 300);
     cap = served;
     const { target, flush, live } = await openLive();
