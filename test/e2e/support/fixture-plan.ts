@@ -31,6 +31,11 @@ Run the loader against a recorded sidecar and confirm the first lookup is a
 cache hit. Cold-start timings should match warm-path timings within noise.
 `;
 
+/** FIXTURE_PLAN under a different `#` heading, which the daemon takes as the review's title. */
+export function titledPlan(title: string): string {
+  return `# ${title}${FIXTURE_PLAN.slice(FIXTURE_PLAN.indexOf("\n"))}`;
+}
+
 const tallSection = (label: string) =>
   Array.from({ length: 40 }, (_, i) => `${label} line ${i + 1} keeps the plan tall.`).join("\n");
 

@@ -65,7 +65,7 @@ test("the review runs this caret's review command under the claude-mcp adapter",
   expect(JSON.parse(stdin ?? "")).toEqual({
     session_id: "mcp-S",
     cwd: "/proj",
-    tool_input: { plan: "# Add rate limiting\n\nsteps", title: "Add rate limiting" },
+    tool_input: { plan: "# Add rate limiting\n\nsteps" },
   });
 });
 

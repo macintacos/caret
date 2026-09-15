@@ -108,7 +108,7 @@ export async function routeIncomingPlan(
     id,
     sessionId,
     cwd: input.cwd ?? "",
-    title: input.title?.trim() || deriveTitle(plan),
+    title: deriveTitle(plan),
     status: "pending",
     cmux: input.cmux,
     versions: [{ version: 1, plan, annotations: [], createdAt: now }],

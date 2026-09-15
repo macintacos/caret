@@ -90,7 +90,7 @@ model that never considers `plan_exit` is exactly the case the rewrite cannot ca
 
 caret does **not** re-implement the daemon round-trip inside the plugin. The tool's
 `execute()` builds a small caret-defined envelope
-(`{ session_id, cwd, tool_input: { plan, title, planFilePath? } }`) and
+(`{ session_id, cwd, tool_input: { plan, planFilePath? } }`) and
 **spawns `caret review` with `CARET_AGENT=opencode`**, piping the envelope on stdin and
 reading the flat decision JSON (`{ behavior, feedback? }`) on stdout. That reuses the
 entire existing daemon/review pipeline unchanged — the OpenCode plugin is the

@@ -34,13 +34,12 @@ test("parseHookInput maps the caret OpenCode envelope into a core PlanInput", ()
   const stdin = JSON.stringify({
     session_id: "S",
     cwd: "/proj",
-    tool_input: { plan: "# Plan", title: "T", planFilePath: "/proj/plans/p.md" },
+    tool_input: { plan: "# Plan", planFilePath: "/proj/plans/p.md" },
   });
   expect(opencodeAdapter.parseHookInput(stdin)).toEqual({
     sessionId: "S",
     cwd: "/proj",
     plan: "# Plan",
-    title: "T",
     planFilePath: "/proj/plans/p.md",
   });
 });
@@ -50,7 +49,6 @@ test("parseHookInput tolerates a payload missing every field", () => {
     sessionId: undefined,
     cwd: undefined,
     plan: undefined,
-    title: undefined,
     planFilePath: undefined,
   });
 });

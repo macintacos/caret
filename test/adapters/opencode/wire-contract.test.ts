@@ -32,7 +32,6 @@ test("the fixture parses to a PlanInput carrying the envelope payload", () => {
   const input = opencodeAdapter.parseHookInput(stdin);
   expect(input.sessionId).toBe("0pen-c0de-1b27-4d91-9c64-7ea2f0b1d3a5");
   expect(input.cwd).toBe("/Users/dev/projects/gadget");
-  expect(input.title).toBe("Add a status endpoint");
   expect(input.plan).toContain("# Add a status endpoint");
 });
 

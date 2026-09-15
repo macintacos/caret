@@ -10,16 +10,6 @@ export type CaretDecision =
   | { behavior: "allow"; feedback?: string }
   | { behavior: "deny"; feedback: string };
 
-/** The first markdown heading in the plan, used as the review title — or
- * undefined when the plan has no `# ` heading. */
-export function planTitle(plan: string): string | undefined {
-  for (const line of plan.split("\n")) {
-    const m = line.match(/^#\s+(.+?)\s*$/);
-    if (m?.[1]) return m[1];
-  }
-  return undefined;
-}
-
 /** Build the caret review envelope `caret review` parses.
  * Mirrors the snake_case session/cwd shape the opencode adapter's parseHookInput
  * reads — both ends are caret-owned. */
@@ -30,7 +20,7 @@ export function buildEnvelope(
   return JSON.stringify({
     session_id: ctx.sessionID,
     cwd: ctx.directory,
-    tool_input: { plan, title: planTitle(plan), planFilePath: ctx.planFilePath },
+    tool_input: { plan, planFilePath: ctx.planFilePath },
   });
 }
 

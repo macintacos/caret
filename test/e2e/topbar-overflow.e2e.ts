@@ -14,6 +14,7 @@
 
 import { reviewSwitcher } from "@test/e2e/support/chrome.ts";
 import { approveViaVariant, assertResolved } from "@test/e2e/support/decision.ts";
+import { titledPlan } from "@test/e2e/support/fixture-plan.ts";
 import { type Daemon, expect, test } from "@test/e2e/support/fixtures.ts";
 import { planSurface, seedAndOpen } from "@test/e2e/support/source-view.ts";
 
@@ -183,10 +184,10 @@ test("a long plan title truncates instead of running under the action buttons", 
   // trigger's min-width floor, since a floor too tall to fit the collapsed row
   // would put the trigger straight back under the controls.
   await daemon.seed({
-    title: "caret dev — markdown rendering stress test — extra long plan title",
+    plan: titledPlan("caret dev — markdown rendering stress test — extra long plan title"),
     cwd: "/tmp/proj-alpha",
   });
-  await daemon.seed({ title: "Plan Beta", cwd: "/tmp/proj-beta" });
+  await daemon.seed({ plan: titledPlan("Plan Beta"), cwd: "/tmp/proj-beta" });
   await page.goto("/");
   await planSurface(page);
   await expect(reviewSwitcher(page)).toBeVisible();

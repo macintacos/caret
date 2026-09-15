@@ -27,7 +27,7 @@ import type { Decision, PlanInput, SkillRef } from "@/lib/types.ts";
 interface HookStdin {
   session_id?: string;
   cwd?: string;
-  tool_input?: { plan?: string; title?: string; planFilePath?: string };
+  tool_input?: { plan?: string; planFilePath?: string };
 }
 
 export const opencodeAdapter: AgentAdapter = {
@@ -40,7 +40,6 @@ export const opencodeAdapter: AgentAdapter = {
       sessionId: hook.session_id,
       cwd: hook.cwd,
       plan: hook.tool_input?.plan,
-      title: hook.tool_input?.title,
       planFilePath: hook.tool_input?.planFilePath,
     };
   },
