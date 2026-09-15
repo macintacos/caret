@@ -90,11 +90,10 @@ afterEach(() => {
 
 // ---- DEV_SESSION (EXC-461) ----
 
-test("DEV_SESSION is per-instance: suffixed, never the bare caret-dev", () => {
+test("DEV_SESSION is per-instance: suffixed", () => {
   // Two dev sessions deliberately sharing one daemon must not collide on
   // session identity — the pid suffix makes each driver process its own session.
   expect(DEV_SESSION.startsWith("caret-dev-")).toBe(true);
-  expect(DEV_SESSION).not.toBe("caret-dev");
 });
 
 // ---- hookStdin ----
