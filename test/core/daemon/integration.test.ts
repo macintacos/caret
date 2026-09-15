@@ -676,10 +676,7 @@ test("the review hook treats an unknown flag as a parse error, not a deny", asyn
 test("the daemon logs the parsed settings at startup", async () => {
   const stateHome = await mkdtemp(join(tmpdir(), "caret-settings-boot-"));
   const configHome = await mkdtemp(join(tmpdir(), "caret-settings-cfg-"));
-  await Bun.write(
-    join(configHome, "caret", "config.toml"),
-    "[logging]\ndebug = true\nredact = true\n",
-  );
+  await Bun.write(join(configHome, "caret", "config.toml"), "[logging]\nredact = true\n");
   const lockPath = join(stateHome, "caret", "daemon.lock");
   const proc = spawnCaretDaemon(stateHome, { XDG_CONFIG_HOME: configHome }, { pipeStderr: true });
   try {
@@ -692,8 +689,7 @@ test("the daemon logs the parsed settings at startup", async () => {
       (r) => r.step === "settings",
     );
     expect(rec).toBeDefined();
-    // Effective (validated) values, never raw config text. `debug` is no longer
-    // a known key (EXC-400): zod strips it, so it never reaches the boot line.
+    // Effective (validated) values, never raw config text.
     // The daemon/review tables are the file-or-default values — the CARET_PORT /
     // CARET_IDLE_MS env overrides above resolve in the accessors (EXC-430) and
     // never appear in the parsed settings.

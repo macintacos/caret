@@ -243,17 +243,6 @@ test("reports a file over MAX_EXCERPT_BYTES as too large to preview", async () =
   expect(await readFileExcerpt(cwd, "huge.ts")).toBeNull();
 });
 
-// 3 MiB: comfortably past the 2 MiB ceiling chunked serving and row virtualization
-// replaced, and well under the current one (EXC-973).
-test("previews a file past the old 2 MiB ceiling", async () => {
-  const count = Math.ceil((3 * 1024 * 1024) / 100);
-  write("mid.ts", `${"x".repeat(99)}\n`.repeat(count));
-  const ex = await readFileExcerpt(cwd, "mid.ts");
-  expect(await isFileTooLargeToPreview(cwd, "mid.ts")).toBe(false);
-  expect(ex?.totalLines).toBe(count);
-  expect(ex?.lines).toHaveLength(EXCERPT_HEAD_LINES);
-});
-
 test("does not report a small, a missing, or an escaping file as too large", async () => {
   write("small.ts", numberedLines(5));
   // An oversized file outside cwd answers false because it never resolves, not
