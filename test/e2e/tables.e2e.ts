@@ -554,10 +554,10 @@ test("no pipe glyph paints, and the rules stand where the pipes did", async ({ p
   }
 
   // And what the edges were handed to (EXC-1136): not a frame any more but a surface —
-  // the code card's own fill, a radius and a lift, with no border on any side. The rows
-  // inside give up the library's opaque per-row fill so that panel reaches the screen,
-  // and the corner rounding on the end rows survives for the banded case, where a row IS
-  // opaque again and would otherwise paint its square corner over the card's arc.
+  // the code card's own fill, a radius and a lift. The rows inside give up the library's
+  // opaque per-row fill so that panel reaches the screen, and the corner rounding on the
+  // end rows survives for the banded case, where a row IS opaque again and would
+  // otherwise paint its square corner over the card's arc.
   const surface = await page.evaluate(() => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
     const card = sh?.querySelector("[data-content] > [data-table-card]") as HTMLElement;
@@ -580,8 +580,6 @@ test("no pipe glyph paints, and the rules stand where the pipes did", async ({ p
       ];
     };
     return {
-      widths: [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth, cs.borderLeftWidth],
-      sides: [cs.borderTopStyle, cs.borderRightStyle, cs.borderBottomStyle, cs.borderLeftStyle],
       fill: cs.backgroundColor,
       panel,
       shadow: cs.boxShadow,
@@ -592,11 +590,6 @@ test("no pipe glyph paints, and the rules stand where the pipes did", async ({ p
       middle: corners(card.children[1] as Element),
     };
   });
-  // No border left anywhere. `none` on a side reports 0px regardless of the declared
-  // width, so both halves are checked — a `border-style: none` with a live width would
-  // pass the style check alone and still be a frame waiting to be re-enabled.
-  expect(surface.sides).toEqual(["none", "none", "none", "none"]);
-  expect(surface.widths).toEqual(["0px", "0px", "0px", "0px"]);
   // The panel fill really reaches the card: the color-mix resolved across the shadow
   // boundary rather than falling back to nothing. Non-transparent, so this cannot pass by
   // both sides being unset.

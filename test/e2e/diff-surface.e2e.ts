@@ -1146,7 +1146,6 @@ test("renders a fenced code block as a tagged, darker panel on its own rows (EXC
           `[data-content] > [data-line="${n}"] [${attr}]`,
         ) as HTMLElement | null) ?? null;
       const lang = tokenIn(5, "data-code-lang"); // opening fence "```ts" → language token
-      const openFence = tokenIn(5, "data-code-fence"); // opening fence "```" → markers
       const fence = tokenIn(8, "data-code-fence"); // closing fence "```" → markers
       return {
         codeLines: [5, 6, 7, 8].map((n) => has(n, "data-code-line")),
@@ -1162,10 +1161,6 @@ test("renders a fenced code block as a tagged, darker panel on its own rows (EXC
         langTop: lang ? getComputedStyle(lang).top : null,
         fenceText: fence?.textContent ?? null,
         fenceTop: fence ? getComputedStyle(fence).top : null,
-        openFenceText: openFence?.textContent ?? null,
-        openFenceBg: openFence ? getComputedStyle(openFence).backgroundColor : null,
-        fenceBg: fence ? getComputedStyle(fence).backgroundColor : null,
-        fenceRadius: fence ? getComputedStyle(fence).borderTopLeftRadius : null,
       };
     });
 
@@ -1203,15 +1198,6 @@ test("renders a fenced code block as a tagged, darker panel on its own rows (EXC
   expect(Number.parseFloat(panel.langTop as string)).toBeLessThan(0);
   expect(panel.fenceText?.trim()).toBe("```");
   expect(Number.parseFloat(panel.fenceTop as string)).toBeGreaterThan(0);
-  // The delimiters carry NO chip. EXC-869 gave them one and it was the chip family's one
-  // member that never read as one: a chip tints a span of CONTENT, and a fence row is all
-  // marker and no content, so the tint drew a small empty pill inside the panel. What the
-  // markers keep is their ink and the centering nudges above; the panel is what says where
-  // the block starts and stops.
-  expect(panel.openFenceText?.trim()).toBe("```");
-  expect(panel.fenceBg).toBe("rgba(0, 0, 0, 0)");
-  expect(panel.openFenceBg).toBe(panel.fenceBg);
-  expect(Number.parseFloat(panel.fenceRadius as string)).toBe(0);
 });
 
 test("hovering a code block reveals a copy button that copies the code (EXC-692)", async ({

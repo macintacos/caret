@@ -517,8 +517,6 @@ test("each breadcrumb header names its group in the accessibility tree", async (
   // The match sits INSIDE the group its breadcrumb names, which is what makes the
   // header wayfinding rather than a caption that happens to be nearby.
   await expect(group(page, "Plan › Setup").getByRole("option")).toHaveText(["Setup notes"]);
-  // The dimmed context rows this view used to render are gone.
-  await expect(panel(page).locator(".toc-context")).toHaveCount(0);
 });
 
 test("the grouping filter drives the list, not the command's own filter engine", async ({

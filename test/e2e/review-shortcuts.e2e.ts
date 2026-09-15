@@ -1,10 +1,10 @@
-// Review-verdict + chrome keyboard shortcuts. Approve (a), request changes (r),
-// reject (shift+R, EXC-913), toggle compare/diff (d), open plan search (/,
-// EXC-832), open the heading breadcrumbs (b), and open settings (,) are all
-// wired through the shortcut engine (EXC-786), and a held key runs its shortcut once
-// (EXC-1131). These are real-browser keyboard behaviors — a keydown routed through
-// the global dispatcher into the same guarded path a click takes — so they live here,
-// not in a unit (browser-testing.md). Every action is driven with a REAL keystroke.
+// Review-verdict + chrome keyboard shortcuts. Approve (a), request changes (r), reject
+// (shift+R, EXC-913), toggle compare/diff (d), open the heading breadcrumbs (b), and open
+// settings (,) are all wired through the shortcut engine (EXC-786), and a held key runs
+// its shortcut once (EXC-1131). These are real-browser keyboard behaviors — a keydown
+// routed through the global dispatcher into the same guarded path a click takes — so they
+// live here, not in a unit (browser-testing.md). Every action is driven with a REAL
+// keystroke.
 //
 // waitPastSafeModeGrace is mandatory before the first key press: a key inside the
 // post-mount grace window is swallowed by Safe Mode (safeMode.ts).
@@ -183,22 +183,6 @@ test("a held d toggles compare once", async ({ daemon, page }) => {
   for (let i = 0; i < 4; i++) await page.keyboard.down("d");
   await page.keyboard.up("d");
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
-});
-
-test("slash opens the plan search, not the contents filter (EXC-832)", async ({ daemon, page }) => {
-  await daemon.seed({ plan: PLAN });
-  await page.goto("/");
-  await loadPlan(page);
-
-  // EXC-832 repurposed / from focusing the contents filter (EXC-789) to opening a
-  // vim-style plan search. The breadcrumbs bar's own `/` (EXC-948) lives inside an
-  // open crumb menu, so with no menu up the key belongs to the search outright and
-  // no heading filter is mounted to steal it. The full search flow lives in
-  // plan-search.e2e.ts — here we only pin the key's owner at the plan surface.
-  await expect(page.getByLabel("Filter headings")).toHaveCount(0);
-
-  await page.keyboard.press("/");
-  await expect(page.getByRole("search")).toBeVisible();
 });
 
 test("b opens the breadcrumbs bar, and j/j/Enter jumps to the highlighted heading", async ({

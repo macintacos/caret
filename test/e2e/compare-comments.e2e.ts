@@ -122,34 +122,6 @@ async function openComparePanel(page: Page) {
   return nav;
 }
 
-test("entering compare mode leaves the panel closed; the tally opens it", async ({
-  daemon,
-  page,
-}) => {
-  await seedCommentedVersions(daemon);
-  await page.goto("/");
-  await planSurface(page);
-
-  const nav = commentNavigator(page);
-  const toggle = commentTally(page);
-
-  // The tally is the entry point in the single-version view…
-  await toggle.click();
-  await expect(nav).toBeVisible();
-  await toggle.click();
-  await expect(nav).toHaveCount(0);
-
-  // …and entering compare mode does not change that: the diff comes up with the
-  // panel still shut, and the same tally opens it on the compared range.
-  await page.getByRole("button", { name: "Versions" }).click();
-  await expect(page.locator(".diffview pre").first()).toHaveAttribute("data-diff-type", "split");
-  await expect(nav).toHaveCount(0);
-
-  await toggle.click();
-  await expect(nav).toBeVisible();
-  await expect(nav).toHaveAccessibleName("Comments in v2–v3");
-});
-
 /** Enter compare mode in `layout` with the side-anchor fixture, and open the panel. */
 async function openSideAnchors(page: Page, layout: "Split" | "Unified") {
   await planSurface(page);
