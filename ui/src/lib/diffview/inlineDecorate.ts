@@ -40,7 +40,8 @@
 // a notch through its middle — `**a `c` b**` would render the bold chip with a
 // rounded hole where the code run sits. The outermost pill wins on the ELEMENT.
 // Where a member is alone on the child, "every member" is just itself and it caps
-// normally.
+// normally. A member the run marks as wrapping (`continues` / `continued`) never caps
+// at the row break, so a span the reflow split still reads as one pill (EXC-1342).
 //
 // A nested member gets its corners all the same, from a second BOX: data-md-inner
 // names the members whose group sits inside another's on this child, and
@@ -160,8 +161,13 @@ function tagRow(
       const g = group.get(m);
       return g === undefined ? 0 : g.endCol - g.startCol;
     };
-    const opens = members.filter((m) => group.get(m)?.startCol === start);
-    const closes = members.filter((m) => group.get(m)?.endCol === col);
+    // A member wrapping across rows gets no cap at the break, so its chip reads as one.
+    const opens = members.filter(
+      (m) => group.get(m)?.startCol === start && !run.continued?.some((w) => w === m),
+    );
+    const closes = members.filter(
+      (m) => group.get(m)?.endCol === col && !run.continues?.some((w) => w === m),
+    );
     // NESTING is a comparison of extents, and on one child it is that simple: the
     // members here are nested in each other by construction (markdown cannot
     // interleave them), so the widest group is the enclosing pill and every
