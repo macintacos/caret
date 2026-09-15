@@ -240,7 +240,9 @@ function pathCtx(
 test("a path review sends the file's text and its absolute path in the envelope", async () => {
   const { directory, planFilePath } = planDir("# From disk\n");
   const stdins: string[] = [];
-  const hooks = await buildHooks(stubRunner(`{"behavior":"allow"}`, (_c, _e, s) => stdins.push(s)));
+  const hooks = await buildHooks(
+    stubRunner(`{"behavior":"allow"}`, (_command, _env, stdin) => stdins.push(stdin)),
+  );
   await hooks.tool?.[REVIEW_TOOL]?.execute?.({ path: "plans/plan.md" }, pathCtx(directory));
   expect(JSON.parse(stdins[0] ?? "{}").tool_input).toMatchObject({
     plan: "# From disk\n",
