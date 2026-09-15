@@ -1,7 +1,8 @@
 // The global keydown dispatcher: one listener that matches events to registered
 // shortcuts and invokes their run(). Focus-aware — single-key shortcuts yield
 // while a text field or the CodeMirror composer is focused, and any event a
-// focused widget already handled (defaultPrevented) is left alone. A framework-
+// focused widget already handled (defaultPrevented) is left alone. A held key
+// runs its shortcut once unless the entry opts into repeat. A framework-
 // agnostic factory over injected deps (target, registry, clock), wired in
 // App.svelte's $effect exactly like createSafeModeGuard.
 
@@ -89,10 +90,14 @@ export function createShortcutDispatcher(opts: ShortcutDispatcherOptions): Short
       if (seq?.candidates.every((c) => isBareSpec(c.keys))) seq = null;
     }
     const { entry, state } = matchKeydown(seq, e, entries, now(), timeoutMs);
-    seq = state;
+    // A held key is one press: its OS repeats (which preventDefault() does not
+    // stop) are claimed but re-run only an opted-in entry, and leave a pending
+    // sequence as it was.
+    const held = entry !== null && e.repeat && !entry.repeat;
+    if (!held) seq = state;
     if (entry && entry.enabled?.() !== false) {
       e.preventDefault();
-      entry.run?.();
+      if (!held) entry.run?.();
     }
   }
 

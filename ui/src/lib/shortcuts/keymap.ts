@@ -66,19 +66,22 @@ export const SETTINGS_SHORTCUTS: ShortcutEntry[] = [
 /** Every reserved binding, in help-modal order. */
 export const CANONICAL_KEYMAP: ShortcutEntry[] = [
   // Motion (cursor)
-  { id: "motion.down", keys: [{ key: "j" }], group: "motion", label: "Line down" },
-  { id: "motion.up", keys: [{ key: "k" }], group: "motion", label: "Line up" },
+  // Relative motions repeat — each OS repeat is one more step; gg/G jump to a fixed place.
+  { id: "motion.down", keys: [{ key: "j" }], group: "motion", label: "Line down", repeat: true },
+  { id: "motion.up", keys: [{ key: "k" }], group: "motion", label: "Line up", repeat: true },
   {
     id: "motion.halfPageDown",
     keys: [{ key: "d", mods: ["ctrl"] }],
     group: "motion",
     label: "Half-page down",
+    repeat: true,
   },
   {
     id: "motion.halfPageUp",
     keys: [{ key: "u", mods: ["ctrl"] }],
     group: "motion",
     label: "Half-page up",
+    repeat: true,
   },
   { id: "motion.top", keys: [{ key: "g" }, { key: "g" }], group: "motion", label: "Go to top" },
   { id: "motion.bottom", keys: [{ key: "G" }], group: "motion", label: "Go to bottom" },
@@ -87,15 +90,29 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
     keys: [{ key: "]" }, { key: "]" }],
     group: "motion",
     label: "Next heading",
+    repeat: true,
   },
   {
     id: "motion.prevHeading",
     keys: [{ key: "[" }, { key: "[" }],
     group: "motion",
     label: "Previous heading",
+    repeat: true,
   },
-  { id: "motion.nextBlank", keys: [{ key: "}" }], group: "motion", label: "Next blank line" },
-  { id: "motion.prevBlank", keys: [{ key: "{" }], group: "motion", label: "Previous blank line" },
+  {
+    id: "motion.nextBlank",
+    keys: [{ key: "}" }],
+    group: "motion",
+    label: "Next blank line",
+    repeat: true,
+  },
+  {
+    id: "motion.prevBlank",
+    keys: [{ key: "{" }],
+    group: "motion",
+    label: "Previous blank line",
+    repeat: true,
+  },
   // Commenting
   { id: "commenting.comment", keys: [{ key: "c" }], group: "commenting", label: "Comment line" },
   {
@@ -144,7 +161,8 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
     label: "Search plan",
   },
   // EXC-832: cycle to the next / previous search match (wrapping), registered live only
-  // while a committed search HUD is up.
+  // while a committed search HUD is up. No repeat: a held n would replay searchStepped on
+  // every tick (EXC-1131).
   { id: "actions.searchNext", keys: [{ key: "n" }], group: "actions", label: "Next match" },
   { id: "actions.searchPrev", keys: [{ key: "N" }], group: "actions", label: "Previous match" },
   { id: "actions.settings", keys: [{ key: "," }], group: "actions", label: "Open settings" },
@@ -192,7 +210,7 @@ function reservedEntry(id: string): ShortcutEntry {
   return base;
 }
 
-/** A live, dispatchable entry from a reservation: the canonical key/label/group/cap
+/** A live, dispatchable entry from a reservation: the canonical key/label/group/cap/repeat
  * spread with the caller's `run` (+ optional `enabled`/`scope`). The single seam every
  * live binding registers through (EXC-876). An explicit `scope` overrides; otherwise the
  * reservation's own scope (help.show's `"global"`) is preserved by the spread. */

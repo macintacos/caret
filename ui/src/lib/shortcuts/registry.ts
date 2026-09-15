@@ -42,7 +42,9 @@ export type ShortcutScope = "global" | "review" | "settings";
  * listed for the help modal but never dispatched (the existing editor chords,
  * which the composer already owns on focus). `enabled` gates dispatch and lets
  * the modal grey out entries. `scope` gates by the active view (see ShortcutScope);
- * absent = the base review surface. */
+ * absent = the base review surface. `repeat` opts into the OS key repeat: absent or false,
+ * the entry runs once per press; true, it runs again on every repeat while the key is held
+ * (a two-key sequence, on every second one). */
 export interface ShortcutEntry {
   id: string;
   keys: KeySpec;
@@ -51,6 +53,7 @@ export interface ShortcutEntry {
   run?: () => void;
   enabled?: () => boolean;
   scope?: ShortcutScope;
+  repeat?: boolean;
 }
 
 export interface ShortcutRegistry {
