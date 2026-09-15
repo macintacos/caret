@@ -504,7 +504,10 @@ const CARET_OVERRIDES = `
     padding-inline-end: var(--chip-pad-inline);
   }
   /* A pill the reflow broke across rows has no cap at the break, but its glyphs still
-     want the room a cap gives them: the square edge keeps the padding, not the radius. */
+     want the room a cap gives them: the square edge keeps the padding, not the radius.
+     A table cell's SOFT wrap stays flush on purpose. The only way to pad a visual break
+     is box-decoration-break: clone, which pads every edge of every token as well, and
+     would spread a pill's own glyphs apart at each token seam. */
   [data-content] [data-line] [data-md-wrap-start] {
     padding-inline-start: var(--chip-pad-inline);
   }
