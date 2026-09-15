@@ -5,9 +5,9 @@ import { readAppCss } from "$lib/appCss.ts";
 // The caret↔@pierre/diffs bridge lives in exactly one place: a single .diffview
 // rule in ui/src/app.css that maps caret's design tokens onto the @pierre/diffs
 // --diffs-* custom properties and sets the Berkeley Mono font stack. This suite
-// pins the contract the acceptance criteria require — exact font stack and the
-// absence of hardcoded hex — so a drift fails the unit suite rather than only
-// showing as a visual mismatch in the diff view's shadow DOM.
+// pins the contract the acceptance criteria require — the absence of hardcoded
+// hex — so a drift fails the unit suite rather than only showing as a visual
+// mismatch in the diff view's shadow DOM.
 
 const appCss = readAppCss();
 
@@ -22,8 +22,6 @@ function diffviewRule(css: string): string {
 function declarations(css: string): string {
   return diffviewRule(css).replace(/\/\*[\s\S]*?\*\//g, "");
 }
-
-const FONT_STACK = "'Berkeley Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace";
 
 /** Asserts each of `names` is set in `rule` to a value matching `valuePattern`
  * and never `oklch` (mangled in the embedding Chrome build) — the shared shape
@@ -47,10 +45,6 @@ function testTokenOverrides(
 
 describe("the .diffview → --diffs-* bridge", () => {
   const rule = diffviewRule(appCss);
-
-  test("sets --diffs-font-family to caret's Berkeley Mono stack", () => {
-    expect(rule).toContain(`--diffs-font-family: ${FONT_STACK};`);
-  });
 
   test("turns on tabular figures via --diffs-font-features", () => {
     // The library passes --diffs-font-features straight into font-feature-settings

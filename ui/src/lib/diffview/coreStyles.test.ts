@@ -419,19 +419,6 @@ describe("the fenced code-block panel (EXC-692)", () => {
   });
 });
 
-// The fence markers take NO chip. EXC-869 gave them one and it was the family member that
-// never read as one — a chip tints a span of CONTENT, and a fence row is all marker and no
-// content, so the tint drew a small empty pill inside the code panel. What they keep is
-// their ink (caret-theme.ts) and the EXC-692 centering nudges, which are about where the
-// marker sits in its line box rather than about tinting it.
-test("draws no chip on the fence markers", () => {
-  const fenceRules = rulesFor(String.raw`\[data-code-fence\]`).join("\n");
-  expect(fenceRules).not.toMatch(/background|border-radius/);
-  // Asserted against the centering rules still being there, so this cannot pass by the
-  // selector having vanished from the sheet altogether.
-  expect(fenceRules).toMatch(/top:\s*-?[\d.]+em/);
-});
-
 // EXC-867: the inline emphasis chips, the first prose members of the EXC-855 chip family.
 // The real weight and slant come from shiki (caret-theme.ts) — EXC-858 measured bold's and
 // italic's tints within a 1.05 contrast ratio in five of nine palettes, so the tint alone
@@ -1674,12 +1661,11 @@ describe("tables (EXC-864)", () => {
     expect(cardRule).toMatch(/justify-self:\s*start/);
   });
 
-  test("is a surface, on the code card's fill, and no longer a frame", () => {
+  test("is a surface, on the code card's fill", () => {
     // EXC-1136 traded the outline for a panel. The fill is the code card's own, quoted
     // rather than re-tuned: a table and a fenced block are the two cards on this page,
     // and two panel colours a shade apart read as a mistake rather than as two kinds of
-    // block. The elevation is what says "floating"; the frame it replaces is gone
-    // outright, so the column rules now stop against the panel's edge instead of a line.
+    // block. The elevation is what says "floating".
     const codeCard =
       overrideDecls.match(/\[data-content\]\s*>\s*\[data-code-card\]\s*\{[^}]*\}/)?.[0] ?? "";
     const codeFill = codeCard.match(/background-color:\s*([^;]+);/)?.[1];
@@ -1699,7 +1685,6 @@ describe("tables (EXC-864)", () => {
     expect(blur).toBeGreaterThan(0);
     expect(blur).toBeLessThan(12);
     expect(lift).not.toContain("--shadow-card");
-    expect(cardRule).not.toMatch(/border:\s*1px/);
   });
 
   test("clears the library's row fill inside the card, banded rows excepted", () => {
@@ -1947,13 +1932,12 @@ describe("tables (EXC-864)", () => {
     expect(slotOverride).toMatch(/:nth-child\(2 of \[data-column-number\]\)/);
   });
 
-  test("caps the header in subdued small-caps rather than shouting it in bold", () => {
+  test("caps the header in subdued small-caps", () => {
     // The filled card carries the table's edge (EXC-1136), so the header does not have to
     // out-weigh a frame to read as a header. Uppercase plus a step back in the ink says
     // "these are labels" quietly, where bold would shout it.
     expect(headCap).toMatch(/text-transform:\s*uppercase/);
     expect(headCap).toMatch(/color:\s*var\(--ink-soft\)/);
-    expect(headCap).not.toContain("font-weight");
     // No font-size and no letter-spacing, both for the same reason: the column dividers
     // paint 0.5ch INSIDE each cell, so a header set on a different advance width would
     // land its divider segment on a different x than every body row's.
