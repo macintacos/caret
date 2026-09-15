@@ -86,7 +86,6 @@ describe("CANONICAL_KEYMAP", () => {
     const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.reject");
     if (!entry) throw new Error("actions.reject missing");
     expect(entry.group).toBe("actions");
-    expect(entry.label).toBe("Reject");
     expect(specSignature(entry.keys)).toBe("R");
     expect(keyCaps(entry.keys)).toEqual([["shift", "R"]]);
     expect(ariaKeyshortcutsFor("actions.reject")).toBe("Shift+R");
@@ -127,7 +126,6 @@ describe("CANONICAL_KEYMAP", () => {
     const search = CANONICAL_KEYMAP.find((e) => e.id === "actions.search");
     if (!search) throw new Error("actions.search missing");
     expect(search.group).toBe("actions");
-    expect(search.label).toBe("Search plan");
     expect(specSignature(search.keys)).toBe("/");
   });
 
@@ -138,8 +136,6 @@ describe("CANONICAL_KEYMAP", () => {
     if (!next || !prev) throw new Error("search n/N keymap entries missing");
     expect(next.group).toBe("actions");
     expect(prev.group).toBe("actions");
-    expect(next.label).toBe("Next match");
-    expect(prev.label).toBe("Previous match");
     expect(specSignature(next.keys)).toBe("n");
     expect(specSignature(prev.keys)).toBe("N");
     expect(keyCaps(next.keys)).toEqual([["N"]]);

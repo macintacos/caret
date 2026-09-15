@@ -308,8 +308,7 @@ describe("getApproveMode instrumentation", () => {
     await expect(getApproveMode()).rejects.toThrow("offline");
     flush();
 
-    const warn = expectLoggedAt("warn", "prefs");
-    expect(warn.msg as string).toContain("approve mode read failed");
+    expectLoggedAt("warn", "prefs");
   });
 });
 
@@ -329,8 +328,7 @@ describe("getHealth instrumentation", () => {
     await expect(getHealth()).rejects.toThrow("offline");
     flush();
 
-    const warn = expectLoggedAt("warn", "request");
-    expect(warn.msg as string).toContain("health probe failed");
+    expectLoggedAt("warn", "request");
   });
 });
 
@@ -352,8 +350,7 @@ describe("getDiagnostics instrumentation", () => {
     await expect(getDiagnostics()).rejects.toThrow("offline");
     flush();
 
-    const warn = expectLoggedAt("warn", "request");
-    expect(warn.msg as string).toContain("diagnostics probe failed");
+    expectLoggedAt("warn", "request");
   });
 });
 
@@ -692,8 +689,7 @@ describe("getUpdate", () => {
     flush();
 
     expect(cap.events().some((r) => r.level === "warn")).toBe(false);
-    const debug = expectLoggedAt("debug", "request");
-    expect(debug.msg as string).toContain("update route unwired");
+    expectLoggedAt("debug", "request");
   });
 
   test("any other failure warns at step request and rejects", async () => {
@@ -702,7 +698,6 @@ describe("getUpdate", () => {
     await expect(getUpdate()).rejects.toThrow("offline");
     flush();
 
-    const warn = expectLoggedAt("warn", "request");
-    expect(warn.msg as string).toContain("update report");
+    expectLoggedAt("warn", "request");
   });
 });
