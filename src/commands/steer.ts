@@ -10,7 +10,7 @@ export async function runSteerSubcommand(): Promise<void> {
     const out = planTitleSteer(await Bun.stdin.text());
     if (out) process.stdout.write(`${out}\n`);
   } catch {
-    // Unparseable stdin: nothing to steer.
+    // Any failure: nothing to steer.
   }
   process.exit(0);
 }

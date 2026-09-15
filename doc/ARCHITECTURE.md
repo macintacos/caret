@@ -123,7 +123,7 @@ so the shipped Claude plugin keeps working unchanged.
 
 | Adapter | `CARET_AGENT` | How it wires in | What ships | Status |
 | ------- | ------------- | --------------- | ---------- | ------ |
-| **Claude Code** — `src/adapters/claude/` | `claude` (the default) | Five plan-mode hooks; the `PermissionRequest`/`ExitPlanMode` one intercepts the plan. The plugin also serves a `review_plan` MCP tool (`caret mcp`) | The `caret@caret` plugin, from caret's own marketplace | Stable (default) |
+| **Claude Code** — `src/adapters/claude/` | `claude` (the default) | Five hooks; the `PermissionRequest`/`ExitPlanMode` one intercepts the plan. The plugin also serves a `review_plan` MCP tool (`caret mcp`) | The `caret@caret` plugin, from caret's own marketplace | Stable (default) |
 | **OpenCode** — `src/adapters/opencode/` | `opencode` | An in-process plugin registering a `caret_review_plan` tool — OpenCode has no plan hook to intercept | The `@macintacos/caret` npm package, plus its own installer | Stable |
 | **Codex CLI** — `src/adapters/codex/` | `codex` | A `PermissionRequest` hook | Nothing — no installer, no hook manifests | Provisional, default-off |
 
@@ -143,7 +143,7 @@ behavior.
 
 ### The Claude Code adapter
 
-caret wires into Claude Code through five plan-mode hooks:
+caret wires into Claude Code through five hooks:
 
 | Hook                | Matcher         | Command           | Purpose                                                                     |
 | ------------------- | --------------- | ----------------- | --------------------------------------------------------------------------- |
@@ -164,6 +164,14 @@ If the approval happened in Claude's own interface rather than caret's UI — so
 still holds the review as pending — it resolves that review to keep the two surfaces in
 sync. When the UI already resolved the plan (the normal case) it is a no-op, and it never
 gates: any failure is silent, so a stalled reconcile can't block the agent.
+
+The two `caret steer` hooks add a one-line instruction as `additionalContext`, asking the
+model to open its plan with a `# <title>` heading, which caret shows as the review's
+title. On `PostToolUse` it fires only for `EnterPlanMode`. It is wired twice because
+entering plan mode with Shift+Tab fires no `EnterPlanMode`, so a prompt sent in plan mode
+is the only signal. `UserPromptSubmit` fires on every prompt, so outside plan mode the
+command prints nothing, it never reads config or writes logs, and any failure exits 0
+silently.
 
 Beside the hooks, the plugin starts a stdio MCP server, `caret mcp`, declared in
 `.claude-plugin/plugin.json`. It serves one tool, `review_plan`, which a skill can call to
@@ -329,6 +337,8 @@ OpenCode's tool takes exactly one of `plan` or `path`, and `path` is preferred. 
 names a markdown (`.md`) file holding the complete plan, either absolute or relative to
 the session's directory. The agent passes nothing else: the review's session and working
 directory come from the calling session (OpenCode) or from the MCP server (Claude Code).
+caret titles the review from the plan's first `#` heading (else its first `##`, else its
+opening line), so open the plan with `# <title>`.
 
 **It is for plans only.** caret reflows whatever it receives into its own plan layout and
 presents it as a plan, so a checklist, a schema, or a question put through it arrives
@@ -423,7 +433,7 @@ src/adapters/       the coding-agent adapter axis — the AgentAdapter interface
 ui/                 Svelte 5 multi-asset SPA (Vite) embedded into the binary via the build-generated asset manifest, served by the daemon by URL path · src/state/ runes state modules · src/icons/ vendored Lucide SVGs
 hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode + PostToolUse/ExitPlanMode + UserPromptSubmit) — Claude-adapter packaging
 commands/           /caret:demo · /caret:debug · /caret:discovery — Claude-adapter packaging (agent-specific behavioral prose)
-opencode/           the plugin OpenCode loads — the review tool, the planning steer, the config-hook mutation, and commands/ (the same three commands, rewritten for OpenCode) — OpenCode-adapter packaging; review-bridge.ts, its bridge to caret review, is shared with caret mcp
+opencode/           the plugin OpenCode loads — the review tool, the planning steer, the config-hook mutation, and commands/ (the same three commands, rewritten for OpenCode) — OpenCode-adapter packaging; review-bridge.ts, its bridge to caret review, is shared with caret mcp and caret steer
 templates/          demo.md — the /caret:demo plan both adapters' commands fill and present
 test/               core/ (tool-agnostic suites) · adapters/<tool>/ (per-adapter suites + fixtures) · opencode/ (the repo-root opencode/ package) · e2e/ (Playwright) · structure/ (repo-shape invariants) · scripts/ (release + dev tooling) · support/ (shared scaffolding)
 scripts/            dev and release tooling for the checkout, plus the two committed shims' tests

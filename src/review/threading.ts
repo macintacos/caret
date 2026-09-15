@@ -9,7 +9,7 @@
 
 import { randomBytes } from "node:crypto";
 
-import { Marked, type Tokens } from "marked";
+import { Lexer, type Tokens } from "marked";
 
 import { type CaretLogger, noopLogger, shortId } from "@/lib/log.ts";
 import type { PlanInput, Review, RouteResult } from "@/lib/types.ts";
@@ -30,9 +30,13 @@ export function newReviewId(): string {
  * heading, else the first line of its first paragraph. Only top-level tokens count,
  * so a `#` line inside a fenced block is never a candidate. */
 export function deriveTitle(plan: string): string {
-  const tokens = new Marked({ gfm: true }).lexer(plan);
+  // Block pass only: the inline pass is quadratic on emphasis runs and a title needs
+  // only block text. blockTokens skips lex()'s CR normalisation, hence the replace.
+  const tokens = new Lexer({ gfm: true }).blockTokens(plan.replace(/\r\n?/g, "\n"));
   const heading = (depth: number) =>
-    tokens.find((t): t is Tokens.Heading => t.type === "heading" && t.depth === depth)?.text;
+    tokens.find(
+      (t): t is Tokens.Heading => t.type === "heading" && t.depth === depth && t.text.trim() !== "",
+    )?.text;
   const prose = tokens
     .find((t): t is Tokens.Paragraph => t.type === "paragraph")
     ?.text.split("\n")[0];

@@ -2,7 +2,9 @@
 // plugin and `caret mcp`: build caret's review envelope, spawn the review, and turn the
 // flat decision it prints into the tool's result text. It sits in opencode/ because that
 // directory ships as unbundled source the plugin can reach only by relative import, and
-// it imports node builtins only, so bundling it into the CLI pulls in no plugin SDK.
+// it imports node builtins only, so bundling it into the CLI pulls in no plugin SDK. It
+// also holds PLAN_TITLE_INSTRUCTION, since this is the one module the plugin, `caret mcp`
+// and `caret steer` can all import.
 
 import { spawn } from "node:child_process";
 
@@ -10,8 +12,9 @@ export type CaretDecision =
   | { behavior: "allow"; feedback?: string }
   | { behavior: "deny"; feedback: string };
 
-/** The steer every agent-facing surface appends so the plan opens on the heading
- * caret derives the review title from. */
+/** Asks the model to open its plan on a `#` heading, which deriveTitle
+ * (src/review/threading.ts) prefers as the review title — keep the two in sync. Sent by
+ * the OpenCode planning steer, the MCP review_plan description, and `caret steer`. */
 export const PLAN_TITLE_INSTRUCTION =
   "Start the plan with a single `# <title>` heading that names the change in a few words; caret shows it as the plan's title in the review UI.";
 

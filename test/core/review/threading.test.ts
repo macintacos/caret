@@ -66,6 +66,7 @@ test.each([
   ],
   ["a # heading wins over an earlier ## heading", "## Context\n\nx\n\n# Real title", "Real title"],
   ["a ## heading stands in when there is no # heading", "## Steps\n\n1. do it", "Steps"],
+  ["a blank # heading is not a title", "#\n\n## Real title\n\nbody", "Real title"],
   ["prose falls back to its first line", "First line\nsecond line", "First line"],
   [
     "a plan that is only a fenced block is untitled",
