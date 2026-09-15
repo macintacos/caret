@@ -36,10 +36,10 @@ body:
 
 - **Browser dependence behind a helper.** `createAnnotation`
   (`test/e2e/diff-surface.e2e.ts:1749`) reads as a few lines of intent, but it routes
-  through `revealGutterPlus` (`test/e2e/support/source-view.ts:415`), which does
+  through `revealGutterPlus` (`test/e2e/support/source-view.ts:406`), which does
   `getBoundingClientRect()` and then `page.mouse.move()`. Inline the helper before
   concluding a spec is pure logic.
-- **Browser dependence declared in the config.** `playwright.config.ts:87` emulates
+- **Browser dependence declared in the config.** `playwright.config.ts:90` emulates
   `colorScheme: "dark"`, so a spec asserting what a fresh origin paints is doing media
   emulation with nothing in its body that says so. Read the config's `use` block too.
 
@@ -243,7 +243,7 @@ in `ui/` holds a deadline on that clock at that number.** If it does, the wait i
 If it does not, you have written `page.waitForTimeout` with extra steps — reach for
 `waitForTwoPollTicks` or a `page.waitForResponse` on the event that must not happen, both
 of which say what they are waiting for. The four are a standing finding, not a licence to
-add a fifth. One of them — `expectNoComposerOpens` (`test/e2e/support/source-view.ts:522`)
+add a fifth. One of them — `expectNoComposerOpens` (`test/e2e/support/source-view.ts:513`)
 — sits in a harness module, shared by three specs; its docblock says which of the two it
 is, because a helper is exactly where an unlabelled one reads as sanctioned.
 

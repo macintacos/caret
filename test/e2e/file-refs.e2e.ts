@@ -2,29 +2,24 @@
 // plan renders as markdown source through @pierre/diffs; a path-shaped token
 // that resolves to a real file in the review's cwd gets a file icon (its token
 // tagged data-file-ref in the shadow root) plus a resting chip that hover steps up
-// from (EXC-880), and CLICKING it opens a syntax-highlighted excerpt popover —
-// hovering alone never does.
+// from (EXC-880), and CLICKING it opens a syntax-highlighted excerpt popover.
 // A path written as a markdown link's target counts as a reference too
 // (EXC-954), which is what the link spec below covers.
-// The preview is a click-opened lane that stays put: moving the pointer away
-// never dismisses it (EXC-840 dropped EXC-799's hover-intent tracker), and
-// neither does clicking outside it (EXC-1067) — it docks beside the plan rather
-// than covering it, so a click in the plan does its own job while the excerpt
-// stays open. It closes on Escape or on the header's close circle, and a folder
-// reference opened beside it leaves it alone (EXC-1129); the coexistence rules
-// themselves — click routing, Escape order, card placement — are folder-refs'
-// and file-drawer's. Reading past the
-// opening window costs no click either: scrolling near an end of the code region
-// loads the next chunk toward it (EXC-969), which needs real layout and so lives
-// here — as does reaching the same ends from the keyboard (EXC-972), which needs
-// a tab order and native key scrolling besides. The resolve + read + shadow-DOM
-// token tagging + real hover/click only
-// exist in a browser against a real daemon reading a real cwd, so they are
-// exercised here too; the pure detection, resolution, and excerpt math stay
-// units (fileRefs / fileRefTag / plan-files / api tests), as do the chip's CSS
-// declarations themselves (diffview/coreStyles.test.ts) — what needs a browser is
-// that those declarations resolve their tokens across the shadow boundary and that
-// hover beats rest in the live cascade.
+// The preview is a click-opened lane that stays put: clicking outside it never dismisses
+// it (EXC-1067) — it docks beside the plan rather than covering it, so a click in the
+// plan does its own job while the excerpt stays open. It closes on Escape or on the
+// header's close circle, and a folder reference opened beside it leaves it alone
+// (EXC-1129); the coexistence rules themselves — click routing, Escape order, card
+// placement — are folder-refs' and file-drawer's. Reading past the opening window costs
+// no click either: scrolling near an end of the code region loads the next chunk toward
+// it (EXC-969), which needs real layout and so lives here — as does reaching the same
+// ends from the keyboard (EXC-972), which needs a tab order and native key scrolling
+// besides. The resolve + read + shadow-DOM token tagging + real hover/click only exist in
+// a browser against a real daemon reading a real cwd, so they are exercised here too; the
+// pure detection, resolution, and excerpt math stay units (fileRefs / fileRefTag /
+// plan-files / api tests), as do the chip's CSS declarations themselves
+// (diffview/coreStyles.test.ts) — what needs a browser is that those declarations resolve
+// their tokens across the shadow boundary and that hover beats rest in the live cascade.
 //
 // The daemon is a real subprocess reading the local filesystem, so each test
 // writes a synthetic project dir and seeds a review whose cwd points at it. The
@@ -324,12 +319,11 @@ test("marks only references that resolve to a real file", async ({ daemon, page 
     // colour at each backtick.
     const resting = await expectRestingChip(page);
 
-    await page.locator("[data-file-ref]").first().hover();
-
     // The hover affordance is the highlight itself, and it has to stay legible now
     // that the resting state is tinted too: with the pointer on the token the real
     // :hover state swaps the fill to a DIFFERENT color than the resting chip, so
     // hover still reads as a change of state rather than as nothing happening.
+    await page.locator("[data-file-ref]").first().hover();
     const hovered = await refChipStyle(page);
     expectHoverChipDiffers(hovered, resting);
 

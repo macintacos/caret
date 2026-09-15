@@ -1,10 +1,9 @@
-// Click-to-copy cwd path + the success alert (EXC-850). Clicking the compare-row
-// path copies the FULL absolute path to the clipboard (the row only shows the
-// abbreviated form) and raises a success toast bottom-right — with no hover
-// popup. Clipboard access + toast render + stacking are real-browser behavior,
-// so they are proven here rather than in the happy-dom unit suite (per
-// doc/agents/browser-testing.md); the queue's auto-dismiss timing is unit-tested
-// deterministically in ui/src/state/alerts.test.ts.
+// Click-to-copy cwd path + the success alert (EXC-850). Clicking the compare-row path
+// copies the FULL absolute path to the clipboard (the row only shows the abbreviated
+// form) and raises a success toast bottom-right. Clipboard access + toast render +
+// stacking are real-browser behavior, so they are proven here rather than in the
+// happy-dom unit suite (per doc/agents/browser-testing.md); the queue's auto-dismiss
+// timing is unit-tested deterministically in ui/src/state/alerts.test.ts.
 
 import type { Locator, Page } from "@playwright/test";
 

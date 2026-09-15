@@ -192,7 +192,7 @@ test("hovering the link's row away from its label reveals no tooltip", async ({ 
   await expect.poll(() => tooltipHref(page)).toBeNull();
 });
 
-test("hovering a link token reveals a caret tooltip with the full href, not a native title", async ({
+test("hovering a link token reveals a caret tooltip with the full href", async ({
   daemon,
   page,
 }) => {
