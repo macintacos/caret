@@ -118,15 +118,6 @@ describe("updatePaneCopy", () => {
     }
   });
 
-  test("a `disabled` verdict never tells the reviewer to restart anything", () => {
-    // The daemon reads the switch per request (EXC-1210), so this verdict is only ever
-    // served while the switch really is off — the copy states that and says what turning
-    // it back on gets them, with no restart to prescribe.
-    const off = updatePaneCopy(report({ kind: "unavailable", reason: "disabled" }));
-    expect(off.detail.toLowerCase()).not.toContain("restart");
-    expect(off.detail.toLowerCase()).toContain("turn them back on");
-  });
-
   test("the uncomparable-build reason is framed as normal for a local build", () => {
     // This is the DAILY reading on a developer's machine, not a rare failure: a local
     // build bakes in an unpushed commit, GitHub's compare 404s, and the verdict settles

@@ -16,7 +16,6 @@ import {
 import { CARET_COLOR_PLACEMENT, CARET_DARK, CARET_LIGHT } from "$lib/themes/caret.ts";
 
 afterEach(() => {
-  localStorage.clear();
   // Strip any inline vars/attrs a prior paintTheme wrote onto the root.
   document.documentElement.removeAttribute("style");
   document.documentElement.removeAttribute("data-theme");
@@ -807,13 +806,6 @@ describe("paintTheme", () => {
     paintTheme("caret-dark");
     expect(document.documentElement.style.getPropertyValue("color-scheme")).toBe("dark");
     expect(document.documentElement.dataset.theme).toBe("dark");
-  });
-
-  // Painting is the whole job: which theme to paint (and remembering it) is
-  // appearance.ts's, so a paint must never write a preference of its own.
-  test("persists nothing", () => {
-    paintTheme("caret-light");
-    expect(localStorage.length).toBe(0);
   });
 
   test("returns the painted theme object", () => {

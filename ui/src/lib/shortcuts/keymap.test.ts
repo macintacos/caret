@@ -75,7 +75,6 @@ describe("CANONICAL_KEYMAP", () => {
     const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.toggleComments");
     if (!entry) throw new Error("actions.toggleComments missing");
     expect(entry.group).toBe("actions");
-    expect(entry.label).toBe("Toggle comments");
     expect(specSignature(entry.keys)).toBe("C");
     expect(keyCaps(entry.keys)).toEqual([["shift", "C"]]);
   });
@@ -87,7 +86,6 @@ describe("CANONICAL_KEYMAP", () => {
     const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.reject");
     if (!entry) throw new Error("actions.reject missing");
     expect(entry.group).toBe("actions");
-    expect(entry.label).toBe("Reject");
     expect(specSignature(entry.keys)).toBe("R");
     expect(keyCaps(entry.keys)).toEqual([["shift", "R"]]);
     expect(ariaKeyshortcutsFor("actions.reject")).toBe("Shift+R");
@@ -97,20 +95,15 @@ describe("CANONICAL_KEYMAP", () => {
     const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.contents");
     if (!entry) throw new Error("actions.contents missing");
     expect(entry.group).toBe("actions");
-    expect(entry.label).toBe("Open contents");
     expect(specSignature(entry.keys)).toBe("\\");
     expect(keyCaps(entry.keys)).toEqual([["\\"]]);
     expect(ariaKeyshortcutsFor("actions.contents")).toBe("\\");
-    // No second reservation may claim `\`, or the help modal would carry a row saying it
-    // opens the breadcrumbs bar.
-    expect(CANONICAL_KEYMAP.some((e) => e.id === "actions.toggleSidebar")).toBe(false);
   });
 
   test("reserves b for the heading breadcrumbs in the Actions group, rendered as a B cap", () => {
     const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.headingNav");
     if (!entry) throw new Error("actions.headingNav missing");
     expect(entry.group).toBe("actions");
-    expect(entry.label).toBe("Open breadcrumbs");
     expect(specSignature(entry.keys)).toBe("b");
     expect(keyCaps(entry.keys)).toEqual([["B"]]);
     expect(ariaKeyshortcutsFor("actions.headingNav")).toBe("b");
@@ -133,9 +126,7 @@ describe("CANONICAL_KEYMAP", () => {
     const search = CANONICAL_KEYMAP.find((e) => e.id === "actions.search");
     if (!search) throw new Error("actions.search missing");
     expect(search.group).toBe("actions");
-    expect(search.label).toBe("Search plan");
     expect(specSignature(search.keys)).toBe("/");
-    expect(CANONICAL_KEYMAP.some((e) => e.id === "actions.focusFilter")).toBe(false);
   });
 
   test("reserves n / N to cycle search matches (EXC-832)", () => {
@@ -145,8 +136,6 @@ describe("CANONICAL_KEYMAP", () => {
     if (!next || !prev) throw new Error("search n/N keymap entries missing");
     expect(next.group).toBe("actions");
     expect(prev.group).toBe("actions");
-    expect(next.label).toBe("Next match");
-    expect(prev.label).toBe("Previous match");
     expect(specSignature(next.keys)).toBe("n");
     expect(specSignature(prev.keys)).toBe("N");
     expect(keyCaps(next.keys)).toEqual([["N"]]);

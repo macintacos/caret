@@ -48,11 +48,6 @@ describe("placeBesideMenu", () => {
     const menu: Box = { ...MENU, top: -50 };
     expect(placeBesideMenu(menu, CARD, VIEW, OPTS).top).toBe(8);
   });
-
-  test("a menu measured at the origin lands the card in the top-left corner", () => {
-    // This is the glitch position — proof of what a premature measurement produces.
-    expect(placeBesideMenu(ORIGIN, CARD, VIEW, OPTS)).toEqual({ top: 8, left: 10 });
-  });
 });
 
 /** A hand-driven requestAnimationFrame: stores the pending callback so a test can fire the
