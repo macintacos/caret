@@ -95,16 +95,15 @@ export function devConfigFile(): string {
   return `${configDir()}/config.dev.toml`;
 }
 
-/** Machine-global prefs: the last-used approve mode, and the `updates.check`
- * opt-out the daemon reads. One shared file under stateDir; last-write-wins per
- * key. Separate from the per-review JSON in reviewsDir(). */
+/** The retired machine-global prefs file, read only by migratePrefsFile (prefs.ts),
+ * which carries its `updates.check` opt-out into config.toml and deletes it. */
 export function prefsFile(): string {
   return `${stateDir()}/prefs.json`;
 }
 
 /** The daemon's update-check record: when it last asked whether a newer caret
- * exists, and what it concluded (EXC-1205). A small machine-global marker beside
- * prefs.json — an on-demand daemon exits on idle and every daemon restarts on an upgrade,
+ * exists, and what it concluded (EXC-1205). A small machine-global marker under
+ * stateDir — an on-demand daemon exits on idle and every daemon restarts on an upgrade,
  * so the verdict has to outlive the process that computed it. */
 export function updateCheckFile(): string {
   return `${stateDir()}/update-check.json`;
@@ -112,7 +111,7 @@ export function updateCheckFile(): string {
 
 /** Directory holding the live logs, their archive/, the rotation locks, and
  * `caret redact`'s *.redacted.log siblings — so the state dir's root stays
- * reviews, prefs, the daemon lock, and the update-check record (EXC-1068). */
+ * reviews, the daemon lock, and the update-check record (EXC-1068). */
 export function logsDir(): string {
   return `${stateDir()}/logs`;
 }
@@ -155,10 +154,10 @@ export function daemonLock(): string {
 /** Create `target` (the state dir, or a child like reviewsDir()) at 0700, the
  * single mode-enforcing path every mkdir-of-stateDir site routes through so the
  * dir holding plan bodies is never world-readable (EXC-539). Sync so both the
- * sync (log/lock/spawn) and async (store/prefs) callers share one helper.
+ * sync (log/lock/spawn) and async (store) callers share one helper.
  *
  * Recursive mkdir does NOT chmod an already-existing directory, so the root
- * mode is otherwise a create-order race — a no-mode caller (prefs, lock, spawn)
+ * mode is otherwise a create-order race — a no-mode caller (lock, spawn)
  * reaching it first leaves stateDir at the umask-derived 0755. We close that by
  * chmodding `target`, and when `target` lives under stateDir (e.g. reviewsDir),
  * tightening the root too. The helper may throw; callers keep their own failure

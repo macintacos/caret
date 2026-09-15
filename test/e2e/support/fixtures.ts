@@ -22,9 +22,9 @@ import { KEY_REPEAT_DELAY_MS } from "@ui/src/lib/keyRepeat.ts";
 import { waitForHealth } from "@/daemon/client.ts";
 import type {
   ClientReview,
+  ConfigPatch,
   DraftBody,
   PlanInput,
-  PrefsPatch,
   RouteResult,
   UpdateStatus,
 } from "@/lib/types.ts";
@@ -56,9 +56,9 @@ export interface Daemon {
    * uses), so a spec can deny a review harness-side and thread a revision onto
    * it with the next seed. */
   resolve(id: string, behavior: "allow" | "deny", feedback?: string): Promise<void>;
-  /** POST /api/prefs — the same public route the Settings toggles write through, so a
-   * spec can stage a daemon-owned pref (the `updates.check` opt-out) harness-side. */
-  setPrefs(patch: PrefsPatch): Promise<void>;
+  /** POST /api/config — the same public route the Settings toggles write through, so a
+   * spec can stage a config.toml setting (the `updates.check` opt-out) harness-side. */
+  setConfig(patch: ConfigPatch): Promise<void>;
   /** Seed a review with `count` versions under one session: post v1, deny it,
    * then post each revision (which threads onto the rejected review), leaving the
    * review pending at v`count`. Returns the review id.
@@ -225,7 +225,7 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
   daemon: async ({ bootTimeoutMs, updateStatus }, use) => {
     // Before mkdtemp so an unresolvable rumdl can't leak a state dir.
     const rumdl = pinnedRumdl();
-    // Ephemeral, isolated state: the daemon's reviews/prefs/logs all live under
+    // Ephemeral, isolated state: the daemon's reviews and logs all live under
     // this dir and are wiped at teardown. The user's real state is never touched.
     const stateDir = await mkdtemp(join(tmpdir(), "caret-e2e."));
     // stdin is a live pipe on purpose: the daemon self-reaps when it closes,
@@ -234,6 +234,9 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
       env: {
         ...process.env,
         XDG_STATE_HOME: stateDir,
+        // The Updates toggle writes this file, so it goes in the throwaway dir too —
+        // otherwise a spec would edit the developer's own config.toml.
+        CARET_CONFIG_FILE: join(stateDir, "config.toml"),
         CARET_RUMDL_BIN: rumdl,
         CARET_E2E_UPDATE_STATUS: JSON.stringify(updateStatus),
       },
@@ -296,13 +299,13 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
           });
           if (!res.ok) throw new Error(`resolve failed: POST /resolve → ${res.status}`);
         },
-        async setPrefs(patch: PrefsPatch) {
-          const res = await fetch(`${url}/api/prefs`, {
+        async setConfig(patch: ConfigPatch) {
+          const res = await fetch(`${url}/api/config`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(patch),
           });
-          if (!res.ok) throw new Error(`setPrefs failed: POST /api/prefs → ${res.status}`);
+          if (!res.ok) throw new Error(`setConfig failed: POST /api/config → ${res.status}`);
         },
         async seedVersions(count: number, plans: string[], cwd = "/tmp/caret-e2e") {
           const sessionId = randomUUID();

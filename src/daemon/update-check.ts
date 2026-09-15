@@ -81,7 +81,7 @@ export interface UpdateCheckDeps {
   kind: BuildKind;
   version: string;
   commit: string;
-  /** Whether the user has left the check on — `updates.check` in prefs.json. */
+  /** Whether the user has left the check on — `[updates] check` in config.toml. */
   enabled: () => Promise<boolean>;
   /** Wall clock in ms (Date.now in prod). */
   now: () => number;

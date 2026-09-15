@@ -70,7 +70,7 @@ test.describe("with a pending update", () => {
     // The gate the whole design rests on, and it is the DAEMON'S now: prefs say the check
     // is off, so /api/update serves `disabled` over the pending build verdict it holds.
     await daemon.seed();
-    await daemon.setPrefs({ updates: { check: false } });
+    await daemon.setConfig({ updates: { check: false } });
     await page.goto("/");
     await planSurface(page);
 
@@ -90,7 +90,7 @@ test.describe("with a pending update", () => {
 
     // The marker was not spent either: turning the check back on must still toast this
     // version. Proven by lifting the opt-out and reloading.
-    await daemon.setPrefs({ updates: { check: true } });
+    await daemon.setConfig({ updates: { check: true } });
     await page.reload();
     await planSurface(page);
     await expect(toast(page)).toBeVisible();

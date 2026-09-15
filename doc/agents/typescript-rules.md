@@ -128,12 +128,12 @@ bespoke when the semantics differ.
   null" parse, `src/lib/json-file.ts`), and cross-cutting constants
   (`src/config/constants.ts`). A repeated expression with one meaning becomes one named
   helper; grep should find zero hand-rolled copies left.
-- **Keep bespoke when semantics differ:** `prefs.ts`'s `readApproveMode` keeps its own
-  try/catch because it must distinguish ENOENT (a normal first run, logged calmly) from
-  other read failures — which is exactly what `readJsonFile`'s any-failure→null collapse
-  erases. Folding it into the shared helper would lose a meaningful branch. When two sites
-  *look* alike but one needs a distinction the helper flattens, leave it bespoke and say
-  why in a comment.
+- **Keep bespoke when semantics differ:** `settings.ts`'s `createSettings` keeps its own
+  try/catch around each of the stat and the read, because a file that was never there must
+  yield `DEFAULTS` while one deleted mid-run must hold `lastGood` — a distinction an
+  any-failure→null collapse erases. Folding it into a shared helper would lose a
+  meaningful branch. When two sites *look* alike but one needs a distinction the helper
+  flattens, leave it bespoke and say why in a comment.
 - **No speculative abstraction.** Don't introduce an interface, a wrapper, or a "client"
   object for a single call site or a future that isn't here. Add the seam when the second
   real case arrives.
@@ -162,9 +162,8 @@ cover of "adding validation."
   invariant.
 - **Commit fixtures for back-compat claims.** A "still reads the old format" claim is
   anchored by a checked-in artifact in the old shape, run through the *real* read path —
-  `test/adapters/claude/fixtures/*` drive `back-compat.test.ts` through `readApproveMode`
-  and the daemon's persisted-decision serve, so a change that strands those files fails
-  loudly.
+  `test/adapters/claude/fixtures/*` drive `back-compat.test.ts` through the daemon's
+  persisted-decision serve, so a change that strands those files fails loudly.
 
 ## Comments describe current state
 

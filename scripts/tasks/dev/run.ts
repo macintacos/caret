@@ -325,6 +325,9 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
   const configFilePath = opts.fresh
     ? join(tmpdir(), "caret-dev-fresh-no-config.toml")
     : devConfigFile();
+  // The Updates toggle can create that path, and a leftover copy would make the next
+  // --fresh boot read someone else's settings instead of the built-in defaults.
+  if (opts.fresh) rmSync(configFilePath, { force: true });
   const settings = deps.loadSettings(configFilePath);
 
   // Port mode (EXC-461): ephemeral by default (OS-assigned, discovered from the

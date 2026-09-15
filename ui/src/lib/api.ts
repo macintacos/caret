@@ -4,6 +4,7 @@
 import type {
   Annotation,
   ClientReview,
+  ConfigPatch,
   DaemonDiagnostics,
   DirListing,
   FileExcerpt,
@@ -12,7 +13,6 @@ import type {
   FileSearchResponse,
   HealthIdentity,
   PersistedScratch,
-  PrefsPatch,
   ResolveBody,
   SkillDescriptionResponse,
   SkillRef,
@@ -80,31 +80,37 @@ export async function getUpdate(): Promise<UpdateReport> {
   }
 }
 
-/** Write the daemon-owned prefs a settings control may change (EXC-1206).
+/** Write a setting the UI owns a control for into the user's config.toml (EXC-1206).
  *
  * The one API function here that rewrites its own failure message: a settings control
  * renders whatever this throws in a persistent toast, and `HttpError`'s "HTTP 400" is not
- * something a person can act on. The two classes stay apart because only one is the
- * reviewer's to fix — an unreachable daemon they can start, a refused body they cannot. */
-export async function setPrefs(patch: PrefsPatch): Promise<void> {
+ * something a person can act on. The three classes stay apart by what the reviewer can do
+ * about each — start an unreachable daemon, hand-edit a config.toml caret refused to
+ * rewrite, and nothing at all for a refused body. */
+export async function setConfig(patch: ConfigPatch): Promise<void> {
   try {
     await json<{ ok: true }>(
-      await fetch("/api/prefs", {
+      await fetch("/api/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
       }),
     );
   } catch (err) {
-    uiLog.warn("prefs", "prefs save failed", { reason: String(err) });
+    uiLog.warn("settings", "config save failed", { reason: String(err) });
     // `cause` keeps the HttpError for anyone who wants to branch on it.
-    throw new Error(
-      err instanceof HttpError
-        ? `The daemon couldn't save the change (HTTP ${err.status}).`
-        : "The caret daemon isn't reachable, so the change wasn't saved.",
-      { cause: err },
-    );
+    throw new Error(configSaveMessage(err), { cause: err });
   }
+}
+
+function configSaveMessage(err: unknown): string {
+  if (!(err instanceof HttpError)) {
+    return "The caret daemon isn't reachable, so the change wasn't saved.";
+  }
+  if (err.status === 409) {
+    return "caret couldn't edit config.toml safely — set `[updates] check` there by hand.";
+  }
+  return `The daemon couldn't save the change (HTTP ${err.status}).`;
 }
 
 export async function listReviews(): Promise<ClientReview[]> {

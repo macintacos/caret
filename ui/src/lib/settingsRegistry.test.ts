@@ -280,8 +280,8 @@ describe("Updates (EXC-1207)", () => {
 
 describe("staged fields wrap existing pref modules", () => {
   // Both sweeps write EVERY staged field, and a daemon-backed one writes by POSTing —
-  // so the suite answers /api/prefs rather than carrying an exclusion list, and covers
-  // both kinds with one stub. `{ ok: true }` is what setPrefs parses on success.
+  // so the suite answers /api/config rather than carrying an exclusion list, and covers
+  // both kinds with one stub. `{ ok: true }` is what setConfig parses on success.
   //
   // ORDERING, and it is load-bearing: daemonField's landed-value shadow is closure state
   // on the module-level registry with no reset seam, so this sweep pins updatesCheck's
@@ -526,7 +526,7 @@ describe("daemonField", () => {
 
     await field().write(false);
 
-    expect(seen?.url).toBe("/api/prefs");
+    expect(seen?.url).toBe("/api/config");
     expect(JSON.parse(seen?.options?.body as string)).toEqual({ updates: { check: false } });
     // The whole point of the kind: nothing lands in localStorage.
     expect(storedKeys()).toEqual([]);

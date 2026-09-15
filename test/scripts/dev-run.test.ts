@@ -5,7 +5,7 @@
 // daemon. The pure protocol side lives in dev-driver.test.ts; the port-mode /
 // lock guards in dev-env.test.ts.
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -287,6 +287,23 @@ describe("runDev supervision", () => {
       const stateDir = calls[0]?.env?.XDG_STATE_HOME;
       expect(stateDir).toBeDefined();
       expect(existsSync(stateDir as string)).toBe(false);
+    });
+  });
+
+  test("--fresh clears a stale config at the no-config path before boot", async () => {
+    await withCleanDevEnv(async () => {
+      // The Updates toggle writes config.toml, so an earlier --fresh session can leave
+      // a real file at the path --fresh points at — and the next one would boot from it
+      // instead of the built-in defaults.
+      const stale = join(tmpdir(), "caret-dev-fresh-no-config.toml");
+      writeFileSync(stale, "[updates]\ncheck = false\n");
+      const { spawn } = capturingSpawn(0);
+
+      await expect(
+        runDev({ numVersions: 3, notify: false, persist: false, fresh: true }, baseDeps({ spawn })),
+      ).rejects.toBeInstanceOf(ExitSignal);
+
+      expect(existsSync(stale)).toBe(false);
     });
   });
 

@@ -70,8 +70,14 @@ test("an absent file yields all defaults with no error", () => {
     daemon: { port: 42718, idle_ms: 60_000, heartbeat_ms: 8_000 },
     review: { timeout_s: 3600 },
     opencode: {},
+    updates: { check: true },
     dev: { notify: { enabled: false, interval_ms: 15_000, max_pending: 3 } },
   });
+});
+
+test("[updates] check is a recognized key", async () => {
+  await Bun.write(file, "[updates]\ncheck = false\n");
+  expect(loadSettings(file).updates.check).toBe(false);
 });
 
 test("[opencode] plans_dir is a recognized key", async () => {
@@ -164,6 +170,7 @@ test("DEFAULTS is frozen, nested tables included", () => {
   expect(Object.isFrozen(DEFAULTS.logging)).toBe(true);
   expect(Object.isFrozen(DEFAULTS.daemon)).toBe(true);
   expect(Object.isFrozen(DEFAULTS.review)).toBe(true);
+  expect(Object.isFrozen(DEFAULTS.updates)).toBe(true);
 });
 
 test("a parsed file result is frozen, nested tables included", async () => {

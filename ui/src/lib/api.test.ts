@@ -32,7 +32,7 @@ import {
   resolveFileRefs,
   resolveReview,
   searchFiles,
-  setPrefs,
+  setConfig,
 } from "$lib/api.ts";
 import { flush } from "$lib/log.ts";
 
@@ -589,10 +589,10 @@ describe("getSkillDescription", () => {
   });
 });
 
-// EXC-1206. The one write into daemon-owned prefs. Unlike this file's swallowing
+// EXC-1206. The one write into the user's config.toml. Unlike this file's swallowing
 // readers it THROWS, because a settings control has to snap back and say why — so
 // the message is written for a person rather than being HttpError's "HTTP 400".
-describe("setPrefs", () => {
+describe("setConfig", () => {
   test("POSTs the patch as the request body", async () => {
     let seen: { url: string; options: RequestInit | undefined } | undefined;
     respond = (url, options) => {
@@ -600,9 +600,9 @@ describe("setPrefs", () => {
       return Promise.resolve(jsonResponse({ ok: true }));
     };
 
-    await setPrefs({ updates: { check: false } });
+    await setConfig({ updates: { check: false } });
 
-    expect(seen?.url).toBe("/api/prefs");
+    expect(seen?.url).toBe("/api/config");
     expect(seen?.options?.method).toBe("POST");
     expect(JSON.parse(seen?.options?.body as string)).toEqual({ updates: { check: false } });
   });
@@ -617,7 +617,7 @@ describe("setPrefs", () => {
     ]) {
       respond = answer;
       let message = "";
-      await setPrefs({ updates: { check: false } }).catch((err: unknown) => {
+      await setConfig({ updates: { check: false } }).catch((err: unknown) => {
         message = err instanceof Error ? err.message : String(err);
       });
       expect(message).not.toBe("");
@@ -627,19 +627,30 @@ describe("setPrefs", () => {
     }
   });
 
-  test("a rejected save warns at step prefs", async () => {
+  test("a refused config.toml rewrite (409) tells the reviewer to edit it by hand", async () => {
+    // The one failure the reviewer can actually act on, so it must not read like the
+    // generic "the daemon couldn't save it".
+    respond = () => Promise.resolve(new Response(null, { status: 409 }));
+    let message = "";
+    await setConfig({ updates: { check: false } }).catch((err: unknown) => {
+      message = err instanceof Error ? err.message : String(err);
+    });
+    expect(message).toContain("config.toml");
+  });
+
+  test("a rejected save warns at step settings", async () => {
     respond = () => Promise.resolve(new Response(null, { status: 400 }));
 
-    await expect(setPrefs({ updates: { check: false } })).rejects.toThrow();
+    await expect(setConfig({ updates: { check: false } })).rejects.toThrow();
     await flush();
 
-    expectLoggedAt("warn", "prefs");
+    expectLoggedAt("warn", "settings");
   });
 
   test("a successful save emits no record", async () => {
     respond = () => Promise.resolve(jsonResponse({ ok: true }));
 
-    await setPrefs({ updates: { check: false } });
+    await setConfig({ updates: { check: false } });
     await flush();
 
     // The daemon logs the write; a second UI line would only restate it.

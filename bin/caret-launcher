@@ -154,7 +154,7 @@ stop_agent() {
 # anything when there is no `service` record — nothing here installed a
 # supervisor, so this launcher cannot know what still names it, and deleting
 # itself would leave whatever does respawning on ENOENT. Deleting only bin/ and
-# the records leaves prefs and review state for a reinstall.
+# the records leaves review state for a reinstall.
 evict() {
   local service unit
   service="$(read_record "$records/service" || true)"

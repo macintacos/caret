@@ -38,9 +38,9 @@ let srv: { port: number; stop(): void };
 let base: string;
 
 async function boot(opts: BootOptions = {}) {
-  // Default prefs into the temp dir so the prefs tests never touch the real
-  // machine-global prefs file.
-  d = await bootDaemon(dir, { prefsPath: join(dir, "prefs.json"), ...opts });
+  // Default config.toml into the temp dir so the settings tests never touch the
+  // developer's real one.
+  d = await bootDaemon(dir, { configPath: join(dir, "config.toml"), ...opts });
   store = d.store;
   srv = { port: d.port, stop: d.stop };
   base = d.url;
@@ -1209,9 +1209,9 @@ describe("read-confidentiality posture", () => {
         () => fetch(`${base}/api/reviews/${id}/skill-description?name=git&origin=user`),
       ],
       [
-        "POST /api/prefs",
+        "POST /api/config",
         () =>
-          fetch(`${base}/api/prefs`, {
+          fetch(`${base}/api/config`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ updates: { check: true } }),
@@ -1563,7 +1563,7 @@ describe("routing fallthrough", () => {
       ["POST", "/api/health"],
       ["POST", "/api/diagnostics"], // /api/diagnostics is GET-only
       ["POST", "/api/update"], // /api/update is GET-only
-      ["DELETE", "/api/prefs"],
+      ["DELETE", "/api/config"],
       ["PUT", `/api/reviews/${id}/resolve`], // /resolve is POST-only
       ["GET", `/api/reviews/${id}/resolve`],
       ["DELETE", `/api/reviews/${id}/decision`],
@@ -1832,45 +1832,44 @@ test("a revision re-pends the review and clears the prior decision (no stale re-
   expect(res.status).toBe(204);
 });
 
-// ---- POST /api/prefs (EXC-1206) ----
+// ---- POST /api/config (EXC-1206) ----
 //
-// The write half of the prefs route, and the one schema in the daemon that REJECTS
-// where its neighbours degrade: a loopback write endpoint into caret's state dir must
-// not become a general write primitive, so an unrecognized key is a 400 rather than a
-// stripped field. `approveMode` is deliberately not writable here — the resolve path
-// owns it.
-describe("POST /api/prefs", () => {
-  const prefsOnDisk = (): Record<string, unknown> =>
-    JSON.parse(readFileSync(join(dir, "prefs.json"), "utf-8"));
+// The route the settings toggles write through, and the one schema in the daemon that
+// REJECTS where its neighbours degrade: a loopback write endpoint into the user's
+// config.toml must not become a general write primitive, so an unrecognized key is a
+// 400 rather than a stripped field. A rewrite the writer refuses is a 409.
+describe("POST /api/config", () => {
+  const configPath = () => join(dir, "config.toml");
+  const configOnDisk = () => readFileSync(configPath(), "utf-8");
 
-  async function setPrefs(body: unknown): Promise<Response> {
-    return fetch(`${base}/api/prefs`, {
+  async function setConfig(body: unknown): Promise<Response> {
+    return fetch(`${base}/api/config`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
   }
 
-  test("a valid patch answers 200 and lands on disk", async () => {
+  test("a valid patch answers 200 and lands in config.toml", async () => {
     await boot();
-    const res = await setPrefs({ updates: { check: false } });
+    const res = await setConfig({ updates: { check: false } });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
-    expect(prefsOnDisk()).toEqual({ updates: { check: false } });
+    expect(configOnDisk()).toContain("check = false");
   });
 
   test("a landed flip-to-on re-runs the update check, and nothing else does (EXC-1210)", async () => {
-    // POST /api/prefs is the user action the 24h-throttle constraint names, so turning
-    // the check back on is allowed to spend a call — otherwise a reviewer who opted out
+    // The toggle is the user action the 24h-throttle constraint names, so turning the
+    // check back on is allowed to spend a call — otherwise a reviewer who opted out
     // months ago would wait a whole daemon lifetime for a verdict.
     let calls = 0;
     await boot({ onUpdatesEnabled: () => calls++ });
-    expect((await setPrefs({ updates: { check: false } })).status).toBe(200);
+    expect((await setConfig({ updates: { check: false } })).status).toBe(200);
     expect(calls).toBe(0);
-    expect((await setPrefs({ updates: { check: true } })).status).toBe(200);
+    expect((await setConfig({ updates: { check: true } })).status).toBe(200);
     expect(calls).toBe(1);
     // A rejected patch never reaches the callback.
-    expect((await setPrefs({ updates: { check: "yes" } })).status).toBe(400);
+    expect((await setConfig({ updates: { check: "yes" } })).status).toBe(400);
     expect(calls).toBe(1);
   });
 
@@ -1880,15 +1879,24 @@ describe("POST /api/prefs", () => {
       { nope: 1 }, // unknown top-level key
       { updates: { check: false, extra: 1 } }, // unknown key under updates
       { updates: { check: "no" } }, // wrong-typed value
-      { approveMode: "auto" }, // owned by the resolve path, not writable here
       "not an object",
     ]) {
-      const res = await setPrefs(body);
+      const res = await setConfig(body);
       expect(res.status).toBe(400);
       expect((await res.json()).error).toBeTruthy();
     }
     // Not one of them created the file.
-    expect(existsSync(join(dir, "prefs.json"))).toBe(false);
+    expect(existsSync(configPath())).toBe(false);
+  });
+
+  test("a config.toml the rewrite refuses answers 409 and stays byte-identical", async () => {
+    await boot();
+    const original = "updates.check = true\n";
+    await Bun.write(configPath(), original);
+    const res = await setConfig({ updates: { check: false } });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBeTruthy();
+    expect(configOnDisk()).toBe(original);
   });
 
   test("is CSRF-guarded and Host-guarded like every other write (AC #2)", async () => {
@@ -1896,20 +1904,20 @@ describe("POST /api/prefs", () => {
     // the moment it exists.
     await boot();
     const body = JSON.stringify({ updates: { check: false } });
-    const foreignOrigin = await fetch(`${base}/api/prefs`, {
+    const foreignOrigin = await fetch(`${base}/api/config`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Origin: "http://evil.com" },
       body,
     });
     expect(foreignOrigin.status).toBe(403);
-    const foreignHost = await fetch(`${base}/api/prefs`, {
+    const foreignHost = await fetch(`${base}/api/config`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Host: "evil.com" },
       body,
     });
     expect(foreignHost.status).toBe(403);
     // Neither reached the handler.
-    expect(existsSync(join(dir, "prefs.json"))).toBe(false);
+    expect(existsSync(configPath())).toBe(false);
   });
 });
 

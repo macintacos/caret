@@ -64,11 +64,12 @@ bunx --no-cache @macintacos/caret@latest install --uninstall  # remove
 out, the review UI says so once: a toast on load, a mark on the settings button, and a
 **Settings → Updates** pane naming the version and the exact command to take it.
 
-Turn the check off from that same pane, or by setting `updates.check` to `false` in
-`prefs.json` (`~/.local/state/caret/prefs.json`, or under `$XDG_STATE_HOME/caret`):
+Turn the check off from that same pane, or by hand in
+[`config.toml`](doc/CONFIGURING.md#the-updates-table):
 
-```json
-{ "updates": { "check": false } }
+```toml
+[updates]
+check = false
 ```
 
 See [the OpenCode adapter](doc/ARCHITECTURE.md#the-opencode-adapter) for the by-hand

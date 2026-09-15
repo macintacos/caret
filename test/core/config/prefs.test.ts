@@ -1,81 +1,68 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { createPrefsWriter, readUpdatesCheck } from "@/config/prefs.ts";
+import { recordingLog } from "@test/support/recording-log.ts";
+import { createConfigWriter } from "@/config/config-write.ts";
+import { migratePrefsFile } from "@/config/prefs.ts";
+
+// EXC-1354. prefs.json is retired: `updates.check` lives in config.toml and the
+// remembered approve mode lives in the browser. All that is left of the old file is
+// this one-time migration, so a reviewer who turned the daily update check off does
+// not silently get it turned back on.
 
 let dir: string;
-let file: string;
+let prefs: string;
+let config: string;
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "caret-prefs-"));
-  file = join(dir, "prefs.json");
+  prefs = join(dir, "prefs.json");
+  config = join(dir, "config.toml");
 });
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-// ---- the update-check opt-out (EXC-1205) ----
-//
-// `updates.check` is a kill switch, so only an explicit `false` turns the daemon's
-// daily check off. Every other reading — no file, no key, junk — leaves it on, which
-// is what keeps a corrupt prefs.json from silently disabling the feature.
+const migrate = (log = recordingLog().log) =>
+  migratePrefsFile(prefs, createConfigWriter(config), log);
 
-test("an absent prefs file leaves the update check on", async () => {
-  expect(await readUpdatesCheck(file)).toBe(true);
+test("an absent prefs file is a no-op", async () => {
+  await migrate();
+  expect(existsSync(config)).toBe(false);
 });
 
-test("a prefs file without an updates key leaves the update check on", async () => {
-  await Bun.write(file, JSON.stringify({ approveMode: "default" }));
-  expect(await readUpdatesCheck(file)).toBe(true);
+test("an opt-out moves into config.toml and the prefs file goes", async () => {
+  await writeFile(prefs, JSON.stringify({ updates: { check: false } }));
+  await migrate();
+  expect(await readFile(config, "utf-8")).toContain("check = false");
+  expect(existsSync(prefs)).toBe(false);
 });
 
-test("only an explicit false turns the update check off", async () => {
-  await Bun.write(file, JSON.stringify({ updates: { check: false } }));
-  expect(await readUpdatesCheck(file)).toBe(false);
+test("a prefs file carrying only the approve mode is dropped, writing no config", async () => {
+  // The remembered variant is a browser pref now, and a daemon cannot write browser
+  // storage — so it resets once rather than migrating.
+  await writeFile(prefs, JSON.stringify({ approveMode: "auto" }));
+  await migrate();
+  expect(existsSync(prefs)).toBe(false);
+  expect(existsSync(config)).toBe(false);
 });
 
-test("an explicit true leaves the update check on", async () => {
-  await Bun.write(file, JSON.stringify({ updates: { check: true } }));
-  expect(await readUpdatesCheck(file)).toBe(true);
+test("a corrupt prefs file is dropped", async () => {
+  await writeFile(prefs, "{ not valid json");
+  await migrate();
+  expect(existsSync(prefs)).toBe(false);
 });
 
-test("a junk updates value leaves the update check on rather than off", async () => {
-  for (const updates of [{ check: "no" }, { check: 0 }, "off", null, []]) {
-    await Bun.write(file, JSON.stringify({ updates }));
-    expect(await readUpdatesCheck(file)).toBe(true);
-  }
-  await Bun.write(file, "{ not valid json");
-  expect(await readUpdatesCheck(file)).toBe(true);
-});
-
-// ---- serialized writes (EXC-1206) ----
-//
-// The read-modify-write is serialized through one PrefsWriter rather than raced.
-// These cases are what the chain buys: remove it and each merge reads the pre-write
-// file, so the later write drops the earlier one's key.
-
-const readPrefs = async (at: string): Promise<unknown> => JSON.parse(await readFile(at, "utf-8"));
-
-test("merges issued together over one writer all land", async () => {
-  const writer = createPrefsWriter(file);
-  // Deliberately not awaited in turn: the second merge is issued while the first
-  // is still in flight, which is the interleave a bare read-modify-write loses.
-  await Promise.all([writer.merge({ updates: { check: false } }), writer.merge({ theme: "dark" })]);
-  expect(await readPrefs(file)).toEqual({ updates: { check: false }, theme: "dark" });
-});
-
-test("a failed merge rejects to its caller and leaves the writer usable", async () => {
-  // prefs.json nested under a regular FILE, so ensureStateDir's mkdir throws.
-  const blocker = join(dir, "blocked");
-  await Bun.write(blocker, "i am a file, not a directory");
-  const nested = join(blocker, "prefs.json");
-  const writer = createPrefsWriter(nested);
-  await expect(writer.merge({ theme: "dark" })).rejects.toThrow();
-  // Clear the blocker: the next merge on the SAME writer must still run, which it
-  // only does if the stored tail was caught rather than left rejected.
-  await rm(blocker);
-  await writer.merge({ theme: "dark" });
-  expect(await readPrefs(nested)).toEqual({ theme: "dark" });
+test("a refused config edit keeps the prefs file so the next boot retries", async () => {
+  await writeFile(prefs, JSON.stringify({ updates: { check: false } }));
+  // A dotted key is one of the shapes the config rewrite refuses.
+  await writeFile(config, "updates.check = true\n");
+  const { recs, log } = recordingLog();
+  await migrate(log);
+  expect(existsSync(prefs)).toBe(true);
+  expect(await readFile(config, "utf-8")).toBe("updates.check = true\n");
+  expect(recs).toContainEqual(expect.objectContaining({ level: "warn", step: "settings" }));
 });

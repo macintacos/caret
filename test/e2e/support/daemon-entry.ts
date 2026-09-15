@@ -13,9 +13,10 @@
 //      where it must be a POSITIVE int — so the schema can't carry 0 and direct
 //      createServer is the only way to ask for one. OS-assigned ports keep
 //      fullyParallel workers collision-free.
-//   2. Config hermeticity. createServer takes explicit opts and reads no
-//      config.toml, so the user's ~/.config/caret/config.toml can never leak
-//      into a test run; the production boot resolves settings (and hot-reloads).
+//   2. Config hermeticity. createServer takes explicit opts, and the one setting
+//      read here comes from the throwaway CARET_CONFIG_FILE the fixture points at,
+//      so the user's ~/.config/caret/config.toml can never leak into a test run;
+//      the production boot resolves the whole settings graph (and hot-reloads).
 //   3. NEVER_IDLE_MS + a no-op onShutdown. The daemon must never idle-shut-down
 //      mid-test, and even an unexpected shutdown must not process.exit out from
 //      under the runner; the production boot's onShutdown exits the process.
@@ -30,8 +31,8 @@
 
 import { fakeDiagnostics } from "@test/support/diagnostics.ts";
 import { NEVER_IDLE_MS } from "@/config/constants.ts";
-import { prefsFile, reviewsDir } from "@/config/paths.ts";
-import { readUpdatesCheck } from "@/config/prefs.ts";
+import { configFile, reviewsDir } from "@/config/paths.ts";
+import { loadSettings } from "@/config/settings.ts";
 import { createServer } from "@/daemon/server.ts";
 import { updateReportFor } from "@/daemon/update-check.ts";
 import { buildHash } from "@/lib/build-id.ts";
@@ -44,6 +45,13 @@ import { loadUiAssets } from "@/ui/assets.ts";
 // ~/.local/state/caret (same posture as assertDevEnv in scripts/tasks/dev/driver.ts).
 if (!process.env.XDG_STATE_HOME) {
   console.error("caret e2e daemon: XDG_STATE_HOME must be set to an isolated state dir");
+  process.exit(1);
+}
+
+// The Updates toggle writes config.toml, so the same posture covers it: without an
+// isolated path the toggle specs would edit the developer's own config.
+if (!process.env.CARET_CONFIG_FILE) {
+  console.error("caret e2e daemon: CARET_CONFIG_FILE must be set to an isolated config path");
   process.exit(1);
 }
 
@@ -83,7 +91,6 @@ const server = createServer({
   idleMs: NEVER_IDLE_MS,
   // Belt and braces: even an unexpected idle fire must not process.exit.
   onShutdown: () => {},
-  prefsPath: prefsFile(), // under the ephemeral state dir
   assets,
   // A synthetic build identity + self-diagnostics so the settings Advanced pane
   // (EXC-848) has real blocks to render. The prod daemon derives these from the
@@ -116,11 +123,11 @@ const server = createServer({
   // can never settle on — a dev build short-circuits before it compares anything. Inert:
   // no UI arm reads `report.install`. If one ever does, stage the install kind beside the
   // status rather than letting a spec assert an impossible build.
-  updateReport: async () =>
+  updateReport: () =>
     updateReportFor(
       { install: "dev", version: "0.0.0-e2e", commit: "e2ecommit0000000" },
       buildStatus,
-      await readUpdatesCheck(prefsFile()),
+      loadSettings(configFile()).updates.check,
     ),
   diagnostics: fakeDiagnostics,
   log,

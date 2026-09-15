@@ -4,12 +4,12 @@
 
 import { z } from "zod";
 
-import type { Behavior, DraftBody, PlanInput, PrefsPatch, ResolveBody } from "@/lib/types.ts";
+import type { Behavior, ConfigPatch, DraftBody, PlanInput, ResolveBody } from "@/lib/types.ts";
 
 // Request-body schemas at the browser trust boundary. The schemas over routes that
 // predate them are deliberately lenient — a malformed body degrades to the schema's
 // fallback rather than rejecting, matching the cast-and-trust behavior they replace.
-// PrefsPatchSchema is the one exception and says below why it rejects instead.
+// ConfigPatchSchema is the one exception and says below why it rejects instead.
 
 // POST /api/reviews: an incoming plan. Every field is optional and the whole
 // object falls back to {} on a non-object body, mirroring the `req.json()
@@ -78,15 +78,15 @@ export const ResolveBodySchema: z.ZodType<ResolveBody> = z
   })
   .catch({ behavior: "allow" });
 
-// POST /api/prefs — the ONE schema here that rejects where its neighbours degrade.
+// POST /api/config — the ONE schema here that rejects where its neighbours degrade.
 // The routes above historically tolerated junk, so validating them must not tighten
-// them; this route is new, and it writes into caret's state dir over a loopback
-// endpoint any local page can reach. Silently stripping an unrecognized key would
-// make it a general write primitive that answers 200 to a body it did not honour —
-// so `.strict()`, and the handler answers 400 (EXC-1206). `.strict()` applies at
-// both levels, so an unknown key UNDER `updates` is refused too; an empty patch is
+// them; this route writes into the user's own config.toml over a loopback endpoint
+// any local page can reach. Silently stripping an unrecognized key would make it a
+// general write primitive that answers 200 to a body it did not honour — so
+// `.strict()`, and the handler answers 400 (EXC-1206). `.strict()` applies at both
+// levels, so an unknown key UNDER `updates` is refused too; an empty patch is
 // deliberately a success.
-export const PrefsPatchSchema: z.ZodType<PrefsPatch> = z
+export const ConfigPatchSchema: z.ZodType<ConfigPatch> = z
   .object({ updates: z.object({ check: z.boolean() }).strict().optional() })
   .strict();
 

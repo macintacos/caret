@@ -6,9 +6,9 @@
 import { renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
+import { createConfigWriter } from "@/config/config-write.ts";
 import { deriveIdleTimeoutSec } from "@/config/constants.ts";
-import { ensureStateDir, prefsFile } from "@/config/paths.ts";
-import { createPrefsWriter, type PrefsWriter } from "@/config/prefs.ts";
+import { configFile, ensureStateDir } from "@/config/paths.ts";
 import { DEFAULTS } from "@/config/settings.ts";
 import {
   isClientLive,
@@ -19,13 +19,13 @@ import {
 } from "@/daemon/guards.ts";
 import { createLiveness, type LivenessDeps } from "@/daemon/liveness.ts";
 import {
+  ConfigPatchSchema,
   DraftBodySchema,
   FileRefsBodySchema,
   FileSearchBodySchema,
   MAX_FILE_REFS,
   malformedLineAnchor,
   PlanInputSchema,
-  PrefsPatchSchema,
   parseBody,
   ResolveBodySchema,
 } from "@/daemon/schemas.ts";
@@ -112,11 +112,9 @@ export interface CreateServerOptions {
   assets?: UiAssets;
   onShutdown?: () => void;
   routePlan?: RoutePlan;
-  /** Path to the machine-global prefs file; defaults to paths.prefsFile(). */
-  prefsPath?: string;
-  /** The one writer both prefs write paths share; defaults to
-   * createPrefsWriter(prefsPath). Injectable so a test can hold a write open. */
-  prefsWriter?: PrefsWriter;
+  /** Path to the user's config.toml, the file POST /api/config edits; defaults to
+   * paths.configFile(). */
+  configPath?: string;
   /** Single-instance lock file path. When set, the daemon writes the lock on a
    * successful bind and removes it on stop(); omitted (default) means no lock is
    * managed. */
@@ -179,7 +177,7 @@ export interface CreateServerOptions {
    * one (EXC-1207): the UI reads this route on every load, so an unwired route there
    * would 404 into every spec's page load. */
   updateReport?: () => UpdateReport | Promise<UpdateReport>;
-  /** Called after a landed POST /api/prefs patch whose `updates.check` is `true`
+  /** Called after a landed POST /api/config patch whose `updates.check` is `true`
    * (EXC-1210). A user action is exactly what the 24h throttle's constraint permits a
    * call for, so runDaemon wires it to the same check boot runs — without it, a reviewer
    * who opted out long ago would wait a whole daemon lifetime for a verdict. The daemon
@@ -227,7 +225,7 @@ interface ResolvedOptions {
   assets: UiAssets | undefined;
   onShutdown: () => void;
   routePlan: RoutePlan;
-  prefsPath: string;
+  configPath: string;
   lockPath: string | undefined;
   buildId: string | undefined;
   assetDigest: string | undefined;
@@ -257,7 +255,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     assets: opts.assets,
     onShutdown: opts.onShutdown ?? (() => process.exit(0)),
     routePlan: opts.routePlan ?? routeIncomingPlan,
-    prefsPath: opts.prefsPath ?? prefsFile(),
+    configPath: opts.configPath ?? configFile(),
     lockPath: opts.lockPath,
     buildId: opts.buildId,
     assetDigest: opts.assetDigest,
@@ -309,13 +307,13 @@ function ifNoneMatchHit(header: string | null, etag: string): boolean {
 
 export function createServer(opts: CreateServerOptions): CaretServer {
   const cfg = resolveOptions(opts);
-  const { store, idle, heartbeat, resident, assets, onShutdown, routePlan, prefsPath, log } = cfg;
+  const { store, idle, heartbeat, resident, assets, onShutdown, routePlan, configPath, log } = cfg;
   const { buildId, assetDigest, commit, stateDir, instanceId } = cfg;
   const { approveVariants, source, lockPath } = cfg;
   const { awaitDecision, resolveDecision, clearDecision, openDecisionCount, unreadDecisionCount } =
     createDecisions(log);
 
-  const prefsWriter = opts.prefsWriter ?? createPrefsWriter(prefsPath);
+  const configWriter = createConfigWriter(configPath);
 
   // Wait for a decision but no longer than `ms` — resolves to null on timeout so
   // the handler can return a 204 heartbeat. The pending promise is left intact
@@ -408,7 +406,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // install kind, the running version/commit, whether the check is on, and the verdict
   // with the command that would take the upgrade. The thunk reads a verdict the daemon
   // already holds, so serving this never makes a network call — but it does fold in the
-  // LIVE `updates.check` (EXC-1210), a prefs.json read, which is why it may be async.
+  // LIVE `updates.check` (EXC-1210), which is why it may be async.
   // With no thunk wired (default; e.g. a bare test daemon) the route 404s, like any
   // absent optional capability.
   async function handleUpdate(): Promise<Response> {
@@ -570,26 +568,31 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return new Response(null, { status: 204 });
   }
 
-  // POST /api/prefs — the write half (EXC-1206). Unlike the daemon's other bodies
-  // this one is REJECTED rather than degraded when it doesn't parse: see
-  // PrefsPatchSchema. The write merges, so a patch naming one key leaves the rest
-  // of prefs.json (the remembered approve mode) alone.
-  async function handleSetPrefs(req: Request): Promise<Response> {
-    const parsed = PrefsPatchSchema.safeParse(await req.json().catch(() => null));
+  // POST /api/config — the settings the UI may write into the user's config.toml
+  // (EXC-1206). Unlike the daemon's other bodies this one is REJECTED rather than
+  // degraded when it doesn't parse: see ConfigPatchSchema. A rewrite the writer
+  // refuses answers 409, which the UI turns into "edit the file by hand".
+  async function handleSetConfig(req: Request): Promise<Response> {
+    const parsed = ConfigPatchSchema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) {
-      const error = parsed.error.issues[0]?.message ?? "invalid prefs patch";
+      const error = parsed.error.issues[0]?.message ?? "invalid config patch";
       // warn, carrying the reason: the browser turns the body into a sentence that
       // names no key, so the daemon log is the only place WHICH key was refused
       // survives. A zod message about a boolean field carries nothing identifying.
-      log.warn("prefs", "prefs patch rejected", { reason: error });
+      log.warn("settings", "config patch rejected", { reason: error });
       return Response.json({ error }, { status: 400 });
     }
-    await prefsWriter.merge(parsed.data);
-    log.debug("prefs", "prefs saved");
+    const check = parsed.data.updates?.check;
+    if (check === undefined) return Response.json({ ok: true }); // nothing to write
+    if (!(await configWriter.setUpdatesCheck(check))) {
+      log.warn("settings", "config.toml edit refused");
+      return Response.json({ error: "config.toml cannot be edited safely" }, { status: 409 });
+    }
+    log.debug("settings", "config saved");
     // Turning the check back on is a user action, so it is allowed to spend a call
     // (EXC-1210). The throttle still governs: a re-run inside the 24h window returns
     // null and the already-held verdict is what gets served.
-    if (parsed.data.updates?.check === true) cfg.onUpdatesEnabled?.();
+    if (check === true) cfg.onUpdatesEnabled?.();
     return Response.json({ ok: true });
   }
 
@@ -956,7 +959,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     if (method === "POST" && path === "/api/logs") return handleLogs(req);
     if (method === "POST" && path === "/api/ui/gone") return handleUiGone();
     if (method === "GET" && path === "/api/reviews") return handleListReviews();
-    if (method === "POST" && path === "/api/prefs") return handleSetPrefs(req);
+    if (method === "POST" && path === "/api/config") return handleSetConfig(req);
 
     const route = matchIdRoute(path);
     if (route) {

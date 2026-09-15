@@ -78,11 +78,11 @@ Concretely:
   `"plan rejected"`. Review ids in messages are truncated to their first 8 chars via
   `shortId` (`src/lib/log.ts`) — the full id rides in the record's `reviewId` field.
 - `step` is a **short fixed lowercase token** naming the operation (`review`, `resolve`,
-  `decision`, `idle`, `listen`, `settings`, `signal`, `store`, `prefs`, `draft`, `env`,
-  `ui`, `poll`, `render`, `prewarm`, `retire`, `drain`, `spawn`, `request`, `fatal`,
-  `update`, `service`, `upkeep`, `mcp`). Reuse an existing token before minting a new one
-  — and when you do mint one, add it here in the same change, so this stays a registry
-  rather than a snapshot.
+  `decision`, `idle`, `listen`, `settings`, `signal`, `store`, `draft`, `env`, `ui`,
+  `poll`, `render`, `prewarm`, `retire`, `drain`, `spawn`, `request`, `fatal`, `update`,
+  `service`, `upkeep`, `mcp`). Reuse an existing token before minting a new one — and when
+  you do mint one, add it here in the same change, so this stays a registry rather than a
+  snapshot.
 - Review-scoped records carry structured `reviewId` / `sessionId` fields in `extra` so one
   session stitches across the two log streams (EXC-444).
 - Every record carries a `source` field naming the emitting process — `"hook"`,
@@ -140,12 +140,12 @@ Logs live under `$XDG_STATE_HOME/caret/logs` (default `~/.local/state/caret/logs
 
 Every log file is created `0600`, inside `0700` directories. The mode is enforced by
 `ensureStateDir()` (`src/config/paths.ts`), which every mkdir-of-stateDir site routes
-through (log, store, prefs, lock, spawn) — it chmods an already existing dir, so the mode
-holds regardless of which caller creates the dir first (EXC-539); log writers reach it
-through `ensureLogsDir()`. `daemon-stderr.log` under a supervisor is the one file that
-does not: the units name no log destination at all, so the supervised daemon inherits the
-descriptor from `bin/caret-launcher`, which creates `logs/` at 0700 and opens the file at
-0600 in bash before it execs caret. Writes are synchronous, so a record logged just before
+through (log, store, lock, spawn) — it chmods an already existing dir, so the mode holds
+regardless of which caller creates the dir first (EXC-539); log writers reach it through
+`ensureLogsDir()`. `daemon-stderr.log` under a supervisor is the one file that does not:
+the units name no log destination at all, so the supervised daemon inherits the descriptor
+from `bin/caret-launcher`, which creates `logs/` at 0700 and opens the file at 0600 in
+bash before it execs caret. Writes are synchronous, so a record logged just before
 `process.exit` (fail-safe and signal paths) is durable.
 
 Both logger sinks check their size before each record they write and, past

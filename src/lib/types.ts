@@ -360,10 +360,10 @@ export interface ResolveBody {
   acceptMode?: ApproveVariantId;
 }
 
-/** Body of POST /api/prefs — the daemon-owned prefs the UI may write (EXC-1206).
- * Deliberately narrow: the schema rejects anything not named below rather than
- * stripping it. */
-export interface PrefsPatch {
+/** Body of POST /api/config — the settings the UI may write into the user's
+ * config.toml (EXC-1206). Deliberately narrow: the schema rejects anything not named
+ * below rather than stripping it. */
+export interface ConfigPatch {
   updates?: { check: boolean };
 }
 

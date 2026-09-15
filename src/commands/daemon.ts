@@ -10,8 +10,16 @@ import { existsSync } from "node:fs";
 
 import { selectAdapter } from "@/adapters/index.ts";
 import { warnInvalidEnvVars } from "@/commands/boot.ts";
-import { configFile, daemonLock, reviewsDir, stateDir, updateCheckFile } from "@/config/paths.ts";
-import { readUpdatesCheck } from "@/config/prefs.ts";
+import { createConfigWriter } from "@/config/config-write.ts";
+import {
+  configFile,
+  daemonLock,
+  prefsFile,
+  reviewsDir,
+  stateDir,
+  updateCheckFile,
+} from "@/config/paths.ts";
+import { migratePrefsFile } from "@/config/prefs.ts";
 import {
   getPort,
   heartbeatMs,
@@ -72,6 +80,9 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
     existsSync(cfg) ? `settings: reading ${cfg}` : `settings: no config at ${cfg}; using defaults`,
     { settings: boot },
   );
+  // Before anything reads `updates.check`: a legacy prefs.json opt-out becomes an
+  // `[updates] check` line, so a reviewer who turned the daily check off keeps it off.
+  await migratePrefsFile(prefsFile(), createConfigWriter(cfg), log);
   warnInvalidEnvVars((msg) => log.warn("env", msg));
   // The active adapter (CARET_AGENT, default claude). Its declared approve
   // variants are published in /api/health so the UI renders its approve
@@ -89,7 +100,7 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
   let updateStatus = readCachedStatus(updateCache, version, commit);
   // Ask — at most once a day, and never on a dev build or under the `updates.check`
   // opt-out — whether a newer caret exists (EXC-1205). Fire-and-forget: nothing awaits it,
-  // so neither boot nor a prefs write is delayed, and runUpdateCheck never rejects. A null
+  // so boot is never delayed, and runUpdateCheck never rejects. A null
   // result is the throttle (or the opt-out) saying there is nothing new, so the seeded
   // verdict stands. Boot fires it once; a resident daemon re-arms it on the upkeep tick,
   // bounded by the same 24h stamp.
@@ -98,7 +109,7 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
       kind: install,
       version,
       commit,
-      enabled: () => readUpdatesCheck(),
+      enabled: async () => svc.current().updates.check,
       now: Date.now,
       cache: updateCache,
       npmLatest: publishedCaretVersion,
@@ -225,10 +236,10 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
         ),
       // Whether this caret is behind (EXC-1205). A thunk over a local the background
       // check assigns, so GET /api/update never makes a network call of its own — it
-      // reads the live `updates.check` (a prefs.json read, not a call out) and folds it
-      // over the held verdict, so an opt-out takes effect without a restart (EXC-1210).
-      updateReport: async () =>
-        updateReportFor({ install, version, commit }, updateStatus, await readUpdatesCheck()),
+      // reads the live `updates.check` off the hot-reloading settings service and folds
+      // it over the held verdict, so an opt-out takes effect without a restart (EXC-1210).
+      updateReport: () =>
+        updateReportFor({ install, version, commit }, updateStatus, svc.current().updates.check),
       // Turning the check back on re-runs it, so a reviewer who opted out long ago gets
       // a real verdict on the spot rather than a daemon lifetime later.
       onUpdatesEnabled: refreshUpdate,

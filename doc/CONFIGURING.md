@@ -28,7 +28,8 @@ the BSD-flavored `ps -axo pid=,comm=` everywhere.
 
 ## Config file
 
-caret reads optional settings from a TOML file. Which file, in precedence order:
+caret reads optional settings from a TOML file. You own it; the one line caret writes
+itself is `[updates] check` (below). Which file, in precedence order:
 
 | When                       | Path                                 |
 | -------------------------- | ------------------------------------ |
@@ -119,6 +120,22 @@ change takes effect after you restart OpenCode.
 [opencode]
 plans_dir = "~/.local/share/opencode/plans"
 ```
+
+### The `[updates]` table
+
+| Key             | Default | Purpose                                                                                                                                    |
+| --------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `updates.check` | `true`  | Whether the daemon asks GitHub once a day if a newer caret is out. Hot-reloads, so turning it off takes effect without a daemon restart. |
+
+```toml
+[updates]
+check = false
+```
+
+This is the one key caret writes itself. **Settings → Updates** edits that single line and
+leaves the rest of your file — comments, ordering, formatting — alone. When it cannot do
+that safely, which it can't if you spelled the key as a dotted `updates.check = true` or
+as an inline table, it changes nothing and says so, so you can set it by hand.
 
 ### The `[dev]` table
 
