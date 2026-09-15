@@ -140,7 +140,7 @@ export const COMPLETION_PAINT_MS = 100 + 100;
  * pick an option the reviewer never saw. Selecting and painting are unaffected —
  * only acceptance — which is why a test that types and immediately presses Enter
  * gets a newline rather than the completion. */
-export const COMPLETION_INTERACTION_MS = 75;
+const COMPLETION_INTERACTION_MS = 75;
 
 /** Poll `pred` until it holds, or the budget runs out; returns its final value.
  * Faster than a fixed sleep on the happy path and immune to host contention,

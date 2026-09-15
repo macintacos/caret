@@ -19,7 +19,7 @@ export interface WireAdapter {
  * the supplied decision, so one call drives the whole review loop to that
  * outcome.
  */
-export function depsReturning(
+function depsReturning(
   decision: Decision,
   parseHookInput: (stdin: string) => PlanInput,
 ): Parameters<typeof runReview>[1] {

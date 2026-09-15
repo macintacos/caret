@@ -88,7 +88,7 @@ export function alerts(page: Page): Locator {
 }
 
 /** The breadcrumbs bar (`Breadcrumb.Root aria-label="Plan location"`). */
-export function planLocation(page: Page): Locator {
+function planLocation(page: Page): Locator {
   return page.getByRole("navigation", { name: "Plan location" });
 }
 
