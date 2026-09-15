@@ -130,8 +130,8 @@ describe("createShortcutDispatcher", () => {
     registry.register(a.entry);
     mount();
     keydown("a");
-    keydown("a", { repeat: true });
-    keydown("a", { repeat: true });
+    expect(keydown("a", { repeat: true }).defaultPrevented).toBe(true);
+    expect(keydown("a", { repeat: true }).defaultPrevented).toBe(true);
     expect(a.calls()).toBe(1);
   });
 
@@ -145,13 +145,24 @@ describe("createShortcutDispatcher", () => {
     expect(j.calls()).toBe(3);
   });
 
-  test("a held first key does not complete a sequence that does not opt in", () => {
+  test("a held sequence that opts into repeat completes on every second tick", () => {
+    const next = spyEntry("next", [{ key: "]" }, { key: "]" }], { repeat: true });
+    registry.register(next.entry);
+    mount();
+    keydown("]");
+    for (let i = 0; i < 5; i++) keydown("]", { repeat: true });
+    expect(next.calls()).toBe(3);
+  });
+
+  test("a held first key counts once toward a sequence that does not opt in", () => {
     const gg = spyEntry("top", [{ key: "g" }, { key: "g" }]);
     registry.register(gg.entry);
     mount();
     keydown("g");
     keydown("g", { repeat: true });
     expect(gg.calls()).toBe(0);
+    keydown("g");
+    expect(gg.calls()).toBe(1);
   });
 
   test("does not complete a bare sequence once an editing context takes focus", () => {

@@ -66,6 +66,7 @@ export const SETTINGS_SHORTCUTS: ShortcutEntry[] = [
 /** Every reserved binding, in help-modal order. */
 export const CANONICAL_KEYMAP: ShortcutEntry[] = [
   // Motion (cursor)
+  // Relative motions repeat — each OS repeat is one more step; gg/G jump to a fixed place.
   { id: "motion.down", keys: [{ key: "j" }], group: "motion", label: "Line down", repeat: true },
   { id: "motion.up", keys: [{ key: "k" }], group: "motion", label: "Line up", repeat: true },
   {
@@ -160,7 +161,8 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
     label: "Search plan",
   },
   // EXC-832: cycle to the next / previous search match (wrapping), registered live only
-  // while a committed search HUD is up.
+  // while a committed search HUD is up. No repeat: a held n would replay searchStepped on
+  // every tick (EXC-1131).
   { id: "actions.searchNext", keys: [{ key: "n" }], group: "actions", label: "Next match" },
   { id: "actions.searchPrev", keys: [{ key: "N" }], group: "actions", label: "Previous match" },
   { id: "actions.settings", keys: [{ key: "," }], group: "actions", label: "Open settings" },
@@ -208,7 +210,7 @@ function reservedEntry(id: string): ShortcutEntry {
   return base;
 }
 
-/** A live, dispatchable entry from a reservation: the canonical key/label/group/cap
+/** A live, dispatchable entry from a reservation: the canonical key/label/group/cap/repeat
  * spread with the caller's `run` (+ optional `enabled`/`scope`). The single seam every
  * live binding registers through (EXC-876). An explicit `scope` overrides; otherwise the
  * reservation's own scope (help.show's `"global"`) is preserved by the spread. */

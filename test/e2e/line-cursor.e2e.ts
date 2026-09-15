@@ -1,9 +1,10 @@
 // Focused-line cursor + vim motion in the plan (EXC-788). The cursor, its
-// motion (j/k, Ctrl+d/u, gg/G, ]]/[[, }/{), click-to-relocate, Esc-to-clear, and
-// scroll-into-view are all real-browser keyboard/scroll behavior, so they live
-// here rather than in a unit (browser-testing.md). Every motion is driven with a
-// REAL keystroke — never fill()/click() shortcuts — and the cursor line is read
-// from a stable marker (data-caret-cursor on the focused shadow row).
+// motion (j/k, Ctrl+d/u, gg/G, ]]/[[, }/{), a held j riding the OS repeat one step
+// per tick, click-to-relocate, Esc-to-clear, and scroll-into-view are all
+// real-browser keyboard/scroll behavior, so they live here rather than in a unit
+// (browser-testing.md). Every motion is driven with a REAL keystroke — never
+// fill()/click() shortcuts — and the cursor line is read from a stable marker
+// (data-caret-cursor on the focused shadow row).
 //
 // The plan is reflowed on ingest, so heading line numbers shift; the spec
 // asserts RELATIVE motion and reads line numbers from the DOM, never hardcoding

@@ -80,12 +80,6 @@ export function createShortcutDispatcher(opts: ShortcutDispatcherOptions): Short
     const scope = activeScope();
     entries = entries.filter((entry) => isEntryActive(entry, scope));
     if (seq && !seq.candidates.some((c) => isEntryActive(c, scope))) seq = null;
-    // A held key's OS repeats re-run only entries that opt in; preventDefault()
-    // does not stop the browser emitting them.
-    if (e.repeat) {
-      entries = entries.filter((entry) => entry.repeat);
-      if (seq && !seq.candidates.some((c) => c.repeat)) seq = null;
-    }
     // Single-key (bare) shortcuts do not fire while a text field or the composer
     // is focused — that surface keeps owning its own keys.
     if (isEditingContext()) {
@@ -96,10 +90,14 @@ export function createShortcutDispatcher(opts: ShortcutDispatcherOptions): Short
       if (seq?.candidates.every((c) => isBareSpec(c.keys))) seq = null;
     }
     const { entry, state } = matchKeydown(seq, e, entries, now(), timeoutMs);
-    seq = state;
+    // A held key is one press: its OS repeats (which preventDefault() does not
+    // stop) are claimed but re-run only an opted-in entry, and leave a pending
+    // sequence as it was.
+    const held = entry !== null && e.repeat && !entry.repeat;
+    if (!held) seq = state;
     if (entry && entry.enabled?.() !== false) {
       e.preventDefault();
-      entry.run?.();
+      if (!held) entry.run?.();
     }
   }
 
