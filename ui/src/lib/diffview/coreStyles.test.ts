@@ -520,20 +520,18 @@ describe("the inline emphasis chips (EXC-867)", () => {
     // back to transparent is what lets one stack carry two policies.
     expect(tintRule("bold")).toMatch(/:not\(\[data-selected-line\]\)/);
     expect(tintRule("italic")).toMatch(/:not\(\[data-selected-line\]\)/);
-    // Code sides with them (EXC-868): it marks a span rather than offering an action, the
-    // same call the fence chip makes with the same token.
+    // Code sides with them (EXC-868): it marks a span rather than offering an action.
     expect(tintRule("code")).toMatch(/:not\(\[data-selected-line\]\)/);
     expect(fillRule).not.toMatch(/:not\(\[data-selected-line\]\)/);
   });
 });
 
-// EXC-859: the link chip, the family's fifth member and the compensating half of EXC-866 —
-// that ticket generalized the collapse of [label](target) to every safe link, leaving the
-// bare label where the markup used to be. This member takes EXC-880's side of the family's
-// selection split rather than EXC-869's: a fence chip is decoration and drops on a
-// drag-selected row so the band reads flat, while the reference chip stays lit because an
-// affordance's chip is not decoration to be tidied away — and a link chip vanishing beside
-// a reference chip on the same selected row would read as a glitch rather than a policy.
+// EXC-859: the link chip, the family's fifth member. The view collapses every safe
+// [label](target) to its bare label, and the chip is what marks that label as link syntax.
+// It takes the reference chip's side of the family's selection split: the decoration chips
+// drop on a drag-selected row so the band reads flat, while the reference chip stays lit
+// because an affordance's chip is not decoration to be tidied away — and a link chip
+// vanishing beside a reference chip on the same selected row would read as a glitch.
 // The link's ink and underline are ungated for a different reason again: like bold's
 // weight, they are what the text IS. What only a real browser can say is that the cascade
 // actually resolves that way, which is diff-surface e2e's half (links.e2e.ts).
@@ -602,7 +600,7 @@ describe("the link chip (EXC-859)", () => {
 // decoration pass already tags a codespan data-md~="code" and already closes its pill once
 // per ELEMENT (EXC-867), so the whole render is one layer variable and one gradient — which
 // is all this suite has to pin, plus the one call the ticket had to make: that the tint is
-// the same token the fence chip spends rather than a second value corrected for the surface.
+// the family's derived --chip-code rather than a second value corrected for the surface.
 // The geometry the code member rides is shared with bold and italic, so the "shifts no
 // column" and "drops the chip on a selected row" pins above already cover it and are not
 // repeated here.

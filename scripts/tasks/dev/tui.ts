@@ -262,7 +262,7 @@ export interface TuiOptions {
 export interface Tui {
   /** Append child or in-process output. Chunks may split mid-line. */
   write: (chunk: string) => void;
-  /** Replace the status lines pinned under the shortcut list. */
+  /** Replace the status items shown in the header row. */
   setStatus: (lines: readonly string[]) => void;
   /** Current backlog size, for the bounded-growth test. */
   lineCount: () => number;

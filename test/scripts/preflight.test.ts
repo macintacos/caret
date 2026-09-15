@@ -207,12 +207,11 @@ test("preflight's task groups map to real mise task files", async () => {
   for (const group of firstWords) expect(existsSync(taskFile(group))).toBe(true);
 });
 
-test("the consolidated group task files declare no `#MISE depends` edge (concurrent-UI-build guard, EXC-738)", () => {
+test("the group task files declare no `#MISE depends` edge", () => {
   // preflight builds the UI exactly once: it runs `build ui` itself and spawns
   // the dependents with CARET_SKIP_BUILD_UI=1. A `#MISE depends` edge on
   // build/test/smoke would run its dependency REGARDLESS of that env var,
-  // re-introducing a second concurrent Vite build that races on ui/dist. Guard
-  // against anyone adding one back.
+  // starting a second concurrent Vite build that races on ui/dist.
   const taskFile = (name: string): string => join(import.meta.dir, "../../.mise/tasks", name);
   for (const group of ["build", "test", "smoke"]) {
     expect(readFileSync(taskFile(group), "utf8")).not.toContain("#MISE depends");
@@ -224,8 +223,8 @@ test("every `.mise/tasks/*` forwarder to the tasks CLI sets `#MISE raw_args=true
   // every flag and `--help`. `#MISE raw_args=true` makes mise pass arguments —
   // including a bare `--help` — straight through instead of intercepting them, so
   // `mise run <task> --help` reaches the CLI's real help. Guard that no forwarder
-  // loses the directive. preflight is a forwarder like the rest now (EXC-737):
-  // it execs `caret-tasks preflight`, whose commander tree owns its --json flags.
+  // loses the directive. preflight is one too (EXC-737): it execs
+  // `caret-tasks preflight`, whose commander tree owns its --json flags.
   const tasksDir = join(import.meta.dir, "../../.mise/tasks");
   const forwarders = readdirSync(tasksDir, { withFileTypes: true })
     // Skip any namespaced-task subdirectory (mise supports `foo:bar` dirs) so the

@@ -23,9 +23,9 @@
 // here needs an exception carved for prose, and the fixtures.ts header that
 // explains the sleep rule is simply not a violation. Where a rule WOULD need an
 // exception for real code (the `waitForFunction((t) => performance.now() > t +
-// N, t0)` construct, whose eleven call sites split into one legitimate
-// app-clock wait and ten fixed sleeps; the five per-call `toPass` budgets in
-// file-refs.e2e.ts that raise above the config) the rule needs judgment, so it
+// N, t0)` construct, whose call sites split into honest app-clock waits and
+// fixed sleeps; the per-call `toPass` budgets in file-refs.e2e.ts that raise
+// above the config) the rule needs judgment, so it
 // stays prose in browser-testing.md instead of shipping here with a list to
 // append to.
 //

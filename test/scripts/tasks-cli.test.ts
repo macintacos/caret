@@ -586,8 +586,7 @@ describe("tasks CLI: release subcommand group", () => {
 
 // The preflight gate is a first-class subcommand (EXC-737): `mise run preflight`
 // forwards to `caret-tasks preflight`, and commander parses --json/-v/--grep/
-// --task directly — the interface the mise `usage` spec used to carry via
-// usage_* env vars. This pins the parse → JsonArgs contract the preflight action
+// --task directly. This pins the parse → JsonArgs contract the preflight action
 // receives, without running the real gate (the injected action just captures).
 async function parsePreflightArgs(args: string[]): Promise<JsonArgs> {
   let captured: JsonArgs | undefined;
@@ -665,9 +664,8 @@ describe("tasks CLI: preflight command", () => {
 });
 
 // --- orchestration ordering + the CARET_SKIP_BUILD_UI skip (EXC-738/739/740) ---
-// The UI-first ordering + build-once dedupe that replaced the deleted `#MISE
-// depends` edges now live in the run functions, not mise. Inject a capturing
-// runner to pin the command SEQUENCE (not just each command string): the UI is
+// The UI-first ordering + build-once dedupe live in the run functions, not in
+// `#MISE depends` edges. Inject a capturing runner to pin the command SEQUENCE (not just each command string): the UI is
 // built before the artifact that needs it, and skipped when the caller (the
 // preflight gate) already built it.
 

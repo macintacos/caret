@@ -1,8 +1,7 @@
 // Pins the palette generator: what it emits is app.css's static first-paint
 // fallback, so it must carry every color token a Theme declares, the theme's
 // color-scheme, and one flat :root block the CSS-contract suites can parse — and
-// app.css must actually import it, which nothing else in the repo checks now
-// that the mirror test is gone.
+// app.css must actually import it, which nothing else in the repo checks.
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";

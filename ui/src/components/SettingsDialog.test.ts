@@ -66,7 +66,7 @@ describe("SettingsDialog shell", () => {
     expect(has("button#setting-themeLight")).toBe(true);
     expect(has("button#setting-themeDark")).toBe(true);
     expect(has("[data-slot='switch']")).toBe(true);
-    // The Diff view section's fields now live in the same (Appearance) pane.
+    // The Diff view section's fields share the Appearance pane.
     expect(has("button#setting-diffStyle")).toBe(true);
     expect(has("button#setting-diffIndicators")).toBe(true);
   });
