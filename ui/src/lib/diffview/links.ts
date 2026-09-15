@@ -33,9 +33,9 @@
 import { hasKnownFileExtension } from "@core/config/constants";
 import { classify, type FileRefSpan, type FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 import {
-  buildInlineSpans,
+  buildInlineLayer,
   type ColumnRange,
-  type InlineSpan,
+  type InlineLine,
   type InlineSpanMap,
 } from "$lib/diffview/inlineSpans.ts";
 
@@ -226,12 +226,19 @@ function transformLine(
   display: string;
   spans: LinkSpan[];
   fileRefs: FileRefSpan[];
-  inline: InlineSpan[];
-  quoteDepth: number;
+  linkRanges: ColumnRange[];
+  labelRanges: ColumnRange[];
   images: ImageSpan[];
 } {
   if (inCode)
-    return { display: source, spans: [], fileRefs: [], inline: [], quoteDepth: 0, images: [] };
+    return {
+      display: source,
+      spans: [],
+      fileRefs: [],
+      linkRanges: [],
+      labelRanges: [],
+      images: [],
+    };
 
   // Mask inline-code regions so their contents are never rewritten or linked.
   const codeRanges: Range[] = [];
@@ -395,13 +402,7 @@ function transformLine(
     if (rw.image != null) images.push(rw.image);
   }
   display += source.slice(cursor);
-  const { spans: inline, quoteDepth } = buildInlineSpans(
-    display,
-    linkRanges,
-    labelRanges,
-    fileRefs,
-  );
-  return { display, spans, fileRefs, inline, quoteDepth, images };
+  return { display, spans, fileRefs, linkRanges, labelRanges, images };
 }
 
 /** Production link opener: a new tab with noopener,noreferrer so the opened
@@ -415,11 +416,10 @@ export function buildLinkLayer(text: string): LinkLayer {
   const lines = text.split("\n");
   const spans: LinkSpanMap = new Map();
   const fileRefs: FileRefSpanMap = new Map();
-  const inline: InlineSpanMap = new Map();
-  const quoteDepth = new Map<number, number>();
   const images: ImageSpanMap = new Map();
   let inCode = false;
   const out: string[] = [];
+  const inlineLines: InlineLine[] = [];
 
   for (let i = 0; i < lines.length; i++) {
     const source = lines[i] ?? "";
@@ -431,11 +431,17 @@ export function buildLinkLayer(text: string): LinkLayer {
     out.push(line.display);
     if (line.spans.length > 0) spans.set(i + 1, line.spans);
     if (line.fileRefs.length > 0) fileRefs.set(i + 1, line.fileRefs);
-    if (line.inline.length > 0) inline.set(i + 1, line.inline);
-    if (line.quoteDepth > 0) quoteDepth.set(i + 1, line.quoteDepth);
     if (line.images.length > 0) images.set(i + 1, line.images);
+    inlineLines.push({
+      display: line.display,
+      inCode: lineInCode,
+      linkRanges: line.linkRanges,
+      labelRanges: line.labelRanges,
+      refRanges: line.fileRefs,
+    });
     if (isFence) inCode = !inCode;
   }
 
+  const { inline, quoteDepth } = buildInlineLayer(inlineLines);
   return { text: out.join("\n"), spans, fileRefs, inline, quoteDepth, images };
 }

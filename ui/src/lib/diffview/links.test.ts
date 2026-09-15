@@ -642,6 +642,82 @@ describe("buildLinkLayer inline runs", () => {
     expect(layer.text.split("\n").length).toBe(input.split("\n").length);
     expect(layer.inline.size).toBeGreaterThan(0);
   });
+
+  // The formatter reflows at 90 columns and breaks inside a span too long for one
+  // line; these fixtures are its real output.
+  test("a bold span the formatter wrapped takes a run on both lines", () => {
+    const text = [
+      "Some intro words and **a bold clause that is far too long to ever fit on a single line of",
+      "ninety columns so the formatter has to break it** after.",
+    ].join("\n");
+    expect(runsOnLine(text, 1)).toEqual([
+      { startCol: 21, endCol: 89, bold: true, continues: ["bold"] },
+    ]);
+    expect(runsOnLine(text, 2)).toEqual([
+      { startCol: 0, endCol: 49, bold: true, continued: ["bold"] },
+    ]);
+  });
+
+  test("a wrapped italic list item resumes past the hanging indent", () => {
+    const text = [
+      "- An item that goes *italic for a very long stretch of words that keeps going well past",
+      "  the ninety column limit of the reflow* and ends.",
+    ].join("\n");
+    expect(runsOnLine(text, 1)).toEqual([
+      { startCol: 0, endCol: 1, listMarker: "bullet" },
+      { startCol: 20, endCol: 87, italic: true, continues: ["italic"] },
+    ]);
+    expect(runsOnLine(text, 2)).toEqual([
+      { startCol: 2, endCol: 40, italic: true, continued: ["italic"] },
+    ]);
+  });
+
+  test("a wrapped bold clause in a blockquote resumes past the quote prefix", () => {
+    const text = [
+      "> Quoted words and **a bold clause that is far too long to ever fit on a single line of",
+      "> ninety columns so it must break** done.",
+    ].join("\n");
+    expect(runsOnLine(text, 1)).toEqual([
+      { startCol: 0, endCol: 1, quoteMarker: 1 },
+      { startCol: 19, endCol: 87, bold: true, continues: ["bold"] },
+    ]);
+    expect(runsOnLine(text, 2)).toEqual([
+      { startCol: 0, endCol: 1, quoteMarker: 1 },
+      { startCol: 2, endCol: 35, bold: true, continued: ["bold"] },
+    ]);
+  });
+
+  test("a code span hard-wrapped in unformatted source is code on both lines", () => {
+    const text = "a `code that\nwraps` b";
+    expect(runsOnLine(text, 1)).toEqual([
+      { startCol: 2, endCol: 12, code: true, continues: ["code"] },
+    ]);
+    expect(runsOnLine(text, 2)).toEqual([
+      { startCol: 0, endCol: 6, code: true, continued: ["code"] },
+    ]);
+  });
+
+  test("only the member that crosses the break is marked as running on", () => {
+    // Bold wraps, but the code span nested in it closes before the break.
+    const text = "**a `c`\nd**";
+    expect(runsOnLine(text, 1)).toEqual([
+      { startCol: 0, endCol: 4, bold: true },
+      { startCol: 4, endCol: 7, bold: true, code: true, continues: ["bold"] },
+    ]);
+    expect(runsOnLine(text, 2)).toEqual([
+      { startCol: 0, endCol: 3, bold: true, continued: ["bold"] },
+    ]);
+  });
+
+  test.each([
+    ["two list items", "- **a\n- b**"],
+    ["two paragraphs", "**a\n\nb**"],
+    ["a heading and the paragraph under it", "# **a\nb**"],
+    ["two table rows", "| h | h |\n| - | - |\n| a | **b |\n| c | d** |"],
+  ])("emphasis does not pair across %s", (_name, text) => {
+    const runs = [...buildLinkLayer(text).inline.values()].flat();
+    expect(runs.filter((run) => run.bold)).toEqual([]);
+  });
 });
 
 // The image layer (EXC-870). An image is the one shape in this file that keeps

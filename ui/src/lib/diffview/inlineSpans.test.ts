@@ -1,12 +1,26 @@
 import { describe, expect, test } from "bun:test";
 
-import { buildInlineSpans, type InlineSpan } from "$lib/diffview/inlineSpans.ts";
+import { buildInlineLayer, type ColumnRange, type InlineSpan } from "$lib/diffview/inlineSpans.ts";
 
-// buildInlineSpans is the pure per-line pass: display text + the line's link
+// buildInlineLayer is the pure pass over display lines: each line's text + link
 // ranges -> flat atomic runs (one per maximal stretch of identical attribute
 // set) plus the line's blockquote depth. Columns are 0-based, half-open
 // [startCol, endCol) into the DISPLAY line. Nothing is stripped or rewritten
-// here — the markers are part of the runs they mark.
+// here — the markers are part of the runs they mark. These cases are one-line
+// documents; spans wrapping across lines are pinned through links.test.ts.
+
+/** A one-line document's runs and depth. */
+function layer(
+  line: string,
+  links: ColumnRange[],
+  labels: ColumnRange[],
+  refs: ColumnRange[],
+): { spans: InlineSpan[]; quoteDepth: number } {
+  const { inline, quoteDepth } = buildInlineLayer([
+    { display: line, inCode: false, linkRanges: links, labelRanges: labels, refRanges: refs },
+  ]);
+  return { spans: inline.get(1) ?? [], quoteDepth: quoteDepth.get(1) ?? 0 };
+}
 
 /** Runs for a line. `links` are the ranges marked `link: true`; `labels` is the
  * superset the caller rewrote (references included) that the quote scan reads, and
@@ -14,15 +28,15 @@ import { buildInlineSpans, type InlineSpan } from "$lib/diffview/inlineSpans.ts"
  * the file-reference ranges whose interior markup is suppressed. */
 function runs(
   line: string,
-  links: { startCol: number; endCol: number }[] = [],
-  labels: { startCol: number; endCol: number }[] = links,
-  refs: { startCol: number; endCol: number }[] = [],
+  links: ColumnRange[] = [],
+  labels: ColumnRange[] = links,
+  refs: ColumnRange[] = [],
 ): InlineSpan[] {
-  return buildInlineSpans(line, links, labels, refs).spans;
+  return layer(line, links, labels, refs).spans;
 }
 
 function depth(line: string): number {
-  return buildInlineSpans(line, [], [], []).quoteDepth;
+  return layer(line, [], [], []).quoteDepth;
 }
 
 /** `"> - item"`'s two runs: the quote marker, then the bullet past it. Shared by
@@ -488,7 +502,7 @@ describe("blockquote depth and markers", () => {
   // over a link and subdues the whole row.
   test("a `>` inside a collapsed link label is not a quote marker", () => {
     const label = [{ startCol: 0, endCol: 3 }];
-    const { spans, quoteDepth } = buildInlineSpans("> x", label, label, []);
+    const { spans, quoteDepth } = layer("> x", label, label, []);
     expect(quoteDepth).toBe(0);
     expect(spans).toEqual([{ startCol: 0, endCol: 3, link: true }]);
   });
@@ -499,7 +513,7 @@ describe("blockquote depth and markers", () => {
   // would put data-md-quote and data-file-ref on ONE element, landing the bar's
   // ::before and the glyph's ::before on the same box.
   test("a `>` inside a collapsed reference label is not a quote marker either", () => {
-    const { spans, quoteDepth } = buildInlineSpans("> a.ts", [], [{ startCol: 0, endCol: 6 }], []);
+    const { spans, quoteDepth } = layer("> a.ts", [], [{ startCol: 0, endCol: 6 }], []);
     expect(quoteDepth).toBe(0);
     expect(spans).toEqual([]);
   });
@@ -508,7 +522,7 @@ describe("blockquote depth and markers", () => {
     // `> [> x](url)` displays as `> > x`: the first marker is the line's, the
     // second is the label's and stops the scan.
     const label = [{ startCol: 2, endCol: 5 }];
-    const { spans, quoteDepth } = buildInlineSpans("> > x", label, label, []);
+    const { spans, quoteDepth } = layer("> > x", label, label, []);
     expect(quoteDepth).toBe(1);
     expect(spans).toEqual([
       { startCol: 0, endCol: 1, quoteMarker: 1 },
@@ -588,7 +602,7 @@ describe("blockquote mixing cases", () => {
   // some quoted rows — so it is pinned here, where the two are produced.
   test("a line with depth always emits at least one marker run", () => {
     for (const line of ["> a", "> > a", ">", "> >", "   > a", "- > a", ">\t> a", "> - [ ] t"]) {
-      const { spans, quoteDepth } = buildInlineSpans(line, [], [], []);
+      const { spans, quoteDepth } = layer(line, [], [], []);
       expect(quoteDepth, line).toBeGreaterThan(0);
       expect(
         spans.filter((s) => s.quoteMarker !== undefined),
