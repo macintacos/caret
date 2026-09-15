@@ -1,9 +1,10 @@
 // Focused-line cursor + vim motion in the plan (EXC-788). The cursor, its
-// motion (j/k, Ctrl+d/u, gg/G, ]]/[[, }/{), click-to-relocate, Esc-to-clear, and
-// scroll-into-view are all real-browser keyboard/scroll behavior, so they live
-// here rather than in a unit (browser-testing.md). Every motion is driven with a
-// REAL keystroke — never fill()/click() shortcuts — and the cursor line is read
-// from a stable marker (data-caret-cursor on the focused shadow row).
+// motion (j/k, Ctrl+d/u, gg/G, ]]/[[, }/{), a held j riding the OS repeat one step
+// per tick, click-to-relocate, Esc-to-clear, and scroll-into-view are all
+// real-browser keyboard/scroll behavior, so they live here rather than in a unit
+// (browser-testing.md). Every motion is driven with a REAL keystroke — never
+// fill()/click() shortcuts — and the cursor line is read from a stable marker
+// (data-caret-cursor on the focused shadow row).
 //
 // The plan is reflowed on ingest, so heading line numbers shift; the spec
 // asserts RELATIVE motion and reads line numbers from the DOM, never hardcoding
@@ -186,6 +187,23 @@ test("} and { jump the cursor between blank (paragraph-boundary) lines", async (
   // The two } jumps landed on consecutive blanks, so { lands back on the first.
   await page.keyboard.press("{");
   await expectCursorLine(page, firstBlank);
+});
+
+test("a held j steps the cursor on every repeat", async ({ daemon, page }) => {
+  await openPlanForKeys(page, daemon, PLAN);
+
+  await goToTop(page);
+  let pressed = 1;
+  for (let i = 0; i < 4; i++) {
+    await page.keyboard.press("j");
+    pressed = await readCursorLine(page, pressed);
+  }
+
+  // A `down` on a key already held sends `repeat: true`: one press plus three repeats.
+  await goToTop(page);
+  for (let i = 0; i < 4; i++) await page.keyboard.down("j");
+  await page.keyboard.up("j");
+  await expectCursorLine(page, pressed);
 });
 
 test("holding j keeps the cursor on-screen and follows it, never yanking it to the top", async ({

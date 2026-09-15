@@ -1,10 +1,10 @@
 // Review-verdict + chrome keyboard shortcuts. Approve (a), request changes (r),
 // reject (shift+R, EXC-913), toggle compare/diff (d), open plan search (/,
 // EXC-832), open the heading breadcrumbs (b), and open settings (,) are all
-// wired through the shortcut engine (EXC-786). These are real-browser keyboard behaviors — a
-// keydown routed through the global dispatcher into the same guarded path a click
-// takes — so they live here, not in a unit (browser-testing.md). Every action is
-// driven with a REAL keystroke.
+// wired through the shortcut engine (EXC-786), and a held key runs its shortcut once
+// (EXC-1131). These are real-browser keyboard behaviors — a keydown routed through
+// the global dispatcher into the same guarded path a click takes — so they live here,
+// not in a unit (browser-testing.md). Every action is driven with a REAL keystroke.
 //
 // waitPastSafeModeGrace is mandatory before the first key press: a key inside the
 // post-mount grace window is swallowed by Safe Mode (safeMode.ts).
@@ -166,6 +166,23 @@ test("d toggles the compare/diff view when there are multiple versions", async (
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
   await page.keyboard.press("d");
   await expect(toggle).toHaveAttribute("aria-pressed", "false");
+});
+
+test("a held d toggles compare once", async ({ daemon, page }) => {
+  await daemon.seedVersions(2, [
+    `# Alpha\n\n${filler("alpha")}\n`,
+    `# Alpha\n\n${filler("beta")}\n`,
+  ]);
+  await page.goto("/");
+  await loadPlan(page);
+
+  const toggle = page.getByRole("button", { name: "Versions" });
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  // A `down` on a key already held sends `repeat: true`. Four keydowns: an even count
+  // lands a per-repeat toggle back where it started.
+  for (let i = 0; i < 4; i++) await page.keyboard.down("d");
+  await page.keyboard.up("d");
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
 });
 
 test("slash opens the plan search, not the contents filter (EXC-832)", async ({ daemon, page }) => {
