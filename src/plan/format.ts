@@ -13,6 +13,10 @@ export const PLAN_FORMAT_DENY_MESSAGE =
   "opening fence (e.g. ```ts, ```bash, ```json), and use `text` for non-code " +
   "blocks like directory trees, console output, or ASCII art. Then resubmit the plan.";
 
+export const PLAN_EMPTY_DENY_MESSAGE =
+  "caret: no plan text reached caret, so there is nothing to review. Call the tool " +
+  "again with the complete plan as its `plan` argument.";
+
 /**
  * True when the plan markdown contains a code block with no language marker.
  *

@@ -15,7 +15,11 @@ import { logFile } from "@/config/paths.ts";
 import type { EnsureMode } from "@/daemon/lifecycle.ts";
 import { type ErrorContext, logDebug, logError, logInfo, shortId } from "@/lib/log.ts";
 import { type CmuxPane, type Decision, errorMessage, type PlanInput } from "@/lib/types.ts";
-import { hasUntaggedCodeBlock, PLAN_FORMAT_DENY_MESSAGE } from "@/plan/format.ts";
+import {
+  hasUntaggedCodeBlock,
+  PLAN_EMPTY_DENY_MESSAGE,
+  PLAN_FORMAT_DENY_MESSAGE,
+} from "@/plan/format.ts";
 
 /** A fail-safe deny the core constructs when an unreviewed plan must never ship.
  * The reason rides in `feedback`; the adapter renders it to the tool's deny wire
@@ -121,11 +125,15 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<Decisi
     // run leaves a record of the request and its session.
     logInfo("review", "review requested", { ...ctx });
 
-    // Reject unhighlightable (untagged) code blocks before any daemon work, so a
-    // format-only reject never spins up a daemon or creates a review. An EXPECTED
-    // outcome, so it logs at info (default-on) and carries its own message rather
-    // than the fail-safe deny's.
+    // Reject a blank plan or unhighlightable (untagged) code blocks before any
+    // daemon work, so neither reject spins up a daemon or creates a review. An
+    // EXPECTED outcome, so it logs at info (default-on) and carries its own message
+    // rather than the fail-safe deny's.
     step = "validatePlan";
+    if (!input.plan?.trim()) {
+      logInfo(step, "plan rejected: plan is empty", ctx);
+      return denyDecision(PLAN_EMPTY_DENY_MESSAGE);
+    }
     if (hasUntaggedCodeBlock(input.plan)) {
       logInfo(step, "plan rejected: code block missing language marker", ctx);
       return denyDecision(PLAN_FORMAT_DENY_MESSAGE);
