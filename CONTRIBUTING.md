@@ -51,9 +51,9 @@ The full task catalog (`build`, `test`, `smoke`, `lint`, `format`) is documented
   entrypoint shim, the service launcher, and the bootstrap preamble
   (`mise run test bats`).
 - `scripts/linux/verify.sh` — the systemd contract, checked against a real systemd booted
-  in a container (`mise run linux verify`). Hand-run: no gate spawns it.
+  in a container (`mise run verify linux`). Hand-run: no gate spawns it.
 - `scripts/macos/verify.sh` — the launchd contract, checked against this Mac's own
-  launchctl (`mise run macos verify`). Hand-run too, and it needs a GUI login session.
+  launchctl (`mise run verify macos`). Hand-run too, and it needs a GUI login session.
 
 ## Configuration
 

@@ -60,18 +60,18 @@ mise run lint       # read-only gate: formatting + Biome lint + tsc + svelte-che
 mise run format     # Biome (write)
 mise run smoke      # smoke the shipped artifacts; also `smoke bin` / `smoke bundle`
 mise run preflight  # pre-push gate: lint + tests (unit ∥ bats ∥ e2e) + build + smoke, scoped to the diff
-mise run linux      # boot a real systemd in a container; `linux verify` runs the unit checks
-mise run macos      # drive this Mac's own launchctl; `verify` is the only mode, and the default
+mise run verify     # check the service unit against a real supervisor: `verify macos` or `verify linux`
+                    # `verify linux shell` boots the same systemd container into a shell instead
 ```
 
-`mise run linux` and `mise run macos` are the two tasks above no gate runs, and between
-them they are the only check caret's service units get against a real supervisor —
-`mise run preflight` never spawns either, so run the one for your platform yourself when
-you change `src/service/` or `bin/caret-launcher`. `linux verify` needs
-[Apple container](https://github.com/apple/container); `macos verify` needs a GUI login
-session, because launchctl's `gui/<uid>` domain does not exist over ssh.
+`mise run verify` is the one task above no gate runs, and it is the only check caret's
+service units get against a real supervisor — `mise run preflight` never spawns it, so run
+it for your platform yourself when you change `src/service/` or `bin/caret-launcher`.
+`verify linux` needs [Apple container](https://github.com/apple/container); `verify macos`
+needs a GUI login session, because launchctl's `gui/<uid>` domain does not exist over ssh.
+`verify linux shell` boots the same container into a shell as `caret` instead.
 
-`macos verify` works on a throwaway label, so these stay a hand check against your own
+`verify macos` works on a throwaway label, so these stay a hand check against your own
 `dev.excessive.caret` agent. They need one to exist: `caret install` registers it from a
 build carrying `src/service/`, which is `mise run build --install` from a checkout until a
 release has it, and `launchctl print gui/$(id -u)/dev.excessive.caret` is how you confirm
@@ -95,7 +95,7 @@ it landed. Each step disturbs your login item, so do them when you can watch:
    unit suite, and not `verify.sh`, which bootstraps its own label by hand.
 6. Restore with the install you started from — `mise run build --install` from a checkout.
 
-`linux verify` runs against Ubuntu 24.04's systemd (`scripts/linux/Containerfile`),
+`verify linux` runs against Ubuntu 24.04's systemd (`scripts/linux/Containerfile`),
 loading the unit `buildSystemdUnit()` emits over the real launcher and a stub caret, and
 drives the user-bus probe, install's reload, enable and restart, a second install onto a
 running unit, the restart contract (a draining stop, exit 78, exit 0, the start-limit

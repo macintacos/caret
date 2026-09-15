@@ -80,7 +80,7 @@ side to match the other.
   bootstrap preamble. They sit outside `test/` because their subject does, and because
   bats collects them from the directory it is handed rather than from `test/`'s tree.
 - **Linux systemd** — `scripts/linux/verify.sh`, run by hand through
-  `mise run linux verify`, which boots a real systemd under Apple `container` and drives
+  `mise run verify linux`, which boots a real systemd under Apple `container` and drives
   the install, restart and uninstall sequence `createSystemdManager` performs against the
   unit `buildSystemdUnit()` actually emitted. It is the systemd contract's only coverage:
   `test/core/service/` asserts on the generated unit text, never on what systemd does with
@@ -92,7 +92,7 @@ side to match the other.
   wrote, self-linger, the `systemctl --user disable` opt-out install reads, the
   `caret install --refresh` cycle, and start at login.
 - **macOS launchd** — `scripts/macos/verify.sh`, run by hand through
-  `mise run macos verify`, the same arrangement one platform over: it bootstraps the plist
+  `mise run verify macos`, the same arrangement one platform over: it bootstraps the plist
   `buildLaunchdPlist()` actually emitted under a throwaway label and drives the install,
   reload, keepalive, restart, drain, disabled and uninstall sequence
   `createLaunchdManager` performs, plus a terminal-exit section for the launcher's own

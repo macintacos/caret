@@ -166,8 +166,8 @@ How long a daemon stays up, and who may replace it.
   `SUPERVISOR_WINDOW_MS` while the service `keepsAlive`.
 - **SIGTERM drains; SIGINT stops at once.** SIGTERM is how a supervisor cycles the
   service, so `DRAIN_DEADLINE_MS` stays under its stop grace.
-- **Only hand-run tasks exercise a real supervisor:** `mise run linux verify` and
-  `mise run macos verify`. See [`test-layout.md`](test-layout.md) § Where else tests live.
+- **Only hand-run tasks exercise a real supervisor:** `mise run verify linux` and
+  `mise run verify macos`. See [`test-layout.md`](test-layout.md) § Where else tests live.
 
 ## Daemon trust model
 

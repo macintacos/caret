@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
 # Drives the launchctl sequence createLaunchdManager performs, against the plist
-# buildLaunchdPlist() really emitted, in this Mac's own login session. `mise run macos
-# verify` generates that plist and the throwaway HOME and puts this script on them.
+# buildLaunchdPlist() really emitted, in this Mac's own login session. `mise run verify
+# macos` generates that plist and the throwaway HOME and puts this script on them.
 #
 # Every check states what launchd answered, because these answers are what
 # src/service/launchd-manager.ts is written against — a release that changes one should
@@ -11,11 +11,11 @@ set -uo pipefail
 
 # Never $HOME: everything below builds a fake caret install and hands it to launchd, and
 # the developer's real home must not be where that lands.
-home="${CARET_VERIFY_HOME:?set by .mise/tasks/macos}"
-label="${CARET_VERIFY_LABEL:?set by .mise/tasks/macos}"
-window_ms="${CARET_VERIFY_WINDOW_MS:?set by .mise/tasks/macos}"
-real_label="${CARET_VERIFY_REAL_LABEL:?set by .mise/tasks/macos}"
-plist="${CARET_VERIFY_PLIST:?set by .mise/tasks/macos}"
+home="${CARET_VERIFY_HOME:?set by .mise/tasks/verify}"
+label="${CARET_VERIFY_LABEL:?set by .mise/tasks/verify}"
+window_ms="${CARET_VERIFY_WINDOW_MS:?set by .mise/tasks/verify}"
+real_label="${CARET_VERIFY_REAL_LABEL:?set by .mise/tasks/verify}"
+plist="${CARET_VERIFY_PLIST:?set by .mise/tasks/verify}"
 uid="$(id -u)"
 domain="gui/$uid"
 target="$domain/$label"
