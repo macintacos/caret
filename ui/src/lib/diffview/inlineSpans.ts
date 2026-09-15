@@ -257,7 +257,9 @@ function collectTokenIntervals(tokens: Token[], base: number, into: Interval[]):
 /** Cuts the intervals at every boundary they introduce and keeps the stretches
  * some interval covers — the atomic-run partition the decoration pass consumes.
  * Cells are never fused across a boundary, so a run is always bounded by the
- * elements that produced it. */
+ * elements that produced it. `continues` / `continued` land on a span only from
+ * a covering interval whose own edge is that span's edge, not one merely running
+ * through it. */
 function flatten(intervals: Interval[]): InlineSpan[] {
   const bounds = new Set<number>();
   for (const interval of intervals) {
