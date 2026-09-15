@@ -126,8 +126,8 @@ export function createConfigWriter(file = configFile()): ConfigWriter {
           await mkdir(dirname(file), { recursive: true });
           await writeFileAtomic(file, next, { mode });
         } catch {
-          // Reported, not thrown: this runs on the boot path, where an escaping error
-          // would take the daemon down rather than leave prefs.json for the next boot.
+          // Reported, not thrown: the boot migration path (prefs.ts) has nothing to
+          // catch an escaping error, and it would crash the daemon before it starts.
           refusal = "unwritable";
         }
       });

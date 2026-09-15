@@ -46,11 +46,9 @@ async function boot(opts: BootOptions = {}) {
   base = d.url;
 }
 
-// Boot with the Claude adapter's declared approve variants — the recognized set
-// the daemon's /resolve and prefs persistence gate on in production. The
-// resolve/prefs tests exercise that token behavior ("acceptEdits"/"auto"), so
-// they boot through the adapter's real declaration rather than a bare daemon
-// (which recognizes only "default").
+// Boot with the Claude adapter's declared approve variants, so an acceptMode like
+// "acceptEdits" or "auto" below is a token a real adapter actually declares, not a
+// bare daemon's built-in "default".
 async function bootClaude(opts: BootOptions = {}) {
   await boot({ approveVariants: APPROVE_VARIANTS, ...opts });
 }

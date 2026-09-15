@@ -353,8 +353,7 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
   const worldDir = join(stateDirPath, "caret");
   // Under --fresh the child writes into this run's own state dir rather than the
   // sentinel above: the Updates toggle creates whatever CARET_CONFIG_FILE names, and a
-  // shared path would leak one session's flip into the next --fresh boot. CARET_FRESH
-  // tells the UI to reset its saved preferences.
+  // shared path would leak one session's flip into the next --fresh boot.
   const childConfig = opts.fresh ? join(worldDir, "config.toml") : configFilePath;
   const childEnv = childEnvFor(stateDirPath, portMode, {
     configFile: childConfig,
