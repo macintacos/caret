@@ -460,6 +460,65 @@ test("keeps the code pill on a prose label that cites a path", () => {
   ]);
 });
 
+test("a span wrapped onto the next row caps only at its real ends", () => {
+  // Driven from buildLinkLayer so the wrap flags are the ones emission produces. A
+  // cap at the break would draw one pill as two.
+  const layer = buildLinkLayer("x **a\nb** y");
+  const [first = "", second = ""] = layer.text.split("\n");
+  host = root(row(1, [first]), row(2, [second]));
+  decorateInlineRuns(host, layer.inline, layer.fileRefs);
+  expect(pieces(host, 1)).toEqual([
+    { text: "x ", md: null, start: null, end: null },
+    { text: "**a", md: "bold", start: "bold", end: null },
+  ]);
+  expect(pieces(host, 2)).toEqual([
+    { text: "b**", md: "bold", start: null, end: "bold" },
+    { text: " y", md: null, start: null, end: null },
+  ]);
+});
+
+test("marks the break edges of a wrapped span, and only those", () => {
+  // data-md-wrap-start / -end are where the sheet keeps the chip's inline room without
+  // a radius. The span's real ends carry caps instead, and a token the pill merely runs
+  // through carries neither.
+  const layer = buildLinkLayer("x **a `c`\nd e** y");
+  const [first = "", second = ""] = layer.text.split("\n");
+  host = root(row(1, [first]), row(2, [second]));
+  decorateInlineRuns(host, layer.inline, layer.fileRefs);
+  const wraps = (line: number) =>
+    rowChildren(host, line).map((child) => ({
+      text: child.textContent ?? "",
+      start: child.hasAttribute("data-md-wrap-start"),
+      end: child.hasAttribute("data-md-wrap-end"),
+    }));
+  expect(wraps(1)).toEqual([
+    { text: "x ", start: false, end: false },
+    { text: "**a ", start: false, end: false },
+    { text: "`c`", start: false, end: true },
+  ]);
+  expect(wraps(2)).toEqual([
+    { text: "d e**", start: true, end: false },
+    { text: " y", start: false, end: false },
+  ]);
+});
+
+test("a nested span that closes before the wrap keeps its inner end", () => {
+  // In ``**a `c`⏎d**`` bold runs on past the break but code closes on the first row, so
+  // the `c` child drops only bold's cap: the outer pill stays open while the inner one
+  // still rounds.
+  const layer = buildLinkLayer("**a `c`\nd**");
+  host = root(row(1, [layer.text.split("\n")[0] ?? ""]));
+  decorateInlineRuns(host, layer.inline, layer.fileRefs);
+  expect(pieces(host)).toEqual([
+    { text: "**a ", md: "bold", start: "bold", end: null },
+    { text: "`c`", md: "bold code", start: null, end: null },
+  ]);
+  expect(nested(host)).toEqual([
+    { text: "**a ", inner: null, start: false, end: false },
+    { text: "`c`", inner: "code", start: true, end: true },
+  ]);
+});
+
 test("decorates a row that a scroll card re-parented", () => {
   // An overflowing code block's rows are moved into a scroll card, so they are no
   // longer direct children of [data-content] — the same descendant query

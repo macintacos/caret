@@ -502,6 +502,19 @@ describe("the inline emphasis chips (EXC-867)", () => {
     expect(endRule).toMatch(/padding-inline-end:\s*var\(--chip-pad-inline\)/);
   });
 
+  test("keeps the inline room at a row break without rounding it", () => {
+    // A span the reflow wrapped carries no cap at the break, but its glyphs still need the
+    // room a cap would give them, or the squared edge sits tight against the text.
+    const wrapStart =
+      overrideDecls.match(/\[data-content\][^{}]*\[data-md-wrap-start\]\s*\{[^}]*\}/)?.[0] ?? "";
+    const wrapEnd =
+      overrideDecls.match(/\[data-content\][^{}]*\[data-md-wrap-end\]\s*\{[^}]*\}/)?.[0] ?? "";
+    expect(wrapStart).toMatch(/padding-inline-start:\s*var\(--chip-pad-inline\)/);
+    expect(wrapEnd).toMatch(/padding-inline-end:\s*var\(--chip-pad-inline\)/);
+    expect(wrapStart).not.toMatch(/radius/);
+    expect(wrapEnd).not.toMatch(/radius/);
+  });
+
   test("shifts its neighbours rather than cancelling the padding under them", () => {
     // The shift is intended: nothing resolves a column in pixels (anchors and motions are
     // character-indexed, the search marks paint over DOM ranges), and a cancelled pair
@@ -692,14 +705,15 @@ describe("the inline-code chip (EXC-868)", () => {
 // one of its own.
 describe("the nested chip's own corners", () => {
   const fillRule = rulesFor(String.raw`\[data-md\]`)[0] ?? "";
-  const nestFill = rulesFor(String.raw`\[data-md-inner\]::after`)[0] ?? "";
+  const CELL_SCOPE = String.raw`(?::not\([^{}]*?\))?`;
+  const nestFill = rulesFor(String.raw`\[data-md-inner\]${CELL_SCOPE}::after`)[0] ?? "";
   const nestBox = rulesFor(String.raw`\[data-md-inner\]`).find((r) => r.includes("z-index")) ?? "";
   const nestStart = rulesFor(String.raw`\[data-md-inner-start\]::after`)[0] ?? "";
   const nestEnd = rulesFor(String.raw`\[data-md-inner-end\]::after`)[0] ?? "";
   const nestPadStart = rulesFor(String.raw`\[data-md-inner-start\]`)[0] ?? "";
   const nestPadEnd = rulesFor(String.raw`\[data-md-inner-end\]`)[0] ?? "";
   const nestTint = (member: string) =>
-    rulesFor(String.raw`\[data-md-inner~="${member}"\]`).find((r) =>
+    rulesFor(String.raw`\[data-md-inner~="${member}"\]${CELL_SCOPE}`).find((r) =>
       r.includes(`--nest-${member}:`),
     ) ?? "";
 
@@ -810,6 +824,13 @@ describe("the nested chip's own corners", () => {
       expect(nestTint(member)).toMatch(/:not\(\[data-selected-line\]\)/);
     }
     expect(nestTint("link")).not.toMatch(/:not\(\[data-selected-line\]\)/);
+  });
+
+  test("leaves a table cell's nested member on the token", () => {
+    // A nested chip in a soft-wrapped cell paints on the token (coreStyles.ts).
+    for (const rule of [nestFill, ...["bold", "italic", "code", "link"].map(nestTint)]) {
+      expect(rule.slice(0, rule.indexOf("{"))).toContain(":not([data-table-cell] *)");
+    }
   });
 });
 

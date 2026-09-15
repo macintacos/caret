@@ -1,6 +1,15 @@
 // Pure emission for the plan view's inline-markdown layer (EXC-855, EXC-866).
-// Takes one DISPLAY line and returns the flat atomic runs covering it — each
-// carrying every attribute that covers it — plus the line's blockquote depth.
+// Takes the document's DISPLAY lines and returns, per line, the flat atomic runs
+// covering it — each carrying every attribute that covers it — plus the line's
+// blockquote depth.
+//
+// Inline tokens are lexed a PARAGRAPH at a time and emitted a line at a time
+// (EXC-1342). The reflow breaks inside a span too long for one line, and a lex of
+// either half alone finds no closing delimiter, so the span would get no run at
+// all. A token crossing a break is cut into one run per line, each clipped to that
+// line's content — never over its hanging indent or `>` prefix — and flagged with
+// the members that run on, so the decoration pass draws no pill cap at the break.
+// The line-leading markers stay per line, because they only ever start one.
 //
 // Flat runs are a requirement rather than a style. The decoration pass (EXC-867)
 // turns each run into a sibling element, and every pass that then locates a token
@@ -17,7 +26,7 @@
 // The inline grammar comes from marked, already a UI dependency (lib/markdown.ts
 // renders comment bodies with it). Reusing its CommonMark delimiter-run pass is
 // what makes emphasis-looking text inside inline code come out right. Columns
-// come from the token tree's own `raw` strings, which tile the line exactly.
+// come from the token tree's own `raw` strings, which tile the lexed text exactly.
 //
 // The line is read as DISPLAY text, not source: on a line with no link collapse
 // the two are identical, and on one that collapsed the label survives verbatim,
@@ -42,7 +51,12 @@
 // the indentation before them: the marker is overdrawn where it sits, and the
 // columns to its left are what spell the nesting depth.
 
-import { Lexer, type Token } from "marked";
+import { Lexer, type Token, type Tokens } from "marked";
+
+/** The members whose element can run on across a line break. */
+export type WrapMember = "bold" | "italic" | "code";
+
+const WRAP_MEMBERS: readonly WrapMember[] = ["bold", "italic", "code"];
 
 /** One run of identical attributes on a display line. Columns are 0-based,
  * half-open [startCol, endCol) into the display line's text. A run always carries
@@ -77,6 +91,10 @@ export interface InlineSpan {
    * is NOT part of any run — the columns before the marker carry the nesting, and a
    * task item keeps its. */
   listMarker?: "bullet" | "ordered" | "task";
+  /** Members whose element runs on past this run's end onto the next line. */
+  continues?: readonly WrapMember[];
+  /** Members whose element began on an earlier line. */
+  continued?: readonly WrapMember[];
 }
 
 /** Per-line inline runs, keyed by 1-based display line number. Lines with no runs
@@ -90,9 +108,33 @@ export interface ColumnRange {
   endCol: number;
 }
 
-type Attributes = Omit<InlineSpan, "startCol" | "endCol">;
+/** One display line as the link layer hands it over. `linkRanges` are display
+ * columns already resolved — every clickable link span plus every collapsed label
+ * that carries no file reference — and become `link: true` runs. `labelRanges` is
+ * the superset the link layer rewrote at all, references included; only the
+ * blockquote scan reads it, to tell a marker from a label that merely starts with
+ * one. `refRanges` are the columns the reference layer claimed, whose interior
+ * markup is suppressed. An `inCode` line takes no runs. An `inTable` line is one
+ * tables.ts draws as a row, so it keeps the one-line lex. */
+export interface InlineLine {
+  display: string;
+  inCode: boolean;
+  inTable: boolean;
+  linkRanges: readonly ColumnRange[];
+  labelRanges: readonly ColumnRange[];
+  refRanges: readonly ColumnRange[];
+}
 
-type Interval = ColumnRange & { attributes: Attributes };
+type Attributes = Omit<InlineSpan, "startCol" | "endCol" | "continues" | "continued">;
+
+type Interval = ColumnRange & { attributes: Attributes; continues?: boolean; continued?: boolean };
+
+/** Where a token-lexing pass reads a display line from. */
+interface Segment {
+  /** 0-based index into the document's lines. */
+  line: number;
+  col: number;
+}
 
 // The token types that ARE an attribute. Everything else marked emits — text,
 // escape, del, html, image, link, br — contributes no attribute of its own, but
@@ -150,10 +192,10 @@ const THEMATIC_BREAK = /^\s*([-*_])[ \t]*(?:\1[ \t]*){2,}$/;
 // offset from the content start; group 2 is the marker itself. Nine digits is
 // CommonMark's cap on an ordered marker.
 //
-// This layer reads one line with no block context beyond the quote prefix, so the
-// one shape it over-matches is a `- item` inside a FOUR-SPACE-INDENTED code block,
-// which CommonMark reads as code and this reads as a nested list. Telling them
-// apart needs block-level parsing the whole module deliberately does not do —
+// The marker scans read one line with no block context beyond the quote prefix, so
+// the one shape they over-match is a `- item` inside a FOUR-SPACE-INDENTED code
+// block, which CommonMark reads as code and this reads as a nested list. Telling
+// them apart needs block-level state the marker scans deliberately do not carry —
 // indentation is also how nesting is spelled — and the fenced form, which is how
 // caret's plans actually carry code, never reaches here at all (links.ts passes
 // fenced lines through untouched).
@@ -215,7 +257,9 @@ function collectTokenIntervals(tokens: Token[], base: number, into: Interval[]):
 /** Cuts the intervals at every boundary they introduce and keeps the stretches
  * some interval covers — the atomic-run partition the decoration pass consumes.
  * Cells are never fused across a boundary, so a run is always bounded by the
- * elements that produced it. */
+ * elements that produced it. `continues` / `continued` land on a span only from
+ * a covering interval whose own edge is that span's edge, not one merely running
+ * through it. */
 function flatten(intervals: Interval[]): InlineSpan[] {
   const bounds = new Set<number>();
   for (const interval of intervals) {
@@ -227,17 +271,28 @@ function flatten(intervals: Interval[]): InlineSpan[] {
   let startCol: number | undefined;
   for (const endCol of [...bounds].sort((a, b) => a - b)) {
     if (startCol !== undefined) {
-      const attributes: Attributes = {};
-      for (const interval of intervals) {
-        if (interval.startCol <= startCol && interval.endCol >= endCol) {
-          Object.assign(attributes, interval.attributes);
-        }
+      const from = startCol;
+      const covering = intervals.filter((i) => i.startCol <= from && i.endCol >= endCol);
+      const attributes: Attributes = Object.assign({}, ...covering.map((i) => i.attributes));
+      if (Object.keys(attributes).length > 0) {
+        const span: InlineSpan = { startCol, endCol, ...attributes };
+        const continues = wrapMembers(covering, (i) => i.continues === true && i.endCol === endCol);
+        const continued = wrapMembers(covering, (i) => i.continued === true && i.startCol === from);
+        if (continues.length > 0) span.continues = continues;
+        if (continued.length > 0) span.continued = continued;
+        spans.push(span);
       }
-      if (Object.keys(attributes).length > 0) spans.push({ startCol, endCol, ...attributes });
     }
     startCol = endCol;
   }
   return spans;
+}
+
+/** The wrap members carried by the intervals that pass `test`, in member order. */
+function wrapMembers(intervals: readonly Interval[], test: (i: Interval) => boolean): WrapMember[] {
+  return WRAP_MEMBERS.filter((m) =>
+    intervals.some((i) => test(i) && i.attributes[m] !== undefined),
+  );
 }
 
 /** Whether a token interval falls inside a range the reference layer claimed
@@ -280,21 +335,138 @@ function listMarkerAt(display: string, offset: number, into: Interval[]): void {
   });
 }
 
-/** The flat atomic runs covering one display line, plus its blockquote depth.
- * `linkRanges` are display columns the caller already resolved — every clickable
- * link span plus every collapsed label that carries no file reference — and become
- * `link: true` runs. `labelRanges` is the superset the caller rewrote at all,
- * references included; only the blockquote scan reads it, to tell a marker from a
- * label that merely starts with one. `refRanges` are the columns the reference
- * layer claimed, whose interior markup is suppressed. Fenced-code lines never
- * reach here; the caller passes them through untouched. */
-export function buildInlineSpans(
+const newlines = (text: string): number => (text.match(/\n/g) ?? []).length;
+
+/** Pushes the [first, last] line indices of every `paragraph` or `text` leaf in
+ * `tokens` that spans two or more lines, the first child starting on `line`, and
+ * returns the line index past the last token. Only newline counts are read, never
+ * offsets: a nested token's `raw` has its container markers stripped, which moves
+ * its columns but leaves its line breaks intact. */
+function collectExtents(tokens: readonly Token[], line: number, into: [number, number][]): number {
+  let at = line;
+  for (const token of tokens) {
+    const span = newlines(token.raw.trimEnd());
+    if ((token.type === "paragraph" || token.type === "text") && span > 0) {
+      into.push([at, at + span]);
+    } else if (token.type === "list") {
+      collectExtents((token as Tokens.List).items, at, into);
+    } else if (token.type === "list_item" || token.type === "blockquote") {
+      collectExtents((token as Tokens.ListItem | Tokens.Blockquote).tokens, at, into);
+    }
+    at += newlines(token.raw);
+  }
+  return at;
+}
+
+/** The multi-line paragraphs of the document, as 0-based [first, last] line
+ * indices. An extent touching a fenced or table line is dropped, so its lines keep
+ * the per-line lex: the panel wins where links.ts's fence scan or tables.ts and
+ * marked disagree. marked reads a lone `\r` as a line break, so when its line count
+ * differs from ours no extent can be trusted and the whole document keeps the
+ * per-line lex. */
+function paragraphExtents(lines: readonly InlineLine[]): [number, number][] {
+  const extents: [number, number][] = [];
+  const tokens = Lexer.lex(lines.map((l) => l.display).join("\n"));
+  if (collectExtents(tokens, 0, extents) !== lines.length - 1) return [];
+  return extents.filter(([first, last]) =>
+    lines.slice(first, last + 1).every((l) => !l.inCode && !l.inTable),
+  );
+}
+
+/** Lexes `segments` as one run of inline text — each line read from its `col`,
+ * joined with `\n` — and pushes every token back onto the lines it touches, cut at
+ * each break. A piece is flagged `continued` / `continues` where its token runs on
+ * from the line before or onto the line after. */
+function lexSegments(
+  lines: readonly InlineLine[],
+  segments: readonly Segment[],
+  into: Interval[][],
+): void {
+  let joined = "";
+  const bounds = segments.map(({ line, col }, k) => {
+    if (k > 0) joined += "\n";
+    const start = joined.length;
+    joined += lines[line]?.display.slice(col) ?? "";
+    return { line, col, start, end: joined.length };
+  });
+  const tokens: Interval[] = [];
+  collectTokenIntervals(Lexer.lexInline(joined, { gfm: true }), 0, tokens);
+  for (const token of tokens) {
+    const pieces = bounds.flatMap(({ line, col, start, end }) => {
+      const from = Math.max(token.startCol, start);
+      const to = Math.min(token.endCol, end);
+      return to > from ? [{ line, startCol: col + from - start, endCol: col + to - start }] : [];
+    });
+    // A reference never crosses a line, but a wrapped token's piece can sit wholly
+    // inside one; the reference wins, so the whole token is dropped.
+    //
+    // A CODESPAN is exempt whatever it contains: its interior is literal, so it can
+    // never be the collision this drops, and taking it away costs the reference the
+    // chip it is drawn as. Both shapes that carry one are real — the citation
+    // `[`a/b.ts`](a/b.ts)` emits its range over the whole backticked label, while a
+    // prose label like `[the `resolve` handler](src/x.ts)` carries the span inside it.
+    const claimed = pieces.some((p) => insideReference(p, lines[p.line]?.refRanges ?? []));
+    if (claimed && token.attributes.code === undefined) continue;
+    pieces.forEach(({ line, startCol, endCol }, i) => {
+      into[line]?.push({
+        startCol,
+        endCol,
+        attributes: token.attributes,
+        continued: i > 0,
+        continues: i < pieces.length - 1,
+      });
+    });
+  }
+}
+
+/** The flat atomic runs and blockquote depth for every display line, keyed 1-based.
+ * A span wrapping across lines takes a run on each line it touches. Lines with no
+ * runs, and unquoted lines, are absent. */
+export function buildInlineLayer(lines: readonly InlineLine[]): {
+  inline: InlineSpanMap;
+  quoteDepth: Map<number, number>;
+} {
+  const quotes = lines.map((line) => scanQuotePrefix(line.display, line.labelRanges));
+  const tokens: Interval[][] = lines.map(() => []);
+  const lexed = new Set<number>();
+  for (const [first, last] of paragraphExtents(lines)) {
+    const segments: Segment[] = [];
+    for (let line = first; line <= last; line++) {
+      const display = lines[line]?.display ?? "";
+      const contentStart = quotes[line]?.contentStart ?? 0;
+      const indent = Math.max(0, display.slice(contentStart).search(/\S/));
+      segments.push({ line, col: contentStart + indent });
+      lexed.add(line);
+    }
+    lexSegments(lines, segments, tokens);
+  }
+
+  const inline: InlineSpanMap = new Map();
+  const quoteDepth = new Map<number, number>();
+  lines.forEach((line, i) => {
+    const quote = quotes[i];
+    if (line.inCode || quote === undefined) return;
+    if (!lexed.has(i)) lexSegments(lines, [{ line: i, col: 0 }], tokens);
+    const links = line.linkRanges.map(
+      ({ startCol, endCol }): Interval => ({ startCol, endCol, attributes: { link: true } }),
+    );
+    const spans = flatten([
+      ...markerIntervals(line.display, quote),
+      ...(tokens[i] ?? []),
+      ...links,
+    ]);
+    if (spans.length > 0) inline.set(i + 1, spans);
+    if (quote.intervals.length > 0) quoteDepth.set(i + 1, quote.intervals.length);
+  });
+  return { inline, quoteDepth };
+}
+
+/** The line-leading marker intervals: each `>`, a task item's checkbox, and every
+ * list marker. */
+function markerIntervals(
   display: string,
-  linkRanges: readonly ColumnRange[],
-  labelRanges: readonly ColumnRange[],
-  refRanges: readonly ColumnRange[],
-): { spans: InlineSpan[]; quoteDepth: number } {
-  const quote = scanQuotePrefix(display, labelRanges);
+  quote: { intervals: Interval[]; contentStart: number },
+): Interval[] {
   const intervals: Interval[] = [...quote.intervals];
 
   const content = display.slice(quote.contentStart);
@@ -321,26 +493,5 @@ export function buildInlineSpans(
   listMarkerAt(display, 0, intervals);
   if (quote.contentStart > 0) listMarkerAt(display, quote.contentStart, intervals);
 
-  // Collected apart from the structural intervals above so only the token ones are
-  // filtered. A checkbox or list marker is not markup a reference range can be read
-  // against, and a `>` inside a label is already refused by the quote scan.
-  //
-  // A CODESPAN is exempt whatever it contains: its interior is literal, so it can
-  // never be the collision this drops, and taking it away costs the reference the
-  // chip it is drawn as. Both shapes that carry one are real — the citation
-  // `[`a/b.ts`](a/b.ts)` emits its range over the whole backticked label, while a
-  // prose label like `[the `resolve` handler](src/x.ts)` carries the span inside it.
-  const tokens: Interval[] = [];
-  collectTokenIntervals(Lexer.lexInline(display, { gfm: true }), 0, tokens);
-  for (const token of tokens) {
-    if (token.attributes.code !== undefined || !insideReference(token, refRanges)) {
-      intervals.push(token);
-    }
-  }
-
-  for (const range of linkRanges) {
-    intervals.push({ startCol: range.startCol, endCol: range.endCol, attributes: { link: true } });
-  }
-
-  return { spans: flatten(intervals), quoteDepth: quote.intervals.length };
+  return intervals;
 }

@@ -47,13 +47,16 @@ digraph plan_render {
 }
 ```
 
-- **`links.ts`** is the one per-line pass over plan text. It returns display text plus
-  five layers keyed by display line: clickable link spans, file references, flat inline
-  runs, blockquote depth, and images.
-- **`inlineSpans.ts`** emits the flat atomic runs for one display line — one span per
-  element-bounded stretch of identical attribute set. Runs are **flat by requirement**,
-  not by style: a nested wrapper would break the token partition below. Abutting elements
-  are never fused, because that boundary is where a pill's rounded end gets drawn.
+- **`links.ts`** collapses links one line at a time — the only rewrite of plan text. It
+  returns display text plus five layers keyed by display line: clickable link spans, file
+  references, flat inline runs, blockquote depth, and images. The runs and the depth come
+  from handing every display line to `inlineSpans.ts` at once.
+- **`inlineSpans.ts`** lexes inline markup a paragraph at a time and emits the flat atomic
+  runs per display line — one span per element-bounded stretch of identical attribute set.
+  Runs are **flat by requirement**, not by style: a nested wrapper would break the token
+  partition below. Abutting elements are never fused, because that boundary is where a
+  pill's rounded end gets drawn. A run cut from an element that crosses a line break names
+  the members that do (`continues` / `continued`), so no cap is drawn there.
 - **`inlineDecorate.ts`** refines shiki's tokens until none straddles a run boundary, then
   tags each with the run covering it.
 - **`coreStyles.ts`** turns each attribute into one CSS rule. The ink and chip vocabulary
@@ -66,10 +69,21 @@ rather than the component so it is unit-testable against a constructed fixture.
 
 ## Line parity
 
-**Every transform is strictly per-line, and the output always has the same line count as
-the input.** Lines are processed independently and rejoined with `\n`. The annotation and
-feedback line numbers depend on it: a pass that dropped or added a line would silently
-move every comment anchor below it.
+**The output always has the same line count as the input.** Lines are rejoined with `\n`,
+and no pass drops or adds one. The annotation and feedback line numbers depend on it: a
+pass that dropped or added a line would silently move every comment anchor below it.
+
+**Recognition is a separate question from parity.** The line-leading markers — `>`, list
+bullets, task brackets — are read one line at a time, because they only ever start a line.
+The link collapse is too, so a link whose label wraps stays literal. Inline grammar is
+block-scoped: `inlineSpans.ts` lexes a multi-line paragraph as one text, so a bold, italic
+or code span the 90-column reflow broke still pairs, and every line it touches gets a run
+clipped to that line. Headings, tables and every other block keep the one-line lex.
+
+**A hard wrap and a soft wrap are different problems.** A hard wrap is a newline in the
+source, so the span spans rows and pairing it is the lex's job. A soft wrap is one row the
+browser fragments — a long table cell wrapping inside its column — and needs nothing from
+the lex; what it can need is CSS that paints per fragment.
 
 ## Display coordinates
 

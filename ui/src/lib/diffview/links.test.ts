@@ -5,9 +5,9 @@ import { buildLinkLayer, openLinkInNewTab } from "$lib/diffview/links.ts";
 
 // buildLinkLayer is the pure transform: plan source text -> display text +
 // a per-line span map of clickable link ranges + a per-line map of file
-// references emitted from path-shaped link targets. It is strictly per-line — it
-// never merges or splits lines, so line count is invariant. Columns in the
-// span map are 0-based, half-open [startCol, endCol) into the *display* line.
+// references emitted from path-shaped link targets. Line count is invariant — it
+// never merges or splits lines. Columns in the span map are 0-based, half-open
+// [startCol, endCol) into the *display* line.
 
 function spansOnLine(text: string, line: number) {
   return buildLinkLayer(text).spans.get(line) ?? [];
@@ -539,9 +539,11 @@ describe("buildLinkLayer backticked-path labels", () => {
 });
 
 // The inline-markdown layer (EXC-866): the flat atomic runs the decoration pass
-// turns into sibling elements. buildInlineSpans owns the run math and is tested
-// on its own; these pin how buildLinkLayer composes it — which columns count as
-// a link, which lines are skipped, and that nothing about the display text moved.
+// turns into sibling elements. The one-line run math lives in inlineSpans.test.ts;
+// these pin how buildLinkLayer composes it — which columns count as a link, which
+// lines are skipped, that nothing about the display text moved — and the
+// paragraph-scoped cases, since the fence and table guards come from its per-line
+// state.
 describe("buildLinkLayer inline runs", () => {
   function runsOnLine(text: string, line: number) {
     return buildLinkLayer(text).inline.get(line) ?? [];
@@ -641,6 +643,153 @@ describe("buildLinkLayer inline runs", () => {
     expect(layer.text).toBe(input);
     expect(layer.text.split("\n").length).toBe(input.split("\n").length);
     expect(layer.inline.size).toBeGreaterThan(0);
+  });
+
+  // The formatter reflows at 90 columns and breaks inside a span too long for one
+  // line; these fixtures are its real output.
+  test("a bold span the formatter wrapped takes a run on both lines", () => {
+    const text = [
+      "Some intro words and **a bold clause that is far too long to ever fit on a single line of",
+      "ninety columns so the formatter has to break it** after.",
+    ].join("\n");
+    expect(runsOnLine(text, 1)).toEqual([
+      { startCol: 21, endCol: 89, bold: true, continues: ["bold"] },
+    ]);
+    expect(runsOnLine(text, 2)).toEqual([
+      { startCol: 0, endCol: 49, bold: true, continued: ["bold"] },
+    ]);
+  });
+
+  test("a wrapped italic list item resumes past the hanging indent", () => {
+    const text = [
+      "- An item that goes *italic for a very long stretch of words that keeps going well past",
+      "  the ninety column limit of the reflow* and ends.",
+    ].join("\n");
+    expect(runsOnLine(text, 1)).toEqual([
+      { startCol: 0, endCol: 1, listMarker: "bullet" },
+      { startCol: 20, endCol: 87, italic: true, continues: ["italic"] },
+    ]);
+    expect(runsOnLine(text, 2)).toEqual([
+      { startCol: 2, endCol: 40, italic: true, continued: ["italic"] },
+    ]);
+  });
+
+  test("a wrapped bold clause in a blockquote resumes past the quote prefix", () => {
+    const text = [
+      "> Quoted words and **a bold clause that is far too long to ever fit on a single line of",
+      "> ninety columns so it must break** done.",
+    ].join("\n");
+    expect(runsOnLine(text, 1)).toEqual([
+      { startCol: 0, endCol: 1, quoteMarker: 1 },
+      { startCol: 19, endCol: 87, bold: true, continues: ["bold"] },
+    ]);
+    expect(runsOnLine(text, 2)).toEqual([
+      { startCol: 0, endCol: 1, quoteMarker: 1 },
+      { startCol: 2, endCol: 35, bold: true, continued: ["bold"] },
+    ]);
+  });
+
+  test("a code span hard-wrapped in unformatted source is code on both lines", () => {
+    const text = "a `code that\nwraps` b";
+    expect(runsOnLine(text, 1)).toEqual([
+      { startCol: 2, endCol: 12, code: true, continues: ["code"] },
+    ]);
+    expect(runsOnLine(text, 2)).toEqual([
+      { startCol: 0, endCol: 6, code: true, continued: ["code"] },
+    ]);
+  });
+
+  test("only the member that crosses the break is marked as running on", () => {
+    // Bold wraps, but the code span nested in it closes before the break.
+    const text = "**a `c`\nd**";
+    expect(runsOnLine(text, 1)).toEqual([
+      { startCol: 0, endCol: 4, bold: true },
+      { startCol: 4, endCol: 7, bold: true, code: true, continues: ["bold"] },
+    ]);
+    expect(runsOnLine(text, 2)).toEqual([
+      { startCol: 0, endCol: 3, bold: true, continued: ["bold"] },
+    ]);
+  });
+
+  test.each([
+    ["two list items", "- **a\n- b**"],
+    ["two paragraphs", "**a\n\nb**"],
+    ["a heading and the paragraph under it", "# **a\nb**"],
+    ["two table rows", "| h | h |\n| - | - |\n| a | **b |\n| c | d** |"],
+    // tables.ts reads the pipe inside the code span as cell text and draws a table;
+    // marked splits on it, finds a cell-count mismatch and lexes one paragraph.
+    [
+      "the rows of a table marked reads as prose",
+      "| `a|b` | c |\n| - | - |\n| x | **y |\n| z | w** |",
+    ],
+    // A backtick in the info string voids the fence for marked, not for the scan.
+    ["a fence whose info string holds a backtick", "x **a\n```js `y`\nb**"],
+    // A lone CR is a line break to marked's block lex and not to the split on `\n`.
+    ["a line holding a lone carriage return", "x\r**b\n# c**"],
+  ])("emphasis does not pair across %s", (_name, text) => {
+    const runs = [...buildLinkLayer(text).inline.values()].flat();
+    expect(runs.filter((run) => run.bold)).toEqual([]);
+  });
+
+  test("a wrapped emphasis with a piece inside a reference is dropped whole", () => {
+    // `__` in the path opens a strong run the next line closes; the reference wins.
+    expect([...buildLinkLayer("see [foo/__x.py](foo/__x.py)\nbar__ baz").inline]).toEqual([]);
+  });
+
+  test.each([
+    [
+      "a nested list item",
+      "- a\n  - **b\n    c**",
+      [
+        [2, 4, 7],
+        [3, 4, 7],
+      ],
+    ],
+    [
+      "a loose list item",
+      "- a\n\n- **b\n  c**",
+      [
+        [3, 2, 5],
+        [4, 2, 5],
+      ],
+    ],
+    [
+      "a list inside a quote",
+      "> - **a\n>   b**",
+      [
+        [1, 4, 7],
+        [2, 4, 7],
+      ],
+    ],
+    [
+      "a task item",
+      "- [ ] **a\n  b**",
+      [
+        [1, 6, 9],
+        [2, 2, 5],
+      ],
+    ],
+    [
+      "a paragraph after a list",
+      "- a\n- b\n\n**c\nd**",
+      [
+        [4, 0, 3],
+        [5, 0, 3],
+      ],
+    ],
+    [
+      "a paragraph after a table",
+      "| h |\n| - |\n| x |\n\n**c\nd**",
+      [
+        [5, 0, 3],
+        [6, 0, 3],
+      ],
+    ],
+  ])("a bold span wrapped in %s takes a run on both lines", (_name, text, expected) => {
+    const bold = [...buildLinkLayer(text).inline].flatMap(([line, runs]) =>
+      runs.filter((run) => run.bold).map((run) => [line, run.startCol, run.endCol]),
+    );
+    expect(bold).toEqual(expected);
   });
 });
 
