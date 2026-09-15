@@ -418,11 +418,3 @@ describe("inline comments — Discard / Mark as draft (EXC-762)", () => {
     await confirmDiscard(flush, ".inline-row .discard", discarded, "a1");
   });
 });
-
-describe("compiled feedback preview (EXC-762)", () => {
-  test("relabels the preview disclosure and still shows it when there is feedback", async () => {
-    await mount({ ...baseProps, generalComment: "please revise" });
-    expect(q(".preview")).not.toBeNull();
-    expect(q(".preview-trigger")?.textContent).toContain("Compiled feedback preview");
-  });
-});

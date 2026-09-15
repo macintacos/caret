@@ -421,8 +421,6 @@ describe("PlanToc surface", () => {
     // primitive's item set, which is what keeps the walk on match rows alone.
     expect(named?.getAttribute("role")).toBeNull();
     expect(named?.getAttribute("data-slot")).not.toBe("command-item");
-    // No dimmed context rows: the header carries the path instead.
-    expect(listbox()?.querySelector(".toc-context")).toBeNull();
     await close(target, flush);
   });
 

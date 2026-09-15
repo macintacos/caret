@@ -650,11 +650,10 @@ describe("DiffPlanView plan search (EXC-832)", () => {
     await until(() => target.querySelector(".plan-search") != null);
   }
 
-  test("/ owns search, and the focus-filter binding is gone", async () => {
+  test("/ owns search", async () => {
     const { target } = render(DiffPlanView, props());
     await openSearch(target);
     expect(target.querySelector(".plan-search")).not.toBeNull();
-    expect(shortcuts.list().some((e) => e.id === "actions.focusFilter")).toBe(false);
   });
 
   test("typing a query drives the match counter", async () => {

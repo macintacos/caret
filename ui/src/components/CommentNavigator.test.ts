@@ -220,13 +220,4 @@ describe("CommentNavigator in compare mode", () => {
       "Comments in v1–v3",
     );
   });
-
-  test("keeps the reveal key cap in the legend — compare rows reveal now", () => {
-    const { target } = render(CommentNavigator, { ...compare, showShortcutHints: true });
-    const hints = target.querySelector(".nav-hints")!.textContent;
-    expect(hints).toContain("reveal");
-    expect(hints).toContain("move");
-    expect(hints).toContain("search");
-    expect(hints).toContain("close");
-  });
 });

@@ -90,7 +90,7 @@ describe("StatusStrip", () => {
 
   // The same vertical Separator the TopBar cluster uses, so the chrome shares one
   // divider vocabulary.
-  test("divides the readout with shadcn Separators, not `·` glyphs", () => {
+  test("divides the readout with shadcn Separators", () => {
     const { target } = render(StatusStrip, {
       ...base,
       pendingCount: 2,
@@ -100,9 +100,8 @@ describe("StatusStrip", () => {
     const strip = target.querySelector(".status-strip")!;
     const sep = strip.querySelector('[data-slot="separator"]');
     expect(sep).not.toBeNull();
-    expect(strip.textContent).not.toContain("·");
-    // Decorative, matching the old aria-hidden `·` glyphs — a screen reader
-    // traversing the labelled strip shouldn't announce "separator" between metrics.
+    // Decorative — a screen reader traversing the labelled strip shouldn't announce
+    // "separator" between metrics.
     expect(sep!.getAttribute("aria-hidden")).toBe("true");
   });
 

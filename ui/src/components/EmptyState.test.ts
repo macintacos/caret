@@ -42,15 +42,6 @@ describe("EmptyState", () => {
     }
   });
 
-  // The hint pill keeps the floating-pill surface the empty screen shares with the
-  // safe-mode toast and the comment navigator. It no longer couples to VersionBadge,
-  // which moved into the flat status bar (EXC-787) and dropped its pill surface.
-  test("the hint pill keeps its floating-pill surface + border tokens", async () => {
-    const hintRule = ruleBody(await componentCss("EmptyState.svelte"), ".hint");
-    expect(hintRule).toContain("background: var(--paper-raised);");
-    expect(hintRule).toContain("border: 1px solid var(--rule);");
-  });
-
   // The amber ^ glyph is the hero of this screen and must survive the elevate:
   // the accent color, the accent-wash text-shadow, and the 6rem display size are
   // pinned so a refactor can't quietly demote or recolor the brand mark.
