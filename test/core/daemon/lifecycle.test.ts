@@ -141,6 +141,25 @@ test("ensureDaemon swallows an EADDRINUSE spawn race and connects to the winner"
   expect(url).toBe("http://localhost:42718");
 });
 
+test("ensureDaemon spawns again only once the daemon it spawned has exited", async () => {
+  let checks = 0;
+  const spawned: number[] = [];
+  await ensureDaemon(
+    ensureDeps({
+      health: async () => (++checks <= 4 ? null : { service: "caret", build: "b1", version: "v1" }),
+      spawn: () => {
+        const pid = spawned.length + 1;
+        spawned.push(pid);
+        return pid;
+      },
+      // Daemon 1 is still booting at the second check and gone by the third; daemon 2
+      // is still booting when the port first answers.
+      isAlive: (pid) => pid === 2 || checks < 3,
+    }),
+  );
+  expect(spawned).toEqual([1, 2]);
+});
+
 test("ensureDaemon gives up after maxAttempts", async () => {
   await expect(
     ensureDaemon(ensureDeps({ health: async () => null, timing: noOpTiming(3) })),
@@ -665,7 +684,7 @@ test("a cycle whose daemon never returns falls back to a spawn that does not cla
     spawnedEnv = { ...opts.env };
     const out = opts.stdio?.[1];
     if (typeof out === "number") closeSync(out);
-    return { unref: () => {} };
+    return { pid: 1, unref: () => {} };
   }) as unknown as typeof Bun.spawn;
   const { served, health } = recordingHealth(() => {
     if (!calls.includes("restart")) return peer("old");
@@ -924,14 +943,15 @@ test("a supervisor window that runs out still leaves the fallback spawn its turn
     ensureDeps({
       timing: clock.timing,
       service,
-      // Slower to bind than one backoff. Each refused probe meanwhile spawns again; in
-      // production those extra spawns lose the bind race.
+      // Slower to bind than one backoff. The no-op isAlive reports the spawned daemon dead,
+      // so each refused probe meanwhile spawns again; `??=` keeps the first spawn's time.
       health: async () =>
         firstSpawn !== undefined && clock.timing.now() >= firstSpawn + 2 * clock.stepMs
           ? peer("spawned", { build: "b1", resident: false })
           : null,
       spawn: () => {
         firstSpawn ??= clock.timing.now();
+        return 1;
       },
     }),
   );

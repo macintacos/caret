@@ -24,7 +24,7 @@ export function ensureDaemonNoOps(maxAttempts = 5): EnsureDaemonNoOps {
     isAlive: () => false,
     retire: async () => true,
     removeLock: () => {},
-    spawn: () => {},
+    spawn: () => 1,
     timing: noOpTiming(maxAttempts),
   };
 }

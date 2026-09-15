@@ -61,8 +61,8 @@ export interface EnsureDeps {
   retire: (baseUrl: string, lock: DaemonLock | null) => Promise<boolean>;
   /** Remove an orphan lock file. */
   removeLock: () => void;
-  /** Spawn a detached daemon. May throw EADDRINUSE if it loses a race. */
-  spawn: () => void;
+  /** Spawn a detached daemon and return its pid. May throw EADDRINUSE if it loses a race. */
+  spawn: () => number;
   /** This world's supervisor, absent when the world installed none. */
   service?: Supervisor;
   /** The world's launcher execs a pinned root, so a cycle brings that root back whatever
@@ -155,6 +155,7 @@ export async function ensureDaemon(
   // so a launcher resolving another build than this hook's is never cycled twice.
   let windowSpent = mode === "successor" ? await awaitDrained(deps, windowEnd) : false;
   let supervised: boolean | undefined;
+  let spawned: number | undefined;
   for (let attempt = 0; attempt < timing.maxAttempts && timing.now() < deadline; attempt++) {
     windowSpent ||= timing.now() >= windowEnd;
     const h = await deps.health(deps.baseUrl);
@@ -220,11 +221,15 @@ export async function ensureDaemon(
       deps.removeLock();
       logDebug("spawn", "orphan daemon lock removed");
     }
-    try {
-      deps.spawn();
-      logDebug("spawn", "daemon spawned");
-    } catch (e) {
-      if (!isAddrInUse(e)) throw e;
+    // A daemon this call spawned may still be booting, and a second would bind the port
+    // once the first is gone.
+    if (spawned === undefined || !deps.isAlive(spawned)) {
+      try {
+        spawned = deps.spawn();
+        logDebug("spawn", "daemon spawned");
+      } catch (e) {
+        if (!isAddrInUse(e)) throw e;
+      }
     }
     await timing.backoff(attempt);
   }
@@ -459,15 +464,17 @@ export const DAEMON_CWD = "/";
 
 /** Spawn the on-demand daemon a hook falls back to when no service keeps one up; it
  * idle-exits. Pinned to `DAEMON_CWD`, with stdout/stderr redirected to
- * daemon-stderr.log. */
-export function spawnDaemon(s: Settings, spawn: typeof Bun.spawn = Bun.spawn): void {
+ * daemon-stderr.log. Returns the daemon's pid. */
+export function spawnDaemon(s: Settings, spawn: typeof Bun.spawn = Bun.spawn): number {
   const out = openDaemonStderr(s);
-  spawn(selfCommand("daemon"), {
+  const child = spawn(selfCommand("daemon"), {
     cwd: DAEMON_CWD,
     stdio: ["ignore", out, out],
     detached: true,
     env: process.env,
-  }).unref();
+  });
+  child.unref();
+  return child.pid;
 }
 
 /** `backoff`'s sleep for `attempt`, before its jitter. */
