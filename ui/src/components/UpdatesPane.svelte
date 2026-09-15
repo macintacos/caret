@@ -14,6 +14,7 @@
   // The verdict→copy mapping is pure and lives in lib/updates.ts; this file is the shell.
   import type { UpdateReport } from "@core/lib/types";
   import { Field, FieldTitle } from "$lib/components/ui/field/index.js";
+  import { Input } from "$lib/components/ui/input/index.js";
   import { isUpdatePending, updatePaneCopy } from "$lib/updates.ts";
 
   interface Props {
@@ -53,19 +54,17 @@
       {#if copy.command}
         <!-- The command is the one thing anyone will select out of this pane, so it takes
              the sunk mono block the Advanced diagnostics already read as copyable text.
-             It is a <code>, not a control: there is no copy button here, deliberately —
-             the reader is at a terminal, and the Advanced pane's copy affordance is a
-             click away if one is ever wanted.
+             There is no copy button here, deliberately — the reader is at a terminal, and
+             the Advanced pane's copy affordance is a click away if one is ever wanted.
 
-             It scrolls (the release command overflows the pane), and Chrome and Safari
-             leave a plain `overflow: auto` element out of the tab order — so the region
-             role plus the tab stop ARE the keyboard reading affordance, exactly as
-             FilePreview's `.fp-code` carries them for the same reason (EXC-972). -->
-        <code
+             A read-only field rather than a <code>: the release command overflows the
+             pane, and a field is focusable, scrolls under the caret keys, and selects just
+             the command on select-all, all natively. -->
+        <Input
           class="update-command settings-copy-box settings-copy-text"
-          role="region"
-          tabindex="0"
-          aria-label="Upgrade command">{copy.command}</code>
+          readonly
+          value={copy.command}
+          aria-label="Upgrade command" />
       {/if}
     {:else}
       <p class="update-placeholder">No update information is available from the daemon.</p>
@@ -123,8 +122,10 @@
   }
 
   /* The upgrade command, on the recessed surface the Advanced blocks use. It scrolls
-     rather than wrapping: a wrapped shell command invites a half-copied paste. */
-  .update-command {
+     rather than wrapping: a wrapped shell command invites a half-copied paste. The
+     copy-box padding sets its height, over the field's fixed one. */
+  .updates :global(.update-command) {
+    height: auto;
     margin-top: 0.35rem;
   }
 

@@ -35,6 +35,8 @@ const COMMIT: UpdateStatus = {
 
 const text = (target: HTMLElement, sel: string): string =>
   target.querySelector(sel)?.textContent?.trim() ?? "";
+const command = (target: HTMLElement): HTMLInputElement | null =>
+  target.querySelector<HTMLInputElement>("input.update-command");
 const tone = (target: HTMLElement): string | null =>
   target.querySelector(".update-dot")?.getAttribute("data-tone") ?? null;
 
@@ -43,13 +45,15 @@ describe("UpdatesPane render", () => {
     const { target } = render(UpdatesPane, { report: report(RELEASE) });
     expect(text(target, ".update-headline")).toContain("1.5.0");
     expect(text(target, ".update-detail")).toContain("1.4.0");
-    expect(text(target, ".update-command")).toBe(RELEASE.command);
+    expect(command(target)?.value).toBe(RELEASE.command);
+    // Read-only, so the reader can focus, scroll and select it but never edit it.
+    expect(command(target)?.readOnly).toBe(true);
   });
 
   test("a commit verdict shows the distance and its own rebuild command", () => {
     const { target } = render(UpdatesPane, { report: report(COMMIT) });
     expect(text(target, ".update-headline")).toContain("3 commits");
-    expect(text(target, ".update-command")).toBe(COMMIT.command);
+    expect(command(target)?.value).toBe(COMMIT.command);
   });
 
   test("an up-to-date caret renders no command block", () => {

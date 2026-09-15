@@ -1,7 +1,7 @@
 <script lang="ts">
   // Test-only fixture (not shipped): the mount harness renders once and cannot set
   // a prop afterwards, but the contract under test is what a CHANGED annotations
-  // prop does. Swapping a $state list from a button reproduces that update inside
+  // prop does. Swapping the derived list from a button reproduces that update inside
   // the component tree, the only place a keyed block can be observed. Same shape
   // and reason as ConfirmPopover-fixture.svelte.
   import type { LineAnnotation } from "@core/lib/types";
@@ -15,10 +15,11 @@
   }
   let { first, second }: Props = $props();
 
-  let annotations = $state<LineAnnotation[]>([first]);
+  let swapped = $state(false);
+  const annotations = $derived(swapped ? [second] : [first]);
 </script>
 
-<button type="button" class="swap" onclick={() => (annotations = [second])}>swap</button>
+<button type="button" class="swap" onclick={() => (swapped = true)}>swap</button>
 <SourceAnnotationThread
   {annotations}
   focusedAnnotation={null}
