@@ -311,7 +311,7 @@
   let variants = $derived(approveVariants(declaredVariants));
   // The remembered id gated against the live set, so a variant this daemon no longer
   // declares never drives the primary Approve button.
-  let approveMode = $derived(pickApproveMode(resolve.approveMode, variants));
+  let effectiveApproveMode = $derived(pickApproveMode(resolve.approveMode, variants));
   // Whether to mark the update surfaces (EXC-1207). The daemon's verdict alone: an
   // opted-out reviewer is served `disabled`, which is not pending.
   let updatePending = $derived(!!updateReport && isUpdatePending(updateReport.status));
@@ -542,7 +542,7 @@
     // (EXC-913). Settings is persistent chrome (EXC-730), reachable with no review.
     const canAct = () => active != null && !resolve.busy;
     const unregisterActions = [
-      reg("actions.approve", { run: () => onApprove(approveMode), enabled: canAct }),
+      reg("actions.approve", { run: () => onApprove(effectiveApproveMode), enabled: canAct }),
       reg("actions.requestChanges", {
         run: () => {
           showDialog = true;
@@ -675,7 +675,7 @@
     reviews={selection.reviews}
     {active}
     busy={resolve.busy}
-    {approveMode}
+    approveMode={effectiveApproveMode}
     {variants}
     {isDev}
     {source}

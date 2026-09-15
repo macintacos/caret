@@ -58,20 +58,22 @@ export function withUpdatesCheck(text: string, check: boolean): string | null {
 
   const eol = text.includes("\r\n") ? "\r\n" : "\n";
   const lines = text.split("\n");
-  const header = lines.findIndex((l) => UPDATES_HEADER.test(l));
+  const headerLine = lines.findIndex((l) => UPDATES_HEADER.test(l));
 
   let next: string;
-  if (header === -1) {
+  if (headerLine === -1) {
     const separator = text === "" ? "" : text.endsWith("\n") ? eol : `${eol}${eol}`;
     next = `${text}${separator}[updates]${eol}check = ${check}${eol}`;
   } else {
-    const end = lines.findIndex((l, i) => i > header && TABLE_HEADER.test(l));
-    const stop = end === -1 ? lines.length : end;
-    const at = lines.findIndex((l, i) => i > header && i < stop && CHECK_LINE.test(l));
-    if (at === -1) {
-      lines.splice(header + 1, 0, `check = ${check}${eol === "\r\n" ? "\r" : ""}`);
+    const nextHeaderIndex = lines.findIndex((l, i) => i > headerLine && TABLE_HEADER.test(l));
+    const tableEnd = nextHeaderIndex === -1 ? lines.length : nextHeaderIndex;
+    const checkLineIndex = lines.findIndex(
+      (l, i) => i > headerLine && i < tableEnd && CHECK_LINE.test(l),
+    );
+    if (checkLineIndex === -1) {
+      lines.splice(headerLine + 1, 0, `check = ${check}${eol === "\r\n" ? "\r" : ""}`);
     } else {
-      lines[at] = (lines[at] as string).replace(CHECK_LINE, `$1${check}$3`);
+      lines[checkLineIndex] = (lines[checkLineIndex] as string).replace(CHECK_LINE, `$1${check}$3`);
     }
     next = lines.join("\n");
   }
