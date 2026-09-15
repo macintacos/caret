@@ -115,7 +115,7 @@ test("approvedMessage without notes stays the bare proceed message", () => {
   expect(approvedMessage()).not.toContain("Notes from the user");
 });
 
-test("deniedMessage carries the feedback and resubmit instruction", () => {
+test("deniedMessage carries the feedback", () => {
   const msg = deniedMessage("narrow step 2", "submit_plan");
   expect(msg).toContain("narrow step 2");
 });

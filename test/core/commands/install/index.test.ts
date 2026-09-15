@@ -438,6 +438,17 @@ test("--from-local hands the checkout to the service step as its pinned root", a
   expect(pinnedRoot).toBe("/checkout");
 });
 
+test("the prewarm step reports that prewarm ran, not that the daemon was swapped", async () => {
+  // prewarm retires a retireable daemon but reuses a legacy one, and can't report which
+  // happened — so the step must not claim the fresh build is now serving.
+  const ui = recordingUI();
+  await runInstallSubcommand(
+    { uninstall: false, dryRun: false, fromLocal: true },
+    fromLocalPrewarmDeps(ui, async () => {}),
+  );
+  expect(ui.events).toContain("settled:Ran the fresh build's prewarm");
+});
+
 test("a dry run closes by saying nothing was changed", async () => {
   const ui = recordingUI();
   await runInstallSubcommand({ uninstall: false, dryRun: true }, { ...CLAUDE_ONLY, ui });
