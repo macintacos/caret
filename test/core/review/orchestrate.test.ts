@@ -6,7 +6,7 @@ import { logFile } from "@/config/paths.ts";
 import type { EnsureMode } from "@/daemon/lifecycle.ts";
 import { setLogLevel } from "@/lib/log.ts";
 import type { Decision, PlanInput } from "@/lib/types.ts";
-import { PLAN_FORMAT_DENY_MESSAGE } from "@/plan/format.ts";
+import { PLAN_EMPTY_DENY_MESSAGE, PLAN_FORMAT_DENY_MESSAGE } from "@/plan/format.ts";
 import { expireAbandoned, runReview } from "@/review/orchestrate.ts";
 
 const allow: Decision = { behavior: "allow", decidedAt: 1 };
@@ -452,9 +452,33 @@ test("a bare-fence plan is denied for format before any daemon work", async () =
 });
 
 test.each<[string, string | undefined]>([
+  ["absent", undefined],
+  ["empty", ""],
+  ["whitespace-only", " \n\t"],
+])("a blank plan (%s) is denied before any daemon work", async (_kind, plan) => {
+  let ensureCalls = 0;
+  let postCalls = 0;
+  const out = await runReview(
+    planStdin(plan),
+    reviewDeps({
+      ensureDaemon: async () => {
+        ensureCalls++;
+        return "http://x";
+      },
+      postReview: async () => {
+        postCalls++;
+        return { id: "rid" };
+      },
+    }),
+  );
+  expect(out).toMatchObject({ behavior: "deny", feedback: PLAN_EMPTY_DENY_MESSAGE });
+  expect(ensureCalls).toBe(0);
+  expect(postCalls).toBe(0);
+});
+
+test.each<[string, string | undefined]>([
   ["a fully-tagged plan is posted for review as before", "# Plan\n\n```ts\nconst x = 1;\n```\n"],
   ["a plan with no code blocks is posted for review", "# Just prose, no code.\n"],
-  ["an absent plan is posted for review (no spurious format-deny)", undefined],
 ])("%s", async (_title, plan) => {
   let postCalls = 0;
   const out = await runReview(
