@@ -539,7 +539,7 @@ describe("buildLinkLayer backticked-path labels", () => {
 });
 
 // The inline-markdown layer (EXC-866): the flat atomic runs the decoration pass
-// turns into sibling elements. buildInlineSpans owns the run math and is tested
+// turns into sibling elements. buildInlineLayer owns the run math and is tested
 // on its own; these pin how buildLinkLayer composes it — which columns count as
 // a link, which lines are skipped, and that nothing about the display text moved.
 describe("buildLinkLayer inline runs", () => {

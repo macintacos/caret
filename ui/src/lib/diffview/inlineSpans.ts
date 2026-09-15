@@ -1,6 +1,15 @@
 // Pure emission for the plan view's inline-markdown layer (EXC-855, EXC-866).
-// Takes one DISPLAY line and returns the flat atomic runs covering it — each
-// carrying every attribute that covers it — plus the line's blockquote depth.
+// Takes the document's DISPLAY lines and returns, per line, the flat atomic runs
+// covering it — each carrying every attribute that covers it — plus the line's
+// blockquote depth.
+//
+// Inline tokens are lexed a PARAGRAPH at a time and emitted a line at a time
+// (EXC-1342). The reflow breaks inside a span too long for one line, and a lex of
+// either half alone finds no closing delimiter, so the span would get no run at
+// all. A token crossing a break is cut into one run per line, each clipped to that
+// line's content — never over its hanging indent or `>` prefix — and flagged with
+// the members that run on, so the decoration pass draws no pill cap at the break.
+// The line-leading markers stay per line, because they only ever start one.
 //
 // Flat runs are a requirement rather than a style. The decoration pass (EXC-867)
 // turns each run into a sibling element, and every pass that then locates a token
@@ -17,7 +26,7 @@
 // The inline grammar comes from marked, already a UI dependency (lib/markdown.ts
 // renders comment bodies with it). Reusing its CommonMark delimiter-run pass is
 // what makes emphasis-looking text inside inline code come out right. Columns
-// come from the token tree's own `raw` strings, which tile the line exactly.
+// come from the token tree's own `raw` strings, which tile the lexed text exactly.
 //
 // The line is read as DISPLAY text, not source: on a line with no link collapse
 // the two are identical, and on one that collapsed the label survives verbatim,
@@ -181,10 +190,10 @@ const THEMATIC_BREAK = /^\s*([-*_])[ \t]*(?:\1[ \t]*){2,}$/;
 // offset from the content start; group 2 is the marker itself. Nine digits is
 // CommonMark's cap on an ordered marker.
 //
-// This layer reads one line with no block context beyond the quote prefix, so the
-// one shape it over-matches is a `- item` inside a FOUR-SPACE-INDENTED code block,
-// which CommonMark reads as code and this reads as a nested list. Telling them
-// apart needs block-level parsing the whole module deliberately does not do —
+// The marker scans read one line with no block context beyond the quote prefix, so
+// the one shape they over-match is a `- item` inside a FOUR-SPACE-INDENTED code
+// block, which CommonMark reads as code and this reads as a nested list. Telling
+// them apart needs block-level state the marker scans deliberately do not carry —
 // indentation is also how nesting is spelled — and the fenced form, which is how
 // caret's plans actually carry code, never reaches here at all (links.ts passes
 // fenced lines through untouched).

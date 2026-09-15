@@ -80,8 +80,9 @@ export interface LinkLayer {
    * never be re-found — the link layer is the only place that still knows where
    * it landed. */
   fileRefs: FileRefSpanMap;
-  /** Flat atomic inline-markdown runs per display line (EXC-866). Fenced-code
-   * lines are absent, as they are from every other map here. */
+  /** Flat atomic inline-markdown runs per display line (EXC-866). A span wrapped
+   * across lines takes a run on each line it touches (EXC-1342). Fenced-code lines
+   * are absent, as they are from every other map here. */
   inline: InlineSpanMap;
   /** Blockquote nesting depth per 1-based display line. Unquoted lines are
    * absent; this rides the ROW rather than the runs, since subduing a quote is a
