@@ -9,6 +9,8 @@
 
 import { randomBytes } from "node:crypto";
 
+import { Marked, type Tokens } from "marked";
+
 import { type CaretLogger, noopLogger, shortId } from "@/lib/log.ts";
 import type { PlanInput, Review, RouteResult } from "@/lib/types.ts";
 import { writeCanonicalPlanFile } from "@/plan/canonical-file.ts";
@@ -24,14 +26,17 @@ export function newReviewId(): string {
   return randomBytes(8).toString("base64url");
 }
 
-/** Derive a human title from the plan's first heading / non-empty line. */
+/** Derive a human title from the plan: its first `#` heading, else its first `##`
+ * heading, else the first line of its first paragraph. Only top-level tokens count,
+ * so a `#` line inside a fenced block is never a candidate. */
 export function deriveTitle(plan: string): string {
-  for (const line of plan.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    return trimmed.replace(/^#+\s*/, "").slice(0, 120) || "Untitled plan";
-  }
-  return "Untitled plan";
+  const tokens = new Marked({ gfm: true }).lexer(plan);
+  const heading = (depth: number) =>
+    tokens.find((t): t is Tokens.Heading => t.type === "heading" && t.depth === depth)?.text;
+  const prose = tokens
+    .find((t): t is Tokens.Paragraph => t.type === "paragraph")
+    ?.text.split("\n")[0];
+  return (heading(1) ?? heading(2) ?? prose)?.trim().slice(0, 120) || "Untitled plan";
 }
 
 export async function routeIncomingPlan(
@@ -72,6 +77,7 @@ export async function routeIncomingPlan(
     const version = latest.versions.length + 1;
     await store.update(latest.id, (r) => {
       r.versions.push({ version, plan, annotations: [], createdAt: now });
+      r.title = deriveTitle(plan);
       r.status = "pending";
       // Re-point at the pane that actually submitted this revision; a submission
       // carrying none leaves the original in place (EXC-961).

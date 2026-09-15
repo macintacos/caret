@@ -8,7 +8,7 @@ import { recordingLog } from "@test/support/recording-log.ts";
 import { currentVersion, type PlanInput, type Review } from "@/lib/types.ts";
 import { formatPlanMarkdown } from "@/plan/markdown.ts";
 import { createStore, type Store } from "@/review/store.ts";
-import { newReviewId, routeIncomingPlan } from "@/review/threading.ts";
+import { deriveTitle, newReviewId, routeIncomingPlan } from "@/review/threading.ts";
 
 let dir: string;
 let store: Store;
@@ -56,6 +56,31 @@ test("first plan for a session starts a new thread at v1", async () => {
   const r = await routeIncomingPlan(input({ plan: "# Hello\n\nx" }), store);
   expect(r).toMatchObject({ action: "new", version: 1 });
   expect(store.get(r.id)?.title).toBe("Hello");
+});
+
+test.each([
+  [
+    "a # line inside a fenced block is not a heading",
+    'Check the YAML parses.\n\n```bash\n# → prints "yaml ok", exit 0\npython3 -c "import yaml"\n```\n',
+    "Check the YAML parses.",
+  ],
+  ["a # heading wins over an earlier ## heading", "## Context\n\nx\n\n# Real title", "Real title"],
+  ["a ## heading stands in when there is no # heading", "## Steps\n\n1. do it", "Steps"],
+  ["prose falls back to its first line", "First line\nsecond line", "First line"],
+  [
+    "a plan that is only a fenced block is untitled",
+    "```bash\n# just a comment\n```\n",
+    "Untitled plan",
+  ],
+])("deriveTitle: %s", (_name, plan, title) => {
+  expect(deriveTitle(plan)).toBe(title);
+});
+
+test("a revision re-derives the review's title", async () => {
+  const a = await routeIncomingPlan(input({ plan: "no heading yet" }), store);
+  await reject(a.id);
+  await routeIncomingPlan(input({ plan: "# Now titled\n\nbody" }), store);
+  expect(store.get(a.id)?.title).toBe("Now titled");
 });
 
 test("appending a revision does not carry the prior version's composer scratches", async () => {
