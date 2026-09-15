@@ -44,6 +44,11 @@ from the mapping rule; prefer the mapping.
   This stays the single home whichever program or tool a module is named for — a stub for
   the OpenCode plugin client, a Claude hook payload, a `CLAUDE_CONFIG_DIR` temp dir —
   since the boundary rule below constrains *importers*, not where a module sits.
+  **A support module exports every type an exported declaration names**, so a caller can
+  name what a helper takes or returns; a type no exported declaration names stays private.
+  A value export is the opposite: one nothing imports is dead, and
+  `test/structure/support-exports.test.ts` fails on it — here, in `test/e2e/support/` and
+  in `ui/support/` — and on a support module nothing imports or wires in through config.
 
 ## The boundary rule
 

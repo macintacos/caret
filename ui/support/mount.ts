@@ -17,7 +17,7 @@ import { assertSvelteClientRuntime } from "./svelte-runtime-guard.ts";
 // svelte-runtime-guard.ts for why a missing `browser` condition crashes mounts.
 assertSvelteClientRuntime(import.meta.resolve("svelte"));
 
-interface Mounted {
+export interface Mounted {
   /** The container the component was mounted into. */
   target: HTMLElement;
   /** Force the pending reactive effects to run synchronously (for assertions

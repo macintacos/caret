@@ -4,12 +4,12 @@
 // adapter's suite states through its own `toHookOutput`/`denyOutput`.
 import { expect } from "bun:test";
 
-interface DecisionInput {
+export interface DecisionInput {
   behavior: "allow" | "deny";
   feedback?: string;
 }
 
-interface HookOutput {
+export interface HookOutput {
   hookSpecificOutput: {
     hookEventName: "PermissionRequest";
     decision: { behavior: string; message?: string };

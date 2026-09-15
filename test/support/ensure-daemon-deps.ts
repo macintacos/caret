@@ -2,7 +2,7 @@
 // isn't exercising, so a test overrides only what it cares about.
 import type { EnsureDeps, EnsureTiming } from "@/daemon/lifecycle.ts";
 
-type EnsureDaemonNoOps = Pick<
+export type EnsureDaemonNoOps = Pick<
   EnsureDeps,
   "readLock" | "isAlive" | "retire" | "removeLock" | "spawn" | "timing"
 >;

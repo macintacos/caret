@@ -2,9 +2,9 @@
 // with TypeScript 7 — the Go port, installed as the `@typescript/native` alias — while
 // keeping `typescript` at ^6 alongside it. The 6.x install is load-bearing twice over:
 // svelte-check refuses to run against a plain 7 (its bin/ts-version-check.js throws with
-// exactly this recipe), and e2e-conventions.test.ts and tokenize-conventions.test.ts in
-// this directory import the compiler API as a parsing library, which 7.x moves behind
-// ./unstable/* subpaths that expose no standalone parse.
+// exactly this recipe), and e2e-conventions.test.ts, tokenize-conventions.test.ts and
+// support-exports.test.ts in this directory import the compiler API as a parsing library,
+// which 7.x moves behind ./unstable/* subpaths that expose no standalone parse.
 //
 // Both halves of the arrangement fail SILENTLY when they decay, which is why this file
 // asserts the invocations rather than trusting them. Neither checker announces which
@@ -15,8 +15,8 @@
 //
 // Expect a red on the last test to mean "simplify", not "broken": it fires when upstream
 // widens svelte-check's peer range to admit 7.x. That clears only the first of the two
-// reasons above — collapsing to a single `typescript@7` also means porting the two
-// conventions suites off the compiler API, in the same pass.
+// reasons above — collapsing to a single `typescript@7` also means porting those three
+// suites off the compiler API, in the same pass.
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -111,8 +111,8 @@ test("the second install is still necessary", () => {
   expect(typeof peer).toBe("string");
   // When this reds, svelte-check has learned to type-check Svelte against a plain
   // `typescript@7`. Dropping the alias and moving this range to ^7 then also requires
-  // porting e2e-conventions.test.ts and tokenize-conventions.test.ts off the 6.x compiler
-  // API, which is the second reason the install is here.
+  // porting the structure suites that parse with the 6.x compiler API, which is the second
+  // reason the install is here.
   expect(semver.satisfies("7.0.0", peer as string)).toBe(false);
   expect(pkg.devDependencies.typescript).toStartWith("^6");
 });
