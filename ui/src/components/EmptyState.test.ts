@@ -42,6 +42,16 @@ describe("EmptyState", () => {
     }
   });
 
+  // The amber ^ glyph is the hero of this screen and must survive the elevate:
+  // the accent color, the accent-wash text-shadow, and the 6rem display size are
+  // pinned so a refactor can't quietly demote or recolor the brand mark.
+  test("preserves the amber ^ glyph (accent color, accent-wash, 6rem)", async () => {
+    const glyphRule = ruleBody(await componentCss("EmptyState.svelte"), ".glyph");
+    expect(glyphRule).toContain("color: var(--accent);");
+    expect(glyphRule).toContain("var(--accent-wash)");
+    expect(glyphRule).toContain("font-size: 6rem;");
+  });
+
   // EXC-763: the screen is rebuilt on the shadcn Empty container, so its
   // structure now reads as one system with the rest of the shadcn-migrated UI.
   test("renders inside a shadcn Empty container", () => {

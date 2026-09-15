@@ -291,7 +291,7 @@ describe("SourceAnnotationCard state indicator", () => {
   });
 });
 
-describe("SourceAnnotationCard focus + position", () => {
+describe("SourceAnnotationCard focus", () => {
   test("the focused card carries the focused class", () => {
     const { target } = render(SourceAnnotationCard, base({ focused: true }));
     expect(target.querySelector(".card")?.classList.contains("focused")).toBe(true);
