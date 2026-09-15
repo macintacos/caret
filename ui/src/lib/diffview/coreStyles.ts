@@ -547,22 +547,32 @@ const CARET_OVERRIDES = `
      pseudo-element and merge — the icon absolutely positioned at inset 0 behind the text
      it should sit left of, wearing the chip's gradient through its own mask. The two
      decorations need two slots, and the checkbox is the only other ::after here (a
-     line-start marker, which can never carry an inner member). */
-  [data-content] [data-line]:not([data-selected-line]) [data-md~="bold"][data-md-inner~="bold"] {
+     line-start marker, which can never carry an inner member).
+
+     None of it reaches a table cell. A cell soft-wraps, and on an inline element split
+     across lines the pseudo resolves to ONE rectangle from the first fragment's start to
+     the last one's end — the tint lands on the wrong characters. Left on the token, every
+     fragment takes its own slice of the background, and the member gives up only its inner
+     corners. */
+  [data-content]
+    [data-line]:not([data-selected-line])
+    [data-md~="bold"][data-md-inner~="bold"]:not([data-table-cell] *) {
     --md-bold: initial;
     --nest-bold: var(--chip-bold);
   }
   [data-content]
     [data-line]:not([data-selected-line])
-    [data-md~="italic"][data-md-inner~="italic"] {
+    [data-md~="italic"][data-md-inner~="italic"]:not([data-table-cell] *) {
     --md-italic: initial;
     --nest-italic: var(--chip-italic);
   }
-  [data-content] [data-line]:not([data-selected-line]) [data-md~="code"][data-md-inner~="code"] {
+  [data-content]
+    [data-line]:not([data-selected-line])
+    [data-md~="code"][data-md-inner~="code"]:not([data-table-cell] *) {
     --md-code: initial;
     --nest-code: var(--chip-code);
   }
-  [data-content] [data-line] [data-md~="link"][data-md-inner~="link"] {
+  [data-content] [data-line] [data-md~="link"][data-md-inner~="link"]:not([data-table-cell] *) {
     --md-link: initial;
     --nest-link: var(--chip-link);
   }
@@ -570,7 +580,7 @@ const CARET_OVERRIDES = `
     position: relative;
     z-index: 0;
   }
-  [data-content] [data-line] [data-md-inner]::after {
+  [data-content] [data-line] [data-md-inner]:not([data-table-cell] *)::after {
     content: "";
     position: absolute;
     inset: 0;
@@ -594,39 +604,6 @@ const CARET_OVERRIDES = `
   [data-content] [data-line] [data-md-inner-end]::after {
     border-start-end-radius: var(--radius);
     border-end-end-radius: var(--radius);
-  }
-  /* A table cell soft-wraps, and on an inline element split across lines the pseudo above
-     resolves to ONE rectangle from the first fragment's start to the last one's end — the
-     tint lands on the wrong characters. So inside a cell the nested member paints on the
-     token again, where every fragment takes its own slice of the background, and gives up
-     only its inner corners. These out-rank the nested rules on selector weight, the table
-     scope adding attribute selectors, rather than on source order. */
-  [data-content] > [data-table-card] [data-table-cell] [data-md-inner]::after {
-    content: none;
-  }
-  [data-content]
-    > [data-table-card]
-    > [data-line]:not([data-selected-line])
-    [data-table-cell]
-    [data-md~="bold"][data-md-inner~="bold"] {
-    --md-bold: var(--chip-bold);
-  }
-  [data-content]
-    > [data-table-card]
-    > [data-line]:not([data-selected-line])
-    [data-table-cell]
-    [data-md~="italic"][data-md-inner~="italic"] {
-    --md-italic: var(--chip-italic);
-  }
-  [data-content]
-    > [data-table-card]
-    > [data-line]:not([data-selected-line])
-    [data-table-cell]
-    [data-md~="code"][data-md-inner~="code"] {
-    --md-code: var(--chip-code);
-  }
-  [data-content] > [data-table-card] [data-table-cell] [data-md~="link"][data-md-inner~="link"] {
-    --md-link: var(--chip-link);
   }
 
   /* EXC-861: the list markers. This is the epic's transform-in-place stance (EXC-855) at

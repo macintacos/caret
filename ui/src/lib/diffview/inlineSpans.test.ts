@@ -7,7 +7,8 @@ import { buildInlineLayer, type ColumnRange, type InlineSpan } from "$lib/diffvi
 // set) plus the line's blockquote depth. Columns are 0-based, half-open
 // [startCol, endCol) into the DISPLAY line. Nothing is stripped or rewritten
 // here — the markers are part of the runs they mark. These cases are one-line
-// documents; spans wrapping across lines are pinned through links.test.ts.
+// documents; paragraph-scoped cases are pinned through links.test.ts, since the
+// fence and table guards come from buildLinkLayer's per-line state.
 
 /** A one-line document's runs and depth. */
 function layer(
@@ -17,7 +18,14 @@ function layer(
   refs: ColumnRange[],
 ): { spans: InlineSpan[]; quoteDepth: number } {
   const { inline, quoteDepth } = buildInlineLayer([
-    { display: line, inCode: false, linkRanges: links, labelRanges: labels, refRanges: refs },
+    {
+      display: line,
+      inCode: false,
+      inTable: false,
+      linkRanges: links,
+      labelRanges: labels,
+      refRanges: refs,
+    },
   ]);
   return { spans: inline.get(1) ?? [], quoteDepth: quoteDepth.get(1) ?? 0 };
 }
@@ -613,8 +621,8 @@ describe("blockquote mixing cases", () => {
 
   // A lazy continuation carries no marker column, so it carries no depth. The
   // bars are drawn over the source's own markers, and inferring a bar for a line
-  // that has none would need block-level quote state this per-line pass does not
-  // carry. Pinned so the boundary is recorded rather than assumed.
+  // that has none would need block-level quote state the per-line quote scan does
+  // not carry. Pinned so the boundary is recorded rather than assumed.
   test("a lazy continuation line carries no depth of its own", () => {
     expect(depth("continued from the quote above")).toBe(0);
     expect(runs("continued from the quote above")).toEqual([]);

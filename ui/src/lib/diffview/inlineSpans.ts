@@ -114,10 +114,12 @@ export interface ColumnRange {
  * the superset the link layer rewrote at all, references included; only the
  * blockquote scan reads it, to tell a marker from a label that merely starts with
  * one. `refRanges` are the columns the reference layer claimed, whose interior
- * markup is suppressed. An `inCode` line takes no runs. */
+ * markup is suppressed. An `inCode` line takes no runs. An `inTable` line is one
+ * tables.ts draws as a row, so it keeps the one-line lex. */
 export interface InlineLine {
   display: string;
   inCode: boolean;
+  inTable: boolean;
   linkRanges: readonly ColumnRange[];
   labelRanges: readonly ColumnRange[];
   refRanges: readonly ColumnRange[];
@@ -334,10 +336,11 @@ function listMarkerAt(display: string, offset: number, into: Interval[]): void {
 const newlines = (text: string): number => (text.match(/\n/g) ?? []).length;
 
 /** Pushes the [first, last] line indices of every `paragraph` or `text` leaf in
- * `tokens` that spans two or more lines, the first child starting on `line`. Only
- * newline counts are read, never offsets: a nested token's `raw` has its container
- * markers stripped, which moves its columns but leaves its line breaks intact. */
-function collectExtents(tokens: readonly Token[], line: number, into: [number, number][]): void {
+ * `tokens` that spans two or more lines, the first child starting on `line`, and
+ * returns the line index past the last token. Only newline counts are read, never
+ * offsets: a nested token's `raw` has its container markers stripped, which moves
+ * its columns but leaves its line breaks intact. */
+function collectExtents(tokens: readonly Token[], line: number, into: [number, number][]): number {
   let at = line;
   for (const token of tokens) {
     const span = newlines(token.raw.trimEnd());
@@ -350,18 +353,21 @@ function collectExtents(tokens: readonly Token[], line: number, into: [number, n
     }
     at += newlines(token.raw);
   }
+  return at;
 }
 
 /** The multi-line paragraphs of the document, as 0-based [first, last] line
- * indices. An extent touching a fenced line or holding a blank line is dropped, so
- * its lines keep the per-line lex: links.ts's fence scan wins where it and marked
- * disagree, and a paragraph never holds a blank line, so one inside means the line
- * count has drifted. */
+ * indices. An extent touching a fenced or table line is dropped, so its lines keep
+ * the per-line lex: the panel wins where links.ts's fence scan or tables.ts and
+ * marked disagree. marked reads a lone `\r` as a line break, so when its line count
+ * differs from ours no extent can be trusted and the whole document keeps the
+ * per-line lex. */
 function paragraphExtents(lines: readonly InlineLine[]): [number, number][] {
   const extents: [number, number][] = [];
-  collectExtents(Lexer.lex(lines.map((l) => l.display).join("\n")), 0, extents);
+  const tokens = Lexer.lex(lines.map((l) => l.display).join("\n"));
+  if (collectExtents(tokens, 0, extents) !== lines.length - 1) return [];
   return extents.filter(([first, last]) =>
-    lines.slice(first, last + 1).every((l) => !l.inCode && l.display.trim() !== ""),
+    lines.slice(first, last + 1).every((l) => !l.inCode && !l.inTable),
   );
 }
 
@@ -389,23 +395,16 @@ function lexSegments(
       const to = Math.min(token.endCol, end);
       return to > from ? [{ line, startCol: col + from - start, endCol: col + to - start }] : [];
     });
-    // Only a piece that is its token's whole extent can be a reference's own
-    // spelling: a reference never crosses a line.
+    // A reference never crosses a line, but a wrapped token's piece can sit wholly
+    // inside one; the reference wins, so the whole token is dropped.
     //
     // A CODESPAN is exempt whatever it contains: its interior is literal, so it can
     // never be the collision this drops, and taking it away costs the reference the
     // chip it is drawn as. Both shapes that carry one are real — the citation
     // `[`a/b.ts`](a/b.ts)` emits its range over the whole backticked label, while a
     // prose label like `[the `resolve` handler](src/x.ts)` carries the span inside it.
-    const [only] = pieces;
-    if (
-      pieces.length === 1 &&
-      only !== undefined &&
-      token.attributes.code === undefined &&
-      insideReference(only, lines[only.line]?.refRanges ?? [])
-    ) {
-      continue;
-    }
+    const claimed = pieces.some((p) => insideReference(p, lines[p.line]?.refRanges ?? []));
+    if (claimed && token.attributes.code === undefined) continue;
     pieces.forEach(({ line, startCol, endCol }, i) => {
       into[line]?.push({
         startCol,
@@ -418,12 +417,9 @@ function lexSegments(
   }
 }
 
-/** The flat atomic runs for every display line, plus each line's blockquote depth.
- * Line-leading markers are read one line at a time; inline tokens are lexed once
- * per multi-line paragraph, read from each line's content past its quote prefix and
- * indentation, so a span that wraps takes a run on every line it touches. Every
- * other line is lexed alone. Lines with no runs, and unquoted lines, are absent
- * from their maps. */
+/** The flat atomic runs and blockquote depth for every display line, keyed 1-based.
+ * A span wrapping across lines takes a run on each line it touches. Lines with no
+ * runs, and unquoted lines, are absent. */
 export function buildInlineLayer(lines: readonly InlineLine[]): {
   inline: InlineSpanMap;
   quoteDepth: Map<number, number>;

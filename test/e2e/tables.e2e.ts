@@ -11,8 +11,7 @@
 // inline layers — code, bold, italic, a collapsing link, a file reference — still find
 // their columns once a row's tokens sit one level down inside cells; that a chip nested
 // inside another keeps its tint on every fragment when the cell's soft wrap splits it,
-// which only a real engine's inline box fragmentation can show; that the pipes
-// compute to
+// which only a real engine's inline box fragmentation can show; that the pipes compute to
 // transparent and the rules that stand in for them paint as background layers whose
 // `var()` inks resolve ACROSS the shadow boundary; that a table's rows and its gutter
 // numbers still pair one-for-one, which is the guard against @pierre/diffs'
@@ -1163,11 +1162,7 @@ test("a nested chip keeps its tint on every line the cell's wrap splits it acros
   page,
   daemon,
 }) => {
-  // Outside a table a nested member's tint rides an absolutely positioned ::after, and on
-  // an inline element the wrap fragments, that pseudo resolves to ONE rectangle from the
-  // first fragment's start to the last one's end: the tint lands on the wrong characters
-  // and part of the span gets none. Inside a cell the member paints on the token itself,
-  // where every fragment takes its own slice of the background.
+  // A nested chip in a soft-wrapped cell paints on the token (coreStyles.ts).
   await openPlan(page, daemon, NESTED_WRAP);
   await carded(page, 1);
 
@@ -1184,6 +1179,8 @@ test("a nested chip keeps its tint on every line the cell's wrap splits it acros
       const cell = [...(sh?.querySelectorAll("[data-content] [data-table-cell]") ?? [])].find((c) =>
         (c.textContent ?? "").includes("health probe"),
       );
+      // The inline pass and shiki can cut one codespan into several elements; only the
+      // longest is certain to straddle the wrap.
       const code = [...(cell?.querySelectorAll('[data-md-inner~="code"]') ?? [])].sort(
         (a, b) => (b.textContent?.length ?? 0) - (a.textContent?.length ?? 0),
       )[0];

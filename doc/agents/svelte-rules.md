@@ -228,30 +228,32 @@ imports it — stays green under any invocation.
   `border-radius` clips every background layer on an element, so an inner cap would notch
   the enclosing pill's tint — the pass names the nested members in `data-md-inner` and the
   sheet paints them on `::after` instead, with `data-md-inner-start` / `-end` as that
-  pill's caps. `::after` and not `::before`, which the file-reference glyph owns. The plan
-  surface's `--leading-relaxed` line-height is the other half of the same decision — a
-  chip is taller than its glyphs, so stacked chips need the row gap the chrome's leading
-  does not give. The chip family is **five members and closed**: a markdown decoration
-  that overdraws a marker rather than tinting a span takes ink from the ramp, never a
-  sixth chip. WHICH ink is settled, epic-wide, by one question —
-  **does the source character survive?** — and EXC-871 swept every marker the epic draws
-  onto one side or the other of it. A **supplementary** decoration leaves a legible glyph
-  beside it and takes `--ink-faint`: the fence markers, the `**` / `_` emphasis markers,
-  an ordered item's `1.`. A **replacement** decoration takes its character to
-  `transparent` and draws in the column it vacated, so it is the only thing left carrying
-  that character's meaning — which is WCAG 1.4.11's own test for a graphical object
-  required to understand the content. It therefore owes that clause's 3:1 floor and spends
-  `--ink-soft`: the task-list checkbox (EXC-860), the list bullet (EXC-861), the
-  blockquote level bar (EXC-863), the thematic break (EXC-862) and a table's column rules
-  and header rule (EXC-864), all in `diffview/coreStyles.ts`. There is a
-  **third case, and it is open**: a decoration that replaces nothing because it was never
-  in the source at all. The file and folder glyphs (EXC-687 / EXC-918) are the instance —
-  they are added beside a fully legible path, which is why they sit on `--ink-faint`
-  today, but the file-vs-directory distinction is carried by the glyph alone and by
-  nothing else in the row, so 1.4.11 arguably binds them too. They predate this epic and
-  EXC-871 did not re-tint them; an ADDED indicator carrying information no surviving
-  character carries owes the same floor, and closing that is its own change. Do not read
-  the two-way split above as covering it.
+  pill's caps. `::after` and not `::before`, which the file-reference glyph owns. Inside a
+  table cell the nested member stays on the element, because a soft-wrapped inline box
+  gives an absolutely positioned pseudo one rectangle across all its fragments; the price
+  is square inner ends. The plan surface's `--leading-relaxed` line-height is the other
+  half of the same decision — a chip is taller than its glyphs, so stacked chips need the
+  row gap the chrome's leading does not give. The chip family is
+  **five members and closed**: a markdown decoration that overdraws a marker rather than
+  tinting a span takes ink from the ramp, never a sixth chip. WHICH ink is settled,
+  epic-wide, by one question — **does the source character survive?** — and EXC-871 swept
+  every marker the epic draws onto one side or the other of it. A **supplementary**
+  decoration leaves a legible glyph beside it and takes `--ink-faint`: the fence markers,
+  the `**` / `_` emphasis markers, an ordered item's `1.`. A **replacement** decoration
+  takes its character to `transparent` and draws in the column it vacated, so it is the
+  only thing left carrying that character's meaning — which is WCAG 1.4.11's own test for
+  a graphical object required to understand the content. It therefore owes that clause's
+  3:1 floor and spends `--ink-soft`: the task-list checkbox (EXC-860), the list bullet
+  (EXC-861), the blockquote level bar (EXC-863), the thematic break (EXC-862) and a
+  table's column rules and header rule (EXC-864), all in `diffview/coreStyles.ts`. There
+  is a **third case, and it is open**: a decoration that replaces nothing because it was
+  never in the source at all. The file and folder glyphs (EXC-687 / EXC-918) are the
+  instance — they are added beside a fully legible path, which is why they sit on
+  `--ink-faint` today, but the file-vs-directory distinction is carried by the glyph alone
+  and by nothing else in the row, so 1.4.11 arguably binds them too. They predate this
+  epic and EXC-871 did not re-tint them; an ADDED indicator carrying information no
+  surviving character carries owes the same floor, and closing that is its own change. Do
+  not read the two-way split above as covering it.
   **The floor binds on the surface the decoration actually renders on**, and that is the
   trap the rule exists to close. `theme.test.ts`'s ink-ramp case measures `--paper` and
   `--paper-raised`, the two chrome surfaces, while the diff view binds `--diffs-bg` to

@@ -73,12 +73,12 @@ rather than the component so it is unit-testable against a constructed fixture.
 and no pass drops or adds one. The annotation and feedback line numbers depend on it: a
 pass that dropped or added a line would silently move every comment anchor below it.
 
-**Recognition is a separate question from parity.** The link collapse and the line-leading
-markers — `>`, list bullets, task brackets — are read one line at a time, because they
-only ever start a line. Inline grammar is block-scoped: `inlineSpans.ts` lexes a
-multi-line paragraph as one text, so a bold, italic or code span the 90-column reflow
-broke still pairs, and every line it touches gets a run clipped to that line. Headings,
-tables and every other block keep the one-line lex.
+**Recognition is a separate question from parity.** The line-leading markers — `>`, list
+bullets, task brackets — are read one line at a time, because they only ever start a line.
+The link collapse is too, so a link whose label wraps stays literal. Inline grammar is
+block-scoped: `inlineSpans.ts` lexes a multi-line paragraph as one text, so a bold, italic
+or code span the 90-column reflow broke still pairs, and every line it touches gets a run
+clipped to that line. Headings, tables and every other block keep the one-line lex.
 
 **A hard wrap and a soft wrap are different problems.** A hard wrap is a newline in the
 source, so the span spans rows and pairing it is the lex's job. A soft wrap is one row the

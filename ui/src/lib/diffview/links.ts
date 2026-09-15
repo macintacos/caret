@@ -31,6 +31,7 @@
 // row instead of hiding behind a label.
 
 import { hasKnownFileExtension } from "@core/config/constants";
+import { codeBlockRanges } from "$lib/diffview/codeBlocks.ts";
 import { classify, type FileRefSpan, type FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 import {
   buildInlineLayer,
@@ -38,6 +39,7 @@ import {
   type InlineLine,
   type InlineSpanMap,
 } from "$lib/diffview/inlineSpans.ts";
+import { tableRanges } from "$lib/diffview/tables.ts";
 
 /** A clickable link range on a single display line. Columns are 0-based,
  * half-open [startCol, endCol) into the display line's text. */
@@ -420,7 +422,7 @@ export function buildLinkLayer(text: string): LinkLayer {
   const images: ImageSpanMap = new Map();
   let inCode = false;
   const out: string[] = [];
-  const inlineLines: InlineLine[] = [];
+  const inlineLines: Omit<InlineLine, "inTable">[] = [];
 
   for (let i = 0; i < lines.length; i++) {
     const source = lines[i] ?? "";
@@ -443,6 +445,14 @@ export function buildLinkLayer(text: string): LinkLayer {
     if (isFence) inCode = !inCode;
   }
 
-  const { inline, quoteDepth } = buildInlineLayer(inlineLines);
-  return { text: out.join("\n"), spans, fileRefs, inline, quoteDepth, images };
+  const display = out.join("\n");
+  // The same question SourceView asks of the display text, so no paragraph pairs
+  // emphasis across rows the panel lays out as a table.
+  const tableLines = new Set(
+    tableRanges(display, codeBlockRanges(display)).flatMap((t) => t.rows.map((r) => r.line)),
+  );
+  const { inline, quoteDepth } = buildInlineLayer(
+    inlineLines.map((line, i) => ({ ...line, inTable: tableLines.has(i + 1) })),
+  );
+  return { text: display, spans, fileRefs, inline, quoteDepth, images };
 }

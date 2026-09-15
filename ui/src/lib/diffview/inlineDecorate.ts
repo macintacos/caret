@@ -161,7 +161,6 @@ function tagRow(
       const g = group.get(m);
       return g === undefined ? 0 : g.endCol - g.startCol;
     };
-    // A member wrapping across rows gets no cap at the break, so its chip reads as one.
     const opens = members.filter(
       (m) => group.get(m)?.startCol === start && !run.continued?.some((w) => w === m),
     );
