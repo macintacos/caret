@@ -17,17 +17,15 @@ Want to develop `caret` rather than use it? Start with [CONTRIBUTING.md](CONTRIB
 
 ## Install
 
-`caret` needs [`bun`](https://bun.sh) on your `PATH` — it runs from a `bun` bundle.
+```sh
+bunx --no-cache @macintacos/caret@latest install
+```
 
 > [!NOTE]
 > `caret` supports macOS and Linux, where the review UI can run as a long-lived login
 > service. Windows is best-effort and runs `caret` on demand only. See
 > [`doc/CONFIGURING.md`](doc/CONFIGURING.md#platform-support) for what differs on each
 > platform and what to fall back on.
-
-```sh
-bunx --no-cache @macintacos/caret@latest install
-```
 
 Assuming that you installed it as a long-lived service (the default), you can navigate to
 <http://caret.localhost:42718> to see the `caret` UI.
