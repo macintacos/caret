@@ -74,7 +74,7 @@ function writeRecord(path: string, value: string): void {
 
 /** Remove the launcher and everything it reads, the half of `--uninstall` that takes the
  * launcher out with the plugin. Mirrors evict() in bin/caret-launcher, which deletes the
- * same two directories and leaves prefs and review state for a reinstall. */
+ * same two directories and leaves review state for a reinstall. */
 export function uninstallLauncher(): void {
   rmSync(dirname(launcherPath()), { recursive: true, force: true });
   rmSync(launcherRecordDir(), { recursive: true, force: true });

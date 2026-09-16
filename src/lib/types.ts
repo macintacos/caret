@@ -360,20 +360,11 @@ export interface ResolveBody {
   acceptMode?: ApproveVariantId;
 }
 
-/** Body of POST /api/prefs — the daemon-owned prefs the UI may write (EXC-1206).
- * Deliberately narrow: `approveMode` is seeded by the resolve path and is not
- * writable from here, and the schema rejects anything not named below rather than
- * stripping it. */
-export interface PrefsPatch {
+/** Body of POST /api/config — the settings the UI may write into the user's
+ * config.toml (EXC-1206). Deliberately narrow: the schema rejects anything not named
+ * below rather than stripping it. */
+export interface ConfigPatch {
   updates?: { check: boolean };
-}
-
-/** Body of GET /api/prefs — the daemon-owned prefs the UI reads on load. Wider
- * than PrefsPatch: `approveMode` is readable here and writable only by the resolve
- * path. `updates.check` is deliberately absent: it is writable through PrefsPatch but
- * READ through GET /api/update, folded into the verdict it qualifies. */
-export interface PrefsResponse {
-  approveMode: ApproveVariantId;
 }
 
 /** Body of PUT /api/reviews/:id/draft (the reviewer's working-copy autosave).

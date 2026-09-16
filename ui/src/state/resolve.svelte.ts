@@ -2,13 +2,14 @@
 //
 // Approving (allow) or requesting changes (deny) flushes any pending draft,
 // POSTs the decision, and advances to the next review. The approve mode is
-// remembered machine-globally (read once on load, mirrored locally on each
-// approve). A daemon non-2xx (already resolved/removed elsewhere) still
-// advances; only a genuine network failure flips the connection offline.
+// remembered per browser, persisted on each landed approve. A daemon non-2xx
+// (already resolved/removed elsewhere) still advances; only a genuine network
+// failure flips the connection offline.
 
 import { PLAN_REJECTED_MESSAGE } from "@core/config/constants";
 import type { Annotation, ApproveVariantId } from "@core/lib/types";
-import { getApproveMode, HttpError, resolveReview } from "$lib/api.ts";
+import { HttpError, resolveReview } from "$lib/api.ts";
+import { writeApproveMode } from "$lib/approveModePref.ts";
 import { formatFeedback } from "$lib/feedback.ts";
 
 export { HttpError };
@@ -22,8 +23,9 @@ export function isNetworkFailure(err: unknown): boolean {
 export interface ResolveDeps {
   /** Resolve a review. Defaults to the api client's resolveReview. */
   resolveReview?: typeof resolveReview;
-  /** Read the remembered approve mode. Defaults to the api client's getApproveMode. */
-  getApproveMode?: typeof getApproveMode;
+  /** Persist the approve mode this browser should default to next. Defaults to the
+   * localStorage-backed writeApproveMode. */
+  saveApproveMode?: (mode: ApproveVariantId) => void;
   /** The id of the active review, or null. */
   activeId: () => string | null;
   /** The working-copy annotations to format into deny feedback. */
@@ -43,19 +45,16 @@ export interface ResolveDeps {
 
 /** Backing fields the resolve flow reads and writes. */
 export interface ResolveStore {
-  /** Remembered approve variant id (machine-global, last-wins). */
-  approveMode: ApproveVariantId;
+  /** Remembered approve variant id, or null when this browser has none yet. */
+  approveMode: ApproveVariantId | null;
   /** True while a resolve POST is in flight. */
   busy: boolean;
 }
 
 export interface Resolve {
-  readonly approveMode: ApproveVariantId;
+  readonly approveMode: ApproveVariantId | null;
   readonly busy: boolean;
 
-  /** Read the remembered approve variant once on load. A failure leaves the
-   * current default, matching the daemon's fail-safe. */
-  loadApproveMode: () => void;
   /** Approve the plan. Optional `notes` ride the allow as feedback (EXC-791): the
    * reviewer's free-text note, delivered to the agent to fold into its work. A
    * blank note is omitted. */
@@ -68,7 +67,7 @@ export interface Resolve {
 
 export function createResolve(store: ResolveStore, deps: ResolveDeps): Resolve {
   const submit = deps.resolveReview ?? resolveReview;
-  const readMode = deps.getApproveMode ?? getApproveMode;
+  const saveMode = deps.saveApproveMode ?? writeApproveMode;
 
   // The general-comment mirror is cleared because the daemon dropped the stored
   // draft on resolve, and a deny keeps this review id — the sent text would linger
@@ -99,12 +98,6 @@ export function createResolve(store: ResolveStore, deps: ResolveDeps): Resolve {
       return store.busy;
     },
 
-    loadApproveMode() {
-      void readMode()
-        .then((m) => (store.approveMode = m))
-        .catch(() => {});
-    },
-
     async approve(mode, notes) {
       const id = deps.activeId();
       if (!id) return;
@@ -118,6 +111,7 @@ export function createResolve(store: ResolveStore, deps: ResolveDeps): Resolve {
           ...(feedback ? { feedback } : {}),
         });
         store.approveMode = mode; // remember locally so the next plan defaults to it
+        saveMode(mode);
         deps.afterResolve(id);
       } catch (err) {
         // 404/409 = already resolved or removed elsewhere → just advance.

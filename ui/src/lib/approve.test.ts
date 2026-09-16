@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { ApproveVariant } from "@core/lib/types";
-import { approveLabel, approveVariants, WIRE_FALLBACK } from "$lib/approve.ts";
+import { approveLabel, approveVariants, pickApproveMode, WIRE_FALLBACK } from "$lib/approve.ts";
 
 describe("approveVariants", () => {
   test("returns the declared set when present and non-empty", () => {
@@ -46,5 +46,26 @@ describe("approveLabel", () => {
     ];
     expect(approveLabel("yolo", variants)).toBe("Ship it & auto");
     expect(approveLabel("nope", variants)).toBe("Ship it");
+  });
+});
+
+describe("pickApproveMode", () => {
+  test("keeps the remembered id when the live set still carries it", () => {
+    expect(pickApproveMode("auto", WIRE_FALLBACK)).toBe("auto");
+  });
+
+  test("falls back to the first variant when nothing is remembered", () => {
+    expect(pickApproveMode(null, WIRE_FALLBACK)).toBe("default");
+  });
+
+  test("falls back when the remembered id is not in the live set", () => {
+    // A browser that remembers another adapter's id must not drive a variant this
+    // daemon never declared.
+    const variants: ApproveVariant[] = [{ id: "approve", label: "Ship it" }];
+    expect(pickApproveMode("auto", variants)).toBe("approve");
+  });
+
+  test("reads 'default' for an empty variant set", () => {
+    expect(pickApproveMode("auto", [])).toBe("default");
   });
 });

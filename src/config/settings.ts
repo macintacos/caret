@@ -1,6 +1,7 @@
 // User-editable settings: ~/.config/caret/config.toml (see paths.configFile),
 // parsed with smol-toml and validated by a zod schema that supplies a default
-// for every key. The file is user-authored: caret never writes it.
+// for every key. The file is user-authored; the one line caret writes itself is
+// `[updates] check`, which the Settings toggle edits in place (config-write.ts).
 //
 // Contract (EXC-429): reads NEVER throw. An absent, malformed, partial, or
 // invalid file falls back to last-known-good, then DEFAULTS. Invalid values
@@ -110,6 +111,11 @@ const SettingsSchema = z.object({
       plans_dir: z.string().min(1).optional(),
     })
     .prefault({}),
+  updates: z
+    .object({
+      check: z.boolean().default(true), // EXC-1354: the daily update check's kill switch
+    })
+    .prefault({}),
   dev: Dev, // EXC-558: build-gated dev-only settings (see Dev above)
 });
 
@@ -122,6 +128,7 @@ function freeze(s: Settings): Settings {
   Object.freeze(s.daemon);
   Object.freeze(s.review);
   Object.freeze(s.opencode); // EXC-1340
+  Object.freeze(s.updates); // EXC-1354
   Object.freeze(s.dev.notify); // EXC-558
   Object.freeze(s.dev); // EXC-558
   return Object.freeze(s);
@@ -223,7 +230,7 @@ export function createSettings(
  * `Settings` rather than an unsafe cast to a string-indexed record. `dev`
  * (EXC-558) is deliberately omitted: it is captured at startup by dev tooling,
  * never consumed or hot-reloaded by the daemon, so it has no change to log. */
-const SETTINGS_TABLES = ["logging", "daemon", "review"] as const;
+const SETTINGS_TABLES = ["logging", "daemon", "review", "updates"] as const;
 
 /** Describe value changes between two settings snapshots as
  * "table.key: old → new" lines. Validated values only (schema-constrained

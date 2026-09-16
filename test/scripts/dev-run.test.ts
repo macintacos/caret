@@ -83,8 +83,8 @@ test("childEnvFor threads the dev config path, and CARET_FRESH only when fresh",
   );
   expect(normal.CARET_CONFIG_FILE).toBe("/cfg/config.dev.toml");
   expect(normal.CARET_FRESH).toBeUndefined();
-  // --fresh: config points at a nonexistent path (→ defaults) and CARET_FRESH=1
-  // signals the UI to reset its saved prefs.
+  // --fresh: the caller hands a config path of its own — runDev's is inside the run's
+  // state dir — and CARET_FRESH=1 signals the UI to reset its saved prefs.
   const fresh = childEnvFor(
     "/tmp/world",
     { kind: "ephemeral" },
@@ -287,6 +287,23 @@ describe("runDev supervision", () => {
       const stateDir = calls[0]?.env?.XDG_STATE_HOME;
       expect(stateDir).toBeDefined();
       expect(existsSync(stateDir as string)).toBe(false);
+    });
+  });
+
+  test("--fresh points the child's config inside the run's own state dir", async () => {
+    await withCleanDevEnv(async () => {
+      // The Updates toggle writes whatever CARET_CONFIG_FILE names, so --fresh cannot
+      // hand the daemon a shared-tmpdir sentinel: two sessions would share it, and the
+      // next --fresh boot would read it back instead of the built-in defaults.
+      const { spawn, calls } = capturingSpawn(0);
+
+      await expect(
+        runDev({ numVersions: 3, notify: false, persist: false, fresh: true }, baseDeps({ spawn })),
+      ).rejects.toBeInstanceOf(ExitSignal);
+
+      const stateDir = calls[0]?.env?.XDG_STATE_HOME as string;
+      expect(calls[0]?.env?.CARET_CONFIG_FILE).toBe(join(stateDir, "caret", "config.toml"));
+      expect(calls[0]?.env?.CARET_FRESH).toBe("1");
     });
   });
 

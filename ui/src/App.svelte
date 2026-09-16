@@ -9,7 +9,8 @@
   // holds them together and lays out the TopBar + DiffPlanView.
   import { untrack } from "svelte";
   import { getHealth, getUpdate, markSeen } from "$lib/api.ts";
-  import { approveVariants } from "$lib/approve.ts";
+  import { approveVariants, pickApproveMode } from "$lib/approve.ts";
+  import { readApproveMode } from "$lib/approveModePref.ts";
   import { createPlanNotifier } from "$lib/notify.ts";
   import { installUiGoneBeacon } from "$lib/presence.ts";
   import { createSafeModeGuard } from "$lib/safeMode.ts";
@@ -92,7 +93,7 @@
     unread: [],
     arrivals: 0,
   });
-  let resStore = $state<ResolveStore>({ approveMode: "default", busy: false });
+  let resStore = $state<ResolveStore>({ approveMode: readApproveMode(), busy: false });
   // The in-UI alert/toast queue (EXC-850): App owns the reactive backing store,
   // createAlerts (below) mutates it, and AlertHost renders it bottom-right.
   let alertStore = $state<AlertStore>({ alerts: [] });
@@ -308,6 +309,9 @@
     active ? { reviewId: active.id, cwd: active.cwd, adapter: source } : undefined,
   );
   let variants = $derived(approveVariants(declaredVariants));
+  // The remembered id gated against the live set, so a variant this daemon no longer
+  // declares never drives the primary Approve button.
+  let effectiveApproveMode = $derived(pickApproveMode(resolve.approveMode, variants));
   // Whether to mark the update surfaces (EXC-1207). The daemon's verdict alone: an
   // opted-out reviewer is served `disabled`, which is not pending.
   let updatePending = $derived(!!updateReport && isUpdatePending(updateReport.status));
@@ -448,6 +452,7 @@
         if (h.fresh && !freshResetApplied(h.instanceId)) {
           clearKnownPrefs();
           appearance.boot();
+          resStore.approveMode = null;
           showShortcutHints = readShortcutHints();
           showOnboarding =
             typeof Notification !== "undefined" && shouldShowOnboarding(Notification.permission);
@@ -488,14 +493,6 @@
       window.removeEventListener("focus", dismiss);
       document.removeEventListener("visibilitychange", dismiss);
     };
-  });
-
-  // ----- Remembered approve mode (read once on load) -----
-  // Assigns only (no reactive reads), so this effect runs a single time on
-  // mount — deliberately separate from the 2s reviews poll above. A failure
-  // leaves today's "default", matching the daemon's fail-safe.
-  $effect(() => {
-    resolve.loadApproveMode();
   });
 
   // ----- Safe Mode -----
@@ -545,7 +542,7 @@
     // (EXC-913). Settings is persistent chrome (EXC-730), reachable with no review.
     const canAct = () => active != null && !resolve.busy;
     const unregisterActions = [
-      reg("actions.approve", { run: () => onApprove(resolve.approveMode), enabled: canAct }),
+      reg("actions.approve", { run: () => onApprove(effectiveApproveMode), enabled: canAct }),
       reg("actions.requestChanges", {
         run: () => {
           showDialog = true;
@@ -678,7 +675,7 @@
     reviews={selection.reviews}
     {active}
     busy={resolve.busy}
-    approveMode={resolve.approveMode}
+    approveMode={effectiveApproveMode}
     {variants}
     {isDev}
     {source}

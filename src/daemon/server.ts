@@ -6,15 +6,9 @@
 import { renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
+import { createConfigWriter } from "@/config/config-write.ts";
 import { deriveIdleTimeoutSec } from "@/config/constants.ts";
-import { ensureStateDir, prefsFile } from "@/config/paths.ts";
-import {
-  type ApproveModeSet,
-  createPrefsWriter,
-  type PrefsWriter,
-  readApproveMode,
-  writeApproveMode,
-} from "@/config/prefs.ts";
+import { configFile, ensureStateDir } from "@/config/paths.ts";
 import { DEFAULTS } from "@/config/settings.ts";
 import {
   isClientLive,
@@ -25,13 +19,13 @@ import {
 } from "@/daemon/guards.ts";
 import { createLiveness, type LivenessDeps } from "@/daemon/liveness.ts";
 import {
+  ConfigPatchSchema,
   DraftBodySchema,
   FileRefsBodySchema,
   FileSearchBodySchema,
   MAX_FILE_REFS,
   malformedLineAnchor,
   PlanInputSchema,
-  PrefsPatchSchema,
   parseBody,
   ResolveBodySchema,
 } from "@/daemon/schemas.ts";
@@ -49,7 +43,6 @@ import {
   type FileRefsResponse,
   type HealthIdentity,
   type PlanInput,
-  type PrefsResponse,
   type ResolveBody,
   type RouteResult,
   type SkillDescriptionResponse,
@@ -119,11 +112,9 @@ export interface CreateServerOptions {
   assets?: UiAssets;
   onShutdown?: () => void;
   routePlan?: RoutePlan;
-  /** Path to the machine-global prefs file; defaults to paths.prefsFile(). */
-  prefsPath?: string;
-  /** The one writer both prefs write paths share; defaults to
-   * createPrefsWriter(prefsPath). Injectable so a test can hold a write open. */
-  prefsWriter?: PrefsWriter;
+  /** Path to the user's config.toml, the file POST /api/config edits; defaults to
+   * paths.configFile(). */
+  configPath?: string;
   /** Single-instance lock file path. When set, the daemon writes the lock on a
    * successful bind and removes it on stop(); omitted (default) means no lock is
    * managed. */
@@ -186,7 +177,7 @@ export interface CreateServerOptions {
    * one (EXC-1207): the UI reads this route on every load, so an unwired route there
    * would 404 into every spec's page load. */
   updateReport?: () => UpdateReport | Promise<UpdateReport>;
-  /** Called after a landed POST /api/prefs patch whose `updates.check` is `true`
+  /** Called after a landed POST /api/config patch whose `updates.check` is `true`
    * (EXC-1210). A user action is exactly what the 24h throttle's constraint permits a
    * call for, so runDaemon wires it to the same check boot runs — without it, a reviewer
    * who opted out long ago would wait a whole daemon lifetime for a verdict. The daemon
@@ -234,7 +225,7 @@ interface ResolvedOptions {
   assets: UiAssets | undefined;
   onShutdown: () => void;
   routePlan: RoutePlan;
-  prefsPath: string;
+  configPath: string;
   lockPath: string | undefined;
   buildId: string | undefined;
   assetDigest: string | undefined;
@@ -264,7 +255,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     assets: opts.assets,
     onShutdown: opts.onShutdown ?? (() => process.exit(0)),
     routePlan: opts.routePlan ?? routeIncomingPlan,
-    prefsPath: opts.prefsPath ?? prefsFile(),
+    configPath: opts.configPath ?? configFile(),
     lockPath: opts.lockPath,
     buildId: opts.buildId,
     assetDigest: opts.assetDigest,
@@ -316,25 +307,13 @@ function ifNoneMatchHit(header: string | null, etag: string): boolean {
 
 export function createServer(opts: CreateServerOptions): CaretServer {
   const cfg = resolveOptions(opts);
-  const { store, idle, heartbeat, resident, assets, onShutdown, routePlan, prefsPath, log } = cfg;
+  const { store, idle, heartbeat, resident, assets, onShutdown, routePlan, configPath, log } = cfg;
   const { buildId, assetDigest, commit, stateDir, instanceId } = cfg;
   const { approveVariants, source, lockPath } = cfg;
   const { awaitDecision, resolveDecision, clearDecision, openDecisionCount, unreadDecisionCount } =
     createDecisions(log);
 
-  // The set of approve-variant ids the resolve route and prefs persistence gate
-  // on: the daemon stays tool-agnostic, recognizing whatever the adapter declares
-  // rather than a baked enum. A daemon with no declared variants recognizes only
-  // "default", so a fresh /api/prefs still reads "default".
-  const approveModeSet: ApproveModeSet =
-    approveVariants && approveVariants.length > 0
-      ? { valid: approveVariants.map((v) => v.id), fallback: approveVariants[0]?.id ?? "default" }
-      : { valid: ["default"], fallback: "default" };
-
-  // ONE writer for the two paths that write prefs.json — the resolve path's approve
-  // mode and POST /api/prefs. Sharing it is what serializes them: two writers would
-  // each hold their own queue and could still interleave a read-modify-write.
-  const prefsWriter = opts.prefsWriter ?? createPrefsWriter(prefsPath);
+  const configWriter = createConfigWriter(configPath);
 
   // Wait for a decision but no longer than `ms` — resolves to null on timeout so
   // the handler can return a 204 heartbeat. The pending promise is left intact
@@ -426,8 +405,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // GET /api/update — whether the caret this daemon is, is behind (EXC-1205): the
   // install kind, the running version/commit, whether the check is on, and the verdict
   // with the command that would take the upgrade. The thunk reads a verdict the daemon
-  // already holds, so serving this never makes a network call — but it does fold in the
-  // LIVE `updates.check` (EXC-1210), a prefs.json read, which is why it may be async.
+  // already holds, so serving this never makes a network call — it is allowed to be
+  // async so a future source may do I/O.
   // With no thunk wired (default; e.g. a bare test daemon) the route 404s, like any
   // absent optional capability.
   async function handleUpdate(): Promise<Response> {
@@ -589,38 +568,44 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return new Response(null, { status: 204 });
   }
 
-  // GET /api/prefs — machine-global UI prefs, read once on UI load (deliberately
-  // not part of the 2s /api/reviews poll). Fails safe to "default" for an unreadable
-  // approve mode. `updates.check` is writable through the POST half but reaches the
-  // browser on GET /api/update instead (EXC-1210), folded into the verdict it qualifies,
-  // so the switch has exactly one read path rather than two that can drift.
-  async function handlePrefs(): Promise<Response> {
-    const body: PrefsResponse = {
-      approveMode: await readApproveMode(prefsPath, log, approveModeSet),
-    };
-    return Response.json(body);
-  }
-
-  // POST /api/prefs — the write half (EXC-1206). Unlike the daemon's other bodies
-  // this one is REJECTED rather than degraded when it doesn't parse: see
-  // PrefsPatchSchema. The write merges, so a patch naming one key leaves the rest
-  // of prefs.json (the remembered approve mode) alone.
-  async function handleSetPrefs(req: Request): Promise<Response> {
-    const parsed = PrefsPatchSchema.safeParse(await req.json().catch(() => null));
+  // POST /api/config — the settings the UI may write into the user's config.toml
+  // (EXC-1206). Unlike the daemon's other bodies this one is REJECTED rather than
+  // degraded when it doesn't parse: see ConfigPatchSchema. A rewrite the writer
+  // refuses answers 409, which the UI turns into "edit the file by hand".
+  async function handleSetConfig(req: Request): Promise<Response> {
+    const parsed = ConfigPatchSchema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) {
-      const error = parsed.error.issues[0]?.message ?? "invalid prefs patch";
+      const error = parsed.error.issues[0]?.message ?? "invalid config patch";
       // warn, carrying the reason: the browser turns the body into a sentence that
       // names no key, so the daemon log is the only place WHICH key was refused
       // survives. A zod message about a boolean field carries nothing identifying.
-      log.warn("prefs", "prefs patch rejected", { reason: error });
+      log.warn("settings", "config patch rejected", { reason: error });
       return Response.json({ error }, { status: 400 });
     }
-    await prefsWriter.merge(parsed.data);
-    log.debug("prefs", "prefs saved");
+    const { updates } = parsed.data;
+    if (updates === undefined) {
+      // An empty patch is deliberately a success (ConfigPatchSchema): it asked for
+      // nothing, so nothing was written. Anything else reaching here is a ConfigPatch key
+      // nobody wired, and this route must not answer 200 to a body it did not honour.
+      if (Object.keys(parsed.data).length > 0) {
+        return Response.json({ error: "unhandled config patch" }, { status: 400 });
+      }
+      return Response.json({ ok: true });
+    }
+    const { check } = updates;
+    const wrote = await configWriter.setUpdatesCheck(check);
+    if (!wrote.ok) {
+      // Carrying the reason for the same reason the 400 above does: the toast tells the
+      // user to hand-edit but not what in their file blocked the write, so the daemon log
+      // is the only place it survives. The reasons are a closed set of tokens.
+      log.warn("settings", "config.toml edit refused", { reason: wrote.reason });
+      return Response.json({ error: "config.toml cannot be edited safely" }, { status: 409 });
+    }
+    log.debug("settings", "config saved");
     // Turning the check back on is a user action, so it is allowed to spend a call
     // (EXC-1210). The throttle still governs: a re-run inside the 24h window returns
     // null and the already-held verdict is what gets served.
-    if (parsed.data.updates?.check === true) cfg.onUpdatesEnabled?.();
+    if (check === true) cfg.onUpdatesEnabled?.();
     return Response.json({ ok: true });
   }
 
@@ -921,18 +906,6 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     // so a resident daemon never accumulates approved reviews.
     if (decision.behavior === "allow") {
       await store.remove(id);
-      // Remember the chosen variant for the UI's next load. Fire-and-forget:
-      // never awaited, so it can't delay the 200 that unblocks the long-polling
-      // hook. A bare allow (no acceptMode) leaves prefs as-is; an id outside the
-      // adapter-declared set is ignored by writeApproveMode.
-      if (decision.acceptMode !== undefined && approveModeSet.valid.includes(decision.acceptMode)) {
-        liveness.detachedWrite(
-          writeApproveMode(decision.acceptMode, prefsWriter, log, approveModeSet).catch(() => {
-            // Recoverable: prefs only seed the UI's next default.
-            log.warn("prefs", "approve mode write failed");
-          }),
-        );
-      }
     }
     // The plan has been decided on, so the pane that submitted it no longer
     // needs the reviewer (EXC-961). Fire-and-forget: markPaneRead returns as soon
@@ -999,8 +972,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     if (method === "POST" && path === "/api/logs") return handleLogs(req);
     if (method === "POST" && path === "/api/ui/gone") return handleUiGone();
     if (method === "GET" && path === "/api/reviews") return handleListReviews();
-    if (method === "GET" && path === "/api/prefs") return handlePrefs();
-    if (method === "POST" && path === "/api/prefs") return handleSetPrefs(req);
+    if (method === "POST" && path === "/api/config") return handleSetConfig(req);
 
     const route = matchIdRoute(path);
     if (route) {

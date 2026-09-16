@@ -291,7 +291,7 @@ export function shouldCheckForUpdate(lastCheckMs: number | null, nowMs: number):
 }
 
 /** Absolute path of the throttle file holding the last-check epoch-ms. Lives under
- * caret's state dir, beside caret's other small machine-global markers (prefs.json).
+ * caret's state dir, beside caret's other small machine-global markers (update-check.json).
  * The plugin stays self-contained and cannot import src/config/paths.ts, so that
  * convention is mirrored here by hand. */
 export function updateCheckCachePath(

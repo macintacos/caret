@@ -38,46 +38,19 @@ let srv: { port: number; stop(): void };
 let base: string;
 
 async function boot(opts: BootOptions = {}) {
-  // Default prefs into the temp dir so the prefs tests never touch the real
-  // machine-global prefs file.
-  d = await bootDaemon(dir, { prefsPath: join(dir, "prefs.json"), ...opts });
+  // Default config.toml into the temp dir so the settings tests never touch the
+  // developer's real one.
+  d = await bootDaemon(dir, { configPath: join(dir, "config.toml"), ...opts });
   store = d.store;
   srv = { port: d.port, stop: d.stop };
   base = d.url;
 }
 
-// Boot with the Claude adapter's declared approve variants — the recognized set
-// the daemon's /resolve and prefs persistence gate on in production. The
-// resolve/prefs tests exercise that token behavior ("acceptEdits"/"auto"), so
-// they boot through the adapter's real declaration rather than a bare daemon
-// (which recognizes only "default").
+// Boot with the Claude adapter's declared approve variants, so an acceptMode like
+// "acceptEdits" or "auto" below is a token a real adapter actually declares, not a
+// bare daemon's built-in "default".
 async function bootClaude(opts: BootOptions = {}) {
   await boot({ approveVariants: APPROVE_VARIANTS, ...opts });
-}
-
-async function prefMode(): Promise<string> {
-  return ((await (await fetch(`${base}/api/prefs`)).json()) as { approveMode: string }).approveMode;
-}
-
-// The prefs write on /resolve is fire-and-forget (off the hook's blocking path),
-// so poll briefly for it to land rather than asserting on a single fixed sleep.
-async function waitForPrefMode(want: string): Promise<string> {
-  let last = "";
-  for (let i = 0; i < 20; i++) {
-    last = await prefMode();
-    if (last === want) return last;
-    await Bun.sleep(10);
-  }
-  return last;
-}
-
-/** Seed a review, approve it with acceptMode "auto", and wait for the
- * remembered approve mode to land — the common precondition for a test that
- * then exercises prefs merge or restart persistence. */
-async function approveWithAutoMode(): Promise<string> {
-  const { id } = await newReview();
-  await resolve(id, { behavior: "allow", acceptMode: "auto" });
-  return waitForPrefMode("auto");
 }
 
 // A promise that resolves the first time the daemon's idle/retire shutdown fires,
@@ -434,32 +407,6 @@ test("the idle timer cannot end a drain that is still waiting", async () => {
   timer.fire();
   expect(sig.fired()).toBe(false);
   await fetch(`${base}/api/reviews/${id}/decision`);
-  await sig.shutdown;
-});
-
-test("an approve-mode write detached from its /resolve still holds the drain", async () => {
-  const sig = shutdownSignal();
-  const park = decisionParked();
-  let release!: () => void;
-  const gate = new Promise<void>((r) => {
-    release = r;
-  });
-  await bootClaude({
-    onShutdown: sig.onShutdown,
-    onDecisionAwaited: park.onDecisionAwaited,
-    prefsWriter: { merge: () => gate },
-  });
-  const { id } = await newReview();
-  // The hook is already parked when the decision lands, so its read leaves no
-  // entry behind and the prefs write is the only thing left to hold the drain.
-  const poll = fetch(`${base}/api/reviews/${id}/decision`);
-  await park.parked;
-  await resolve(id, { behavior: "allow", acceptMode: "auto" });
-  await poll;
-  d.drain();
-  await Bun.sleep(20);
-  expect(sig.fired()).toBe(false);
-  release();
   await sig.shutdown;
 });
 
@@ -1259,11 +1206,10 @@ describe("read-confidentiality posture", () => {
         "GET /api/reviews/:id/skill-description",
         () => fetch(`${base}/api/reviews/${id}/skill-description?name=git&origin=user`),
       ],
-      ["GET /api/prefs", () => fetch(`${base}/api/prefs`)],
       [
-        "POST /api/prefs",
+        "POST /api/config",
         () =>
-          fetch(`${base}/api/prefs`, {
+          fetch(`${base}/api/config`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ updates: { check: true } }),
@@ -1615,7 +1561,7 @@ describe("routing fallthrough", () => {
       ["POST", "/api/health"],
       ["POST", "/api/diagnostics"], // /api/diagnostics is GET-only
       ["POST", "/api/update"], // /api/update is GET-only
-      ["DELETE", "/api/prefs"],
+      ["DELETE", "/api/config"],
       ["PUT", `/api/reviews/${id}/resolve`], // /resolve is POST-only
       ["GET", `/api/reviews/${id}/resolve`],
       ["DELETE", `/api/reviews/${id}/decision`],
@@ -1884,55 +1830,44 @@ test("a revision re-pends the review and clears the prior decision (no stale re-
   expect(res.status).toBe(204);
 });
 
-// The read half serves `approveMode` and nothing else: `updates.check` reaches the
-// browser on GET /api/update, folded into the verdict it qualifies (EXC-1210), so there
-// is exactly one read path for it rather than two that can drift.
-test("GET /api/prefs defaults to 'default' on a fresh daemon", async () => {
-  await boot();
-  const res = await fetch(`${base}/api/prefs`);
-  expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ approveMode: "default" });
-});
-
-// ---- POST /api/prefs (EXC-1206) ----
+// ---- POST /api/config (EXC-1206) ----
 //
-// The write half of the prefs route, and the one schema in the daemon that REJECTS
-// where its neighbours degrade: a loopback write endpoint into caret's state dir must
-// not become a general write primitive, so an unrecognized key is a 400 rather than a
-// stripped field. `approveMode` is deliberately not writable here — the resolve path
-// owns it.
-describe("POST /api/prefs", () => {
-  const prefsOnDisk = (): Record<string, unknown> =>
-    JSON.parse(readFileSync(join(dir, "prefs.json"), "utf-8"));
+// The route the settings toggles write through, and the one schema in the daemon that
+// REJECTS where its neighbours degrade: a loopback write endpoint into the user's
+// config.toml must not become a general write primitive, so an unrecognized key is a
+// 400 rather than a stripped field. A rewrite the writer refuses is a 409.
+describe("POST /api/config", () => {
+  const configPath = () => join(dir, "config.toml");
+  const configOnDisk = () => readFileSync(configPath(), "utf-8");
 
-  async function setPrefs(body: unknown): Promise<Response> {
-    return fetch(`${base}/api/prefs`, {
+  async function setConfig(body: unknown): Promise<Response> {
+    return fetch(`${base}/api/config`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
   }
 
-  test("a valid patch answers 200 and lands on disk", async () => {
+  test("a valid patch answers 200 and lands in config.toml", async () => {
     await boot();
-    const res = await setPrefs({ updates: { check: false } });
+    const res = await setConfig({ updates: { check: false } });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
-    expect(prefsOnDisk()).toEqual({ updates: { check: false } });
+    expect(configOnDisk()).toContain("check = false");
   });
 
   test("a landed flip-to-on re-runs the update check, and nothing else does (EXC-1210)", async () => {
-    // POST /api/prefs is the user action the 24h-throttle constraint names, so turning
-    // the check back on is allowed to spend a call — otherwise a reviewer who opted out
+    // The toggle is the user action the 24h-throttle constraint names, so turning the
+    // check back on is allowed to spend a call — otherwise a reviewer who opted out
     // months ago would wait a whole daemon lifetime for a verdict.
     let calls = 0;
     await boot({ onUpdatesEnabled: () => calls++ });
-    expect((await setPrefs({ updates: { check: false } })).status).toBe(200);
+    expect((await setConfig({ updates: { check: false } })).status).toBe(200);
     expect(calls).toBe(0);
-    expect((await setPrefs({ updates: { check: true } })).status).toBe(200);
+    expect((await setConfig({ updates: { check: true } })).status).toBe(200);
     expect(calls).toBe(1);
     // A rejected patch never reaches the callback.
-    expect((await setPrefs({ updates: { check: "yes" } })).status).toBe(400);
+    expect((await setConfig({ updates: { check: "yes" } })).status).toBe(400);
     expect(calls).toBe(1);
   });
 
@@ -1942,24 +1877,44 @@ describe("POST /api/prefs", () => {
       { nope: 1 }, // unknown top-level key
       { updates: { check: false, extra: 1 } }, // unknown key under updates
       { updates: { check: "no" } }, // wrong-typed value
-      { approveMode: "auto" }, // owned by the resolve path, not writable here
       "not an object",
     ]) {
-      const res = await setPrefs(body);
+      const res = await setConfig(body);
       expect(res.status).toBe(400);
       expect((await res.json()).error).toBeTruthy();
     }
     // Not one of them created the file.
-    expect(existsSync(join(dir, "prefs.json"))).toBe(false);
+    expect(existsSync(configPath())).toBe(false);
   });
 
-  test("a write preserves a sibling key it did not name", async () => {
-    // The merge, exercised through the route: the remembered approve mode is what a
-    // whole-file write here would erase.
-    await bootClaude();
-    expect(await approveWithAutoMode()).toBe("auto");
-    expect((await setPrefs({ updates: { check: false } })).status).toBe(200);
-    expect(prefsOnDisk()).toEqual({ approveMode: "auto", updates: { check: false } });
+  test("an empty patch is a success that writes nothing", async () => {
+    // ConfigPatchSchema calls this out as deliberate: a body asking for nothing is
+    // honoured in full by writing nothing.
+    await boot();
+    const res = await setConfig({});
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(existsSync(configPath())).toBe(false);
+  });
+
+  test("a config.toml the rewrite refuses answers 409 and stays byte-identical", async () => {
+    const { recs, log } = recordingLog();
+    await boot({ log });
+    const original = "updates.check = true\n";
+    await Bun.write(configPath(), original);
+    const res = await setConfig({ updates: { check: false } });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBeTruthy();
+    expect(configOnDisk()).toBe(original);
+    // The toast names no key, so the daemon log is the only place the refusal's reason
+    // survives for the user who has to go hand-edit the file.
+    expect(recs).toContainEqual(
+      expect.objectContaining({
+        level: "warn",
+        step: "settings",
+        extra: { reason: "unverifiable" },
+      }),
+    );
   });
 
   test("is CSRF-guarded and Host-guarded like every other write (AC #2)", async () => {
@@ -1967,62 +1922,21 @@ describe("POST /api/prefs", () => {
     // the moment it exists.
     await boot();
     const body = JSON.stringify({ updates: { check: false } });
-    const foreignOrigin = await fetch(`${base}/api/prefs`, {
+    const foreignOrigin = await fetch(`${base}/api/config`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Origin: "http://evil.com" },
       body,
     });
     expect(foreignOrigin.status).toBe(403);
-    const foreignHost = await fetch(`${base}/api/prefs`, {
+    const foreignHost = await fetch(`${base}/api/config`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Host: "evil.com" },
       body,
     });
     expect(foreignHost.status).toBe(403);
     // Neither reached the handler.
-    expect(existsSync(join(dir, "prefs.json"))).toBe(false);
+    expect(existsSync(configPath())).toBe(false);
   });
-});
-
-test("an allow remembers the chosen acceptMode (incl. auto)", async () => {
-  await bootClaude();
-  for (const mode of ["acceptEdits", "auto"] as const) {
-    const { id } = await newReview();
-    await resolve(id, { behavior: "allow", acceptMode: mode });
-    expect(await waitForPrefMode(mode)).toBe(mode);
-  }
-});
-
-test("a deny does not change the remembered approve mode", async () => {
-  await bootClaude();
-  const { id: a } = await newReview();
-  await resolve(a, { behavior: "allow", acceptMode: "acceptEdits" });
-  expect(await waitForPrefMode("acceptEdits")).toBe("acceptEdits");
-
-  const { id: d } = await newReview();
-  // Even a deny that carries an acceptMode must not move the remembered value —
-  // the write is gated on behavior === "allow", not on the token's absence.
-  await resolve(d, { behavior: "deny", acceptMode: "auto", feedback: "redo" });
-  await Bun.sleep(30); // give any (erroneous) write a chance to land
-  expect(await prefMode()).toBe("acceptEdits");
-});
-
-test("an allow with an unrecognized acceptMode leaves prefs at 'default'", async () => {
-  await bootClaude();
-  const { id } = await newReview();
-  await resolve(id, { behavior: "allow", acceptMode: "turbo" });
-  await Bun.sleep(30); // an id outside the declared set must not seed prefs
-  expect(await prefMode()).toBe("default");
-});
-
-test("the remembered approve mode survives a daemon restart", async () => {
-  await bootClaude();
-  expect(await approveWithAutoMode()).toBe("auto");
-
-  // Restart: stop the server, boot a fresh one against the same state dir.
-  srv.stop();
-  await bootClaude();
-  expect(await prefMode()).toBe("auto");
 });
 
 // ---- instrumentation (EXC-444) ----
@@ -2313,23 +2227,6 @@ test("a real daemon logger censors a forged plan body on the wire path", async (
   expect(text).toContain('"source":"ui"');
   expect(text).toContain('"plan":"<redacted>"');
   expectNeverLogsBody(text, "secret plan body");
-});
-
-test("a failed fire-and-forget prefs write is logged at warn", async () => {
-  const { recs, log } = recordingLog();
-  // prefsPath nested under a regular FILE so the writer's ensureStateDir mkdir fails.
-  const blocker = join(dir, "blocker");
-  await Bun.write(blocker, "i am a file, not a directory");
-  await bootClaude({ log, prefsPath: join(blocker, "prefs.json") });
-  const { id } = await newReview();
-  await resolve(id, { behavior: "allow", acceptMode: "auto" });
-  // Fire-and-forget: poll briefly for the warn to land.
-  let warn: (typeof recs)[number] | undefined;
-  for (let i = 0; i < 20 && !warn; i++) {
-    warn = recs.find((r) => r.level === "warn" && r.step === "prefs");
-    await Bun.sleep(10);
-  }
-  expect(warn?.msg).toBe("approve mode write failed");
 });
 
 // ---- cmux unread marks (EXC-961) ----

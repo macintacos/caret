@@ -30,9 +30,6 @@ export interface Liveness {
   arm(): void;
   /** Bracket one request; the returned callback ends it. */
   begin(method: string): () => void;
-  /** Hold a drain open until `write` settles, so a write detached from its request (and
-   * never delaying the response) still lands. A rejection is the caller's to log. */
-  detachedWrite(write: Promise<void>): void;
   isDraining(): boolean;
   /** Begin stepping down: release once no write is in flight and no decision is unread,
    * or at drainMs. Idempotent. */
@@ -118,15 +115,6 @@ export function createLiveness(deps: LivenessDeps): Liveness {
     });
     release();
   }
-  function detachedWrite(write: Promise<void>) {
-    writesInFlight++;
-    const settled = () => {
-      writesInFlight--;
-      if (draining) setTimeout(maybeReleaseDrain, 0);
-    };
-    void write.then(settled, settled);
-  }
-
   function begin(method: string) {
     inFlight++;
     const isWrite = !isSafeMethod(method);
@@ -156,5 +144,5 @@ export function createLiveness(deps: LivenessDeps): Liveness {
     deps.release();
   }
 
-  return { arm: refreshIdle, begin, detachedWrite, isDraining: () => draining, drain, stop };
+  return { arm: refreshIdle, begin, isDraining: () => draining, drain, stop };
 }

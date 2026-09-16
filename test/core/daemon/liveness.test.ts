@@ -170,36 +170,6 @@ test("a read in flight does not hold the drain", async () => {
   expect(releases()).toBe(1);
 });
 
-test("a detached write holds the drain until it settles", async () => {
-  const { live, releases } = boot();
-  let settle!: () => void;
-  const write = new Promise<void>((r) => {
-    settle = r;
-  });
-  live.detachedWrite(write);
-  live.drain();
-  await tick();
-  expect(releases()).toBe(0);
-  settle();
-  await write;
-  await tick();
-  expect(releases()).toBe(1);
-});
-
-test("a detached write that rejects still lets the drain release", async () => {
-  const { live, releases } = boot();
-  let fail!: (err: Error) => void;
-  const write = new Promise<void>((_, reject) => {
-    fail = reject;
-  });
-  live.detachedWrite(write);
-  live.drain();
-  fail(new Error("disk full"));
-  await write.catch(() => {});
-  await tick();
-  expect(releases()).toBe(1);
-});
-
 test("the deadline releases a drain that never clears", async () => {
   const { live, held, releases, recs } = boot({ drainMs: 5 });
   held.unread = 1;

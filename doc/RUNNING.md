@@ -241,7 +241,7 @@ Three details worth knowing:
 ## Update notices
 
 The daemon asks whether a newer caret is out (see the README for what that call sends and
-how to turn it off in `prefs.json`). An on-demand daemon asks when it starts, a resident
+how to turn it off in `config.toml`). An on-demand daemon asks when it starts, a resident
 one asks again on an hourly tick, and a 24-hour stamp keeps either to about once a day.
 This is what you see when the answer is yes.
 
@@ -353,9 +353,9 @@ registers none where there isn't one.
 > instead.
 
 Alongside the agents, `--uninstall` removes the service's unit file, the launcher, and the
-records the launcher reads, keeping your prefs and reviews. The launcher removes the same
-things itself when it finds no caret installed anywhere, after looking twice more, five
-seconds apart. When caret is installed but can't run, it stops the service instead (see
+records the launcher reads, keeping your reviews. The launcher removes the same things
+itself when it finds no caret installed anywhere, after looking twice more, five seconds
+apart. When caret is installed but can't run, it stops the service instead (see
 [When the daemon exits](#when-the-daemon-exits)). `caret install` brings back either.
 
 ## Logging & Debugging

@@ -12,9 +12,9 @@
 // `category` is the sidebar taxonomy (one nav row each); `section` sub-groups a
 // category's fields into labelled blocks within its pane.
 
-import type { PrefsPatch } from "@core/lib/types";
+import type { ConfigPatch } from "@core/lib/types";
 import { appearance } from "@/state/appearance.svelte.ts";
-import { setPrefs } from "$lib/api.ts";
+import { setConfig } from "$lib/api.ts";
 import { THEME_MODES, type ThemeMode } from "$lib/appearance.ts";
 import { readDiffIndicators, writeDiffIndicators } from "$lib/diffIndicatorsPref.ts";
 import { readDiffStyle, writeDiffStyle } from "$lib/diffStylePref.ts";
@@ -106,7 +106,7 @@ export function stagedField<V>(def: Omit<StagedField<V>, "kind">): StagedField {
 }
 
 /** Define a field the DAEMON owns rather than the browser (EXC-1206): `patch` turns
- * the control's value into a POST /api/prefs body, and that POST is the write. The
+ * the control's value into a POST /api/config body, and that POST is the write. The
  * result is an ordinary StagedField — same kind, same controls, same rendering — so
  * a daemon-backed setting costs a constructor here rather than a third entry kind
  * threaded through isStagedField and every pane.
@@ -116,7 +116,7 @@ export function stagedField<V>(def: Omit<StagedField<V>, "kind">): StagedField {
  * the last value the daemon ACCEPTED shadows the registrant's `read`. A refused write
  * never reaches that shadow, which is what keeps the re-read a snap-back. */
 export function daemonField<V>(
-  def: Omit<StagedField<V>, "kind" | "write"> & { patch: (value: V) => PrefsPatch },
+  def: Omit<StagedField<V>, "kind" | "write"> & { patch: (value: V) => ConfigPatch },
 ): StagedField {
   // `patch` destructured out so it never rides along on the field object.
   const { patch, read, ...rest } = def;
@@ -128,7 +128,7 @@ export function daemonField<V>(
     ...rest,
     read: () => (landed ? landed.value : read()),
     write: async (value: V) => {
-      await setPrefs(patch(value));
+      await setConfig(patch(value));
       landed = { value };
     },
   } as StagedField;

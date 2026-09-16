@@ -35,7 +35,7 @@ async function bootResident(resident: boolean, idleMs: number) {
   d = await bootDaemon(dir, {
     resident,
     idleMs,
-    prefsPath: join(dir, "prefs.json"),
+    configPath: join(dir, "config.toml"),
     setIdleTimer: timer.setTimer,
     clearIdleTimer: timer.clearTimer,
     onShutdown: () => {},

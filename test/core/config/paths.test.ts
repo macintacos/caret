@@ -40,7 +40,7 @@ test("daemonLock resolves under stateDir and honors XDG_STATE_HOME", () => {
   });
 });
 
-test("updateCheckFile resolves under stateDir, beside prefs.json", () => {
+test("updateCheckFile resolves under stateDir", () => {
   withEnv({ XDG_STATE_HOME: "/tmp/caret-xdg-paths-test" }, () => {
     expect(updateCheckFile()).toBe(`${stateDir()}/update-check.json`);
   });

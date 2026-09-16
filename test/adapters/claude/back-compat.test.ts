@@ -1,10 +1,9 @@
-// Falsifiable back-compat (EXC-516): prefs and on-disk review records written in
-// the pre-epic `acceptMode` format must still parse and resolve to the correct
-// approve variant after the daemon/prefs decoupling. The fixtures in the sibling
-// fixtures/ dir are checked-in artifacts in that pre-epic shape; the assertions
-// run through the REAL read paths (readApproveMode for prefs; the daemon's
-// persisted-decision serve for a review record), not a hand-rolled parser. If a
-// future change strands those files, these tests fail.
+// Falsifiable back-compat (EXC-516): an on-disk review record written in the
+// pre-epic `acceptMode` format must still parse and resolve to the correct approve
+// variant. The fixture in the sibling fixtures/ dir is a checked-in artifact in that
+// pre-epic shape; the assertion runs through the REAL read path — the daemon's
+// persisted-decision serve — not a hand-rolled parser. If a future change strands
+// that file, this test fails.
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
@@ -13,16 +12,8 @@ import { join } from "node:path";
 
 import { bootDaemon, type TestDaemon } from "@test/support/daemon.ts";
 import { APPROVE_VARIANTS } from "@/adapters/claude/approve.ts";
-import { type ApproveModeSet, readApproveMode } from "@/config/prefs.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures");
-
-// The recognized set the Claude-paired daemon derives from its declared variants
-// — what the resolve/prefs persistence gates incoming and stored ids against.
-const CLAUDE_SET: ApproveModeSet = {
-  valid: APPROVE_VARIANTS.map((v) => v.id),
-  fallback: APPROVE_VARIANTS[0]?.id ?? "default",
-};
 
 let dir: string;
 
@@ -31,13 +22,6 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
-});
-
-test("a pre-epic prefs file ({approveMode:'acceptEdits'}) still resolves to that variant", async () => {
-  // The real prefs read path, gated against the Claude-declared set: the legacy
-  // token is a recognized variant id, so it round-trips rather than degrading.
-  const mode = await readApproveMode(join(FIXTURES, "prefs-pre-epic.json"), undefined, CLAUDE_SET);
-  expect(mode).toBe("acceptEdits");
 });
 
 test("a pre-epic review record's decision.acceptMode survives the persisted-decision serve", async () => {

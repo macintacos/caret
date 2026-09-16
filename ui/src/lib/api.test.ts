@@ -18,7 +18,6 @@ import {
   type Respond,
 } from "@ui/support/routed-fetch.ts";
 import {
-  getApproveMode,
   getDiagnostics,
   getDirListing,
   getFileExcerpt,
@@ -33,12 +32,12 @@ import {
   resolveFileRefs,
   resolveReview,
   searchFiles,
-  setPrefs,
+  setConfig,
 } from "$lib/api.ts";
 import { flush } from "$lib/log.ts";
 
 // Shared URL-routing fetch double (routed-fetch.ts): /api/logs POSTs are
-// captured; the review/prefs endpoints answer from the per-test `respond` so
+// captured; the review/config endpoints answer from the per-test `respond` so
 // each case can pick success, a non-2xx Response, or a rejected promise.
 let respond: Respond;
 let cap: LogCapture;
@@ -298,17 +297,6 @@ describe("putDraft instrumentation", () => {
     const scratches = [{ startLine: 2, endLine: 3, text: "wip" }];
     await putDraft(ID, { annotations, generalCommentDraft: "", composerScratches: scratches });
     expect(body).toMatchObject({ composerScratches: scratches });
-  });
-});
-
-describe("getApproveMode instrumentation", () => {
-  test("failure warns at step prefs and rejects", async () => {
-    respond = () => Promise.reject(new Error("offline"));
-
-    await expect(getApproveMode()).rejects.toThrow("offline");
-    flush();
-
-    expectLoggedAt("warn", "prefs");
   });
 });
 
@@ -601,10 +589,20 @@ describe("getSkillDescription", () => {
   });
 });
 
-// EXC-1206. The one write into daemon-owned prefs. Unlike this file's swallowing
+// EXC-1206. The one write into the user's config.toml. Unlike this file's swallowing
 // readers it THROWS, because a settings control has to snap back and say why — so
 // the message is written for a person rather than being HttpError's "HTTP 400".
-describe("setPrefs", () => {
+describe("setConfig", () => {
+  /** The message `setConfig` rejects with when the daemon answers `answer`. */
+  async function saveFailureMessage(answer: Respond): Promise<string> {
+    respond = answer;
+    let message = "";
+    await setConfig({ updates: { check: false } }).catch((err: unknown) => {
+      message = err instanceof Error ? err.message : String(err);
+    });
+    return message;
+  }
+
   test("POSTs the patch as the request body", async () => {
     let seen: { url: string; options: RequestInit | undefined } | undefined;
     respond = (url, options) => {
@@ -612,9 +610,9 @@ describe("setPrefs", () => {
       return Promise.resolve(jsonResponse({ ok: true }));
     };
 
-    await setPrefs({ updates: { check: false } });
+    await setConfig({ updates: { check: false } });
 
-    expect(seen?.url).toBe("/api/prefs");
+    expect(seen?.url).toBe("/api/config");
     expect(seen?.options?.method).toBe("POST");
     expect(JSON.parse(seen?.options?.body as string)).toEqual({ updates: { check: false } });
   });
@@ -627,11 +625,7 @@ describe("setPrefs", () => {
       () => Promise.resolve(new Response(null, { status: 500 })),
       () => Promise.reject(new Error("offline")),
     ]) {
-      respond = answer;
-      let message = "";
-      await setPrefs({ updates: { check: false } }).catch((err: unknown) => {
-        message = err instanceof Error ? err.message : String(err);
-      });
+      const message = await saveFailureMessage(answer);
       expect(message).not.toBe("");
       expect(message).not.toMatch(/^HTTP \d+$/);
       // A sentence, not a status line.
@@ -639,19 +633,39 @@ describe("setPrefs", () => {
     }
   });
 
-  test("a rejected save warns at step prefs", async () => {
+  test("a refused config.toml rewrite (409) tells the reviewer to edit it by hand", async () => {
+    // The one failure the reviewer can actually act on, so it must not read like the
+    // generic "the daemon couldn't save it".
+    const message = await saveFailureMessage(() =>
+      Promise.resolve(new Response(null, { status: 409 })),
+    );
+    expect(message).toContain("config.toml");
+  });
+
+  test("no failure message carries markdown — the toast renders it as text", async () => {
+    // AlertHost renders the message verbatim, so a backtick or an asterisk reaches the
+    // reviewer literally.
+    for (const status of [400, 409, 500]) {
+      const message = await saveFailureMessage(() =>
+        Promise.resolve(new Response(null, { status })),
+      );
+      expect(message).not.toMatch(/[`*_]/);
+    }
+  });
+
+  test("a rejected save warns at step settings", async () => {
     respond = () => Promise.resolve(new Response(null, { status: 400 }));
 
-    await expect(setPrefs({ updates: { check: false } })).rejects.toThrow();
+    await expect(setConfig({ updates: { check: false } })).rejects.toThrow();
     await flush();
 
-    expectLoggedAt("warn", "prefs");
+    expectLoggedAt("warn", "settings");
   });
 
   test("a successful save emits no record", async () => {
     respond = () => Promise.resolve(jsonResponse({ ok: true }));
 
-    await setPrefs({ updates: { check: false } });
+    await setConfig({ updates: { check: false } });
     await flush();
 
     // The daemon logs the write; a second UI line would only restate it.
