@@ -279,9 +279,9 @@ describe("tasks CLI: task command lines", () => {
     expect(lintCommand(["src"])).toEqual(["hk", "check", "--all", "src"]);
   });
 
-  test("format runs hk fix --all --no-stage", () => {
-    expect(formatCommand([])).toEqual(["hk", "fix", "--all", "--no-stage"]);
-    expect(formatCommand(["src"])).toEqual(["hk", "fix", "--all", "--no-stage", "src"]);
+  test("format runs hk fix --all", () => {
+    expect(formatCommand([])).toEqual(["hk", "fix", "--all"]);
+    expect(formatCommand(["src"])).toEqual(["hk", "fix", "--all", "src"]);
   });
 
   test("caret forwards a leading --help instead of answering it", async () => {

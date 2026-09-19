@@ -1,6 +1,6 @@
-amends "package://github.com/jdx/hk/releases/download/v1.55.0/hk@1.55.0#/Config.pkl"
+amends "package://github.com/jdx/hk/releases/download/v2.0.1/hk@2.0.1#/Config.pkl"
 
-import "package://github.com/jdx/hk/releases/download/v1.55.0/hk@1.55.0#/Builtins.pkl"
+import "package://github.com/jdx/hk/releases/download/v2.0.1/hk@2.0.1#/Builtins.pkl"
 
 // Keep the amends/import version in lockstep with the `hk` version in mise.toml.
 //
@@ -66,6 +66,8 @@ local formatters = new Mapping<String, Step> {
   // because caret reflows it at ingest and that is what `mise run dev` is testing.
   ["Markdown(Format) [[builtins.rumdl]]"] = (Builtins.rumdl) {
     fix = "rumdl fmt {{ files }}"
+    // Builtin tests assert rumdl's linting fix, not this formatter-only command.
+    tests = new Mapping<String, StepTest> {}
     exclude = List("scripts/tasks/dev/fake-plan.md")
   }
 

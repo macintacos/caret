@@ -16,7 +16,7 @@ HK_MISE = 1
 # Keep hk in lockstep with hk.pkl's amends/import version; the two are compared exactly,
 # so even a patch bump landing here needs the hk.pkl edit. test/structure/hk-pin.test.ts
 # fails if they diverge.
-hk  = "1.55"
+hk  = "2.0"
 pkl = "0"
 bun = "1.4"
 # Bump biome.jsonc's `$schema` to match whatever release mise.lock resolves. biome
