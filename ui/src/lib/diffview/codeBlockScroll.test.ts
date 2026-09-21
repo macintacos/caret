@@ -444,11 +444,8 @@ describe("syncCodeBlockCards — an open comment inside a carded block", () => {
   });
 });
 
-// EXC-1386: the reviewer can soft-wrap ONE overflowing block in place. The wrap is a state
-// on the card the block already has — REFLOW_ATTR on both the content card and its gutter
-// mirror, which three CSS rules turn into pre-wrap rows and a top-aligned line number. The
-// attribute lives in the DOM rather than in syncCodeBlockCards' signature, so this pass
-// re-marks a card the frame a repaint rebuilds it.
+// EXC-1386: the reviewer soft-wraps ONE overflowing block by marking its content card and
+// gutter mirror with REFLOW_ATTR; this pass re-marks a card the frame a repaint rebuilds it.
 describe("applyCodeBlockReflow", () => {
   const contentCardFor = (root: HTMLElement, key: string) =>
     root.querySelector<HTMLElement>(`[data-content] > [${CARD_ATTR}="${key}"]`);

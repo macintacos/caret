@@ -6,9 +6,8 @@
   // sibling of the diff surface, so — unlike the motionless shadow render surface — it
   // may animate; app.css's reduced-motion kill-switch collapses that.
   //
-  // Both buttons are always mounted, so the affordances are discoverable without a
-  // hover to find them; the box rests dimmed and brightens once the reviewer's pointer
-  // reaches the block, which is what keeps it from competing with the code.
+  // The box is mounted for every block rather than only the hovered one, so the controls
+  // are discoverable without a hover to find them.
   import type { Snippet } from "svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
@@ -128,9 +127,8 @@
   </Tooltip.Root>
 {/snippet}
 
-<!-- The box is the absolutely-positioned element, with its top/left set inline by
-     DiffPlanView. One Provider over both Roots: the delay is shared, and a plan mounts
-     one tooltip context per block rather than two. -->
+<!-- One Provider over both Roots: the delay is shared, and a plan mounts one tooltip
+     context per block rather than two. -->
 <div class="code-chrome" style="top: {top}px; left: {left}px;" data-lit={hovered ? "" : undefined}>
   <Tooltip.Provider delayDuration={300}>
     {#if carded}
@@ -162,9 +160,8 @@
     display: flex;
     gap: 0.25rem;
     z-index: 4;
-    /* The chrome is always mounted, so it rests dimmed and comes up as the reviewer
-       reaches the block — discoverable without a hover to find it, quiet while they are
-       reading the code. Keyboard focus lights it the same way a pointer does. */
+    /* Rests dimmed so it stays quiet while the code is read, and comes up as the reviewer
+       reaches the block. Keyboard focus lights it the same way a pointer does. */
     opacity: 0.4;
     transition: opacity var(--dur-micro) var(--ease-out);
   }

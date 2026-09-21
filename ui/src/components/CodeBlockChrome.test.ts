@@ -4,11 +4,7 @@ import { describe, expect, test } from "bun:test";
 import { render } from "@ui/support/mount.ts";
 import CodeBlockChrome from "@/components/CodeBlockChrome.svelte";
 
-// CodeBlockChrome is the per-code-block control box — copy, plus a soft-wrap toggle for a
-// block wide enough to have been carded. These units cover the contract DiffPlanView
-// depends on: it positions itself, offers the wrap button only where wrapping is possible,
-// reports the toggle, and writes the block's code to the injected clipboard. happy-dom is
-// enough for the state/label swaps; the wrap's actual effect on layout is e2e
+// happy-dom is enough for the state/label swaps; the wrap's actual effect on layout is e2e
 // (test/e2e/code-chrome.e2e.ts), and the injected `copy` keeps this off a real clipboard.
 
 // Lets a click's async handler settle (the awaited copy + the reactive update).

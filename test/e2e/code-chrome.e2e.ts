@@ -25,19 +25,8 @@ import { planSurface, settledMutations } from "@test/e2e/support/source-view.ts"
 // One block far wider than the reading width (so it cards and offers the wrap toggle) and
 // one inside it (so it does not) — the pair every assertion below reads the per-block
 // claim against. The wide block's line is a run of ordinary words, so it has break
-// opportunities and can actually reflow; a line of one unbroken token could not.
-//
-// Which side a block lands on is the `--caret-read-max` 720px cap, and no viewport moves a
-// block across it — measured below in both directions. The two box kinds do differ, which
-// is why a resize re-runs the card pass at all: a loose `[data-line]` row is
-// `white-space: pre` with no overflow, so it grows the plan column to its own content
-// (capped at 720) and reports scrollWidth === clientWidth at every viewport, while a
-// `[data-code-card]` contributes nothing and takes whatever the column gives, so it is
-// narrower on a narrow viewport. Neither difference reaches the threshold: a card exists
-// only because its content already passed 720, which no width the column can offer it
-// beats. Both halves of that are conditional on the cap being a CONSTANT — make
-// `--caret-read-max` relative (a vw, a percentage, a clamp) and either crossing becomes
-// reachable again. The second block's ~82 characters stay inside the cap throughout.
+// opportunities and can actually reflow; a line of one unbroken token could not. The
+// second block's ~82 characters stay inside the reading-width cap at every viewport.
 //
 // The trailing filler is scroll room — the brightening spec wheels one block under a
 // stationary pointer, which needs the surface to scroll past a viewport.
@@ -98,7 +87,6 @@ async function blockPoint(page: Page, start: number): Promise<{ x: number; y: nu
   return point as { x: number; y: number };
 }
 
-/** How many cards on the page carry the reflow mark. */
 function reflowMarkCount(page: Page): Promise<number> {
   return page.evaluate(
     () =>
@@ -280,10 +268,16 @@ test("the chrome brightens on the block under the pointer, and follows a scroll 
 });
 
 test("no viewport moves a block across the fit/overflow line", async ({ daemon, page }) => {
-  // AC 4's threshold, measured rather than assumed. A card takes whatever the content
-  // column gives and so narrows with the viewport; a fitting row grows the column to its
-  // own content and never clips. Neither crosses the 720px cap, in either direction — so
-  // the wrap button neither appears nor disappears on a resize.
+  // The fit/overflow threshold, measured rather than assumed. The two box kinds differ: a
+  // loose `[data-line]` row is `white-space: pre` with no overflow, so it grows the plan
+  // column to its own content (capped at 720) and reads scrollWidth === clientWidth at every
+  // viewport, while a `[data-code-card]` contributes nothing and takes whatever the column
+  // gives, so it narrows with the viewport — which is why a resize re-runs the card pass at
+  // all. Neither crosses the `--caret-read-max` 720px cap, in either direction: a card
+  // exists only because its content already passed 720, which no width the column can offer
+  // it beats. So the wrap button neither appears nor disappears on a resize — but only while
+  // the cap is a CONSTANT; make it relative (a vw, a percentage, a clamp) and either
+  // crossing becomes reachable again.
   await openMixedPlan(page, daemon);
   const reference = await blockMetrics(page, WIDE);
 
@@ -308,17 +302,16 @@ test("no viewport moves a block across the fit/overflow line", async ({ daemon, 
 });
 
 test("a wrapped block stays wrapped across a viewport resize", async ({ daemon, page }) => {
-  // AC 5. The card pass re-runs on resize and retires a card that stops overflowing — a
-  // wrapped block always stops overflowing, so the reflow mark is what has to hold the
-  // card open across the re-run rather than fall out of it.
+  // The card pass re-runs on resize and retires a card that stops overflowing — a wrapped
+  // block always stops overflowing, so the reflow mark is what has to hold the card open
+  // across the re-run rather than fall out of it.
   await openMixedPlan(page, daemon);
   await wrapToggle(page).click();
   await expect.poll(async () => (await blockMetrics(page, WIDE))?.reflowed).toBe(true);
 
-  // Settle before reading, rather than polling for a true. Without the reflow mark holding
-  // the card open, the resize retires it, the loose rows overflow again, the next pass
-  // re-cards and re-marks them, and the block flips forever — and a poll is satisfied by
-  // any one of those frames. Settling is the claim: the block is wrapped and at rest.
+  // Settle before reading, rather than polling for a true: without the reflow mark holding
+  // the card open the block flips between carded and loose forever, and a poll is satisfied
+  // by any one of those frames.
   await page.setViewportSize({ width: 420, height: 900 });
   await settledMutations(page);
   expect((await blockMetrics(page, WIDE))?.reflowed).toBe(true);
@@ -329,9 +322,9 @@ test("a wrapped block stays wrapped across a viewport resize", async ({ daemon, 
 });
 
 test("a new plan version returns every block to scrolling", async ({ daemon, page }) => {
-  // AC 6: the wrap is per-rendering, never a preference. A version arriving on the open
-  // page is the case a reload cannot stand in for — the component stays mounted, so only
-  // the contentKey reset clears the state.
+  // The wrap is per-rendering, never a preference. A version arriving on the open page is
+  // the case a reload cannot stand in for — the component stays mounted, so only the
+  // contentKey reset clears the state.
   const id = await openMixedPlan(page, daemon);
   await wrapToggle(page).click();
   await expect.poll(async () => (await blockMetrics(page, WIDE))?.reflowed).toBe(true);
@@ -348,9 +341,9 @@ test("a new plan version returns every block to scrolling", async ({ daemon, pag
 });
 
 test("the wrap toggle is reachable and operable from the keyboard", async ({ daemon, page }) => {
-  // AC 9. The chrome is a real <button> in the .diff-plan light DOM, so it should be an
-  // ordinary tab stop — reached without a pointer, and activated by Enter rather than by
-  // a click handler alone.
+  // The chrome is a real <button> in the .diff-plan light DOM, so it should be an ordinary
+  // tab stop — reached without a pointer, and activated by Enter rather than by a click
+  // handler alone.
   await openMixedPlan(page, daemon);
   const toggle = wrapToggle(page);
 

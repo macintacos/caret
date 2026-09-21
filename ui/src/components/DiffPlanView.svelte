@@ -666,9 +666,9 @@
   });
 
   // The fenced code blocks in the rendered plan, each with its range (for hover
-  // hit-testing) and its fence-stripped code (for the clipboard). Backs the per-block
-  // copy affordance (EXC-692). Computed from the SAME text the view renders
-  // (linkLayer.text) so the ranges line up with the shadow rows' data-line numbers,
+  // hit-testing and chrome anchoring) and its fence-stripped code (for the clipboard).
+  // Backs the per-block chrome (EXC-692, EXC-1386). Computed from the SAME text the view
+  // renders (linkLayer.text) so the ranges line up with the shadow rows' data-line numbers,
   // and memoized on that text so an unchanged poll tick keeps a stable reference.
   let codeBlocksMemo:
     | { text: string; blocks: Array<{ range: CodeBlockRange; text: string }> }
@@ -698,8 +698,7 @@
   let hoveredBlock = $state<number | undefined>();
 
   // The blocks the reviewer has soft-wrapped, by opening line. Transient by design: no
-  // preference, nothing persisted, and it empties on a review or version switch below, so
-  // a reload starts with every block scrolling horizontally as before.
+  // preference, nothing persisted, and it empties on a review or version switch below.
   let reflowedBlocks = $state<ReadonlySet<number>>(new Set());
   const toggleReflow = (start: number): void => {
     // A fresh Set rather than a mutation — the reference change is what re-runs the
@@ -1671,12 +1670,12 @@
              [data-line] rows) so the rails scroll with the rows; it is decorative
              (pointer-events: none). -->
         <div use:bracketLayer={{ host, spans: bracketSpans }}></div>
-        <!-- The per-code-block chrome (EXC-692, EXC-1386): copy and soft wrap, at the
-             top-right of every fenced block, resting dimmed and brightening under the
-             pointer. Keyed on the block's opening line so a re-anchor updates each box's
-             props and leaves the instance — and its copied/checkmark state — alone. It
-             layers over the .diff-plan scroll content, so like the bracket rails it
-             scrolls with the rows. -->
+        <!-- The per-code-block chrome (EXC-692, EXC-1386): copy at the top-right of every
+             fenced block, plus soft wrap on the ones that overflow, resting dimmed and
+             brightening under the pointer. Keyed on the block's opening line so a re-anchor
+             updates each box's props and leaves the instance — and its copied/checkmark
+             state — alone. It layers over the .diff-plan scroll content, so like the bracket
+             rails it scrolls with the rows. -->
         {#each chrome as anchor (anchor.start)}
           <CodeBlockChrome
             text={anchor.text}

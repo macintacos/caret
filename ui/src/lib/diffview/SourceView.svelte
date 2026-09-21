@@ -539,7 +539,7 @@
       // depends on nothing else here, so its position costs no frame either way.
       tagThematicBreakRows(root, breaks);
       syncCodeBlockCards(root, ranges);
-      // Always run, so a populated→empty transition unwraps too.
+      // Always run, so a populated→empty transition clears the marks too.
       applyCodeBlockReflow(root, reflowed ?? EMPTY_REFLOWED);
       // Card each table and group its rows' tokens into cells (EXC-864). BEFORE the
       // inline pass, which walks a row through tokenChildren: it has to see the

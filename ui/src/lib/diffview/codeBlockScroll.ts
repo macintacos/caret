@@ -103,7 +103,8 @@ function wrapGutterBlock(gutter: Element, key: string, cells: Element[]): void {
 
 /**
  * Ensures every overflowing fenced block is wrapped in one scroll card, and that blocks which
- * fit (or no longer exist) are not. Idempotent: an already-wrapped block that still overflows
+ * fit (or no longer exist) are not — except a card marked REFLOW_ATTR, which is kept while
+ * its block exists. Idempotent: an already-wrapped block that still overflows
  * is left exactly as-is (no DOM mutation), and a fitting unwrapped block is left as plain
  * rows. `read` is injectable for tests — it is called on a row to decide whether an unwrapped
  * block overflows, and on a card to decide whether a wrapped block still overflows.
@@ -121,12 +122,10 @@ export function syncCodeBlockCards(
     const key = String(range.start);
     const card = content.querySelector<HTMLElement>(`:scope > [${CARD_ATTR}="${key}"]`);
     if (card != null) {
-      // A reflowed block's rows wrap to the card width, so the card reports no overflow —
-      // the very condition the retire pass unwraps on. Keeping it above that read is what
-      // stops the wrap oscillating — without this, retiring a reflowed card sends its rows
-      // loose, they overflow, the next pass re-cards and re-marks them, and the block flips
-      // without settling. The cost is `carded` reading true for a block widened back to a
-      // fit until the reviewer toggles the wrap off.
+      // A reflowed card's rows wrap to its width, so it never reads as overflowing and the
+      // check below would retire it; its loose rows then overflow, get re-carded and
+      // re-marked, and the block flips forever. Kept until the reviewer toggles the wrap off,
+      // even once a widened viewport lets the block fit.
       if (card.hasAttribute(REFLOW_ATTR)) {
         wanted.add(key);
         continue;

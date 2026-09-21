@@ -1087,15 +1087,16 @@ const CARET_OVERRIDES = `
      it the track stays wide and nothing reflows. overflow-x deliberately stays in force from
      the rule above: a line with no break opportunity (a long URL, a hash) cannot reflow to the
      card width, so it overflows the capped track and keeps its scrollbar rather than widening
-     the card. A reflowed row grows its parent row track and the gutter cell mapped to it grows
-     too, so the line number is pinned to the track's start rather than floating beside the
-     middle of the paragraph. */
+     the card. */
   [data-content] > [data-code-card][data-code-card-reflow] {
     grid-auto-columns: minmax(0, 1fr);
   }
   [data-content] > [data-code-card][data-code-card-reflow] > [data-line][data-code-line] {
     white-space: pre-wrap;
   }
+  /* A reflowed row grows its parent row track and the gutter cell mapped to it grows too, so
+     the line number is pinned to the track's start rather than floating beside the middle of
+     the paragraph. */
   [data-gutter] [data-code-card-gutter][data-code-card-reflow] > [data-column-number] {
     align-self: start;
   }
