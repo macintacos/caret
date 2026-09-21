@@ -2,7 +2,7 @@ import "@ui/support/setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
 
 import { scrolledOffsetReader } from "@ui/support/diffview-dom.ts";
-import type { RectReader } from "$lib/diffview/codeCopy.ts";
+import type { RectReader } from "$lib/diffview/codeChrome.ts";
 import type { FileRefSpan, FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 import {
   dismissRefHint,

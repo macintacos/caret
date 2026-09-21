@@ -12,7 +12,7 @@
 
 import type { FileRefKind } from "@core/lib/types";
 import { defineFlagPref, type Pref } from "$lib/definePref.ts";
-import type { RectReader } from "$lib/diffview/codeCopy.ts";
+import type { RectReader } from "$lib/diffview/codeChrome.ts";
 import type { FileRefSpan, FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 import { refTokenAt } from "$lib/diffview/fileRefTag.ts";
 
@@ -154,7 +154,7 @@ function pillEnd(token: HTMLElement): HTMLElement {
 }
 
 // The pill's top-right in the scroll container's content coordinates. The
-// conversion mirrors copyAnchor: a row's content offset is its viewport edge
+// conversion mirrors codeChromeAnchors: a row's content offset is its viewport edge
 // minus the scroller's viewport edge, plus how far the content is scrolled.
 function anchorFor(
   token: HTMLElement,

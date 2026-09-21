@@ -39,6 +39,7 @@
   import squareCheckBig from "@/icons/square-check-big.svg?raw";
   import squareSlash from "@/icons/square-slash.svg?raw";
   import sun from "@/icons/sun.svg?raw";
+  import textWrap from "@/icons/text-wrap.svg?raw";
   import trash2 from "@/icons/trash-2.svg?raw";
   import unplug from "@/icons/unplug.svg?raw";
   import x from "@/icons/x.svg?raw";
@@ -79,6 +80,7 @@
     "square-check-big": squareCheckBig,
     "square-slash": squareSlash,
     sun,
+    "text-wrap": textWrap,
     "trash-2": trash2,
     unplug,
     x,
