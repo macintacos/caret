@@ -3,9 +3,11 @@ import { describe, expect, test } from "bun:test";
 
 import { openComment } from "@ui/support/diffview-dom.ts";
 import {
+  applyCodeBlockReflow,
   CARD_ATTR,
   GUTTER_CARD_ATTR,
   type MetricsReader,
+  REFLOW_ATTR,
   type RowMetrics,
   syncCodeBlockCards,
 } from "$lib/diffview/codeBlockScroll.ts";
@@ -115,6 +117,16 @@ const FITTING_THEN_OVERFLOWING_BLOCK: RowSpec[] = [
   { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 900 } },
 ];
 
+// Overflowing blocks (1-2 and 4-5) either side of prose (3) — shared by the content-only and
+// gutter-mirror suites, which each assert a per-block decision across the pair.
+const BOTH_BLOCKS_OVERFLOWING: RowSpec[] = [
+  { code: true, start: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
+  { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 900 } },
+  {},
+  { code: true, start: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
+  { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 700 } },
+];
+
 /** Asserts the content column carries no card and its rows are `lines`, in
  * order — the shared postcondition for a block that unwrapped or never carded. */
 function expectContentUnwrapped(content: HTMLElement, lines: string[]): void {
@@ -169,13 +181,7 @@ describe("syncCodeBlockCards", () => {
   });
 
   test("gives each overflowing block its own card", () => {
-    const { root, content, rowMetrics } = buildContent([
-      { code: true, start: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
-      { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 900 } },
-      {},
-      { code: true, start: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
-      { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 700 } },
-    ]);
+    const { root, content, rowMetrics } = buildContent(BOTH_BLOCKS_OVERFLOWING);
     syncCodeBlockCards(root, TWO_BLOCK_RANGES, makeReader(rowMetrics));
     const cards = cardsIn(content);
     expect(cards).toHaveLength(2);
@@ -204,6 +210,18 @@ describe("syncCodeBlockCards", () => {
     syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics, cardFits));
     // Rows come back as direct children, in order.
     expectContentUnwrapped(content, ["1", "2", "3"]);
+  });
+
+  test("keeps a reflowed card even though its wrapped rows now fit", () => {
+    // A reflowed block's rows wrap to the card width, so the card reads scrollWidth ===
+    // clientWidth — the very condition the retire pass unwraps on. Without the mark held
+    // above that read, the wrap would vanish the frame after the reviewer asked for it.
+    const { root, content, rowMetrics } = buildContent(overflowingBlock);
+    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics, cardOverflows));
+    applyCodeBlockReflow(root, new Set([1]));
+    const cardFits = { "1": { scrollWidth: 300, clientWidth: 300 } };
+    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics, cardFits));
+    expect(cardsIn(content)).toHaveLength(1);
   });
 
   test("retires a card whose block no longer exists", () => {
@@ -423,5 +441,68 @@ describe("syncCodeBlockCards — an open comment inside a carded block", () => {
     const settled = root.innerHTML;
     syncCodeBlockCards(root, [overflowingRange], read);
     expect(root.innerHTML).toBe(settled);
+  });
+});
+
+// EXC-1386: the reviewer soft-wraps ONE overflowing block by marking its content card and
+// gutter mirror with REFLOW_ATTR; this pass re-marks a card the frame a repaint rebuilds it.
+describe("applyCodeBlockReflow", () => {
+  const contentCardFor = (root: HTMLElement, key: string) =>
+    root.querySelector<HTMLElement>(`[data-content] > [${CARD_ATTR}="${key}"]`);
+  const gutterCardFor = (root: HTMLElement, key: string) =>
+    root.querySelector<HTMLElement>(`[data-gutter] > [${GUTTER_CARD_ATTR}="${key}"]`);
+
+  /** A carded block (1-3) in both columns, ready to be reflowed. */
+  function rootWithCardedBlock(): HTMLElement {
+    const { root, rowMetrics } = buildColumns(overflowingBlock);
+    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics, cardOverflows));
+    return root;
+  }
+
+  test("marks both the content card and its gutter mirror", () => {
+    const root = rootWithCardedBlock();
+    applyCodeBlockReflow(root, new Set([1]));
+    expect(contentCardFor(root, "1")?.hasAttribute(REFLOW_ATTR)).toBe(true);
+    expect(gutterCardFor(root, "1")?.hasAttribute(REFLOW_ATTR)).toBe(true);
+  });
+
+  test("clears the mark from both when the block leaves the set", () => {
+    const root = rootWithCardedBlock();
+    applyCodeBlockReflow(root, new Set([1]));
+    applyCodeBlockReflow(root, new Set());
+    expect(contentCardFor(root, "1")?.hasAttribute(REFLOW_ATTR)).toBe(false);
+    expect(gutterCardFor(root, "1")?.hasAttribute(REFLOW_ATTR)).toBe(false);
+  });
+
+  test("marks only the blocks in the set", () => {
+    const { root, rowMetrics } = buildColumns(BOTH_BLOCKS_OVERFLOWING);
+    syncCodeBlockCards(root, TWO_BLOCK_RANGES, makeReader(rowMetrics));
+    applyCodeBlockReflow(root, new Set([4]));
+    expect(contentCardFor(root, "1")?.hasAttribute(REFLOW_ATTR)).toBe(false);
+    expect(contentCardFor(root, "4")?.hasAttribute(REFLOW_ATTR)).toBe(true);
+  });
+
+  test("mutates nothing on a settled re-run", () => {
+    const root = rootWithCardedBlock();
+    applyCodeBlockReflow(root, new Set([1]));
+    const settled = root.innerHTML;
+    applyCodeBlockReflow(root, new Set([1]));
+    expect(root.innerHTML).toBe(settled);
+  });
+
+  test("re-marks a card the repaint rebuilt, since the mark rides the same pass", () => {
+    // A repaint returns the rows to the column flat; syncCodeBlockCards re-cards them and
+    // this pass, running right after it, puts the mark back on the fresh card.
+    const { root, rowMetrics } = buildColumns(overflowingBlock);
+    const read = makeReader(rowMetrics, cardOverflows);
+    syncCodeBlockCards(root, [overflowingRange], read);
+    applyCodeBlockReflow(root, new Set([1]));
+    const staleCard = contentCardFor(root, "1");
+    syncCodeBlockCards(root, [], read); // repaint retires the card
+    syncCodeBlockCards(root, [overflowingRange], read); // ...and rebuilds it
+    applyCodeBlockReflow(root, new Set([1]));
+    const rebuiltCard = contentCardFor(root, "1");
+    expect(rebuiltCard).not.toBe(staleCard);
+    expect(rebuiltCard?.hasAttribute(REFLOW_ATTR)).toBe(true);
   });
 });

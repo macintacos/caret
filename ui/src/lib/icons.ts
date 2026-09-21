@@ -36,6 +36,7 @@ export const ICON_NAMES = [
   "square-check-big",
   "square-slash",
   "sun",
+  "text-wrap",
   "trash-2",
   "unplug",
   "x",

@@ -20,7 +20,7 @@
   import { type CodeBlockRange, codeBlockRanges, tagCodeBlockRows } from "$lib/diffview/codeBlocks.ts";
   import { decorateInlineRuns } from "$lib/diffview/inlineDecorate.ts";
   import type { InlineSpanMap } from "$lib/diffview/inlineSpans.ts";
-  import { syncCodeBlockCards } from "$lib/diffview/codeBlockScroll.ts";
+  import { applyCodeBlockReflow, syncCodeBlockCards } from "$lib/diffview/codeBlockScroll.ts";
   import { paintCardSelection, type SelectedLines } from "$lib/diffview/cardSelection.ts";
   import { selectionIn, selectionText } from "$lib/diffview/selectionCopy.ts";
   import { tagThematicBreakRows, thematicBreakLines } from "$lib/diffview/thematicBreaks.ts";
@@ -124,6 +124,10 @@
     /** Index of the current (active) match within `searchMatches` — painted with the
      * strong highlight while the others get the dim underlay. -1 (default) = none. */
     currentMatchIndex?: number;
+    /** The fenced blocks the reviewer has soft-wrapped (EXC-1386), by 1-based opening
+     * line. Each one's scroll card is marked so the override sheet wraps its rows;
+     * omitted or empty leaves every block scrolling horizontally. */
+    reflowedBlocks?: ReadonlySet<number>;
   }
 
   let {
@@ -147,6 +151,7 @@
     cursorLine = null,
     searchMatches,
     currentMatchIndex = -1,
+    reflowedBlocks,
   }: Props = $props();
 
   // The container div is component markup, so the instance must not remove
@@ -502,6 +507,7 @@
   const EMPTY_INLINE: InlineSpanMap = new Map();
   const EMPTY_IMAGES: ImageSpanMap = new Map();
   const EMPTY_QUOTES: Map<number, number> = new Map();
+  const EMPTY_REFLOWED: ReadonlySet<number> = new Set();
   $effect(() => {
     const root = container?.shadowRoot;
     if (root == null) return;
@@ -519,6 +525,7 @@
     const tables = tableSpans;
     const imageSpans = images;
     const quotes = quoteDepth;
+    const reflowed = reflowedBlocks;
     let raf = 0;
     // Tag the rows, then wrap each overflowing block in its scroll card (EXC-729). Both re-run
     // after every library repaint via the observer below; syncCodeBlockCards is idempotent (an
@@ -532,6 +539,8 @@
       // depends on nothing else here, so its position costs no frame either way.
       tagThematicBreakRows(root, breaks);
       syncCodeBlockCards(root, ranges);
+      // Always run, so a populated→empty transition clears the marks too.
+      applyCodeBlockReflow(root, reflowed ?? EMPTY_REFLOWED);
       // Card each table and group its rows' tokens into cells (EXC-864). BEFORE the
       // inline pass, which walks a row through tokenChildren: it has to see the
       // celled row so both passes partition the same column space. Idempotent for
@@ -577,9 +586,8 @@
     tag();
     const observer = new MutationObserver(schedule);
     observer.observe(root, { childList: true, subtree: true });
-    // Whether a block overflows depends on the card width, so a viewport resize (the card is
-    // capped but shrinks below its cap on a narrow viewport) can push a fitting block into
-    // overflow or the reverse — re-run to wrap/unwrap, since a resize fires no DOM mutation the
+    // A resize changes the card's drawn width — it is capped, but shrinks below its cap on a
+    // narrow viewport — so re-run to re-measure, since a resize fires no DOM mutation the
     // observer above would catch.
     const resize = new ResizeObserver(schedule);
     if (container != null) resize.observe(container);

@@ -1,4 +1,4 @@
-import type { RectReader } from "$lib/diffview/codeCopy.ts";
+import type { RectReader } from "$lib/diffview/codeChrome.ts";
 import { CELL_ATTR } from "$lib/diffview/rowTokens.ts";
 
 /** A `[data-line]` row holding one `<span>` per token, concatenating to the
@@ -90,7 +90,7 @@ export function fillLines(content: HTMLElement, lineCount: number): void {
 
 /** Stubs a scroller offset from its content origin (scrollTop 50, scrollLeft
  * 10, viewport top 5 / left 8) and a fixed content-space rect for every other
- * element — the fixture both `copyAnchor` and `pickRefHintAnchors` resolve
+ * element — the fixture both `codeChromeAnchors` and `pickRefHintAnchors` resolve
  * their "accounts for scroll" case through: content top 100 resolves to
  * scroller-relative top 145, right 300 to left 302. */
 export function scrolledOffsetReader(scroller: HTMLElement): RectReader {

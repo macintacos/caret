@@ -1273,6 +1273,46 @@ describe("the single per-block code scrollbar (EXC-729)", () => {
   });
 });
 
+// EXC-1386: the reviewer can soft-wrap ONE overflowing block in place. The card is already
+// there (EXC-729); reflow is a state on it, and these three rules are the whole mechanism —
+// the content card's rows wrap, and the gutter mirror's numbers move to the top of the taller
+// row tracks the subgrid grows for them.
+describe("the per-block reflow state on the code card (EXC-1386)", () => {
+  const reflowCardRule =
+    overrideDecls.match(
+      /\[data-content\]\s*>\s*\[data-code-card\]\[data-code-card-reflow\]\s*\{[^}]*\}/,
+    )?.[0] ?? "";
+
+  test("frees the card's columns from max-content so a wrapped row can be measured", () => {
+    // The base card sizes its columns to the widest unwrapped line, which measures a
+    // pre-wrap row at its unwrapped width — so without this swap the track stays wide and
+    // nothing visibly reflows.
+    expect(reflowCardRule).toMatch(/grid-auto-columns:\s*minmax\(0,\s*1fr\)/);
+  });
+
+  test("wraps the reflowed card's code rows", () => {
+    expect(overrideDecls).toMatch(
+      /\[data-code-card\]\[data-code-card-reflow\]\s*>\s*\[data-line\]\[data-code-line\]\s*\{[^}]*white-space:\s*pre-wrap/,
+    );
+  });
+
+  test("pins the reflowed block's line numbers to the top of their grown row tracks", () => {
+    // A content row that reflows to three visual rows grows its parent track, and the
+    // gutter cell mapped to that track grows with it — a centred number would then float
+    // beside the middle of the paragraph rather than its first line.
+    expect(overrideDecls).toMatch(
+      /\[data-gutter\]\s*\[data-code-card-gutter\]\[data-code-card-reflow\]\s*>\s*\[data-column-number\]\s*\{[^}]*align-self:\s*start/,
+    );
+  });
+
+  test("leaves the card's horizontal scrolling in place while reflowed", () => {
+    // A line with no break opportunity — a long URL, a hash — cannot reflow to the card
+    // width. It overflows the capped track and keeps its scrollbar rather than widening
+    // the card, which is what the base rule's overflow-x still being in force buys.
+    expect(reflowCardRule).not.toMatch(/overflow-x:/);
+  });
+});
+
 // EXC-687: a resolved filename reference token (tagged data-file-ref by
 // fileRefTag.ts) gets a small file icon before it, rendered as a mask so it takes
 // the ink color. This pins the rule structurally.

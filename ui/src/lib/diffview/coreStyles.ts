@@ -1082,6 +1082,24 @@ const CARET_OVERRIDES = `
   [data-content] > [data-code-card] > [data-line][data-code-end] {
     padding-block-end: 0.5rem;
   }
+  /* EXC-1386: the reviewer soft-wraps one block in place. grid-auto-columns is the
+     load-bearing swap — max-content measures a pre-wrap row at its UNWRAPPED width, so without
+     it the track stays wide and nothing reflows. overflow-x deliberately stays in force from
+     the rule above: a line with no break opportunity (a long URL, a hash) cannot reflow to the
+     card width, so it overflows the capped track and keeps its scrollbar rather than widening
+     the card. */
+  [data-content] > [data-code-card][data-code-card-reflow] {
+    grid-auto-columns: minmax(0, 1fr);
+  }
+  [data-content] > [data-code-card][data-code-card-reflow] > [data-line][data-code-line] {
+    white-space: pre-wrap;
+  }
+  /* A reflowed row grows its parent row track and the gutter cell mapped to it grows too, so
+     the line number is pinned to the track's start rather than floating beside the middle of
+     the paragraph. */
+  [data-gutter] [data-code-card-gutter][data-code-card-reflow] > [data-column-number] {
+    align-self: start;
+  }
   /* One always-visible scrollbar at the card's bottom. Styling ::-webkit-scrollbar opts out
      of the platform's auto-hiding overlay bar (the standard scrollbar-* props would pull it
      back in Chromium, where caret renders); the thumb is a caret-neutral ink mix — no amber,

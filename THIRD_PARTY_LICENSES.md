@@ -44,6 +44,7 @@ under the ISC license.
 | `square-check-big` | [ui/src/icons/square-check-big.svg](ui/src/icons/square-check-big.svg) | [square-check-big.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/square-check-big.svg) |
 | `square-slash` | [ui/src/icons/square-slash.svg](ui/src/icons/square-slash.svg) | [square-slash.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/square-slash.svg) |
 | `sun` | [ui/src/icons/sun.svg](ui/src/icons/sun.svg) | [sun.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/sun.svg) |
+| `text-wrap` | [ui/src/icons/text-wrap.svg](ui/src/icons/text-wrap.svg) | [text-wrap.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/text-wrap.svg) |
 | `trash-2` | [ui/src/icons/trash-2.svg](ui/src/icons/trash-2.svg) | [trash-2.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/trash-2.svg) |
 | `unplug` | [ui/src/icons/unplug.svg](ui/src/icons/unplug.svg) | [unplug.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/unplug.svg) |
 | `x` | [ui/src/icons/x.svg](ui/src/icons/x.svg) | [x.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/x.svg) |

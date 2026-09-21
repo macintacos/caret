@@ -31,7 +31,11 @@
   } from "$lib/diffview/annotationSlot.ts";
   import { type BracketSpan, bracketLayer } from "$lib/diffview/bracket.ts";
   import { type CodeBlockRange, codeBlockRanges, codeBlockText } from "$lib/diffview/codeBlocks.ts";
-  import { codeBlockAtPoint, copyAnchor } from "$lib/diffview/codeCopy.ts";
+  import {
+    codeBlockAtPoint,
+    type CodeChromeAnchor,
+    codeChromeAnchors,
+  } from "$lib/diffview/codeChrome.ts";
   import {
     type ComposerScratch,
     normalizeRange,
@@ -99,7 +103,7 @@
   import LegacyAnnotationList from "@/components/LegacyAnnotationList.svelte";
   import PlanBreadcrumbs from "@/components/PlanBreadcrumbs.svelte";
   import PlanToc from "@/components/PlanToc.svelte";
-  import CodeCopyButton from "@/components/CodeCopyButton.svelte";
+  import CodeBlockChrome from "@/components/CodeBlockChrome.svelte";
   import RefHintBadge from "@/components/RefHintBadge.svelte";
   import FileDrawer from "@/components/FileDrawer.svelte";
   import FilePreview from "@/components/FilePreview.svelte";
@@ -662,9 +666,9 @@
   });
 
   // The fenced code blocks in the rendered plan, each with its range (for hover
-  // hit-testing) and its fence-stripped code (for the clipboard). Backs the per-block
-  // copy affordance (EXC-692). Computed from the SAME text the view renders
-  // (linkLayer.text) so the ranges line up with the shadow rows' data-line numbers,
+  // hit-testing and chrome anchoring) and its fence-stripped code (for the clipboard).
+  // Backs the per-block chrome (EXC-692, EXC-1386). Computed from the SAME text the view
+  // renders (linkLayer.text) so the ranges line up with the shadow rows' data-line numbers,
   // and memoized on that text so an unchanged poll tick keeps a stable reference.
   let codeBlocksMemo:
     | { text: string; blocks: Array<{ range: CodeBlockRange; text: string }> }
@@ -689,25 +693,53 @@
   // reveal below only reaches for it while showDiff, so a stale one is inert.
   let diffApi = $state<SourceDiffViewApi | undefined>();
 
-  // The code block the reviewer is hovering, with its top-right anchor in .diff-plan
-  // content coordinates — drives the copy button (EXC-692). Undefined when the pointer
-  // is over no block. The effect below tracks it from pointer moves over the scroller.
-  let hoveredCopy = $state<
-    { range: CodeBlockRange; text: string; top: number; left: number } | undefined
-  >();
+  // The code block the reviewer's pointer is over — what brightens that block's chrome
+  // (EXC-1386). Undefined when the pointer is over no block.
+  let hoveredBlockStart = $state<number | undefined>();
 
-  // Track the hovered code block from pointer moves over the scroll container (the
-  // rows live in the SourceView's shadow root; codeCopy.ts does the hit-test + the
-  // content-coordinate anchor). rAF-throttled, and the anchor is recomputed only when
-  // the hovered block changes (it is the block's own top-right, independent of where
-  // in the block the pointer sits), so hovering does not thrash layout. The button is
-  // a light-DOM child of .diff-plan, so it scrolls with the rows for free.
+  // The blocks the reviewer has soft-wrapped, by opening line. Transient by design: no
+  // preference, nothing persisted, and it empties on a review or version switch below.
+  let reflowedBlocks = $state<ReadonlySet<number>>(new Set());
+  const toggleReflow = (start: number): void => {
+    // A fresh Set rather than a mutation — the reference change is what re-runs the
+    // tagging effect in SourceView and the chrome sync below.
+    const next = new Set(reflowedBlocks);
+    if (!next.delete(start)) next.add(start);
+    reflowedBlocks = next;
+  };
+  // Empty the choices on a review or version switch: they name blocks that are no longer
+  // on screen. contentKey rather than the text, so an unchanged poll tick re-delivering the
+  // same version leaves a live wrap alone.
+  $effect(() => {
+    void contentKey;
+    reflowedBlocks = new Set();
+  });
+
+  // Where each block's chrome sits, in .diff-plan content coordinates, whether the block
+  // overflows unwrapped — the predicate the wrap button gates on — and the code its copy
+  // button writes, joined in the sync below so the template never looks one up.
+  type ChromeBox = CodeChromeAnchor & { text: string };
+  let chromeBoxes = $state<ChromeBox[]>([]);
+
+  // A version switch or a fresh SourceView leaves the boxes holding the previous
+  // document's coordinates and code, and the first re-sync is a frame away — long enough
+  // to paint them over rows they were never measured on.
+  $effect(() => {
+    void contentKey;
+    void host;
+    chromeBoxes = [];
+  });
+
+  // Track the hovered code block from pointer moves over the scroll container; the rows
+  // live in the SourceView's shadow root, so codeChrome.ts does the hit-test. rAF-
+  // throttled, and it yields a key rather than a position — every block's chrome is
+  // anchored by the sync effect below, whatever the pointer is doing.
   $effect(() => {
     const scroller = scrollEl;
     const el = host;
     const blocks = codeBlocks;
     if (scroller == null || el == null || blocks.length === 0) {
-      hoveredCopy = undefined;
+      hoveredBlockStart = undefined;
       return;
     }
     const ranges = blocks.map((b) => b.range);
@@ -716,18 +748,7 @@
     let lastY = 0;
     const update = () => {
       raf = 0;
-      const range = codeBlockAtPoint(el, ranges, lastX, lastY);
-      if (range == null) {
-        hoveredCopy = undefined;
-        return;
-      }
-      if (hoveredCopy?.range.start === range.start) return; // same block — keep the anchor
-      const anchor = copyAnchor(el, scroller, range);
-      const block = blocks.find((b) => b.range.start === range.start);
-      hoveredCopy =
-        anchor == null || block == null
-          ? undefined
-          : { range, text: block.text, top: anchor.top, left: anchor.left };
+      hoveredBlockStart = codeBlockAtPoint(el, ranges, lastX, lastY)?.start;
     };
     const onMove = (event: PointerEvent) => {
       lastX = event.clientX;
@@ -737,7 +758,7 @@
     const onLeave = () => {
       cancelAnimationFrame(raf);
       raf = 0;
-      hoveredCopy = undefined;
+      hoveredBlockStart = undefined;
     };
     scroller.addEventListener("pointermove", onMove);
     scroller.addEventListener("pointerleave", onLeave);
@@ -745,6 +766,54 @@
       cancelAnimationFrame(raf);
       scroller.removeEventListener("pointermove", onMove);
       scroller.removeEventListener("pointerleave", onLeave);
+    };
+  });
+
+  // Keep every block's chrome anchored, the same shape as the reference-hint sync below:
+  // rAF-throttled, re-run from a ResizeObserver over the host. Content coordinates survive
+  // scrolling by construction, so what has to be caught is anything that changes a block's
+  // box — a library repaint, a block moving into or out of its scroll card, a viewport
+  // resize — and all of them change the rendered height the observer watches. The chrome
+  // is a light-DOM child of .diff-plan, so it scrolls with the rows for free.
+  $effect(() => {
+    const scroller = scrollEl;
+    const el = host;
+    const blocks = codeBlocks;
+    // A wrap toggle changes a block's height: depending on it re-measures now rather than
+    // waiting for the ResizeObserver to report the new box.
+    void reflowedBlocks;
+    // Nothing to anchor on the compare surface — it renders no chrome, and its rows are a
+    // different document, so syncing there would walk the single-version view's torn-out
+    // shadow root.
+    if (showDiff || scroller == null || el == null || blocks.length === 0) {
+      chromeBoxes = [];
+      return;
+    }
+    const ranges = blocks.map((b) => b.range);
+    const codeByStart = new Map(blocks.map((b) => [b.range.start, b.text]));
+    let raf = 0;
+    const sync = () => {
+      raf = 0;
+      chromeBoxes = codeChromeAnchors(el, scroller, ranges).flatMap((anchor) => {
+        const text = codeByStart.get(anchor.start);
+        return text === undefined ? [] : [{ ...anchor, text }];
+      });
+    };
+    const schedule = () => {
+      if (raf === 0) raf = requestAnimationFrame(sync);
+    };
+    // The rows are tagged and carded on a frame off SourceView's MutationObserver, so
+    // there is nothing to measure for the first few frames after a document arrives.
+    const cancelFrames = retryFrames(() => {
+      sync();
+      return chromeBoxes.length > 0;
+    });
+    const observer = new ResizeObserver(schedule);
+    observer.observe(el);
+    return () => {
+      cancelFrames();
+      cancelAnimationFrame(raf);
+      observer.disconnect();
     };
   });
 
@@ -832,8 +901,9 @@
   // the plan under a still pointer leaves both glued to the row that scrolled away.
   // Re-fire the real gesture: on scroll, synthesize a pointermove at the retained cursor
   // position into the row now beneath it. The library re-hovers that row (highlight +
-  // "+"), and the composed event bubbles out to .diff-plan so the code-block copy effect
-  // above re-anchors too — one re-fire drives every hover-dependent affordance.
+  // "+"), and the composed event bubbles out to .diff-plan so the block-hover effect above
+  // re-lights the chrome on the block now under the pointer — one re-fire drives every
+  // hover-dependent affordance.
   // rAF-throttled, and gated on pointer presence so a programmatic scroll (a vim j/k
   // motion) with the pointer away can't resurrect a stale hover.
   $effect(() => {
@@ -1592,6 +1662,7 @@
           cursorLine={keyboardStore.cursorLine}
           {searchMatches}
           currentMatchIndex={keyboardStore.searchIndex}
+          {reflowedBlocks}
         />
         <!-- The comment-span bracket overlay: rounded gutter rails marking each
              comment's covered lines. It layers over the .diff-plan scroll content
@@ -1599,16 +1670,24 @@
              [data-line] rows) so the rails scroll with the rows; it is decorative
              (pointer-events: none). -->
         <div use:bracketLayer={{ host, spans: bracketSpans }}></div>
-        <!-- The per-code-block copy button (EXC-692): shown at the top-right of the
-             fenced block the reviewer is hovering (tracked above). Keyed on the block
-             so moving to another block resets its copied/checkmark state. It layers over
-             the .diff-plan scroll content, so like the bracket rails it scrolls with the
-             rows. -->
-        {#if hoveredCopy}
-          {#key hoveredCopy.range.start}
-            <CodeCopyButton text={hoveredCopy.text} top={hoveredCopy.top} left={hoveredCopy.left} />
-          {/key}
-        {/if}
+        <!-- The per-code-block chrome (EXC-692, EXC-1386): copy at the top-right of every
+             fenced block, plus soft wrap on the ones that overflow, resting dimmed and
+             brightening under the pointer. Keyed on the block's opening line so a re-anchor
+             updates each box's props and leaves the instance — and its copied/checkmark
+             state — alone. It layers over the .diff-plan scroll content, so like the bracket
+             rails it scrolls with the rows. -->
+        {#each chromeBoxes as chromeBox (chromeBox.start)}
+          <CodeBlockChrome
+            text={chromeBox.text}
+            start={chromeBox.start}
+            top={chromeBox.top}
+            left={chromeBox.left}
+            carded={chromeBox.carded}
+            reflowed={reflowedBlocks.has(chromeBox.start)}
+            hovered={hoveredBlockStart === chromeBox.start}
+            onToggleReflow={() => toggleReflow(chromeBox.start)}
+          />
+        {/each}
         <!-- The one-time reference hints (EXC-1061): one badge over the first
              on-screen file reference and one over the first directory reference,
              teaching that a path token opens a preview. Layered over the .diff-plan

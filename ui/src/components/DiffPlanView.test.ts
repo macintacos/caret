@@ -504,6 +504,28 @@ describe("DiffPlanView comment-span brackets", () => {
   });
 });
 
+describe("DiffPlanView code-block chrome", () => {
+  // The chrome's pixel geometry is real layout, owned by codeChrome.ts's unit tests and
+  // the Playwright e2e — happy-dom has none. Here: the host-side wiring, that the boxes
+  // mounted over a document do not outlive it.
+  const planWithBlock = (body: string, lead = "") =>
+    `# Title\n\n${lead}\`\`\`ts\n${body}\n\`\`\`\n`;
+
+  function chromeBoxes(target: HTMLElement): NodeListOf<Element> {
+    return target.querySelectorAll(".diff-plan .code-chrome");
+  }
+
+  test("a new version drops the prior document's boxes", async () => {
+    const p = reactiveProps(props({ review: reviewFixture({ currentPlan: planWithBlock("a") }) }));
+    const { target, flush } = render(DiffPlanView, p);
+    await until(() => chromeBoxes(target).length === 1);
+
+    p.review = reviewFixture({ version: 2, currentPlan: planWithBlock("b", "prose\n\n") });
+    flush();
+    expect(chromeBoxes(target)).toHaveLength(0);
+  });
+});
+
 // File-reference resolution (EXC-687) is keyed off the plan text, not the review
 // object identity: the 2s poll re-delivers a fresh review object every tick, but
 // the referenced files don't change underneath the reader, so the daemon must be

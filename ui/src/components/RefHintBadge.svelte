@@ -48,7 +48,7 @@
   );
 </script>
 
-<!-- The badge is a shadcn Button wrapped in a shadcn Tooltip, following CodeCopyButton.
+<!-- The badge is a shadcn Button wrapped in a shadcn Tooltip, following CodeBlockChrome.
      The button stays the absolutely-positioned element (inline top/left from
      DiffPlanView), so its `.ref-hint` surface is molded in place. `{...props}` from the
      tooltip trigger is spread first so the explicit handlers/label below win — which
@@ -107,7 +107,7 @@
     background-clip: content-box;
     box-shadow: none;
     /* Over the plan rows and the comment-span bracket rails (which take the default
-       layer), under the code-copy chip (4) and the drawer. Shared with the plan's
+       layer), under the code-block chrome (4) and the drawer. Shared with the plan's
        own rails — .drag-readout-rail, .drag-hint and .visual-hint are all 3 and all
        later in DOM order, so each paints over the badge where they overlap. That is
        the right way round: every one of them is transient, and the badge is what the

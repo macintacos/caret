@@ -1200,31 +1200,17 @@ test("renders a fenced code block as a tagged, darker panel on its own rows (EXC
   expect(Number.parseFloat(panel.fenceTop as string)).toBeGreaterThan(0);
 });
 
-test("hovering a code block reveals a copy button that copies the code (EXC-692)", async ({
-  daemon,
-  page,
-}) => {
-  // The copy affordance: hovering a fenced block shows a button at its top-right;
-  // clicking it writes the block's code (fences stripped) to the clipboard and
-  // confirms with a checkmark that reverts. Proves the hover hit-test, the clipboard
-  // write, and the icon swap resolve end to end in the real browser.
+test("a code block's copy button copies the code (EXC-692)", async ({ daemon, page }) => {
+  // The copy affordance: every fenced block carries a button at its top-right; clicking
+  // it writes the block's code (fences stripped) to the clipboard and confirms with a
+  // checkmark that reverts. Proves the anchor, the clipboard write, and the icon swap
+  // resolve end to end in the real browser.
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await daemon.seed({ plan: CODE_PLAN });
   await page.goto("/");
   await expect(page.getByText("Some intro prose here.")).toBeVisible();
 
   const copy = page.getByRole("button", { name: "Copy code" });
-  await expect(copy).toHaveCount(0);
-
-  // The centre of line 6 — inside the fence, not on it.
-  const point = await page.evaluate(() => {
-    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
-    const row = sh?.querySelector('[data-content] > [data-line="6"]') as HTMLElement | null;
-    const r = row?.getBoundingClientRect();
-    return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null;
-  });
-  expect(point).not.toBeNull();
-  await page.mouse.move((point as { x: number }).x, (point as { y: number }).y);
   await expect(copy).toBeVisible();
 
   await copy.click();
@@ -1234,30 +1220,6 @@ test("hovering a code block reveals a copy button that copies the code (EXC-692)
   expect(clip).toBe("const x: number = compute();\nreturn x + 1;");
   await expect(page.getByRole("button", { name: "Copy code" })).toBeVisible();
 });
-
-// Two distinct fenced blocks separated by prose, with trailing filler for scroll room.
-// Block A and block B carry different code so the clipboard proves which block the copy
-// button targets after the plan scrolls under a stationary cursor (EXC-836).
-const SCROLL_COPY_PLAN = `# Scroll Copy Plan
-
-Intro prose above the first block.
-
-\`\`\`ts
-const a = 1;
-const aa = 2;
-\`\`\`
-
-Middle prose between the blocks.
-
-\`\`\`ts
-const b = 3;
-const bb = 4;
-\`\`\`
-
-Closing prose after the second block.
-
-${Array.from({ length: 20 }, (_, i) => `Filler line ${i + 1} giving the surface room to scroll.`).join("\n\n")}
-`;
 
 // The viewport center of the shadow row whose text contains `needle`, or null when no
 // such row is rendered. Used to place the cursor and to compute how far to scroll a row
@@ -1302,51 +1264,6 @@ async function lineNoAt(page: Page, x: number, y: number): Promise<string | null
     { x, y },
   );
 }
-
-test("the copy button follows the block under a stationary cursor as the plan scrolls (EXC-836)", async ({
-  daemon,
-  page,
-}) => {
-  // CSS :hover doesn't re-fire when the container scrolls under a still pointer, so the
-  // copy button used to stay glued to the block that scrolled away. It must instead
-  // re-anchor to the element now under the pointer: hide over prose, and re-appear
-  // targeting the new block when another block scrolls under the cursor.
-  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
-  await daemon.seed({ plan: SCROLL_COPY_PLAN });
-  await page.goto("/");
-  await expect(page.getByText("Intro prose above the first block.")).toBeVisible();
-
-  const copy = page.getByRole("button", { name: "Copy code" });
-  // Scroll with a real mouse wheel at the stationary pointer — the true user gesture.
-  // NOT `el.scrollTop +=`, which fires a scroll event without proving a wheel over the
-  // plan actually routes to `.diff-plan`; wheel deltaY maps 1:1 onto scrollTop here.
-  const wheelBy = (dy: number) => page.mouse.wheel(0, dy);
-
-  // Park the cursor on block A's interior code line.
-  const cursor = await rowPoint(page, "const a = 1;");
-  expect(cursor).not.toBeNull();
-  await page.mouse.move(cursor!.x, cursor!.y);
-  await expect(copy).toBeVisible();
-
-  // Scroll the middle prose under the stationary cursor: no block is there, so the
-  // button hides — the behavior CSS :hover alone could never produce on scroll.
-  const prose = await rowPoint(page, "Middle prose between the blocks.");
-  expect(prose).not.toBeNull();
-  await wheelBy(prose!.y - cursor!.y);
-  await expect(copy).toHaveCount(0);
-
-  // Scroll block B under the same stationary cursor: the button re-anchors to it.
-  const blockB = await rowPoint(page, "const b = 3;");
-  expect(blockB).not.toBeNull();
-  await wheelBy(blockB!.y - cursor!.y);
-  await expect(copy).toBeVisible();
-
-  // Clicking the re-anchored button copies block B's code — proof it followed to the
-  // block now under the pointer, not the one that was there before the scroll.
-  await copy.click();
-  const clip = await page.evaluate(() => navigator.clipboard.readText());
-  expect(clip).toBe("const b = 3;\nconst bb = 4;");
-});
 
 test("the row highlight and gutter + follow the row under a stationary cursor as the plan scrolls (EXC-836)", async ({
   daemon,
