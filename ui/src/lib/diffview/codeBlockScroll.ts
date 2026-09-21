@@ -135,8 +135,8 @@ export function syncCodeBlockCards(
       // tables.ts's cardHoldsRange, which re-validates a kept card's span: an annotation
       // change makes the library's partial render ineligible, so a card never survives one
       // to hold a stale span.
-      const m = read(card);
-      if (m.scrollWidth > m.clientWidth) wanted.add(key);
+      const cardMetrics = read(card);
+      if (cardMetrics.scrollWidth > cardMetrics.clientWidth) wanted.add(key);
       continue;
     }
     // Not wrapped: wrap it if any row overflows its capped box. Measured on the slice's

@@ -10,7 +10,7 @@ import CodeBlockChrome from "@/components/CodeBlockChrome.svelte";
 // Lets a click's async handler settle (the awaited copy + the reactive update).
 const settle = () => Promise.resolve().then(() => Promise.resolve());
 
-const BASE = {
+const BASE_PROPS = {
   text: "x",
   top: 0,
   left: 0,
@@ -24,7 +24,7 @@ const BASE = {
 
 describe("CodeBlockChrome", () => {
   test("positions itself at the given content coordinates", () => {
-    const { target, flush } = render(CodeBlockChrome, { ...BASE, top: 12, left: 34 });
+    const { target, flush } = render(CodeBlockChrome, { ...BASE_PROPS, top: 12, left: 34 });
     flush();
     const box = target.querySelector(".code-chrome") as HTMLElement;
     expect(box.style.top).toBe("12px");
@@ -38,7 +38,7 @@ describe("CodeBlockChrome", () => {
       return Promise.resolve();
     };
     const { target, flush } = render(CodeBlockChrome, {
-      ...BASE,
+      ...BASE_PROPS,
       text: "const x = 1;\nreturn x;",
       copy,
     });
@@ -55,7 +55,7 @@ describe("CodeBlockChrome", () => {
 
   test("stays as the copy glyph when the clipboard write rejects", async () => {
     const copy = () => Promise.reject(new Error("denied"));
-    const { target, flush } = render(CodeBlockChrome, { ...BASE, copy });
+    const { target, flush } = render(CodeBlockChrome, { ...BASE_PROPS, copy });
     flush();
     const button = target.querySelector("button.code-copy") as HTMLButtonElement;
     button.click();
@@ -67,23 +67,23 @@ describe("CodeBlockChrome", () => {
   });
 
   test("offers the wrap toggle only for a block wide enough to need it", () => {
-    const fits = render(CodeBlockChrome, BASE);
+    const fits = render(CodeBlockChrome, BASE_PROPS);
     fits.flush();
     expect(fits.target.querySelector("button.code-wrap")).toBeNull();
 
-    const overflows = render(CodeBlockChrome, { ...BASE, carded: true });
+    const overflows = render(CodeBlockChrome, { ...BASE_PROPS, carded: true });
     overflows.flush();
     expect(overflows.target.querySelector("button.code-wrap")).not.toBeNull();
   });
 
   test("announces whether the block is currently wrapped", () => {
-    const off = render(CodeBlockChrome, { ...BASE, carded: true });
+    const off = render(CodeBlockChrome, { ...BASE_PROPS, carded: true });
     off.flush();
     const unwrapped = off.target.querySelector("button.code-wrap") as HTMLButtonElement;
     expect(unwrapped.getAttribute("aria-pressed")).toBe("false");
     expect(unwrapped.getAttribute("aria-label")).toBe("Wrap long lines from line 42");
 
-    const on = render(CodeBlockChrome, { ...BASE, carded: true, reflowed: true });
+    const on = render(CodeBlockChrome, { ...BASE_PROPS, carded: true, reflowed: true });
     on.flush();
     const wrapped = on.target.querySelector("button.code-wrap") as HTMLButtonElement;
     expect(wrapped.getAttribute("aria-pressed")).toBe("true");
@@ -91,16 +91,16 @@ describe("CodeBlockChrome", () => {
   });
 
   test("leaves the copy button out of the toggle contract", () => {
-    const { target, flush } = render(CodeBlockChrome, { ...BASE, carded: true });
+    const { target, flush } = render(CodeBlockChrome, { ...BASE_PROPS, carded: true });
     flush();
-    const copy = target.querySelector("button.code-copy") as HTMLButtonElement;
-    expect(copy.getAttribute("aria-pressed")).toBeNull();
+    const copyButton = target.querySelector("button.code-copy") as HTMLButtonElement;
+    expect(copyButton.getAttribute("aria-pressed")).toBeNull();
   });
 
   test("reports the wrap toggle to its host", () => {
     let toggles = 0;
     const { target, flush } = render(CodeBlockChrome, {
-      ...BASE,
+      ...BASE_PROPS,
       carded: true,
       onToggleReflow: () => {
         toggles += 1;
@@ -112,13 +112,13 @@ describe("CodeBlockChrome", () => {
   });
 
   test("brightens while the pointer is over its block", () => {
-    const resting = render(CodeBlockChrome, BASE);
+    const resting = render(CodeBlockChrome, BASE_PROPS);
     resting.flush();
     expect(
       (resting.target.querySelector(".code-chrome") as HTMLElement).dataset.lit,
     ).toBeUndefined();
 
-    const lit = render(CodeBlockChrome, { ...BASE, hovered: true });
+    const lit = render(CodeBlockChrome, { ...BASE_PROPS, hovered: true });
     lit.flush();
     expect((lit.target.querySelector(".code-chrome") as HTMLElement).dataset.lit).toBe("");
   });

@@ -48,16 +48,16 @@ function blockBox(
 ): { top: number; bottom: number; left: number; right: number; carded: boolean } | null {
   const card = root.querySelector<HTMLElement>(`[data-content] > [${CARD_ATTR}="${range.start}"]`);
   if (card != null) return { ...read(card), carded: true };
-  const first = root.querySelector<HTMLElement>(`[data-content] [data-line="${range.start}"]`);
-  const last = root.querySelector<HTMLElement>(`[data-content] [data-line="${range.end}"]`);
-  if (first == null || last == null) return null;
-  const a = read(first);
-  const b = read(last);
+  const firstRow = root.querySelector<HTMLElement>(`[data-content] [data-line="${range.start}"]`);
+  const lastRow = root.querySelector<HTMLElement>(`[data-content] [data-line="${range.end}"]`);
+  if (firstRow == null || lastRow == null) return null;
+  const firstRect = read(firstRow);
+  const lastRect = read(lastRow);
   return {
-    top: Math.min(a.top, b.top),
-    bottom: Math.max(a.bottom, b.bottom),
-    left: a.left,
-    right: a.right,
+    top: Math.min(firstRect.top, lastRect.top),
+    bottom: Math.max(firstRect.bottom, lastRect.bottom),
+    left: firstRect.left,
+    right: firstRect.right,
     carded: false,
   };
 }
@@ -106,15 +106,15 @@ export function codeChromeAnchors(
 ): CodeChromeAnchor[] {
   const root = host.shadowRoot;
   if (root == null) return [];
-  const s = read(scroller);
+  const scrollerRect = read(scroller);
   const anchors: CodeChromeAnchor[] = [];
   for (const range of ranges) {
     const box = blockBox(root, range, read);
     if (box == null) continue;
     anchors.push({
       start: range.start,
-      top: box.top - (s.top - scroller.scrollTop),
-      left: box.right - (s.left - scroller.scrollLeft),
+      top: box.top - (scrollerRect.top - scroller.scrollTop),
+      left: box.right - (scrollerRect.left - scroller.scrollLeft),
       carded: box.carded,
     });
   }

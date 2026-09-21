@@ -35,12 +35,11 @@
     copy?: (text: string) => Promise<void>;
   }
 
-  /** One chrome button. `label` carries the block's line for the tab order; `tip` is the
-   * short visible text. */
+  /** One chrome button. */
   interface Control {
-    cls: string;
-    label: string;
-    tip: string;
+    className: string;
+    ariaLabel: string;
+    tooltip: string;
     /** Omitted on a non-toggle: undefined renders no aria-pressed at all. */
     pressed?: boolean;
     onclick: (event: MouseEvent) => void;
@@ -104,7 +103,7 @@
 <!-- `{...props}` from the tooltip trigger is spread first so the explicit handlers and
      label below win. The wrap control's name stays put across the toggle — aria-pressed
      is what carries the state. -->
-{#snippet control(c: Control)}
+{#snippet control(chromeButton: Control)}
   <Tooltip.Root>
     <Tooltip.Trigger>
       {#snippet child({ props })}
@@ -113,17 +112,17 @@
           variant="outline"
           size="icon"
           type="button"
-          class="code-chrome-button {c.cls}"
-          aria-label={c.label}
-          aria-pressed={c.pressed}
+          class="code-chrome-button {chromeButton.className}"
+          aria-label={chromeButton.ariaLabel}
+          aria-pressed={chromeButton.pressed}
           onpointerdown={(event) => event.stopPropagation()}
-          onclick={c.onclick}
+          onclick={chromeButton.onclick}
         >
-          {@render c.glyph()}
+          {@render chromeButton.glyph()}
         </Button>
       {/snippet}
     </Tooltip.Trigger>
-    <Tooltip.Content>{c.tip}</Tooltip.Content>
+    <Tooltip.Content>{chromeButton.tooltip}</Tooltip.Content>
   </Tooltip.Root>
 {/snippet}
 
@@ -133,18 +132,18 @@
   <Tooltip.Provider delayDuration={300}>
     {#if carded}
       {@render control({
-        cls: "code-wrap",
-        label: `Wrap long lines from line ${start}`,
-        tip: "Wrap long lines",
+        className: "code-wrap",
+        ariaLabel: `Wrap long lines from line ${start}`,
+        tooltip: "Wrap long lines",
         pressed: reflowed,
         onclick: onWrapClick,
         glyph: wrapGlyph,
       })}
     {/if}
     {@render control({
-      cls: "code-copy",
-      label: copied ? `Copied code from line ${start}` : `Copy code from line ${start}`,
-      tip: copied ? "Copied" : "Copy code",
+      className: "code-copy",
+      ariaLabel: copied ? `Copied code from line ${start}` : `Copy code from line ${start}`,
+      tooltip: copied ? "Copied" : "Copy code",
       onclick: onCopyClick,
       glyph: copyGlyph,
     })}

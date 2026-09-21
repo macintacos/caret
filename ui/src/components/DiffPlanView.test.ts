@@ -511,18 +511,18 @@ describe("DiffPlanView code-block chrome", () => {
   const planWithBlock = (body: string, lead = "") =>
     `# Title\n\n${lead}\`\`\`ts\n${body}\n\`\`\`\n`;
 
-  function boxes(target: HTMLElement): NodeListOf<Element> {
+  function chromeBoxes(target: HTMLElement): NodeListOf<Element> {
     return target.querySelectorAll(".diff-plan .code-chrome");
   }
 
   test("a new version drops the prior document's boxes", async () => {
     const p = reactiveProps(props({ review: reviewFixture({ currentPlan: planWithBlock("a") }) }));
     const { target, flush } = render(DiffPlanView, p);
-    await until(() => boxes(target).length === 1);
+    await until(() => chromeBoxes(target).length === 1);
 
     p.review = reviewFixture({ version: 2, currentPlan: planWithBlock("b", "prose\n\n") });
     flush();
-    expect(boxes(target)).toHaveLength(0);
+    expect(chromeBoxes(target)).toHaveLength(0);
   });
 });
 

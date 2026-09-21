@@ -453,21 +453,21 @@ describe("applyCodeBlockReflow", () => {
     root.querySelector<HTMLElement>(`[data-gutter] > [${GUTTER_CARD_ATTR}="${key}"]`);
 
   /** A carded block (1-3) in both columns, ready to be reflowed. */
-  function carded(): HTMLElement {
+  function rootWithCardedBlock(): HTMLElement {
     const { root, rowMetrics } = buildColumns(overflowingBlock);
     syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics, cardOverflows));
     return root;
   }
 
   test("marks both the content card and its gutter mirror", () => {
-    const root = carded();
+    const root = rootWithCardedBlock();
     applyCodeBlockReflow(root, new Set([1]));
     expect(contentCardFor(root, "1")?.hasAttribute(REFLOW_ATTR)).toBe(true);
     expect(gutterCardFor(root, "1")?.hasAttribute(REFLOW_ATTR)).toBe(true);
   });
 
   test("clears the mark from both when the block leaves the set", () => {
-    const root = carded();
+    const root = rootWithCardedBlock();
     applyCodeBlockReflow(root, new Set([1]));
     applyCodeBlockReflow(root, new Set());
     expect(contentCardFor(root, "1")?.hasAttribute(REFLOW_ATTR)).toBe(false);
@@ -483,7 +483,7 @@ describe("applyCodeBlockReflow", () => {
   });
 
   test("mutates nothing on a settled re-run", () => {
-    const root = carded();
+    const root = rootWithCardedBlock();
     applyCodeBlockReflow(root, new Set([1]));
     const settled = root.innerHTML;
     applyCodeBlockReflow(root, new Set([1]));
@@ -497,12 +497,12 @@ describe("applyCodeBlockReflow", () => {
     const read = makeReader(rowMetrics, cardOverflows);
     syncCodeBlockCards(root, [overflowingRange], read);
     applyCodeBlockReflow(root, new Set([1]));
-    const before = contentCardFor(root, "1");
+    const staleCard = contentCardFor(root, "1");
     syncCodeBlockCards(root, [], read); // repaint retires the card
     syncCodeBlockCards(root, [overflowingRange], read); // ...and rebuilds it
     applyCodeBlockReflow(root, new Set([1]));
-    const after = contentCardFor(root, "1");
-    expect(after).not.toBe(before);
-    expect(after?.hasAttribute(REFLOW_ATTR)).toBe(true);
+    const rebuiltCard = contentCardFor(root, "1");
+    expect(rebuiltCard).not.toBe(staleCard);
+    expect(rebuiltCard?.hasAttribute(REFLOW_ATTR)).toBe(true);
   });
 });

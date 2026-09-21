@@ -19,16 +19,16 @@ function makeHost(lineCount: number): HTMLElement {
 
 /** Moves lines `start`..`end` into a scroll card, as codeBlockScroll.ts does for an
  * overflowing block — the shape that makes the block's rows non-direct children. */
-function card(host: HTMLElement, start: number, end: number): void {
+function wrapInCard(host: HTMLElement, start: number, end: number): void {
   const content = host.shadowRoot?.querySelector("[data-content]") as HTMLElement;
   const rows = [];
   for (let n = start; n <= end; n++) {
     rows.push(content.querySelector(`[data-line="${n}"]`) as HTMLElement);
   }
-  const box = document.createElement("div");
-  box.setAttribute(CARD_ATTR, String(start));
-  content.insertBefore(box, rows[0] ?? null);
-  for (const row of rows) box.appendChild(row);
+  const card = document.createElement("div");
+  card.setAttribute(CARD_ATTR, String(start));
+  content.insertBefore(card, rows[0] ?? null);
+  for (const row of rows) card.appendChild(row);
 }
 
 // Lays each row on a vertical grid: row n spans y [ (n-1)*10, n*10 ], x [100, 300]. A card
@@ -79,7 +79,7 @@ describe("codeBlockAtPoint", () => {
 
   test("hits an overflowing block through its scroll card", () => {
     const host = makeHost(8);
-    card(host, 2, 4);
+    wrapInCard(host, 2, 4);
     // The card spans y [10,60], x [100,250].
     expect(codeBlockAtPoint(host, [{ start: 2, end: 4 }], 150, 25, POINT_READER)).toEqual({
       start: 2,
@@ -89,7 +89,7 @@ describe("codeBlockAtPoint", () => {
 
   test("returns null beyond a carded block's visible edge, not its max-content rows", () => {
     const host = makeHost(8);
-    card(host, 2, 4);
+    wrapInCard(host, 2, 4);
     // x=280 is inside a row's max-content box but past the card the reviewer can see.
     expect(codeBlockAtPoint(host, [{ start: 2, end: 4 }], 280, 25, POINT_READER)).toBeNull();
   });
@@ -128,7 +128,7 @@ describe("codeChromeAnchors", () => {
 
   test("anchors a carded block to its card's visible edge, not its max-content row", () => {
     const host = makeHost(8);
-    card(host, 2, 4);
+    wrapInCard(host, 2, 4);
     const scroller = document.createElement("div");
     expect(codeChromeAnchors(host, scroller, [{ start: 2, end: 4 }], gridReader(scroller))).toEqual(
       [{ start: 2, top: 10, left: 250, carded: true }],

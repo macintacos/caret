@@ -212,9 +212,9 @@ test("copied text is byte-identical wrapped and unwrapped", async ({ daemon, pag
   await openMixedPlan(page, daemon);
   // Scoped to the wide block's own chrome box: a copy button renames itself to "Copied"
   // for a moment, so a page-wide name query would walk to the other block's button.
-  const box = page.locator(".code-chrome").first();
-  const idle = box.getByRole("button", { name: "Copy code" });
-  const done = box.getByRole("button", { name: "Copied" });
+  const wideChrome = page.locator(".code-chrome").first();
+  const idle = wideChrome.getByRole("button", { name: "Copy code" });
+  const done = wideChrome.getByRole("button", { name: "Copied" });
 
   await idle.click();
   await expect(done).toBeVisible();
@@ -250,21 +250,21 @@ test("the chrome brightens on the block under the pointer, and follows a scroll 
   // still pointer too — CSS :hover never re-fires there, so the chrome would stay lit on
   // the block that scrolled away, which is the EXC-836 failure one affordance over.
   await openMixedPlan(page, daemon);
-  const wide = chromeFor(page, WIDE);
-  const narrow = chromeFor(page, NARROW);
+  const wideChrome = chromeFor(page, WIDE);
+  const narrowChrome = chromeFor(page, NARROW);
 
   const cursor = await blockPoint(page, WIDE);
   await page.mouse.move(cursor.x, cursor.y);
-  await expect(wide).toHaveAttribute("data-lit", "");
-  await expect(narrow).not.toHaveAttribute("data-lit", "");
+  await expect(wideChrome).toHaveAttribute("data-lit", "");
+  await expect(narrowChrome).not.toHaveAttribute("data-lit", "");
 
   // Wheel the narrow block up to the unmoved pointer — a real wheel, so this proves the
   // gesture routes to the plan and that the re-fired move re-keys the hover.
   const target = await blockPoint(page, NARROW);
   await page.mouse.wheel(0, target.y - cursor.y);
 
-  await expect(narrow).toHaveAttribute("data-lit", "");
-  await expect(wide).not.toHaveAttribute("data-lit", "");
+  await expect(narrowChrome).toHaveAttribute("data-lit", "");
+  await expect(wideChrome).not.toHaveAttribute("data-lit", "");
 });
 
 test("no viewport moves a block across the fit/overflow line", async ({ daemon, page }) => {

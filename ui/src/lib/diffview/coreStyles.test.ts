@@ -1278,7 +1278,7 @@ describe("the single per-block code scrollbar (EXC-729)", () => {
 // the content card's rows wrap, and the gutter mirror's numbers move to the top of the taller
 // row tracks the subgrid grows for them.
 describe("the per-block reflow state on the code card (EXC-1386)", () => {
-  const reflowCard =
+  const reflowCardRule =
     overrideDecls.match(
       /\[data-content\]\s*>\s*\[data-code-card\]\[data-code-card-reflow\]\s*\{[^}]*\}/,
     )?.[0] ?? "";
@@ -1287,7 +1287,7 @@ describe("the per-block reflow state on the code card (EXC-1386)", () => {
     // The base card sizes its columns to the widest unwrapped line, which measures a
     // pre-wrap row at its unwrapped width — so without this swap the track stays wide and
     // nothing visibly reflows.
-    expect(reflowCard).toMatch(/grid-auto-columns:\s*minmax\(0,\s*1fr\)/);
+    expect(reflowCardRule).toMatch(/grid-auto-columns:\s*minmax\(0,\s*1fr\)/);
   });
 
   test("wraps the reflowed card's code rows", () => {
@@ -1309,7 +1309,7 @@ describe("the per-block reflow state on the code card (EXC-1386)", () => {
     // A line with no break opportunity — a long URL, a hash — cannot reflow to the card
     // width. It overflows the capped track and keeps its scrollbar rather than widening
     // the card, which is what the base rule's overflow-x still being in force buys.
-    expect(reflowCard).not.toMatch(/overflow-x:/);
+    expect(reflowCardRule).not.toMatch(/overflow-x:/);
   });
 });
 

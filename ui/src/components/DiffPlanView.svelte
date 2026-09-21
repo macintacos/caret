@@ -693,9 +693,9 @@
   // reveal below only reaches for it while showDiff, so a stale one is inert.
   let diffApi = $state<SourceDiffViewApi | undefined>();
 
-  // The code block the reviewer's pointer is over, by its 1-based opening line — what
-  // brightens that block's chrome (EXC-1386). Undefined when the pointer is over no block.
-  let hoveredBlock = $state<number | undefined>();
+  // The code block the reviewer's pointer is over — what brightens that block's chrome
+  // (EXC-1386). Undefined when the pointer is over no block.
+  let hoveredBlockStart = $state<number | undefined>();
 
   // The blocks the reviewer has soft-wrapped, by opening line. Transient by design: no
   // preference, nothing persisted, and it empties on a review or version switch below.
@@ -719,7 +719,7 @@
   // overflows unwrapped — the predicate the wrap button gates on — and the code its copy
   // button writes, joined in the sync below so the template never looks one up.
   type ChromeBox = CodeChromeAnchor & { text: string };
-  let chrome = $state<ChromeBox[]>([]);
+  let chromeBoxes = $state<ChromeBox[]>([]);
 
   // A version switch or a fresh SourceView leaves the boxes holding the previous
   // document's coordinates and code, and the first re-sync is a frame away — long enough
@@ -727,7 +727,7 @@
   $effect(() => {
     void contentKey;
     void host;
-    chrome = [];
+    chromeBoxes = [];
   });
 
   // Track the hovered code block from pointer moves over the scroll container; the rows
@@ -739,7 +739,7 @@
     const el = host;
     const blocks = codeBlocks;
     if (scroller == null || el == null || blocks.length === 0) {
-      hoveredBlock = undefined;
+      hoveredBlockStart = undefined;
       return;
     }
     const ranges = blocks.map((b) => b.range);
@@ -748,7 +748,7 @@
     let lastY = 0;
     const update = () => {
       raf = 0;
-      hoveredBlock = codeBlockAtPoint(el, ranges, lastX, lastY)?.start;
+      hoveredBlockStart = codeBlockAtPoint(el, ranges, lastX, lastY)?.start;
     };
     const onMove = (event: PointerEvent) => {
       lastX = event.clientX;
@@ -758,7 +758,7 @@
     const onLeave = () => {
       cancelAnimationFrame(raf);
       raf = 0;
-      hoveredBlock = undefined;
+      hoveredBlockStart = undefined;
     };
     scroller.addEventListener("pointermove", onMove);
     scroller.addEventListener("pointerleave", onLeave);
@@ -786,17 +786,17 @@
     // different document, so syncing there would walk the single-version view's torn-out
     // shadow root.
     if (showDiff || scroller == null || el == null || blocks.length === 0) {
-      chrome = [];
+      chromeBoxes = [];
       return;
     }
     const ranges = blocks.map((b) => b.range);
-    const code = new Map(blocks.map((b) => [b.range.start, b.text]));
+    const codeByStart = new Map(blocks.map((b) => [b.range.start, b.text]));
     let raf = 0;
     const sync = () => {
       raf = 0;
-      chrome = codeChromeAnchors(el, scroller, ranges).flatMap((a) => {
-        const text = code.get(a.start);
-        return text === undefined ? [] : [{ ...a, text }];
+      chromeBoxes = codeChromeAnchors(el, scroller, ranges).flatMap((anchor) => {
+        const text = codeByStart.get(anchor.start);
+        return text === undefined ? [] : [{ ...anchor, text }];
       });
     };
     const schedule = () => {
@@ -806,7 +806,7 @@
     // there is nothing to measure for the first few frames after a document arrives.
     const cancelFrames = retryFrames(() => {
       sync();
-      return chrome.length > 0;
+      return chromeBoxes.length > 0;
     });
     const observer = new ResizeObserver(schedule);
     observer.observe(el);
@@ -1676,16 +1676,16 @@
              updates each box's props and leaves the instance — and its copied/checkmark
              state — alone. It layers over the .diff-plan scroll content, so like the bracket
              rails it scrolls with the rows. -->
-        {#each chrome as anchor (anchor.start)}
+        {#each chromeBoxes as chromeBox (chromeBox.start)}
           <CodeBlockChrome
-            text={anchor.text}
-            start={anchor.start}
-            top={anchor.top}
-            left={anchor.left}
-            carded={anchor.carded}
-            reflowed={reflowedBlocks.has(anchor.start)}
-            hovered={hoveredBlock === anchor.start}
-            onToggleReflow={() => toggleReflow(anchor.start)}
+            text={chromeBox.text}
+            start={chromeBox.start}
+            top={chromeBox.top}
+            left={chromeBox.left}
+            carded={chromeBox.carded}
+            reflowed={reflowedBlocks.has(chromeBox.start)}
+            hovered={hoveredBlockStart === chromeBox.start}
+            onToggleReflow={() => toggleReflow(chromeBox.start)}
           />
         {/each}
         <!-- The one-time reference hints (EXC-1061): one badge over the first
