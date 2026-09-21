@@ -1,6 +1,6 @@
-// The View Transitions capability in one place — the probe and the ambient effects —
-// shared by the two swaps that use the API: the theme wipe (lib/themeWipe.ts) and the
-// plan hand-off (lib/planHandoff.ts), so a browser quirk gate lands in one place.
+// The View Transitions probe and ambient effects, shared by the two swaps that use the
+// API — the theme wipe (lib/themeWipe.ts) and the plan hand-off (lib/planHandoff.ts) — so
+// a browser-quirk gate lands in one place.
 
 /** The API, probed for without hard-typing it (it isn't in every TS DOM lib); of the
  * transition it returns, only `finished` is ever read. */
@@ -17,8 +17,8 @@ export interface ViewTransitionDeps {
   prefersReducedMotion: () => boolean;
 }
 
-/** True when this document has the View Transitions API. App gates the `.arrival`
- * curtain on it, so an engine without the API keeps today's cover. */
+/** True when this document has the View Transitions API. App withholds the `.arrival`
+ * curtain on the empty state only when this is true, so an engine without the API keeps it. */
 export function supportsViewTransition(): boolean {
   return (
     typeof document !== "undefined" &&

@@ -616,11 +616,9 @@ describe("the arrival that uncovers the next state", () => {
 });
 
 describe("the crossfade that hands the window back to the waiting room", () => {
-  // EXC-1400. Draining the queue swaps the whole window at once — plan view for empty
-  // state, the TopBar's action cluster for nothing — so withPlanHandoff runs the swap
-  // inside a view transition and the browser crossfades between the two frames. The arms
-  // are scoped under the `.plan-handoff` class the module tags, which is what keeps them
-  // off the theme wipe's unconditional ::view-transition-*(root) sweep.
+  // EXC-1400. The crossfade's arms are scoped under the `.plan-handoff` class
+  // withPlanHandoff tags, which is what keeps them off the theme wipe's unconditional
+  // ::view-transition-*(root) sweep.
   const handoffClass = /HANDOFF_CLASS = "([^"]+)"/.exec(planHandoffSrc)?.[1] ?? "";
   const half = (which: "old" | "new"): string =>
     new RegExp(`:root\\.${handoffClass}::view-transition-${which}\\(root\\)\\s*\\{([^}]*)\\}`).exec(
@@ -629,9 +627,8 @@ describe("the crossfade that hands the window back to the waiting room", () => {
 
   test("the window departs on the exit tier and arrives on the enter tier", () => {
     expect(handoffClass).not.toBe("");
-    // The same asymmetry the curtain above spends, now spoken by the whole window: the
-    // departure leads and is over first, so a decided guard receding and the waiting room
-    // arriving read as one gesture rather than two events that coincided.
+    // The curtain's asymmetry again, spoken by the whole window: the departure leads and is
+    // over first, so the guard receding and the waiting room arriving read as one gesture.
     expect(half("old")).toContain("var(--dur-exit)");
     expect(half("old")).toContain("var(--ease-in)");
     expect(half("new")).toContain("var(--dur-enter)");
@@ -643,10 +640,9 @@ describe("the crossfade that hands the window back to the waiting room", () => {
   });
 
   test("reduced motion stills the root view transitions on !important, not a list", () => {
-    // The guard for these pseudo-elements is its own @media block — they live on the
-    // document root, outside the #app anchor the global rule uses. It wins on
-    // `!important` rather than by naming each scoped arm, so one claim covers every
-    // transition and a scoped one added later cannot out-specify the preference.
+    // These live on the document root, outside the #app anchor the global rule uses, hence
+    // their own @media block. `!important` rather than naming each scoped arm, so one claim
+    // covers every transition and a scoped one added later cannot out-specify it.
     const stilled =
       /@media \(prefers-reduced-motion: reduce\) \{\s*[^{]*::view-transition[^{]*\{([^}]*)\}/.exec(
         appCss,

@@ -14,10 +14,9 @@
 // introduces does not exist there at all, so a unit could only assert the gate's
 // bookkeeping (modalPresence.test.ts already does). Whether a real exit runs, what it
 // spends, and whether the surface actually leaves afterwards, is browser behavior. The
-// drain route needs one more thing a unit cannot give: the View Transitions API, whose
-// ::view-transition-* pseudo-elements exist only while a real browser runs a real
-// transition. planHandoff.test.ts covers the decision to start one; what that
-// transition then plays is only observable here.
+// drain route needs one more thing a unit cannot give: ::view-transition-* pseudo-elements
+// exist only while a real browser runs a real transition. planHandoff.test.ts covers the
+// decision to start one; what it plays is only observable here.
 
 import { alerts, openSettings } from "@test/e2e/support/chrome.ts";
 import {
@@ -52,9 +51,9 @@ type ChoreographyWindow = {
 /** One animation the hand-off recorder saw START (EXC-894). Ordering is the claim, so the
  * sample is taken at animationstart rather than at animationend — an exit that both begins
  * and ends before a slower arrival begins would satisfy an end-ordering trivially. `who`
- * is the surface's `data-slot`, `arrival` for the curtain, which has no slot, or the
- * `::view-transition-*` pseudo-element the crossfade runs on — those dispatch on the
- * document element and name themselves through the event's `pseudoElement` instead.
+ * is the surface's `data-slot`, `arrival` for the curtain (no slot), or the
+ * `::view-transition-*` pseudo-element the crossfade runs on, which dispatches on the
+ * document element and names itself through the event's `pseudoElement`.
  *
  * `at` is the event's own `timeStamp` — the frame the animation was scheduled for — and
  * NOT a `performance.now()` read inside the handler. Two animations that start in the same
@@ -78,8 +77,8 @@ async function recordHandoff(page: import("@playwright/test").Page) {
         const el = e.target;
         if (!(el instanceof HTMLElement)) return;
         const played = e as AnimationEvent;
-        // `pseudoElement` is "" for an animation on the element itself, so it is both
-        // the pseudo's name and the fallback the slotless, curtainless case wants.
+        // `pseudoElement` is "" for an animation on the element itself, so it doubles as
+        // the slotless, curtainless fallback.
         (window as unknown as HandoffWindow).__handoff.push({
           who:
             el.dataset.slot ??
@@ -381,12 +380,10 @@ test("draining the queue hands the whole window over in one crossfade", async ({
   daemon,
   page,
 }) => {
-  // The same relationship on the other route (EXC-1400), spoken by the window rather than
-  // by a rectangle: with nothing left to select, the swap runs inside a view transition and
-  // the browser crossfades the plan view, the TopBar's cluster and the waiting room
-  // together. Which keyframes play is the load-bearing half — the theme wipe's directional
-  // sweep is declared on these same pseudo-elements, unconditionally, so a crossfade that
-  // failed to scope itself would still animate and would still satisfy the timing below.
+  // The same relationship on the drain route (EXC-1400). Which keyframes play is the
+  // load-bearing half: the theme wipe's directional sweep is declared unconditionally on
+  // these same pseudo-elements, so a crossfade that failed to scope itself would still
+  // animate and still satisfy the timing below.
   await seedAndOpen(page, daemon);
   await waitPastSafeModeGrace(page);
 
@@ -399,8 +396,9 @@ test("draining the queue hands the whole window over in one crossfade", async ({
   await recordHandoff(page);
   await guard.getByRole("button", { name: "Reject", exact: true }).click();
 
-  // The arriving half is the longer one, so waiting for it to start is waiting for the
-  // whole gesture to be under way.
+  // Both halves start in the transition's one animation phase and dispatch in tree order,
+  // old before new — so the arriving half is the later of the two to record, and waiting
+  // on it is waiting for both.
   await page.waitForFunction(() =>
     (window as unknown as HandoffWindow).__handoff.some(
       (a) => a.who === "::view-transition-new(root)",

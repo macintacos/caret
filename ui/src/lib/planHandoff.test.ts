@@ -2,12 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import { withPlanHandoff } from "$lib/planHandoff.ts";
 
-// withPlanHandoff decides whether to wrap the drain-to-empty swap in a View
-// Transitions crossfade or run it instantly, and tags the document root for the
-// transition's lifetime so the stylesheet can pick this animation over the theme
-// wipe's. Both halves are unit-testable through injected deps — no real browser, no
-// real matchMedia — following browser-testing.md's "inject, don't wait" rule; the
-// crossfade's visual output is exercised in the e2e.
+// Deps are injected — no real browser, no real matchMedia — per browser-testing.md; what
+// the crossfade actually plays is exercised in the e2e.
 describe("withPlanHandoff", () => {
   test("runs the update instantly when the View Transitions API is unavailable", () => {
     let ran = 0;
@@ -43,8 +39,6 @@ describe("withPlanHandoff", () => {
     let ran = 0;
     withPlanHandoff(() => ran++, {
       startViewTransition: (update) => {
-        // The transition runs the DOM update inside the crossfade; running it here
-        // mirrors that the caller's update is the transition's callback.
         update();
         return undefined;
       },
@@ -83,8 +77,7 @@ describe("withPlanHandoff", () => {
       prefersReducedMotion: () => false,
       tag: (on) => tagged.push(on),
     });
-    // A browser that abandons the transition rejects `finished`. A stranded class
-    // would restyle the next theme wipe, so the rejection has to clear it too.
+    // A stranded class would restyle the next theme wipe, so a rejection has to clear it too.
     await Promise.resolve();
     expect(tagged).toEqual([true, false]);
   });

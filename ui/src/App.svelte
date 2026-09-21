@@ -268,8 +268,7 @@
   $effect(() => {
     autosave.setScratches(scratches);
   });
-  // Probed once — the curtain's gate; a document does not gain or lose the API
-  // mid-session.
+  // Probed once: a document does not gain or lose the API mid-session.
   const canCrossfade = supportsViewTransition();
   const resolve = createResolve(resStore, {
     activeId: () => selection.activeId,
@@ -769,12 +768,12 @@
        Keyed on the review's identity rather than the derived object: the 2s poll bumps
        the version without changing the id, and a revision in place is not an arrival.
 
-       Withheld when the destination is the empty state and the crossfade (EXC-1400) will
-       carry it instead, since two covers over one hand-off read as a stutter — both routes
-       there run inside the transition, a resolve and an expiry out of the poll, and first
-       paint has no hand-off to cover, so a boot with nothing pending deliberately raises
-       none. Gated on the capability rather than on the destination alone, so an engine
-       without view transitions keeps the curtain rather than regressing to a bare cut. -->
+       Withheld on the empty state when the crossfade (EXC-1400) carries the hand-off, since
+       two covers over one hand-off read as a stutter. Both routes there — a resolve and a
+       poll expiry — run inside the transition, and first paint has no hand-off to cover, so
+       a boot with nothing pending deliberately raises none. Gated on the capability, not the
+       destination alone, so an engine without view transitions keeps the curtain instead of
+       a bare cut. -->
   {#if active !== null || !canCrossfade}
     {#key active?.id ?? "none"}
       <div class="arrival" aria-hidden="true"></div>
@@ -975,8 +974,8 @@
      Both ends of the placement are spelled out because out of flow they have to be: an
      `auto` grid line on an absolutely-positioned child resolves to the grid container's
      PADDING EDGE rather than "span 1", so a bare `grid-row: 3` would run the curtain
-     over the status bar too — the bar stays continuous through the curtain's hand-off.
-     Only that one: the drain route's crossfade washes the whole viewport, bar included.
+     over the status bar too — the bar stays continuous through the curtain's hand-off,
+     unlike the drain route's crossfade, which washes the whole viewport, bar included.
 
      Opacity only, never a wipe: the directional sweep is spoken for by the theme switch,
      where it means "everything was restyled". One paper tone serves both destinations —
