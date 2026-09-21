@@ -539,10 +539,7 @@
       // depends on nothing else here, so its position costs no frame either way.
       tagThematicBreakRows(root, breaks);
       syncCodeBlockCards(root, ranges);
-      // Mark the cards the reviewer has soft-wrapped (EXC-1386), right after the pass that
-      // creates them — a card a repaint destroyed and that pass rebuilt is re-marked on the
-      // frame it reappears, which is why the state rides the DOM rather than the card
-      // pass's signature. Always run, so a populated→empty transition unwraps too.
+      // Always run, so a populated→empty transition unwraps too.
       applyCodeBlockReflow(root, reflowed ?? EMPTY_REFLOWED);
       // Card each table and group its rows' tokens into cells (EXC-864). BEFORE the
       // inline pass, which walks a row through tokenChildren: it has to see the
@@ -589,9 +586,8 @@
     tag();
     const observer = new MutationObserver(schedule);
     observer.observe(root, { childList: true, subtree: true });
-    // Whether a block overflows depends on the card width, so a viewport resize (the card is
-    // capped but shrinks below its cap on a narrow viewport) can push a fitting block into
-    // overflow or the reverse — re-run to wrap/unwrap, since a resize fires no DOM mutation the
+    // A resize changes the card's drawn width — it is capped, but shrinks below its cap on a
+    // narrow viewport — so re-run to re-measure, since a resize fires no DOM mutation the
     // observer above would catch.
     const resize = new ResizeObserver(schedule);
     if (container != null) resize.observe(container);

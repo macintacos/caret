@@ -708,14 +708,28 @@
     if (!next.delete(start)) next.add(start);
     reflowedBlocks = next;
   };
+  // Empty the choices on a review or version switch: they name blocks that are no longer
+  // on screen. contentKey rather than the text, so an unchanged poll tick re-delivering the
+  // same version leaves a live wrap alone.
   $effect(() => {
     void contentKey;
     reflowedBlocks = new Set();
   });
 
-  // Where each block's chrome sits, in .diff-plan content coordinates, and whether the
-  // block overflows unwrapped — the predicate the wrap button gates on.
-  let chrome = $state<CodeChromeAnchor[]>([]);
+  // Where each block's chrome sits, in .diff-plan content coordinates, whether the block
+  // overflows unwrapped — the predicate the wrap button gates on — and the code its copy
+  // button writes, joined in the sync below so the template never looks one up.
+  type ChromeBox = CodeChromeAnchor & { text: string };
+  let chrome = $state<ChromeBox[]>([]);
+
+  // A version switch or a fresh SourceView leaves the boxes holding the previous
+  // document's coordinates and code, and the first re-sync is a frame away — long enough
+  // to paint them over rows they were never measured on.
+  $effect(() => {
+    void contentKey;
+    void host;
+    chrome = [];
+  });
 
   // Track the hovered code block from pointer moves over the scroll container; the rows
   // live in the SourceView's shadow root, so codeChrome.ts does the hit-test. rAF-
@@ -766,17 +780,25 @@
     const scroller = scrollEl;
     const el = host;
     const blocks = codeBlocks;
-    // reflowedBlocks moves a block in and out of its card, which moves its anchor.
+    // A wrap toggle changes a block's height: depending on it re-measures now rather than
+    // waiting for the ResizeObserver to report the new box.
     void reflowedBlocks;
-    if (scroller == null || el == null || blocks.length === 0) {
+    // Nothing to anchor on the compare surface — it renders no chrome, and its rows are a
+    // different document, so syncing there would walk the single-version view's torn-out
+    // shadow root.
+    if (showDiff || scroller == null || el == null || blocks.length === 0) {
       chrome = [];
       return;
     }
     const ranges = blocks.map((b) => b.range);
+    const code = new Map(blocks.map((b) => [b.range.start, b.text]));
     let raf = 0;
     const sync = () => {
       raf = 0;
-      chrome = codeChromeAnchors(el, scroller, ranges);
+      chrome = codeChromeAnchors(el, scroller, ranges).flatMap((a) => {
+        const text = code.get(a.start);
+        return text === undefined ? [] : [{ ...a, text }];
+      });
     };
     const schedule = () => {
       if (raf === 0) raf = requestAnimationFrame(sync);
@@ -1657,7 +1679,8 @@
              scrolls with the rows. -->
         {#each chrome as anchor (anchor.start)}
           <CodeBlockChrome
-            text={codeBlocks.find((b) => b.range.start === anchor.start)?.text ?? ""}
+            text={anchor.text}
+            start={anchor.start}
             top={anchor.top}
             left={anchor.left}
             carded={anchor.carded}

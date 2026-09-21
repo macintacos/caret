@@ -1082,15 +1082,14 @@ const CARET_OVERRIDES = `
   [data-content] > [data-code-card] > [data-line][data-code-end] {
     padding-block-end: 0.5rem;
   }
-  /* EXC-1386: the reviewer soft-wraps one block in place, which is this state on the card it
-     already has (codeBlockScroll.ts sets REFLOW_ATTR on the content card and its gutter
-     mirror). grid-auto-columns is the load-bearing swap — max-content measures a pre-wrap row
-     at its UNWRAPPED width, so without it the track stays wide and nothing reflows. overflow-x
-     deliberately stays in force from the rule above: a line with no break opportunity (a long
-     URL, a hash) cannot reflow to the card width, so it overflows the capped track and keeps
-     its scrollbar rather than widening the card. A reflowed row grows its parent row track and
-     the gutter cell mapped to it grows too, so the line number is pinned to the track's start
-     rather than floating beside the middle of the paragraph. */
+  /* EXC-1386: the reviewer soft-wraps one block in place. grid-auto-columns is the
+     load-bearing swap — max-content measures a pre-wrap row at its UNWRAPPED width, so without
+     it the track stays wide and nothing reflows. overflow-x deliberately stays in force from
+     the rule above: a line with no break opportunity (a long URL, a hash) cannot reflow to the
+     card width, so it overflows the capped track and keeps its scrollbar rather than widening
+     the card. A reflowed row grows its parent row track and the gutter cell mapped to it grows
+     too, so the line number is pinned to the track's start rather than floating beside the
+     middle of the paragraph. */
   [data-content] > [data-code-card][data-code-card-reflow] {
     grid-auto-columns: minmax(0, 1fr);
   }

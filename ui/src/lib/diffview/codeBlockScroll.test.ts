@@ -117,6 +117,16 @@ const FITTING_THEN_OVERFLOWING_BLOCK: RowSpec[] = [
   { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 900 } },
 ];
 
+// Overflowing blocks (1-2 and 4-5) either side of prose (3) — shared by the content-only and
+// gutter-mirror suites, which each assert a per-block decision across the pair.
+const BOTH_BLOCKS_OVERFLOWING: RowSpec[] = [
+  { code: true, start: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
+  { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 900 } },
+  {},
+  { code: true, start: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
+  { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 700 } },
+];
+
 /** Asserts the content column carries no card and its rows are `lines`, in
  * order — the shared postcondition for a block that unwrapped or never carded. */
 function expectContentUnwrapped(content: HTMLElement, lines: string[]): void {
@@ -171,13 +181,7 @@ describe("syncCodeBlockCards", () => {
   });
 
   test("gives each overflowing block its own card", () => {
-    const { root, content, rowMetrics } = buildContent([
-      { code: true, start: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
-      { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 900 } },
-      {},
-      { code: true, start: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
-      { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 700 } },
-    ]);
+    const { root, content, rowMetrics } = buildContent(BOTH_BLOCKS_OVERFLOWING);
     syncCodeBlockCards(root, TWO_BLOCK_RANGES, makeReader(rowMetrics));
     const cards = cardsIn(content);
     expect(cards).toHaveLength(2);
@@ -474,13 +478,7 @@ describe("applyCodeBlockReflow", () => {
   });
 
   test("marks only the blocks in the set", () => {
-    const { root, rowMetrics } = buildColumns([
-      { code: true, start: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
-      { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 900 } },
-      {},
-      { code: true, start: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
-      { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 700 } },
-    ]);
+    const { root, rowMetrics } = buildColumns(BOTH_BLOCKS_OVERFLOWING);
     syncCodeBlockCards(root, TWO_BLOCK_RANGES, makeReader(rowMetrics));
     applyCodeBlockReflow(root, new Set([4]));
     expect(contentCardFor(root, "1")?.hasAttribute(REFLOW_ATTR)).toBe(false);

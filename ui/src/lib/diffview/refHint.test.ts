@@ -15,7 +15,7 @@ import {
 // Both halves of the one-time reference hint (EXC-1061): the per-kind dismissal
 // flags, against the happy-dom localStorage support/setup.ts wires, and the anchor
 // pick, against a hand-built shadow host. happy-dom lays nothing out, so the
-// geometry runs through an injected rect reader — the same seam codeCopy uses.
+// geometry runs through an injected rect reader — the same seam codeChrome uses.
 
 type Rect = ReturnType<RectReader>;
 

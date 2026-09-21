@@ -20,6 +20,7 @@ const BASE = {
   left: 0,
   carded: false,
   reflowed: false,
+  start: 42,
   hovered: false,
   onToggleReflow: () => {},
   copy: async () => {},
@@ -52,7 +53,7 @@ describe("CodeBlockChrome", () => {
     flush();
 
     expect(written).toBe("const x = 1;\nreturn x;");
-    expect(button.getAttribute("aria-label")).toBe("Copied");
+    expect(button.getAttribute("aria-label")).toBe("Copied code from line 42");
     expect(target.querySelector(".glyph.done")).not.toBeNull();
   });
 
@@ -65,7 +66,7 @@ describe("CodeBlockChrome", () => {
     await settle();
     flush();
 
-    expect(button.getAttribute("aria-label")).toBe("Copy code");
+    expect(button.getAttribute("aria-label")).toBe("Copy code from line 42");
     expect(target.querySelector(".glyph.done")).toBeNull();
   });
 
@@ -84,13 +85,20 @@ describe("CodeBlockChrome", () => {
     off.flush();
     const unwrapped = off.target.querySelector("button.code-wrap") as HTMLButtonElement;
     expect(unwrapped.getAttribute("aria-pressed")).toBe("false");
-    expect(unwrapped.getAttribute("aria-label")).toBe("Wrap long lines");
+    expect(unwrapped.getAttribute("aria-label")).toBe("Wrap long lines from line 42");
 
     const on = render(CodeBlockChrome, { ...BASE, carded: true, reflowed: true });
     on.flush();
     const wrapped = on.target.querySelector("button.code-wrap") as HTMLButtonElement;
     expect(wrapped.getAttribute("aria-pressed")).toBe("true");
-    expect(wrapped.getAttribute("aria-label")).toBe("Wrap long lines");
+    expect(wrapped.getAttribute("aria-label")).toBe("Wrap long lines from line 42");
+  });
+
+  test("leaves the copy button out of the toggle contract", () => {
+    const { target, flush } = render(CodeBlockChrome, { ...BASE, carded: true });
+    flush();
+    const copy = target.querySelector("button.code-copy") as HTMLButtonElement;
+    expect(copy.getAttribute("aria-pressed")).toBeNull();
   });
 
   test("reports the wrap toggle to its host", () => {

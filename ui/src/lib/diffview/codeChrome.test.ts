@@ -48,11 +48,14 @@ function gridReader(scroller: HTMLElement): RectReader {
   };
 }
 
+// codeBlockAtPoint takes no scroller, so nothing it reads matches the sentinel.
+const POINT_READER = gridReader(document.createElement("div"));
+
 describe("codeBlockAtPoint", () => {
   test("returns the block whose row span contains the point", () => {
     const host = makeHost(8);
     // Rows 2-4 span y [10,40]; point (150, 25) is inside, x within [100,300].
-    expect(codeBlockAtPoint(host, [{ start: 2, end: 4 }], 150, 25, gridReader(host))).toEqual({
+    expect(codeBlockAtPoint(host, [{ start: 2, end: 4 }], 150, 25, POINT_READER)).toEqual({
       start: 2,
       end: 4,
     });
@@ -60,9 +63,8 @@ describe("codeBlockAtPoint", () => {
 
   test("returns null above the block and right of the column", () => {
     const host = makeHost(8);
-    const read = gridReader(host);
-    expect(codeBlockAtPoint(host, [{ start: 2, end: 4 }], 150, 5, read)).toBeNull();
-    expect(codeBlockAtPoint(host, [{ start: 2, end: 4 }], 350, 25, read)).toBeNull();
+    expect(codeBlockAtPoint(host, [{ start: 2, end: 4 }], 150, 5, POINT_READER)).toBeNull();
+    expect(codeBlockAtPoint(host, [{ start: 2, end: 4 }], 350, 25, POINT_READER)).toBeNull();
   });
 
   test("selects the block the point is in when several exist", () => {
@@ -72,14 +74,14 @@ describe("codeBlockAtPoint", () => {
       { start: 6, end: 8 },
     ];
     // y=65 is within rows 6-8 (y [50,80]).
-    expect(codeBlockAtPoint(host, ranges, 150, 65, gridReader(host))).toEqual({ start: 6, end: 8 });
+    expect(codeBlockAtPoint(host, ranges, 150, 65, POINT_READER)).toEqual({ start: 6, end: 8 });
   });
 
   test("hits an overflowing block through its scroll card", () => {
     const host = makeHost(8);
     card(host, 2, 4);
     // The card spans y [10,60], x [100,250].
-    expect(codeBlockAtPoint(host, [{ start: 2, end: 4 }], 150, 25, gridReader(host))).toEqual({
+    expect(codeBlockAtPoint(host, [{ start: 2, end: 4 }], 150, 25, POINT_READER)).toEqual({
       start: 2,
       end: 4,
     });
@@ -89,7 +91,7 @@ describe("codeBlockAtPoint", () => {
     const host = makeHost(8);
     card(host, 2, 4);
     // x=280 is inside a row's max-content box but past the card the reviewer can see.
-    expect(codeBlockAtPoint(host, [{ start: 2, end: 4 }], 280, 25, gridReader(host))).toBeNull();
+    expect(codeBlockAtPoint(host, [{ start: 2, end: 4 }], 280, 25, POINT_READER)).toBeNull();
   });
 });
 

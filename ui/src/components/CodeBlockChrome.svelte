@@ -9,6 +9,7 @@
   // Both buttons are always mounted, so the affordances are discoverable without a
   // hover to find them; the box rests dimmed and brightens once the reviewer's pointer
   // reaches the block, which is what keeps it from competing with the code.
+  import type { Snippet } from "svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import { sound } from "$lib/sound.ts";
@@ -23,6 +24,9 @@
     /** The block overflows its reading width unwrapped, so wrapping it means something.
      * A block that fits gets no wrap button. */
     carded: boolean;
+    /** The block's 1-based opening line. It names this block's controls, which are
+     * otherwise indistinguishable from every other block's in the tab order. */
+    start: number;
     /** The reviewer has wrapped this block. */
     reflowed: boolean;
     /** The pointer is over this block — what brightens the resting box. */
@@ -32,12 +36,25 @@
     copy?: (text: string) => Promise<void>;
   }
 
+  /** One chrome button. `label` carries the block's line for the tab order; `tip` is the
+   * short visible text. */
+  interface Control {
+    cls: string;
+    label: string;
+    tip: string;
+    /** Omitted on a non-toggle: undefined renders no aria-pressed at all. */
+    pressed?: boolean;
+    onclick: (event: MouseEvent) => void;
+    glyph: Snippet;
+  }
+
   let {
     text,
     top,
     left,
     carded,
     reflowed,
+    start,
     hovered,
     onToggleReflow,
     copy = (t) => navigator.clipboard.writeText(t),
@@ -73,60 +90,66 @@
   $effect(() => () => clearTimeout(timer));
 </script>
 
-<!-- The box is the absolutely-positioned element (inline top/left set by DiffPlanView) and
-     carries the inset from the corner, so both buttons clear the first line's text. Each
-     Button's `{...props}` from its tooltip trigger is spread first so the explicit
-     handlers/label below win. The wrap button's name stays put across the toggle —
-     aria-pressed is what carries the state. -->
+{#snippet wrapGlyph()}
+  <span class="glyph"><Icon name="text-wrap" size={14} /></span>
+{/snippet}
+
+{#snippet copyGlyph()}
+  {#key copied}
+    <span class="glyph" class:done={copied}>
+      <Icon name={copied ? "check" : "copy"} size={14} />
+    </span>
+  {/key}
+{/snippet}
+
+<!-- `{...props}` from the tooltip trigger is spread first so the explicit handlers and
+     label below win. The wrap control's name stays put across the toggle — aria-pressed
+     is what carries the state. -->
+{#snippet control(c: Control)}
+  <Tooltip.Root>
+    <Tooltip.Trigger>
+      {#snippet child({ props })}
+        <Button
+          {...props}
+          variant="outline"
+          size="icon"
+          type="button"
+          class="code-chrome-button {c.cls}"
+          aria-label={c.label}
+          aria-pressed={c.pressed}
+          onpointerdown={(event) => event.stopPropagation()}
+          onclick={c.onclick}
+        >
+          {@render c.glyph()}
+        </Button>
+      {/snippet}
+    </Tooltip.Trigger>
+    <Tooltip.Content>{c.tip}</Tooltip.Content>
+  </Tooltip.Root>
+{/snippet}
+
+<!-- The box is the absolutely-positioned element, with its top/left set inline by
+     DiffPlanView. One Provider over both Roots: the delay is shared, and a plan mounts
+     one tooltip context per block rather than two. -->
 <div class="code-chrome" style="top: {top}px; left: {left}px;" data-lit={hovered ? "" : undefined}>
-  {#if carded}
-    <Tooltip.Provider delayDuration={300}>
-      <Tooltip.Root>
-        <Tooltip.Trigger>
-          {#snippet child({ props })}
-            <Button
-              {...props}
-              variant="outline"
-              size="icon"
-              type="button"
-              class="code-chrome-button code-wrap"
-              aria-label="Wrap long lines"
-              aria-pressed={reflowed}
-              onpointerdown={(event) => event.stopPropagation()}
-              onclick={onWrapClick}
-            >
-              <span class="glyph"><Icon name="text-wrap" size={14} /></span>
-            </Button>
-          {/snippet}
-        </Tooltip.Trigger>
-        <Tooltip.Content>Wrap long lines</Tooltip.Content>
-      </Tooltip.Root>
-    </Tooltip.Provider>
-  {/if}
   <Tooltip.Provider delayDuration={300}>
-    <Tooltip.Root>
-      <Tooltip.Trigger>
-        {#snippet child({ props })}
-          <Button
-            {...props}
-            variant="outline"
-            size="icon"
-            type="button"
-            class="code-chrome-button code-copy"
-            aria-label={copied ? "Copied" : "Copy code"}
-            onpointerdown={(event) => event.stopPropagation()}
-            onclick={onCopyClick}
-          >
-            {#key copied}
-              <span class="glyph" class:done={copied}>
-                <Icon name={copied ? "check" : "copy"} size={14} />
-              </span>
-            {/key}
-          </Button>
-        {/snippet}
-      </Tooltip.Trigger>
-      <Tooltip.Content>{copied ? "Copied" : "Copy code"}</Tooltip.Content>
-    </Tooltip.Root>
+    {#if carded}
+      {@render control({
+        cls: "code-wrap",
+        label: `Wrap long lines from line ${start}`,
+        tip: "Wrap long lines",
+        pressed: reflowed,
+        onclick: onWrapClick,
+        glyph: wrapGlyph,
+      })}
+    {/if}
+    {@render control({
+      cls: "code-copy",
+      label: copied ? `Copied code from line ${start}` : `Copy code from line ${start}`,
+      tip: copied ? "Copied" : "Copy code",
+      onclick: onCopyClick,
+      glyph: copyGlyph,
+    })}
   </Tooltip.Provider>
 </div>
 
@@ -186,6 +209,12 @@
   :global(.code-wrap[aria-pressed="true"]) {
     color: var(--ink);
     background: var(--chip-hover);
+  }
+
+  /* Ties the pressed rule above on specificity, so source order is what gives a pressed
+     toggle hover feedback at all. */
+  :global(.code-wrap[aria-pressed="true"]:hover) {
+    background: var(--paper);
   }
 
   .glyph {

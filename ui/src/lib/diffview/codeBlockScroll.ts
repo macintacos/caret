@@ -18,10 +18,10 @@
 // module only owns the DOM structure — which blocks are wrapped, kept, or unwrapped. A block
 // that fits is left as plain direct-child rows, which EXC-692's per-row rules still style. The
 // library owns and repaints these rows, so this re-runs after every repaint (SourceView's
-// MutationObserver) and on viewport resize (a narrower viewport can push a fitting block into
-// overflow, or the reverse); it is idempotent — an already-correct block mutates nothing, so a
-// re-run cannot re-trigger that observer. happy-dom reports 0 for every layout metric, so
-// overflow is read through an injectable `read`.
+// MutationObserver) and on viewport resize (a card's drawn width narrows with the column); it
+// is idempotent — an already-correct block mutates nothing, so a re-run cannot re-trigger that
+// observer. happy-dom reports 0 for every layout metric, so overflow is read through an
+// injectable `read`.
 
 import { unwrappedSlice } from "$lib/diffview/cardSlice.ts";
 import type { CodeBlockRange } from "$lib/diffview/codeBlocks.ts";
@@ -123,7 +123,10 @@ export function syncCodeBlockCards(
     if (card != null) {
       // A reflowed block's rows wrap to the card width, so the card reports no overflow —
       // the very condition the retire pass unwraps on. Keeping it above that read is what
-      // stops the wrap disappearing the frame after the reviewer asked for it.
+      // stops the wrap oscillating — without this, retiring a reflowed card sends its rows
+      // loose, they overflow, the next pass re-cards and re-marks them, and the block flips
+      // without settling. The cost is `carded` reading true for a block widened back to a
+      // fit until the reviewer toggles the wrap off.
       if (card.hasAttribute(REFLOW_ATTR)) {
         wanted.add(key);
         continue;
@@ -183,8 +186,7 @@ export function syncCodeBlockCards(
  * Marks every card whose block the reviewer has reflowed, and clears the mark from the
  * rest. Runs immediately after syncCodeBlockCards in the same pass, so a card the library's
  * repaint destroyed and this pass rebuilt is re-marked on the frame it reappears — which is
- * why the state rides the DOM rather than syncCodeBlockCards' signature. Both columns are
- * marked: the content card wraps its rows, the gutter mirror tops its line numbers.
+ * why the state rides the DOM rather than syncCodeBlockCards' signature.
  */
 export function applyCodeBlockReflow(root: ParentNode, reflowed: ReadonlySet<number>): void {
   for (const card of root.querySelectorAll(`[${CARD_ATTR}], [${GUTTER_CARD_ATTR}]`)) {
