@@ -413,6 +413,10 @@ test("draining the queue hands the whole window over in one crossfade", async ({
   expect(exit).toBeDefined();
   expect(departing?.name).toBe("plan-handoff-out");
   expect(arriving?.name).toBe("plan-handoff-in");
+  // One cover per hand-off: the curtain is withheld on this route. The wait above bounds the
+  // absence — the curtain mounts in the same flush the transition's update runs in, so it
+  // would already have started by the time the arriving half does.
+  expect(played.filter((a) => a.who === "arrival")).toEqual([]);
 
   expect(exit?.at ?? 0).toBeLessThanOrEqual(departing?.at ?? 0);
   expect(exit?.seconds ?? 0).toBeLessThan(arriving?.seconds ?? 0);

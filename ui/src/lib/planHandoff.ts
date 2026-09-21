@@ -1,8 +1,7 @@
 // Handing the window back to the waiting room as a crossfade (EXC-1400). Resolving
 // the last pending plan swaps everything at once — the plan view for the empty state,
-// the TopBar's whole action cluster for nothing — so the View Transitions API runs the
-// swap: the browser snapshots the old window, applies the update, and crossfades to the
-// new one, which carries every piece in one gesture rather than four hand-animated ones.
+// the TopBar's whole action cluster for nothing — so one view transition carries every
+// piece in one gesture rather than four hand-animated ones.
 //
 // The crossfade geometry is CSS (::view-transition-* in styles/base.css); this module
 // only decides whether to wrap the swap in a transition, and tags the document root so
@@ -11,40 +10,19 @@
 // than startViewTransition({ update, types }): the object call form throws a TypeError
 // on Chrome 111-124, while the class works on every engine that has the API at all.
 
-/** A page whose View Transitions support we probe without hard-typing the API
- * (it isn't in every TS DOM lib). */
-type MaybeViewTransitions = Document & {
-  startViewTransition?: (update: () => void) => unknown;
-};
+import { type ViewTransitionDeps, viewTransitionDeps } from "$lib/viewTransition.ts";
 
 /** The class the stylesheet's crossfade arms are scoped under. */
 const HANDOFF_CLASS = "plan-handoff";
 
-export interface PlanHandoffDeps {
-  /** Runs the update inside a crossfade when supported; undefined means unsupported. */
-  startViewTransition?: (update: () => void) => unknown;
-  /** True when the user prefers reduced motion — run instantly, no crossfade. */
-  prefersReducedMotion: () => boolean;
+export interface PlanHandoffDeps extends ViewTransitionDeps {
   /** Tag the document for the transition's lifetime so CSS can pick this animation. */
   tag: (on: boolean) => void;
 }
 
-/** True when this document can run a view transition at all — also the curtain's gate,
- * since App's `.arrival` keeps covering the hand-off wherever the crossfade cannot. */
-export function supportsViewTransition(): boolean {
-  return (
-    typeof document !== "undefined" &&
-    typeof (document as MaybeViewTransitions).startViewTransition === "function"
-  );
-}
-
 function defaultHandoffDeps(): PlanHandoffDeps {
-  const doc = typeof document !== "undefined" ? (document as MaybeViewTransitions) : undefined;
-  const start = doc?.startViewTransition;
   return {
-    startViewTransition: typeof start === "function" ? start.bind(doc) : undefined,
-    prefersReducedMotion: () =>
-      typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches,
+    ...viewTransitionDeps(),
     tag: (on) => document.documentElement.classList.toggle(HANDOFF_CLASS, on),
   };
 }
@@ -61,9 +39,11 @@ export function withPlanHandoff(
     return;
   }
   deps.tag(true);
-  const transition = deps.startViewTransition(update) as { finished?: Promise<unknown> };
+  const transition = deps.startViewTransition(update);
   // Settled either way: a transition the browser skips REJECTS `finished`, and a
-  // stranded class would restyle the next theme wipe.
+  // stranded class would restyle the next theme wipe. The tag is a boolean, not a
+  // count, so a poll landing mid-resolve starts a second hand-off that the first's
+  // untag strips the class from — harmless: that swap has nothing left to animate.
   const untag = () => deps.tag(false);
   Promise.resolve(transition?.finished).then(untag, untag);
 }

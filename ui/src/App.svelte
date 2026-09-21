@@ -12,7 +12,7 @@
   import { approveVariants, pickApproveMode } from "$lib/approve.ts";
   import { readApproveMode } from "$lib/approveModePref.ts";
   import { createPlanNotifier } from "$lib/notify.ts";
-  import { supportsViewTransition, withPlanHandoff } from "$lib/planHandoff.ts";
+  import { withPlanHandoff } from "$lib/planHandoff.ts";
   import { installUiGoneBeacon } from "$lib/presence.ts";
   import { createSafeModeGuard } from "$lib/safeMode.ts";
   import { createSeenWatcher } from "$lib/seen.ts";
@@ -25,6 +25,7 @@
     shortcuts,
   } from "$lib/shortcuts/index.ts";
   import { sound } from "$lib/sound.ts";
+  import { supportsViewTransition } from "$lib/viewTransition.ts";
   import { type AlertStore, createAlerts } from "@/state/alerts.ts";
   import { appearance } from "@/state/appearance.svelte.ts";
   import { createAutosave } from "@/state/autosave.svelte.ts";
@@ -267,18 +268,19 @@
   $effect(() => {
     autosave.setScratches(scratches);
   });
-  // Probed once: the hand-off's two routes are split on it, and a document does not
-  // gain or lose the API mid-session.
+  // Probed once — the curtain's gate; a document does not gain or lose the API
+  // mid-session.
   const canCrossfade = supportsViewTransition();
   const resolve = createResolve(resStore, {
     activeId: () => selection.activeId,
     annotations: () => work.annotations,
     planText: () => active?.currentPlan ?? "",
     flushPending: () => autosave.flushPending(),
-    // A resolve that empties the queue swaps the whole window, so it crossfades; one
-    // that lands on the next plan leaves the view mounted and is the curtain's route.
+    // A resolve that empties the queue swaps the whole window, so it crossfades; one that
+    // lands on the next plan leaves the view mounted and is the curtain's route. What is
+    // left decides that, not the count — a poll landing mid-resolve can drop this id.
     afterResolve: (id) => {
-      if (selection.reviews.length > 1) selection.afterResolve(id);
+      if (selection.reviews.some((r) => r.id !== id)) selection.afterResolve(id);
       else withPlanHandoff(() => selection.afterResolve(id));
     },
     onOffline: () => {
@@ -478,7 +480,11 @@
         // diffs against its own seen-set, so the new-review signal stays
         // independent of what merge selects.
         notifier.observe(incoming);
-        selection.mergeReviews(incoming);
+        // A merge that empties the queue reaches the same empty state a resolve does — the
+        // last pending plan expiring — so it hands over the same way.
+        if (incoming.length === 0 && selection.reviews.length > 0)
+          withPlanHandoff(() => selection.mergeReviews(incoming));
+        else selection.mergeReviews(incoming);
       },
       2000,
       () => selection.setConnected(false),
@@ -764,9 +770,11 @@
        the version without changing the id, and a revision in place is not an arrival.
 
        Withheld when the destination is the empty state and the crossfade (EXC-1400) will
-       carry it instead, since two covers over one hand-off read as a stutter. Gated on
-       the capability rather than on the destination alone, so an engine without view
-       transitions keeps the curtain rather than regressing to a bare cut. -->
+       carry it instead, since two covers over one hand-off read as a stutter — both routes
+       there run inside the transition, a resolve and an expiry out of the poll, and first
+       paint has no hand-off to cover, so a boot with nothing pending deliberately raises
+       none. Gated on the capability rather than on the destination alone, so an engine
+       without view transitions keeps the curtain rather than regressing to a bare cut. -->
   {#if active !== null || !canCrossfade}
     {#key active?.id ?? "none"}
       <div class="arrival" aria-hidden="true"></div>
@@ -967,7 +975,8 @@
      Both ends of the placement are spelled out because out of flow they have to be: an
      `auto` grid line on an absolutely-positioned child resolves to the grid container's
      PADDING EDGE rather than "span 1", so a bare `grid-row: 3` would run the curtain
-     over the status bar too — and the bar stays continuous through the hand-off.
+     over the status bar too — the bar stays continuous through the curtain's hand-off.
+     Only that one: the drain route's crossfade washes the whole viewport, bar included.
 
      Opacity only, never a wipe: the directional sweep is spoken for by the theme switch,
      where it means "everything was restyled". One paper tone serves both destinations —

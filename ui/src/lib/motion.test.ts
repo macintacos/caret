@@ -22,6 +22,10 @@ const emptyState = await Bun.file(join(uiDir, "components/EmptyState.svelte")).t
 // only to be asserted on is a worse seam than the regex that avoids it.
 const planKeyboard = await Bun.file(join(uiDir, "state/planKeyboard.svelte.ts")).text();
 const alertsState = await Bun.file(join(uiDir, "state/alerts.ts")).text();
+// Read the same way, for the same reason: the stylesheet's scope and the module's tag
+// are one spelling with nothing else coupling them, so a rename would drop the hand-off
+// through to the theme wipe's unconditional sweep with every unit test still green.
+const planHandoffSrc = await Bun.file(join(uiDir, "lib/planHandoff.ts")).text();
 
 // The four vendored modal surfaces (EXC-892), keyed by the `data-slot` each stamps. The
 // slot name IS the filename and its primitive is the slot minus `-overlay` / `-content`,
@@ -617,12 +621,14 @@ describe("the crossfade that hands the window back to the waiting room", () => {
   // inside a view transition and the browser crossfades between the two frames. The arms
   // are scoped under the `.plan-handoff` class the module tags, which is what keeps them
   // off the theme wipe's unconditional ::view-transition-*(root) sweep.
+  const handoffClass = /HANDOFF_CLASS = "([^"]+)"/.exec(planHandoffSrc)?.[1] ?? "";
   const half = (which: "old" | "new"): string =>
-    new RegExp(`:root\\.plan-handoff::view-transition-${which}\\(root\\)\\s*\\{([^}]*)\\}`).exec(
+    new RegExp(`:root\\.${handoffClass}::view-transition-${which}\\(root\\)\\s*\\{([^}]*)\\}`).exec(
       appCss,
     )?.[1] ?? "";
 
   test("the window departs on the exit tier and arrives on the enter tier", () => {
+    expect(handoffClass).not.toBe("");
     // The same asymmetry the curtain above spends, now spoken by the whole window: the
     // departure leads and is over first, so a decided guard receding and the waiting room
     // arriving read as one gesture rather than two events that coincided.
@@ -632,25 +638,21 @@ describe("the crossfade that hands the window back to the waiting room", () => {
     expect(half("new")).toContain("var(--ease-out)");
   });
 
-  test("the departure's fill is `forwards`, which is a correctness rule here", () => {
-    // The two halves run on different tiers, so the old snapshot finishes first and the
-    // transition lives on until the new one settles. Without the fill its final opacity is
-    // discarded and the departed window snaps back to full through the crossfade's tail.
+  test("the departure declares its end state with `forwards`", () => {
     expect(half("old")).toMatch(/animation:[^;]*\bforwards\b/);
   });
 
-  test("reduced motion stills the crossfade, which out-specifies the shared guard", () => {
+  test("reduced motion stills the root view transitions on !important, not a list", () => {
     // The guard for these pseudo-elements is its own @media block — they live on the
-    // document root, outside the #app anchor the global rule uses. A class-scoped arm
-    // scores above the bare ::view-transition-*(root) selectors that block already names,
-    // so it has to name the scoped ones too or the preference silently loses.
+    // document root, outside the #app anchor the global rule uses. It wins on
+    // `!important` rather than by naming each scoped arm, so one claim covers every
+    // transition and a scoped one added later cannot out-specify the preference.
     const stilled =
-      /@media \(prefers-reduced-motion: reduce\) \{\s*([^{]*::view-transition[^{]*)\{/.exec(
+      /@media \(prefers-reduced-motion: reduce\) \{\s*[^{]*::view-transition[^{]*\{([^}]*)\}/.exec(
         appCss,
       )?.[1] ?? "";
     expect(stilled).not.toBe("");
-    expect(stilled).toContain(".plan-handoff::view-transition-old(root)");
-    expect(stilled).toContain(".plan-handoff::view-transition-new(root)");
+    expect(stilled).toMatch(/animation:\s*none\s*!important/);
   });
 });
 

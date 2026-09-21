@@ -145,10 +145,9 @@ body {
 
    Written in the chrome's own vocabulary rather than a new one: the departing window
    leaves on the exit tier and the arriving one enters on the longer enter tier, so a
-   decided guard receding and the waiting room arriving stay one gesture. `forwards` on
-   the departure is load-bearing — the old half finishes first and the transition lives
-   on until the new one settles, so without the fill the window that left snaps back to
-   full opacity through the crossfade's tail. */
+   decided guard receding and the waiting room arriving stay one gesture. `forwards`
+   states the departure's end state — it finishes first, while the transition runs on —
+   rather than fixing a visible snap-back: the arriving half is ~0.99 opaque by then. */
 :root.plan-handoff::view-transition-old(root) {
   animation: plan-handoff-out var(--dur-exit) var(--ease-in) forwards;
 }
@@ -172,15 +171,12 @@ body {
   }
 }
 
-/* The scoped arms are named alongside the bare ones because they out-specify them —
-   a class compound beats a lone pseudo-element, so the preference would otherwise
-   lose to the crossfade it is meant to still. */
+/* !important rather than a selector list, so no scoped arm can out-specify the
+   preference — the same reason the chrome guard above uses it. */
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-old(root),
-  ::view-transition-new(root),
-  :root.plan-handoff::view-transition-old(root),
-  :root.plan-handoff::view-transition-new(root) {
-    animation: none;
+  ::view-transition-new(root) {
+    animation: none !important;
   }
 }
 
