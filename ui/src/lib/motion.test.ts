@@ -620,7 +620,7 @@ describe("the crossfade that hands the window back to the waiting room", () => {
   // withPlanHandoff tags, which is what keeps them off the theme wipe's unconditional
   // ::view-transition-*(root) sweep.
   const handoffClass = /HANDOFF_CLASS = "([^"]+)"/.exec(planHandoffSrc)?.[1] ?? "";
-  const half = (which: "old" | "new"): string =>
+  const handoffArm = (which: "old" | "new"): string =>
     new RegExp(`:root\\.${handoffClass}::view-transition-${which}\\(root\\)\\s*\\{([^}]*)\\}`).exec(
       appCss,
     )?.[1] ?? "";
@@ -629,26 +629,26 @@ describe("the crossfade that hands the window back to the waiting room", () => {
     expect(handoffClass).not.toBe("");
     // The curtain's asymmetry again, spoken by the whole window: the departure leads and is
     // over first, so the guard receding and the waiting room arriving read as one gesture.
-    expect(half("old")).toContain("var(--dur-exit)");
-    expect(half("old")).toContain("var(--ease-in)");
-    expect(half("new")).toContain("var(--dur-enter)");
-    expect(half("new")).toContain("var(--ease-out)");
+    expect(handoffArm("old")).toContain("var(--dur-exit)");
+    expect(handoffArm("old")).toContain("var(--ease-in)");
+    expect(handoffArm("new")).toContain("var(--dur-enter)");
+    expect(handoffArm("new")).toContain("var(--ease-out)");
   });
 
   test("the departure declares its end state with `forwards`", () => {
-    expect(half("old")).toMatch(/animation:[^;]*\bforwards\b/);
+    expect(handoffArm("old")).toMatch(/animation:[^;]*\bforwards\b/);
   });
 
   test("reduced motion stills the root view transitions on !important, not a list", () => {
     // These live on the document root, outside the #app anchor the global rule uses, hence
     // their own @media block. `!important` rather than naming each scoped arm, so one claim
     // covers every transition and a scoped one added later cannot out-specify it.
-    const stilled =
+    const reducedMotionGuard =
       /@media \(prefers-reduced-motion: reduce\) \{\s*[^{]*::view-transition[^{]*\{([^}]*)\}/.exec(
         appCss,
       )?.[1] ?? "";
-    expect(stilled).not.toBe("");
-    expect(stilled).toMatch(/animation:\s*none\s*!important/);
+    expect(reducedMotionGuard).not.toBe("");
+    expect(reducedMotionGuard).toMatch(/animation:\s*none\s*!important/);
   });
 });
 

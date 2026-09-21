@@ -278,9 +278,9 @@
     // A resolve that empties the queue swaps the whole window, so it crossfades; one that
     // lands on the next plan leaves the view mounted and is the curtain's route. What is
     // left decides that, not the count — a poll landing mid-resolve can drop this id.
-    afterResolve: (id) => {
-      if (selection.reviews.some((r) => r.id !== id)) selection.afterResolve(id);
-      else withPlanHandoff(() => selection.afterResolve(id));
+    afterResolve: (resolvedId) => {
+      if (selection.reviews.some((r) => r.id !== resolvedId)) selection.afterResolve(resolvedId);
+      else withPlanHandoff(() => selection.afterResolve(resolvedId));
     },
     onOffline: () => {
       selection.setConnected(false);

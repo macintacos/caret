@@ -8,9 +8,9 @@ import { supportsViewTransition } from "$lib/viewTransition.ts";
 // the false branch; the true branch stubs one onto the document and takes it back off,
 // since the DOM globals are shared with every other UI test file.
 describe("supportsViewTransition", () => {
-  const probe = document as unknown as Record<string, unknown>;
+  const untypedDocument = document as unknown as Record<string, unknown>;
   afterEach(() => {
-    delete probe.startViewTransition;
+    delete untypedDocument.startViewTransition;
   });
 
   test("false when the document has no View Transitions API", () => {
@@ -18,7 +18,7 @@ describe("supportsViewTransition", () => {
   });
 
   test("true when the document exposes startViewTransition", () => {
-    probe.startViewTransition = () => {};
+    untypedDocument.startViewTransition = () => {};
     expect(supportsViewTransition()).toBe(true);
   });
 });
