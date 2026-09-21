@@ -12,6 +12,7 @@
   import { approveVariants, pickApproveMode } from "$lib/approve.ts";
   import { readApproveMode } from "$lib/approveModePref.ts";
   import { createPlanNotifier } from "$lib/notify.ts";
+  import { supportsViewTransition, withPlanHandoff } from "$lib/planHandoff.ts";
   import { installUiGoneBeacon } from "$lib/presence.ts";
   import { createSafeModeGuard } from "$lib/safeMode.ts";
   import { createSeenWatcher } from "$lib/seen.ts";
@@ -266,12 +267,20 @@
   $effect(() => {
     autosave.setScratches(scratches);
   });
+  // Probed once: the hand-off's two routes are split on it, and a document does not
+  // gain or lose the API mid-session.
+  const canCrossfade = supportsViewTransition();
   const resolve = createResolve(resStore, {
     activeId: () => selection.activeId,
     annotations: () => work.annotations,
     planText: () => active?.currentPlan ?? "",
     flushPending: () => autosave.flushPending(),
-    afterResolve: (id) => selection.afterResolve(id),
+    // A resolve that empties the queue swaps the whole window, so it crossfades; one
+    // that lands on the next plan leaves the view mounted and is the curtain's route.
+    afterResolve: (id) => {
+      if (selection.reviews.length > 1) selection.afterResolve(id);
+      else withPlanHandoff(() => selection.afterResolve(id));
+    },
     onOffline: () => {
       selection.setConnected(false);
       // Fires only on a genuine network failure, since a daemon non-2xx still advances
@@ -752,10 +761,17 @@
        the @pierre/diffs render, re-init the compare store and strand revealLine.
 
        Keyed on the review's identity rather than the derived object: the 2s poll bumps
-       the version without changing the id, and a revision in place is not an arrival. -->
-  {#key active?.id ?? "none"}
-    <div class="arrival" aria-hidden="true"></div>
-  {/key}
+       the version without changing the id, and a revision in place is not an arrival.
+
+       Withheld when the destination is the empty state and the crossfade (EXC-1400) will
+       carry it instead, since two covers over one hand-off read as a stutter. Gated on
+       the capability rather than on the destination alone, so an engine without view
+       transitions keeps the curtain rather than regressing to a bare cut. -->
+  {#if active !== null || !canCrossfade}
+    {#key active?.id ?? "none"}
+      <div class="arrival" aria-hidden="true"></div>
+    {/key}
+  {/if}
 
   <!-- While comparing, the tally counts what the panel it toggles actually lists, so
        the two can't disagree, and 0 covered lines is how the "· M lines" readout —

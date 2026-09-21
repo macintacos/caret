@@ -611,6 +611,49 @@ describe("the arrival that uncovers the next state", () => {
   });
 });
 
+describe("the crossfade that hands the window back to the waiting room", () => {
+  // EXC-1400. Draining the queue swaps the whole window at once — plan view for empty
+  // state, the TopBar's action cluster for nothing — so withPlanHandoff runs the swap
+  // inside a view transition and the browser crossfades between the two frames. The arms
+  // are scoped under the `.plan-handoff` class the module tags, which is what keeps them
+  // off the theme wipe's unconditional ::view-transition-*(root) sweep.
+  const half = (which: "old" | "new"): string =>
+    new RegExp(`:root\\.plan-handoff::view-transition-${which}\\(root\\)\\s*\\{([^}]*)\\}`).exec(
+      appCss,
+    )?.[1] ?? "";
+
+  test("the window departs on the exit tier and arrives on the enter tier", () => {
+    // The same asymmetry the curtain above spends, now spoken by the whole window: the
+    // departure leads and is over first, so a decided guard receding and the waiting room
+    // arriving read as one gesture rather than two events that coincided.
+    expect(half("old")).toContain("var(--dur-exit)");
+    expect(half("old")).toContain("var(--ease-in)");
+    expect(half("new")).toContain("var(--dur-enter)");
+    expect(half("new")).toContain("var(--ease-out)");
+  });
+
+  test("the departure's fill is `forwards`, which is a correctness rule here", () => {
+    // The two halves run on different tiers, so the old snapshot finishes first and the
+    // transition lives on until the new one settles. Without the fill its final opacity is
+    // discarded and the departed window snaps back to full through the crossfade's tail.
+    expect(half("old")).toMatch(/animation:[^;]*\bforwards\b/);
+  });
+
+  test("reduced motion stills the crossfade, which out-specifies the shared guard", () => {
+    // The guard for these pseudo-elements is its own @media block — they live on the
+    // document root, outside the #app anchor the global rule uses. A class-scoped arm
+    // scores above the bare ::view-transition-*(root) selectors that block already names,
+    // so it has to name the scoped ones too or the preference silently loses.
+    const stilled =
+      /@media \(prefers-reduced-motion: reduce\) \{\s*([^{]*::view-transition[^{]*)\{/.exec(
+        appCss,
+      )?.[1] ?? "";
+    expect(stilled).not.toBe("");
+    expect(stilled).toContain(".plan-handoff::view-transition-old(root)");
+    expect(stilled).toContain(".plan-handoff::view-transition-new(root)");
+  });
+});
+
 describe("chrome motion declarations draw from the tokens, not bare literals", () => {
   // The whole chrome, motion or not (see chromeComponents above). Each component's
   // `<style>` is scanned for `transition:`/`animation:` declarations; the one-shot ones

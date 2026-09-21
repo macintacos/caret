@@ -135,9 +135,51 @@ body {
     clip-path: inset(0 0 0 0);
   }
 }
+/* The hand-off back to the waiting room (EXC-1400). Resolving the last pending plan
+   swaps the whole window — the plan view for the empty state, the TopBar's switcher,
+   version label and decision chips for nothing — so withPlanHandoff (lib/planHandoff.ts)
+   runs that swap inside a view transition and the browser carries every piece in one
+   crossfade. Scoped under the class that module tags, because the sweep above is
+   unconditional and is SPOKEN FOR: a directional wipe means "everything was restyled",
+   which is the theme switch's sentence and not this one.
+
+   Written in the chrome's own vocabulary rather than a new one: the departing window
+   leaves on the exit tier and the arriving one enters on the longer enter tier, so a
+   decided guard receding and the waiting room arriving stay one gesture. `forwards` on
+   the departure is load-bearing — the old half finishes first and the transition lives
+   on until the new one settles, so without the fill the window that left snaps back to
+   full opacity through the crossfade's tail. */
+:root.plan-handoff::view-transition-old(root) {
+  animation: plan-handoff-out var(--dur-exit) var(--ease-in) forwards;
+}
+:root.plan-handoff::view-transition-new(root) {
+  animation: plan-handoff-in var(--dur-enter) var(--ease-out);
+}
+@keyframes plan-handoff-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes plan-handoff-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* The scoped arms are named alongside the bare ones because they out-specify them —
+   a class compound beats a lone pseudo-element, so the preference would otherwise
+   lose to the crossfade it is meant to still. */
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-old(root),
-  ::view-transition-new(root) {
+  ::view-transition-new(root),
+  :root.plan-handoff::view-transition-old(root),
+  :root.plan-handoff::view-transition-new(root) {
     animation: none;
   }
 }
