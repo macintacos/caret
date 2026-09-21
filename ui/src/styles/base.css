@@ -135,10 +135,46 @@ body {
     clip-path: inset(0 0 0 0);
   }
 }
+/* The hand-off back to the waiting room (EXC-1400): withPlanHandoff (lib/planHandoff.ts)
+   runs the swap inside a view transition, so the browser crossfades the whole window.
+   Scoped under the class that module tags, because the sweep above is unconditional and
+   SPOKEN FOR: a directional wipe means "everything was restyled", which is the theme
+   switch's sentence and not this one.
+
+   The departing window leaves on the exit tier and the arriving one enters on the longer
+   enter tier, so a decided guard receding and the waiting room arriving stay one gesture.
+   `forwards` states the departure's end state — it finishes first, while the transition
+   runs on — rather than fixing a visible snap-back: the arriving half is ~0.99 opaque by
+   then. */
+:root.plan-handoff::view-transition-old(root) {
+  animation: plan-handoff-out var(--dur-exit) var(--ease-in) forwards;
+}
+:root.plan-handoff::view-transition-new(root) {
+  animation: plan-handoff-in var(--dur-enter) var(--ease-out);
+}
+@keyframes plan-handoff-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes plan-handoff-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* !important rather than a selector list, so no scoped arm can out-specify the
+   preference — the same reason the chrome guard above uses it. */
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-old(root),
   ::view-transition-new(root) {
-    animation: none;
+    animation: none !important;
   }
 }
 

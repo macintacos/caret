@@ -10,33 +10,14 @@
 // and an OS appearance flip under `system`. Boot is the one exception — there is
 // no previous frame to wipe from — so main.ts paints directly instead.
 
-/** A page whose View Transitions support we probe without hard-typing the API
- * (it isn't in every TS DOM lib). */
-type MaybeViewTransitions = Document & {
-  startViewTransition?: (update: () => void) => unknown;
-};
+import { type ViewTransitionDeps, viewTransitionDeps } from "$lib/viewTransition.ts";
 
-export interface ThemeWipeDeps {
-  /** Runs the update inside a wipe when supported; undefined means unsupported. */
-  startViewTransition?: (update: () => void) => unknown;
-  /** True when the user prefers reduced motion — run instantly, no wipe. */
-  prefersReducedMotion: () => boolean;
-}
-
-function defaultWipeDeps(): ThemeWipeDeps {
-  const doc = typeof document !== "undefined" ? (document as MaybeViewTransitions) : undefined;
-  const start = doc?.startViewTransition;
-  return {
-    startViewTransition: typeof start === "function" ? start.bind(doc) : undefined,
-    prefersReducedMotion: () =>
-      typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches,
-  };
-}
+export type ThemeWipeDeps = ViewTransitionDeps;
 
 /** Run a DOM update as a whole-UI wipe when the browser supports the View
  * Transitions API and motion is allowed; otherwise run it instantly. The update
  * runs exactly once either way. */
-export function withWipe(update: () => void, deps: ThemeWipeDeps = defaultWipeDeps()): void {
+export function withWipe(update: () => void, deps: ThemeWipeDeps = viewTransitionDeps()): void {
   if (!deps.startViewTransition || deps.prefersReducedMotion()) {
     update();
     return;

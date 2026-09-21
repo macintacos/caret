@@ -400,7 +400,12 @@ shadcn surfaces (dialogs, dropdown menus, tooltips, popovers) instead animate th
 enter/exit through `tw-animate-css` — the `animate-in`/`fade`/`zoom`/`slide` utilities the
 copied components ship with. Ambient/infinite animations (the safe-mode pulse, the
 EmptyState float, the theme wipe) are exempt from both and keep their own bespoke
-durations.
+durations. The hand-off back to the waiting room (`lib/planHandoff.ts`, EXC-1400) is the
+second view transition and is NOT exempt: it crossfades the whole window on the
+`--dur-exit`/`--dur-enter` surface pair, so a decided plan leaving and the waiting room
+arriving spend the same asymmetric pair a dialog does. Its two arms are scoped under a
+class that module tags, because the theme wipe claims the bare `::view-transition-*(root)`
+pseudo-elements unconditionally.
 
 **A property no stylesheet can drive takes a third route, and it is the narrowest one.**
 Where the thing being animated is a JS property rather than a style — `scrollTop`, or a

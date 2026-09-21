@@ -56,7 +56,7 @@
      Ambient/infinite animations are deliberately EXEMPT and keep their own
      literals: the safe-mode pulse, the EmptyState float and the reference-hint ping
      — a 120ms loop would strobe. The theme wipe (styles/base.css) is exempt from
-     the other side: it is a full-viewport view transition, not a surface arriving
+     the other side: it is a full-viewport directional sweep, not a surface arriving
      in place.
      --dur-travel is the one token OFF the enter/exit axis, and that is what earns
      it a name of its own rather than a fold into --dur-enter: it times the plan's

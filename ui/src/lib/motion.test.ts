@@ -22,6 +22,10 @@ const emptyState = await Bun.file(join(uiDir, "components/EmptyState.svelte")).t
 // only to be asserted on is a worse seam than the regex that avoids it.
 const planKeyboard = await Bun.file(join(uiDir, "state/planKeyboard.svelte.ts")).text();
 const alertsState = await Bun.file(join(uiDir, "state/alerts.ts")).text();
+// Read the same way, for the same reason: the stylesheet's scope and the module's tag
+// are one spelling with nothing else coupling them, so a rename would drop the hand-off
+// through to the theme wipe's unconditional sweep with every unit test still green.
+const planHandoffSrc = await Bun.file(join(uiDir, "lib/planHandoff.ts")).text();
 
 // The four vendored modal surfaces (EXC-892), keyed by the `data-slot` each stamps. The
 // slot name IS the filename and its primitive is the slot minus `-overlay` / `-content`,
@@ -608,6 +612,43 @@ describe("the arrival that uncovers the next state", () => {
     // pinned over the content region for the rest of the session, with the whole plan
     // behind it. The one property whose absence is a blank app rather than a worse fade.
     expect(arrival).toMatch(/animation:[^;]*\bforwards\b/);
+  });
+});
+
+describe("the crossfade that hands the window back to the waiting room", () => {
+  // EXC-1400. The crossfade's arms are scoped under the `.plan-handoff` class
+  // withPlanHandoff tags, which is what keeps them off the theme wipe's unconditional
+  // ::view-transition-*(root) sweep.
+  const handoffClass = /HANDOFF_CLASS = "([^"]+)"/.exec(planHandoffSrc)?.[1] ?? "";
+  const handoffArm = (which: "old" | "new"): string =>
+    new RegExp(`:root\\.${handoffClass}::view-transition-${which}\\(root\\)\\s*\\{([^}]*)\\}`).exec(
+      appCss,
+    )?.[1] ?? "";
+
+  test("the window departs on the exit tier and arrives on the enter tier", () => {
+    expect(handoffClass).not.toBe("");
+    // The curtain's asymmetry again, spoken by the whole window: the departure leads and is
+    // over first, so the guard receding and the waiting room arriving read as one gesture.
+    expect(handoffArm("old")).toContain("var(--dur-exit)");
+    expect(handoffArm("old")).toContain("var(--ease-in)");
+    expect(handoffArm("new")).toContain("var(--dur-enter)");
+    expect(handoffArm("new")).toContain("var(--ease-out)");
+  });
+
+  test("the departure declares its end state with `forwards`", () => {
+    expect(handoffArm("old")).toMatch(/animation:[^;]*\bforwards\b/);
+  });
+
+  test("reduced motion stills the root view transitions on !important, not a list", () => {
+    // These live on the document root, outside the #app anchor the global rule uses, hence
+    // their own @media block. `!important` rather than naming each scoped arm, so one claim
+    // covers every transition and a scoped one added later cannot out-specify it.
+    const reducedMotionGuard =
+      /@media \(prefers-reduced-motion: reduce\) \{\s*[^{]*::view-transition[^{]*\{([^}]*)\}/.exec(
+        appCss,
+      )?.[1] ?? "";
+    expect(reducedMotionGuard).not.toBe("");
+    expect(reducedMotionGuard).toMatch(/animation:\s*none\s*!important/);
   });
 });
 
