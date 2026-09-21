@@ -45,6 +45,12 @@ export const CARD_ATTR = "data-code-card";
  * (EXC-865), so they highlight while dragging like any other row. */
 export const GUTTER_CARD_ATTR = "data-code-card-gutter";
 
+/** Marks a card whose block the reviewer has soft-wrapped — caret's per-block, transient
+ * reflow, distinct from the library's global `overflow: "wrap"` over every source line. Set
+ * on both the content card and its gutter mirror, whose coreStyles.ts rules turn it into
+ * pre-wrap rows and a top-aligned line number. */
+export const REFLOW_ATTR = "data-code-card-reflow";
+
 /** The layout metrics that decide whether a block overflows its card. For an unwrapped block
  * these are read per row (does the capped row box overflow?); for a wrapped block they are
  * read from the card (does the block still overflow after wrapping?). */
@@ -115,6 +121,13 @@ export function syncCodeBlockCards(
     const key = String(range.start);
     const card = content.querySelector<HTMLElement>(`:scope > [${CARD_ATTR}="${key}"]`);
     if (card != null) {
+      // A reflowed block's rows wrap to the card width, so the card reports no overflow —
+      // the very condition the retire pass unwraps on. Keeping it above that read is what
+      // stops the wrap disappearing the frame after the reviewer asked for it.
+      if (card.hasAttribute(REFLOW_ATTR)) {
+        wanted.add(key);
+        continue;
+      }
       // Already wrapped: keep it only while it still overflows; otherwise the retire pass
       // below unwraps it (e.g. the viewport widened until the block fits). No equivalent of
       // tables.ts's cardHoldsRange, which re-validates a kept card's span: an annotation
@@ -163,5 +176,19 @@ export function syncCodeBlockCards(
   }
   for (const card of gutter.querySelectorAll<HTMLElement>(`:scope > [${GUTTER_CARD_ATTR}]`)) {
     if (!wanted.has(card.getAttribute(GUTTER_CARD_ATTR) ?? "")) unwrapCard(gutter, card);
+  }
+}
+
+/**
+ * Marks every card whose block the reviewer has reflowed, and clears the mark from the
+ * rest. Runs immediately after syncCodeBlockCards in the same pass, so a card the library's
+ * repaint destroyed and this pass rebuilt is re-marked on the frame it reappears — which is
+ * why the state rides the DOM rather than syncCodeBlockCards' signature. Both columns are
+ * marked: the content card wraps its rows, the gutter mirror tops its line numbers.
+ */
+export function applyCodeBlockReflow(root: ParentNode, reflowed: ReadonlySet<number>): void {
+  for (const card of root.querySelectorAll(`[${CARD_ATTR}], [${GUTTER_CARD_ATTR}]`)) {
+    const key = card.getAttribute(CARD_ATTR) ?? card.getAttribute(GUTTER_CARD_ATTR);
+    card.toggleAttribute(REFLOW_ATTR, reflowed.has(Number(key)));
   }
 }
