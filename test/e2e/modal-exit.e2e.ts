@@ -5,14 +5,26 @@
 // move as one gesture on the shared tokens, that leaving is quicker than arriving, and
 // that reduced motion stills both without stranding either.
 //
+// And it carries the hand-off a decided modal starts, on both of its routes (EXC-894,
+// EXC-1400): a resolve landing on the next plan is uncovered by the curtain, one that
+// drains the queue by a whole-window crossfade.
+//
 // This layer is e2e and cannot be anything else: happy-dom has no getAnimations,
 // which is exactly what bits-ui's PresenceManager waits on — the hold this ticket
 // introduces does not exist there at all, so a unit could only assert the gate's
 // bookkeeping (modalPresence.test.ts already does). Whether a real exit runs, what it
-// spends, and whether the surface actually leaves afterwards, is browser behavior.
+// spends, and whether the surface actually leaves afterwards, is browser behavior. The
+// drain route needs one more thing a unit cannot give: the View Transitions API, whose
+// ::view-transition-* pseudo-elements exist only while a real browser runs a real
+// transition. planHandoff.test.ts covers the decision to start one; what that
+// transition then plays is only observable here.
 
 import { alerts, openSettings } from "@test/e2e/support/chrome.ts";
-import { openRejectGuard, openWithPendingAnnotation } from "@test/e2e/support/decision.ts";
+import {
+  openRejectGuard,
+  openWithPendingAnnotation,
+  seedTwoPlansAndOpen,
+} from "@test/e2e/support/decision.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { seedAndOpen } from "@test/e2e/support/source-view.ts";
 
@@ -40,7 +52,9 @@ type ChoreographyWindow = {
 /** One animation the hand-off recorder saw START (EXC-894). Ordering is the claim, so the
  * sample is taken at animationstart rather than at animationend — an exit that both begins
  * and ends before a slower arrival begins would satisfy an end-ordering trivially. `who`
- * is the surface's `data-slot`, or `arrival` for the curtain, which has no slot.
+ * is the surface's `data-slot`, `arrival` for the curtain, which has no slot, or the
+ * `::view-transition-*` pseudo-element the crossfade runs on — those dispatch on the
+ * document element and name themselves through the event's `pseudoElement` instead.
  *
  * `at` is the event's own `timeStamp` — the frame the animation was scheduled for — and
  * NOT a `performance.now()` read inside the handler. Two animations that start in the same
@@ -63,11 +77,18 @@ async function recordHandoff(page: import("@playwright/test").Page) {
       (e) => {
         const el = e.target;
         if (!(el instanceof HTMLElement)) return;
+        const played = e as AnimationEvent;
+        // `pseudoElement` is "" for an animation on the element itself, so it is both
+        // the pseudo's name and the fallback the slotless, curtainless case wants.
         (window as unknown as HandoffWindow).__handoff.push({
-          who: el.dataset.slot ?? (el.classList.contains("arrival") ? "arrival" : ""),
-          name: (e as AnimationEvent).animationName,
+          who:
+            el.dataset.slot ??
+            (el.classList.contains("arrival") ? "arrival" : played.pseudoElement),
+          name: played.animationName,
           at: e.timeStamp,
-          seconds: Number.parseFloat(getComputedStyle(el).animationDuration),
+          seconds: Number.parseFloat(
+            getComputedStyle(el, played.pseudoElement || null).animationDuration,
+          ),
         });
       },
       true,
@@ -319,7 +340,10 @@ test("a decided guard's exit leads the arrival that uncovers the next state", as
   // can carry — it only exists while the app runs — so it is sampled at animationstart. The
   // duration comparison beside it is a computed-style read, and is here only because the
   // two claims are the same claim: the exit leads, and it is over first.
-  await seedAndOpen(page, daemon);
+  //
+  // Two plans, so the reject lands on the NEXT one — the route the curtain covers. Draining
+  // the queue instead is the crossfade's, and is the test below.
+  await seedTwoPlansAndOpen(daemon, page);
   await waitPastSafeModeGrace(page);
 
   const guard = await openRejectGuard(page);
@@ -351,6 +375,47 @@ test("a decided guard's exit leads the arrival that uncovers the next state", as
   // pair of facts is the whole of "deliberately timed against each other" — a relationship
   // drawn from the --dur-exit/--dur-enter tiers rather than a number this hand-off minted.
   expect(exit?.seconds ?? 0).toBeLessThan(arrival?.seconds ?? 0);
+});
+
+test("draining the queue hands the whole window over in one crossfade", async ({
+  daemon,
+  page,
+}) => {
+  // The same relationship on the other route (EXC-1400), spoken by the window rather than
+  // by a rectangle: with nothing left to select, the swap runs inside a view transition and
+  // the browser crossfades the plan view, the TopBar's cluster and the waiting room
+  // together. Which keyframes play is the load-bearing half — the theme wipe's directional
+  // sweep is declared on these same pseudo-elements, unconditionally, so a crossfade that
+  // failed to scope itself would still animate and would still satisfy the timing below.
+  await seedAndOpen(page, daemon);
+  await waitPastSafeModeGrace(page);
+
+  const guard = await openRejectGuard(page);
+  await page.waitForFunction(
+    (sels) => sels.every((s) => (document.querySelector(s)?.getAnimations().length ?? 1) === 0),
+    [guardContent, guardOverlay],
+  );
+
+  await recordHandoff(page);
+  await guard.getByRole("button", { name: "Reject", exact: true }).click();
+
+  // The arriving half is the longer one, so waiting for it to start is waiting for the
+  // whole gesture to be under way.
+  await page.waitForFunction(() =>
+    (window as unknown as HandoffWindow).__handoff.some(
+      (a) => a.who === "::view-transition-new(root)",
+    ),
+  );
+  const played = await page.evaluate(() => (window as unknown as HandoffWindow).__handoff);
+  const exit = played.find((a) => a.who === "alert-dialog-content" && a.name === "exit");
+  const departing = played.find((a) => a.who === "::view-transition-old(root)");
+  const arriving = played.find((a) => a.who === "::view-transition-new(root)");
+  expect(exit).toBeDefined();
+  expect(departing?.name).toBe("plan-handoff-out");
+  expect(arriving?.name).toBe("plan-handoff-in");
+
+  expect(exit?.at ?? 0).toBeLessThanOrEqual(departing?.at ?? 0);
+  expect(exit?.seconds ?? 0).toBeLessThan(arriving?.seconds ?? 0);
 });
 
 test("diverting from a guard to the dialog acknowledges nothing and uncovers nothing", async ({
