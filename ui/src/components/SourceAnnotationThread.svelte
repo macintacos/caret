@@ -41,7 +41,7 @@
     </header>
     {#each annotations as a, i (a.id)}
       {#if i > 0}
-        <Separator decorative class="thread-rule" />
+        <Separator class="thread-rule" />
       {/if}
       <div class="thread-item">
         <span class="thread-ordinal metric" aria-hidden="true">{i + 1}</span>

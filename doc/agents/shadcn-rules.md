@@ -99,8 +99,8 @@ the first consumer whose row renders something richer. Forward it when that land
 ### Edits a re-sync will silently undo
 
 Because the revert above is wholesale, anything caret **added** to a vendored component
-survives only if someone notices it went missing. One such edit is worth naming here,
-since losing it breaks accessibility rather than looks:
+survives only if someone notices it went missing. Three such edits are worth naming here,
+since losing any of them breaks accessibility rather than looks:
 
 **`command-list.svelte` renders a `Command.Viewport` that the registry source does not**
 (EXC-1096). bits-ui derives the command input's `aria-controls` **and** its
@@ -114,6 +114,18 @@ listbox may own options and groups but not a generic wrapper between them.
 
 `ui/src/lib/shadcn-command-popover.test.ts` is the guard, and it reds if a re-sync drops
 either half. Put the viewport back before you commit an overwrite of that file.
+
+**`separator.svelte` defaults `decorative` to `true`** (EXC-1412). bits-ui defaults a
+separator to `role="separator"`, so a caller that omits the prop is announced; chrome
+dividers are decorative, and a caller that means a semantic break passes
+`decorative={false}`. `separator.test.ts` guards it.
+
+**The focus-cued components use `focus-visible:outline-hidden` where the registry ships
+`outline-none`** (EXC-1412). At rest there is no outline in either mode. On
+`:focus-visible` the outline style is `none`, except under forced colors, where the
+browser paints a transparent 2px outline in a system color. The ring alone cannot do that,
+because forced colors strips box-shadows. `test/structure/shadcn-outline.test.ts` and the
+forced-colors spec in `test/e2e/settings.e2e.ts` guard it.
 
 **That is the policy, not a one-off.** When the registry source is wrong on accessibility,
 patch the vendored file and leave a test that reds if a re-sync drops the patch — the pair

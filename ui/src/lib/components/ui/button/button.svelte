@@ -14,7 +14,7 @@
 			// Leading icon: default sizing, no pointer capture
 			"[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
 			// Motion + interaction
-			"transition-all outline-none select-none active:not-aria-[haspopup]:translate-y-px",
+			"transition-all focus-visible:outline-hidden select-none active:not-aria-[haspopup]:translate-y-px",
 			// Focus ring
 			"focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-3",
 			// Invalid state
