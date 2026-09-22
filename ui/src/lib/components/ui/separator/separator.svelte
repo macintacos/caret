@@ -6,6 +6,7 @@
 		ref = $bindable(null),
 		class: className,
 		"data-slot": dataSlot = "separator",
+		decorative = true,
 		...restProps
 	}: SeparatorPrimitive.RootProps = $props();
 </script>
@@ -13,6 +14,7 @@
 <SeparatorPrimitive.Root
 	bind:ref
 	data-slot={dataSlot}
+	{decorative}
 	class={cn(
 		// Surface
 		"bg-border shrink-0",
