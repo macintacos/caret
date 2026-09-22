@@ -71,10 +71,13 @@ function openBrowser(url: string): void {
  * gets a whole supervisor window of its own. */
 const REVIEW_RESERVE_MS = SUPERVISOR_WINDOW_MS;
 
-export function prodReviewDeps(s: Settings): ReviewDeps {
+export function prodReviewDeps(settings: Settings): ReviewDeps {
   return {
     ensureDaemon: async (mode) =>
-      ensureDaemon(await prodEnsureDeps(s, () => prodService().manager, REVIEW_RESERVE_MS), mode),
+      ensureDaemon(
+        await prodEnsureDeps(settings, () => prodService().manager, REVIEW_RESERVE_MS),
+        mode,
+      ),
     postReview,
     longPoll,
     openBrowser,
@@ -82,7 +85,7 @@ export function prodReviewDeps(s: Settings): ReviewDeps {
       process.stderr.write(reviewUrlLine(url));
     },
     readPane: readCmuxPane,
-    timeoutMs: reviewTimeoutMs(s),
+    timeoutMs: reviewTimeoutMs(settings),
     expire: expireReview,
   };
 }
@@ -156,8 +159,8 @@ export async function runReviewSubcommand(): Promise<void> {
 
   const stdin = await Bun.stdin.text();
   const deps = prodReviewDeps(loaded);
-  deps.onPosted = (p) => {
-    posted = p;
+  deps.onPosted = (handle) => {
+    posted = handle;
   };
   const { decision: out, input } = await reviewHookInput(
     parseHook(adapter.parseHookInput, stdin),
