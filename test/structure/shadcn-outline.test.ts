@@ -1,13 +1,8 @@
 // Standing gate over the vendored shadcn tree: a component whose focus cue is a
 // ring or border must hide its outline with `focus-visible:outline-hidden`, never
-// `outline-none`.
-//
-// Forced-colors mode strips box-shadows, so a ring-only focus cue vanishes there.
-// `outline-none` is `outline-style: none`, which forced colors leaves invisible;
-// `outline-hidden` paints a transparent outline that forced colors repaints, and the
-// `focus-visible:` scope keeps it off at rest. The registry ships `outline-none`, so a
-// re-sync reverts the patch silently — this is where it reds. `settings.e2e.ts` checks
-// the computed outline under emulated forced colors.
+// `outline-none` — forced colors strips the box-shadow ring, and only
+// `outline-hidden` repaints under it (doc/agents/shadcn-rules.md § Edits a re-sync
+// will silently undo has the full mechanics).
 //
 // Components with no focus cue of their own (scroll containers, programmatic
 // focus targets, the input-group wrapper keyed on `has-[…:focus-visible]`)
@@ -23,7 +18,6 @@ const VENDORED_DIR = "ui/src/lib/components/ui";
 
 const FOCUS_CUE = /(?<![\w-])focus-visible:(?:ring|border)/;
 
-/** Line-leading `//` lines and `<!--…-->` blocks, blanked before matching. */
 function stripComments(source: string): string {
   return source.replace(/^\s*\/\/.*$/gm, "").replace(/<!--[\s\S]*?-->/g, "");
 }
