@@ -14,10 +14,13 @@ const WIRE_SHAPE = "hookSpecificOutput";
  * What in `source` breaks the boundary: a `from`, side-effect, or dynamic import
  * of the Claude adapter, or the Claude wire shape's key. Raw source is scanned,
  * so a mention in a comment fails too — reword the prose.
+ *
+ * The regex is byte-identical to the ones in import-conventions.test.ts and
+ * dependency-placement.test.ts; harden all three or none.
  */
 function boundaryViolations(source: string): string[] {
   const found: string[] = [];
-  for (const match of source.matchAll(/\b(?:from|import)\s*\(?\s*"([^"]+)"/g)) {
+  for (const match of source.matchAll(/(?<!@)\b(?:from|import)\s*\(?\s*"([^"]+)"/g)) {
     const spec = match[1];
     if (spec?.startsWith(CLAUDE_ADAPTER)) found.push(spec);
   }

@@ -136,10 +136,10 @@ test("acceptMode passes through on the decision", async () => {
   const out = await review(
     stdin,
     reviewDeps({
-      longPoll: async () => ({ behavior: "allow", acceptMode: "acceptEdits", decidedAt: 1 }),
+      longPoll: async () => ({ behavior: "allow", acceptMode: "yolo", decidedAt: 1 }),
     }),
   );
-  expect(out).toMatchObject({ behavior: "allow", acceptMode: "acceptEdits" });
+  expect(out).toMatchObject({ behavior: "allow", acceptMode: "yolo" });
 });
 
 test("invalid stdin JSON fails safe to deny (never allow)", async () => {
@@ -399,7 +399,7 @@ test("a failed reconnect logs step=reconnect, not the poll step", async () => {
 // ---- cmux pane capture (EXC-961) ----
 
 /** Capture the PlanInput runReview posts, so the pane stamp is observable. */
-async function postedInput(over: Partial<Parameters<typeof runReview>[1]> = {}) {
+async function postedInput(over: Partial<ReviewDeps> = {}) {
   let posted: PlanInput | undefined;
   await review(
     stdin,
@@ -567,11 +567,11 @@ test("an approved plan's record carries the acceptMode", async () => {
   await review(
     stdin,
     reviewDeps({
-      longPoll: async () => ({ behavior: "allow", acceptMode: "acceptEdits", decidedAt: 1 }),
+      longPoll: async () => ({ behavior: "allow", acceptMode: "yolo", decidedAt: 1 }),
     }),
   );
   const rec = caretLogRecords().find((r) => r.step === "decision");
-  expect(rec).toMatchObject({ msg: "plan approved", acceptMode: "acceptEdits" });
+  expect(rec).toMatchObject({ msg: "plan approved", acceptMode: "yolo" });
 });
 
 test("a failure after the review was posted carries the reviewId", async () => {

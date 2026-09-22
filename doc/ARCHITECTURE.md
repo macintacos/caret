@@ -365,14 +365,14 @@ as the work proceeds; that is not another round, the plan is already approved.
 With `path`, that loop runs on the file instead of regenerating the plan. Write the plan
 once. On a change request, re-read the file, make targeted edits, and call again with the
 same `path`. On approval there is nothing left to save: the file already holds the
-approved plan, with any reviewer notes appended (the notes still come back in the tool
-result too). Because caret rewrites the file, it first asks OpenCode for edit permission
-on it, and a denied ask comes back as an error with no review. OpenCode's `plan` agent may
-edit plan files only in a few places, so caret's planning steer tells it to write to
-OpenCode's plans directory: `~/.local/share/opencode/plans` (under `$XDG_DATA_HOME` when
-that is set), or wherever `[opencode] plans_dir` in caret's
-[config file](CONFIGURING.md#the-opencode-table) points. Any other agent can use any `.md`
-file its edit rules allow.
+approved plan, with any reviewer notes appended unless you rewrote the file after caret
+read it (the notes still come back in the tool result too). Because caret rewrites the
+file, it first asks OpenCode for edit permission on it, and a denied ask comes back as an
+error with no review. OpenCode's `plan` agent may edit plan files only in a few places, so
+caret's planning steer tells it to write to OpenCode's plans directory:
+`~/.local/share/opencode/plans` (under `$XDG_DATA_HOME` when that is set), or wherever
+`[opencode] plans_dir` in caret's [config file](CONFIGURING.md#the-opencode-table) points.
+Any other agent can use any `.md` file its edit rules allow.
 
 On Claude Code a long wait has two more wrinkles. From Claude Code v2.1.212 a tool call
 still running after two minutes can move to the background; the tool's description tells

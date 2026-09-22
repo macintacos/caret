@@ -56,8 +56,12 @@ export async function routeIncomingPlan(
   // so its plan of record matches what the human reviews. Runs for every incoming
   // version (new thread or revision); best-effort, and skipped when the agent
   // rewrote the file after caret read it.
-  const planFile = input.planFilePath
-    ? { planFileCurrent: writeCanonicalPlanFile(input, plan, log) }
+  const { planFilePath } = input;
+  const planFile = planFilePath
+    ? {
+        planFileCurrent:
+          writeCanonicalPlanFile({ ...input, planFilePath }, plan, log) !== "changed",
+      }
     : {};
   const now = Date.now();
 

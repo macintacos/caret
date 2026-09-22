@@ -6,14 +6,14 @@ import { setupTempStateDir } from "@test/support/env.ts";
 import { waitFor } from "@test/support/poll.ts";
 import { expectNeverLogsBody } from "@test/support/redaction.ts";
 import { codeBlockRanges } from "@ui/src/lib/diffview/codeBlocks.ts";
-import { claudeAdapter } from "@/adapters/claude/index.ts";
 import { EXCERPT_RADIUS, MAX_CITED_SPAN_LINES, PLAN_REJECTED_MESSAGE } from "@/config/constants.ts";
 import { setLogLevel } from "@/lib/log.ts";
 import { hasUntaggedCodeBlock } from "@/plan/format.ts";
-import { parseHook, runReview } from "@/review/orchestrate.ts";
+import { runReview } from "@/review/orchestrate.ts";
 import {
   assertDevEnv,
   bootstrapReview,
+  devHookInput,
   devReviewDeps,
   runExtraReview,
   runExtraSeeder,
@@ -507,7 +507,7 @@ test("a revision round-trips through the real runReview hook path and logs to ca
   await boot();
   const deps = devReviewDeps(base, () => {});
   // First submission: the driver's initial seed, through the real hook.
-  const first = runReview(parseHook(claudeAdapter.parseHookInput, hookStdin(PLAN_V1)), deps);
+  const first = runReview(devHookInput(PLAN_V1), deps);
   const id = await waitFor(async () => {
     const list = (await (await fetch(`${base}/api/reviews`)).json()) as Array<{ id: string }>;
     return list[0]?.id;
@@ -518,7 +518,7 @@ test("a revision round-trips through the real runReview hook path and logs to ca
   expect(out.feedback).toBe("needs a rollout plan");
   // The driver's step: append Revision 1 and resubmit through the same path.
   const next = nextPlan({ plan: PLAN_V1, revision: 0 }, out, PLAN_V1);
-  const second = runReview(parseHook(claudeAdapter.parseHookInput, hookStdin(next.plan)), deps);
+  const second = runReview(devHookInput(next.plan), deps);
   const threaded = await waitFor(async () => {
     const r = await clientReview(id);
     return r.version === 2 ? r : undefined;

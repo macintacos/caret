@@ -14,7 +14,13 @@ import { logFile } from "@/config/paths.ts";
 // the daemon at runtime.
 import type { EnsureMode } from "@/daemon/lifecycle.ts";
 import { type ErrorContext, logDebug, logError, logInfo, shortId } from "@/lib/log.ts";
-import { type CmuxPane, type Decision, errorMessage, type PlanInput } from "@/lib/types.ts";
+import {
+  type CmuxPane,
+  type CreatedReview,
+  type Decision,
+  errorMessage,
+  type PlanInput,
+} from "@/lib/types.ts";
 import {
   hasUntaggedCodeBlock,
   PLAN_EMPTY_DENY_MESSAGE,
@@ -41,23 +47,18 @@ export function parseHook(parse: (stdin: string) => PlanInput, stdin: string): P
   }
 }
 
-/** The created review's daemon handle, plus the daemon's verdict on whether the
- * agent's plan file still holds the reviewed plan (absent from an older daemon, or
- * when the plan came without a plan file). */
-export type PostedReview = { baseUrl: string; id: string; planFileCurrent?: boolean };
+/** The created review's daemon handle, plus the daemon's at-ingest verdict on the
+ * agent's plan file (see RouteResult.planFileCurrent). */
+export type PostedReview = Omit<CreatedReview, "hasLiveClient"> & { baseUrl: string };
 
 export interface ReviewDeps {
   /** Ensure a daemon is up and return its base URL, resolving the port as `mode` says
    * (see EnsureMode). */
   ensureDaemon: (mode: EnsureMode) => Promise<string>;
   /** Create the review, or null when the daemon refused it while stepping down.
-   * `hasLiveClient` (EXC-559) reports whether a UI tab is already polling the
-   * daemon; when true the hook skips opening the browser so an open backgrounded
+   * On `hasLiveClient` the hook skips opening the browser so an open backgrounded
    * tab's away-gated notification isn't pre-empted. */
-  postReview: (
-    baseUrl: string,
-    input: PlanInput,
-  ) => Promise<{ id: string; hasLiveClient?: boolean; planFileCurrent?: boolean } | null>;
+  postReview: (baseUrl: string, input: PlanInput) => Promise<CreatedReview | null>;
   /** One bounded poll: a Decision, or null on a heartbeat (re-poll). Throws on
    * a transient drop so the caller can reconnect. */
   longPoll: (baseUrl: string, id: string) => Promise<Decision | null>;

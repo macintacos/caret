@@ -233,10 +233,19 @@ export interface RouteResult {
   version: number;
   /** Stale pending reviews of the same session this routing expired (EXC-454). */
   expired: string[];
-  /** Whether the agent's plan file still holds the reviewed plan. Absent when the
-   * plan came without a plan file. */
+  /** False only when, at ingest, the daemon read the agent's plan file and found it
+   * no longer holds the ingested plan; true otherwise (including a guard refusal or
+   * fs failure, which warn on their own). Absent when the plan came without a plan
+   * file. */
   planFileCurrent?: boolean;
 }
+
+/** `POST /api/reviews`' success body as the hook reads it. Every optional field may
+ * be absent from an older daemon (mid-upgrade version skew). `hasLiveClient`
+ * (EXC-559) reports whether a UI tab is already polling the daemon. */
+export type CreatedReview = Pick<RouteResult, "id" | "planFileCurrent"> & {
+  hasLiveClient?: boolean;
+};
 
 /** What a plan's path reference turned out to be on disk. The filesystem is the
  * only thing that knows, so the parser never guesses from the token's shape —

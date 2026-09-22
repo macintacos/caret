@@ -43,54 +43,54 @@ export function readPlanFile(path: string): string | undefined {
  * model-chosen path (OpenCode's `path`) is vetted by the plugin, which asks
  * OpenCode for edit permission before sending it. Never throws.
  */
-function guardedPlanFileWrite(
+function guardedPlanFileWrite<T>(
   planFilePath: string,
   log: Pick<CaretLogger, "warn">,
   failMsg: string,
-  write: (path: string) => void,
-): void {
+  write: (path: string) => T,
+): T | undefined {
   try {
-    if (!isPlanFile(planFilePath)) return;
-    write(planFilePath);
+    if (!isPlanFile(planFilePath)) return undefined;
+    return write(planFilePath);
   } catch (err) {
     // An fs error's `.code` (e.g. EACCES) is safe to log; the path and plan text
     // must never reach a log record.
     const code = (err as { code?: string } | null)?.code;
     log.warn("review", failMsg, code ? { code } : {});
+    return undefined;
   }
 }
 
 /**
  * Overwrite the plan file with the canonical plan text, but only while it still
  * holds the `plan` caret ingested: a file the agent rewrote since is newer than the
- * review and is left alone. No-op when the path is absent (agents without a plan
- * file) or fails the safety guard (must be an existing regular `.md` file). Returns
- * whether the file now holds `canonical`. Never throws.
+ * review and is left alone (`"changed"`). `"skipped"` when the path fails the safety
+ * guard (must be an existing regular `.md` file) or the fs op fails, which logs its
+ * own warning. Never throws.
  */
 export function writeCanonicalPlanFile(
-  input: Pick<PlanInput, "plan" | "planFilePath" | "sessionId">,
+  input: Pick<PlanInput, "plan" | "sessionId"> & { planFilePath: string },
   canonical: string,
   log: CaretLogger,
-): boolean {
-  if (!input.planFilePath) return false;
-  let current = false;
-  guardedPlanFileWrite(input.planFilePath, log, "plan file canonicalize failed", (p) => {
-    if (readFileSync(p, "utf8") !== (input.plan ?? "")) {
-      log.info("review", "plan file changed; rewrite skipped", { sessionId: input.sessionId });
-      return;
-    }
-    writeFileSync(p, canonical);
-    current = true;
-  });
-  return current;
+): "written" | "changed" | "skipped" {
+  return (
+    guardedPlanFileWrite(input.planFilePath, log, "plan file canonicalize failed", (p) => {
+      if (readFileSync(p, "utf8") !== (input.plan ?? "")) {
+        log.info("review", "plan file changed; rewrite skipped", { sessionId: input.sessionId });
+        return "changed" as const;
+      }
+      writeFileSync(p, canonical);
+      return "written" as const;
+    }) ?? "skipped"
+  );
 }
 
 /**
  * Append the reviewer's approval notes to the agent's plan file as a trailing,
  * clearly-labeled section, so the plan of record the agent reads carries them on
  * an approval (EXC-791). Shares writeCanonicalPlanFile's surgical guards via
- * guardedPlanFileWrite — the file normally already holds the canonical plan (not
- * when the agent rewrote it after ingest), so this only adds the section. A blank
+ * guardedPlanFileWrite. The caller appends only when the daemon did not see the
+ * file move on after ingest, so this only adds the section. A blank
  * note or absent path is a no-op. Never throws: notes are a convenience, and
  * losing them must not fail the review.
  */

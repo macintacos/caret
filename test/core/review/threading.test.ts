@@ -121,6 +121,14 @@ test("reports the plan file as not current when the agent rewrote it after inges
   expect(routed.planFileCurrent).toBe(false);
 });
 
+test("reports the plan file as current when the guard refuses it", async () => {
+  const routed = await routeIncomingPlan(
+    input({ plan: "# Ingested\n", planFilePath: join(dir, "missing.md") }),
+    store,
+  );
+  expect(routed.planFileCurrent).toBe(true);
+});
+
 test("reports no plan-file state for a plan without a plan file", async () => {
   const routed = await routeIncomingPlan(input(), store);
   expect("planFileCurrent" in routed).toBe(false);

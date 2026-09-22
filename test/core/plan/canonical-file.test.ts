@@ -32,7 +32,7 @@ test("rewrites an existing .md plan file with the canonical text", () => {
     recordingLog().log,
   );
   expect(readFileSync(path, "utf8")).toBe("# Canonical\n\nwrapped\n");
-  expect(current).toBe(true);
+  expect(current).toBe("written");
 });
 
 test("leaves a plan file that changed since ingest untouched", () => {
@@ -45,14 +45,10 @@ test("leaves a plan file that changed since ingest untouched", () => {
     log,
   );
   expect(readFileSync(path, "utf8")).toBe("# Newer plan the agent just wrote\n");
-  expect(current).toBe(false);
+  expect(current).toBe("changed");
   expect(recs.map((r) => [r.level, r.step, r.extra])).toEqual([
     ["info", "review", { sessionId: "s1" }],
   ]);
-});
-
-test("is a no-op when no path is given (agents without a plan file)", () => {
-  expect(() => writeCanonicalPlanFile({ plan: "x" }, "x", recordingLog().log)).not.toThrow();
 });
 
 test("refuses a non-.md path, leaving it untouched", () => {
@@ -64,7 +60,7 @@ test("refuses a non-.md path, leaving it untouched", () => {
     recordingLog().log,
   );
   expect(readFileSync(path, "utf8")).toBe("raw");
-  expect(current).toBe(false);
+  expect(current).toBe("skipped");
 });
 
 test("does not create a plan file that does not already exist", () => {
@@ -75,15 +71,15 @@ test("does not create a plan file that does not already exist", () => {
     recordingLog().log,
   );
   expect(existsSync(path)).toBe(false);
-  expect(current).toBe(false);
+  expect(current).toBe("skipped");
 });
 
 test("is a no-op for a directory path that ends in .md", () => {
   const path = join(dir, "weird.md");
   mkdtempSync(path); // a directory, not a file
-  expect(() =>
+  expect(
     writeCanonicalPlanFile({ plan: "raw", planFilePath: path }, "canonical", recordingLog().log),
-  ).not.toThrow();
+  ).toBe("skipped");
 });
 
 test("never throws when the file cannot be written", () => {
@@ -92,10 +88,10 @@ test("never throws when the file cannot be written", () => {
   chmodSync(path, 0o444);
   // The invariant is that a write failure is swallowed (a plan is never lost to
   // a file-write error). Whether the write actually fails is platform/uid
-  // dependent — root ignores the mode — so we only assert the no-throw contract.
-  expect(() =>
+  // dependent — root ignores the mode.
+  expect(
     writeCanonicalPlanFile({ plan: "raw", planFilePath: path }, "canonical", recordingLog().log),
-  ).not.toThrow();
+  ).toBe(process.getuid?.() === 0 ? "written" : "skipped");
 });
 
 test("readPlanFile returns an .md plan file's text", () => {

@@ -44,6 +44,19 @@ export function reviewUrlLine(url: string): string {
   return `caret: review this plan at ${url}\n`;
 }
 
+/** Where an approval's reviewer notes go: the plan file, nowhere, or nowhere because the
+ * daemon saw the agent rewrite the file after ingest (an older daemon's absent verdict
+ * counts as current). */
+export function notesAppendTarget(
+  decision: Pick<Decision, "behavior" | "feedback">,
+  planFilePath: string | undefined,
+  posted: Pick<PostedReview, "planFileCurrent"> | undefined,
+): { path: string; notes: string } | "skip-moved-on" | undefined {
+  if (decision.behavior !== "allow" || !decision.feedback || !planFilePath) return undefined;
+  if (posted?.planFileCurrent === false) return "skip-moved-on";
+  return { path: planFilePath, notes: decision.feedback };
+}
+
 function openBrowser(url: string): void {
   try {
     Bun.spawn(browserOpenCmd(process.platform, url), {
@@ -152,18 +165,19 @@ export async function runReviewSubcommand(): Promise<void> {
   );
   hookInput = input;
   // Fold an approval's reviewer notes onto the agent's plan of record (EXC-791)
-  // before emitting the decision, so the agent reads them when it proceeds. The
-  // guard on planFilePath scopes this to reviews with a plan file (Claude, and an
-  // OpenCode `path` review); the Claude wire echo carries the notes too, and
-  // OpenCode surfaces them via its tool result. Best-effort and never fatal. A file
-  // the agent rewrote after ingest is no longer the reviewed plan, so it is left
-  // alone; only the daemon knows, since it made that call at ingest.
-  if (out.behavior === "allow" && out.feedback && hookInput?.planFilePath) {
-    if (posted?.planFileCurrent === false) {
-      logInfo("review", "plan file changed; notes append skipped", { reviewId: posted.id });
-    } else {
-      appendReviewerNotesToPlanFile(hookInput.planFilePath, out.feedback, { warn: logWarn });
-    }
+  // before emitting the decision, so the agent reads them when it proceeds. Scoped to
+  // reviews with a plan file (Claude, and an OpenCode `path` review); the Claude wire
+  // echo carries the notes too, and OpenCode surfaces them via its tool result.
+  // Best-effort and never fatal. A file the agent rewrote after ingest is left alone;
+  // the daemon's verdict, not the hook, says so.
+  const target = notesAppendTarget(out, hookInput?.planFilePath, posted);
+  if (target === "skip-moved-on") {
+    logInfo("review", "plan file changed; notes append skipped", {
+      reviewId: posted?.id,
+      sessionId: hookInput?.sessionId,
+    });
+  } else if (target) {
+    appendReviewerNotesToPlanFile(target.path, target.notes, { warn: logWarn });
   }
   respond(out);
   process.exit(0);

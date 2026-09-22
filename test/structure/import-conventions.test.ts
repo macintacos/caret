@@ -59,8 +59,9 @@ const ALLOWED_LITERALS: Record<string, string> = {
  *
  * This pattern is byte-identical to the one in `importedPackages` in
  * dependency-placement.test.ts, which derives the shipped dependency set from
- * the same three forms. The duplication is deliberate — a shared regex and loop
- * is not `test/support/` scaffolding — so harden both or neither.
+ * the same three forms, and to `boundaryViolations` in
+ * core-adapter-boundary.test.ts. The duplication is deliberate — a shared regex
+ * and loop is not `test/support/` scaffolding — so harden all three or none.
  */
 function offendingSpecifiers(source: string, allowedPrefix?: string): string[] {
   const found: string[] = [];

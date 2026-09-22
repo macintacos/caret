@@ -44,8 +44,9 @@ const SHIPPED_GLOB = "**/*.{ts,mts,cts,js,mjs,cjs}";
  * each is a module reference a consumer's resolver must satisfy. Relative and absolute
  * specifiers and node builtins are dropped; a subpath is reduced to its package name
  * (`@scope/pkg/sub` to `@scope/pkg`, `pkg/sub` to `pkg`), which is the unit `package.json`
- * declares. The `(?<!@)` guard drops CSS `@import` at-rules, matching the sibling
- * extractor in import-conventions.test.ts.
+ * declares. The `(?<!@)` guard drops CSS `@import` at-rules. The regex is
+ * byte-identical to the extractors in import-conventions.test.ts and
+ * core-adapter-boundary.test.ts; harden all three or none.
  *
  * Three properties worth knowing before reading a failure:
  *

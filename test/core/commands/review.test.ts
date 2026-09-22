@@ -2,7 +2,12 @@ import { expect, test } from "bun:test";
 
 import { parseReviewUrl } from "@opencode/review-bridge.ts";
 import { fakeReviewDeps } from "@test/support/wire-contract.ts";
-import { browserOpenCmd, reviewHookInput, reviewUrlLine } from "@/commands/review.ts";
+import {
+  browserOpenCmd,
+  notesAppendTarget,
+  reviewHookInput,
+  reviewUrlLine,
+} from "@/commands/review.ts";
 import type { PlanInput } from "@/lib/types.ts";
 import { PLAN_EMPTY_DENY_MESSAGE } from "@/plan/format.ts";
 import { parseHook } from "@/review/orchestrate.ts";
@@ -104,4 +109,31 @@ test("stdin that fails to parse denies without reading the plan file", async () 
   expect(decision.behavior).toBe("deny");
   expect(input).toBeUndefined();
   expect(r.reads).toEqual([]);
+});
+
+// An older daemon omits planFileCurrent, which must still append (version skew).
+test.each([
+  ["no posted review", "allow", "n", PLAN_FILE, undefined, { path: PLAN_FILE, notes: "n" }],
+  [
+    "a current plan file",
+    "allow",
+    "n",
+    PLAN_FILE,
+    { planFileCurrent: true },
+    { path: PLAN_FILE, notes: "n" },
+  ],
+  [
+    "an older daemon's absent verdict",
+    "allow",
+    "n",
+    PLAN_FILE,
+    {},
+    { path: PLAN_FILE, notes: "n" },
+  ],
+  ["a moved-on plan file", "allow", "n", PLAN_FILE, { planFileCurrent: false }, "skip-moved-on"],
+  ["a deny", "deny", "n", PLAN_FILE, undefined, undefined],
+  ["no notes", "allow", undefined, PLAN_FILE, undefined, undefined],
+  ["no plan file", "allow", "n", undefined, undefined, undefined],
+] as const)("notes append target with %s", (_, behavior, feedback, path, posted, expected) => {
+  expect(notesAppendTarget({ behavior, feedback }, path, posted)).toEqual(expected);
 });
