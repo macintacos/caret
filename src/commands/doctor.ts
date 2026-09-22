@@ -38,7 +38,7 @@ import {
   type Settings,
 } from "@/config/settings.ts";
 import { httpHealth } from "@/daemon/client.ts";
-import { isPidAlive, readDaemonLock } from "@/daemon/lifecycle.ts";
+import { isPidAlive, readBootMarker, readDaemonLock } from "@/daemon/lifecycle.ts";
 import { type BundleDeps, runBundle } from "@/doctor/bundle.ts";
 import { runChecks } from "@/doctor/checks.ts";
 import {
@@ -82,6 +82,7 @@ function prodDoctorDeps(s: Settings): DoctorDeps {
     health: httpHealth,
     serviceInstalled: () => existsSync(launcherServiceFile()),
     readLock: readDaemonLock,
+    readBootMarker,
     isPidAlive,
     listProcesses,
     listReviewFiles,
