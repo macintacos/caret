@@ -448,6 +448,13 @@ export function fileBootMarker(): BootMarkerStore {
   };
 }
 
+/** Drop the boot marker, but only when it names THIS process — the daemon a hook spawned,
+ * once its lock is written or it exits. A marker naming another pid is someone else's
+ * boot, so for a supervised or `caret serve` daemon this is a no-op. */
+export function removeOwnBootMarker(): void {
+  if (readBootMarker()?.pid === process.pid) rmQuiet(daemonBootMarker());
+}
+
 function rmQuiet(path: string): void {
   try {
     unlinkSync(path);

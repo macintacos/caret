@@ -40,6 +40,7 @@ import {
   isPidAlive,
   openDaemonStderr,
   prodEnsureDeps,
+  removeOwnBootMarker,
   removeOwnDaemonLock,
   retireDaemon,
   rotateDaemonStderr,
@@ -1320,6 +1321,32 @@ test("removeOwnDaemonLock tolerates a missing or unreadable lock", () => {
   expect(() => removeOwnDaemonLock()).not.toThrow();
   expect(existsSync(daemonLock())).toBe(true);
   unlinkSync(daemonLock());
+});
+
+// A daemon drops the boot marker only when it names this process: a marker naming
+// another pid is a boot still under way elsewhere.
+test("removeOwnBootMarker removes a marker naming this process", () => {
+  mkdirSync(dirname(daemonBootMarker()), { recursive: true });
+  writeFileSync(daemonBootMarker(), JSON.stringify({ pid: process.pid, claimedAt: 0 }));
+  removeOwnBootMarker();
+  expect(existsSync(daemonBootMarker())).toBe(false);
+});
+
+test("removeOwnBootMarker keeps a marker naming another process", () => {
+  mkdirSync(dirname(daemonBootMarker()), { recursive: true });
+  writeFileSync(daemonBootMarker(), JSON.stringify({ pid: process.pid + 1, claimedAt: 0 }));
+  removeOwnBootMarker();
+  expect(existsSync(daemonBootMarker())).toBe(true);
+  unlinkSync(daemonBootMarker());
+});
+
+test("removeOwnBootMarker tolerates a missing or unreadable marker", () => {
+  mkdirSync(dirname(daemonBootMarker()), { recursive: true });
+  expect(() => removeOwnBootMarker()).not.toThrow();
+  writeFileSync(daemonBootMarker(), "{ not json");
+  expect(() => removeOwnBootMarker()).not.toThrow();
+  expect(existsSync(daemonBootMarker())).toBe(true);
+  unlinkSync(daemonBootMarker());
 });
 
 // `caret serve` clears the port before it binds: a same-world, unsupervised daemon is
