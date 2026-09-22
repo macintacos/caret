@@ -2,7 +2,7 @@
 // state dir, and neither world's hook reaches the other world's daemon or the machine's
 // supervisor. Real daemons, because the property is what two live processes leave each
 // other — the dev task's own childEnvFor and daemonCommand drive the dev side.
-import { afterEach, expect, setDefaultTimeout, test } from "bun:test";
+import { afterEach, expect, mock, setDefaultTimeout, test } from "bun:test";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -21,7 +21,11 @@ import { fakeServiceManager } from "@test/support/service-manager.ts";
 import { launcherServiceFile } from "@/config/paths.ts";
 import { loadSettings } from "@/config/settings.ts";
 import { ensureDaemon, prodEnsureDeps, readDaemonLock } from "@/daemon/lifecycle.ts";
+import * as buildId from "@/lib/build-id.ts";
 import { childEnvFor, daemonCommand } from "@/tasks/dev/run.ts";
+
+// As if a concurrent UI build rewrote ui/dist after both daemons booted.
+mock.module("@/lib/build-id.ts", () => ({ ...buildId, currentBuildId: async () => "churned-ui" }));
 
 // Real daemon boots stretch to seconds under preflight's concurrent load; see
 // test/core/daemon/integration.test.ts for why the waits are patient-while-alive instead.
@@ -111,7 +115,8 @@ async function runHook(world: { stateHome: string; port: number; configFile: str
       },
       0,
     );
-    return ensureDaemon(deps);
+    // The daemon hashed ui/dist at its boot; a UI build since then must not read as staleness.
+    return ensureDaemon({ ...deps, currentBuild: lockIn(world.stateHome)!.build! });
   });
   return { url, built, calls: service.calls };
 }
