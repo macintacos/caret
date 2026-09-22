@@ -79,6 +79,10 @@ Every review and prewarm hook first makes sure a current daemon holds the port
   directory registered.
 - When nothing holds the port but the service will start a daemon, the hook leaves it to
   the supervisor for `SUPERVISOR_WINDOW_MS` before spawning one.
+- A hook that finds another daemon of its state directory still booting, by the
+  `daemon.boot` marker there, waits for it rather than spawning a second. The daemon drops
+  the marker once its lock is written; a marker whose pid is dead, or older than 30 s, is
+  cleared.
 - A review hook whose long-poll drops mid-review only reattaches, to whatever daemon of
   its state directory answers, whatever its build.
 

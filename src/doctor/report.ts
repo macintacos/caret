@@ -16,6 +16,7 @@ import { basename, join } from "node:path";
 import type { InstallProbe } from "@/adapters/adapter.ts";
 import { daemonLock, reviewsDir } from "@/config/paths.ts";
 import type { Settings } from "@/config/settings.ts";
+import type { BootMarker } from "@/daemon/lifecycle.ts";
 import type { DaemonLock } from "@/lib/build-id.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
 import { shortId } from "@/lib/log.ts";
@@ -84,6 +85,7 @@ export interface DoctorDeps {
    * one that idle-exited by design. */
   serviceInstalled: () => boolean;
   readLock: () => DaemonLock | null;
+  readBootMarker: () => BootMarker | null;
   isPidAlive: (pid: number) => boolean;
   listProcesses: () => ProcessEntry[];
   listReviewFiles: () => ReviewStatusRecord[];
@@ -127,8 +129,8 @@ export interface DaemonSection {
   commit?: string;
 }
 
-/** The lock file reconciled against the effective port. Everything past the first two
- * fields is absent when no lock file exists. */
+/** The lock file reconciled against the effective port. The lock fields are absent when
+ * no lock file exists, and the boot marker's when no daemon is booting. */
 export interface LockSection {
   lockExists: boolean;
   portServesCaret: boolean;
@@ -140,6 +142,8 @@ export interface LockSection {
   lockStartedAt?: number;
   pidAlive?: boolean;
   portMismatch?: boolean;
+  bootMarkerPid?: number;
+  bootMarkerAgeMs?: number;
 }
 
 /** Flat-by-design so scrubValue's depth-6 cap never clips a leaf. */
@@ -277,13 +281,19 @@ function buildDaemon(deps: DoctorDeps, health: HealthIdentity | null): DaemonSec
   };
 }
 
-/** The lock + port reconciliation, flattened. portServesCaret comes from the
- * shared health probe (service === "caret"); portMismatch compares the lock's
- * port to the effective port. No lock → { lockExists: false, portServesCaret }. */
+/** The lock + port reconciliation, flattened, plus the boot marker when one is claimed.
+ * portServesCaret comes from the shared health probe (service === "caret"); portMismatch
+ * compares the lock's port to the effective port. No lock → { lockExists: false,
+ * portServesCaret, ...bootFields }. */
 function buildLockAndPort(deps: DoctorDeps, health: HealthIdentity | null): LockSection {
   const portServesCaret = health?.service === "caret";
+  const marker = deps.readBootMarker();
+  const bootFields = marker && {
+    bootMarkerPid: marker.pid,
+    bootMarkerAgeMs: deps.now().getTime() - marker.claimedAt,
+  };
   const lock = deps.readLock();
-  if (!lock) return { lockExists: false, portServesCaret };
+  if (!lock) return { lockExists: false, portServesCaret, ...bootFields };
   return {
     lockExists: true,
     lockPath: daemonLock(),
@@ -295,6 +305,7 @@ function buildLockAndPort(deps: DoctorDeps, health: HealthIdentity | null): Lock
     pidAlive: deps.isPidAlive(lock.pid),
     portServesCaret,
     portMismatch: lock.port !== deps.effective().port,
+    ...bootFields,
   };
 }
 

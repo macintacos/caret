@@ -3,23 +3,29 @@
 // unsupervised one, spawn the on-demand fallback, and clean orphan locks (EXC-406) —
 // never denying a review because takeover failed. This module also owns the
 // world-identity guards (EXC-461) and the lock read/write/liveness primitives the
-// takeover loop and the doctor command share.
+// takeover loop and the doctor command share, and the boot marker that lets one daemon
+// of a state dir boot at a time.
 
 import {
   accessSync,
   chmodSync,
   constants,
   existsSync,
+  linkSync,
   openSync,
   readFileSync,
+  renameSync,
   unlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { join, normalize } from "node:path";
 
 import {
+  daemonBootMarker,
   daemonLock,
   daemonStderrLogFile,
   ensureLogsDir,
+  ensureStateDir,
   launcherPinnedRootFile,
   launcherServiceFile,
   stateDir,
@@ -51,9 +57,9 @@ export interface EnsureDeps {
   health: (baseUrl: string) => Promise<HealthBody | null>;
   /** Read the daemon lock, or null if absent/unreadable. */
   readLock: () => DaemonLock | null;
-  /** Is a PID alive? False lets an orphan lock be removed, and lets ensureDaemon spawn
-   * again once the daemon it spawned has exited — which relies on the runtime reaping
-   * that detached child, since a zombie still answers signal 0. */
+  /** Is a PID alive? False lets an orphan lock or boot marker be cleared, so a spawn can
+   * follow a boot that died — which relies on the runtime reaping a detached child, since
+   * a zombie still answers signal 0. */
   isAlive: (pid: number) => boolean;
   /** Ask a stale daemon to step down. Returns true when a graceful shutdown was
    * initiated (POST /api/retire accepted, or SIGTERM sent to a live lock PID —
@@ -65,6 +71,9 @@ export interface EnsureDeps {
   removeLock: () => void;
   /** Spawn a detached daemon and return its pid. May throw EADDRINUSE if it loses a race. */
   spawn: () => number;
+  /** The state dir's boot marker, claimed before a spawn so another process's boot is
+   * waited on, not doubled. */
+  bootMarker: BootMarkerStore;
   /** This world's supervisor, absent when the world installed none. */
   service?: Supervisor;
   /** The world's launcher execs a pinned root, so a cycle brings that root back whatever
@@ -81,12 +90,37 @@ export interface EnsureTiming {
   maxAttempts: number;
   /** Monotonic milliseconds, read for the call's deadline. */
   now: () => number;
+  /** Epoch milliseconds, read for a boot marker's age: another process wrote it. */
+  wallNow: () => number;
   /** How long from the call's start the supervisor has to put a daemon on the port. */
   windowMs: number;
   /** How long past that window the fallback spawn goes on trying, so a window that ran
    * out still leaves it a turn. No attempt starts after it. */
   reserveMs: number;
 }
+
+/** The on-disk boot marker: its pid is the claiming hook until it spawns, then the daemon
+ * it spawned. */
+export interface BootMarker {
+  pid: number;
+  /** Epoch ms. */
+  claimedAt: number;
+}
+
+/** The state dir's boot marker: at most one daemon of this world boots at a time. */
+export interface BootMarkerStore {
+  /** Atomically create `marker`; false only when one already exists. */
+  claim: (marker: BootMarker) => boolean;
+  /** Point the marker this call holds at the daemon it spawned, keeping its `claimedAt`. */
+  assign: (pid: number) => void;
+  read: () => BootMarker | null;
+  /** Remove the marker whoever it names. */
+  clear: () => void;
+}
+
+/** A boot claimed longer ago than this is abandoned, whatever its pid — which may since
+ * have been recycled. A real boot takes seconds. */
+export const BOOT_MARKER_TTL_MS = 30_000;
 
 export function isAddrInUse(e: unknown): boolean {
   if (e && typeof e === "object" && "code" in e) {
@@ -158,7 +192,9 @@ export async function ensureDaemon(
   let windowSpent = mode === "successor" ? await awaitDrained(deps, windowEnd) : false;
   let supervised: boolean | undefined;
   let spawnedPid: number | undefined;
+  let waitingOn: number | undefined;
   for (let attempt = 0; attempt < timing.maxAttempts && timing.now() < deadline; attempt++) {
+    waitingOn = undefined;
     windowSpent ||= timing.now() >= windowEnd;
     const h = await deps.health(deps.baseUrl);
     if (h && h.service === "caret") {
@@ -223,17 +259,29 @@ export async function ensureDaemon(
       deps.removeLock();
       logDebug("spawn", "orphan daemon lock removed");
     }
-    // A daemon this call spawned may still be booting, and a second would bind the port
-    // once the first is gone.
-    if (spawnedPid === undefined || !deps.isAlive(spawnedPid)) {
+    // The marker guards another process's boot; this call's own spawn is guarded too,
+    // since a marker that cannot be written counts as claimed on every attempt.
+    const claim = claimBoot(deps);
+    if (claim.claimed && spawnedPid !== undefined && deps.isAlive(spawnedPid)) {
+      deps.bootMarker.clear();
+    } else if (claim.claimed) {
       try {
         spawnedPid = deps.spawn();
+        // ponytail: a daemon that binds before this runs leaves the marker naming this
+        // hook until it exits or the TTL passes; unreachable behind a multi-second boot.
+        deps.bootMarker.assign(spawnedPid);
         logDebug("spawn", "daemon spawned", { pid: spawnedPid });
       } catch (e) {
+        deps.bootMarker.clear();
         if (!isAddrInUse(e)) throw e;
       }
+    } else if (claim.bootPid !== spawnedPid) {
+      waitingOn = claim.bootPid;
     }
     await timing.backoff(attempt);
+  }
+  if (waitingOn !== undefined) {
+    logDebug("spawn", "gave up waiting on a booting daemon", { bootPid: waitingOn });
   }
   // Exhausted: never deny a review on takeover failure — reuse even a stale
   // daemon we couldn't retire. The foreign world stays the one exception
@@ -244,6 +292,29 @@ export async function ensureDaemon(
     return deps.baseUrl;
   }
   throw new Error("caret daemon did not become healthy in time");
+}
+
+/** Whether this call holds the boot marker; if not, the pid of a live boot that does —
+ * absent when the marker was released or just cleared as stale. */
+type BootClaim = { claimed: true } | { claimed: false; bootPid?: number };
+
+/** Claim the boot marker, or clear a dead or expired one. A stale marker is only cleared
+ * here, never re-claimed in the same call — clearing and re-creating is not atomic; the
+ * next attempt's claim is the only way to win it. */
+function claimBoot(deps: EnsureDeps): BootClaim {
+  const { bootMarker, timing } = deps;
+  if (bootMarker.claim({ pid: process.pid, claimedAt: timing.wallNow() })) {
+    return { claimed: true };
+  }
+  const held = bootMarker.read();
+  if (!held) return { claimed: false };
+  const age = timing.wallNow() - held.claimedAt;
+  if (deps.isAlive(held.pid) && age >= 0 && age < BOOT_MARKER_TTL_MS) {
+    return { claimed: false, bootPid: held.pid };
+  }
+  bootMarker.clear();
+  logDebug("spawn", "stale boot marker removed", { bootPid: held.pid });
+  return { claimed: false };
 }
 
 /** Wait past the daemon that just refused work while stepping down. True when one was
@@ -347,6 +418,66 @@ export function readDaemonLock(): DaemonLock | null {
   return null;
 }
 
+/** Read + validate the boot marker; null if missing or unparseable. */
+export function readBootMarker(): BootMarker | null {
+  const m = readJsonFileSync(daemonBootMarker()) as BootMarker | null;
+  if (m && typeof m.pid === "number" && typeof m.claimedAt === "number") return m;
+  return null;
+}
+
+/** The boot marker on disk. Every write lands whole — `link` for the claim, `rename` for
+ * the reassignment — so a reader never takes a half-written marker for a stale one. A
+ * marker that cannot be written is treated as claimed: it only guards another process's
+ * spawn, and must never stop one. */
+export function fileBootMarker(): BootMarkerStore {
+  const write = (marker: BootMarker, place: (tmp: string, path: string) => void): void => {
+    const path = daemonBootMarker();
+    const tmp = `${path}.${process.pid}.tmp`;
+    writeFileSync(tmp, JSON.stringify(marker), { mode: 0o600 });
+    try {
+      place(tmp, path);
+    } finally {
+      rmQuiet(tmp);
+    }
+  };
+  return {
+    claim: (marker) => {
+      try {
+        ensureStateDir();
+        write(marker, linkSync);
+        return true;
+      } catch (e) {
+        return (e as { code?: string }).code !== "EEXIST";
+      }
+    },
+    assign: (pid) => {
+      try {
+        write({ pid, claimedAt: readBootMarker()?.claimedAt ?? 0 }, renameSync);
+      } catch {
+        // Left naming this process: the next caller clears it once this pid is dead or the
+        // TTL passes.
+      }
+    },
+    read: readBootMarker,
+    clear: () => rmQuiet(daemonBootMarker()),
+  };
+}
+
+/** Drop the boot marker, but only when it names THIS process — the daemon a hook spawned,
+ * once its lock is written or it exits. A marker naming another pid is someone else's
+ * boot, so for a supervised or `caret serve` daemon this is a no-op. */
+export function removeOwnBootMarker(): void {
+  if (readBootMarker()?.pid === process.pid) rmQuiet(daemonBootMarker());
+}
+
+function rmQuiet(path: string): void {
+  try {
+    unlinkSync(path);
+  } catch {
+    // already gone — nothing to do.
+  }
+}
+
 /** Liveness probe via signal 0 (kills nothing). ESRCH ⇒ dead; EPERM ⇒ alive but
  * owned by another user (treated as alive — we must not assume it's an orphan). */
 export function isPidAlive(pid: number): boolean {
@@ -359,11 +490,7 @@ export function isPidAlive(pid: number): boolean {
 }
 
 export function removeDaemonLock(): void {
-  try {
-    unlinkSync(daemonLock());
-  } catch {
-    // already gone — nothing to do.
-  }
+  rmQuiet(daemonLock());
 }
 
 /** Remove the daemon lock, but only when it names THIS process. `removeDaemonLock`
@@ -538,10 +665,12 @@ export async function prodEnsureDeps(
     retire: (baseUrl, lock) => retireDaemon(baseUrl, lock, world),
     removeLock: removeDaemonLock,
     spawn: () => spawnDaemon(s),
+    bootMarker: fileBootMarker(),
     timing: {
       backoff,
       maxAttempts: PROD_MAX_ATTEMPTS,
       now: () => performance.now(),
+      wallNow: Date.now,
       windowMs: SUPERVISOR_WINDOW_MS,
       reserveMs,
     },

@@ -3,12 +3,17 @@
 // supervisor. Real daemons, because the property is what two live processes leave each
 // other — the dev task's own childEnvFor and daemonCommand drive the dev side.
 import { afterEach, expect, setDefaultTimeout, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { runCaretCli, spawnEphemeralDaemon, untilLockWritten } from "@test/support/cli-process.ts";
+import {
+  runCaretCli,
+  spawnCaretDaemon,
+  spawnEphemeralDaemon,
+  untilLockWritten,
+} from "@test/support/cli-process.ts";
 import { withEnv } from "@test/support/env.ts";
 import { freePort } from "@test/support/net.ts";
 import { until } from "@test/support/poll.ts";
@@ -161,4 +166,19 @@ test("a dev-world hook with no dev daemon spawns its own rather than attaching t
   expect(lockIn(devHome)?.port).toBe(portB);
   expect((await health(portB)).stateDir).toBe(join(devHome, "caret"));
   expect((await health(resident.port)).instanceId).toBe(residentBefore.instanceId);
+});
+
+test("a spawned daemon drops the boot marker naming it once its lock is written", async () => {
+  const home = await tempHome("caret-boot-marker-");
+  const daemon = spawnCaretDaemon(home, { CARET_CONFIG_FILE: noConfig(home) });
+  procs.push(daemon);
+  // Planted after spawn because only then is the pid known; the daemon reads the marker
+  // only once it has bound, far behind this synchronous write.
+  const markerFile = join(home, "caret", "daemon.boot");
+  mkdirSync(dirname(markerFile), { recursive: true });
+  writeFileSync(markerFile, JSON.stringify({ pid: daemon.pid, claimedAt: Date.now() }));
+
+  await untilLockWritten(daemon, join(home, "caret", "daemon.lock"));
+  expect(await until(() => !existsSync(markerFile), 2_000)).toBe(true);
+  expect(daemon.exitCode).toBeNull();
 });

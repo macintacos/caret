@@ -1,9 +1,9 @@
 // `caret daemon`: run the review daemon. Boots the settings service (hot-reload
 // + boot-time validation), wires the leveled NDJSON logger, rehydrates the
-// store, binds the HTTP server, and installs the signal/exit cleanup that frees
-// the lock on shutdown (EXC-406). Started by the service's launcher (supervised,
-// resident), by `caret serve` through runDaemon, or by a hook's on-demand spawn, which
-// idle-exits.
+// store, binds the HTTP server, drops the boot marker its spawner claimed, and
+// installs the signal/exit cleanup that frees the lock on shutdown (EXC-406). Started
+// by the service's launcher (supervised, resident), by `caret serve` through runDaemon,
+// or by a hook's on-demand spawn, which idle-exits.
 
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -30,7 +30,12 @@ import {
   watchSettings,
 } from "@/config/settings.ts";
 import { buildDiagnostics, prodDiagnosticsDeps } from "@/daemon/diagnostics.ts";
-import { isAddrInUse, removeOwnDaemonLock, rotateDaemonStderr } from "@/daemon/lifecycle.ts";
+import {
+  isAddrInUse,
+  removeOwnBootMarker,
+  removeOwnDaemonLock,
+  rotateDaemonStderr,
+} from "@/daemon/lifecycle.ts";
 import { type CaretServer, createServer } from "@/daemon/server.ts";
 import {
   fileUpdateCache,
@@ -181,6 +186,7 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
   // landing in the sliver between createServer writing the lock and `server`
   // being assigned, where shutdown() has nothing to stop yet.
   process.once("exit", removeOwnDaemonLock);
+  process.once("exit", removeOwnBootMarker);
 
   // Stop on a boot failure no restart can fix: SERVICE_TERMINAL_EXIT_STATUS is the status
   // systemd's RestartPreventExitStatus is keyed on, and the stderr line is what reaches
@@ -264,6 +270,8 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
     // print the hook fail-safe's deny line and exit 0, which reads as a clean stop.
     exitTerminal("cannot bind the daemon port", e);
   }
+  // The lock guards the port from here on.
+  removeOwnBootMarker();
   // The fatal handlers stay BELOW the bind: a boot that dies before this point
   // should surface its stack the way any other startup crash does, rather than
   // being turned into a logged exit(1).

@@ -49,6 +49,7 @@ function doctorDeps(over: Partial<DoctorDeps> = {}): DoctorDeps {
     health: async () => ({ service: "caret", version: "1.2.3", build: "abc", commit: "def" }),
     serviceInstalled: () => false,
     readLock: () => ({ pid: 111, port: 42718, build: "abc", version: "1.2.3", startedAt: 9 }),
+    readBootMarker: () => null,
     isPidAlive: () => true,
     listProcesses: () => [{ pid: 111, name: "caret-native" }],
     listReviewFiles: () => [{ id: "abcdef12-0000", status: "pending" }],
@@ -239,6 +240,21 @@ test("with no lock, lockAndPort still reports portServesCaret", async () => {
     doctorDeps({ readLock: () => null, health: async () => ({ service: "caret" }) }),
   );
   expect(report.lockAndPort).toEqual({ lockExists: false, portServesCaret: true });
+});
+
+// A booting daemon has no lock yet, so the marker is reported whether or not one exists.
+test("a boot marker reports its pid and age beside a missing lock", async () => {
+  const report = await collectReport(
+    doctorDeps({
+      readLock: () => null,
+      readBootMarker: () => ({ pid: 333, claimedAt: Date.parse("2026-06-04T11:59:58.000Z") }),
+    }),
+  );
+  expect(report.lockAndPort).toMatchObject({
+    lockExists: false,
+    bootMarkerPid: 333,
+    bootMarkerAgeMs: 2000,
+  });
 });
 
 // ---- process merge ----

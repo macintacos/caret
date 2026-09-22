@@ -151,6 +151,12 @@ export function daemonLock(): string {
   return `${stateDir()}/daemon.lock`;
 }
 
+/** Boot marker: claimed before a hook spawns a daemon and dropped once that daemon's lock
+ * is written, so at most one daemon of this state dir boots at a time. */
+export function daemonBootMarker(): string {
+  return `${stateDir()}/daemon.boot`;
+}
+
 /** Create `target` (the state dir, or a child like reviewsDir()) at 0700, the
  * single mode-enforcing path every mkdir-of-stateDir site routes through so the
  * dir holding plan bodies is never world-readable (EXC-539). Sync so both the
