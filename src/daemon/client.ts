@@ -60,7 +60,7 @@ export async function waitForHealth(
 export async function postReview(
   baseUrl: string,
   input: PlanInput,
-): Promise<{ id: string; hasLiveClient?: boolean } | null> {
+): Promise<{ id: string; hasLiveClient?: boolean; planFileCurrent?: boolean } | null> {
   const res = await fetch(`${baseUrl}/api/reviews`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -68,9 +68,10 @@ export async function postReview(
   });
   if (res.status === 503) return null;
   if (!res.ok) throw new Error(`POST /api/reviews failed: ${res.status}`);
-  // hasLiveClient is optional: an older daemon (mid-upgrade version skew) omits
-  // it, and the hook reads its absence as "no live client" (EXC-559).
-  return (await res.json()) as { id: string; hasLiveClient?: boolean };
+  // hasLiveClient and planFileCurrent are optional: an older daemon (mid-upgrade
+  // version skew) omits them, and the hook reads their absence as "no live
+  // client" (EXC-559) and "plan file current".
+  return (await res.json()) as { id: string; hasLiveClient?: boolean; planFileCurrent?: boolean };
 }
 
 /** Best-effort expire: short-fused so a dying hook never hangs on it. The

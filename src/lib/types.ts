@@ -233,6 +233,9 @@ export interface RouteResult {
   version: number;
   /** Stale pending reviews of the same session this routing expired (EXC-454). */
   expired: string[];
+  /** Whether the agent's plan file still holds the reviewed plan. Absent when the
+   * plan came without a plan file. */
+  planFileCurrent?: boolean;
 }
 
 /** What a plan's path reference turned out to be on disk. The filesystem is the

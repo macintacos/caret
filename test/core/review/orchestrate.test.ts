@@ -7,7 +7,13 @@ import type { EnsureMode } from "@/daemon/lifecycle.ts";
 import { setLogLevel } from "@/lib/log.ts";
 import type { Decision, PlanInput } from "@/lib/types.ts";
 import { PLAN_EMPTY_DENY_MESSAGE, PLAN_FORMAT_DENY_MESSAGE } from "@/plan/format.ts";
-import { expireAbandoned, parseHook, type ReviewDeps, runReview } from "@/review/orchestrate.ts";
+import {
+  expireAbandoned,
+  type PostedReview,
+  parseHook,
+  type ReviewDeps,
+  runReview,
+} from "@/review/orchestrate.ts";
 
 const allow: Decision = { behavior: "allow", decidedAt: 1 };
 
@@ -597,16 +603,28 @@ test("decision info records are suppressed when the level is error", async () =>
 // instead of keeping a zombie.
 
 test("onPosted fires with the daemon base URL and review id once the review is created", async () => {
-  const posted: Array<[string, string]> = [];
+  const posted: PostedReview[] = [];
   await review(
     stdin,
     reviewDeps({
       ensureDaemon: async () => "http://d",
       postReview: async () => ({ id: "rid" }),
-      onPosted: (baseUrl: string, id: string) => posted.push([baseUrl, id]),
+      onPosted: (p) => posted.push(p),
     }),
   );
-  expect(posted).toEqual([["http://d", "rid"]]);
+  expect(posted).toEqual([{ baseUrl: "http://d", id: "rid" }]);
+});
+
+test("onPosted carries the daemon's verdict on whether the plan file is current", async () => {
+  const posted: PostedReview[] = [];
+  await review(
+    stdin,
+    reviewDeps({
+      postReview: async () => ({ id: "rid", planFileCurrent: false }),
+      onPosted: (p) => posted.push(p),
+    }),
+  );
+  expect(posted[0]?.planFileCurrent).toBe(false);
 });
 
 test("onPosted does not fire when the review was never created", async () => {
@@ -617,7 +635,7 @@ test("onPosted does not fire when the review was never created", async () => {
       ensureDaemon: async () => {
         throw new Error("boom");
       },
-      onPosted: (_baseUrl: string, id: string) => posted.push(id),
+      onPosted: ({ id }) => posted.push(id),
     }),
   );
   expect(posted).toEqual([]);

@@ -41,6 +41,11 @@ export function parseHook(parse: (stdin: string) => PlanInput, stdin: string): P
   }
 }
 
+/** The created review's daemon handle, plus the daemon's verdict on whether the
+ * agent's plan file still holds the reviewed plan (absent from an older daemon, or
+ * when the plan came without a plan file). */
+export type PostedReview = { baseUrl: string; id: string; planFileCurrent?: boolean };
+
 export interface ReviewDeps {
   /** Ensure a daemon is up and return its base URL, resolving the port as `mode` says
    * (see EnsureMode). */
@@ -52,7 +57,7 @@ export interface ReviewDeps {
   postReview: (
     baseUrl: string,
     input: PlanInput,
-  ) => Promise<{ id: string; hasLiveClient?: boolean } | null>;
+  ) => Promise<{ id: string; hasLiveClient?: boolean; planFileCurrent?: boolean } | null>;
   /** One bounded poll: a Decision, or null on a heartbeat (re-poll). Throws on
    * a transient drop so the caller can reconnect. */
   longPoll: (baseUrl: string, id: string) => Promise<Decision | null>;
@@ -71,12 +76,12 @@ export interface ReviewDeps {
   /** Best-effort: tell the daemon the hook is abandoning this review, so it
    * doesn't hold a pending orphan (EXC-454). Failures are swallowed. */
   expire: (baseUrl: string, id: string) => Promise<void>;
-  /** Called once the review is created, with the daemon base URL and review id.
-   * Lets the command layer capture the handle so a SIGINT/SIGTERM abandon can
-   * expire the review (EXC-482) — the signal fires outside runReview's control
-   * flow, so it needs the id runReview computed. Optional: absent for the dev
-   * driver and tests that don't wire signal handling. */
-  onPosted?: (baseUrl: string, id: string) => void;
+  /** Called once the review is created, with its handle. Lets the command layer
+   * capture it so a SIGINT/SIGTERM abandon can expire the review (EXC-482) — the
+   * signal fires outside runReview's control flow, so it needs the id runReview
+   * computed — and so an approval skips appending notes to a plan file that moved
+   * on. Optional: absent for the dev driver and tests that don't wire either. */
+  onPosted?: (posted: PostedReview) => void;
 }
 
 class TimeoutError extends Error {}
@@ -166,13 +171,13 @@ export async function runReview(parsed: ParsedHookInput, deps: ReviewDeps): Prom
       created = await deps.postReview(baseUrl, payload);
       if (!created) throw new Error("daemon draining; review not created");
     }
-    const { id, hasLiveClient } = created;
+    const { id, hasLiveClient, planFileCurrent } = created;
     // From here every record — decision and error alike — carries the reviewId,
     // stitching this stream against the daemon's review/resolve records.
     ctx.reviewId = id;
     // Surface the handle so a SIGINT/SIGTERM abandon can expire this review, from
     // outside this flow (EXC-482).
-    deps.onPosted?.(baseUrl, id);
+    deps.onPosted?.({ baseUrl, id, planFileCurrent });
     logDebug("review", `review created: ${shortId(id)}`, { ...ctx });
     // EXC-426: humans get the vanity origin; internal fetches keep using baseUrl.
     const open = new URL(baseUrl);

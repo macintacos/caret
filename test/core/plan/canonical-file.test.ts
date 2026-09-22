@@ -26,24 +26,26 @@ test("rewrites an existing .md plan file with the canonical text", () => {
   const path = join(dir, "plan.md");
   const raw = "the agent's raw, unwrapped plan text";
   writeFileSync(path, raw);
-  writeCanonicalPlanFile(
+  const current = writeCanonicalPlanFile(
     { plan: raw, planFilePath: path },
     "# Canonical\n\nwrapped\n",
     recordingLog().log,
   );
   expect(readFileSync(path, "utf8")).toBe("# Canonical\n\nwrapped\n");
+  expect(current).toBe(true);
 });
 
 test("leaves a plan file that changed since ingest untouched", () => {
   const path = join(dir, "changed.md");
   writeFileSync(path, "# Newer plan the agent just wrote\n");
   const { recs, log } = recordingLog();
-  writeCanonicalPlanFile(
+  const current = writeCanonicalPlanFile(
     { plan: "# Ingested plan\n", planFilePath: path, sessionId: "s1" },
     "# Canonical\n",
     log,
   );
   expect(readFileSync(path, "utf8")).toBe("# Newer plan the agent just wrote\n");
+  expect(current).toBe(false);
   expect(recs.map((r) => [r.level, r.step, r.extra])).toEqual([
     ["info", "review", { sessionId: "s1" }],
   ]);
@@ -56,14 +58,24 @@ test("is a no-op when no path is given (agents without a plan file)", () => {
 test("refuses a non-.md path, leaving it untouched", () => {
   const path = join(dir, "plan.txt");
   writeFileSync(path, "raw");
-  writeCanonicalPlanFile({ plan: "raw", planFilePath: path }, "canonical", recordingLog().log);
+  const current = writeCanonicalPlanFile(
+    { plan: "raw", planFilePath: path },
+    "canonical",
+    recordingLog().log,
+  );
   expect(readFileSync(path, "utf8")).toBe("raw");
+  expect(current).toBe(false);
 });
 
 test("does not create a plan file that does not already exist", () => {
   const path = join(dir, "missing.md");
-  writeCanonicalPlanFile({ plan: "raw", planFilePath: path }, "canonical", recordingLog().log);
+  const current = writeCanonicalPlanFile(
+    { plan: "raw", planFilePath: path },
+    "canonical",
+    recordingLog().log,
+  );
   expect(existsSync(path)).toBe(false);
+  expect(current).toBe(false);
 });
 
 test("is a no-op for a directory path that ends in .md", () => {

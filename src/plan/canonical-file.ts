@@ -64,22 +64,25 @@ function guardedPlanFileWrite(
  * Overwrite the plan file with the canonical plan text, but only while it still
  * holds the `plan` caret ingested: a file the agent rewrote since is newer than the
  * review and is left alone. No-op when the path is absent (agents without a plan
- * file) or fails the safety guard (must be an existing regular `.md` file). Never
- * throws.
+ * file) or fails the safety guard (must be an existing regular `.md` file). Returns
+ * whether the file now holds `canonical`. Never throws.
  */
 export function writeCanonicalPlanFile(
   input: Pick<PlanInput, "plan" | "planFilePath" | "sessionId">,
   canonical: string,
   log: CaretLogger,
-): void {
-  if (!input.planFilePath) return;
+): boolean {
+  if (!input.planFilePath) return false;
+  let current = false;
   guardedPlanFileWrite(input.planFilePath, log, "plan file canonicalize failed", (p) => {
     if (readFileSync(p, "utf8") !== (input.plan ?? "")) {
       log.info("review", "plan file changed; rewrite skipped", { sessionId: input.sessionId });
       return;
     }
     writeFileSync(p, canonical);
+    current = true;
   });
+  return current;
 }
 
 /**

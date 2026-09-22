@@ -14,12 +14,13 @@ import { loadSettings, reviewTimeoutMs, type Settings } from "@/config/settings.
 import { expireReview, longPoll, postReview } from "@/daemon/client.ts";
 import { ensureDaemon, prodEnsureDeps, SUPERVISOR_WINDOW_MS } from "@/daemon/lifecycle.ts";
 import { readCmuxPane } from "@/lib/cmux.ts";
-import { logError, logWarn } from "@/lib/log.ts";
+import { logError, logInfo, logWarn } from "@/lib/log.ts";
 import type { Decision, PlanInput } from "@/lib/types.ts";
 import { appendReviewerNotesToPlanFile, readPlanFile } from "@/plan/canonical-file.ts";
 import {
   expireAbandoned,
   type ParsedHookInput,
+  type PostedReview,
   parseHook,
   type ReviewDeps,
   runReview,
@@ -109,7 +110,7 @@ export async function runReviewSubcommand(): Promise<void> {
   let hookInput: PlanInput | undefined;
   // The review's daemon handle, captured via onPosted once the review is created,
   // so a signal-path abandon can expire it (EXC-482). Undefined until then.
-  let posted: { baseUrl: string; id: string } | undefined;
+  let posted: PostedReview | undefined;
   // Emit exactly one decision line. A signal arriving after the normal decision
   // was written must not append a second (deny) line. The adapter renders the
   // core Decision to the agent's wire string — the single emission boundary.
@@ -141,8 +142,8 @@ export async function runReviewSubcommand(): Promise<void> {
 
   const stdin = await Bun.stdin.text();
   const deps = prodReviewDeps(loaded);
-  deps.onPosted = (baseUrl, id) => {
-    posted = { baseUrl, id };
+  deps.onPosted = (p) => {
+    posted = p;
   };
   const { decision: out, input } = await reviewHookInput(
     parseHook(adapter.parseHookInput, stdin),
@@ -154,9 +155,15 @@ export async function runReviewSubcommand(): Promise<void> {
   // before emitting the decision, so the agent reads them when it proceeds. The
   // guard on planFilePath scopes this to reviews with a plan file (Claude, and an
   // OpenCode `path` review); the Claude wire echo carries the notes too, and
-  // OpenCode surfaces them via its tool result. Best-effort and never fatal.
+  // OpenCode surfaces them via its tool result. Best-effort and never fatal. A file
+  // the agent rewrote after ingest is no longer the reviewed plan, so it is left
+  // alone; only the daemon knows, since it made that call at ingest.
   if (out.behavior === "allow" && out.feedback && hookInput?.planFilePath) {
-    appendReviewerNotesToPlanFile(hookInput.planFilePath, out.feedback, { warn: logWarn });
+    if (posted?.planFileCurrent === false) {
+      logInfo("review", "plan file changed; notes append skipped", { reviewId: posted.id });
+    } else {
+      appendReviewerNotesToPlanFile(hookInput.planFilePath, out.feedback, { warn: logWarn });
+    }
   }
   respond(out);
   process.exit(0);
