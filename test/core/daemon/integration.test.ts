@@ -520,6 +520,20 @@ test("caret doctor prints a human-readable report and exits 0", async () => {
   }
 });
 
+test("caret doctor --bundle refuses without a terminal and without --yes", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-doctor-bundle-"));
+  try {
+    // A spawned child has no terminal on either end, which is the condition under test.
+    const { exitCode } = await runCaretCli(["doctor", "--bundle"], {
+      env: doctorEnv(stateHome),
+    });
+    expect(exitCode).toBe(2);
+    expect(existsSync(join(stateHome, "caret"))).toBe(false);
+  } finally {
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
 test("caret doctor exits 1 and names a remedy when a check fails", async () => {
   const stateHome = await mkdtemp(join(tmpdir(), "caret-doctor-fail-"));
   try {

@@ -87,7 +87,15 @@ function buildProgram(): Command {
     .command("doctor")
     .description("diagnose this caret install")
     .option("--json", "emit the machine-readable JSON document")
-    .action((opts) => runDoctorSubcommand({ json: opts.json ?? false }));
+    .option("--bundle", "also write a zip of the raw logs and review records, to share")
+    .option("--yes", "write the bundle without asking — it holds unredacted content")
+    .action((opts) =>
+      runDoctorSubcommand({
+        json: opts.json ?? false,
+        bundle: opts.bundle ?? false,
+        yes: opts.yes ?? false,
+      }),
+    );
 
   program
     .command("install")

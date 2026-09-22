@@ -19,12 +19,16 @@ import {
   type UpgradeVerdict,
 } from "@/adapters/opencode/upgrade.ts";
 import { upgradeVerdictLine } from "@/commands/install/prompt.ts";
+import { isTerminal } from "@/commands/install/ui.ts";
 import {
   configFile,
   daemonLogFile,
   daemonStderrLogFile,
+  ensureStateDir,
   launcherServiceFile,
   logFile,
+  reviewsDir,
+  stateDir,
 } from "@/config/paths.ts";
 import {
   getPort,
@@ -36,6 +40,7 @@ import {
 } from "@/config/settings.ts";
 import { httpHealth } from "@/daemon/client.ts";
 import { isPidAlive, readDaemonLock } from "@/daemon/lifecycle.ts";
+import { type BundleDeps, runBundle } from "@/doctor/bundle.ts";
 import { runChecks } from "@/doctor/checks.ts";
 import {
   type Check,
@@ -47,6 +52,7 @@ import {
   logStats,
   renderStdout,
 } from "@/doctor/report.ts";
+import { writeZip } from "@/doctor/zip.ts";
 import { isCompiledBinary, VERSION } from "@/lib/build-id.ts";
 import { errorMessage } from "@/lib/types.ts";
 
@@ -131,14 +137,58 @@ async function readOpencodeCheck(): Promise<Check | undefined> {
   }
 }
 
-export async function runDoctorSubcommand(opts: { json: boolean }): Promise<void> {
+/** The bundle's effects. The state dir is created here rather than in the zip writer,
+ * which owns the container and nothing else. */
+function prodBundleDeps(): BundleDeps {
+  return {
+    stateDir: stateDir(),
+    logPaths: [logFile(), daemonLogFile(), daemonStderrLogFile()],
+    reviewsDir: reviewsDir(),
+    now: () => new Date(),
+    isInteractive: isTerminal,
+    confirm: confirmBundle,
+    write: (path, entries, now) => {
+      ensureStateDir();
+      writeZip(path, entries, now);
+    },
+  };
+}
+
+/** Ask before writing unredacted content, naming plainly what the archive holds. clack
+ * is loaded lazily: src/cli.ts is the review hook's entrypoint on every plan, so nothing
+ * on that path may pull it in eagerly. */
+async function confirmBundle(): Promise<boolean | null> {
+  const { confirm, isCancel } = await import("@clack/prompts");
+  const answer = await confirm({
+    message: "The bundle holds your logs and plan bodies, unredacted. Write it?",
+  });
+  return isCancel(answer) ? null : answer === true;
+}
+
+export async function runDoctorSubcommand(opts: {
+  json: boolean;
+  bundle: boolean;
+  yes: boolean;
+}): Promise<void> {
   // 1 means the install has something wrong with it, 2 that doctor could not say —
   // a distinction a script needs, since a degraded section is still a usable report.
   try {
+    // Consent is settled before anything is collected, so a refusal costs no probes.
+    const bundled = opts.bundle ? await runBundle({ yes: opts.yes }, prodBundleDeps()) : undefined;
+    if (bundled?.kind === "refused") {
+      process.stderr.write(`caret doctor: ${bundled.message}\n`);
+      process.exit(2);
+    }
     const s = loadSettings();
     const report = await collectReport(prodDoctorDeps(s));
     const doc: DoctorDocument = { ...report, checks: runChecks(report, await readOpencodeCheck()) };
     process.stdout.write(`${renderStdout(doc, opts.json ? "json" : "text")}\n`);
+    if (bundled?.kind === "written") {
+      // Under --json the note goes to stderr so stdout stays exactly one document.
+      const note = opts.json ? process.stderr : process.stdout;
+      note.write(`caret doctor: wrote ${bundled.path}\n`);
+      note.write("caret doctor: it is unredacted — move it over a channel you trust\n");
+    }
     process.exit(doc.checks.some((c) => c.status === "fail") ? 1 : 0);
   } catch (e) {
     process.stderr.write(`caret doctor: ${e}\n`);
