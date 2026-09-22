@@ -177,7 +177,8 @@ export async function runReview(parsed: ParsedHookInput, deps: ReviewDeps): Prom
     // stitching this stream against the daemon's review/resolve records.
     ctx.reviewId = id;
     // Surface the handle so a SIGINT/SIGTERM abandon can expire this review, from
-    // outside this flow (EXC-482).
+    // outside this flow (EXC-482), and so an approval can skip notes for a plan
+    // file that moved on.
     deps.onPosted?.({ baseUrl, id, planFileCurrent });
     logDebug("review", `review created: ${shortId(id)}`, { ...ctx });
     // EXC-426: humans get the vanity origin; internal fetches keep using baseUrl.

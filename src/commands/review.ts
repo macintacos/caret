@@ -122,7 +122,8 @@ export async function runReviewSubcommand(): Promise<void> {
   // beats the review never matters.
   let hookInput: PlanInput | undefined;
   // The review's daemon handle, captured via onPosted once the review is created,
-  // so a signal-path abandon can expire it (EXC-482). Undefined until then.
+  // so a signal-path abandon can expire it (EXC-482) and an approval can skip
+  // notes for a plan file that moved on. Undefined until then.
   let posted: PostedReview | undefined;
   // Emit exactly one decision line. A signal arriving after the normal decision
   // was written must not append a second (deny) line. The adapter renders the
