@@ -17,9 +17,9 @@ import type { Decision, PlanInput, SkillRef } from "@/lib/types.ts";
 interface HookStdin {
   session_id?: string;
   cwd?: string;
-  // planFilePath is the path Claude Code injects for the on-disk plan file it
-  // read the plan from (it lives alongside `plan` in tool_input); caret rewrites
-  // that file with the canonical plan so the agent's copy matches the review.
+  // planFilePath is the plan file Claude Code names alongside `plan`. caret reviews
+  // that file's contents in preference to `plan`, and rewrites the file with the
+  // canonical text so the agent's copy matches the review.
   tool_input?: { plan?: string; planFilePath?: string };
 }
 

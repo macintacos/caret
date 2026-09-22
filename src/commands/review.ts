@@ -17,7 +17,7 @@ import { ensureDaemon, prodEnsureDeps, SUPERVISOR_WINDOW_MS } from "@/daemon/lif
 import { readCmuxPane } from "@/lib/cmux.ts";
 import { logError, logWarn } from "@/lib/log.ts";
 import type { Decision, PlanInput } from "@/lib/types.ts";
-import { appendReviewerNotesToPlanFile } from "@/plan/canonical-file.ts";
+import { appendReviewerNotesToPlanFile, readPlanFile } from "@/plan/canonical-file.ts";
 import { expireAbandoned, type ReviewDeps, runReview } from "@/review/orchestrate.ts";
 
 /** Select the platform's URL-opening argv: darwin `open`, win32 `cmd /c start`,
@@ -69,6 +69,28 @@ export function prodReviewDeps(s: Settings, adapter: AgentAdapter): ReviewDeps {
   };
 }
 
+/** Parse the hook stdin once and review the plan file's current text in preference
+ * to the payload's `plan`, which Claude Code can fill before the agent's write to
+ * that file lands. Returns the reviewed input so the approval echo carries the same
+ * text. A payload that fails to parse goes to runReview unchanged, which fail-safe
+ * denies; `input` is then absent, since a deny needs no echo. `readPlan` must never
+ * throw. */
+export async function reviewHookStdin(
+  stdin: string,
+  deps: ReviewDeps,
+  readPlan: (path: string) => string | undefined,
+): Promise<{ decision: Decision; input?: PlanInput }> {
+  let parsed: PlanInput;
+  try {
+    parsed = deps.parseHookInput(stdin);
+  } catch {
+    return { decision: await runReview(stdin, deps) };
+  }
+  const fromFile = parsed.planFilePath ? readPlan(parsed.planFilePath) : undefined;
+  const input = fromFile?.trim() ? { ...parsed, plan: fromFile } : parsed;
+  return { decision: await runReview(stdin, { ...deps, parseHookInput: () => input }), input };
+}
+
 export async function runReviewSubcommand(): Promise<void> {
   // Wire [logging].level and .redact before anything can emit. One synchronous read —
   // the same snapshot feeds the review deps below, so the hook's logging config and
@@ -80,11 +102,11 @@ export async function runReviewSubcommand(): Promise<void> {
   // denies to fail safe. The same adapter parses the hook stdin and renders the
   // decision, so a review can't parse one tool's input and emit another's.
   const adapter = selectAdapter();
-  // The parsed hook input, captured once stdin is read, so `respond` can hand it to
-  // emitDecision — the Claude adapter echoes its tool_input back as updatedInput on
-  // an allow, without which Claude Code >=2.1.199 drops the approve (EXC-683). The
+  // The reviewed hook input, captured once the review returns, so `respond` can hand
+  // it to emitDecision — the Claude adapter echoes its tool_input back as updatedInput
+  // on an allow, without which Claude Code >=2.1.199 drops the approve (EXC-683). The
   // signal path only ever denies, and a deny needs no echo, so whether the signal
-  // beats the parse never matters.
+  // beats the review never matters.
   let hookInput: PlanInput | undefined;
   // The review's daemon handle, captured via onPosted once the review is created,
   // so a signal-path abandon can expire it (EXC-482). Undefined until then.
@@ -119,19 +141,12 @@ export async function runReviewSubcommand(): Promise<void> {
   );
 
   const stdin = await Bun.stdin.text();
-  // Parse once for the updatedInput echo. runReview re-parses through its injected
-  // dep, so a malformed payload is handled there (it fail-safe denies, which needs
-  // no echo); the guard here just keeps a parse throw off the emit path.
-  try {
-    hookInput = adapter.parseHookInput(stdin);
-  } catch {
-    hookInput = undefined;
-  }
   const deps = prodReviewDeps(loaded, adapter);
   deps.onPosted = (baseUrl, id) => {
     posted = { baseUrl, id };
   };
-  const out = await runReview(stdin, deps);
+  const { decision: out, input } = await reviewHookStdin(stdin, deps, readPlanFile);
+  hookInput = input;
   // Fold an approval's reviewer notes onto the agent's plan of record (EXC-791)
   // before emitting the decision, so the agent reads them when it proceeds. The
   // guard on planFilePath scopes this to reviews with a plan file (Claude, and an

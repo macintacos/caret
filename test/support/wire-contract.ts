@@ -5,7 +5,7 @@
 import { expect } from "bun:test";
 
 import type { Decision, PlanInput } from "@/lib/types.ts";
-import { runReview } from "@/review/orchestrate.ts";
+import { type ReviewDeps, runReview } from "@/review/orchestrate.ts";
 
 /** The adapter surface `emitWire` needs — every `AgentAdapter` satisfies it. */
 export interface WireAdapter {
@@ -13,26 +13,30 @@ export interface WireAdapter {
   emitDecision(decision: Decision, input?: PlanInput): string;
 }
 
-/**
- * Build runReview deps that parse with the real adapter and fake only the
- * daemon-side effects (the network, the browser, the timer); longPoll returns
- * the supplied decision, so one call drives the whole review loop to that
- * outcome.
- */
-function depsReturning(
-  decision: Decision,
-  parseHookInput: (stdin: string) => PlanInput,
-): Parameters<typeof runReview>[1] {
+/** runReview deps faking every effect: a daemon that creates review "rid" and
+ * approves it. `parseHookInput` has no sensible default, so callers supply it. */
+export function fakeReviewDeps(
+  overrides: Partial<ReviewDeps> & Pick<ReviewDeps, "parseHookInput">,
+): ReviewDeps {
   return {
-    parseHookInput,
     ensureDaemon: async () => "http://x",
     postReview: async () => ({ id: "rid" }),
-    longPoll: async () => decision,
+    longPoll: async () => ({ behavior: "allow", decidedAt: 1 }),
     openBrowser: () => {},
     announceUrl: () => {},
     timeoutMs: 1000,
     expire: async () => {},
+    ...overrides,
   };
+}
+
+/** Deps that parse with the real adapter and resolve the review to `decision`, so one
+ * call drives the whole review loop to that outcome. */
+function depsReturning(
+  decision: Decision,
+  parseHookInput: (stdin: string) => PlanInput,
+): ReviewDeps {
+  return fakeReviewDeps({ parseHookInput, longPoll: async () => decision });
 }
 
 /**
