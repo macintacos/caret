@@ -87,9 +87,11 @@ svelte's client runtime), and `ui/support/mount.ts` exposes `render(Component, p
 a mounted component exposes.
 
 Scaffolding a second suite reaches for — a fixture, a stub, a storage double — joins that
-harness as `ui/test-<name>.ts` and is imported through the test-only `@ui/*` alias. Not
-under `ui/src/`: a module there sits among production `$lib` code, and a production import
-of one would drag its test-only dependencies into the vite bundle.
+harness as `ui/support/<name>.ts` and is imported through the test-only alias as
+`@ui/support/…`; what a support module must export is in
+[`test-layout.md`](test-layout.md). Not under `ui/src/`: a module there sits among
+production `$lib` code, and a production import of one would drag its test-only
+dependencies into the vite bundle.
 
 What does *not* go in a component unit: real-browser behavior (text selection,
 focus/keyboard, scroll, popover positioning, timing windows). That is e2e. The unit-vs-e2e
@@ -189,15 +191,13 @@ imports it — stays green under any invocation.
   markdown is content — and the alpha tint is what lets the same token sit on the editor's
   `--paper` and on the code panel's ground without a second value. A recognized codespan
   gives up its own `.cm-md-code` pill for the same reason `data-md-cite` collapses below:
-  one range, one chip. (The fence markers took `--chip-code` too until they lost their
-  chip: a chip tints a span of CONTENT, and a fence row is all marker and no content, so
-  the tint drew an empty pill inside the code panel.) That suite also holds `--chip-link`
-  and `--chip-ref` at least 60 degrees of hue apart in every palette; check that pin
-  rather than your eye when adding one, and read the comment above it for why that pair
-  and not another. A third pin measures something else for a different pair: `--chip-ref`
-  sits above a shared saturation floor and `--chip-code` below it, since those two render
-  side by side and a near-neutral's hue angle carries no design intent to compare against.
-  Read that test's comment before choosing `chipCodeHue` or `chipRefHue`.
+  one range, one chip. That suite also holds `--chip-link` and `--chip-ref` at least 60
+  degrees of hue apart in every palette; check that pin rather than your eye when adding
+  one, and read the comment above it for why that pair and not another. A third pin
+  measures something else for a different pair: `--chip-ref` sits above a shared
+  saturation floor and `--chip-code` below it, since those two render side by side and a
+  near-neutral's hue angle carries no design intent to compare against. Read that test's
+  comment before choosing `chipCodeHue` or `chipRefHue`.
   **`--chip-link` marks link SYNTAX, not clickability.** Five shapes wear it and are not
   followable — an internal anchor, an unresolvable path, a fragment target, a bare-word
   target, and an image — and that is the contract rather than a gap (EXC-871 settled it).

@@ -300,12 +300,12 @@ const CARET_OVERRIDES = `
      look centered (their row carries padding-block-start), so they are left alone;
      only the closing markers and the opening language tag are shifted to their row's
      vertical center. shiki attaches no classes, so codeBlocks.ts tags both tokens
-     (data-code-fence on each fence's markers, data-code-lang on the language) and each
-     is shifted with position: relative, which moves the glyph without touching the
-     panel background or the row layout. The closing markers move down; the language,
-     a baseline word that its row's top padding has pushed low, moves up. Both offsets
-     are em-relative eyeball values — the two knobs to tune if either token looks off
-     center. */
+     (data-code-fence on the closing fence's markers, data-code-lang on the language)
+     and each is shifted with position: relative, which moves the glyph without
+     touching the panel background or the row layout. The closing markers move down;
+     the language, a baseline word that its row's top padding has pushed low, moves
+     up. Both offsets are em-relative eyeball values — the two knobs to tune if either
+     token looks off center. */
   [data-content] > [data-line][data-code-end]:not([data-selected-line]) [data-code-fence] {
     position: relative;
     top: 0.2em;

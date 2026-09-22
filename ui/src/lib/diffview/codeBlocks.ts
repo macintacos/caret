@@ -102,8 +102,8 @@ function tagFenceToken(row: Element): void {
  * `[data-content] > [data-line]` cell inside a block, plus `data-code-start` /
  * `data-code-end` on each block's first / last line. Also tags the two fence-line
  * token kinds the panel CSS styles: `data-code-lang` on the opening line's language
- * tag, and `data-code-fence` on each fence line's markers. Re-run after every
- * repaint (see SourceView.svelte); clears rows and tokens no longer in a block.
+ * tag, and `data-code-fence` on the closing fence line's markers. Re-run after
+ * every repaint (see SourceView.svelte); clears rows and tokens no longer in a block.
  */
 export function tagCodeBlockRows(root: ParentNode, ranges: CodeBlockRange[]): void {
   const startLines = new Set(ranges.map((r) => r.start));
@@ -127,7 +127,7 @@ export function tagCodeBlockRows(root: ParentNode, ranges: CodeBlockRange[]): vo
     row.toggleAttribute("data-code-start", code && startLines.has(n));
     row.toggleAttribute("data-code-end", code && endLines.has(n));
     if (code && startLines.has(n)) tagLanguageToken(row);
-    if (code && (startLines.has(n) || endLines.has(n))) tagFenceToken(row);
+    if (code && endLines.has(n)) tagFenceToken(row);
   }
   // Also tag each code line's gutter number cell (line numbers only, no
   // start/end): the panel stays content-only, but the tag lets the focused-line

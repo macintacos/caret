@@ -93,8 +93,9 @@ it.
   `ui/support/` and is reached as `@ui/support/…`) and `test/e2e/*.e2e.ts` (Playwright;
   the `.e2e.ts` suffix keeps them out of `bun test`'s collection even though they sit
   under `test/`, and its harness is `test/e2e/support/`, distinct from `test/support/`).
-  The unit-vs-e2e split is governed by `browser-testing.md`; this file governs only the
-  backend `test/` subtrees.
+  The unit-vs-e2e split is governed by `browser-testing.md`; this file governs the backend
+  `test/` tree, plus the shared support-module rules that also bind `ui/support/` and
+  `test/e2e/support/`.
 - **Shell** — `scripts/*.bats`, beside the scripts they cover (`mise run test bats`), one
   suite per shipped script: the plugin entrypoint shim, the service launcher, the
   bootstrap preamble. They sit outside `test/` because their subject does, and because
