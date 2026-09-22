@@ -280,6 +280,12 @@ animations are still exactly what `getAnimations()` is for; the split is by clai
 API. "Does it drain" is liveness and is polled through it; "did it fire" is history and is
 recorded off `animationstart`.
 
+An empty list is also *early* for "is it over". The finished animation leaves the list
+before its `animationend` dispatches. So a listener attached the moment a poll reads 0 can
+still catch that animation's end. A wait that gates a listener on an animation having
+ended is history too. Record `animationend`, armed before the intent, and wait on the
+recorded end (`waitForEnterToSettle`, EXC-1401).
+
 **An armed listener is not automatically safe either**, and it misses in two directions
 that look identical from the failure text:
 
@@ -367,6 +373,7 @@ Verdicts recorded against them, so a later red gate knows what was already looke
 | `plan-breadcrumbs.e2e.ts` "reduced motion collapses the exit" | A LOST `animationstart`, not a late one: at `0.01ms` the crumb often goes before the animation starts, so no listener anywhere sees it. Re-asserted off the cascade. Fixed. |
 | `confirm-popover.e2e.ts` "a click outside the dialog's discard bubble" | A REAL race, and the clearest case of the throttle's blind spot: it survives 90x, yet `--repeat-each 20` at ordinary parallelism reds it 1/20. The arming signal is bits-ui's rather than the DOM's, and the click is DROPPED rather than delayed — the mechanism is written out once at `awaitDismissArmed` (`test/e2e/support/fixtures.ts`), which is what waits it out, at all three of the file's outside-click sites (EXC-1200). Fixed. The same window sits under every other outside-dismiss in the suite; which way the assertion points decides what an unarmed layer does there, and what else that costs — the outside-dismiss note above. |
 | `settings.e2e.ts` "the volume slider is keyboard-operable, named, and persists" | A too-early reload, not a slow read: under load the three arrow presses straddle `SettingSlider`'s 200ms commit window, the first commit's toast satisfied a `.first()` wait, and `page.reload()` dropped the commit still pending. Forcing the split (waiting for the first press's toast) reds it 15/20 under `--repeat-each`, every red reading back 30; the wait is now a polled read of the stored value, green 20/20 under the same probe. Fixed. |
+| `modal-exit.e2e.ts` "closing a modal plays its exit" | Too EARLY, not too late, so the throttle is blind to it: `getAnimations()` empties before the enter's `animationend` dispatches, and the exit listener attached in that gap resolved with `enter`. At 24 workers on 12 cores the old poll returned there 5/80; it was 0/60 at ordinary parallelism. All four enter-settle waits in the file now read a recorded `animationend`, and the same probe returned there 0/80. Fixed. |
 | `lineCenterY` callers | No miss in two full oversubscribed suites; the rows are already there the instant `.diff-plan` turns visible. Polled anyway, because that guard is the caller's rather than the helper's. |
 | `ref-hint.e2e.ts` "the dev fake plan badges both kinds" | Survives 20x, reds under oversubscription at 40s+. Budget starvation. Standing. |
 

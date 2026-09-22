@@ -95,13 +95,43 @@ async function recordHandoff(page: import("@playwright/test").Page) {
   });
 }
 
-/** Resolve once nothing is animating on the dialog content — the enter has
- * finished. Not a sleep: it reads the same getAnimations the presence layer does,
- * so a listener registered after it cannot catch the enter's tail. */
-async function waitForEnterToSettle(page: import("@playwright/test").Page) {
+/** The surfaces whose enter has ENDED since `recordEnters` went on. Element references
+ * rather than slots: bits-ui remounts the content per open, so the enter that counts is
+ * the node in the DOM now. */
+type EnteredWindow = { __entered: Element[] };
+
+/** Record every enter that finishes, armed ahead of the open intent. Capture-phase on the
+ * document, so it sees the modal surfaces portalled outside #app.
+ *
+ * The end is recorded, not polled through an empty `getAnimations()`: the list drops a
+ * finished enter before its animationend dispatches, and under gate contention that gap is
+ * wide enough for a listener attached in it to catch the enter's end (EXC-1401). */
+async function recordEnters(page: import("@playwright/test").Page) {
+  await page.evaluate(() => {
+    (window as unknown as EnteredWindow).__entered = [];
+    document.addEventListener(
+      "animationend",
+      (e) => {
+        if ((e as AnimationEvent).animationName !== "enter") return;
+        if (e.target instanceof Element) {
+          (window as unknown as EnteredWindow).__entered.push(e.target);
+        }
+      },
+      true,
+    );
+  });
+}
+
+/** Resolve once each surface's enter has ended. Requires `recordEnters` armed before the
+ * open intent that produced them. */
+async function waitForEnterToSettle(page: import("@playwright/test").Page, sels: string[]) {
   await page.waitForFunction(
-    (sel) => (document.querySelector(sel)?.getAnimations().length ?? 1) === 0,
-    settingsDialog,
+    (wanted) =>
+      wanted.every((sel) => {
+        const el = document.querySelector(sel);
+        return el !== null && (window as unknown as EnteredWindow).__entered.includes(el);
+      }),
+    sels,
   );
 }
 
@@ -112,8 +142,9 @@ test("closing a modal plays its exit before the surface leaves the DOM", async (
   await seedAndOpen(page, daemon);
   await waitPastSafeModeGrace(page);
 
+  await recordEnters(page);
   await openSettings(page);
-  await waitForEnterToSettle(page);
+  await waitForEnterToSettle(page, [settingsDialog]);
 
   // Register before the close intent: the exit is over in --dur-exit (140ms), so a
   // listener attached after Escape would race the very event it is waiting on. Only a
@@ -205,6 +236,7 @@ test("the backdrop moves with the panel, and both leave quicker than they arrive
   await openWithPendingAnnotation(daemon, page, "explain cold cost");
   await waitPastSafeModeGrace(page);
 
+  await recordEnters(page);
   await openRejectGuard(page);
 
   // The enter is read off the COMPUTED style rather than off a running animation: the
@@ -237,11 +269,8 @@ test("the backdrop moves with the panel, and both leave quicker than they arrive
   expect(entering[0]?.seconds).toBe(entering[1]?.seconds);
 
   // Both enters must be over before the exit listeners go on, or the enter's own
-  // animationend resolves them. Same getAnimations the presence layer reads.
-  await page.waitForFunction(
-    (sels) => sels.every((s) => (document.querySelector(s)?.getAnimations().length ?? 1) === 0),
-    [guardContent, guardOverlay],
-  );
+  // animationend resolves them.
+  await waitForEnterToSettle(page, [guardContent, guardOverlay]);
 
   // elapsedTime at animationend IS the animation's active duration, which is what makes
   // the exit measurable rather than merely observable — nothing here samples a clock.
@@ -345,13 +374,11 @@ test("a decided guard's exit leads the arrival that uncovers the next state", as
   await seedTwoPlansAndOpen(daemon, page);
   await waitPastSafeModeGrace(page);
 
+  await recordEnters(page);
   const guard = await openRejectGuard(page);
   // Let the guard's own arrival finish first, so the recorder cannot mistake the enter it
   // is still playing for part of the hand-off that has not started yet.
-  await page.waitForFunction(
-    (sels) => sels.every((s) => (document.querySelector(s)?.getAnimations().length ?? 1) === 0),
-    [guardContent, guardOverlay],
-  );
+  await waitForEnterToSettle(page, [guardContent, guardOverlay]);
 
   await recordHandoff(page);
   await guard.getByRole("button", { name: "Reject", exact: true }).click();
@@ -387,11 +414,9 @@ test("draining the queue hands the whole window over in one crossfade", async ({
   await seedAndOpen(page, daemon);
   await waitPastSafeModeGrace(page);
 
+  await recordEnters(page);
   const guard = await openRejectGuard(page);
-  await page.waitForFunction(
-    (sels) => sels.every((s) => (document.querySelector(s)?.getAnimations().length ?? 1) === 0),
-    [guardContent, guardOverlay],
-  );
+  await waitForEnterToSettle(page, [guardContent, guardOverlay]);
 
   await recordHandoff(page);
   await guard.getByRole("button", { name: "Reject", exact: true }).click();
