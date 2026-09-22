@@ -269,7 +269,6 @@ describe("tagCodeBlockRows token tagging", () => {
     setRowTokens(root, 2, ["```"]);
     tagCodeBlockRows(root, [{ start: 1, end: 2 }]);
     expect(root.querySelector("[data-code-lang]")).toBeNull();
-    // The bare close still carries the marker tag.
     expect(fenceOf(root, 2)?.textContent).toBe("```");
   });
 
