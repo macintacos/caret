@@ -128,6 +128,7 @@ const KNOWN_FILE_EXTENSIONS: ReadonlySet<string> = new Set([
   "php",
   "swift",
   "dart",
+  "lua",
   "txt",
   "lock",
   "cfg",

@@ -12,10 +12,13 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { bundledLanguages } from "shiki/bundle/full";
+
 import { writeTreeFile } from "@test/support/fs-tree.ts";
-import { EXCERPT_RADIUS } from "@/config/constants.ts";
+import { EXCERPT_RADIUS, hasKnownFileExtension } from "@/config/constants.ts";
 import {
   EXCERPT_HEAD_LINES,
+  EXT_LANGUAGE,
   isFileTooLargeToPreview,
   MAX_EXCERPT_BYTES,
   readFileExcerpt,
@@ -182,6 +185,22 @@ test("reports a cwd-relative path and infers the language from the extension", a
   const ex = await readFileExcerpt(cwd, "ui/src/app.css");
   expect(ex?.path).toBe("ui/src/app.css");
   expect(ex?.language).toBe("css");
+});
+
+test("previews a .lua file with the lua grammar (EXC-1409)", async () => {
+  write("init.lua", 'local greeting = "hi"\n');
+  expect((await readFileExcerpt(cwd, "init.lua"))?.language).toBe("lua");
+});
+
+test("every highlightable extension is also resolvable by bare name", () => {
+  const unresolvable = Object.keys(EXT_LANGUAGE).filter((ext) => !hasKnownFileExtension(`f${ext}`));
+  expect(unresolvable).toEqual([]);
+  expect(Object.keys(EXT_LANGUAGE).length).toBeGreaterThan(40); // non-vacuity
+});
+
+test("every mapped grammar id exists in the bundle caret ships", () => {
+  const missing = Object.values(EXT_LANGUAGE).filter((id) => !(id in bundledLanguages));
+  expect(missing).toEqual([]);
 });
 
 test("defaults the language to text for an unknown extension", async () => {

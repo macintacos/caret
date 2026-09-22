@@ -43,7 +43,7 @@ export const SKIP_DIRS = new Set(["node_modules", "dist", "build", "coverage", "
 
 // Extension → shiki grammar name. Only the common source/config kinds are
 // mapped; anything else previews as plain "text" (still readable, just uncolored).
-const EXT_LANGUAGE: Readonly<Record<string, string>> = {
+export const EXT_LANGUAGE: Readonly<Record<string, string>> = {
   ".ts": "typescript",
   ".mts": "typescript",
   ".cts": "typescript",
@@ -89,6 +89,7 @@ const EXT_LANGUAGE: Readonly<Record<string, string>> = {
   ".php": "php",
   ".swift": "swift",
   ".dart": "dart",
+  ".lua": "lua",
 };
 
 function languageForPath(path: string): string {
