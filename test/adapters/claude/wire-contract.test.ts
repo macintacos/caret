@@ -23,8 +23,9 @@ import {
   fakeReviewDeps,
 } from "@test/support/wire-contract.ts";
 import { claudeAdapter } from "@/adapters/claude/index.ts";
-import { reviewHookStdin } from "@/commands/review.ts";
+import { reviewHookInput } from "@/commands/review.ts";
 import type { Decision } from "@/lib/types.ts";
+import { parseHook } from "@/review/orchestrate.ts";
 
 const FIXTURE = join(import.meta.dir, "fixtures", "permission-request-stdin.json");
 const stdin = readFileSync(FIXTURE, "utf-8");
@@ -99,8 +100,8 @@ test("an approve echoes the plan file's text when the payload plan is stale", as
     session_id: "s",
     tool_input: { plan: "# Old", planFilePath: "/plans/x.md" },
   });
-  const deps = fakeReviewDeps({ parseHookInput: claudeAdapter.parseHookInput });
-  const { decision, input } = await reviewHookStdin(staleStdin, deps, () => "# New");
+  const parsed = parseHook(claudeAdapter.parseHookInput, staleStdin);
+  const { decision, input } = await reviewHookInput(parsed, fakeReviewDeps(), () => "# New");
   const wire = JSON.parse(claudeAdapter.emitDecision(decision, input));
   expect(wire.hookSpecificOutput.decision.updatedInput.plan).toBe("# New");
 });

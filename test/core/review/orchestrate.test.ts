@@ -7,12 +7,12 @@ import type { EnsureMode } from "@/daemon/lifecycle.ts";
 import { setLogLevel } from "@/lib/log.ts";
 import type { Decision, PlanInput } from "@/lib/types.ts";
 import { PLAN_EMPTY_DENY_MESSAGE, PLAN_FORMAT_DENY_MESSAGE } from "@/plan/format.ts";
-import { expireAbandoned, runReview } from "@/review/orchestrate.ts";
+import { expireAbandoned, parseHook, type ReviewDeps, runReview } from "@/review/orchestrate.ts";
 
 const allow: Decision = { behavior: "allow", decidedAt: 1 };
 
-// A tool-agnostic fake stdin parser: the core takes parseHookInput as an injected
-// dependency, so this suite stays in test/core/ without reaching into any
+// A tool-agnostic fake stdin parser: the core takes the parse result rather than
+// an adapter, so this suite stays in test/core/ without reaching into any
 // adapter (the real parsers live in test/adapters/<tool>/). It normalizes the
 // generic hook shape these tests pipe in below.
 function fakeParseHookInput(stdin: string): PlanInput {
@@ -24,9 +24,8 @@ function fakeParseHookInput(stdin: string): PlanInput {
   return { sessionId: h.session_id, cwd: h.cwd, plan: h.tool_input?.plan };
 }
 
-function reviewDeps(over: Partial<Parameters<typeof runReview>[1]> = {}) {
+function reviewDeps(over: Partial<ReviewDeps> = {}): ReviewDeps {
   return {
-    parseHookInput: fakeParseHookInput,
     ensureDaemon: async () => "http://x",
     postReview: async () => ({ id: "rid" }),
     longPoll: async () => allow,
@@ -36,6 +35,10 @@ function reviewDeps(over: Partial<Parameters<typeof runReview>[1]> = {}) {
     expire: async () => {},
     ...over,
   };
+}
+
+function review(stdin: string, deps: ReviewDeps): Promise<Decision> {
+  return runReview(parseHook(fakeParseHookInput, stdin), deps);
 }
 
 const stdin = JSON.stringify({ session_id: "S", cwd: "/p", tool_input: { plan: "# P" } });
@@ -53,13 +56,13 @@ afterEach(() => setLogLevel("info")); // undo any per-test level change
 // test/adapters/claude/.
 
 test("happy path returns an allow decision", async () => {
-  const out = await runReview(stdin, reviewDeps());
+  const out = await review(stdin, reviewDeps());
   expect(out.behavior).toBe("allow");
 });
 
 test("browser opens under the caret.localhost vanity origin (EXC-426)", async () => {
   let opened: string | undefined;
-  await runReview(
+  await review(
     stdin,
     reviewDeps({
       ensureDaemon: async () => "http://localhost:4242",
@@ -73,7 +76,7 @@ test("browser opens under the caret.localhost vanity origin (EXC-426)", async ()
 
 test("does not open the browser when a live UI client is already polling (EXC-559)", async () => {
   let opened = false;
-  await runReview(
+  await review(
     stdin,
     reviewDeps({
       postReview: async () => ({ id: "rid", hasLiveClient: true }),
@@ -87,7 +90,7 @@ test("does not open the browser when a live UI client is already polling (EXC-55
 
 test("announces the review URL through the injected sink, never on stderr itself", async () => {
   let announced: string | undefined;
-  await runReview(
+  await review(
     stdin,
     reviewDeps({
       ensureDaemon: async () => "http://localhost:4242",
@@ -101,7 +104,7 @@ test("announces the review URL through the injected sink, never on stderr itself
 
 test("opens the browser when no live UI client is polling (EXC-559)", async () => {
   let opened = false;
-  await runReview(
+  await review(
     stdin,
     reviewDeps({
       postReview: async () => ({ id: "rid", hasLiveClient: false }),
@@ -114,7 +117,7 @@ test("opens the browser when no live UI client is polling (EXC-559)", async () =
 });
 
 test("deny decision passes the feedback through", async () => {
-  const out = await runReview(
+  const out = await review(
     stdin,
     reviewDeps({
       longPoll: async () => ({ behavior: "deny", feedback: "tweak X", decidedAt: 1 }),
@@ -124,7 +127,7 @@ test("deny decision passes the feedback through", async () => {
 });
 
 test("acceptMode passes through on the decision", async () => {
-  const out = await runReview(
+  const out = await review(
     stdin,
     reviewDeps({
       longPoll: async () => ({ behavior: "allow", acceptMode: "acceptEdits", decidedAt: 1 }),
@@ -134,12 +137,12 @@ test("acceptMode passes through on the decision", async () => {
 });
 
 test("invalid stdin JSON fails safe to deny (never allow)", async () => {
-  const out = await runReview("not json", reviewDeps());
+  const out = await review("not json", reviewDeps());
   expect(out.behavior).toBe("deny");
 });
 
 test("ensureDaemon failure fails safe to deny", async () => {
-  const out = await runReview(
+  const out = await review(
     stdin,
     reviewDeps({
       ensureDaemon: async () => {
@@ -151,7 +154,7 @@ test("ensureDaemon failure fails safe to deny", async () => {
 });
 
 test("a never-resolving long-poll times out to deny", async () => {
-  const out = await runReview(
+  const out = await review(
     stdin,
     reviewDeps({
       longPoll: () => new Promise<Decision>(() => {}),
@@ -164,7 +167,7 @@ test("a never-resolving long-poll times out to deny", async () => {
 
 test("a timeout notifies the daemon to expire the review before denying", async () => {
   const expired: Array<[string, string]> = [];
-  const out = await runReview(
+  const out = await review(
     stdin,
     reviewDeps({
       longPoll: () => new Promise<Decision>(() => {}),
@@ -179,7 +182,7 @@ test("a timeout notifies the daemon to expire the review before denying", async 
 });
 
 test("an expire failure never changes the fail-safe deny", async () => {
-  const out = await runReview(
+  const out = await review(
     stdin,
     reviewDeps({
       longPoll: () => new Promise<Decision>(() => {}),
@@ -195,7 +198,7 @@ test("an expire failure never changes the fail-safe deny", async () => {
 
 test("no expire call when the review was never created", async () => {
   const expired: string[] = [];
-  await runReview(
+  await review(
     stdin,
     reviewDeps({
       ensureDaemon: async () => {
@@ -211,7 +214,7 @@ test("no expire call when the review was never created", async () => {
 
 test("a dropped long-poll reconnects once then succeeds", async () => {
   let calls = 0;
-  const out = await runReview(
+  const out = await review(
     stdin,
     reviewDeps({
       longPoll: async () => {
@@ -227,7 +230,7 @@ test("a dropped long-poll reconnects once then succeeds", async () => {
 
 test("a 204 heartbeat re-polls until a decision arrives", async () => {
   let calls = 0;
-  const out = await runReview(
+  const out = await review(
     stdin,
     reviewDeps({
       longPoll: async () => {
@@ -243,7 +246,7 @@ test("a 204 heartbeat re-polls until a decision arrives", async () => {
 test("a transient drop reconnects and keeps polling (no premature deny)", async () => {
   let reconnects = 0;
   let calls = 0;
-  const out = await runReview(
+  const out = await review(
     stdin,
     reviewDeps({
       ensureDaemon: async () => {
@@ -269,7 +272,7 @@ test("a transient drop reconnects and keeps polling (no premature deny)", async 
 test("the startup ensure takes over, the reconnect only attaches", async () => {
   const modes: EnsureMode[] = [];
   let calls = 0;
-  await runReview(
+  await review(
     stdin,
     reviewDeps({
       ensureDaemon: async (mode) => {
@@ -292,7 +295,7 @@ test("the startup ensure takes over, the reconnect only attaches", async () => {
 test("a review refused by a draining daemon is re-posted to its successor", async () => {
   const ensures: EnsureMode[] = [];
   const posts: string[] = [];
-  const out = await runReview(
+  const out = await review(
     stdin,
     reviewDeps({
       ensureDaemon: async (mode) => {
@@ -311,13 +314,13 @@ test("a review refused by a draining daemon is re-posted to its successor", asyn
 });
 
 test("a review refused by two draining daemons is denied, naming the drain", async () => {
-  const out = await runReview(stdin, reviewDeps({ postReview: async () => null }));
+  const out = await review(stdin, reviewDeps({ postReview: async () => null }));
   expect(out.behavior).toBe("deny");
   expect(out.feedback).toContain("draining");
 });
 
 test("the poll loop is bounded by timeoutMs (endless heartbeats → deny)", async () => {
-  const out = await runReview(
+  const out = await review(
     stdin,
     reviewDeps({
       longPoll: async () => {
@@ -333,7 +336,7 @@ test("the poll loop is bounded by timeoutMs (endless heartbeats → deny)", asyn
 
 test("an unreachable daemon mid-poll fails safe to deny", async () => {
   let first = true;
-  const out = await runReview(
+  const out = await review(
     stdin,
     reviewDeps({
       longPoll: async () => {
@@ -352,7 +355,7 @@ test("an unreachable daemon mid-poll fails safe to deny", async () => {
 });
 
 test("a failure logs the step + context to caret.log and surfaces the path", async () => {
-  const out = await runReview(
+  const out = await review(
     stdin,
     reviewDeps({
       ensureDaemon: async () => {
@@ -367,7 +370,7 @@ test("a failure logs the step + context to caret.log and surfaces the path", asy
 
 test("a failed reconnect logs step=reconnect, not the poll step", async () => {
   let firstEnsure = true;
-  await runReview(
+  await review(
     stdin,
     reviewDeps({
       longPoll: async () => {
@@ -392,7 +395,7 @@ test("a failed reconnect logs step=reconnect, not the poll step", async () => {
 /** Capture the PlanInput runReview posts, so the pane stamp is observable. */
 async function postedInput(over: Partial<Parameters<typeof runReview>[1]> = {}) {
   let posted: PlanInput | undefined;
-  await runReview(
+  await review(
     stdin,
     reviewDeps({
       postReview: async (_baseUrl: string, input: PlanInput) => {
@@ -429,7 +432,7 @@ function planStdin(plan: string | undefined): string {
 test("a bare-fence plan is denied for format before any daemon work", async () => {
   let ensureCalls = 0;
   let postCalls = 0;
-  const out = await runReview(
+  const out = await review(
     planStdin("# Plan\n\n```\ncode\n```\n"),
     reviewDeps({
       ensureDaemon: async () => {
@@ -458,7 +461,7 @@ test.each<[string, string | undefined]>([
 ])("a blank plan (%s) is denied before any daemon work", async (_kind, plan) => {
   let ensureCalls = 0;
   let postCalls = 0;
-  const out = await runReview(
+  const out = await review(
     planStdin(plan),
     reviewDeps({
       ensureDaemon: async () => {
@@ -481,7 +484,7 @@ test.each<[string, string | undefined]>([
   ["a plan with no code blocks is posted for review", "# Just prose, no code.\n"],
 ])("%s", async (_title, plan) => {
   let postCalls = 0;
-  const out = await runReview(
+  const out = await review(
     planStdin(plan),
     reviewDeps({
       postReview: async () => {
@@ -495,7 +498,7 @@ test.each<[string, string | undefined]>([
 });
 
 test("a format-deny is logged at info — an expected reject, not an error", async () => {
-  await runReview(
+  await review(
     JSON.stringify({ session_id: "FMT", cwd: "/p", tool_input: { plan: "```\nx\n```\n" } }),
     reviewDeps(),
   );
@@ -510,7 +513,7 @@ test("a format-deny is logged at info — an expected reject, not an error", asy
 // ---- decision outcome records (EXC-398) ----
 
 test("a rejected plan is logged at info without the feedback body (EXC-444)", async () => {
-  await runReview(
+  await review(
     stdin,
     reviewDeps({
       longPoll: async () => ({ behavior: "deny", feedback: "tighten phase 2", decidedAt: 1 }),
@@ -528,7 +531,7 @@ test("a rejected plan is logged at info without the feedback body (EXC-444)", as
 });
 
 test("an approved plan is logged at info", async () => {
-  await runReview(stdin, reviewDeps());
+  await review(stdin, reviewDeps());
   const rec = caretLogRecords().find((r) => r.step === "decision");
   expect(rec).toMatchObject({ level: 30, msg: "plan approved", sessionId: "S" });
 });
@@ -536,14 +539,14 @@ test("an approved plan is logged at info", async () => {
 // ---- hook-path instrumentation (EXC-444) ----
 
 test("a review start is logged at info with session context", async () => {
-  await runReview(stdin, reviewDeps());
+  await review(stdin, reviewDeps());
   const rec = caretLogRecords().find((r) => r.step === "review" && r.msg === "review requested");
   expect(rec).toMatchObject({ level: 30, sessionId: "S", cwd: "/p" });
 });
 
 test("the posted review id is logged at debug and stitches later records", async () => {
   setLogLevel("debug");
-  await runReview(stdin, reviewDeps());
+  await review(stdin, reviewDeps());
   // Locate the create record by its stable contract (debug "review" step
   // carrying the reviewId), not the id-embedding message prose (F1 style).
   const posted = caretLogRecords().find((r) => r.step === "review" && r.reviewId === "rid");
@@ -555,7 +558,7 @@ test("the posted review id is logged at debug and stitches later records", async
 });
 
 test("an approved plan's record carries the acceptMode", async () => {
-  await runReview(
+  await review(
     stdin,
     reviewDeps({
       longPoll: async () => ({ behavior: "allow", acceptMode: "acceptEdits", decidedAt: 1 }),
@@ -566,7 +569,7 @@ test("an approved plan's record carries the acceptMode", async () => {
 });
 
 test("a failure after the review was posted carries the reviewId", async () => {
-  await runReview(
+  await review(
     stdin,
     reviewDeps({ longPoll: () => new Promise<Decision>(() => {}), timeoutMs: 30 }),
   );
@@ -576,7 +579,7 @@ test("a failure after the review was posted carries the reviewId", async () => {
 
 test("decision info records are suppressed when the level is error", async () => {
   setLogLevel("error");
-  await runReview(
+  await review(
     stdin,
     reviewDeps({
       longPoll: async () => ({ behavior: "deny", feedback: "nope", decidedAt: 1 }),
@@ -595,7 +598,7 @@ test("decision info records are suppressed when the level is error", async () =>
 
 test("onPosted fires with the daemon base URL and review id once the review is created", async () => {
   const posted: Array<[string, string]> = [];
-  await runReview(
+  await review(
     stdin,
     reviewDeps({
       ensureDaemon: async () => "http://d",
@@ -608,7 +611,7 @@ test("onPosted fires with the daemon base URL and review id once the review is c
 
 test("onPosted does not fire when the review was never created", async () => {
   const posted: string[] = [];
-  await runReview(
+  await review(
     stdin,
     reviewDeps({
       ensureDaemon: async () => {

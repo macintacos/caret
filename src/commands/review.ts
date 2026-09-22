@@ -1,12 +1,11 @@
-// `caret review`: review a plan piped on stdin (the ExitPlanMode hook). Wires
-// the production review dependencies — the active adapter's stdin parser, the
-// daemon HTTP client, takeover, and the local browser opener — then runs one
+// `caret review`: review a plan piped on stdin (the ExitPlanMode hook). Parses
+// the stdin with the active adapter, wires the production review dependencies —
+// the daemon HTTP client, takeover, and the local browser opener — then runs one
 // review to a single decision line on stdout. This is the emission boundary: the
 // core returns a tool-agnostic Decision, and the selected adapter renders it to
 // the agent's wire string here. The signal handlers below deny to fail safe if
 // the process is killed before a decision is written.
 
-import type { AgentAdapter } from "@/adapters/adapter.ts";
 import { selectAdapter } from "@/adapters/index.ts";
 import { bootHookLogging } from "@/commands/boot.ts";
 import { prodService } from "@/commands/service-target.ts";
@@ -18,7 +17,13 @@ import { readCmuxPane } from "@/lib/cmux.ts";
 import { logError, logWarn } from "@/lib/log.ts";
 import type { Decision, PlanInput } from "@/lib/types.ts";
 import { appendReviewerNotesToPlanFile, readPlanFile } from "@/plan/canonical-file.ts";
-import { expireAbandoned, type ReviewDeps, runReview } from "@/review/orchestrate.ts";
+import {
+  expireAbandoned,
+  type ParsedHookInput,
+  parseHook,
+  type ReviewDeps,
+  runReview,
+} from "@/review/orchestrate.ts";
 
 /** Select the platform's URL-opening argv: darwin `open`, win32 `cmd /c start`,
  * anything else `xdg-open` (support per platform: doc/CONFIGURING.md § Platform support).
@@ -52,9 +57,8 @@ function openBrowser(url: string): void {
  * gets a whole supervisor window of its own. */
 const REVIEW_RESERVE_MS = SUPERVISOR_WINDOW_MS;
 
-export function prodReviewDeps(s: Settings, adapter: AgentAdapter): ReviewDeps {
+export function prodReviewDeps(s: Settings): ReviewDeps {
   return {
-    parseHookInput: (stdin) => adapter.parseHookInput(stdin),
     ensureDaemon: async (mode) =>
       ensureDaemon(await prodEnsureDeps(s, () => prodService().manager, REVIEW_RESERVE_MS), mode),
     postReview,
@@ -69,26 +73,21 @@ export function prodReviewDeps(s: Settings, adapter: AgentAdapter): ReviewDeps {
   };
 }
 
-/** Parse the hook stdin once and review the plan file's current text in preference
- * to the payload's `plan`, which Claude Code can fill before the agent's write to
- * that file lands. Returns the reviewed input so the approval echo carries the same
- * text. A payload that fails to parse goes to runReview unchanged, which fail-safe
- * denies; `input` is then absent, since a deny needs no echo. `readPlan` must never
- * throw. */
-export async function reviewHookStdin(
-  stdin: string,
+/** Review the plan file's current text in preference to the payload's `plan`, which
+ * Claude Code can fill before the agent's write to that file lands. Returns the
+ * reviewed input so the approval echo carries the same text. A failed parse goes to
+ * runReview unchanged, which fail-safe denies; `input` is then absent, since a deny
+ * needs no echo. `readPlan` must never throw. */
+export async function reviewHookInput(
+  parsed: ParsedHookInput,
   deps: ReviewDeps,
   readPlan: (path: string) => string | undefined,
 ): Promise<{ decision: Decision; input?: PlanInput }> {
-  let parsed: PlanInput;
-  try {
-    parsed = deps.parseHookInput(stdin);
-  } catch {
-    return { decision: await runReview(stdin, deps) };
-  }
-  const fromFile = parsed.planFilePath ? readPlan(parsed.planFilePath) : undefined;
-  const input = fromFile?.trim() ? { ...parsed, plan: fromFile } : parsed;
-  return { decision: await runReview(stdin, { ...deps, parseHookInput: () => input }), input };
+  if ("error" in parsed) return { decision: await runReview(parsed, deps) };
+  const payload = parsed.input;
+  const fromFile = payload.planFilePath ? readPlan(payload.planFilePath) : undefined;
+  const input = fromFile?.trim() ? { ...payload, plan: fromFile } : payload;
+  return { decision: await runReview({ input }, deps), input };
 }
 
 export async function runReviewSubcommand(): Promise<void> {
@@ -141,11 +140,15 @@ export async function runReviewSubcommand(): Promise<void> {
   );
 
   const stdin = await Bun.stdin.text();
-  const deps = prodReviewDeps(loaded, adapter);
+  const deps = prodReviewDeps(loaded);
   deps.onPosted = (baseUrl, id) => {
     posted = { baseUrl, id };
   };
-  const { decision: out, input } = await reviewHookStdin(stdin, deps, readPlanFile);
+  const { decision: out, input } = await reviewHookInput(
+    parseHook(adapter.parseHookInput, stdin),
+    deps,
+    readPlanFile,
+  );
   hookInput = input;
   // Fold an approval's reviewer notes onto the agent's plan of record (EXC-791)
   // before emitting the decision, so the agent reads them when it proceeds. The

@@ -29,7 +29,7 @@ import {
   waitForHealth,
 } from "@/daemon/client.ts";
 import type { ClientReview } from "@/lib/types.ts";
-import { type ReviewDeps, runReview } from "@/review/orchestrate.ts";
+import { parseHook, type ReviewDeps, runReview } from "@/review/orchestrate.ts";
 import { type InjectDeps, injectKey } from "@/tasks/dev/inject.ts";
 import {
   appendRevision,
@@ -73,7 +73,6 @@ export function devReviewDeps(base: string, sink: DriverLog = log): DevDeps {
     // Prefixed like the driver's other lines rather than reproducing the hook's exact
     // stderr wording — nothing parses this one, `mise run dev` just shows it.
     announceUrl: (url) => sink(`review this plan at ${url}`),
-    parseHookInput: (stdin) => claudeAdapter.parseHookInput(stdin),
     ensureDaemon: async () => {
       await waitForHealth(base);
       return base;
@@ -98,7 +97,10 @@ export async function runExtraReview(
 ): Promise<void> {
   let state: DriverState = { plan, revision: 0 };
   for (;;) {
-    const out = await runReview(hookStdin(state.plan, sessionId), deps);
+    const out = await runReview(
+      parseHook(claudeAdapter.parseHookInput, hookStdin(state.plan, sessionId)),
+      deps,
+    );
     const next = nextPlan(state, out, plan);
     if (next.action === "reseed") return; // approved: this thread is done
     if (next.action === "wait") return; // rejected (EXC-685): the agent waits — thread done
@@ -238,7 +240,10 @@ export async function bootstrapReview(
   const plans = demoVersions(fixture.plan, fixture.versions, fixture.edits);
   for (let i = 0; i < plans.length; i++) {
     // runReview blocks on the decision long-poll; the deny is what unblocks it.
-    const reviewing = runReview(hookStdin(plans[i] as string, fixture.session), deps);
+    const reviewing = runReview(
+      parseHook(claudeAdapter.parseHookInput, hookStdin(plans[i] as string, fixture.session)),
+      deps,
+    );
     const feedback = `Bootstrap revision ${i + 1} for the dev review.`;
     await denyPendingReview(base, fixture.session, feedback);
     await reviewing;
@@ -285,7 +290,10 @@ async function runFixtureLoop(
   let state = initial;
   for (;;) {
     // Never throws: every abnormal path inside runReview becomes a deny.
-    const out = await runReview(hookStdin(state.plan, fixture.session), deps);
+    const out = await runReview(
+      parseHook(claudeAdapter.parseHookInput, hookStdin(state.plan, fixture.session)),
+      deps,
+    );
     const next = nextPlan(state, out, fixture.plan);
     if (next.action === "wait") {
       // Reject (EXC-685): the agent waits for the user's next message instead of

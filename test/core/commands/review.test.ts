@@ -2,9 +2,10 @@ import { expect, test } from "bun:test";
 
 import { parseReviewUrl } from "@opencode/review-bridge.ts";
 import { fakeReviewDeps } from "@test/support/wire-contract.ts";
-import { browserOpenCmd, reviewHookStdin, reviewUrlLine } from "@/commands/review.ts";
+import { browserOpenCmd, reviewHookInput, reviewUrlLine } from "@/commands/review.ts";
 import type { PlanInput } from "@/lib/types.ts";
 import { PLAN_EMPTY_DENY_MESSAGE } from "@/plan/format.ts";
+import { parseHook } from "@/review/orchestrate.ts";
 
 // browserOpenCmd is the pure platform→argv selection extracted from openBrowser
 // so the branch choice is testable without spawning (the spawn-and-swallow stays
@@ -53,7 +54,6 @@ function recordingReview(fromFile: string | undefined) {
   const posted: PlanInput[] = [];
   const reads: string[] = [];
   const deps = fakeReviewDeps({
-    parseHookInput: fakeParseHookInput,
     postReview: async (_baseUrl, input) => {
       posted.push(input);
       return { id: "rid" };
@@ -63,7 +63,11 @@ function recordingReview(fromFile: string | undefined) {
     reads.push(path);
     return fromFile;
   };
-  return { posted, reads, run: (stdin: string) => reviewHookStdin(stdin, deps, readPlan) };
+  return {
+    posted,
+    reads,
+    run: (stdin: string) => reviewHookInput(parseHook(fakeParseHookInput, stdin), deps, readPlan),
+  };
 }
 
 test("reviews and returns the plan file's text over a stale payload plan", async () => {

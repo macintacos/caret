@@ -1,6 +1,6 @@
 // Review orchestration core: run one plan review end-to-end and return the
-// tool-agnostic `Decision`. Tool-agnostic throughout — the agent's stdin shape
-// is parsed behind the injected `parseHookInput`, and the command layer renders
+// tool-agnostic `Decision`. Tool-agnostic throughout — the command layer parses
+// the agent's stdin with the adapter's `parseHookInput` via `parseHook`, and renders
 // the returned Decision to the agent's wire string via the adapter's
 // `emitDecision`.
 //
@@ -28,10 +28,20 @@ function denyDecision(reason: string): Decision {
   return { behavior: "deny", feedback: reason, decidedAt: Date.now() };
 }
 
+/** The hook stdin as the caller parsed it: its PlanInput, or what the parse threw. */
+export type ParsedHookInput = { input: PlanInput } | { error: unknown };
+
+/** Run `parse` over `stdin`, keeping a throw for runReview to fail-safe deny. Never
+ * throws. */
+export function parseHook(parse: (stdin: string) => PlanInput, stdin: string): ParsedHookInput {
+  try {
+    return { input: parse(stdin) };
+  } catch (error) {
+    return { error };
+  }
+}
+
 export interface ReviewDeps {
-  /** Normalize the agent's raw hook stdin into a core PlanInput. Throws on input
-   * that can't be parsed — the throw becomes the fail-safe deny. */
-  parseHookInput: (stdin: string) => PlanInput;
   /** Ensure a daemon is up and return its base URL, resolving the port as `mode` says
    * (see EnsureMode). */
   ensureDaemon: (mode: EnsureMode) => Promise<string>;
@@ -108,7 +118,7 @@ export async function expireAbandoned(
 /** Run a review end-to-end, returning the core `Decision`. Never throws — any
  * failure becomes a deny so an unreviewed plan can never ship. The command layer
  * renders the returned Decision to the agent's wire string via the adapter. */
-export async function runReview(stdin: string, deps: ReviewDeps): Promise<Decision> {
+export async function runReview(parsed: ParsedHookInput, deps: ReviewDeps): Promise<Decision> {
   // Track the current step + context so the catch can log what actually failed.
   let step = "parse";
   const ctx: ErrorContext = {};
@@ -116,7 +126,8 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<Decisi
   // reconnects re-assign it, so it always holds the last-known daemon URL.
   let baseUrl: string | undefined;
   try {
-    const input = deps.parseHookInput(stdin);
+    if ("error" in parsed) throw parsed.error;
+    const input = parsed.input;
     ctx.sessionId = input.sessionId;
     // cwd is logged raw (diagnostic: which project this review came from); the
     // redact path home-scrubs it on share, so it is not a DENY_KEY (EXC-545).

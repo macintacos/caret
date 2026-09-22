@@ -5,7 +5,7 @@
 import { expect } from "bun:test";
 
 import type { Decision, PlanInput } from "@/lib/types.ts";
-import { type ReviewDeps, runReview } from "@/review/orchestrate.ts";
+import { parseHook, type ReviewDeps, runReview } from "@/review/orchestrate.ts";
 
 /** The adapter surface `emitWire` needs — every `AgentAdapter` satisfies it. */
 export interface WireAdapter {
@@ -14,10 +14,8 @@ export interface WireAdapter {
 }
 
 /** runReview deps faking every effect: a daemon that creates review "rid" and
- * approves it. `parseHookInput` has no sensible default, so callers supply it. */
-export function fakeReviewDeps(
-  overrides: Partial<ReviewDeps> & Pick<ReviewDeps, "parseHookInput">,
-): ReviewDeps {
+ * approves it. */
+export function fakeReviewDeps(overrides: Partial<ReviewDeps> = {}): ReviewDeps {
   return {
     ensureDaemon: async () => "http://x",
     postReview: async () => ({ id: "rid" }),
@@ -30,15 +28,6 @@ export function fakeReviewDeps(
   };
 }
 
-/** Deps that parse with the real adapter and resolve the review to `decision`, so one
- * call drives the whole review loop to that outcome. */
-function depsReturning(
-  decision: Decision,
-  parseHookInput: (stdin: string) => PlanInput,
-): ReviewDeps {
-  return fakeReviewDeps({ parseHookInput, longPoll: async () => decision });
-}
-
 /**
  * Run the real parse -> runReview -> emitDecision path over `stdin` and return
  * the parsed stdout wire object the hook would write.
@@ -48,8 +37,9 @@ export async function emitWire(
   decision: Decision,
   adapter: WireAdapter,
 ): Promise<unknown> {
-  const out = await runReview(stdin, depsReturning(decision, adapter.parseHookInput));
-  return JSON.parse(adapter.emitDecision(out, adapter.parseHookInput(stdin)));
+  const parsed = parseHook(adapter.parseHookInput, stdin);
+  const out = await runReview(parsed, fakeReviewDeps({ longPoll: async () => decision }));
+  return JSON.parse(adapter.emitDecision(out, "input" in parsed ? parsed.input : undefined));
 }
 
 /**
