@@ -11,13 +11,13 @@ export type EnsureDaemonNoOps = Pick<
 export function memoryBootMarker(initial: BootMarker | null = null): BootMarkerStore {
   let marker = initial;
   return {
-    claim: () => {
+    claim: (claimed) => {
       if (marker) return false;
-      marker = { pid: process.pid, claimedAt: 0 };
+      marker = claimed;
       return true;
     },
     assign: (pid) => {
-      if (marker) marker = { ...marker, pid };
+      marker = { pid, claimedAt: marker?.claimedAt ?? 0 };
     },
     read: () => marker,
     clear: () => {

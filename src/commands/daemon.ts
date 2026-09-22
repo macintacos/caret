@@ -1,9 +1,9 @@
 // `caret daemon`: run the review daemon. Boots the settings service (hot-reload
 // + boot-time validation), wires the leveled NDJSON logger, rehydrates the
-// store, binds the HTTP server, drops the boot marker its spawner claimed, and installs
-// the signal/exit cleanup that frees the lock on shutdown (EXC-406). Started by the service's launcher (supervised,
-// resident), by `caret serve` through runDaemon, or by a hook's on-demand spawn, which
-// idle-exits.
+// store, binds the HTTP server, drops the boot marker its spawner claimed, and
+// installs the signal/exit cleanup that frees the lock on shutdown (EXC-406). Started
+// by the service's launcher (supervised, resident), by `caret serve` through runDaemon,
+// or by a hook's on-demand spawn, which idle-exits.
 
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";

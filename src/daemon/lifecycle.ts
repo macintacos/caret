@@ -71,6 +71,8 @@ export interface EnsureDeps {
   removeLock: () => void;
   /** Spawn a detached daemon and return its pid. May throw EADDRINUSE if it loses a race. */
   spawn: () => number;
+  /** The state dir's boot marker, claimed before a spawn so another process's boot is
+   * waited on, not doubled. */
   bootMarker: BootMarkerStore;
   /** This world's supervisor, absent when the world installed none. */
   service?: Supervisor;
@@ -97,6 +99,8 @@ export interface EnsureTiming {
   reserveMs: number;
 }
 
+/** The on-disk boot marker: its pid is the claiming hook until it spawns, then the daemon
+ * it spawned. */
 export interface BootMarker {
   pid: number;
   /** Epoch ms. */
@@ -105,11 +109,12 @@ export interface BootMarker {
 
 /** The state dir's boot marker: at most one daemon of this world boots at a time. */
 export interface BootMarkerStore {
-  /** Atomically create the marker naming this process; false when one already exists. */
-  claim: () => boolean;
-  /** Point the marker this call holds at the daemon it spawned. */
+  /** Atomically create `marker`; false only when one already exists. */
+  claim: (marker: BootMarker) => boolean;
+  /** Point the marker this call holds at the daemon it spawned, keeping its `claimedAt`. */
   assign: (pid: number) => void;
   read: () => BootMarker | null;
+  /** Remove the marker whoever it names. */
   clear: () => void;
 }
 
@@ -186,8 +191,10 @@ export async function ensureDaemon(
   // so a launcher resolving another build than this hook's is never cycled twice.
   let windowSpent = mode === "successor" ? await awaitDrained(deps, windowEnd) : false;
   let supervised: boolean | undefined;
+  let spawnedPid: number | undefined;
   let waitingOn: number | undefined;
   for (let attempt = 0; attempt < timing.maxAttempts && timing.now() < deadline; attempt++) {
+    waitingOn = undefined;
     windowSpent ||= timing.now() >= windowEnd;
     const h = await deps.health(deps.baseUrl);
     if (h && h.service === "caret") {
@@ -253,21 +260,26 @@ export async function ensureDaemon(
       logDebug("spawn", "orphan daemon lock removed");
     }
     // A daemon still booting — this call's or another process's — would bind the port
-    // once a second one had come and gone.
-    const holder = claimBoot(deps);
-    if (holder === null) {
+    // once a second one had come and gone. The marker guards another process's boot; this
+    // call's own spawn is guarded here too, since a marker that cannot be written is
+    // claimed on every attempt.
+    const boot = claimBoot(deps);
+    if (boot.claimed && spawnedPid !== undefined && deps.isAlive(spawnedPid)) {
+      deps.bootMarker.clear();
+    } else if (boot.claimed) {
       try {
-        const pid = deps.spawn();
+        spawnedPid = deps.spawn();
         // ponytail: a daemon that binds before this runs leaves the marker naming this
         // hook until it exits or the TTL passes; unreachable behind a multi-second boot.
-        deps.bootMarker.assign(pid);
-        logDebug("spawn", "daemon spawned", { pid });
+        deps.bootMarker.assign(spawnedPid);
+        logDebug("spawn", "daemon spawned", { pid: spawnedPid });
       } catch (e) {
         deps.bootMarker.clear();
         if (!isAddrInUse(e)) throw e;
       }
+    } else if (boot.bootPid !== spawnedPid) {
+      waitingOn = boot.bootPid;
     }
-    waitingOn = holder ?? undefined;
     await timing.backoff(attempt);
   }
   if (waitingOn !== undefined) {
@@ -284,24 +296,27 @@ export async function ensureDaemon(
   throw new Error("caret daemon did not become healthy in time");
 }
 
-/** Claim the boot marker, clearing a dead or expired one first. Null when this call now
- * holds it; otherwise the pid of the boot that does. */
-function claimBoot(deps: EnsureDeps): number | null {
-  const { bootMarker } = deps;
-  if (bootMarker.claim()) return null;
-  const held = bootMarker.read();
-  if (
-    held &&
-    deps.isAlive(held.pid) &&
-    deps.timing.wallNow() - held.claimedAt < BOOT_MARKER_TTL_MS
-  ) {
-    return held.pid;
+/** Whether this call holds the boot marker; if not, the pid of a live boot that does —
+ * absent when the marker was released or just cleared as stale. */
+type BootClaim = { claimed: true } | { claimed: false; bootPid?: number };
+
+/** Claim the boot marker, or clear a dead or expired one. A stale marker is only cleared
+ * here, never re-claimed in the same call — clearing and re-creating is not atomic; the
+ * next attempt's claim is the only way to win it. */
+function claimBoot(deps: EnsureDeps): BootClaim {
+  const { bootMarker, timing } = deps;
+  if (bootMarker.claim({ pid: process.pid, claimedAt: timing.wallNow() })) {
+    return { claimed: true };
   }
-  // ponytail: not atomic — a caller that read the same stale marker can unlink the claim
-  // made here, costing a second spawn; clear by rename-and-verify if that ever matters.
+  const held = bootMarker.read();
+  if (!held) return { claimed: false };
+  const age = timing.wallNow() - held.claimedAt;
+  if (deps.isAlive(held.pid) && age >= 0 && age < BOOT_MARKER_TTL_MS) {
+    return { claimed: false, bootPid: held.pid };
+  }
   bootMarker.clear();
-  logDebug("spawn", "stale boot marker removed", { bootPid: held?.pid });
-  return bootMarker.claim() ? null : (bootMarker.read()?.pid ?? null);
+  logDebug("spawn", "stale boot marker removed", { bootPid: held.pid });
+  return { claimed: false };
 }
 
 /** Wait past the daemon that just refused work while stepping down. True when one was
@@ -405,6 +420,7 @@ export function readDaemonLock(): DaemonLock | null {
   return null;
 }
 
+/** Read + validate the boot marker; null if missing or unparseable. */
 export function readBootMarker(): BootMarker | null {
   const m = readJsonFileSync(daemonBootMarker()) as BootMarker | null;
   if (m && typeof m.pid === "number" && typeof m.claimedAt === "number") return m;
@@ -413,12 +429,12 @@ export function readBootMarker(): BootMarker | null {
 
 /** The boot marker on disk. Every write lands whole — `link` for the claim, `rename` for
  * the reassignment — so a reader never takes a half-written marker for a stale one. A
- * marker that cannot be written is treated as claimed: it only guards a spawn, and must
- * never stop one. */
+ * marker that cannot be written is treated as claimed: it only guards another process's
+ * spawn, and must never stop one. */
 export function fileBootMarker(): BootMarkerStore {
   const write = (marker: BootMarker, place: (tmp: string, path: string) => void): void => {
     const path = daemonBootMarker();
-    const tmp = `${path}.tmp.${process.pid}`;
+    const tmp = `${path}.${process.pid}.tmp`;
     writeFileSync(tmp, JSON.stringify(marker), { mode: 0o600 });
     try {
       place(tmp, path);
@@ -427,10 +443,10 @@ export function fileBootMarker(): BootMarkerStore {
     }
   };
   return {
-    claim: () => {
+    claim: (marker) => {
       try {
         ensureStateDir();
-        write({ pid: process.pid, claimedAt: Date.now() }, linkSync);
+        write(marker, linkSync);
         return true;
       } catch (e) {
         return (e as { code?: string }).code !== "EEXIST";
@@ -438,9 +454,10 @@ export function fileBootMarker(): BootMarkerStore {
     },
     assign: (pid) => {
       try {
-        write({ pid, claimedAt: readBootMarker()?.claimedAt ?? Date.now() }, renameSync);
+        write({ pid, claimedAt: readBootMarker()?.claimedAt ?? 0 }, renameSync);
       } catch {
-        // the marker still names this process, which clears it on exit or at the TTL.
+        // Left naming this process: the next caller clears it once this pid is dead or the
+        // TTL passes.
       }
     },
     read: readBootMarker,
@@ -475,11 +492,7 @@ export function isPidAlive(pid: number): boolean {
 }
 
 export function removeDaemonLock(): void {
-  try {
-    unlinkSync(daemonLock());
-  } catch {
-    // already gone — nothing to do.
-  }
+  rmQuiet(daemonLock());
 }
 
 /** Remove the daemon lock, but only when it names THIS process. `removeDaemonLock`

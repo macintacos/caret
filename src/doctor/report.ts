@@ -294,7 +294,6 @@ function buildLockAndPort(deps: DoctorDeps, health: HealthIdentity | null): Lock
   const lock = deps.readLock();
   if (!lock) return { lockExists: false, portServesCaret, ...boot };
   return {
-    ...boot,
     lockExists: true,
     lockPath: daemonLock(),
     lockPid: lock.pid,
@@ -305,6 +304,7 @@ function buildLockAndPort(deps: DoctorDeps, health: HealthIdentity | null): Lock
     pidAlive: deps.isPidAlive(lock.pid),
     portServesCaret,
     portMismatch: lock.port !== deps.effective().port,
+    ...boot,
   };
 }
 

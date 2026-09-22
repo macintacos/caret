@@ -214,6 +214,10 @@ test.each<[string, Partial<Parameters<typeof ensureDaemon>[0]>]>([
     "a live pid claimed longer ago than the TTL",
     { isAlive: () => true, timing: { ...noOpTiming(), wallNow: () => BOOT_MARKER_TTL_MS + 1 } },
   ],
+  [
+    "a live pid claimed after the wall clock's now",
+    { isAlive: () => true, timing: { ...noOpTiming(), wallNow: () => -1 } },
+  ],
 ])("a boot marker naming %s does not block a spawn", async (_title, over) => {
   const bootMarker = memoryBootMarker({ pid: 4_000_000, claimedAt: 0 });
   let spawns = 0;
@@ -227,6 +231,62 @@ test.each<[string, Partial<Parameters<typeof ensureDaemon>[0]>]>([
   );
   expect(spawns).toBe(1);
   expect(bootMarker.read()?.pid).toBe(101);
+});
+
+// A marker that cannot be written leaves every claim won: only the call's own record of
+// its spawn keeps it from spawning again while that daemon boots.
+test("a call spawns once while its daemon boots, even with an unwritable marker", async () => {
+  let spawns = 0;
+  let probes = 0;
+  await ensureDaemon(
+    ensureDeps({
+      bootMarker: { claim: () => true, assign: () => {}, read: () => null, clear: () => {} },
+      health: async () => (++probes > 3 ? { service: "caret", build: "b1", version: "v1" } : null),
+      isAlive: () => true,
+      spawn: () => ++spawns,
+    }),
+  );
+  expect(spawns).toBe(1);
+});
+
+// A booting daemon releases the marker once bound: a claim lost to it, then a read that
+// finds nothing, is that boot ending — not a stale marker to clear and spawn over.
+test("a marker released between a lost claim and its read does not trigger a spawn", async () => {
+  const inner = memoryBootMarker({ pid: 4_000_003, claimedAt: 0 });
+  let spawns = 0;
+  await ensureDaemon(
+    ensureDeps({
+      bootMarker: {
+        ...inner,
+        claim: (m) => {
+          if (inner.claim(m)) return true;
+          inner.clear();
+          return false;
+        },
+      },
+      health: async () => null,
+      isAlive: () => true,
+      spawn: () => ++spawns,
+      timing: noOpTiming(1),
+    }),
+  ).catch(() => {});
+  expect(spawns).toBe(0);
+});
+
+test("a call waiting on its own spawn does not log giving up on a booting daemon", async () => {
+  setLogLevel("debug");
+  await expect(
+    ensureDaemon(
+      ensureDeps({
+        health: async () => null,
+        isAlive: () => true,
+        spawn: () => 4_000_004,
+        timing: noOpTiming(3),
+      }),
+    ),
+  ).rejects.toThrow();
+  const recs = caretLogRecords().filter((r) => r.step === "spawn");
+  expect(recs.some((r) => r.bootPid === 4_000_004)).toBe(false);
 });
 
 test("ensureDaemon logs giving up on a booting daemon at debug", async () => {
@@ -1280,15 +1340,16 @@ test("a detached, unref'd child that exits is reaped without being awaited", asy
 
 test("fileBootMarker lets one claim win until the marker is cleared", () => {
   const store = fileBootMarker();
-  expect(store.claim()).toBe(true);
-  expect(store.claim()).toBe(false);
-  expect(store.read()?.pid).toBe(process.pid);
+  const marker = { pid: process.pid, claimedAt: 1_000 };
+  expect(store.claim(marker)).toBe(true);
+  expect(store.claim(marker)).toBe(false);
+  expect(store.read()).toEqual(marker);
   store.assign(4_000_002);
-  expect(store.read()?.pid).toBe(4_000_002);
+  expect(store.read()).toEqual({ pid: 4_000_002, claimedAt: 1_000 });
   store.clear();
   expect(existsSync(daemonBootMarker())).toBe(false);
   expect(() => store.clear()).not.toThrow();
-  expect(store.claim()).toBe(true);
+  expect(store.claim(marker)).toBe(true);
   store.clear();
 });
 
