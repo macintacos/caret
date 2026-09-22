@@ -733,7 +733,7 @@
      region outgrows the lane's height it pages here, beneath a pinned header.
      Scrolling it is also what fetches the next chunk, so it runs flush to the
      panel's bottom edge with nothing under it — a band there would read as a
-     control, which is the affordance EXC-969 removed. The code reads at the plan
+     load-more control that does not exist. The code reads at the plan
      source view's own grid — the same font stack, --text-base size,
      --leading-normal rhythm, and tabular figures the .diffview bridge sets
      (app.css) — so an excerpt looks like a window onto the plan, not a smaller
