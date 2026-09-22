@@ -281,9 +281,10 @@ function buildDaemon(deps: DoctorDeps, health: HealthIdentity | null): DaemonSec
   };
 }
 
-/** The lock + port reconciliation, flattened. portServesCaret comes from the
- * shared health probe (service === "caret"); portMismatch compares the lock's
- * port to the effective port. No lock → { lockExists: false, portServesCaret }. */
+/** The lock + port reconciliation, flattened, plus the boot marker when one is claimed.
+ * portServesCaret comes from the shared health probe (service === "caret"); portMismatch
+ * compares the lock's port to the effective port. No lock → { lockExists: false,
+ * portServesCaret, ...boot }. */
 function buildLockAndPort(deps: DoctorDeps, health: HealthIdentity | null): LockSection {
   const portServesCaret = health?.service === "caret";
   const marker = deps.readBootMarker();

@@ -259,10 +259,8 @@ export async function ensureDaemon(
       deps.removeLock();
       logDebug("spawn", "orphan daemon lock removed");
     }
-    // A daemon still booting — this call's or another process's — would bind the port
-    // once a second one had come and gone. The marker guards another process's boot; this
-    // call's own spawn is guarded here too, since a marker that cannot be written is
-    // claimed on every attempt.
+    // The marker guards another process's boot; this call's own spawn is guarded too,
+    // since a marker that cannot be written counts as claimed on every attempt.
     const boot = claimBoot(deps);
     if (boot.claimed && spawnedPid !== undefined && deps.isAlive(spawnedPid)) {
       deps.bootMarker.clear();
