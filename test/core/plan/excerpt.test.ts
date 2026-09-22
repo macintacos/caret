@@ -184,6 +184,11 @@ test("reports a cwd-relative path and infers the language from the extension", a
   expect(ex?.language).toBe("css");
 });
 
+test("previews a .lua file with the lua grammar (EXC-1409)", async () => {
+  write("init.lua", 'local greeting = "hi"\n');
+  expect((await readFileExcerpt(cwd, "init.lua"))?.language).toBe("lua");
+});
+
 test("defaults the language to text for an unknown extension", async () => {
   write("notes", "hello");
   expect((await readFileExcerpt(cwd, "notes"))?.language).toBe("text");
