@@ -35,6 +35,8 @@ After installing:
 1. **Restart the agent.** OpenCode installs the plugin package on its next start.
 2. **Run `/caret:demo`.** It presents a short demo plan that points at files in the repo
    you run it from, so you can exercise the whole flow before a real one arrives.
+3. **Run `/caret:plan <what you want done>`** to plan a real change and review it in
+   `caret` before the agent implements it.
 
 ### Running `caret` yourself
 
@@ -87,10 +89,12 @@ your browser instead of the terminal prompt. There you:
   and re-present.
 
 > [!TIP]
-> You don't have to wait to be intercepted: `caret` gives both agents a plan-review tool
-> they can call directly — `review_plan` in Claude Code (from the plugin's MCP server) and
-> `caret_review_plan` in OpenCode — so a skill of your own can route its plan through the
-> same review UI. The tool is for plans only; see
+> You don't have to wait to be intercepted: `/caret:plan <what you want done>` asks the
+> agent for a plan and routes it straight to the review UI. In OpenCode it runs on the
+> `plan` agent, so switch to `build` to implement once you approve. A skill of your own
+> can do the same with the plan-review tool `caret` gives both agents — `review_plan` in
+> Claude Code (from the plugin's MCP server) and `caret_review_plan` in OpenCode. The tool
+> is for plans only; see
 > [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md#calling-the-review-tool-from-your-own-skill).
 
 ## Configuration
