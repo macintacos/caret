@@ -136,12 +136,9 @@ skill does not prompt again unless a step errors.
 
 ### 3. Compose the release notes
 
-The release is titled by its version alone (`v<version>`); the script sets that title, so
-there is no name to compose.
-
 The notes body's first line is the **theme line**: one or two sentences, read from
-`commits[]`, saying what this release ships and what is worth trying. Lead with the
-net-new features users haven't seen yet, ahead of fixes and polish. It is a plain-language
+`commits[]`, saying what this release ships and what is worth trying. Name the net-new
+features users haven't seen yet first, ahead of fixes and polish. It is a plain-language
 digest, not a re-listing of the category sections under it.
 
 Write it tight and direct, the way the category entries under it read. Lead with
@@ -245,14 +242,13 @@ only the publish.
 bun scripts/tasks/cli.ts release finalize --dry-run --notes-file <path>
 ```
 
-This fetches `origin/trunk` and returns the concrete `version`, `tag`, `title`, and
-`taggedSha` (trunk's merged HEAD), and previews the npm publish, without mutating
-anything. Pass the **same** `--notes-file` you will pass for real, so a mistyped path
-fails here as `NOTES_MISSING` instead of on the real run. It confirms the squash-merge
-from Phase 1 step 5 actually landed: `ok: true` means proceed. If it returns `ok: false`
-with `NOT_MERGED`, the merge didn't reach `origin/trunk` (the `gh pr merge` failed or is
-still settling) — surface that and work with the operator before continuing; do not run
-`finalize --yes`.
+This fetches `origin/trunk` and returns the concrete `version`, `tag`, and `taggedSha`
+(trunk's merged HEAD), and previews the npm publish, without mutating anything. Pass the
+**same** `--notes-file` you will pass for real, so a mistyped path fails here as
+`NOTES_MISSING` instead of on the real run. It confirms the squash-merge from Phase 1 step
+5 actually landed: `ok: true` means proceed. If it returns `ok: false` with `NOT_MERGED`,
+the merge didn't reach `origin/trunk` (the `gh pr merge` failed or is still settling) —
+surface that and work with the operator before continuing; do not run `finalize --yes`.
 
 ### 2. Run finalize
 

@@ -1,7 +1,7 @@
-// Version arithmetic for the release pipeline, plus the release-asset names
-// derived from a version (the tag and the Release title). The release script is
-// the sole source of the version number — the agent never computes or alters it
-// — so all semver math lives here and nowhere else.
+// Version arithmetic for the release pipeline, plus the `vX.Y.Z` tag name
+// derived from a version, which also serves as the Release title. The release
+// script is the sole source of the version number — the agent never computes or
+// alters it — so all semver math lives here and nowhere else.
 
 import semver from "semver";
 

@@ -23,11 +23,11 @@ import {
 import type { BumpLevel } from "@/tasks/release/version.ts";
 
 /** The release PR body: a "What changed" summary and a "What to test" checklist. */
-function prBody(version: string, title: string): string {
+function prBody(version: string): string {
   return [
     "## What changed",
     "",
-    `Release ${title}: bumps the version to ${version} across package.json and the two .claude-plugin manifests.`,
+    `Bumps the version to ${version} across package.json and the two .claude-plugin manifests.`,
     "",
     "## What to test",
     "",
@@ -168,7 +168,7 @@ async function ensurePr(
       head: ctx.releaseBranch,
       base: defaultBranch,
       title,
-      body: prBody(ctx.version, title),
+      body: prBody(ctx.version),
     });
     return { prNumber: pr.number, prUrl: pr.url };
   }
