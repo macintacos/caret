@@ -12,12 +12,11 @@
 // OpenCode resolves an array entry once and caches it forever — re-adding the entry, all
 // a re-run would otherwise do, never moves anyone off the version they installed on.
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
 import {
   addPluginToConfigText,
-  findPluginEntry,
   pluginEntries,
   removePluginFromConfigText,
   setPluginVersionInConfigText,
@@ -44,16 +43,15 @@ import {
 } from "@/adapters/opencode/paths.ts";
 import {
   clearCachedCaret,
-  readCachedCaretVersion,
+  readConfigText,
+  readUpgradeVerdict,
   type UpgradeVerdict,
-  upgradeVerdict,
 } from "@/adapters/opencode/upgrade.ts";
 import type { LocalInstall } from "@/commands/install/local.ts";
 import { promptUpgrade, type StaleVerdict, upgradeVerdictLine } from "@/commands/install/prompt.ts";
 import type { InstallUI } from "@/commands/install/ui.ts";
 import { isTerminal, silentUI } from "@/commands/install/ui.ts";
 import { VERSION } from "@/lib/build-id.ts";
-import { publishedCaretVersion } from "@/lib/upstream.ts";
 
 /** Injection seam for tests: override the config dir and packaging so the target
  * can run against a temp dir without resolving the real caret root, and every effect
@@ -247,15 +245,9 @@ function previewLine(verdict: UpgradeVerdict): string {
   return verdict.kind === "unknown" ? `${line} (${verdict.reason})` : line;
 }
 
-/** Compare the caret OpenCode would load against npm's published one. Read-only: the
- * config entry, the cache, and the registry are all just read, so a dry run may call it
- * too. Each read degrades to null on its own, and the verdict decides what that means. */
+/** This run's upgrade check: the adapter's read, with the test seams threaded in. */
 async function check(configFile: string, deps: InstallOpencodeDeps): Promise<UpgradeVerdict> {
-  return upgradeVerdict({
-    entry: findPluginEntry(readConfigText(configFile), CARET_PACKAGE),
-    cached: readCachedCaretVersion((deps.cacheDirs ?? existingOpencodeCachePackageDirs)()),
-    published: await (deps.published ?? publishedCaretVersion)(),
-  });
+  return readUpgradeVerdict({ configFile, cacheDirs: deps.cacheDirs, published: deps.published });
 }
 
 /** Report the upgrade check, then act on it. Only a stale verdict has anything to do,
@@ -314,11 +306,6 @@ async function upgradeStep(
         ? `Bumped the pin to ${CARET_PACKAGE}@${verdict.published}`
         : `Left ${basename(configFile)} unchanged`,
   );
-}
-
-/** The config file's text, or null when it is absent. */
-function readConfigText(path: string): string | null {
-  return existsSync(path) ? readFileSync(path, "utf-8") : null;
 }
 
 /** Apply `transform` to the config file's text (null when the file is absent),

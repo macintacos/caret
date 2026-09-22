@@ -17,9 +17,10 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
-import { splitPluginSpecifier } from "@/adapters/opencode/config-plugin.ts";
+import { findPluginEntry, splitPluginSpecifier } from "@/adapters/opencode/config-plugin.ts";
 import { CARET_PACKAGE, existingOpencodeCachePackageDirs } from "@/adapters/opencode/paths.ts";
 import { isNewer, parseVersionTriple } from "@/lib/semver.ts";
+import { publishedCaretVersion } from "@/lib/upstream.ts";
 
 /** What install found when it compared the caret OpenCode would load against the one
  * npm publishes. `fresh` and `current` need no action; the two `stale-*` kinds each
@@ -70,6 +71,28 @@ export function upgradeVerdict(input: {
   return isNewer(published, cached)
     ? { kind: "stale-cache", cached, published }
     : { kind: "current", version: cached };
+}
+
+/** Compare the caret OpenCode would load against npm's published one. Read-only: the
+ * config entry, the cache, and the registry are all just read, so a dry run may call it
+ * too. Each read degrades to null on its own, and the verdict decides what that means.
+ * The one call site for both `caret install` and `caret doctor`, so neither can describe
+ * a version gap the other would describe differently. */
+export async function readUpgradeVerdict(deps: {
+  configFile: string;
+  cacheDirs?: () => string[];
+  published?: () => Promise<string | null>;
+}): Promise<UpgradeVerdict> {
+  return upgradeVerdict({
+    entry: findPluginEntry(readConfigText(deps.configFile), CARET_PACKAGE),
+    cached: readCachedCaretVersion((deps.cacheDirs ?? existingOpencodeCachePackageDirs)()),
+    published: await (deps.published ?? publishedCaretVersion)(),
+  });
+}
+
+/** The config file's text, or null when it is absent. */
+export function readConfigText(path: string): string | null {
+  return existsSync(path) ? readFileSync(path, "utf-8") : null;
 }
 
 /** caret's resolved version from the first cache dir whose top-level shim manifest names

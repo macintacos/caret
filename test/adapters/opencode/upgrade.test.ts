@@ -14,6 +14,7 @@ import { join } from "node:path";
 import {
   clearCachedCaret,
   readCachedCaretVersion,
+  readUpgradeVerdict,
   upgradeVerdict,
 } from "@/adapters/opencode/upgrade.ts";
 
@@ -168,4 +169,43 @@ test("clearing removes every cache dir that existed and reports exactly those", 
 test("clearing nothing is not an error and reports nothing", () => {
   expect(clearCachedCaret([join(tmp, "nope")])).toEqual([]);
   expect(clearCachedCaret([])).toEqual([]);
+});
+
+// ---- readUpgradeVerdict: the three reads the verdict is decided over ----
+
+/** An OpenCode config file carrying `entries` in its `plugin` array. */
+function configWith(entries: string[]): string {
+  const path = join(tmp, "opencode.json");
+  writeFileSync(path, JSON.stringify({ plugin: entries }));
+  return path;
+}
+
+test("a pinned config entry is compared against the published version", async () => {
+  expect(
+    await readUpgradeVerdict({
+      configFile: configWith([`${PKG}@0.8.0`]),
+      cacheDirs: () => [],
+      published: async () => "0.9.0",
+    }),
+  ).toEqual({ kind: "stale-pin", entry: `${PKG}@0.8.0`, pinned: "0.8.0", published: "0.9.0" });
+});
+
+test("a bare config entry is compared against what OpenCode cached", async () => {
+  expect(
+    await readUpgradeVerdict({
+      configFile: configWith([PKG]),
+      cacheDirs: () => [cacheDir(PKG, shim("0.8.0"))],
+      published: async () => "0.9.0",
+    }),
+  ).toEqual({ kind: "stale-cache", cached: "0.8.0", published: "0.9.0" });
+});
+
+test("an absent config file reads as no entry at all", async () => {
+  expect(
+    await readUpgradeVerdict({
+      configFile: join(tmp, "no-such-config.json"),
+      cacheDirs: () => [],
+      published: async () => "0.9.0",
+    }),
+  ).toEqual({ kind: "fresh" });
 });
