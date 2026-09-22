@@ -5,20 +5,23 @@ import { join } from "node:path";
 
 import { setupTempStateDir } from "@test/support/env.ts";
 import { expectNeverLogsBody } from "@test/support/redaction.ts";
-import { reviewsDir } from "@/config/paths.ts";
+import { daemonLock, reviewsDir } from "@/config/paths.ts";
 import { DEFAULTS } from "@/config/settings.ts";
 import {
+  type Check,
   collectReport,
   countLogLevels,
-  type DiscoveryDeps,
+  type DoctorDeps,
+  type DoctorDocument,
   listProcesses,
   listReviewFiles,
   logStats,
   parsePsLines,
   type Report,
-  renderReport,
+  renderDocument,
+  renderStdout,
   tallyReviews,
-} from "@/discovery.ts";
+} from "@/doctor/report.ts";
 import { scrubValue } from "@/redact/node.ts";
 
 function boom(): never {
@@ -27,7 +30,7 @@ function boom(): never {
 
 // Happy-path fakes for every injected probe; each test overrides only what it
 // exercises.
-function discoveryDeps(over: Partial<DiscoveryDeps> = {}): DiscoveryDeps {
+function doctorDeps(over: Partial<DoctorDeps> = {}): DoctorDeps {
   return {
     now: () => new Date("2026-06-04T12:00:00.000Z"),
     version: "1.2.3",
@@ -44,6 +47,7 @@ function discoveryDeps(over: Partial<DiscoveryDeps> = {}): DiscoveryDeps {
     }),
     baseUrl: "http://localhost:42718",
     health: async () => ({ service: "caret", version: "1.2.3", build: "abc", commit: "def" }),
+    serviceInstalled: () => false,
     readLock: () => ({ pid: 111, port: 42718, build: "abc", version: "1.2.3", startedAt: 9 }),
     isPidAlive: () => true,
     listProcesses: () => [{ pid: 111, name: "caret-native" }],
@@ -63,11 +67,19 @@ function discoveryDeps(over: Partial<DiscoveryDeps> = {}): DiscoveryDeps {
   };
 }
 
+/** The emitted document: a collected report plus whatever checks ran over it. */
+async function document(
+  over: Partial<DoctorDeps> = {},
+  checks: Check[] = [],
+): Promise<DoctorDocument> {
+  return { ...(await collectReport(doctorDeps(over))), checks };
+}
+
 // ---- happy path ----
 
 test("collectReport assembles a full document with every section present", async () => {
-  const report = await collectReport(discoveryDeps());
-  expect(report.schema).toBe("caret-discovery/1");
+  const report = await collectReport(doctorDeps());
+  expect(report.schema).toBe("caret-doctor/1");
   expect(report.version).toBe("1.2.3");
   expect(report.generatedAt).toBe("2026-06-04T12:00:00.000Z");
   for (const key of [
@@ -86,7 +98,7 @@ test("collectReport assembles a full document with every section present", async
 });
 
 test("happy path populates the section scalars from the deps", async () => {
-  const report = await collectReport(discoveryDeps());
+  const report = await collectReport(doctorDeps());
   expect(report.system).toEqual({ platform: "darwin", os: "macos", arch: "arm64" });
   expect(report.install).toEqual({ kind: "dev", binaryPath: "/bin/caret", bunVersion: "0.0.0" });
   expect(report.daemon).toMatchObject({
@@ -105,7 +117,7 @@ test("happy path populates the section scalars from the deps", async () => {
 });
 
 test("the logs section carries one LogStats per live log path", async () => {
-  const report = await collectReport(discoveryDeps());
+  const report = await collectReport(doctorDeps());
   expect(report.logs).toEqual({
     caret: { path: "/state/logs/caret.log", exists: true, size: 10, errors: 0, warns: 0 },
     daemon: { path: "/state/logs/daemon.log", exists: true, size: 10, errors: 0, warns: 0 },
@@ -139,7 +151,7 @@ const ALL_SECTIONS: Array<keyof Report> = [
 // health feeds daemon+lockAndPort, and readLock/isPidAlive feed
 // lockAndPort+processes — those rows declare every affected section.
 const degradations: Array<
-  [label: string, over: Partial<DiscoveryDeps>, affected: Array<keyof Report>]
+  [label: string, over: Partial<DoctorDeps>, affected: Array<keyof Report>]
 > = [
   ["system", { system: boom }, ["system"]],
   ["install", { install: boom }, ["install"]],
@@ -163,7 +175,7 @@ const degradations: Array<
 
 for (const [label, over, affected] of degradations) {
   test(`a throwing ${label} probe degrades only its section(s) to { error } and still resolves`, async () => {
-    const report = await collectReport(discoveryDeps(over));
+    const report = await collectReport(doctorDeps(over));
     for (const section of affected) expect(report[section]).toHaveProperty("error");
     for (const section of ALL_SECTIONS) {
       if (affected.includes(section)) continue;
@@ -177,7 +189,7 @@ for (const [label, over, affected] of degradations) {
 test("the daemon health is probed exactly once and shared between sections", async () => {
   let calls = 0;
   await collectReport(
-    discoveryDeps({
+    doctorDeps({
       health: async () => {
         calls++;
         return { service: "caret" };
@@ -191,7 +203,7 @@ test("the daemon health is probed exactly once and shared between sections", asy
 
 test("lock port mismatch sets portMismatch and surfaces pidAlive from the fake", async () => {
   const report = await collectReport(
-    discoveryDeps({
+    doctorDeps({
       readLock: () => ({ pid: 222, port: 9999 }),
       isPidAlive: () => true,
       effective: () => ({
@@ -205,21 +217,26 @@ test("lock port mismatch sets portMismatch and surfaces pidAlive from the fake",
   expect(report.lockAndPort).toMatchObject({ lockPort: 9999, portMismatch: true, pidAlive: true });
 });
 
+test("a lock section carries the lock's own path, so the stale-lock remedy can name it", async () => {
+  const report = await collectReport(doctorDeps());
+  expect(report.lockAndPort).toMatchObject({ lockPath: daemonLock() });
+});
+
 test("a port held by a non-caret process is reachable but portServesCaret is false", async () => {
-  const report = await collectReport(discoveryDeps({ health: async () => ({ service: "other" }) }));
+  const report = await collectReport(doctorDeps({ health: async () => ({ service: "other" }) }));
   expect(report.daemon).toMatchObject({ reachable: true, service: "other" });
   expect(report.lockAndPort).toMatchObject({ portServesCaret: false });
 });
 
 test("an unreachable daemon (null health) reports reachable:false without throwing", async () => {
-  const report = await collectReport(discoveryDeps({ health: async () => null }));
-  expect(report.daemon).toEqual({ reachable: false });
+  const report = await collectReport(doctorDeps({ health: async () => null }));
+  expect(report.daemon).toEqual({ reachable: false, serviceInstalled: false });
   expect(report.lockAndPort).toMatchObject({ portServesCaret: false });
 });
 
 test("with no lock, lockAndPort still reports portServesCaret", async () => {
   const report = await collectReport(
-    discoveryDeps({ readLock: () => null, health: async () => ({ service: "caret" }) }),
+    doctorDeps({ readLock: () => null, health: async () => ({ service: "caret" }) }),
   );
   expect(report.lockAndPort).toEqual({ lockExists: false, portServesCaret: true });
 });
@@ -228,7 +245,7 @@ test("with no lock, lockAndPort still reports portServesCaret", async () => {
 
 test("a live lock pid not already listed is merged in, tagged daemon.lock", async () => {
   const report = await collectReport(
-    discoveryDeps({
+    doctorDeps({
       listProcesses: () => [{ pid: 5, name: "caret-native" }],
       readLock: () => ({ pid: 99, port: 42718 }),
       isPidAlive: () => true,
@@ -245,7 +262,7 @@ test("a live lock pid not already listed is merged in, tagged daemon.lock", asyn
 
 test("a lock pid already in the ps list is not duplicated", async () => {
   const report = await collectReport(
-    discoveryDeps({
+    doctorDeps({
       listProcesses: () => [{ pid: 99, name: "caret-native" }],
       readLock: () => ({ pid: 99, port: 42718 }),
       isPidAlive: () => true,
@@ -256,7 +273,7 @@ test("a lock pid already in the ps list is not duplicated", async () => {
 
 test("a dead lock pid is not merged into the process list", async () => {
   const report = await collectReport(
-    discoveryDeps({
+    doctorDeps({
       listProcesses: () => [],
       readLock: () => ({ pid: 99, port: 42718 }),
       isPidAlive: () => false,
@@ -268,7 +285,7 @@ test("a dead lock pid is not merged into the process list", async () => {
 // ---- reviews ----
 
 test("an absent reviews dir yields zeroed tallies and no pending ids", async () => {
-  const report = await collectReport(discoveryDeps({ listReviewFiles: () => [] }));
+  const report = await collectReport(doctorDeps({ listReviewFiles: () => [] }));
   expect(report.reviews).toEqual({
     pending: 0,
     approved: 0,
@@ -285,7 +302,7 @@ test("pendingIds are truncated to 8 chars and capped at 8 entries", async () => 
     id: `pending-id-${i}-with-a-long-tail`,
     status: "pending",
   }));
-  const report = await collectReport(discoveryDeps({ listReviewFiles: () => records }));
+  const report = await collectReport(doctorDeps({ listReviewFiles: () => records }));
   const reviews = report.reviews as { pending: number; pendingIds: string[] };
   expect(reviews.pending).toBe(10); // full count survives
   expect(reviews.pendingIds).toHaveLength(8); // sample is capped
@@ -297,7 +314,7 @@ test("pendingIds are truncated to 8 chars and capped at 8 entries", async () => 
 
 test("installState unknowns pass through untouched", async () => {
   const report = await collectReport(
-    discoveryDeps({
+    doctorDeps({
       readAgentInstallState: () => ({
         pluginVersion: "unknown",
         pluginEnabled: "unknown",
@@ -318,7 +335,7 @@ test("a leaked plan body in a review record is censored by scrubValue and the ta
   const leaky = [
     { id: "abcdef12-0000", status: "pending", plan: "SECRET PLAN BODY TEXT" } as never,
   ];
-  const report = await collectReport(discoveryDeps({ listReviewFiles: () => leaky }));
+  const report = await collectReport(doctorDeps({ listReviewFiles: () => leaky }));
   const scrubbed = scrubValue(report, true);
   expectNeverLogsBody(scrubbed, "SECRET PLAN BODY TEXT");
   // The tally is built from { id, status } only, so it is unaffected.
@@ -328,7 +345,7 @@ test("a leaked plan body in a review record is censored by scrubValue and the ta
 test("home paths and foreign usernames are scrubbed in the finished report", async () => {
   const home = homedir();
   const report = await collectReport(
-    discoveryDeps({
+    doctorDeps({
       install: () => ({
         kind: "prod",
         binaryPath: `${home}/.local/share/caret/bin/caret`,
@@ -345,7 +362,7 @@ test("home paths and foreign usernames are scrubbed in the finished report", asy
 
 test("the report is flat enough that scrubValue never depth-caps a leaf", async () => {
   const report = await collectReport(
-    discoveryDeps({
+    doctorDeps({
       listProcesses: () => [{ pid: 1, name: "caret-native" }],
       readLock: () => ({ pid: 2, port: 42718, build: "b", version: "v", startedAt: 9 }),
       isPidAlive: () => true,
@@ -355,13 +372,12 @@ test("the report is flat enough that scrubValue never depth-caps a leaf", async 
   expect(JSON.stringify(scrubValue(report, true))).not.toContain("<depth-capped>");
 });
 
-// ---- renderReport ----
+// ---- renderDocument ----
 
-test("renderReport renders the header and every section title for a happy report", async () => {
-  const report = await collectReport(discoveryDeps());
-  const text = renderReport(report);
+test("renderDocument renders the header and every section title for a happy report", async () => {
+  const text = renderDocument(await document());
   expect(typeof text).toBe("string");
-  expect(text).toContain("caret-discovery/1");
+  expect(text).toContain("caret-doctor/1");
   for (const title of [
     "system:",
     "install:",
@@ -380,15 +396,14 @@ test("renderReport renders the header and every section title for a happy report
   expect(text).toContain("daemonStderr");
 });
 
-test("renderReport renders a degraded section as an error line and never throws", async () => {
-  const report = await collectReport(discoveryDeps({ system: boom }));
-  const text = renderReport(report);
+test("renderDocument renders a degraded section as an error line and never throws", async () => {
+  const text = renderDocument(await document({ system: boom }));
   expect(text).toContain("system error: probe boom");
 });
 
-test("renderReport tolerates an all-degraded report without throwing", () => {
+test("renderDocument tolerates an all-degraded report without throwing", () => {
   const allError = {
-    schema: "caret-discovery/1",
+    schema: "caret-doctor/1",
     version: "1.0.0",
     generatedAt: "2026-06-04T00:00:00.000Z",
     system: { error: "x" },
@@ -400,9 +415,88 @@ test("renderReport tolerates an all-degraded report without throwing", () => {
     reviews: { error: "x" },
     installState: { error: "x" },
     logs: { error: "x" },
-  } as Report;
-  expect(() => renderReport(allError)).not.toThrow();
+    checks: [],
+  } as DoctorDocument;
+  expect(() => renderDocument(allError)).not.toThrow();
 });
+
+test("the checks block renders before the first state section", async () => {
+  const text = renderDocument(
+    await document({}, [
+      { id: "daemon-lock", title: "Daemon lock", status: "pass", detail: "on port 42718" },
+    ]),
+  );
+  expect(text.indexOf("checks:")).toBeGreaterThan(-1);
+  expect(text.indexOf("checks:")).toBeLessThan(text.indexOf("system:"));
+  expect(text).toContain("✓ daemon-lock");
+});
+
+test("a failing check renders its remedy and an unknown one its reason", async () => {
+  const text = renderDocument(
+    await document({}, [
+      { id: "log-errors", title: "Logs", status: "fail", detail: "2 errors", remedy: "read x.log" },
+      {
+        id: "opencode-caret-version",
+        title: "OpenCode",
+        status: "unknown",
+        detail: "",
+        reason: "offline",
+      },
+    ]),
+  );
+  expect(text).toContain("✗ log-errors");
+  expect(text).toContain("remedy: read x.log");
+  expect(text).toContain("? opencode-caret-version");
+  expect(text).toContain("reason: offline");
+  // A check that claims nothing — every degraded section's — carries no detail, so it
+  // must not render a separator with nothing after it.
+  expect(text).not.toContain("opencode-caret-version —");
+});
+
+test("the status markers stay uncolored unless the caller asks for color", async () => {
+  const checks: Check[] = [
+    { id: "daemon-lock", title: "Daemon lock", status: "pass", detail: "live" },
+    { id: "log-errors", title: "Logs", status: "fail", detail: "2 errors", remedy: "read x.log" },
+    { id: "opencode-caret-version", title: "OpenCode", status: "unknown", detail: "", reason: "x" },
+  ];
+  const doc = await document({}, checks);
+  expect(renderStdout(doc, "text")).not.toContain("\x1b[");
+  const colored = renderStdout(doc, "text", true);
+  expect(colored).toContain("\x1b[32m✓\x1b[0m daemon-lock");
+  expect(colored).toContain("\x1b[31m✗\x1b[0m log-errors");
+  expect(colored).toContain("\x1b[33m?\x1b[0m opencode-caret-version");
+  // Only the marker is colored: the rest of the line pastes clean.
+  expect(colored).toContain("daemon-lock — live");
+});
+
+test("the json format carries no color, whatever the caller asked for", async () => {
+  const doc = await document({}, [
+    { id: "daemon-lock", title: "Daemon lock", status: "pass", detail: "live" },
+  ]);
+  const json = renderStdout(doc, "json", true);
+  expect(json).not.toContain("\x1b[");
+  expect(JSON.parse(json).checks[0].status).toBe("pass");
+});
+
+// ---- the stdout path is scrubbed as one document ----
+
+for (const format of ["text", "json"] as const) {
+  test(`renderStdout (${format}) scrubs the checks alongside the report sections`, async () => {
+    const home = homedir();
+    const doc = await document({ configPath: `${home}/.config/caret/config.toml` }, [
+      {
+        id: "log-errors",
+        title: "Logs",
+        status: "fail",
+        detail: `2 errors in ${home}/.local/state/caret/logs/caret.log`,
+        remedy: `read ${home}/.local/state/caret/logs/caret.log`,
+      },
+    ]);
+    const out = renderStdout(doc, format);
+    expectNeverLogsBody(out, home);
+    expect(out).toContain("~/.local/state/caret/logs/caret.log");
+  });
+}
 
 // ---- pure helpers ----
 
@@ -426,24 +520,39 @@ test("countLogLevels tallies levels, skips malformed and raw crash lines", () =>
   const text = [
     '{"level":30,"msg":"info"}',
     '{"level":40,"msg":"warn"}',
-    '{"level":50,"msg":"error"}',
-    '{"level":60,"msg":"fatal"}', // >= 50 counts as an error too
+    '{"level":50,"time":"2026-06-04T10:00:00.000Z","msg":"error"}',
+    // >= 50 counts as an error too, and the last one dates the tally.
+    '{"level":60,"time":"2026-06-04T11:00:00.000Z","msg":"fatal"}',
     "not json at all (raw crash output)",
     '{"level":"oops"}', // non-numeric level — skipped
     "{ malformed json",
   ].join("\n");
-  expect(countLogLevels(text, false)).toEqual({ errors: 2, warns: 1 });
+  expect(countLogLevels(text, false)).toEqual({
+    errors: 2,
+    warns: 1,
+    lastErrorAt: "2026-06-04T11:00:00.000Z",
+  });
+});
+
+test("countLogLevels leaves the error time unknown when the newest error carries none", () => {
+  const text = [
+    '{"level":50,"time":"2026-06-04T10:00:00.000Z","msg":"dated"}',
+    '{"level":50,"msg":"undated"}',
+  ].join("\n");
+  // Reporting the older record's time would date the tally as settled when the newest
+  // error is in fact undatable.
+  expect(countLogLevels(text, false)).toEqual({ errors: 2, warns: 0, lastErrorAt: undefined });
 });
 
 test("countLogLevels drops a partial first line when the tail started mid-file", () => {
   const text = ['l":50,"msg":"partial"}', '{"level":40,"msg":"warn"}'].join("\n");
   // First line is a mid-record fragment; with dropFirstLine it is ignored.
-  expect(countLogLevels(text, true)).toEqual({ errors: 0, warns: 1 });
+  expect(countLogLevels(text, true)).toMatchObject({ errors: 0, warns: 1 });
   // Without the drop, that fragment still doesn't start with "{" so it's skipped
   // anyway — here the drop matters only for a fragment that DID start with "{".
   const startsWithBrace = ['{"level":50}', '{"level":40}'].join("\n");
-  expect(countLogLevels(startsWithBrace, true)).toEqual({ errors: 0, warns: 1 });
-  expect(countLogLevels(startsWithBrace, false)).toEqual({ errors: 1, warns: 1 });
+  expect(countLogLevels(startsWithBrace, true)).toMatchObject({ errors: 0, warns: 1 });
+  expect(countLogLevels(startsWithBrace, false)).toMatchObject({ errors: 1, warns: 1 });
 });
 
 test("tallyReviews counts mixed statuses, routing an unknown status to other", () => {
@@ -471,7 +580,7 @@ test("tallyReviews counts mixed statuses, routing an unknown status to other", (
 // Point XDG_STATE_HOME at a throwaway temp dir so the readers touch disposable
 // state, never the real ~/.local/state/caret. The state dir + its XDG wiring
 // come from the shared helper.
-const stateDir = setupTempStateDir("caret-discovery-");
+const stateDir = setupTempStateDir("caret-doctor-");
 let tmp: string;
 beforeEach(() => {
   tmp = stateDir();
@@ -521,15 +630,27 @@ test("logStats counts error/warn records and reports the size, never the text", 
   const body = [
     '{"level":30,"msg":"info SENSITIVE"}',
     '{"level":40,"msg":"warn"}',
-    '{"level":50,"msg":"error"}',
+    '{"level":50,"time":"2026-06-04T10:00:00.000Z","msg":"error"}',
     "raw crash output line",
   ].join("\n");
   await writeFile(path, body);
   const stats = await logStats(path);
-  expect(stats).toMatchObject({ exists: true, errors: 1, warns: 1 });
+  expect(stats).toMatchObject({
+    exists: true,
+    errors: 1,
+    warns: 1,
+    lastErrorAt: "2026-06-04T10:00:00.000Z",
+  });
   expect(stats.size).toBeGreaterThan(0);
   // Only the contract fields are present — no log text leaks.
-  expect(Object.keys(stats).sort()).toEqual(["errors", "exists", "path", "size", "warns"]);
+  expect(Object.keys(stats).sort()).toEqual([
+    "errors",
+    "exists",
+    "lastErrorAt",
+    "path",
+    "size",
+    "warns",
+  ]);
   expectNeverLogsBody(stats, "SENSITIVE");
 });
 

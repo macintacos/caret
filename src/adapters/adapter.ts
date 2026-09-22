@@ -10,8 +10,8 @@ export type { ApproveVariant };
 
 /**
  * What the adapter can report about the agent tool's local install — surfaced by
- * the discovery command. Each field degrades to "unknown" rather than throwing, so
- * discovery always renders a report.
+ * the doctor command. Each field degrades to "unknown" rather than throwing, so
+ * doctor always renders a report.
  */
 export interface InstallProbe {
   /** The installed caret package version, or "unknown" if unreadable. */
@@ -60,7 +60,7 @@ export interface AgentAdapter {
    */
   fatalDenyLine(reason: string): string;
 
-  /** Probe the agent tool's local install for the discovery report. */
+  /** Probe the agent tool's local install for the doctor report. */
   readInstallState(): InstallProbe;
 
   /**

@@ -73,6 +73,20 @@ The backend keeps a separate `test/` tree; the browser program colocates its uni
 what `test/` buys, and `ui/` has no core/adapter boundary to protect. Don't "fix" either
 side to match the other.
 
+## The XDG floor
+
+`bunfig.toml`'s `[test] preload` runs `test/support/xdg-preload.ts` before any suite,
+pointing `XDG_STATE_HOME` and `XDG_CONFIG_HOME` at fixed dirs under `tmpdir()`. A suite
+that never thinks about isolation therefore still resolves caret's state and config away
+from the developer's own, and `test/structure/xdg-isolation.test.ts` fails if that stops
+holding.
+
+It is a floor, not isolation: those dirs are shared by every test process, so anything a
+suite writes and later reads still needs `setupTempStateDir` / `setupTempConfigFile`. What
+the floor rules out is the failure nobody sees — an unisolated suite logging an error into
+the live `~/.local/state/caret/logs/caret.log` once per run, with nothing red to show for
+it.
+
 ## Where else tests live
 
 - **Browser/UI** — `ui/src/**/*.test.ts` (happy-dom units, whose shared harness sits in

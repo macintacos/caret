@@ -1,6 +1,6 @@
-// Claude Code's install probe for the discovery command: a best-effort,
+// Claude Code's install probe for the doctor command: a best-effort,
 // strictly read-only read of caret's plugin install state from Claude's config
-// dir. Every field degrades to "unknown" rather than throwing, so discovery can
+// dir. Every field degrades to "unknown" rather than throwing, so doctor can
 // always render the install-state section. Reads ONLY caret's own entries —
 // never any other settings key (privacy).
 

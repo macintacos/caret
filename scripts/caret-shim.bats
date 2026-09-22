@@ -65,8 +65,8 @@ shim() { "$BASH_BIN" "$root/bin/caret" "$@"; }
 @test "execs bun src/cli.ts when only source exists" {
   rmdir "$root/dist"
   seed_source
-  run -0 shim discovery
-  [[ "$output" == *"SOURCE:discovery"* ]]
+  run -0 shim doctor
+  [[ "$output" == *"SOURCE:doctor"* ]]
 }
 
 # A bundle-only root run with a PATH carrying the coreutils the shim needs

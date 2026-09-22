@@ -1,5 +1,5 @@
 // Where Claude Code keeps the files caret reads: its config dir and the two
-// registry/settings files under it. Both readers — the discovery install probe
+// registry/settings files under it. Both readers — the doctor install probe
 // (install.ts) and the skill enumerator (skills.ts) — resolve through here, so
 // they can never disagree about a path. Mirrors the role
 // `src/adapters/opencode/paths.ts` plays for the OpenCode adapter.

@@ -11,7 +11,7 @@ function asText(haystack: unknown): string {
  *
  * Plan/prompt/feedback/draft bodies and identifying paths are structurally
  * censored before they reach a log (src/redact/node.ts), so one surfacing in a
- * captured log, discovery report, or daemon wire payload is a redaction leak.
+ * captured log, doctor report, or daemon wire payload is a redaction leak.
  */
 export function expectNeverLogsBody(haystack: unknown, secrets: string | string[]): void {
   const text = asText(haystack);

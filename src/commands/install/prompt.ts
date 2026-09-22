@@ -1,14 +1,14 @@
 // The questions `caret install` asks, and the copy that describes what they are about:
 // the agent chooser, whether caret keeps the review UI running, and the confirm a stale
-// OpenCode raises. The verdict lines live here too, beside the question they turn into,
-// so the prompt, the check's settled line, and the non-interactive nudge all describe a
-// version gap the same way.
+// OpenCode raises. The line naming the version gap is the adapter's (upgrade.ts); what
+// this module adds is the remedy the question offers, so the prompt and the check
+// describe the gap itself the same way.
 //
 // @clack/prompts is loaded through a dynamic import so only these paths pay for it —
 // src/cli.ts is the review hook's entrypoint on every plan, and install is the one
 // subcommand branch that ever renders a prompt.
 
-import type { UpgradeVerdict } from "@/adapters/opencode/upgrade.ts";
+import { type StaleVerdict, upgradeVerdictLine } from "@/adapters/opencode/upgrade.ts";
 import type { ServiceChoice } from "@/commands/install/service.ts";
 import { INSTALL_TARGETS, type InstallTarget } from "@/commands/install/targets.ts";
 
@@ -53,30 +53,6 @@ export async function promptForServiceChoice(): Promise<AskedServiceChoice | nul
     ],
   });
   return isCancel(choice) ? null : choice;
-}
-
-/** The two verdicts with a remedy to offer — the only ones anyone is asked about. Spelled
- * out rather than matched on a `stale-*` prefix, so a third stale kind is a compile error
- * here, at the copy that would have to describe its remedy. */
-export type StaleVerdict = Extract<UpgradeVerdict, { kind: "stale-cache" | "stale-pin" }>;
-
-/** One line naming what an upgrade check found: which caret OpenCode would load, and,
- * when it is behind, which one npm publishes. `unknown` deliberately names no version —
- * the check could not be made, so any number in the line would be a claim caret cannot
- * support (the reason is reported separately, as a warning). */
-export function upgradeVerdictLine(verdict: UpgradeVerdict): string {
-  switch (verdict.kind) {
-    case "fresh":
-      return "OpenCode will resolve caret on its next start";
-    case "current":
-      return `OpenCode's caret is ${verdict.version} — already current`;
-    case "stale-cache":
-      return `OpenCode's cached caret is ${verdict.cached}; ${verdict.published} is published`;
-    case "stale-pin":
-      return `Your config pins ${verdict.entry}; ${verdict.published} is published`;
-    case "unknown":
-      return "Could not check which caret OpenCode would load";
-  }
 }
 
 /** The upgrade confirm's question: the version gap, then the remedy that closes it —

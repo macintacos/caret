@@ -2,7 +2,7 @@
 #
 # caret plugin entrypoint shim (EXC-643). This is the ONE file Claude Code's
 # hooks invoke — `${CLAUDE_PLUGIN_ROOT}/bin/caret <subcommand>` (see
-# hooks/hooks.json and commands/discovery.md). It is committed and shipped in
+# hooks/hooks.json and commands/doctor.md). It is committed and shipped in
 # every install; it resolves the actual caret runtime from whatever the install
 # method placed beside it:
 #

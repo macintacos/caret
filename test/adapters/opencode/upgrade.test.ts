@@ -1,9 +1,10 @@
-// The OpenCode upgrade module (EXC-909): the pure "is this install stale?" decision
-// plus the two cache effects it needs — reading OpenCode's cached caret version and
-// clearing those cache dirs. The decision is a table over the verdict rules; the
-// effects are driven against a temp dir, so nothing here touches the real cache. The
-// published version the verdict compares against is read by `@/lib/upstream.ts` and
-// covered by its own suite.
+// The OpenCode upgrade module (EXC-909): the pure "is this install stale?" decision,
+// the two cache effects it needs — reading OpenCode's cached caret version and
+// clearing those cache dirs — and how the verdict is described to a reader, as
+// install's line and as doctor's check. The decision is a table over the verdict
+// rules; the effects are driven against a temp dir, so nothing here touches the real
+// cache. The published version the verdict compares against is read by
+// `@/lib/upstream.ts` and covered by its own suite.
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
@@ -13,11 +14,23 @@ import { join } from "node:path";
 
 import {
   clearCachedCaret,
+  hasCaretPluginEntry,
   readCachedCaretVersion,
+  readUpgradeVerdict,
+  type UpgradeVerdict,
+  upgradeCheck,
   upgradeVerdict,
+  upgradeVerdictLine,
 } from "@/adapters/opencode/upgrade.ts";
 
 const PKG = "@macintacos/caret";
+const STALE_CACHE = { kind: "stale-cache", cached: "0.2.0", published: "0.8.1" } as const;
+const STALE_PIN = {
+  kind: "stale-pin",
+  entry: `${PKG}@0.7.3`,
+  pinned: "0.7.3",
+  published: "0.8.1",
+} as const;
 
 let tmp: string;
 beforeEach(async () => {
@@ -168,4 +181,104 @@ test("clearing removes every cache dir that existed and reports exactly those", 
 test("clearing nothing is not an error and reports nothing", () => {
   expect(clearCachedCaret([join(tmp, "nope")])).toEqual([]);
   expect(clearCachedCaret([])).toEqual([]);
+});
+
+// ---- readUpgradeVerdict: the three reads the verdict is decided over ----
+
+/** An OpenCode config file carrying `entries` in its `plugin` array. */
+function configWith(entries: string[]): string {
+  const path = join(tmp, "opencode.json");
+  writeFileSync(path, JSON.stringify({ plugin: entries }));
+  return path;
+}
+
+test("a pinned config entry is compared against the published version", async () => {
+  expect(
+    await readUpgradeVerdict({
+      configFile: configWith([`${PKG}@0.8.0`]),
+      cacheDirs: () => [],
+      published: async () => "0.9.0",
+    }),
+  ).toEqual({ kind: "stale-pin", entry: `${PKG}@0.8.0`, pinned: "0.8.0", published: "0.9.0" });
+});
+
+test("a bare config entry is compared against what OpenCode cached", async () => {
+  expect(
+    await readUpgradeVerdict({
+      configFile: configWith([PKG]),
+      cacheDirs: () => [cacheDir(PKG, shim("0.8.0"))],
+      published: async () => "0.9.0",
+    }),
+  ).toEqual({ kind: "stale-cache", cached: "0.8.0", published: "0.9.0" });
+});
+
+test("an absent config file reads as no entry at all", async () => {
+  expect(
+    await readUpgradeVerdict({
+      configFile: join(tmp, "no-such-config.json"),
+      cacheDirs: () => [],
+      published: async () => "0.9.0",
+    }),
+  ).toEqual({ kind: "fresh" });
+});
+
+// ---- hasCaretPluginEntry: the question doctor asks before paying for the check ----
+
+test("a config naming caret has an entry; one naming another plugin does not", () => {
+  expect(hasCaretPluginEntry(configWith([`${PKG}@0.8.0`]))).toBe(true);
+  expect(hasCaretPluginEntry(configWith([PKG]))).toBe(true);
+  expect(hasCaretPluginEntry(configWith(["opencode-wakatime"]))).toBe(false);
+});
+
+test("an absent config file carries no entry", () => {
+  expect(hasCaretPluginEntry(join(tmp, "no-such-config.json"))).toBe(false);
+});
+
+// ---- the verdict's line, and the check doctor renders it as ----
+
+test("every verdict has a line, and only the stale ones name a version gap", () => {
+  const lines: Record<UpgradeVerdict["kind"], string> = {
+    fresh: upgradeVerdictLine({ kind: "fresh" }),
+    current: upgradeVerdictLine({ kind: "current", version: "0.8.1" }),
+    "stale-cache": upgradeVerdictLine(STALE_CACHE),
+    "stale-pin": upgradeVerdictLine(STALE_PIN),
+    unknown: upgradeVerdictLine({ kind: "unknown", reason: "offline" }),
+  };
+  expect(lines.current).toContain("0.8.1");
+  expect(lines["stale-cache"]).toContain("0.2.0");
+  expect(lines["stale-pin"]).toContain(`${PKG}@0.7.3`);
+  // A line that could not be read must not read as a verdict about a version.
+  expect(lines.unknown).not.toContain("0.8.1");
+  expect(Object.values(lines).every((l) => l.length > 0)).toBe(true);
+});
+
+test("a settled verdict passes", () => {
+  expect(upgradeCheck({ kind: "fresh" }).status).toBe("pass");
+  expect(upgradeCheck({ kind: "current", version: "0.9.0" }).status).toBe("pass");
+});
+
+test("either staleness fails and names the flag that closes it", () => {
+  for (const verdict of [STALE_CACHE, STALE_PIN]) {
+    const check = upgradeCheck(verdict);
+    expect(check.status).toBe("fail");
+    expect(check.status === "fail" && check.remedy).toContain("--refresh");
+  }
+});
+
+test("the two stale kinds get their own remedies — a cache is cleared, a pin is bumped", () => {
+  const cache = upgradeCheck(STALE_CACHE);
+  const pin = upgradeCheck(STALE_PIN);
+  expect(cache.status === "fail" && pin.status === "fail" && cache.remedy).not.toBe(
+    pin.status === "fail" ? pin.remedy : "",
+  );
+});
+
+test("an unreadable verdict is unknown and carries its reason", () => {
+  const check = upgradeCheck({ kind: "unknown", reason: "no network" });
+  expect(check.status).toBe("unknown");
+  expect(check.status === "unknown" && check.reason).toBe("no network");
+});
+
+test("the check's detail is the same line install prints, so neither can drift", () => {
+  expect(upgradeCheck(STALE_PIN).detail).toBe(upgradeVerdictLine(STALE_PIN));
 });

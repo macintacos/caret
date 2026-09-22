@@ -19,11 +19,11 @@ service that keeps the review UI up (see
 | Linux | systemd user unit `caret.service`. Needs a systemd user session; lingering keeps it running past logout | `xdg-open` |
 | Windows | none — caret runs on demand | `cmd /c start` |
 
-The process-discovery probe behind `caret discovery` (`src/discovery.ts`) shells out to
-the BSD-flavored `ps -axo pid=,comm=` everywhere.
+The process probe behind `caret doctor` (`src/doctor/report.ts`) shells out to the
+BSD-flavored `ps -axo pid=,comm=` everywhere.
 
 > [!NOTE]
-> If the browser doesn't open, or discovery shows no processes, on Linux or Windows: the
+> If the browser doesn't open, or doctor shows no processes, on Linux or Windows: the
 > review URL caret prints to stderr is the fallback.
 
 ## Config file

@@ -4,7 +4,7 @@
 
 import { afterEach, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -57,7 +57,7 @@ function noConfig(stateHome: string): string {
   return join(stateHome, "none.toml");
 }
 
-// In-process health/discovery probe servers (a bare createServer + fixed-path
+// In-process health/doctor probe servers (a bare createServer + fixed-path
 // store, distinct from bootDaemon's full boot+client). Stopped after each test.
 const servers: Array<{ stop(): void }> = [];
 afterEach(() => {
@@ -470,17 +470,20 @@ test("caret redact reports when there are no logs to scrub", async () => {
   }
 });
 
-// `caret discovery` end-to-end (EXC-464): argv routing (human vs --json), the
+// `caret doctor` end-to-end (EXC-464): argv routing (human vs --json), the
 // always-on redaction, and the exit-0-on-degraded contract — real subprocess,
 // like the redact tests above. CARET_PORT points at a just-released free port
-// so the probe never touches a real daemon; CLAUDE_CONFIG_DIR points at the
-// empty state home so installState stays hermetic ("unknown").
-function discoveryEnv(stateHome: string): Record<string, string> {
+// so the probe never touches a real daemon; both agent config dirs point at the
+// empty state home, which keeps installState hermetic ("unknown") and leaves
+// OpenCode's config carrying no caret entry, so the version check is skipped
+// and no run reaches npm.
+function doctorEnv(stateHome: string): Record<string, string> {
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
     XDG_STATE_HOME: stateHome,
     CARET_PORT: String(freePort()),
     CLAUDE_CONFIG_DIR: join(stateHome, "claude"),
+    OPENCODE_CONFIG_DIR: join(stateHome, "opencode"),
   };
   // Force the default config path (~/.config/...): its home prefix is exactly
   // what the always-on scrub must rewrite to ~.
@@ -488,17 +491,18 @@ function discoveryEnv(stateHome: string): Record<string, string> {
   return env;
 }
 
-test("caret discovery prints a human-readable report and exits 0", async () => {
-  const stateHome = await mkdtemp(join(tmpdir(), "caret-discovery-human-"));
+test("caret doctor prints a human-readable report and exits 0", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-doctor-human-"));
   try {
-    const { exitCode, stdout: out } = await runCaretCli(["discovery"], {
-      env: discoveryEnv(stateHome),
+    const { exitCode, stdout: out } = await runCaretCli(["doctor"], {
+      env: doctorEnv(stateHome),
     });
     expect(exitCode).toBe(0);
-    expect(out.startsWith("caret discovery (caret-discovery/1)")).toBe(true);
+    expect(out.startsWith("caret doctor (caret-doctor/1)")).toBe(true);
     // Every section title renders, and the daemon (nothing on the port) reads
     // as unreachable.
     for (const title of [
+      "checks:",
       "system:",
       "install:",
       "settings:",
@@ -511,21 +515,93 @@ test("caret discovery prints a human-readable report and exits 0", async () => {
     ]) {
       expect(out).toContain(title);
     }
-    expect(out).toContain("reachable : false");
+    expect(out).toMatch(/^ {2}reachable +: false$/m);
+    // An empty state home is a healthy one: an idle-exited daemon, no lock, no logs.
+    expect(out).toMatch(/^ {2}✓ daemon-reachable /m);
   } finally {
     await rm(stateHome, { recursive: true, force: true });
   }
 });
 
-test("caret discovery --json prints one parseable, redacted document", async () => {
-  const stateHome = await mkdtemp(join(tmpdir(), "caret-discovery-json-"));
+test("caret doctor --bundle refuses without a terminal and without --yes", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-doctor-bundle-"));
   try {
-    const { exitCode, stdout: out } = await runCaretCli(["discovery", "--json"], {
-      env: discoveryEnv(stateHome),
+    // A spawned child has no terminal on either end, which is the condition under test.
+    const { exitCode } = await runCaretCli(["doctor", "--bundle"], {
+      env: doctorEnv(stateHome),
+    });
+    expect(exitCode).toBe(2);
+    expect(existsSync(join(stateHome, "caret"))).toBe(false);
+  } finally {
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
+test("caret doctor --bundle announces the archive before it prints the report", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-doctor-bundle-yes-"));
+  try {
+    // The archive is on disk the moment it is written, so its path is reported then —
+    // not after a report that may never be printed.
+    const { exitCode, stdout: out } = await runCaretCli(["doctor", "--bundle", "--yes"], {
+      env: doctorEnv(stateHome),
+    });
+    expect(exitCode).toBe(0);
+    expect(out).toContain("caret doctor: wrote ");
+    expect(out.indexOf("caret doctor: wrote ")).toBeLessThan(
+      out.indexOf("caret doctor (caret-doctor/1)"),
+    );
+  } finally {
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
+test("caret doctor exits 1 and names a remedy when a check fails", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-doctor-fail-"));
+  try {
+    const logs = join(stateHome, "caret", "logs");
+    await mkdir(logs, { recursive: true });
+    const justNow = new Date().toISOString();
+    await writeFile(join(logs, "caret.log"), `{"level":50,"time":"${justNow}","msg":"boom"}\n`);
+    const { exitCode, stdout: out } = await runCaretCli(["doctor"], {
+      env: doctorEnv(stateHome),
+    });
+    expect(exitCode).toBe(1);
+    expect(out).toMatch(/^ {2}✗ log-errors /m);
+    expect(out).toContain(justNow);
+    expect(out).toMatch(/^ {4}remedy: /m);
+  } finally {
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
+test("caret doctor exits 0 when the only error records have aged out", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-doctor-stale-"));
+  try {
+    const logs = join(stateHome, "caret", "logs");
+    await mkdir(logs, { recursive: true });
+    const longAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    await writeFile(join(logs, "caret.log"), `{"level":50,"time":"${longAgo}","msg":"boom"}\n`);
+    const { exitCode, stdout: out } = await runCaretCli(["doctor"], {
+      env: doctorEnv(stateHome),
+    });
+    expect(exitCode).toBe(0);
+    expect(out).toMatch(/^ {2}✓ log-errors /m);
+    // The record is still surfaced — it just no longer stands as a verdict.
+    expect(out).toContain(longAgo);
+  } finally {
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
+test("caret doctor --json prints one parseable, redacted document", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-doctor-json-"));
+  try {
+    const { exitCode, stdout: out } = await runCaretCli(["doctor", "--json"], {
+      env: doctorEnv(stateHome),
     });
     expect(exitCode).toBe(0);
     const report = JSON.parse(out) as Record<string, unknown>;
-    expect(report.schema).toBe("caret-discovery/1");
+    expect(report.schema).toBe("caret-doctor/1");
     expect(report.version).toBe(VERSION);
     for (const key of [
       "system",
@@ -542,7 +618,8 @@ test("caret discovery --json prints one parseable, redacted document", async () 
     }
     // Empty state + nothing on the port: every probe degrades gracefully, the
     // run still exits 0 (the acceptance contract).
-    expect(report.daemon).toEqual({ reachable: false });
+    expect(report.daemon).toEqual({ reachable: false, serviceInstalled: false });
+    expect((report.checks as unknown[]).length).toBeGreaterThan(0);
     // Always-redacted: the home prefix never appears raw — the default config
     // path renders as ~/.config/... and the bun binaryPath is scrubbed too.
     expectNeverLogsBody(out, homedir());
@@ -556,8 +633,8 @@ test("caret discovery --json prints one parseable, redacted document", async () 
   }
 });
 
-test("caret discovery --json reports a live daemon's identity and commit", async () => {
-  const stateHome = await mkdtemp(join(tmpdir(), "caret-discovery-live-"));
+test("caret doctor --json reports a live daemon's identity and commit", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-doctor-live-"));
   const srv = createServer({
     store: createStore(join(stateHome, "reviews")),
     port: 0,
@@ -565,14 +642,15 @@ test("caret discovery --json reports a live daemon's identity and commit", async
     commit: "it-commit",
   });
   servers.push(srv);
-  const env = discoveryEnv(stateHome);
+  const env = doctorEnv(stateHome);
   env.CARET_PORT = String(srv.port);
   try {
-    const { exitCode, stdout: out } = await runCaretCli(["discovery", "--json"], { env });
+    const { exitCode, stdout: out } = await runCaretCli(["doctor", "--json"], { env });
     expect(exitCode).toBe(0);
     const report = JSON.parse(out) as Record<string, unknown>;
     expect(report.daemon).toEqual({
       reachable: true,
+      serviceInstalled: false,
       service: "caret",
       daemonVersion: VERSION,
       build: "it-build",

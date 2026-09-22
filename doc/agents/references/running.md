@@ -5,7 +5,7 @@
 `doc/RUNNING.md` is the human-facing guide to caret in use, behind
 [`README.md`](../../../README.md): desktop notifications and their per-origin permission
 model, cmux unread marks, and logging & debugging (the log files, the record shape,
-`caret redact`, and `caret discovery`).
+`caret redact`, and `caret doctor`).
 
 When to edit it:
 

@@ -19,6 +19,7 @@ Find the row that matches what you came here to do, then follow the link.
 | Find out what the mark on the settings button means, or stop update notices | [`RUNNING.md` § Update notices](RUNNING.md#update-notices) |
 | Stop caret starting with your machine, or remove it | [`RUNNING.md` § Turning caret off](RUNNING.md#turning-caret-off) |
 | Find the logs, or scrub them before sharing | [`RUNNING.md` § Logging & Debugging](RUNNING.md#logging--debugging) |
+| Work out why caret isn't working, or gather a report to share | [`RUNNING.md` § Diagnostics](RUNNING.md#diagnostics) |
 | Understand how caret works, and how it hooks into your agent | [`ARCHITECTURE.md` § How it works](ARCHITECTURE.md#how-it-works) |
 | Call the review tool from a skill of your own | [`ARCHITECTURE.md` § Calling the review tool from your own skill](ARCHITECTURE.md#calling-the-review-tool-from-your-own-skill) |
 | Find where something lives in the source tree | [`ARCHITECTURE.md` § Layout](ARCHITECTURE.md#layout) |

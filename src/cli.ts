@@ -16,7 +16,7 @@ import type { Command } from "@commander-js/extra-typings";
 
 import { fatalDeny } from "@/adapters/index.ts";
 import { runDaemon } from "@/commands/daemon.ts";
-import { runDiscoverySubcommand } from "@/commands/discovery.ts";
+import { runDoctorSubcommand } from "@/commands/doctor.ts";
 import { installExitCode, runInstallSubcommand } from "@/commands/install/index.ts";
 import { runPrewarm } from "@/commands/prewarm.ts";
 import { runReconcileSubcommand } from "@/commands/reconcile.ts";
@@ -84,10 +84,18 @@ function buildProgram(): Command {
     .action(() => runRedactSubcommand());
 
   program
-    .command("discovery")
-    .description("print a diagnostics report")
+    .command("doctor")
+    .description("diagnose this caret install")
     .option("--json", "emit the machine-readable JSON document")
-    .action((opts) => runDiscoverySubcommand({ json: opts.json ?? false }));
+    .option("--bundle", "also write a zip of the raw logs and review records, to share")
+    .option("--yes", "write the bundle without asking — it holds unredacted content")
+    .action((opts) =>
+      runDoctorSubcommand({
+        json: opts.json ?? false,
+        bundle: opts.bundle ?? false,
+        yes: opts.yes ?? false,
+      }),
+    );
 
   program
     .command("install")

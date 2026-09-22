@@ -57,8 +57,8 @@ second line that restates the line above it is clutter, not signal.
 | `warn`  | 40      | A recoverable oddity that deserves attention but didn't fail the operation.                  |
 | `error` | 50      | Genuine failures only.                                                                        |
 
-`error` is for genuine failures only. `/caret:debug` and users treat any record at level ≥
-50 as a failure, so a noisy `error` level cries wolf — a recoverable oddity is a `warn`,
+`error` is for genuine failures only. `/caret:doctor` and users treat any record at level
+≥ 50 as a failure, so a noisy `error` level cries wolf — a recoverable oddity is a `warn`,
 not an `error`.
 
 ## Message style

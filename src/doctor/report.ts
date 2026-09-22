@@ -1,4 +1,4 @@
-// Read-only diagnostics snapshot for `caret discovery` (EXC-464): a one-shot,
+// Read-only diagnostics snapshot for `caret doctor` (EXC-464): a one-shot,
 // ALWAYS-REDACTED picture of the local install for pasting into a bug report.
 // This module assembles the document and renders it; it NEVER mutates anything
 // (no lock cleanup, no file writes) and NEVER logs — its output IS the report.
@@ -14,12 +14,13 @@ import { readdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 
 import type { InstallProbe } from "@/adapters/adapter.ts";
-import { reviewsDir } from "@/config/paths.ts";
+import { daemonLock, reviewsDir } from "@/config/paths.ts";
 import type { Settings } from "@/config/settings.ts";
 import type { DaemonLock } from "@/lib/build-id.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
 import { shortId } from "@/lib/log.ts";
 import { errorMessage, type HealthIdentity } from "@/lib/types.ts";
+import { scrubValue } from "@/redact/node.ts";
 
 // ---------------------------------------------------------------------------
 // Injected probe shapes
@@ -47,18 +48,22 @@ export interface ReviewStatusRecord {
   status: string;
 }
 
-/** Bounded summary of a log file: counts only, never log text. */
+/** Bounded summary of a log file: counts only, never log text. `lastErrorAt` is the
+ * newest counted error record's own `time`, which dates the tally so a verdict can tell a
+ * log that is still failing from one that settled; it is absent when no error was counted
+ * or the newest one carried no timestamp. */
 export interface LogStats {
   path: string;
   exists: boolean;
   size: number;
   errors: number;
   warns: number;
+  lastErrorAt?: string;
 }
 
 /** Every side-effecting input the report needs, injected so collectReport is a
  * pure function of its deps (the CLI phase wires the prod readers below). */
-export interface DiscoveryDeps {
+export interface DoctorDeps {
   /** ISO timestamp source. */
   now: () => Date;
   /** This binary's caret version (VERSION in prod). */
@@ -74,6 +79,10 @@ export interface DiscoveryDeps {
   baseUrl: string;
   /** Parsed /api/health body or null when unreachable (httpHealth in prod; 500ms bounded). */
   health: (baseUrl: string) => Promise<HealthIdentity | null>;
+  /** Whether this machine's install recorded a service unit — the only thing that
+   * distinguishes a supervisor that should be keeping a daemon up from an on-demand
+   * one that idle-exited by design. */
+  serviceInstalled: () => boolean;
   readLock: () => DaemonLock | null;
   isPidAlive: (pid: number) => boolean;
   listProcesses: () => ProcessEntry[];
@@ -97,21 +106,62 @@ export interface SectionError {
   error: string;
 }
 
+/** One verdict over the collected report. A `fail` always names the remedy that closes
+ * it and an `unknown` always names why it could not be decided, so neither can be
+ * emitted without the one thing that makes it actionable. */
+export type Check = { id: string; title: string; detail: string } & (
+  | { status: "pass" }
+  | { status: "fail"; remedy: string }
+  | { status: "unknown"; reason: string }
+);
+
+/** What the one shared health probe saw, plus whether this install recorded a service
+ * unit. A reachable port answering as something other than "caret" is a squatter, not a
+ * daemon — src/doctor/checks.ts draws that distinction from `service`. */
+export interface DaemonSection {
+  reachable: boolean;
+  serviceInstalled: boolean;
+  service?: string;
+  daemonVersion?: string;
+  build?: string;
+  commit?: string;
+}
+
+/** The lock file reconciled against the effective port. Everything past the first two
+ * fields is absent when no lock file exists. */
+export interface LockSection {
+  lockExists: boolean;
+  portServesCaret: boolean;
+  lockPath?: string;
+  lockPid?: number;
+  lockPort?: number;
+  lockBuild?: string;
+  lockVersion?: string;
+  lockStartedAt?: number;
+  pidAlive?: boolean;
+  portMismatch?: boolean;
+}
+
 /** Flat-by-design so scrubValue's depth-6 cap never clips a leaf. */
 export interface Report {
-  schema: "caret-discovery/1";
+  schema: "caret-doctor/1";
   version: string;
   generatedAt: string;
   system: { platform: string; os: string; arch: string } | SectionError;
   install: { kind: string; binaryPath: string; bunVersion: string } | SectionError;
   settings: Record<string, unknown> | SectionError;
-  daemon: Record<string, unknown> | SectionError;
-  lockAndPort: Record<string, unknown> | SectionError;
+  daemon: DaemonSection | SectionError;
+  lockAndPort: LockSection | SectionError;
   processes: { count: number; items: ProcessItem[] } | SectionError;
   reviews: ReviewsSection | SectionError;
   installState: InstallProbe | SectionError;
   logs: { caret: LogStats; daemon: LogStats; daemonStderr: LogStats } | SectionError;
 }
+
+/** What doctor emits: the collected state plus the verdicts read off it. A second type
+ * rather than a Report field, so collectReport — which cannot fill checks — never
+ * carries one. */
+export type DoctorDocument = Report & { checks: Check[] };
 
 /** A merged process entry: the listed caret processes plus (when alive and not
  * already listed) the daemon lock's pid, each tagged with how it was found. */
@@ -150,7 +200,7 @@ async function safe<T>(build: () => T | Promise<T>): Promise<T | SectionError> {
  * safe(). Does NOT redact — the CLI caller scrubs, always and regardless of
  * [logging].redact. The daemon health is probed ONCE (one bounded network call)
  * and shared between the `daemon` and `lockAndPort` sections. */
-export async function collectReport(deps: DiscoveryDeps): Promise<Report> {
+export async function collectReport(deps: DoctorDeps): Promise<Report> {
   // One bounded health probe, shared. Wrapped so a throwing health() can't sink
   // collectReport; both sections see null (treated as unreachable) on failure.
   let health: HealthIdentity | null = null;
@@ -166,7 +216,7 @@ export async function collectReport(deps: DiscoveryDeps): Promise<Report> {
       safe(() => deps.system()),
       safe(() => deps.install()),
       safe(() => buildSettings(deps)),
-      healthError ?? safe(() => buildDaemon(health)),
+      healthError ?? safe(() => buildDaemon(deps, health)),
       healthError ?? safe(() => buildLockAndPort(deps, health)),
       safe(() => buildProcesses(deps)),
       safe(() => tallyReviews(deps.listReviewFiles())),
@@ -175,7 +225,7 @@ export async function collectReport(deps: DiscoveryDeps): Promise<Report> {
     ]);
 
   return {
-    schema: "caret-discovery/1",
+    schema: "caret-doctor/1",
     version: deps.version,
     generatedAt: deps.now().toISOString(),
     system,
@@ -192,7 +242,7 @@ export async function collectReport(deps: DiscoveryDeps): Promise<Report> {
 
 /** Flatten the settings/effective values to dotted/prefixed scalar keys (the
  * depth-budget discipline). */
-function buildSettings(deps: DiscoveryDeps): Record<string, unknown> {
+function buildSettings(deps: DoctorDeps): Record<string, unknown> {
   const s = deps.settings();
   const e = deps.effective();
   return {
@@ -214,10 +264,12 @@ function buildSettings(deps: DiscoveryDeps): Record<string, unknown> {
 /** The daemon section from the shared health probe: unreachable (null) →
  * { reachable: false }; reachable → its identity, whatever service it claims
  * (a non-caret squatter still shows reachable, with its own service). */
-function buildDaemon(health: HealthIdentity | null): Record<string, unknown> {
-  if (!health) return { reachable: false };
+function buildDaemon(deps: DoctorDeps, health: HealthIdentity | null): DaemonSection {
+  const serviceInstalled = deps.serviceInstalled();
+  if (!health) return { reachable: false, serviceInstalled };
   return {
     reachable: true,
+    serviceInstalled,
     service: health.service,
     daemonVersion: health.version,
     build: health.build,
@@ -228,15 +280,13 @@ function buildDaemon(health: HealthIdentity | null): Record<string, unknown> {
 /** The lock + port reconciliation, flattened. portServesCaret comes from the
  * shared health probe (service === "caret"); portMismatch compares the lock's
  * port to the effective port. No lock → { lockExists: false, portServesCaret }. */
-function buildLockAndPort(
-  deps: DiscoveryDeps,
-  health: HealthIdentity | null,
-): Record<string, unknown> {
+function buildLockAndPort(deps: DoctorDeps, health: HealthIdentity | null): LockSection {
   const portServesCaret = health?.service === "caret";
   const lock = deps.readLock();
   if (!lock) return { lockExists: false, portServesCaret };
   return {
     lockExists: true,
+    lockPath: daemonLock(),
     lockPid: lock.pid,
     lockPort: lock.port,
     lockBuild: lock.build,
@@ -251,7 +301,7 @@ function buildLockAndPort(
 /** Merge the listed caret processes with the lock pid: a live, unlisted lock
  * pid is appended, tagged "daemon.lock", so the report shows the daemon even
  * when `ps` filtering missed it. */
-function buildProcesses(deps: DiscoveryDeps): { count: number; items: ProcessItem[] } {
+function buildProcesses(deps: DoctorDeps): { count: number; items: ProcessItem[] } {
   const items: ProcessItem[] = deps
     .listProcesses()
     .map((p) => ({ pid: p.pid, name: p.name, identifiedBy: "ps comm" as const }));
@@ -263,7 +313,7 @@ function buildProcesses(deps: DiscoveryDeps): { count: number; items: ProcessIte
 }
 
 async function buildLogs(
-  deps: DiscoveryDeps,
+  deps: DoctorDeps,
 ): Promise<{ caret: LogStats; daemon: LogStats; daemonStderr: LogStats }> {
   const [caret, daemon, daemonStderr] = await Promise.all([
     deps.logStats(deps.logPaths.caret),
@@ -309,20 +359,42 @@ export function tallyReviews(records: ReviewStatusRecord[]): ReviewsSection {
 // Rendering
 // ---------------------------------------------------------------------------
 
-/** The report's scalar header fields — everything else is a renderable
- * section, so a future Report field can't silently vanish from the render. */
-const HEADER_KEYS = new Set(["schema", "version", "generatedAt"]);
+/** Fields renderDocument emits by hand — the header line's three, plus `checks`, which
+ * gets its own block — so everything left over is a section and no new Report field can
+ * silently vanish from the render. */
+const HEADER_KEYS = new Set(["schema", "version", "generatedAt", "checks"]);
 
-/** Render the (already-scrubbed) report as plain text: a header line, then one
- * titled block per section with aligned `key: value` lines. No ANSI. Never
- * throws — a degraded { error } section renders one error line, and missing
- * keys are simply absent. */
-export function renderReport(report: Report): string {
+/** One marker per status. U+2713 and U+2717 are Dingbats — not emoji, not a Nerd Font
+ * private-use codepoint — so a bare terminal font draws them and a paste into an issue
+ * carries them as themselves. The heavy U+2714/U+2718 pair is deliberately not used:
+ * fonts are free to give it emoji presentation, which would double its width. */
+const STATUS_GLYPH = { pass: "✓", fail: "✗", unknown: "?" } as const;
+
+/** SGR color per status, worn by the glyph alone so the rest of the line stays plain
+ * text. Only a caller that knows its stdout is a terminal asks for it. */
+const STATUS_COLOR = { pass: "\x1b[32m", fail: "\x1b[31m", unknown: "\x1b[33m" } as const;
+const COLOR_RESET = "\x1b[0m";
+
+/** Everything doctor writes to stdout, in either format. The one scrub covers the whole
+ * document — the checks' own strings included — and runs before anything is rendered, so
+ * no output path can carry an unredacted value. `color` reaches only the text format's
+ * status glyphs; JSON is a data document and never wears it. */
+export function renderStdout(doc: DoctorDocument, format: "json" | "text", color = false): string {
+  // scrubValue returns a shape-preserving copy — same keys, scrubbed strings — so the
+  // cast back is safe.
+  const redacted = scrubValue(doc, true) as DoctorDocument;
+  return format === "json" ? JSON.stringify(redacted, null, 2) : renderDocument(redacted, color);
+}
+
+/** Render the (already-scrubbed) document as plain text: a header line, the checks
+ * block, then one titled block per state section with aligned `key: value` lines. ANSI
+ * appears only on the check glyphs, and only when asked for. Never throws — a degraded
+ * { error } section renders one error line, and missing keys are simply absent. */
+export function renderDocument(doc: DoctorDocument, color = false): string {
   const lines: string[] = [];
-  lines.push(
-    `caret discovery (${report.schema}) version ${report.version} at ${report.generatedAt}`,
-  );
-  const sections = Object.entries(report).filter(([key]) => !HEADER_KEYS.has(key));
+  lines.push(`caret doctor (${doc.schema}) version ${doc.version} at ${doc.generatedAt}`);
+  lines.push("", "checks:", ...renderChecks(doc.checks, color));
+  const sections = Object.entries(doc).filter(([key]) => !HEADER_KEYS.has(key));
   for (const [title, value] of sections) {
     lines.push("");
     lines.push(`${title}:`);
@@ -331,7 +403,25 @@ export function renderReport(report: Report): string {
   return lines.join("\n");
 }
 
-function isSectionError(v: unknown): v is SectionError {
+/** One line per check, with the remedy or reason indented beneath the ones that leave
+ * the reader something to do. A check that claims nothing carries no detail, and renders
+ * without the separator rather than trailing one. */
+function renderChecks(checks: Check[], color: boolean): string[] {
+  const out: string[] = [];
+  for (const c of checks) {
+    const glyph = STATUS_GLYPH[c.status];
+    const marker = color ? `${STATUS_COLOR[c.status]}${glyph}${COLOR_RESET}` : glyph;
+    out.push(`  ${marker} ${c.id}${c.detail ? ` — ${c.detail}` : ""}`);
+    if (c.status === "fail") out.push(`    remedy: ${c.remedy}`);
+    if (c.status === "unknown") out.push(`    reason: ${c.reason}`);
+  }
+  return out;
+}
+
+/** A section that degraded to { error } rather than the value it was supposed to collect
+ * — the discriminator src/doctor/checks.ts reads before drawing any verdict from a
+ * section. */
+export function isSectionError(v: unknown): v is SectionError {
   return (
     typeof v === "object" &&
     v !== null &&
@@ -441,8 +531,8 @@ export async function logStats(path: string): Promise<LogStats> {
   try {
     const start = Math.max(0, size - TAIL_BYTES);
     const text = await Bun.file(path).slice(start).text();
-    const { errors, warns } = countLogLevels(text, start > 0);
-    return { path, exists: true, size, errors, warns };
+    const { errors, warns, lastErrorAt } = countLogLevels(text, start > 0);
+    return { path, exists: true, size, errors, warns, lastErrorAt };
   } catch {
     // Unreadable despite existing (raced delete, EACCES): report exists+size,
     // no counts.
@@ -450,29 +540,34 @@ export async function logStats(path: string): Promise<LogStats> {
   }
 }
 
-/** Count error/warn NDJSON records in a log tail. When dropFirstLine is set
- * (the slice started mid-file), the first line may be a partial record and is
- * skipped. Only `{`-prefixed, parseable lines with a numeric level count;
+/** Count error/warn NDJSON records in a log tail, and date the newest error. When
+ * dropFirstLine is set (the slice started mid-file), the first line may be a partial
+ * record and is skipped. Only `{`-prefixed, parseable lines with a numeric level count;
  * everything else (raw crash output, malformed records) is ignored. */
 export function countLogLevels(
   tailText: string,
   dropFirstLine: boolean,
-): { errors: number; warns: number } {
+): { errors: number; warns: number; lastErrorAt?: string } {
   let errors = 0;
   let warns = 0;
+  let lastErrorAt: string | undefined;
   const lines = tailText.split("\n");
   for (const [i, line] of lines.entries()) {
     if (i === 0 && dropFirstLine) continue;
     if (!line.startsWith("{")) continue;
-    let level: unknown;
+    let record: { level?: unknown; time?: unknown };
     try {
-      level = (JSON.parse(line) as { level?: unknown }).level;
+      record = JSON.parse(line) as { level?: unknown; time?: unknown };
     } catch {
       continue;
     }
-    if (typeof level !== "number") continue;
-    if (level >= 50) errors++;
-    else if (level === 40) warns++;
+    if (typeof record.level !== "number") continue;
+    if (record.level >= 50) {
+      errors++;
+      // Each error overwrites the date, undated ones included: carrying an older record's
+      // time forward would date the tally as settled while the newest error is undatable.
+      lastErrorAt = typeof record.time === "string" ? record.time : undefined;
+    } else if (record.level === 40) warns++;
   }
-  return { errors, warns };
+  return { errors, warns, lastErrorAt };
 }

@@ -41,7 +41,7 @@ test("buildKind classifies the runtime off argv[1]'s extension", () => {
 });
 
 test("isCompiledBinary is true for both compiled and bundle (production), false only in dev", () => {
-  // It gates production-vs-dev (dev settings, isDev, discovery label), so the
+  // It gates production-vs-dev (dev settings, isDev, doctor label), so the
   // npm bundle — production, though it runs under bun — must read as true.
   const saved = process.argv.slice();
   try {

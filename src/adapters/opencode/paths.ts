@@ -1,7 +1,7 @@
 // Shared OpenCode config-dir + packaging-path resolution for caret's OpenCode
 // integration. caret installs into OpenCode as a first-class `plugin` array entry
 // (@macintacos/caret) plus its command files; the install writer
-// (commands/install/opencode.ts) and the discovery probe (install.ts) resolve WHERE
+// (commands/install/opencode.ts) and the doctor probe (install.ts) resolve WHERE
 // those live through this single module, so the reader and the writer can never
 // disagree about a path. It also resolves what the file-deploy era left in that config
 // dir, which install and uninstall sweep.
@@ -58,7 +58,7 @@ export function namespacedCommandFilename(sourceName: string): string {
 /** Config filenames OpenCode may use in its config dir, in the order caret prefers
  * to WRITE (jsonc first — OpenCode's documented primary form, edited in place so a
  * commented config survives; then json; then the legacy global `config.json`). The
- * discovery probe scans every one, so order doesn't mask a later file for reads. */
+ * doctor probe scans every one, so order doesn't mask a later file for reads. */
 export const CONFIG_FILENAMES = ["opencode.jsonc", "opencode.json", "config.json"] as const;
 
 /** The OpenCode config dir: OPENCODE_CONFIG_DIR override, else

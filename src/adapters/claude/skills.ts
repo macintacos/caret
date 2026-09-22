@@ -27,7 +27,7 @@
 // plugins that are installed but disabled, every one of which a glob would offer
 // as a skill the agent cannot reach. Reading `enabledPlugins` means reading keys
 // that are not caret's own — unlike install.ts, whose output is shared in a
-// discovery report, nothing here leaves the machine.
+// doctor report, nothing here leaves the machine.
 
 import { access, readdir } from "node:fs/promises";
 import { join } from "node:path";
