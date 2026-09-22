@@ -26,9 +26,10 @@ Then run the matching invocation:
 ```
 
 The exit code is the verdict: `0` every check passed, `1` at least one failed, `2` no
-report could be produced at all. On `2`, present the exit code and stderr instead — and if
-the binary itself is missing (a source checkout that has never been built), say so and
-point at `mise run build` (or `mise run build --install`).
+report — doctor could not produce one, or a `--bundle` run had no terminal to ask consent
+at and stopped before collecting anything. On `2`, present the exit code and stderr
+instead — and if the binary itself is missing (a source checkout that has never been
+built), say so and point at `mise run build` (or `mise run build --install`).
 
 ## 2. Relay each failing check
 
@@ -37,16 +38,18 @@ one. What each id means:
 
 | id | what failed | relay |
 | --- | --- | --- |
-| `daemon-reachable` | a caret service is installed but the daemon did not answer | the check's remedy, then offer to read `logs/daemon-stderr.log` |
+| `daemon-reachable` | a caret service is recorded but the daemon did not answer, or the effective port answers as something other than caret | the check's remedy verbatim, then offer to read any log it names |
 | `daemon-lock` | the lock names a dead pid, or a port caret is not configured to bind | the check's remedy verbatim |
 | `agent-install` | the active agent does not have caret enabled | `caret install` |
-| `log-errors` | at least one live log holds an error record | step 4 |
-| `opencode-caret-version` | OpenCode would load a caret behind the published one | `caret install --refresh` |
+| `log-errors` | at least one live log holds an NDJSON error record | step 4 |
+| `opencode-caret-version` | OpenCode would load a caret behind the published one | the check's remedy verbatim |
 
-An `unknown` check is not a failure: it names its own `reason` (no network, an unreadable
-config), and a doctor run offline reaching one is the normal case. A degraded state
-section (`daemon error: …`, or `"error": "…"` under `--json`) is likewise normal when the
-daemon is down — present it as-is rather than treating it as a failure of this command.
+An `unknown` check is not a failure: it names its own `reason` — no network, an unreadable
+config, or a report section that never collected, which also shows as `<name> error: …`
+(`"error": "…"` under `--json`) and leaves the check with no detail. A doctor run offline
+reaching one is the normal case; present it as-is rather than treating it as a failure of
+this command. A daemon that is simply not running is not one of these — it reports
+`reachable false` and *passes*, because an on-demand daemon idle-exits by design.
 
 ## 3. Present the report
 
@@ -69,16 +72,52 @@ tail -n 40 "$dir/logs/daemon-stderr.log"
 ```
 
 A "socket connection closed" on the hook side often has its real cause on the daemon side,
-so check both. If a failure predates the current live file, `gunzip -c` the segment you
-need from `logs/archive/` and rerun the recipe against the result.
+so check both. `log-errors` counts only NDJSON error records, so a crash that reached
+`daemon-stderr.log` alone leaves it passing — tail that file even when the check is green.
+If a failure predates the current live file, `gunzip -c` the segment you need from
+`logs/archive/` and rerun the recipe against the result.
 
-When reading the on-disk review records (`reviews/<id>.json`), never select or echo
-`versions[].plan` or `generalCommentDraft` — they hold full plan and draft bodies.
+## 5. Review this session's plans
 
-## 5. Sharing the raw logs
+The report counts reviews in aggregate; it does not say what happened in *this* session.
+When the user wants that timeline, reconstruct it from the records — identify the session
+by the most recently updated review whose `cwd` matches, then list every review in it,
+oldest first:
+
+```bash
+dir="${XDG_STATE_HOME:-$HOME/.local/state}/caret"
+sid=$(jq -rs --arg cwd "$PWD" '[.[] | select(.cwd == $cwd)] | sort_by(.updatedAt) | last | .sessionId // empty' "$dir"/reviews/*.json)
+jq -s --arg sid "$sid" '[.[] | select(.sessionId == $sid)] | sort_by(.createdAt) | .[] | {id, title, status, versions: (.versions | length), decidedAt: .decision.decidedAt, feedback: .decision.feedback}' "$dir"/reviews/*.json
+```
+
+That field whitelist is deliberate: `versions[].plan` and `generalCommentDraft` hold full
+plan and draft bodies — never select or echo them.
+
+If `sid` comes back empty, no review matches the working directory. Say so, then fall back
+to the most recently updated session across all reviews and re-run the listing with it:
+
+```bash
+sid=$(jq -rs 'sort_by(.updatedAt) | last | .sessionId // empty' "$dir"/reviews/*.json)
+```
+
+If `$dir/reviews` is missing or empty the glob won't match and these commands error (shell
+or jq, depending on the shell) — that is "no reviews recorded", not a failure.
+
+Present the result grouped by status, each review with its id, title, and version count
+(the number of plan revisions):
+
+- **pending** — awaiting a decision in the browser.
+- **rejected** — changes requested; awaiting a revised plan. Include a short excerpt of
+  the decision `feedback`.
+- **approved** — plan accepted; terminal success.
+- **expired** — abandoned by its hook (timeout) or superseded by a resubmitted plan;
+  terminal, never reviewed.
+
+## 6. Sharing the raw logs
 
 If the report is not enough and the user wants to hand the raw material to a maintainer,
 `caret doctor --bundle` writes a zip of the live logs and review records to caret's state
 dir. Tell them plainly before suggesting it: that archive is **not** redacted — it holds
 their logs and full plan bodies — so it is written only after they confirm, and it should
-move over a channel they trust.
+move over a channel they trust. caret asks at a terminal and your run has none, so carry
+their answer with `--yes` — never before they have given it.

@@ -16,8 +16,15 @@ function report(over: Partial<Report> = {}): Report {
     system: { platform: "darwin", os: "macos", arch: "arm64" },
     install: { kind: "prod", binaryPath: "/bin/caret", bunVersion: "0.0.0" },
     settings: {},
-    daemon: { reachable: true, serviceInstalled: true },
-    lockAndPort: { lockExists: true, lockPid: 111, pidAlive: true, portMismatch: false },
+    daemon: { reachable: true, serviceInstalled: true, service: "caret" },
+    lockAndPort: {
+      lockExists: true,
+      portServesCaret: true,
+      lockPath: "/state/daemon.lock",
+      lockPid: 111,
+      pidAlive: true,
+      portMismatch: false,
+    },
     processes: { count: 1, items: [{ pid: 111, name: "caret-native", identifiedBy: "ps comm" }] },
     reviews: {
       pending: 0,
@@ -67,27 +74,62 @@ test("an unreachable daemon with no supervisor installed passes — on-demand da
   expect(check(checks, "daemon-reachable").status).toBe("pass");
 });
 
-test("a degraded daemon section cannot fail daemon-reachable", () => {
+test("a foreign server on the effective port fails daemon-reachable and names it", () => {
+  const checks = runChecks(
+    report({ daemon: { reachable: true, serviceInstalled: false, service: "other" } }),
+  );
+  const failed = check(checks, "daemon-reachable");
+  expect(failed.status).toBe("fail");
+  expect(failed.detail).toContain("other");
+});
+
+test("a degraded daemon section yields unknown, claiming nothing about the daemon", () => {
   const checks = runChecks(report({ daemon: { error: "probe boom" } }));
-  expect(check(checks, "daemon-reachable").status).toBe("pass");
+  const undecided = check(checks, "daemon-reachable");
+  expect(undecided.status).toBe("unknown");
+  expect(undecided.detail).toBe("");
 });
 
 // ---- daemon-lock ----
 
-test("a lock whose pid is dead fails daemon-lock", () => {
+test("a lock whose pid is dead fails daemon-lock and names the file to delete", () => {
   const checks = runChecks(
     report({
-      lockAndPort: { lockExists: true, lockPid: 111, pidAlive: false, portMismatch: false },
+      lockAndPort: {
+        lockExists: true,
+        portServesCaret: true,
+        lockPath: "/state/daemon.lock",
+        lockPid: 111,
+        pidAlive: false,
+        portMismatch: false,
+      },
+    }),
+  );
+  const failed = check(checks, "daemon-lock");
+  expect(failed.status).toBe("fail");
+  expect(failed.status === "fail" && failed.remedy).toContain("/state/daemon.lock");
+});
+
+test("a lock on a port other than the effective one fails daemon-lock", () => {
+  const checks = runChecks(
+    report({
+      lockAndPort: {
+        lockExists: true,
+        portServesCaret: true,
+        lockPid: 111,
+        pidAlive: true,
+        portMismatch: true,
+      },
     }),
   );
   expect(check(checks, "daemon-lock").status).toBe("fail");
 });
 
-test("a lock on a port other than the effective one fails daemon-lock", () => {
-  const checks = runChecks(
-    report({ lockAndPort: { lockExists: true, lockPid: 111, pidAlive: true, portMismatch: true } }),
-  );
-  expect(check(checks, "daemon-lock").status).toBe("fail");
+test("a degraded lockAndPort section yields unknown, claiming no lock state", () => {
+  const checks = runChecks(report({ lockAndPort: { error: "probe boom" } }));
+  const undecided = check(checks, "daemon-lock");
+  expect(undecided.status).toBe("unknown");
+  expect(undecided.detail).toBe("");
 });
 
 test("no lock at all passes daemon-lock", () => {
@@ -119,6 +161,13 @@ test("an unreadable pluginEnabled passes agent-install rather than failing on a 
   expect(check(checks, "agent-install").status).toBe("pass");
 });
 
+test("a degraded installState section yields unknown rather than the probe's own answer", () => {
+  const checks = runChecks(report({ installState: { error: "probe boom" } }));
+  const undecided = check(checks, "agent-install");
+  expect(undecided.status).toBe("unknown");
+  expect(undecided.detail).toBe("");
+});
+
 // ---- log-errors ----
 
 test("an error record in any live log fails log-errors and names the log to read", () => {
@@ -136,13 +185,27 @@ test("an error record in any live log fails log-errors and names the log to read
   expect(failed.status === "fail" && failed.remedy).toContain("/logs/daemon.log");
 });
 
+test("a degraded logs section yields unknown, claiming no log is clean", () => {
+  const checks = runChecks(report({ logs: { error: "probe boom" } }));
+  const undecided = check(checks, "log-errors");
+  expect(undecided.status).toBe("unknown");
+  expect(undecided.detail).toBe("");
+});
+
 // ---- the remedy contract ----
 
 test("every failing check names a remedy and every unknown names a reason", () => {
   const checks = runChecks(
     report({
       daemon: { reachable: false, serviceInstalled: true },
-      lockAndPort: { lockExists: true, lockPid: 111, pidAlive: false, portMismatch: true },
+      lockAndPort: {
+        lockExists: true,
+        portServesCaret: true,
+        lockPath: "/state/daemon.lock",
+        lockPid: 111,
+        pidAlive: false,
+        portMismatch: true,
+      },
       installState: { pluginVersion: "1.2.3", pluginEnabled: false, hookInUserSettings: false },
       logs: {
         caret: log("/logs/caret.log", 1),
@@ -150,7 +213,7 @@ test("every failing check names a remedy and every unknown names a reason", () =
         daemonStderr: log("/logs/daemon-stderr.log"),
       },
     }),
-    { id: "x", title: "X", status: "unknown", detail: "d", reason: "offline" },
+    [{ id: "x", title: "X", status: "unknown", detail: "d", reason: "offline" }],
   );
   expect(checks.filter((c) => c.status === "fail")).toHaveLength(4);
   for (const c of checks) {
@@ -159,17 +222,15 @@ test("every failing check names a remedy and every unknown names a reason", () =
   }
 });
 
-test("the caller's own check is appended after the report-derived ones", () => {
-  const opencode: Check = {
-    id: "opencode-caret-version",
-    title: "OpenCode's caret",
-    status: "pass",
-    detail: "current",
-  };
-  expect(runChecks(report(), opencode).at(-1)).toEqual(opencode);
+test("the caller's own checks are appended, in order, after the report-derived ones", () => {
+  const adapterChecks: Check[] = [
+    { id: "adapter-a", title: "A", status: "pass", detail: "current" },
+    { id: "adapter-b", title: "B", status: "pass", detail: "current" },
+  ];
+  expect(runChecks(report(), adapterChecks).slice(-2)).toEqual(adapterChecks);
 });
 
-test("a fully degraded report yields checks without failing any of them", () => {
+test("a fully degraded report decides nothing rather than passing every check", () => {
   const degraded = report({
     daemon: { error: "x" },
     lockAndPort: { error: "x" },
@@ -178,5 +239,9 @@ test("a fully degraded report yields checks without failing any of them", () => 
   });
   const checks = runChecks(degraded);
   expect(checks).toHaveLength(4);
-  expect(checks.some((c) => c.status === "fail")).toBe(false);
+  expect(checks.map((c) => c.status)).toEqual(checks.map(() => "unknown"));
+  for (const c of checks) {
+    expect(c.detail).toBe("");
+    expect(c.status === "unknown" && c.reason.length).toBeGreaterThan(0);
+  }
 });

@@ -4,12 +4,12 @@
 // writer would share any misreading of it.
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { writeZip } from "@/doctor/zip.ts";
+import { writeZip, type ZipEntry } from "@/doctor/zip.ts";
 
 const NOW = new Date("2026-06-04T12:34:56.000Z");
 
@@ -21,8 +21,23 @@ afterEach(async () => {
   await rm(tmp, { recursive: true, force: true });
 });
 
+// Resolved once and loudly: `unzip` is absent from the same minimal images that made
+// caret write its own container, and spawning it blind reports ENOENT from inside an
+// assertion — as if the writer were at fault.
+function resolveUnzip(): string {
+  const bin = Bun.which("unzip");
+  if (!bin) {
+    throw new Error(
+      "caret zip suite: no `unzip` on PATH to read the archive back — install it " +
+        "(`brew install unzip`, `apt-get install unzip`).",
+    );
+  }
+  return bin;
+}
+const UNZIP = resolveUnzip();
+
 function unzip(args: string[]): { exitCode: number | null; stdout: string; stderr: string } {
-  const r = Bun.spawnSync(["unzip", ...args]);
+  const r = Bun.spawnSync([UNZIP, ...args]);
   return { exitCode: r.exitCode, stdout: r.stdout.toString(), stderr: r.stderr.toString() };
 }
 
@@ -62,6 +77,37 @@ test("the archive is owner-only from the moment it exists", () => {
   const path = join(tmp, "mode.zip");
   writeZip(path, [{ name: "a.txt", data: bytes("a") }], NOW);
   expect(statSync(path).mode & 0o777).toBe(0o600);
+});
+
+test("an extracted member is owner-only, like the archive it came from", () => {
+  const path = join(tmp, "attrs.zip");
+  writeZip(path, [{ name: "logs/caret.log", data: bytes("x") }], NOW);
+
+  // The recorded mode is the portable half: this unzip applies it either way, but an
+  // extractor that honours the origin host reads it only off a UNIX-made archive.
+  expect(unzip(["-Z", "-v", path]).stdout).toContain("Unix file attributes (000600 octal)");
+
+  const out = join(tmp, "out");
+  expect(unzip(["-q", path, "-d", out]).exitCode).toBe(0);
+  expect(statSync(join(out, "logs", "caret.log")).mode & 0o777).toBe(0o600);
+});
+
+test("a failure part-way through leaves no archive behind", () => {
+  // A full disk or a deflate refusal is what fails here in production; neither can be
+  // provoked from this side, so the second entry throws where they would.
+  const path = join(tmp, "partial.zip");
+  const entries: ZipEntry[] = [
+    { name: "a.txt", data: bytes("first") },
+    {
+      name: "b.txt",
+      get data(): Uint8Array<ArrayBuffer> {
+        throw new Error("no space left on device");
+      },
+    },
+  ];
+
+  expect(() => writeZip(path, entries, NOW)).toThrow("no space left on device");
+  expect(existsSync(path)).toBe(false);
 });
 
 test("an existing path is a refusal, never an overwrite", () => {

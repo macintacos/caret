@@ -5,13 +5,7 @@
 
 import { expect, test } from "bun:test";
 
-import type { UpgradeVerdict } from "@/adapters/opencode/upgrade.ts";
-import {
-  chooserOptions,
-  promptUpgrade,
-  upgradePromptMessage,
-  upgradeVerdictLine,
-} from "@/commands/install/prompt.ts";
+import { chooserOptions, promptUpgrade, upgradePromptMessage } from "@/commands/install/prompt.ts";
 import { INSTALL_TARGET_IDS } from "@/commands/install/targets.ts";
 
 const STALE_CACHE = { kind: "stale-cache", cached: "0.2.0", published: "0.8.1" } as const;
@@ -46,22 +40,6 @@ test("a stale pin's question names the verbatim entry and offers the bump", () =
   expect(msg).toContain("@macintacos/caret@0.7.3");
   expect(msg).toContain("0.8.1");
   expect(msg).toContain("Bump the pin");
-});
-
-test("every verdict has a line, and only the stale ones name a version gap", () => {
-  const lines: Record<UpgradeVerdict["kind"], string> = {
-    fresh: upgradeVerdictLine({ kind: "fresh" }),
-    current: upgradeVerdictLine({ kind: "current", version: "0.8.1" }),
-    "stale-cache": upgradeVerdictLine(STALE_CACHE),
-    "stale-pin": upgradeVerdictLine(STALE_PIN),
-    unknown: upgradeVerdictLine({ kind: "unknown", reason: "offline" }),
-  };
-  expect(lines.current).toContain("0.8.1");
-  expect(lines["stale-cache"]).toContain("0.2.0");
-  expect(lines["stale-pin"]).toContain("@macintacos/caret@0.7.3");
-  // A line that could not be read must not read as a verdict about a version.
-  expect(lines.unknown).not.toContain("0.8.1");
-  expect(Object.values(lines).every((l) => l.length > 0)).toBe(true);
 });
 
 test("a cancelled confirm answers null, so the caller changes nothing", async () => {

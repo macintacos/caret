@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -105,6 +106,15 @@ test("an unreadable or absent member is skipped rather than failing the bundle",
   await runBundle({ yes: true }, deps());
   expect(written?.entries).toEqual([]);
   expect(written?.path).toContain(tmp);
+});
+
+test("review membership stops at 5000 records", async () => {
+  await mkdir(join(tmp, "reviews"), { recursive: true });
+  for (let i = 0; i <= 5000; i++) {
+    writeFileSync(join(tmp, "reviews", `r${String(i).padStart(5, "0")}.json`), '{"id":"r"}');
+  }
+  await runBundle({ yes: true }, deps());
+  expect(written?.entries).toHaveLength(5000);
 });
 
 test("the default path is a UTC-stamped archive inside caret's state dir", async () => {

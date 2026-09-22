@@ -3,22 +3,21 @@
 // scrubs the result — a deliberate inversion of the raw-by-default logging posture
 // (EXC-399), since the artifact exists to be pasted into bug reports.
 //
-// The OpenCode version check is built here rather than in src/doctor/checks.ts, which is
-// core and imports no adapter: it is the one check that needs an adapter's vocabulary,
-// so composition builds it and the core layer just appends what it is handed.
+// The OpenCode version check reaches the report from the adapter rather than from
+// src/doctor/checks.ts, which is core and imports no adapter: it is the one check that
+// needs an adapter's vocabulary, so composition asks for it and the core layer just
+// appends what it is handed.
 
 import { existsSync } from "node:fs";
 import { release } from "node:os";
 
 import { selectAdapter } from "@/adapters/index.ts";
-import { findPluginEntry } from "@/adapters/opencode/config-plugin.ts";
-import { CARET_PACKAGE, opencodeConfigDir, resolveConfigFile } from "@/adapters/opencode/paths.ts";
+import { opencodeConfigDir, resolveConfigFile } from "@/adapters/opencode/paths.ts";
 import {
-  readConfigText,
+  hasCaretPluginEntry,
   readUpgradeVerdict,
-  type UpgradeVerdict,
+  upgradeCheck,
 } from "@/adapters/opencode/upgrade.ts";
-import { upgradeVerdictLine } from "@/commands/install/prompt.ts";
 import { isTerminal } from "@/commands/install/ui.ts";
 import {
   configFile,
@@ -96,44 +95,18 @@ function prodDoctorDeps(s: Settings): DoctorDeps {
   };
 }
 
-/** The upgrade verdict as a check. The detail is the line `caret install` prints, so the
- * two surfaces can never describe a version gap differently; only the remedies differ,
- * because a bare entry is unfrozen by clearing its cache and a pin only by rewriting it.
- * An `unknown` stays `unknown` rather than becoming a failure — a doctor run offline is
- * the normal case, not a broken install. */
-export function opencodeVersionCheck(verdict: UpgradeVerdict): Check {
-  const base = {
-    id: "opencode-caret-version",
-    title: "OpenCode's caret",
-    detail: upgradeVerdictLine(verdict),
-  };
-  switch (verdict.kind) {
-    case "unknown":
-      return { ...base, status: "unknown", reason: verdict.reason };
-    case "stale-cache":
-      return {
-        ...base,
-        status: "fail",
-        remedy: "run `caret install --refresh` to clear the cached copy",
-      };
-    case "stale-pin":
-      return { ...base, status: "fail", remedy: "run `caret install --refresh` to bump the pin" };
-    default:
-      return { ...base, status: "pass" };
-  }
-}
-
-/** The OpenCode check, or undefined when OpenCode's config carries no caret package
- * entry — a Claude-only user then pays no network call and gets no meaningless verdict.
- * A `file:` entry is skipped by the same test: it re-resolves to its checkout on every
- * start, so npm's version says nothing about it. */
-async function readOpencodeCheck(): Promise<Check | undefined> {
+/** The adapter checks doctor appends to the core ones: OpenCode's version verdict, or
+ * nothing when OpenCode's config carries no caret package entry — a Claude-only user
+ * then pays no network call and gets no meaningless verdict. A `file:` entry is skipped
+ * by the same test: it re-resolves to its checkout on every start, so npm's version says
+ * nothing about it. */
+async function readAdapterChecks(): Promise<Check[]> {
   try {
-    const configFile = resolveConfigFile(opencodeConfigDir());
-    if (findPluginEntry(readConfigText(configFile), CARET_PACKAGE) === null) return undefined;
-    return opencodeVersionCheck(await readUpgradeVerdict({ configFile }));
+    const config = resolveConfigFile(opencodeConfigDir());
+    if (!hasCaretPluginEntry(config)) return [];
+    return [upgradeCheck(await readUpgradeVerdict({ configFile: config }))];
   } catch (e) {
-    return opencodeVersionCheck({ kind: "unknown", reason: errorMessage(e) });
+    return [upgradeCheck({ kind: "unknown", reason: errorMessage(e) })];
   }
 }
 
@@ -170,8 +143,10 @@ export async function runDoctorSubcommand(opts: {
   bundle: boolean;
   yes: boolean;
 }): Promise<void> {
-  // 1 means the install has something wrong with it, 2 that doctor could not say —
-  // a distinction a script needs, since a degraded section is still a usable report.
+  // 1 means the install has something wrong with it, 2 that no report was produced at
+  // all — doctor could not collect one, or --bundle had no terminal to ask consent at
+  // and stopped before collecting. Neither a degraded section nor a prompt answered no
+  // is that: both still print a usable report.
   try {
     // Consent is settled before anything is collected, so a refusal costs no probes.
     const bundled = opts.bundle ? await runBundle({ yes: opts.yes }, prodBundleDeps()) : undefined;
@@ -179,19 +154,26 @@ export async function runDoctorSubcommand(opts: {
       process.stderr.write(`caret doctor: ${bundled.message}\n`);
       process.exit(2);
     }
-    const s = loadSettings();
-    const report = await collectReport(prodDoctorDeps(s));
-    const doc: DoctorDocument = { ...report, checks: runChecks(report, await readOpencodeCheck()) };
-    process.stdout.write(`${renderStdout(doc, opts.json ? "json" : "text")}\n`);
     if (bundled?.kind === "written") {
-      // Under --json the note goes to stderr so stdout stays exactly one document.
+      // Announced the moment it exists, so a failure below never leaves an unredacted
+      // archive unmentioned. Under --json the note goes to stderr so stdout stays
+      // exactly one document.
       const note = opts.json ? process.stderr : process.stdout;
       note.write(`caret doctor: wrote ${bundled.path}\n`);
       note.write("caret doctor: it is unredacted — move it over a channel you trust\n");
     }
+    const s = loadSettings();
+    // The check's bounded npm read is independent of the local probes, so it runs
+    // alongside them.
+    const [report, adapterChecks] = await Promise.all([
+      collectReport(prodDoctorDeps(s)),
+      readAdapterChecks(),
+    ]);
+    const doc: DoctorDocument = { ...report, checks: runChecks(report, adapterChecks) };
+    process.stdout.write(`${renderStdout(doc, opts.json ? "json" : "text")}\n`);
     process.exit(doc.checks.some((c) => c.status === "fail") ? 1 : 0);
   } catch (e) {
-    process.stderr.write(`caret doctor: ${e}\n`);
+    process.stderr.write(`caret doctor: ${errorMessage(e)}\n`);
     process.exit(2);
   }
 }

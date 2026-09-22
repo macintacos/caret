@@ -45,10 +45,12 @@ import {
   clearCachedCaret,
   readConfigText,
   readUpgradeVerdict,
+  type StaleVerdict,
   type UpgradeVerdict,
+  upgradeVerdictLine,
 } from "@/adapters/opencode/upgrade.ts";
 import type { LocalInstall } from "@/commands/install/local.ts";
-import { promptUpgrade, type StaleVerdict, upgradeVerdictLine } from "@/commands/install/prompt.ts";
+import { promptUpgrade } from "@/commands/install/prompt.ts";
 import type { InstallUI } from "@/commands/install/ui.ts";
 import { isTerminal, silentUI } from "@/commands/install/ui.ts";
 import { VERSION } from "@/lib/build-id.ts";

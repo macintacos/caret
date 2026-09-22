@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { setupTempStateDir } from "@test/support/env.ts";
 import { expectNeverLogsBody } from "@test/support/redaction.ts";
-import { reviewsDir } from "@/config/paths.ts";
+import { daemonLock, reviewsDir } from "@/config/paths.ts";
 import { DEFAULTS } from "@/config/settings.ts";
 import {
   type Check,
@@ -215,6 +215,11 @@ test("lock port mismatch sets portMismatch and surfaces pidAlive from the fake",
     }),
   );
   expect(report.lockAndPort).toMatchObject({ lockPort: 9999, portMismatch: true, pidAlive: true });
+});
+
+test("a lock section carries the lock's own path, so the stale-lock remedy can name it", async () => {
+  const report = await collectReport(doctorDeps());
+  expect(report.lockAndPort).toMatchObject({ lockPath: daemonLock() });
 });
 
 test("a port held by a non-caret process is reachable but portServesCaret is false", async () => {
@@ -443,6 +448,9 @@ test("a failing check renders its remedy and an unknown one its reason", async (
   expect(text).toContain("remedy: read x.log");
   expect(text).toContain("unknown opencode-caret-version");
   expect(text).toContain("reason: offline");
+  // A check that claims nothing — every degraded section's — carries no detail, so it
+  // must not render a separator with nothing after it.
+  expect(text).not.toContain("opencode-caret-version —");
 });
 
 // ---- the stdout path is scrubbed as one document ----

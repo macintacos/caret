@@ -14,7 +14,7 @@ import { readdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 
 import type { InstallProbe } from "@/adapters/adapter.ts";
-import { reviewsDir } from "@/config/paths.ts";
+import { daemonLock, reviewsDir } from "@/config/paths.ts";
 import type { Settings } from "@/config/settings.ts";
 import type { DaemonLock } from "@/lib/build-id.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
@@ -111,6 +111,33 @@ export type Check = { id: string; title: string; detail: string } & (
   | { status: "unknown"; reason: string }
 );
 
+/** What the one shared health probe saw, plus whether this install recorded a service
+ * unit. A reachable port answering as something other than "caret" is a squatter, not a
+ * daemon — src/doctor/checks.ts draws that distinction from `service`. */
+export interface DaemonSection {
+  reachable: boolean;
+  serviceInstalled: boolean;
+  service?: string;
+  daemonVersion?: string;
+  build?: string;
+  commit?: string;
+}
+
+/** The lock file reconciled against the effective port. Everything past the first two
+ * fields is absent when no lock file exists. */
+export interface LockSection {
+  lockExists: boolean;
+  portServesCaret: boolean;
+  lockPath?: string;
+  lockPid?: number;
+  lockPort?: number;
+  lockBuild?: string;
+  lockVersion?: string;
+  lockStartedAt?: number;
+  pidAlive?: boolean;
+  portMismatch?: boolean;
+}
+
 /** Flat-by-design so scrubValue's depth-6 cap never clips a leaf. */
 export interface Report {
   schema: "caret-doctor/1";
@@ -119,8 +146,8 @@ export interface Report {
   system: { platform: string; os: string; arch: string } | SectionError;
   install: { kind: string; binaryPath: string; bunVersion: string } | SectionError;
   settings: Record<string, unknown> | SectionError;
-  daemon: Record<string, unknown> | SectionError;
-  lockAndPort: Record<string, unknown> | SectionError;
+  daemon: DaemonSection | SectionError;
+  lockAndPort: LockSection | SectionError;
   processes: { count: number; items: ProcessItem[] } | SectionError;
   reviews: ReviewsSection | SectionError;
   installState: InstallProbe | SectionError;
@@ -233,7 +260,7 @@ function buildSettings(deps: DoctorDeps): Record<string, unknown> {
 /** The daemon section from the shared health probe: unreachable (null) →
  * { reachable: false }; reachable → its identity, whatever service it claims
  * (a non-caret squatter still shows reachable, with its own service). */
-function buildDaemon(deps: DoctorDeps, health: HealthIdentity | null): Record<string, unknown> {
+function buildDaemon(deps: DoctorDeps, health: HealthIdentity | null): DaemonSection {
   const serviceInstalled = deps.serviceInstalled();
   if (!health) return { reachable: false, serviceInstalled };
   return {
@@ -249,15 +276,13 @@ function buildDaemon(deps: DoctorDeps, health: HealthIdentity | null): Record<st
 /** The lock + port reconciliation, flattened. portServesCaret comes from the
  * shared health probe (service === "caret"); portMismatch compares the lock's
  * port to the effective port. No lock → { lockExists: false, portServesCaret }. */
-function buildLockAndPort(
-  deps: DoctorDeps,
-  health: HealthIdentity | null,
-): Record<string, unknown> {
+function buildLockAndPort(deps: DoctorDeps, health: HealthIdentity | null): LockSection {
   const portServesCaret = health?.service === "caret";
   const lock = deps.readLock();
   if (!lock) return { lockExists: false, portServesCaret };
   return {
     lockExists: true,
+    lockPath: daemonLock(),
     lockPid: lock.pid,
     lockPort: lock.port,
     lockBuild: lock.build,
@@ -330,8 +355,9 @@ export function tallyReviews(records: ReviewStatusRecord[]): ReviewsSection {
 // Rendering
 // ---------------------------------------------------------------------------
 
-/** The report's scalar header fields — everything else is a renderable
- * section, so a future Report field can't silently vanish from the render. */
+/** Fields renderDocument emits by hand — the header line's three, plus `checks`, which
+ * gets its own block — so everything left over is a section and no new Report field can
+ * silently vanish from the render. */
 const HEADER_KEYS = new Set(["schema", "version", "generatedAt", "checks"]);
 
 /** Status words rather than glyphs or ANSI, so the checks block survives being pasted
@@ -342,7 +368,8 @@ const STATUS_WORD = { pass: "pass", fail: "FAIL", unknown: "unknown" } as const;
  * document — the checks' own strings included — and runs before anything is rendered, so
  * no output path can carry an unredacted value. */
 export function renderStdout(doc: DoctorDocument, format: "json" | "text"): string {
-  // scrubValue scrubs strings in place, preserving shape — so the cast back is safe.
+  // scrubValue returns a shape-preserving copy — same keys, scrubbed strings — so the
+  // cast back is safe.
   const redacted = scrubValue(doc, true) as DoctorDocument;
   return format === "json" ? JSON.stringify(redacted, null, 2) : renderDocument(redacted);
 }
@@ -365,17 +392,21 @@ export function renderDocument(doc: DoctorDocument): string {
 }
 
 /** One line per check, with the remedy or reason indented beneath the ones that leave
- * the reader something to do. */
+ * the reader something to do. A check that claims nothing carries no detail, and renders
+ * without the separator rather than trailing one. */
 function renderChecks(checks: Check[]): string[] {
   const out: string[] = [];
   for (const c of checks) {
-    out.push(`  ${STATUS_WORD[c.status]} ${c.id} — ${c.detail}`);
+    out.push(`  ${STATUS_WORD[c.status]} ${c.id}${c.detail ? ` — ${c.detail}` : ""}`);
     if (c.status === "fail") out.push(`    remedy: ${c.remedy}`);
     if (c.status === "unknown") out.push(`    reason: ${c.reason}`);
   }
   return out;
 }
 
+/** A section that degraded to { error } rather than the value it was supposed to collect
+ * — the discriminator src/doctor/checks.ts reads before drawing any verdict from a
+ * section. */
 export function isSectionError(v: unknown): v is SectionError {
   return (
     typeof v === "object" &&

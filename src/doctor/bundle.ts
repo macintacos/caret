@@ -1,5 +1,5 @@
 // `caret doctor --bundle` (EXC-1188): a consent-gated archive of the raw material the
-// report deliberately leaves out — the live logs in full, and every review record, plan
+// report deliberately leaves out — the live logs in full, and the review records, plan
 // bodies included. It is the one caret artifact that is NOT redacted, which is why
 // nothing here touches the report: the two paths share only the state-dir paths they
 // read, so a change to one cannot leak into the other.
@@ -9,7 +9,7 @@
 // archive without saying anything about a failure happening now.
 
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 import type { ZipEntry } from "@/doctor/zip.ts";
 
@@ -42,7 +42,7 @@ function stamp(now: Date): string {
 
 /** Where a bundle goes by default: caret's own state dir, never the working directory —
  * which may itself be a synced folder, and this archive is not redacted. */
-export function bundlePath(stateDir: string, now: Date): string {
+function bundlePath(stateDir: string, now: Date): string {
   return join(stateDir, `doctor-${stamp(now)}.zip`);
 }
 
@@ -56,16 +56,23 @@ function member(path: string, name: string): ZipEntry | null {
   }
 }
 
-/** The live logs plus every review record, each under its own prefix. */
+/** The same ceiling the report's `listReviewFiles` applies, for a harder reason: every
+ * member is read whole into memory, and past 65535 entries the archive's 16-bit entry
+ * count wraps and the container is malformed. */
+const MAX_REVIEW_MEMBERS = 5000;
+
+/** The live logs plus the review records, each under its own prefix. */
 function entriesFor(deps: BundleDeps): ZipEntry[] {
-  const logs = deps.logPaths.map((p) => member(p, `logs/${p.split("/").pop() ?? p}`));
+  const logs = deps.logPaths.map((p) => member(p, `logs/${basename(p)}`));
   let reviews: string[];
   try {
     reviews = readdirSync(deps.reviewsDir).filter((f) => f.endsWith(".json"));
   } catch {
     reviews = []; // absent dir — a normal first run
   }
-  const records = reviews.map((f) => member(join(deps.reviewsDir, f), `reviews/${f}`));
+  const records = reviews
+    .slice(0, MAX_REVIEW_MEMBERS)
+    .map((f) => member(join(deps.reviewsDir, f), `reviews/${f}`));
   return [...logs, ...records].filter((e): e is ZipEntry => e !== null);
 }
 

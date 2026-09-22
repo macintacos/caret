@@ -399,9 +399,11 @@ only genuine failures sit at error.
 
 - `caret doctor` — a one-shot, read-only diagnosis of the local install. It opens with a
   `checks:` block — the daemon's reachability, the daemon lock, whether your agent has
-  caret enabled, error records in the live logs, and whether OpenCode would load a caret
-  behind the published one — where every failing check names the remedy that closes it.
-  Under that sits the state it read those from: running caret processes, daemon identity
+  caret enabled, NDJSON error records in the live logs, and whether OpenCode would load a
+  caret behind the published one — where every failing check names the remedy that closes
+  it. Only the OpenCode check leaves your machine, and only when OpenCode's config names
+  caret: it reads npm's published caret version, and degrades to `unknown` offline. Under
+  that sits the state it read those from: running caret processes, daemon identity
   (version, build, startup commit), lock/port state, effective settings, review counts,
   the agent adapter's install-state probe, log sizes and error/warn counts, install and
   runtime info, and system basics.
@@ -410,16 +412,17 @@ only genuine failures sit at error.
   object (schema marker `caret-doctor/1`). Unlike the logs, it is **always redacted** — it
   exists to be shared — and never contains plan/prompt/feedback bodies or log contents.
   Probes are individually bounded and degrade per-section. The exit code is the verdict:
-  `0` all clear, `1` a check failed, `2` no report could be produced at all.
+  `0` all clear, `1` a check failed, `2` no report — doctor could not produce one, or
+  `--bundle` had no terminal to ask consent at and stopped before collecting anything.
 - `/caret:doctor` — the slash command that wraps it: asks whether you want JSON or
   human-readable output, runs the subcommand, relays each failing check's remedy, and ends
   with the report in a code block ready to share.
 - `caret doctor --bundle` — when the report isn't enough, a zip of the three live logs and
-  every review record, written to caret's state dir at `0600`. This archive is the one
-  caret artifact that is **not** redacted: it holds your logs in full and complete plan
-  bodies. caret asks before writing it, refuses outright when there is no terminal to ask
-  at (pass `--yes` to confirm in a script), and never includes the rotated `logs/archive/`
-  segments. Move it over a channel you trust.
+  up to 5000 review records, written to caret's state dir at `0600`. This archive is the
+  one caret artifact that is **not** redacted: it holds your logs in full and complete
+  plan bodies. caret asks before writing it, refuses outright when there is no terminal to
+  ask at (pass `--yes` to confirm in a script), and never includes the rotated
+  `logs/archive/` segments. Move it over a channel you trust.
 - `caret redact` — scrubs the three live logs, not the archives, into shareable
   `*.redacted.log` siblings (home paths become `~`, usernames in foreign home paths are
   censored). For always-on scrubbing at write time, set `redact = true` in `[logging]`.

@@ -473,14 +473,17 @@ test("caret redact reports when there are no logs to scrub", async () => {
 // `caret doctor` end-to-end (EXC-464): argv routing (human vs --json), the
 // always-on redaction, and the exit-0-on-degraded contract — real subprocess,
 // like the redact tests above. CARET_PORT points at a just-released free port
-// so the probe never touches a real daemon; CLAUDE_CONFIG_DIR points at the
-// empty state home so installState stays hermetic ("unknown").
+// so the probe never touches a real daemon; both agent config dirs point at the
+// empty state home, which keeps installState hermetic ("unknown") and leaves
+// OpenCode's config carrying no caret entry, so the version check is skipped
+// and no run reaches npm.
 function doctorEnv(stateHome: string): Record<string, string> {
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
     XDG_STATE_HOME: stateHome,
     CARET_PORT: String(freePort()),
     CLAUDE_CONFIG_DIR: join(stateHome, "claude"),
+    OPENCODE_CONFIG_DIR: join(stateHome, "opencode"),
   };
   // Force the default config path (~/.config/...): its home prefix is exactly
   // what the always-on scrub must rewrite to ~.
@@ -529,6 +532,24 @@ test("caret doctor --bundle refuses without a terminal and without --yes", async
     });
     expect(exitCode).toBe(2);
     expect(existsSync(join(stateHome, "caret"))).toBe(false);
+  } finally {
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
+test("caret doctor --bundle announces the archive before it prints the report", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-doctor-bundle-yes-"));
+  try {
+    // The archive is on disk the moment it is written, so its path is reported then —
+    // not after a report that may never be printed.
+    const { exitCode, stdout: out } = await runCaretCli(["doctor", "--bundle", "--yes"], {
+      env: doctorEnv(stateHome),
+    });
+    expect(exitCode).toBe(0);
+    expect(out).toContain("caret doctor: wrote ");
+    expect(out.indexOf("caret doctor: wrote ")).toBeLessThan(
+      out.indexOf("caret doctor (caret-doctor/1)"),
+    );
   } finally {
     await rm(stateHome, { recursive: true, force: true });
   }
