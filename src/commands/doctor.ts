@@ -7,7 +7,13 @@ import { existsSync } from "node:fs";
 import { release } from "node:os";
 
 import { selectAdapter } from "@/adapters/index.ts";
-import { configFile, daemonLogFile, daemonStderrLogFile, logFile } from "@/config/paths.ts";
+import {
+  configFile,
+  daemonLogFile,
+  daemonStderrLogFile,
+  launcherServiceFile,
+  logFile,
+} from "@/config/paths.ts";
 import {
   getPort,
   heartbeatMs,
@@ -18,17 +24,17 @@ import {
 } from "@/config/settings.ts";
 import { httpHealth } from "@/daemon/client.ts";
 import { isPidAlive, readDaemonLock } from "@/daemon/lifecycle.ts";
+import { runChecks } from "@/doctor/checks.ts";
 import {
   collectReport,
   type DoctorDeps,
+  type DoctorDocument,
   listProcesses,
   listReviewFiles,
   logStats,
-  type Report,
-  renderReport,
+  renderStdout,
 } from "@/doctor/report.ts";
 import { isCompiledBinary, VERSION } from "@/lib/build-id.ts";
-import { scrubValue } from "@/redact/node.ts";
 
 /** Production probes for the doctor report, reusing the primitives the review
  * path already drives. Deliberately no removeLock or retire — doctor
@@ -55,6 +61,7 @@ function prodDoctorDeps(s: Settings): DoctorDeps {
     }),
     baseUrl: `http://localhost:${getPort(s)}`,
     health: httpHealth,
+    serviceInstalled: () => existsSync(launcherServiceFile()),
     readLock: readDaemonLock,
     isPidAlive,
     listProcesses,
@@ -70,19 +77,16 @@ function prodDoctorDeps(s: Settings): DoctorDeps {
 }
 
 export async function runDoctorSubcommand(opts: { json: boolean }): Promise<void> {
-  // Exit 0 whenever a report was produced, however degraded; non-zero only when
-  // none could be.
+  // 1 means the install has something wrong with it, 2 that doctor could not say —
+  // a distinction a script needs, since a degraded section is still a usable report.
   try {
     const s = loadSettings();
     const report = await collectReport(prodDoctorDeps(s));
-    // scrubValue scrubs strings in place, preserving the report's shape — so the
-    // cast back to Report is safe.
-    const redacted = scrubValue(report, true) as Report;
-    const out = opts.json ? JSON.stringify(redacted, null, 2) : renderReport(redacted);
-    process.stdout.write(`${out}\n`);
-    process.exit(0);
+    const doc: DoctorDocument = { ...report, checks: runChecks(report) };
+    process.stdout.write(`${renderStdout(doc, opts.json ? "json" : "text")}\n`);
+    process.exit(doc.checks.some((c) => c.status === "fail") ? 1 : 0);
   } catch (e) {
     process.stderr.write(`caret doctor: ${e}\n`);
-    process.exit(1);
+    process.exit(2);
   }
 }

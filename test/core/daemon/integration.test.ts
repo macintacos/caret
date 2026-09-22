@@ -4,7 +4,7 @@
 
 import { afterEach, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -499,6 +499,7 @@ test("caret doctor prints a human-readable report and exits 0", async () => {
     // Every section title renders, and the daemon (nothing on the port) reads
     // as unreachable.
     for (const title of [
+      "checks:",
       "system:",
       "install:",
       "settings:",
@@ -511,7 +512,26 @@ test("caret doctor prints a human-readable report and exits 0", async () => {
     ]) {
       expect(out).toContain(title);
     }
-    expect(out).toContain("reachable : false");
+    expect(out).toMatch(/^ {2}reachable +: false$/m);
+    // An empty state home is a healthy one: an idle-exited daemon, no lock, no logs.
+    expect(out).toMatch(/^ {2}pass daemon-reachable /m);
+  } finally {
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
+test("caret doctor exits 1 and names a remedy when a check fails", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-doctor-fail-"));
+  try {
+    const logs = join(stateHome, "caret", "logs");
+    await mkdir(logs, { recursive: true });
+    await writeFile(join(logs, "caret.log"), '{"level":50,"msg":"boom"}\n');
+    const { exitCode, stdout: out } = await runCaretCli(["doctor"], {
+      env: doctorEnv(stateHome),
+    });
+    expect(exitCode).toBe(1);
+    expect(out).toMatch(/^ {2}FAIL log-errors /m);
+    expect(out).toMatch(/^ {4}remedy: /m);
   } finally {
     await rm(stateHome, { recursive: true, force: true });
   }
@@ -542,7 +562,8 @@ test("caret doctor --json prints one parseable, redacted document", async () => 
     }
     // Empty state + nothing on the port: every probe degrades gracefully, the
     // run still exits 0 (the acceptance contract).
-    expect(report.daemon).toEqual({ reachable: false });
+    expect(report.daemon).toEqual({ reachable: false, serviceInstalled: false });
+    expect((report.checks as unknown[]).length).toBeGreaterThan(0);
     // Always-redacted: the home prefix never appears raw — the default config
     // path renders as ~/.config/... and the bun binaryPath is scrubbed too.
     expectNeverLogsBody(out, homedir());
@@ -573,6 +594,7 @@ test("caret doctor --json reports a live daemon's identity and commit", async ()
     const report = JSON.parse(out) as Record<string, unknown>;
     expect(report.daemon).toEqual({
       reachable: true,
+      serviceInstalled: false,
       service: "caret",
       daemonVersion: VERSION,
       build: "it-build",

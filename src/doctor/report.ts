@@ -20,6 +20,7 @@ import type { DaemonLock } from "@/lib/build-id.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
 import { shortId } from "@/lib/log.ts";
 import { errorMessage, type HealthIdentity } from "@/lib/types.ts";
+import { scrubValue } from "@/redact/node.ts";
 
 // ---------------------------------------------------------------------------
 // Injected probe shapes
@@ -74,6 +75,10 @@ export interface DoctorDeps {
   baseUrl: string;
   /** Parsed /api/health body or null when unreachable (httpHealth in prod; 500ms bounded). */
   health: (baseUrl: string) => Promise<HealthIdentity | null>;
+  /** Whether this machine's install recorded a service unit — the only thing that
+   * distinguishes a supervisor that should be keeping a daemon up from an on-demand
+   * one that idle-exited by design. */
+  serviceInstalled: () => boolean;
   readLock: () => DaemonLock | null;
   isPidAlive: (pid: number) => boolean;
   listProcesses: () => ProcessEntry[];
@@ -97,6 +102,15 @@ export interface SectionError {
   error: string;
 }
 
+/** One verdict over the collected report. A `fail` always names the remedy that closes
+ * it and an `unknown` always names why it could not be decided, so neither can be
+ * emitted without the one thing that makes it actionable. */
+export type Check = { id: string; title: string; detail: string } & (
+  | { status: "pass" }
+  | { status: "fail"; remedy: string }
+  | { status: "unknown"; reason: string }
+);
+
 /** Flat-by-design so scrubValue's depth-6 cap never clips a leaf. */
 export interface Report {
   schema: "caret-doctor/1";
@@ -112,6 +126,11 @@ export interface Report {
   installState: InstallProbe | SectionError;
   logs: { caret: LogStats; daemon: LogStats; daemonStderr: LogStats } | SectionError;
 }
+
+/** What doctor emits: the collected state plus the verdicts read off it. A second type
+ * rather than a Report field, so collectReport — which cannot fill checks — never
+ * carries one. */
+export type DoctorDocument = Report & { checks: Check[] };
 
 /** A merged process entry: the listed caret processes plus (when alive and not
  * already listed) the daemon lock's pid, each tagged with how it was found. */
@@ -166,7 +185,7 @@ export async function collectReport(deps: DoctorDeps): Promise<Report> {
       safe(() => deps.system()),
       safe(() => deps.install()),
       safe(() => buildSettings(deps)),
-      healthError ?? safe(() => buildDaemon(health)),
+      healthError ?? safe(() => buildDaemon(deps, health)),
       healthError ?? safe(() => buildLockAndPort(deps, health)),
       safe(() => buildProcesses(deps)),
       safe(() => tallyReviews(deps.listReviewFiles())),
@@ -214,10 +233,12 @@ function buildSettings(deps: DoctorDeps): Record<string, unknown> {
 /** The daemon section from the shared health probe: unreachable (null) →
  * { reachable: false }; reachable → its identity, whatever service it claims
  * (a non-caret squatter still shows reachable, with its own service). */
-function buildDaemon(health: HealthIdentity | null): Record<string, unknown> {
-  if (!health) return { reachable: false };
+function buildDaemon(deps: DoctorDeps, health: HealthIdentity | null): Record<string, unknown> {
+  const serviceInstalled = deps.serviceInstalled();
+  if (!health) return { reachable: false, serviceInstalled };
   return {
     reachable: true,
+    serviceInstalled,
     service: health.service,
     daemonVersion: health.version,
     build: health.build,
@@ -311,16 +332,30 @@ export function tallyReviews(records: ReviewStatusRecord[]): ReviewsSection {
 
 /** The report's scalar header fields — everything else is a renderable
  * section, so a future Report field can't silently vanish from the render. */
-const HEADER_KEYS = new Set(["schema", "version", "generatedAt"]);
+const HEADER_KEYS = new Set(["schema", "version", "generatedAt", "checks"]);
 
-/** Render the (already-scrubbed) report as plain text: a header line, then one
- * titled block per section with aligned `key: value` lines. No ANSI. Never
- * throws — a degraded { error } section renders one error line, and missing
+/** Status words rather than glyphs or ANSI, so the checks block survives being pasted
+ * into an issue, a chat, or a terminal that renders neither. */
+const STATUS_WORD = { pass: "pass", fail: "FAIL", unknown: "unknown" } as const;
+
+/** Everything doctor writes to stdout, in either format. The one scrub covers the whole
+ * document — the checks' own strings included — and runs before anything is rendered, so
+ * no output path can carry an unredacted value. */
+export function renderStdout(doc: DoctorDocument, format: "json" | "text"): string {
+  // scrubValue scrubs strings in place, preserving shape — so the cast back is safe.
+  const redacted = scrubValue(doc, true) as DoctorDocument;
+  return format === "json" ? JSON.stringify(redacted, null, 2) : renderDocument(redacted);
+}
+
+/** Render the (already-scrubbed) document as plain text: a header line, the checks
+ * block, then one titled block per state section with aligned `key: value` lines. No
+ * ANSI. Never throws — a degraded { error } section renders one error line, and missing
  * keys are simply absent. */
-export function renderReport(report: Report): string {
+export function renderDocument(doc: DoctorDocument): string {
   const lines: string[] = [];
-  lines.push(`caret doctor (${report.schema}) version ${report.version} at ${report.generatedAt}`);
-  const sections = Object.entries(report).filter(([key]) => !HEADER_KEYS.has(key));
+  lines.push(`caret doctor (${doc.schema}) version ${doc.version} at ${doc.generatedAt}`);
+  lines.push("", "checks:", ...renderChecks(doc.checks));
+  const sections = Object.entries(doc).filter(([key]) => !HEADER_KEYS.has(key));
   for (const [title, value] of sections) {
     lines.push("");
     lines.push(`${title}:`);
@@ -329,7 +364,19 @@ export function renderReport(report: Report): string {
   return lines.join("\n");
 }
 
-function isSectionError(v: unknown): v is SectionError {
+/** One line per check, with the remedy or reason indented beneath the ones that leave
+ * the reader something to do. */
+function renderChecks(checks: Check[]): string[] {
+  const out: string[] = [];
+  for (const c of checks) {
+    out.push(`  ${STATUS_WORD[c.status]} ${c.id} — ${c.detail}`);
+    if (c.status === "fail") out.push(`    remedy: ${c.remedy}`);
+    if (c.status === "unknown") out.push(`    reason: ${c.reason}`);
+  }
+  return out;
+}
+
+export function isSectionError(v: unknown): v is SectionError {
   return (
     typeof v === "object" &&
     v !== null &&

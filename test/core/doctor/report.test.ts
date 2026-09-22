@@ -8,15 +8,18 @@ import { expectNeverLogsBody } from "@test/support/redaction.ts";
 import { reviewsDir } from "@/config/paths.ts";
 import { DEFAULTS } from "@/config/settings.ts";
 import {
+  type Check,
   collectReport,
   countLogLevels,
   type DoctorDeps,
+  type DoctorDocument,
   listProcesses,
   listReviewFiles,
   logStats,
   parsePsLines,
   type Report,
-  renderReport,
+  renderDocument,
+  renderStdout,
   tallyReviews,
 } from "@/doctor/report.ts";
 import { scrubValue } from "@/redact/node.ts";
@@ -44,6 +47,7 @@ function doctorDeps(over: Partial<DoctorDeps> = {}): DoctorDeps {
     }),
     baseUrl: "http://localhost:42718",
     health: async () => ({ service: "caret", version: "1.2.3", build: "abc", commit: "def" }),
+    serviceInstalled: () => false,
     readLock: () => ({ pid: 111, port: 42718, build: "abc", version: "1.2.3", startedAt: 9 }),
     isPidAlive: () => true,
     listProcesses: () => [{ pid: 111, name: "caret-native" }],
@@ -61,6 +65,14 @@ function doctorDeps(over: Partial<DoctorDeps> = {}): DoctorDeps {
     },
     ...over,
   };
+}
+
+/** The emitted document: a collected report plus whatever checks ran over it. */
+async function document(
+  over: Partial<DoctorDeps> = {},
+  checks: Check[] = [],
+): Promise<DoctorDocument> {
+  return { ...(await collectReport(doctorDeps(over))), checks };
 }
 
 // ---- happy path ----
@@ -213,7 +225,7 @@ test("a port held by a non-caret process is reachable but portServesCaret is fal
 
 test("an unreachable daemon (null health) reports reachable:false without throwing", async () => {
   const report = await collectReport(doctorDeps({ health: async () => null }));
-  expect(report.daemon).toEqual({ reachable: false });
+  expect(report.daemon).toEqual({ reachable: false, serviceInstalled: false });
   expect(report.lockAndPort).toMatchObject({ portServesCaret: false });
 });
 
@@ -355,11 +367,10 @@ test("the report is flat enough that scrubValue never depth-caps a leaf", async 
   expect(JSON.stringify(scrubValue(report, true))).not.toContain("<depth-capped>");
 });
 
-// ---- renderReport ----
+// ---- renderDocument ----
 
-test("renderReport renders the header and every section title for a happy report", async () => {
-  const report = await collectReport(doctorDeps());
-  const text = renderReport(report);
+test("renderDocument renders the header and every section title for a happy report", async () => {
+  const text = renderDocument(await document());
   expect(typeof text).toBe("string");
   expect(text).toContain("caret-doctor/1");
   for (const title of [
@@ -380,13 +391,12 @@ test("renderReport renders the header and every section title for a happy report
   expect(text).toContain("daemonStderr");
 });
 
-test("renderReport renders a degraded section as an error line and never throws", async () => {
-  const report = await collectReport(doctorDeps({ system: boom }));
-  const text = renderReport(report);
+test("renderDocument renders a degraded section as an error line and never throws", async () => {
+  const text = renderDocument(await document({ system: boom }));
   expect(text).toContain("system error: probe boom");
 });
 
-test("renderReport tolerates an all-degraded report without throwing", () => {
+test("renderDocument tolerates an all-degraded report without throwing", () => {
   const allError = {
     schema: "caret-doctor/1",
     version: "1.0.0",
@@ -400,9 +410,60 @@ test("renderReport tolerates an all-degraded report without throwing", () => {
     reviews: { error: "x" },
     installState: { error: "x" },
     logs: { error: "x" },
-  } as Report;
-  expect(() => renderReport(allError)).not.toThrow();
+    checks: [],
+  } as DoctorDocument;
+  expect(() => renderDocument(allError)).not.toThrow();
 });
+
+test("the checks block renders before the first state section", async () => {
+  const text = renderDocument(
+    await document({}, [
+      { id: "daemon-lock", title: "Daemon lock", status: "pass", detail: "on port 42718" },
+    ]),
+  );
+  expect(text.indexOf("checks:")).toBeGreaterThan(-1);
+  expect(text.indexOf("checks:")).toBeLessThan(text.indexOf("system:"));
+  expect(text).toContain("pass daemon-lock");
+});
+
+test("a failing check renders its remedy and an unknown one its reason", async () => {
+  const text = renderDocument(
+    await document({}, [
+      { id: "log-errors", title: "Logs", status: "fail", detail: "2 errors", remedy: "read x.log" },
+      {
+        id: "opencode-caret-version",
+        title: "OpenCode",
+        status: "unknown",
+        detail: "",
+        reason: "offline",
+      },
+    ]),
+  );
+  expect(text).toContain("FAIL log-errors");
+  expect(text).toContain("remedy: read x.log");
+  expect(text).toContain("unknown opencode-caret-version");
+  expect(text).toContain("reason: offline");
+});
+
+// ---- the stdout path is scrubbed as one document ----
+
+for (const format of ["text", "json"] as const) {
+  test(`renderStdout (${format}) scrubs the checks alongside the report sections`, async () => {
+    const home = homedir();
+    const doc = await document({ configPath: `${home}/.config/caret/config.toml` }, [
+      {
+        id: "log-errors",
+        title: "Logs",
+        status: "fail",
+        detail: `2 errors in ${home}/.local/state/caret/logs/caret.log`,
+        remedy: `read ${home}/.local/state/caret/logs/caret.log`,
+      },
+    ]);
+    const out = renderStdout(doc, format);
+    expectNeverLogsBody(out, home);
+    expect(out).toContain("~/.local/state/caret/logs/caret.log");
+  });
+}
 
 // ---- pure helpers ----
 
