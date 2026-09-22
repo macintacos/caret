@@ -266,6 +266,8 @@ export const MARKDOWN_READ_BY_TESTS: readonly string[] = [
   "commands/demo.md", // test/structure/demo-template.test.ts checks every path it reads ships
   "opencode/commands/demo.md", // test/structure/demo-template.test.ts checks it carries the template marker
   "templates/demo.md", // test/structure/demo-template.test.ts checks it exists and ships
+  "commands/plan.md", // test/structure/caret-plan-command.test.ts checks it ships and names ExitPlanMode
+  "opencode/commands/plan.md", // test/structure/caret-plan-command.test.ts checks it ships and names the review tool
   // test/adapters/opencode/docs-cache-path.test.ts checks the `rm -rf` path it prints;
   // test/structure/line-anchor-claim.test.ts checks the line-anchor claim it states.
   "doc/ARCHITECTURE.md",
