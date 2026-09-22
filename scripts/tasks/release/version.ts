@@ -41,11 +41,6 @@ export function isNewer(version: string, other: string): boolean {
   return semver.gt(version, other);
 }
 
-/** The release asset title: `vX.Y.Z - <Theme>` (or bare `vX.Y.Z` when untitled). */
-export function composeReleaseTitle(version: string, title: string | null): string {
-  return title ? `v${version} - ${title}` : `v${version}`;
-}
-
 /** The version body of a `vX.Y.Z` tag. Throws if the tag is not `v` + semver. */
 export function versionFromTag(tag: string): string {
   if (!tag.startsWith("v")) {

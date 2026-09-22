@@ -149,10 +149,10 @@ describe("release group error discipline (in-process, injected deps)", () => {
     expect(stderr).toBe("");
   });
 
-  test("finalize's --title and --notes-file reach the step and shape the release", async () => {
+  test("finalize's --notes-file reaches the step and shapes the release", async () => {
     // Commander camelCases --notes-file to opts.notesFile; a slip there reads as
     // "no notes" and publishes a silently empty Release body, discovered only after
-    // the tag is pushed. --title fails loudly by contrast, so only this asserts it.
+    // the tag is pushed.
     const NOTES_FILE = "/tmp/caret-release-notes.md";
     const { deps, releases } = makeReleaseHarness({
       refs: { "origin/trunk": "mergedsha" },
@@ -166,8 +166,6 @@ describe("release group error discipline (in-process, injected deps)", () => {
     const { threw } = await runReleaseInProcess(deps, [
       "finalize",
       "--yes",
-      "--title",
-      "The Foundations Release",
       "--notes-file",
       NOTES_FILE,
     ]);

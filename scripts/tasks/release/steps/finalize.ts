@@ -2,9 +2,9 @@
 // It derives the version from trunk's three manifests and proves the bump
 // actually merged before publishing anything, and is resume-aware throughout —
 // reusing an existing release, never moving an existing tag, and completing a
-// run that died partway. The themed title and the release body are prose only
-// the agent can write, so they arrive as `--title` and `--notes-file`; the body
-// is reflowed to single-line paragraphs so it renders cleanly on GitHub.
+// run that died partway. The release body is prose only the agent can write, so
+// it arrives as `--notes-file`, reflowed to single-line paragraphs so it renders
+// cleanly on GitHub.
 
 import { extractVersion } from "@/tasks/release/manifest.ts";
 import {
@@ -19,7 +19,7 @@ import {
   GuardError,
   syncedVersion,
 } from "@/tasks/release/steps/guards.ts";
-import { composeReleaseTitle, isNewer, tagName, versionFromTag } from "@/tasks/release/version.ts";
+import { isNewer, tagName, versionFromTag } from "@/tasks/release/version.ts";
 
 /** The finalized release derived from `origin/<defaultBranch>`: the merged HEAD to
  * tag plus the version/tag/title of the release being published. */
@@ -38,11 +38,7 @@ interface TrunkRelease {
  * else is `TAG_EXISTS`, and neither case holding is `NOT_MERGED`. Never mutates;
  * the tag/release creation is the caller's job.
  */
-async function resolveTrunkRelease(
-  deps: Deps,
-  defaultBranch: string,
-  title: string | undefined,
-): Promise<TrunkRelease> {
+async function resolveTrunkRelease(deps: Deps, defaultBranch: string): Promise<TrunkRelease> {
   const trunkRef = `origin/${defaultBranch}`;
   const trunkSha = await deps.git.tryRevParse(trunkRef);
   if (trunkSha === null) {
@@ -82,12 +78,7 @@ async function resolveTrunkRelease(
     );
   }
 
-  return {
-    trunkSha,
-    version,
-    tag,
-    title: composeReleaseTitle(version, title?.trim() || null),
-  };
+  return { trunkSha, version, tag, title: tag };
 }
 
 /**
@@ -137,7 +128,7 @@ async function ensureTag(deps: Deps, tag: string, trunkSha: string, title: strin
 /** Phase 2: tag trunk's merged HEAD and publish the GitHub Release. */
 export async function finalize(
   deps: Deps,
-  opts: { dryRun: boolean; title?: string; notesFile?: string },
+  opts: { dryRun: boolean; notesFile?: string },
 ): Promise<FinalizeResult> {
   const { defaultBranch } = await assertRepoAndGh(deps);
   // No branch guard here: finalize tags origin/trunk's HEAD (derived after the
@@ -152,11 +143,7 @@ export async function finalize(
   // origin/trunk so phase detection and previews reflect a merged PR.
   await deps.git.fetch();
 
-  const { trunkSha, version, tag, title } = await resolveTrunkRelease(
-    deps,
-    defaultBranch,
-    opts.title,
-  );
+  const { trunkSha, version, tag, title } = await resolveTrunkRelease(deps, defaultBranch);
 
   // Resolve the GitHub release: reuse an existing one, preview it in a dry run,
   // or tag + create it. An existing release still falls through to the npm

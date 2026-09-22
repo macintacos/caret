@@ -15,9 +15,6 @@ import type { ErrorCode } from "@/tasks/release/contract.ts";
 import type { PrState } from "@/tasks/release/github.ts";
 import { baseline, compute, finalize, GuardError, prepare } from "@/tasks/release/steps.ts";
 
-/** The themed release name the agent hands the script via `--title`. */
-const THEME = "The Foundations Release";
-
 async function expectGuard(p: Promise<unknown>, code: ErrorCode) {
   try {
     await p;
@@ -155,26 +152,16 @@ const resumedReleaseBranch = (state: PrState): HarnessOptions => ({
 
 test("prepare dry-run writes, commits, pushes, and PRs nothing", async () => {
   const { deps, calls } = makeReleaseHarness(PREPARE_OPTS);
-  const r = await prepare(deps, { bump: "minor", dryRun: true, title: THEME });
+  const r = await prepare(deps, { bump: "minor", dryRun: true });
   expect(r.dryRun).toBe(true);
   expect(r.version).toBe("0.1.0");
-  expect(r.title).toBe("v0.1.0 - The Foundations Release");
+  expect(r.title).toBe("v0.1.0");
   expect(calls).toEqual([]);
-});
-
-test("prepare rejects TITLE_MISSING when no themed title is supplied", async () => {
-  const { deps } = makeReleaseHarness(PREPARE_OPTS);
-  await expectGuard(prepare(deps, { bump: "minor", dryRun: false }), "TITLE_MISSING");
-});
-
-test("prepare rejects TITLE_MISSING when the title is blank", async () => {
-  const { deps } = makeReleaseHarness(PREPARE_OPTS);
-  await expectGuard(prepare(deps, { bump: "minor", dryRun: false, title: "   " }), "TITLE_MISSING");
 });
 
 test("prepare stages only the version manifests", async () => {
   const { deps, calls } = makeReleaseHarness(PREPARE_OPTS);
-  await prepare(deps, { bump: "minor", dryRun: false, title: THEME });
+  await prepare(deps, { bump: "minor", dryRun: false });
   expect(calls).toContain(
     "stage:package.json,.claude-plugin/marketplace.json,.claude-plugin/plugin.json",
   );
@@ -182,7 +169,7 @@ test("prepare stages only the version manifests", async () => {
 
 test("prepare bumps manifests, commits, pushes, and opens a PR", async () => {
   const { deps, calls, files } = makeReleaseHarness(PREPARE_OPTS);
-  const r = await prepare(deps, { bump: "minor", dryRun: false, title: THEME });
+  const r = await prepare(deps, { bump: "minor", dryRun: false });
   expect(files.get("package.json")).toContain('"version": "0.1.0"');
   expect(files.get(".claude-plugin/marketplace.json")).toContain('"version": "0.1.0"');
   expect(calls).toContain("checkoutNew:release/v0.1.0");
@@ -190,7 +177,7 @@ test("prepare bumps manifests, commits, pushes, and opens a PR", async () => {
   expect(r.committed).toBe(true);
   expect(r.pushed).toBe(true);
   expect(r.prUrl).toBe("https://github.com/macintacos/caret/pull/9");
-  expect(r.title).toBe("v0.1.0 - The Foundations Release");
+  expect(r.title).toBe("v0.1.0");
 });
 
 test("prepare reuses an already-open PR instead of opening a duplicate", async () => {
@@ -201,7 +188,7 @@ test("prepare reuses an already-open PR instead of opening a duplicate", async (
     refs: { "origin/trunk": "trunksha", "origin/release/v0.1.0": "x" },
     prs: releasePr3("OPEN"),
   });
-  const r = await prepare(deps, { bump: "minor", dryRun: false, title: THEME });
+  const r = await prepare(deps, { bump: "minor", dryRun: false });
   expect(calls).not.toContain("prCreate");
   expect(r.prNumber).toBe(3);
   expect(r.prUrl).toBe("https://github.com/macintacos/caret/pull/3");
@@ -209,7 +196,7 @@ test("prepare reuses an already-open PR instead of opening a duplicate", async (
 
 test("prepare resumes cleanly when the release branch is already bumped", async () => {
   const { deps, calls } = makeReleaseHarness(resumedReleaseBranch("OPEN"));
-  const r = await prepare(deps, { bump: "minor", dryRun: false, title: THEME });
+  const r = await prepare(deps, { bump: "minor", dryRun: false });
   expect(r.version).toBe("0.1.0");
   expect(r.prNumber).toBe(3);
   expect(calls).not.toContain("write:package.json"); // bump skipped, no crash
@@ -237,10 +224,7 @@ test("prepare rejects BRANCH_DIVERGED when the remote release branch is not an a
       ".claude-plugin/marketplace.json": market("0.1.0"),
     },
   });
-  await expectGuard(
-    prepare(deps, { bump: "minor", dryRun: false, title: THEME }),
-    "BRANCH_DIVERGED",
-  );
+  await expectGuard(prepare(deps, { bump: "minor", dryRun: false }), "BRANCH_DIVERGED");
   expect(calls).not.toContain("pushBranch:release/v0.1.0:false"); // never pushed over the divergence
 });
 
@@ -248,10 +232,7 @@ test("prepare rejects ALREADY_MERGED when the release PR is already merged", asy
   // The bump PR merged but the operator re-ran prepare; it must point them at
   // finalize rather than open a duplicate or push again.
   const { deps, calls } = makeReleaseHarness(resumedReleaseBranch("MERGED"));
-  await expectGuard(
-    prepare(deps, { bump: "minor", dryRun: false, title: THEME }),
-    "ALREADY_MERGED",
-  );
+  await expectGuard(prepare(deps, { bump: "minor", dryRun: false }), "ALREADY_MERGED");
   expect(calls).not.toContain("prCreate");
 });
 
@@ -259,7 +240,7 @@ test("prepare rejects PR_CLOSED when the release PR was closed unmerged", async 
   // A closed-unmerged PR means a human intervened; prepare refuses to silently
   // open a fresh PR over the same branch.
   const { deps, calls } = makeReleaseHarness(resumedReleaseBranch("CLOSED"));
-  await expectGuard(prepare(deps, { bump: "minor", dryRun: false, title: THEME }), "PR_CLOSED");
+  await expectGuard(prepare(deps, { bump: "minor", dryRun: false }), "PR_CLOSED");
   expect(calls).not.toContain("prCreate");
 });
 
@@ -459,17 +440,11 @@ test("finalize reuses an existing GitHub release", async () => {
 
 // --- finalize: title ---------------------------------------------------------
 
-test("finalize titles the tag and release from --title", async () => {
+test("finalize titles the tag and release with the bare version", async () => {
   const { deps, calls } = makeReleaseHarness(FINALIZE_OPTS);
-  const r = await finalize(deps, { dryRun: false, title: THEME });
-  expect(r.title).toBe("v0.1.0 - The Foundations Release");
-  expect(calls).toContain("createTag:v0.1.0@mergedsha");
-});
-
-test("finalize falls back to a bare vX.Y.Z title when --title is absent", async () => {
-  const { deps } = makeReleaseHarness(FINALIZE_OPTS);
   const r = await finalize(deps, { dryRun: false });
   expect(r.title).toBe("v0.1.0");
+  expect(calls).toContain("createTag:v0.1.0@mergedsha");
 });
 
 // --- finalize: notes + reflow ------------------------------------------------
