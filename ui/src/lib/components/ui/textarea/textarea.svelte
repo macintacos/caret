@@ -22,7 +22,7 @@
 		// Spacing + type
 		"px-3 py-2 text-base md:text-sm",
 		// Border, placeholder + motion
-		"border-input placeholder:text-muted-foreground transition-[color,box-shadow] outline-none",
+		"border-input placeholder:text-muted-foreground transition-[color,box-shadow] outline-hidden",
 		// Focus ring
 		"focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
 		// Invalid state

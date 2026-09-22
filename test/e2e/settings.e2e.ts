@@ -14,6 +14,9 @@
 // The label specs (EXC-1112) are here for the same reason: whether a <label> forwards a
 // click to its control, and what accessible name a browser then computes, are both
 // engine behaviour that happy-dom does not model.
+//
+// The forced-colors outline spec needs a real browser too: happy-dom neither emulates
+// forced colors nor computes the outline a focused field paints.
 
 import type { Locator, Page } from "@playwright/test";
 
@@ -615,6 +618,14 @@ test("`/` focuses the search from anywhere in the modal; once focused, `/` types
   // Once it owns focus, `/` types a literal slash instead of re-focusing.
   await page.keyboard.press("/");
   await expect(search).toHaveValue("/");
+});
+
+test("a focused text field keeps a visible outline in forced colors", async ({ daemon, page }) => {
+  await page.emulateMedia({ forcedColors: "active" });
+  const search = await openSettingsSearch(page, daemon);
+  await search.focus();
+  // Forced colors strips the box-shadow focus ring, so the outline is the only cue left.
+  expect(await search.evaluate((el) => getComputedStyle(el).outlineStyle)).not.toBe("none");
 });
 
 test("Esc in the search clears the query and returns focus to the dialog; a second Esc dismisses", async ({

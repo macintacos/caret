@@ -34,7 +34,7 @@
 			// Selection, placeholder + ring offset
 			"selection:bg-primary selection:text-primary-foreground placeholder:text-muted-foreground ring-offset-background",
 			// Motion
-			"transition-[color,box-shadow] outline-none",
+			"transition-[color,box-shadow] outline-hidden",
 			// Disabled
 			"disabled:cursor-not-allowed disabled:opacity-50",
 			// Focus ring
@@ -62,7 +62,7 @@
 			// Selection, placeholder + ring offset
 			"selection:bg-primary selection:text-primary-foreground placeholder:text-muted-foreground ring-offset-background",
 			// Motion
-			"transition-[color,box-shadow] outline-none",
+			"transition-[color,box-shadow] outline-hidden",
 			// Disabled
 			"disabled:cursor-not-allowed disabled:opacity-50",
 			// Focus ring
