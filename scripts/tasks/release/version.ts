@@ -1,7 +1,7 @@
-// Version arithmetic for the release pipeline, plus the release-asset names
-// derived from a version (the tag and the Release title). The release script is
-// the sole source of the version number — the agent never computes or alters it
-// — so all semver math lives here and nowhere else.
+// Version arithmetic for the release pipeline, plus the `vX.Y.Z` tag name
+// derived from a version, which also serves as the Release title. The release
+// script is the sole source of the version number — the agent never computes or
+// alters it — so all semver math lives here and nowhere else.
 
 import semver from "semver";
 
@@ -39,11 +39,6 @@ export function tagName(version: string): string {
  */
 export function isNewer(version: string, other: string): boolean {
   return semver.gt(version, other);
-}
-
-/** The release asset title: `vX.Y.Z - <Theme>` (or bare `vX.Y.Z` when untitled). */
-export function composeReleaseTitle(version: string, title: string | null): string {
-  return title ? `v${version} - ${title}` : `v${version}`;
 }
 
 /** The version body of a `vX.Y.Z` tag. Throws if the tag is not `v` + semver. */

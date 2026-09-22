@@ -20,33 +20,20 @@ import {
   assertRepoAndGh,
   GuardError,
 } from "@/tasks/release/steps/guards.ts";
-import { type BumpLevel, composeReleaseTitle } from "@/tasks/release/version.ts";
+import type { BumpLevel } from "@/tasks/release/version.ts";
 
 /** The release PR body: a "What changed" summary and a "What to test" checklist. */
-function prBody(version: string, title: string): string {
+function prBody(version: string): string {
   return [
     "## What changed",
     "",
-    `Release ${title}: bumps the version to ${version} across package.json and the two .claude-plugin manifests.`,
+    `Bumps the version to ${version} across package.json and the two .claude-plugin manifests.`,
     "",
     "## What to test",
     "",
     "- `mise run preflight` passes on the release branch.",
     "- All three manifests reflect the new version.",
   ].join("\n");
-}
-
-/**
- * Compose the release title from the agent-supplied theme. The theme arrives as
- * `--title` because it is prose only the agent can write, and it titles the
- * commit, the PR, the tag, and the GitHub Release alike.
- */
-function composeTitle(ctx: ReleaseContext, title: string | undefined): string {
-  const themed = title?.trim() ?? "";
-  if (themed === "") {
-    throw new GuardError("TITLE_MISSING", 'Pass --title "The <Theme> Release".');
-  }
-  return composeReleaseTitle(ctx.version, themed);
 }
 
 /** Ensure we are on the release branch, resuming onto an existing local/remote one. */
@@ -181,7 +168,7 @@ async function ensurePr(
       head: ctx.releaseBranch,
       base: defaultBranch,
       title,
-      body: prBody(ctx.version, title),
+      body: prBody(ctx.version),
     });
     return { prNumber: pr.number, prUrl: pr.url };
   }
@@ -192,7 +179,7 @@ async function ensurePr(
 /** Phase 1: bump the manifests, commit them, push the branch, open a PR. */
 export async function prepare(
   deps: Deps,
-  opts: { bump: BumpLevel; dryRun: boolean; title?: string },
+  opts: { bump: BumpLevel; dryRun: boolean },
 ): Promise<PrepareResult> {
   const apply = !opts.dryRun;
   const { repoSlug, defaultBranch } = await assertRepoAndGh(deps);
@@ -200,7 +187,7 @@ export async function prepare(
   await assertCleanTree(deps, MANIFESTS);
   const ctx = await gatherContext(deps, opts.bump, repoSlug, defaultBranch);
 
-  const title = composeTitle(ctx, opts.title);
+  const title = ctx.tag;
   await resolveReleaseBranch(deps, ctx, apply);
   await bumpManifests(deps, ctx, apply);
   // No preflight gate here: release deliberately does not run `mise run preflight`

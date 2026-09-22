@@ -36,6 +36,7 @@ export interface PrepareResult {
   version: string;
   tag: string;
   releaseBranch: string;
+  /** Always equal to `tag`: the commit, PR, tag, and Release title. */
   title: string;
   prNumber: number | null;
   prUrl: string | null;
@@ -48,6 +49,7 @@ export interface FinalizeResult {
   phase: "finalize";
   version: string;
   tag: string;
+  /** Always equal to `tag`: the commit, PR, tag, and Release title. */
   title: string;
   taggedSha: string;
   releaseUrl: string | null;

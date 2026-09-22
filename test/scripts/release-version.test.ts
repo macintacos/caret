@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 
 import {
   type BumpLevel,
-  composeReleaseTitle,
   isBumpLevel,
   isNewer,
   nextVersion,
@@ -38,13 +37,6 @@ test("versionFromTag strips the leading v", () => {
 test("versionFromTag rejects a tag without a valid semver body", () => {
   expect(() => versionFromTag("v1.2")).toThrow();
   expect(() => versionFromTag("0.1.0")).toThrow();
-});
-
-test("composeReleaseTitle builds the themed asset title", () => {
-  expect(composeReleaseTitle("0.1.0", "The Foundations Release")).toBe(
-    "v0.1.0 - The Foundations Release",
-  );
-  expect(composeReleaseTitle("0.1.0", null)).toBe("v0.1.0");
 });
 
 test("isNewer orders versions by semver, not string comparison", () => {
