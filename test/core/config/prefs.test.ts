@@ -48,7 +48,7 @@ test("an opt-out moves into config.toml and the prefs file goes", async () => {
 test("a prefs file carrying only the approve mode is dropped, writing no config", async () => {
   // The remembered variant is a browser pref now, and a daemon cannot write browser
   // storage — so it resets once rather than migrating.
-  await writeFile(prefs, JSON.stringify({ approveMode: "auto" }));
+  await writeFile(prefs, JSON.stringify({ approveMode: "yolo" }));
   const { recs, log } = recordingLog();
   await migrate(log);
   expect(existsSync(prefs)).toBe(false);

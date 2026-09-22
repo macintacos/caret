@@ -57,8 +57,10 @@ The test that catches drift is structural: a Claude literal appearing in `test/c
 the smell. When a core suite needs an agent-specific value, the value arrives through an
 injected dep (the pattern the daemon/review suites already follow) — that is what keeps
 the core layer honest and the adapter directory the single home for tool-specific
-vocabulary. `test/structure/core-adapter-boundary.test.ts` enforces the import and
-`hookSpecificOutput` halves, so a reintroduced leak fails `bun test`.
+vocabulary. `test/structure/core-adapter-boundary.test.ts` enforces it: an `@/adapters/*`
+import other than the `adapter.ts` interface, or any of the literals above, fails
+`bun test`. The two registry-contract suites (the adapter registry and the install-target
+registry) may import the registries they cover, since naming every agent is their subject.
 
 Mirroring is what preserves this. `test/core/` remains one directory to grep, so "is the
 core still tool-agnostic?" stays a question the layout can answer; the domain directories
