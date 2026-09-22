@@ -11,12 +11,17 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { ensureDaemonNoOps, noOpTiming } from "@test/support/ensure-daemon-deps.ts";
+import {
+  ensureDaemonNoOps,
+  memoryBootMarker,
+  noOpTiming,
+} from "@test/support/ensure-daemon-deps.ts";
 import { setupTempStateDir, withEnv } from "@test/support/env.ts";
 import { caretLogRecords } from "@test/support/ndjson.ts";
 import { until } from "@test/support/poll.ts";
 import { fakeServiceManager } from "@test/support/service-manager.ts";
 import {
+  daemonBootMarker,
   daemonLock,
   daemonStderrLogFile,
   ensureLogsDir,
@@ -27,9 +32,11 @@ import {
 import { DEFAULTS } from "@/config/settings.ts";
 import type { HealthBody } from "@/daemon/client.ts";
 import {
+  BOOT_MARKER_TTL_MS,
   DAEMON_CWD,
   type EnsureMode,
   ensureDaemon,
+  fileBootMarker,
   isPidAlive,
   openDaemonStderr,
   prodEnsureDeps,
@@ -160,6 +167,102 @@ test("ensureDaemon spawns again only once the daemon it spawned has exited", asy
     }),
   );
   expect(spawned).toEqual([1, 2]);
+});
+
+test("concurrent ensureDaemon calls spawn one daemon between them", async () => {
+  let spawns = 0;
+  let probesSinceSpawn = 0;
+  const deps = ensureDeps({
+    // The spawned daemon takes a few probes to boot.
+    health: async () =>
+      spawns > 0 && ++probesSinceSpawn > 3
+        ? { service: "caret", build: "b1", version: "v1" }
+        : null,
+    spawn: () => ++spawns,
+    isAlive: () => true,
+  });
+  await Promise.all([ensureDaemon(deps), ensureDaemon(deps)]);
+  expect(spawns).toBe(1);
+});
+
+test("a call that times out mid-boot leaves the next call waiting on that boot", async () => {
+  const bootMarker = memoryBootMarker();
+  let spawns = 0;
+  let booted = false;
+  const deps = (over: Partial<Parameters<typeof ensureDaemon>[0]>) =>
+    ensureDeps({ bootMarker, isAlive: () => true, spawn: () => ++spawns, ...over });
+  await expect(
+    ensureDaemon(deps({ health: async () => null, timing: noOpTiming(2) })),
+  ).rejects.toThrow();
+  let probes = 0;
+  const url = await ensureDaemon(
+    deps({
+      health: async () => {
+        booted ||= ++probes > 2;
+        return booted ? { service: "caret", build: "b1", version: "v1" } : null;
+      },
+    }),
+  );
+  expect(url).toBe("http://localhost:42718");
+  expect(spawns).toBe(1);
+});
+
+test.each<[string, Partial<Parameters<typeof ensureDaemon>[0]>]>([
+  ["a dead pid", { isAlive: () => false }],
+  [
+    "a live pid claimed longer ago than the TTL",
+    { isAlive: () => true, timing: { ...noOpTiming(), wallNow: () => BOOT_MARKER_TTL_MS + 1 } },
+  ],
+])("a boot marker naming %s does not block a spawn", async (_title, over) => {
+  const bootMarker = memoryBootMarker({ pid: 4_000_000, claimedAt: 0 });
+  let spawns = 0;
+  await ensureDaemon(
+    ensureDeps({
+      bootMarker,
+      health: async () => (spawns > 0 ? { service: "caret", build: "b1", version: "v1" } : null),
+      spawn: () => ++spawns + 100,
+      ...over,
+    }),
+  );
+  expect(spawns).toBe(1);
+  expect(bootMarker.read()?.pid).toBe(101);
+});
+
+test("ensureDaemon logs giving up on a booting daemon at debug", async () => {
+  setLogLevel("debug");
+  await expect(
+    ensureDaemon(
+      ensureDeps({
+        bootMarker: memoryBootMarker({ pid: 4_000_001, claimedAt: 0 }),
+        health: async () => null,
+        isAlive: () => true,
+        timing: noOpTiming(3),
+      }),
+    ),
+  ).rejects.toThrow();
+  const recs = caretLogRecords().filter((r) => r.step === "spawn");
+  expect(recs.some((r) => r.bootPid === 4_000_001)).toBe(true);
+});
+
+test.each<[string, () => Error]>([
+  ["fails", () => new Error("spawn failed")],
+  [
+    "loses the port race",
+    () => Object.assign(new Error("listen EADDRINUSE"), { code: "EADDRINUSE" }),
+  ],
+])("a spawn that %s releases the boot marker", async (_title, error) => {
+  const bootMarker = memoryBootMarker();
+  await ensureDaemon(
+    ensureDeps({
+      bootMarker,
+      health: async () => null,
+      spawn: () => {
+        throw error();
+      },
+      timing: noOpTiming(1),
+    }),
+  ).catch(() => {});
+  expect(bootMarker.read()).toBeNull();
 });
 
 test("ensureDaemon gives up after maxAttempts", async () => {
@@ -896,6 +999,7 @@ function steppedClock() {
     stepMs,
     timing: {
       now: () => t,
+      wallNow: () => 0,
       backoff: async () => {
         t += stepMs;
       },
@@ -1169,6 +1273,22 @@ test("a detached, unref'd child that exits is reaped without being awaited", asy
   child.unref();
   const { pid } = child;
   expect(await until(() => !isPidAlive(pid))).toBe(true);
+});
+
+// ---- fileBootMarker ----
+
+test("fileBootMarker lets one claim win until the marker is cleared", () => {
+  const store = fileBootMarker();
+  expect(store.claim()).toBe(true);
+  expect(store.claim()).toBe(false);
+  expect(store.read()?.pid).toBe(process.pid);
+  store.assign(4_000_002);
+  expect(store.read()?.pid).toBe(4_000_002);
+  store.clear();
+  expect(existsSync(daemonBootMarker())).toBe(false);
+  expect(() => store.clear()).not.toThrow();
+  expect(store.claim()).toBe(true);
+  store.clear();
 });
 
 // ---- removeOwnDaemonLock ----
