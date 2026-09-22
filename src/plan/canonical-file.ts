@@ -9,10 +9,26 @@
 // Best-effort and never fatal: a plan must survive even when the file can't be
 // rewritten (read-only fs, a race, an older agent that sends no path), so every
 // failure is swallowed with a logged code.
-import { appendFileSync, existsSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 
 import type { CaretLogger } from "@/lib/log.ts";
 import { reviewerNotesSection } from "@/plan/reviewer-notes.ts";
+
+/** Only an existing regular `.md` file counts as the agent's plan file. May throw
+ * on an fs race; callers guard it. */
+function isPlanFile(path: string): boolean {
+  return path.endsWith(".md") && existsSync(path) && statSync(path).isFile();
+}
+
+/** The plan file's current text, or undefined when the path fails `isPlanFile` or
+ * the read fails. Never throws. */
+export function readPlanFile(path: string): string | undefined {
+  try {
+    return isPlanFile(path) ? readFileSync(path, "utf8") : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * The shared, security-relevant guard for writing the agent's plan file: only an
@@ -33,8 +49,7 @@ function guardedPlanFileWrite(
   write: (path: string) => void,
 ): void {
   try {
-    if (!planFilePath.endsWith(".md")) return;
-    if (!existsSync(planFilePath) || !statSync(planFilePath).isFile()) return;
+    if (!isPlanFile(planFilePath)) return;
     write(planFilePath);
   } catch (err) {
     // An fs error's `.code` (e.g. EACCES) is safe to log; the path and plan text

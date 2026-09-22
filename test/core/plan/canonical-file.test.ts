@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { recordingLog } from "@test/support/recording-log.ts";
-import { appendReviewerNotesToPlanFile, writeCanonicalPlanFile } from "@/plan/canonical-file.ts";
+import {
+  appendReviewerNotesToPlanFile,
+  readPlanFile,
+  writeCanonicalPlanFile,
+} from "@/plan/canonical-file.ts";
 
 // writeCanonicalPlanFile mirrors caret's canonical plan text back onto the
 // on-disk file the agent reads from, so its plan of record matches the review.
@@ -56,6 +60,19 @@ test("never throws when the file cannot be written", () => {
   // a file-write error). Whether the write actually fails is platform/uid
   // dependent — root ignores the mode — so we only assert the no-throw contract.
   expect(() => writeCanonicalPlanFile(path, "canonical", recordingLog().log)).not.toThrow();
+});
+
+test("readPlanFile returns an .md plan file's text", () => {
+  const path = join(dir, "read.md");
+  writeFileSync(path, "# Plan\n");
+  expect(readPlanFile(path)).toBe("# Plan\n");
+});
+
+test("readPlanFile returns undefined for a missing or non-.md file", () => {
+  const txt = join(dir, "plan.txt");
+  writeFileSync(txt, "raw");
+  expect(readPlanFile(join(dir, "missing.md"))).toBeUndefined();
+  expect(readPlanFile(txt)).toBeUndefined();
 });
 
 // appendReviewerNotesToPlanFile folds an approval's reviewer notes onto the same
