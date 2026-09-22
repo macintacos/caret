@@ -22,6 +22,13 @@
 #
 # Re-probe both on the next bun bump.
 [test]
-# rumdl-preload points the plan formatter (src/plan/rumdl.ts) at the mise-pinned
-# rumdl so tests run offline; svelte-preload compiles .svelte for the UI suite.
-preload = ["./test/support/rumdl-preload.ts", "./ui/support/svelte-preload.ts"]
+# xdg-preload runs first: it points the XDG roots at throwaway dirs, so anything the
+# later preloads or the suites themselves resolve lands there and not in the developer's
+# own ~/.local/state/caret or ~/.config/caret. rumdl-preload points the plan formatter
+# (src/plan/rumdl.ts) at the mise-pinned rumdl so tests run offline; svelte-preload
+# compiles .svelte for the UI suite.
+preload = [
+  "./test/support/xdg-preload.ts",
+  "./test/support/rumdl-preload.ts",
+  "./ui/support/svelte-preload.ts",
+]
