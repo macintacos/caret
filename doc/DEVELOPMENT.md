@@ -51,7 +51,7 @@ mise run setup      # install pinned tools + JS deps + the generated palette + e
 mise run build      # build the UI (Vite multi-asset) then the binary; one progress line, log only on failure
 mise run build ui   # just the Svelte UI (Vite -> ui/dist), verbose; also `build bin` / `build bundle`
 mise run dev        # dev console: isolated daemon + three fake plans + Vite UI
-mise run caret      # caret's own CLI from src/cli.ts, e.g. `mise run caret discovery`
+mise run caret      # caret's own CLI from src/cli.ts, e.g. `mise run caret doctor`
 mise run test       # bun test (unit); `mise run test unit` is the same target
 mise run test e2e   # Playwright browser e2e (isolated daemon; Chromium, plus WebKit for the JSC probe)
                     # both take --quiet / --verbose / --json, before any forwarded args

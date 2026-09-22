@@ -9,11 +9,10 @@ slots in without touching core internals; blur it and agent vocabulary leaks eve
 - **`src/` is the tool-agnostic core, grouped by domain.** The core knows reviews, plans,
   and decisions; it does **not** know any agent's wire protocol. It is organized into
   cohesive domain directories (`daemon/`, `service/`, `review/`, `plan/`, `redact/`,
-  `ui/`, `config/`, `lib/`); [`../ARCHITECTURE.md`](../ARCHITECTURE.md) § Layout describes
-  what each one holds. `src/cli.ts` (the `bun build --compile` entrypoint) and
-  `src/discovery.ts` (the standalone diagnostics feature) stay at the root, beside the
-  gitignored generated UI manifest. There is deliberately no `src/core/` bucket — the
-  domain directories **are** the core.
+  `doctor/`, `ui/`, `config/`, `lib/`); [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §
+  Layout describes what each one holds. `src/cli.ts` (the `bun build --compile`
+  entrypoint) stays at the root, beside the gitignored generated UI manifest. There is
+  deliberately no `src/core/` bucket — the domain directories **are** the core.
 - **`src/adapters/<tool>/` implements one agent tool.** `src/adapters/adapter.ts` declares
   the `AgentAdapter` interface; `src/adapters/index.ts` is the registry that maps a tool
   id to its adapter and resolves the active one (by explicit id, then `CARET_AGENT`, then
@@ -22,11 +21,11 @@ slots in without touching core internals; blur it and agent vocabulary leaks eve
   seam. An adapter owns seven surfaces: `parseHookInput` (raw hook stdin → core
   `PlanInput`), `emitDecision` (core `Decision` → the tool's stdout wire shape),
   `fatalDenyLine` (a dependency-free last-resort deny line for the CLI's fatal handler),
-  `approveVariants` (the post-approval options it offers), `readInstallState` (the
-  discovery install probe), `listSkills` (the skill names the reviewer's `/` completion
-  offers — names only, never a skill's contents), and `readSkillDescription` (one named
-  skill's own description, read on demand for the preview panel that completion opens —
-  that description, never the rest of the skill's file).
+  `approveVariants` (the post-approval options it offers), `readInstallState` (the doctor
+  install probe), `listSkills` (the skill names the reviewer's `/` completion offers —
+  names only, never a skill's contents), and `readSkillDescription` (one named skill's own
+  description, read on demand for the preview panel that completion opens — that
+  description, never the rest of the skill's file).
 
 ## The dependency law (grep-enforceable)
 

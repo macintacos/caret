@@ -11,7 +11,7 @@ production wires the real effects at a composition point, and tests inject fakes
 `runReview(stdin, deps)` takes `ReviewDeps` (parseHookInput, ensureDaemon, postReview,
 longPoll, openBrowser, expire) and never reaches a module global; the CLI builds the prod
 deps, the test builds fakes. Same shape in `createAutosave(store, activeId, deps)` and
-`collectReport(DiscoveryDeps)`.
+`collectReport(DoctorDeps)`.
 
 Corollary — **prefer injectable state over module-level mutable state.** State a function
 closes over should be passed in (the backing store, the clock, the timer), so a test can
@@ -31,8 +31,8 @@ which layer the builder belongs to:
   costs a test, or a second caller, nothing.
 - **At the wiring point**, in `src/commands/` — when the builder needs the entrypoint's
   own graph: the adapter registry, the store, the server, loaded UI assets.
-  `prodDiscoveryDeps` (`src/commands/discovery.ts`) is here, and it is unexported, because
-  a test that imported it would drag that graph in behind it.
+  `prodDoctorDeps` (`src/commands/doctor.ts`) is here, and it is unexported, because a
+  test that imported it would drag that graph in behind it.
 
 What the builder cannot know — the boot timestamp, the resolved config path, the live
 settings service — stays a parameter either way. That is what keeps the first bullet's
