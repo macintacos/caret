@@ -2,14 +2,15 @@ import { expect, test } from "bun:test";
 
 import { setupTempStateDir } from "@test/support/env.ts";
 import type { ClientReview, PlanInput } from "@/lib/types.ts";
-import { runReconcile } from "@/review/reconcile.ts";
+import { parseHook } from "@/review/orchestrate.ts";
+import { type ReconcileDeps, runReconcile } from "@/review/reconcile.ts";
 
 // Point the state dir at a throwaway temp dir so reconcile's best-effort log
 // lines append to a disposable caret.log, not the real ~/.local/state/caret.
 setupTempStateDir("caret-reconcile-");
 
-// A tool-agnostic fake stdin parser: runReconcile takes parseHookInput as an
-// injected dependency, so this suite stays in test/core/ without reaching into
+// A tool-agnostic fake stdin parser: runReconcile takes the parse result rather
+// than an adapter, so this suite stays in test/core/ without reaching into
 // any adapter (the real parser is exercised in test/adapters/<tool>/).
 function fakeParseHookInput(stdin: string): PlanInput {
   const h = JSON.parse(stdin) as { session_id?: string; tool_input?: { plan?: string } };
@@ -35,20 +36,23 @@ function clientReview(over: Partial<ClientReview> = {}): ClientReview {
   };
 }
 
-function reconcileDeps(over: Partial<Parameters<typeof runReconcile>[1]> = {}) {
+function reconcileDeps(over: Partial<ReconcileDeps> = {}): ReconcileDeps {
   return {
-    parseHookInput: fakeParseHookInput,
     listReviews: async () => [] as ClientReview[],
     resolveReview: async () => {},
     ...over,
   };
 }
 
+function reconcile(stdin: string, deps: ReconcileDeps): Promise<void> {
+  return runReconcile(parseHook(fakeParseHookInput, stdin), deps);
+}
+
 const stdin = JSON.stringify({ session_id: "S", tool_input: { plan: "# P" } });
 
 test("a pending review for this session is reconciled to approved", async () => {
   const resolved: string[] = [];
-  await runReconcile(
+  await reconcile(
     stdin,
     reconcileDeps({
       listReviews: async () => [clientReview({ id: "rid", sessionId: "S" })],
@@ -62,7 +66,7 @@ test("a pending review for this session is reconciled to approved", async () => 
 
 test("no pending review for this session is a no-op (the UI already resolved it)", async () => {
   const resolved: string[] = [];
-  await runReconcile(
+  await reconcile(
     stdin,
     reconcileDeps({
       listReviews: async () => [clientReview({ id: "other", sessionId: "OTHER" })],
@@ -76,7 +80,7 @@ test("no pending review for this session is a no-op (the UI already resolved it)
 
 test("an empty pending list is a no-op", async () => {
   const resolved: string[] = [];
-  await runReconcile(
+  await reconcile(
     stdin,
     reconcileDeps({
       listReviews: async () => [],
@@ -91,7 +95,7 @@ test("an empty pending list is a no-op", async () => {
 test("no daemon answering (listReviews rejects) is a silent no-op, never throws", async () => {
   const resolved: string[] = [];
   await expect(
-    runReconcile(
+    reconcile(
       stdin,
       reconcileDeps({
         listReviews: async () => {
@@ -109,7 +113,7 @@ test("no daemon answering (listReviews rejects) is a silent no-op, never throws"
 test("unparseable stdin is a silent no-op, never throws", async () => {
   const resolved: string[] = [];
   await expect(
-    runReconcile(
+    reconcile(
       "not json",
       reconcileDeps({
         resolveReview: async (id: string) => {
@@ -123,7 +127,7 @@ test("unparseable stdin is a silent no-op, never throws", async () => {
 
 test("stdin without a session id short-circuits before listing reviews", async () => {
   let listed = 0;
-  await runReconcile(
+  await reconcile(
     JSON.stringify({ tool_input: { plan: "# P" } }),
     reconcileDeps({
       listReviews: async () => {
@@ -137,7 +141,7 @@ test("stdin without a session id short-circuits before listing reviews", async (
 
 test("a resolve failure is swallowed (best-effort), never throws", async () => {
   await expect(
-    runReconcile(
+    reconcile(
       stdin,
       reconcileDeps({
         listReviews: async () => [clientReview({ id: "rid", sessionId: "S" })],

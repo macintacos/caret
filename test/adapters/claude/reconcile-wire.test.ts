@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { setupTempStateDir } from "@test/support/env.ts";
 import { claudeAdapter } from "@/adapters/claude/index.ts";
 import type { ClientReview } from "@/lib/types.ts";
+import { parseHook } from "@/review/orchestrate.ts";
 import { runReconcile } from "@/review/reconcile.ts";
 
 const FIXTURE = join(import.meta.dir, "fixtures", "exit-plan-mode-posttooluse-stdin.json");
@@ -52,8 +53,7 @@ test("the PostToolUse fixture parses to a PlanInput carrying the session id and 
 
 test("a terminal approval reconciles the daemon's pending review for that session", async () => {
   const resolved: string[] = [];
-  await runReconcile(stdin, {
-    parseHookInput: claudeAdapter.parseHookInput,
+  await runReconcile(parseHook(claudeAdapter.parseHookInput, stdin), {
     listReviews: async () => [pendingReview({ id: "rid" })],
     resolveReview: async (id) => {
       resolved.push(id);
@@ -64,8 +64,7 @@ test("a terminal approval reconciles the daemon's pending review for that sessio
 
 test("a pending review for a different session is left untouched", async () => {
   const resolved: string[] = [];
-  await runReconcile(stdin, {
-    parseHookInput: claudeAdapter.parseHookInput,
+  await runReconcile(parseHook(claudeAdapter.parseHookInput, stdin), {
     listReviews: async () => [pendingReview({ id: "other", sessionId: "some-other-session" })],
     resolveReview: async (id) => {
       resolved.push(id);

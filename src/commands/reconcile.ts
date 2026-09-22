@@ -1,25 +1,24 @@
 // `caret reconcile`: the ExitPlanMode PostToolUse hook. When a plan is approved,
 // this fires and reconciles a terminal approval (one made in the agent interface,
-// not caret's UI) into the daemon — see src/review/reconcile.ts. Wires the production
-// deps: the active adapter's stdin parser and the daemon HTTP client, pointed at
-// the already-running daemon's loopback port (it never spawns one).
+// not caret's UI) into the daemon — see src/review/reconcile.ts. Parses the stdin with
+// the active adapter and wires the daemon HTTP client, pointed at the already-running
+// daemon's loopback port (it never spawns one).
 //
 // Unlike `caret review`, this hook GATES NOTHING — the plan is already approved.
 // So its failure mode is a SILENT NO-OP, never a fail-safe deny: it writes no
 // stdout, and any error (bad adapter selector, unreadable stdin) is swallowed so
 // a stray decision line can't reach Claude's PostToolUse channel.
 
-import type { AgentAdapter } from "@/adapters/adapter.ts";
 import { selectAdapter } from "@/adapters/index.ts";
 import { bootHookLogging } from "@/commands/boot.ts";
 import { getPort, loadSettings } from "@/config/settings.ts";
 import { listReviews, resolveReview } from "@/daemon/client.ts";
 import { logDebug } from "@/lib/log.ts";
+import { parseHook } from "@/review/orchestrate.ts";
 import { type ReconcileDeps, runReconcile } from "@/review/reconcile.ts";
 
-export function prodReconcileDeps(baseUrl: string, adapter: AgentAdapter): ReconcileDeps {
+export function prodReconcileDeps(baseUrl: string): ReconcileDeps {
   return {
-    parseHookInput: (stdin) => adapter.parseHookInput(stdin),
     listReviews: () => listReviews(baseUrl),
     // A terminal approve chose no caret approve variant, so resolve as a bare
     // allow — the daemon records it and drops the review from the pending set.
@@ -34,7 +33,7 @@ export async function runReconcileSubcommand(): Promise<void> {
     const adapter = selectAdapter();
     const baseUrl = `http://localhost:${getPort(loaded)}`;
     const stdin = await Bun.stdin.text();
-    await runReconcile(stdin, prodReconcileDeps(baseUrl, adapter));
+    await runReconcile(parseHook(adapter.parseHookInput, stdin), prodReconcileDeps(baseUrl));
   } catch (err) {
     // Never let this hook throw to the CLI's fail-safe (which would emit a deny
     // line): it gates nothing, so a failure is a silent no-op.
