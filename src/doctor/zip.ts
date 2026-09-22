@@ -25,7 +25,7 @@ const LOCAL_SIG = 0x04034b50;
 const CENTRAL_SIG = 0x02014b50;
 const EOCD_SIG = 0x06054b50;
 /** "2.0" — the version that introduced deflate, which is all this writer emits. */
-const VERSION = 20;
+const ZIP_VERSION = 20;
 const DEFLATE = 8;
 /** The "version made by" host byte. It must say UNIX or an extractor ignores the
  * external attributes below and the entry lands at its own umask default. */
@@ -58,7 +58,7 @@ interface ZipRecord {
 function localHeader(r: ZipRecord, stamp: { time: number; date: number }): Uint8Array {
   const head = new DataView(new ArrayBuffer(30));
   head.setUint32(0, LOCAL_SIG, true);
-  head.setUint16(4, VERSION, true);
+  head.setUint16(4, ZIP_VERSION, true);
   head.setUint16(6, 0, true); // general-purpose flags
   head.setUint16(8, DEFLATE, true);
   head.setUint16(10, stamp.time, true);
@@ -74,8 +74,8 @@ function localHeader(r: ZipRecord, stamp: { time: number; date: number }): Uint8
 function centralHeader(r: ZipRecord, stamp: { time: number; date: number }): Uint8Array {
   const head = new DataView(new ArrayBuffer(46));
   head.setUint32(0, CENTRAL_SIG, true);
-  head.setUint16(4, (UNIX_HOST << 8) | VERSION, true); // version made by
-  head.setUint16(6, VERSION, true); // version needed
+  head.setUint16(4, (UNIX_HOST << 8) | ZIP_VERSION, true); // version made by
+  head.setUint16(6, ZIP_VERSION, true); // version needed
   head.setUint16(8, 0, true); // general-purpose flags
   head.setUint16(10, DEFLATE, true);
   head.setUint16(12, stamp.time, true);

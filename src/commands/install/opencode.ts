@@ -143,7 +143,7 @@ export async function runInstallOpencodeTarget(
     const verb = opts.uninstall ? "remove" : "write";
     // The check is read-only, so a preview can still run it and say what it found. A
     // preview has no warning to carry an `unknown`'s reason, so the note carries it.
-    const found = checks(opts) ? ["", previewLine(await check(configFile, deps))] : [];
+    const found = checks(opts) ? ["", previewLine(await readVerdict(configFile, deps))] : [];
     // The specifier is the one thing a preview can't be read off the paths: `--from-local`
     // and a published install write the same file with very different content.
     const entry = opts.uninstall ? [] : ["", `plugin entry: ${specifier}`];
@@ -248,7 +248,7 @@ function previewLine(verdict: UpgradeVerdict): string {
 }
 
 /** This run's upgrade check: the adapter's read, with the test seams threaded in. */
-async function check(configFile: string, deps: InstallOpencodeDeps): Promise<UpgradeVerdict> {
+async function readVerdict(configFile: string, deps: InstallOpencodeDeps): Promise<UpgradeVerdict> {
   return readUpgradeVerdict({ configFile, cacheDirs: deps.cacheDirs, published: deps.published });
 }
 
@@ -265,7 +265,7 @@ async function upgradeStep(
 ): Promise<void> {
   const verdict = await ui.step(
     "Checking OpenCode's caret version",
-    () => check(configFile, deps),
+    () => readVerdict(configFile, deps),
     upgradeVerdictLine,
   );
   if (verdict.kind === "unknown") {
