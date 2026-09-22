@@ -433,8 +433,8 @@ src/commands/       per-subcommand entrypoints (one file per subcommand), plus t
 src/adapters/       the coding-agent adapter axis — the AgentAdapter interface and registry, plus one directory per tool (claude · opencode · codex)
 ui/                 Svelte 5 multi-asset SPA (Vite) embedded into the binary via the build-generated asset manifest, served by the daemon by URL path · src/state/ runes state modules · src/icons/ vendored Lucide SVGs
 hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode + PostToolUse/ExitPlanMode + UserPromptSubmit) — Claude-adapter packaging
-commands/           /caret:demo · /caret:doctor — Claude-adapter packaging (agent-specific behavioral prose)
-opencode/           the plugin OpenCode loads — the review tool, the planning steer, the config-hook mutation, and commands/ (the same two commands, rewritten for OpenCode) — OpenCode-adapter packaging; review-bridge.ts, its bridge to caret review, is shared with caret mcp and caret steer
+commands/           /caret:demo · /caret:doctor · /caret:plan — Claude-adapter packaging (agent-specific behavioral prose)
+opencode/           the plugin OpenCode loads — the review tool, the planning steer, the config-hook mutation, and commands/ (the same three commands, rewritten for OpenCode) — OpenCode-adapter packaging; review-bridge.ts, its bridge to caret review, is shared with caret mcp and caret steer
 templates/          demo.md — the /caret:demo plan both adapters' commands fill and present
 test/               core/ (tool-agnostic suites) · adapters/<tool>/ (per-adapter suites + fixtures) · opencode/ (the repo-root opencode/ package) · e2e/ (Playwright) · structure/ (repo-shape invariants) · scripts/ (release + dev tooling) · support/ (shared scaffolding)
 scripts/            dev and release tooling for the checkout, plus the two committed shims' tests
