@@ -16,7 +16,7 @@
 // engine behaviour that happy-dom does not model.
 //
 // The forced-colors outline spec needs a real browser too: happy-dom neither emulates
-// forced colors nor computes the outline a focused field paints.
+// forced colors nor computes a field's outline at rest and on focus.
 
 import type { Locator, Page } from "@playwright/test";
 
@@ -620,12 +620,13 @@ test("`/` focuses the search from anywhere in the modal; once focused, `/` types
   await expect(search).toHaveValue("/");
 });
 
-test("a focused text field keeps a visible outline in forced colors", async ({ daemon, page }) => {
+test("a focused text field gains an outline in forced colors", async ({ daemon, page }) => {
   await page.emulateMedia({ forcedColors: "active" });
   const search = await openSettingsSearch(page, daemon);
+  await expect(search).toHaveCSS("outline-style", "none");
   await search.focus();
-  // Forced colors strips the box-shadow focus ring, so the outline is the only cue left.
-  expect(await search.evaluate((el) => getComputedStyle(el).outlineStyle)).not.toBe("none");
+  // Forced colors strips the box-shadow ring, so the outline is the only focus cue left.
+  await expect(search).not.toHaveCSS("outline-style", "none");
 });
 
 test("Esc in the search clears the query and returns focus to the dialog; a second Esc dismisses", async ({

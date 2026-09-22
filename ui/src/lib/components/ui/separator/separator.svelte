@@ -6,6 +6,7 @@
 		ref = $bindable(null),
 		class: className,
 		"data-slot": dataSlot = "separator",
+		// bits-ui defaults to false, which announces every chrome divider.
 		decorative = true,
 		...restProps
 	}: SeparatorPrimitive.RootProps = $props();

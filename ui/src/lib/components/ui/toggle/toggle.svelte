@@ -14,7 +14,7 @@
 			// On (pressed) state
 			"data-[state=on]:bg-accent data-[state=on]:text-accent-foreground",
 			// Motion + focus ring
-			"transition-[color,box-shadow] outline-hidden focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
+			"transition-[color,box-shadow] focus-visible:outline-hidden focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
 			// Invalid state
 			"aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
 			// Disabled
