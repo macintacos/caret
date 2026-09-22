@@ -12,6 +12,7 @@
 import { appendFileSync, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 
 import type { CaretLogger } from "@/lib/log.ts";
+import type { PlanInput } from "@/lib/types.ts";
 import { reviewerNotesSection } from "@/plan/reviewer-notes.ts";
 
 /** Only an existing regular `.md` file counts as the agent's plan file. May throw
@@ -60,19 +61,25 @@ function guardedPlanFileWrite(
 }
 
 /**
- * Overwrite `planFilePath` with the canonical plan text. No-op when the path is
- * absent (agents without a plan file) or fails the safety guard (must be an
- * existing regular `.md` file). Never throws.
+ * Overwrite the plan file with the canonical plan text, but only while it still
+ * holds the `plan` caret ingested: a file the agent rewrote since is newer than the
+ * review and is left alone. No-op when the path is absent (agents without a plan
+ * file) or fails the safety guard (must be an existing regular `.md` file). Never
+ * throws.
  */
 export function writeCanonicalPlanFile(
-  planFilePath: string | undefined,
+  input: Pick<PlanInput, "plan" | "planFilePath">,
   canonical: string,
   log: CaretLogger,
 ): void {
-  if (!planFilePath) return;
-  guardedPlanFileWrite(planFilePath, log, "plan file canonicalize failed", (p) =>
-    writeFileSync(p, canonical),
-  );
+  if (!input.planFilePath) return;
+  guardedPlanFileWrite(input.planFilePath, log, "plan file canonicalize failed", (p) => {
+    if (readFileSync(p, "utf8") !== (input.plan ?? "")) {
+      log.info("review", "plan file changed; rewrite skipped");
+      return;
+    }
+    writeFileSync(p, canonical);
+  });
 }
 
 /**

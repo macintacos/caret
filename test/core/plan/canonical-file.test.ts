@@ -24,32 +24,48 @@ afterEach(() => {
 
 test("rewrites an existing .md plan file with the canonical text", () => {
   const path = join(dir, "plan.md");
-  writeFileSync(path, "the agent's raw, unwrapped plan text");
-  writeCanonicalPlanFile(path, "# Canonical\n\nwrapped\n", recordingLog().log);
+  const raw = "the agent's raw, unwrapped plan text";
+  writeFileSync(path, raw);
+  writeCanonicalPlanFile(
+    { plan: raw, planFilePath: path },
+    "# Canonical\n\nwrapped\n",
+    recordingLog().log,
+  );
   expect(readFileSync(path, "utf8")).toBe("# Canonical\n\nwrapped\n");
 });
 
+test("leaves a plan file that changed since ingest untouched", () => {
+  const path = join(dir, "changed.md");
+  writeFileSync(path, "# Newer plan the agent just wrote\n");
+  const { recs, log } = recordingLog();
+  writeCanonicalPlanFile({ plan: "# Ingested plan\n", planFilePath: path }, "# Canonical\n", log);
+  expect(readFileSync(path, "utf8")).toBe("# Newer plan the agent just wrote\n");
+  expect(recs.map((r) => [r.level, r.step])).toEqual([["info", "review"]]);
+});
+
 test("is a no-op when no path is given (agents without a plan file)", () => {
-  expect(() => writeCanonicalPlanFile(undefined, "x", recordingLog().log)).not.toThrow();
+  expect(() => writeCanonicalPlanFile({ plan: "x" }, "x", recordingLog().log)).not.toThrow();
 });
 
 test("refuses a non-.md path, leaving it untouched", () => {
   const path = join(dir, "plan.txt");
   writeFileSync(path, "raw");
-  writeCanonicalPlanFile(path, "canonical", recordingLog().log);
+  writeCanonicalPlanFile({ plan: "raw", planFilePath: path }, "canonical", recordingLog().log);
   expect(readFileSync(path, "utf8")).toBe("raw");
 });
 
 test("does not create a plan file that does not already exist", () => {
   const path = join(dir, "missing.md");
-  writeCanonicalPlanFile(path, "canonical", recordingLog().log);
+  writeCanonicalPlanFile({ plan: "raw", planFilePath: path }, "canonical", recordingLog().log);
   expect(existsSync(path)).toBe(false);
 });
 
 test("is a no-op for a directory path that ends in .md", () => {
   const path = join(dir, "weird.md");
   mkdtempSync(path); // a directory, not a file
-  expect(() => writeCanonicalPlanFile(path, "canonical", recordingLog().log)).not.toThrow();
+  expect(() =>
+    writeCanonicalPlanFile({ plan: "raw", planFilePath: path }, "canonical", recordingLog().log),
+  ).not.toThrow();
 });
 
 test("never throws when the file cannot be written", () => {
@@ -59,7 +75,9 @@ test("never throws when the file cannot be written", () => {
   // The invariant is that a write failure is swallowed (a plan is never lost to
   // a file-write error). Whether the write actually fails is platform/uid
   // dependent — root ignores the mode — so we only assert the no-throw contract.
-  expect(() => writeCanonicalPlanFile(path, "canonical", recordingLog().log)).not.toThrow();
+  expect(() =>
+    writeCanonicalPlanFile({ plan: "raw", planFilePath: path }, "canonical", recordingLog().log),
+  ).not.toThrow();
 });
 
 test("readPlanFile returns an .md plan file's text", () => {

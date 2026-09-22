@@ -105,8 +105,8 @@ test("rewrites the agent's on-disk plan file with the canonical formatted text",
   // plan whose prose the formatter reflows should leave the canonical text on disk,
   // not the raw text the agent first wrote.
   const planFilePath = join(dir, "agent-plan.md");
-  writeFileSync(planFilePath, "raw, never read back");
   const raw = `# Title\n\n${"a long sentence that prettier will reflow ".repeat(6)}`;
+  writeFileSync(planFilePath, raw);
   await routeIncomingPlan(input({ plan: raw, planFilePath }), store);
   const canonical = await formatPlanMarkdown(raw, recordingLog().log);
   expect(canonical).not.toBe(raw); // the reflow actually changed the text
@@ -117,8 +117,8 @@ test("canonicalizes the plan file on a revision, not just the first version", as
   const first = await routeIncomingPlan(input({ plan: "# T\n\nv1" }), store);
   await reject(first.id);
   const planFilePath = join(dir, "revision.md");
-  writeFileSync(planFilePath, "raw revision");
   const raw = `# T\n\n${"reflow me ".repeat(20)}`;
+  writeFileSync(planFilePath, raw);
   const r = await routeIncomingPlan(input({ plan: raw, planFilePath }), store);
   expect(r.action).toBe("append");
   const canonical = await formatPlanMarkdown(raw, recordingLog().log);

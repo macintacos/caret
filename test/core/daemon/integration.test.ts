@@ -73,8 +73,8 @@ test("POST /api/reviews canonicalizes the agent's on-disk plan file end to end",
   const srv = createServer({ store: createStore(join(dir, "store")), port: 0 });
   servers.push(srv);
   const planFilePath = join(dir, "plan.md");
-  writeFileSync(planFilePath, "raw text the agent first wrote");
   const raw = `# Title\n\n${"a sentence prettier will reflow ".repeat(6)}`;
+  writeFileSync(planFilePath, raw);
 
   const res = await fetch(`http://localhost:${srv.port}/api/reviews`, {
     method: "POST",
