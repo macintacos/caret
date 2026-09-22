@@ -261,10 +261,10 @@ export async function ensureDaemon(
     }
     // The marker guards another process's boot; this call's own spawn is guarded too,
     // since a marker that cannot be written counts as claimed on every attempt.
-    const boot = claimBoot(deps);
-    if (boot.claimed && spawnedPid !== undefined && deps.isAlive(spawnedPid)) {
+    const claim = claimBoot(deps);
+    if (claim.claimed && spawnedPid !== undefined && deps.isAlive(spawnedPid)) {
       deps.bootMarker.clear();
-    } else if (boot.claimed) {
+    } else if (claim.claimed) {
       try {
         spawnedPid = deps.spawn();
         // ponytail: a daemon that binds before this runs leaves the marker naming this
@@ -275,8 +275,8 @@ export async function ensureDaemon(
         deps.bootMarker.clear();
         if (!isAddrInUse(e)) throw e;
       }
-    } else if (boot.bootPid !== spawnedPid) {
-      waitingOn = boot.bootPid;
+    } else if (claim.bootPid !== spawnedPid) {
+      waitingOn = claim.bootPid;
     }
     await timing.backoff(attempt);
   }

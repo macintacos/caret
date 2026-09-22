@@ -284,16 +284,16 @@ function buildDaemon(deps: DoctorDeps, health: HealthIdentity | null): DaemonSec
 /** The lock + port reconciliation, flattened, plus the boot marker when one is claimed.
  * portServesCaret comes from the shared health probe (service === "caret"); portMismatch
  * compares the lock's port to the effective port. No lock → { lockExists: false,
- * portServesCaret, ...boot }. */
+ * portServesCaret, ...bootFields }. */
 function buildLockAndPort(deps: DoctorDeps, health: HealthIdentity | null): LockSection {
   const portServesCaret = health?.service === "caret";
   const marker = deps.readBootMarker();
-  const boot = marker && {
+  const bootFields = marker && {
     bootMarkerPid: marker.pid,
     bootMarkerAgeMs: deps.now().getTime() - marker.claimedAt,
   };
   const lock = deps.readLock();
-  if (!lock) return { lockExists: false, portServesCaret, ...boot };
+  if (!lock) return { lockExists: false, portServesCaret, ...bootFields };
   return {
     lockExists: true,
     lockPath: daemonLock(),
@@ -305,7 +305,7 @@ function buildLockAndPort(deps: DoctorDeps, health: HealthIdentity | null): Lock
     pidAlive: deps.isPidAlive(lock.pid),
     portServesCaret,
     portMismatch: lock.port !== deps.effective().port,
-    ...boot,
+    ...bootFields,
   };
 }
 

@@ -190,14 +190,14 @@ test("a call that times out mid-boot leaves the next call waiting on that boot",
   const bootMarker = memoryBootMarker();
   let spawns = 0;
   let booted = false;
-  const deps = (over: Partial<Parameters<typeof ensureDaemon>[0]>) =>
+  const depsFor = (over: Partial<Parameters<typeof ensureDaemon>[0]>) =>
     ensureDeps({ bootMarker, isAlive: () => true, spawn: () => ++spawns, ...over });
   await expect(
-    ensureDaemon(deps({ health: async () => null, timing: noOpTiming(2) })),
+    ensureDaemon(depsFor({ health: async () => null, timing: noOpTiming(2) })),
   ).rejects.toThrow();
   let probes = 0;
   const url = await ensureDaemon(
-    deps({
+    depsFor({
       health: async () => {
         booted ||= ++probes > 2;
         return booted ? { service: "caret", build: "b1", version: "v1" } : null;
@@ -258,8 +258,8 @@ test("a marker released between a lost claim and its read does not trigger a spa
     ensureDeps({
       bootMarker: {
         ...inner,
-        claim: (m) => {
-          if (inner.claim(m)) return true;
+        claim: (marker) => {
+          if (inner.claim(marker)) return true;
           inner.clear();
           return false;
         },

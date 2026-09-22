@@ -174,11 +174,11 @@ test("a spawned daemon drops the boot marker naming it once its lock is written"
   procs.push(daemon);
   // Planted after spawn because only then is the pid known; the daemon reads the marker
   // only once it has bound, far behind this synchronous write.
-  const marker = join(home, "caret", "daemon.boot");
-  mkdirSync(dirname(marker), { recursive: true });
-  writeFileSync(marker, JSON.stringify({ pid: daemon.pid, claimedAt: Date.now() }));
+  const markerFile = join(home, "caret", "daemon.boot");
+  mkdirSync(dirname(markerFile), { recursive: true });
+  writeFileSync(markerFile, JSON.stringify({ pid: daemon.pid, claimedAt: Date.now() }));
 
   await untilLockWritten(daemon, join(home, "caret", "daemon.lock"));
-  expect(await until(() => !existsSync(marker), 2_000)).toBe(true);
+  expect(await until(() => !existsSync(markerFile), 2_000)).toBe(true);
   expect(daemon.exitCode).toBeNull();
 });
