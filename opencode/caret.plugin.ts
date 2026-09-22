@@ -174,13 +174,14 @@ type PlanSource = { plan: string; planFilePath?: string };
 
 /** The plan the review tool submits, from exactly one of its `plan` / `path` args (an
  * empty string counts as absent). A `path` resolves against the session directory and
- * must be a readable `.md` file — the same check the core's plan-file write-back makes,
- * repeated here because this plugin cannot import src/. `readPlanFile` returns the
- * text, or undefined when absPath is not a readable regular file. */
+ * must be a readable `.md` file — mirroring the core's `isPlanFile`
+ * (src/plan/canonical-file.ts), repeated here because this plugin cannot import src/.
+ * `readFile` returns the text, or undefined when absPath is not a readable regular
+ * file. */
 export function resolvePlanSource(
   args: { plan?: string; path?: string },
   directory: string,
-  readPlanFile: (absPath: string) => string | undefined,
+  readFile: (absPath: string) => string | undefined,
 ): PlanSource | { error: string } {
   const plan = args.plan || undefined;
   const path = args.path || undefined;
@@ -195,7 +196,7 @@ export function resolvePlanSource(
       error: `caret: ${REVIEW_TOOL} needs a markdown (.md) file as \`path\`, not ${planFilePath}. Write the plan to a .md file, or pass it inline as \`plan\`.`,
     };
   }
-  const text = readPlanFile(planFilePath);
+  const text = readFile(planFilePath);
   if (text === undefined) {
     return {
       error: `caret: ${REVIEW_TOOL} could not read ${planFilePath} as a regular file. Write the plan there first, or pass it inline as \`plan\`.`,

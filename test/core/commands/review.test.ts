@@ -2,9 +2,15 @@ import { expect, test } from "bun:test";
 
 import { parseReviewUrl } from "@opencode/review-bridge.ts";
 import { fakeReviewDeps } from "@test/support/wire-contract.ts";
-import { browserOpenCmd, reviewHookStdin, reviewUrlLine } from "@/commands/review.ts";
+import {
+  browserOpenCmd,
+  notesAppendTarget,
+  reviewHookInput,
+  reviewUrlLine,
+} from "@/commands/review.ts";
 import type { PlanInput } from "@/lib/types.ts";
 import { PLAN_EMPTY_DENY_MESSAGE } from "@/plan/format.ts";
+import { parseHook } from "@/review/orchestrate.ts";
 
 // browserOpenCmd is the pure platform→argv selection extracted from openBrowser
 // so the branch choice is testable without spawning (the spawn-and-swallow stays
@@ -53,7 +59,6 @@ function recordingReview(fromFile: string | undefined) {
   const posted: PlanInput[] = [];
   const reads: string[] = [];
   const deps = fakeReviewDeps({
-    parseHookInput: fakeParseHookInput,
     postReview: async (_baseUrl, input) => {
       posted.push(input);
       return { id: "rid" };
@@ -63,7 +68,11 @@ function recordingReview(fromFile: string | undefined) {
     reads.push(path);
     return fromFile;
   };
-  return { posted, reads, run: (stdin: string) => reviewHookStdin(stdin, deps, readPlan) };
+  return {
+    posted,
+    reads,
+    run: (stdin: string) => reviewHookInput(parseHook(fakeParseHookInput, stdin), deps, readPlan),
+  };
 }
 
 test("reviews and returns the plan file's text over a stale payload plan", async () => {
@@ -100,4 +109,31 @@ test("stdin that fails to parse denies without reading the plan file", async () 
   expect(decision.behavior).toBe("deny");
   expect(input).toBeUndefined();
   expect(r.reads).toEqual([]);
+});
+
+// An older daemon omits planFileCurrent, which must still append (version skew).
+test.each([
+  ["no posted review", "allow", "n", PLAN_FILE, undefined, { path: PLAN_FILE, notes: "n" }],
+  [
+    "a current plan file",
+    "allow",
+    "n",
+    PLAN_FILE,
+    { planFileCurrent: true },
+    { path: PLAN_FILE, notes: "n" },
+  ],
+  [
+    "an older daemon's absent verdict",
+    "allow",
+    "n",
+    PLAN_FILE,
+    {},
+    { path: PLAN_FILE, notes: "n" },
+  ],
+  ["a moved-on plan file", "allow", "n", PLAN_FILE, { planFileCurrent: false }, "skip-moved-on"],
+  ["a deny", "deny", "n", PLAN_FILE, undefined, undefined],
+  ["no notes", "allow", undefined, PLAN_FILE, undefined, undefined],
+  ["no plan file", "allow", "n", undefined, undefined, undefined],
+] as const)("notes append target with %s", (_, behavior, feedback, path, posted, expected) => {
+  expect(notesAppendTarget({ behavior, feedback }, path, posted)).toEqual(expected);
 });

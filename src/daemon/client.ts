@@ -4,6 +4,7 @@
 
 import type {
   ClientReview,
+  CreatedReview,
   Decision,
   HealthIdentity,
   PlanInput,
@@ -57,10 +58,7 @@ export async function waitForHealth(
 
 /** Create the review. Null on a 503, the refusal of a daemon stepping down, so the
  * caller can post to its successor; any other failure throws. */
-export async function postReview(
-  baseUrl: string,
-  input: PlanInput,
-): Promise<{ id: string; hasLiveClient?: boolean } | null> {
+export async function postReview(baseUrl: string, input: PlanInput): Promise<CreatedReview | null> {
   const res = await fetch(`${baseUrl}/api/reviews`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -68,9 +66,9 @@ export async function postReview(
   });
   if (res.status === 503) return null;
   if (!res.ok) throw new Error(`POST /api/reviews failed: ${res.status}`);
-  // hasLiveClient is optional: an older daemon (mid-upgrade version skew) omits
-  // it, and the hook reads its absence as "no live client" (EXC-559).
-  return (await res.json()) as { id: string; hasLiveClient?: boolean };
+  // The hook reads an older daemon's missing hasLiveClient as "no live client" and
+  // its missing planFileCurrent as "plan file current".
+  return (await res.json()) as CreatedReview;
 }
 
 /** Best-effort expire: short-fused so a dying hook never hangs on it. The

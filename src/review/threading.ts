@@ -56,7 +56,13 @@ export async function routeIncomingPlan(
   // so its plan of record matches what the human reviews. Runs for every incoming
   // version (new thread or revision); best-effort, and skipped when the agent
   // rewrote the file after caret read it.
-  writeCanonicalPlanFile(input, plan, log);
+  const { planFilePath } = input;
+  const planFile = planFilePath
+    ? {
+        planFileCurrent:
+          writeCanonicalPlanFile({ ...input, planFilePath }, plan, log) !== "changed",
+      }
+    : {};
   const now = Date.now();
 
   // A pending review here is an orphan: a session has at most one outstanding
@@ -105,6 +111,7 @@ export async function routeIncomingPlan(
       action: "append",
       version,
       expired,
+      ...planFile,
     };
   }
 
@@ -127,5 +134,5 @@ export async function routeIncomingPlan(
     action: "new",
     version: 1,
   });
-  return { id, action: "new", version: 1, expired };
+  return { id, action: "new", version: 1, expired, ...planFile };
 }

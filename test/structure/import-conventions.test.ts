@@ -14,6 +14,8 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { importSpecifiers } from "@test/support/import-specifiers.ts";
+
 // From import.meta.dir, not cwd, so the suite reads the real tree wherever it runs.
 const REPO_ROOT = join(import.meta.dir, "..", "..");
 
@@ -40,39 +42,19 @@ const ALLOWED_LITERALS: Record<string, string> = {
 };
 
 /**
- * Extracts every relative import specifier in `source` that violates the rule.
- *
- * Covers all three specifier-bearing forms: `from "…"` (which also catches
- * `export … from`), a bare side-effect `import "…"`, and a dynamic
- * `import("…")`. All three are real module references, so a rule that read only
- * the `from` form would leave every side-effect harness import unpoliced — and
- * the UI suites reach their harness that way. A
- * specifier offends when it starts with `../` (any upward traversal) or when it
- * starts with `./` and contains a further `/` (a descent into a subdirectory).
- *
- * The `(?<!@)` guard drops CSS at-rules: `@import "./styles/x.css"` is not a JS
- * module reference, and appCss.ts documents the partials it inlines in exactly
- * that form. Scanning raw source rather than stripping comments first is
- * deliberate — a tokenizer that mis-parses a regex literal containing a quote
- * would silently stop reporting real imports, and for a gate a loud false
- * positive (reword the prose) beats a silent false negative.
- *
- * This pattern is byte-identical to the one in `importedPackages` in
- * dependency-placement.test.ts, which derives the shipped dependency set from
- * the same three forms. The duplication is deliberate — a shared regex and loop
- * is not `test/support/` scaffolding — so harden both or neither.
+ * Every relative import specifier in `source` that violates the rule: one that starts
+ * with `../` (any upward traversal), or starts with `./` and contains a further `/` (a
+ * descent into a subdirectory). The side-effect form matters as much as `from`: the UI
+ * suites reach their harness that way. `importSpecifiers`' `@import` guard is what
+ * keeps appCss.ts's documented `@import "./styles/x.css"` partials out.
  */
 function offendingSpecifiers(source: string, allowedPrefix?: string): string[] {
-  const found: string[] = [];
-  for (const match of source.matchAll(/(?<!@)\b(?:from|import)\s*\(?\s*"([^"]+)"/g)) {
-    const spec = match[1];
-    if (!spec) continue;
-    if (!spec.startsWith("./") && !spec.startsWith("../")) continue;
-    if (allowedPrefix && spec.startsWith(allowedPrefix)) continue;
+  return importSpecifiers(source).filter((spec) => {
+    if (!spec.startsWith("./") && !spec.startsWith("../")) return false;
+    if (allowedPrefix && spec.startsWith(allowedPrefix)) return false;
     const descends = spec.startsWith("./") && spec.slice(2).includes("/");
-    if (spec.startsWith("../") || descends) found.push(spec);
-  }
-  return found;
+    return spec.startsWith("../") || descends;
+  });
 }
 
 test("no import under test/ or ui/src/ traverses up or descends via a relative path", () => {

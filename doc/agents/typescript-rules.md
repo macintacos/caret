@@ -8,9 +8,9 @@ only on genuine repetition — never speculative abstraction.
 
 The dominant pattern: a function takes a `Deps` interface of the effects it performs,
 production wires the real effects at a composition point, and tests inject fakes.
-`runReview(stdin, deps)` takes `ReviewDeps` (parseHookInput, ensureDaemon, postReview,
-longPoll, openBrowser, expire) and never reaches a module global; the CLI builds the prod
-deps, the test builds fakes. Same shape in `createAutosave(store, activeId, deps)` and
+`runReview(parsed, deps)` takes `ReviewDeps` (ensureDaemon, postReview, longPoll,
+openBrowser, expire) and never reaches a module global; the CLI builds the prod deps, the
+test builds fakes. Same shape in `createAutosave(store, activeId, deps)` and
 `collectReport(DoctorDeps)`.
 
 Corollary — **prefer injectable state over module-level mutable state.** State a function

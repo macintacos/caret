@@ -107,10 +107,31 @@ test("rewrites the agent's on-disk plan file with the canonical formatted text",
   const planFilePath = join(dir, "agent-plan.md");
   const raw = `# Title\n\n${"a long sentence that prettier will reflow ".repeat(6)}`;
   writeFileSync(planFilePath, raw);
-  await routeIncomingPlan(input({ plan: raw, planFilePath }), store);
+  const routed = await routeIncomingPlan(input({ plan: raw, planFilePath }), store);
   const canonical = await formatPlanMarkdown(raw, recordingLog().log);
   expect(canonical).not.toBe(raw); // the reflow actually changed the text
   expect(readFileSync(planFilePath, "utf8")).toBe(canonical);
+  expect(routed.planFileCurrent).toBe(true);
+});
+
+test("reports the plan file as not current when the agent rewrote it after ingest", async () => {
+  const planFilePath = join(dir, "moved-on.md");
+  writeFileSync(planFilePath, "# Newer plan\n");
+  const routed = await routeIncomingPlan(input({ plan: "# Ingested\n", planFilePath }), store);
+  expect(routed.planFileCurrent).toBe(false);
+});
+
+test("reports the plan file as current when the guard refuses it", async () => {
+  const routed = await routeIncomingPlan(
+    input({ plan: "# Ingested\n", planFilePath: join(dir, "missing.md") }),
+    store,
+  );
+  expect(routed.planFileCurrent).toBe(true);
+});
+
+test("reports no plan-file state for a plan without a plan file", async () => {
+  const routed = await routeIncomingPlan(input(), store);
+  expect("planFileCurrent" in routed).toBe(false);
 });
 
 test("canonicalizes the plan file on a revision, not just the first version", async () => {

@@ -1,6 +1,6 @@
 // Review orchestration core: run one plan review end-to-end and return the
-// tool-agnostic `Decision`. Tool-agnostic throughout — the agent's stdin shape
-// is parsed behind the injected `parseHookInput`, and the command layer renders
+// tool-agnostic `Decision`. Tool-agnostic throughout — the command layer parses
+// the agent's stdin with the adapter's `parseHookInput` via `parseHook`, and renders
 // the returned Decision to the agent's wire string via the adapter's
 // `emitDecision`.
 //
@@ -14,7 +14,13 @@ import { logFile } from "@/config/paths.ts";
 // the daemon at runtime.
 import type { EnsureMode } from "@/daemon/lifecycle.ts";
 import { type ErrorContext, logDebug, logError, logInfo, shortId } from "@/lib/log.ts";
-import { type CmuxPane, type Decision, errorMessage, type PlanInput } from "@/lib/types.ts";
+import {
+  type CmuxPane,
+  type CreatedReview,
+  type Decision,
+  errorMessage,
+  type PlanInput,
+} from "@/lib/types.ts";
 import {
   hasUntaggedCodeBlock,
   PLAN_EMPTY_DENY_MESSAGE,
@@ -28,21 +34,31 @@ function denyDecision(reason: string): Decision {
   return { behavior: "deny", feedback: reason, decidedAt: Date.now() };
 }
 
+/** The hook stdin as the caller parsed it: its PlanInput, or what the parse threw. */
+export type ParsedHookInput = { input: PlanInput } | { error: unknown };
+
+/** Run `parse` over `stdin`, keeping a throw for runReview to fail-safe deny. Never
+ * throws. */
+export function parseHook(parse: (stdin: string) => PlanInput, stdin: string): ParsedHookInput {
+  try {
+    return { input: parse(stdin) };
+  } catch (error) {
+    return { error };
+  }
+}
+
+/** The created review's daemon handle, plus the daemon's at-ingest verdict on the
+ * agent's plan file (see RouteResult.planFileCurrent). */
+export type PostedReview = Omit<CreatedReview, "hasLiveClient"> & { baseUrl: string };
+
 export interface ReviewDeps {
-  /** Normalize the agent's raw hook stdin into a core PlanInput. Throws on input
-   * that can't be parsed — the throw becomes the fail-safe deny. */
-  parseHookInput: (stdin: string) => PlanInput;
   /** Ensure a daemon is up and return its base URL, resolving the port as `mode` says
    * (see EnsureMode). */
   ensureDaemon: (mode: EnsureMode) => Promise<string>;
   /** Create the review, or null when the daemon refused it while stepping down.
-   * `hasLiveClient` (EXC-559) reports whether a UI tab is already polling the
-   * daemon; when true the hook skips opening the browser so an open backgrounded
+   * On `hasLiveClient` the hook skips opening the browser so an open backgrounded
    * tab's away-gated notification isn't pre-empted. */
-  postReview: (
-    baseUrl: string,
-    input: PlanInput,
-  ) => Promise<{ id: string; hasLiveClient?: boolean } | null>;
+  postReview: (baseUrl: string, input: PlanInput) => Promise<CreatedReview | null>;
   /** One bounded poll: a Decision, or null on a heartbeat (re-poll). Throws on
    * a transient drop so the caller can reconnect. */
   longPoll: (baseUrl: string, id: string) => Promise<Decision | null>;
@@ -61,12 +77,12 @@ export interface ReviewDeps {
   /** Best-effort: tell the daemon the hook is abandoning this review, so it
    * doesn't hold a pending orphan (EXC-454). Failures are swallowed. */
   expire: (baseUrl: string, id: string) => Promise<void>;
-  /** Called once the review is created, with the daemon base URL and review id.
-   * Lets the command layer capture the handle so a SIGINT/SIGTERM abandon can
-   * expire the review (EXC-482) — the signal fires outside runReview's control
-   * flow, so it needs the id runReview computed. Optional: absent for the dev
-   * driver and tests that don't wire signal handling. */
-  onPosted?: (baseUrl: string, id: string) => void;
+  /** Called once the review is created, with its handle. Lets the command layer
+   * capture it so a SIGINT/SIGTERM abandon can expire the review (EXC-482) — the
+   * signal fires outside runReview's control flow, so it needs the id runReview
+   * computed — and so an approval skips appending notes to a plan file that moved
+   * on. Optional: absent for the dev driver and tests that don't wire either. */
+  onPosted?: (posted: PostedReview) => void;
 }
 
 class TimeoutError extends Error {}
@@ -108,7 +124,7 @@ export async function expireAbandoned(
 /** Run a review end-to-end, returning the core `Decision`. Never throws — any
  * failure becomes a deny so an unreviewed plan can never ship. The command layer
  * renders the returned Decision to the agent's wire string via the adapter. */
-export async function runReview(stdin: string, deps: ReviewDeps): Promise<Decision> {
+export async function runReview(parsed: ParsedHookInput, deps: ReviewDeps): Promise<Decision> {
   // Track the current step + context so the catch can log what actually failed.
   let step = "parse";
   const ctx: ErrorContext = {};
@@ -116,7 +132,8 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<Decisi
   // reconnects re-assign it, so it always holds the last-known daemon URL.
   let baseUrl: string | undefined;
   try {
-    const input = deps.parseHookInput(stdin);
+    if ("error" in parsed) throw parsed.error;
+    const input = parsed.input;
     ctx.sessionId = input.sessionId;
     // cwd is logged raw (diagnostic: which project this review came from); the
     // redact path home-scrubs it on share, so it is not a DENY_KEY (EXC-545).
@@ -155,13 +172,14 @@ export async function runReview(stdin: string, deps: ReviewDeps): Promise<Decisi
       created = await deps.postReview(baseUrl, payload);
       if (!created) throw new Error("daemon draining; review not created");
     }
-    const { id, hasLiveClient } = created;
+    const { id, hasLiveClient, planFileCurrent } = created;
     // From here every record — decision and error alike — carries the reviewId,
     // stitching this stream against the daemon's review/resolve records.
     ctx.reviewId = id;
     // Surface the handle so a SIGINT/SIGTERM abandon can expire this review, from
-    // outside this flow (EXC-482).
-    deps.onPosted?.(baseUrl, id);
+    // outside this flow (EXC-482), and so an approval can skip notes for a plan
+    // file that moved on.
+    deps.onPosted?.({ baseUrl, id, planFileCurrent });
     logDebug("review", `review created: ${shortId(id)}`, { ...ctx });
     // EXC-426: humans get the vanity origin; internal fetches keep using baseUrl.
     const open = new URL(baseUrl);

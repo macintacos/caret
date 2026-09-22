@@ -11,7 +11,6 @@ import { makeFakeUiAssets } from "@test/support/fake-ui-assets.ts";
 import { manualTimer } from "@test/support/manual-timer.ts";
 import { type RecordedEmit, recordingLog } from "@test/support/recording-log.ts";
 import { expectNeverLogsBody } from "@test/support/redaction.ts";
-import { APPROVE_VARIANTS } from "@/adapters/claude/approve.ts";
 import { VANITY_HOST } from "@/config/constants.ts";
 import {
   isClientLive,
@@ -44,13 +43,6 @@ async function boot(opts: BootOptions = {}) {
   store = d.store;
   srv = { port: d.port, stop: d.stop };
   base = d.url;
-}
-
-// Boot with the Claude adapter's declared approve variants, so an acceptMode like
-// "acceptEdits" or "auto" below is a token a real adapter actually declares, not a
-// bare daemon's built-in "default".
-async function bootClaude(opts: BootOptions = {}) {
-  await boot({ approveVariants: APPROVE_VARIANTS, ...opts });
 }
 
 // A promise that resolves the first time the daemon's idle/retire shutdown fires,
@@ -1958,13 +1950,19 @@ test("the review record is emitted once, by the router, with threading extras", 
 
 test("the resolve record carries reviewId, sessionId, and acceptMode extras", async () => {
   const { recs, log } = recordingLog();
-  await bootClaude({ log });
+  await boot({
+    log,
+    approveVariants: [
+      { id: "default", label: "Approve" },
+      { id: "yolo", label: "Approve & auto" },
+    ],
+  });
   const { id } = await newReview();
-  await resolve(id, { behavior: "allow", acceptMode: "acceptEdits" });
+  await resolve(id, { behavior: "allow", acceptMode: "yolo" });
   const rec = recs.find((r) => r.step === "resolve");
   expect(rec).toMatchObject({
     level: "info",
-    extra: { reviewId: id, sessionId: "S", acceptMode: "acceptEdits" },
+    extra: { reviewId: id, sessionId: "S", acceptMode: "yolo" },
   });
   // The behavior rides only in the message prose (no `behavior` extra), so match
   // it loosely: the stable id prefix plus the resolved behavior token.

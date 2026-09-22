@@ -15,12 +15,10 @@
 // layer, keeping this core agent-agnostic.
 
 import { type ErrorContext, logDebug, logInfo } from "@/lib/log.ts";
-import type { ClientReview, PlanInput } from "@/lib/types.ts";
+import type { ClientReview } from "@/lib/types.ts";
+import type { ParsedHookInput } from "@/review/orchestrate.ts";
 
 export interface ReconcileDeps {
-  /** Normalize the agent's raw post-approval hook stdin into a core PlanInput.
-   * Throws on input that can't be parsed — runReconcile swallows the throw (no-op). */
-  parseHookInput: (stdin: string) => PlanInput;
   /** The daemon's pending reviews. Rejects when no daemon is reachable — treated
    * as "nothing to reconcile". */
   listReviews: () => Promise<ClientReview[]>;
@@ -28,11 +26,13 @@ export interface ReconcileDeps {
   resolveReview: (id: string) => Promise<void>;
 }
 
-/** Reconcile a terminal plan approval into the daemon. Never throws. */
-export async function runReconcile(stdin: string, deps: ReconcileDeps): Promise<void> {
+/** Reconcile a terminal plan approval into the daemon. A failed parse is a no-op.
+ * Never throws. */
+export async function runReconcile(parsed: ParsedHookInput, deps: ReconcileDeps): Promise<void> {
   const ctx: ErrorContext = {};
   try {
-    const input = deps.parseHookInput(stdin);
+    if ("error" in parsed) throw parsed.error;
+    const input = parsed.input;
     ctx.sessionId = input.sessionId;
     // No session id → nothing to match a pending review against.
     if (!input.sessionId) return;

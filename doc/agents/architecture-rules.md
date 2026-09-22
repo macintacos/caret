@@ -34,10 +34,10 @@ an adapter.
 
 - **Composition is the only exception.** The wiring points — `src/cli.ts` and
   `src/commands/*` — select the active adapter and thread it in (e.g.
-  `runReviewSubcommand` hands the adapter's `parseHookInput` to `runReview` as a
-  `ReviewDeps` field). Core modules like `review/orchestrate.ts` take the capability as an
-  injected dependency, so they name no adapter. A `from "./adapters/` import in a
-  non-composition core module is the smell.
+  `runReviewSubcommand` parses the hook stdin with the adapter's `parseHookInput` and
+  hands `runReview` the result). Core modules like `review/orchestrate.ts` take the
+  capability, or its output, as an injected dependency, so they name no adapter. A
+  `from "./adapters/` import in a non-composition core module is the smell.
 - **The emission seam lives at the composition layer, not the core.** `runReview` returns
   a tool-agnostic `Decision` (its fail-safe denies are `Decision`s the core constructs);
   the wiring point renders it to the agent's wire string with `adapter.emitDecision` at

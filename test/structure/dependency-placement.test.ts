@@ -25,6 +25,7 @@ import { isBuiltin } from "node:module";
 import { join } from "node:path";
 
 import pkg from "@root/package.json" with { type: "json" };
+import { importSpecifiers } from "@test/support/import-specifiers.ts";
 
 // From import.meta.dir, not cwd, so the suite reads the real tree wherever it runs.
 const REPO_ROOT = join(import.meta.dir, "..", "..");
@@ -37,46 +38,24 @@ const SHIPPED_DIR = "opencode";
 const SHIPPED_GLOB = "**/*.{ts,mts,cts,js,mjs,cjs}";
 
 /**
- * Every npm package name `source` imports.
- *
- * Covers all three specifier-bearing forms — `from "…"` (which also catches
- * `export … from`), a bare side-effect `import "…"`, and a dynamic `import("…")` — since
- * each is a module reference a consumer's resolver must satisfy. Relative and absolute
- * specifiers and node builtins are dropped; a subpath is reduced to its package name
- * (`@scope/pkg/sub` to `@scope/pkg`, `pkg/sub` to `pkg`), which is the unit `package.json`
- * declares. The `(?<!@)` guard drops CSS `@import` at-rules, matching the sibling
- * extractor in import-conventions.test.ts.
- *
- * Three properties worth knowing before reading a failure:
- *
- * - **Double-quoted specifiers only**, which is exhaustive here rather than lucky: biome
- *   formats this tree with `quoteStyle: "double"` and `opencode/` is in its scope, so a
- *   single-quoted import fails `mise run lint` before it can reach this scan. A
- *   template-literal or `require()` specifier would be missed silently — neither has a
- *   place in an ESM plugin, and both would have to survive review.
- * - **Raw source is scanned, not a token stream.** A `from "…"` inside a comment or a
- *   template literal is therefore read as a package name and reds the gate. That loud
- *   false positive — reword the prose — is the deliberate trade against a tokenizer that
- *   could mis-parse and silently stop seeing real imports.
- * - **A type-only import counts.** Types are erased before a consumer runs anything, so
- *   this is strict in the safe direction; keep `opencode/` free of `import type` from a
- *   package you would not want every consumer to download.
+ * Every npm package name `source` imports. Relative and absolute specifiers and node
+ * builtins are dropped; a subpath is reduced to its package name (`@scope/pkg/sub` to
+ * `@scope/pkg`, `pkg/sub` to `pkg`), which is the unit `package.json` declares. The
+ * extractor's limits (double quotes only, raw source) are exhaustive here: a template-
+ * literal or `require()` specifier has no place in an ESM plugin. A type-only import
+ * counts: types are erased before a consumer runs anything, so this is strict in the
+ * safe direction; keep `opencode/` free of `import type` from a package you would not
+ * want every consumer to download.
  */
 function importedPackages(source: string): string[] {
-  const found: string[] = [];
-  for (const match of source.matchAll(/(?<!@)\b(?:from|import)\s*\(?\s*"([^"]+)"/g)) {
-    const spec = match[1];
-    if (!spec) continue;
-    if (spec.startsWith(".") || spec.startsWith("/")) continue;
-    if (isBuiltin(spec)) continue;
-    found.push(
+  return importSpecifiers(source)
+    .filter((spec) => !spec.startsWith(".") && !spec.startsWith("/") && !isBuiltin(spec))
+    .map((spec) =>
       spec
         .split("/")
         .slice(0, spec.startsWith("@") ? 2 : 1)
         .join("/"),
     );
-  }
-  return found;
 }
 
 const shipped = new Set<string>();
