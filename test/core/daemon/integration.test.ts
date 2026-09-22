@@ -57,7 +57,7 @@ function noConfig(stateHome: string): string {
   return join(stateHome, "none.toml");
 }
 
-// In-process health/discovery probe servers (a bare createServer + fixed-path
+// In-process health/doctor probe servers (a bare createServer + fixed-path
 // store, distinct from bootDaemon's full boot+client). Stopped after each test.
 const servers: Array<{ stop(): void }> = [];
 afterEach(() => {
@@ -470,12 +470,12 @@ test("caret redact reports when there are no logs to scrub", async () => {
   }
 });
 
-// `caret discovery` end-to-end (EXC-464): argv routing (human vs --json), the
+// `caret doctor` end-to-end (EXC-464): argv routing (human vs --json), the
 // always-on redaction, and the exit-0-on-degraded contract — real subprocess,
 // like the redact tests above. CARET_PORT points at a just-released free port
 // so the probe never touches a real daemon; CLAUDE_CONFIG_DIR points at the
 // empty state home so installState stays hermetic ("unknown").
-function discoveryEnv(stateHome: string): Record<string, string> {
+function doctorEnv(stateHome: string): Record<string, string> {
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
     XDG_STATE_HOME: stateHome,
@@ -488,14 +488,14 @@ function discoveryEnv(stateHome: string): Record<string, string> {
   return env;
 }
 
-test("caret discovery prints a human-readable report and exits 0", async () => {
-  const stateHome = await mkdtemp(join(tmpdir(), "caret-discovery-human-"));
+test("caret doctor prints a human-readable report and exits 0", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-doctor-human-"));
   try {
-    const { exitCode, stdout: out } = await runCaretCli(["discovery"], {
-      env: discoveryEnv(stateHome),
+    const { exitCode, stdout: out } = await runCaretCli(["doctor"], {
+      env: doctorEnv(stateHome),
     });
     expect(exitCode).toBe(0);
-    expect(out.startsWith("caret discovery (caret-discovery/1)")).toBe(true);
+    expect(out.startsWith("caret doctor (caret-doctor/1)")).toBe(true);
     // Every section title renders, and the daemon (nothing on the port) reads
     // as unreachable.
     for (const title of [
@@ -517,15 +517,15 @@ test("caret discovery prints a human-readable report and exits 0", async () => {
   }
 });
 
-test("caret discovery --json prints one parseable, redacted document", async () => {
-  const stateHome = await mkdtemp(join(tmpdir(), "caret-discovery-json-"));
+test("caret doctor --json prints one parseable, redacted document", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-doctor-json-"));
   try {
-    const { exitCode, stdout: out } = await runCaretCli(["discovery", "--json"], {
-      env: discoveryEnv(stateHome),
+    const { exitCode, stdout: out } = await runCaretCli(["doctor", "--json"], {
+      env: doctorEnv(stateHome),
     });
     expect(exitCode).toBe(0);
     const report = JSON.parse(out) as Record<string, unknown>;
-    expect(report.schema).toBe("caret-discovery/1");
+    expect(report.schema).toBe("caret-doctor/1");
     expect(report.version).toBe(VERSION);
     for (const key of [
       "system",
@@ -556,8 +556,8 @@ test("caret discovery --json prints one parseable, redacted document", async () 
   }
 });
 
-test("caret discovery --json reports a live daemon's identity and commit", async () => {
-  const stateHome = await mkdtemp(join(tmpdir(), "caret-discovery-live-"));
+test("caret doctor --json reports a live daemon's identity and commit", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-doctor-live-"));
   const srv = createServer({
     store: createStore(join(stateHome, "reviews")),
     port: 0,
@@ -565,10 +565,10 @@ test("caret discovery --json reports a live daemon's identity and commit", async
     commit: "it-commit",
   });
   servers.push(srv);
-  const env = discoveryEnv(stateHome);
+  const env = doctorEnv(stateHome);
   env.CARET_PORT = String(srv.port);
   try {
-    const { exitCode, stdout: out } = await runCaretCli(["discovery", "--json"], { env });
+    const { exitCode, stdout: out } = await runCaretCli(["doctor", "--json"], { env });
     expect(exitCode).toBe(0);
     const report = JSON.parse(out) as Record<string, unknown>;
     expect(report.daemon).toEqual({

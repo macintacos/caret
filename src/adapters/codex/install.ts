@@ -1,7 +1,7 @@
-// OpenAI Codex CLI's install probe for the discovery command: a best-effort,
+// OpenAI Codex CLI's install probe for the doctor command: a best-effort,
 // strictly read-only read of caret's Codex hook state from `~/.codex`. Mirrors
 // claude/install.ts's structure and degrade-to-"unknown" discipline — every field
-// degrades to "unknown" rather than throwing, so discovery always renders the
+// degrades to "unknown" rather than throwing, so doctor always renders the
 // install-state section. Reads ONLY caret's own entries — never any other config
 // key (privacy).
 //

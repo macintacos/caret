@@ -1,4 +1,4 @@
-// `caret discovery`: print a one-shot diagnostics snapshot (EXC-464). Wires the
+// `caret doctor`: print a one-shot diagnostics snapshot (EXC-464). Wires the
 // production probes, collects the report, and always scrubs it — a deliberate
 // inversion of the raw-by-default logging posture (EXC-399), since the artifact
 // exists to be pasted into bug reports.
@@ -20,20 +20,20 @@ import { httpHealth } from "@/daemon/client.ts";
 import { isPidAlive, readDaemonLock } from "@/daemon/lifecycle.ts";
 import {
   collectReport,
-  type DiscoveryDeps,
+  type DoctorDeps,
   listProcesses,
   listReviewFiles,
   logStats,
   type Report,
   renderReport,
-} from "@/discovery.ts";
+} from "@/doctor/report.ts";
 import { isCompiledBinary, VERSION } from "@/lib/build-id.ts";
 import { scrubValue } from "@/redact/node.ts";
 
-/** Production probes for the discovery report, reusing the primitives the review
- * path already drives. Deliberately no removeLock or retire — discovery
+/** Production probes for the doctor report, reusing the primitives the review
+ * path already drives. Deliberately no removeLock or retire — doctor
  * observes, never repairs. */
-function prodDiscoveryDeps(s: Settings): DiscoveryDeps {
+function prodDoctorDeps(s: Settings): DoctorDeps {
   return {
     now: () => new Date(),
     version: VERSION,
@@ -69,12 +69,12 @@ function prodDiscoveryDeps(s: Settings): DiscoveryDeps {
   };
 }
 
-export async function runDiscoverySubcommand(opts: { json: boolean }): Promise<void> {
+export async function runDoctorSubcommand(opts: { json: boolean }): Promise<void> {
   // Exit 0 whenever a report was produced, however degraded; non-zero only when
   // none could be.
   try {
     const s = loadSettings();
-    const report = await collectReport(prodDiscoveryDeps(s));
+    const report = await collectReport(prodDoctorDeps(s));
     // scrubValue scrubs strings in place, preserving the report's shape — so the
     // cast back to Report is safe.
     const redacted = scrubValue(report, true) as Report;
@@ -82,7 +82,7 @@ export async function runDiscoverySubcommand(opts: { json: boolean }): Promise<v
     process.stdout.write(`${out}\n`);
     process.exit(0);
   } catch (e) {
-    process.stderr.write(`caret discovery: ${e}\n`);
+    process.stderr.write(`caret doctor: ${e}\n`);
     process.exit(1);
   }
 }

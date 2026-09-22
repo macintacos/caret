@@ -3,7 +3,7 @@
 // unsupervised one, spawn the on-demand fallback, and clean orphan locks (EXC-406) —
 // never denying a review because takeover failed. This module also owns the
 // world-identity guards (EXC-461) and the lock read/write/liveness primitives the
-// takeover loop and the discovery command share.
+// takeover loop and the doctor command share.
 
 import {
   accessSync,

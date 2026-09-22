@@ -10,7 +10,7 @@ import { DEFAULTS } from "@/config/settings.ts";
 import {
   collectReport,
   countLogLevels,
-  type DiscoveryDeps,
+  type DoctorDeps,
   listProcesses,
   listReviewFiles,
   logStats,
@@ -18,7 +18,7 @@ import {
   type Report,
   renderReport,
   tallyReviews,
-} from "@/discovery.ts";
+} from "@/doctor/report.ts";
 import { scrubValue } from "@/redact/node.ts";
 
 function boom(): never {
@@ -27,7 +27,7 @@ function boom(): never {
 
 // Happy-path fakes for every injected probe; each test overrides only what it
 // exercises.
-function discoveryDeps(over: Partial<DiscoveryDeps> = {}): DiscoveryDeps {
+function doctorDeps(over: Partial<DoctorDeps> = {}): DoctorDeps {
   return {
     now: () => new Date("2026-06-04T12:00:00.000Z"),
     version: "1.2.3",
@@ -66,8 +66,8 @@ function discoveryDeps(over: Partial<DiscoveryDeps> = {}): DiscoveryDeps {
 // ---- happy path ----
 
 test("collectReport assembles a full document with every section present", async () => {
-  const report = await collectReport(discoveryDeps());
-  expect(report.schema).toBe("caret-discovery/1");
+  const report = await collectReport(doctorDeps());
+  expect(report.schema).toBe("caret-doctor/1");
   expect(report.version).toBe("1.2.3");
   expect(report.generatedAt).toBe("2026-06-04T12:00:00.000Z");
   for (const key of [
@@ -86,7 +86,7 @@ test("collectReport assembles a full document with every section present", async
 });
 
 test("happy path populates the section scalars from the deps", async () => {
-  const report = await collectReport(discoveryDeps());
+  const report = await collectReport(doctorDeps());
   expect(report.system).toEqual({ platform: "darwin", os: "macos", arch: "arm64" });
   expect(report.install).toEqual({ kind: "dev", binaryPath: "/bin/caret", bunVersion: "0.0.0" });
   expect(report.daemon).toMatchObject({
@@ -105,7 +105,7 @@ test("happy path populates the section scalars from the deps", async () => {
 });
 
 test("the logs section carries one LogStats per live log path", async () => {
-  const report = await collectReport(discoveryDeps());
+  const report = await collectReport(doctorDeps());
   expect(report.logs).toEqual({
     caret: { path: "/state/logs/caret.log", exists: true, size: 10, errors: 0, warns: 0 },
     daemon: { path: "/state/logs/daemon.log", exists: true, size: 10, errors: 0, warns: 0 },
@@ -139,7 +139,7 @@ const ALL_SECTIONS: Array<keyof Report> = [
 // health feeds daemon+lockAndPort, and readLock/isPidAlive feed
 // lockAndPort+processes — those rows declare every affected section.
 const degradations: Array<
-  [label: string, over: Partial<DiscoveryDeps>, affected: Array<keyof Report>]
+  [label: string, over: Partial<DoctorDeps>, affected: Array<keyof Report>]
 > = [
   ["system", { system: boom }, ["system"]],
   ["install", { install: boom }, ["install"]],
@@ -163,7 +163,7 @@ const degradations: Array<
 
 for (const [label, over, affected] of degradations) {
   test(`a throwing ${label} probe degrades only its section(s) to { error } and still resolves`, async () => {
-    const report = await collectReport(discoveryDeps(over));
+    const report = await collectReport(doctorDeps(over));
     for (const section of affected) expect(report[section]).toHaveProperty("error");
     for (const section of ALL_SECTIONS) {
       if (affected.includes(section)) continue;
@@ -177,7 +177,7 @@ for (const [label, over, affected] of degradations) {
 test("the daemon health is probed exactly once and shared between sections", async () => {
   let calls = 0;
   await collectReport(
-    discoveryDeps({
+    doctorDeps({
       health: async () => {
         calls++;
         return { service: "caret" };
@@ -191,7 +191,7 @@ test("the daemon health is probed exactly once and shared between sections", asy
 
 test("lock port mismatch sets portMismatch and surfaces pidAlive from the fake", async () => {
   const report = await collectReport(
-    discoveryDeps({
+    doctorDeps({
       readLock: () => ({ pid: 222, port: 9999 }),
       isPidAlive: () => true,
       effective: () => ({
@@ -206,20 +206,20 @@ test("lock port mismatch sets portMismatch and surfaces pidAlive from the fake",
 });
 
 test("a port held by a non-caret process is reachable but portServesCaret is false", async () => {
-  const report = await collectReport(discoveryDeps({ health: async () => ({ service: "other" }) }));
+  const report = await collectReport(doctorDeps({ health: async () => ({ service: "other" }) }));
   expect(report.daemon).toMatchObject({ reachable: true, service: "other" });
   expect(report.lockAndPort).toMatchObject({ portServesCaret: false });
 });
 
 test("an unreachable daemon (null health) reports reachable:false without throwing", async () => {
-  const report = await collectReport(discoveryDeps({ health: async () => null }));
+  const report = await collectReport(doctorDeps({ health: async () => null }));
   expect(report.daemon).toEqual({ reachable: false });
   expect(report.lockAndPort).toMatchObject({ portServesCaret: false });
 });
 
 test("with no lock, lockAndPort still reports portServesCaret", async () => {
   const report = await collectReport(
-    discoveryDeps({ readLock: () => null, health: async () => ({ service: "caret" }) }),
+    doctorDeps({ readLock: () => null, health: async () => ({ service: "caret" }) }),
   );
   expect(report.lockAndPort).toEqual({ lockExists: false, portServesCaret: true });
 });
@@ -228,7 +228,7 @@ test("with no lock, lockAndPort still reports portServesCaret", async () => {
 
 test("a live lock pid not already listed is merged in, tagged daemon.lock", async () => {
   const report = await collectReport(
-    discoveryDeps({
+    doctorDeps({
       listProcesses: () => [{ pid: 5, name: "caret-native" }],
       readLock: () => ({ pid: 99, port: 42718 }),
       isPidAlive: () => true,
@@ -245,7 +245,7 @@ test("a live lock pid not already listed is merged in, tagged daemon.lock", asyn
 
 test("a lock pid already in the ps list is not duplicated", async () => {
   const report = await collectReport(
-    discoveryDeps({
+    doctorDeps({
       listProcesses: () => [{ pid: 99, name: "caret-native" }],
       readLock: () => ({ pid: 99, port: 42718 }),
       isPidAlive: () => true,
@@ -256,7 +256,7 @@ test("a lock pid already in the ps list is not duplicated", async () => {
 
 test("a dead lock pid is not merged into the process list", async () => {
   const report = await collectReport(
-    discoveryDeps({
+    doctorDeps({
       listProcesses: () => [],
       readLock: () => ({ pid: 99, port: 42718 }),
       isPidAlive: () => false,
@@ -268,7 +268,7 @@ test("a dead lock pid is not merged into the process list", async () => {
 // ---- reviews ----
 
 test("an absent reviews dir yields zeroed tallies and no pending ids", async () => {
-  const report = await collectReport(discoveryDeps({ listReviewFiles: () => [] }));
+  const report = await collectReport(doctorDeps({ listReviewFiles: () => [] }));
   expect(report.reviews).toEqual({
     pending: 0,
     approved: 0,
@@ -285,7 +285,7 @@ test("pendingIds are truncated to 8 chars and capped at 8 entries", async () => 
     id: `pending-id-${i}-with-a-long-tail`,
     status: "pending",
   }));
-  const report = await collectReport(discoveryDeps({ listReviewFiles: () => records }));
+  const report = await collectReport(doctorDeps({ listReviewFiles: () => records }));
   const reviews = report.reviews as { pending: number; pendingIds: string[] };
   expect(reviews.pending).toBe(10); // full count survives
   expect(reviews.pendingIds).toHaveLength(8); // sample is capped
@@ -297,7 +297,7 @@ test("pendingIds are truncated to 8 chars and capped at 8 entries", async () => 
 
 test("installState unknowns pass through untouched", async () => {
   const report = await collectReport(
-    discoveryDeps({
+    doctorDeps({
       readAgentInstallState: () => ({
         pluginVersion: "unknown",
         pluginEnabled: "unknown",
@@ -318,7 +318,7 @@ test("a leaked plan body in a review record is censored by scrubValue and the ta
   const leaky = [
     { id: "abcdef12-0000", status: "pending", plan: "SECRET PLAN BODY TEXT" } as never,
   ];
-  const report = await collectReport(discoveryDeps({ listReviewFiles: () => leaky }));
+  const report = await collectReport(doctorDeps({ listReviewFiles: () => leaky }));
   const scrubbed = scrubValue(report, true);
   expectNeverLogsBody(scrubbed, "SECRET PLAN BODY TEXT");
   // The tally is built from { id, status } only, so it is unaffected.
@@ -328,7 +328,7 @@ test("a leaked plan body in a review record is censored by scrubValue and the ta
 test("home paths and foreign usernames are scrubbed in the finished report", async () => {
   const home = homedir();
   const report = await collectReport(
-    discoveryDeps({
+    doctorDeps({
       install: () => ({
         kind: "prod",
         binaryPath: `${home}/.local/share/caret/bin/caret`,
@@ -345,7 +345,7 @@ test("home paths and foreign usernames are scrubbed in the finished report", asy
 
 test("the report is flat enough that scrubValue never depth-caps a leaf", async () => {
   const report = await collectReport(
-    discoveryDeps({
+    doctorDeps({
       listProcesses: () => [{ pid: 1, name: "caret-native" }],
       readLock: () => ({ pid: 2, port: 42718, build: "b", version: "v", startedAt: 9 }),
       isPidAlive: () => true,
@@ -358,10 +358,10 @@ test("the report is flat enough that scrubValue never depth-caps a leaf", async 
 // ---- renderReport ----
 
 test("renderReport renders the header and every section title for a happy report", async () => {
-  const report = await collectReport(discoveryDeps());
+  const report = await collectReport(doctorDeps());
   const text = renderReport(report);
   expect(typeof text).toBe("string");
-  expect(text).toContain("caret-discovery/1");
+  expect(text).toContain("caret-doctor/1");
   for (const title of [
     "system:",
     "install:",
@@ -381,14 +381,14 @@ test("renderReport renders the header and every section title for a happy report
 });
 
 test("renderReport renders a degraded section as an error line and never throws", async () => {
-  const report = await collectReport(discoveryDeps({ system: boom }));
+  const report = await collectReport(doctorDeps({ system: boom }));
   const text = renderReport(report);
   expect(text).toContain("system error: probe boom");
 });
 
 test("renderReport tolerates an all-degraded report without throwing", () => {
   const allError = {
-    schema: "caret-discovery/1",
+    schema: "caret-doctor/1",
     version: "1.0.0",
     generatedAt: "2026-06-04T00:00:00.000Z",
     system: { error: "x" },
@@ -471,7 +471,7 @@ test("tallyReviews counts mixed statuses, routing an unknown status to other", (
 // Point XDG_STATE_HOME at a throwaway temp dir so the readers touch disposable
 // state, never the real ~/.local/state/caret. The state dir + its XDG wiring
 // come from the shared helper.
-const stateDir = setupTempStateDir("caret-discovery-");
+const stateDir = setupTempStateDir("caret-doctor-");
 let tmp: string;
 beforeEach(() => {
   tmp = stateDir();

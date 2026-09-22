@@ -26,7 +26,7 @@ import { errorMessage } from "@/lib/types.ts";
 import { shortId } from "@/redact/core.ts";
 import { scrubString, scrubValue } from "@/redact/node.ts";
 
-// Re-exported so the daemon/hook/store/discovery call sites import their
+// Re-exported so the daemon/hook/store/doctor call sites import their
 // message helper from the logging module alongside the loggers themselves.
 export { shortId };
 

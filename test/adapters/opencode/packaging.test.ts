@@ -17,7 +17,7 @@ beforeEach(async () => {
     `const CARET_PLUGIN_VERSION = "__CARET_VERSION__";\n// plugin body\n`,
   );
   await writeFile(join(root, "opencode", "commands", "demo.md"), "# demo\n");
-  await writeFile(join(root, "opencode", "commands", "discovery.md"), "# discovery\n");
+  await writeFile(join(root, "opencode", "commands", "doctor.md"), "# doctor\n");
   await mkdir(join(root, "templates"), { recursive: true });
   await writeFile(join(root, DEMO_TEMPLATE), "<!-- fill the slots -->\n# Demo plan\n");
 });
@@ -29,7 +29,7 @@ test("loadOpencodePackaging reads the bin path, demo template, and sorted comman
   const pkg = loadOpencodePackaging(root);
   expect(pkg.binPath).toBe(join(root, "bin", "caret"));
   expect(pkg.demoTemplate).toBe("<!-- fill the slots -->\n# Demo plan\n");
-  expect(pkg.commands.map((c) => c.name)).toEqual(["demo.md", "discovery.md"]);
+  expect(pkg.commands.map((c) => c.name)).toEqual(["demo.md", "doctor.md"]);
   expect(pkg.commands[0]?.contents).toContain("demo");
 });
 

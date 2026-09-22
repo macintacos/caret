@@ -1,5 +1,5 @@
 // `caret` task: run caret's own CLI straight from source, so a dev can drive any
-// subcommand (install, discovery, review, …) against the working tree. It runs
+// subcommand (install, doctor, review, …) against the working tree. It runs
 // src/cli.ts rather than bin/caret because the shim execs the compiled
 // bin/caret-native whenever a build produced one, which can lag the checkout —
 // this task always reflects what is on disk right now. Every argument is

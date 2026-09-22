@@ -1,10 +1,10 @@
-// OpenCode's install probe for the discovery command: a best-effort, strictly
+// OpenCode's install probe for the doctor command: a best-effort, strictly
 // read-only snapshot of caret's OpenCode install. caret installs as a `plugin` array
 // entry (@macintacos/caret) that OpenCode installs into its own cache, one
 // `packages/<specifier>/` dir per array entry with the resolved version recorded in
 // that dir's top-level shim manifest. Mirrors claude/codex install.ts's
 // degrade-to-"unknown" discipline — every field degrades rather than throwing, so
-// discovery always renders. Reads only caret's own cache dirs and the user's plugin
+// doctor always renders. Reads only caret's own cache dirs and the user's plugin
 // array — never any other config key.
 
 import { existsSync, readFileSync } from "node:fs";
@@ -60,7 +60,7 @@ function readCaretInPluginArray(dir: string): boolean | "unknown" {
     const arr = cfg.plugin;
     // Loose "caret" substring on purpose (a diagnostics probe, not the exact writer
     // match): also surfaces a dev/local caret entry (a `bun link` path or a pinned
-    // `@macintacos/caret@x`), so discovery reports "configured" for those too.
+    // `@macintacos/caret@x`), so doctor reports "configured" for those too.
     if (Array.isArray(arr) && arr.some((e) => typeof e === "string" && e.includes("caret"))) {
       return true;
     }

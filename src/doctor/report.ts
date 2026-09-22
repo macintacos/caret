@@ -1,4 +1,4 @@
-// Read-only diagnostics snapshot for `caret discovery` (EXC-464): a one-shot,
+// Read-only diagnostics snapshot for `caret doctor` (EXC-464): a one-shot,
 // ALWAYS-REDACTED picture of the local install for pasting into a bug report.
 // This module assembles the document and renders it; it NEVER mutates anything
 // (no lock cleanup, no file writes) and NEVER logs — its output IS the report.
@@ -58,7 +58,7 @@ export interface LogStats {
 
 /** Every side-effecting input the report needs, injected so collectReport is a
  * pure function of its deps (the CLI phase wires the prod readers below). */
-export interface DiscoveryDeps {
+export interface DoctorDeps {
   /** ISO timestamp source. */
   now: () => Date;
   /** This binary's caret version (VERSION in prod). */
@@ -99,7 +99,7 @@ export interface SectionError {
 
 /** Flat-by-design so scrubValue's depth-6 cap never clips a leaf. */
 export interface Report {
-  schema: "caret-discovery/1";
+  schema: "caret-doctor/1";
   version: string;
   generatedAt: string;
   system: { platform: string; os: string; arch: string } | SectionError;
@@ -150,7 +150,7 @@ async function safe<T>(build: () => T | Promise<T>): Promise<T | SectionError> {
  * safe(). Does NOT redact — the CLI caller scrubs, always and regardless of
  * [logging].redact. The daemon health is probed ONCE (one bounded network call)
  * and shared between the `daemon` and `lockAndPort` sections. */
-export async function collectReport(deps: DiscoveryDeps): Promise<Report> {
+export async function collectReport(deps: DoctorDeps): Promise<Report> {
   // One bounded health probe, shared. Wrapped so a throwing health() can't sink
   // collectReport; both sections see null (treated as unreachable) on failure.
   let health: HealthIdentity | null = null;
@@ -175,7 +175,7 @@ export async function collectReport(deps: DiscoveryDeps): Promise<Report> {
     ]);
 
   return {
-    schema: "caret-discovery/1",
+    schema: "caret-doctor/1",
     version: deps.version,
     generatedAt: deps.now().toISOString(),
     system,
@@ -192,7 +192,7 @@ export async function collectReport(deps: DiscoveryDeps): Promise<Report> {
 
 /** Flatten the settings/effective values to dotted/prefixed scalar keys (the
  * depth-budget discipline). */
-function buildSettings(deps: DiscoveryDeps): Record<string, unknown> {
+function buildSettings(deps: DoctorDeps): Record<string, unknown> {
   const s = deps.settings();
   const e = deps.effective();
   return {
@@ -229,7 +229,7 @@ function buildDaemon(health: HealthIdentity | null): Record<string, unknown> {
  * shared health probe (service === "caret"); portMismatch compares the lock's
  * port to the effective port. No lock → { lockExists: false, portServesCaret }. */
 function buildLockAndPort(
-  deps: DiscoveryDeps,
+  deps: DoctorDeps,
   health: HealthIdentity | null,
 ): Record<string, unknown> {
   const portServesCaret = health?.service === "caret";
@@ -251,7 +251,7 @@ function buildLockAndPort(
 /** Merge the listed caret processes with the lock pid: a live, unlisted lock
  * pid is appended, tagged "daemon.lock", so the report shows the daemon even
  * when `ps` filtering missed it. */
-function buildProcesses(deps: DiscoveryDeps): { count: number; items: ProcessItem[] } {
+function buildProcesses(deps: DoctorDeps): { count: number; items: ProcessItem[] } {
   const items: ProcessItem[] = deps
     .listProcesses()
     .map((p) => ({ pid: p.pid, name: p.name, identifiedBy: "ps comm" as const }));
@@ -263,7 +263,7 @@ function buildProcesses(deps: DiscoveryDeps): { count: number; items: ProcessIte
 }
 
 async function buildLogs(
-  deps: DiscoveryDeps,
+  deps: DoctorDeps,
 ): Promise<{ caret: LogStats; daemon: LogStats; daemonStderr: LogStats }> {
   const [caret, daemon, daemonStderr] = await Promise.all([
     deps.logStats(deps.logPaths.caret),
@@ -319,9 +319,7 @@ const HEADER_KEYS = new Set(["schema", "version", "generatedAt"]);
  * keys are simply absent. */
 export function renderReport(report: Report): string {
   const lines: string[] = [];
-  lines.push(
-    `caret discovery (${report.schema}) version ${report.version} at ${report.generatedAt}`,
-  );
+  lines.push(`caret doctor (${report.schema}) version ${report.version} at ${report.generatedAt}`);
   const sections = Object.entries(report).filter(([key]) => !HEADER_KEYS.has(key));
   for (const [title, value] of sections) {
     lines.push("");
