@@ -54,7 +54,8 @@ export async function routeIncomingPlan(
   const plan = await formatPlanMarkdown(input.plan ?? "", log);
   // Mirror the canonical text back onto the on-disk plan file the agent reads from,
   // so its plan of record matches what the human reviews. Runs for every incoming
-  // version (new thread or revision); best-effort.
+  // version (new thread or revision); best-effort, and skipped when the agent
+  // rewrote the file after caret read it.
   writeCanonicalPlanFile(input, plan, log);
   const now = Date.now();
 

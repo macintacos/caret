@@ -38,9 +38,15 @@ test("leaves a plan file that changed since ingest untouched", () => {
   const path = join(dir, "changed.md");
   writeFileSync(path, "# Newer plan the agent just wrote\n");
   const { recs, log } = recordingLog();
-  writeCanonicalPlanFile({ plan: "# Ingested plan\n", planFilePath: path }, "# Canonical\n", log);
+  writeCanonicalPlanFile(
+    { plan: "# Ingested plan\n", planFilePath: path, sessionId: "s1" },
+    "# Canonical\n",
+    log,
+  );
   expect(readFileSync(path, "utf8")).toBe("# Newer plan the agent just wrote\n");
-  expect(recs.map((r) => [r.level, r.step])).toEqual([["info", "review"]]);
+  expect(recs.map((r) => [r.level, r.step, r.extra])).toEqual([
+    ["info", "review", { sessionId: "s1" }],
+  ]);
 });
 
 test("is a no-op when no path is given (agents without a plan file)", () => {

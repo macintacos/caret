@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 
 import { parseReviewUrl } from "@opencode/review-bridge.ts";
-import { claudeAdapter } from "@/adapters/claude/index.ts";
+import { fakeReviewDeps } from "@test/support/wire-contract.ts";
 import { browserOpenCmd, reviewHookStdin, reviewUrlLine } from "@/commands/review.ts";
 import type { PlanInput } from "@/lib/types.ts";
-import type { ReviewDeps } from "@/review/orchestrate.ts";
+import { PLAN_EMPTY_DENY_MESSAGE } from "@/plan/format.ts";
 
 // browserOpenCmd is the pure platform→argv selection extracted from openBrowser
 // so the branch choice is testable without spawning (the spawn-and-swallow stays
@@ -36,60 +36,68 @@ test("the announced line is the one the OpenCode plugin parses back", () => {
   expect(parseReviewUrl(reviewUrlLine(URL))).toBe(URL);
 });
 
-// Claude Code can fill tool_input.plan before the agent's write to the plan file
-// lands, so the payload lags the file. The file's text is what gets reviewed and
-// echoed back on approval.
+// The hook payload's plan can lag the plan file, so the file's text is what gets
+// reviewed and returned for the approval echo.
 
-function recordingDeps(posted: PlanInput[]): ReviewDeps {
-  return {
-    parseHookInput: claudeAdapter.parseHookInput,
-    ensureDaemon: async () => "http://x",
+const PLAN_FILE = "/plans/x.md";
+
+function planStdin(plan: string): string {
+  return JSON.stringify({ plan, planFilePath: PLAN_FILE });
+}
+
+function fakeParseHookInput(stdin: string): PlanInput {
+  return JSON.parse(stdin) as PlanInput;
+}
+
+function recordingReview(fromFile: string | undefined) {
+  const posted: PlanInput[] = [];
+  const reads: string[] = [];
+  const deps = fakeReviewDeps({
+    parseHookInput: fakeParseHookInput,
     postReview: async (_baseUrl, input) => {
       posted.push(input);
       return { id: "rid" };
     },
-    longPoll: async () => ({ behavior: "allow", decidedAt: 1 }),
-    openBrowser: () => {},
-    announceUrl: () => {},
-    timeoutMs: 1000,
-    expire: async () => {},
-  };
-}
-
-function hookStdin(plan: string): string {
-  return JSON.stringify({
-    session_id: "s",
-    tool_input: { plan, planFilePath: "/plans/x.md" },
   });
-}
-
-test("reviews and echoes the plan file's text over a stale payload plan", async () => {
-  const posted: PlanInput[] = [];
-  const reads: string[] = [];
   const readPlan = (path: string) => {
     reads.push(path);
-    return "# New";
+    return fromFile;
   };
-  const { decision, input } = await reviewHookStdin(
-    hookStdin("# Old"),
-    claudeAdapter.parseHookInput,
-    recordingDeps(posted),
-    readPlan,
-  );
-  expect(posted.map((p) => p.plan)).toEqual(["# New"]);
-  const wire = JSON.parse(claudeAdapter.emitDecision(decision, input));
-  expect(wire.hookSpecificOutput.decision.updatedInput.plan).toBe("# New");
-  expect(reads).toEqual(["/plans/x.md"]);
+  return { posted, reads, run: (stdin: string) => reviewHookStdin(stdin, deps, readPlan) };
+}
+
+test("reviews and returns the plan file's text over a stale payload plan", async () => {
+  const r = recordingReview("# New");
+  const { input } = await r.run(planStdin("# Old"));
+  expect(r.posted.map((p) => p.plan)).toEqual(["# New"]);
+  expect(input?.plan).toBe("# New");
+  expect(r.reads).toEqual([PLAN_FILE]);
 });
 
 test("an empty payload plan is reviewed from a non-empty plan file", async () => {
-  const posted: PlanInput[] = [];
-  const { decision } = await reviewHookStdin(
-    hookStdin(""),
-    claudeAdapter.parseHookInput,
-    recordingDeps(posted),
-    () => "# New",
-  );
+  const r = recordingReview("# New");
+  const { decision } = await r.run(planStdin(""));
   expect(decision.behavior).toBe("allow");
-  expect(posted.map((p) => p.plan)).toEqual(["# New"]);
+  expect(r.posted.map((p) => p.plan)).toEqual(["# New"]);
+});
+
+test("a blank plan file leaves the payload plan in place", async () => {
+  const r = recordingReview("  \n");
+  await r.run(planStdin("# Old"));
+  expect(r.posted.map((p) => p.plan)).toEqual(["# Old"]);
+});
+
+test("an empty payload with no readable plan file is denied as an empty plan", async () => {
+  const r = recordingReview(undefined);
+  const { decision } = await r.run(planStdin(""));
+  expect(decision).toMatchObject({ behavior: "deny", feedback: PLAN_EMPTY_DENY_MESSAGE });
+  expect(r.posted).toEqual([]);
+});
+
+test("stdin that fails to parse denies without reading the plan file", async () => {
+  const r = recordingReview("# New");
+  const { decision, input } = await r.run("not json");
+  expect(decision.behavior).toBe("deny");
+  expect(input).toBeUndefined();
+  expect(r.reads).toEqual([]);
 });

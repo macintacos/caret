@@ -17,8 +17,13 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { setupTempStateDir } from "@test/support/env.ts";
-import { emitWire as emitWireVia, expectWireDenyContract } from "@test/support/wire-contract.ts";
+import {
+  emitWire as emitWireVia,
+  expectWireDenyContract,
+  fakeReviewDeps,
+} from "@test/support/wire-contract.ts";
 import { claudeAdapter } from "@/adapters/claude/index.ts";
+import { reviewHookStdin } from "@/commands/review.ts";
 import type { Decision } from "@/lib/types.ts";
 
 const FIXTURE = join(import.meta.dir, "fixtures", "permission-request-stdin.json");
@@ -87,4 +92,15 @@ test("approve + auto over the fixture carries updatedInput and a setMode auto pe
 
 test("a deny over the fixture carries the reviewer feedback in decision.message", async () => {
   await expectWireDenyContract(emitWire);
+});
+
+test("an approve echoes the plan file's text when the payload plan is stale", async () => {
+  const staleStdin = JSON.stringify({
+    session_id: "s",
+    tool_input: { plan: "# Old", planFilePath: "/plans/x.md" },
+  });
+  const deps = fakeReviewDeps({ parseHookInput: claudeAdapter.parseHookInput });
+  const { decision, input } = await reviewHookStdin(staleStdin, deps, () => "# New");
+  const wire = JSON.parse(claudeAdapter.emitDecision(decision, input));
+  expect(wire.hookSpecificOutput.decision.updatedInput.plan).toBe("# New");
 });

@@ -1,5 +1,5 @@
 // Canonicalize the on-disk plan file the agent reads from: Claude Code's
-// `~/.claude/plans/<name>.md`, read back via normalizeToolInput, or the file an
+// `~/.claude/plans/<name>.md`, read for review via readPlanFile, or the file an
 // OpenCode `path` review names. That file — not caret's review store — is the
 // plan of record the agent references. caret reformats the plan for human review; this
 // rewrites the same file with the canonical text so what the agent references is
@@ -8,7 +8,8 @@
 //
 // Best-effort and never fatal: a plan must survive even when the file can't be
 // rewritten (read-only fs, a race, an older agent that sends no path), so every
-// failure is swallowed with a logged code.
+// failure is swallowed with a logged code. A file the agent rewrote after ingest
+// is left alone.
 import { appendFileSync, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 
 import type { CaretLogger } from "@/lib/log.ts";
@@ -16,7 +17,8 @@ import type { PlanInput } from "@/lib/types.ts";
 import { reviewerNotesSection } from "@/plan/reviewer-notes.ts";
 
 /** Only an existing regular `.md` file counts as the agent's plan file. May throw
- * on an fs race; callers guard it. */
+ * on an fs race; callers guard it. `resolvePlanSource` (opencode/caret.plugin.ts)
+ * repeats this check — keep the two in sync. */
 function isPlanFile(path: string): boolean {
   return path.endsWith(".md") && existsSync(path) && statSync(path).isFile();
 }
@@ -35,13 +37,11 @@ export function readPlanFile(path: string): string | undefined {
  * The shared, security-relevant guard for writing the agent's plan file: only an
  * existing regular `.md` file is touched (a malformed path can never make caret
  * clobber something else), and every failure is swallowed with a logged `.code`
- * (never the path or plan text). `write` performs the fs op inside the guard.
+ * (never the path or plan text). `write` performs the fs ops inside the guard.
  * Not a privilege boundary: caret runs as the agent's user, so following a symlink
  * grants no access it lacks; the guard only keeps a non-plan path unclobbered. A
  * model-chosen path (OpenCode's `path`) is vetted by the plugin, which asks
- * OpenCode for edit permission before sending it. `resolvePlanSource`
- * (opencode/caret.plugin.ts) repeats the `.md` + regular-file check — keep the two
- * in sync. Never throws.
+ * OpenCode for edit permission before sending it. Never throws.
  */
 function guardedPlanFileWrite(
   planFilePath: string,
@@ -68,14 +68,14 @@ function guardedPlanFileWrite(
  * throws.
  */
 export function writeCanonicalPlanFile(
-  input: Pick<PlanInput, "plan" | "planFilePath">,
+  input: Pick<PlanInput, "plan" | "planFilePath" | "sessionId">,
   canonical: string,
   log: CaretLogger,
 ): void {
   if (!input.planFilePath) return;
   guardedPlanFileWrite(input.planFilePath, log, "plan file canonicalize failed", (p) => {
     if (readFileSync(p, "utf8") !== (input.plan ?? "")) {
-      log.info("review", "plan file changed; rewrite skipped");
+      log.info("review", "plan file changed; rewrite skipped", { sessionId: input.sessionId });
       return;
     }
     writeFileSync(p, canonical);
@@ -86,9 +86,10 @@ export function writeCanonicalPlanFile(
  * Append the reviewer's approval notes to the agent's plan file as a trailing,
  * clearly-labeled section, so the plan of record the agent reads carries them on
  * an approval (EXC-791). Shares writeCanonicalPlanFile's surgical guards via
- * guardedPlanFileWrite — the file already holds the canonical plan, so this only
- * adds the section. A blank note or absent path is a no-op. Never throws: notes
- * are a convenience, and losing them must not fail the review.
+ * guardedPlanFileWrite — the file normally already holds the canonical plan (not
+ * when the agent rewrote it after ingest), so this only adds the section. A blank
+ * note or absent path is a no-op. Never throws: notes are a convenience, and
+ * losing them must not fail the review.
  */
 export function appendReviewerNotesToPlanFile(
   planFilePath: string | undefined,

@@ -73,16 +73,16 @@ export function prodReviewDeps(s: Settings, adapter: AgentAdapter): ReviewDeps {
  * to the payload's `plan`, which Claude Code can fill before the agent's write to
  * that file lands. Returns the reviewed input so the approval echo carries the same
  * text. A payload that fails to parse goes to runReview unchanged, which fail-safe
- * denies. */
+ * denies; `input` is then absent, since a deny needs no echo. `readPlan` must never
+ * throw. */
 export async function reviewHookStdin(
   stdin: string,
-  parse: (stdin: string) => PlanInput,
   deps: ReviewDeps,
   readPlan: (path: string) => string | undefined,
 ): Promise<{ decision: Decision; input?: PlanInput }> {
   let parsed: PlanInput;
   try {
-    parsed = parse(stdin);
+    parsed = deps.parseHookInput(stdin);
   } catch {
     return { decision: await runReview(stdin, deps) };
   }
@@ -102,11 +102,11 @@ export async function runReviewSubcommand(): Promise<void> {
   // denies to fail safe. The same adapter parses the hook stdin and renders the
   // decision, so a review can't parse one tool's input and emit another's.
   const adapter = selectAdapter();
-  // The reviewed hook input, captured once the review returns, so `respond` can hand it to
-  // emitDecision — the Claude adapter echoes its tool_input back as updatedInput on
-  // an allow, without which Claude Code >=2.1.199 drops the approve (EXC-683). The
+  // The reviewed hook input, captured once the review returns, so `respond` can hand
+  // it to emitDecision — the Claude adapter echoes its tool_input back as updatedInput
+  // on an allow, without which Claude Code >=2.1.199 drops the approve (EXC-683). The
   // signal path only ever denies, and a deny needs no echo, so whether the signal
-  // beats the parse never matters.
+  // beats the review never matters.
   let hookInput: PlanInput | undefined;
   // The review's daemon handle, captured via onPosted once the review is created,
   // so a signal-path abandon can expire it (EXC-482). Undefined until then.
@@ -145,14 +145,7 @@ export async function runReviewSubcommand(): Promise<void> {
   deps.onPosted = (baseUrl, id) => {
     posted = { baseUrl, id };
   };
-  // The review and the updatedInput echo share one parsed input, so the agent is
-  // approved on exactly the text the human reviewed.
-  const { decision: out, input } = await reviewHookStdin(
-    stdin,
-    (s) => adapter.parseHookInput(s),
-    deps,
-    readPlanFile,
-  );
+  const { decision: out, input } = await reviewHookStdin(stdin, deps, readPlanFile);
   hookInput = input;
   // Fold an approval's reviewer notes onto the agent's plan of record (EXC-791)
   // before emitting the decision, so the agent reads them when it proceeds. The
