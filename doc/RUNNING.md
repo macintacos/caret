@@ -399,14 +399,18 @@ only genuine failures sit at error.
 
 - `caret doctor` — a one-shot, read-only diagnosis of the local install. It opens with a
   `checks:` block — the daemon's reachability, the daemon lock, whether your agent has
-  caret enabled, NDJSON error records in the live logs, and whether OpenCode would load a
-  caret behind the published one — where every failing check names the remedy that closes
-  it. Only the OpenCode check leaves your machine, and only when OpenCode's config names
-  caret: it reads npm's published caret version, and degrades to `unknown` offline. Under
-  that sits the state it read those from: running caret processes, daemon identity
-  (version, build, startup commit), lock/port state, effective settings, review counts,
-  the agent adapter's install-state probe, log sizes and error/warn counts, install and
-  runtime info, and system basics.
+  caret enabled, recent NDJSON error records in the live logs, and whether OpenCode would
+  load a caret behind the published one — each line marked `✓` passed, `✗` failed or `?`
+  undecided (colored only when stdout is a terminal, so a pipe, `NO_COLOR` or CI gets the
+  glyphs bare), and every failing check names the remedy that closes it. The log check
+  weighs only the last 24 hours and reports when each noisy log last erred: an install
+  that has stopped failing goes green on its own rather than waiting for the record to
+  rotate away. Only the OpenCode check leaves your machine, and only when OpenCode's
+  config names caret: it reads npm's published caret version, and degrades to `unknown`
+  offline. Under that sits the state it read those from: running caret processes, daemon
+  identity (version, build, startup commit), lock/port state, effective settings, review
+  counts, the agent adapter's install-state probe, log sizes and error/warn counts,
+  install and runtime info, and system basics.
 
   Human-readable by default; `caret doctor --json` prints the same document as one JSON
   object (schema marker `caret-doctor/1`). Unlike the logs, it is **always redacted** — it

@@ -3,9 +3,13 @@ import { expect, test } from "bun:test";
 import { runChecks } from "@/doctor/checks.ts";
 import type { Check, LogStats, Report } from "@/doctor/report.ts";
 
-function log(path: string, errors = 0): LogStats {
-  return { path, exists: true, size: 10, errors, warns: 0 };
+function log(path: string, errors = 0, lastErrorAt?: string): LogStats {
+  return { path, exists: true, size: 10, errors, warns: 0, lastErrorAt };
 }
+
+/** Relative to the fixture's generatedAt of 2026-06-04T12:00:00.000Z. */
+const THIRTY_MINUTES_AGO = "2026-06-04T11:30:00.000Z";
+const THREE_DAYS_AGO = "2026-06-01T12:00:00.000Z";
 
 /** An install with nothing wrong with it; each test breaks exactly one thing. */
 function report(over: Partial<Report> = {}): Report {
@@ -170,19 +174,66 @@ test("a degraded installState section yields unknown rather than the probe's own
 
 // ---- log-errors ----
 
-test("an error record in any live log fails log-errors and names the log to read", () => {
+test("a recent error record fails log-errors, naming the log to read and when it last erred", () => {
   const checks = runChecks(
     report({
       logs: {
         caret: log("/logs/caret.log"),
-        daemon: log("/logs/daemon.log", 3),
+        daemon: log("/logs/daemon.log", 3, THIRTY_MINUTES_AGO),
         daemonStderr: log("/logs/daemon-stderr.log"),
       },
     }),
   );
   const failed = check(checks, "log-errors");
   expect(failed.status).toBe("fail");
+  expect(failed.detail).toContain(THIRTY_MINUTES_AGO);
   expect(failed.status === "fail" && failed.remedy).toContain("/logs/daemon.log");
+});
+
+test("an error record older than the window passes, still naming when it last erred", () => {
+  const checks = runChecks(
+    report({
+      logs: {
+        caret: log("/logs/caret.log"),
+        daemon: log("/logs/daemon.log", 3, THREE_DAYS_AGO),
+        daemonStderr: log("/logs/daemon-stderr.log"),
+      },
+    }),
+  );
+  const passed = check(checks, "log-errors");
+  expect(passed.status).toBe("pass");
+  expect(passed.detail).toContain(THREE_DAYS_AGO);
+  expect(passed.detail).toContain("/logs/daemon.log");
+});
+
+test("a log still erring fails even when a quiet log erred long ago", () => {
+  const checks = runChecks(
+    report({
+      logs: {
+        caret: log("/logs/caret.log", 1, THREE_DAYS_AGO),
+        daemon: log("/logs/daemon.log", 1, THIRTY_MINUTES_AGO),
+        daemonStderr: log("/logs/daemon-stderr.log"),
+      },
+    }),
+  );
+  const failed = check(checks, "log-errors");
+  expect(failed.status).toBe("fail");
+  // The remedy points only at what is still erring, not at the log that settled.
+  expect(failed.status === "fail" && failed.remedy).toContain("/logs/daemon.log");
+  expect(failed.status === "fail" && failed.remedy).not.toContain("/logs/caret.log");
+});
+
+test("an error record carrying no timestamp fails, since nothing dates it as settled", () => {
+  const checks = runChecks(
+    report({
+      logs: {
+        caret: log("/logs/caret.log"),
+        daemon: log("/logs/daemon.log", 2),
+        daemonStderr: log("/logs/daemon-stderr.log"),
+      },
+    }),
+  );
+  expect(check(checks, "log-errors").status).toBe("fail");
 });
 
 test("a degraded logs section yields unknown, claiming no log is clean", () => {

@@ -48,13 +48,17 @@ export interface ReviewStatusRecord {
   status: string;
 }
 
-/** Bounded summary of a log file: counts only, never log text. */
+/** Bounded summary of a log file: counts only, never log text. `lastErrorAt` is the
+ * newest counted error record's own `time`, which dates the tally so a verdict can tell a
+ * log that is still failing from one that settled; it is absent when no error was counted
+ * or the newest one carried no timestamp. */
 export interface LogStats {
   path: string;
   exists: boolean;
   size: number;
   errors: number;
   warns: number;
+  lastErrorAt?: string;
 }
 
 /** Every side-effecting input the report needs, injected so collectReport is a
@@ -360,28 +364,36 @@ export function tallyReviews(records: ReviewStatusRecord[]): ReviewsSection {
  * silently vanish from the render. */
 const HEADER_KEYS = new Set(["schema", "version", "generatedAt", "checks"]);
 
-/** Status words rather than glyphs or ANSI, so the checks block survives being pasted
- * into an issue, a chat, or a terminal that renders neither. */
-const STATUS_WORD = { pass: "pass", fail: "FAIL", unknown: "unknown" } as const;
+/** One marker per status. U+2713 and U+2717 are Dingbats — not emoji, not a Nerd Font
+ * private-use codepoint — so a bare terminal font draws them and a paste into an issue
+ * carries them as themselves. The heavy U+2714/U+2718 pair is deliberately not used:
+ * fonts are free to give it emoji presentation, which would double its width. */
+const STATUS_GLYPH = { pass: "✓", fail: "✗", unknown: "?" } as const;
+
+/** SGR color per status, worn by the glyph alone so the rest of the line stays plain
+ * text. Only a caller that knows its stdout is a terminal asks for it. */
+const STATUS_COLOR = { pass: "\x1b[32m", fail: "\x1b[31m", unknown: "\x1b[33m" } as const;
+const COLOR_RESET = "\x1b[0m";
 
 /** Everything doctor writes to stdout, in either format. The one scrub covers the whole
  * document — the checks' own strings included — and runs before anything is rendered, so
- * no output path can carry an unredacted value. */
-export function renderStdout(doc: DoctorDocument, format: "json" | "text"): string {
+ * no output path can carry an unredacted value. `color` reaches only the text format's
+ * status glyphs; JSON is a data document and never wears it. */
+export function renderStdout(doc: DoctorDocument, format: "json" | "text", color = false): string {
   // scrubValue returns a shape-preserving copy — same keys, scrubbed strings — so the
   // cast back is safe.
   const redacted = scrubValue(doc, true) as DoctorDocument;
-  return format === "json" ? JSON.stringify(redacted, null, 2) : renderDocument(redacted);
+  return format === "json" ? JSON.stringify(redacted, null, 2) : renderDocument(redacted, color);
 }
 
 /** Render the (already-scrubbed) document as plain text: a header line, the checks
- * block, then one titled block per state section with aligned `key: value` lines. No
- * ANSI. Never throws — a degraded { error } section renders one error line, and missing
- * keys are simply absent. */
-export function renderDocument(doc: DoctorDocument): string {
+ * block, then one titled block per state section with aligned `key: value` lines. ANSI
+ * appears only on the check glyphs, and only when asked for. Never throws — a degraded
+ * { error } section renders one error line, and missing keys are simply absent. */
+export function renderDocument(doc: DoctorDocument, color = false): string {
   const lines: string[] = [];
   lines.push(`caret doctor (${doc.schema}) version ${doc.version} at ${doc.generatedAt}`);
-  lines.push("", "checks:", ...renderChecks(doc.checks));
+  lines.push("", "checks:", ...renderChecks(doc.checks, color));
   const sections = Object.entries(doc).filter(([key]) => !HEADER_KEYS.has(key));
   for (const [title, value] of sections) {
     lines.push("");
@@ -394,10 +406,12 @@ export function renderDocument(doc: DoctorDocument): string {
 /** One line per check, with the remedy or reason indented beneath the ones that leave
  * the reader something to do. A check that claims nothing carries no detail, and renders
  * without the separator rather than trailing one. */
-function renderChecks(checks: Check[]): string[] {
+function renderChecks(checks: Check[], color: boolean): string[] {
   const out: string[] = [];
   for (const c of checks) {
-    out.push(`  ${STATUS_WORD[c.status]} ${c.id}${c.detail ? ` — ${c.detail}` : ""}`);
+    const glyph = STATUS_GLYPH[c.status];
+    const marker = color ? `${STATUS_COLOR[c.status]}${glyph}${COLOR_RESET}` : glyph;
+    out.push(`  ${marker} ${c.id}${c.detail ? ` — ${c.detail}` : ""}`);
     if (c.status === "fail") out.push(`    remedy: ${c.remedy}`);
     if (c.status === "unknown") out.push(`    reason: ${c.reason}`);
   }
@@ -517,8 +531,8 @@ export async function logStats(path: string): Promise<LogStats> {
   try {
     const start = Math.max(0, size - TAIL_BYTES);
     const text = await Bun.file(path).slice(start).text();
-    const { errors, warns } = countLogLevels(text, start > 0);
-    return { path, exists: true, size, errors, warns };
+    const { errors, warns, lastErrorAt } = countLogLevels(text, start > 0);
+    return { path, exists: true, size, errors, warns, lastErrorAt };
   } catch {
     // Unreadable despite existing (raced delete, EACCES): report exists+size,
     // no counts.
@@ -526,29 +540,34 @@ export async function logStats(path: string): Promise<LogStats> {
   }
 }
 
-/** Count error/warn NDJSON records in a log tail. When dropFirstLine is set
- * (the slice started mid-file), the first line may be a partial record and is
- * skipped. Only `{`-prefixed, parseable lines with a numeric level count;
+/** Count error/warn NDJSON records in a log tail, and date the newest error. When
+ * dropFirstLine is set (the slice started mid-file), the first line may be a partial
+ * record and is skipped. Only `{`-prefixed, parseable lines with a numeric level count;
  * everything else (raw crash output, malformed records) is ignored. */
 export function countLogLevels(
   tailText: string,
   dropFirstLine: boolean,
-): { errors: number; warns: number } {
+): { errors: number; warns: number; lastErrorAt?: string } {
   let errors = 0;
   let warns = 0;
+  let lastErrorAt: string | undefined;
   const lines = tailText.split("\n");
   for (const [i, line] of lines.entries()) {
     if (i === 0 && dropFirstLine) continue;
     if (!line.startsWith("{")) continue;
-    let level: unknown;
+    let record: { level?: unknown; time?: unknown };
     try {
-      level = (JSON.parse(line) as { level?: unknown }).level;
+      record = JSON.parse(line) as { level?: unknown; time?: unknown };
     } catch {
       continue;
     }
-    if (typeof level !== "number") continue;
-    if (level >= 50) errors++;
-    else if (level === 40) warns++;
+    if (typeof record.level !== "number") continue;
+    if (record.level >= 50) {
+      errors++;
+      // Each error overwrites the date, undated ones included: carrying an older record's
+      // time forward would date the tally as settled while the newest error is undatable.
+      lastErrorAt = typeof record.time === "string" ? record.time : undefined;
+    } else if (record.level === 40) warns++;
   }
-  return { errors, warns };
+  return { errors, warns, lastErrorAt };
 }

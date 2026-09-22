@@ -428,7 +428,7 @@ test("the checks block renders before the first state section", async () => {
   );
   expect(text.indexOf("checks:")).toBeGreaterThan(-1);
   expect(text.indexOf("checks:")).toBeLessThan(text.indexOf("system:"));
-  expect(text).toContain("pass daemon-lock");
+  expect(text).toContain("✓ daemon-lock");
 });
 
 test("a failing check renders its remedy and an unknown one its reason", async () => {
@@ -444,13 +444,38 @@ test("a failing check renders its remedy and an unknown one its reason", async (
       },
     ]),
   );
-  expect(text).toContain("FAIL log-errors");
+  expect(text).toContain("✗ log-errors");
   expect(text).toContain("remedy: read x.log");
-  expect(text).toContain("unknown opencode-caret-version");
+  expect(text).toContain("? opencode-caret-version");
   expect(text).toContain("reason: offline");
   // A check that claims nothing — every degraded section's — carries no detail, so it
   // must not render a separator with nothing after it.
   expect(text).not.toContain("opencode-caret-version —");
+});
+
+test("the status markers stay uncolored unless the caller asks for color", async () => {
+  const checks: Check[] = [
+    { id: "daemon-lock", title: "Daemon lock", status: "pass", detail: "live" },
+    { id: "log-errors", title: "Logs", status: "fail", detail: "2 errors", remedy: "read x.log" },
+    { id: "opencode-caret-version", title: "OpenCode", status: "unknown", detail: "", reason: "x" },
+  ];
+  const doc = await document({}, checks);
+  expect(renderStdout(doc, "text")).not.toContain("\x1b[");
+  const colored = renderStdout(doc, "text", true);
+  expect(colored).toContain("\x1b[32m✓\x1b[0m daemon-lock");
+  expect(colored).toContain("\x1b[31m✗\x1b[0m log-errors");
+  expect(colored).toContain("\x1b[33m?\x1b[0m opencode-caret-version");
+  // Only the marker is colored: the rest of the line pastes clean.
+  expect(colored).toContain("daemon-lock — live");
+});
+
+test("the json format carries no color, whatever the caller asked for", async () => {
+  const doc = await document({}, [
+    { id: "daemon-lock", title: "Daemon lock", status: "pass", detail: "live" },
+  ]);
+  const json = renderStdout(doc, "json", true);
+  expect(json).not.toContain("\x1b[");
+  expect(JSON.parse(json).checks[0].status).toBe("pass");
 });
 
 // ---- the stdout path is scrubbed as one document ----
@@ -495,24 +520,39 @@ test("countLogLevels tallies levels, skips malformed and raw crash lines", () =>
   const text = [
     '{"level":30,"msg":"info"}',
     '{"level":40,"msg":"warn"}',
-    '{"level":50,"msg":"error"}',
-    '{"level":60,"msg":"fatal"}', // >= 50 counts as an error too
+    '{"level":50,"time":"2026-06-04T10:00:00.000Z","msg":"error"}',
+    // >= 50 counts as an error too, and the last one dates the tally.
+    '{"level":60,"time":"2026-06-04T11:00:00.000Z","msg":"fatal"}',
     "not json at all (raw crash output)",
     '{"level":"oops"}', // non-numeric level — skipped
     "{ malformed json",
   ].join("\n");
-  expect(countLogLevels(text, false)).toEqual({ errors: 2, warns: 1 });
+  expect(countLogLevels(text, false)).toEqual({
+    errors: 2,
+    warns: 1,
+    lastErrorAt: "2026-06-04T11:00:00.000Z",
+  });
+});
+
+test("countLogLevels leaves the error time unknown when the newest error carries none", () => {
+  const text = [
+    '{"level":50,"time":"2026-06-04T10:00:00.000Z","msg":"dated"}',
+    '{"level":50,"msg":"undated"}',
+  ].join("\n");
+  // Reporting the older record's time would date the tally as settled when the newest
+  // error is in fact undatable.
+  expect(countLogLevels(text, false)).toEqual({ errors: 2, warns: 0, lastErrorAt: undefined });
 });
 
 test("countLogLevels drops a partial first line when the tail started mid-file", () => {
   const text = ['l":50,"msg":"partial"}', '{"level":40,"msg":"warn"}'].join("\n");
   // First line is a mid-record fragment; with dropFirstLine it is ignored.
-  expect(countLogLevels(text, true)).toEqual({ errors: 0, warns: 1 });
+  expect(countLogLevels(text, true)).toMatchObject({ errors: 0, warns: 1 });
   // Without the drop, that fragment still doesn't start with "{" so it's skipped
   // anyway — here the drop matters only for a fragment that DID start with "{".
   const startsWithBrace = ['{"level":50}', '{"level":40}'].join("\n");
-  expect(countLogLevels(startsWithBrace, true)).toEqual({ errors: 0, warns: 1 });
-  expect(countLogLevels(startsWithBrace, false)).toEqual({ errors: 1, warns: 1 });
+  expect(countLogLevels(startsWithBrace, true)).toMatchObject({ errors: 0, warns: 1 });
+  expect(countLogLevels(startsWithBrace, false)).toMatchObject({ errors: 1, warns: 1 });
 });
 
 test("tallyReviews counts mixed statuses, routing an unknown status to other", () => {
@@ -590,15 +630,27 @@ test("logStats counts error/warn records and reports the size, never the text", 
   const body = [
     '{"level":30,"msg":"info SENSITIVE"}',
     '{"level":40,"msg":"warn"}',
-    '{"level":50,"msg":"error"}',
+    '{"level":50,"time":"2026-06-04T10:00:00.000Z","msg":"error"}',
     "raw crash output line",
   ].join("\n");
   await writeFile(path, body);
   const stats = await logStats(path);
-  expect(stats).toMatchObject({ exists: true, errors: 1, warns: 1 });
+  expect(stats).toMatchObject({
+    exists: true,
+    errors: 1,
+    warns: 1,
+    lastErrorAt: "2026-06-04T10:00:00.000Z",
+  });
   expect(stats.size).toBeGreaterThan(0);
   // Only the contract fields are present — no log text leaks.
-  expect(Object.keys(stats).sort()).toEqual(["errors", "exists", "path", "size", "warns"]);
+  expect(Object.keys(stats).sort()).toEqual([
+    "errors",
+    "exists",
+    "lastErrorAt",
+    "path",
+    "size",
+    "warns",
+  ]);
   expectNeverLogsBody(stats, "SENSITIVE");
 });
 

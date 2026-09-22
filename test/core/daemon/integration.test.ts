@@ -517,7 +517,7 @@ test("caret doctor prints a human-readable report and exits 0", async () => {
     }
     expect(out).toMatch(/^ {2}reachable +: false$/m);
     // An empty state home is a healthy one: an idle-exited daemon, no lock, no logs.
-    expect(out).toMatch(/^ {2}pass daemon-reachable /m);
+    expect(out).toMatch(/^ {2}✓ daemon-reachable /m);
   } finally {
     await rm(stateHome, { recursive: true, force: true });
   }
@@ -560,13 +560,34 @@ test("caret doctor exits 1 and names a remedy when a check fails", async () => {
   try {
     const logs = join(stateHome, "caret", "logs");
     await mkdir(logs, { recursive: true });
-    await writeFile(join(logs, "caret.log"), '{"level":50,"msg":"boom"}\n');
+    const justNow = new Date().toISOString();
+    await writeFile(join(logs, "caret.log"), `{"level":50,"time":"${justNow}","msg":"boom"}\n`);
     const { exitCode, stdout: out } = await runCaretCli(["doctor"], {
       env: doctorEnv(stateHome),
     });
     expect(exitCode).toBe(1);
-    expect(out).toMatch(/^ {2}FAIL log-errors /m);
+    expect(out).toMatch(/^ {2}✗ log-errors /m);
+    expect(out).toContain(justNow);
     expect(out).toMatch(/^ {4}remedy: /m);
+  } finally {
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
+test("caret doctor exits 0 when the only error records have aged out", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-doctor-stale-"));
+  try {
+    const logs = join(stateHome, "caret", "logs");
+    await mkdir(logs, { recursive: true });
+    const longAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    await writeFile(join(logs, "caret.log"), `{"level":50,"time":"${longAgo}","msg":"boom"}\n`);
+    const { exitCode, stdout: out } = await runCaretCli(["doctor"], {
+      env: doctorEnv(stateHome),
+    });
+    expect(exitCode).toBe(0);
+    expect(out).toMatch(/^ {2}✓ log-errors /m);
+    // The record is still surfaced — it just no longer stands as a verdict.
+    expect(out).toContain(longAgo);
   } finally {
     await rm(stateHome, { recursive: true, force: true });
   }

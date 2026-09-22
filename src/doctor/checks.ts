@@ -10,7 +10,7 @@
 // a different thing — a real state the adapter reported — and passes. A `fail` is a claim
 // caret has to be able to support.
 
-import { type Check, isSectionError, type Report } from "@/doctor/report.ts";
+import { type Check, isSectionError, type LogStats, type Report } from "@/doctor/report.ts";
 
 /** A section's value, or undefined when it degraded to { error }. */
 function present<T>(value: T | { error: string }): T | undefined {
@@ -119,9 +119,31 @@ function agentInstall(report: Report): Check {
   };
 }
 
+/** How recently a log must have erred to fail the run. Older records stay in the report
+ * and the check still names when each log last erred, but they stop being a verdict: an
+ * error from weeks ago clears only when rotation drops it, so failing on it asks the
+ * reader for something they cannot do. */
+const ERROR_WINDOW_HOURS = 24;
+const ERROR_WINDOW_MS = ERROR_WINDOW_HOURS * 60 * 60 * 1000;
+
+/** Whether a log's newest error is recent enough to count against the install. An
+ * undated one does: nothing places it outside the window, and sending a reader to a quiet
+ * log is the cheaper mistake. */
+function stillErring(log: LogStats, generatedAt: number): boolean {
+  if (log.lastErrorAt === undefined) return true;
+  const age = generatedAt - Date.parse(log.lastErrorAt);
+  return Number.isNaN(age) || age < ERROR_WINDOW_MS;
+}
+
+function describeErrors(log: LogStats): string {
+  const when = log.lastErrorAt ? `, last at ${log.lastErrorAt}` : "";
+  return `${log.errors} error record(s) in ${log.path}${when}`;
+}
+
 /** Only a counted NDJSON record can move this check: logStats tallies `level` fields, so
  * daemon-stderr.log's raw crash output is summarized in the report but never weighed
- * here. */
+ * here. Recency is judged against the report's own generatedAt, so the verdict stays a
+ * pure function of the report and needs no clock. */
 function logErrors(report: Report): Check {
   const logs = present(report.logs);
   if (logs === undefined) return undecided("log-errors", "Logs", "logs");
@@ -134,12 +156,22 @@ function logErrors(report: Report): Check {
       detail: "no NDJSON error records",
     };
   }
+  const generatedAt = Date.parse(report.generatedAt);
+  const erring = noisy.filter((l) => stillErring(l, generatedAt));
+  if (erring.length === 0) {
+    return {
+      id: "log-errors",
+      title: "Logs",
+      status: "pass",
+      detail: `none in the last ${ERROR_WINDOW_HOURS}h; ${noisy.map(describeErrors).join("; ")}`,
+    };
+  }
   return {
     id: "log-errors",
     title: "Logs",
     status: "fail",
-    detail: noisy.map((l) => `${l.errors} error record(s) in ${l.path}`).join("; "),
-    remedy: `read ${noisy.map((l) => l.path).join(" and ")}, then /systematic-debugging`,
+    detail: erring.map(describeErrors).join("; "),
+    remedy: `read ${erring.map((l) => l.path).join(" and ")}, then /systematic-debugging`,
   };
 }
 

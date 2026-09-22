@@ -41,7 +41,7 @@ one. What each id means:
 | `daemon-reachable` | a caret service is recorded but the daemon did not answer, or the effective port answers as something other than caret | the check's remedy verbatim, then offer to read any log it names |
 | `daemon-lock` | the lock names a dead pid, or a port caret is not configured to bind | the check's remedy verbatim |
 | `agent-install` | the active agent does not have caret enabled | `caret install` |
-| `log-errors` | at least one live log holds an NDJSON error record | step 4 |
+| `log-errors` | a live log wrote an NDJSON error record in the last 24h; the detail names which log and when it last erred | step 4 |
 | `opencode-caret-version` | OpenCode would load a caret behind the published one | the check's remedy verbatim |
 
 An `unknown` check is not a failure: it names its own `reason` — no network, an unreadable
@@ -74,8 +74,10 @@ tail -n 40 "$dir/logs/daemon-stderr.log"
 A "socket connection closed" on the hook side often has its real cause on the daemon side,
 so check both. `log-errors` counts only NDJSON error records, so a crash that reached
 `daemon-stderr.log` alone leaves it passing — tail that file even when the check is green.
-If a failure predates the current live file, `gunzip -c` the segment you need from
-`logs/archive/` and rerun the recipe against the result.
+It fails only on records from the last 24h, so a log that has settled passes while still
+reporting when it last erred; work from that time rather than from the count. If a failure
+predates the current live file, `gunzip -c` the segment you need from `logs/archive/` and
+rerun the recipe against the result.
 
 ## 5. Review this session's plans
 

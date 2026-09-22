@@ -170,7 +170,11 @@ export async function runDoctorSubcommand(opts: {
       readAdapterChecks(),
     ]);
     const doc: DoctorDocument = { ...report, checks: runChecks(report, adapterChecks) };
-    process.stdout.write(`${renderStdout(doc, opts.json ? "json" : "text")}\n`);
+    // The same gate createInstallUI draws its chrome behind: a pipe, NO_COLOR, or CI all
+    // want the glyphs bare. Deciding it here keeps the renderer a pure function.
+    const color =
+      process.stdout.isTTY === true && !process.env.NO_COLOR && process.env.CI !== "true";
+    process.stdout.write(`${renderStdout(doc, opts.json ? "json" : "text", color)}\n`);
     process.exit(doc.checks.some((c) => c.status === "fail") ? 1 : 0);
   } catch (e) {
     process.stderr.write(`caret doctor: ${errorMessage(e)}\n`);
