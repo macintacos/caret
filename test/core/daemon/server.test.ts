@@ -1687,6 +1687,17 @@ test("POST /expire ends a pending review: terminal on disk, gone from the queue"
   });
 });
 
+test.failing("an orphan v1 expire after v2 appended leaves v2 pending", async () => {
+  await boot();
+  const { id } = await newReview();
+  await resolve(id, { behavior: "deny", feedback: "redo" });
+  expect((await newReview({ plan: "# v2\n\nrevised" })).id).toBe(id);
+  const res = await fetch(`${base}/api/reviews/${id}/expire?version=1`, { method: "POST" });
+  expect(res.status).toBe(409);
+  expect(store.get(id)?.status).toBe("pending");
+  expect(store.get(id)?.versions).toHaveLength(2);
+});
+
 test("POST /expire refuses a non-pending review", async () => {
   await boot();
   const { id } = await newReview();

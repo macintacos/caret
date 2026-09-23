@@ -177,6 +177,13 @@ test("a plan after an approval starts a new thread", async () => {
   expect(b.expired).toEqual([]);
 });
 
+test.failing("a plan arriving while the latest review is pending appends v2 to it", async () => {
+  const a = await routeIncomingPlan(input(), store);
+  const b = await routeIncomingPlan(input({ plan: "# v2\n\nrevised" }), store);
+  expect(b).toMatchObject({ id: a.id, action: "append", version: 2 });
+  expect(b.expired).toEqual([]);
+});
+
 test("a plan arriving while a review is still pending starts a new thread", async () => {
   const a = await routeIncomingPlan(input(), store);
   const b = await routeIncomingPlan(input({ plan: "# other\n\nz" }), store);
