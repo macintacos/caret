@@ -864,17 +864,17 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // names a superseded version — its line anchors belong to the old text. The
       // review-scoped general draft always writes; an omitted version is current.
       const cur = currentVersion(r);
-      const stale = body.version != null && body.version !== cur.version;
+      const isStale = body.version != null && body.version !== cur.version;
       // `!= null` so an absent OR null field is left alone — guarding null keeps
       // the old `?? []` null-safety (a stray null annotations would otherwise
       // persist and crash the client's `.map`).
-      if (body.annotations != null && !stale) {
+      if (body.annotations != null && !isStale) {
         cur.annotations = body.annotations;
       }
       if (body.generalCommentDraft != null) {
         r.generalCommentDraft = body.generalCommentDraft;
       }
-      if (body.composerScratches != null && !stale) {
+      if (body.composerScratches != null && !isStale) {
         cur.composerScratches = body.composerScratches;
       }
     });

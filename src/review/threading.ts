@@ -73,11 +73,11 @@ export async function routeIncomingPlan(
   // hook gave up or died, EXC-454): expire it, terminal on disk so it never
   // rehydrates as approvable.
   const expired: string[] = [];
-  for (const stale of older.filter((r) => r.status === "pending")) {
-    await store.expire(stale.id);
-    expired.push(stale.id);
-    log.info("review", `review superseded: ${shortId(stale.id)}`, {
-      reviewId: stale.id,
+  for (const orphan of older.filter((r) => r.status === "pending")) {
+    await store.expire(orphan.id);
+    expired.push(orphan.id);
+    log.info("review", `review superseded: ${shortId(orphan.id)}`, {
+      reviewId: orphan.id,
       sessionId,
       action: "supersede",
     });
