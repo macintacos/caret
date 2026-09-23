@@ -316,6 +316,14 @@ function isStaleVersion(review: Review | undefined, version: number | undefined)
   );
 }
 
+function expiredDeny(): Decision {
+  return {
+    behavior: "deny",
+    feedback: "caret: this review expired before a decision; denying so no unreviewed plan ships.",
+    decidedAt: Date.now(),
+  };
+}
+
 function versionQuery(req: Request): number | undefined {
   return VersionQuerySchema.parse(new URL(req.url).searchParams.get("version") ?? undefined);
 }
@@ -841,6 +849,11 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       log.debug("decision", `decision served from disk: ${shortId(id)}`, { reviewId: id });
       clearDecision(id);
       return Response.json(disk.decision);
+    }
+    // Nothing will ever decide an expired review; waiting would pin idle shutdown.
+    if (disk?.status === "expired") {
+      log.debug("decision", `expired review denied: ${shortId(id)}`, { reviewId: id });
+      return Response.json(expiredDeny());
     }
     // Otherwise wait, but only to the heartbeat window, then 204 so the client
     // re-polls before any socket idle timeout closes the connection.
