@@ -173,43 +173,42 @@ test("a plan after an approval starts a new thread", async () => {
   const b = await routeIncomingPlan(input({ plan: "# next\n\ny" }), store);
   expect(b).toMatchObject({ action: "new", version: 1 });
   expect(b.id).not.toBe(a.id);
-  // A review left pending would be superseded here rather than approved.
+  // The approved review is terminal, so nothing is left pending to supersede.
   expect(b.expired).toEqual([]);
 });
 
-test.failing("a plan arriving while the latest review is pending appends v2 to it", async () => {
+test("a plan arriving while the latest review is pending appends v2 to it", async () => {
   const a = await routeIncomingPlan(input(), store);
   const b = await routeIncomingPlan(input({ plan: "# v2\n\nrevised" }), store);
   expect(b).toMatchObject({ id: a.id, action: "append", version: 2 });
   expect(b.expired).toEqual([]);
 });
 
-test("a plan arriving while a review is still pending starts a new thread", async () => {
+test("a revision identical to the pending version still appends", async () => {
   const a = await routeIncomingPlan(input(), store);
-  const b = await routeIncomingPlan(input({ plan: "# other\n\nz" }), store);
-  expect(b).toMatchObject({ action: "new" });
-  expect(b.id).not.toBe(a.id);
+  const b = await routeIncomingPlan(input(), store);
+  expect(b).toMatchObject({ id: a.id, action: "append", version: 2 });
+  expect(store.get(a.id)?.versions.map((v) => v.plan)).toEqual([
+    "# Title\n\nbody\n",
+    "# Title\n\nbody\n",
+  ]);
+});
+
+test("appending to a pending review drops its unsent general-comment draft", async () => {
+  const a = await routeIncomingPlan(input(), store);
+  await store.update(a.id, (r) => {
+    r.generalCommentDraft = "half-written";
+  });
+  await routeIncomingPlan(input({ plan: "# v2\n\nrevised" }), store);
+  expect(store.get(a.id)?.generalCommentDraft).toBe("");
 });
 
 // ---- stale-pending supersede (EXC-454) ----
 
-test("resubmitting while the latest review is pending expires the orphan", async () => {
-  const a = await routeIncomingPlan(input(), store);
-  const b = await routeIncomingPlan(input(), store);
-  expect(b.action).toBe("new");
-  expect(b.expired).toEqual([a.id]);
-  expect(store.get(a.id)).toBeUndefined(); // dropped from memory
-  expect(store.list().map((r) => r.id)).toEqual([b.id]); // exactly one approvable review
-  // Terminal on disk: a still-pending record would rehydrate as an orphan.
-  expect((await store.persisted(a.id))?.status).toBe("expired");
-});
-
-test("an orphan pending behind a rejected latest is expired; the revision still appends", async () => {
-  const a = await routeIncomingPlan(input(), store);
-  await reject(a.id);
-  // Simulate a pre-fix orphan: an older pending review for the same session
-  // (the router can no longer produce one, but on-disk state can rehydrate it).
-  const orphan: Review = {
+// A pending review for the same session, older than any routed one (createdAt 1):
+// on-disk state from an earlier build can rehydrate one.
+async function seedOlderOrphan(): Promise<void> {
+  await store.create({
     id: "orphan",
     sessionId: "S",
     cwd: "/p",
@@ -218,8 +217,25 @@ test("an orphan pending behind a rejected latest is expired; the revision still 
     versions: [{ version: 1, plan: "old", annotations: [], createdAt: 1 }],
     createdAt: 1,
     updatedAt: 1,
-  };
-  await store.create(orphan);
+  });
+}
+
+test("an older pending orphan behind a pending latest is expired; the revision appends", async () => {
+  const a = await routeIncomingPlan(input(), store);
+  await seedOlderOrphan();
+  const b = await routeIncomingPlan(input({ plan: "v2" }), store);
+  expect(b).toMatchObject({ id: a.id, action: "append", version: 2 });
+  expect(b.expired).toEqual(["orphan"]);
+  expect(store.get("orphan")).toBeUndefined(); // dropped from memory
+  expect(store.list().map((r) => r.id)).toEqual([a.id]); // exactly one approvable review
+  // Terminal on disk: a still-pending record would rehydrate as an orphan.
+  expect((await store.persisted("orphan"))?.status).toBe("expired");
+});
+
+test("an orphan pending behind a rejected latest is expired; the revision still appends", async () => {
+  const a = await routeIncomingPlan(input(), store);
+  await reject(a.id);
+  await seedOlderOrphan();
   const b = await routeIncomingPlan(input({ plan: "v2" }), store);
   expect(b).toMatchObject({ id: a.id, action: "append", version: 2 });
   expect(b.expired).toEqual(["orphan"]);
@@ -228,14 +244,15 @@ test("an orphan pending behind a rejected latest is expired; the revision still 
 });
 
 test("superseding logs review superseded with the orphan's id", async () => {
-  const a = await routeIncomingPlan(input(), store);
+  await routeIncomingPlan(input(), store);
+  await seedOlderOrphan();
   const { recs, log } = recordingLog();
   await routeIncomingPlan(input(), store, log);
   expect(recs).toContainEqual({
     level: "info",
     step: "review",
-    msg: `review superseded: ${a.id.slice(0, 8)}`,
-    extra: { reviewId: a.id, sessionId: "S", action: "supersede" },
+    msg: "review superseded: orphan",
+    extra: { reviewId: "orphan", sessionId: "S", action: "supersede" },
   });
 });
 
@@ -245,9 +262,9 @@ test("two interleaved sessions never cross-contaminate", async () => {
   await reject(s1.id);
   const s1b = await routeIncomingPlan(input({ sessionId: "S1", plan: "s1 v2" }), store);
   const s2b = await routeIncomingPlan(input({ sessionId: "S2", plan: "s2 again" }), store);
-  expect(s1b).toMatchObject({ id: s1.id, action: "append" }); // appended to S1
-  expect(s2b.action).toBe("new"); // S2 was pending -> new thread
-  expect(s2b.id).not.toBe(s2.id);
+  expect(s1b).toMatchObject({ id: s1.id, action: "append", version: 2 });
+  expect(s2b).toMatchObject({ id: s2.id, action: "append", version: 2 });
+  expect(store.get(s1.id)?.versions.map((v) => v.plan)).toEqual(["# Title\n\nbody\n", "s1 v2\n"]);
 });
 
 // ---- instrumentation (EXC-444) ----
@@ -277,27 +294,23 @@ test("appending a revision logs review appended with the version", async () => {
   });
 });
 
-test("property: appends only follow a rejection, never crossing an approval", async () => {
+test("property: a plan appends while its session has an open review, never crossing an approval", async () => {
   // A scripted sequence of events; assert the invariant after each plan.
   const events = ["plan", "reject", "plan", "approve", "plan", "reject", "plan", "plan"] as const;
   let lastId: string | null = null;
-  let lastStatusWasRejected = false;
   for (const ev of events) {
     if (ev === "plan") {
       const r = await routeIncomingPlan(input({ plan: `p-${Math.random()}` }), store);
-      if (lastStatusWasRejected) {
-        expect(r.action).toBe("append");
+      if (lastId) {
+        expect(r).toMatchObject({ id: lastId, action: "append" });
       } else {
         expect(r.action).toBe("new");
       }
       lastId = r.id;
-      lastStatusWasRejected = false;
     } else if (ev === "reject" && lastId) {
       await reject(lastId);
-      lastStatusWasRejected = true;
     } else if (ev === "approve" && lastId) {
       await approve(lastId);
-      lastStatusWasRejected = false;
       lastId = null;
     }
   }

@@ -1648,17 +1648,17 @@ test("idle shutdown fires when empty, not while a review is pending", async () =
   await sig.shutdown;
 });
 
-test("a superseded review's decision entry does not pin idle shutdown", async () => {
+test("a superseded version's decision entry does not pin idle shutdown", async () => {
   const { sig, timer } = await bootWithManualIdle({ heartbeatMs: 20 });
-  const { id: stale } = await newReview();
-  // The (timed-out) hook long-polled once, leaving an unsettled decision entry.
-  expect((await fetch(`${base}/api/reviews/${stale}/decision`)).status).toBe(204);
-  // The session resubmits: the stale review is superseded by a fresh thread.
-  const { id: fresh } = await newReview();
-  expect(fresh).not.toBe(stale);
-  await resolve(fresh, { behavior: "allow" });
-  // The stale entry was cleared along with the supersede, so nothing pins
-  // openDecisionCount and the armed idle timer shuts the daemon down when it fires.
+  const { id } = await newReview();
+  // v1's hook long-polled once, leaving an unsettled decision entry.
+  expect((await fetch(`${base}/api/reviews/${id}/decision?version=1`)).status).toBe(204);
+  // The session resubmits while v1 is still pending: v2 appends to the same review.
+  expect((await newReview({ plan: "# v2\n\nrevised" })).id).toBe(id);
+  // v1's hook re-polls and is told it has been superseded.
+  expect((await fetch(`${base}/api/reviews/${id}/decision?version=1`)).status).toBe(409);
+  await resolve(id, { behavior: "allow" });
+  // Nothing pins openDecisionCount, so the armed idle timer shuts the daemon down.
   timer.fire();
   await sig.shutdown;
 });
@@ -1687,16 +1687,22 @@ test("POST /expire ends a pending review: terminal on disk, gone from the queue"
   });
 });
 
-test("an orphan v1 expire after v2 appended leaves v2 pending", async () => {
-  await boot();
-  const { id } = await newReview();
-  await resolve(id, { behavior: "deny", feedback: "redo" });
-  expect((await newReview({ plan: "# v2\n\nrevised" })).id).toBe(id);
-  const res = await fetch(`${base}/api/reviews/${id}/expire?version=1`, { method: "POST" });
-  expect(res.status).toBe(409);
-  expect(store.get(id)?.status).toBe("pending");
-  expect(store.get(id)?.versions).toHaveLength(2);
-});
+test.each([
+  ["rejected in the UI", true],
+  ["still pending (denied in the terminal)", false],
+])(
+  "an orphan v1 expire after v2 appended to a review %s leaves v2 pending",
+  async (_shape, rejected) => {
+    await boot();
+    const { id } = await newReview();
+    if (rejected) await resolve(id, { behavior: "deny", feedback: "redo" });
+    expect((await newReview({ plan: "# v2\n\nrevised" })).id).toBe(id);
+    const res = await fetch(`${base}/api/reviews/${id}/expire?version=1`, { method: "POST" });
+    expect(res.status).toBe(409);
+    expect(store.get(id)?.status).toBe("pending");
+    expect(store.get(id)?.versions).toHaveLength(2);
+  },
+);
 
 // ---- version ownership (EXC-1421) ----
 //

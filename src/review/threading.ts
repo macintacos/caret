@@ -2,10 +2,10 @@
 //
 // session_id alone is insufficient: a distinct later plan in the same session
 // would fold into the wrong thread. Rule: a new ExitPlanMode for a session
-// APPENDS a version to its latest review ONLY IF that review is currently
-// `rejected` (changes requested, awaiting revision); otherwise it starts a NEW
-// thread. An approved review never returns to `rejected`, so the plan after an
-// approval starts a new thread.
+// APPENDS a version to its latest review while that review is still open —
+// `rejected` (changes requested in the UI) or `pending` (denied in the agent's own
+// terminal, which caret never hears about); otherwise it starts a NEW thread. An
+// approved review never reopens, so the plan after an approval starts a new thread.
 
 import { randomBytes } from "node:crypto";
 
@@ -65,13 +65,15 @@ export async function routeIncomingPlan(
     : {};
   const now = Date.now();
 
-  // A pending review here is an orphan: a session has at most one outstanding
-  // plan hook, so a new plan means the prior hook gave up (timeout) or died
-  // without resolution (EXC-454). Expire every stale pending — not just the
-  // newest, since a pre-fix orphan can hide behind a rejected latest — before
-  // threading. Terminal on disk so it never rehydrates as approvable.
+  const [latest, ...older] = store.bySession(sessionId);
+
+  // A pending latest is not dead: a terminal-side deny leaves its hook alive and the
+  // review pending, and this plan is its revision. The version guard stops that hook
+  // from touching the appended version. An OLDER pending review is an orphan (its
+  // hook gave up or died, EXC-454): expire it, terminal on disk so it never
+  // rehydrates as approvable.
   const expired: string[] = [];
-  for (const stale of store.bySession(sessionId).filter((r) => r.status === "pending")) {
+  for (const stale of older.filter((r) => r.status === "pending")) {
     await store.expire(stale.id);
     expired.push(stale.id);
     log.info("review", `review superseded: ${shortId(stale.id)}`, {
@@ -81,10 +83,7 @@ export async function routeIncomingPlan(
     });
   }
 
-  const latest = store.bySession(sessionId)[0];
-
-  // Append only to a review currently awaiting revision.
-  if (latest && latest.status === "rejected") {
+  if (latest && (latest.status === "rejected" || latest.status === "pending")) {
     const version = latest.versions.length + 1;
     await store.update(latest.id, (r) => {
       r.versions.push({ version, plan, annotations: [], createdAt: now });
@@ -97,6 +96,8 @@ export async function routeIncomingPlan(
       // daemon's /decision handler waits for the next decision instead of
       // re-serving the stale deny.
       r.decision = undefined;
+      // A pending review can hold an unsent draft written against the old version.
+      r.generalCommentDraft = "";
     });
     // The threading decision is logged here — not in the daemon handler — so
     // append vs new is distinguishable and the resolved sessionId rides along.
