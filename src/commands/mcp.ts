@@ -49,8 +49,8 @@ export interface ReviewPlanDeps {
 type ReviewPlanHandler = (plan: string, signal: AbortSignal) => Promise<CallToolResult>;
 
 /** The review_plan call. One review at a time: every call shares the server's session
- * id, so a second concurrent review would supersede the first and leave its call waiting
- * out the review timeout. */
+ * id, so a second concurrent review would append to the first as its next version and
+ * end the first call with a superseded deny. */
 export function createReviewPlanHandler(deps: ReviewPlanDeps): ReviewPlanHandler {
   let pending = false;
   return async (plan, signal) => {

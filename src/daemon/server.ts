@@ -28,6 +28,7 @@ import {
   PlanInputSchema,
   parseBody,
   ResolveBodySchema,
+  VersionQuerySchema,
 } from "@/daemon/schemas.ts";
 import { type DaemonLock, IDENTITY, isCompiledBinary } from "@/lib/build-id.ts";
 import { markPaneRead as clearCmuxMark } from "@/lib/cmux.ts";
@@ -44,6 +45,7 @@ import {
   type HealthIdentity,
   type PlanInput,
   type ResolveBody,
+  type Review,
   type RouteResult,
   type SkillDescriptionResponse,
   type SkillRef,
@@ -305,6 +307,19 @@ function ifNoneMatchHit(header: string | null, etag: string): boolean {
   return header.split(",").some((t) => t.trim().replace(/^W\//, "") === etag);
 }
 
+/** Whether a hook or tab is acting on a version the review has since moved past. A
+ * missing version is taken as current: older hooks, older tabs and `caret reconcile`
+ * send none. */
+function isStaleVersion(review: Review | undefined, version: number | undefined): boolean {
+  return (
+    review !== undefined && version !== undefined && currentVersion(review).version !== version
+  );
+}
+
+function versionQuery(req: Request): number | undefined {
+  return VersionQuerySchema.parse(new URL(req.url).searchParams.get("version") ?? undefined);
+}
+
 export function createServer(opts: CreateServerOptions): CaretServer {
   const cfg = resolveOptions(opts);
   const { store, idle, heartbeat, resident, assets, onShutdown, routePlan, configPath, log } = cfg;
@@ -361,6 +376,10 @@ export function createServer(opts: CreateServerOptions): CaretServer {
 
   function notFound() {
     return new Response("not found", { status: 404 });
+  }
+
+  function versionConflict() {
+    return new Response("superseded by a newer version", { status: 409 });
   }
 
   function tooLarge() {
@@ -500,10 +519,11 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     // hook re-creates its entry per heartbeat, but that's bounded by its
     // timeout, whose /expire clears it for good.
     for (const staleId of routed.expired) clearDecision(staleId);
-    // A revision append re-pends a settled review; drop any orphaned registry
-    // entry so the revision's long-poll awaits a fresh decision instead of
-    // re-serving the prior one (EXC-590). routeIncomingPlan already cleared the
-    // store decision (r.decision = undefined); this is its in-memory analog.
+    // An append can follow a rejected latest (a settled decision to drop) or a
+    // still-pending one (an abandoned long-poll entry to drop) — either way the
+    // revision's long-poll must await a fresh decision, not the stale entry
+    // (EXC-590). routeIncomingPlan already cleared the store decision
+    // (r.decision = undefined); this is its in-memory analog.
     if (routed.action === "append") clearDecision(routed.id);
     // Tell the hook whether a UI tab is already listening (polled recently): if
     // so it skips foregrounding the browser, so an open backgrounded tab's
@@ -801,25 +821,26 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   }
 
   // GET /api/reviews/:id/decision — the hook's long-poll for a decision.
-  async function handleDecision(id: string): Promise<Response> {
+  async function handleDecision(req: Request, id: string): Promise<Response> {
     // A decision may already be recorded: in memory (a deny keeps the review) or
     // on disk (an approve removed it from memory, or the daemon restarted
     // without rehydrating it). Serve it at once so a hook that dropped its
     // long-poll and reconnected still receives the decision.
     const inMem = store.get(id);
+    const disk = inMem ? undefined : await store.persisted(id);
+    // Before serving a decision or registering a wait: a stale poll must neither
+    // read the newer version's decision nor register an entry that pins idle shutdown.
+    if (isStaleVersion(inMem ?? disk, versionQuery(req))) return versionConflict();
     if (inMem?.decision) {
       clearDecision(id);
       return Response.json(inMem.decision);
     }
-    if (!inMem) {
-      const disk = await store.persisted(id);
-      if (disk?.decision) {
-        // The reconnect-recovery path — rare and diagnostic gold when a hook
-        // dropped its long-poll or the daemon restarted mid-review.
-        log.debug("decision", `decision served from disk: ${shortId(id)}`, { reviewId: id });
-        clearDecision(id);
-        return Response.json(disk.decision);
-      }
+    if (disk?.decision) {
+      // The reconnect-recovery path — rare and diagnostic gold when a hook
+      // dropped its long-poll or the daemon restarted mid-review.
+      log.debug("decision", `decision served from disk: ${shortId(id)}`, { reviewId: id });
+      clearDecision(id);
+      return Response.json(disk.decision);
     }
     // Otherwise wait, but only to the heartbeat window, then 204 so the client
     // re-polls before any socket idle timeout closes the connection.
@@ -839,27 +860,21 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     if (invalid) return Response.json({ error: invalid }, { status: 400 });
     const body: DraftBody = DraftBodySchema.parse(raw);
     const updated = await store.update(id, (r) => {
+      // Version-scoped fields (annotations, composer scratches) drop when the save
+      // names a superseded version — its line anchors belong to the old text. The
+      // review-scoped general draft always writes; an omitted version is current.
+      const cur = currentVersion(r);
+      const isStale = body.version != null && body.version !== cur.version;
       // `!= null` so an absent OR null field is left alone — guarding null keeps
       // the old `?? []` null-safety (a stray null annotations would otherwise
       // persist and crash the client's `.map`).
-      if (body.annotations != null) {
-        currentVersion(r).annotations = body.annotations;
+      if (body.annotations != null && !isStale) {
+        cur.annotations = body.annotations;
       }
       if (body.generalCommentDraft != null) {
         r.generalCommentDraft = body.generalCommentDraft;
       }
-      // Persist the current version's unsent composer scratches, version-scoped
-      // alongside its annotations so a new plan version starts with neither; the
-      // source view rehydrates them from the served ClientReview on load. Drop a
-      // stale write: a scratch save whose debounce fired after a new version
-      // arrived carries the version it was composed against, and its old line
-      // anchors must not land on the current version (an omitted version writes,
-      // for back-compat).
-      const cur = currentVersion(r);
-      if (
-        body.composerScratches != null &&
-        (body.version == null || body.version === cur.version)
-      ) {
+      if (body.composerScratches != null && !isStale) {
         cur.composerScratches = body.composerScratches;
       }
     });
@@ -872,6 +887,15 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   async function handleResolve(req: Request, id: string): Promise<Response> {
     const body: ResolveBody = await parseBody(req, ResolveBodySchema);
     const existing = store.get(id);
+    // A decision made on a version the reviewer no longer sees must not land on the
+    // one that replaced it.
+    if (isStaleVersion(existing, body.version)) {
+      log.info("resolve", "resolve refused: stale version", {
+        reviewId: id,
+        version: body.version,
+      });
+      return versionConflict();
+    }
     // Only a pending review can be resolved — guards against a double resolve
     // diverging the store from the decision the hook received.
     if (existing?.status !== "pending") return notFound();
@@ -927,12 +951,18 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // POST /api/reviews/:id/expire — the hook is abandoning this review: its
   // timeout fired and it is about to emit the fail-safe deny (EXC-454). No
   // decision is recorded: the plan was never reviewed.
-  async function handleExpire(id: string): Promise<Response> {
-    // Drop any unsettled long-poll entry unconditionally — even when the review
-    // is already gone, a zombie hook's entry would otherwise pin
+  async function handleExpire(req: Request, id: string): Promise<Response> {
+    const existing = store.get(id);
+    // An orphan hook of an older version: the entry belongs to the newer one and may
+    // hold its settled-but-unread decision, so leave it. An approved newer version
+    // has left memory, so its version is read from disk.
+    if (isStaleVersion(existing ?? (await store.persisted(id)), versionQuery(req))) {
+      return versionConflict();
+    }
+    // Otherwise drop any unsettled long-poll entry unconditionally — even when the
+    // review is already gone, a zombie hook's entry would otherwise pin
     // openDecisionCount and block idle shutdown forever.
     clearDecision(id);
-    const existing = store.get(id);
     // Only a pending review can expire; resolved ones are already terminal.
     if (existing?.status !== "pending") return notFound();
     await store.expire(id);
@@ -986,10 +1016,10 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       }
       if (method === "POST" && sub === "/file-refs") return handleFileRefs(req, id);
       if (method === "POST" && sub === "/file-search") return handleFileSearch(req, id);
-      if (method === "GET" && sub === "/decision") return handleDecision(id);
+      if (method === "GET" && sub === "/decision") return handleDecision(req, id);
       if (method === "PUT" && sub === "/draft") return handleDraft(req, id);
       if (method === "POST" && sub === "/resolve") return handleResolve(req, id);
-      if (method === "POST" && sub === "/expire") return handleExpire(id);
+      if (method === "POST" && sub === "/expire") return handleExpire(req, id);
       if (method === "POST" && sub === "/seen") return handleSeen(id);
     }
 

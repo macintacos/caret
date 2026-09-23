@@ -5,7 +5,7 @@
 // so no real time passes.
 import { afterEach, expect, test } from "bun:test";
 
-import { postReview, waitForHealth } from "@/daemon/client.ts";
+import { expireReview, longPoll, postReview, waitForHealth } from "@/daemon/client.ts";
 
 const servers: Array<{ stop(): void }> = [];
 afterEach(() => {
@@ -79,4 +79,34 @@ test("postReview rejects any other failed status", async () => {
   const srv = Bun.serve({ port: 0, fetch: () => new Response("boom", { status: 500 }) });
   servers.push(srv);
   await expect(postReview(`http://localhost:${srv.port}`, { plan: "# P" })).rejects.toThrow(/500/);
+});
+
+function serveStatus(status: number, seen: string[] = []): string {
+  const srv = Bun.serve({
+    port: 0,
+    fetch: (req) => {
+      seen.push(new URL(req.url).search);
+      return new Response(null, { status });
+    },
+  });
+  servers.push(srv);
+  return `http://localhost:${srv.port}`;
+}
+
+test("longPoll names its version and reads a 409 as superseded", async () => {
+  const seen: string[] = [];
+  expect(await longPoll(serveStatus(409, seen), "r1", 1)).toBe("superseded");
+  expect(seen).toEqual(["?version=1"]);
+});
+
+test("expireReview names its version and treats a 409 as nothing left to expire", async () => {
+  const seen: string[] = [];
+  await expireReview(serveStatus(409, seen), "r1", 1);
+  expect(seen).toEqual(["?version=1"]);
+});
+
+test("a call without a version sends no version query", async () => {
+  const seen: string[] = [];
+  await expireReview(serveStatus(404, seen), "r1", undefined);
+  expect(seen).toEqual([""]);
 });

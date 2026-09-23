@@ -39,9 +39,9 @@ export interface Daemon {
    * Seed a review through the public API — the same POST /api/reviews the hook
    * makes, issued harness-side (no Origin header, so the same-origin guard is
    * unaffected). `sessionId` defaults to a fresh UUID per call: the daemon
-   * SUPERSEDES a same-session pending review, so two seeds sharing a session
-   * would silently collapse to one. Pass an explicit sessionId only to test
-   * that threading behavior.
+   * APPENDS a same-session plan to that session's open review, so two seeds
+   * sharing a session would silently collapse to one. Pass an explicit sessionId
+   * only to test that threading behavior.
    */
   seed(input?: PlanInput): Promise<string>;
   /** PUT /api/reviews/:id/draft — autosave the reviewer's working draft

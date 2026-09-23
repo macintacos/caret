@@ -407,9 +407,9 @@ On Claude Code, three more behaviors follow from how the server is built:
 
 - **One review at a time.** The server mints its own session id when it starts and uses it
   for every call for the life of the Claude Code process. A second review under that id
-  would replace the pending one, so the server refuses a call made while a review is
-  pending: it returns an error at once, telling the agent to wait for the pending
-  decision.
+  would land as the next version of the pending one and end the first call with a deny, so
+  the server refuses a call made while a review is pending: it returns an error at once,
+  telling the agent to wait for the pending decision.
 - **Resubmissions thread.** Because every call from that process shares the one id, a
   revised plan sent after a change request lands as the next version of the same review.
   The id is not Claude Code's session id, so a tool review and a review intercepted from

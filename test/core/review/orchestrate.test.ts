@@ -172,19 +172,41 @@ test("a never-resolving long-poll times out to deny", async () => {
 });
 
 test("a timeout notifies the daemon to expire the review before denying", async () => {
-  const expired: Array<[string, string]> = [];
+  const expired: Array<[string, string, number | undefined]> = [];
   const out = await review(
     stdin,
     reviewDeps({
+      postReview: async () => ({ id: "rid", version: 3 }),
       longPoll: () => new Promise<Decision>(() => {}),
       timeoutMs: 20,
-      expire: async (baseUrl: string, id: string) => {
-        expired.push([baseUrl, id]);
+      expire: async (baseUrl, id, version) => {
+        expired.push([baseUrl, id, version]);
       },
     }),
   );
   expect(out.behavior).toBe("deny");
-  expect(expired).toEqual([["http://x", "rid"]]);
+  expect(expired).toEqual([["http://x", "rid", 3]]);
+});
+
+test("a superseded review is denied without expiring the newer revision", async () => {
+  const polled: Array<number | undefined> = [];
+  let expires = 0;
+  const out = await review(
+    stdin,
+    reviewDeps({
+      postReview: async () => ({ id: "rid", version: 1 }),
+      longPoll: async (_baseUrl, _id, version) => {
+        polled.push(version);
+        return "superseded";
+      },
+      expire: async () => {
+        expires++;
+      },
+    }),
+  );
+  expect(out.behavior).toBe("deny");
+  expect(polled).toEqual([1]);
+  expect(expires).toBe(0);
 });
 
 test("an expire failure never changes the fail-safe deny", async () => {
@@ -602,17 +624,17 @@ test("decision info records are suppressed when the level is error", async () =>
 // best-effort expire the abandon path runs so caret's UI drops the pending review
 // instead of keeping a zombie.
 
-test("onPosted fires with the daemon base URL and review id once the review is created", async () => {
+test("onPosted fires with the daemon base URL, review id and version once the review is created", async () => {
   const posted: PostedReview[] = [];
   await review(
     stdin,
     reviewDeps({
       ensureDaemon: async () => "http://d",
-      postReview: async () => ({ id: "rid" }),
+      postReview: async () => ({ id: "rid", version: 2 }),
       onPosted: (p) => posted.push(p),
     }),
   );
-  expect(posted).toEqual([{ baseUrl: "http://d", id: "rid" }]);
+  expect(posted).toEqual([{ baseUrl: "http://d", id: "rid", version: 2 }]);
 });
 
 test("onPosted carries the daemon's verdict on whether the plan file is current", async () => {
@@ -641,15 +663,15 @@ test("onPosted does not fire when the review was never created", async () => {
   expect(posted).toEqual([]);
 });
 
-test("expireAbandoned expires the posted review", async () => {
-  const expired: Array<[string, string]> = [];
+test("expireAbandoned expires the posted review at its version", async () => {
+  const expired: Array<[string, string, number | undefined]> = [];
   await expireAbandoned(
-    async (baseUrl, id) => {
-      expired.push([baseUrl, id]);
+    async (baseUrl, id, version) => {
+      expired.push([baseUrl, id, version]);
     },
-    { baseUrl: "http://d", id: "rid" },
+    { baseUrl: "http://d", id: "rid", version: 2 },
   );
-  expect(expired).toEqual([["http://d", "rid"]]);
+  expect(expired).toEqual([["http://d", "rid", 2]]);
 });
 
 test("expireAbandoned is a no-op when nothing was posted yet", async () => {

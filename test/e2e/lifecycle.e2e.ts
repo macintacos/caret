@@ -3,8 +3,8 @@
 // page is open appears via the 2s poll without a reload.
 //
 // Multi-review seeds rely on the fixture's per-call UUID sessionId default:
-// the daemon SUPERSEDES a same-session pending review, so sharing a session
-// would silently collapse two seeds into one.
+// the daemon APPENDS a same-session plan to that session's open review, so
+// sharing a session would silently collapse two seeds into one.
 //
 // Everything here needs a real browser. The switcher pick goes through a
 // portalled bits-ui menu, the deep link is a real navigation whose query string

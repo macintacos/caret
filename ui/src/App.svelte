@@ -272,6 +272,7 @@
   const canCrossfade = supportsViewTransition();
   const resolve = createResolve(resStore, {
     activeId: () => selection.activeId,
+    activeVersion: () => active?.version,
     annotations: () => work.annotations,
     planText: () => active?.currentPlan ?? "",
     flushPending: () => autosave.flushPending(),
@@ -284,8 +285,9 @@
     },
     onOffline: () => {
       selection.setConnected(false);
-      // Fires only on a genuine network failure, since a daemon non-2xx still advances
-      // — so this is exactly the case the optimistic confirmations below get wrong.
+      // Fires only on a genuine network failure, since a daemon non-2xx either advances
+      // or lands in onSuperseded — so this is a case the optimistic confirmations below
+      // get wrong.
       // Nothing advanced and the plan is still on screen; the persistent alert is what
       // keeps a failed decision from reading as a landed one.
       alerts.push({
@@ -295,6 +297,14 @@
         persistent: true,
       });
     },
+    // The other case they get wrong: the decision was refused, not sent.
+    onSuperseded: () =>
+      alerts.push({
+        variant: "destructive",
+        title: "The plan was revised",
+        message: "Your decision wasn't sent — review the new version.",
+        persistent: true,
+      }),
     clearGeneralComment: () => autosave.clearGeneralComment(),
   });
   // EXC-427 desktop-plan notifier. Component-scoped so both consumers — the poll

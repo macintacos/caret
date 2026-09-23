@@ -8,6 +8,7 @@ import type {
   Decision,
   HealthIdentity,
   PlanInput,
+  PollResult,
   ResolveBody,
 } from "@/lib/types.ts";
 
@@ -71,22 +72,41 @@ export async function postReview(baseUrl: string, input: PlanInput): Promise<Cre
   return (await res.json()) as CreatedReview;
 }
 
+/** `?version=N` naming the version this hook posted, so the daemon can refuse a
+ * hook the review has moved past; empty for a caller that knows none. */
+function versionSearch(version: number | undefined): string {
+  return version === undefined ? "" : `?version=${version}`;
+}
+
 /** Best-effort expire: short-fused so a dying hook never hangs on it. The
  * caller (runReview's catch) swallows any throw. */
-export async function expireReview(baseUrl: string, id: string): Promise<void> {
-  const res = await fetch(`${baseUrl}/api/reviews/${id}/expire`, {
+export async function expireReview(
+  baseUrl: string,
+  id: string,
+  version: number | undefined,
+): Promise<void> {
+  const res = await fetch(`${baseUrl}/api/reviews/${id}/expire${versionSearch(version)}`, {
     method: "POST",
     signal: AbortSignal.timeout(1000),
   });
-  // 404 = already terminal (resolved or superseded) — nothing left to expire.
-  if (!res.ok && res.status !== 404) throw new Error(`POST /expire failed: ${res.status}`);
+  // 404 = already terminal (resolved or superseded); 409 = a newer version owns the
+  // review. Either way nothing of this hook's is left to expire.
+  if (!res.ok && res.status !== 404 && res.status !== 409) {
+    throw new Error(`POST /expire failed: ${res.status}`);
+  }
 }
 
 /** Poll once for the decision. Null on a 204 heartbeat (still pending) so the
- * caller re-polls; the settled Decision otherwise. */
-export async function longPoll(baseUrl: string, id: string): Promise<Decision | null> {
-  const res = await fetch(`${baseUrl}/api/reviews/${id}/decision`);
+ * caller re-polls; "superseded" once a newer version owns the review; the settled
+ * Decision otherwise. */
+export async function longPoll(
+  baseUrl: string,
+  id: string,
+  version: number | undefined,
+): Promise<PollResult> {
+  const res = await fetch(`${baseUrl}/api/reviews/${id}/decision${versionSearch(version)}`);
   if (res.status === 204) return null;
+  if (res.status === 409) return "superseded";
   if (!res.ok) throw new Error(`decision long-poll failed: ${res.status}`);
   return (await res.json()) as Decision;
 }

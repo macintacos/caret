@@ -851,6 +851,16 @@ test("PUT draft drops composerScratches composed against a stale version", async
   expect(one.composerScratches).toEqual(SCRATCHES);
 });
 
+test("PUT draft naming a superseded version drops its annotations but keeps the general draft", async () => {
+  await boot();
+  const { id } = await newReview();
+  expect((await newReview({ plan: "# v2\n\nrevised" })).id).toBe(id);
+  await putDraft(id, { annotations: ANNS, generalCommentDraft: "x", version: 1 });
+  const one = await (await fetch(`${base}/api/reviews/${id}`)).json();
+  expect(one.annotations).toEqual([]);
+  expect(one.generalCommentDraft).toBe("x");
+});
+
 test("PUT draft does not clobber the other field (either direction)", async () => {
   await boot();
   const { id } = await newReview();
@@ -1648,17 +1658,17 @@ test("idle shutdown fires when empty, not while a review is pending", async () =
   await sig.shutdown;
 });
 
-test("a superseded review's decision entry does not pin idle shutdown", async () => {
+test("a superseded version's decision entry does not pin idle shutdown", async () => {
   const { sig, timer } = await bootWithManualIdle({ heartbeatMs: 20 });
-  const { id: stale } = await newReview();
-  // The (timed-out) hook long-polled once, leaving an unsettled decision entry.
-  expect((await fetch(`${base}/api/reviews/${stale}/decision`)).status).toBe(204);
-  // The session resubmits: the stale review is superseded by a fresh thread.
-  const { id: fresh } = await newReview();
-  expect(fresh).not.toBe(stale);
-  await resolve(fresh, { behavior: "allow" });
-  // The stale entry was cleared along with the supersede, so nothing pins
-  // openDecisionCount and the armed idle timer shuts the daemon down when it fires.
+  const { id } = await newReview();
+  // v1's hook long-polled once, leaving an unsettled decision entry.
+  expect((await fetch(`${base}/api/reviews/${id}/decision?version=1`)).status).toBe(204);
+  // The session resubmits while v1 is still pending: v2 appends to the same review.
+  expect((await newReview({ plan: "# v2\n\nrevised" })).id).toBe(id);
+  // v1's hook re-polls and is told it has been superseded.
+  expect((await fetch(`${base}/api/reviews/${id}/decision?version=1`)).status).toBe(409);
+  await resolve(id, { behavior: "allow" });
+  // Nothing pins openDecisionCount, so the armed idle timer shuts the daemon down.
   timer.fire();
   await sig.shutdown;
 });
@@ -1685,6 +1695,93 @@ test("POST /expire ends a pending review: terminal on disk, gone from the queue"
     step: "review",
     extra: { reviewId: id, sessionId: "S" },
   });
+});
+
+test.each([
+  ["rejected in the UI", true],
+  ["still pending (denied in the terminal)", false],
+])(
+  "an orphan v1 expire after v2 appended to a review %s leaves v2 pending",
+  async (_shape, rejected) => {
+    await boot();
+    const { id } = await newReview();
+    if (rejected) await resolve(id, { behavior: "deny", feedback: "redo" });
+    expect((await newReview({ plan: "# v2\n\nrevised" })).id).toBe(id);
+    const res = await fetch(`${base}/api/reviews/${id}/expire?version=1`, { method: "POST" });
+    expect(res.status).toBe(409);
+    expect(store.get(id)?.status).toBe("pending");
+    expect(store.get(id)?.versions).toHaveLength(2);
+  },
+);
+
+// ---- version ownership (EXC-1421) ----
+//
+// A hook names the version it posted; a call naming an older one is an orphan hook
+// acting on a review that has since moved on, so the daemon answers 409 and does
+// nothing else. A call naming no version is taken as current.
+
+async function appendedToV2(): Promise<string> {
+  const { id } = await newReview();
+  await resolve(id, { behavior: "deny", feedback: "redo" });
+  await newReview({ plan: "# v2\n\nrevised" });
+  return id;
+}
+
+test("a stale /expire after v2 was approved leaves v2's decision entry alone", async () => {
+  await boot();
+  const id = await appendedToV2();
+  await d.resolve(id, { behavior: "allow", version: 2 });
+  expect(store.get(id)).toBeUndefined();
+  const res = await fetch(`${base}/api/reviews/${id}/expire?version=1`, { method: "POST" });
+  expect(res.status).toBe(409);
+});
+
+test("a stale /decision poll is refused without parking on the decision pipe", async () => {
+  let parks = 0;
+  await boot({ heartbeatMs: 20, onDecisionAwaited: () => parks++ });
+  const id = await appendedToV2();
+  expect((await fetch(`${base}/api/reviews/${id}/decision?version=1`)).status).toBe(409);
+  expect(parks).toBe(0);
+});
+
+test("a v1 long-poll in flight when v2 appends never receives v2's decision", async () => {
+  const park = decisionParked();
+  await boot({ heartbeatMs: 200, onDecisionAwaited: park.onDecisionAwaited });
+  const { id } = await newReview();
+  const v1Poll = fetch(`${base}/api/reviews/${id}/decision?version=1`);
+  await park.parked;
+  expect((await newReview({ plan: "# v2\n\nrevised" })).id).toBe(id);
+  await d.resolve(id, { behavior: "deny", feedback: "again", version: 2 });
+  expect((await v1Poll).status).toBe(204);
+  const v2 = await fetch(`${base}/api/reviews/${id}/decision?version=2`);
+  expect(await v2.json()).toMatchObject({ behavior: "deny", feedback: "again" });
+});
+
+test("a stale /resolve is logged as a refused decision", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log });
+  const id = await appendedToV2();
+  await d.resolve(id, { behavior: "allow", version: 1 });
+  const refused = recs.filter((r) => r.step === "resolve").at(-1);
+  expect(refused).toMatchObject({ level: "info", extra: { reviewId: id, version: 1 } });
+});
+
+test("a stale /resolve is refused and leaves the review pending", async () => {
+  await boot();
+  const id = await appendedToV2();
+  const res = await d.resolve(id, { behavior: "allow", version: 1 });
+  expect(res.status).toBe(409);
+  expect(store.get(id)?.status).toBe("pending");
+});
+
+test("calls naming the current version act as calls naming none", async () => {
+  await boot({ heartbeatMs: 30 });
+  const id = await appendedToV2();
+  expect((await fetch(`${base}/api/reviews/${id}/decision?version=2`)).status).toBe(204);
+  expect((await d.resolve(id, { behavior: "deny", feedback: "x", version: 2 })).status).toBe(200);
+  const { id: other } = await newReview({ sessionId: "other" });
+  const res = await fetch(`${base}/api/reviews/${other}/expire?version=1`, { method: "POST" });
+  expect(res.status).toBe(200);
 });
 
 test("POST /expire refuses a non-pending review", async () => {

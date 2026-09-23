@@ -19,6 +19,7 @@ let submitResult: () => Promise<void>;
 let advanced: string[];
 let flushOrder: string[];
 let offline: boolean;
+let superseded: number;
 let cleared: number;
 let saved: ApproveVariantId[];
 
@@ -28,9 +29,17 @@ function makeStore(over: Partial<ResolveStore> = {}): ResolveStore {
 
 function build(
   store: ResolveStore,
-  opts: { activeId?: string | null; annotations?: Annotation[]; planText?: string } = {},
+  opts: {
+    activeId?: string | null;
+    activeVersion?: number;
+    /** The version the poll delivers while the flush is in flight. */
+    versionAfterFlush?: number;
+    annotations?: Annotation[];
+    planText?: string;
+  } = {},
 ) {
   const activeId = "activeId" in opts ? (opts.activeId ?? null) : "r1";
+  let version = opts.activeVersion;
   const resolve = createResolve(store, {
     resolveReview: async (id, body) => {
       submits.push({ id, body });
@@ -38,14 +47,19 @@ function build(
     },
     saveApproveMode: (mode) => saved.push(mode),
     activeId: () => activeId,
+    activeVersion: () => version,
     annotations: () => opts.annotations ?? [],
     planText: () => opts.planText ?? "",
     flushPending: async () => {
       flushOrder.push("flush");
+      if (opts.versionAfterFlush !== undefined) version = opts.versionAfterFlush;
     },
     afterResolve: (id) => advanced.push(id),
     onOffline: () => {
       offline = true;
+    },
+    onSuperseded: () => {
+      superseded++;
     },
     clearGeneralComment: () => {
       cleared++;
@@ -60,6 +74,7 @@ beforeEach(() => {
   advanced = [];
   flushOrder = [];
   offline = false;
+  superseded = 0;
   cleared = 0;
   saved = [];
 });
@@ -79,13 +94,30 @@ const TIGHTEN_ANNOTATION: Annotation = {
 async function expectHttpErrorAdvances(
   run: (resolve: ReturnType<typeof build>) => Promise<void>,
 ): Promise<ResolveStore> {
-  submitResult = () => Promise.reject(new HttpError(409));
+  submitResult = () => Promise.reject(new HttpError(404));
   const store = makeStore();
   const resolve = build(store);
   await run(resolve);
   expect(advanced).toEqual(["r1"]);
   expect(offline).toBe(false);
+  expect(superseded).toBe(0);
   return store;
+}
+
+/** submitResult rejects with a 409 (a newer version of this review arrived);
+ * `run` stays on the review, reports it superseded, and clears busy. */
+async function expectSupersededStays(
+  run: (resolve: ReturnType<typeof build>) => Promise<void>,
+): Promise<void> {
+  submitResult = () => Promise.reject(new HttpError(409));
+  const store = makeStore();
+  const resolve = build(store);
+  await run(resolve);
+  expect(advanced).toEqual([]);
+  expect(superseded).toBe(1);
+  expect(offline).toBe(false);
+  expect(cleared).toBe(0);
+  expect(store.busy).toBe(false);
 }
 
 /** submitResult rejects with a plain network error; `run` flips offline and
@@ -123,6 +155,22 @@ async function expectNoopWhenInactive(
   await run(resolve);
   expect(submits).toEqual([]);
 }
+
+describe("version ownership", () => {
+  test("every decision names the version the reviewer was looking at", async () => {
+    const resolve = build(makeStore(), { activeVersion: 2 });
+    await resolve.approve("default");
+    await resolve.requestChanges("note");
+    await resolve.reject();
+    expect(submits.map((s) => s.body.version)).toEqual([2, 2, 2]);
+  });
+
+  test("a version the poll delivers during the flush never rides the decision", async () => {
+    await build(makeStore(), { activeVersion: 1, versionAfterFlush: 2 }).approve("default");
+    await build(makeStore(), { activeVersion: 1, versionAfterFlush: 2 }).reject();
+    expect(submits.map((s) => s.body.version)).toEqual([1, 1]);
+  });
+});
 
 describe("isNetworkFailure", () => {
   test("an HttpError is NOT a network failure (the daemon answered)", () => {
@@ -179,6 +227,11 @@ describe("approve", () => {
     expect(store.busy).toBe(false);
   });
 
+  test("a 409 (a newer version arrived) stays on the review", async () => {
+    await expectSupersededStays((resolve) => resolve.approve("default"));
+    expect(saved).toEqual([]);
+  });
+
   test("a network failure flips offline and does NOT advance", async () => {
     const store = await expectNetworkFailureBlocksAdvance((resolve) => resolve.approve("default"));
     expect(store.busy).toBe(false);
@@ -220,6 +273,10 @@ describe("requestChanges", () => {
     await expectHttpErrorAdvances((resolve) => resolve.requestChanges("note"));
   });
 
+  test("a 409 (a newer version arrived) stays on the review", async () => {
+    await expectSupersededStays((resolve) => resolve.requestChanges("note"));
+  });
+
   test("a network failure flips offline and does NOT advance", async () => {
     await expectNetworkFailureBlocksAdvance((resolve) => resolve.requestChanges("note"));
   });
@@ -257,6 +314,10 @@ describe("reject", () => {
 
   test("an HttpError (already resolved elsewhere) still advances", async () => {
     await expectHttpErrorAdvances((resolve) => resolve.reject());
+  });
+
+  test("a 409 (a newer version arrived) stays on the review", async () => {
+    await expectSupersededStays((resolve) => resolve.reject());
   });
 
   test("a network failure flips offline and does NOT advance", async () => {

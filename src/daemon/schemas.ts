@@ -75,8 +75,15 @@ export const ResolveBodySchema: z.ZodType<ResolveBody> = z
     behavior: BehaviorSchema.catch("allow"),
     feedback: z.string().optional(),
     acceptMode: z.string().optional().catch(undefined),
+    // Per-field catch: a garbled version must not degrade the whole body, whose
+    // fallback is an allow.
+    version: z.number().int().positive().optional().catch(undefined),
   })
   .catch({ behavior: "allow" });
+
+// `?version=N` on the hook's /decision and /expire calls. Anything unparseable is
+// treated as absent, i.e. current.
+export const VersionQuerySchema = z.coerce.number().int().positive().optional().catch(undefined);
 
 // POST /api/config — the ONE schema here that rejects where its neighbours degrade.
 // The routes above historically tolerated junk, so validating them must not tighten
