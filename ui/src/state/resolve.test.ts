@@ -28,7 +28,12 @@ function makeStore(over: Partial<ResolveStore> = {}): ResolveStore {
 
 function build(
   store: ResolveStore,
-  opts: { activeId?: string | null; annotations?: Annotation[]; planText?: string } = {},
+  opts: {
+    activeId?: string | null;
+    activeVersion?: number;
+    annotations?: Annotation[];
+    planText?: string;
+  } = {},
 ) {
   const activeId = "activeId" in opts ? (opts.activeId ?? null) : "r1";
   const resolve = createResolve(store, {
@@ -38,6 +43,7 @@ function build(
     },
     saveApproveMode: (mode) => saved.push(mode),
     activeId: () => activeId,
+    activeVersion: () => opts.activeVersion,
     annotations: () => opts.annotations ?? [],
     planText: () => opts.planText ?? "",
     flushPending: async () => {
@@ -123,6 +129,16 @@ async function expectNoopWhenInactive(
   await run(resolve);
   expect(submits).toEqual([]);
 }
+
+describe("version ownership", () => {
+  test("every decision names the version the reviewer was looking at", async () => {
+    const resolve = build(makeStore(), { activeVersion: 2 });
+    await resolve.approve("default");
+    await resolve.requestChanges("note");
+    await resolve.reject();
+    expect(submits.map((s) => s.body.version)).toEqual([2, 2, 2]);
+  });
+});
 
 describe("isNetworkFailure", () => {
   test("an HttpError is NOT a network failure (the daemon answered)", () => {

@@ -1687,7 +1687,7 @@ test("POST /expire ends a pending review: terminal on disk, gone from the queue"
   });
 });
 
-test.failing("an orphan v1 expire after v2 appended leaves v2 pending", async () => {
+test("an orphan v1 expire after v2 appended leaves v2 pending", async () => {
   await boot();
   const { id } = await newReview();
   await resolve(id, { behavior: "deny", feedback: "redo" });
@@ -1696,6 +1696,56 @@ test.failing("an orphan v1 expire after v2 appended leaves v2 pending", async ()
   expect(res.status).toBe(409);
   expect(store.get(id)?.status).toBe("pending");
   expect(store.get(id)?.versions).toHaveLength(2);
+});
+
+// ---- version ownership (EXC-1421) ----
+//
+// A hook names the version it posted; a call naming an older one is an orphan hook
+// acting on a review that has since moved on, so the daemon answers 409 and does
+// nothing else. A call naming no version is taken as current.
+
+async function appendedToV2(): Promise<string> {
+  const { id } = await newReview();
+  await resolve(id, { behavior: "deny", feedback: "redo" });
+  await newReview({ plan: "# v2\n\nrevised" });
+  return id;
+}
+
+test("a stale /expire keeps v2's settled-but-unread decision servable", async () => {
+  await boot({ heartbeatMs: 30 });
+  const id = await appendedToV2();
+  await resolve(id, { behavior: "deny", feedback: "again" });
+  const res = await fetch(`${base}/api/reviews/${id}/expire?version=1`, { method: "POST" });
+  expect(res.status).toBe(409);
+  const decision = await fetch(`${base}/api/reviews/${id}/decision?version=2`);
+  expect(await decision.json()).toMatchObject({ behavior: "deny", feedback: "again" });
+});
+
+test("a stale /decision poll is refused without registering a decision entry", async () => {
+  const { sig, timer } = await bootWithManualIdle({ heartbeatMs: 20 });
+  const id = await appendedToV2();
+  expect((await fetch(`${base}/api/reviews/${id}/decision?version=1`)).status).toBe(409);
+  await resolve(id, { behavior: "allow" });
+  timer.fire();
+  await sig.shutdown;
+});
+
+test("a stale /resolve is refused and leaves the review pending", async () => {
+  await boot();
+  const id = await appendedToV2();
+  const res = await d.resolve(id, { behavior: "allow", version: 1 });
+  expect(res.status).toBe(409);
+  expect(store.get(id)?.status).toBe("pending");
+});
+
+test("calls naming the current version act as calls naming none", async () => {
+  await boot({ heartbeatMs: 30 });
+  const id = await appendedToV2();
+  expect((await fetch(`${base}/api/reviews/${id}/decision?version=2`)).status).toBe(204);
+  expect((await d.resolve(id, { behavior: "deny", feedback: "x", version: 2 })).status).toBe(200);
+  const { id: other } = await newReview({ sessionId: "other" });
+  const res = await fetch(`${base}/api/reviews/${other}/expire?version=1`, { method: "POST" });
+  expect(res.status).toBe(200);
 });
 
 test("POST /expire refuses a non-pending review", async () => {

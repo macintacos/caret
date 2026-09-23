@@ -28,6 +28,9 @@ export interface ResolveDeps {
   saveApproveMode?: (mode: ApproveVariantId) => void;
   /** The id of the active review, or null. */
   activeId: () => string | null;
+  /** The version of the active review on screen, so a decision never lands on a
+   * newer version the reviewer has not seen. */
+  activeVersion: () => number | undefined;
   /** The working-copy annotations to format into deny feedback. */
   annotations: () => Annotation[];
   /** The active review's current plan text, used to quote a line-anchored
@@ -79,7 +82,7 @@ export function createResolve(store: ResolveStore, deps: ResolveDeps): Resolve {
     store.busy = true;
     await deps.flushPending();
     try {
-      await submit(id, { behavior: "deny", feedback: feedback() });
+      await submit(id, { behavior: "deny", feedback: feedback(), version: deps.activeVersion() });
       deps.clearGeneralComment();
       deps.afterResolve(id);
     } catch (err) {
@@ -108,6 +111,7 @@ export function createResolve(store: ResolveStore, deps: ResolveDeps): Resolve {
         await submit(id, {
           behavior: "allow",
           acceptMode: mode,
+          version: deps.activeVersion(),
           ...(feedback ? { feedback } : {}),
         });
         store.approveMode = mode; // remember locally so the next plan defaults to it

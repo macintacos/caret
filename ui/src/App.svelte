@@ -272,6 +272,7 @@
   const canCrossfade = supportsViewTransition();
   const resolve = createResolve(resStore, {
     activeId: () => selection.activeId,
+    activeVersion: () => active?.version,
     annotations: () => work.annotations,
     planText: () => active?.currentPlan ?? "",
     flushPending: () => autosave.flushPending(),

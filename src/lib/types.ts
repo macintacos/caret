@@ -243,9 +243,10 @@ export interface RouteResult {
 /** `POST /api/reviews`' success body as the hook reads it. Every optional field may
  * be absent from an older daemon (mid-upgrade version skew). `hasLiveClient`
  * (EXC-559) reports whether a UI tab is already polling the daemon. */
-export type CreatedReview = Pick<RouteResult, "id" | "planFileCurrent"> & {
-  hasLiveClient?: boolean;
-};
+export type CreatedReview = Pick<RouteResult, "id" | "planFileCurrent"> &
+  Partial<Pick<RouteResult, "version">> & {
+    hasLiveClient?: boolean;
+  };
 
 /** What a plan's path reference turned out to be on disk. The filesystem is the
  * only thing that knows, so the parser never guesses from the token's shape —
@@ -370,6 +371,8 @@ export interface ResolveBody {
   feedback?: string;
   /** The chosen approve variant's opaque id (see Decision.acceptMode). */
   acceptMode?: ApproveVariantId;
+  /** The version the reviewer decided on; a stale one is refused. Absent = current. */
+  version?: number;
 }
 
 /** Body of POST /api/config — the settings the UI may write into the user's
