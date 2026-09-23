@@ -1814,6 +1814,19 @@ test("idle shutdown fires after a pending review is expired", async () => {
   await sig.shutdown;
 });
 
+test("a poll on an expired review is denied at once and pins no idle shutdown", async () => {
+  const { sig, timer } = await bootWithManualIdle({ heartbeatMs: 20 });
+  const { id } = await newReview();
+  await fetch(`${base}/api/reviews/${id}/expire`, { method: "POST" });
+  const res = await fetch(`${base}/api/reviews/${id}/decision?version=1`);
+  expect(res.status).toBe(200);
+  const decision = (await res.json()) as { behavior: string; feedback?: string };
+  expect(decision.behavior).toBe("deny");
+  expect(decision.feedback).toBeTruthy();
+  timer.fire();
+  await sig.shutdown;
+});
+
 test("idle shutdown fires when the daemon boots with no reviews", async () => {
   const sig = shutdownSignal();
   await boot({ idleMs: 30, onShutdown: sig.onShutdown });
