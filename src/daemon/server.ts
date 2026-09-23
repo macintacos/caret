@@ -378,7 +378,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return new Response("not found", { status: 404 });
   }
 
-  function staleVersion() {
+  function versionConflict() {
     return new Response("superseded by a newer version", { status: 409 });
   }
 
@@ -827,9 +827,9 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     // long-poll and reconnected still receives the decision.
     const inMem = store.get(id);
     const disk = inMem ? undefined : await store.persisted(id);
-    // Before serving or awaiting anything: a stale poll must neither read the newer
-    // version's decision nor register an entry that pins idle shutdown.
-    if (isStaleVersion(inMem ?? disk, versionQuery(req))) return staleVersion();
+    // Before serving a decision or registering a wait: a stale poll must neither
+    // read the newer version's decision nor register an entry that pins idle shutdown.
+    if (isStaleVersion(inMem ?? disk, versionQuery(req))) return versionConflict();
     if (inMem?.decision) {
       clearDecision(id);
       return Response.json(inMem.decision);
@@ -859,27 +859,21 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     if (invalid) return Response.json({ error: invalid }, { status: 400 });
     const body: DraftBody = DraftBodySchema.parse(raw);
     const updated = await store.update(id, (r) => {
+      // Version-scoped fields (annotations, composer scratches) drop when the save
+      // names a superseded version — its line anchors belong to the old text. The
+      // review-scoped general draft always writes; an omitted version is current.
+      const cur = currentVersion(r);
+      const stale = body.version != null && body.version !== cur.version;
       // `!= null` so an absent OR null field is left alone — guarding null keeps
       // the old `?? []` null-safety (a stray null annotations would otherwise
       // persist and crash the client's `.map`).
-      if (body.annotations != null) {
-        currentVersion(r).annotations = body.annotations;
+      if (body.annotations != null && !stale) {
+        cur.annotations = body.annotations;
       }
       if (body.generalCommentDraft != null) {
         r.generalCommentDraft = body.generalCommentDraft;
       }
-      // Persist the current version's unsent composer scratches, version-scoped
-      // alongside its annotations so a new plan version starts with neither; the
-      // source view rehydrates them from the served ClientReview on load. Drop a
-      // stale write: a scratch save whose debounce fired after a new version
-      // arrived carries the version it was composed against, and its old line
-      // anchors must not land on the current version (an omitted version writes,
-      // for back-compat).
-      const cur = currentVersion(r);
-      if (
-        body.composerScratches != null &&
-        (body.version == null || body.version === cur.version)
-      ) {
+      if (body.composerScratches != null && !stale) {
         cur.composerScratches = body.composerScratches;
       }
     });
@@ -894,7 +888,13 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     const existing = store.get(id);
     // A decision made on a version the reviewer no longer sees must not land on the
     // one that replaced it.
-    if (isStaleVersion(existing, body.version)) return staleVersion();
+    if (isStaleVersion(existing, body.version)) {
+      log.info("resolve", "resolve refused: stale version", {
+        reviewId: id,
+        version: body.version,
+      });
+      return versionConflict();
+    }
     // Only a pending review can be resolved — guards against a double resolve
     // diverging the store from the decision the hook received.
     if (existing?.status !== "pending") return notFound();
@@ -953,8 +953,11 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   async function handleExpire(req: Request, id: string): Promise<Response> {
     const existing = store.get(id);
     // An orphan hook of an older version: the entry belongs to the newer one and may
-    // hold its settled-but-unread decision, so leave it.
-    if (isStaleVersion(existing, versionQuery(req))) return staleVersion();
+    // hold its settled-but-unread decision, so leave it. An approved newer version
+    // has left memory, so its version is read from disk.
+    if (isStaleVersion(existing ?? (await store.persisted(id)), versionQuery(req))) {
+      return versionConflict();
+    }
     // Otherwise drop any unsettled long-poll entry unconditionally — even when the
     // review is already gone, a zombie hook's entry would otherwise pin
     // openDecisionCount and block idle shutdown forever.

@@ -194,15 +194,6 @@ test("a revision identical to the pending version still appends", async () => {
   ]);
 });
 
-test("appending to a pending review drops its unsent general-comment draft", async () => {
-  const a = await routeIncomingPlan(input(), store);
-  await store.update(a.id, (r) => {
-    r.generalCommentDraft = "half-written";
-  });
-  await routeIncomingPlan(input({ plan: "# v2\n\nrevised" }), store);
-  expect(store.get(a.id)?.generalCommentDraft).toBe("");
-});
-
 // ---- stale-pending supersede (EXC-454) ----
 
 // A pending review for the same session, older than any routed one (createdAt 1):
@@ -220,28 +211,24 @@ async function seedOlderOrphan(): Promise<void> {
   });
 }
 
-test("an older pending orphan behind a pending latest is expired; the revision appends", async () => {
-  const a = await routeIncomingPlan(input(), store);
-  await seedOlderOrphan();
-  const b = await routeIncomingPlan(input({ plan: "v2" }), store);
-  expect(b).toMatchObject({ id: a.id, action: "append", version: 2 });
-  expect(b.expired).toEqual(["orphan"]);
-  expect(store.get("orphan")).toBeUndefined(); // dropped from memory
-  expect(store.list().map((r) => r.id)).toEqual([a.id]); // exactly one approvable review
-  // Terminal on disk: a still-pending record would rehydrate as an orphan.
-  expect((await store.persisted("orphan"))?.status).toBe("expired");
-});
-
-test("an orphan pending behind a rejected latest is expired; the revision still appends", async () => {
-  const a = await routeIncomingPlan(input(), store);
-  await reject(a.id);
-  await seedOlderOrphan();
-  const b = await routeIncomingPlan(input({ plan: "v2" }), store);
-  expect(b).toMatchObject({ id: a.id, action: "append", version: 2 });
-  expect(b.expired).toEqual(["orphan"]);
-  expect((await store.persisted("orphan"))?.status).toBe("expired");
-  expect(store.list().map((r) => r.id)).toEqual([a.id]); // only the re-pended thread remains
-});
+test.each([
+  ["pending", false],
+  ["rejected", true],
+])(
+  "an older pending orphan behind a %s latest is expired; the revision appends",
+  async (_latest, rejected) => {
+    const a = await routeIncomingPlan(input(), store);
+    if (rejected) await reject(a.id);
+    await seedOlderOrphan();
+    const b = await routeIncomingPlan(input({ plan: "v2" }), store);
+    expect(b).toMatchObject({ id: a.id, action: "append", version: 2 });
+    expect(b.expired).toEqual(["orphan"]);
+    expect(store.get("orphan")).toBeUndefined(); // dropped from memory
+    expect(store.list().map((r) => r.id)).toEqual([a.id]); // exactly one approvable review
+    // Terminal on disk: a still-pending record would rehydrate as an orphan.
+    expect((await store.persisted("orphan"))?.status).toBe("expired");
+  },
+);
 
 test("superseding logs review superseded with the orphan's id", async () => {
   await routeIncomingPlan(input(), store);

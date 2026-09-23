@@ -2,7 +2,8 @@
 //
 // Approving (allow) or requesting changes (deny) flushes any pending draft,
 // POSTs the decision, and advances to the next review. The approve mode is
-// remembered per browser, persisted on each landed approve. A daemon non-2xx
+// remembered per browser, persisted on each landed approve. A daemon 409 (a
+// newer version of the review arrived) stays on the review; any other non-2xx
 // (already resolved/removed elsewhere) still advances; only a genuine network
 // failure flips the connection offline.
 
@@ -42,6 +43,9 @@ export interface ResolveDeps {
   afterResolve: (id: string) => void;
   /** Mark the daemon offline on a genuine network failure. */
   onOffline: () => void;
+  /** Report a decision the daemon refused because a newer version of the review
+   * arrived; the review stays on screen. */
+  onSuperseded: () => void;
   /** Clear the local general-comment draft after a deny clears it server-side. */
   clearGeneralComment: () => void;
 }
@@ -72,22 +76,30 @@ export function createResolve(store: ResolveStore, deps: ResolveDeps): Resolve {
   const submit = deps.resolveReview ?? resolveReview;
   const saveMode = deps.saveApproveMode ?? writeApproveMode;
 
+  // 404 = resolved or removed elsewhere → advance. 409 = a newer version of this
+  // still-pending review arrived → stay, so the next poll raises the revision.
+  function onSubmitError(id: string, err: unknown): void {
+    if (!(err instanceof HttpError)) deps.onOffline();
+    else if (err.status === 409) deps.onSuperseded();
+    else deps.afterResolve(id);
+  }
+
   // The general-comment mirror is cleared because the daemon dropped the stored
   // draft on resolve, and a deny keeps this review id — the sent text would linger
   // on reopen. `feedback` is a thunk because it must be composed AFTER the flush:
   // a pending draft the flush commits belongs in it.
   async function deny(feedback: () => string): Promise<void> {
     const id = deps.activeId();
+    const version = deps.activeVersion();
     if (!id) return;
     store.busy = true;
     await deps.flushPending();
     try {
-      await submit(id, { behavior: "deny", feedback: feedback(), version: deps.activeVersion() });
+      await submit(id, { behavior: "deny", feedback: feedback(), version });
       deps.clearGeneralComment();
       deps.afterResolve(id);
     } catch (err) {
-      if (err instanceof HttpError) deps.afterResolve(id);
-      else deps.onOffline();
+      onSubmitError(id, err);
     } finally {
       store.busy = false;
     }
@@ -103,6 +115,7 @@ export function createResolve(store: ResolveStore, deps: ResolveDeps): Resolve {
 
     async approve(mode, notes) {
       const id = deps.activeId();
+      const version = deps.activeVersion();
       if (!id) return;
       store.busy = true;
       await deps.flushPending();
@@ -111,16 +124,14 @@ export function createResolve(store: ResolveStore, deps: ResolveDeps): Resolve {
         await submit(id, {
           behavior: "allow",
           acceptMode: mode,
-          version: deps.activeVersion(),
+          version,
           ...(feedback ? { feedback } : {}),
         });
         store.approveMode = mode; // remember locally so the next plan defaults to it
         saveMode(mode);
         deps.afterResolve(id);
       } catch (err) {
-        // 404/409 = already resolved or removed elsewhere → just advance.
-        if (err instanceof HttpError) deps.afterResolve(id);
-        else deps.onOffline();
+        onSubmitError(id, err);
       } finally {
         store.busy = false;
       }

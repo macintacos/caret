@@ -851,6 +851,16 @@ test("PUT draft drops composerScratches composed against a stale version", async
   expect(one.composerScratches).toEqual(SCRATCHES);
 });
 
+test("PUT draft naming a superseded version drops its annotations but keeps the general draft", async () => {
+  await boot();
+  const { id } = await newReview();
+  expect((await newReview({ plan: "# v2\n\nrevised" })).id).toBe(id);
+  await putDraft(id, { annotations: ANNS, generalCommentDraft: "x", version: 1 });
+  const one = await (await fetch(`${base}/api/reviews/${id}`)).json();
+  expect(one.annotations).toEqual([]);
+  expect(one.generalCommentDraft).toBe("x");
+});
+
 test("PUT draft does not clobber the other field (either direction)", async () => {
   await boot();
   const { id } = await newReview();
@@ -1717,23 +1727,43 @@ async function appendedToV2(): Promise<string> {
   return id;
 }
 
-test("a stale /expire keeps v2's settled-but-unread decision servable", async () => {
-  await boot({ heartbeatMs: 30 });
+test("a stale /expire after v2 was approved leaves v2's decision entry alone", async () => {
+  await boot();
   const id = await appendedToV2();
-  await resolve(id, { behavior: "deny", feedback: "again" });
+  await d.resolve(id, { behavior: "allow", version: 2 });
+  expect(store.get(id)).toBeUndefined();
   const res = await fetch(`${base}/api/reviews/${id}/expire?version=1`, { method: "POST" });
   expect(res.status).toBe(409);
-  const decision = await fetch(`${base}/api/reviews/${id}/decision?version=2`);
-  expect(await decision.json()).toMatchObject({ behavior: "deny", feedback: "again" });
 });
 
-test("a stale /decision poll is refused without registering a decision entry", async () => {
-  const { sig, timer } = await bootWithManualIdle({ heartbeatMs: 20 });
+test("a stale /decision poll is refused without parking on the decision pipe", async () => {
+  let parks = 0;
+  await boot({ heartbeatMs: 20, onDecisionAwaited: () => parks++ });
   const id = await appendedToV2();
   expect((await fetch(`${base}/api/reviews/${id}/decision?version=1`)).status).toBe(409);
-  await resolve(id, { behavior: "allow" });
-  timer.fire();
-  await sig.shutdown;
+  expect(parks).toBe(0);
+});
+
+test("a v1 long-poll in flight when v2 appends never receives v2's decision", async () => {
+  const park = decisionParked();
+  await boot({ heartbeatMs: 200, onDecisionAwaited: park.onDecisionAwaited });
+  const { id } = await newReview();
+  const v1Poll = fetch(`${base}/api/reviews/${id}/decision?version=1`);
+  await park.parked;
+  expect((await newReview({ plan: "# v2\n\nrevised" })).id).toBe(id);
+  await d.resolve(id, { behavior: "deny", feedback: "again", version: 2 });
+  expect((await v1Poll).status).toBe(204);
+  const v2 = await fetch(`${base}/api/reviews/${id}/decision?version=2`);
+  expect(await v2.json()).toMatchObject({ behavior: "deny", feedback: "again" });
+});
+
+test("a stale /resolve is logged as a refused decision", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log });
+  const id = await appendedToV2();
+  await d.resolve(id, { behavior: "allow", version: 1 });
+  const refused = recs.filter((r) => r.step === "resolve").at(-1);
+  expect(refused).toMatchObject({ level: "info", extra: { reviewId: id, version: 1 } });
 });
 
 test("a stale /resolve is refused and leaves the review pending", async () => {

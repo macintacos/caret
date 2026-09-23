@@ -137,6 +137,10 @@ export interface Decision {
   decidedAt: number;
 }
 
+/** One hook long-poll's outcome: the settled Decision, null on a heartbeat, or
+ * "superseded" once a newer version owns the review. */
+export type PollResult = Decision | null | "superseded";
+
 /**
  * The on-disk form of an unsent composer "scratch" — the in-memory
  * `ComposerScratch` (ui/src/lib/diffview/commenting.ts) reduced to its persistable
@@ -241,8 +245,9 @@ export interface RouteResult {
 }
 
 /** `POST /api/reviews`' success body as the hook reads it. Every optional field may
- * be absent from an older daemon (mid-upgrade version skew). `hasLiveClient`
- * (EXC-559) reports whether a UI tab is already polling the daemon. */
+ * be absent from an older daemon (mid-upgrade version skew). `version` is what the
+ * hook sends back on `/decision` and `/expire`. `hasLiveClient` (EXC-559) reports
+ * whether a UI tab is already polling the daemon. */
 export type CreatedReview = Pick<RouteResult, "id" | "planFileCurrent"> &
   Partial<Pick<RouteResult, "version">> & {
     hasLiveClient?: boolean;

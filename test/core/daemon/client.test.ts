@@ -107,6 +107,6 @@ test("expireReview names its version and treats a 409 as nothing left to expire"
 
 test("a call without a version sends no version query", async () => {
   const seen: string[] = [];
-  await expireReview(serveStatus(404, seen), "r1");
+  await expireReview(serveStatus(404, seen), "r1", undefined);
   expect(seen).toEqual([""]);
 });

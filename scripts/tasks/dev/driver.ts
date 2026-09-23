@@ -310,10 +310,9 @@ async function runFixtureLoop(
     } else {
       // Fail-safe deny from the hook itself (daemon down, poll timeout): back
       // off so a dead daemon can't tight-loop. A fail-safe after a successful
-      // post leaves the review pending, so the resubmit starts a NEW thread
-      // (routeIncomingPlan appends only to a rejected review) and the Revision
-      // label can drift from the daemon's version number — both are accepted
-      // dev-only noise on an already-broken session.
+      // post leaves the review pending, so the resubmit appends to it as its next
+      // version; the Revision label can drift from the daemon's version number —
+      // accepted dev-only noise on an already-broken session.
       deps.log(`${fixture.file}: hook fail-safe deny → resubmitting the plan unchanged`);
       await Bun.sleep(500);
     }

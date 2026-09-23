@@ -20,6 +20,7 @@ import {
   type Decision,
   errorMessage,
   type PlanInput,
+  type PollResult,
 } from "@/lib/types.ts";
 import {
   hasUntaggedCodeBlock,
@@ -62,11 +63,7 @@ export interface ReviewDeps {
   /** One bounded poll for `version`: a Decision, null on a heartbeat (re-poll), or
    * "superseded" once a newer version owns the review. Throws on a transient drop
    * so the caller can reconnect. */
-  longPoll: (
-    baseUrl: string,
-    id: string,
-    version?: number,
-  ) => Promise<Decision | null | "superseded">;
+  longPoll: (baseUrl: string, id: string, version: number | undefined) => Promise<PollResult>;
   openBrowser: (url: string) => void;
   /** Show the human the review URL — clickable in the transcript when the browser
    * doesn't open, and the OpenCode plugin's only source for its toast. Injected
@@ -81,7 +78,7 @@ export interface ReviewDeps {
   timeoutMs: number;
   /** Best-effort: tell the daemon the hook is abandoning this review, so it
    * doesn't hold a pending orphan (EXC-454). Failures are swallowed. */
-  expire: (baseUrl: string, id: string, version?: number) => Promise<void>;
+  expire: (baseUrl: string, id: string, version: number | undefined) => Promise<void>;
   /** Called once the review is created, with its handle. Lets the command layer
    * capture it so a SIGINT/SIGTERM abandon can expire the review (EXC-482) — the
    * signal fires outside runReview's control flow, so it needs the id runReview
@@ -112,8 +109,8 @@ function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> 
  * is abandoned so its UI drops the pending review instead of keeping a zombie
  * (EXC-482). The command's SIGINT/SIGTERM handlers call it with the handle
  * `onPosted` surfaced. A no-op when the signal beat review creation (nothing to
- * expire), and it swallows any failure — the resubmit/supersede path self-heals
- * if the expire never lands (EXC-454). Never throws. */
+ * expire), and it swallows any failure — the next plan in the session appends to
+ * or supersedes the review if the expire never lands (EXC-454). Never throws. */
 export async function expireAbandoned(
   expire: ReviewDeps["expire"],
   handle: Pick<PostedReview, "baseUrl" | "id" | "version"> | undefined,
@@ -122,7 +119,7 @@ export async function expireAbandoned(
   try {
     await expire(handle.baseUrl, handle.id, handle.version);
   } catch {
-    // best-effort — the resubmit/supersede path self-heals.
+    // best-effort — the next plan reclaims the review.
   }
 }
 
@@ -134,7 +131,8 @@ export async function runReview(parsed: ParsedHookInput, deps: ReviewDeps): Prom
   let step = "parse";
   const ctx: ErrorContext = {};
   // Hoisted so the catch can reach the daemon for the best-effort expire;
-  // reconnects re-assign it, so it always holds the last-known daemon URL.
+  // reconnects re-assign baseUrl, so it always holds the last-known daemon URL.
+  // version is set once, on create.
   let baseUrl: string | undefined;
   let version: number | undefined;
   try {
@@ -218,11 +216,13 @@ export async function runReview(parsed: ParsedHookInput, deps: ReviewDeps): Prom
           "review timed out",
         );
         if (polled === "superseded") {
-          // The agent resubmitted without this hook hearing back (a terminal-side
-          // deny), so the review now belongs to a newer version and its hook. The
-          // agent has already moved on and ignores this output; expiring would kill
-          // the live version.
-          logInfo("review", "review superseded by a newer version", { ...ctx, version });
+          // A newer version (a terminal-side deny, then a resubmit) owns this review
+          // and its hook; nothing here is ours to expire. The agent has moved on and
+          // ignores this deny.
+          logInfo("review", `review yielded to newer version: ${shortId(id)}`, {
+            ...ctx,
+            version,
+          });
           return denyDecision("caret: superseded by a newer revision of this plan.");
         }
         decision = polled ?? undefined;
@@ -250,14 +250,14 @@ export async function runReview(parsed: ParsedHookInput, deps: ReviewDeps): Prom
   } catch (err) {
     logError(step, err, ctx);
     // The hook is abandoning the review (timeout or post-create failure):
-    // best-effort expire so the daemon doesn't hold a pending orphan. The
-    // supersede-on-resubmit path self-heals if this never lands (EXC-454).
+    // best-effort expire so the daemon doesn't hold a pending orphan. The next
+    // plan in the session appends to or supersedes it if this never lands (EXC-454).
     if (ctx.reviewId && baseUrl) {
       try {
         await deps.expire(baseUrl, ctx.reviewId, version);
         logDebug("review", `review expire requested: ${shortId(ctx.reviewId)}`, { ...ctx });
       } catch {
-        logDebug("review", "review expire failed; resubmit supersedes", { ...ctx });
+        logDebug("review", "review expire failed; next plan reclaims it", { ...ctx });
       }
     }
     const msg = errorMessage(err);

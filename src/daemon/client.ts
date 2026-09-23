@@ -8,6 +8,7 @@ import type {
   Decision,
   HealthIdentity,
   PlanInput,
+  PollResult,
   ResolveBody,
 } from "@/lib/types.ts";
 
@@ -79,7 +80,11 @@ function versionSearch(version: number | undefined): string {
 
 /** Best-effort expire: short-fused so a dying hook never hangs on it. The
  * caller (runReview's catch) swallows any throw. */
-export async function expireReview(baseUrl: string, id: string, version?: number): Promise<void> {
+export async function expireReview(
+  baseUrl: string,
+  id: string,
+  version: number | undefined,
+): Promise<void> {
   const res = await fetch(`${baseUrl}/api/reviews/${id}/expire${versionSearch(version)}`, {
     method: "POST",
     signal: AbortSignal.timeout(1000),
@@ -97,8 +102,8 @@ export async function expireReview(baseUrl: string, id: string, version?: number
 export async function longPoll(
   baseUrl: string,
   id: string,
-  version?: number,
-): Promise<Decision | null | "superseded"> {
+  version: number | undefined,
+): Promise<PollResult> {
   const res = await fetch(`${baseUrl}/api/reviews/${id}/decision${versionSearch(version)}`);
   if (res.status === 204) return null;
   if (res.status === 409) return "superseded";

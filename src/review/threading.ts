@@ -96,8 +96,6 @@ export async function routeIncomingPlan(
       // daemon's /decision handler waits for the next decision instead of
       // re-serving the stale deny.
       r.decision = undefined;
-      // A pending review can hold an unsent draft written against the old version.
-      r.generalCommentDraft = "";
     });
     // The threading decision is logged here — not in the daemon handler — so
     // append vs new is distinguishable and the resolved sessionId rides along.
