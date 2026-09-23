@@ -519,10 +519,11 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     // hook re-creates its entry per heartbeat, but that's bounded by its
     // timeout, whose /expire clears it for good.
     for (const staleId of routed.expired) clearDecision(staleId);
-    // A revision append re-pends a settled review; drop any orphaned registry
-    // entry so the revision's long-poll awaits a fresh decision instead of
-    // re-serving the prior one (EXC-590). routeIncomingPlan already cleared the
-    // store decision (r.decision = undefined); this is its in-memory analog.
+    // An append can follow a rejected latest (a settled decision to drop) or a
+    // still-pending one (an abandoned long-poll entry to drop) — either way the
+    // revision's long-poll must await a fresh decision, not the stale entry
+    // (EXC-590). routeIncomingPlan already cleared the store decision
+    // (r.decision = undefined); this is its in-memory analog.
     if (routed.action === "append") clearDecision(routed.id);
     // Tell the hook whether a UI tab is already listening (polled recently): if
     // so it skips foregrounding the browser, so an open backgrounded tab's

@@ -92,9 +92,9 @@ export async function routeIncomingPlan(
       // Re-point at the pane that actually submitted this revision; a submission
       // carrying none leaves the original in place (EXC-961).
       r.cmux = input.cmux ?? r.cmux;
-      // Re-pended and awaiting a fresh decision: drop the prior rejection so the
-      // daemon's /decision handler waits for the next decision instead of
-      // re-serving the stale deny.
+      // Re-pended and awaiting a fresh decision: clear any decision already
+      // recorded (a rejection; pending has none) so the daemon's /decision
+      // handler waits for the next one instead of re-serving a stale deny.
       r.decision = undefined;
     });
     // The threading decision is logged here — not in the daemon handler — so
