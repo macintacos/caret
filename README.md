@@ -120,7 +120,8 @@ Two more live at the repo root:
 
 - `/caret:doctor` runs `caret doctor`: a one-shot, read-only check of your install —
   what's wrong, how to fix it, and the state it read that from. Always redacted, and it
-  never contains plan, prompt, or feedback bodies, nor any log contents.
+  never contains plan, prompt, or feedback bodies, nor any log message, error or stack
+  text.
 - `caret doctor --bundle` archives the raw logs and review records when a maintainer needs
   them. That archive is **not** redacted, so caret asks before writing it.
 

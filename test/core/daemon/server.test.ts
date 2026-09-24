@@ -1872,7 +1872,42 @@ test("a handler exception is logged at error level before returning the 500", as
   expect(res.status).toBe(500);
   const rec = recs.find((r) => r.level === "error");
   expect(rec?.step).toBe("request");
+  expect(rec?.code).toBe("request-failed");
   expect(rec?.msg).toContain("kaboom");
+});
+
+test("a throwing review route logs its failure against that review", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log });
+  const { id } = await newReview();
+  store.update = () => Promise.reject(new Error("disk full"));
+  expect((await d.draft(id, { generalCommentDraft: "x" })).status).toBe(500);
+  expect(recs.find((r) => r.level === "error")).toMatchObject({
+    step: "request",
+    code: "request-failed",
+    extra: { reviewId: id },
+  });
+});
+
+test("a failing review create logs its failure against the posting session", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log, routePlan: throwingRoutePlan });
+  expect((await postTriggeringRoutePlan()).status).toBe(500);
+  expect(recs.find((r) => r.level === "error")).toMatchObject({
+    code: "request-failed",
+    extra: { sessionId: "S" },
+  });
+});
+
+test("a cross-origin POST to a malformed review id gets the CSRF 403, not a 500", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log });
+  const res = await fetch(`${base}/api/reviews/%E0/resolve`, {
+    method: "POST",
+    headers: { Origin: "http://evil.com" },
+  });
+  expect(res.status).toBe(403);
+  expect(recs.some((r) => r.level === "error")).toBe(false);
 });
 
 test("a throwing log sink during a handler error still returns the clean 500", async () => {
@@ -2279,6 +2314,7 @@ test("POST /api/logs forwards an error-level event at level 'error'", async () =
   expect(recs.find((r) => r.msg === "render failed")).toMatchObject({
     level: "error",
     step: "ui",
+    code: "ui-error",
     extra: { source: "ui" },
   });
 });

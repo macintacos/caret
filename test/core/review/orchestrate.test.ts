@@ -4,7 +4,7 @@ import { setupTempStateDir } from "@test/support/env.ts";
 import { caretLogRecords } from "@test/support/ndjson.ts";
 import { logFile } from "@/config/paths.ts";
 import type { EnsureMode } from "@/daemon/lifecycle.ts";
-import { setLogLevel } from "@/lib/log.ts";
+import { logInfo, setLogLevel } from "@/lib/log.ts";
 import type { Decision, PlanInput } from "@/lib/types.ts";
 import { PLAN_EMPTY_DENY_MESSAGE, PLAN_FORMAT_DENY_MESSAGE } from "@/plan/format.ts";
 import {
@@ -418,6 +418,31 @@ test("a failed reconnect logs step=reconnect, not the poll step", async () => {
   expect(recs.some((r) => r.step === "longPoll")).toBe(false);
 });
 
+const boom = () => Promise.reject(new Error("boom"));
+
+test.each<[string, string, Partial<ReviewDeps>, string]>([
+  ["an unparseable hook input", "not json", {}, "hook-input-invalid"],
+  ["an unreachable daemon", stdin, { ensureDaemon: boom }, "daemon-unreachable"],
+  ["a review the daemon did not create", stdin, { postReview: boom }, "review-create-failed"],
+  [
+    "a review that outlives its timeout",
+    stdin,
+    { longPoll: () => new Promise<Decision>(() => {}), timeoutMs: 30 },
+    "review-timeout",
+  ],
+])("%s logs its failure code", async (_case, input, over, code) => {
+  await review(input, reviewDeps(over));
+  expect(caretLogRecords().find((r) => r.level === 50)?.code).toBe(code);
+});
+
+// The command layer's post-review records (signal deny, notes skipped) rely on this.
+test("a record logged after runReview returns still carries the review's ids", async () => {
+  await review(stdin, reviewDeps());
+  logInfo("after", "post-review record");
+  const rec = caretLogRecords().find((r) => r.step === "after");
+  expect(rec).toMatchObject({ reviewId: "rid", sessionId: "S" });
+});
+
 // ---- cmux pane capture (EXC-961) ----
 
 /** Capture the PlanInput runReview posts, so the pane stamp is observable. */
@@ -603,6 +628,13 @@ test("a failure after the review was posted carries the reviewId", async () => {
   );
   const rec = caretLogRecords().find((r) => r.level === 50);
   expect(rec).toMatchObject({ step: "longPoll", reviewId: "rid", sessionId: "S" });
+});
+
+test("a review that fails to parse carries no ids from the review before it", async () => {
+  await review(stdin, reviewDeps());
+  await review("not json", reviewDeps());
+  const rec = caretLogRecords().find((r) => r.step === "parse");
+  expect([rec?.level, rec?.sessionId, rec?.reviewId]).toEqual([50, undefined, undefined]);
 });
 
 test("decision info records are suppressed when the level is error", async () => {

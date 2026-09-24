@@ -32,26 +32,60 @@ export { shortId };
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
-export interface ErrorContext {
+/** The correlation ids a logger binds onto every record it writes (see
+ * CaretLogger.child and setLogContext), so one review stitches across caret.log
+ * and daemon.log. */
+export interface LogContext {
   sessionId?: string;
   cwd?: string;
-  /** Set once the daemon has assigned the review an id — stitches caret.log
-   * records against the daemon's review/resolve records (EXC-444). */
+  /** Set once the daemon has assigned the review an id. */
   reviewId?: string;
 }
 
+/** The stable `code` every error record carries, so a failure can be triaged by
+ * machine rather than by its prose. Append-only: a shipped code is never renamed
+ * or reused for a different failure. Mint a new code rather than stretching one. */
+export type ErrorCode =
+  /** No specific code fits. */
+  | "unexpected"
+  /** config.toml failed validation and was ignored. */
+  | "config-invalid"
+  /** The agent's hook stdin could not be parsed. */
+  | "hook-input-invalid"
+  /** SIGINT/SIGTERM reached `caret review` before a decision. */
+  | "hook-interrupted"
+  /** The hook could not start or reattach to a daemon. */
+  | "daemon-unreachable"
+  /** The daemon did not create the review. */
+  | "review-create-failed"
+  /** No decision inside the review timeout. */
+  | "review-timeout"
+  /** A daemon request handler threw; the client got a 500. */
+  | "request-failed"
+  /** The daemon could not bind its port and exited terminally. */
+  | "daemon-bind-failed"
+  /** An uncaught exception or rejection took the daemon down. */
+  | "daemon-crashed"
+  /** The daemon's update check rejected. */
+  | "update-check-failed"
+  /** An error the browser reported through POST /api/logs. */
+  | "ui-error";
+
 /** The leveled surface both sinks expose. debug/info/warn take a human message
- * plus optional structured `extra`; error takes the raw thrown value (an
- * Error's `cause` chain is serialized; msg derives from it) plus optional
- * `extra` fields (e.g. sessionId/cwd). `extra` keys must not collide with the
- * record's own fields (level/time/msg/step/pid/err/caller). (source is absent
- * here on purpose: an explicit extra.source is a sanctioned override — the
- * bridged-UI signal — not a collision.) */
+ * plus optional structured `extra`; error takes an ErrorCode and the raw thrown
+ * value (an Error's `cause` chain is serialized; msg derives from it) plus
+ * optional `extra` fields. `extra` keys must not collide with the record's own
+ * fields (level/time/msg/step/pid/err/caller/code). (source is absent here on
+ * purpose: an explicit extra.source is a sanctioned override — the bridged-UI
+ * signal — not a collision.) */
 export interface CaretLogger {
   debug(step: string, msg: string, extra?: object): void;
   info(step: string, msg: string, extra?: object): void;
   warn(step: string, msg: string, extra?: object): void;
-  error(step: string, err: unknown, extra?: object): void;
+  error(step: string, code: ErrorCode, err: unknown, extra?: object): void;
+  /** A logger over the same sink that stamps `ctx` on every record; a key the
+   * call's `extra` also sets takes the call's value. */
+  child(ctx: LogContext): CaretLogger;
 }
 
 /** The rotation thresholds a logger checks its sink against, as thunks so a
@@ -85,15 +119,10 @@ const pinoOpts = {
  * serializer so the scrub can cover message/stack/cause — pino's own `redact`
  * option can't rewrite substrings inside those strings, walk an unbounded cause
  * chain, or hot-toggle (see src/redact/node.ts). */
-function wrap(
-  logger: pino.Logger,
-  liveLevel: () => LogLevel,
-  liveRedact: () => boolean,
-  source: "hook" | "daemon",
-  rotate?: () => void,
-): CaretLogger {
+function wrap(logger: pino.Logger, opts: WrapOptions): CaretLogger {
+  const { liveLevel, liveRedact, source, rotate, bound } = opts;
   function fields(extra: object | undefined, step: string, redact: boolean) {
-    const out = scrubValue({ ...extra }, redact) as Record<string, unknown>;
+    const out = scrubValue(Object.assign({}, ...bound, extra), redact) as Record<string, unknown>;
     out.step = step;
     // When extra already carried a source it's a bridged record (the daemon
     // forwarding a browser event as source="ui", EXC-445): keep that tag and
@@ -130,21 +159,33 @@ function wrap(
     debug: (step, msg, extra) => emit("debug", step, msg, extra),
     info: (step, msg, extra) => emit("info", step, msg, extra),
     warn: (step, msg, extra) => emit("warn", step, msg, extra),
-    error(step, err, extra) {
+    error(step, code, err, extra) {
       try {
         // No level update here: error (50) passes every threshold in the set —
         // and with no gate to sit behind, the rotation check leads.
         rotate?.();
         const r = liveRedact();
-        const f = fields(extra, step, r);
-        if (err instanceof Error) f.err = scrubValue(pino.stdSerializers.errWithCause(err), r);
+        const record = fields(extra, step, r);
+        record.code = code;
+        if (err instanceof Error) record.err = scrubValue(pino.stdSerializers.errWithCause(err), r);
         const msg = errorMessage(err);
-        logger.error(f, r ? scrubString(msg) : msg);
+        logger.error(record, r ? scrubString(msg) : msg);
       } catch {
         // Same swallow: a failed error write still must not propagate.
       }
     },
+    child: (ctx) => wrap(logger, { ...opts, bound: [...bound, ctx] }),
   };
+}
+
+interface WrapOptions {
+  liveLevel: () => LogLevel;
+  liveRedact: () => boolean;
+  source: "hook" | "daemon";
+  rotate?: () => void;
+  /** Bound contexts, oldest first. Merged only when a record is built, so a
+   * poisoned binding throws inside the emit's swallow rather than out of child(). */
+  bound: readonly LogContext[];
 }
 
 /** A logger that drops everything — the degraded mode when a destination can't
@@ -155,6 +196,7 @@ export const noopLogger: CaretLogger = {
   info: () => {},
   warn: () => {},
   error: () => {},
+  child: () => noopLogger,
 };
 
 /** Build a hook-side CaretLogger over a fresh caret.log destination at the
@@ -172,14 +214,22 @@ function createHookLogger(
     ensureLogsDir();
     const dest = pino.destination({ dest: path, sync: true, mode: 0o600 });
     const rotate = () => rotateIfOversized(path, limits.maxSize(), limits.keep());
-    return { log: wrap(pino(pinoOpts, dest), level, redact, "hook", rotate), dest, path };
+    const log = wrap(pino(pinoOpts, dest), {
+      liveLevel: level,
+      liveRedact: redact,
+      source: "hook",
+      rotate,
+      bound: [],
+    });
+    return { log, dest, path };
   } catch {
     return { log: noopLogger, dest: null, path };
   }
 }
 
 // The one hook-logger instance the log{Debug,Info,Warn,Error} wrappers ride
-// over, plus the live level/redact the wrap() thunks re-read on every emit.
+// over, plus the live level/redact the wrap() thunks re-read on every emit,
+// and the log context hook() binds onto every emit (setLogContext).
 // Redact defaults off to match the schema default — raw logs day-to-day;
 // `caret redact` produces shareable copies on demand. `instance` is lazily
 // built and rebuilt when logFile() changes path (tests swap XDG_STATE_HOME per
@@ -190,24 +240,27 @@ const hookState: {
   redact: boolean;
   maxSize: number;
   keep: number;
+  context: LogContext;
   instance: ReturnType<typeof createHookLogger> | null;
 } = {
   level: "info",
   redact: false,
   maxSize: DEFAULT_LOG_MAX_SIZE,
   keep: DEFAULT_LOG_KEEP,
+  context: {},
   instance: null,
 };
 
-/** The current hook logger, built on first use and rebuilt when its resolved
- * path changes (closing the previous destination so its fd doesn't leak). A
- * build failure is not latched: instance stays null so the next emit retries
- * the mkdir/open, so a transient failure doesn't permanently silence a
- * long-running process's logError path. */
+/** The current hook logger, bound to the hook's log context (setLogContext).
+ * Built on first use and rebuilt when its resolved path changes (closing the
+ * previous destination so its fd doesn't leak). A build failure is not
+ * latched: instance stays null so the next emit retries the mkdir/open, so a
+ * transient failure doesn't permanently silence a long-running process's
+ * logError path. */
 function hook(): CaretLogger {
   const path = logFile();
   if (hookState.instance && hookState.instance.path === path) {
-    return hookState.instance.log;
+    return hookState.instance.log.child(hookState.context);
   }
   try {
     hookState.instance?.dest?.destroy(); // sync mode buffers nothing; just release the fd
@@ -222,12 +275,12 @@ function hook(): CaretLogger {
   // Only latch a successfully-opened instance; a degraded build leaves the
   // cache null so the next emit retries.
   hookState.instance = next.dest ? next : null;
-  return next.log;
+  return next.log.child(hookState.context);
 }
 
 /** Reset the hook logger for tests: close any open destination and drop the
- * cached instance and the level/redact overrides, so the next emit rebuilds
- * cleanly under the current XDG_STATE_HOME with default level/redact. Not part
+ * cached instance, the level/redact overrides and the log context, so the next
+ * emit rebuilds cleanly under the current XDG_STATE_HOME with defaults. Not part
  * of the runtime call-site API — the explicit seam against cross-test bleed. */
 export function resetHookLogger(): void {
   try {
@@ -240,6 +293,7 @@ export function resetHookLogger(): void {
   hookState.redact = false;
   hookState.maxSize = DEFAULT_LOG_MAX_SIZE;
   hookState.keep = DEFAULT_LOG_KEEP;
+  hookState.context = {};
 }
 
 /** Set the hook logger's level (the hook injects loadSettings().logging.level).
@@ -263,6 +317,12 @@ export function setLogRotation(maxSize: number, keep: number): void {
   hookState.keep = keep;
 }
 
+/** Replace the ids every hook record carries. A hook process serves one review,
+ * so its binding is process state rather than a child logger. */
+export function setLogContext(ctx: LogContext): void {
+  hookState.context = { ...ctx };
+}
+
 export function logDebug(step: string, msg: string, extra?: object): void {
   hook().debug(step, msg, extra);
 }
@@ -277,10 +337,9 @@ export function logWarn(step: string, msg: string, extra?: object): void {
 
 /** Append an error record to caret.log. msg is the Error's message (or the
  * stringified value for a non-Error); the `err` field — with its serialized
- * cause chain — is included only for real Errors; sessionId/cwd ride along from
- * ctx. Best-effort: never throws. */
-export function logError(step: string, err: unknown, ctx?: ErrorContext): void {
-  hook().error(step, err, ctx);
+ * cause chain — is included only for real Errors. Best-effort: never throws. */
+export function logError(step: string, code: ErrorCode, err: unknown, extra?: object): void {
+  hook().error(step, code, err, extra);
 }
 
 /** A leveled logger for the long-running daemon. Writes NDJSON to the path it
@@ -307,7 +366,13 @@ export function createDaemonLogger(
       limits && typeof dest === "string"
         ? () => rotateIfOversized(dest, limits.maxSize(), limits.keep())
         : undefined;
-    return wrap(logger, level, redact, "daemon", rotate);
+    return wrap(logger, {
+      liveLevel: level,
+      liveRedact: redact,
+      source: "daemon",
+      rotate,
+      bound: [],
+    });
   } catch {
     return noopLogger;
   }

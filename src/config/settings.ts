@@ -145,7 +145,7 @@ function logValidationFailure(err: z.ZodError): void {
   const safe = err.issues
     .map((i) => `${i.path.length ? i.path.join(".") : "(root)"}: ${i.code}`)
     .join("; ");
-  logError("settings", new Error(`config.toml ignored — invalid: ${safe}`));
+  logError("settings", "config-invalid", new Error(`config.toml ignored — invalid: ${safe}`));
 }
 
 /** Parse + validate TOML text; null means "unusable" (malformed or invalid)

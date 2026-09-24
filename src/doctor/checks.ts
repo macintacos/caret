@@ -10,7 +10,14 @@
 // a different thing — a real state the adapter reported — and passes. A `fail` is a claim
 // caret has to be able to support.
 
-import { type Check, isSectionError, type LogStats, type Report } from "@/doctor/report.ts";
+import {
+  type Check,
+  ERROR_WINDOW_HOURS,
+  inErrorWindow,
+  isSectionError,
+  type LogStats,
+  type Report,
+} from "@/doctor/report.ts";
 
 /** A section's value, or undefined when it degraded to { error }. */
 function present<T>(value: T | { error: string }): T | undefined {
@@ -104,7 +111,7 @@ function agentInstall(report: Report): Check {
       id: "agent-install",
       title: "Agent install",
       status: "fail",
-      detail: "the active agent does not have caret enabled",
+      detail: `${probe.agent} does not have caret enabled`,
       remedy: "run `caret install`",
     };
   }
@@ -114,25 +121,9 @@ function agentInstall(report: Report): Check {
     status: "pass",
     detail:
       probe.pluginEnabled === true
-        ? `caret ${probe.pluginVersion} is enabled`
-        : "the agent's install state could not be read",
+        ? `caret ${probe.pluginVersion} is enabled for ${probe.agent}`
+        : `${probe.agent}'s install state could not be read`,
   };
-}
-
-/** How recently a log must have erred to fail the run. Older records stay in the report
- * and the check still names when each log last erred, but they stop being a verdict: an
- * error from weeks ago clears only when rotation drops it, so failing on it asks the
- * reader for something they cannot do. */
-const ERROR_WINDOW_HOURS = 24;
-const ERROR_WINDOW_MS = ERROR_WINDOW_HOURS * 60 * 60 * 1000;
-
-/** Whether a log's newest error is recent enough to count against the install. An
- * undated one does: nothing places it outside the window, and sending a reader to a quiet
- * log is the cheaper mistake. */
-function stillErring(log: LogStats, generatedAt: number): boolean {
-  if (log.lastErrorAt === undefined) return true;
-  const age = generatedAt - Date.parse(log.lastErrorAt);
-  return Number.isNaN(age) || age < ERROR_WINDOW_MS;
 }
 
 function describeErrors(log: LogStats): string {
@@ -157,7 +148,9 @@ function logErrors(report: Report): Check {
     };
   }
   const generatedAt = Date.parse(report.generatedAt);
-  const erring = noisy.filter((l) => stillErring(l, generatedAt));
+  // Older errors stay in the report, and the detail still names when each log last
+  // erred, but they stop being a verdict.
+  const erring = noisy.filter((l) => inErrorWindow(l.lastErrorAt, generatedAt));
   if (erring.length === 0) {
     return {
       id: "log-errors",

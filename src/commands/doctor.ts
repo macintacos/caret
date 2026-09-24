@@ -48,6 +48,7 @@ import {
   type DoctorDocument,
   listProcesses,
   listReviewFiles,
+  logErrorRecords,
   logStats,
   renderStdout,
 } from "@/doctor/report.ts";
@@ -86,8 +87,12 @@ function prodDoctorDeps(s: Settings): DoctorDeps {
     isPidAlive,
     listProcesses,
     listReviewFiles,
-    readAgentInstallState: () => selectAdapter().readInstallState(),
+    readAgentInstallState: () => {
+      const adapter = selectAdapter();
+      return { agent: adapter.id, ...adapter.readInstallState() };
+    },
     logStats,
+    logErrorRecords,
     logPaths: {
       caret: logFile(),
       daemon: daemonLogFile(),

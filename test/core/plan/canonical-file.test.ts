@@ -40,15 +40,13 @@ test("leaves a plan file that changed since ingest untouched", () => {
   writeFileSync(path, "# Newer plan the agent just wrote\n");
   const { recs, log } = recordingLog();
   const current = writeCanonicalPlanFile(
-    { plan: "# Ingested plan\n", planFilePath: path, sessionId: "s1" },
+    { plan: "# Ingested plan\n", planFilePath: path },
     "# Canonical\n",
     log,
   );
   expect(readFileSync(path, "utf8")).toBe("# Newer plan the agent just wrote\n");
   expect(current).toBe("changed");
-  expect(recs.map((r) => [r.level, r.step, r.extra])).toEqual([
-    ["info", "review", { sessionId: "s1" }],
-  ]);
+  expect(recs.map((r) => [r.level, r.step])).toEqual([["info", "review"]]);
 });
 
 test("refuses a non-.md path, leaving it untouched", () => {
@@ -92,6 +90,16 @@ test("never throws when the file cannot be written", () => {
   expect(
     writeCanonicalPlanFile({ plan: "raw", planFilePath: path }, "canonical", recordingLog().log),
   ).toBe(process.getuid?.() === 0 ? "written" : "skipped");
+});
+
+// Root ignores the file mode, so the write never fails there.
+test.skipIf(process.getuid?.() === 0)("a failed write logs the fs code, never the path", () => {
+  const path = join(dir, "readonly.md");
+  writeFileSync(path, "raw");
+  chmodSync(path, 0o444);
+  const { recs, log } = recordingLog();
+  writeCanonicalPlanFile({ plan: "raw", planFilePath: path }, "canonical", log);
+  expect(recs.map((r) => [r.level, r.extra])).toEqual([["warn", { fsCode: "EACCES" }]]);
 });
 
 test("readPlanFile returns an .md plan file's text", () => {

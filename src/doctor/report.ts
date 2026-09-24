@@ -4,8 +4,8 @@
 // (no lock cleanup, no file writes) and NEVER logs — its output IS the report.
 //
 // The report is built FLAT on purpose. src/redact/node.ts caps recursion at depth
-// 6 (deeper values become "<depth-capped>"); keeping every leaf shallow (the
-// deepest is processes.items[i].field at depth 4) means the CLI caller's
+// 6 (deeper objects become "<depth-capped>"); keeping every object shallow (the
+// deepest is failures.groups[i].records[j], at depth 5) means the CLI caller's
 // scrubValue(report, true) never clips a value. Sections that would nest —
 // settings, lockAndPort, reviews — are flattened to dotted/prefixed scalar keys
 // to hold that budget.
@@ -62,6 +62,34 @@ export interface LogStats {
   lastErrorAt?: string;
 }
 
+/** An agent-neutral install probe, plus the id of the agent it probed. */
+export type AgentInstallState = InstallProbe & { agent: string };
+
+/** The fields doctor reads off one error record: enough to triage it, and never its
+ * msg, err or stack. */
+const ERROR_RECORD_FIELDS = ["time", "source", "step", "code", "reviewId", "sessionId"] as const;
+
+/** Each field is absent when the record did not carry it as a string. */
+export type ErrorRecord = Partial<Record<(typeof ERROR_RECORD_FIELDS)[number], string>>;
+
+/** An error record as the failures section shows it, under the id it is grouped by. */
+export type FailureRecord = Omit<ErrorRecord, "reviewId" | "sessionId">;
+
+/** One review's error records, or one session's when no review id was assigned. */
+export type FailureGroup = ({ reviewId: string } | { sessionId: string }) & {
+  records: FailureRecord[];
+};
+
+/** Recent error records from the hook and daemon logs, grouped for triage. `total`
+ * counts every record in the window; the oldest `omitted` of them are left out. */
+export interface FailuresSection {
+  windowHours: number;
+  total: number;
+  omitted: number;
+  groups: FailureGroup[];
+  ungrouped: FailureRecord[];
+}
+
 /** Every side-effecting input the report needs, injected so collectReport is a
  * pure function of its deps (the CLI phase wires the prod readers below). */
 export interface DoctorDeps {
@@ -89,10 +117,11 @@ export interface DoctorDeps {
   isPidAlive: (pid: number) => boolean;
   listProcesses: () => ProcessEntry[];
   listReviewFiles: () => ReviewStatusRecord[];
-  /** The active adapter's install probe — an agent-neutral InstallProbe; the
-   * Claude adapter supplies the implementation in prod. */
-  readAgentInstallState: () => InstallProbe;
+  /** The active adapter's install probe, named for the agent it probed. */
+  readAgentInstallState: () => AgentInstallState;
   logStats: (path: string) => Promise<LogStats>;
+  /** The triage fields of a log's recent error records (logErrorRecords in prod). */
+  logErrorRecords: (path: string) => Promise<ErrorRecord[]>;
   /** The live logs to summarize: the hook log, the daemon's NDJSON, and the
    * daemon's raw stderr. Rotated archives are out of scope. */
   logPaths: { caret: string; daemon: string; daemonStderr: string };
@@ -158,8 +187,9 @@ export interface Report {
   lockAndPort: LockSection | SectionError;
   processes: { count: number; items: ProcessItem[] } | SectionError;
   reviews: ReviewsSection | SectionError;
-  installState: InstallProbe | SectionError;
+  installState: AgentInstallState | SectionError;
   logs: { caret: LogStats; daemon: LogStats; daemonStderr: LogStats } | SectionError;
+  failures: FailuresSection | SectionError;
 }
 
 /** What doctor emits: the collected state plus the verdicts read off it. A second type
@@ -215,18 +245,29 @@ export async function collectReport(deps: DoctorDeps): Promise<Report> {
     healthError = { error: errorMessage(e) };
   }
 
-  const [system, install, settings, daemon, lockAndPort, processes, reviews, installState, logs] =
-    await Promise.all([
-      safe(() => deps.system()),
-      safe(() => deps.install()),
-      safe(() => buildSettings(deps)),
-      healthError ?? safe(() => buildDaemon(deps, health)),
-      healthError ?? safe(() => buildLockAndPort(deps, health)),
-      safe(() => buildProcesses(deps)),
-      safe(() => tallyReviews(deps.listReviewFiles())),
-      safe(() => deps.readAgentInstallState()),
-      safe(() => buildLogs(deps)),
-    ]);
+  const [
+    system,
+    install,
+    settings,
+    daemon,
+    lockAndPort,
+    processes,
+    reviews,
+    installState,
+    logs,
+    failures,
+  ] = await Promise.all([
+    safe(() => deps.system()),
+    safe(() => deps.install()),
+    safe(() => buildSettings(deps)),
+    healthError ?? safe(() => buildDaemon(deps, health)),
+    healthError ?? safe(() => buildLockAndPort(deps, health)),
+    safe(() => buildProcesses(deps)),
+    safe(() => tallyReviews(deps.listReviewFiles())),
+    safe(() => deps.readAgentInstallState()),
+    safe(() => buildLogs(deps)),
+    safe(() => buildFailures(deps)),
+  ]);
 
   return {
     schema: "caret-doctor/1",
@@ -241,6 +282,7 @@ export async function collectReport(deps: DoctorDeps): Promise<Report> {
     reviews,
     installState,
     logs,
+    failures,
   };
 }
 
@@ -334,6 +376,35 @@ async function buildLogs(
   return { caret, daemon, daemonStderr };
 }
 
+/** The failures both NDJSON logs hold; daemon-stderr.log is raw output with no records
+ * to group. */
+async function buildFailures(deps: DoctorDeps): Promise<FailuresSection> {
+  const [caret, daemon] = await Promise.all([
+    deps.logErrorRecords(deps.logPaths.caret),
+    deps.logErrorRecords(deps.logPaths.daemon),
+  ]);
+  return groupFailures([...caret, ...daemon], deps.now().getTime());
+}
+
+// ---------------------------------------------------------------------------
+// Error window, shared with checks.ts
+// ---------------------------------------------------------------------------
+
+/** How recently an error must have happened to matter: `log-errors` weighs only these
+ * and the failures section lists only these. An error from weeks ago clears only when
+ * rotation drops it, so weighing it asks the reader for something they cannot do. */
+export const ERROR_WINDOW_HOURS = 24;
+const ERROR_WINDOW_MS = ERROR_WINDOW_HOURS * 60 * 60 * 1000;
+
+/** Whether an error at `time` falls inside the window ending at `generatedAt`. An
+ * undated or unparseable one does: nothing places it outside the window, and sending a
+ * reader to a quiet log is the cheaper mistake. */
+export function inErrorWindow(time: string | undefined, generatedAt: number): boolean {
+  if (time === undefined) return true;
+  const age = generatedAt - Date.parse(time);
+  return Number.isNaN(age) || age < ERROR_WINDOW_MS;
+}
+
 // ---------------------------------------------------------------------------
 // Pure helpers (exported for direct unit testing)
 // ---------------------------------------------------------------------------
@@ -364,6 +435,44 @@ export function tallyReviews(records: ReviewStatusRecord[]): ReviewsSection {
     }
   }
   return { ...counts, total: records.length, pendingIds };
+}
+
+/** The newest in-window error records a report carries; older ones are only counted. */
+const FAILURES_CAP = 50;
+
+/** Group the in-window error records by review id, else session id, in order of first
+ * appearance, keeping the newest FAILURES_CAP. ISO times sort lexically, undated
+ * first. */
+export function groupFailures(records: ErrorRecord[], generatedAt: number): FailuresSection {
+  const recent = records
+    .filter((r) => inErrorWindow(r.time, generatedAt))
+    .sort((a, b) => compareTimes(a.time ?? "", b.time ?? ""));
+  const newest = recent.slice(-FAILURES_CAP);
+  const groups = new Map<string, FailureGroup>();
+  const ungrouped: FailureRecord[] = [];
+  for (const { reviewId, sessionId, ...record } of newest) {
+    const groupId =
+      reviewId !== undefined ? { reviewId } : sessionId !== undefined ? { sessionId } : null;
+    if (groupId === null) {
+      ungrouped.push(record);
+      continue;
+    }
+    const key = JSON.stringify(groupId);
+    const group = groups.get(key) ?? { ...groupId, records: [] };
+    group.records.push(record);
+    groups.set(key, group);
+  }
+  return {
+    windowHours: ERROR_WINDOW_HOURS,
+    total: recent.length,
+    omitted: recent.length - newest.length,
+    groups: [...groups.values()],
+    ungrouped,
+  };
+}
+
+function compareTimes(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -540,9 +649,8 @@ export async function logStats(path: string): Promise<LogStats> {
     return { path, exists: false, size: 0, errors: 0, warns: 0 };
   }
   try {
-    const start = Math.max(0, size - TAIL_BYTES);
-    const text = await Bun.file(path).slice(start).text();
-    const { errors, warns, lastErrorAt } = countLogLevels(text, start > 0);
+    const { text, partial } = await readTail(path, size);
+    const { errors, warns, lastErrorAt } = countLogLevels(text, partial);
     return { path, exists: true, size, errors, warns, lastErrorAt };
   } catch {
     // Unreadable despite existing (raced delete, EACCES): report exists+size,
@@ -551,10 +659,64 @@ export async function logStats(path: string): Promise<LogStats> {
   }
 }
 
-/** Count error/warn NDJSON records in a log tail, and date the newest error. When
- * dropFirstLine is set (the slice started mid-file), the first line may be a partial
- * record and is skipped. Only `{`-prefixed, parseable lines with a numeric level count;
- * everything else (raw crash output, malformed records) is ignored. */
+/** The last TAIL_BYTES of a `size`-byte file, and whether it started mid-file. */
+async function readTail(path: string, size: number): Promise<{ text: string; partial: boolean }> {
+  const start = Math.max(0, size - TAIL_BYTES);
+  return { text: await Bun.file(path).slice(start).text(), partial: start > 0 };
+}
+
+/** The triage fields of every error record in a log's bounded tail. A missing log has
+ * none; an unreadable one rejects, degrading the failures section. */
+export async function logErrorRecords(path: string): Promise<ErrorRecord[]> {
+  let size: number;
+  try {
+    size = statSync(path).size;
+  } catch {
+    return [];
+  }
+  const { text, partial } = await readTail(path, size);
+  return parseErrorRecords(text, partial);
+}
+
+/** Project each error record (level >= 50) in a log tail onto its string-typed triage
+ * fields. Never reads msg, err or stack. */
+export function parseErrorRecords(tailText: string, dropFirstLine: boolean): ErrorRecord[] {
+  const out: ErrorRecord[] = [];
+  for (const record of tailRecords(tailText, dropFirstLine)) {
+    if (typeof record.level !== "number" || record.level < 50) continue;
+    const triageFields: ErrorRecord = {};
+    for (const field of ERROR_RECORD_FIELDS) {
+      const value = record[field];
+      if (typeof value === "string") triageFields[field] = value;
+    }
+    out.push(triageFields);
+  }
+  return out;
+}
+
+/** The parsed NDJSON records in a log tail. When dropFirstLine is set (the slice
+ * started mid-file), the first line may be a partial record and is skipped. Only
+ * `{`-prefixed lines that parse to an object count; raw crash output and malformed
+ * records are ignored. */
+function* tailRecords(
+  tailText: string,
+  dropFirstLine: boolean,
+): Generator<Record<string, unknown>> {
+  for (const [i, line] of tailText.split("\n").entries()) {
+    if (i === 0 && dropFirstLine) continue;
+    if (!line.startsWith("{")) continue;
+    let record: unknown;
+    try {
+      record = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (typeof record === "object" && record !== null) yield record as Record<string, unknown>;
+  }
+}
+
+/** Count error/warn NDJSON records in a log tail (see tailRecords), and date the newest
+ * error. Only records with a numeric level count. */
 export function countLogLevels(
   tailText: string,
   dropFirstLine: boolean,
@@ -562,16 +724,7 @@ export function countLogLevels(
   let errors = 0;
   let warns = 0;
   let lastErrorAt: string | undefined;
-  const lines = tailText.split("\n");
-  for (const [i, line] of lines.entries()) {
-    if (i === 0 && dropFirstLine) continue;
-    if (!line.startsWith("{")) continue;
-    let record: { level?: unknown; time?: unknown };
-    try {
-      record = JSON.parse(line) as { level?: unknown; time?: unknown };
-    } catch {
-      continue;
-    }
+  for (const record of tailRecords(tailText, dropFirstLine)) {
     if (typeof record.level !== "number") continue;
     if (record.level >= 50) {
       errors++;

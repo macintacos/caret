@@ -298,6 +298,23 @@ function matchIdRoute(path: string): IdRoute | null {
   return { id: decodeURIComponent(m[1] as string), sub: m[2] };
 }
 
+/** An /api/reviews/:id request: the decoded id, its sub-route, and the daemon
+ * logger bound to that review. */
+interface ReviewRoute extends IdRoute {
+  log: CaretLogger;
+}
+
+// A request as handle() resolved it for dispatch: the :id route its path matched.
+interface Routed {
+  method: string;
+  path: string;
+  route: ReviewRoute | null;
+  /** The logger the catch-all 500 reports through: the route's when there is one.
+   * A handler that learns the request's owner later rebinds it, so a failure after
+   * that point groups with the owner's other records. */
+  log: CaretLogger;
+}
+
 /** Whether an If-None-Match header names `etag`. The header is a comma-separated
  * candidate list compared weakly, so `W/"x"` and `"x"` both match `"x"`. `*` is
  * not honoured — no browser sends it on a GET, and falling through to a 200 is
@@ -511,7 +528,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   }
 
   // POST /api/reviews — an incoming plan from the hook.
-  async function handleCreateReview(req: Request): Promise<Response> {
+  async function handleCreateReview(req: Request, routed: Routed): Promise<Response> {
     if (liveness.isDraining()) {
       // 503 is postReview's re-post signal — keep it for draining only. The warn records
       // the refusal on this side.
@@ -519,25 +536,27 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       return new Response("draining", { status: 503 });
     }
     const body = await parseBody(req, PlanInputSchema);
+    // Without a sessionId the router invents an anon id no hook record carries.
+    if (body.sessionId) routed.log = log.child({ sessionId: body.sessionId });
     // The router logs the review record (created vs appended) itself.
-    const routed = await routePlan(body, store, log);
+    const routing = await routePlan(body, store, routed.log);
     // Drop superseded reviews' unsettled long-poll entries — their hooks have
     // given up (or will, at their own timeout), and a lingering unsettled entry
     // pins openDecisionCount, blocking idle shutdown (EXC-454). A still-polling
     // hook re-creates its entry per heartbeat, but that's bounded by its
     // timeout, whose /expire clears it for good.
-    for (const staleId of routed.expired) clearDecision(staleId);
+    for (const staleId of routing.expired) clearDecision(staleId);
     // An append can follow a rejected latest (a settled decision to drop) or a
     // still-pending one (an abandoned long-poll entry to drop) — either way the
     // revision's long-poll must await a fresh decision, not the stale entry
     // (EXC-590). routeIncomingPlan already cleared the store decision
     // (r.decision = undefined); this is its in-memory analog.
-    if (routed.action === "append") clearDecision(routed.id);
+    if (routing.action === "append") clearDecision(routing.id);
     // Tell the hook whether a UI tab is already listening (polled recently): if
     // so it skips foregrounding the browser, so an open backgrounded tab's
     // away-gated desktop notification isn't pre-empted (EXC-559).
     const hasLiveClient = isClientLive(lastReviewsPollAt, Date.now(), LIVE_CLIENT_WINDOW_MS);
-    return Response.json({ ...routed, hasLiveClient });
+    return Response.json({ ...routing, hasLiveClient });
   }
 
   // POST /api/logs — the UI log bridge (EXC-445): the browser ships log events
@@ -567,10 +586,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     const result = parseUiLogBatch(parsed);
     if ("status" in result) return reject(result.status);
     // The accept path logs nothing of its own (noise rule) — only the forwarded
-    // events. All four CaretLogger methods take (step, string, extra?) here:
-    // error's String(err) on an already-sanitized string is identity, so one
-    // dispatch covers every level.
-    for (const ev of result.events) log[ev.level](ev.step, ev.msg, ev.extra);
+    // events. error's String(err) on an already-sanitized string is identity, so
+    // the msg lands the same at every level.
+    for (const ev of result.events) {
+      if (ev.level === "error") log.error(ev.step, "ui-error", ev.msg, ev.extra);
+      else log[ev.level](ev.step, ev.msg, ev.extra);
+    }
     return new Response(null, { status: 204 });
   }
 
@@ -638,7 +659,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   }
 
   // GET /api/reviews/:id — one review as its client-facing shape.
-  function handleGetReview(id: string): Response {
+  function handleGetReview({ id }: ReviewRoute): Response {
     const r = store.get(id);
     return r ? Response.json(toClientReview(r)) : notFound();
   }
@@ -660,7 +681,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // ponytail: a fixed batch, so the slowest resolve in one holds up the next.
   // A sliding window would not, and is the upgrade if a cold filesystem ever
   // makes this measurable — the cap below is the knob to reach for first.
-  async function handleFileRefs(req: Request, id: string): Promise<Response> {
+  async function handleFileRefs(req: Request, route: ReviewRoute): Promise<Response> {
+    const { id } = route;
     const r = store.get(id);
     if (!r) return notFound();
     const { paths } = await parseBody(req, FileRefsBodySchema);
@@ -692,11 +714,14 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     // Counts only — a candidate is plan text, and plan text is never logged.
     // `requested` is what makes the cap visible: without it a plan truncated at
     // MAX_FILE_REFS reads exactly like one that fit.
-    log.debug("request", `file-refs resolved: ${Object.keys(resolved).length}/${unique.length}`, {
-      reviewId: id,
-      requested: paths.length,
-      directories: Object.values(resolved).filter((k) => k === "directory").length,
-    });
+    route.log.debug(
+      "request",
+      `file-refs resolved: ${Object.keys(resolved).length}/${unique.length}`,
+      {
+        requested: paths.length,
+        directories: Object.values(resolved).filter((k) => k === "directory").length,
+      },
+    );
     return Response.json({ resolved } satisfies FileRefsResponse);
   }
 
@@ -707,7 +732,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // ends. Resolution is confined to the review's cwd; a path that doesn't
   // resolve (missing, or escaping cwd) is a 404, and a file too large to preview
   // is a 413 so the UI can say so. File contents are never logged.
-  async function handleFileExcerpt(req: Request, id: string): Promise<Response> {
+  async function handleFileExcerpt(req: Request, { id }: ReviewRoute): Promise<Response> {
     const r = store.get(id);
     if (!r) return notFound();
     const params = new URL(req.url).searchParams;
@@ -736,14 +761,14 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // indistinguishable to the caller.
   //
   // Counts only reach the log: a directory's contents are the reader's project.
-  async function handleDirListing(req: Request, id: string): Promise<Response> {
+  async function handleDirListing(req: Request, route: ReviewRoute): Promise<Response> {
+    const { id } = route;
     const r = store.get(id);
     if (!r) return notFound();
     const params = new URL(req.url).searchParams;
     const listing = await listDirectory(r.cwd, params.get("root") ?? "", params.get("path") ?? "");
     if (listing === null) return notFound();
-    log.debug("request", "dir listed", {
-      reviewId: id,
+    route.log.debug("request", "dir listed", {
       total: listing.total,
       returned: listing.entries.length,
     });
@@ -761,12 +786,13 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // having no cache to invalidate.
   //
   // Counts only reach the log: the names are the reviewer's own configuration.
-  async function handleSkills(id: string): Promise<Response> {
+  async function handleSkills(route: ReviewRoute): Promise<Response> {
+    const { id } = route;
     if (!cfg.listSkills) return notFound();
     const r = store.get(id);
     if (!r) return notFound();
     const skills = await cfg.listSkills(r.cwd);
-    log.debug("request", "skills listed", { reviewId: id, count: skills.length });
+    route.log.debug("request", "skills listed", { count: skills.length });
     return Response.json(skills);
   }
 
@@ -788,7 +814,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   //
   // Neither the name nor the description reaches the log: both are the reviewer's
   // own configuration, and a description is prose someone wrote.
-  async function handleSkillDescription(req: Request, id: string): Promise<Response> {
+  async function handleSkillDescription(req: Request, route: ReviewRoute): Promise<Response> {
+    const { id } = route;
     if (!cfg.readSkillDescription) return notFound();
     const r = store.get(id);
     if (!r) return notFound();
@@ -797,7 +824,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       name: params.get("name") ?? "",
       origin: params.get("origin") ?? "",
     });
-    log.debug("request", "skill description read", { reviewId: id, found: description !== null });
+    route.log.debug("request", "skill description read", { found: description !== null });
     return Response.json({ description } satisfies SkillDescriptionResponse);
   }
 
@@ -814,14 +841,14 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   //
   // Counts only reach the log: the query is reviewer-typed text and the paths
   // are the reader's project, so neither is ever a record's content.
-  async function handleFileSearch(req: Request, id: string): Promise<Response> {
+  async function handleFileSearch(req: Request, route: ReviewRoute): Promise<Response> {
+    const { id } = route;
     const r = store.get(id);
     if (!r) return notFound();
     const { query } = await parseBody(req, FileSearchBodySchema);
     const result = await searchFiles(r.cwd, query);
     if (result === null) return notFound();
-    log.debug("request", "file search answered", {
-      reviewId: id,
+    route.log.debug("request", "file search answered", {
       returned: result.paths.length,
       stoppedAt: result.stoppedAt,
     });
@@ -829,7 +856,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   }
 
   // GET /api/reviews/:id/decision — the hook's long-poll for a decision.
-  async function handleDecision(req: Request, id: string): Promise<Response> {
+  async function handleDecision(req: Request, route: ReviewRoute): Promise<Response> {
+    const { id } = route;
     // A decision may already be recorded: in memory (a deny keeps the review) or
     // on disk (an approve removed it from memory, or the daemon restarted
     // without rehydrating it). Serve it at once so a hook that dropped its
@@ -846,13 +874,13 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     if (disk?.decision) {
       // The reconnect-recovery path — rare and diagnostic gold when a hook
       // dropped its long-poll or the daemon restarted mid-review.
-      log.debug("decision", `decision served from disk: ${shortId(id)}`, { reviewId: id });
+      route.log.debug("decision", `decision served from disk: ${shortId(id)}`);
       clearDecision(id);
       return Response.json(disk.decision);
     }
     // Nothing will ever decide an expired review; waiting would pin idle shutdown.
     if (disk?.status === "expired") {
-      log.debug("decision", `expired review denied: ${shortId(id)}`, { reviewId: id });
+      route.log.debug("decision", `expired review denied: ${shortId(id)}`);
       return Response.json(expiredDeny());
     }
     // Otherwise wait, but only to the heartbeat window, then 204 so the client
@@ -867,7 +895,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // version-scoped inline annotations and the review-scoped general-comment
   // draft. Each field is independently optional so a draft-only write never
   // wipes annotations (and vice versa) — an omitted field is left alone.
-  async function handleDraft(req: Request, id: string): Promise<Response> {
+  async function handleDraft(req: Request, route: ReviewRoute): Promise<Response> {
+    const { id } = route;
     const raw: unknown = await req.json().catch(() => ({}));
     const invalid = malformedLineAnchor(raw);
     if (invalid) return Response.json({ error: invalid }, { status: 400 });
@@ -892,21 +921,19 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       }
     });
     // Id only — draft/annotation text is reviewer prose and never logged.
-    if (updated) log.debug("draft", `draft saved: ${shortId(id)}`, { reviewId: id });
+    if (updated) route.log.debug("draft", `draft saved: ${shortId(id)}`);
     return updated ? Response.json({ ok: true }) : notFound();
   }
 
   // POST /api/reviews/:id/resolve — the browser's approve/deny decision.
-  async function handleResolve(req: Request, id: string): Promise<Response> {
+  async function handleResolve(req: Request, route: ReviewRoute): Promise<Response> {
+    const { id } = route;
     const body: ResolveBody = await parseBody(req, ResolveBodySchema);
     const existing = store.get(id);
     // A decision made on a version the reviewer no longer sees must not land on the
     // one that replaced it.
     if (isStaleVersion(existing, body.version)) {
-      log.info("resolve", "resolve refused: stale version", {
-        reviewId: id,
-        version: body.version,
-      });
+      route.log.info("resolve", "resolve refused: stale version", { version: body.version });
       return versionConflict();
     }
     // Only a pending review can be resolved — guards against a double resolve
@@ -953,8 +980,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     // (otherwise the browser's POST can appear to race the unblock). The drain's
     // re-check, queued after this when the request ends, relies on it landing first.
     setTimeout(() => resolveDecision(id, decision), 0);
-    log.info("resolve", `review ${shortId(id)} resolved: ${decision.behavior}`, {
-      reviewId: id,
+    route.log.info("resolve", `review ${shortId(id)} resolved: ${decision.behavior}`, {
       sessionId: existing.sessionId,
       acceptMode: decision.acceptMode,
     });
@@ -964,7 +990,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // POST /api/reviews/:id/expire — the hook is abandoning this review: its
   // timeout fired and it is about to emit the fail-safe deny (EXC-454). No
   // decision is recorded: the plan was never reviewed.
-  async function handleExpire(req: Request, id: string): Promise<Response> {
+  async function handleExpire(req: Request, route: ReviewRoute): Promise<Response> {
+    const { id } = route;
     const existing = store.get(id);
     // An orphan hook of an older version: the entry belongs to the newer one and may
     // hold its settled-but-unread decision, so leave it. An approved newer version
@@ -979,8 +1006,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     // Only a pending review can expire; resolved ones are already terminal.
     if (existing?.status !== "pending") return notFound();
     await store.expire(id);
-    log.info("review", `review expired: ${shortId(id)}`, {
-      reviewId: id,
+    route.log.info("review", `review expired: ${shortId(id)}`, {
       sessionId: existing.sessionId,
     });
     return Response.json({ ok: true });
@@ -991,7 +1017,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // their attention even though no decision has been made yet (EXC-961). Purely a
   // signal: nothing is persisted, and a review submitted outside cmux is a
   // no-op 204 rather than an error.
-  function handleSeen(id: string): Response {
+  function handleSeen({ id }: ReviewRoute): Response {
     const existing = store.get(id);
     if (!existing) return notFound();
     if (existing.cmux) cfg.markPaneRead(existing.cmux);
@@ -999,9 +1025,11 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   }
 
   // Resolve a request to its handler by method + path, returning the Response.
-  // The wrapper (handle) owns the cross-origin guard, the liveness bracket, and the
-  // catch-all 500; dispatch is pure routing + business logic.
-  async function dispatch(req: Request, method: string, path: string): Promise<Response> {
+  // The wrapper (handle) owns the cross-origin guard, the liveness bracket, the :id
+  // route match and its bound logger, and the catch-all 500; dispatch is pure
+  // routing + business logic.
+  async function dispatch(req: Request, routed: Routed): Promise<Response> {
+    const { method, path, route } = routed;
     // The UI routes answer HEAD as well as GET — both guards already admit it
     // (isSafeMethod), and Bun strips the body from what the handlers return, so
     // reading an ETag with `curl -I` works without a HEAD-specific path.
@@ -1011,29 +1039,28 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     if (method === "GET" && path === "/api/update") return handleUpdate();
     if (method === "POST" && path === "/api/retire") return handleRetire();
     if (readsUi && (path === "/" || path === INDEX_PATH)) return handleIndex(req);
-    if (method === "POST" && path === "/api/reviews") return handleCreateReview(req);
+    if (method === "POST" && path === "/api/reviews") return handleCreateReview(req, routed);
     if (method === "POST" && path === "/api/logs") return handleLogs(req);
     if (method === "POST" && path === "/api/ui/gone") return handleUiGone();
     if (method === "GET" && path === "/api/reviews") return handleListReviews();
     if (method === "POST" && path === "/api/config") return handleSetConfig(req);
 
-    const route = matchIdRoute(path);
     if (route) {
-      const { id, sub } = route;
-      if (method === "GET" && !sub) return handleGetReview(id);
-      if (method === "GET" && sub === "/file") return handleFileExcerpt(req, id);
-      if (method === "GET" && sub === "/dir") return handleDirListing(req, id);
-      if (method === "GET" && sub === "/skills") return handleSkills(id);
+      const { sub } = route;
+      if (method === "GET" && !sub) return handleGetReview(route);
+      if (method === "GET" && sub === "/file") return handleFileExcerpt(req, route);
+      if (method === "GET" && sub === "/dir") return handleDirListing(req, route);
+      if (method === "GET" && sub === "/skills") return handleSkills(route);
       if (method === "GET" && sub === "/skill-description") {
-        return handleSkillDescription(req, id);
+        return handleSkillDescription(req, route);
       }
-      if (method === "POST" && sub === "/file-refs") return handleFileRefs(req, id);
-      if (method === "POST" && sub === "/file-search") return handleFileSearch(req, id);
-      if (method === "GET" && sub === "/decision") return handleDecision(req, id);
-      if (method === "PUT" && sub === "/draft") return handleDraft(req, id);
-      if (method === "POST" && sub === "/resolve") return handleResolve(req, id);
-      if (method === "POST" && sub === "/expire") return handleExpire(req, id);
-      if (method === "POST" && sub === "/seen") return handleSeen(id);
+      if (method === "POST" && sub === "/file-refs") return handleFileRefs(req, route);
+      if (method === "POST" && sub === "/file-search") return handleFileSearch(req, route);
+      if (method === "GET" && sub === "/decision") return handleDecision(req, route);
+      if (method === "PUT" && sub === "/draft") return handleDraft(req, route);
+      if (method === "POST" && sub === "/resolve") return handleResolve(req, route);
+      if (method === "POST" && sub === "/expire") return handleExpire(req, route);
+      if (method === "POST" && sub === "/seen") return handleSeen(route);
     }
 
     // A hashed sibling asset (exact manifest-key match) — checked after the API
@@ -1058,6 +1085,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     self: { readonly port: number | undefined },
   ): Promise<Response> {
     const end = liveness.begin(req.method);
+    let routed: Routed | undefined;
     try {
       const port = self.port ?? -1;
 
@@ -1076,7 +1104,6 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       const url = new URL(req.url);
       const path = url.pathname;
       const method = req.method;
-
       // Gate every non-safe (state-changing) method, not a fixed POST/PUT list, so
       // a future mutating verb is CSRF-protected by default. Safe methods (GET/HEAD)
       // fall through — the browser's same-origin policy already blocks a foreign
@@ -1085,7 +1112,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
         return new Response("cross-origin request blocked", { status: 403 });
       }
 
-      return await dispatch(req, method, path);
+      // Below the CSRF guard: decoding a malformed id throws, and a blocked request
+      // must still get its 403.
+      const idRoute = matchIdRoute(path);
+      const route = idRoute && { ...idRoute, log: log.child({ reviewId: idRoute.id }) };
+      routed = { method, path, route, log: route?.log ?? log };
+      return await dispatch(req, routed);
     } catch (err) {
       // Never let a handler exception drop the connection without a response — and
       // log it first, since a bare 500 alone is undebuggable. The log call is itself
@@ -1093,7 +1125,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // NB: values reaching this sink must not embed plan bodies — today no handler
       // error message interpolates plan content; keep it that way.
       try {
-        log.error("request", err);
+        (routed?.log ?? log).error("request", "request-failed", err);
       } catch {
         // best-effort: the response below is what matters.
       }

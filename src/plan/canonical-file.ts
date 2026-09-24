@@ -53,10 +53,11 @@ function guardedPlanFileWrite<T>(
     if (!isPlanFile(planFilePath)) return undefined;
     return write(planFilePath);
   } catch (err) {
-    // An fs error's `.code` (e.g. EACCES) is safe to log; the path and plan text
-    // must never reach a log record.
+    // An fs error's `.code` (e.g. EACCES) is safe to log, as `fsCode` since `code` means
+    // the triage code on every record; the path and plan text must never reach a
+    // log record.
     const code = (err as { code?: string } | null)?.code;
-    log.warn("review", failMsg, code ? { code } : {});
+    log.warn("review", failMsg, code ? { fsCode: code } : {});
     return undefined;
   }
 }
@@ -69,14 +70,14 @@ function guardedPlanFileWrite<T>(
  * own warning. Never throws.
  */
 export function writeCanonicalPlanFile(
-  input: Pick<PlanInput, "plan" | "sessionId"> & { planFilePath: string },
+  input: Pick<PlanInput, "plan"> & { planFilePath: string },
   canonical: string,
   log: CaretLogger,
 ): "written" | "changed" | "skipped" {
   return (
     guardedPlanFileWrite(input.planFilePath, log, "plan file canonicalize failed", (p) => {
       if (readFileSync(p, "utf8") !== (input.plan ?? "")) {
-        log.info("review", "plan file changed; rewrite skipped", { sessionId: input.sessionId });
+        log.info("review", "plan file changed; rewrite skipped");
         return "changed" as const;
       }
       writeFileSync(p, canonical);

@@ -2,30 +2,38 @@
 // counterpart of the NDJSON-file readers the hook-side tests use.
 import { expect } from "bun:test";
 
-import type { CaretLogger } from "@/lib/log.ts";
+import type { CaretLogger, ErrorCode, LogContext } from "@/lib/log.ts";
 
 export interface RecordedEmit {
   level: "debug" | "info" | "warn" | "error";
   step: string;
   msg: string;
+  code?: ErrorCode;
   extra?: object;
 }
 
 export function recordingLog(): { recs: RecordedEmit[]; log: CaretLogger } {
   const recs: RecordedEmit[] = [];
-  const log: CaretLogger = {
-    debug: (step, msg, extra) => recs.push({ level: "debug", step, msg, extra }),
-    info: (step, msg, extra) => recs.push({ level: "info", step, msg, extra }),
-    warn: (step, msg, extra) => recs.push({ level: "warn", step, msg, extra }),
-    error: (step, err, extra) =>
+  return { recs, log: recorder(recs) };
+}
+
+/** A recorder into `recs`; a child records its bound ids merged under each call's extra. */
+function recorder(recs: RecordedEmit[], bound?: LogContext): CaretLogger {
+  const merged = (extra?: object) => (bound ? { ...bound, ...extra } : extra);
+  return {
+    debug: (step, msg, extra) => recs.push({ level: "debug", step, msg, extra: merged(extra) }),
+    info: (step, msg, extra) => recs.push({ level: "info", step, msg, extra: merged(extra) }),
+    warn: (step, msg, extra) => recs.push({ level: "warn", step, msg, extra: merged(extra) }),
+    error: (step, code, err, extra) =>
       recs.push({
         level: "error",
         step,
         msg: err instanceof Error ? err.message : String(err),
-        extra,
+        code,
+        extra: merged(extra),
       }),
+    child: (ctx) => recorder(recs, { ...bound, ...ctx }),
   };
-  return { recs, log };
 }
 
 /**
