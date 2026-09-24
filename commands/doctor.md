@@ -7,9 +7,10 @@ local install: a `checks:` block naming what is wrong and how to fix it, then th
 read that from — running caret processes, daemon identity, lock/port state, effective
 settings, review counts, the agent adapter's install-state probe (plugin version, enabled
 state, and whether a manual hook sits in the agent's user settings), log sizes and error
-counts, install/runtime info, and system basics. The report is **always redacted** (home
-paths become `~`, usernames in foreign home paths are censored) and never contains plan,
-prompt, or feedback bodies, nor any log contents — it exists to be shared.
+counts, recent failures grouped by review with their codes, install/runtime info, and
+system basics. The report is **always redacted** (home paths become `~`, usernames in
+foreign home paths are censored) and never contains plan, prompt, or feedback bodies, nor
+any log contents — it exists to be shared.
 
 ## 1. Run it
 
@@ -40,7 +41,7 @@ one. What each id means:
 | --- | --- | --- |
 | `daemon-reachable` | a caret service is recorded but the daemon did not answer, or the effective port answers as something other than caret | the check's remedy verbatim, then offer to read any log it names |
 | `daemon-lock` | the lock names a dead pid, or a port caret is not configured to bind | the check's remedy verbatim |
-| `agent-install` | the active agent does not have caret enabled | `caret install` |
+| `agent-install` | the agent the check names does not have caret enabled | `caret install` |
 | `log-errors` | a live log wrote an NDJSON error record in the last 24h; the detail names which log and when it last erred | step 4 |
 | `opencode-caret-version` | OpenCode would load a caret behind the published one | the check's remedy verbatim |
 
@@ -62,7 +63,7 @@ sections; the report is already redacted and complete.
 
 When `log-errors` failed and the `/systematic-debugging` skill is available, invoke it to
 drive root-cause investigation from the logs the check named. Otherwise read the last
-error records yourself and reason from the failing step, msg, cause, and stack:
+error records yourself and reason from the failing step, code, msg, cause, and stack:
 
 ```bash
 dir="${XDG_STATE_HOME:-$HOME/.local/state}/caret"
@@ -71,13 +72,21 @@ grep '^{' "$dir/logs/daemon.log" | jq -s '[.[] | select(.level >= 50)] | .[-5:]'
 tail -n 40 "$dir/logs/daemon-stderr.log"
 ```
 
-A "socket connection closed" on the hook side often has its real cause on the daemon side,
-so check both. `log-errors` counts only NDJSON error records, so a crash that reached
-`daemon-stderr.log` alone leaves it passing — tail that file even when the check is green.
-It fails only on records from the last 24h, so a log that has settled passes while still
-reporting when it last erred; work from that time rather than from the count. If a failure
-predates the current live file, `gunzip -c` the segment you need from `logs/archive/` and
-rerun the recipe against the result.
+Read the report's `failures` first. Each group is one review's error records from both
+logs with their codes (a session's, when the failure came before a review id existed), so
+a hook-side "socket connection closed" sits beside the daemon-side record that caused it.
+Pull that review's full records from both logs (`.sessionId` for a session group):
+
+```bash
+grep -h '^{' "$dir/logs/caret.log" "$dir/logs/daemon.log" | jq -c 'select(.reviewId == "<id>")'
+```
+
+`log-errors` counts only NDJSON error records, so a crash that reached `daemon-stderr.log`
+alone leaves it passing — tail that file even when the check is green. It fails only on
+records from the last 24h, so a log that has settled passes while still reporting when it
+last erred; work from that time rather than from the count. If a failure predates the
+current live file, `gunzip -c` the segment you need from `logs/archive/` and rerun the
+recipe against the result.
 
 ## 5. Review this session's plans
 

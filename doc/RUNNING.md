@@ -409,8 +409,9 @@ only genuine failures sit at error.
   config names caret: it reads npm's published caret version, and degrades to `unknown`
   offline. Under that sits the state it read those from: running caret processes, daemon
   identity (version, build, startup commit), lock/port state, effective settings, review
-  counts, the agent adapter's install-state probe, log sizes and error/warn counts,
-  install and runtime info, and system basics.
+  counts, the agent adapter's install-state probe, log sizes and error/warn counts, the
+  last 24 hours' failures from both logs grouped by review with their error codes, install
+  and runtime info, and system basics.
 
   Human-readable by default; `caret doctor --json` prints the same document as one JSON
   object (schema marker `caret-doctor/1`). Unlike the logs, it is **always redacted** — it

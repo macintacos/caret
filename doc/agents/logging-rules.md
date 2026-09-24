@@ -5,8 +5,8 @@ writes through the second — sharing one record shape
 (`{"level":30,"time":...,"step":"x","msg":"...",...}`):
 
 - **Hook processes** (the short-lived `caret review` hook) call
-  `logDebug/logInfo/logWarn/logError(step, msg, extra?)` from `src/lib/log.ts`, which
-  append to `caret.log`.
+  `logDebug/logInfo/logWarn(step, msg, extra?)` and `logError(step, code, err, extra?)`
+  from `src/lib/log.ts`, which append to `caret.log`.
 - **The daemon** holds a `CaretLogger` built by `createDaemonLogger` (`src/lib/log.ts`),
   which writes NDJSON to `daemon.log` — a path the logger owns, so it can stat and rotate
   its own sink. The process's raw stderr is a separate file: `spawnDaemon` redirects it to
@@ -19,6 +19,12 @@ writes through the second — sharing one record shape
 `error` is special: it takes the raw thrown value, not a string. For an `Error`, the
 `cause` chain is serialized into the record's `err` field and the `msg` derives from the
 error's message; for any other value the stringified value becomes the `msg`.
+
+It also takes a `code` from `ErrorCode` in `src/lib/log.ts`, which the type checker
+requires on every call. The registry is closed and append-only: a shipped code is never
+renamed or reused, because `caret doctor` and anyone grepping the logs key on it. Use
+`unexpected` when nothing fits, and mint a new code rather than stretching one to cover a
+different failure.
 
 Logging is non-essential and **never throws**. Construction and every emit are wrapped,
 degrading to a silent no-op on failure — a logging failure must never turn an allow into a
@@ -33,7 +39,7 @@ House style, from real call sites:
 
 ```ts
 log.info("review", "review created: abc123");
-logInfo("decision", "plan approved", { ...ctx });
+logInfo("decision", "plan approved", { acceptMode: decision.acceptMode });
 log.info("idle", "idle shutdown");
 ```
 
@@ -83,8 +89,10 @@ Concretely:
   `service`, `upkeep`, `mcp`). Reuse an existing token before minting a new one — and when
   you do mint one, add it here in the same change, so this stays a registry rather than a
   snapshot.
-- Review-scoped records carry structured `reviewId` / `sessionId` fields in `extra` so one
-  session stitches across the two log streams (EXC-444).
+- Review-scoped records carry structured `reviewId` / `sessionId` fields so one review
+  stitches across the two log streams (EXC-444). They get them by binding, never per-call
+  `extra`: the daemon logs through `log.child({ reviewId })`, and the hook, which serves
+  one review per process, sets them once with `setLogContext`.
 - Every record carries a `source` field naming the emitting process — `"hook"`,
   `"daemon"`, or `"ui"` (EXC-445). The logger attaches its own token unless `extra.source`
   is already set; the explicit value winning is how bridged browser events stay `"ui"`
@@ -94,7 +102,7 @@ Concretely:
   records carry none. It is best-effort: the field is omitted if the stack can't be parsed
   (e.g. an unmapped compiled binary).
 - `extra` keys must **not collide** with the record's own fields: `level`, `time`, `msg`,
-  `step`, `pid`, `err`, `caller`.
+  `step`, `pid`, `err`, `caller`, `code`.
 
 ## The redaction rule
 
@@ -115,17 +123,17 @@ Concretely:
   produces shareable `*.redacted.log` copies after the fact, and `redact = true` scrubs
   (home paths → `~`, usernames in foreign home paths censored) at write time. Write every
   message and `extra` assuming it may be shared.
-- **The review `cwd` is raw locally, scrubbed on share.** `review.ts` logs the review's
-  working directory verbatim in the `review requested` record (and every `ctx`-spreading
-  record) under the default `redact = false`, because which project a review came from is
-  genuine diagnostic context. It is an absolute path carrying a username, so it is
-  identifying — but it is deliberately **not** a `DENY_KEY` (that would censor it
-  unconditionally, even in local debug logs, contradicting the scrub-on-share model). The
-  home-path scrub covers it instead: `redact = true` / `caret redact` turns the current
-  user's home into `~` and censors a foreign home's username segment, so a shared log
-  leaks no identifying path. That is the scrub-on-share treatment any path-valued field
-  gets; content keys (`plan`/`prompt`/`feedback`) are the `DENY_KEYS` exception precisely
-  because their bodies must never appear at any toggle.
+- **The review `cwd` is raw locally, scrubbed on share.** The hook binds the review's
+  working directory into its log context, so the `review requested` record and every hook
+  record after it carry it verbatim under the default `redact = false`, because which
+  project a review came from is genuine diagnostic context. It is an absolute path
+  carrying a username, so it is identifying — but it is deliberately **not** a `DENY_KEY`
+  (that would censor it unconditionally, even in local debug logs, contradicting the
+  scrub-on-share model). The home-path scrub covers it instead: `redact = true` /
+  `caret redact` turns the current user's home into `~` and censors a foreign home's
+  username segment, so a shared log leaks no identifying path. That is the scrub-on-share
+  treatment any path-valued field gets; content keys (`plan`/`prompt`/`feedback`) are the
+  `DENY_KEYS` exception precisely because their bodies must never appear at any toggle.
 
 ## Where logs live
 
