@@ -1876,6 +1876,19 @@ test("a handler exception is logged at error level before returning the 500", as
   expect(rec?.msg).toContain("kaboom");
 });
 
+test("a throwing review route logs its failure against that review", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log });
+  const { id } = await newReview();
+  store.update = () => Promise.reject(new Error("disk full"));
+  expect((await d.draft(id, { generalCommentDraft: "x" })).status).toBe(500);
+  expect(recs.find((r) => r.level === "error")).toMatchObject({
+    step: "request",
+    code: "request-failed",
+    extra: { reviewId: id },
+  });
+});
+
 test("a throwing log sink during a handler error still returns the clean 500", async () => {
   const { log } = recordingLog();
   await boot({

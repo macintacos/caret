@@ -69,14 +69,14 @@ function guardedPlanFileWrite<T>(
  * own warning. Never throws.
  */
 export function writeCanonicalPlanFile(
-  input: Pick<PlanInput, "plan" | "sessionId"> & { planFilePath: string },
+  input: Pick<PlanInput, "plan"> & { planFilePath: string },
   canonical: string,
   log: CaretLogger,
 ): "written" | "changed" | "skipped" {
   return (
     guardedPlanFileWrite(input.planFilePath, log, "plan file canonicalize failed", (p) => {
       if (readFileSync(p, "utf8") !== (input.plan ?? "")) {
-        log.info("review", "plan file changed; rewrite skipped", { sessionId: input.sessionId });
+        log.info("review", "plan file changed; rewrite skipped");
         return "changed" as const;
       }
       writeFileSync(p, canonical);

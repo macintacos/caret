@@ -17,6 +17,7 @@ import {
   logWarn,
   noopLogger,
   resetHookLogger,
+  setLogContext,
   setLogLevel,
   setLogRotation,
   setRedact,
@@ -498,6 +499,70 @@ test("a poisoned extra never propagates out of the daemon logger", () => {
     reached = true;
   }).not.toThrow();
   expect(reached).toBe(true);
+});
+
+test("a poisoned binding never propagates out of a child logger", () => {
+  const log = createDaemonLogger(() => "info", join(home, "daemon-poison-child.log"));
+  let reached = false;
+  expect(() => {
+    const child = log.child(poisoned() as ErrorContext);
+    child.info("review", "still logs");
+    child.error("review", "unexpected", new Error("x"));
+    reached = true;
+  }).not.toThrow();
+  expect(reached).toBe(true);
+});
+
+// --- correlation-id binding ---
+
+test("a child logger stamps its bound ids on every level, nested children merged", () => {
+  const dest = join(home, "daemon-child.log");
+  const log = createDaemonLogger(() => "debug", dest)
+    .child({ sessionId: "s1" })
+    .child({ reviewId: "r1" });
+  log.debug("request", "d");
+  log.info("review", "i");
+  log.warn("review", "w");
+  log.error("request", "request-failed", new Error("e"));
+  expect(records(dest).map((r) => [r.sessionId, r.reviewId])).toEqual([
+    ["s1", "r1"],
+    ["s1", "r1"],
+    ["s1", "r1"],
+    ["s1", "r1"],
+  ]);
+});
+
+test("a call-site extra wins over a bound id", () => {
+  const dest = join(home, "daemon-child-wins.log");
+  createDaemonLogger(() => "info", dest)
+    .child({ reviewId: "bound" })
+    .info("review", "superseded", { reviewId: "explicit" });
+  expect(records(dest)[0]!.reviewId).toBe("explicit");
+});
+
+test("with redaction on, a bound cwd is scrubbed like any extra", () => {
+  const dest = join(home, "daemon-child-redact.log");
+  createDaemonLogger(
+    () => "info",
+    dest,
+    () => true,
+  )
+    .child({ cwd: `${realHome}/proj` })
+    .info("review", "requested");
+  expect(records(dest)[0]!.cwd).toBe("~/proj");
+});
+
+test("setLogContext stamps hook records until resetHookLogger", () => {
+  setLogContext({ sessionId: "s1", reviewId: "r1" });
+  logInfo("review", "bound");
+  logError("longPoll", "review-timeout", new Error("x"));
+  resetHookLogger();
+  logInfo("review", "unbound");
+  expect(records().map((r) => [r.sessionId, r.reviewId])).toEqual([
+    ["s1", "r1"],
+    ["s1", "r1"],
+    [undefined, undefined],
+  ]);
 });
 
 // --- hook-logger reset seam ---

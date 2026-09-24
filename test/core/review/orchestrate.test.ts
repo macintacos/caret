@@ -622,6 +622,13 @@ test("a failure after the review was posted carries the reviewId", async () => {
   expect(rec).toMatchObject({ step: "longPoll", reviewId: "rid", sessionId: "S" });
 });
 
+test("a review that fails to parse carries no ids from the review before it", async () => {
+  await review(stdin, reviewDeps());
+  await review("not json", reviewDeps());
+  const rec = caretLogRecords().find((r) => r.step === "parse");
+  expect([rec?.level, rec?.sessionId, rec?.reviewId]).toEqual([50, undefined, undefined]);
+});
+
 test("decision info records are suppressed when the level is error", async () => {
   setLogLevel("error");
   await review(

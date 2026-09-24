@@ -121,6 +121,15 @@ test("reports the plan file as not current when the agent rewrote it after inges
   expect(routed.planFileCurrent).toBe(false);
 });
 
+test("plan-file records carry the incoming plan's session", async () => {
+  const planFilePath = join(dir, "moved-on.md");
+  writeFileSync(planFilePath, "# Newer plan\n");
+  const { recs, log } = recordingLog();
+  await routeIncomingPlan(input({ plan: "# Ingested\n", planFilePath }), store, log);
+  const skipped = recs.find((r) => r.msg === "plan file changed; rewrite skipped");
+  expect(skipped?.extra).toEqual({ sessionId: "S" });
+});
+
 test("reports the plan file as current when the guard refuses it", async () => {
   const routed = await routeIncomingPlan(
     input({ plan: "# Ingested\n", planFilePath: join(dir, "missing.md") }),

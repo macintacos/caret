@@ -40,15 +40,13 @@ test("leaves a plan file that changed since ingest untouched", () => {
   writeFileSync(path, "# Newer plan the agent just wrote\n");
   const { recs, log } = recordingLog();
   const current = writeCanonicalPlanFile(
-    { plan: "# Ingested plan\n", planFilePath: path, sessionId: "s1" },
+    { plan: "# Ingested plan\n", planFilePath: path },
     "# Canonical\n",
     log,
   );
   expect(readFileSync(path, "utf8")).toBe("# Newer plan the agent just wrote\n");
   expect(current).toBe("changed");
-  expect(recs.map((r) => [r.level, r.step, r.extra])).toEqual([
-    ["info", "review", { sessionId: "s1" }],
-  ]);
+  expect(recs.map((r) => [r.level, r.step])).toEqual([["info", "review"]]);
 });
 
 test("refuses a non-.md path, leaving it untouched", () => {

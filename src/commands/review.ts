@@ -176,10 +176,7 @@ export async function runReviewSubcommand(): Promise<void> {
   // the daemon's verdict, not the hook, says so.
   const target = notesAppendTarget(out, hookInput?.planFilePath, posted);
   if (target === "skip-moved-on") {
-    logInfo("review", "plan file changed; notes append skipped", {
-      reviewId: posted?.id,
-      sessionId: hookInput?.sessionId,
-    });
+    logInfo("review", "plan file changed; notes append skipped");
   } else if (target) {
     appendReviewerNotesToPlanFile(target.path, target.notes, { warn: logWarn });
   }
