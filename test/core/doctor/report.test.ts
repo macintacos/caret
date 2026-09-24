@@ -3,19 +3,23 @@ import { rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { doctorDeps } from "@test/support/doctor-deps.ts";
 import { setupTempStateDir } from "@test/support/env.ts";
 import { expectNeverLogsBody } from "@test/support/redaction.ts";
 import { daemonLock, reviewsDir } from "@/config/paths.ts";
-import { DEFAULTS } from "@/config/settings.ts";
 import {
   type Check,
   collectReport,
   countLogLevels,
   type DoctorDeps,
   type DoctorDocument,
+  type ErrorRecord,
+  groupFailures,
   listProcesses,
   listReviewFiles,
+  logErrorRecords,
   logStats,
+  parseErrorRecords,
   parsePsLines,
   type Report,
   renderDocument,
@@ -26,46 +30,6 @@ import { scrubValue } from "@/redact/node.ts";
 
 function boom(): never {
   throw new Error("probe boom");
-}
-
-// Happy-path fakes for every injected probe; each test overrides only what it
-// exercises.
-function doctorDeps(over: Partial<DoctorDeps> = {}): DoctorDeps {
-  return {
-    now: () => new Date("2026-06-04T12:00:00.000Z"),
-    version: "1.2.3",
-    system: () => ({ platform: "darwin", os: "macos", arch: "arm64" }),
-    install: () => ({ kind: "dev", binaryPath: "/bin/caret", bunVersion: "0.0.0" }),
-    settings: () => DEFAULTS,
-    configPath: "/cfg/config.toml",
-    configExists: () => true,
-    effective: () => ({
-      port: 42718,
-      idleMs: 60000,
-      reviewTimeoutMs: 3600000,
-      heartbeatMs: 8000,
-    }),
-    baseUrl: "http://localhost:42718",
-    health: async () => ({ service: "caret", version: "1.2.3", build: "abc", commit: "def" }),
-    serviceInstalled: () => false,
-    readLock: () => ({ pid: 111, port: 42718, build: "abc", version: "1.2.3", startedAt: 9 }),
-    readBootMarker: () => null,
-    isPidAlive: () => true,
-    listProcesses: () => [{ pid: 111, name: "caret-native" }],
-    listReviewFiles: () => [{ id: "abcdef12-0000", status: "pending" }],
-    readAgentInstallState: () => ({
-      pluginVersion: "0.0.3",
-      pluginEnabled: true,
-      hookInUserSettings: false,
-    }),
-    logStats: async (path: string) => ({ path, exists: true, size: 10, errors: 0, warns: 0 }),
-    logPaths: {
-      caret: "/state/logs/caret.log",
-      daemon: "/state/logs/daemon.log",
-      daemonStderr: "/state/logs/daemon-stderr.log",
-    },
-    ...over,
-  };
 }
 
 /** The emitted document: a collected report plus whatever checks ran over it. */
@@ -93,6 +57,7 @@ test("collectReport assembles a full document with every section present", async
     "reviews",
     "installState",
     "logs",
+    "failures",
   ]) {
     expect(report).toHaveProperty(key);
   }
@@ -144,6 +109,7 @@ const ALL_SECTIONS: Array<keyof Report> = [
   "reviews",
   "installState",
   "logs",
+  "failures",
 ];
 
 // Each injectable probe gets a throwing fake. The probe's consuming section(s)
@@ -171,6 +137,15 @@ const degradations: Array<
       },
     },
     ["logs"],
+  ],
+  [
+    "logErrorRecords",
+    {
+      logErrorRecords: async () => {
+        throw new Error("read boom");
+      },
+    },
+    ["failures"],
   ],
 ];
 
@@ -332,6 +307,7 @@ test("installState unknowns pass through untouched", async () => {
   const report = await collectReport(
     doctorDeps({
       readAgentInstallState: () => ({
+        agent: "test-agent",
         pluginVersion: "unknown",
         pluginEnabled: "unknown",
         hookInUserSettings: "unknown",
@@ -339,6 +315,7 @@ test("installState unknowns pass through untouched", async () => {
     }),
   );
   expect(report.installState).toEqual({
+    agent: "test-agent",
     pluginVersion: "unknown",
     pluginEnabled: "unknown",
     hookInUserSettings: "unknown",
@@ -383,9 +360,112 @@ test("the report is flat enough that scrubValue never depth-caps a leaf", async 
       readLock: () => ({ pid: 2, port: 42718, build: "b", version: "v", startedAt: 9 }),
       isPidAlive: () => true,
       listReviewFiles: () => [{ id: "abcdef12-0000", status: "pending" }],
+      logErrorRecords: async () => [{ reviewId: "r1", step: "request", code: "request-failed" }],
     }),
   );
   expect(JSON.stringify(scrubValue(report, true))).not.toContain("<depth-capped>");
+});
+
+// ---- failures ----
+
+/** Relative to the fixture's generatedAt of 2026-06-04T12:00:00.000Z. */
+const NOW = Date.parse("2026-06-04T12:00:00.000Z");
+const RECENT = "2026-06-04T11:00:00.000Z";
+
+test("the failures section groups both logs' error records by review", async () => {
+  const report = await collectReport(
+    doctorDeps({
+      logErrorRecords: async (path) =>
+        path.endsWith("caret.log")
+          ? [
+              {
+                time: RECENT,
+                source: "hook",
+                step: "longPoll",
+                code: "review-timeout",
+                reviewId: "r1",
+              },
+            ]
+          : [
+              {
+                time: RECENT,
+                source: "daemon",
+                step: "request",
+                code: "request-failed",
+                reviewId: "r1",
+              },
+            ],
+    }),
+  );
+  expect(report.failures).toEqual({
+    windowHours: 24,
+    total: 2,
+    omitted: 0,
+    groups: [
+      {
+        reviewId: "r1",
+        records: [
+          { time: RECENT, source: "hook", step: "longPoll", code: "review-timeout" },
+          { time: RECENT, source: "daemon", step: "request", code: "request-failed" },
+        ],
+      },
+    ],
+    ungrouped: [],
+  });
+});
+
+test("groupFailures groups by review, else session, in order of first appearance", () => {
+  const records: ErrorRecord[] = [
+    { time: "2026-06-04T11:00:00.000Z", step: "a", sessionId: "s1" },
+    { time: "2026-06-04T11:01:00.000Z", step: "b", reviewId: "r1", sessionId: "s1" },
+    { time: "2026-06-04T11:02:00.000Z", step: "c" },
+    { time: "2026-06-04T11:03:00.000Z", step: "d", sessionId: "s1" },
+  ];
+  const { groups, ungrouped } = groupFailures(records, NOW);
+  expect(groups).toEqual([
+    {
+      sessionId: "s1",
+      records: [
+        { time: "2026-06-04T11:00:00.000Z", step: "a" },
+        { time: "2026-06-04T11:03:00.000Z", step: "d" },
+      ],
+    },
+    { reviewId: "r1", records: [{ time: "2026-06-04T11:01:00.000Z", step: "b" }] },
+  ]);
+  expect(ungrouped).toEqual([{ time: "2026-06-04T11:02:00.000Z", step: "c" }]);
+});
+
+test("groupFailures shows an uncoded record without a code and passes an unknown code through", () => {
+  const { ungrouped } = groupFailures(
+    [
+      { time: RECENT, step: "old" },
+      { time: RECENT, step: "new", code: "not-yet-minted" },
+    ],
+    NOW,
+  );
+  expect(ungrouped).toEqual([
+    { time: RECENT, step: "old" },
+    { time: RECENT, step: "new", code: "not-yet-minted" },
+  ]);
+});
+
+test("groupFailures leaves out records older than the window, but keeps undated ones", () => {
+  const section = groupFailures(
+    [{ time: "2026-06-01T12:00:00.000Z", step: "stale" }, { step: "undated" }],
+    NOW,
+  );
+  expect(section.total).toBe(1);
+  expect(section.ungrouped).toEqual([{ step: "undated" }]);
+});
+
+test("groupFailures keeps the newest 50 records and counts the rest as omitted", () => {
+  const records: ErrorRecord[] = Array.from({ length: 60 }, (_, i) => ({
+    time: new Date(NOW - (60 - i) * 1000).toISOString(),
+    step: `s${i}`,
+  }));
+  const section = groupFailures([...records].reverse(), NOW);
+  expect([section.total, section.omitted]).toEqual([60, 10]);
+  expect(section.ungrouped.map((r) => r.step)).toEqual(records.slice(10).map((r) => r.step));
 });
 
 // ---- renderDocument ----
@@ -404,6 +484,7 @@ test("renderDocument renders the header and every section title for a happy repo
     "reviews:",
     "installState:",
     "logs:",
+    "failures:",
   ]) {
     expect(text).toContain(title);
   }
@@ -431,6 +512,7 @@ test("renderDocument tolerates an all-degraded report without throwing", () => {
     reviews: { error: "x" },
     installState: { error: "x" },
     logs: { error: "x" },
+    failures: { error: "x" },
     checks: [],
   } as DoctorDocument;
   expect(() => renderDocument(allError)).not.toThrow();
@@ -571,6 +653,39 @@ test("countLogLevels drops a partial first line when the tail started mid-file",
   expect(countLogLevels(startsWithBrace, false)).toMatchObject({ errors: 1, warns: 1 });
 });
 
+test("parseErrorRecords keeps only the triage fields of error records, never their text", () => {
+  const text = [
+    '{"level":40,"step":"warned","msg":"warn"}',
+    JSON.stringify({
+      level: 50,
+      time: RECENT,
+      source: "hook",
+      step: "longPoll",
+      code: "review-timeout",
+      reviewId: "r1",
+      sessionId: "s1",
+      cwd: "/Users/someone/proj",
+      msg: "SENSITIVE MSG",
+      err: { message: "SENSITIVE ERR", stack: "SENSITIVE STACK" },
+    }),
+    '{"level":50,"step":7,"code":null}',
+    "raw crash output line",
+  ].join("\n");
+  const records = parseErrorRecords(text, false);
+  expect(records).toEqual([
+    {
+      time: RECENT,
+      source: "hook",
+      step: "longPoll",
+      code: "review-timeout",
+      reviewId: "r1",
+      sessionId: "s1",
+    },
+    {},
+  ]);
+  expectNeverLogsBody(records, ["SENSITIVE MSG", "SENSITIVE ERR", "SENSITIVE STACK"]);
+});
+
 test("tallyReviews counts mixed statuses, routing an unknown status to other", () => {
   const records = [
     { id: "p1xxxxxx", status: "pending" },
@@ -668,6 +783,21 @@ test("logStats counts error/warn records and reports the size, never the text", 
     "warns",
   ]);
   expectNeverLogsBody(stats, "SENSITIVE");
+});
+
+test("logErrorRecords reads a missing log as no failures", async () => {
+  expect(await logErrorRecords(join(tmp, "nope.log"))).toEqual([]);
+});
+
+test("logErrorRecords reads the error records from a log's tail", async () => {
+  const path = join(tmp, "daemon.log");
+  await writeFile(
+    path,
+    ['{"level":30,"step":"listen"}', '{"level":50,"step":"request","code":"request-failed"}'].join(
+      "\n",
+    ),
+  );
+  expect(await logErrorRecords(path)).toEqual([{ step: "request", code: "request-failed" }]);
 });
 
 test("listProcesses returns an array and never throws", () => {

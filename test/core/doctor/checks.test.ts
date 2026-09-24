@@ -39,12 +39,18 @@ function report(over: Partial<Report> = {}): Report {
       total: 0,
       pendingIds: [],
     },
-    installState: { pluginVersion: "1.2.3", pluginEnabled: true, hookInUserSettings: false },
+    installState: {
+      agent: "test-agent",
+      pluginVersion: "1.2.3",
+      pluginEnabled: true,
+      hookInUserSettings: false,
+    },
     logs: {
       caret: log("/logs/caret.log"),
       daemon: log("/logs/daemon.log"),
       daemonStderr: log("/logs/daemon-stderr.log"),
     },
+    failures: { windowHours: 24, total: 0, omitted: 0, groups: [], ungrouped: [] },
     ...over,
   };
 }
@@ -146,16 +152,37 @@ test("no lock at all passes daemon-lock", () => {
 test("an agent that has caret disabled fails agent-install", () => {
   const checks = runChecks(
     report({
-      installState: { pluginVersion: "1.2.3", pluginEnabled: false, hookInUserSettings: false },
+      installState: {
+        agent: "test-agent",
+        pluginVersion: "1.2.3",
+        pluginEnabled: false,
+        hookInUserSettings: false,
+      },
     }),
   );
   expect(check(checks, "agent-install").status).toBe("fail");
+});
+
+test("agent-install names the agent it probed, whichever way it goes", () => {
+  const disabled = runChecks(
+    report({
+      installState: {
+        agent: "test-agent",
+        pluginVersion: "1.2.3",
+        pluginEnabled: false,
+        hookInUserSettings: false,
+      },
+    }),
+  );
+  expect(check(disabled, "agent-install").detail).toContain("test-agent");
+  expect(check(runChecks(report()), "agent-install").detail).toContain("test-agent");
 });
 
 test("an unreadable pluginEnabled passes agent-install rather than failing on a guess", () => {
   const checks = runChecks(
     report({
       installState: {
+        agent: "test-agent",
         pluginVersion: "unknown",
         pluginEnabled: "unknown",
         hookInUserSettings: "unknown",
@@ -257,7 +284,12 @@ test("every failing check names a remedy and every unknown names a reason", () =
         pidAlive: false,
         portMismatch: true,
       },
-      installState: { pluginVersion: "1.2.3", pluginEnabled: false, hookInUserSettings: false },
+      installState: {
+        agent: "test-agent",
+        pluginVersion: "1.2.3",
+        pluginEnabled: false,
+        hookInUserSettings: false,
+      },
       logs: {
         caret: log("/logs/caret.log", 1),
         daemon: log("/logs/daemon.log"),
