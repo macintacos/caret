@@ -15,6 +15,7 @@ import {
   logError,
   logInfo,
   logWarn,
+  noopLogger,
   resetHookLogger,
   setLogLevel,
   setLogRotation,
@@ -45,7 +46,7 @@ test("logFile and daemonLogFile resolve under the caret state dir's logs/", () =
 });
 
 test("logError writes a single-line JSON error record with step, msg, and a real stack", () => {
-  logError("longPoll", new Error("boom"));
+  logError("longPoll", "unexpected", new Error("boom"));
   const recs = records();
   expect(recs.length).toBe(1);
   const r = recs[0]!;
@@ -58,7 +59,7 @@ test("logError writes a single-line JSON error record with step, msg, and a real
 });
 
 test("logError serializes a nested cause chain", () => {
-  logError("ensureDaemon", new Error("outer", { cause: new Error("inner-root") }));
+  logError("ensureDaemon", "unexpected", new Error("outer", { cause: new Error("inner-root") }));
   const r = records()[0]!;
   const err = r.err as { message: string; cause: { message: string } };
   expect(err.message).toBe("outer");
@@ -70,7 +71,7 @@ test("logError terminates on a cyclic cause chain instead of hanging", () => {
   const b = new Error("b-err");
   (a as Error).cause = b;
   (b as Error).cause = a; // cycle: a -> b -> a
-  logError("cyclic", a);
+  logError("cyclic", "unexpected", a);
   const body = readFileSync(logFile(), "utf-8");
   // One record written, both messages present, no hang.
   expect(records().length).toBe(1);
@@ -79,7 +80,7 @@ test("logError terminates on a cyclic cause chain instead of hanging", () => {
 });
 
 test("logError records sessionId and cwd context when provided", () => {
-  logError("runReview", new Error("x"), {
+  logError("runReview", "unexpected", new Error("x"), {
     sessionId: "sess-42",
     cwd: "/tmp/proj",
   });
@@ -90,12 +91,30 @@ test("logError records sessionId and cwd context when provided", () => {
 });
 
 test("logError handles a non-Error value, using the string as msg", () => {
-  logError("stringy", "just a string");
+  logError("stringy", "unexpected", "just a string");
   const r = records()[0]!;
   expect(r.level).toBe(50);
   expect(r.step).toBe("stringy");
   expect(r.msg).toBe("just a string");
   expect(r.err).toBeUndefined();
+});
+
+test("an error record carries its code in both sinks", () => {
+  logError("longPoll", "review-timeout", new Error("boom"));
+  const dest = join(home, "daemon-code.log");
+  createDaemonLogger(() => "info", dest).error("request", "request-failed", new Error("kaboom"));
+  expect(records()[0]!.code).toBe("review-timeout");
+  expect(records(dest)[0]!.code).toBe("request-failed");
+});
+
+test("a call-site extra cannot override an error record's code", () => {
+  logError("longPoll", "review-timeout", new Error("boom"), { code: "forged" });
+  expect(records()[0]!.code).toBe("review-timeout");
+});
+
+test("an error call without a code does not type-check", () => {
+  // @ts-expect-error every error record names an ErrorCode
+  noopLogger.error("x", new Error("y"));
 });
 
 test("logInfo, logWarn, and logDebug write level 30/40/20 records with step, msg, and extra", () => {
@@ -137,7 +156,7 @@ test("after setLogLevel('warn'), logInfo is gated but logWarn and logError emit"
   setLogLevel("warn");
   logInfo("info", "gated");
   logWarn("warn", "shown");
-  logError("err", new Error("also shown"));
+  logError("err", "unexpected", new Error("also shown"));
   const recs = records();
   expect(recs.length).toBe(2);
   expect(recs.map((r) => r.level)).toEqual([40, 50]);
@@ -161,7 +180,7 @@ test("records append across calls rather than truncating", () => {
 });
 
 test("logging creates the state and logs dirs 0700 and the log file 0600", () => {
-  logError("perm", new Error("p"));
+  logError("perm", "unexpected", new Error("p"));
   expect(statSync(join(home, "caret")).mode & 0o777).toBe(0o700);
   expect(statSync(join(home, "caret", "logs")).mode & 0o777).toBe(0o700);
   expect(statSync(logFile()).mode & 0o777).toBe(0o600);
@@ -221,7 +240,7 @@ test("logging swallows write failures instead of throwing", async () => {
   const blocker = join(home, "blocker");
   await writeFile(blocker, "not a dir");
   process.env.XDG_STATE_HOME = join(blocker, "nested");
-  expect(() => logError("doomed", new Error("nope"))).not.toThrow();
+  expect(() => logError("doomed", "unexpected", new Error("nope"))).not.toThrow();
   expect(() => logInfo("doomed", "nope")).not.toThrow();
 });
 
@@ -295,7 +314,7 @@ test("daemon records carry the caller location", () => {
 });
 
 test("error records carry the caller location", () => {
-  logError("boom", new Error("x"));
+  logError("boom", "unexpected", new Error("x"));
   expect(records()[0]!.caller).toMatch(CALLER);
 });
 
@@ -342,7 +361,7 @@ test("records carry an ISO 8601 UTC time with the date", () => {
 const realHome = homedir();
 
 test("by default (redaction off), home paths pass through raw", () => {
-  logError("raw", new Error(`boom at ${realHome}/src/cli.ts`), {
+  logError("raw", "unexpected", new Error(`boom at ${realHome}/src/cli.ts`), {
     cwd: `${realHome}/proj`,
   });
   const body = readFileSync(logFile(), "utf-8");
@@ -351,10 +370,15 @@ test("by default (redaction off), home paths pass through raw", () => {
 
 test("with redaction on, identifiable strings never reach the file but debuggability survives", () => {
   setRedact(true);
-  logError("runReview", new Error(`failed reading ${realHome}/.config/caret/config.toml`), {
-    cwd: `${realHome}/GitLocal/proj`,
-    plan: "SECRET PLAN BODY",
-  } as ErrorContext);
+  logError(
+    "runReview",
+    "unexpected",
+    new Error(`failed reading ${realHome}/.config/caret/config.toml`),
+    {
+      cwd: `${realHome}/GitLocal/proj`,
+      plan: "SECRET PLAN BODY",
+    } as ErrorContext,
+  );
   logInfo("settings", `settings: reading ${realHome}/.config/caret/config.toml`);
   const body = readFileSync(logFile(), "utf-8");
   expect(body).not.toContain(realHome);
@@ -374,6 +398,7 @@ test("with redaction on, a nested cause chain is scrubbed at depth", () => {
   setRedact(true);
   logError(
     "deep",
+    "unexpected",
     new Error(`outer ${realHome}/a`, {
       cause: new Error(`inner ${realHome}/b`),
     }),
@@ -418,7 +443,7 @@ test("createDaemonLogger redacts when its redact thunk returns true", () => {
     dest,
     () => true,
   );
-  log.error("request", new Error(`kaboom at ${realHome}/srv`), {
+  log.error("request", "unexpected", new Error(`kaboom at ${realHome}/srv`), {
     cwd: `${realHome}/proj`,
   });
   const body = readFileSync(dest, "utf-8");
@@ -431,7 +456,7 @@ test("createDaemonLogger redacts when its redact thunk returns true", () => {
 test("createDaemonLogger error method serializes an Error", () => {
   const dest = join(home, "daemon-err.log");
   const log = createDaemonLogger(() => "info", dest);
-  log.error("request", new Error("kaboom"));
+  log.error("request", "unexpected", new Error("kaboom"));
   const r = records(dest)[0]!;
   expect(r.level).toBe(50);
   expect(r.step).toBe("request");
@@ -458,7 +483,7 @@ test("a poisoned extra never propagates out of the hook loggers", () => {
   expect(() => {
     logInfo("review", "still logs", poisoned());
     logWarn("review", "still logs", poisoned());
-    logError("review", new Error("x"), poisoned() as ErrorContext);
+    logError("review", "unexpected", new Error("x"), poisoned() as ErrorContext);
     reached = true; // the caller continues past every log call
   }).not.toThrow();
   expect(reached).toBe(true);
@@ -469,7 +494,7 @@ test("a poisoned extra never propagates out of the daemon logger", () => {
   let reached = false;
   expect(() => {
     log.info("review", "still logs", poisoned());
-    log.error("review", new Error("x"), poisoned());
+    log.error("review", "unexpected", new Error("x"), poisoned());
     reached = true;
   }).not.toThrow();
   expect(reached).toBe(true);

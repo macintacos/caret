@@ -567,10 +567,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     const result = parseUiLogBatch(parsed);
     if ("status" in result) return reject(result.status);
     // The accept path logs nothing of its own (noise rule) — only the forwarded
-    // events. All four CaretLogger methods take (step, string, extra?) here:
-    // error's String(err) on an already-sanitized string is identity, so one
-    // dispatch covers every level.
-    for (const ev of result.events) log[ev.level](ev.step, ev.msg, ev.extra);
+    // events. error's String(err) on an already-sanitized string is identity, so
+    // the msg lands the same at every level.
+    for (const ev of result.events) {
+      if (ev.level === "error") log.error(ev.step, "ui-error", ev.msg, ev.extra);
+      else log[ev.level](ev.step, ev.msg, ev.extra);
+    }
     return new Response(null, { status: 204 });
   }
 
@@ -1093,7 +1095,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // NB: values reaching this sink must not embed plan bodies — today no handler
       // error message interpolates plan content; keep it that way.
       try {
-        log.error("request", err);
+        log.error("request", "request-failed", err);
       } catch {
         // best-effort: the response below is what matters.
       }

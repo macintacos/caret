@@ -1872,6 +1872,7 @@ test("a handler exception is logged at error level before returning the 500", as
   expect(res.status).toBe(500);
   const rec = recs.find((r) => r.level === "error");
   expect(rec?.step).toBe("request");
+  expect(rec?.code).toBe("request-failed");
   expect(rec?.msg).toContain("kaboom");
 });
 
@@ -2279,6 +2280,7 @@ test("POST /api/logs forwards an error-level event at level 'error'", async () =
   expect(recs.find((r) => r.msg === "render failed")).toMatchObject({
     level: "error",
     step: "ui",
+    code: "ui-error",
     extra: { source: "ui" },
   });
 });

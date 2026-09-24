@@ -136,7 +136,7 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
       // runUpdateCheck settles every failure itself, so this arm should be unreachable —
       // but an unhandled rejection here would hit the process handlers installed below and
       // take a live daemon down with it, which is far too high a price for an update nudge.
-      (err) => log.error("update", err),
+      (err) => log.error("update", "update-check-failed", err),
     );
   }
   const store = createStore(reviewsDir(), log);
@@ -195,7 +195,10 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
   // to its ~10s floor, not looping (EXC-1164).
   function exitTerminal(reason: string, err: unknown): never {
     process.stderr.write(`caret: ${reason}; exiting.\n`);
-    log.error("fatal", err, { reason, exitStatus: SERVICE_TERMINAL_EXIT_STATUS });
+    log.error("fatal", "daemon-bind-failed", err, {
+      reason,
+      exitStatus: SERVICE_TERMINAL_EXIT_STATUS,
+    });
     process.exit(SERVICE_TERMINAL_EXIT_STATUS);
   }
 
@@ -276,7 +279,7 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
   // should surface its stack the way any other startup crash does, rather than
   // being turned into a logged exit(1).
   const onFatal = (label: string) => (err: unknown) => {
-    log.error(label, err);
+    log.error(label, "daemon-crashed", err);
     shutdown(1);
   };
   process.once("uncaughtException", onFatal("uncaughtException"));

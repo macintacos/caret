@@ -13,7 +13,14 @@ import { logFile } from "@/config/paths.ts";
 // Type-only: the review core takes its daemon operations as deps and never imports
 // the daemon at runtime.
 import type { EnsureMode } from "@/daemon/lifecycle.ts";
-import { type ErrorContext, logDebug, logError, logInfo, shortId } from "@/lib/log.ts";
+import {
+  type ErrorCode,
+  type ErrorContext,
+  logDebug,
+  logError,
+  logInfo,
+  shortId,
+} from "@/lib/log.ts";
 import {
   type CmuxPane,
   type CreatedReview,
@@ -89,6 +96,30 @@ export interface ReviewDeps {
 
 class TimeoutError extends Error {}
 
+/** The runReview step a failure is attributed to. */
+type ReviewStep =
+  | "parse"
+  | "validatePlan"
+  | "ensureDaemon"
+  | "postReview"
+  | "reconnect"
+  | "longPoll";
+
+function reviewFailureCode(step: ReviewStep, err: unknown): ErrorCode {
+  if (err instanceof TimeoutError) return "review-timeout";
+  switch (step) {
+    case "parse":
+      return "hook-input-invalid";
+    case "ensureDaemon":
+    case "reconnect":
+      return "daemon-unreachable";
+    case "postReview":
+      return "review-create-failed";
+    default:
+      return "unexpected";
+  }
+}
+
 function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const t = setTimeout(() => reject(new TimeoutError(message)), ms);
@@ -128,7 +159,7 @@ export async function expireAbandoned(
  * renders the returned Decision to the agent's wire string via the adapter. */
 export async function runReview(parsed: ParsedHookInput, deps: ReviewDeps): Promise<Decision> {
   // Track the current step + context so the catch can log what actually failed.
-  let step = "parse";
+  let step: ReviewStep = "parse";
   const ctx: ErrorContext = {};
   // Hoisted so the catch can reach the daemon for the best-effort expire;
   // reconnects re-assign baseUrl, so it always holds the last-known daemon URL.
@@ -248,7 +279,7 @@ export async function runReview(parsed: ParsedHookInput, deps: ReviewDeps): Prom
     }
     return decision;
   } catch (err) {
-    logError(step, err, ctx);
+    logError(step, reviewFailureCode(step, err), err, ctx);
     // The hook is abandoning the review (timeout or post-create failure):
     // best-effort expire so the daemon doesn't hold a pending orphan. The next
     // plan in the session appends to or supersedes it if this never lands (EXC-454).

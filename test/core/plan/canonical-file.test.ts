@@ -94,6 +94,16 @@ test("never throws when the file cannot be written", () => {
   ).toBe(process.getuid?.() === 0 ? "written" : "skipped");
 });
 
+// Root ignores the file mode, so the write never fails there.
+test.skipIf(process.getuid?.() === 0)("a failed write logs the fs errno, never the path", () => {
+  const path = join(dir, "readonly.md");
+  writeFileSync(path, "raw");
+  chmodSync(path, 0o444);
+  const { recs, log } = recordingLog();
+  writeCanonicalPlanFile({ plan: "raw", planFilePath: path }, "canonical", log);
+  expect(recs.map((r) => [r.level, r.extra])).toEqual([["warn", { errno: "EACCES" }]]);
+});
+
 test("readPlanFile returns an .md plan file's text", () => {
   const path = join(dir, "read.md");
   writeFileSync(path, "# Plan\n");

@@ -24,7 +24,7 @@ test("wire caps match the published contract", () => {
 
 test("RESERVED_KEYS covers the record's own NDJSON fields", () => {
   expect([...RESERVED_KEYS].sort()).toEqual(
-    ["caller", "err", "level", "msg", "pid", "step", "time"].sort(),
+    ["caller", "code", "err", "level", "msg", "pid", "step", "time"].sort(),
   );
 });
 
@@ -77,7 +77,14 @@ test("reserved and forged-provenance keys are stripped from extra", () => {
         level: "info",
         step: "ui",
         msg: "x",
-        extra: { step: "forged", pid: 9, caller: "src/evil.ts:1", source: "hook", keep: "me" },
+        extra: {
+          step: "forged",
+          pid: 9,
+          caller: "src/evil.ts:1",
+          code: "forged",
+          source: "hook",
+          keep: "me",
+        },
       },
     ],
   });

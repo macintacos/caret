@@ -143,7 +143,7 @@ if (import.meta.main) {
     // fatalDeny resolves the active adapter and renders its deny, degrading to a
     // dependency-free deny line if selection or rendering throws — so the
     // truly-fatal path always ships a deny rather than emitting nothing.
-    logError("fatal", err);
+    logError("fatal", "unexpected", err);
     const reason = `caret: fatal ${err} — denying to fail safe. See ${logFile()}.`;
     process.stdout.write(`${fatalDeny(reason)}\n`);
     process.exit(0);

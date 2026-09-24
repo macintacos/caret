@@ -21,7 +21,16 @@ export const STEP_RE = /^[a-z][a-z0-9-]{0,31}$/;
 // The record's own NDJSON fields — a client `extra` key colliding with one would
 // shadow the structural field. `caller` is stamped by src/lib/log.ts, never by a
 // bridged UI record, so a client-sent one is forged provenance (EXC-451).
-export const RESERVED_KEYS = new Set(["level", "time", "msg", "step", "pid", "err", "caller"]);
+export const RESERVED_KEYS = new Set([
+  "level",
+  "time",
+  "msg",
+  "step",
+  "pid",
+  "err",
+  "caller",
+  "code",
+]);
 // C0/C1 control chars except TAB. Newline is stripped too: pino already
 // JSON-escapes newlines at serialization, so this is defense in depth for
 // raw-text consumers of the log — not the only thing preventing a forged record.

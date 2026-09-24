@@ -140,7 +140,7 @@ export async function runReviewSubcommand(): Promise<void> {
   const denyAndExit = async (reason: string) => {
     // Only log when this signal is what actually denies the review (a signal
     // arriving after a normal decision is already a no-op below).
-    if (!responded) logError("signal", new Error(reason));
+    if (!responded) logError("signal", "hook-interrupted", new Error(reason));
     // Emit the deny first (stdout flushes before Claude reads it), then a
     // best-effort expire so caret's UI drops the abandoned pending review rather
     // than keeping a zombie (EXC-482).

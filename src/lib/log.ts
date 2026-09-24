@@ -40,18 +40,47 @@ export interface ErrorContext {
   reviewId?: string;
 }
 
+/** The stable `code` every error record carries, so a failure can be triaged by
+ * machine rather than by its prose. Append-only: a shipped code is never renamed
+ * or reused for a different failure. Mint a new code rather than stretching one. */
+export type ErrorCode =
+  /** No specific code fits. */
+  | "unexpected"
+  /** config.toml failed validation and was ignored. */
+  | "config-invalid"
+  /** The agent's hook stdin could not be parsed. */
+  | "hook-input-invalid"
+  /** SIGINT/SIGTERM reached `caret review` before a decision. */
+  | "hook-interrupted"
+  /** The hook could not start or reattach to a daemon. */
+  | "daemon-unreachable"
+  /** The daemon did not create the review. */
+  | "review-create-failed"
+  /** No decision inside the review timeout. */
+  | "review-timeout"
+  /** A daemon request handler threw; the client got a 500. */
+  | "request-failed"
+  /** The daemon could not bind its port and exited terminally. */
+  | "daemon-bind-failed"
+  /** An uncaught exception or rejection took the daemon down. */
+  | "daemon-crashed"
+  /** The daemon's update check rejected. */
+  | "update-check-failed"
+  /** An error the browser reported through POST /api/logs. */
+  | "ui-error";
+
 /** The leveled surface both sinks expose. debug/info/warn take a human message
- * plus optional structured `extra`; error takes the raw thrown value (an
- * Error's `cause` chain is serialized; msg derives from it) plus optional
- * `extra` fields (e.g. sessionId/cwd). `extra` keys must not collide with the
- * record's own fields (level/time/msg/step/pid/err/caller). (source is absent
- * here on purpose: an explicit extra.source is a sanctioned override — the
- * bridged-UI signal — not a collision.) */
+ * plus optional structured `extra`; error takes an ErrorCode and the raw thrown
+ * value (an Error's `cause` chain is serialized; msg derives from it) plus
+ * optional `extra` fields. `extra` keys must not collide with the record's own
+ * fields (level/time/msg/step/pid/err/caller/code). (source is absent here on
+ * purpose: an explicit extra.source is a sanctioned override — the bridged-UI
+ * signal — not a collision.) */
 export interface CaretLogger {
   debug(step: string, msg: string, extra?: object): void;
   info(step: string, msg: string, extra?: object): void;
   warn(step: string, msg: string, extra?: object): void;
-  error(step: string, err: unknown, extra?: object): void;
+  error(step: string, code: ErrorCode, err: unknown, extra?: object): void;
 }
 
 /** The rotation thresholds a logger checks its sink against, as thunks so a
@@ -130,13 +159,14 @@ function wrap(
     debug: (step, msg, extra) => emit("debug", step, msg, extra),
     info: (step, msg, extra) => emit("info", step, msg, extra),
     warn: (step, msg, extra) => emit("warn", step, msg, extra),
-    error(step, err, extra) {
+    error(step, code, err, extra) {
       try {
         // No level update here: error (50) passes every threshold in the set —
         // and with no gate to sit behind, the rotation check leads.
         rotate?.();
         const r = liveRedact();
         const f = fields(extra, step, r);
+        f.code = code;
         if (err instanceof Error) f.err = scrubValue(pino.stdSerializers.errWithCause(err), r);
         const msg = errorMessage(err);
         logger.error(f, r ? scrubString(msg) : msg);
@@ -277,10 +307,9 @@ export function logWarn(step: string, msg: string, extra?: object): void {
 
 /** Append an error record to caret.log. msg is the Error's message (or the
  * stringified value for a non-Error); the `err` field — with its serialized
- * cause chain — is included only for real Errors; sessionId/cwd ride along from
- * ctx. Best-effort: never throws. */
-export function logError(step: string, err: unknown, ctx?: ErrorContext): void {
-  hook().error(step, err, ctx);
+ * cause chain — is included only for real Errors. Best-effort: never throws. */
+export function logError(step: string, code: ErrorCode, err: unknown, extra?: object): void {
+  hook().error(step, code, err, extra);
 }
 
 /** A leveled logger for the long-running daemon. Writes NDJSON to the path it

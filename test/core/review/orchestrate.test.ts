@@ -418,6 +418,23 @@ test("a failed reconnect logs step=reconnect, not the poll step", async () => {
   expect(recs.some((r) => r.step === "longPoll")).toBe(false);
 });
 
+const boom = () => Promise.reject(new Error("boom"));
+
+test.each<[string, string, Partial<ReviewDeps>, string]>([
+  ["an unparseable hook input", "not json", {}, "hook-input-invalid"],
+  ["an unreachable daemon", stdin, { ensureDaemon: boom }, "daemon-unreachable"],
+  ["a review the daemon did not create", stdin, { postReview: boom }, "review-create-failed"],
+  [
+    "a review that outlives its timeout",
+    stdin,
+    { longPoll: () => new Promise<Decision>(() => {}), timeoutMs: 30 },
+    "review-timeout",
+  ],
+])("%s logs its failure code", async (_case, input, over, code) => {
+  await review(input, reviewDeps(over));
+  expect(caretLogRecords().find((r) => r.level === 50)?.code).toBe(code);
+});
+
 // ---- cmux pane capture (EXC-961) ----
 
 /** Capture the PlanInput runReview posts, so the pane stamp is observable. */
