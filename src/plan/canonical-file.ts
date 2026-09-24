@@ -53,10 +53,11 @@ function guardedPlanFileWrite<T>(
     if (!isPlanFile(planFilePath)) return undefined;
     return write(planFilePath);
   } catch (err) {
-    // An fs error's `.code` (e.g. EACCES) is safe to log; the path and plan text
-    // must never reach a log record.
+    // An fs error's `.code` (e.g. EACCES) is safe to log, as `fsCode` since `code` means
+    // the triage code on every record; the path and plan text must never reach a
+    // log record.
     const code = (err as { code?: string } | null)?.code;
-    log.warn("review", failMsg, code ? { errno: code } : {});
+    log.warn("review", failMsg, code ? { fsCode: code } : {});
     return undefined;
   }
 }

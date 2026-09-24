@@ -13,15 +13,7 @@ import { logFile } from "@/config/paths.ts";
 // Type-only: the review core takes its daemon operations as deps and never imports
 // the daemon at runtime.
 import type { EnsureMode } from "@/daemon/lifecycle.ts";
-import {
-  type ErrorCode,
-  type ErrorContext,
-  logDebug,
-  logError,
-  logInfo,
-  setLogContext,
-  shortId,
-} from "@/lib/log.ts";
+import { type ErrorCode, logDebug, logError, logInfo, setLogContext, shortId } from "@/lib/log.ts";
 import {
   type CmuxPane,
   type CreatedReview,
@@ -97,28 +89,21 @@ export interface ReviewDeps {
 
 class TimeoutError extends Error {}
 
-/** The runReview step a failure is attributed to. */
-type ReviewStep =
-  | "parse"
-  | "validatePlan"
-  | "ensureDaemon"
-  | "postReview"
-  | "reconnect"
-  | "longPoll";
+/** The code a failure at each runReview step logs under. A timeout overrides the step,
+ * since it can surface from any await the deadline races. */
+const REVIEW_FAILURE_CODES = {
+  parse: "hook-input-invalid",
+  validatePlan: "unexpected", // validation denies; it never throws by design
+  ensureDaemon: "daemon-unreachable",
+  postReview: "review-create-failed",
+  reconnect: "daemon-unreachable",
+  longPoll: "unexpected", // a dropped poll reconnects; only a timeout escapes it
+} as const satisfies Record<string, ErrorCode>;
+
+type ReviewStep = keyof typeof REVIEW_FAILURE_CODES;
 
 function reviewFailureCode(step: ReviewStep, err: unknown): ErrorCode {
-  if (err instanceof TimeoutError) return "review-timeout";
-  switch (step) {
-    case "parse":
-      return "hook-input-invalid";
-    case "ensureDaemon":
-    case "reconnect":
-      return "daemon-unreachable";
-    case "postReview":
-      return "review-create-failed";
-    default:
-      return "unexpected";
-  }
+  return err instanceof TimeoutError ? "review-timeout" : REVIEW_FAILURE_CODES[step];
 }
 
 function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> {
@@ -159,24 +144,23 @@ export async function expireAbandoned(
  * failure becomes a deny so an unreviewed plan can never ship. The command layer
  * renders the returned Decision to the agent's wire string via the adapter. */
 export async function runReview(parsed: ParsedHookInput, deps: ReviewDeps): Promise<Decision> {
-  // Track the current step + context so the catch can log what actually failed.
+  // Track the step the catch codes its failure by; the ids ride the hook's log context.
   let step: ReviewStep = "parse";
-  const ctx: ErrorContext = {};
   // A review's records start unbound, so nothing leaks from an earlier review in this process.
-  setLogContext(ctx);
+  setLogContext({});
   // Hoisted so the catch can reach the daemon for the best-effort expire;
   // reconnects re-assign baseUrl, so it always holds the last-known daemon URL.
-  // version is set once, on create.
+  // version and reviewId are set once, on create.
   let baseUrl: string | undefined;
   let version: number | undefined;
+  let reviewId: string | undefined;
   try {
     if ("error" in parsed) throw parsed.error;
     const input = parsed.input;
-    ctx.sessionId = input.sessionId;
     // cwd is logged raw (diagnostic: which project this review came from); the
     // redact path home-scrubs it on share, so it is not a DENY_KEY (EXC-545).
-    ctx.cwd = input.cwd;
-    setLogContext(ctx);
+    const ids = { sessionId: input.sessionId, cwd: input.cwd };
+    setLogContext(ids);
     // The review's start-of-timeline anchor: even a format-deny or a crashed
     // run leaves a record of the request and its session.
     logInfo("review", "review requested");
@@ -215,8 +199,8 @@ export async function runReview(parsed: ParsedHookInput, deps: ReviewDeps): Prom
     version = created.version;
     // From here every record — decision and error alike — carries the reviewId,
     // stitching this stream against the daemon's review/resolve records.
-    ctx.reviewId = id;
-    setLogContext(ctx);
+    reviewId = id;
+    setLogContext({ ...ids, reviewId });
     // Surface the handle so a SIGINT/SIGTERM abandon can expire this review, from
     // outside this flow (EXC-482), and so an approval can skip notes for a plan
     // file that moved on.
@@ -285,10 +269,10 @@ export async function runReview(parsed: ParsedHookInput, deps: ReviewDeps): Prom
     // The hook is abandoning the review (timeout or post-create failure):
     // best-effort expire so the daemon doesn't hold a pending orphan. The next
     // plan in the session appends to or supersedes it if this never lands (EXC-454).
-    if (ctx.reviewId && baseUrl) {
+    if (reviewId && baseUrl) {
       try {
-        await deps.expire(baseUrl, ctx.reviewId, version);
-        logDebug("review", `review expire requested: ${shortId(ctx.reviewId)}`);
+        await deps.expire(baseUrl, reviewId, version);
+        logDebug("review", `review expire requested: ${shortId(reviewId)}`);
       } catch {
         logDebug("review", "review expire failed; next plan reclaims it");
       }

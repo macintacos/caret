@@ -1889,6 +1889,27 @@ test("a throwing review route logs its failure against that review", async () =>
   });
 });
 
+test("a failing review create logs its failure against the posting session", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log, routePlan: throwingRoutePlan });
+  expect((await postTriggeringRoutePlan()).status).toBe(500);
+  expect(recs.find((r) => r.level === "error")).toMatchObject({
+    code: "request-failed",
+    extra: { sessionId: "S" },
+  });
+});
+
+test("a cross-origin POST to a malformed review id gets the CSRF 403, not a 500", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log });
+  const res = await fetch(`${base}/api/reviews/%E0/resolve`, {
+    method: "POST",
+    headers: { Origin: "http://evil.com" },
+  });
+  expect(res.status).toBe(403);
+  expect(recs.some((r) => r.level === "error")).toBe(false);
+});
+
 test("a throwing log sink during a handler error still returns the clean 500", async () => {
   const { log } = recordingLog();
   await boot({

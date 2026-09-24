@@ -4,7 +4,7 @@ import { afterEach, expect, test } from "bun:test";
 
 import { doctorDeps } from "@test/support/doctor-deps.ts";
 import { setupTempStateDir } from "@test/support/env.ts";
-import { daemonLogFile, logFile } from "@/config/paths.ts";
+import { daemonLogFile, daemonStderrLogFile, logFile } from "@/config/paths.ts";
 import { collectReport, logErrorRecords, logStats, renderStdout } from "@/doctor/report.ts";
 import { createDaemonLogger, logError, resetHookLogger, setLogContext } from "@/lib/log.ts";
 
@@ -23,7 +23,7 @@ test("a review's hook and daemon failures surface as one group in doctor --json"
       now: () => new Date(),
       logStats,
       logErrorRecords,
-      logPaths: { caret: logFile(), daemon: daemonLogFile(), daemonStderr: "" },
+      logPaths: { caret: logFile(), daemon: daemonLogFile(), daemonStderr: daemonStderrLogFile() },
     }),
   );
   const out = JSON.parse(renderStdout({ ...report, checks: [] }, "json"));

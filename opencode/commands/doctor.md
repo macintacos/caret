@@ -59,22 +59,27 @@ away — the report is already redacted and complete.
 ## 4. Debug a failing `log-errors`
 
 When `log-errors` failed, read the last error records from the logs the check named and
-reason from the failing step, code, msg, cause, and stack:
-
-```bash
-dir="${XDG_STATE_HOME:-$HOME/.local/state}/caret"
-grep '^{' "$dir/logs/caret.log" | jq -s '[.[] | select(.level >= 50)] | .[-5:]'
-grep '^{' "$dir/logs/daemon.log" | jq -s '[.[] | select(.level >= 50)] | .[-5:]'
-tail -n 40 "$dir/logs/daemon-stderr.log"
-```
+reason from the failing step, code, msg, cause, and stack.
 
 Read the report's `failures` first. Each group is one review's error records from both
 logs with their codes (a session's, when the failure came before a review id existed), so
-a hook-side "socket connection closed" sits beside the daemon-side record that caused it.
-Pull that review's full records from both logs (`.sessionId` for a session group):
+a hook-side record sits beside any daemon-side record from that review's own requests. A
+daemon-wide failure (a crash, a bind failure, a failed update check) carries no id and
+lands in `ungrouped`: read it alongside the group and correlate the two by `time`. Pull a
+group's full records from both logs (`.sessionId` for a session group):
 
 ```bash
+dir="${XDG_STATE_HOME:-$HOME/.local/state}/caret"
 grep -h '^{' "$dir/logs/caret.log" "$dir/logs/daemon.log" | jq -c 'select(.reviewId == "<id>")'
+```
+
+For records outside any group or the report's window, fall back to the last error records
+of each log:
+
+```bash
+grep '^{' "$dir/logs/caret.log" | jq -s '[.[] | select(.level >= 50)] | .[-5:]'
+grep '^{' "$dir/logs/daemon.log" | jq -s '[.[] | select(.level >= 50)] | .[-5:]'
+tail -n 40 "$dir/logs/daemon-stderr.log"
 ```
 
 `log-errors` counts only NDJSON error records, so a crash that reached `daemon-stderr.log`

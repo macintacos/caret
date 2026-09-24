@@ -126,8 +126,8 @@ test("plan-file records carry the incoming plan's session", async () => {
   writeFileSync(planFilePath, "# Newer plan\n");
   const { recs, log } = recordingLog();
   await routeIncomingPlan(input({ plan: "# Ingested\n", planFilePath }), store, log);
-  const skipped = recs.find((r) => r.msg === "plan file changed; rewrite skipped");
-  expect(skipped?.extra).toEqual({ sessionId: "S" });
+  expect(recs.length).toBeGreaterThan(0);
+  expect(recs.every((r) => (r.extra as { sessionId?: string })?.sessionId === "S")).toBe(true);
 });
 
 test("reports the plan file as current when the guard refuses it", async () => {

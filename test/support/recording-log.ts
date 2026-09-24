@@ -2,7 +2,7 @@
 // counterpart of the NDJSON-file readers the hook-side tests use.
 import { expect } from "bun:test";
 
-import type { CaretLogger, ErrorCode, ErrorContext } from "@/lib/log.ts";
+import type { CaretLogger, ErrorCode, LogContext } from "@/lib/log.ts";
 
 export interface RecordedEmit {
   level: "debug" | "info" | "warn" | "error";
@@ -18,7 +18,7 @@ export function recordingLog(): { recs: RecordedEmit[]; log: CaretLogger } {
 }
 
 /** A recorder into `recs`; a child records its bound ids merged under each call's extra. */
-function recorder(recs: RecordedEmit[], bound?: ErrorContext): CaretLogger {
+function recorder(recs: RecordedEmit[], bound?: LogContext): CaretLogger {
   const merged = (extra?: object) => (bound ? { ...bound, ...extra } : extra);
   return {
     debug: (step, msg, extra) => recs.push({ level: "debug", step, msg, extra: merged(extra) }),

@@ -14,7 +14,7 @@
 // hook wiring (which agent event triggers it) lives in the command + adapter
 // layer, keeping this core agent-agnostic.
 
-import { type ErrorContext, logDebug, logInfo } from "@/lib/log.ts";
+import { type LogContext, logDebug, logInfo } from "@/lib/log.ts";
 import type { ClientReview } from "@/lib/types.ts";
 import type { ParsedHookInput } from "@/review/orchestrate.ts";
 
@@ -29,7 +29,7 @@ export interface ReconcileDeps {
 /** Reconcile a terminal plan approval into the daemon. A failed parse is a no-op.
  * Never throws. */
 export async function runReconcile(parsed: ParsedHookInput, deps: ReconcileDeps): Promise<void> {
-  const ctx: ErrorContext = {};
+  const ctx: LogContext = {};
   try {
     if ("error" in parsed) throw parsed.error;
     const input = parsed.input;

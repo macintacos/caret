@@ -45,7 +45,7 @@ import {
 } from "@/daemon/update-check.ts";
 import { startUpkeep, type UpkeepTask } from "@/daemon/upkeep.ts";
 import { buildHash, buildKind, currentBuildId, currentCommit, VERSION } from "@/lib/build-id.ts";
-import { createDaemonLogger } from "@/lib/log.ts";
+import { createDaemonLogger, type ErrorCode } from "@/lib/log.ts";
 import { commitsAheadOfTrunk, latestReleaseTag, publishedCaretVersion } from "@/lib/upstream.ts";
 import { createStore } from "@/review/store.ts";
 import { isSupervised, SERVICE_TERMINAL_EXIT_STATUS } from "@/service/manager.ts";
@@ -193,9 +193,9 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
   // the supervisor's own log (bin/caret-launcher redirects stderr there). launchd has
   // no per-status allowlist, so a macOS agent still respawns under KeepAlive — throttled
   // to its ~10s floor, not looping (EXC-1164).
-  function exitTerminal(reason: string, err: unknown): never {
+  function exitTerminal(reason: string, code: ErrorCode, err: unknown): never {
     process.stderr.write(`caret: ${reason}; exiting.\n`);
-    log.error("fatal", "daemon-bind-failed", err, {
+    log.error("fatal", code, err, {
       reason,
       exitStatus: SERVICE_TERMINAL_EXIT_STATUS,
     });
@@ -271,7 +271,7 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
     // privileged one, an address that does not exist — so a supervisor must stop
     // rather than restart into it. Left to propagate, the CLI's fatal handler would
     // print the hook fail-safe's deny line and exit 0, which reads as a clean stop.
-    exitTerminal("cannot bind the daemon port", e);
+    exitTerminal("cannot bind the daemon port", "daemon-bind-failed", e);
   }
   // The lock guards the port from here on.
   removeOwnBootMarker();

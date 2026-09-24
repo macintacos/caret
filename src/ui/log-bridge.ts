@@ -20,7 +20,8 @@ export interface UiLogEvent {
 export const STEP_RE = /^[a-z][a-z0-9-]{0,31}$/;
 // The record's own NDJSON fields — a client `extra` key colliding with one would
 // shadow the structural field. `caller` is stamped by src/lib/log.ts, never by a
-// bridged UI record, so a client-sent one is forged provenance (EXC-451).
+// bridged UI record, so a client-sent one is forged provenance (EXC-451),
+// and `code` likewise: a client-sent one would forge a triage code.
 export const RESERVED_KEYS = new Set([
   "level",
   "time",

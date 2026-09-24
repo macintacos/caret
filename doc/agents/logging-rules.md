@@ -41,6 +41,7 @@ House style, from real call sites:
 log.info("review", "review created: abc123");
 logInfo("decision", "plan approved", { acceptMode: decision.acceptMode });
 log.info("idle", "idle shutdown");
+log.error("request", "request-failed", err);
 ```
 
 ## When to add a log
@@ -90,9 +91,12 @@ Concretely:
   you do mint one, add it here in the same change, so this stays a registry rather than a
   snapshot.
 - Review-scoped records carry structured `reviewId` / `sessionId` fields so one review
-  stitches across the two log streams (EXC-444). They get them by binding, never per-call
-  `extra`: the daemon logs through `log.child({ reviewId })`, and the hook, which serves
-  one review per process, sets them once with `setLogContext`.
+  stitches across the two log streams (EXC-444). A logger whose scope is one review binds
+  them once: a daemon `:id` handler logs through the request's `log.child({ reviewId })`,
+  and the hook's review flow, which serves one review per process, sets them with
+  `setLogContext`. Code behind a shared, not-review-scoped object (the store, decision
+  settlement, reconcile, the router's threading records, the MCP server) names the id in
+  `extra` on the record that concerns it, as does a record that learns an id mid-handler.
 - Every record carries a `source` field naming the emitting process — `"hook"`,
   `"daemon"`, or `"ui"` (EXC-445). The logger attaches its own token unless `extra.source`
   is already set; the explicit value winning is how bridged browser events stay `"ui"`

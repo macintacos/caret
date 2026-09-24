@@ -66,15 +66,11 @@ export interface LogStats {
 export type AgentInstallState = InstallProbe & { agent: string };
 
 /** The fields doctor reads off one error record: enough to triage it, and never its
- * msg, err or stack. Each is absent when the record did not carry it as a string. */
-export interface ErrorRecord {
-  time?: string;
-  source?: string;
-  step?: string;
-  code?: string;
-  reviewId?: string;
-  sessionId?: string;
-}
+ * msg, err or stack. */
+const ERROR_RECORD_FIELDS = ["time", "source", "step", "code", "reviewId", "sessionId"] as const;
+
+/** Each field is absent when the record did not carry it as a string. */
+export type ErrorRecord = Partial<Record<(typeof ERROR_RECORD_FIELDS)[number], string>>;
 
 /** An error record as the failures section shows it, under the id it is grouped by. */
 export type FailureRecord = Omit<ErrorRecord, "reviewId" | "sessionId">;
@@ -391,6 +387,25 @@ async function buildFailures(deps: DoctorDeps): Promise<FailuresSection> {
 }
 
 // ---------------------------------------------------------------------------
+// Error window, shared with checks.ts
+// ---------------------------------------------------------------------------
+
+/** How recently an error must have happened to matter: `log-errors` weighs only these
+ * and the failures section lists only these. An error from weeks ago clears only when
+ * rotation drops it, so weighing it asks the reader for something they cannot do. */
+export const ERROR_WINDOW_HOURS = 24;
+const ERROR_WINDOW_MS = ERROR_WINDOW_HOURS * 60 * 60 * 1000;
+
+/** Whether an error at `time` falls inside the window ending at `generatedAt`. An
+ * undated or unparseable one does: nothing places it outside the window, and sending a
+ * reader to a quiet log is the cheaper mistake. */
+export function inErrorWindow(time: string | undefined, generatedAt: number): boolean {
+  if (time === undefined) return true;
+  const age = generatedAt - Date.parse(time);
+  return Number.isNaN(age) || age < ERROR_WINDOW_MS;
+}
+
+// ---------------------------------------------------------------------------
 // Pure helpers (exported for direct unit testing)
 // ---------------------------------------------------------------------------
 
@@ -420,21 +435,6 @@ export function tallyReviews(records: ReviewStatusRecord[]): ReviewsSection {
     }
   }
   return { ...counts, total: records.length, pendingIds };
-}
-
-/** How recently an error must have happened to count against the install. An error
- * from weeks ago clears only when rotation drops it, so weighing it asks the reader for
- * something they cannot do. */
-export const ERROR_WINDOW_HOURS = 24;
-const ERROR_WINDOW_MS = ERROR_WINDOW_HOURS * 60 * 60 * 1000;
-
-/** Whether an error at `time` falls inside the window ending at `generatedAt`. An
- * undated or unparseable one does: nothing places it outside the window, and sending a
- * reader to a quiet log is the cheaper mistake. */
-export function inErrorWindow(time: string | undefined, generatedAt: number): boolean {
-  if (time === undefined) return true;
-  const age = generatedAt - Date.parse(time);
-  return Number.isNaN(age) || age < ERROR_WINDOW_MS;
 }
 
 /** The newest in-window error records a report carries; older ones are only counted. */
@@ -677,8 +677,6 @@ export async function logErrorRecords(path: string): Promise<ErrorRecord[]> {
   const { text, partial } = await readTail(path, size);
   return parseErrorRecords(text, partial);
 }
-
-const ERROR_RECORD_FIELDS = ["time", "source", "step", "code", "reviewId", "sessionId"] as const;
 
 /** Project each error record (level >= 50) in a log tail onto its string-typed triage
  * fields. Never reads msg, err or stack. */

@@ -10,7 +10,7 @@ import { daemonLogFile, logArchiveDir, logFile } from "@/config/paths.ts";
 import { callerLocation, parseCaller } from "@/lib/caller-location.ts";
 import {
   createDaemonLogger,
-  type ErrorContext,
+  type LogContext,
   logDebug,
   logError,
   logInfo,
@@ -378,7 +378,7 @@ test("with redaction on, identifiable strings never reach the file but debuggabi
     {
       cwd: `${realHome}/GitLocal/proj`,
       plan: "SECRET PLAN BODY",
-    } as ErrorContext,
+    } as LogContext,
   );
   logInfo("settings", `settings: reading ${realHome}/.config/caret/config.toml`);
   const body = readFileSync(logFile(), "utf-8");
@@ -484,7 +484,7 @@ test("a poisoned extra never propagates out of the hook loggers", () => {
   expect(() => {
     logInfo("review", "still logs", poisoned());
     logWarn("review", "still logs", poisoned());
-    logError("review", "unexpected", new Error("x"), poisoned() as ErrorContext);
+    logError("review", "unexpected", new Error("x"), poisoned() as LogContext);
     reached = true; // the caller continues past every log call
   }).not.toThrow();
   expect(reached).toBe(true);
@@ -505,7 +505,7 @@ test("a poisoned binding never propagates out of a child logger", () => {
   const log = createDaemonLogger(() => "info", join(home, "daemon-poison-child.log"));
   let reached = false;
   expect(() => {
-    const child = log.child(poisoned() as ErrorContext);
+    const child = log.child(poisoned() as LogContext);
     child.info("review", "still logs");
     child.error("review", "unexpected", new Error("x"));
     reached = true;

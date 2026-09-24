@@ -380,13 +380,15 @@ settings as everything else.
 
 Each record is one JSON object per line (pino):
 
-| Field    | Value                                                                                                     |
-| -------- | ----------------------------------------------------------------------------------------------------------- |
-| `level`  | Numeric — 20 debug, 30 info, 40 warn, 50 error.                                                           |
-| `time`   | ISO 8601 UTC, e.g. `2026-06-04T21:25:40.038Z`.                                                            |
-| `step`   | A short fixed token.                                                                                      |
-| `source` | The emitting process — `"hook"`, `"daemon"`, or `"ui"`.                                                   |
-| `caller` | The `file:line` of the emitting call site. On hook and daemon records only; bridged UI records omit it.    |
+| Field                    | Value                                                                                                                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `level`                  | Numeric — 20 debug, 30 info, 40 warn, 50 error.                                                                                                                          |
+| `time`                   | ISO 8601 UTC, e.g. `2026-06-04T21:25:40.038Z`.                                                                                                                           |
+| `step`                   | A short fixed token.                                                                                                                                                     |
+| `source`                 | The emitting process — `"hook"`, `"daemon"`, or `"ui"`.                                                                                                                  |
+| `caller`                 | The `file:line` of the emitting call site. On hook and daemon records only; bridged UI records omit it.                                                                  |
+| `code`                   | On error records only: a stable failure code (`review-timeout`, `request-failed`, …). A shipped code is never renamed.                                                   |
+| `reviewId` / `sessionId` | On a review's records in both logs: they stitch one review across `caret.log` and `daemon.log`. Records written before the daemon assigns an id carry `sessionId` alone. |
 
 Every record also carries `msg`, plus structured extras. Normal operation logs at info;
 only genuine failures sit at error.
@@ -415,10 +417,11 @@ only genuine failures sit at error.
 
   Human-readable by default; `caret doctor --json` prints the same document as one JSON
   object (schema marker `caret-doctor/1`). Unlike the logs, it is **always redacted** — it
-  exists to be shared — and never contains plan/prompt/feedback bodies or log contents.
-  Probes are individually bounded and degrade per-section. The exit code is the verdict:
-  `0` all clear, `1` a check failed, `2` no report — doctor could not produce one, or
-  `--bundle` had no terminal to ask consent at and stopped before collecting anything.
+  exists to be shared — and never contains plan/prompt/feedback bodies or any log message,
+  error or stack text. Probes are individually bounded and degrade per-section. The exit
+  code is the verdict: `0` all clear, `1` a check failed, `2` no report — doctor could not
+  produce one, or `--bundle` had no terminal to ask consent at and stopped before
+  collecting anything.
 - `/caret:doctor` — the slash command that wraps it: asks whether you want JSON or
   human-readable output, runs the subcommand, relays each failing check's remedy, and ends
   with the report in a code block ready to share.

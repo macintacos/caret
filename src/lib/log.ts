@@ -35,7 +35,7 @@ export type LogLevel = "debug" | "info" | "warn" | "error";
 /** The correlation ids a logger binds onto every record it writes (see
  * CaretLogger.child and setLogContext), so one review stitches across caret.log
  * and daemon.log. */
-export interface ErrorContext {
+export interface LogContext {
   sessionId?: string;
   cwd?: string;
   /** Set once the daemon has assigned the review an id. */
@@ -83,9 +83,9 @@ export interface CaretLogger {
   info(step: string, msg: string, extra?: object): void;
   warn(step: string, msg: string, extra?: object): void;
   error(step: string, code: ErrorCode, err: unknown, extra?: object): void;
-  /** A logger over the same sink that stamps `ctx` on every record, under each
-   * call's `extra`. */
-  child(ctx: ErrorContext): CaretLogger;
+  /** A logger over the same sink that stamps `ctx` on every record; a key the
+   * call's `extra` also sets takes the call's value. */
+  child(ctx: LogContext): CaretLogger;
 }
 
 /** The rotation thresholds a logger checks its sink against, as thunks so a
@@ -185,7 +185,7 @@ interface WrapOptions {
   rotate?: () => void;
   /** Bound contexts, oldest first. Merged only when a record is built, so a
    * poisoned binding throws inside the emit's swallow rather than out of child(). */
-  bound: readonly ErrorContext[];
+  bound: readonly LogContext[];
 }
 
 /** A logger that drops everything — the degraded mode when a destination can't
@@ -228,7 +228,8 @@ function createHookLogger(
 }
 
 // The one hook-logger instance the log{Debug,Info,Warn,Error} wrappers ride
-// over, plus the live level/redact the wrap() thunks re-read on every emit.
+// over, plus the live level/redact the wrap() thunks re-read on every emit,
+// and the log context hook() binds onto every emit (setLogContext).
 // Redact defaults off to match the schema default — raw logs day-to-day;
 // `caret redact` produces shareable copies on demand. `instance` is lazily
 // built and rebuilt when logFile() changes path (tests swap XDG_STATE_HOME per
@@ -239,7 +240,7 @@ const hookState: {
   redact: boolean;
   maxSize: number;
   keep: number;
-  context: ErrorContext;
+  context: LogContext;
   instance: ReturnType<typeof createHookLogger> | null;
 } = {
   level: "info",
@@ -252,10 +253,10 @@ const hookState: {
 
 /** The current hook logger, bound to the hook's log context (setLogContext).
  * Built on first use and rebuilt when its resolved path changes (closing the
- * previous destination so its fd doesn't leak). A
- * build failure is not latched: instance stays null so the next emit retries
- * the mkdir/open, so a transient failure doesn't permanently silence a
- * long-running process's logError path. */
+ * previous destination so its fd doesn't leak). A build failure is not
+ * latched: instance stays null so the next emit retries the mkdir/open, so a
+ * transient failure doesn't permanently silence a long-running process's
+ * logError path. */
 function hook(): CaretLogger {
   const path = logFile();
   if (hookState.instance && hookState.instance.path === path) {
@@ -318,7 +319,7 @@ export function setLogRotation(maxSize: number, keep: number): void {
 
 /** Replace the ids every hook record carries. A hook process serves one review,
  * so its binding is process state rather than a child logger. */
-export function setLogContext(ctx: ErrorContext): void {
+export function setLogContext(ctx: LogContext): void {
   hookState.context = { ...ctx };
 }
 

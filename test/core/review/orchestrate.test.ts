@@ -4,7 +4,7 @@ import { setupTempStateDir } from "@test/support/env.ts";
 import { caretLogRecords } from "@test/support/ndjson.ts";
 import { logFile } from "@/config/paths.ts";
 import type { EnsureMode } from "@/daemon/lifecycle.ts";
-import { setLogLevel } from "@/lib/log.ts";
+import { logInfo, setLogLevel } from "@/lib/log.ts";
 import type { Decision, PlanInput } from "@/lib/types.ts";
 import { PLAN_EMPTY_DENY_MESSAGE, PLAN_FORMAT_DENY_MESSAGE } from "@/plan/format.ts";
 import {
@@ -433,6 +433,14 @@ test.each<[string, string, Partial<ReviewDeps>, string]>([
 ])("%s logs its failure code", async (_case, input, over, code) => {
   await review(input, reviewDeps(over));
   expect(caretLogRecords().find((r) => r.level === 50)?.code).toBe(code);
+});
+
+// The command layer's post-review records (signal deny, notes skipped) rely on this.
+test("a record logged after runReview returns still carries the review's ids", async () => {
+  await review(stdin, reviewDeps());
+  logInfo("after", "post-review record");
+  const rec = caretLogRecords().find((r) => r.step === "after");
+  expect(rec).toMatchObject({ reviewId: "rid", sessionId: "S" });
 });
 
 // ---- cmux pane capture (EXC-961) ----
