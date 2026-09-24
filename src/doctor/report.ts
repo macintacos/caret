@@ -447,25 +447,25 @@ export function groupFailures(records: ErrorRecord[], generatedAt: number): Fail
   const recent = records
     .filter((r) => inErrorWindow(r.time, generatedAt))
     .sort((a, b) => compareTimes(a.time ?? "", b.time ?? ""));
-  const kept = recent.slice(-FAILURES_CAP);
+  const newest = recent.slice(-FAILURES_CAP);
   const groups = new Map<string, FailureGroup>();
   const ungrouped: FailureRecord[] = [];
-  for (const { reviewId, sessionId, ...record } of kept) {
-    const id =
+  for (const { reviewId, sessionId, ...record } of newest) {
+    const groupId =
       reviewId !== undefined ? { reviewId } : sessionId !== undefined ? { sessionId } : null;
-    if (id === null) {
+    if (groupId === null) {
       ungrouped.push(record);
       continue;
     }
-    const key = JSON.stringify(id);
-    const group = groups.get(key) ?? { ...id, records: [] };
+    const key = JSON.stringify(groupId);
+    const group = groups.get(key) ?? { ...groupId, records: [] };
     group.records.push(record);
     groups.set(key, group);
   }
   return {
     windowHours: ERROR_WINDOW_HOURS,
     total: recent.length,
-    omitted: recent.length - kept.length,
+    omitted: recent.length - newest.length,
     groups: [...groups.values()],
     ungrouped,
   };
@@ -684,12 +684,12 @@ export function parseErrorRecords(tailText: string, dropFirstLine: boolean): Err
   const out: ErrorRecord[] = [];
   for (const record of tailRecords(tailText, dropFirstLine)) {
     if (typeof record.level !== "number" || record.level < 50) continue;
-    const kept: ErrorRecord = {};
+    const triageFields: ErrorRecord = {};
     for (const field of ERROR_RECORD_FIELDS) {
       const value = record[field];
-      if (typeof value === "string") kept[field] = value;
+      if (typeof value === "string") triageFields[field] = value;
     }
-    out.push(kept);
+    out.push(triageFields);
   }
   return out;
 }

@@ -50,10 +50,10 @@ export async function routeIncomingPlan(
 ): Promise<RouteResult> {
   const sessionId = input.sessionId ?? `anon-${Date.now()}`;
   // No review id is assigned yet, so the plan-file records carry the session.
-  const slog = log.child({ sessionId });
+  const sessionLog = log.child({ sessionId });
   // Canonicalize once, at ingest: both version-creation sites below store this
   // value, and versions already on the review are never reformatted.
-  const plan = await formatPlanMarkdown(input.plan ?? "", slog);
+  const plan = await formatPlanMarkdown(input.plan ?? "", sessionLog);
   // Mirror the canonical text back onto the on-disk plan file the agent reads from,
   // so its plan of record matches what the human reviews. Runs for every incoming
   // version (new thread or revision); best-effort, and skipped when the agent
@@ -62,7 +62,7 @@ export async function routeIncomingPlan(
   const planFile = planFilePath
     ? {
         planFileCurrent:
-          writeCanonicalPlanFile({ ...input, planFilePath }, plan, slog) !== "changed",
+          writeCanonicalPlanFile({ ...input, planFilePath }, plan, sessionLog) !== "changed",
       }
     : {};
   const now = Date.now();

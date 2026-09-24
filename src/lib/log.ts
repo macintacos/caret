@@ -165,11 +165,11 @@ function wrap(logger: pino.Logger, opts: WrapOptions): CaretLogger {
         // and with no gate to sit behind, the rotation check leads.
         rotate?.();
         const r = liveRedact();
-        const f = fields(extra, step, r);
-        f.code = code;
-        if (err instanceof Error) f.err = scrubValue(pino.stdSerializers.errWithCause(err), r);
+        const record = fields(extra, step, r);
+        record.code = code;
+        if (err instanceof Error) record.err = scrubValue(pino.stdSerializers.errWithCause(err), r);
         const msg = errorMessage(err);
-        logger.error(f, r ? scrubString(msg) : msg);
+        logger.error(record, r ? scrubString(msg) : msg);
       } catch {
         // Same swallow: a failed error write still must not propagate.
       }

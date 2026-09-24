@@ -539,24 +539,24 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     // Without a sessionId the router invents an anon id no hook record carries.
     if (body.sessionId) routed.log = log.child({ sessionId: body.sessionId });
     // The router logs the review record (created vs appended) itself.
-    const planRouted = await routePlan(body, store, routed.log);
+    const routing = await routePlan(body, store, routed.log);
     // Drop superseded reviews' unsettled long-poll entries — their hooks have
     // given up (or will, at their own timeout), and a lingering unsettled entry
     // pins openDecisionCount, blocking idle shutdown (EXC-454). A still-polling
     // hook re-creates its entry per heartbeat, but that's bounded by its
     // timeout, whose /expire clears it for good.
-    for (const staleId of planRouted.expired) clearDecision(staleId);
+    for (const staleId of routing.expired) clearDecision(staleId);
     // An append can follow a rejected latest (a settled decision to drop) or a
     // still-pending one (an abandoned long-poll entry to drop) — either way the
     // revision's long-poll must await a fresh decision, not the stale entry
     // (EXC-590). routeIncomingPlan already cleared the store decision
     // (r.decision = undefined); this is its in-memory analog.
-    if (planRouted.action === "append") clearDecision(planRouted.id);
+    if (routing.action === "append") clearDecision(routing.id);
     // Tell the hook whether a UI tab is already listening (polled recently): if
     // so it skips foregrounding the browser, so an open backgrounded tab's
     // away-gated desktop notification isn't pre-empted (EXC-559).
     const hasLiveClient = isClientLive(lastReviewsPollAt, Date.now(), LIVE_CLIENT_WINDOW_MS);
-    return Response.json({ ...planRouted, hasLiveClient });
+    return Response.json({ ...routing, hasLiveClient });
   }
 
   // POST /api/logs — the UI log bridge (EXC-445): the browser ships log events
