@@ -1,5 +1,6 @@
 // Best-effort reads of caret's published upstream state: npm's `latest`, GitHub's
-// newest release tag, and how far trunk has moved past a given commit. Every read is
+// newest release tag, how far trunk has moved past a given commit, and — for What's
+// new, which answers 502 on null — the release list and a trunk comparison. Every read is
 // bounded and degrades to null on any failure — non-200, unparseable body, missing or
 // wrong-typed field, timeout, no network — because every caller (the daemon's update
 // check, the OpenCode install's staleness verdict) treats an unreadable upstream as an
@@ -7,6 +8,8 @@
 //
 // The GitHub calls are unauthenticated and send nothing but a `user-agent`, so they
 // cost the user no token and carry no identity.
+
+import { z } from "zod";
 
 import pkg from "../../package.json" with { type: "json" };
 
@@ -30,6 +33,9 @@ const LATEST_RELEASE_URL = "https://api.github.com/repos/macintacos/caret/releas
  * trunk holds that the given commit does not. */
 const COMPARE_URL = "https://api.github.com/repos/macintacos/caret/compare";
 
+/** Every caret release on one page; 100 is GitHub's maximum page size. */
+const RELEASES_URL = "https://api.github.com/repos/macintacos/caret/releases?per_page=100";
+
 /** How long any upstream read waits. Bounded for the same reason every daemon fetch is
  * (`src/daemon/client.ts`): these run behind an install spinner or on the daemon's boot
  * path, and a blackholed connection would otherwise stall for the OS timeout. */
@@ -46,7 +52,7 @@ export type FetchLike = (
 const GITHUB_HEADERS = { "user-agent": "caret" } as const;
 
 /** Fetch `url` and parse its body, or null when anything at all goes wrong. The one
- * "any failure → null" read the three public readers share; each then picks and
+ * "any failure → null" read every public reader shares; each then picks and
  * type-checks its own field. */
 async function readJson(
   url: string,
@@ -96,4 +102,51 @@ export async function commitsAheadOfTrunk(
   const body = (await readJson(url, fetchImpl, GITHUB_HEADERS)) as { ahead_by?: unknown } | null;
   const ahead = body?.ahead_by;
   return typeof ahead === "number" && Number.isFinite(ahead) ? ahead : null;
+}
+
+const ReleaseSchema = z.object({
+  tag_name: z.string(),
+  body: z.string().nullable(),
+  draft: z.boolean(),
+  prerelease: z.boolean(),
+});
+
+const CommitSchema = z.object({
+  sha: z.string(),
+  commit: z.object({ message: z.string() }),
+});
+
+const CompareSchema = z.object({
+  total_commits: z.number(),
+  commits: z.array(CommitSchema),
+});
+
+/** A GitHub release, narrowed to the fields caret reads. */
+export type GitHubRelease = z.infer<typeof ReleaseSchema>;
+/** A GitHub commit, narrowed to the fields caret reads. */
+export type GitHubCommit = z.infer<typeof CommitSchema>;
+/** A `<commit>...trunk` comparison: up to 250 commits (the newest 250 when truncated)
+ * oldest first, and the full count. */
+export type TrunkComparison = z.infer<typeof CompareSchema>;
+
+async function readParsed<T>(url: string, schema: z.ZodType<T>, fetchImpl: FetchLike) {
+  const parsed = schema.safeParse(await readJson(url, fetchImpl, GITHUB_HEADERS));
+  return parsed.success ? parsed.data : null;
+}
+
+/** caret's GitHub releases, newest first as GitHub lists them, or null when unreadable. */
+export function listReleases(fetchImpl: FetchLike = fetch): Promise<GitHubRelease[] | null> {
+  return readParsed(RELEASES_URL, z.array(ReleaseSchema), fetchImpl);
+}
+
+/** The commits trunk holds that `commit` does not, or null when unreadable. */
+export function compareToTrunk(
+  commit: string,
+  fetchImpl: FetchLike = fetch,
+): Promise<TrunkComparison | null> {
+  return readParsed(
+    `${COMPARE_URL}/${encodeURIComponent(commit)}...trunk`,
+    CompareSchema,
+    fetchImpl,
+  );
 }

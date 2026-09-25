@@ -8,8 +8,10 @@ import { expect, test } from "bun:test";
 
 import {
   commitsAheadOfTrunk,
+  compareToTrunk,
   type FetchLike,
   latestReleaseTag,
+  listReleases,
   publishedCaretVersion,
 } from "@/lib/upstream.ts";
 
@@ -129,4 +131,35 @@ test("an unreadable compare response degrades to null", async () => {
   const wrongType = fetching({ ok: true, body: { ahead_by: "3" } }).fetchImpl;
   expect(await commitsAheadOfTrunk("abc", wrongType)).toBeNull();
   expect(await commitsAheadOfTrunk("abc", offline)).toBeNull();
+});
+
+// --- What's new readers (EXC-1452) -----------------------------------------------
+
+const RELEASE = { tag_name: "v0.14.0", body: null, draft: false, prerelease: false };
+const COMMIT = { sha: "a".repeat(40), commit: { message: "Fix it (#12)" } };
+
+test("releases are read from one page of GitHub's release list", async () => {
+  const { fetchImpl, urls, inits } = fetching({ ok: true, body: [RELEASE] });
+  expect(await listReleases(fetchImpl)).toEqual([RELEASE]);
+  expect(urls).toEqual(["https://api.github.com/repos/macintacos/caret/releases?per_page=100"]);
+  expect(inits[0]?.headers).toEqual({ "user-agent": "caret" });
+});
+
+test("the trunk comparison lists the commits and their total", async () => {
+  const body = { total_commits: 1, commits: [COMMIT], ahead_by: 1 };
+  const { fetchImpl, urls } = fetching({ ok: true, body });
+  expect(await compareToTrunk("abc1234", fetchImpl)).toEqual({
+    total_commits: 1,
+    commits: [COMMIT],
+  });
+  expect(urls).toEqual(["https://api.github.com/repos/macintacos/caret/compare/abc1234...trunk"]);
+});
+
+test("each What's new reader degrades to null on a non-200, a malformed body, or no network", async () => {
+  for (const read of [listReleases, (f: FetchLike) => compareToTrunk("abc1234", f)]) {
+    expect(await read(fetching({ ok: false, body: [] }).fetchImpl)).toBeNull();
+    expect(await read(fetching({ ok: true, body: undefined }).fetchImpl)).toBeNull();
+    expect(await read(fetching({ ok: true, body: [{ sha: 7 }] }).fetchImpl)).toBeNull();
+    expect(await read(offline)).toBeNull();
+  }
 });

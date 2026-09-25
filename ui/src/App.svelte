@@ -1,14 +1,14 @@
 <script lang="ts">
   // The app shell: the composition root that wires caret's state factories to the
   // review surface. It runs the /api/health probe (version, commit, isDev,
-  // source), drives review selection + polling, autosave, and resolve
+  // source, restartHint), drives review selection + polling, autosave, and resolve
   // (approve variants / reject / request changes), and owns the top-level dialogs
-  // — request-changes, settings, onboarding, and the unsent-comments guard — plus
-  // theme, safe mode, the keyboard-shortcut dispatcher, and the UI-gone presence
-  // beacon. The behaviors themselves live in $lib/* and @/state/*; this file only
+  // — request-changes, settings, What's new, onboarding, and the unsent-comments
+  // guard — plus theme, safe mode, the keyboard-shortcut dispatcher, and the UI-gone
+  // presence beacon. The behaviors themselves live in $lib/* and @/state/*; this file only
   // holds them together and lays out the TopBar + DiffPlanView.
   import { untrack } from "svelte";
-  import { getHealth, getUpdate, markSeen } from "$lib/api.ts";
+  import { getHealth, getUpdate, getUpdateChanges, markSeen } from "$lib/api.ts";
   import { approveVariants, pickApproveMode } from "$lib/approve.ts";
   import { readApproveMode } from "$lib/approveModePref.ts";
   import { createPlanNotifier } from "$lib/notify.ts";
@@ -21,6 +21,7 @@
     createShortcutDispatcher,
     defaultIsEditingContext,
     EDITOR_SHORTCUTS,
+    type ShortcutScope,
     scopedShortcuts,
     shortcuts,
   } from "$lib/shortcuts/index.ts";
@@ -53,7 +54,6 @@
     SETTINGS_REGISTRY,
     type StagedField,
     THEME_KEYS,
-    UPDATES_CATEGORY,
     UPDATES_CHECK_KEY,
   } from "$lib/settingsRegistry.ts";
   import { isUpdatePending, updateSignature, updateToast } from "$lib/updates.ts";
@@ -81,6 +81,7 @@
   import ShortcutsHelp from "@/components/ShortcutsHelp.svelte";
   import StatusBar from "@/components/StatusBar.svelte";
   import TopBar from "@/components/TopBar.svelte";
+  import WhatsNewDialog from "@/components/WhatsNewDialog.svelte";
 
   // ----- Reactive backing state -----
   // `daemonChanged`: set when the daemon behind the port is replaced (its
@@ -113,6 +114,9 @@
   // The active adapter's id (EXC-791) — the environment the UI adapts to (e.g. an
   // OpenCode session). Undefined until the probe lands, or for a daemon predating it.
   let source = $state<string | undefined>(undefined);
+  // What to do after upgrading, in the spawning harness's words, for What's new.
+  // Undefined until the probe lands, or on a resident daemon, which withholds it.
+  let restartHint = $state<string | undefined>(undefined);
   // The daemon's update verdict (EXC-1207), read on load and re-read after the
   // Updates toggle lands. Null when it can't be read — a daemon that wires no update
   // thunk 404s the route — and every surface then stays quiet. The `updates.check`
@@ -143,17 +147,22 @@
   let safeMode = $state(false);
 
   let showSettings = $state(false);
-  // Which category Settings opens on (EXC-1207) — set only by the update toast's deep
-  // link; undefined lands on Appearance. ModalPresence mounts SettingsDialog per open,
-  // so recording it before showing is what makes the seed apply.
-  let settingsCategory = $state<string | undefined>(undefined);
   // The two surfaces the reviewer summons over a plan announce themselves on the way
   // in only. The verdict dialogs sit this out — they belong to the decision flow,
   // which sounds through its own verdict cue.
-  function openSettings(category?: string): void {
+  function openSettings(): void {
     sound.play("modalOpen");
-    settingsCategory = category;
     showSettings = true;
+  }
+  let showWhatsNew = $state(false);
+  function openWhatsNew(): void {
+    sound.play("modalOpen");
+    showWhatsNew = true;
+  }
+  // The topmost modal decides which shortcuts fire and which the help lists (EXC-849).
+  function activeScope(): ShortcutScope | null {
+    if (showWhatsNew) return "modal";
+    return showSettings ? "settings" : null;
   }
   function openHelp(): void {
     sound.play("modalOpen");
@@ -437,12 +446,12 @@
         persistent: true,
         sound: null,
         action: {
-          label: "View",
+          label: "What's new",
           run: () => {
             // Activating an alert does not dismiss it (state/alerts.ts), and leaving this
             // one behind the dialog it just opened would strand it.
             alerts.dismiss(id);
-            openSettings(UPDATES_CATEGORY);
+            openWhatsNew();
           },
         },
       });
@@ -464,6 +473,7 @@
         version = h.version;
         commit = h.commit;
         source = h.source;
+        restartHint = h.restartHint;
         // Dev --fresh (EXC-781): reset the browser to a brand-new-user session. The
         // re-paint is needed because main.ts already painted whatever was stored
         // before this probe resolved. Keyed on instanceId because the daemon reports
@@ -588,9 +598,8 @@
       // the verdict keys don't fire while the reviewer walks the comment list.
       isEditingContext: () =>
         defaultIsEditingContext() || document.activeElement?.closest("#comment-navigator") != null,
-      // While the Settings modal owns the view, the review shortcuts are inert
-      // (EXC-849) — only the settings-scoped entries and the globals (?) fire.
-      activeScope: () => (showSettings ? "settings" : null),
+      // While a modal owns the view, the review shortcuts are inert (EXC-849).
+      activeScope,
     });
     return () => {
       for (const off of unregister) off();
@@ -921,10 +930,26 @@
       onChange={applySetting}
       onClose={() => (showSettings = false)}
       onCopyDiagnostic={copyDiagnostics}
-      initialCategory={settingsCategory}
       {updatePending}
       {updateReport}
+      onWhatsNew={openWhatsNew}
     />
+  {/snippet}
+</ModalPresence>
+
+<!-- After Settings, so opened from the Updates pane it stacks above it. -->
+<ModalPresence open={showWhatsNew && updateReport !== null}>
+  {#snippet modal({ open, onClosed })}
+    {#if updateReport}
+      <WhatsNewDialog
+        {open}
+        {onClosed}
+        onClose={() => (showWhatsNew = false)}
+        report={updateReport}
+        {restartHint}
+        load={getUpdateChanges}
+      />
+    {/if}
   {/snippet}
 </ModalPresence>
 
@@ -944,7 +969,7 @@
     <ShortcutsHelp
       {open}
       {onClosed}
-      entries={scopedShortcuts(shortcuts.list(), showSettings ? "settings" : null)}
+      entries={scopedShortcuts(shortcuts.list(), activeScope())}
       onClose={() => (showHelp = false)}
     />
   {/snippet}

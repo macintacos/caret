@@ -7,6 +7,7 @@ import type {
   FileExcerpt,
   ResolveBody,
   SkillRef,
+  UpdateChanges,
   UpdateReport,
 } from "@core/lib/types";
 import { fakeDiagnostics } from "@test/support/diagnostics.ts";
@@ -26,6 +27,7 @@ import {
   getSkillDescription,
   getSkills,
   getUpdate,
+  getUpdateChanges,
   HttpError,
   markSeen,
   putDraft,
@@ -710,6 +712,34 @@ describe("getUpdate", () => {
     respond = () => Promise.reject(new Error("offline"));
 
     await expect(getUpdate()).rejects.toThrow("offline");
+    flush();
+
+    expectLoggedAt("warn", "request");
+  });
+});
+
+// EXC-1452. Read only when the What's new dialog opens; it rethrows so the dialog can
+// render its error state.
+describe("getUpdateChanges", () => {
+  const changes: UpdateChanges = {
+    kind: "commits",
+    commits: [{ sha: "a".repeat(40), subject: "fix: x (#7)", pr: 7 }],
+    more: 0,
+  };
+
+  test("returns the changes on success and emits no record", async () => {
+    respond = () => Promise.resolve(jsonResponse(changes));
+
+    expect(await getUpdateChanges()).toEqual(changes);
+    flush();
+
+    expectNoRecords();
+  });
+
+  test("a non-2xx throws HttpError and warns at step request", async () => {
+    respond = () => Promise.resolve(new Response("upstream unavailable", { status: 502 }));
+
+    await expect(getUpdateChanges()).rejects.toThrow(HttpError);
     flush();
 
     expectLoggedAt("warn", "request");

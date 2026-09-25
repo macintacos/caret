@@ -80,10 +80,8 @@
      * clipboard and fires the shared success alert. Defaults to a no-op so mounts
      * without the Advanced pane need not supply it. */
     onCopyDiagnostic?: (text: string) => void;
-    /** Which category to open on (EXC-1207). The host mounts this per open
-     * (ModalPresence), so the seed applies on every open — which is what makes the
-     * update toast's deep link work. Absent, the dialog opens where it always has. */
-    initialCategory?: string;
+    /** Opens the What's new modal from the Updates pane. */
+    onWhatsNew?: () => void;
     /** Whether an update is waiting, badging the Updates rail row (EXC-1207). */
     updatePending?: boolean;
     /** The daemon's update verdict, rendered by the Updates pane — the reviewer's live
@@ -98,7 +96,7 @@
     onChange,
     onClose,
     onCopyDiagnostic = () => {},
-    initialCategory,
+    onWhatsNew = () => {},
     updatePending = false,
     updateReport = null,
   }: Props = $props();
@@ -129,8 +127,7 @@
     SETTINGS_CATEGORIES.filter((c) => filtered.some((e) => e.category === c.id)),
   );
 
-  // svelte-ignore state_referenced_locally
-  let selectedId = $state(initialCategory ?? SETTINGS_CATEGORIES[0]?.id ?? "");
+  let selectedId = $state(SETTINGS_CATEGORIES[0]?.id ?? "");
   const selected = $derived(categories.find((c) => c.id === selectedId) ?? categories[0]);
   const paneFields = $derived(staged.filter((f) => f.category === selected?.id));
 
@@ -291,7 +288,7 @@
               <!-- Updates is the one category whose pane sits ABOVE its fields rather
                    than replacing them (EXC-1207): the verdict is read-only, but the
                    `updates.check` opt-out beneath it is an ordinary registry field. -->
-              <UpdatesPane report={updateReport} />
+              <UpdatesPane report={updateReport} {onWhatsNew} />
             {/if}
             {#each paneSections as section, si (si)}
               {#if section.label === THEME_SECTION}

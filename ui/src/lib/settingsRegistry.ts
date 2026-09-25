@@ -229,8 +229,7 @@ export const THEME_KEYS: readonly string[] = Object.values(THEME_FIELD);
  * opt-out — without re-spelling a literal the registry owns. */
 export const UPDATES_CHECK_KEY = "updatesCheck";
 
-/** The Updates category id: the update toast deep-links to this pane, and a renamed
- * category would silently degrade that link to "opens on Appearance". */
+/** The Updates category id: the rail badge and the Updates pane key off it. */
 export const UPDATES_CATEGORY = "Updates";
 
 const diffStyleOptions = [

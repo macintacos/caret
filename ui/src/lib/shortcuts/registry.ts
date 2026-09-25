@@ -35,8 +35,9 @@ export type ShortcutGroup = "motion" | "commenting" | "actions" | "settings" | "
  * (the `?` help toggle). A named modal scope (`"settings"`) is active only while
  * that modal owns the view. The dispatcher and the help modal both filter by the
  * active scope (see shortcuts/scope.ts), so an open modal suppresses the review
- * shortcuts and the help lists only the shortcuts valid in the current view. */
-export type ShortcutScope = "global" | "review" | "settings";
+ * shortcuts and the help lists only the shortcuts valid in the current view.
+ * `"modal"` is a modal with no shortcuts of its own, so only globals fire under it. */
+export type ShortcutScope = "global" | "review" | "settings" | "modal";
 
 /** A registry entry. `run` is optional: an entry without it is display-only —
  * listed for the help modal but never dispatched (the existing editor chords,

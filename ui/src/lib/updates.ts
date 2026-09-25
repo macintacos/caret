@@ -1,16 +1,18 @@
 // What an update verdict LOOKS like (EXC-1207). The daemon decides whether this caret
 // is behind and publishes the answer — including the exact upgrade command — on
-// GET /api/update; this module turns that one verdict into the copy every surface
-// renders, so the toast, the two badges, and the Updates pane can never disagree about
-// what a status means.
+// GET /api/update; this module turns that one verdict into the copy and links every
+// surface renders, so the toast, the two badges, the Updates pane, and What's new can
+// never disagree about what a status means.
 //
 // Pure and node-free, in the shape of notify.ts's bellPresentation and safeMode.ts: no
 // mount, no fetch, no storage, so every arm unit-tests without a browser. Nothing here
-// derives an upgrade command or branches on `install` beyond wording — `status.command`
-// rides the wire precisely because the daemon is the only party that knows how this
-// caret was installed.
+// derives an upgrade command — `status.command` rides the wire because the daemon is the
+// only party that knows how this caret was installed. `compareUrl` is the one function
+// here that reads `install`: it compares release tags for a bundle and the build commit
+// for a binary.
 
-import type { UpdateReport, UpdateStatus } from "@core/lib/types";
+import { parseVersionTriple } from "@core/lib/semver";
+import type { TrunkCommit, UpdateReport, UpdateStatus } from "@core/lib/types";
 
 /** The daemon's `unknown` reason for a build GitHub cannot compare against trunk —
  * mirrored from NEEDS_COMPARE in src/daemon/update-check.ts, which is daemon-only and so
@@ -18,10 +20,16 @@ import type { UpdateReport, UpdateStatus } from "@core/lib/types";
  * dedicated copy below and falls back to the generic arm, never a broken render. */
 const UNCOMPARABLE = "could not compare this build against trunk";
 
+/** A verdict that caret is behind — the one kind that carries an upgrade command. */
+export type PendingUpdateStatus = Extract<
+  UpdateStatus,
+  { kind: "behind-release" | "behind-commit" }
+>;
+
 /** Whether this verdict is worth showing the reviewer at all — the whole badge
  * condition. `current`, `unavailable`, and `unknown` are all quiet: only a caret that
  * is actually behind earns a dot. */
-export function isUpdatePending(status: UpdateStatus): boolean {
+export function isUpdatePending(status: UpdateStatus): status is PendingUpdateStatus {
   return status.kind === "behind-release" || status.kind === "behind-commit";
 }
 
@@ -36,7 +44,8 @@ export function updateSignature(status: UpdateStatus): string | null {
 }
 
 /** The load-time nudge, or null when there is nothing to nudge about. Deliberately
- * commandless: a toast is the notice, and the pane is where the command lives. */
+ * commandless: a toast is the notice, and its action opens What's new, where the changes
+ * and the command live. */
 export function updateToast(report: UpdateReport): { title: string; message: string } | null {
   const { status } = report;
   if (status.kind === "behind-release") {
@@ -116,6 +125,51 @@ export function updatePaneCopy(report: UpdateReport): {
             command: null,
           };
   }
+}
+
+const REPO_URL = "https://github.com/macintacos/caret";
+
+const COMMIT_SHA = /^[0-9a-f]{7,40}$/;
+
+/** GitHub's compare view from this caret to what it is behind, or null when no validated
+ * endpoint pair exists: a bundle compares release tags, a binary its commit to trunk. */
+export function compareUrl(report: UpdateReport): string | null {
+  const { install, status } = report;
+  if (install === "bundle" && status.kind === "behind-release") {
+    const from = parseVersionTriple(report.version);
+    const to = parseVersionTriple(status.available);
+    return from && to ? `${REPO_URL}/compare/v${from.join(".")}...v${to.join(".")}` : null;
+  }
+  if (install === "binary" && COMMIT_SHA.test(report.commit)) {
+    return `${REPO_URL}/compare/${report.commit}...trunk`;
+  }
+  return null;
+}
+
+/** The pull request page for `pr`, or null unless it is a positive safe integer. */
+export function pullUrl(pr: number): string | null {
+  return Number.isSafeInteger(pr) && pr > 0 ? `${REPO_URL}/pull/${pr}` : null;
+}
+
+/** Where a trunk commit's row links: the pull request its subject names, otherwise the
+ * commit itself; null when neither validates. */
+export function commitLink(commit: TrunkCommit): string | null {
+  const pull = commit.pr === null ? null : pullUrl(commit.pr);
+  return pull ?? (COMMIT_SHA.test(commit.sha) ? `${REPO_URL}/commit/${commit.sha}` : null);
+}
+
+/** What to do about a behind verdict: the daemon's command verbatim, then the harness's
+ * restart hint when the daemon knows it, then one line about the other harnesses. The
+ * commit arm has no `--refresh` note because `mise run build --install` takes none. */
+export function upgradeGuidance(
+  status: PendingUpdateStatus,
+  restartHint: string | undefined,
+): { command: string; lines: string[] } {
+  const generic =
+    status.kind === "behind-release"
+      ? "Its --refresh flag updates caret in every harness it's installed in — restart each one afterward."
+      : "Restart each harness afterward so it loads the new build.";
+  return { command: status.command, lines: restartHint ? [restartHint, generic] : [generic] };
 }
 
 /** `n` as a pluralized commit count. */

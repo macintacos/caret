@@ -37,6 +37,10 @@ export interface AgentAdapter {
   /** The approve variants this adapter offers, in display order. */
   readonly approveVariants: readonly ApproveVariant[];
 
+  /** The post-upgrade line the UI shows beside the upgrade command. Optional; an
+   * adapter without one omits it. */
+  readonly restartHint?: string;
+
   /**
    * Normalize the tool's raw hook stdin into a core `PlanInput`. Throws on input
    * that can't be parsed — the caller turns that into a fail-safe deny.

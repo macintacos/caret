@@ -432,9 +432,9 @@ describe("SettingsDialog search (EXC-845)", () => {
   });
 });
 
-// EXC-1207. The three additions the update surface needs from the shell: an opening
-// category (so the toast can deep-link), a rail badge while an update is pending, and
-// the Updates pane rendered ABOVE the category's own toggle rather than in place of it.
+// EXC-1207. The two additions the update surface needs from the shell: a rail badge
+// while an update is pending, and the Updates pane rendered ABOVE the category's own
+// toggle rather than in place of it.
 describe("SettingsDialog Updates category (EXC-1207)", () => {
   const REPORT: UpdateReport = {
     install: "binary",
@@ -452,21 +452,13 @@ describe("SettingsDialog Updates category (EXC-1207)", () => {
     ).toBe("page");
   });
 
-  test("initialCategory seeds the open pane — what makes the toast's deep link work", async () => {
-    // The host mounts this per open (ModalPresence), so the seed applies on every open.
-    const { flush } = render(SettingsDialog, props({ initialCategory: "Updates" }));
-    await flushUntil(flush, mounted);
-    expect(
-      document.body.querySelector("[data-category='Updates']")?.getAttribute("aria-current"),
-    ).toBe("page");
-    expect(has("[data-updates-pane]")).toBe(true);
-  });
-
   test("the Updates pane renders above the category's own toggle, not instead of it", async () => {
     // Unlike Notifications and Advanced, this pane does not replace the staged rows: the
     // opt-out is an ordinary registry field and the shell still renders it.
-    const { flush } = render(SettingsDialog, props({ initialCategory: "Updates" }));
+    const { flush } = render(SettingsDialog, props());
     await flushUntil(flush, mounted);
+    (document.body.querySelector("[data-category='Updates']") as HTMLButtonElement).click();
+    flush();
     const pane = document.body.querySelector("[data-updates-pane]");
     const toggle = document.body.querySelector("[data-field='updatesCheck']");
     expect(pane !== null).toBe(true);
@@ -495,8 +487,10 @@ describe("SettingsDialog Updates category (EXC-1207)", () => {
   });
 
   test("a null report still renders the pane, degraded", async () => {
-    const { flush } = render(SettingsDialog, props({ initialCategory: "Updates" }));
+    const { flush } = render(SettingsDialog, props());
     await flushUntil(flush, mounted);
+    (document.body.querySelector("[data-category='Updates']") as HTMLButtonElement).click();
+    flush();
     expect(has("[data-updates-pane] .update-placeholder")).toBe(true);
   });
 });

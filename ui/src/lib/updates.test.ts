@@ -2,7 +2,16 @@ import "@ui/support/setup.ts";
 import { describe, expect, test } from "bun:test";
 
 import type { UpdateReport, UpdateStatus } from "@core/lib/types";
-import { isUpdatePending, updatePaneCopy, updateSignature, updateToast } from "$lib/updates.ts";
+import {
+  commitLink,
+  compareUrl,
+  isUpdatePending,
+  pullUrl,
+  updatePaneCopy,
+  updateSignature,
+  updateToast,
+  upgradeGuidance,
+} from "$lib/updates.ts";
 
 // EXC-1207. The verdict→presentation mapping every update surface renders, so the
 // toast, the two badges, and the pane can never disagree about what one status means.
@@ -151,5 +160,97 @@ describe("updatePaneCopy", () => {
 
   test("never derives a command — only a status that carries one gets one", () => {
     for (const status of QUIET) expect(updatePaneCopy(report(status)).command).toBeNull();
+  });
+});
+
+describe("compareUrl", () => {
+  const SHA = "0123456789abcdef0123456789abcdef01234567";
+
+  test("a bundle compares its version's tag against the available release", () => {
+    expect(compareUrl(report(RELEASE, { install: "bundle", version: "1.4.0-rc.2" }))).toBe(
+      "https://github.com/macintacos/caret/compare/v1.4.0...v1.5.0",
+    );
+  });
+
+  test("a binary compares its commit against trunk", () => {
+    expect(compareUrl(report(COMMIT, { commit: SHA }))).toBe(
+      `https://github.com/macintacos/caret/compare/${SHA}...trunk`,
+    );
+  });
+
+  test("a binary on a release verdict still compares its commit", () => {
+    expect(compareUrl(report(RELEASE, { commit: "abc1234" }))).toBe(
+      "https://github.com/macintacos/caret/compare/abc1234...trunk",
+    );
+  });
+
+  test("is null for a dev install", () => {
+    expect(compareUrl(report(RELEASE, { install: "dev" }))).toBe(null);
+  });
+
+  test("is null for a binary whose commit is not a hex sha", () => {
+    expect(compareUrl(report(COMMIT, { commit: "unknown" }))).toBe(null);
+  });
+
+  test("is null for a bundle whose version does not parse", () => {
+    expect(compareUrl(report(RELEASE, { install: "bundle", version: "garbage" }))).toBe(null);
+  });
+
+  test("is null for a bundle that is not behind a release", () => {
+    expect(compareUrl(report(COMMIT, { install: "bundle" }))).toBe(null);
+  });
+});
+
+describe("pullUrl", () => {
+  test("links a positive PR number", () => {
+    expect(pullUrl(42)).toBe("https://github.com/macintacos/caret/pull/42");
+  });
+
+  test("is null for anything but a positive safe integer", () => {
+    for (const n of [0, -1, 1.5, Number.NaN, 2 ** 60]) expect(pullUrl(n)).toBe(null);
+  });
+});
+
+describe("commitLink", () => {
+  const sha = "a".repeat(40);
+
+  test("links the pull request a squash-merged subject names", () => {
+    expect(commitLink({ sha, subject: "feat: x (#42)", pr: 42 })).toBe(
+      "https://github.com/macintacos/caret/pull/42",
+    );
+  });
+
+  test("links the commit itself when the subject names no pull request", () => {
+    expect(commitLink({ sha, subject: "chore: x", pr: null })).toBe(
+      `https://github.com/macintacos/caret/commit/${sha}`,
+    );
+  });
+
+  test("is null when neither the pull request nor the sha validates", () => {
+    expect(commitLink({ sha: "not-a-sha", subject: "chore: x", pr: null })).toBe(null);
+  });
+});
+
+describe("upgradeGuidance", () => {
+  const HINT = "Then restart OpenCode.";
+
+  test("a release verdict leads with its command, then the hint and the --refresh note", () => {
+    const g = upgradeGuidance(RELEASE, HINT);
+    expect(g.command).toBe(RELEASE.command);
+    expect(g.lines).toHaveLength(2);
+    expect(g.lines[0]).toBe(HINT);
+    expect(g.lines[1]).toContain("--refresh");
+  });
+
+  test("a commit verdict carries no --refresh note", () => {
+    const g = upgradeGuidance(COMMIT, HINT);
+    expect(g.command).toBe(COMMIT.command);
+    expect(g.lines).toHaveLength(2);
+    expect(g.lines[1]).not.toContain("--refresh");
+  });
+
+  test("without a hint only the generic line remains", () => {
+    expect(upgradeGuidance(RELEASE, undefined).lines).toHaveLength(1);
+    expect(upgradeGuidance(COMMIT, undefined).lines).toHaveLength(1);
   });
 });

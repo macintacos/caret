@@ -43,6 +43,11 @@ describe("isEntryActive", () => {
     expect(isEntryActive(help, null)).toBe(true);
     expect(isEntryActive(help, "settings")).toBe(true);
   });
+
+  test("under the modal scope only global entries are active", () => {
+    expect(isEntryActive(review, "modal")).toBe(false);
+    expect(isEntryActive(help, "modal")).toBe(true);
+  });
 });
 
 describe("scopedShortcuts", () => {

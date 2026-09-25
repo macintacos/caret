@@ -37,7 +37,7 @@ import { createServer } from "@/daemon/server.ts";
 import { updateReportFor } from "@/daemon/update-check.ts";
 import { buildHash } from "@/lib/build-id.ts";
 import { createDaemonLogger } from "@/lib/log.ts";
-import type { UpdateStatus } from "@/lib/types.ts";
+import type { BuildKind, UpdateChanges, UpdateStatus } from "@/lib/types.ts";
 import { createStore } from "@/review/store.ts";
 import { loadUiAssets } from "@/ui/assets.ts";
 
@@ -87,6 +87,12 @@ const buildStatus: UpdateStatus = ((): UpdateStatus => {
   }
 })();
 
+// The install kind and the changes payload the fixture staged beside the verdict.
+const buildInstall = (process.env.CARET_E2E_UPDATE_INSTALL || "dev") as BuildKind;
+const stagedChanges = JSON.parse(
+  process.env.CARET_E2E_UPDATE_CHANGES || "null",
+) as UpdateChanges | null;
+
 const server = createServer({
   store,
   port: 0, // OS-assigned: parallel workers can never collide
@@ -122,16 +128,17 @@ const server = createServer({
   // through the same updateReportFor production uses (EXC-1210), so a spec that flips the
   // opt-out gets the daemon's real behaviour rather than a stub's.
   //
-  // A staged verdict rides on the `install: "dev"` identity below, a pair the real check
-  // can never settle on — a dev build short-circuits before it compares anything. Inert:
-  // no UI arm reads `report.install`. If one ever does, stage the install kind beside the
-  // status rather than letting a spec assert an impossible build.
+  // The install kind is staged beside the verdict because the What's new footer reads
+  // `report.install` for its compare link; a spec staging a behind verdict should stage
+  // the install that could have produced it.
   updateReport: () =>
     updateReportFor(
-      { install: "dev", version: "0.0.0-e2e", commit: "e2ecommit0000000" },
+      { install: buildInstall, version: "0.0.0-e2e", commit: "e2ecommit0000000" },
       buildStatus,
       settings.current().updates.check,
     ),
+  // Unwired unless a spec staged changes, so GET /api/update/changes 404s by default.
+  ...(stagedChanges ? { updateChanges: async () => stagedChanges } : {}),
   diagnostics: fakeDiagnostics,
   log,
 });

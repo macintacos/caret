@@ -1,20 +1,23 @@
 // The update surface (EXC-1207): a once-per-version toast on load, the settings-gear
-// dot, and the Settings dialog's Updates pane.
+// dot, the Settings dialog's Updates pane, and What's new, opened from the toast and from
+// the pane (EXC-1452).
 //
 // What needs a real browser here is the toast card actually rendering and its button
-// actually opening and switching a PORTALLED dialog, and `localStorage` suppressing the
-// second toast across a real reload — none of which a mounted component models, and the
-// third of which no unit can even stage. The verdict→copy mapping is pure and lives in
-// `ui/src/lib/updates.test.ts`; the pane's own render, the rail badge, and the gear's
-// aria-label are component units (`UpdatesPane.test.ts`, `SettingsDialog.test.ts`,
-// `TopBar.test.ts`).
+// actually opening a PORTALLED dialog, that dialog stacking over Settings, and
+// `localStorage` suppressing the second toast across a real reload — none of which a
+// mounted component models, and the last of which no unit can even stage. The
+// verdict→copy mapping is pure and lives in `ui/src/lib/updates.test.ts`; the pane's own
+// render, the rail badge, the gear's aria-label, and the What's new body are component
+// units (`UpdatesPane.test.ts`, `SettingsDialog.test.ts`, `TopBar.test.ts`,
+// `WhatsNewDialog.test.ts`).
 //
 // Nothing here stubs a route. The daemon owns the whole answer (EXC-1210): its BUILD
-// verdict is staged through the fixture's `updateStatus` option, and the reviewer's
-// `updates.check` is folded over it per request — so the opt-out specs below exercise the
-// real fold rather than a `page.route` that would only test itself. The fixture daemon's
-// default verdict is the quiet from-source one, which is why the specs outside the
-// describe block see no toast they did not ask for.
+// verdict is staged through the fixture's `updateStatus` option (with `updateInstall` and
+// `updateChanges` beside it), and the reviewer's `updates.check` is folded over it per
+// request — so the opt-out specs below exercise the real fold rather than a `page.route`
+// that would only test itself. The fixture daemon's default verdict is the quiet
+// from-source one, which is why the specs outside the describe block see no toast they
+// did not ask for.
 
 import type { Page } from "@playwright/test";
 
@@ -23,6 +26,7 @@ import { planSurface } from "@test/e2e/support/source-view.ts";
 
 const AVAILABLE = "9.9.9";
 const COMMAND = "bunx --no-cache @macintacos/caret@latest install --refresh";
+const RELEASE_NOTE = "Staged release note for the e2e run.";
 
 const toast = (page: Page) => page.locator(".alert-item", { hasText: "Update available" });
 const markedGear = (page: Page) =>
@@ -31,6 +35,8 @@ const markedGear = (page: Page) =>
 test.describe("with a pending update", () => {
   test.use({
     updateStatus: { kind: "behind-release", available: AVAILABLE, command: COMMAND },
+    updateInstall: "bundle",
+    updateChanges: { kind: "releases", releases: [{ version: AVAILABLE, body: RELEASE_NOTE }] },
   });
 
   test("a pending update toasts on load and dots the settings gear", async ({ daemon, page }) => {
@@ -44,7 +50,7 @@ test.describe("with a pending update", () => {
     await expect(markedGear(page)).toBeVisible();
   });
 
-  test("the toast's action opens Settings on the Updates pane, carrying the command", async ({
+  test("the toast's action opens What's new with the skipped release notes", async ({
     daemon,
     page,
   }) => {
@@ -52,18 +58,57 @@ test.describe("with a pending update", () => {
     await page.goto("/");
     await planSurface(page);
 
-    await toast(page).getByRole("button", { name: "View" }).click();
+    await toast(page).getByRole("button", { name: "What's new" }).click();
 
-    const dialog = page.getByRole("dialog", { name: "Settings" });
+    const dialog = page.getByRole("dialog", { name: "What's new" });
     await expect(dialog).toBeVisible();
-    await expect(page.locator("[data-category='Updates']")).toHaveAttribute("aria-current", "page");
+    await expect(dialog).toContainText(RELEASE_NOTE);
+    // The fixture runs 0.0.0-e2e, which parses to 0.0.0.
+    await expect(dialog.getByRole("link", { name: "Compare on GitHub" })).toHaveAttribute(
+      "href",
+      /\/compare\/v0\.0\.0\.\.\.v9\.9\.9$/,
+    );
+
+    // r and a would each stack a verdict dialog; under the modal scope neither fires.
+    const contents = page.locator("[data-slot='dialog-content']");
+    await page.keyboard.press("r");
+    await page.keyboard.press("a");
+    // `?` is global and keys dispatch in order: once its dialog is up, any dialog r or a
+    // opened would be up too, which bounds the count.
+    await page.keyboard.press("?");
+    await expect(page.getByRole("dialog", { name: /Shortcuts/ })).toBeVisible();
+    await expect(contents).toHaveCount(2);
+
+    await page.keyboard.press("Escape");
+    await expect(contents).toHaveCount(1);
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+  });
+
+  test("the Updates pane states the verdict and opens What's new over Settings", async ({
+    daemon,
+    page,
+  }) => {
+    await daemon.seed();
+    await page.goto("/");
+    await planSurface(page);
+
+    await markedGear(page).click();
+    const settings = page.getByRole("dialog", { name: "Settings" });
+    await settings.locator("[data-category='Updates']").click();
 
     // The pane states the verdict and offers the exact command — the whole reason the
     // daemon puts `command` on the wire rather than letting the browser derive one.
-    await expect(page.locator("[data-updates-pane] .update-headline")).toContainText(AVAILABLE);
-    await expect(page.getByRole("textbox", { name: "Upgrade command" })).toHaveValue(COMMAND);
-    // And the toggle sits beneath it — the pane does not replace the category's fields.
-    await expect(page.getByRole("switch", { name: "Check for updates" })).toBeVisible();
+    await expect(settings.locator("[data-updates-pane] .update-headline")).toContainText(AVAILABLE);
+    await expect(settings.getByRole("textbox", { name: "Upgrade command" })).toHaveValue(COMMAND);
+
+    await settings.getByRole("button", { name: "What's new" }).click();
+    const whatsNew = page.getByRole("dialog", { name: "What's new" });
+    await expect(whatsNew).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(whatsNew).toHaveCount(0);
+    await expect(settings.locator("[data-updates-pane]")).toBeVisible();
   });
 
   test("the opt-out silences a pending verdict — no toast, no marks", async ({ daemon, page }) => {

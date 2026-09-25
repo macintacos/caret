@@ -16,6 +16,7 @@ import type {
   ResolveBody,
   SkillDescriptionResponse,
   SkillRef,
+  UpdateChanges,
   UpdateReport,
 } from "@core/lib/types";
 import { shortId, uiLog } from "$lib/log.ts";
@@ -76,6 +77,18 @@ export async function getUpdate(): Promise<UpdateReport> {
     } else {
       uiLog.warn("request", "update report read failed", { reason: String(err) });
     }
+    throw err;
+  }
+}
+
+/** What the caret this build is behind would bring (EXC-1452), fetched only when the
+ * What's new dialog opens. Throws `HttpError` on any non-2xx — the dialog renders one
+ * error state for all of them. */
+export async function getUpdateChanges(): Promise<UpdateChanges> {
+  try {
+    return await json(await fetch("/api/update/changes"));
+  } catch (err) {
+    uiLog.warn("request", "update changes read failed", { reason: String(err) });
     throw err;
   }
 }

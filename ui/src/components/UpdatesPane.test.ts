@@ -12,7 +12,7 @@ import UpdatesPane from "@/components/UpdatesPane.svelte";
 //
 // The verdict→copy mapping itself is pure and covered in lib/updates.test.ts; this suite
 // covers what the component does with it — the rendered blocks, the command's presence,
-// the dot's tone, and the null-report degrade.
+// the dot's tone, the What's new button, and the null-report degrade.
 
 const report = (status: UpdateStatus, version = "1.4.0"): UpdateReport => ({
   install: "binary",
@@ -95,5 +95,30 @@ describe("UpdatesPane render", () => {
     expect(text(target, ".update-placeholder")).toBeTruthy();
     expect(commandInput(target) === null).toBe(true);
     expect(target.textContent?.toLowerCase()).not.toContain("error");
+  });
+
+  test("a behind verdict offers a What's new button that calls onWhatsNew", () => {
+    for (const status of [RELEASE, COMMIT]) {
+      let calls = 0;
+      const { target } = render(UpdatesPane, {
+        report: report(status),
+        onWhatsNew: () => calls++,
+      });
+      const button = target.querySelector<HTMLButtonElement>("[data-action='whats-new']");
+      expect(button === null, status.kind).toBe(false);
+      button?.click();
+      expect(calls, status.kind).toBe(1);
+    }
+  });
+
+  test("a verdict with nothing new offers no What's new button", () => {
+    for (const status of [
+      { kind: "current" },
+      { kind: "unavailable", reason: "dev" },
+      { kind: "unknown", reason: "x" },
+    ] as UpdateStatus[]) {
+      const { target } = render(UpdatesPane, { report: report(status) });
+      expect(target.querySelector("[data-action='whats-new']") === null, status.kind).toBe(true);
+    }
   });
 });
