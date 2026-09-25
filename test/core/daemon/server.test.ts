@@ -20,7 +20,7 @@ import {
 } from "@/daemon/guards.ts";
 import { VERSION } from "@/lib/build-id.ts";
 import { createDaemonLogger } from "@/lib/log.ts";
-import type { UpdateReport } from "@/lib/types.ts";
+import type { UpdateChanges, UpdateReport } from "@/lib/types.ts";
 import { formatPlanMarkdown } from "@/plan/markdown.ts";
 import type { Store } from "@/review/store.ts";
 import { routeIncomingPlan } from "@/review/threading.ts";
@@ -290,6 +290,38 @@ test("GET /api/update is 404 when the daemon wires no update thunk", async () =>
   await boot();
   const res = await fetch(`${base}/api/update`);
   expect(res.status).toBe(404);
+});
+
+// ---- update changes endpoint (EXC-1452) ----
+
+test("GET /api/update/changes serves the thunk's payload", async () => {
+  const changes: UpdateChanges = { kind: "releases", releases: [{ version: "0.14.0", body: "x" }] };
+  await boot({ updateChanges: async () => changes });
+  const res = await fetch(`${base}/api/update/changes`);
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual(changes);
+});
+
+test("GET /api/update/changes is 502 when there is nothing to describe", async () => {
+  await boot({ updateChanges: async () => null });
+  expect((await fetch(`${base}/api/update/changes`)).status).toBe(502);
+});
+
+test("GET /api/update/changes is 404 when unwired", async () => {
+  await boot();
+  expect((await fetch(`${base}/api/update/changes`)).status).toBe(404);
+});
+
+test("GET /api/health publishes a wired restartHint", async () => {
+  await boot({ restartHint: "Then restart OpenCode." });
+  const body = (await (await fetch(`${base}/api/health`)).json()) as Record<string, unknown>;
+  expect(body.restartHint).toBe("Then restart OpenCode.");
+});
+
+test("GET /api/health omits restartHint when none is wired", async () => {
+  await boot();
+  const body = (await (await fetch(`${base}/api/health`)).json()) as Record<string, unknown>;
+  expect("restartHint" in body).toBe(false);
 });
 
 test("the lock file records stateDir and instanceId", async () => {
@@ -1182,6 +1214,7 @@ describe("read-confidentiality posture", () => {
         checkEnabled: true,
         status: { kind: "current" as const },
       }),
+      updateChanges: async () => ({ kind: "commits" as const, commits: [], more: 0 }),
       assets: fakeAssets({
         "/index.html": '<!doctype html><html><body><div id="app"></div></body></html>',
         "/assets/index-AB12.js": "export const x = 1;\n",
@@ -1219,6 +1252,7 @@ describe("read-confidentiality posture", () => {
       ],
       ["GET /api/diagnostics", () => fetch(`${base}/api/diagnostics`)],
       ["GET /api/update", () => fetch(`${base}/api/update`)],
+      ["GET /api/update/changes", () => fetch(`${base}/api/update/changes`)],
       ["GET / (index)", () => fetch(`${base}/`)],
       ["GET /assets/* (asset)", () => fetch(`${base}/assets/index-AB12.js`)],
       [
@@ -1550,7 +1584,7 @@ describe("routing fallthrough", () => {
   });
 
   test("a wrong method on a known path falls through to 404 (no 405)", async () => {
-    await boot();
+    await boot({ updateChanges: async () => ({ kind: "commits", commits: [], more: 0 }) });
     const { id } = await newReview();
     // Each pair is a real route under a method it does not serve, sent SAME-ORIGIN
     // (no Origin header) so the CSRF guard passes and the request reaches the
@@ -1563,6 +1597,7 @@ describe("routing fallthrough", () => {
       ["POST", "/api/health"],
       ["POST", "/api/diagnostics"], // /api/diagnostics is GET-only
       ["POST", "/api/update"], // /api/update is GET-only
+      ["POST", "/api/update/changes"],
       ["DELETE", "/api/config"],
       ["PUT", `/api/reviews/${id}/resolve`], // /resolve is POST-only
       ["GET", `/api/reviews/${id}/resolve`],

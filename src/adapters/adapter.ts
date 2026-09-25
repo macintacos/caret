@@ -37,6 +37,10 @@ export interface AgentAdapter {
   /** The approve variants this adapter offers, in display order. */
   readonly approveVariants: readonly ApproveVariant[];
 
+  /** What to do after upgrading caret so this harness loads it, shown in the What's
+   * new modal. Omitted when the harness needs no instruction. */
+  readonly restartHint?: string;
+
   /**
    * Normalize the tool's raw hook stdin into a core `PlanInput`. Throws on input
    * that can't be parsed — the caller turns that into a fail-safe deny.

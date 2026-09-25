@@ -38,6 +38,7 @@ function toolInputEcho(input: PlanInput | undefined): Record<string, unknown> | 
 export const claudeAdapter: AgentAdapter = {
   id: "claude",
   approveVariants: APPROVE_VARIANTS,
+  restartHint: "Then run /reload-plugins or restart Claude Code.",
 
   parseHookInput(stdin: string): PlanInput {
     const hook = parseHookStdin<HookStdin>(stdin);

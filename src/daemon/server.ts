@@ -50,6 +50,7 @@ import {
   type SkillDescriptionResponse,
   type SkillRef,
   toClientReview,
+  type UpdateChanges,
   type UpdateReport,
 } from "@/lib/types.ts";
 import { listDirectory } from "@/plan/directory.ts";
@@ -179,6 +180,12 @@ export interface CreateServerOptions {
    * one (EXC-1207): the UI reads this route on every load, so an unwired route there
    * would 404 into every spec's page load. */
   updateReport?: () => UpdateReport | Promise<UpdateReport>;
+  /** A thunk answering GET /api/update/changes (EXC-1452): what the caret the user is
+   * behind would bring, fetched from GitHub on request. Null → 502. Omitted → 404. */
+  updateChanges?: () => Promise<UpdateChanges | null>;
+  /** The active harness's post-upgrade instruction, published in /api/health.
+   * Omitted drops the field from the body. */
+  restartHint?: string;
   /** Called after a landed POST /api/config patch whose `updates.check` is `true`
    * (EXC-1210). A user action is exactly what the 24h throttle's constraint permits a
    * call for, so runDaemon wires it to the same check boot runs — without it, a reviewer
@@ -240,6 +247,8 @@ interface ResolvedOptions {
   readSkillDescription: ((cwd: string, skill: SkillRef) => Promise<string | null>) | undefined;
   diagnostics: (() => DaemonDiagnostics) | undefined;
   updateReport: (() => UpdateReport | Promise<UpdateReport>) | undefined;
+  updateChanges: (() => Promise<UpdateChanges | null>) | undefined;
+  restartHint: string | undefined;
   onUpdatesEnabled: (() => void) | undefined;
   onDecisionAwaited: ((id: string) => void) | undefined;
   markPaneRead: (pane: CmuxPane) => void;
@@ -270,6 +279,8 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     readSkillDescription: opts.readSkillDescription,
     diagnostics: opts.diagnostics,
     updateReport: opts.updateReport,
+    updateChanges: opts.updateChanges,
+    restartHint: opts.restartHint,
     onUpdatesEnabled: opts.onUpdatesEnabled,
     onDecisionAwaited: opts.onDecisionAwaited,
     markPaneRead: opts.markPaneRead ?? ((pane) => clearCmuxMark(pane, { log: opts.log })),
@@ -433,6 +444,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // The active adapter's id (EXC-791): the "source" the UI adapts to (e.g.
       // OpenCode's single-variant approve). Absent when the daemon declares none.
       ...(source ? { source } : {}),
+      ...(cfg.restartHint ? { restartHint: cfg.restartHint } : {}),
     };
     return Response.json(body);
   }
@@ -456,6 +468,14 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   async function handleUpdate(): Promise<Response> {
     if (!cfg.updateReport) return notFound();
     return Response.json(await cfg.updateReport());
+  }
+
+  // GET /api/update/changes — what the skipped releases or trunk commits bring
+  // (EXC-1452). Unlike /api/update this may reach GitHub; the thunk caches.
+  async function handleUpdateChanges(): Promise<Response> {
+    if (!cfg.updateChanges) return notFound();
+    const changes = await cfg.updateChanges();
+    return changes ? Response.json(changes) : new Response("upstream unavailable", { status: 502 });
   }
 
   // POST /api/retire — graceful single-instance retire (EXC-406): a newer caret
@@ -1037,6 +1057,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     if (method === "GET" && path === "/api/health") return handleHealth();
     if (method === "GET" && path === "/api/diagnostics") return handleDiagnostics();
     if (method === "GET" && path === "/api/update") return handleUpdate();
+    if (method === "GET" && path === "/api/update/changes") return handleUpdateChanges();
     if (method === "POST" && path === "/api/retire") return handleRetire();
     if (readsUi && (path === "/" || path === INDEX_PATH)) return handleIndex(req);
     if (method === "POST" && path === "/api/reviews") return handleCreateReview(req, routed);

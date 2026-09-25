@@ -432,6 +432,9 @@ export interface HealthIdentity {
    * capability instead of hard-coding tool mode names. Optional: a daemon that
    * predates this field omits it, and the UI falls back to its built-in set. */
   approveVariants?: ApproveVariant[];
+  /** What to do after upgrading, in the words of the harness that spawned this daemon.
+   * Absent on a supervised daemon, whose adapter is only a default. */
+  restartHint?: string;
   /** True when the daemon stays up until told to stop rather than idle-exiting
    * (EXC-1164), so a peer knows which handoff protocol to speak. Three states:
    * `true` resident, `false` resident-aware but idle-exiting, absent means the
@@ -531,6 +534,28 @@ export type UpdateStatus =
   | { kind: "behind-release"; available: string; command: string }
   | { kind: "behind-commit"; aheadBy: number; command: string }
   | { kind: "unknown"; reason: string };
+
+/**
+ * GET /api/update/changes body — what the caret the user is behind would bring: the
+ * skipped releases' notes for a bundle, the trunk commits since the build for a binary.
+ */
+export type UpdateChanges =
+  | { kind: "releases"; releases: ReleaseNote[] }
+  | { kind: "commits"; commits: TrunkCommit[]; more: number };
+
+/** One skipped release: its `v`-stripped version and its Markdown notes. */
+export interface ReleaseNote {
+  version: string;
+  body: string;
+}
+
+/** One trunk commit: its full sha, its message's first line, and the PR number its
+ * squash-merge subject ends with, when it does. */
+export interface TrunkCommit {
+  sha: string;
+  subject: string;
+  pr: number | null;
+}
 
 /** Returns the current (latest) version of a review. */
 export function currentVersion(review: Review): PlanVersion {

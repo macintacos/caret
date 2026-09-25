@@ -37,6 +37,7 @@ import {
   rotateDaemonStderr,
 } from "@/daemon/lifecycle.ts";
 import { type CaretServer, createServer } from "@/daemon/server.ts";
+import { createUpdateChanges } from "@/daemon/update-changes.ts";
 import {
   fileUpdateCache,
   readCachedStatus,
@@ -46,7 +47,14 @@ import {
 import { startUpkeep, type UpkeepTask } from "@/daemon/upkeep.ts";
 import { buildHash, buildKind, currentBuildId, currentCommit, VERSION } from "@/lib/build-id.ts";
 import { createDaemonLogger, type ErrorCode } from "@/lib/log.ts";
-import { commitsAheadOfTrunk, latestReleaseTag, publishedCaretVersion } from "@/lib/upstream.ts";
+import {
+  commitsAheadOfTrunk,
+  compareToTrunk,
+  latestReleaseTag,
+  listReleases,
+  publishedCaretVersion,
+  trunkHead,
+} from "@/lib/upstream.ts";
 import { createStore } from "@/review/store.ts";
 import { isSupervised, SERVICE_TERMINAL_EXIT_STATUS } from "@/service/manager.ts";
 import { loadUiAssets } from "@/ui/assets.ts";
@@ -260,6 +268,23 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
       // Turning the check back on re-runs it, so a reviewer who opted out long ago gets
       // a real verdict on the spot rather than a daemon lifetime later.
       onUpdatesEnabled: refreshUpdate,
+      // What the update would bring, for the What's new modal (EXC-1452). Judged on the
+      // served verdict, so the opt-out makes zero GitHub calls.
+      updateChanges: createUpdateChanges({
+        install,
+        version,
+        commit,
+        status: () =>
+          updateReportFor({ install, version, commit }, updateStatus, svc.current().updates.check)
+            .status,
+        releases: () => listReleases(),
+        compare: (c) => compareToTrunk(c),
+        trunkHead: () => trunkHead(),
+        log,
+      }),
+      // Only a harness-spawned daemon knows which harness the user runs; the service
+      // daemon's adapter is a default.
+      restartHint: isSupervised() ? undefined : adapter.restartHint,
       log,
     });
   } catch (e) {

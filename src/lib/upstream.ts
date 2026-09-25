@@ -8,6 +8,8 @@
 // The GitHub calls are unauthenticated and send nothing but a `user-agent`, so they
 // cost the user no token and carry no identity.
 
+import { z } from "zod";
+
 import pkg from "../../package.json" with { type: "json" };
 
 /** npm's `latest` dist-tag document for caret. For the "what would a published
@@ -29,6 +31,13 @@ const LATEST_RELEASE_URL = "https://api.github.com/repos/macintacos/caret/releas
 /** GitHub's commit comparison, `<commit>...trunk`: `ahead_by` is how many commits
  * trunk holds that the given commit does not. */
 const COMPARE_URL = "https://api.github.com/repos/macintacos/caret/compare";
+
+/** Every caret release on one page; 100 is GitHub's maximum page size. */
+const RELEASES_URL = "https://api.github.com/repos/macintacos/caret/releases?per_page=100";
+
+/** Trunk's newest commits, newest first. */
+const TRUNK_COMMITS_URL =
+  "https://api.github.com/repos/macintacos/caret/commits?sha=trunk&per_page=50";
 
 /** How long any upstream read waits. Bounded for the same reason every daemon fetch is
  * (`src/daemon/client.ts`): these run behind an install spinner or on the daemon's boot
@@ -96,4 +105,55 @@ export async function commitsAheadOfTrunk(
   const body = (await readJson(url, fetchImpl, GITHUB_HEADERS)) as { ahead_by?: unknown } | null;
   const ahead = body?.ahead_by;
   return typeof ahead === "number" && Number.isFinite(ahead) ? ahead : null;
+}
+
+const ReleaseSchema = z.object({
+  tag_name: z.string(),
+  body: z.string().nullable(),
+  draft: z.boolean(),
+  prerelease: z.boolean(),
+});
+
+const CommitSchema = z.object({
+  sha: z.string(),
+  commit: z.object({ message: z.string() }),
+});
+
+const CompareSchema = z.object({
+  total_commits: z.number(),
+  commits: z.array(CommitSchema),
+});
+
+/** A GitHub release, narrowed to the fields caret reads. */
+export type GitHubRelease = z.infer<typeof ReleaseSchema>;
+/** A GitHub commit, narrowed to the fields caret reads. */
+export type GitHubCommit = z.infer<typeof CommitSchema>;
+/** A `<commit>...trunk` comparison: up to 250 commits oldest first, and the full count. */
+export type TrunkComparison = z.infer<typeof CompareSchema>;
+
+async function readParsed<T>(url: string, schema: z.ZodType<T>, fetchImpl: FetchLike) {
+  const parsed = schema.safeParse(await readJson(url, fetchImpl, GITHUB_HEADERS));
+  return parsed.success ? parsed.data : null;
+}
+
+/** caret's GitHub releases, newest first as GitHub lists them, or null when unreadable. */
+export function listReleases(fetchImpl: FetchLike = fetch): Promise<GitHubRelease[] | null> {
+  return readParsed(RELEASES_URL, z.array(ReleaseSchema), fetchImpl);
+}
+
+/** The commits trunk holds that `commit` does not, or null when unreadable. */
+export function compareToTrunk(
+  commit: string,
+  fetchImpl: FetchLike = fetch,
+): Promise<TrunkComparison | null> {
+  return readParsed(
+    `${COMPARE_URL}/${encodeURIComponent(commit)}...trunk`,
+    CompareSchema,
+    fetchImpl,
+  );
+}
+
+/** Trunk's newest 50 commits, newest first, or null when unreadable. */
+export function trunkHead(fetchImpl: FetchLike = fetch): Promise<GitHubCommit[] | null> {
+  return readParsed(TRUNK_COMMITS_URL, z.array(CommitSchema), fetchImpl);
 }
