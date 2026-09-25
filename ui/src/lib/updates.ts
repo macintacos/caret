@@ -12,7 +12,7 @@
 // for a binary.
 
 import { parseVersionTriple } from "@core/lib/semver";
-import type { UpdateReport, UpdateStatus } from "@core/lib/types";
+import type { TrunkCommit, UpdateReport, UpdateStatus } from "@core/lib/types";
 
 /** The daemon's `unknown` reason for a build GitHub cannot compare against trunk —
  * mirrored from NEEDS_COMPARE in src/daemon/update-check.ts, which is daemon-only and so
@@ -149,6 +149,13 @@ export function compareUrl(report: UpdateReport): string | null {
 /** The pull request page for `pr`, or null unless it is a positive safe integer. */
 export function pullUrl(pr: number): string | null {
   return Number.isSafeInteger(pr) && pr > 0 ? `${REPO_URL}/pull/${pr}` : null;
+}
+
+/** Where a trunk commit's row links: the pull request its subject names, otherwise the
+ * commit itself; null when neither validates. */
+export function commitLink(commit: TrunkCommit): string | null {
+  const pull = commit.pr === null ? null : pullUrl(commit.pr);
+  return pull ?? (COMMIT_SHA.test(commit.sha) ? `${REPO_URL}/commit/${commit.sha}` : null);
 }
 
 /** What to do about a behind verdict: the daemon's command verbatim, then the harness's

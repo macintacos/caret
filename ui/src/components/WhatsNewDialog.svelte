@@ -9,7 +9,7 @@
   import { Spinner } from "$lib/components/ui/spinner/index.js";
   import { renderMarkdown } from "$lib/markdown.ts";
   import { topmostDialogContent } from "$lib/modalStack.ts";
-  import { compareUrl, isUpdatePending, pullUrl, upgradeGuidance } from "$lib/updates.ts";
+  import { commitLink, compareUrl, isUpdatePending, upgradeGuidance } from "$lib/updates.ts";
 
   interface Props {
     /** Controlled open — false while the modal plays its exit. */
@@ -91,7 +91,7 @@
     {:else}
       <ul class="commits">
         {#each state.changes.commits as commit (commit.sha)}
-          {@const href = commit.pr === null ? null : pullUrl(commit.pr)}
+          {@const href = commitLink(commit)}
           <li>
             {#if href}
               <a {href} target="_blank" rel="noreferrer">{commit.subject}</a>
@@ -216,15 +216,17 @@
     color: var(--accent-bright);
     text-decoration-style: solid;
   }
+  /* Preflight strips the markers; the remainder line carries none of its own. */
   .commits {
-    list-style: none;
+    list-style: disc;
     margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
+    padding-left: 1.25rem;
+  }
+  .commits li + li {
+    margin-top: 0.35rem;
   }
   .commits-more {
+    list-style: none;
     color: var(--ink-soft);
   }
   /* Chrome links stay in the ink — the accent is for selection and brand — so the

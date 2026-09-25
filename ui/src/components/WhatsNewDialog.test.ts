@@ -86,7 +86,7 @@ describe("WhatsNewDialog", () => {
     expect(docs?.getAttribute("rel")).toBe("noreferrer");
   });
 
-  test("links commits that carry a PR and closes with the remainder", async () => {
+  test("links each commit to its PR, or to itself, and closes with the remainder", async () => {
     const load = async (): Promise<UpdateChanges> => ({
       kind: "commits",
       commits: [
@@ -98,7 +98,10 @@ describe("WhatsNewDialog", () => {
     await open(BINARY, load, () => bodyText().includes("chore: plain"));
     const linked = anchors().find((a) => a.textContent === "feat: linked (#12)");
     expect(linked?.getAttribute("href")).toBe("https://github.com/macintacos/caret/pull/12");
-    expect(anchors().some((a) => a.textContent === "chore: plain")).toBe(false);
+    const plain = anchors().find((a) => a.textContent === "chore: plain");
+    expect(plain?.getAttribute("href")).toBe(
+      `https://github.com/macintacos/caret/commit/${"f".repeat(40)}`,
+    );
     const more = anchors().find((a) => a.textContent?.includes("4 more"));
     expect(more?.getAttribute("href")).toBe(
       `https://github.com/macintacos/caret/compare/${SHA}...trunk`,

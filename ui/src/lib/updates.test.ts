@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { UpdateReport, UpdateStatus } from "@core/lib/types";
 import {
+  commitLink,
   compareUrl,
   isUpdatePending,
   pullUrl,
@@ -207,6 +208,26 @@ describe("pullUrl", () => {
 
   test("is null for anything but a positive safe integer", () => {
     for (const n of [0, -1, 1.5, Number.NaN, 2 ** 60]) expect(pullUrl(n)).toBe(null);
+  });
+});
+
+describe("commitLink", () => {
+  const sha = "a".repeat(40);
+
+  test("links the pull request a squash-merged subject names", () => {
+    expect(commitLink({ sha, subject: "feat: x (#42)", pr: 42 })).toBe(
+      "https://github.com/macintacos/caret/pull/42",
+    );
+  });
+
+  test("links the commit itself when the subject names no pull request", () => {
+    expect(commitLink({ sha, subject: "chore: x", pr: null })).toBe(
+      `https://github.com/macintacos/caret/commit/${sha}`,
+    );
+  });
+
+  test("is null when neither the pull request nor the sha validates", () => {
+    expect(commitLink({ sha: "not-a-sha", subject: "chore: x", pr: null })).toBe(null);
   });
 });
 
