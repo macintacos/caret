@@ -119,7 +119,7 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
   const updateCache = fileUpdateCache(updateCheckFile());
   let updateStatus = readCachedStatus(updateCache, version, commit);
   // The served verdict; GET /api/update and What's new must judge the same one.
-  const servedUpdate = () =>
+  const servedReport = () =>
     updateReportFor({ install, version, commit }, updateStatus, svc.current().updates.check);
   // Ask — at most once a day, and never on a dev build or under the `updates.check`
   // opt-out — whether a newer caret exists (EXC-1205). Fire-and-forget: nothing awaits it,
@@ -265,7 +265,7 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
       // check assigns, so GET /api/update never makes a network call of its own — it
       // reads the live `updates.check` off the hot-reloading settings service and folds
       // it over the held verdict, so an opt-out takes effect without a restart (EXC-1210).
-      updateReport: servedUpdate,
+      updateReport: servedReport,
       // Turning the check back on re-runs it, so a reviewer who opted out long ago gets
       // a real verdict on the spot rather than a daemon lifetime later.
       onUpdatesEnabled: refreshUpdate,
@@ -275,7 +275,7 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
         install,
         version,
         commit,
-        status: () => servedUpdate().status,
+        status: () => servedReport().status,
         releases: listReleases,
         compare: compareToTrunk,
         log,

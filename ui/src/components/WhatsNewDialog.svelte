@@ -37,7 +37,7 @@
     );
   });
 
-  const compare = $derived(compareUrl(report));
+  const compareHref = $derived(compareUrl(report));
   const guidance = $derived(
     isUpdatePending(report.status) ? upgradeGuidance(report.status, restartHint) : null,
   );
@@ -104,8 +104,8 @@
         {/each}
         {#if state.changes.more > 0}
           <li class="commits-more">
-            {#if compare}
-              <a href={compare} target="_blank" rel="noreferrer">…and {state.changes.more} more</a>
+            {#if compareHref}
+              <a href={compareHref} target="_blank" rel="noreferrer">…and {state.changes.more} more</a>
             {:else}
               …and {state.changes.more} more
             {/if}
@@ -117,8 +117,8 @@
 
   {#snippet footer()}
     <div class="upgrade">
-      {#if compare}
-        <a class="upgrade-compare" href={compare} target="_blank" rel="noreferrer">Compare on GitHub</a>
+      {#if compareHref}
+        <a class="upgrade-compare" href={compareHref} target="_blank" rel="noreferrer">Compare on GitHub</a>
       {/if}
       {#if guidance}
         <Input

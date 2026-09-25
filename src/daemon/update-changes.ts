@@ -67,8 +67,8 @@ export function selectCommits(
 
 /** The PR a squash-merge subject ends with — `Fix thing (#123)` → 123. */
 export function prNumber(subject: string): number | null {
-  const m = /\(#(\d+)\)$/.exec(subject);
-  return m ? Number(m[1]) : null;
+  const match = /\(#(\d+)\)$/.exec(subject);
+  return match ? Number(match[1]) : null;
 }
 
 /** A thunk answering GET /api/update/changes. One slot, keyed by the identity of the
@@ -108,9 +108,9 @@ async function changesFor(
   const behind = status.kind === "behind-release" || status.kind === "behind-commit";
   if (deps.install !== "binary" || !behind || !COMPARABLE_COMMIT.test(deps.commit)) return null;
 
-  const compared = await deps.compare(deps.commit);
-  if (!compared) return failed(deps.log);
-  return selectCommits([...compared.commits].reverse(), compared.total_commits, COMMIT_CAP);
+  const comparison = await deps.compare(deps.commit);
+  if (!comparison) return failed(deps.log);
+  return selectCommits([...comparison.commits].reverse(), comparison.total_commits, COMMIT_CAP);
 }
 
 function failed(log: CaretLogger): null {
