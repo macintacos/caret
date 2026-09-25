@@ -231,8 +231,8 @@ const SCHEMA_VERSION = 2;
 // A change that touches only Markdown cannot be observed by `build ui`,
 // `build bin`, `test e2e`, or `smoke`, so the gate runs only the tasks that
 // could actually fail on it. The narrowing applies to WHICH TASKS RUN, never to
-// which files a task sees: every task is still spawned as a bare
-// `mise run <task>`. That distinction is load-bearing for `lint`. rumdl resolves
+// which files a task sees: every task is still spawned as `mise run <task>` with
+// no file arguments. That distinction is load-bearing for `lint`. rumdl resolves
 // an MD051 cross-file link fragment only when the file it points into is in the
 // same scan, so a lint handed just the changed files would silently stop checking
 // every cross-file anchor whose target is unchanged — and doc/ is held together
