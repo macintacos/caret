@@ -89,10 +89,11 @@ Concretely:
   `poll`, `render`, `prewarm`, `retire`, `drain`, `spawn`, `request`, `fatal`, `update`,
   `service`, `upkeep`, `mcp`, `reconcile`). Reuse an existing token before minting a new
   one — and when you do mint one, add it here in the same change, so this stays a registry
-  rather than a snapshot. Two emitters log a name rather than a token, so both stay
-  camelCase: `runReview` logs under the step it is on (a key of `REVIEW_FAILURE_CODES` in
-  `src/review/orchestrate.ts`), and the daemon's crash handler logs the process event it
-  caught (`uncaughtException`, `unhandledRejection`).
+  rather than a snapshot. Two emitters pass an identifier as `step`, so both keep its
+  camelCase: `runReview`'s plan rejections and its failure record log the `ReviewStep`
+  they were on (a key of `REVIEW_FAILURE_CODES` in `src/review/orchestrate.ts`), and the
+  daemon's crash handler (`src/commands/daemon.ts`) logs the process event it caught
+  (`uncaughtException`, `unhandledRejection`).
 - Review-scoped records carry structured `reviewId` / `sessionId` fields so one review
   stitches across the two log streams (EXC-444). A logger whose scope is one review binds
   them once: a daemon `:id` handler logs through the request's `log.child({ reviewId })`,

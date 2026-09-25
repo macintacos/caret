@@ -29,7 +29,6 @@ export const MAX_DIR_DEPTH = 10;
 
 // Directories first, then by name — what a tree wants, and what makes the cap
 // deterministic rather than a slice of whatever order readdir happened to give.
-// Compared by code point rather than locale so the cut is the same everywhere.
 function byKindThenName(a: DirEntry, b: DirEntry): number {
   if (a.kind !== b.kind) return a.kind === "directory" ? -1 : 1;
   return compareCodeUnits(a.name, b.name);

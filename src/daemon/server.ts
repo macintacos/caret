@@ -325,10 +325,6 @@ interface Routed {
   method: string;
   path: string;
   route: ReviewRoute | null;
-  /** The logger the catch-all 500 reports through: the route's when there is one.
-   * A handler that learns the request's owner later rebinds it, so a failure after
-   * that point groups with the owner's other records. */
-  log: CaretLogger;
 }
 
 /** Whether an If-None-Match header names `etag`. The header is a comma-separated
@@ -555,7 +551,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // POST /api/reviews — an incoming plan from the hook.
   async function handleCreateReview(
     req: Request,
-    bindRequestLog: (owner: CaretLogger) => void,
+    bindRequestLog: (ownerLog: CaretLogger) => void,
   ): Promise<Response> {
     if (liveness.isDraining()) {
       // 503 is postReview's re-post signal — keep it for draining only. The warn records
@@ -1057,8 +1053,11 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // The wrapper (handle) owns the cross-origin guard, the liveness bracket, the :id
   // route match and its bound logger, and the catch-all 500; dispatch is pure
   // routing + business logic.
-  async function dispatch(req: Request, routed: Routed): Promise<Response> {
-    const { method, path, route } = routed;
+  async function dispatch(
+    req: Request,
+    { method, path, route }: Routed,
+    bindRequestLog: (ownerLog: CaretLogger) => void,
+  ): Promise<Response> {
     // The UI routes answer HEAD as well as GET — both guards already admit it
     // (isSafeMethod), and Bun strips the body from what the handlers return, so
     // reading an ETag with `curl -I` works without a HEAD-specific path.
@@ -1069,11 +1068,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     if (method === "GET" && path === "/api/update/changes") return handleUpdateChanges();
     if (method === "POST" && path === "/api/retire") return handleRetire();
     if (readsUi && (path === "/" || path === INDEX_PATH)) return handleIndex(req);
-    if (method === "POST" && path === "/api/reviews") {
-      return handleCreateReview(req, (owner) => {
-        routed.log = owner;
-      });
-    }
+    if (method === "POST" && path === "/api/reviews")
+      return handleCreateReview(req, bindRequestLog);
     if (method === "POST" && path === "/api/logs") return handleLogs(req);
     if (method === "POST" && path === "/api/ui/gone") return handleUiGone();
     if (method === "GET" && path === "/api/reviews") return handleListReviews();
@@ -1119,7 +1115,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     self: { readonly port: number | undefined },
   ): Promise<Response> {
     const end = liveness.begin(req.method);
-    let routed: Routed | undefined;
+    // Rebound once a handler learns the owner, so a later failure groups with its records.
+    let failureLog = log;
     try {
       const port = self.port ?? -1;
 
@@ -1148,8 +1145,10 @@ export function createServer(opts: CreateServerOptions): CaretServer {
 
       const idRoute = matchIdRoute(path);
       const route = idRoute && { ...idRoute, log: log.child({ reviewId: idRoute.id }) };
-      routed = { method, path, route, log: route?.log ?? log };
-      return await dispatch(req, routed);
+      if (route) failureLog = route.log;
+      return await dispatch(req, { method, path, route }, (ownerLog) => {
+        failureLog = ownerLog;
+      });
     } catch (err) {
       // Never let a handler exception drop the connection without a response — and
       // log it first, since a bare 500 alone is undebuggable. The log call is itself
@@ -1157,7 +1156,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // NB: values reaching this sink must not embed plan bodies — today no handler
       // error message interpolates plan content; keep it that way.
       try {
-        (routed?.log ?? log).error("request", "request-failed", err);
+        failureLog.error("request", "request-failed", err);
       } catch {
         // best-effort: the response below is what matters.
       }

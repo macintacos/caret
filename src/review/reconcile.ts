@@ -29,6 +29,7 @@ export interface ReconcileDeps {
 /** Reconcile a terminal plan approval into the daemon. A failed parse is a no-op.
  * Never throws. */
 export async function runReconcile(parsed: ParsedHookInput, deps: ReconcileDeps): Promise<void> {
+  // A run's records start unbound, so nothing leaks from an earlier run in this process.
   setLogContext({});
   try {
     if ("error" in parsed) throw parsed.error;
