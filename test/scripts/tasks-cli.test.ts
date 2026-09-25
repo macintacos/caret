@@ -117,6 +117,10 @@ describe("tasks CLI: dev command", () => {
       plain: false,
     });
   });
+
+  test("parses --update", async () => {
+    expect((await parseDevArgs(["--update", "commit"])).update).toBe("commit");
+  });
 });
 
 /** Build the program with `overrides` applied, parse `commandPath args` through

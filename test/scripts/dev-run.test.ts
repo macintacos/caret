@@ -94,6 +94,11 @@ test("childEnvFor threads the dev config path, and CARET_FRESH only when fresh",
   expect(fresh.CARET_FRESH).toBe("1");
 });
 
+test("childEnvFor hands --update to the daemon as CARET_DEV_UPDATE", () => {
+  const env = childEnvFor("/tmp/world", { kind: "ephemeral" }, { update: "release" });
+  expect(env.CARET_DEV_UPDATE).toBe("release");
+});
+
 // ---- makeCleanup ----
 
 function fakeKillable() {

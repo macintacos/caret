@@ -59,6 +59,8 @@ export interface RunDevOptions {
    * to the terminal so they scroll, pipe, and copy the way they always did.
    * Optional; absent counts as not-plain. */
   plain?: boolean;
+  /** --update: the mocked update the daemon poses as behind (CARET_DEV_UPDATE). */
+  update?: "release" | "commit";
 }
 
 /** The daemon argv, adding `--ephemeral` only in ephemeral port mode (a fixed
@@ -88,7 +90,7 @@ export function daemonCommand(portMode: PortMode): string[] {
 export function childEnvFor(
   stateDirPath: string,
   portMode: PortMode,
-  extra: { configFile?: string; fresh?: boolean } = {},
+  extra: { configFile?: string; fresh?: boolean; update?: string } = {},
 ): Record<string, string> {
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
@@ -103,6 +105,7 @@ export function childEnvFor(
   // (EXC-781).
   if (extra.configFile) env.CARET_CONFIG_FILE = extra.configFile;
   if (extra.fresh) env.CARET_FRESH = "1";
+  if (extra.update) env.CARET_DEV_UPDATE = extra.update;
   return env;
 }
 
@@ -358,6 +361,7 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
   const childEnv = childEnvFor(stateDirPath, portMode, {
     configFile: childConfig,
     fresh: opts.fresh,
+    update: opts.update,
   });
 
   // A persistent dir may hold a stale lock from a crashed run; the boot writes

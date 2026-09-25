@@ -20,7 +20,12 @@
 // without spawning the tools. It reuses createProgram from src/lib/program.ts so all
 // caret CLIs share the same name/description/help conventions.
 
-import { type Command, InvalidArgumentError, type OptionValues } from "@commander-js/extra-typings";
+import {
+  type Command,
+  InvalidArgumentError,
+  Option,
+  type OptionValues,
+} from "@commander-js/extra-typings";
 
 import { createProgram } from "@/lib/program.ts";
 import { runAssets } from "@/tasks/assets.ts";
@@ -132,6 +137,12 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
       "--fresh",
       "boot as a brand-new user: ignore config.dev.toml (use built-in defaults) and reset the UI's saved preferences",
     )
+    .addOption(
+      new Option(
+        "--update <kind>",
+        "pose as a build behind a newer release or trunk, with mocked What's new content",
+      ).choices(["release", "commit"] as const),
+    )
     .action(async (opts) => {
       await actions.dev({
         numVersions: opts.numVersions,
@@ -141,6 +152,7 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
         persist: opts.persist ?? false,
         fresh: opts.fresh ?? false,
         plain: opts.plain ?? false,
+        update: opts.update,
       });
     });
 

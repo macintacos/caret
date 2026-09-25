@@ -29,6 +29,7 @@ import {
   settings,
   watchSettings,
 } from "@/config/settings.ts";
+import { devUpdateFor } from "@/daemon/dev-update.ts";
 import { buildDiagnostics, prodDiagnosticsDeps } from "@/daemon/diagnostics.ts";
 import {
   isAddrInUse,
@@ -114,13 +115,20 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
   const install = buildKind();
   const version = VERSION;
   const commit = currentCommit();
+  // `mise run dev --update <kind>`: a staged update in place of the check, which a dev
+  // build never runs.
+  const devUpdate = devUpdateFor(process.env.CARET_DEV_UPDATE, { install, version, commit });
   // Seeded from the last persisted verdict, so a daemon that starts fresh can answer
   // immediately; the background check below replaces it when it settles.
   const updateCache = fileUpdateCache(updateCheckFile());
-  let updateStatus = readCachedStatus(updateCache, version, commit);
+  let updateStatus = devUpdate?.status ?? readCachedStatus(updateCache, version, commit);
   // The served verdict; GET /api/update and What's new must judge the same one.
   const servedReport = () =>
-    updateReportFor({ install, version, commit }, updateStatus, svc.current().updates.check);
+    updateReportFor(
+      { install: devUpdate?.install ?? install, version, commit },
+      updateStatus,
+      svc.current().updates.check,
+    );
   // Ask — at most once a day, and never on a dev build or under the `updates.check`
   // opt-out — whether a newer caret exists (EXC-1205). Fire-and-forget: nothing awaits it,
   // so boot is never delayed, and runUpdateCheck never rejects. A null result is the
@@ -128,6 +136,7 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
   // Boot fires it once; a resident daemon re-arms it on the upkeep tick, bounded by the
   // same 24h stamp.
   function refreshUpdate(): void {
+    if (devUpdate) return;
     void runUpdateCheck({
       kind: install,
       version,
@@ -271,15 +280,17 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
       onUpdatesEnabled: refreshUpdate,
       // What the update would bring, for the What's new modal (EXC-1452). Judged on the
       // served verdict, so the opt-out makes zero GitHub calls.
-      updateChanges: createUpdateChanges({
-        install,
-        version,
-        commit,
-        status: () => servedReport().status,
-        releases: listReleases,
-        compare: compareToTrunk,
-        log,
-      }),
+      updateChanges: devUpdate
+        ? async () => devUpdate.changes
+        : createUpdateChanges({
+            install,
+            version,
+            commit,
+            status: () => servedReport().status,
+            releases: listReleases,
+            compare: compareToTrunk,
+            log,
+          }),
       // Only a harness-spawned daemon knows which harness the user runs; a resident
       // daemon's adapter (the service, `caret serve`) is a default.
       restartHint: resident ? undefined : adapter.restartHint,

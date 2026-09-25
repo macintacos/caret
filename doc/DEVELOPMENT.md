@@ -222,6 +222,7 @@ it off. The config keys are documented in full under
 | —                   | —                       | `[dev.notify].max_pending` | `3`     | Cap on unresolved extra reviews.                                                          |
 | `--num-versions <n>`| —                       | —                        | `4`       | How many versions the primary dev review opens with; a positive integer.                  |
 | `--fresh`           | —                       | —                        | off       | Boot as a brand-new user — see below.                                                     |
+| `--update <kind>`   | `CARET_DEV_UPDATE`      | —                        | off       | Pose as behind an update, `release` or `commit` — see below.                              |
 | `--plain`           | —                       | —                        | off       | Skip the dev console and stream logs straight to the terminal, so they scroll and pipe.   |
 
 † A positive `CARET_DEV_NEW_REVIEW_MS` also arms the seeder, not just sets its cadence.
@@ -255,6 +256,19 @@ Every user-facing UI setting the browser persists is built through `definePref` 
 `defineFlagPref` (`ui/src/lib/definePref.ts`), which registers its key so `--fresh` resets
 it. `knownPrefKeys()` derives from those registrations, and `prefKeys.test.ts` fails if a
 persisted key isn't registered.
+
+#### `--update`
+
+A from-source build has no upstream to be behind, so the update toast, the Updates pane's
+**What's new** button and the dialog itself never appear under plain `mise run dev`.
+`--update release` poses as an npm install one minor release behind, and `--update commit`
+as a local build behind trunk; either serves mocked release notes or commits in place of
+GitHub's. The verdict and its upgrade command are the real ones for that install kind, and
+the Updates toggle still silences it. Only a from-source daemon reads `CARET_DEV_UPDATE`,
+so an installed caret can't be made to show a mock.
+
+The toast shows once per update, per browser. Add `--fresh` to see it again, or open
+What's new from **Settings → Updates**.
 
 #### The three plans, and injecting a fourth
 
