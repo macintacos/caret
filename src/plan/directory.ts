@@ -13,6 +13,7 @@ import type { Dirent } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 
+import { compareCodeUnits } from "@/lib/compare.ts";
 import type { DirEntry, DirListing, FileRefKind } from "@/lib/types.ts";
 import { resolveInCwd, SKIP_DIRS, safeRealpath } from "@/plan/excerpt.ts";
 
@@ -28,10 +29,9 @@ export const MAX_DIR_DEPTH = 10;
 
 // Directories first, then by name — what a tree wants, and what makes the cap
 // deterministic rather than a slice of whatever order readdir happened to give.
-// Compared by code point rather than locale so the cut is the same everywhere.
 function byKindThenName(a: DirEntry, b: DirEntry): number {
   if (a.kind !== b.kind) return a.kind === "directory" ? -1 : 1;
-  return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+  return compareCodeUnits(a.name, b.name);
 }
 
 // A dotted name joins the skip set for the same reason `basenameSearch` refuses

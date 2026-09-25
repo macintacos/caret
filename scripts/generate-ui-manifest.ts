@@ -16,6 +16,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { compareCodeUnits } from "@/lib/compare.ts";
 import { walkDist } from "@/ui/assets.ts";
 
 /** One asset: its request URL path, the import specifier (relative to the
@@ -73,7 +74,7 @@ export function enumerateDist(distDir: string, outFile: string): ManifestEntry[]
       if (!importPath.startsWith(".")) importPath = `./${importPath}`;
       return { urlPath, importPath, varName: varNameFor(urlPath) };
     })
-    .sort((a, b) => (a.urlPath < b.urlPath ? -1 : a.urlPath > b.urlPath ? 1 : 0));
+    .sort((a, b) => compareCodeUnits(a.urlPath, b.urlPath));
 }
 
 /** Enumerate ui/dist/ and write the generated manifest module. Returns the

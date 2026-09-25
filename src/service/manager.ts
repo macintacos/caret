@@ -3,6 +3,8 @@
 // the launchd and systemd implementations layer on top, and the composition point
 // selects between them (src/commands/service-target.ts).
 
+import { compareCodeUnits } from "@/lib/compare.ts";
+
 export interface ServiceStatus {
   /** The supervisor knows the unit. What that rests on differs by platform, and the
    * difference is visible after a terminal failure: on macOS it is loadedness, and
@@ -128,5 +130,5 @@ export function serviceEnvironment(
  * than always rewrite. Not locale-sensitive: that would make the output depend on
  * the installing shell's locale. */
 export function sortedEnvironment(env: Record<string, string>): [string, string][] {
-  return Object.entries(env).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return Object.entries(env).sort(([a], [b]) => compareCodeUnits(a, b));
 }
