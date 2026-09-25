@@ -14,7 +14,7 @@
 // hook wiring (which agent event triggers it) lives in the command + adapter
 // layer, keeping this core agent-agnostic.
 
-import { type LogContext, logDebug, logInfo } from "@/lib/log.ts";
+import { logDebug, logInfo, setLogContext } from "@/lib/log.ts";
 import type { ClientReview } from "@/lib/types.ts";
 import type { ParsedHookInput } from "@/review/orchestrate.ts";
 
@@ -29,26 +29,26 @@ export interface ReconcileDeps {
 /** Reconcile a terminal plan approval into the daemon. A failed parse is a no-op.
  * Never throws. */
 export async function runReconcile(parsed: ParsedHookInput, deps: ReconcileDeps): Promise<void> {
-  const ctx: LogContext = {};
+  setLogContext({});
   try {
     if ("error" in parsed) throw parsed.error;
     const input = parsed.input;
-    ctx.sessionId = input.sessionId;
+    setLogContext({ sessionId: input.sessionId });
     // No session id → nothing to match a pending review against.
     if (!input.sessionId) return;
     // Supersede keeps at most one pending review per session, so a session-id
     // match is the review this ExitPlanMode just approved (or its latest revision).
     const match = (await deps.listReviews()).find((r) => r.sessionId === input.sessionId);
     if (!match) {
-      logDebug("reconcile", "no pending review for session; nothing to reconcile", { ...ctx });
+      logDebug("reconcile", "no pending review for session; nothing to reconcile");
       return;
     }
-    ctx.reviewId = match.id;
+    setLogContext({ sessionId: input.sessionId, reviewId: match.id });
     await deps.resolveReview(match.id);
-    logInfo("reconcile", "terminal approval reconciled", { ...ctx });
+    logInfo("reconcile", "terminal approval reconciled");
   } catch (err) {
     // Best-effort: the plan is already approved, so a failure here just leaves
     // the UI's stale-but-harmless pending review — never a deny, never a throw.
-    logDebug("reconcile", "reconcile skipped", { ...ctx, err: String(err) });
+    logDebug("reconcile", "reconcile skipped", { err: String(err) });
   }
 }
