@@ -125,7 +125,7 @@ plans_dir = "~/.local/share/opencode/plans"
 
 | Key             | Default | Purpose                                                                                                                                    |
 | --------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `updates.check` | `true`  | Whether the daemon asks once a day whether a newer caret is out — the npm registry for an installed caret, GitHub instead for a build from source. Hot-reloads, so turning it off takes effect without a daemon restart. |
+| `updates.check` | `true`  | Whether the daemon asks once a day whether a newer caret is out — the npm registry for an installed caret, GitHub instead for a build from source. Off also stops **What's new** from asking GitHub. Hot-reloads, so turning it off takes effect without a daemon restart. |
 
 ```toml
 [updates]

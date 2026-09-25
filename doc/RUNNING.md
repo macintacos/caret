@@ -248,7 +248,13 @@ This is what you see when the answer is yes.
 A toast arrives on your next page load, and it names the version rather than just saying
 one exists. It waits until you read or dismiss it instead of fading, and it appears
 **once per version** — the same release never nags you twice, but a newer one gets its own
-notice. **View** on the toast opens **Settings → Updates**.
+notice. **What's new** on the toast opens a dialog listing what changed since your
+version.
+
+The dialog shows the release notes for every release you skipped on an installed caret,
+and the trunk commits since your build on a locally-built one. Its footer links the full
+comparison on GitHub and repeats the upgrade command. It fetches from GitHub only when you
+open it.
 
 While an update is waiting, a small mark sits on the settings button in the top bar and on
 the **Updates** row in the settings rail, so the notice is findable again after you
@@ -257,7 +263,8 @@ dismiss it.
 The **Updates** pane says which version you are running, which is available, and the exact
 command that installs it — the command matches how *this* caret was installed, so a
 published install and a locally-built one are told apart for you. There is no update
-button: caret tells you what to run, and you run it.
+button: caret tells you what to run, and you run it. While an update is waiting, a
+**What's new** button there opens the same dialog.
 
 Two readings are not problems, and the pane says so rather than reading like a failure:
 
