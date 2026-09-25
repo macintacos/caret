@@ -553,7 +553,10 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   }
 
   // POST /api/reviews — an incoming plan from the hook.
-  async function handleCreateReview(req: Request, routed: Routed): Promise<Response> {
+  async function handleCreateReview(
+    req: Request,
+    bindRequestLog: (owner: CaretLogger) => void,
+  ): Promise<Response> {
     if (liveness.isDraining()) {
       // 503 is postReview's re-post signal — keep it for draining only. The warn records
       // the refusal on this side.
@@ -562,9 +565,10 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     }
     const body = await parseBody(req, PlanInputSchema);
     // Without a sessionId the router invents an anon id no hook record carries.
-    if (body.sessionId) routed.log = log.child({ sessionId: body.sessionId });
+    const reqLog = body.sessionId ? log.child({ sessionId: body.sessionId }) : log;
+    bindRequestLog(reqLog);
     // The router logs the review record (created vs appended) itself.
-    const routing = await routePlan(body, store, routed.log);
+    const routing = await routePlan(body, store, reqLog);
     // Drop superseded reviews' unsettled long-poll entries — their hooks have
     // given up (or will, at their own timeout), and a lingering unsettled entry
     // pins openDecisionCount, blocking idle shutdown (EXC-454). A still-polling
@@ -1065,7 +1069,11 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     if (method === "GET" && path === "/api/update/changes") return handleUpdateChanges();
     if (method === "POST" && path === "/api/retire") return handleRetire();
     if (readsUi && (path === "/" || path === INDEX_PATH)) return handleIndex(req);
-    if (method === "POST" && path === "/api/reviews") return handleCreateReview(req, routed);
+    if (method === "POST" && path === "/api/reviews") {
+      return handleCreateReview(req, (owner) => {
+        routed.log = owner;
+      });
+    }
     if (method === "POST" && path === "/api/logs") return handleLogs(req);
     if (method === "POST" && path === "/api/ui/gone") return handleUiGone();
     if (method === "GET" && path === "/api/reviews") return handleListReviews();
