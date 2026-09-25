@@ -13,6 +13,7 @@
   //
   // The verdict→copy mapping is pure and lives in lib/updates.ts; this file is the shell.
   import type { UpdateReport } from "@core/lib/types";
+  import { Button } from "$lib/components/ui/button/index.js";
   import { Field, FieldTitle } from "$lib/components/ui/field/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { isUpdatePending, updatePaneCopy } from "$lib/updates.ts";
@@ -21,8 +22,10 @@
     /** The daemon's verdict, or null when it could not be read. Already reflects the
      * reviewer's live `updates.check` (EXC-1210), so the pane renders it as handed over. */
     report: UpdateReport | null;
+    /** Opens the What's new modal; offered only while an update is pending. */
+    onWhatsNew?: () => void;
   }
-  let { report }: Props = $props();
+  let { report, onWhatsNew = () => {} }: Props = $props();
 
   const copy = $derived(report ? updatePaneCopy(report) : null);
   // The dot is the pane's one hued element, and it carries the verdict before the
@@ -65,6 +68,11 @@
           readonly
           value={copy.command}
           aria-label="Upgrade command" />
+      {/if}
+      {#if report && isUpdatePending(report.status)}
+        <Button class="update-whats-new" variant="outline" size="sm" data-whats-new onclick={onWhatsNew}>
+          What's new
+        </Button>
       {/if}
     {:else}
       <p class="update-placeholder">No update information is available from the daemon.</p>
@@ -129,6 +137,11 @@
   .updates :global(.update-command:focus-visible) {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
+  }
+
+  .updates :global(.update-whats-new) {
+    align-self: flex-start;
+    margin-top: 0.35rem;
   }
 
   /* A degraded pane reads muted — it is a placeholder, not data, and not a failure. */

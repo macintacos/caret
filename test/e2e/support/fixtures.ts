@@ -21,11 +21,13 @@ import { test as base, expect, type Locator, type Page } from "@playwright/test"
 import { KEY_REPEAT_DELAY_MS } from "@ui/src/lib/keyRepeat.ts";
 import { waitForHealth } from "@/daemon/client.ts";
 import type {
+  BuildKind,
   ClientReview,
   ConfigPatch,
   DraftBody,
   PlanInput,
   RouteResult,
+  UpdateChanges,
   UpdateStatus,
 } from "@/lib/types.ts";
 import { RUMDL_VERSION } from "@/plan/rumdl.ts";
@@ -105,6 +107,10 @@ export interface E2EOptions {
    * so no spec meets a toast or a badge it did not ask for.
    */
   updateStatus: UpdateStatus;
+  /** The install kind the staged verdict rides on; `"dev"` by default, the from-source truth. */
+  updateInstall: BuildKind;
+  /** What GET /api/update/changes serves. Null (the default) leaves the route unwired, so it 404s. */
+  updateChanges: UpdateChanges | null;
 }
 
 const DAEMON_ENTRY = fileURLToPath(new URL("./daemon-entry.ts", import.meta.url));
@@ -222,7 +228,9 @@ function pinnedRumdl(): string {
 export const test = base.extend<E2EOptions & { daemon: Daemon }>({
   bootTimeoutMs: [15_000, { option: true }],
   updateStatus: [{ kind: "unavailable", reason: "dev" }, { option: true }],
-  daemon: async ({ bootTimeoutMs, updateStatus }, use) => {
+  updateInstall: ["dev", { option: true }],
+  updateChanges: [null, { option: true }],
+  daemon: async ({ bootTimeoutMs, updateStatus, updateInstall, updateChanges }, use) => {
     // Before mkdtemp so an unresolvable rumdl can't leak a state dir.
     const rumdl = pinnedRumdl();
     // Ephemeral, isolated state: the daemon's reviews and logs all live under
@@ -239,6 +247,8 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
         CARET_CONFIG_FILE: join(stateDir, "config.toml"),
         CARET_RUMDL_BIN: rumdl,
         CARET_E2E_UPDATE_STATUS: JSON.stringify(updateStatus),
+        CARET_E2E_UPDATE_INSTALL: updateInstall,
+        CARET_E2E_UPDATE_CHANGES: JSON.stringify(updateChanges),
       },
       stdio: ["pipe", "pipe", "pipe"],
     });

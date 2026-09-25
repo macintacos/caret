@@ -96,4 +96,29 @@ describe("UpdatesPane render", () => {
     expect(commandInput(target) === null).toBe(true);
     expect(target.textContent?.toLowerCase()).not.toContain("error");
   });
+
+  test("a behind verdict offers a What's new button that calls onWhatsNew", () => {
+    for (const status of [RELEASE, COMMIT]) {
+      let calls = 0;
+      const { target } = render(UpdatesPane, {
+        report: report(status),
+        onWhatsNew: () => calls++,
+      });
+      const button = target.querySelector<HTMLButtonElement>("[data-whats-new]");
+      expect(button === null, status.kind).toBe(false);
+      button?.click();
+      expect(calls, status.kind).toBe(1);
+    }
+  });
+
+  test("a verdict with nothing new offers no What's new button", () => {
+    for (const status of [
+      { kind: "current" },
+      { kind: "unavailable", reason: "dev" },
+      { kind: "unknown", reason: "x" },
+    ] as UpdateStatus[]) {
+      const { target } = render(UpdatesPane, { report: report(status) });
+      expect(target.querySelector("[data-whats-new]") === null, status.kind).toBe(true);
+    }
+  });
 });
