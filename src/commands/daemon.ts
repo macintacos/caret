@@ -29,7 +29,7 @@ import {
   settings,
   watchSettings,
 } from "@/config/settings.ts";
-import { devUpdateFor } from "@/daemon/dev-update.ts";
+import { devUpdateIdentity, sourceGit } from "@/daemon/dev-update.ts";
 import { buildDiagnostics, prodDiagnosticsDeps } from "@/daemon/diagnostics.ts";
 import {
   isAddrInUse,
@@ -112,23 +112,28 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
   // The identity the update check judges, captured once: all three are process
   // constants, and the check's cache record is keyed on the version and commit so a
   // verdict about an older build is never reported against this one (EXC-1205).
-  const install = buildKind();
-  const version = VERSION;
-  const commit = currentCommit();
-  // `mise run dev --update <kind>`: a staged update in place of the check, which a dev
-  // build never runs.
-  const devUpdate = devUpdateFor(process.env.CARET_DEV_UPDATE, { install, version, commit });
+  const built = { install: buildKind(), version: VERSION, commit: currentCommit() };
+  // `mise run dev --update <kind>` swaps in an older real build, since one run from
+  // source has no upstream to be behind. Logged either way, so a pose that found nothing
+  // to pose as isn't mistaken for a broken update surface.
+  const devPose = process.env.CARET_DEV_UPDATE;
+  const posed = devUpdateIdentity(devPose, built, sourceGit);
+  if (devPose && built.install === "dev") {
+    log.info(
+      "update",
+      posed
+        ? `CARET_DEV_UPDATE=${devPose}: posing as ${posed.install} ${posed.version} at ${posed.commit.slice(0, 7)}`
+        : `CARET_DEV_UPDATE=${devPose}: no older build to pose as`,
+    );
+  }
+  const { install, version, commit } = posed ?? built;
   // Seeded from the last persisted verdict, so a daemon that starts fresh can answer
   // immediately; the background check below replaces it when it settles.
   const updateCache = fileUpdateCache(updateCheckFile());
-  let updateStatus = devUpdate?.status ?? readCachedStatus(updateCache, version, commit);
+  let updateStatus = readCachedStatus(updateCache, version, commit);
   // The served verdict; GET /api/update and What's new must judge the same one.
   const servedReport = () =>
-    updateReportFor(
-      { install: devUpdate?.install ?? install, version, commit },
-      updateStatus,
-      svc.current().updates.check,
-    );
+    updateReportFor({ install, version, commit }, updateStatus, svc.current().updates.check);
   // Ask — at most once a day, and never on a dev build or under the `updates.check`
   // opt-out — whether a newer caret exists (EXC-1205). Fire-and-forget: nothing awaits it,
   // so boot is never delayed, and runUpdateCheck never rejects. A null result is the
@@ -136,7 +141,6 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
   // Boot fires it once; a resident daemon re-arms it on the upkeep tick, bounded by the
   // same 24h stamp.
   function refreshUpdate(): void {
-    if (devUpdate) return;
     void runUpdateCheck({
       kind: install,
       version,
@@ -240,7 +244,7 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
       lockPath: daemonLock(),
       buildId,
       assetDigest,
-      commit,
+      commit: built.commit,
       // World + boot identity (EXC-461): stateDir is the world key (never
       // logged — identifying); the per-boot instanceId is the loggable handle.
       stateDir: stateDir(),
@@ -280,17 +284,15 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
       onUpdatesEnabled: refreshUpdate,
       // What the update would bring, for the What's new modal (EXC-1452). Judged on the
       // served verdict, so the opt-out makes zero GitHub calls.
-      updateChanges: devUpdate
-        ? async () => devUpdate.changes
-        : createUpdateChanges({
-            install,
-            version,
-            commit,
-            status: () => servedReport().status,
-            releases: listReleases,
-            compare: compareToTrunk,
-            log,
-          }),
+      updateChanges: createUpdateChanges({
+        install,
+        version,
+        commit,
+        status: () => servedReport().status,
+        releases: listReleases,
+        compare: compareToTrunk,
+        log,
+      }),
       // Only a harness-spawned daemon knows which harness the user runs; a resident
       // daemon's adapter (the service, `caret serve`) is a default.
       restartHint: resident ? undefined : adapter.restartHint,

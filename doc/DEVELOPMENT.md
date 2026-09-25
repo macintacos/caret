@@ -261,11 +261,18 @@ persisted key isn't registered.
 
 A from-source build has no upstream to be behind, so the update toast, the Updates pane's
 **What's new** button and the dialog itself never appear under plain `mise run dev`.
-`--update release` poses as an npm install one minor release behind, and `--update commit`
-as a local build behind trunk; either serves mocked release notes or commits in place of
-GitHub's. The verdict and its upgrade command are the real ones for that install kind, and
-the Updates toggle still silences it. Only a from-source daemon reads `CARET_DEV_UPDATE`,
-so an installed caret can't be made to show a mock.
+`--update` makes the daemon judge an older real build in place of itself:
+
+- `--update release` poses as an npm install three releases back, the fourth-newest `v*`
+  tag in your checkout.
+- `--update commit` poses as a local build of `origin/trunk~60`, enough commits back that
+  the list ends in "…and N more".
+
+Everything past the pose is the real path: the check asks npm and GitHub, What's new lists
+real release notes or trunk commits, and every link opens a real page. That needs the
+network, and the tags and `origin/trunk` fetched; the daemon log says what it posed as, or
+that it found nothing to pose as. Only a from-source daemon reads `CARET_DEV_UPDATE`, so
+an installed caret can't be made to pose.
 
 The toast shows once per update, per browser. Add `--fresh` to see it again, or open
 What's new from **Settings → Updates**.

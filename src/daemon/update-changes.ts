@@ -18,7 +18,7 @@ import type { GitHubCommit, GitHubRelease, TrunkComparison } from "@/lib/upstrea
 export const COMMIT_CAP = 50;
 
 /** Strict, so a `-rc` tag can never pass for a release. */
-const RELEASE_TAG = /^v?\d+\.\d+\.\d+$/;
+export const RELEASE_TAG = /^v?\d+\.\d+\.\d+$/;
 /** The sha keys the UI's commit list, so only a validated GitHub value reaches the page. */
 const FULL_SHA = /^[0-9a-f]{40}$/;
 const COMPARABLE_COMMIT = /^[0-9a-f]{7,40}$/;
