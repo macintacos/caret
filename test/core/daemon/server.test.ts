@@ -1617,6 +1617,15 @@ describe("routing fallthrough", () => {
     expect(await res.text()).toBe("not found");
   });
 
+  test("GET /api/reviews/:id with a malformed escape is a 404 that logs no error", async () => {
+    const { recs, log } = recordingLog();
+    await boot({ log });
+    const res = await fetch(`${base}/api/reviews/%E0`);
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("not found");
+    expect(recs.some((r) => r.level === "error")).toBe(false);
+  });
+
   test("a malformed :id sub-path is 404 (not a partial match)", async () => {
     await boot();
     const { id } = await newReview();
@@ -1932,17 +1941,6 @@ test("a failing review create logs its failure against the posting session", asy
     code: "request-failed",
     extra: { sessionId: "S" },
   });
-});
-
-test("a cross-origin POST to a malformed review id gets the CSRF 403, not a 500", async () => {
-  const { recs, log } = recordingLog();
-  await boot({ log });
-  const res = await fetch(`${base}/api/reviews/%E0/resolve`, {
-    method: "POST",
-    headers: { Origin: "http://evil.com" },
-  });
-  expect(res.status).toBe(403);
-  expect(recs.some((r) => r.level === "error")).toBe(false);
 });
 
 test("a throwing log sink during a handler error still returns the clean 500", async () => {

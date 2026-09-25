@@ -302,11 +302,16 @@ interface IdRoute {
 const ID_ROUTE_RE =
   /^\/api\/reviews\/([^/]+)(\/decision|\/resolve|\/draft|\/expire|\/seen|\/file-refs|\/file-search|\/file|\/dir|\/skills|\/skill-description)?$/;
 
-/** Match an /api/reviews/:id[/sub] path, decoding the id; null for any other path. */
+/** Match an /api/reviews/:id[/sub] path, decoding the id; null for any other path
+ * or an id that doesn't decode. */
 function matchIdRoute(path: string): IdRoute | null {
   const m = path.match(ID_ROUTE_RE);
   if (!m) return null;
-  return { id: decodeURIComponent(m[1] as string), sub: m[2] };
+  try {
+    return { id: decodeURIComponent(m[1] as string), sub: m[2] };
+  } catch {
+    return null;
+  }
 }
 
 /** An /api/reviews/:id request: the decoded id, its sub-route, and the daemon
@@ -1133,8 +1138,6 @@ export function createServer(opts: CreateServerOptions): CaretServer {
         return new Response("cross-origin request blocked", { status: 403 });
       }
 
-      // Below the CSRF guard: decoding a malformed id throws, and a blocked request
-      // must still get its 403.
       const idRoute = matchIdRoute(path);
       const route = idRoute && { ...idRoute, log: log.child({ reviewId: idRoute.id }) };
       routed = { method, path, route, log: route?.log ?? log };
