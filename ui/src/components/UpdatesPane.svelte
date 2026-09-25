@@ -1,8 +1,8 @@
 <script lang="ts">
   // The settings Updates pane (EXC-1207): the read-only half of the Updates category —
   // what the daemon's cached verdict says about this caret, and the exact command that
-  // takes the upgrade, plus a What's new button while one is pending. The `updates.check` toggle is an ordinary registry field, so the
-  // shell renders it BENEATH this block rather than this pane replacing it (unlike
+  // takes the upgrade, plus a What's new button while one is pending. The
+  // `updates.check` toggle is an ordinary registry field, so the shell renders it BENEATH this block rather than this pane replacing it (unlike
   // Notifications and Advanced, which own their whole pane).
   //
   // The report arrives as a PROP, which is the one place this diverges from AdvancedPane:

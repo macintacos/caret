@@ -4,9 +4,8 @@
   // source, restartHint), drives review selection + polling, autosave, and resolve
   // (approve variants / reject / request changes), and owns the top-level dialogs
   // — request-changes, settings, What's new, onboarding, and the unsent-comments
-  // guard — plus
-  // theme, safe mode, the keyboard-shortcut dispatcher, and the UI-gone presence
-  // beacon. The behaviors themselves live in $lib/* and @/state/*; this file only
+  // guard — plus theme, safe mode, the keyboard-shortcut dispatcher, and the UI-gone
+  // presence beacon. The behaviors themselves live in $lib/* and @/state/*; this file only
   // holds them together and lays out the TopBar + DiffPlanView.
   import { untrack } from "svelte";
   import { getHealth, getUpdate, getUpdateChanges, markSeen } from "$lib/api.ts";

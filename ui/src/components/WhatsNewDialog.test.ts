@@ -7,7 +7,7 @@ import { flushUntil, render } from "@ui/support/mount.ts";
 import WhatsNewDialog from "@/components/WhatsNewDialog.svelte";
 
 // bits-ui portals the dialog content to document.body on a deferred tick, so every
-// assertion reads the body after an effect+timer flush (the shadcn-foundation verdict).
+// assertion reads the body after an effect+timer flush.
 const content = () => document.body.querySelector("[data-slot='dialog-content']");
 const bodyText = () => content()?.textContent ?? "";
 const anchors = () => [...(content()?.querySelectorAll("a") ?? [])];

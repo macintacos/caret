@@ -125,7 +125,8 @@ const CompareSchema = z.object({
 export type GitHubRelease = z.infer<typeof ReleaseSchema>;
 /** A GitHub commit, narrowed to the fields caret reads. */
 export type GitHubCommit = z.infer<typeof CommitSchema>;
-/** A `<commit>...trunk` comparison: up to 250 commits (the newest 250 when truncated) oldest first, and the full count. */
+/** A `<commit>...trunk` comparison: up to 250 commits (the newest 250 when truncated)
+ * oldest first, and the full count. */
 export type TrunkComparison = z.infer<typeof CompareSchema>;
 
 async function readParsed<T>(url: string, schema: z.ZodType<T>, fetchImpl: FetchLike) {

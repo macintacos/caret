@@ -43,8 +43,8 @@
   );
 
   // The sanitizer's output, tightened for a surface that renders GitHub-authored text:
-  // an <img>, <video> or <audio> would make the browser call out to its host, and an in-tab link would
-  // navigate the review away.
+  // an <img>, <video> or <audio> would make the browser call out to its host, and an
+  // in-tab link would navigate the review away.
   function releaseHtml(body: string): string {
     const template = document.createElement("template");
     template.innerHTML = renderMarkdown(body);
