@@ -1,7 +1,9 @@
 // Semver comparison for caret's own version numbers — the `X.Y.Z` triple parse and
 // the strictly-newer test every upgrade check decides on. Pure TS with no imports,
 // shared by the daemon's update check and the OpenCode adapter's install-time
-// staleness verdict so both answer "is this behind?" the same way.
+// staleness verdict so both answer "is this behind?" the same way. Browser-safe: the UI
+// reaches it through `@core` to build the What's new compare link, so it must stay
+// node-free.
 
 /** Semver triple `[major, minor, patch]`, or null when `v` is not `X.Y.Z` (an optional
  * leading `v` is stripped; trailing prerelease/build metadata is ignored). */

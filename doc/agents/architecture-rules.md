@@ -115,8 +115,8 @@ not built here.
 
 Some modules are imported by **both** runtimes — the compiled bun binary and the browser
 UI bundle (the UI reaches them through the `@core/*` alias: `src/lib/types.ts`,
-`config/constants.ts`, `redact/core.ts`, `ui/log-bridge.ts`). Every such module is
-**pure TS with zero node imports** — the node-free property is per-module, so a
+`config/constants.ts`, `redact/core.ts`, `ui/log-bridge.ts`, `lib/semver.ts`). Every such
+module is **pure TS with zero node imports** — the node-free property is per-module, so a
 browser-safe file can sit in a domain directory beside node-only siblings.
 
 The reason is the browser bundle: a `node:*` import in a `@core`-shared module either
