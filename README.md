@@ -61,7 +61,8 @@ bunx --no-cache @macintacos/caret@latest install --uninstall  # remove
 ```
 
 `caret`'s UI is designed to check for updates, at most once a day. When a newer `caret` is
-out, the review UI says so once: a toast on load, a mark on the settings button, and a
+out, the review UI says so once: a toast on load that opens **What's new** (the skipped
+release notes or trunk commits), a mark on the settings button, and a
 **Settings → Updates** pane naming the version and the exact command to take it.
 
 Turn the check off from that same pane, or by hand in

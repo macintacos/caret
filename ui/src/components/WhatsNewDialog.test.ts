@@ -69,13 +69,18 @@ describe("WhatsNewDialog", () => {
     expect(content()?.querySelector("strong")?.textContent).toBe("Bold");
   });
 
-  test("strips body images and opens body links in a new tab", async () => {
+  test("strips body media and opens body links in a new tab", async () => {
     const load = async (): Promise<UpdateChanges> => ({
       kind: "releases",
-      releases: [{ version: "1.5.0", body: "![x](https://e.com/x.png) [docs](https://e.com/d)" }],
+      releases: [
+        {
+          version: "1.5.0",
+          body: '![x](https://e.com/x.png) <video src="https://e.com/v.mp4"></video> <audio src="https://e.com/a.mp3"></audio> [docs](https://e.com/d)',
+        },
+      ],
     });
     await open(BUNDLE, load, () => bodyText().includes("docs"));
-    expect(content()?.querySelector("img") === null).toBe(true);
+    expect(content()?.querySelector("img, video, audio") === null).toBe(true);
     const docs = anchors().find((a) => a.textContent === "docs");
     expect(docs?.getAttribute("target")).toBe("_blank");
     expect(docs?.getAttribute("rel")).toBe("noreferrer");

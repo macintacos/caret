@@ -1,9 +1,10 @@
 <script lang="ts">
   // The app shell: the composition root that wires caret's state factories to the
   // review surface. It runs the /api/health probe (version, commit, isDev,
-  // source), drives review selection + polling, autosave, and resolve
+  // source, restartHint), drives review selection + polling, autosave, and resolve
   // (approve variants / reject / request changes), and owns the top-level dialogs
-  // — request-changes, settings, onboarding, and the unsent-comments guard — plus
+  // — request-changes, settings, What's new, onboarding, and the unsent-comments
+  // guard — plus
   // theme, safe mode, the keyboard-shortcut dispatcher, and the UI-gone presence
   // beacon. The behaviors themselves live in $lib/* and @/state/*; this file only
   // holds them together and lays out the TopBar + DiffPlanView.
@@ -21,10 +22,10 @@
     createShortcutDispatcher,
     defaultIsEditingContext,
     EDITOR_SHORTCUTS,
+    type ShortcutScope,
     scopedShortcuts,
     shortcuts,
   } from "$lib/shortcuts/index.ts";
-  import type { ShortcutScope } from "$lib/shortcuts/registry.ts";
   import { sound } from "$lib/sound.ts";
   import { supportsViewTransition } from "$lib/viewTransition.ts";
   import { type AlertStore, createAlerts } from "@/state/alerts.ts";
@@ -78,10 +79,10 @@
   import OnboardingDialog from "@/components/OnboardingDialog.svelte";
   import RequestChangesDialog from "@/components/RequestChangesDialog.svelte";
   import SettingsDialog from "@/components/SettingsDialog.svelte";
-  import WhatsNewDialog from "@/components/WhatsNewDialog.svelte";
   import ShortcutsHelp from "@/components/ShortcutsHelp.svelte";
   import StatusBar from "@/components/StatusBar.svelte";
   import TopBar from "@/components/TopBar.svelte";
+  import WhatsNewDialog from "@/components/WhatsNewDialog.svelte";
 
   // ----- Reactive backing state -----
   // `daemonChanged`: set when the daemon behind the port is replaced (its
@@ -114,6 +115,8 @@
   // The active adapter's id (EXC-791) — the environment the UI adapts to (e.g. an
   // OpenCode session). Undefined until the probe lands, or for a daemon predating it.
   let source = $state<string | undefined>(undefined);
+  // What to do after upgrading, in the spawning harness's words, for What's new.
+  // Undefined until the probe lands, or on a resident daemon, which withholds it.
   let restartHint = $state<string | undefined>(undefined);
   // The daemon's update verdict (EXC-1207), read on load and re-read after the
   // Updates toggle lands. Null when it can't be read — a daemon that wires no update

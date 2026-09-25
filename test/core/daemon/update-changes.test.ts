@@ -10,6 +10,7 @@ import {
   selectReleases,
   type UpdateChangesDeps,
 } from "@/daemon/update-changes.ts";
+import { updateReportFor } from "@/daemon/update-check.ts";
 import { noopLogger } from "@/lib/log.ts";
 import type { UpdateStatus } from "@/lib/types.ts";
 import type { GitHubCommit, GitHubRelease } from "@/lib/upstream.ts";
@@ -35,7 +36,7 @@ const BEHIND_COMMIT: UpdateStatus = { kind: "behind-commit", aheadBy: 3, command
 
 /** Deps whose every read is counted; overrides replace any field. */
 function deps(over: Partial<UpdateChangesDeps> = {}) {
-  const calls = { releases: 0, compare: 0, trunkHead: 0 };
+  const calls = { releases: 0, compare: 0 };
   const d: UpdateChangesDeps = {
     install: "bundle",
     version: "1.0.0",
@@ -49,17 +50,13 @@ function deps(over: Partial<UpdateChangesDeps> = {}) {
       calls.compare++;
       return { total_commits: 3, commits: oldestFirst(3) };
     },
-    trunkHead: async () => {
-      calls.trunkHead++;
-      return [commit(99)];
-    },
     log: noopLogger,
     ...over,
   };
   return {
     calls,
     get: createUpdateChanges(d),
-    fetches: () => calls.releases + calls.compare + calls.trunkHead,
+    fetches: () => calls.releases + calls.compare,
   };
 }
 
@@ -117,19 +114,45 @@ test("commits are capped with the remainder counted in `more`", async () => {
   expect(got.more).toBe(10);
 });
 
-test("a truncated compare lists trunk's head instead of its oldest page", async () => {
-  const { get, calls } = deps({
+test("a truncated compare (GitHub's newest 250) is listed newest first in one request", async () => {
+  const newest250 = Array.from({ length: 250 }, (_, i) => commit(i + 51));
+  let reads = 0;
+  const { get } = deps({
     install: "binary",
     status: () => BEHIND_COMMIT,
-    compare: async () => ({ total_commits: 300, commits: oldestFirst(250) }),
+    compare: async () => {
+      reads++;
+      return { total_commits: 300, commits: newest250 };
+    },
   });
   const got = await get();
-  expect(calls.trunkHead).toBe(1);
-  expect(got).toEqual({
-    kind: "commits",
-    commits: [{ sha: sha(99), subject: "change 99", pr: null }],
-    more: 299,
+  if (got?.kind !== "commits") throw new Error("expected commits");
+  expect(got.commits[0]?.sha).toBe(sha(300));
+  expect(got.commits).toHaveLength(COMMIT_CAP);
+  expect(got.more).toBe(300 - COMMIT_CAP);
+  expect(reads).toBe(1);
+});
+
+test("a rejected read answers null and is retried on the next open", async () => {
+  let reads = 0;
+  const { get } = deps({
+    releases: async () => {
+      reads++;
+      throw new Error("boom");
+    },
   });
+  expect(await get()).toBeNull();
+  expect(await get()).toBeNull();
+  expect(reads).toBe(2);
+});
+
+test("the real served verdict keeps its identity, so two opens make one fetch", async () => {
+  const held: UpdateStatus = BEHIND_RELEASE;
+  const id = { install: "bundle" as const, version: "1.0.0", commit: "abc1234" };
+  const { get, fetches } = deps({ status: () => updateReportFor(id, held, true).status });
+  await get();
+  await get();
+  expect(fetches()).toBe(1);
 });
 
 test("a squash subject's (#N) is its PR; the subject is the first line; bad shas drop", async () => {

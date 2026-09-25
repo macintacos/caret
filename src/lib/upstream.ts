@@ -1,5 +1,6 @@
 // Best-effort reads of caret's published upstream state: npm's `latest`, GitHub's
-// newest release tag, and how far trunk has moved past a given commit. Every read is
+// newest release tag, how far trunk has moved past a given commit, and — for What's
+// new, which answers 502 on null — the release list and a trunk comparison. Every read is
 // bounded and degrades to null on any failure — non-200, unparseable body, missing or
 // wrong-typed field, timeout, no network — because every caller (the daemon's update
 // check, the OpenCode install's staleness verdict) treats an unreadable upstream as an
@@ -35,10 +36,6 @@ const COMPARE_URL = "https://api.github.com/repos/macintacos/caret/compare";
 /** Every caret release on one page; 100 is GitHub's maximum page size. */
 const RELEASES_URL = "https://api.github.com/repos/macintacos/caret/releases?per_page=100";
 
-/** Trunk's newest commits, newest first. */
-const TRUNK_COMMITS_URL =
-  "https://api.github.com/repos/macintacos/caret/commits?sha=trunk&per_page=50";
-
 /** How long any upstream read waits. Bounded for the same reason every daemon fetch is
  * (`src/daemon/client.ts`): these run behind an install spinner or on the daemon's boot
  * path, and a blackholed connection would otherwise stall for the OS timeout. */
@@ -55,7 +52,7 @@ export type FetchLike = (
 const GITHUB_HEADERS = { "user-agent": "caret" } as const;
 
 /** Fetch `url` and parse its body, or null when anything at all goes wrong. The one
- * "any failure → null" read the three public readers share; each then picks and
+ * "any failure → null" read every public reader shares; each then picks and
  * type-checks its own field. */
 async function readJson(
   url: string,
@@ -128,7 +125,7 @@ const CompareSchema = z.object({
 export type GitHubRelease = z.infer<typeof ReleaseSchema>;
 /** A GitHub commit, narrowed to the fields caret reads. */
 export type GitHubCommit = z.infer<typeof CommitSchema>;
-/** A `<commit>...trunk` comparison: up to 250 commits oldest first, and the full count. */
+/** A `<commit>...trunk` comparison: up to 250 commits (the newest 250 when truncated) oldest first, and the full count. */
 export type TrunkComparison = z.infer<typeof CompareSchema>;
 
 async function readParsed<T>(url: string, schema: z.ZodType<T>, fetchImpl: FetchLike) {
@@ -151,9 +148,4 @@ export function compareToTrunk(
     CompareSchema,
     fetchImpl,
   );
-}
-
-/** Trunk's newest 50 commits, newest first, or null when unreadable. */
-export function trunkHead(fetchImpl: FetchLike = fetch): Promise<GitHubCommit[] | null> {
-  return readParsed(TRUNK_COMMITS_URL, z.array(CommitSchema), fetchImpl);
 }

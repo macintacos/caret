@@ -7,8 +7,8 @@
 // Pure and node-free, in the shape of notify.ts's bellPresentation and safeMode.ts: no
 // mount, no fetch, no storage, so every arm unit-tests without a browser. Nothing here
 // derives an upgrade command — `status.command` rides the wire because the daemon is the
-// only party that knows how this caret was installed. `install` otherwise shapes only
-// wording and `compareUrl`, which compares release tags for a bundle and the build commit
+// only party that knows how this caret was installed. `compareUrl` is the one function
+// here that reads `install`: it compares release tags for a bundle and the build commit
 // for a binary.
 
 import { parseVersionTriple } from "@core/lib/semver";
@@ -20,10 +20,16 @@ import type { UpdateReport, UpdateStatus } from "@core/lib/types";
  * dedicated copy below and falls back to the generic arm, never a broken render. */
 const UNCOMPARABLE = "could not compare this build against trunk";
 
+/** A verdict that caret is behind — the one kind that carries an upgrade command. */
+export type PendingUpdateStatus = Extract<
+  UpdateStatus,
+  { kind: "behind-release" | "behind-commit" }
+>;
+
 /** Whether this verdict is worth showing the reviewer at all — the whole badge
  * condition. `current`, `unavailable`, and `unknown` are all quiet: only a caret that
  * is actually behind earns a dot. */
-export function isUpdatePending(status: UpdateStatus): boolean {
+export function isUpdatePending(status: UpdateStatus): status is PendingUpdateStatus {
   return status.kind === "behind-release" || status.kind === "behind-commit";
 }
 
@@ -121,7 +127,7 @@ export function updatePaneCopy(report: UpdateReport): {
   }
 }
 
-export const REPO_URL = "https://github.com/macintacos/caret";
+const REPO_URL = "https://github.com/macintacos/caret";
 
 const COMMIT_SHA = /^[0-9a-f]{7,40}$/;
 
@@ -149,12 +155,12 @@ export function pullUrl(pr: number): string | null {
  * restart hint when the daemon knows it, then one line about the other harnesses. The
  * commit arm has no `--refresh` note because `mise run build --install` takes none. */
 export function upgradeGuidance(
-  status: Extract<UpdateStatus, { kind: "behind-release" | "behind-commit" }>,
+  status: PendingUpdateStatus,
   restartHint: string | undefined,
 ): { command: string; lines: string[] } {
   const generic =
     status.kind === "behind-release"
-      ? "`--refresh` updates caret in every harness it's installed in — restart each one afterward."
+      ? "Its --refresh flag updates caret in every harness it's installed in — restart each one afterward."
       : "Restart each harness afterward so it loads the new build.";
   return { command: status.command, lines: restartHint ? [restartHint, generic] : [generic] };
 }

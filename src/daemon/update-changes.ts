@@ -19,9 +19,11 @@ export const COMMIT_CAP = 50;
 
 /** Strict, so a `-rc` tag can never pass for a release. */
 const RELEASE_TAG = /^v?\d+\.\d+\.\d+$/;
+/** The sha keys the UI's commit list, so only a validated GitHub value reaches the page. */
 const FULL_SHA = /^[0-9a-f]{40}$/;
 const COMPARABLE_COMMIT = /^[0-9a-f]{7,40}$/;
 
+/** Every effect createUpdateChanges performs, injected so tests run without GitHub. */
 export interface UpdateChangesDeps {
   install: BuildKind;
   version: string;
@@ -29,8 +31,8 @@ export interface UpdateChangesDeps {
   /** The served verdict — `updateReportFor(...).status`, so the opt-out reads `disabled`. */
   status: () => UpdateStatus;
   releases: () => Promise<GitHubRelease[] | null>;
+  /** At most 250 commits — the newest when truncated — oldest first, plus `total_commits`. */
   compare: (commit: string) => Promise<TrunkComparison | null>;
-  trunkHead: () => Promise<GitHubCommit[] | null>;
   log: CaretLogger;
 }
 
@@ -72,8 +74,9 @@ export function prNumber(subject: string): number | null {
 /** A thunk answering GET /api/update/changes. One slot, keyed by the identity of the
  * served status object: a settled check assigns a fresh object, so it always misses,
  * even when its JSON is unchanged (a binary's trunk target moves under the same
- * verdict). The promise is stored so concurrent opens share one fetch; a null clears
- * the slot so a failure is retried on the next open.
+ * verdict). That relies on `updateReportFor` returning the held status by reference.
+ * The promise is stored so concurrent opens share one fetch; a null, or a rejection
+ * mapped to null, clears the slot so the next open retries.
  *
  * ponytail: memory only, so an idle-exit costs one fetch on the next open; persist
  * beside update-check.json if the 60/h rate limit ever strains. */
@@ -82,10 +85,12 @@ export function createUpdateChanges(deps: UpdateChangesDeps): () => Promise<Upda
   return () => {
     const status = deps.status();
     if (slot?.status === status) return slot.promise;
-    const promise = changesFor(deps, status).then((changes) => {
-      if (changes === null && slot?.promise === promise) slot = null;
-      return changes;
-    });
+    const promise = changesFor(deps, status)
+      .catch(() => failed(deps.log))
+      .then((changes) => {
+        if (changes === null && slot?.promise === promise) slot = null;
+        return changes;
+      });
     slot = { status, promise };
     return promise;
   };
@@ -105,12 +110,7 @@ async function changesFor(
 
   const compared = await deps.compare(deps.commit);
   if (!compared) return failed(deps.log);
-  const total = compared.total_commits;
-  // A truncated compare holds the OLDEST commits; trunk is linear, so its head is in range.
-  const newestFirst =
-    compared.commits.length < total ? await deps.trunkHead() : [...compared.commits].reverse();
-  if (!newestFirst) return failed(deps.log);
-  return selectCommits(newestFirst, total, COMMIT_CAP);
+  return selectCommits([...compared.commits].reverse(), compared.total_commits, COMMIT_CAP);
 }
 
 function failed(log: CaretLogger): null {

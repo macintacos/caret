@@ -1,21 +1,23 @@
 // The update surface (EXC-1207): a once-per-version toast on load, the settings-gear
-// dot, the Settings dialog's Updates pane, and the What's new modal both open (EXC-1452).
+// dot, the Settings dialog's Updates pane, and What's new, opened from the toast and from
+// the pane (EXC-1452).
 //
 // What needs a real browser here is the toast card actually rendering and its button
-// actually opening a PORTALLED dialog, that dialog stacking over Settings, and `localStorage` suppressing the
-// second toast across a real reload — none of which a mounted component models, and the
-// third of which no unit can even stage. The verdict→copy mapping is pure and lives in
-// `ui/src/lib/updates.test.ts`; the pane's own render, the rail badge, and the gear's
-// aria-label are component units (`UpdatesPane.test.ts`, `SettingsDialog.test.ts`,
-// `TopBar.test.ts`).
+// actually opening a PORTALLED dialog, that dialog stacking over Settings, and
+// `localStorage` suppressing the second toast across a real reload — none of which a
+// mounted component models, and the last of which no unit can even stage. The
+// verdict→copy mapping is pure and lives in `ui/src/lib/updates.test.ts`; the pane's own
+// render, the rail badge, the gear's aria-label, and the What's new body are component
+// units (`UpdatesPane.test.ts`, `SettingsDialog.test.ts`, `TopBar.test.ts`,
+// `WhatsNewDialog.test.ts`).
 //
 // Nothing here stubs a route. The daemon owns the whole answer (EXC-1210): its BUILD
 // verdict is staged through the fixture's `updateStatus` option (with `updateInstall` and
-// `updateChanges` beside it), and the reviewer's
-// `updates.check` is folded over it per request — so the opt-out specs below exercise the
-// real fold rather than a `page.route` that would only test itself. The fixture daemon's
-// default verdict is the quiet from-source one, which is why the specs outside the
-// describe block see no toast they did not ask for.
+// `updateChanges` beside it), and the reviewer's `updates.check` is folded over it per
+// request — so the opt-out specs below exercise the real fold rather than a `page.route`
+// that would only test itself. The fixture daemon's default verdict is the quiet
+// from-source one, which is why the specs outside the describe block see no toast they
+// did not ask for.
 
 import type { Page } from "@playwright/test";
 
@@ -71,8 +73,14 @@ test.describe("with a pending update", () => {
     const contents = page.locator("[data-slot='dialog-content']");
     await page.keyboard.press("r");
     await page.keyboard.press("a");
-    await expect(contents).toHaveCount(1);
+    // `?` is global and keys dispatch in order: once its dialog is up, any dialog r or a
+    // opened would be up too, which bounds the count.
+    await page.keyboard.press("?");
+    await expect(page.getByRole("dialog", { name: /Shortcuts/ })).toBeVisible();
+    await expect(contents).toHaveCount(2);
 
+    await page.keyboard.press("Escape");
+    await expect(contents).toHaveCount(1);
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
   });

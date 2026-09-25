@@ -191,7 +191,9 @@ directories and the daemon serves the result on `GET /api/reviews/:id/skills`, w
 where the feedback editors' `/` completion reads the names a reviewer can cite. Both are
 the same rule — a capability reaches the browser over the wire, never by importing an
 adapter — so an agent that enumerates nothing simply yields an empty list and no
-completion fires.
+completion fires. The adapter's `restartHint`, the post-upgrade line What's new shows,
+rides `GET /api/health` too, but a resident daemon withholds it: its adapter is a default,
+not the harness the user actually runs.
 
 Skills reach the reviewer by two routes, not one. The enumeration only names them; a
 second, on-demand route answers what a named skill actually does. When the reviewer

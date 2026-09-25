@@ -14,7 +14,7 @@ export type AlertVariant = "default" | "success" | "destructive";
 
 /**
  * An affordance that ACTS on an alert, rendered as a labelled button beside the
- * message (EXC-1207: the update toast opens Settings on its Updates pane). Its own
+ * message (the update toast's "What's new" opens the What's new modal). Its own
  * button, not a clickable card — the card already carries the dismiss control, and
  * nesting interactive controls is an accessibility defect.
  */

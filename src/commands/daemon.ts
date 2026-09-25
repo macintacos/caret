@@ -53,7 +53,6 @@ import {
   latestReleaseTag,
   listReleases,
   publishedCaretVersion,
-  trunkHead,
 } from "@/lib/upstream.ts";
 import { createStore } from "@/review/store.ts";
 import { isSupervised, SERVICE_TERMINAL_EXIT_STATUS } from "@/service/manager.ts";
@@ -119,6 +118,9 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
   // immediately; the background check below replaces it when it settles.
   const updateCache = fileUpdateCache(updateCheckFile());
   let updateStatus = readCachedStatus(updateCache, version, commit);
+  // The served verdict; GET /api/update and What's new must judge the same one.
+  const servedUpdate = () =>
+    updateReportFor({ install, version, commit }, updateStatus, svc.current().updates.check);
   // Ask — at most once a day, and never on a dev build or under the `updates.check`
   // opt-out — whether a newer caret exists (EXC-1205). Fire-and-forget: nothing awaits it,
   // so boot is never delayed, and runUpdateCheck never rejects. A null result is the
@@ -263,8 +265,7 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
       // check assigns, so GET /api/update never makes a network call of its own — it
       // reads the live `updates.check` off the hot-reloading settings service and folds
       // it over the held verdict, so an opt-out takes effect without a restart (EXC-1210).
-      updateReport: () =>
-        updateReportFor({ install, version, commit }, updateStatus, svc.current().updates.check),
+      updateReport: servedUpdate,
       // Turning the check back on re-runs it, so a reviewer who opted out long ago gets
       // a real verdict on the spot rather than a daemon lifetime later.
       onUpdatesEnabled: refreshUpdate,
@@ -274,17 +275,14 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
         install,
         version,
         commit,
-        status: () =>
-          updateReportFor({ install, version, commit }, updateStatus, svc.current().updates.check)
-            .status,
-        releases: () => listReleases(),
-        compare: (c) => compareToTrunk(c),
-        trunkHead: () => trunkHead(),
+        status: () => servedUpdate().status,
+        releases: listReleases,
+        compare: compareToTrunk,
         log,
       }),
-      // Only a harness-spawned daemon knows which harness the user runs; the service
-      // daemon's adapter is a default.
-      restartHint: isSupervised() ? undefined : adapter.restartHint,
+      // Only a harness-spawned daemon knows which harness the user runs; a resident
+      // daemon's adapter (the service, `caret serve`) is a default.
+      restartHint: resident ? undefined : adapter.restartHint,
       log,
     });
   } catch (e) {

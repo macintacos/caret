@@ -433,7 +433,7 @@ export interface HealthIdentity {
    * predates this field omits it, and the UI falls back to its built-in set. */
   approveVariants?: ApproveVariant[];
   /** What to do after upgrading, in the words of the harness that spawned this daemon.
-   * Absent on a supervised daemon, whose adapter is only a default. */
+   * Absent on a resident daemon, whose adapter is only a default. */
   restartHint?: string;
   /** True when the daemon stays up until told to stop rather than idle-exiting
    * (EXC-1164), so a peer knows which handoff protocol to speak. Three states:

@@ -9,7 +9,7 @@
   import { Spinner } from "$lib/components/ui/spinner/index.js";
   import { renderMarkdown } from "$lib/markdown.ts";
   import { topmostDialogContent } from "$lib/modalStack.ts";
-  import { compareUrl, pullUrl, upgradeGuidance } from "$lib/updates.ts";
+  import { compareUrl, isUpdatePending, pullUrl, upgradeGuidance } from "$lib/updates.ts";
 
   interface Props {
     /** Controlled open — false while the modal plays its exit. */
@@ -38,20 +38,17 @@
   });
 
   const compare = $derived(compareUrl(report));
-  const guidance = $derived.by(() => {
-    const status = report.status;
-    return status.kind === "behind-release" || status.kind === "behind-commit"
-      ? upgradeGuidance(status, restartHint)
-      : null;
-  });
+  const guidance = $derived(
+    isUpdatePending(report.status) ? upgradeGuidance(report.status, restartHint) : null,
+  );
 
   // The sanitizer's output, tightened for a surface that renders GitHub-authored text:
-  // an <img> would make the browser call out to its host, and an in-tab link would
+  // an <img>, <video> or <audio> would make the browser call out to its host, and an in-tab link would
   // navigate the review away.
   function releaseHtml(body: string): string {
     const template = document.createElement("template");
     template.innerHTML = renderMarkdown(body);
-    for (const img of template.content.querySelectorAll("img")) img.remove();
+    for (const media of template.content.querySelectorAll("img, video, audio")) media.remove();
     for (const a of template.content.querySelectorAll("a")) {
       a.setAttribute("target", "_blank");
       a.setAttribute("rel", "noreferrer");
@@ -162,12 +159,62 @@
     font-size: var(--text-base);
     font-weight: 600;
   }
-  .release-body :global(:is(p, ul, ol)) {
+  .release-body :global(:is(p, ul, ol, pre, blockquote)) {
     margin: 0 0 0.5rem;
   }
   .release-body :global(ul),
   .release-body :global(ol) {
     padding-left: 1.25rem;
+  }
+  /* Tailwind Preflight resets lists to list-style: none, dropping the markers. */
+  .release-body :global(ul) {
+    list-style: disc;
+  }
+  .release-body :global(ol) {
+    list-style: decimal;
+  }
+  .release-body :global(li) {
+    margin: 0.1em 0;
+  }
+  /* Body headings sit below the `caret X.Y.Z` heading: weight, not size. */
+  .release-body :global(:is(h1, h2, h3, h4, h5, h6)) {
+    margin: 0.6rem 0 0.3rem;
+    font-size: var(--text-sm);
+    font-weight: 700;
+    line-height: var(--leading-tight);
+    color: var(--ink-soft);
+  }
+  .release-body :global(code) {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    background: var(--paper-sunk);
+    padding: 0.05em 0.3em;
+    border-radius: 3px;
+  }
+  .release-body :global(pre) {
+    padding: 0.5rem 0.6rem;
+    background: var(--paper-sunk);
+    border-radius: var(--radius);
+    overflow-x: auto;
+  }
+  .release-body :global(pre code) {
+    padding: 0;
+    background: none;
+  }
+  .release-body :global(blockquote) {
+    padding-left: 0.7em;
+    border-left: 2px solid var(--rule-strong);
+    color: var(--ink-soft);
+  }
+  .release-body :global(a) {
+    color: var(--accent);
+    text-decoration: underline dotted;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+  }
+  .release-body :global(a:hover) {
+    color: var(--accent-bright);
+    text-decoration-style: solid;
   }
   .commits {
     list-style: none;
@@ -180,14 +227,17 @@
   .commits-more {
     color: var(--ink-soft);
   }
-  .changes a,
+  /* Chrome links stay in the ink — the accent is for selection and brand — so the
+     underline, which Preflight resets, is their whole affordance. */
+  .commits a,
   .upgrade a {
-    color: var(--accent);
-    text-decoration: none;
+    color: inherit;
+    text-decoration-line: underline;
+    text-underline-offset: 0.2em;
   }
-  .changes a:hover,
+  .commits a:hover,
   .upgrade a:hover {
-    text-decoration: underline;
+    color: var(--ink-soft);
   }
   .upgrade {
     display: flex;

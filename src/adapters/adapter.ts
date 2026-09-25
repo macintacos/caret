@@ -37,8 +37,8 @@ export interface AgentAdapter {
   /** The approve variants this adapter offers, in display order. */
   readonly approveVariants: readonly ApproveVariant[];
 
-  /** What to do after upgrading caret so this harness loads it, shown in the What's
-   * new modal. Omitted when the harness needs no instruction. */
+  /** The post-upgrade line the UI shows beside the upgrade command. Optional; an
+   * adapter without one omits it. */
   readonly restartHint?: string;
 
   /**

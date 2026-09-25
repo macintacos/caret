@@ -13,7 +13,6 @@ import {
   latestReleaseTag,
   listReleases,
   publishedCaretVersion,
-  trunkHead,
 } from "@/lib/upstream.ts";
 
 const PKG = "@macintacos/caret";
@@ -156,16 +155,8 @@ test("the trunk comparison lists the commits and their total", async () => {
   expect(urls).toEqual(["https://api.github.com/repos/macintacos/caret/compare/abc1234...trunk"]);
 });
 
-test("trunk's head is its newest 50 commits", async () => {
-  const { fetchImpl, urls } = fetching({ ok: true, body: [COMMIT] });
-  expect(await trunkHead(fetchImpl)).toEqual([COMMIT]);
-  expect(urls).toEqual([
-    "https://api.github.com/repos/macintacos/caret/commits?sha=trunk&per_page=50",
-  ]);
-});
-
 test("each What's new reader degrades to null on a non-200, a malformed body, or no network", async () => {
-  for (const read of [listReleases, trunkHead, (f: FetchLike) => compareToTrunk("abc1234", f)]) {
+  for (const read of [listReleases, (f: FetchLike) => compareToTrunk("abc1234", f)]) {
     expect(await read(fetching({ ok: false, body: [] }).fetchImpl)).toBeNull();
     expect(await read(fetching({ ok: true, body: undefined }).fetchImpl)).toBeNull();
     expect(await read(fetching({ ok: true, body: [{ sha: 7 }] }).fetchImpl)).toBeNull();

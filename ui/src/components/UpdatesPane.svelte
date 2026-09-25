@@ -1,7 +1,7 @@
 <script lang="ts">
   // The settings Updates pane (EXC-1207): the read-only half of the Updates category —
   // what the daemon's cached verdict says about this caret, and the exact command that
-  // takes the upgrade. The `updates.check` toggle is an ordinary registry field, so the
+  // takes the upgrade, plus a What's new button while one is pending. The `updates.check` toggle is an ordinary registry field, so the
   // shell renders it BENEATH this block rather than this pane replacing it (unlike
   // Notifications and Advanced, which own their whole pane).
   //
@@ -70,7 +70,12 @@
           aria-label="Upgrade command" />
       {/if}
       {#if report && isUpdatePending(report.status)}
-        <Button class="update-whats-new" variant="outline" size="sm" data-whats-new onclick={onWhatsNew}>
+        <Button
+          variant="secondary"
+          size="sm"
+          class="float-chip update-whats-new"
+          data-action="whats-new"
+          onclick={onWhatsNew}>
           What's new
         </Button>
       {/if}

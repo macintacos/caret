@@ -82,10 +82,6 @@
     onCopyDiagnostic?: (text: string) => void;
     /** Opens the What's new modal from the Updates pane. */
     onWhatsNew?: () => void;
-    /** Which category to open on (EXC-1207). The host mounts this per open
-     * (ModalPresence), so the seed applies on every open — which is what makes the
-     * update toast's deep link work. Absent, the dialog opens where it always has. */
-    initialCategory?: string;
     /** Whether an update is waiting, badging the Updates rail row (EXC-1207). */
     updatePending?: boolean;
     /** The daemon's update verdict, rendered by the Updates pane — the reviewer's live
@@ -101,7 +97,6 @@
     onClose,
     onCopyDiagnostic = () => {},
     onWhatsNew = () => {},
-    initialCategory,
     updatePending = false,
     updateReport = null,
   }: Props = $props();
@@ -132,8 +127,7 @@
     SETTINGS_CATEGORIES.filter((c) => filtered.some((e) => e.category === c.id)),
   );
 
-  // svelte-ignore state_referenced_locally
-  let selectedId = $state(initialCategory ?? SETTINGS_CATEGORIES[0]?.id ?? "");
+  let selectedId = $state(SETTINGS_CATEGORIES[0]?.id ?? "");
   const selected = $derived(categories.find((c) => c.id === selectedId) ?? categories[0]);
   const paneFields = $derived(staged.filter((f) => f.category === selected?.id));
 

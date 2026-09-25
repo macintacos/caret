@@ -246,9 +246,7 @@
 
          onclick WRAPS the callback rather than passing it by reference: bare, the
          click hands its MouseEvent to whatever optional parameter the callback
-         declares, and a `() => void` prop type does not catch it. App's openSettings
-         takes an optional category, so unwrapped this deep-links Settings to a
-         category named "[object MouseEvent]". -->
+         declares, and a `() => void` prop type does not catch it. -->
     <Button
       variant="secondary"
       size="icon"

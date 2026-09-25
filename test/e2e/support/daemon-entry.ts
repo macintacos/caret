@@ -87,7 +87,7 @@ const buildStatus: UpdateStatus = ((): UpdateStatus => {
   }
 })();
 
-/** The install kind and the changes payload the fixture staged beside the verdict. */
+// The install kind and the changes payload the fixture staged beside the verdict.
 const buildInstall = (process.env.CARET_E2E_UPDATE_INSTALL || "dev") as BuildKind;
 const stagedChanges = JSON.parse(
   process.env.CARET_E2E_UPDATE_CHANGES || "null",
