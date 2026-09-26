@@ -18,6 +18,7 @@ import { daemonLock, reviewsDir } from "@/config/paths.ts";
 import type { Settings } from "@/config/settings.ts";
 import type { BootMarker } from "@/daemon/lifecycle.ts";
 import type { DaemonLock } from "@/lib/build-id.ts";
+import { compareCodeUnits } from "@/lib/compare.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
 import { shortId } from "@/lib/log.ts";
 import { errorMessage, type HealthIdentity } from "@/lib/types.ts";
@@ -446,7 +447,7 @@ const FAILURES_CAP = 50;
 export function groupFailures(records: ErrorRecord[], generatedAt: number): FailuresSection {
   const recent = records
     .filter((r) => inErrorWindow(r.time, generatedAt))
-    .sort((a, b) => compareTimes(a.time ?? "", b.time ?? ""));
+    .sort((a, b) => compareCodeUnits(a.time ?? "", b.time ?? ""));
   const newest = recent.slice(-FAILURES_CAP);
   const groups = new Map<string, FailureGroup>();
   const ungrouped: FailureRecord[] = [];
@@ -469,10 +470,6 @@ export function groupFailures(records: ErrorRecord[], generatedAt: number): Fail
     groups: [...groups.values()],
     ungrouped,
   };
-}
-
-function compareTimes(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 // ---------------------------------------------------------------------------

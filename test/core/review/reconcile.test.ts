@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 
 import { setupTempStateDir } from "@test/support/env.ts";
+import { caretLogRecords } from "@test/support/ndjson.ts";
 import type { ClientReview, PlanInput } from "@/lib/types.ts";
 import { parseHook } from "@/review/orchestrate.ts";
 import { type ReconcileDeps, runReconcile } from "@/review/reconcile.ts";
@@ -151,4 +152,10 @@ test("a resolve failure is swallowed (best-effort), never throws", async () => {
       }),
     ),
   ).resolves.toBeUndefined();
+});
+
+test("the reconciled record carries the session and review ids", async () => {
+  await reconcile(stdin, reconcileDeps({ listReviews: async () => [clientReview()] }));
+  const rec = caretLogRecords().find((r) => r.step === "reconcile" && r.level === 30);
+  expect(rec).toMatchObject({ sessionId: "S", reviewId: "rid" });
 });

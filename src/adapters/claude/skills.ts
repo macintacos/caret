@@ -37,6 +37,7 @@ import {
   installedPluginsFile,
   userSettingsFile,
 } from "@/adapters/claude/paths.ts";
+import { compareCodeUnits } from "@/lib/compare.ts";
 import { readJsonFile } from "@/lib/json-file.ts";
 import { readDescriptionUnder } from "@/lib/skill-doc.ts";
 import type { SkillRef } from "@/lib/types.ts";
@@ -172,7 +173,7 @@ async function enabledPlugins(cwd: string): Promise<Array<[string, string]>> {
     // the plugin half alone (`/superpowers:brainstorming`).
     out.push([key.split("@")[0] ?? key, installPath]);
   }
-  return out.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return out.sort(([a], [b]) => compareCodeUnits(a, b));
 }
 
 /**
