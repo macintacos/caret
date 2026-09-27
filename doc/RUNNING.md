@@ -411,20 +411,21 @@ only genuine failures sit at error.
 ### Diagnostics
 
 - `caret doctor` — a one-shot, read-only diagnosis of the local install. It opens with a
-  `checks:` block — the daemon's reachability, the daemon lock, whether your agent has
-  caret enabled, recent NDJSON error records in the live logs, and whether OpenCode would
-  load a caret behind the published one — each line marked `✓` passed, `✗` failed or `?`
-  undecided (colored only when stdout is a terminal, so a pipe, `NO_COLOR` or CI gets the
-  glyphs bare), and every failing check names the remedy that closes it. The log check
-  weighs only the last 24 hours and reports when each noisy log last erred: an install
-  that has stopped failing goes green on its own rather than waiting for the record to
-  rotate away. Only the OpenCode check leaves your machine, and only when OpenCode's
-  config names caret: it reads npm's published caret version, and degrades to `unknown`
-  offline. Under that sits the state it read those from: running caret processes, daemon
-  identity (version, build, startup commit), lock/port state, effective settings, review
-  counts, the agent adapter's install-state probe, log sizes and error/warn counts, the
-  last 24 hours' failures from both logs grouped by review with their error codes, install
-  and runtime info, and system basics.
+  `checks:` block — the daemon's reachability, the running daemon's version against npm's
+  latest, the daemon lock, whether your agent has caret enabled, recent NDJSON error
+  records in the live logs, and whether OpenCode would load a caret behind the published
+  one — each line marked `✓` passed, `✗` failed or `?` undecided (colored only when stdout
+  is a terminal, so a pipe, `NO_COLOR` or CI gets the glyphs bare), and every failing
+  check names the remedy that closes it. The log check weighs only the last 24 hours and
+  reports when each noisy log last erred: an install that has stopped failing goes green
+  on its own rather than waiting for the record to rotate away. Two checks read npm's
+  published caret version, each degrading to `unknown` offline: the daemon-version check,
+  only when a published caret daemon answers, and the OpenCode check, only when OpenCode's
+  config names caret. Under that sits the state it read those from: running caret
+  processes, daemon identity (version, build, startup commit), lock/port state, effective
+  settings, review counts, the agent adapter's install-state probe, log sizes and
+  error/warn counts, the last 24 hours' failures from both logs grouped by review with
+  their error codes, install and runtime info, and system basics.
 
   Human-readable by default; `caret doctor --json` prints the same document as one JSON
   object (schema marker `caret-doctor/1`). Unlike the logs, it is **always redacted** — it

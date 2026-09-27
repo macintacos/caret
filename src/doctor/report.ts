@@ -23,6 +23,7 @@ import { readJsonFileSync } from "@/lib/json-file.ts";
 import { shortId } from "@/lib/log.ts";
 import { errorMessage, type HealthIdentity } from "@/lib/types.ts";
 import { scrubValue } from "@/redact/node.ts";
+import type { ServiceStatus } from "@/service/manager.ts";
 
 // ---------------------------------------------------------------------------
 // Injected probe shapes
@@ -113,6 +114,12 @@ export interface DoctorDeps {
    * distinguishes a supervisor that should be keeping a daemon up from an on-demand
    * one that idle-exited by design. */
   serviceInstalled: () => boolean;
+  /** The supervisor's own status for this machine's service (prodService().manager.status()
+   * in prod). Read only when the install recorded a service. */
+  serviceStatus: () => Promise<ServiceStatus>;
+  /** npm's latest caret version, or null when it could not be read (publishedCaretVersion
+   * in prod; 3 s bounded). Read only when a published caret daemon answered. */
+  publishedVersion: () => Promise<string | null>;
   readLock: () => DaemonLock | null;
   readBootMarker: () => BootMarker | null;
   isPidAlive: (pid: number) => boolean;
@@ -157,6 +164,12 @@ export interface DaemonSection {
   daemonVersion?: string;
   build?: string;
   commit?: string;
+  /** The supervisor keeps the recorded service's job alive. Absent when no service is
+   * recorded, the host cannot run one, or the supervisor query failed. */
+  serviceLoaded?: boolean;
+  isDev?: boolean;
+  /** npm's latest caret, null when unreadable. Present only for a published caret daemon. */
+  npmLatest?: string | null;
 }
 
 /** The lock file reconciled against the effective port. The lock fields are absent when
@@ -234,7 +247,9 @@ async function safe<T>(build: () => T | Promise<T>): Promise<T | SectionError> {
 /** Assemble the diagnostics document. Never rejects: every section is wrapped in
  * safe(). Does NOT redact — the CLI caller scrubs, always and regardless of
  * [logging].redact. The daemon health is probed ONCE (one bounded network call)
- * and shared between the `daemon` and `lockAndPort` sections. */
+ * and shared between the `daemon` and `lockAndPort` sections. Beyond it, the supervisor
+ * is queried once when a service is recorded, and npm is read once (3 s bounded) when a
+ * published caret daemon answered. */
 export async function collectReport(deps: DoctorDeps): Promise<Report> {
   // One bounded health probe, shared. Wrapped so a throwing health() can't sink
   // collectReport; both sections see null (treated as unreachable) on failure.
@@ -311,17 +326,41 @@ function buildSettings(deps: DoctorDeps): Record<string, unknown> {
 /** The daemon section from the shared health probe: unreachable (null) →
  * { reachable: false }; reachable → its identity, whatever service it claims
  * (a non-caret squatter still shows reachable, with its own service). */
-function buildDaemon(deps: DoctorDeps, health: HealthIdentity | null): DaemonSection {
+async function buildDaemon(
+  deps: DoctorDeps,
+  health: HealthIdentity | null,
+): Promise<DaemonSection> {
   const serviceInstalled = deps.serviceInstalled();
-  if (!health) return { reachable: false, serviceInstalled };
-  return {
-    reachable: true,
-    serviceInstalled,
-    service: health.service,
-    daemonVersion: health.version,
-    build: health.build,
-    commit: health.commit,
-  };
+  const published = health?.service === "caret" && !health.isDev && health.version !== undefined;
+  const [serviceLoaded, npmLatest] = await Promise.all([
+    serviceInstalled ? readServiceLoaded(deps) : undefined,
+    published ? deps.publishedVersion() : undefined,
+  ]);
+  const section: DaemonSection = health
+    ? {
+        reachable: true,
+        serviceInstalled,
+        service: health.service,
+        daemonVersion: health.version,
+        build: health.build,
+        commit: health.commit,
+      }
+    : { reachable: false, serviceInstalled };
+  if (health?.isDev !== undefined) section.isDev = health.isDev;
+  if (serviceLoaded !== undefined) section.serviceLoaded = serviceLoaded;
+  if (npmLatest !== undefined) section.npmLatest = npmLatest;
+  return section;
+}
+
+/** Whether the supervisor keeps the job alive; undefined when it could not say. A failed
+ * query degrades to the health-only verdict rather than sinking the daemon section. */
+async function readServiceLoaded(deps: DoctorDeps): Promise<boolean | undefined> {
+  try {
+    const status = await deps.serviceStatus();
+    return status.unsupported === undefined ? status.keepsAlive : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** The lock + port reconciliation, flattened, plus the boot marker when one is claimed.

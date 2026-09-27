@@ -655,6 +655,7 @@ test("caret doctor --json reports a live daemon's identity and commit", async ()
       daemonVersion: VERSION,
       build: "it-build",
       commit: "it-commit",
+      isDev: true,
     });
     expect((report.lockAndPort as Record<string, unknown>).portServesCaret).toBe(true);
   } finally {

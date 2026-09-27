@@ -39,7 +39,8 @@ one. What each id means:
 
 | id | what failed | relay |
 | --- | --- | --- |
-| `daemon-reachable` | a caret service is recorded but the daemon did not answer, or the effective port answers as something other than caret | the check's remedy verbatim, then offer to read any log it names |
+| `daemon-reachable` | a caret service is recorded but the daemon did not answer, the recorded service's job is not loaded, or is turned off, or the effective port answers as something other than caret | the check's remedy verbatim, then offer to read any log it names |
+| `daemon-version` | the running daemon is older than npm's latest | the check's remedy verbatim |
 | `daemon-lock` | the lock names a dead pid, or a port caret is not configured to bind | the check's remedy verbatim |
 | `agent-install` | the agent the check names does not have caret enabled | `caret install` |
 | `log-errors` | a live log wrote an NDJSON error record in the last 24h; the detail names which log and when it last erred | step 4 |

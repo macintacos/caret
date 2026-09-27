@@ -18,6 +18,7 @@ import {
   type LogStats,
   type Report,
 } from "@/doctor/report.ts";
+import { isNewer } from "@/lib/semver.ts";
 
 /** A section's value, or undefined when it degraded to { error }. */
 function present<T>(value: T | { error: string }): T | undefined {
@@ -45,6 +46,17 @@ function undecided(id: string, title: string, section: string): Check {
 function daemonReachable(report: Report): Check {
   const daemon = present(report.daemon);
   if (daemon === undefined) return undecided("daemon-reachable", "Daemon", "daemon");
+  if (daemon.serviceInstalled && daemon.serviceLoaded === false) {
+    return {
+      id: "daemon-reachable",
+      title: "Daemon",
+      status: "fail",
+      detail:
+        "a caret service is recorded for this install, but its job is not loaded or is turned off",
+      remedy:
+        "run `caret install --refresh` — or check the service is not disabled — then read logs/daemon-stderr.log",
+    };
+  }
   if (daemon.serviceInstalled && !daemon.reachable) {
     return {
       id: "daemon-reachable",
@@ -168,11 +180,53 @@ function logErrors(report: Report): Check {
   };
 }
 
+/** The running daemon's version against npm's latest. A dev build is never compared, and
+ * an unreadable npm is `unknown`, never a `fail`. */
+function daemonVersion(report: Report): Check {
+  const id = "daemon-version";
+  const title = "Daemon version";
+  const daemon = present(report.daemon);
+  if (daemon === undefined) return undecided(id, title, "daemon");
+  const v = daemon.daemonVersion;
+  if (!daemon.reachable || daemon.service !== "caret" || v === undefined) {
+    return { id, title, status: "pass", detail: "no caret daemon is running" };
+  }
+  if (daemon.isDev) {
+    return {
+      id,
+      title,
+      status: "pass",
+      detail: `${v}, a development build — not compared with npm`,
+    };
+  }
+  const latest = daemon.npmLatest;
+  if (latest == null) {
+    return {
+      id,
+      title,
+      status: "unknown",
+      detail: v,
+      reason: "npm's latest caret version could not be read",
+    };
+  }
+  if (isNewer(latest, v)) {
+    return {
+      id,
+      title,
+      status: "fail",
+      detail: `the running daemon is ${v}; npm's latest is ${latest}`,
+      remedy: "run `caret install --refresh` to cycle the service onto the published caret",
+    };
+  }
+  return { id, title, status: "pass", detail: v };
+}
+
 /** Every verdict doctor can reach, in report order, with the caller's own checks — the
  * ones that need an adapter — appended last. */
 export function runChecks(report: Report, adapterChecks: readonly Check[] = []): Check[] {
   return [
     daemonReachable(report),
+    daemonVersion(report),
     daemonLock(report),
     agentInstall(report),
     logErrors(report),

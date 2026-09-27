@@ -19,6 +19,7 @@ import {
   upgradeCheck,
 } from "@/adapters/opencode/upgrade.ts";
 import { isTerminal } from "@/commands/install/ui.ts";
+import { prodService } from "@/commands/service-target.ts";
 import {
   configFile,
   daemonLogFile,
@@ -55,6 +56,7 @@ import {
 import { writeZip } from "@/doctor/zip.ts";
 import { isCompiledBinary, VERSION } from "@/lib/build-id.ts";
 import { errorMessage } from "@/lib/types.ts";
+import { publishedCaretVersion } from "@/lib/upstream.ts";
 
 /** Production probes for the doctor report, reusing the primitives the review
  * path already drives. Deliberately no removeLock or retire — doctor
@@ -82,6 +84,9 @@ function prodDoctorDeps(s: Settings): DoctorDeps {
     baseUrl: `http://localhost:${getPort(s)}`,
     health: httpHealth,
     serviceInstalled: () => existsSync(launcherServiceFile()),
+    // async so prodService()'s synchronous throw off darwin/linux becomes a rejection.
+    serviceStatus: async () => prodService().manager.status(),
+    publishedVersion: () => publishedCaretVersion(),
     readLock: readDaemonLock,
     readBootMarker,
     isPidAlive,
