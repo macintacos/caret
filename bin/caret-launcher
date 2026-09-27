@@ -70,7 +70,7 @@ highest() { sort -t. -k1,1n -k2,2n -k3,3n | tail -1 | cut -f2-; }
 # bin/caret-native embeds its UI at compile time; the bundle serves ui/dist, so a
 # half-installed one would answer every UI request with ENOENT. A non-executable
 # bin/caret would exec-fail at 126 and the supervisor would respawn into it forever.
-# Keep in sync with isLauncherPinned (src/daemon/lifecycle.ts).
+# Keep in sync with isRunnableRoot (src/daemon/lifecycle.ts).
 root_runnable() {
   [ -x "$1/bin/caret" ] || return 1
   [ -x "$1/bin/caret-native" ] || [ -f "$1/ui/dist/index.html" ]

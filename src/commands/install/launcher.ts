@@ -4,8 +4,20 @@
 // (EXC-1160). The install's service step is the caller: the launcher lands before the unit
 // that names it, and goes with it on `--uninstall`.
 
-import { chmodSync, copyFileSync, existsSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  copyFileSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
+
+import { z } from "zod";
 
 import { resolveCaretRoot } from "@/adapters/opencode/packaging.ts";
 import {
@@ -17,7 +29,10 @@ import {
   launcherServiceFile,
   ownedRootsDir,
 } from "@/config/paths.ts";
-import { buildKind } from "@/lib/build-id.ts";
+import { isRunnableRoot } from "@/daemon/lifecycle.ts";
+import { buildKind, VERSION } from "@/lib/build-id.ts";
+import { readJsonFileSync } from "@/lib/json-file.ts";
+import { isNewer } from "@/lib/semver.ts";
 
 /** What to record, plus the injection seams for tests: the `bun` to record and the
  * shipped script to copy, so the whole function runs against a temp state dir without a
@@ -34,6 +49,67 @@ export interface LauncherDeps {
   pinnedRoot?: string;
   bunPath?: string;
   source?: () => string;
+  /** The published caret this install runs as, to keep a copy of under ownedRootsDir():
+   * bunx runs it from a temp install that is gone once this process exits. Undefined for
+   * anything but an npm bundle — a dev run, a checkout's dist, a compiled binary. */
+  ownedRoot?: () => OwnedRoot | undefined;
+}
+
+const PackageFiles = z.object({ files: z.array(z.string()).default([]) });
+
+interface OwnedRoot {
+  root: string;
+  version: string;
+}
+
+/** Whether `root` is a caret checkout: the npm package ships no `src/`. */
+export function isSourceCheckout(root: string): boolean {
+  return existsSync(join(root, "src", "cli.ts"));
+}
+
+function publishedRoot(): OwnedRoot | undefined {
+  if (buildKind() !== "bundle") return undefined;
+  const root = resolveCaretRoot();
+  return isSourceCheckout(root) ? undefined : { root, version: VERSION };
+}
+
+/** Copy what npm publishes of `from.root` to ownedRootsDir()/<version>, unless a runnable
+ * copy is already there. */
+export function stageOwnedRoot(from: OwnedRoot): void {
+  if (!isRunnableRoot(from.root)) return;
+  const dest = join(ownedRootsDir(), from.version);
+  if (isRunnableRoot(dest)) return;
+  ensureStateDir(ownedRootsDir());
+  const { files } = PackageFiles.parse(readJsonFileSync(join(from.root, "package.json")));
+  // Dot-prefixed so the launcher's glob never offers a half-copied root.
+  const tmp = join(ownedRootsDir(), `.${from.version}.${process.pid}.tmp`);
+  for (const entry of [...files, "package.json"]) {
+    const src = join(from.root, entry);
+    if (!existsSync(src)) continue;
+    const target = join(tmp, entry);
+    mkdirSync(dirname(target), { recursive: true });
+    cpSync(src, target, { recursive: true });
+  }
+  rmSync(dest, { recursive: true, force: true });
+  renameSync(tmp, dest);
+}
+
+/** Remove every owned root but the highest runnable one. Call it only right after the
+ * service cycles: a bundle daemon reads `ui/dist` per request, so pruning under a live one
+ * can delete the root it serves from. Best-effort — a leftover costs only disk. */
+export function pruneOwnedRoots(): void {
+  try {
+    const entries = readdirSync(ownedRootsDir());
+    const keep = entries
+      .filter((e) => !e.startsWith(".") && isRunnableRoot(join(ownedRootsDir(), e)))
+      .reduce<string | undefined>(
+        (best, e) => (best === undefined || isNewer(e, best) ? e : best),
+        undefined,
+      );
+    for (const e of entries) {
+      if (e !== keep) rmSync(join(ownedRootsDir(), e), { recursive: true, force: true });
+    }
+  } catch {}
 }
 
 /** Install the shipped launcher to the path a service unit names, and record what it reads:
@@ -41,6 +117,10 @@ export interface LauncherDeps {
  * and reporting whether it did. */
 export function installLauncher(deps: LauncherDeps = {}): { unpinned: boolean } {
   const source = (deps.source ?? (() => join(resolveCaretRoot(), "bin", "caret-launcher")))();
+  if (deps.pinnedRoot === undefined) {
+    const owned = (deps.ownedRoot ?? publishedRoot)();
+    if (owned) stageOwnedRoot(owned);
+  }
 
   ensureStateDir(dirname(launcherPath()));
   // Land atomically: a service unit names launcherPath() forever, and bash reads a script

@@ -11,6 +11,7 @@
 
 import {
   type LauncherDeps,
+  pruneOwnedRoots,
   installLauncher as realInstallLauncher,
   uninstallLauncher,
 } from "@/commands/install/launcher.ts";
@@ -258,7 +259,10 @@ export async function reconcileService(
     // A draining daemon keeps answering until it lets the port go, so remember which
     // instance the restart replaces.
     const replaced = cycles && watch ? (await watch.health(baseUrl))?.instanceId : undefined;
-    if (cycles) await manager.restart();
+    if (cycles) {
+      await manager.restart();
+      pruneOwnedRoots();
+    }
 
     // ponytail: a no-cycle install over an older daemon waits the full window before
     // warning; stop at the first answer when nothing cycled if that ever bites.

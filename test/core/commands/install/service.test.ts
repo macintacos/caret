@@ -4,8 +4,8 @@
 // would not register.
 
 import { expect, test } from "bun:test";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 import { setupTempConfigFile, setupTempStateDir } from "@test/support/env.ts";
 import { expectCleanExitCode } from "@test/support/exit-code.ts";
@@ -19,7 +19,7 @@ import {
 import { recordingUI } from "@/commands/install/ui.ts";
 import { SURFACES } from "@/commands/service-target.ts";
 import { VANITY_HOST } from "@/config/constants.ts";
-import { launcherPath, launcherRecordDir } from "@/config/paths.ts";
+import { launcherPath, launcherRecordDir, ownedRootsDir } from "@/config/paths.ts";
 import type { HealthIdentity } from "@/lib/types.ts";
 
 // Each test starts from a config nobody has written, so an absent key means default.
@@ -575,4 +575,45 @@ test("a plain install over an older daemon says to refresh it", async () => {
   expect(watch.probes).toBe(60);
   expect(warning(events)).toContain("0.9.0");
   expect(warning(events)).toContain("caret install --refresh");
+});
+
+/** Two runnable owned roots, as a newer install leaves beside an older one. */
+function seedOwnedRoots(): void {
+  for (const version of ["1.0.2", "1.1.0"]) {
+    const dir = join(ownedRootsDir(), version);
+    mkdirSync(join(dir, "ui", "dist"), { recursive: true });
+    mkdirSync(join(dir, "bin"), { recursive: true });
+    writeFileSync(join(dir, "bin", "caret"), "");
+    chmodSync(join(dir, "bin", "caret"), 0o755);
+    writeFileSync(join(dir, "ui", "dist", "index.html"), "");
+  }
+}
+
+test("a cycling install prunes the owned roots the restarted service no longer runs", async () => {
+  seedOwnedRoots();
+  const service = fakeServiceTarget({ status: { installed: true, running: true } });
+
+  await reconcileService(
+    { ...RECONCILE, refresh: true },
+    { service: service.target, installLauncher: stubLauncher },
+    recordingUI(),
+  );
+
+  expect(service.calls).toContain("restart");
+  expect(existsSync(join(ownedRootsDir(), "1.0.2"))).toBe(false);
+  expect(existsSync(join(ownedRootsDir(), "1.1.0"))).toBe(true);
+});
+
+test("an install that does not cycle keeps every owned root a live daemon may serve from", async () => {
+  seedOwnedRoots();
+  const service = fakeServiceTarget({ status: { installed: true, running: true } });
+
+  await reconcileService(
+    RECONCILE,
+    { service: service.target, installLauncher: stubLauncher },
+    recordingUI(),
+  );
+
+  expect(existsSync(join(ownedRootsDir(), "1.0.2"))).toBe(true);
+  expect(existsSync(join(ownedRootsDir(), "1.1.0"))).toBe(true);
 });
