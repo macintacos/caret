@@ -623,8 +623,9 @@ export const SUPERVISOR_WINDOW_MS = Array.from({ length: PROD_MAX_ATTEMPTS }, (_
 ).reduce((sum, ms) => sum + ms, 0);
 
 /** Whether the launcher execs a pinned root: the pin record's newline-terminated first line
- * names a checkout whose `bin/caret` is executable. Keep in sync with `resolve_root()` in
- * bin/caret-launcher, whose `read` rejects a last line with no newline. */
+ * names a checkout whose `bin/caret` is executable and that carries its UI build. Keep in
+ * sync with `resolve_root()` in bin/caret-launcher, whose `read` rejects a last line with no
+ * newline. */
 function isLauncherPinned(): boolean {
   try {
     const text = readFileSync(launcherPinnedRootFile(), "utf8");
@@ -633,6 +634,7 @@ function isLauncherPinned(): boolean {
     const root = text.slice(0, nl).trim();
     if (!root) return false;
     accessSync(join(root, "bin", "caret"), constants.X_OK);
+    accessSync(join(root, "ui", "dist", "index.html"));
     return true;
   } catch {
     return false;
