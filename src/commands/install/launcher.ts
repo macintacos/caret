@@ -42,10 +42,10 @@ import { readJsonFileSync } from "@/lib/json-file.ts";
 import type { BuildKind } from "@/lib/types.ts";
 
 /** What to record, plus the injection seams for tests: the `bun` to record, the shipped
- * script to copy, and the published caret to keep a copy of, so the whole function runs against a temp state dir without a
- * resolvable caret root. `source` is a thunk because resolveCaretRoot() throws, which a
- * default argument would raise from inside this call rather than where the root actually
- * could not be found. */
+ * script to copy, and the published caret to keep a copy of, so the whole function runs
+ * against a temp state dir without a resolvable caret root. `source` is a thunk because
+ * resolveCaretRoot() throws, which a default argument would raise from inside this call
+ * rather than where the root actually could not be found. */
 export interface LauncherDeps {
   /** The unit this install registered, which the launcher stops on a terminal failure
    * and deletes on eviction. Absent when no supervisor was installed — the launcher
