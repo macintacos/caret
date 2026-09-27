@@ -552,7 +552,7 @@ forwarder sets `#MISE raw_args=true` so mise hands every argument — including 
 | `lint`, `format`, `caret`                           | `scripts/tasks/lint.ts` et al.  | Passthroughs: operands and flags reach the underlying tool. Only `caret` forwards a bare `--help`. |
 | `setup`                                             | `scripts/tasks/setup.ts`        | The bootstrap's three steps, plus the e2e browsers (Chromium and WebKit).         |
 | `preflight`                                         | `scripts/preflight.ts`          | Real Commander options rather than passthrough: `--json`, `-v`, `--grep`, `--task`, `--full`. |
-| `release` — `compute`, `baseline`, `prepare`, `finalize` | `scripts/tasks/release/command.ts` | JSON on stdout so `/release-caret` can parse it.                            |
+| `release` — `compute`, `baseline`, `prepare`, `finalize`, `publish` | `scripts/tasks/release/command.ts` | JSON on stdout so `/release-caret` can parse it.                            |
 
 Task modules are siblings of the CLI in `scripts/tasks/`, named after their group; the
 table above names the two that are not. Code shared across tasks lives in
@@ -566,7 +566,8 @@ parsing contract is unit-tested in `test/scripts/tasks-cli.test.ts`.
 
 Two groups diverge from the plain-module shape. `release` keeps its own JSON-on-stdout
 error discipline — Commander help and errors to stderr, a typed JSON result per action —
-so `/release-caret` can parse it, independent of the CLI's plain-stderr top-level
+so `/release-caret` can parse it — `finalize` tags and drafts the Release, `publish` makes
+it live once npm serves the version — independent of the CLI's plain-stderr top-level
 handling. And `preflight` forwards through `.mise/tasks/preflight` (`raw_args=true`) into
 `caret-tasks preflight`, whose action hands the parsed flags to the gate orchestrator in
 `scripts/preflight.ts`: the concurrent task DAG, the live listr2 display, and the `--json`
@@ -673,6 +674,33 @@ were fragile: mise runs file tasks under macOS `/bin/bash` 3.2, where expanding 
 aborted the task mid-boot and left Vite proxying to a killed daemon, and the smoke tasks
 built exactly such arrays from the served asset list. A typed, unit-tested CLI removes
 that whole class of footgun.
+
+### Releasing
+
+`/release-caret` bumps the version, tags trunk, and drafts the GitHub Release; the tag
+push runs `.github/workflows/publish.yml`, which builds, smoke-tests, and stages the
+version on npm over OIDC trusted publishing, with no npm token. The operator approves the
+stage with npm 2FA, and `release publish` makes the Release live once npm serves the
+version.
+
+One-time setup, before the first CI release:
+
+1. On npmjs.com, add a trusted publisher for `@macintacos/caret`: owner `macintacos`, repo
+   `caret`, workflow `publish.yml`. Leave direct `npm publish` disallowed so only
+   `npm stage publish` is allowed, which forces staging.
+2. In the repo's Actions settings, set the default `GITHUB_TOKEN` to read-only.
+3. Add a tag ruleset named `release tags` that restricts who can create `v*` tags.
+
+After the first CI release, set the package's publishing access to "Require two-factor
+authentication and disallow tokens".
+
+Emergency manual publish, when CI can't:
+
+1. Check out the tag.
+2. `mise run build bundle`.
+3. `npm publish --otp=<code>` from a 2FA login session. Re-allow tokens only if that is
+   refused.
+4. `gh release edit <tag> --draft=false`.
 
 ### Regenerating the README assets
 
