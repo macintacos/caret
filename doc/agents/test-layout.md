@@ -108,13 +108,13 @@ it.
   the install, restart and uninstall sequence `createSystemdManager` performs against the
   unit `buildSystemdUnit()` actually emitted. It is the systemd contract's only coverage:
   `test/core/service/` asserts on the generated unit text, never on what systemd does with
-  it. No gate spawns it — not `mise run preflight`, and caret has no CI — so a change
-  under `src/service/` or to `bin/caret-launcher` is checked only if you run it yourself.
-  The container has no login session and runs a stub caret, so what stays out of its reach
-  is written up as a hand checklist in
-  [`doc/DEVELOPMENT.md`](../DEVELOPMENT.md#development): the unit `caret install` actually
-  wrote, self-linger, the `systemctl --user disable` opt-out install reads, the
-  `caret install --refresh` cycle, and start at login.
+  it. No gate spawns it — not `mise run preflight`, and caret has no PR CI (its only
+  workflow is the tag-triggered npm publish) — so a change under `src/service/` or to
+  `bin/caret-launcher` is checked only if you run it yourself. The container has no login
+  session and runs a stub caret, so what stays out of its reach is written up as a hand
+  checklist in [`doc/DEVELOPMENT.md`](../DEVELOPMENT.md#development): the unit
+  `caret install` actually wrote, self-linger, the `systemctl --user disable` opt-out
+  install reads, the `caret install --refresh` cycle, and start at login.
 - **macOS launchd** — `scripts/macos/verify.sh`, run by hand through
   `mise run verify macos`, the same arrangement one platform over: it bootstraps the plist
   `buildLaunchdPlist()` actually emitted under a throwaway label and drives the install,

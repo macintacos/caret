@@ -1,6 +1,6 @@
 ---
 name: release-caret
-description: Cut a caret release. Computes the next version with the deterministic release script, confirms it once, composes the GitHub Release notes, then drives the flow end-to-end — phase 1 opens a PR with the version bump, merges it, then phase 2 tags trunk, publishes the GitHub Release, and publishes the plugin to npm. Triggers on "/release-caret", "release caret", "cut a caret release", "ship a caret version".
+description: Cut a caret release. Computes the next version with the deterministic release script, confirms it once, composes the GitHub Release notes, then drives the flow end-to-end — phase 1 opens a PR with the version bump, merges it, then phase 2 tags trunk, drafts the GitHub Release, and waits while CI stages the npm version; once the operator approves it with npm 2FA and npm serves it, the Release is published. Triggers on "/release-caret", "release caret", "cut a caret release", "ship a caret version".
 argument-hint: "[patch|minor|major] [dry run]"
 ---
 
@@ -12,9 +12,11 @@ step — version math, version-file edits, the commit range, all `git`/`gh` oper
 is the **sole source of the version number**. Your only jobs are: (1) confirm the version
 the script computes — the single gate — (2) compose the release-notes body, and (3)
 orchestrate the full flow end-to-end: open the release PR, merge it, then finalize (tag,
-GitHub Release, npm). Once the version is confirmed, everything after it runs without
-further prompts. **Never invent, compute, or alter the version yourself** — always take it
-from the script's JSON.
+draft GitHub Release, and wait while CI stages the npm version), pause for the operator to
+approve the staged version with npm 2FA, and publish the Release once npm serves it. Once
+the version is confirmed, the only later stop is that approval pause (or an error).
+**Never invent, compute, or alter the version yourself** — always take it from the
+script's JSON.
 
 The script is invoked directly so its stdout is pure JSON:
 
@@ -55,8 +57,12 @@ bun scripts/tasks/cli.ts release compute <bump>
 - **`ok: false` with any other `errorCode`** (`DIRTY_TREE`, `WRONG_BRANCH`,
   `DETACHED_HEAD`, `MANIFEST_DRIFT`, `NO_GH`, `NOT_A_REPO`) → surface `message` and stop;
   fix the precondition (usually clean or pull trunk) first.
-- **`ok: true` and `currentVersion === previousVersion`** → the manifests still match the
-  latest release tag, so no prepared bump is merged → run **Phase 1**.
+- **`ok: true` and `currentVersion === previousVersion`** → first run
+  `gh release view <previousTag> --json isDraft -q .isDraft`. `true` means that release is
+  paused mid-Phase 2: resume at **Phase 2 step 2**, whose `finalize` result decides the
+  rest (a non-null `approval` → step 3's pause, where the operator may already have
+  approved and just says "continue"; `npmLive: true` → step 4). Otherwise the manifests
+  still match the latest release tag, so no prepared bump is merged → run **Phase 1**.
 - **`ok: true` and `currentVersion !== previousVersion`** → the manifests are ahead of the
   latest tag, i.e. a prepared bump is already merged on trunk awaiting its tag → run
   **Phase 2**.
@@ -86,11 +92,12 @@ follows:
   put the full proposed notes (theme line, category sections, compare link) in the plan
   for review. Write them for real **after** exiting plan mode, to a temp file outside the
   repo, before `prepare`.
-- **Plan approval IS authorization for the whole release.** There is no separate
-  remote-mutation gate. Once you've exited plan mode and written the notes to their temp
-  file, proceed straight through `prepare` → merge the PR → `finalize`, handing `finalize`
-  that file through `--notes-file` and passing `--yes` to the mutating calls — no further
-  prompt. (Stop only on a script or `gh` error.)
+- **Plan approval authorizes everything except the npm approval pause.** Once you've
+  exited plan mode and written the notes to their temp file, proceed straight through
+  `prepare` → merge the PR → `finalize`, handing `finalize` that file through
+  `--notes-file` and passing `--yes` to the mutating calls. The npm approval pause (Phase
+  2 step 3) and its "continue" always stop the run, plan mode included. Otherwise stop
+  only on a script or `gh` error.
 
 ---
 
@@ -120,19 +127,21 @@ version-bearing files the script mutates, so you never have to grep `steps.ts` f
 ### 2. Confirm the version — the single gate
 
 This is the **one** confirmation a real release asks for. Accepting the version authorizes
-the entire remainder of the flow — `prepare --yes`, merging the PR, and `finalize --yes` —
-with no further prompts. Surface the **script-computed** version for explicit
-confirmation. Show the concrete numbers — never paraphrase them:
+the entire remainder of the flow — `prepare --yes`, merging the PR, `finalize --yes`, and
+`publish --yes`. The only later stop is the npm approval pause (Phase 2 step 3). Surface
+the **script-computed** version for explicit confirmation. Show the concrete numbers —
+never paraphrase them:
 
 > **Release `<version>`?** Bumping `<currentVersion>` → `<version>` (`<bump>`), covering
 > `<N>` commits since `<previousTag>`. Accepting runs the whole release end-to-end: opens
-> the PR, merges it, tags trunk, and publishes the GitHub Release + npm.
+> the PR, merges it, tags trunk, drafts the GitHub Release, waits for you to approve the
+> npm stage with 2FA, then publishes the Release.
 >
 > - **Release `<version>`** (Recommended)
 > - **Cancel the release**
 
 Use the version verbatim from the JSON. If the user cancels, stop. After this point the
-skill does not prompt again unless a step errors.
+skill stops again only for the npm approval pause or an error.
 
 ### 3. Compose the release notes
 
@@ -197,9 +206,9 @@ so skip step 5 and stop here.)
 
 ### 5. Merge the release PR
 
-The skill merges its own release PR; there is no human-merge handoff. caret has no CI to
-wait on, release does not gate on `mise run preflight` (verify locally before releasing),
-and the repo merges via squash, so merge immediately:
+The skill merges its own release PR; there is no human-merge handoff. caret has no PR CI
+to wait on, release does not gate on `mise run preflight` (verify locally before
+releasing), and the repo merges via squash, so merge immediately:
 
 ```sh
 gh pr merge <prNumber> --squash --delete-branch
@@ -213,7 +222,7 @@ On a real merge failure (merge conflict, branch protection, not mergeable, auth)
 
 ---
 
-## Phase 2 — tag, publish, and ship to npm
+## Phase 2 — tag, stage on npm, and publish
 
 `finalize` tags `origin/trunk`'s merged HEAD after an unconditional fetch, so it runs from
 **any** branch — including the `release/<tag>` branch Phase 1 leaves you on. You don't
@@ -226,15 +235,11 @@ hard-wrapped, which renders as awkward mid-sentence breaks on GitHub). A re-run
 **without** `--notes-file` leaves an existing Release's notes untouched; a re-run with the
 same file regenerates a byte-identical body, so nothing ever doubles.
 
-After tagging and creating the GitHub Release, `finalize` builds the run-from-source
-bundle and **publishes the plugin to npm** (`@macintacos/caret`), because the
-marketplace's plugin source is an npm source — that publish is what makes
-`/plugin marketplace add macintacos/caret` resolve the new version (EXC-643). The npm step
-is resume-aware: it is skipped when the version is already on the registry, so a re-run
-after a partial failure completes cleanly. It needs the operator's existing `npm` auth
-(e.g. `~/.npmrc` with publish rights to the `@macintacos` scope); if publish fails on
-auth, set that up and re-run `finalize` — it reuses the existing tag/release and retries
-only the publish.
+`finalize` pushes the tag and creates the Release as a **draft**. The tag push triggers
+the CI publish workflow, which builds and smoke-tests the bundle and **stages** the
+version on npm (`@macintacos/caret`) over trusted publishing; `finalize` follows that run.
+The Release stays a draft until npm serves the version, because the OpenCode update toast
+reads `releases/latest` and must never announce a version OpenCode can't install.
 
 ### 1. Preview the finalize
 
@@ -243,33 +248,70 @@ bun scripts/tasks/cli.ts release finalize --dry-run --notes-file <path>
 ```
 
 This fetches `origin/trunk` and returns the concrete `version`, `tag`, and `taggedSha`
-(trunk's merged HEAD), and previews the npm publish, without mutating anything. Pass the
-**same** `--notes-file` you will pass for real, so a mistyped path fails here as
-`NOTES_MISSING` instead of on the real run. It confirms the squash-merge from Phase 1 step
-5 actually landed: `ok: true` means proceed. If it returns `ok: false` with `NOT_MERGED`,
-the merge didn't reach `origin/trunk` (the `gh pr merge` failed or is still settling) —
-surface that and work with the operator before continuing; do not run `finalize --yes`.
+(trunk's merged HEAD) without mutating anything. Pass the **same** `--notes-file` you will
+pass for real, so a mistyped path fails here as `NOTES_MISSING` instead of on the real
+run. It confirms the squash-merge from Phase 1 step 5 actually landed: `ok: true` means
+proceed. If it returns `ok: false` with `NOT_MERGED`, the merge didn't reach
+`origin/trunk` (the `gh pr merge` failed or is still settling) — surface that and work
+with the operator before continuing; do not run `finalize --yes`.
+
+A skill **dry run stops here**: `publish`'s preview needs the tag, which a dry run never
+pushes.
 
 ### 2. Run finalize
 
 The version gate (Phase 1 step 2) already authorized this — no separate confirmation.
-Provided the dry-run probe returned `ok: true`, run it with the notes file from Phase 1
-step 3:
+Provided the dry-run probe returned `ok: true`, run it in the foreground with
+`timeout: 600000`, since it waits on the CI run:
 
 ```sh
-bun scripts/tasks/cli.ts release finalize --yes --notes-file <path>      # real
-bun scripts/tasks/cli.ts release finalize --dry-run --notes-file <path>  # dry run
+bun scripts/tasks/cli.ts release finalize --yes --notes-file <path>
 ```
 
-Parse the result and report the `releaseUrl` and whether `npmPublished` is true. The
-release is live. After a real release (`--yes`), return the checkout to a clean, updated
-`trunk`:
+On `ok: false`:
+
+- **`CI_TIMEOUT`** — the run is still going; re-run the same command to resume.
+- **`STAGE_ID_MISSING`** — the version is staged; only reading its id failed. Relay
+  `message`. Re-running `finalize` retries the read; otherwise the operator approves with
+  the id from the run page, then says "continue" and you go on to step 4.
+- **`CI_FAILED`** or **`CI_NO_RUN`** — surface `message` verbatim: it names the run (when
+  there is one) and the way out. Then stop.
+
+On `ok: true`, `npmLive: true` means the version is already served (a resumed run); skip
+to step 4.
+
+### 3. Pause for npm approval
+
+When `approval` is non-null, print:
+
+- the exact command `npm stage approve <approval.stageId>`
+- the `version`
+- `approval.builtSha` beside `taggedSha`, for the record (the run is matched by that
+  commit, so they always agree)
+- `approval.runUrl`
+
+Note that it can be run here as `! npm stage approve <stageId> --otp=<code>`, or in any
+terminal. Then **wait for the operator to say "continue"**. This pause always stops the
+run, under plan mode too.
+
+### 4. Publish the Release
+
+Run it in the foreground with `timeout: 600000`, since it waits on the registry to serve
+the version:
+
+```sh
+bun scripts/tasks/cli.ts release publish --yes
+```
+
+On `NOT_LIVE`, tell the operator the version isn't live on npm yet and wait for "continue"
+again, then re-run. On `ok: true`, report the published `releaseUrl`. The release is live.
+Return the checkout to a clean, updated `trunk`:
 
 ```sh
 git switch trunk && git pull --ff-only
 ```
 
-### 3. Close the release's Linear ticket
+### 5. Close the release's Linear ticket
 
 A Linear workflow automation (`botActor.type: "workflow"`, `creator: null`) mints an issue
 for the release PR — the one PR caret opens with no `EXC-` ref in its title or branch. It
@@ -298,11 +340,12 @@ entirely on a dry run, which opens no PR for Linear to see.
 - The script computes and owns the version; you only confirm it. If a script call fails,
   stop and surface its `message` — do not retry with a hand-edited version or work around
   the guard.
-- One confirmation gates a real release — the version (Phase 1 step 2). Accepting it
-  authorizes the entire remainder: `prepare --yes`, merging the PR
-  (`gh pr merge --squash`), and `finalize --yes`, with no further prompts. A dry run skips
-  `--yes` entirely and merges nothing. Stop only on a script or `gh` error.
-- Linear's auto-created release ticket is closed by Phase 2 step 3, never left open.
+- One up-front confirmation gates a real release — the version (Phase 1 step 2). Accepting
+  it authorizes the entire remainder: `prepare --yes`, merging the PR
+  (`gh pr merge --squash`), `finalize --yes`, and `publish --yes`. The one later stop
+  besides a script or `gh` error is the npm approval pause (Phase 2 step 3). A dry run
+  skips `--yes` entirely and merges nothing.
+- Linear's auto-created release ticket is closed by Phase 2 step 5, never left open.
 - The script is safe to re-run after a partial failure — it detects an existing branch,
   PR, tag, or release and resumes or no-ops. If a run is interrupted, just invoke
   `/release-caret` again.

@@ -576,7 +576,7 @@ describe("tasks CLI: assets command", () => {
 // and stdout-JSON error discipline are exercised as a subprocess in
 // release-cli.test.ts; this pins the structural mount at the unit level.
 describe("tasks CLI: release subcommand group", () => {
-  test("registers a release group with the four release subcommands", () => {
+  test("registers a release group with the five release subcommands", () => {
     const release = buildProgram().commands.find((c) => c.name() === "release");
     expect(release).toBeDefined();
     expect(release?.commands.map((c) => c.name()).sort()).toEqual([
@@ -584,6 +584,7 @@ describe("tasks CLI: release subcommand group", () => {
       "compute",
       "finalize",
       "prepare",
+      "publish",
     ]);
   });
 });

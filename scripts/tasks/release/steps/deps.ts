@@ -14,7 +14,7 @@ export interface FsOps {
   exists(path: string): Promise<boolean>;
 }
 
-/** Diagnostics sink (stderr in the real CLI; silent in tests). */
+/** Diagnostics sink (stderr in the real CLI; recorded in tests). */
 export interface Io {
   log(message: string): void;
 }
@@ -26,4 +26,5 @@ export interface Deps {
   rumdl: RumdlOps;
   fs: FsOps;
   io: Io;
+  sleep(ms: number): Promise<void>;
 }

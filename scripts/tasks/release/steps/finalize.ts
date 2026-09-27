@@ -1,11 +1,14 @@
-// finalize (phase 2): tag trunk's merged HEAD and publish the GitHub Release.
-// It derives the version from trunk's three manifests and proves the bump
-// actually merged before publishing anything, and is resume-aware throughout —
-// reusing an existing release, never moving an existing tag, and completing a
-// run that died partway. The release body is prose only the agent can write, so
-// it arrives as `--notes-file`, reflowed to single-line paragraphs so it renders
-// cleanly on GitHub.
+// finalize (phase 2): tag trunk's merged HEAD and create the GitHub Release as a
+// draft; the tag push makes CI stage the version on npm, and `publish`
+// un-drafts the Release once npm serves the version. It derives the version
+// from trunk's three manifests and proves the bump actually merged before
+// creating anything, and is resume-aware throughout — reusing an existing
+// release, never moving an existing tag, and completing a run that died partway.
+// The release body is prose only the agent can write, so it arrives as
+// `--notes-file`, reflowed to single-line paragraphs so it renders cleanly on
+// GitHub.
 
+import { STAGE_ID_ANNOTATION } from "@/tasks/release/github.ts";
 import { extractVersion } from "@/tasks/release/manifest.ts";
 import {
   type FinalizeResult,
@@ -19,6 +22,7 @@ import {
   GuardError,
   syncedVersion,
 } from "@/tasks/release/steps/guards.ts";
+import { RELEASE_POLL, waitFor } from "@/tasks/release/steps/wait.ts";
 import { isNewer, tagName, versionFromTag } from "@/tasks/release/version.ts";
 
 /** The finalized release derived from `origin/<defaultBranch>`: the merged HEAD to
@@ -69,7 +73,7 @@ async function resolveTrunkRelease(deps: Deps, defaultBranch: string): Promise<T
   // except when this release's own tag already points at the very commit we are
   // about to tag. That only happens when an earlier run already cleared this
   // check and tagged trunk, so we are resuming it (the classic case: the tag and
-  // the Release landed, the npm publish failed). Without the carve-out every
+  // the Release landed, then the run died). Without the carve-out every
   // post-tag resume would abort as NOT_MERGED.
   if (taggedSha !== trunkSha && !isNewer(version, versionFromTag(latestTag))) {
     throw new GuardError(
@@ -125,7 +129,47 @@ async function ensureTag(deps: Deps, tag: string, trunkSha: string, title: strin
   await deps.git.pushTag(tag);
 }
 
-/** Phase 2: tag trunk's merged HEAD and publish the GitHub Release. */
+/** The non-transient way out when the tag's run can't produce a stage. */
+const CUT_NEXT_PATCH =
+  "A rerun replays the workflow at the tag and a tag never re-triggers, so for a real defect delete the draft Release and cut the next patch, or publish manually per the Releasing doc.";
+
+/** Follow the tag's publish run to its staged version's id. */
+async function followPublishRun(
+  deps: Deps,
+  taggedSha: string,
+  version: string,
+): Promise<NonNullable<FinalizeResult["approval"]>> {
+  const { value: run } = await waitFor({ ...RELEASE_POLL, sleep: deps.sleep }, async () => {
+    const latest = await deps.github.publishRun(taggedSha);
+    return { done: latest?.status === "completed", value: latest };
+  });
+  if (run === null) {
+    throw new GuardError("CI_NO_RUN", `No publish run found for ${taggedSha}. ${CUT_NEXT_PATCH}`);
+  }
+  if (run.status !== "completed") {
+    throw new GuardError(
+      "CI_TIMEOUT",
+      `Publish run ${run.url} has not completed; re-run finalize to keep following it.`,
+    );
+  }
+  if (run.conclusion !== "success") {
+    throw new GuardError(
+      "CI_FAILED",
+      `Publish run ${run.url} concluded ${run.conclusion}. For a transient failure: gh run rerun ${run.id} --failed. ${CUT_NEXT_PATCH}`,
+    );
+  }
+  const stageId = await deps.github.stageId(run.id);
+  if (stageId === null) {
+    throw new GuardError(
+      "STAGE_ID_MISSING",
+      `Publish run ${run.url} is green, so ${version} is staged, but its ${STAGE_ID_ANNOTATION} annotation could not be read; re-run finalize, or take the id from the run page and approve it.`,
+    );
+  }
+  return { stageId, runUrl: run.url, builtSha: run.headSha };
+}
+
+/** Phase 2: tag trunk's merged HEAD, create the Release as a draft, and follow
+ * the tag's publish run to its npm stage id. */
 export async function finalize(
   deps: Deps,
   opts: { dryRun: boolean; notesFile?: string },
@@ -145,10 +189,6 @@ export async function finalize(
 
   const { trunkSha, version, tag, title } = await resolveTrunkRelease(deps, defaultBranch);
 
-  // Resolve the GitHub release: reuse an existing one, preview it in a dry run,
-  // or tag + create it. An existing release still falls through to the npm
-  // publish below, so a re-run after a release-created-but-npm-publish-failed
-  // partial failure still completes.
   const existing = await deps.github.releaseView(tag);
   let releaseUrl: string | null;
   if (existing !== null) {
@@ -185,20 +225,12 @@ export async function finalize(
     releaseUrl = release.url;
   }
 
-  // Publish the run-from-source bundle to npm so the marketplace's npm source
-  // (`/plugin marketplace add macintacos/caret`) resolves this version (EXC-643).
-  // Resume-aware: skip if already on the registry (npm rejects republishing a
-  // version). A dry run previews without side effects, like the release dry run
-  // above — it does not build or pack.
-  let npmPublished = false;
-  if (await deps.npm.isVersionPublished(version)) {
-    deps.io.log(`npm package ${tag} is already published; skipping publish.`);
-  } else if (opts.dryRun) {
-    deps.io.log(`Would build the bundle and npm publish ${version}.`);
-  } else {
-    await deps.npm.publish();
-    deps.io.log(`Published ${version} to npm.`);
-    npmPublished = true;
+  const npmLive = await deps.npm.isVersionPublished(version);
+  let approval: FinalizeResult["approval"] = null;
+  if (opts.dryRun) {
+    if (!npmLive) deps.io.log(`Would follow the publish run for ${trunkSha}.`);
+  } else if (!npmLive) {
+    approval = await followPublishRun(deps, trunkSha, version);
   }
 
   return {
@@ -208,7 +240,8 @@ export async function finalize(
     title,
     taggedSha: trunkSha,
     releaseUrl,
-    npmPublished,
+    npmLive,
+    approval,
     dryRun: opts.dryRun,
   };
 }

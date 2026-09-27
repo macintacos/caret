@@ -53,9 +53,24 @@ export interface FinalizeResult {
   title: string;
   taggedSha: string;
   releaseUrl: string | null;
-  /** Whether this run published the package to npm (false on dry runs and when
-   * the version was already on the registry). */
-  npmPublished: boolean;
+  /** Whether the registry served this version when finalize checked. */
+  npmLive: boolean;
+  /** What the operator approves with npm 2FA; null when live or in a dry run. */
+  approval: {
+    stageId: string;
+    runUrl: string;
+    /** The run's headSha, equal to taggedSha by the `--commit` filter; shown, never checked. */
+    builtSha: string;
+  } | null;
+  dryRun: boolean;
+}
+
+export interface PublishResult {
+  phase: "publish";
+  version: string;
+  tag: string;
+  /** The public Release URL; null on a dry run. */
+  releaseUrl: string | null;
   dryRun: boolean;
 }
 

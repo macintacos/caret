@@ -24,6 +24,12 @@ export type ErrorCode =
   | "PR_CLOSED"
   | "ALREADY_MERGED"
   | "NOT_MERGED"
+  | "NO_RELEASE"
+  | "NOT_LIVE"
+  | "CI_NO_RUN"
+  | "CI_TIMEOUT"
+  | "CI_FAILED"
+  | "STAGE_ID_MISSING"
   | "INTERNAL";
 
 /** One commit in the range since the last release, with parsed metadata. */

@@ -1,10 +1,10 @@
 // The release pipeline's in-memory test harness: builds a `Deps` whose every
 // collaborator is a fake typed against its real interface, so each
-// baseline/compute/prepare/finalize step runs with no live repo and no network.
-// Every mutating call is recorded into `calls` so a test can assert exactly what
-// would (or would not) run.
+// baseline/compute/prepare/finalize/publish step runs with no live repo and no
+// network. Every mutating call, plus the CI reads and sleeps the polls make, is
+// recorded into `calls` so a test can assert exactly what would (or would not) run.
 import type { GitOps, RawCommit } from "@/tasks/release/git.ts";
-import type { GitHubOps, PullRequestSummary } from "@/tasks/release/github.ts";
+import type { GitHubOps, PublishRun, PullRequestSummary } from "@/tasks/release/github.ts";
 import type { NpmOps } from "@/tasks/release/npm.ts";
 import type { RumdlOps } from "@/tasks/release/rumdl.ts";
 import type { Deps, FsOps } from "@/tasks/release/steps.ts";
@@ -40,13 +40,20 @@ export interface GitOptions {
 /** Controls for the gh fake — availability and PR/release fixtures. */
 export interface GitHubOptions {
   prs?: PullRequestSummary[];
-  releases?: Record<string, { url: string; notes?: string }>;
+  releases?: Record<string, { url: string; notes?: string; isDraft?: boolean }>;
   available?: boolean;
+  /** Publish-run states per commit sha: each `publishRun` read pops the next, the last repeats. */
+  runs?: Record<string, PublishRun[]>;
+  /** The stage-id annotation per run id. */
+  stageIds?: Record<string, string>;
 }
 
 /** Controls for the npm fake — which versions are already on the registry. */
 export interface NpmOptions {
   npmPublishedVersions?: string[];
+  /** Every version reads as not live for this many `isVersionPublished` calls,
+   * then live; overrides `npmPublishedVersions` when set. */
+  npmLiveAfter?: number;
 }
 
 /** Controls for the working-tree seam. */
@@ -75,11 +82,13 @@ export interface HarnessState {
 export interface ReleaseHarness {
   deps: Deps;
   calls: string[];
+  /** Every `io.log` message, in order. */
+  logs: string[];
   files: Map<string, string>;
   state: HarnessState;
   /** The GitHub releases the fake knows about, keyed by tag; `notes` is captured
    * from the last releaseCreate/releaseEdit so a test can assert the published body. */
-  releases: Map<string, { url: string; notes?: string }>;
+  releases: Map<string, { url: string; notes?: string; isDraft?: boolean }>;
 }
 
 /** The default working tree: all three manifests synced at the baseline version. */
@@ -221,9 +230,10 @@ export function makeReleaseHarness(opts: HarnessOptions = {}): ReleaseHarness {
   };
 
   const prs = opts.prs ?? [];
-  const releases = new Map<string, { url: string; notes?: string }>(
+  const releases = new Map<string, { url: string; notes?: string; isDraft?: boolean }>(
     Object.entries(opts.releases ?? {}),
   );
+  const runQueues = new Map(Object.entries(opts.runs ?? {}).map(([sha, runs]) => [sha, [...runs]]));
   const github: GitHubOps = {
     async available() {
       return opts.available ?? true;
@@ -244,28 +254,46 @@ export function makeReleaseHarness(opts: HarnessOptions = {}): ReleaseHarness {
       return prs;
     },
     async releaseView(tag) {
-      return releases.get(tag) ?? null;
+      const release = releases.get(tag);
+      return release === undefined ? null : { url: release.url, isDraft: release.isDraft ?? false };
     },
     async releaseCreate({ tag, notes }) {
       calls.push(`releaseCreate:${tag}`);
       const url = `https://github.com/macintacos/caret/releases/tag/${tag}`;
-      releases.set(tag, { url, notes });
+      releases.set(tag, { url, notes, isDraft: true });
       return { url };
     },
     async releaseEdit({ tag, notes }) {
       calls.push(`releaseEdit:${tag}`);
       const existing = releases.get(tag);
-      releases.set(tag, { url: existing?.url ?? "", notes });
+      releases.set(tag, { ...existing, url: existing?.url ?? "", notes });
+    },
+    async releasePublish(tag) {
+      calls.push(`releasePublish:${tag}`);
+      const existing = releases.get(tag);
+      const url = existing?.url ?? "";
+      releases.set(tag, { ...existing, url, isDraft: false });
+      return url;
+    },
+    async publishRun(sha) {
+      calls.push(`publishRun:${sha}`);
+      const queue = runQueues.get(sha);
+      if (queue === undefined || queue.length === 0) return null;
+      return (queue.length > 1 ? queue.shift() : queue[0]) ?? null;
+    },
+    async stageId(runId) {
+      calls.push(`stageId:${runId}`);
+      return opts.stageIds?.[String(runId)] ?? null;
     },
   };
 
   const npmPublishedVersions = new Set(opts.npmPublishedVersions ?? []);
+  let npmReads = 0;
   const npm: NpmOps = {
     async isVersionPublished(version) {
+      npmReads++;
+      if (opts.npmLiveAfter !== undefined) return npmReads > opts.npmLiveAfter;
       return npmPublishedVersions.has(version);
-    },
-    async publish() {
-      calls.push("npmPublish");
     },
   };
 
@@ -280,13 +308,17 @@ export function makeReleaseHarness(opts: HarnessOptions = {}): ReleaseHarness {
     },
   };
 
+  const logs: string[] = [];
   const deps: Deps = {
     git,
     github,
     npm,
     rumdl,
     fs,
-    io: { log: () => {} },
+    io: { log: (m) => logs.push(m) },
+    async sleep(ms) {
+      calls.push(`sleep:${ms}`);
+    },
   };
-  return { deps, calls, files, state, releases };
+  return { deps, calls, logs, files, state, releases };
 }
