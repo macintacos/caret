@@ -37,24 +37,28 @@ function undecided(id: string, title: string, section: string): Check {
   };
 }
 
+const SERVICE_REMEDY =
+  "run `caret install --refresh` — or check the service is not disabled — then read logs/daemon-stderr.log";
+
 /** A daemon that is simply not running is healthy — an on-demand daemon idle-exits by
  * design. Only a machine whose install recorded a service unit has a supervisor that
  * should be keeping one up, which is the same gate prodEnsureDeps uses to decide whether
  * there is a supervisor at all. A reachable port is not enough on its own: httpHealth
  * accepts any 200 JSON, so the service it names is what separates caret's daemon from
- * whatever else is bound there. */
+ * whatever else is bound there. A recorded service the supervisor is not keeping alive
+ * fails first, whatever answers the port: a daemon answering then will not come back once
+ * it exits. */
 function daemonReachable(report: Report): Check {
   const daemon = present(report.daemon);
   if (daemon === undefined) return undecided("daemon-reachable", "Daemon", "daemon");
-  if (daemon.serviceInstalled && daemon.serviceLoaded === false) {
+  if (daemon.serviceInstalled && daemon.serviceKeptAlive === false) {
     return {
       id: "daemon-reachable",
       title: "Daemon",
       status: "fail",
       detail:
-        "a caret service is recorded for this install, but its job is not loaded or is turned off",
-      remedy:
-        "run `caret install --refresh` — or check the service is not disabled — then read logs/daemon-stderr.log",
+        "a caret service is recorded for this install, but the supervisor is not keeping it alive (not loaded, turned off, or parked after failing)",
+      remedy: SERVICE_REMEDY,
     };
   }
   if (daemon.serviceInstalled && !daemon.reachable) {
@@ -63,8 +67,7 @@ function daemonReachable(report: Report): Check {
       title: "Daemon",
       status: "fail",
       detail: "a caret service is recorded for this install, but /api/health did not answer",
-      remedy:
-        "run `caret install --refresh` — or check the service is not disabled — then read logs/daemon-stderr.log",
+      remedy: SERVICE_REMEDY,
     };
   }
   if (daemon.reachable && daemon.service !== "caret") {
@@ -83,6 +86,51 @@ function daemonReachable(report: Report): Check {
     status: "pass",
     detail: daemon.reachable ? "answering on the effective port" : "not running",
   };
+}
+
+/** The running daemon's version against npm's latest. A dev build is never compared, and
+ * an unreadable npm is `unknown`, never a `fail`. */
+function daemonVersion(report: Report): Check {
+  const id = "daemon-version";
+  const title = "Daemon version";
+  const daemon = present(report.daemon);
+  if (daemon === undefined) return undecided(id, title, "daemon");
+  const v = daemon.daemonVersion;
+  if (!daemon.reachable || daemon.service !== "caret") {
+    return { id, title, status: "pass", detail: "no caret daemon is running" };
+  }
+  if (v === undefined) {
+    return { id, title, status: "pass", detail: "the running caret did not report a version" };
+  }
+  if (daemon.isDev) {
+    return {
+      id,
+      title,
+      status: "pass",
+      detail: `${v}, a development build — not compared with npm`,
+    };
+  }
+  // Not the daemon's own /api/update verdict: that can be a day old, or off, so npm is read live.
+  const latest = daemon.npmLatest;
+  if (latest == null) {
+    return {
+      id,
+      title,
+      status: "unknown",
+      detail: v,
+      reason: "npm's latest caret version could not be read",
+    };
+  }
+  if (isNewer(latest, v)) {
+    return {
+      id,
+      title,
+      status: "fail",
+      detail: `the running daemon is ${v}; npm's latest is ${latest}`,
+      remedy: "run `caret install --refresh` to cycle the service onto the published caret",
+    };
+  }
+  return { id, title, status: "pass", detail: v };
 }
 
 function daemonLock(report: Report): Check {
@@ -178,47 +226,6 @@ function logErrors(report: Report): Check {
     detail: erring.map(describeErrors).join("; "),
     remedy: `read ${erring.map((l) => l.path).join(" and ")}, then /systematic-debugging`,
   };
-}
-
-/** The running daemon's version against npm's latest. A dev build is never compared, and
- * an unreadable npm is `unknown`, never a `fail`. */
-function daemonVersion(report: Report): Check {
-  const id = "daemon-version";
-  const title = "Daemon version";
-  const daemon = present(report.daemon);
-  if (daemon === undefined) return undecided(id, title, "daemon");
-  const v = daemon.daemonVersion;
-  if (!daemon.reachable || daemon.service !== "caret" || v === undefined) {
-    return { id, title, status: "pass", detail: "no caret daemon is running" };
-  }
-  if (daemon.isDev) {
-    return {
-      id,
-      title,
-      status: "pass",
-      detail: `${v}, a development build — not compared with npm`,
-    };
-  }
-  const latest = daemon.npmLatest;
-  if (latest == null) {
-    return {
-      id,
-      title,
-      status: "unknown",
-      detail: v,
-      reason: "npm's latest caret version could not be read",
-    };
-  }
-  if (isNewer(latest, v)) {
-    return {
-      id,
-      title,
-      status: "fail",
-      detail: `the running daemon is ${v}; npm's latest is ${latest}`,
-      remedy: "run `caret install --refresh` to cycle the service onto the published caret",
-    };
-  }
-  return { id, title, status: "pass", detail: v };
 }
 
 /** Every verdict doctor can reach, in report order, with the caller's own checks — the

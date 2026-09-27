@@ -46,12 +46,18 @@ function recordingLauncher(calls: string[]): (deps: LauncherDeps) => { unpinned:
 const stubLauncher = () => ({ unpinned: false });
 
 /** A watch for a caret at 1.0.0 whose health probes answer `answers` in call order,
- * repeating the last once the list runs out. */
-function scriptedWatch(answers: (HealthIdentity | null)[]): ServiceWatch & { probes: number } {
+ * repeating the last once the list runs out, each probe logged to `calls`. */
+function scriptedWatch(
+  answers: (HealthIdentity | null)[],
+  calls: string[] = [],
+): ServiceWatch & { probes: number } {
   const watch = {
     probes: 0,
     version: "1.0.0",
-    health: async () => answers[Math.min(watch.probes++, answers.length - 1)] ?? null,
+    health: async () => {
+      calls.push("probe");
+      return answers[Math.min(watch.probes++, answers.length - 1)] ?? null;
+    },
     sleep: async () => {},
   };
   return watch;
@@ -61,8 +67,9 @@ function scriptedWatch(answers: (HealthIdentity | null)[]): ServiceWatch & { pro
 async function reconcileWatched(
   watch: ServiceWatch,
   opts: { refresh: boolean } = { refresh: true },
+  calls?: string[],
 ) {
-  const service = fakeServiceTarget({ status: { installed: true, running: true } });
+  const service = fakeServiceTarget({ status: { installed: true, running: true }, calls });
   const ui = recordingUI();
   await reconcileService(
     { ...RECONCILE, ...opts },
@@ -471,7 +478,10 @@ test("install warns, naming the daemon log, when no caret answers within the win
 
 test("install warns, naming the version, when an older caret keeps answering", async () => {
   const { events } = await reconcileWatched(
-    scriptedWatch([null, { service: "caret", version: "0.9.0", instanceId: "b" }]),
+    scriptedWatch([
+      null,
+      { service: "caret", version: "0.9.0", instanceId: "b", supervised: true },
+    ]),
   );
 
   expect(warning(events)).toContain("0.9.0");
@@ -480,7 +490,10 @@ test("install warns, naming the version, when an older caret keeps answering", a
 });
 
 test("install announces once a caret at its own version answers", async () => {
-  const watch = scriptedWatch([null, { service: "caret", version: "1.0.0", instanceId: "b" }]);
+  const watch = scriptedWatch([
+    null,
+    { service: "caret", version: "1.0.0", instanceId: "b", supervised: true },
+  ]);
   const { events } = await reconcileWatched(watch);
 
   expect(announced(events)).toBe(true);
@@ -489,9 +502,14 @@ test("install announces once a caret at its own version answers", async () => {
 });
 
 test("install keeps polling past a draining older daemon", async () => {
-  const old = { service: "caret", version: "0.9.0", instanceId: "b" };
+  const old = { service: "caret", version: "0.9.0", instanceId: "b", supervised: true };
   const { events } = await reconcileWatched(
-    scriptedWatch([null, old, old, { service: "caret", version: "1.0.0", instanceId: "c" }]),
+    scriptedWatch([
+      null,
+      old,
+      old,
+      { service: "caret", version: "1.0.0", instanceId: "c", supervised: true },
+    ]),
   );
 
   expect(announced(events)).toBe(true);
@@ -508,20 +526,38 @@ test("a non-caret squatter on the port never counts as the service coming up", a
 
 test("the replaced daemon draining at the same version never counts", async () => {
   const { events } = await reconcileWatched(
-    scriptedWatch([{ service: "caret", version: "1.0.0", instanceId: "a" }]),
+    scriptedWatch([{ service: "caret", version: "1.0.0", instanceId: "a", supervised: true }]),
   );
 
-  expect(warning(events)).toBeDefined();
+  expect(warning(events)).toContain("replaced (caret 1.0.0) is still answering");
   expect(announced(events)).toBe(false);
 });
 
+test("a caret the service did not start never counts, even at the installer's version", async () => {
+  const { events } = await reconcileWatched(
+    scriptedWatch([null, { service: "caret", version: "1.0.0", instanceId: "b" }]),
+  );
+
+  expect(warning(events)).toContain("did not start");
+  expect(announced(events)).toBe(false);
+});
+
+test("a refresh reads the running instance before it restarts the service", async () => {
+  const calls: string[] = [];
+  const replaced = { service: "caret", version: "1.0.0", instanceId: "a", supervised: true };
+  const fresh = { ...replaced, instanceId: "b" };
+  await reconcileWatched(scriptedWatch([replaced, fresh], calls), { refresh: true }, calls);
+
+  expect(calls).toEqual(["install", "probe", "restart", "probe"]);
+});
+
 test("a new instance at the same version counts once the replaced one stops answering", async () => {
-  const replaced = { service: "caret", version: "1.0.0", instanceId: "a" };
+  const replaced = { service: "caret", version: "1.0.0", instanceId: "a", supervised: true };
   const watch = scriptedWatch([
     replaced,
     replaced,
     replaced,
-    { service: "caret", version: "1.0.0", instanceId: "b" },
+    { service: "caret", version: "1.0.0", instanceId: "b", supervised: true },
   ]);
   const { events } = await reconcileWatched(watch);
 
@@ -530,7 +566,9 @@ test("a new instance at the same version counts once the replaced one stops answ
 });
 
 test("a plain install over an older daemon says to refresh it", async () => {
-  const watch = scriptedWatch([{ service: "caret", version: "0.9.0", instanceId: "b" }]);
+  const watch = scriptedWatch([
+    { service: "caret", version: "0.9.0", instanceId: "b", supervised: true },
+  ]);
   const { calls, events } = await reconcileWatched(watch, { refresh: false });
 
   expect(calls).toEqual(["install"]);

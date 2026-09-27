@@ -155,8 +155,9 @@ export type Check = { id: string; title: string; detail: string } & (
 );
 
 /** What the one shared health probe saw, plus whether this install recorded a service
- * unit. A reachable port answering as something other than "caret" is a squatter, not a
- * daemon — src/doctor/checks.ts draws that distinction from `service`. */
+ * unit, the supervisor's own verdict on a recorded service, and npm's latest for a
+ * published caret. A reachable port answering as something other than "caret" is a
+ * squatter, not a daemon — src/doctor/checks.ts draws that distinction from `service`. */
 export interface DaemonSection {
   reachable: boolean;
   serviceInstalled: boolean;
@@ -164,9 +165,12 @@ export interface DaemonSection {
   daemonVersion?: string;
   build?: string;
   commit?: string;
-  /** The supervisor keeps the recorded service's job alive. Absent when no service is
-   * recorded, the host cannot run one, or the supervisor query failed. */
-  serviceLoaded?: boolean;
+  /** The supervisor keeps the recorded service's job alive (ServiceStatus.keepsAlive).
+   * Absent when no service is recorded, or when serviceStatusError is set. */
+  serviceKeptAlive?: boolean;
+  /** Why the supervisor could not be consulted for a recorded service: the query threw,
+   * or the host cannot run one. */
+  serviceStatusError?: string;
   isDev?: boolean;
   /** npm's latest caret, null when unreadable. Present only for a published caret daemon. */
   npmLatest?: string | null;
@@ -325,18 +329,24 @@ function buildSettings(deps: DoctorDeps): Record<string, unknown> {
 
 /** The daemon section from the shared health probe: unreachable (null) →
  * { reachable: false }; reachable → its identity, whatever service it claims
- * (a non-caret squatter still shows reachable, with its own service). */
+ * (a non-caret squatter still shows reachable, with its own service). It also asks the
+ * supervisor when a service is recorded, and reads npm for a published caret. */
 async function buildDaemon(
   deps: DoctorDeps,
   health: HealthIdentity | null,
 ): Promise<DaemonSection> {
   const serviceInstalled = deps.serviceInstalled();
   const published = health?.service === "caret" && !health.isDev && health.version !== undefined;
-  const [serviceLoaded, npmLatest] = await Promise.all([
-    serviceInstalled ? readServiceLoaded(deps) : undefined,
+  const [supervisor, npmLatest] = await Promise.all([
+    serviceInstalled ? readServiceKeptAlive(deps) : undefined,
     published ? deps.publishedVersion() : undefined,
   ]);
-  const section: DaemonSection = health
+  const optional = {
+    ...(health?.isDev !== undefined && { isDev: health.isDev }),
+    ...supervisor,
+    ...(npmLatest !== undefined && { npmLatest }),
+  };
+  return health
     ? {
         reachable: true,
         serviceInstalled,
@@ -344,22 +354,23 @@ async function buildDaemon(
         daemonVersion: health.version,
         build: health.build,
         commit: health.commit,
+        ...optional,
       }
-    : { reachable: false, serviceInstalled };
-  if (health?.isDev !== undefined) section.isDev = health.isDev;
-  if (serviceLoaded !== undefined) section.serviceLoaded = serviceLoaded;
-  if (npmLatest !== undefined) section.npmLatest = npmLatest;
-  return section;
+    : { reachable: false, serviceInstalled, ...optional };
 }
 
-/** Whether the supervisor keeps the job alive; undefined when it could not say. A failed
- * query degrades to the health-only verdict rather than sinking the daemon section. */
-async function readServiceLoaded(deps: DoctorDeps): Promise<boolean | undefined> {
+/** The supervisor's verdict on the recorded job, or why it gave none. A failed query
+ * degrades to the health-only verdict rather than sinking the daemon section. */
+async function readServiceKeptAlive(
+  deps: DoctorDeps,
+): Promise<Pick<DaemonSection, "serviceKeptAlive" | "serviceStatusError">> {
   try {
     const status = await deps.serviceStatus();
-    return status.unsupported === undefined ? status.keepsAlive : undefined;
-  } catch {
-    return undefined;
+    return status.unsupported === undefined
+      ? { serviceKeptAlive: status.keepsAlive }
+      : { serviceStatusError: status.unsupported };
+  } catch (e) {
+    return { serviceStatusError: errorMessage(e) };
   }
 }
 

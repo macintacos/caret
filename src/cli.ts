@@ -18,6 +18,7 @@ import { fatalDeny } from "@/adapters/index.ts";
 import { runDaemon } from "@/commands/daemon.ts";
 import { runDoctorSubcommand } from "@/commands/doctor.ts";
 import { installExitCode, runInstallSubcommand } from "@/commands/install/index.ts";
+import { prodServiceWatch } from "@/commands/install/service.ts";
 import { runPrewarm } from "@/commands/prewarm.ts";
 import { runReconcileSubcommand } from "@/commands/reconcile.ts";
 import { runRedactSubcommand } from "@/commands/redact.ts";
@@ -26,7 +27,6 @@ import { runServe } from "@/commands/serve.ts";
 import { prodService } from "@/commands/service-target.ts";
 import { runSteerSubcommand } from "@/commands/steer.ts";
 import { logFile } from "@/config/paths.ts";
-import { httpHealth } from "@/daemon/client.ts";
 import { VERSION } from "@/lib/build-id.ts";
 import { logError } from "@/lib/log.ts";
 import { createProgram, runProgram } from "@/lib/program.ts";
@@ -124,7 +124,7 @@ function buildProgram(): Command {
           refresh: opts.refresh ?? false,
           fromLocal: opts.fromLocal ?? false,
         },
-        { service: prodService, watch: { version: VERSION, health: httpHealth, sleep: Bun.sleep } },
+        { service: prodService, watch: prodServiceWatch() },
       );
       // The command reports every problem itself; this is the only place one becomes an
       // exit code.

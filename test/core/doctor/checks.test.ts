@@ -1,7 +1,14 @@
 import { expect, test } from "bun:test";
 
 import { runChecks } from "@/doctor/checks.ts";
-import type { Check, LogStats, Report } from "@/doctor/report.ts";
+import {
+  type Check,
+  type DaemonSection,
+  isSectionError,
+  type LogStats,
+  type Report,
+  type SectionError,
+} from "@/doctor/report.ts";
 
 function log(path: string, errors = 0, lastErrorAt?: string): LogStats {
   return { path, exists: true, size: 10, errors, warns: 0, lastErrorAt };
@@ -110,7 +117,12 @@ test("a degraded daemon section yields unknown, claiming nothing about the daemo
 test("a recorded service whose job is not loaded fails daemon-reachable even while a daemon answers", () => {
   const checks = runChecks(
     report({
-      daemon: { reachable: true, serviceInstalled: true, service: "caret", serviceLoaded: false },
+      daemon: {
+        reachable: true,
+        serviceInstalled: true,
+        service: "caret",
+        serviceKeptAlive: false,
+      },
     }),
   );
   const failed = check(checks, "daemon-reachable");
@@ -120,15 +132,15 @@ test("a recorded service whose job is not loaded fails daemon-reachable even whi
 
 // ---- daemon-version ----
 
-function versionCheck(daemon: Partial<Report["daemon"]> | { error: string }): Check {
+function versionCheck(daemon: Partial<DaemonSection> | SectionError): Check {
   const base = {
     reachable: true,
     serviceInstalled: true,
     service: "caret",
     daemonVersion: "1.2.3",
   };
-  const merged = "error" in daemon ? daemon : { ...base, ...daemon };
-  return check(runChecks(report({ daemon: merged as Report["daemon"] })), "daemon-version");
+  const merged = isSectionError(daemon) ? daemon : { ...base, ...daemon };
+  return check(runChecks(report({ daemon: merged })), "daemon-version");
 }
 
 test("a daemon older than npm's latest fails daemon-version with the refresh remedy", () => {
@@ -136,7 +148,7 @@ test("a daemon older than npm's latest fails daemon-version with the refresh rem
   expect(failed.status).toBe("fail");
   expect(failed.detail).toContain("1.2.3");
   expect(failed.detail).toContain("1.3.0");
-  if (failed.status === "fail") expect(failed.remedy).toContain("caret install --refresh");
+  expect(failed.status === "fail" && failed.remedy).toContain("caret install --refresh");
 });
 
 test("a daemon at or ahead of npm's latest passes daemon-version and names its version", () => {
@@ -157,6 +169,12 @@ test("a development daemon passes daemon-version without comparing", () => {
 
 test("no caret daemon running passes daemon-version", () => {
   expect(versionCheck({ reachable: false, service: undefined }).status).toBe("pass");
+});
+
+test("a caret daemon that reports no version passes daemon-version and says so", () => {
+  const passed = versionCheck({ daemonVersion: undefined });
+  expect(passed.status).toBe("pass");
+  expect(passed.detail).toBe("the running caret did not report a version");
 });
 
 test("a degraded daemon section leaves daemon-version unknown", () => {

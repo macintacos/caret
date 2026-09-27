@@ -19,7 +19,9 @@ import type { ServiceTarget } from "@/commands/service-target.ts";
 import { VANITY_HOST } from "@/config/constants.ts";
 import { daemonStderrLogFile, launcherPath } from "@/config/paths.ts";
 import { getPort, loadSettings } from "@/config/settings.ts";
+import { httpHealth } from "@/daemon/client.ts";
 import { DAEMON_CWD } from "@/daemon/lifecycle.ts";
+import { VERSION } from "@/lib/build-id.ts";
 import { isNewer } from "@/lib/semver.ts";
 import { errorMessage, type HealthIdentity } from "@/lib/types.ts";
 import { SERVICE_TERMINAL_EXIT_STATUS, serviceEnvironment } from "@/service/manager.ts";
@@ -40,8 +42,7 @@ export interface ServiceStepDeps {
   watch?: ServiceWatch;
 }
 
-/** What watches the service come back after install: the installing caret's version and
- * the probes that read what the port serves. */
+/** The installing caret's version and the probes that read what the port serves. */
 export interface ServiceWatch {
   /** The installing caret's version — VERSION in prod. */
   version: string;
@@ -49,29 +50,108 @@ export interface ServiceWatch {
   sleep: (ms: number) => Promise<void>;
 }
 
-// 30 s: outlasts launchd's ~10 s respawn throttle, the launcher's two 5 s root retries,
-// and the replaced daemon's drain.
-const SETTLE_POLL_MS = 500;
-const SETTLE_ATTEMPTS = 60;
+/** The installing caret's own version and the live health probe. */
+export function prodServiceWatch(): ServiceWatch {
+  return { version: VERSION, health: httpHealth, sleep: Bun.sleep };
+}
 
-/** Poll until a caret at least as new as the installing one answers, other than the
- * `replaced` instance a restart is draining. Resolves to the version the last probe saw
- * from such a caret, or null when the last probe found none. */
-async function awaitServedVersion(
+// Outlasts launchd's ~10 s respawn throttle, the launcher's two 5 s root retries, and the
+// replaced daemon's drain. The real bound adds up to 500 ms per probe that times out.
+const SETTLE_POLL_MS = 500;
+const SETTLE_WINDOW_MS = 30_000;
+const SETTLE_ATTEMPTS = SETTLE_WINDOW_MS / SETTLE_POLL_MS;
+
+/** What the port served when the wait ended. */
+type Served =
+  /** The service's caret, at least as new as the installer. */
+  | { kind: "ready"; version: string }
+  /** The service's caret, older than the installer. */
+  | { kind: "stale"; version: string }
+  /** Only the instance the restart replaced still answers. */
+  | { kind: "replaced"; version?: string }
+  /** A caret the service did not start holds the port. */
+  | { kind: "unsupervised"; version?: string }
+  /** Nothing, or only a non-caret squatter. */
+  | { kind: "silent" };
+
+function classify(
+  health: HealthIdentity | null,
+  version: string,
+  replaced: string | undefined,
+): Served {
+  if (health?.service !== "caret") return { kind: "silent" };
+  const seen = health.version;
+  if (replaced !== undefined && health.instanceId === replaced) {
+    return { kind: "replaced", version: seen };
+  }
+  // The predicate lifecycle.ts uses to recognise the service's daemon.
+  if ((health.supervised ?? health.resident) !== true)
+    return { kind: "unsupervised", version: seen };
+  if (seen === undefined) return { kind: "silent" };
+  return isNewer(version, seen)
+    ? { kind: "stale", version: seen }
+    : { kind: "ready", version: seen };
+}
+
+/** Poll until the service's caret, at least as new as the installer and other than the
+ * `replaced` instance a restart is draining, answers. Resolves to `ready` the moment one
+ * does, else to what the last probe saw. */
+async function awaitServed(
   baseUrl: string,
   watch: ServiceWatch,
   replaced: string | undefined,
-): Promise<string | null> {
-  let seen: string | null = null;
+): Promise<Served> {
+  let served: Served = { kind: "silent" };
   for (let attempt = 0; attempt < SETTLE_ATTEMPTS; attempt++) {
-    const health = await watch.health(baseUrl);
-    const fresh =
-      health?.service === "caret" && (replaced === undefined || health.instanceId !== replaced);
-    seen = fresh ? (health.version ?? null) : null;
-    if (seen !== null && !isNewer(watch.version, seen)) return seen;
+    served = classify(await watch.health(baseUrl), watch.version, replaced);
+    if (served.kind === "ready") return served;
     await watch.sleep(SETTLE_POLL_MS);
   }
-  return seen;
+  return served;
+}
+
+/** The warning for a wait that ended on `served`, or null when the service is ready.
+ * `cycled` says whether this install already restarted the service. */
+function servedWarning(served: Served, version: string, cycled: boolean): string | null {
+  const log = `Read ${daemonStderrLogFile()}; caret still starts on demand.`;
+  const at = (v?: string) => (v === undefined ? "" : ` (caret ${v})`);
+  switch (served.kind) {
+    case "ready":
+      return null;
+    case "stale":
+      return [
+        `The caret service is serving caret ${served.version}, not ${version}.`,
+        cycled ? undefined : "Run `caret install --refresh` to cycle it.",
+        `If it persists, read ${daemonStderrLogFile()}.`,
+      ]
+        .filter(Boolean)
+        .join("\n");
+    case "replaced":
+      return `The daemon the restart replaced${at(served.version)} is still answering.\n${log}`;
+    case "unsupervised":
+      return `A caret the service did not start${at(served.version)} holds the port.\nThe service takes over once it exits.`;
+    case "silent":
+      return `No caret daemon answered within ${SETTLE_WINDOW_MS / 1000} seconds.\n${log}`;
+  }
+}
+
+/** Wait for the service's caret to answer, warning when it does not. Resolves to whether
+ * the install should announce the review UI. */
+async function settleService(
+  baseUrl: string,
+  watch: ServiceWatch,
+  replaced: string | undefined,
+  cycled: boolean,
+  ui: InstallUI,
+): Promise<boolean> {
+  const served = await ui.step(
+    "Waiting for the caret service",
+    () => awaitServed(baseUrl, watch, replaced),
+    (s) => (s.kind === "ready" ? `caret ${s.version} answered` : "The caret service is not up yet"),
+  );
+  const warning = servedWarning(served, watch.version, cycled);
+  if (warning !== null) ui.warn(warning);
+  return warning === null;
 }
 
 /** Run `body` against the supervisor this machine installs under, if there is one to
@@ -180,33 +260,9 @@ export async function reconcileService(
     const replaced = cycles && watch ? (await watch.health(baseUrl))?.instanceId : undefined;
     if (cycles) await manager.restart();
 
-    if (watch) {
-      // ponytail: a no-cycle install over an older daemon waits the full window before
-      // warning; stop at the first answer when nothing cycled if that ever bites.
-      const seen = await ui.step(
-        "Waiting for the caret service",
-        () => awaitServedVersion(baseUrl, watch, replaced),
-        (v) => (v === null ? "No caret answered" : `caret ${v} answered`),
-      );
-      if (seen === null) {
-        ui.warn(
-          `No caret daemon answered within 30 seconds.\nRead ${daemonStderrLogFile()}; caret still starts on demand.`,
-        );
-        return;
-      }
-      if (isNewer(watch.version, seen)) {
-        ui.warn(
-          [
-            `The caret service is serving caret ${seen}, not ${watch.version}.`,
-            cycles ? undefined : "Run `caret install --refresh` to cycle it.",
-            `If it persists, read ${daemonStderrLogFile()}.`,
-          ]
-            .filter(Boolean)
-            .join("\n"),
-        );
-        return;
-      }
-    }
+    // ponytail: a no-cycle install over an older daemon waits the full window before
+    // warning; stop at the first answer when nothing cycled if that ever bites.
+    if (watch && !(await settleService(baseUrl, watch, replaced, cycles, ui))) return;
 
     // One short line per fact: clack draws its gutter only on explicit breaks.
     const announcement = [
