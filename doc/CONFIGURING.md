@@ -88,7 +88,7 @@ These hold the tunables the `CARET_*` environment variables also cover (see
 > Unlike the `[logging]` keys, which hot-reload live, these tunables are captured at
 > startup: `port`, `idle_ms`, and `heartbeat_ms` take effect on the next daemon start, and
 > `timeout_s` on the next review. For the caret service's daemon, the next start means
-> `caret install --refresh` or a
+> `caret install --refresh`, which restarts it on the newest caret installed, or a
 > [service restart](RUNNING.md#the-caret-service).
 
 ```toml

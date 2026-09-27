@@ -272,13 +272,15 @@ so it wants the live check § Verified vs. follow-up already schedules.
   GitHub releases, because `latest` is what OpenCode would re-resolve to — and a stale
   result offers to clear the cached copy, or to bump a user-authored pin. That offer is a
   prompt, since `~/.cache/opencode` is not caret's to delete unasked; `--refresh`
-  pre-answers it, and off a TTY install names the gap and changes nothing. The same run
-  also registers caret with Claude Code via its plugin CLI when Claude Code is among the
-  selected targets. The command lives in `src/commands/install/`: `index.ts` is the
-  orchestrator (it selects the targets — the chooser or detection — and dispatches),
-  beside the target registry, the chooser, the terminal reporter, and one module per
-  target runner. `paths.ts` is the single source of truth both the probe (reader) and the
-  writer resolve through.
+  pre-answers it, and off a TTY install names the gap and changes nothing. Clearing the
+  cache leaves the service on caret's own copy under `~/.local/state/caret/roots/`, not an
+  older agent root, until OpenCode's next start re-resolves. The same run also registers
+  caret with Claude Code via its plugin CLI when Claude Code is among the selected
+  targets. The command lives in `src/commands/install/`: `index.ts` is the orchestrator
+  (it selects the targets — the chooser or detection — and dispatches), beside the target
+  registry, the chooser, the terminal reporter, and one module per target runner.
+  `paths.ts` is the single source of truth both the probe (reader) and the writer resolve
+  through.
 
 ## Distribution choice (amended by EXC-794)
 

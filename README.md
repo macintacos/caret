@@ -60,6 +60,9 @@ bunx --no-cache @macintacos/caret@latest install --refresh    # update
 bunx --no-cache @macintacos/caret@latest install --uninstall  # remove
 ```
 
+`--refresh` also leaves the caret service on the caret you ran, kept under
+`~/.local/state/caret/roots/`.
+
 `caret`'s UI is designed to check for updates, at most once a day. When a newer `caret` is
 out, the review UI says so once: a toast on load that opens **What's new** (the skipped
 release notes or trunk commits), a mark on the settings button, and a

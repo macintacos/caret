@@ -295,9 +295,13 @@ re-resolves on next start **or**, for a stale pinned entry, bumps the pin in the
 place — a bump deliberately leaves the cache alone, since the new specifier gets its own
 cache dir. A plain `caret install` runs the same check and asks first at a terminal; off
 one, with no flag, it names the gap and the command that would close it and changes
-nothing. Restart OpenCode afterward. Pinning `"@macintacos/caret@<version>"` in the array
-and bumping it yourself is the other way to control which version loads. Clearing the
-cache by hand is:
+nothing. Restart OpenCode afterward. Until then the caret service does not fall back to an
+older root: a published `caret install` keeps a copy of itself under
+`~/.local/state/caret/roots/<version>/`, which the service's launcher scans as a third
+glob beside Claude Code's and OpenCode's caches — highest runnable version wins, an
+agent's copy winning a tie. Pinning `"@macintacos/caret@<version>"` in the array and
+bumping it yourself is the other way to control which version loads. Clearing the cache by
+hand is:
 
 ```sh
 rm -rf ~/.cache/opencode/packages/@macintacos/caret*

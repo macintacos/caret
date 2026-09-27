@@ -311,9 +311,12 @@ Every unit runs `$XDG_STATE_HOME/caret/bin/caret daemon`. That file is
 `bin/caret-launcher`, which chooses what to run each time it starts:
 
 - **caret** — the version a `--from-local` build pinned, else the newest one installed
-  across Claude Code's plugin cache and OpenCode's package cache. A caret missing its
-  executable `bin/caret`, or any UI build (`ui/dist`, or the one a compiled
-  `bin/caret-native` embeds), is skipped.
+  across Claude Code's plugin cache, OpenCode's package cache, and caret's own copy at
+  `~/.local/state/caret/roots/`. A published `caret install` keeps that copy of itself, so
+  after `--refresh` the service runs it until something newer is installed — usually
+  OpenCode's next start, which re-resolves its cache. An agent's copy wins a version tie.
+  A caret missing its executable `bin/caret`, or any UI build (`ui/dist`, or the one a
+  compiled `bin/caret-native` embeds), is skipped.
 - **bun** — the one recorded at install, else the first found in `~/.bun/bin`,
   `/opt/homebrew/bin`, `/usr/local/bin`, mise's shims and installs, then `~/.asdf/shims`.
 
@@ -365,9 +368,10 @@ registers none where there isn't one.
 > instead.
 
 Alongside the agents, `--uninstall` removes the service's unit file, the launcher, and the
-records the launcher reads, keeping your reviews. The launcher removes the same things
-itself when it finds no caret installed anywhere, after looking twice more, five seconds
-apart. When caret is installed but can't run, it stops the service instead (see
+records the launcher reads, and caret's own copy under `~/.local/state/caret/roots/`,
+keeping your reviews. The launcher removes the same things itself when it finds no caret
+anywhere, caret's own copy included, after looking twice more, five seconds apart. When
+caret is installed but can't run, it stops the service instead (see
 [When the daemon exits](#when-the-daemon-exits)). `caret install` brings back either.
 
 ## Logging & Debugging
