@@ -549,15 +549,15 @@ test("--dry-run previews the detected agents instead of prompting", async () => 
 });
 
 test("--refresh leaves the service a root at the installing caret that outlives the install", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "caret-install-index-"));
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-install-index-"));
   const claudeDir = await mkdtemp(join(tmpdir(), "caret-install-claude-"));
   runnableRoot(join(claudeDir, "plugins/cache/caret/caret/1.0.2"), manifest("1.0.2"));
   const installing = rootAt("1.1.0");
-  const launcherSource = join(dir, "caret-launcher");
+  const launcherSource = join(stateHome, "caret-launcher");
   await Bun.write(launcherSource, "#!/usr/bin/env bash\n");
   const env = {
-    XDG_STATE_HOME: dir,
-    CARET_CONFIG_FILE: join(dir, "config.toml"),
+    XDG_STATE_HOME: stateHome,
+    CARET_CONFIG_FILE: join(stateHome, "config.toml"),
     CLAUDE_CONFIG_DIR: claudeDir,
     XDG_CACHE_HOME: await mkdtemp(join(tmpdir(), "caret-install-cache-")),
   };

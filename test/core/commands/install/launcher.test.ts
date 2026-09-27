@@ -194,17 +194,17 @@ function seedOwnedRoot(version: string, runnable = true): string {
   return dir;
 }
 
-const owned = () => join(ownedRootsDir(), "1.1.0");
+const stagedRoot = () => join(ownedRootsDir(), "1.1.0");
 
 test("an install keeps a copy of the published caret's files set under its version", () => {
   const pkg = packageRoot();
   installLauncher({ source: shippedScript, ownedRoot: () => pkg });
 
-  expect(existsSync(join(owned(), "package.json"))).toBe(true);
-  expect(perms(join(owned(), "bin", "caret"))).toBe(0o755);
-  expect(existsSync(join(owned(), "dist", "cli.js"))).toBe(true);
-  expect(existsSync(join(owned(), "ui", "dist", "index.html"))).toBe(true);
-  expect(existsSync(join(owned(), "node_modules"))).toBe(false);
+  expect(existsSync(join(stagedRoot(), "package.json"))).toBe(true);
+  expect(perms(join(stagedRoot(), "bin", "caret"))).toBe(0o755);
+  expect(existsSync(join(stagedRoot(), "dist", "cli.js"))).toBe(true);
+  expect(existsSync(join(stagedRoot(), "ui", "dist", "index.html"))).toBe(true);
+  expect(existsSync(join(stagedRoot(), "node_modules"))).toBe(false);
   expect(readdirSync(ownedRootsDir())).toEqual(["1.1.0"]);
 });
 
@@ -213,14 +213,14 @@ test("the owned copy stays runnable once the install's own root is gone", () => 
   installLauncher({ source: shippedScript, ownedRoot: () => pkg });
   rmSync(pkg.root, { recursive: true, force: true });
 
-  expect(isRunnableRoot(owned())).toBe(true);
+  expect(isRunnableRoot(stagedRoot())).toBe(true);
 });
 
 test("an install with nothing to stage keeps the owned root an earlier one left", () => {
   installLauncher({ source: shippedScript, ownedRoot: () => packageRoot() });
   installLauncher({ source: shippedScript, ownedRoot: () => undefined });
 
-  expect(isRunnableRoot(owned())).toBe(true);
+  expect(isRunnableRoot(stagedRoot())).toBe(true);
 });
 
 test("a pinned install stages no owned root", () => {
@@ -237,14 +237,14 @@ test("a runnable owned root of the same version is left as it is", () => {
   writeFileSync(join(seedOwnedRoot("1.1.0"), "marker"), "");
   installLauncher({ source: shippedScript, ownedRoot: () => packageRoot() });
 
-  expect(existsSync(join(owned(), "marker"))).toBe(true);
+  expect(existsSync(join(stagedRoot(), "marker"))).toBe(true);
 });
 
 test("a broken owned root of the same version is replaced", () => {
   seedOwnedRoot("1.1.0", false);
   installLauncher({ source: shippedScript, ownedRoot: () => packageRoot() });
 
-  expect(isRunnableRoot(owned())).toBe(true);
+  expect(isRunnableRoot(stagedRoot())).toBe(true);
 });
 
 test("a source the launcher could not run stages nothing", () => {

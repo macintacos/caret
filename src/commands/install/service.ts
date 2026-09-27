@@ -259,8 +259,8 @@ export async function reconcileService(
       environment: serviceEnvironment(process.env),
       terminalExitStatus: SERVICE_TERMINAL_EXIT_STATUS,
     });
-    const next = predictLauncherRoot(deps);
-    if (next === null) {
+    const nextRoot = predictLauncherRoot(deps);
+    if (nextRoot === null) {
       // Cycling into nothing only makes the launcher exit or evict the service.
       ui.warn(
         "No runnable caret was found for the caret service to start — run `caret install` again once an agent has installed caret.",
@@ -287,7 +287,7 @@ export async function reconcileService(
     const announcement = [
       `The review UI now stays up at ${reviewUrl}`,
       // Only a cycle makes the prediction the serving caret; "ready" alone doesn't.
-      cycles && next && `It starts caret ${next.version} from ${next.root}.`,
+      cycles && nextRoot && `It starts caret ${nextRoot.version} from ${nextRoot.root}.`,
       `It's listed in ${visibleIn}.`,
       `To turn it off, run \`caret install\` and answer "I'll run it myself".`,
       visibleToggleCaveat,

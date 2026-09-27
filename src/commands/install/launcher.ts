@@ -123,8 +123,8 @@ export function pruneOwnedRoots(): void {
     null,
     listDirs(ownedRootsDir()).map((dir) => ({ dir, owned: true })),
   )?.root;
-  for (const e of entries) {
-    const path = join(ownedRootsDir(), e);
+  for (const name of entries) {
+    const path = join(ownedRootsDir(), name);
     if (path === keep) continue;
     try {
       rmSync(path, { recursive: true, force: true });
