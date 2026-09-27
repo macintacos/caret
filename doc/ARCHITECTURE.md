@@ -244,8 +244,14 @@ unconditional, and a third phase runs `plugin update caret@caret --scope user` b
 `plugin list --json` reads, so the settled line reports the version Claude Code actually
 moved from and to. Restart to apply. By hand the equivalents are
 `claude plugin update caret@caret`, or `/plugin marketplace update caret` then
-`/reload-plugins`. `caret install --uninstall` removes the plugin — from every agent, so
-Claude Code among them — and leaves that marketplace registration behind;
+`/reload-plugins`. When Claude's `caret` marketplace is still caret's own dev marketplace
+from a `--from-local` install, the run first hands it back with
+`claude plugin marketplace remove caret`, which also uninstalls `caret@caret`; the install
+that follows puts it back. A `plugin marketplace list --json` read after the add settles
+the line on what Claude actually registered: a `caret` marketplace pointing anywhere else
+— a settings declaration Claude will not override — gets a warning naming that source and
+the remedy. `caret install --uninstall` removes the plugin — from every agent, so Claude
+Code among them — and leaves that marketplace registration behind;
 `claude plugin marketplace remove caret` clears it.
 
 ### The OpenCode adapter

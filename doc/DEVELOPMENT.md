@@ -424,6 +424,10 @@ not carry a login item, answer the install prompt with **I'll run it myself**, t
 After a `/reload-plugins` (or a Claude Code restart), `/caret:*` resolves to your local
 build.
 
+`--install` also leaves Claude Code's `caret` marketplace registered, and declared in its
+user settings, as the dev marketplace. A plain `caret install` removes it
+(`claude plugin marketplace remove caret`) before adding the published one.
+
 Because it mutates your Claude plugin state and daemon, `--install` is for local
 development only, never CI. `bin/caret install --from-local --dry-run` previews the
 install steps without performing them.
