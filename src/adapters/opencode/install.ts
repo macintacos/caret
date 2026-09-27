@@ -15,12 +15,13 @@ import { join } from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
 
 import type { InstallProbe } from "@/adapters/adapter.ts";
+import { readLoadedCaretEntry } from "@/adapters/opencode/entries.ts";
 import {
   CONFIG_FILENAMES,
   opencodeConfigDir,
   resolveConfigFile,
 } from "@/adapters/opencode/paths.ts";
-import { readEntryCachedVersion, readLoadedCaretEntry } from "@/adapters/opencode/upgrade.ts";
+import { readEntryCachedVersion } from "@/adapters/opencode/upgrade.ts";
 import { parseVersionTriple } from "@/lib/semver.ts";
 
 /** Best-effort read of caret's OpenCode install state. Every miss degrades to

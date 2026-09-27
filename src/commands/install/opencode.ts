@@ -26,6 +26,7 @@ import {
   removeFiles,
   renderPlugin,
 } from "@/adapters/opencode/deploy.ts";
+import { caretEntries, isCaretCheckout, readConfigText } from "@/adapters/opencode/entries.ts";
 import { loadOpencodePackaging, type OpencodePackaging } from "@/adapters/opencode/packaging.ts";
 import {
   CARET_PACKAGE,
@@ -39,10 +40,7 @@ import {
   resolveConfigFile,
 } from "@/adapters/opencode/paths.ts";
 import {
-  caretEntries,
   clearCachedCaret,
-  isCaretCheckout,
-  readConfigText,
   readUpgradeVerdict,
   type StaleVerdict,
   type UpgradeVerdict,

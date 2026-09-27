@@ -280,7 +280,7 @@ so it wants the live check § Verified vs. follow-up already schedules.
   (it selects the targets — the chooser or detection — and dispatches), beside the target
   registry, the chooser, the terminal reporter, and one module per target runner.
   `paths.ts` is the single source of truth both the probe (reader) and the writer resolve
-  through.
+  through, and `entries.ts` the single answer to which `plugin` entries are caret's.
 
 ## Distribution choice (amended by EXC-794)
 

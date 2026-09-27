@@ -17,23 +17,15 @@
 // string gets its own cache dir, no deletion involved. The cache reads degrade to null;
 // the config read throws when the file exists but cannot be read, and each caller owns
 // that.
-//
-// It also answers which `plugin` entries are caret's, for install's writer and doctor's
-// probe. The upgrade reads (`readCaretEntry`) match the package form only: npm's version
-// says nothing about a `--from-local` checkout.
 
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
-import {
-  findPluginEntry,
-  pluginEntries,
-  splitPluginSpecifier,
-} from "@/adapters/opencode/config-plugin.ts";
+import { splitPluginSpecifier } from "@/adapters/opencode/config-plugin.ts";
+import { readCaretEntry } from "@/adapters/opencode/entries.ts";
 import {
   CARET_PACKAGE,
   existingOpencodeCachePackageDirs,
-  localSpecifierPath,
   opencodeCachePackageDir,
 } from "@/adapters/opencode/paths.ts";
 import type { Check } from "@/doctor/report.ts";
@@ -165,42 +157,11 @@ export async function readUpgradeVerdict(deps: {
   });
 }
 
-/** Whether `dir` is a caret checkout, by the one file OpenCode would have to load out of
- * it. Keep in sync with `resolveCaretRoot`'s probe (packaging.ts). */
-export function isCaretCheckout(dir: string): boolean {
-  return existsSync(join(dir, "opencode", "caret.plugin.ts"));
-}
-
-/** The `plugin` array entries that are caret's, in array order: the npm package under any
- * pin, plus any local specifier whose path is a caret checkout. A `file:` entry pointing
- * anywhere else is another tool's. */
-export function caretEntries(text: string | null, isCheckout: (dir: string) => boolean): string[] {
-  return pluginEntries(text).filter((entry) => {
-    const path = localSpecifierPath(entry);
-    return path === undefined
-      ? splitPluginSpecifier(entry).pkg === CARET_PACKAGE
-      : isCheckout(path);
-  });
-}
-
 /** Whether OpenCode's config carries caret's npm-package `plugin` entry at all — the
  * question doctor asks before paying for the version check, since `upgradeVerdict`
  * reports a missing entry as `fresh`. */
 export function hasCaretPluginEntry(configFile: string): boolean {
   return readCaretEntry(configFile) !== null;
-}
-
-/** caret's verbatim npm-package entry in `configFile`, pin and all, or null when the file is
- * absent or lists none. Throws when the file exists but cannot be read. */
-export function readCaretEntry(configFile: string): string | null {
-  return findPluginEntry(readConfigText(configFile), CARET_PACKAGE);
-}
-
-/** The caret entry OpenCode loads from `configFile`: the package or a `--from-local`
- * checkout, the first when it lists both (OpenCode loads both). Throws like
- * `readCaretEntry`, which stays package-only on purpose. */
-export function readLoadedCaretEntry(configFile: string): string | null {
-  return caretEntries(readConfigText(configFile), isCaretCheckout)[0] ?? null;
 }
 
 /** What OpenCode cached for `entry`, read from that entry's own cache dir and never a
@@ -210,11 +171,6 @@ export function readEntryCachedVersion(
   cacheDir: (specifier: string) => string = opencodeCachePackageDir,
 ): string | null {
   return entry === null ? null : readCachedCaretVersion(cacheDir(entry));
-}
-
-/** The config file's text, or null when it is absent. */
-export function readConfigText(path: string): string | null {
-  return existsSync(path) ? readFileSync(path, "utf-8") : null;
 }
 
 /** caret's version in one OpenCode cache dir (`packages/<specifier>/`): the `version`

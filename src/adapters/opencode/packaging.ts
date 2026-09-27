@@ -6,21 +6,23 @@
 // keys off — so it is depth-independent (works whether this module runs from
 // source, the bundle, or the compiled binary).
 
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+
+import { isCaretCheckout } from "@/adapters/opencode/entries.ts";
 
 /** caret's root dir (the one containing opencode/ and bin/). dev/bundle: argv[1]
  * is the entry script (src/cli.ts or dist/cli.js), one level under root. binary:
  * argv[1] is a subcommand, so the compiled binary at root/bin/caret-native (=
- * execPath) is two levels under root. Each candidate is confirmed by the presence
- * of opencode/caret.plugin.ts before it's accepted. */
+ * execPath) is two levels under root. Each candidate is confirmed as a caret checkout
+ * (`isCaretCheckout`) before it's accepted. */
 export function resolveCaretRoot(): string {
   const candidates: string[] = [];
   const script = process.argv[1];
   if (script) candidates.push(join(dirname(script), ".."));
   candidates.push(join(dirname(process.execPath), ".."));
   for (const root of candidates) {
-    if (existsSync(join(root, "opencode", "caret.plugin.ts"))) return root;
+    if (isCaretCheckout(root)) return root;
   }
   throw new Error(
     `caret OpenCode packaging not found (no opencode/caret.plugin.ts under: ${candidates.join(", ") || "(none)"}). The OpenCode plugin source must ship with caret.`,
