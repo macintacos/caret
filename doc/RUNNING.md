@@ -319,8 +319,10 @@ Every unit runs `$XDG_STATE_HOME/caret/bin/caret daemon`. That file is
 
 So restarting the service is how its daemon takes an upgrade. `caret install --refresh`
 restarts it, and so does the first review from a newer caret unless a local build is
-pinned. The daemon also sees only the environment captured at install — see
-[Runtime](CONFIGURING.md#runtime).
+pinned. Install then waits up to 30 seconds for a daemon at least as new as itself; if
+none answers, it warns instead of announcing the review UI, naming the version it found
+and `logs/daemon-stderr.log`. The daemon also sees only the environment captured at
+install — see [Runtime](CONFIGURING.md#runtime).
 
 ### When the daemon exits
 

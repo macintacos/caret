@@ -17,10 +17,11 @@ import {
 import type { InstallUI } from "@/commands/install/ui.ts";
 import type { ServiceTarget } from "@/commands/service-target.ts";
 import { VANITY_HOST } from "@/config/constants.ts";
-import { launcherPath } from "@/config/paths.ts";
+import { daemonStderrLogFile, launcherPath } from "@/config/paths.ts";
 import { getPort, loadSettings } from "@/config/settings.ts";
 import { DAEMON_CWD } from "@/daemon/lifecycle.ts";
-import { errorMessage } from "@/lib/types.ts";
+import { isNewer } from "@/lib/semver.ts";
+import { errorMessage, type HealthIdentity } from "@/lib/types.ts";
 import { SERVICE_TERMINAL_EXIT_STATUS, serviceEnvironment } from "@/service/manager.ts";
 
 export interface ServiceStepDeps {
@@ -33,6 +34,44 @@ export interface ServiceStepDeps {
    * rather than something a test has to remember to opt out of. */
   service?: () => ServiceTarget;
   installLauncher?: (deps: LauncherDeps) => { unpinned: boolean };
+  /** What reads the port once the service is in place, wired by src/cli.ts. Absent means
+   * nothing is probed and the install announces as-is: a test must not read whatever real
+   * daemon holds the port. */
+  watch?: ServiceWatch;
+}
+
+/** What watches the service come back after install: the installing caret's version and
+ * the probes that read what the port serves. */
+export interface ServiceWatch {
+  /** The installing caret's version — VERSION in prod. */
+  version: string;
+  health: (baseUrl: string) => Promise<HealthIdentity | null>;
+  sleep: (ms: number) => Promise<void>;
+}
+
+// 30 s: outlasts launchd's ~10 s respawn throttle, the launcher's two 5 s root retries,
+// and the replaced daemon's drain.
+const SETTLE_POLL_MS = 500;
+const SETTLE_ATTEMPTS = 60;
+
+/** Poll until a caret at least as new as the installing one answers, other than the
+ * `replaced` instance a restart is draining. Resolves to the version the last probe saw
+ * from such a caret, or null when the last probe found none. */
+async function awaitServedVersion(
+  baseUrl: string,
+  watch: ServiceWatch,
+  replaced: string | undefined,
+): Promise<string | null> {
+  let seen: string | null = null;
+  for (let attempt = 0; attempt < SETTLE_ATTEMPTS; attempt++) {
+    const health = await watch.health(baseUrl);
+    const fresh =
+      health?.service === "caret" && (replaced === undefined || health.instanceId !== replaced);
+    seen = fresh ? (health.version ?? null) : null;
+    if (seen !== null && !isNewer(watch.version, seen)) return seen;
+    await watch.sleep(SETTLE_POLL_MS);
+  }
+  return seen;
 }
 
 /** Run `body` against the supervisor this machine installs under, if there is one to
@@ -93,7 +132,9 @@ export async function reconcileService(
   deps: ServiceStepDeps,
   ui: InstallUI,
 ): Promise<void> {
-  const reviewUrl = `http://${VANITY_HOST}:${getPort(loadSettings())}`;
+  const port = getPort(loadSettings());
+  const reviewUrl = `http://${VANITY_HOST}:${port}`;
+  const baseUrl = `http://localhost:${port}`;
   if (opts.choice === "run-yourself") return runYourself({ ...opts, reviewUrl }, deps, ui);
   await withService(deps, ui, async (target) => {
     const { manager, label, visibleIn, optOutSurface, visibleToggleCaveat } = target;
@@ -132,7 +173,40 @@ export async function reconcileService(
     // install() is a no-op on an unchanged unit, so a new build or pin serves only once the
     // supervisor cycles. `--from-local` cycles even onto the same pin: hooks never cycle a
     // pinned daemon. Unpinning cycles because hooks attach to a checkout newer than them.
-    if (opts.refresh || opts.pinnedRoot !== undefined || unpinned) await manager.restart();
+    const cycles = opts.refresh || opts.pinnedRoot !== undefined || unpinned;
+    const { watch } = deps;
+    // A draining daemon keeps answering until it lets the port go, so remember which
+    // instance the restart replaces.
+    const replaced = cycles && watch ? (await watch.health(baseUrl))?.instanceId : undefined;
+    if (cycles) await manager.restart();
+
+    if (watch) {
+      // ponytail: a no-cycle install over an older daemon waits the full window before
+      // warning; stop at the first answer when nothing cycled if that ever bites.
+      const seen = await ui.step(
+        "Waiting for the caret service",
+        () => awaitServedVersion(baseUrl, watch, replaced),
+        (v) => (v === null ? "No caret answered" : `caret ${v} answered`),
+      );
+      if (seen === null) {
+        ui.warn(
+          `No caret daemon answered within 30 seconds.\nRead ${daemonStderrLogFile()}; caret still starts on demand.`,
+        );
+        return;
+      }
+      if (isNewer(watch.version, seen)) {
+        ui.warn(
+          [
+            `The caret service is serving caret ${seen}, not ${watch.version}.`,
+            cycles ? undefined : "Run `caret install --refresh` to cycle it.",
+            `If it persists, read ${daemonStderrLogFile()}.`,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        );
+        return;
+      }
+    }
 
     // One short line per fact: clack draws its gutter only on explicit breaks.
     const announcement = [
