@@ -76,21 +76,21 @@ type Served =
 
 function classify(
   health: HealthIdentity | null,
-  version: string,
+  installerVersion: string,
   replaced: string | undefined,
 ): Served {
   if (health?.service !== "caret") return { kind: "silent" };
-  const seen = health.version;
+  const answeringVersion = health.version;
   if (replaced !== undefined && health.instanceId === replaced) {
-    return { kind: "replaced", version: seen };
+    return { kind: "replaced", version: answeringVersion };
   }
   // The predicate lifecycle.ts uses to recognise the service's daemon.
   if ((health.supervised ?? health.resident) !== true)
-    return { kind: "unsupervised", version: seen };
-  if (seen === undefined) return { kind: "silent" };
-  return isNewer(version, seen)
-    ? { kind: "stale", version: seen }
-    : { kind: "ready", version: seen };
+    return { kind: "unsupervised", version: answeringVersion };
+  if (answeringVersion === undefined) return { kind: "silent" };
+  return isNewer(installerVersion, answeringVersion)
+    ? { kind: "stale", version: answeringVersion }
+    : { kind: "ready", version: answeringVersion };
 }
 
 /** Poll until the service's caret, at least as new as the installer and other than the
@@ -112,7 +112,7 @@ async function awaitServed(
 
 /** The warning for a wait that ended on `served`, or null when the service is ready.
  * `cycled` says whether this install already restarted the service. */
-function servedWarning(served: Served, version: string, cycled: boolean): string | null {
+function servedWarning(served: Served, installerVersion: string, cycled: boolean): string | null {
   const log = `Read ${daemonStderrLogFile()}; caret still starts on demand.`;
   const at = (v?: string) => (v === undefined ? "" : ` (caret ${v})`);
   switch (served.kind) {
@@ -120,7 +120,7 @@ function servedWarning(served: Served, version: string, cycled: boolean): string
       return null;
     case "stale":
       return [
-        `The caret service is serving caret ${served.version}, not ${version}.`,
+        `The caret service is serving caret ${served.version}, not ${installerVersion}.`,
         cycled ? undefined : "Run `caret install --refresh` to cycle it.",
         `If it persists, read ${daemonStderrLogFile()}.`,
       ]

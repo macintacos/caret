@@ -337,13 +337,13 @@ async function buildDaemon(
 ): Promise<DaemonSection> {
   const serviceInstalled = deps.serviceInstalled();
   const published = health?.service === "caret" && !health.isDev && health.version !== undefined;
-  const [supervisor, npmLatest] = await Promise.all([
+  const [supervisorVerdict, npmLatest] = await Promise.all([
     serviceInstalled ? readServiceKeptAlive(deps) : undefined,
     published ? deps.publishedVersion() : undefined,
   ]);
   const optional = {
     ...(health?.isDev !== undefined && { isDev: health.isDev }),
-    ...supervisor,
+    ...supervisorVerdict,
     ...(npmLatest !== undefined && { npmLatest }),
   };
   return health
