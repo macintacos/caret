@@ -2,11 +2,12 @@
 // read-only snapshot of caret's OpenCode install. caret installs as a `plugin` array
 // entry (@macintacos/caret) that OpenCode installs into its own cache, one
 // `packages/<specifier>/` dir per array entry with the installed version recorded in
-// that dir's `node_modules/@macintacos/caret/package.json`; a `--from-local` `file:` entry
-// for a caret checkout counts too, read through OpenCode's symlink to the checkout. Mirrors claude/codex
-// install.ts's degrade-to-"unknown" discipline — every field degrades rather than throwing, so
-// doctor always renders. Reads only caret's own cache dirs and the user's plugin
-// array — never any other config key.
+// that dir's `node_modules/@macintacos/caret/package.json`; a `--from-local` `file:`
+// entry pointing at a caret checkout is caret's entry too, its version read through
+// OpenCode's cache symlink to the checkout. Mirrors claude/codex install.ts's
+// degrade-to-"unknown" discipline — every field degrades rather than throwing, so doctor
+// always renders. Reads only caret's own cache dirs, the user's plugin array, and whether
+// each `file:` entry's path holds caret's plugin — never any other config key.
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -19,12 +20,7 @@ import {
   opencodeConfigDir,
   resolveConfigFile,
 } from "@/adapters/opencode/paths.ts";
-import {
-  caretEntries,
-  isCaretCheckout,
-  readConfigText,
-  readEntryCachedVersion,
-} from "@/adapters/opencode/upgrade.ts";
+import { readEntryCachedVersion, readLoadedCaretEntry } from "@/adapters/opencode/upgrade.ts";
 import { parseVersionTriple } from "@/lib/semver.ts";
 
 /** Best-effort read of caret's OpenCode install state. Every miss degrades to
@@ -34,11 +30,11 @@ export function readOpencodeInstallState(): InstallProbe {
   if (!existsSync(dir)) {
     return { pluginVersion: "unknown", pluginEnabled: "unknown", hookInUserSettings: "unknown" };
   }
-  // First existing config file only, not readCaretInPluginArray's all-files scan, so
-  // pluginVersion agrees with the opencode-caret-version check.
+  // First existing config file only, not readCaretInPluginArray's all-files scan, so for a
+  // package entry pluginVersion agrees with the opencode-caret-version check.
   let entry: string | null;
   try {
-    entry = caretEntries(readConfigText(resolveConfigFile(dir)), isCaretCheckout)[0] ?? null;
+    entry = readLoadedCaretEntry(resolveConfigFile(dir));
   } catch {
     return {
       pluginVersion: "unknown",

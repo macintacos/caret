@@ -193,12 +193,9 @@ test("a --from-local checkout entry reports the checkout's version, enabled", as
 });
 
 test("a file: entry that is not a caret checkout is not caret's install", async () => {
-  const dir = join(tmp, "other-tool");
-  await mkdir(dir, { recursive: true });
-  await writeFile(
-    join(dir, "package.json"),
-    JSON.stringify({ name: "@macintacos/caret", version: "9.9.9" }),
-  );
+  // A caret package.json minus the plugin file: only the checkout probe rejects it.
+  const dir = await checkout("9.9.9");
+  await rm(join(dir, "opencode", "caret.plugin.ts"));
   await configWithCaret(`file:${dir}`);
   await linkCheckoutCache(`file:${dir}`, dir);
   expect(readOpencodeInstallState()).toMatchObject({

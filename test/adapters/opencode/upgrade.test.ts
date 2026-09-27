@@ -287,6 +287,13 @@ test("a config naming caret has an entry; one naming another plugin does not", (
   expect(hasCaretPluginEntry(configWith(["opencode-wakatime"]))).toBe(false);
 });
 
+test("a --from-local checkout entry is not the package entry the version check reads", () => {
+  const checkoutDir = join(tmp, "checkout");
+  mkdirSync(join(checkoutDir, "opencode"), { recursive: true });
+  writeFileSync(join(checkoutDir, "opencode", "caret.plugin.ts"), "");
+  expect(hasCaretPluginEntry(configWith([`file:${checkoutDir}`]))).toBe(false);
+});
+
 test("an absent config file carries no entry", () => {
   expect(hasCaretPluginEntry(join(tmp, "no-such-config.json"))).toBe(false);
 });

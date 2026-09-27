@@ -356,9 +356,10 @@ own installed-check is `existsSafe(join(dir, "node_modules", name))`, not the di
 itself — so the probe treats a resolved version, never directory presence, as proof of
 install.
 
-The probe recognises a `--from-local` checkout entry (`file:<checkout>`) the way install
-does, and that entry's cache dir holds `node_modules/@macintacos/caret` as a symlink to
-the checkout, so the version it reads is the checkout's.
+The probe recognises a `--from-local` checkout entry the way install does (`caretEntries`)
+and reads its version through the cache symlink § The local form describes. doctor's
+`opencode-caret-version` check does not: `readCaretEntry` matches the package form only,
+since npm's version says nothing about a checkout.
 
 ## Runtime resolution + update check (EXC-794)
 
