@@ -69,8 +69,10 @@ function versioned(listings: string[]): { runner: ClaudeRunner; calls: string[][
 // the marketplace-update step no-ops, and without this refresh the install reads stale
 // metadata.
 const SUCCESSFUL_INSTALL_CALLS: string[][] = [
+  ["plugin", "marketplace", "list", "--json"],
   ["plugin", "marketplace", "add", "macintacos/caret"],
   ["plugin", "marketplace", "update", "caret"],
+  ["plugin", "marketplace", "list", "--json"],
   ["plugin", "install", "caret@caret", "--scope", "user"],
   ["plugin", "enable", "caret@caret"],
   ["plugin", "list", "--json"],
@@ -80,8 +82,11 @@ const SUCCESSFUL_INSTALL_CALLS: string[][] = [
 
 test("install refreshes the marketplace, installs and enables, then updates the plugin", async () => {
   const { runner, calls } = recorder();
-  await runInstallClaudeTarget({ uninstall: false, dryRun: false }, { claude: runner });
+  const ui = recordingUI();
+  await runInstallClaudeTarget({ uninstall: false, dryRun: false }, { claude: runner, ui });
   expect(calls).toEqual(SUCCESSFUL_INSTALL_CALLS);
+  // An empty (unreadable) marketplace list hands nothing back and keeps today's line.
+  expect(ui.events).toContain("settled:Registered the caret marketplace (macintacos/caret)");
 });
 
 test("an updated plugin settles with the versions it moved between", async () => {
@@ -173,6 +178,9 @@ test("the dry-run preview lists the marketplace refresh and the plugin update", 
   await runInstallClaudeTarget({ uninstall: false, dryRun: true }, { claude: runner, ui });
   expect(bodies.join("\n")).toContain("claude plugin marketplace update caret");
   expect(bodies.join("\n")).toContain("claude plugin update caret@caret --scope user");
+  expect(bodies.join("\n")).toContain(
+    "(if caret's local dev marketplace is registered) claude plugin marketplace remove caret",
+  );
 });
 
 test("uninstall removes the plugin, and says so", async () => {
@@ -228,24 +236,25 @@ test("a missing claude CLI stops after the first step (guidance, not a crash)", 
   const ui = recordingUI();
   await runInstallClaudeTarget({ uninstall: false, dryRun: false }, { claude: runner, ui });
   // Bails on the first (marketplace add) step rather than pressing on to install.
-  expect(calls).toEqual([["plugin", "marketplace", "add", "macintacos/caret"]]);
+  expect(calls).toEqual([
+    ["plugin", "marketplace", "list", "--json"],
+    ["plugin", "marketplace", "add", "macintacos/caret"],
+  ]);
   expect(ui.events).toContain("failed:Registering the caret marketplace");
   expect(ui.events.some((e) => e.startsWith("error:"))).toBe(true);
 });
 
 test("a failed marketplace add is best-effort; a failed install is fatal", async () => {
   // marketplace add fails (already registered), install fails for real -> stop there.
-  let n = 0;
   const calls: string[][] = [];
   const runner: ClaudeRunner = async (args) => {
     calls.push(args);
-    n++;
-    return n === 1
-      ? { ok: false, detail: "already added", stdout: "" }
-      : { ok: false, detail: "boom", stdout: "" };
+    if (args[2] === "add") return { ok: false, detail: "already added", stdout: "" };
+    if (args[1] === "install") return { ok: false, detail: "boom", stdout: "" };
+    return { ok: true, detail: "", stdout: "" };
   };
   await runInstallClaudeTarget({ uninstall: false, dryRun: false }, { claude: runner });
-  expect(calls).toEqual(SUCCESSFUL_INSTALL_CALLS.slice(0, 3));
+  expect(calls).toEqual(SUCCESSFUL_INSTALL_CALLS.slice(0, 5));
 });
 
 test("a failed enable is best-effort: the install still completes", async () => {
@@ -395,4 +404,118 @@ test("the install narrates one step per phase, naming each claude command as it 
   ]);
   // The spinner shows the underlying command while each phase runs.
   expect(ui.events).toContain("detail:claude plugin install caret@caret --scope user");
+});
+
+type MarketplaceEntry = {
+  name: "caret";
+  source: string;
+  repo?: string;
+  path?: string;
+  installLocation: string;
+};
+
+const PUBLISHED_ENTRY: MarketplaceEntry = {
+  name: "caret",
+  source: "github",
+  repo: "macintacos/caret",
+  installLocation: "/home/.claude/plugins/marketplaces/caret",
+};
+
+const directoryEntry = (path: string): MarketplaceEntry => ({
+  name: "caret",
+  source: "directory",
+  path,
+  installLocation: path,
+});
+
+const REFUSAL =
+  'Cannot add marketplace "caret": its network source differs from the one declared for it in settings';
+
+/** A `claude` whose `caret` marketplace starts at `registered` (null: none) and whose
+ * settings declare that same source, so adding any other source is refused until a
+ * `marketplace remove caret` clears both — Claude Code 2.1.283's behaviour. `online: false`
+ * fails an add from empty. */
+function marketplaceMachine(
+  initial: MarketplaceEntry | null,
+  { online = true } = {},
+): { runner: ClaudeRunner; calls: string[][] } {
+  let registered = initial;
+  const calls: string[][] = [];
+  const ok = { ok: true, detail: "", stdout: "" };
+  return {
+    calls,
+    runner: async (args) => {
+      calls.push(args);
+      const sub = args[1] === "marketplace" ? args[2] : undefined;
+      if (sub === "list") return { ...ok, stdout: JSON.stringify(registered ? [registered] : []) };
+      if (sub === "remove") {
+        registered = null;
+        return ok;
+      }
+      if (sub === "add") {
+        if (registered && registered.repo !== "macintacos/caret") {
+          return { ok: false, detail: REFUSAL, stdout: "" };
+        }
+        if (!online) return { ok: false, detail: "getaddrinfo ENOTFOUND github.com", stdout: "" };
+        registered = PUBLISHED_ENTRY;
+        return ok;
+      }
+      if (args[1] === "install" && !registered) {
+        return { ok: false, detail: 'Plugin "caret" not found in any marketplace', stdout: "" };
+      }
+      return ok;
+    },
+  };
+}
+
+const REMOVE = ["plugin", "marketplace", "remove", "caret"];
+const ADD = ["plugin", "marketplace", "add", "macintacos/caret"];
+const indexOfCall = (calls: string[][], c: string[]) =>
+  calls.findIndex((x) => JSON.stringify(x) === JSON.stringify(c));
+
+test("a machine last installed --from-local hands the caret marketplace back first", async () => {
+  const { runner, calls } = marketplaceMachine(directoryEntry("/dev-mp"));
+  const ui = recordingUI();
+  const ok = await runInstallClaudeTarget(
+    { uninstall: false, dryRun: false },
+    { claude: runner, ui, devMarketplaceDir: () => "/dev-mp" },
+  );
+  expect(ok).toBe(true);
+  expect(indexOfCall(calls, REMOVE)).toBeGreaterThanOrEqual(0);
+  expect(indexOfCall(calls, REMOVE)).toBeLessThan(indexOfCall(calls, ADD));
+  expect(ui.events).toContain("settled:Handed the caret marketplace back from the local build");
+  expect(ui.events).toContain("settled:Registered the caret marketplace (macintacos/caret)");
+  expect(ui.events.some((e) => e.startsWith("warn:"))).toBe(false);
+});
+
+test("a foreign caret marketplace warns and the install continues", async () => {
+  const { runner, calls } = marketplaceMachine(directoryEntry("/elsewhere"));
+  const ui = recordingUI();
+  const ok = await runInstallClaudeTarget(
+    { uninstall: false, dryRun: false },
+    { claude: runner, ui, devMarketplaceDir: () => "/dev-mp" },
+  );
+  expect(ok).toBe(true);
+  expect(indexOfCall(calls, REMOVE)).toBe(-1);
+  expect(ui.events).not.toContain("settled:Registered the caret marketplace (macintacos/caret)");
+  const warning = ui.events.find((e) => e.startsWith("warn:")) ?? "";
+  expect(warning).toContain("/elsewhere");
+  expect(warning).toContain(REFUSAL);
+  expect(warning).toContain("claude plugin marketplace remove caret");
+  expect(calls).toContainEqual(["plugin", "install", "caret@caret", "--scope", "user"]);
+});
+
+test("an offline add after the hand-back names both ways back", async () => {
+  const { runner } = marketplaceMachine(directoryEntry("/dev-mp"), { online: false });
+  const ui = recordingUI();
+  const ok = await runInstallClaudeTarget(
+    { uninstall: false, dryRun: false },
+    { claude: runner, ui, devMarketplaceDir: () => "/dev-mp" },
+  );
+  expect(ok).toBe(false);
+  const warning = ui.events.find((e) => e.startsWith("warn:")) ?? "";
+  expect(warning).toContain("getaddrinfo ENOTFOUND github.com");
+  expect(warning).toContain("caret install");
+  expect(warning).toContain("mise run build --install");
+  expect(ui.events).toContain("failed:Installing the caret plugin");
 });

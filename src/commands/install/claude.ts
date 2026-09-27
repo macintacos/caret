@@ -1,7 +1,9 @@
 // caret's Claude Code install target. `caret install` registers caret's PUBLISHED plugin
 // with Claude Code by driving its CLI: add and refresh caret's marketplace, install and
 // enable the plugin, then update it so re-running the installer after a caret upgrade
-// also upgrades caret-in-Claude-Code. `--uninstall` removes it.
+// also upgrades caret-in-Claude-Code. When Claude's `caret` marketplace is still caret's
+// own dev marketplace, it is removed first, since Claude refuses to re-add a name whose
+// declared source differs. `--uninstall` removes it.
 // With `--from-local` the same CLI installs the LOCAL build instead: the marketplace
 // source becomes the generated dev marketplace (see local.ts) rather than the public
 // one, and the update phase is skipped — that path reinstalls the dev build directly,
@@ -13,8 +15,10 @@
 // animating while each one runs — a blocked event loop would freeze it mid-frame and
 // read as a hang.
 
+import { resolve } from "node:path";
+
 import type { LocalInstall } from "@/commands/install/local.ts";
-import { writeDevMarketplace } from "@/commands/install/local.ts";
+import { devMarketplaceDir, writeDevMarketplace } from "@/commands/install/local.ts";
 import type { InstallUI } from "@/commands/install/ui.ts";
 import { silentUI } from "@/commands/install/ui.ts";
 
@@ -74,6 +78,53 @@ function parsePluginVersion(stdout: string, id: string): string | null {
   }
 }
 
+/** What Claude has registered under caret's marketplace name, from a
+ * `claude plugin marketplace list --json` payload: an array of
+ * `{ name, source, repo | path | url, installLocation, … }`. */
+type CaretMarketplace =
+  | { kind: "registered"; source: string; location: string }
+  | { kind: "absent" }
+  | { kind: "unreadable" };
+
+function readCaretMarketplace(stdout: string): CaretMarketplace {
+  try {
+    const parsed: unknown = JSON.parse(stdout);
+    if (!Array.isArray(parsed)) return { kind: "unreadable" };
+    const entry = parsed.find(
+      (m): m is { source?: unknown; repo?: unknown; path?: unknown; url?: unknown } =>
+        typeof m === "object" && m !== null && "name" in m && m.name === MARKETPLACE_NAME,
+    );
+    if (!entry) return { kind: "absent" };
+    const location = entry.repo ?? entry.path ?? entry.url;
+    if (typeof entry.source !== "string" || typeof location !== "string") {
+      return { kind: "unreadable" };
+    }
+    return { kind: "registered", source: entry.source, location };
+  } catch {
+    return { kind: "unreadable" };
+  }
+}
+
+const isPublished = (m: CaretMarketplace) =>
+  m.kind === "unreadable" ||
+  (m.kind === "registered" && m.source === "github" && m.location === MARKETPLACE_SOURCE);
+
+/** Phase 1's warning, from the add's result and the post-add read. */
+function registrationWarning(
+  add: CommandResults[number] | undefined,
+  after: CaretMarketplace,
+  handBack: boolean,
+): string | null {
+  if (isPublished(after)) return null;
+  const why = add?.ok === false ? ` (${add.detail})` : "";
+  if (after.kind === "registered") {
+    return `Claude Code's caret marketplace is ${after.location}, not ${MARKETPLACE_SOURCE}${why}, so the plugin update below reads from it. Run \`claude plugin marketplace remove caret\` and re-run \`caret install\`, or point \`extraKnownMarketplaces.caret\` at ${MARKETPLACE_SOURCE} where your Claude settings are managed.`;
+  }
+  return handBack
+    ? `Could not register ${MARKETPLACE_SOURCE}${why}. Re-run \`caret install\` to retry, or run \`mise run build --install\` to go back to the local build.`
+    : `Could not register ${MARKETPLACE_SOURCE}${why}.`;
+}
+
 /** The update phase's settled line. `updated` is whether the update command itself
  * landed, and it is load-bearing: when it did not, the two reads are identical, so a line
  * derived from the versions alone would announce "already current" over an install that
@@ -96,6 +147,8 @@ interface PhaseCommand {
   args: string[];
   fatal: boolean;
   fallback?: string[];
+  /** Display-only: the condition the dry-run preview prints before this command. */
+  when?: string;
 }
 
 /** What a phase's commands returned, one entry per entry in `commands` and in the same
@@ -119,11 +172,18 @@ interface Phase {
   commands: PhaseCommand[];
 }
 
-function phases(
-  uninstall: boolean,
-  local: LocalInstall | undefined,
-  writeDev: (repoDir: string, outDir: string) => void,
-): Phase[] {
+function phases({
+  uninstall,
+  local,
+  writeDev,
+  handBack,
+}: {
+  uninstall: boolean;
+  local: LocalInstall | undefined;
+  writeDev: (repoDir: string, outDir: string) => void;
+  /** Whether Claude's `caret` marketplace is caret's own dev one, to remove first. */
+  handBack: boolean;
+}): Phase[] {
   if (uninstall) {
     return [
       {
@@ -176,15 +236,46 @@ function phases(
     ];
   }
   return [
+    ...(handBack
+      ? [
+          {
+            label: "Handing the caret marketplace back from the local build",
+            done: ([removed]: CommandResults) =>
+              removed?.ok
+                ? "Handed the caret marketplace back from the local build"
+                : "Could not hand the caret marketplace back from the local build",
+            warn: ([removed]: CommandResults) =>
+              removed?.ok === false
+                ? `\`claude plugin marketplace remove caret\`: ${removed.detail}`
+                : null,
+            commands: [
+              {
+                args: ["plugin", "marketplace", "remove", MARKETPLACE_NAME],
+                fatal: false,
+                when: "caret's local dev marketplace is registered",
+              },
+            ],
+          },
+        ]
+      : []),
     {
       label: "Registering the caret marketplace",
-      done: `Registered the caret marketplace (${MARKETPLACE_SOURCE})`,
+      done: ([, , listed]) => {
+        const after = readCaretMarketplace(listed?.stdout ?? "");
+        if (isPublished(after)) return `Registered the caret marketplace (${MARKETPLACE_SOURCE})`;
+        return after.kind === "registered"
+          ? `Claude Code's caret marketplace is ${after.location}, not ${MARKETPLACE_SOURCE}`
+          : "Could not register the caret marketplace";
+      },
+      warn: ([add, , listed]) =>
+        registrationWarning(add, readCaretMarketplace(listed?.stdout ?? ""), handBack),
       // Both best-effort, and the update is unconditional rather than a fallback: the add
       // no-ops on a machine where the marketplace is already registered, so without a
       // refresh every command below would run against the metadata Claude already had.
       commands: [
         { args: ["plugin", "marketplace", "add", MARKETPLACE_SOURCE], fatal: false },
         { args: ["plugin", "marketplace", "update", MARKETPLACE_NAME], fatal: false },
+        { args: ["plugin", "marketplace", "list", "--json"], fatal: false },
       ],
     },
     {
@@ -232,6 +323,17 @@ class PhaseFailure extends Error {
   }
 }
 
+/** Whether Claude's `caret` marketplace is caret's own dev marketplace directory. */
+async function registeredAtDevDir(
+  run: ClaudeRunner,
+  devDir: () => string = devMarketplaceDir,
+): Promise<boolean> {
+  const m = readCaretMarketplace((await run(["plugin", "marketplace", "list", "--json"])).stdout);
+  return (
+    m.kind === "registered" && m.source === "directory" && resolve(m.location) === resolve(devDir())
+  );
+}
+
 /** Install (or, with `uninstall`, remove) caret in Claude Code via its plugin CLI,
  * reporting one step per phase. `local` installs the checkout it describes instead of the
  * published plugin. A missing `claude` reports guidance and stops without throwing.
@@ -244,18 +346,28 @@ export async function runInstallClaudeTarget(
     claude?: ClaudeRunner;
     ui?: InstallUI;
     writeDevMarketplace?: (repoDir: string, outDir: string) => void;
+    devMarketplaceDir?: () => string;
   } = {},
 ): Promise<boolean> {
   const run = deps.claude ?? claudeCli;
   const ui = deps.ui ?? silentUI;
   const local = opts.uninstall ? undefined : opts.local;
-  const plan = phases(opts.uninstall, local, deps.writeDevMarketplace ?? writeDevMarketplace);
+  const published = !opts.uninstall && !local;
+  // Dry-run cannot probe without spawning, so its preview shows the hand-back as conditional.
+  const handBack =
+    published && (opts.dryRun || (await registeredAtDevDir(run, deps.devMarketplaceDir)));
+  const plan = phases({
+    uninstall: opts.uninstall,
+    local,
+    writeDev: deps.writeDevMarketplace ?? writeDevMarketplace,
+    handBack,
+  });
 
   if (opts.dryRun) {
     const lines = plan.flatMap((p) => [
       ...(local && p.before ? [`write the dev marketplace at ${local.marketplaceDir}`] : []),
       ...p.commands.flatMap((c) => [
-        `claude ${c.args.join(" ")}`,
+        `${c.when ? `(if ${c.when}) ` : ""}claude ${c.args.join(" ")}`,
         ...(c.fallback ? [`  (on failure) claude ${c.fallback.join(" ")}`] : []),
       ]),
     ]);
