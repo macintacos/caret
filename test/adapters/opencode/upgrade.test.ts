@@ -50,6 +50,13 @@ function cacheDir(specifier: string, manifest: unknown): string {
 }
 const shim = (version: string) => ({ dependencies: { [PKG]: version } });
 
+/** The caret package OpenCode actually installed under a cache dir. */
+function installed(dir: string, version: string): void {
+  const pkgDir = join(dir, "node_modules", PKG);
+  mkdirSync(pkgDir, { recursive: true });
+  writeFileSync(join(pkgDir, "package.json"), JSON.stringify({ name: PKG, version }));
+}
+
 test("no plugin entry is a fresh install, not a stale one", () => {
   expect(upgradeVerdict({ entry: null, cached: null, published: "0.8.1" })).toEqual({
     kind: "fresh",
@@ -210,6 +217,19 @@ test("a bare config entry is compared against what OpenCode cached", async () =>
       published: async () => "0.9.0",
     }),
   ).toEqual({ kind: "stale-cache", cached: "0.8.0", published: "0.9.0" });
+});
+
+test("a range shim with an installed caret behind npm is a stale cache", async () => {
+  const configFile = configWith([PKG]);
+  const dir = cacheDir(PKG, shim("^1.1.0"));
+  installed(dir, "1.1.3");
+  expect(
+    await readUpgradeVerdict({
+      configFile,
+      cacheDirs: () => [dir],
+      published: async () => "1.2.0",
+    }),
+  ).toEqual({ kind: "stale-cache", cached: "1.1.3", published: "1.2.0" });
 });
 
 test("an absent config file reads as no entry at all", async () => {
