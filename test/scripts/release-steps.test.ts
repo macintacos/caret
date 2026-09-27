@@ -255,7 +255,7 @@ test("prepare rejects PR_CLOSED when the release PR was closed unmerged", async 
 // --- finalize --------------------------------------------------------------
 
 const RUN_URL = "https://github.com/macintacos/caret/actions/runs/7";
-const run = (status: string, conclusion: string | null = null): PublishRun => ({
+const run = (status: string, conclusion = ""): PublishRun => ({
   id: 7,
   url: RUN_URL,
   status,
@@ -544,7 +544,7 @@ test("finalize titles the tag and release with the bare version", async () => {
 
 // --- finalize: notes + reflow ------------------------------------------------
 
-test("finalize publishes the --notes-file body, reflowed", async () => {
+test("finalize drafts the release with the --notes-file body, reflowed", async () => {
   const { deps, calls, releases } = makeReleaseHarness(withNotes());
   await finalize(deps, { dryRun: false, notesFile: NOTES_FILE });
   expect(calls).toContain("releaseCreate:v0.1.0");

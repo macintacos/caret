@@ -57,8 +57,12 @@ bun scripts/tasks/cli.ts release compute <bump>
 - **`ok: false` with any other `errorCode`** (`DIRTY_TREE`, `WRONG_BRANCH`,
   `DETACHED_HEAD`, `MANIFEST_DRIFT`, `NO_GH`, `NOT_A_REPO`) → surface `message` and stop;
   fix the precondition (usually clean or pull trunk) first.
-- **`ok: true` and `currentVersion === previousVersion`** → the manifests still match the
-  latest release tag, so no prepared bump is merged → run **Phase 1**.
+- **`ok: true` and `currentVersion === previousVersion`** → first run
+  `gh release view <previousTag> --json isDraft -q .isDraft`. `true` means that release is
+  paused mid-Phase 2: resume at **Phase 2 step 2**, whose `finalize` result decides the
+  rest (a non-null `approval` → step 3's pause, where the operator may already have
+  approved and just says "continue"; `npmLive: true` → step 4). Otherwise the manifests
+  still match the latest release tag, so no prepared bump is merged → run **Phase 1**.
 - **`ok: true` and `currentVersion !== previousVersion`** → the manifests are ahead of the
   latest tag, i.e. a prepared bump is already merged on trunk awaiting its tag → run
   **Phase 2**.
@@ -69,9 +73,6 @@ branch and reads local state). When you're **resuming Phase 2** — e.g. still o
 probe: it tags `origin/trunk` regardless of your local branch, so it reports `NOT_MERGED`
 while the bump isn't merged yet and `ok: true` (with the concrete `tag`/`taggedSha`) once
 it is. Use it to detect Phase-2 readiness without switching back to trunk first.
-
-A **draft** GitHub Release for the new tag means Phase 2 is already in progress: resume by
-re-running `finalize` (Phase 2 step 2), then `publish` (step 4).
 
 ---
 
@@ -270,9 +271,11 @@ bun scripts/tasks/cli.ts release finalize --yes --notes-file <path>
 On `ok: false`:
 
 - **`CI_TIMEOUT`** — the run is still going; re-run the same command to resume.
-- **`CI_FAILED`**, **`CI_NO_RUN`** or **`STAGE_ID_MISSING`** — report the run URL from
-  `message` and the way out: a rerun of the workflow for a transient flake; otherwise
-  delete the draft Release and cut the next patch. Then stop.
+- **`STAGE_ID_MISSING`** — the version is staged; only reading its id failed. Relay
+  `message`. Re-running `finalize` retries the read; otherwise the operator approves with
+  the id from the run page, then says "continue" and you go on to step 4.
+- **`CI_FAILED`** or **`CI_NO_RUN`** — surface `message` verbatim: it names the run (when
+  there is one) and the way out. Then stop.
 
 On `ok: true`, `npmLive: true` means the version is already served (a resumed run); skip
 to step 4.
@@ -283,8 +286,8 @@ When `approval` is non-null, print:
 
 - the exact command `npm stage approve <approval.stageId>`
 - the `version`
-- `approval.builtSha` beside `taggedSha`, so the operator can see CI built the tagged
-  commit
+- `approval.builtSha` beside `taggedSha`, for the record (the run is matched by that
+  commit, so they always agree)
 - `approval.runUrl`
 
 Note that it can be run here as `! npm stage approve <stageId> --otp=<code>`, or in any

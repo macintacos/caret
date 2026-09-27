@@ -5,9 +5,9 @@
 // lint "$@"` — so commander owns every flag's parsing, validation, defaults, and
 // --help, and each task file stays one line. The `release` pipeline is mounted
 // here as a nested subcommand group (`caret-tasks release compute|baseline|
-// prepare|finalize|publish`, built in ./release/command.ts); it keeps its own JSON-on-stdout
-// error discipline so /release-caret can parse it, independent of this CLI's
-// plain-stderr top-level catch. The `preflight` gate is a subcommand too, but
+// prepare|finalize|publish`, built in ./release/command.ts); it keeps its own
+// JSON-on-stdout error discipline so /release-caret can parse it, independent of
+// this CLI's plain-stderr top-level catch. The `preflight` gate is a subcommand too, but
 // unlike the passthrough tasks its --json/-v/--grep/--task flags are real
 // commander options, parsed here and handed to the gate orchestrator +
 // --json reporting in scripts/preflight.ts (EXC-737).

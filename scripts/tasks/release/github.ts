@@ -5,9 +5,10 @@
 
 import { $ } from "bun";
 
-// The publish workflow's contract; release-workflow.test.ts pins each against the file.
+// Each must match .github/workflows/publish.yml; release-workflow.test.ts pins them.
 export const PUBLISH_WORKFLOW = "publish.yml";
-/** No `name:` override: `gh run view --json jobs` reports the display name. */
+/** The stage job's id. The job must not set `name:`: `stageId` matches
+ * `gh run view --json jobs` by display name. */
 export const STAGE_JOB = "stage";
 export const STAGE_ID_ANNOTATION = "npm-stage-id";
 
@@ -16,7 +17,8 @@ export interface PublishRun {
   id: number;
   url: string;
   status: string;
-  conclusion: string | null;
+  /** `""` until `status` is `"completed"`. */
+  conclusion: string;
   headSha: string;
 }
 

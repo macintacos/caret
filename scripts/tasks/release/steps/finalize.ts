@@ -1,12 +1,14 @@
 // finalize (phase 2): tag trunk's merged HEAD and create the GitHub Release as a
-// draft; the tag push drives CI's npm publish, and `publish` un-drafts the
-// Release once npm serves the version. It derives the version from trunk's three
-// manifests and proves the bump actually merged before creating anything, and is resume-aware throughout —
-// reusing an existing release, never moving an existing tag, and completing a
-// run that died partway. The release body is prose only the agent can write, so
-// it arrives as `--notes-file`, reflowed to single-line paragraphs so it renders
-// cleanly on GitHub.
+// draft; the tag push makes CI stage the version on npm, and `publish`
+// un-drafts the Release once npm serves the version. It derives the version
+// from trunk's three manifests and proves the bump actually merged before
+// creating anything, and is resume-aware throughout — reusing an existing
+// release, never moving an existing tag, and completing a run that died partway.
+// The release body is prose only the agent can write, so it arrives as
+// `--notes-file`, reflowed to single-line paragraphs so it renders cleanly on
+// GitHub.
 
+import { STAGE_ID_ANNOTATION } from "@/tasks/release/github.ts";
 import { extractVersion } from "@/tasks/release/manifest.ts";
 import {
   type FinalizeResult,
@@ -20,7 +22,7 @@ import {
   GuardError,
   syncedVersion,
 } from "@/tasks/release/steps/guards.ts";
-import { waitFor } from "@/tasks/release/steps/wait.ts";
+import { RELEASE_POLL, waitFor } from "@/tasks/release/steps/wait.ts";
 import { isNewer, tagName, versionFromTag } from "@/tasks/release/version.ts";
 
 /** The finalized release derived from `origin/<defaultBranch>`: the merged HEAD to
@@ -127,8 +129,6 @@ async function ensureTag(deps: Deps, tag: string, trunkSha: string, title: strin
   await deps.git.pushTag(tag);
 }
 
-const CI_POLL = { attempts: 30, intervalMs: 15_000 };
-
 /** The non-transient way out when the tag's run can't produce a stage. */
 const CUT_NEXT_PATCH =
   "A rerun replays the workflow at the tag and a tag never re-triggers, so for a real defect delete the draft Release and cut the next patch, or publish manually per the Releasing doc.";
@@ -137,8 +137,9 @@ const CUT_NEXT_PATCH =
 async function followPublishRun(
   deps: Deps,
   taggedSha: string,
+  version: string,
 ): Promise<NonNullable<FinalizeResult["approval"]>> {
-  const { value: run } = await waitFor({ ...CI_POLL, sleep: deps.sleep }, async () => {
+  const { value: run } = await waitFor({ ...RELEASE_POLL, sleep: deps.sleep }, async () => {
     const run = await deps.github.publishRun(taggedSha);
     return { done: run?.status === "completed", value: run };
   });
@@ -159,12 +160,16 @@ async function followPublishRun(
   }
   const stageId = await deps.github.stageId(run.id);
   if (stageId === null) {
-    throw new GuardError("STAGE_ID_MISSING", `Publish run ${run.url} carries no stage id.`);
+    throw new GuardError(
+      "STAGE_ID_MISSING",
+      `Publish run ${run.url} is green, so ${version} is staged, but its ${STAGE_ID_ANNOTATION} annotation could not be read; re-run finalize, or take the id from the run page and approve it.`,
+    );
   }
   return { stageId, runUrl: run.url, builtSha: run.headSha };
 }
 
-/** Phase 2: tag trunk's merged HEAD and publish the GitHub Release. */
+/** Phase 2: tag trunk's merged HEAD, create the Release as a draft, and follow
+ * the tag's publish run to its npm stage id. */
 export async function finalize(
   deps: Deps,
   opts: { dryRun: boolean; notesFile?: string },
@@ -227,7 +232,7 @@ export async function finalize(
   if (opts.dryRun) {
     if (!npmLive) deps.io.log(`Would follow the publish run for ${trunkSha}.`);
   } else if (!npmLive) {
-    approval = await followPublishRun(deps, trunkSha);
+    approval = await followPublishRun(deps, trunkSha, version);
   }
 
   return {

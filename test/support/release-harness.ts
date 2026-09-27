@@ -1,8 +1,8 @@
 // The release pipeline's in-memory test harness: builds a `Deps` whose every
 // collaborator is a fake typed against its real interface, so each
-// baseline/compute/prepare/finalize step runs with no live repo and no network.
-// Every mutating call is recorded into `calls` so a test can assert exactly what
-// would (or would not) run.
+// baseline/compute/prepare/finalize/publish step runs with no live repo and no
+// network. Every mutating call, plus the CI reads and sleeps the polls make, is
+// recorded into `calls` so a test can assert exactly what would (or would not) run.
 import type { GitOps, RawCommit } from "@/tasks/release/git.ts";
 import type { GitHubOps, PublishRun, PullRequestSummary } from "@/tasks/release/github.ts";
 import type { NpmOps } from "@/tasks/release/npm.ts";
@@ -51,7 +51,8 @@ export interface GitHubOptions {
 /** Controls for the npm fake — which versions are already on the registry. */
 export interface NpmOptions {
   npmPublishedVersions?: string[];
-  /** Every version reads as not live for this many `isVersionPublished` calls, then live. */
+  /** Every version reads as not live for this many `isVersionPublished` calls,
+   * then live; overrides `npmPublishedVersions` when set. */
   npmLiveAfter?: number;
 }
 

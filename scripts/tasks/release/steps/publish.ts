@@ -6,10 +6,8 @@
 import { NO_BASELINE_MESSAGE, type PublishResult } from "@/tasks/release/steps/context.ts";
 import type { Deps } from "@/tasks/release/steps/deps.ts";
 import { assertRepoAndGh, GuardError } from "@/tasks/release/steps/guards.ts";
-import { waitFor } from "@/tasks/release/steps/wait.ts";
+import { RELEASE_POLL, waitFor } from "@/tasks/release/steps/wait.ts";
 import { versionFromTag } from "@/tasks/release/version.ts";
-
-const NPM_POLL = { attempts: 30, intervalMs: 15_000 };
 
 /** Un-draft the newest tag's Release once its version is live on npm. */
 export async function publish(deps: Deps, opts: { dryRun: boolean }): Promise<PublishResult> {
@@ -38,13 +36,13 @@ export async function publish(deps: Deps, opts: { dryRun: boolean }): Promise<Pu
   if (opts.dryRun) {
     const live = await deps.npm.isVersionPublished(version);
     deps.io.log(
-      `Would wait up to ${NPM_POLL.attempts} × ${NPM_POLL.intervalMs / 1000}s for npm to serve ${version} ` +
+      `Would wait up to ~7.5 min for npm to serve ${version} ` +
         `(live now: ${live}), then publish the ${tag} Release.`,
     );
     return result(null);
   }
 
-  const { done } = await waitFor({ ...NPM_POLL, sleep: deps.sleep }, async () => ({
+  const { done } = await waitFor({ ...RELEASE_POLL, sleep: deps.sleep }, async () => ({
     done: await deps.npm.isVersionPublished(version),
     value: undefined,
   }));

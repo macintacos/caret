@@ -56,7 +56,12 @@ export interface FinalizeResult {
   /** Whether the registry served this version when finalize checked. */
   npmLive: boolean;
   /** What the operator approves with npm 2FA; null when live or in a dry run. */
-  approval: { stageId: string; runUrl: string; builtSha: string } | null;
+  approval: {
+    stageId: string;
+    runUrl: string;
+    /** The run's headSha, equal to taggedSha by the `--commit` filter; shown, never checked. */
+    builtSha: string;
+  } | null;
   dryRun: boolean;
 }
 
@@ -64,6 +69,7 @@ export interface PublishResult {
   phase: "publish";
   version: string;
   tag: string;
+  /** The public Release URL; null on a dry run. */
   releaseUrl: string | null;
   dryRun: boolean;
 }

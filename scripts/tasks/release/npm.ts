@@ -4,7 +4,8 @@
 // publishing; this side only asks the registry whether a version is live.
 
 export interface NpmOps {
-  /** True if the registry serves this package's `version`. */
+  /** True if the registry serves this package's `version`. Throws on any registry
+   * status other than 200 or 404, or on a timed-out request. */
   isVersionPublished(version: string): Promise<boolean>;
 }
 
@@ -20,7 +21,7 @@ export function createNpm(): NpmOps {
   return {
     async isVersionPublished(version) {
       const url = `https://registry.npmjs.org/${await packageName()}/${version}`;
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
       if (res.status === 200) return true;
       if (res.status === 404) return false;
       throw new Error(`npm registry answered ${res.status} for ${url}`);

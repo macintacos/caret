@@ -566,8 +566,7 @@ parsing contract is unit-tested in `test/scripts/tasks-cli.test.ts`.
 
 Two groups diverge from the plain-module shape. `release` keeps its own JSON-on-stdout
 error discipline — Commander help and errors to stderr, a typed JSON result per action —
-so `/release-caret` can parse it — `finalize` tags and drafts the Release, `publish` makes
-it live once npm serves the version — independent of the CLI's plain-stderr top-level
+so `/release-caret` can parse it, independent of the CLI's plain-stderr top-level
 handling. And `preflight` forwards through `.mise/tasks/preflight` (`raw_args=true`) into
 `caret-tasks preflight`, whose action hands the parsed flags to the gate orchestrator in
 `scripts/preflight.ts`: the concurrent task DAG, the live listr2 display, and the `--json`
