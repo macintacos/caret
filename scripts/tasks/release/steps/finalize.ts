@@ -189,8 +189,6 @@ export async function finalize(
 
   const { trunkSha, version, tag, title } = await resolveTrunkRelease(deps, defaultBranch);
 
-  // Resolve the GitHub release: reuse an existing one, preview it in a dry run,
-  // or tag + create it.
   const existing = await deps.github.releaseView(tag);
   let releaseUrl: string | null;
   if (existing !== null) {
