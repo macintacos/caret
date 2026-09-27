@@ -24,7 +24,9 @@ failed=0
 # to exit with. $log_dir stays absent, so the log checks below assert against a directory
 # the launcher itself creates.
 caret_root="$HOME/.claude/plugins/cache/caret/caret/0.1.0"
-mkdir -p "$caret_root/bin" "$HOME/bin" "$state/launcher"
+mkdir -p "$caret_root/bin" "$caret_root/ui/dist" "$HOME/bin" "$state/launcher"
+# root_runnable needs the UI build beside bin/caret.
+: >"$caret_root/ui/dist/index.html"
 # Multi-line, because candidate_version() anchors its sed at line start.
 printf '{\n  "version": "0.1.0"\n}\n' >"$caret_root/package.json"
 cat >"$caret_root/bin/caret" <<'CARET'

@@ -213,7 +213,18 @@ launcher_supervised() { CARET_SUPERVISED=1 launcher "$@"; }
   [[ "$output" == *"CARET 0.14.0"* ]]
 }
 
-# Mirrors the no-runnable-bin/caret case: terminal on the first probe, nothing evicted.
+@test "a pin with a compiled binary but no ui/dist stays pinned" {
+  stub_bun
+  seed_caret "$home/.claude/plugins/cache/caret/caret/0.14.0" 0.14.0
+  seed_caret "$home/checkout" 0.1.0
+  rm "$home/checkout/ui/dist/index.html"
+  cp "$home/checkout/bin/caret" "$home/checkout/bin/caret-native"
+  printf '%s\n' "$home/checkout" >"$home/.local/state/caret/launcher/pinned-root"
+  run -0 launcher
+  [[ "$output" == *"CARET 0.1.0"* ]]
+}
+
+# Mirrors the no-runnable-bin/caret case above.
 @test "only UI-less roots exit 78 without evicting or re-probing" {
   stub_bun
   stub_service

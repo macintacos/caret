@@ -1178,6 +1178,11 @@ test("prodEnsureDeps is pinned only while the pin names a runnable caret", async
   writeFileSync(launcherPinnedRootFile(), `${root}\n`);
   expect((await prodEnsureDeps(DEFAULTS, () => service, 0)).pinned).toBe(false);
 
+  writeFileSync(join(root, "bin", "caret-native"), "#!/bin/sh\n");
+  chmodSync(join(root, "bin", "caret-native"), 0o755);
+  expect((await prodEnsureDeps(DEFAULTS, () => service, 0)).pinned).toBe(true);
+  unlinkSync(join(root, "bin", "caret-native"));
+
   mkdirSync(join(root, "ui", "dist"), { recursive: true });
   writeFileSync(join(root, "ui", "dist", "index.html"), "<!doctype html>\n");
   expect((await prodEnsureDeps(DEFAULTS, () => service, 0)).pinned).toBe(true);
