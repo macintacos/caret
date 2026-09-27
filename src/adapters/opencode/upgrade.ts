@@ -183,9 +183,9 @@ export function caretEntries(text: string | null, isCheckout: (dir: string) => b
   });
 }
 
-/** Whether OpenCode's config carries a caret `plugin` entry at all — the question doctor
- * asks before paying for the version check, since `upgradeVerdict` reports a missing
- * entry as `fresh`. */
+/** Whether OpenCode's config carries caret's npm-package `plugin` entry at all — the
+ * question doctor asks before paying for the version check, since `upgradeVerdict`
+ * reports a missing entry as `fresh`. */
 export function hasCaretPluginEntry(configFile: string): boolean {
   return readCaretEntry(configFile) !== null;
 }
