@@ -1,8 +1,8 @@
 // OpenCode's install probe for the doctor command: a best-effort, strictly
 // read-only snapshot of caret's OpenCode install. caret installs as a `plugin` array
 // entry (@macintacos/caret) that OpenCode installs into its own cache, one
-// `packages/<specifier>/` dir per array entry with the resolved version recorded in
-// that dir's top-level shim manifest. Mirrors claude/codex install.ts's
+// `packages/<specifier>/` dir per array entry with the installed version recorded in
+// that dir's `node_modules/@macintacos/caret/package.json`. Mirrors claude/codex install.ts's
 // degrade-to-"unknown" discipline — every field degrades rather than throwing, so
 // doctor always renders. Reads only caret's own cache dirs and the user's plugin
 // array — never any other config key.
@@ -13,12 +13,16 @@ import { join } from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
 
 import type { InstallProbe } from "@/adapters/adapter.ts";
+import { findPluginEntry } from "@/adapters/opencode/config-plugin.ts";
 import {
+  CARET_PACKAGE,
   CONFIG_FILENAMES,
-  existingOpencodeCachePackageDirs,
+  opencodeCachePackageDir,
   opencodeConfigDir,
+  resolveConfigFile,
 } from "@/adapters/opencode/paths.ts";
-import { readCachedCaretVersion } from "@/adapters/opencode/upgrade.ts";
+import { readCachedCaretVersion, readConfigText } from "@/adapters/opencode/upgrade.ts";
+import { parseVersionTriple } from "@/lib/semver.ts";
 
 /** Best-effort read of caret's OpenCode install state. Every miss degrades to
  * "unknown". */
@@ -27,9 +31,10 @@ export function readOpencodeInstallState(): InstallProbe {
   if (!existsSync(dir)) {
     return { pluginVersion: "unknown", pluginEnabled: "unknown", hookInUserSettings: "unknown" };
   }
-  // The probe's vocabulary is "unknown", the upgrade module's is null; the boundary is
-  // this one coercion.
-  const version = readCachedCaretVersion(existingOpencodeCachePackageDirs()) ?? "unknown";
+  const entry = readCaretEntry(dir);
+  const cached = entry === null ? null : readCachedCaretVersion(opencodeCachePackageDir(entry));
+  // A range shim or a miss both read as "unknown": only an exact version is reported.
+  const version = cached !== null && parseVersionTriple(cached) !== null ? cached : "unknown";
   return {
     pluginVersion: version,
     // A `packages/<specifier>/` dir survives an interrupted install, so presence alone
@@ -38,6 +43,16 @@ export function readOpencodeInstallState(): InstallProbe {
     // caret listed in the user's `plugin` array == caret is configured for OpenCode.
     hookInUserSettings: readCaretInPluginArray(dir),
   };
+}
+
+/** caret's `plugin` entry in the config install and doctor resolve, or null when there
+ * is none or the config cannot be read. */
+function readCaretEntry(dir: string): string | null {
+  try {
+    return findPluginEntry(readConfigText(resolveConfigFile(dir)), CARET_PACKAGE);
+  } catch {
+    return null;
+  }
 }
 
 /** Whether caret is listed in any OpenCode config file's `plugin` array. Scans every

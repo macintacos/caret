@@ -1,6 +1,6 @@
 // Whether the caret that OpenCode runs is behind the published one, and the effects
-// needed to answer that. OpenCode records a `plugin` array entry's resolution in
-// `packages/<specifier>/package.json` on first install and never re-resolves it, so a
+// needed to answer that. OpenCode installs a `plugin` array entry into
+// `packages/<specifier>/node_modules/` on first install and never re-resolves it, so a
 // bare entry stays frozen at install-day's version — `caret install` is a no-op on the
 // array entry and therefore on the running version. This module is what lets install
 // say so: a pure verdict over (entry, cached, published), plus the cache reads and the
@@ -21,8 +21,13 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 import { findPluginEntry, splitPluginSpecifier } from "@/adapters/opencode/config-plugin.ts";
-import { CARET_PACKAGE, existingOpencodeCachePackageDirs } from "@/adapters/opencode/paths.ts";
+import {
+  CARET_PACKAGE,
+  existingOpencodeCachePackageDirs,
+  opencodeCachePackageDir,
+} from "@/adapters/opencode/paths.ts";
 import type { Check } from "@/doctor/report.ts";
+import { readJsonFileSync } from "@/lib/json-file.ts";
 import { isNewer, parseVersionTriple } from "@/lib/semver.ts";
 import { publishedCaretVersion } from "@/lib/upstream.ts";
 
@@ -137,12 +142,16 @@ export function upgradeCheck(verdict: UpgradeVerdict): Check {
  * a version gap the other would describe differently. */
 export async function readUpgradeVerdict(deps: {
   configFile: string;
-  cacheDirs?: () => string[];
+  cacheDir?: (specifier: string) => string;
   published?: () => Promise<string | null>;
 }): Promise<UpgradeVerdict> {
+  const entry = findPluginEntry(readConfigText(deps.configFile), CARET_PACKAGE);
   return upgradeVerdict({
-    entry: findPluginEntry(readConfigText(deps.configFile), CARET_PACKAGE),
-    cached: readCachedCaretVersion((deps.cacheDirs ?? existingOpencodeCachePackageDirs)()),
+    entry,
+    cached:
+      entry === null
+        ? null
+        : readCachedCaretVersion((deps.cacheDir ?? opencodeCachePackageDir)(entry)),
     published: await (deps.published ?? publishedCaretVersion)(),
   });
 }
@@ -159,28 +168,23 @@ export function readConfigText(path: string): string | null {
   return existsSync(path) ? readFileSync(path, "utf-8") : null;
 }
 
-/** caret's resolved version from the first cache dir whose top-level shim manifest names
- * caret under `dependencies` — one file read, no node_modules walk. OpenCode records that
- * entry with an empty save prefix, so the value is an exact version, not a range. null
- * when no candidate yields one: nothing installed yet, an interrupted install that left
- * the dir without its entry, or an unreadable manifest. */
-export function readCachedCaretVersion(
-  dirs: readonly string[] = existingOpencodeCachePackageDirs(),
-): string | null {
-  for (const d of dirs) {
-    try {
-      const deps = (
-        JSON.parse(readFileSync(join(d, "package.json"), "utf-8")) as {
-          dependencies?: Record<string, unknown>;
-        }
-      ).dependencies;
-      const v = deps?.[CARET_PACKAGE];
-      if (typeof v === "string" && v.length > 0) return v;
-    } catch {
-      // missing / unreadable / unparseable manifest — try the next candidate.
-    }
+/** caret's version in one OpenCode cache dir (`packages/<specifier>/`): the `version`
+ * of the installed `node_modules/@macintacos/caret/package.json`, else the shim
+ * manifest's requested spec under `dependencies` verbatim — possibly a range, which
+ * callers treat as unknown — else null when neither names one (nothing installed, an
+ * interrupted install, an unreadable manifest). */
+export function readCachedCaretVersion(dir: string): string | null {
+  const installed = readJsonFileSync(join(dir, "node_modules", CARET_PACKAGE, "package.json")) as {
+    version?: unknown;
+  } | null;
+  if (typeof installed?.version === "string" && installed.version.length > 0) {
+    return installed.version;
   }
-  return null;
+  const shim = readJsonFileSync(join(dir, "package.json")) as {
+    dependencies?: Record<string, unknown>;
+  } | null;
+  const requested = shim?.dependencies?.[CARET_PACKAGE];
+  return typeof requested === "string" && requested.length > 0 ? requested : null;
 }
 
 /** Delete every cache dir OpenCode holds for caret so it re-resolves the specifier on its

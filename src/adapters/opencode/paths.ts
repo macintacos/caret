@@ -148,15 +148,15 @@ function opencodeCachePackagesDir(): string {
   return join(xdg || join(homedir(), ".cache"), "opencode", "packages");
 }
 
-/** The cache dir for the BARE `pkg` specifier — what `caret install`'s OpenCode
- * array entry produces, and the prefix every pinned variant extends. */
-export function opencodeCachePackageDir(pkg: string = CARET_PACKAGE): string {
-  return join(opencodeCachePackagesDir(), pkg);
+/** The cache dir for the plugin entry `specifier`, verbatim, pin and all; defaults to
+ * the bare package `caret install` writes. */
+export function opencodeCachePackageDir(specifier: string = CARET_PACKAGE): string {
+  return join(opencodeCachePackagesDir(), specifier);
 }
 
 /** Every cache dir on disk for `pkg`: the bare specifier dir first, then any pinned
- * `<pkg>@<version>` sibling, ordered lexicographically by name — NOT by version, since
- * the caller takes the first candidate that resolves. OpenCode names each dir after the
+ * `<pkg>@<version>` sibling, ordered lexicographically by name: the dirs the stale-cache
+ * clear removes. OpenCode names each dir after the
  * VERBATIM specifier, and a pin's version segment is arbitrary (`@0.7.3`, `@latest`), so
  * listing is the only way to find one. Empty when nothing is listable. */
 export function existingOpencodeCachePackageDirs(pkg: string = CARET_PACKAGE): string[] {

@@ -27,13 +27,15 @@ afterEach(async () => {
 });
 
 /** The deps every case shares. The upgrade check is wired OFFLINE by default — no suite
- * here may reach npm or read the real OpenCode cache — so a case that exercises the
- * check overrides `published`/`cacheDirs` with its own fixture. */
+ * here may reach npm or read the real OpenCode cache: reads resolve under the temp tree
+ * `cacheDir(spec, version)` writes into, and a case that exercises the clear overrides
+ * `published`/`cacheDirs` with its own fixture. */
 function deps(overrides: InstallOpencodeDeps = {}): InstallOpencodeDeps {
   return {
     configDir: dir,
     packaging: PACKAGING,
     published: async () => null,
+    cacheDir: (s) => join(dir, "cache", s),
     cacheDirs: () => [],
     ...overrides,
   };
@@ -47,15 +49,20 @@ const commandFile = () => join(dir, "commands", "caret:demo.md");
 const plugins = () => JSON.parse(readFileSync(configJson(), "utf-8")).plugin;
 
 /** A cache dir shaped like OpenCode's: one directory per verbatim specifier, holding the
- * shim manifest that records caret's resolved version. Under the temp dir, never the
- * real cache. */
-function cacheDir(specifier: string, version: string): string {
+ * shim manifest that records caret's requested spec and, when `installed` is given, the
+ * installed caret's own manifest. Under the temp dir, never the real cache. */
+function cacheDir(specifier: string, version: string, installed?: string): string {
   const d = join(dir, "cache", specifier);
   mkdirSync(d, { recursive: true });
   writeFileSync(
     join(d, "package.json"),
     JSON.stringify({ dependencies: { [CARET_PACKAGE]: version } }),
   );
+  if (installed !== undefined) {
+    const pkg = join(d, "node_modules", CARET_PACKAGE);
+    mkdirSync(pkg, { recursive: true });
+    writeFileSync(join(pkg, "package.json"), JSON.stringify({ version: installed }));
+  }
   return d;
 }
 
@@ -199,6 +206,12 @@ test("--refresh clears a stale cache without asking", async () => {
   expect(said).toContain("Cleared 1 cached copy");
 });
 
+test("--refresh clears a stale cache whose shim records a range", async () => {
+  const cache = cacheDir(CARET_PACKAGE, "^1.1.0", "1.1.3");
+  await transcript({ published: async () => "1.2.0", cacheDirs: () => [cache] }, { refresh: true });
+  expect(existsSync(cache)).toBe(false);
+});
+
 /** The stale-cache upgrade deps a case exercises, with the prompt's answer as the only
  * variable — the fixture every "user did not clear the cache" case shares. */
 function staleCacheDeps(
@@ -327,6 +340,10 @@ test("uninstall skips the check: no network call, no cache read, nothing cleared
       published: async () => {
         calls.push("published");
         return "0.8.1";
+      },
+      cacheDir: (s) => {
+        calls.push("cacheDir");
+        return join(dir, "cache", s);
       },
       cacheDirs: () => {
         calls.push("cacheDirs");

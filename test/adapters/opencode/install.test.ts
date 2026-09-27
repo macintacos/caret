@@ -29,11 +29,11 @@ afterEach(async () => {
 const configDir = () => join(tmp, "opencode");
 
 /** OpenCode's plugin cache: one dir per RAW specifier under `packages/`, each holding
- * a top-level shim manifest whose `dependencies` entry names the resolved version. */
+ * a top-level shim manifest whose `dependencies` entry names the requested spec. */
 const cachePkg = (specifier: string) => join(tmp, "cache", "opencode", "packages", specifier);
 
-/** The shim manifest OpenCode's Arborist reify writes into a cache dir — an exact
- * version under the package NAME, with no range prefix. */
+/** The shim manifest OpenCode's Arborist reify writes into a cache dir — the requested
+ * spec under the package NAME, an exact version or a range. */
 const shim = (version: string) => ({ dependencies: { "@macintacos/caret": version } });
 
 /** Create `specifier`'s cache dir holding `manifest` as its top-level package.json. */
@@ -45,10 +45,10 @@ async function writeCachePkg(specifier: string, manifest: unknown): Promise<void
 /** A config dir listing caret in its `plugin` array, selected via OPENCODE_CONFIG_DIR.
  * Scaffolding for the cache cases: the probe returns all-unknown without a config dir,
  * but these cases assert on the cache, not on the array scan. */
-async function configWithCaret(): Promise<void> {
+async function configWithCaret(entry = "@macintacos/caret"): Promise<void> {
   const dir = configDir();
   await mkdir(dir, { recursive: true });
-  await writeFile(join(dir, "opencode.json"), JSON.stringify({ plugin: ["@macintacos/caret"] }));
+  await writeFile(join(dir, "opencode.json"), JSON.stringify({ plugin: [entry] }));
   process.env.OPENCODE_CONFIG_DIR = dir;
 }
 
@@ -71,28 +71,40 @@ test("reports the bare specifier dir's version + enabled, and caret configured",
   });
 });
 
-test("finds a pinned specifier dir when the bare one is absent", async () => {
+test("a bare entry never falls back to a pinned sibling dir", async () => {
   await configWithCaret();
   await writeCachePkg("@macintacos/caret@latest", shim("0.2.0"));
-  const s = readOpencodeInstallState();
-  expect(s.pluginVersion).toBe("0.2.0");
-  expect(s.pluginEnabled).toBe(true);
+  expect(readOpencodeInstallState().pluginVersion).toBe("unknown");
 });
 
-test("the bare specifier dir wins when a pinned one also exists", async () => {
-  await configWithCaret();
+test("a pinned entry reads its own dir", async () => {
+  await configWithCaret("@macintacos/caret@latest");
   await writeCachePkg("@macintacos/caret", shim("0.8.1"));
   await writeCachePkg("@macintacos/caret@latest", shim("0.2.0"));
+  expect(readOpencodeInstallState().pluginVersion).toBe("0.2.0");
+});
+
+test("an exact-version pin reads its own dir", async () => {
+  await configWithCaret("@macintacos/caret@1.0.2");
+  await writeCachePkg("@macintacos/caret", shim("0.8.1"));
+  await writeCachePkg("@macintacos/caret@1.0.2", shim("1.0.2"));
+  expect(readOpencodeInstallState().pluginVersion).toBe("1.0.2");
+});
+
+test("the installed caret's version is reported over a range in the shim", async () => {
+  await configWithCaret();
+  await writeCachePkg("@macintacos/caret", shim("^1.1.0"));
+  const pkg = join(cachePkg("@macintacos/caret"), "node_modules", "@macintacos", "caret");
+  await mkdir(pkg, { recursive: true });
+  await writeFile(join(pkg, "package.json"), JSON.stringify({ version: "1.1.3" }));
   const s = readOpencodeInstallState();
-  expect(s.pluginVersion).toBe("0.8.1");
+  expect(s.pluginVersion).toBe("1.1.3");
   expect(s.pluginEnabled).toBe(true);
 });
 
-test("a sibling package that merely starts with caret's leaf is not a candidate", async () => {
+test("a range-only shim is unknown, never a guessed version", async () => {
   await configWithCaret();
-  // Same scope, leaf `caret-tools` — only `caret` and `caret@…` are caret's dirs. The
-  // manifest names caret so a prefix scan missing the `@` would wrongly resolve it.
-  await writeCachePkg("@macintacos/caret-tools", shim("9.9.9"));
+  await writeCachePkg("@macintacos/caret", shim("^1.1.0"));
   const s = readOpencodeInstallState();
   expect(s.pluginVersion).toBe("unknown");
   expect(s.pluginEnabled).toBe(false);
