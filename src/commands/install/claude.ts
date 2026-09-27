@@ -110,14 +110,18 @@ function readCaretMarketplace(stdout: string): CaretMarketplace {
 }
 
 /** Claude's `caret` marketplace is the published GitHub source. */
-function isPublished(m: CaretMarketplace): boolean {
-  return m.kind === "registered" && m.source === "github" && m.location === MARKETPLACE_SOURCE;
+function isPublished(marketplace: CaretMarketplace): boolean {
+  return (
+    marketplace.kind === "registered" &&
+    marketplace.source === "github" &&
+    marketplace.location === MARKETPLACE_SOURCE
+  );
 }
 
 /** Whether the registration phase settles as registered. An unreadable list counts: the
  * read is advisory, and a `claude` that can't answer it must not raise a false alarm. */
-function settledAsRegistered(m: CaretMarketplace): boolean {
-  return m.kind === "unreadable" || isPublished(m);
+function settledAsRegistered(marketplace: CaretMarketplace): boolean {
+  return marketplace.kind === "unreadable" || isPublished(marketplace);
 }
 
 /** The registration phase's warning, from the add's result and the post-add read. */
@@ -341,9 +345,13 @@ async function registeredAtDevDir(
   run: ClaudeRunner,
   devDir: () => string = devMarketplaceDir,
 ): Promise<boolean> {
-  const m = readCaretMarketplace((await run(["plugin", "marketplace", "list", "--json"])).stdout);
+  const marketplace = readCaretMarketplace(
+    (await run(["plugin", "marketplace", "list", "--json"])).stdout,
+  );
   return (
-    m.kind === "registered" && m.source === "directory" && resolve(m.location) === resolve(devDir())
+    marketplace.kind === "registered" &&
+    marketplace.source === "directory" &&
+    resolve(marketplace.location) === resolve(devDir())
   );
 }
 

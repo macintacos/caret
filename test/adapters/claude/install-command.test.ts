@@ -461,13 +461,14 @@ function marketplaceMachine(
     calls,
     runner: async (args) => {
       calls.push(args);
-      const sub = args[1] === "marketplace" ? args[2] : undefined;
-      if (sub === "list") return { ...ok, stdout: JSON.stringify(registered ? [registered] : []) };
-      if (sub === "remove") {
+      const marketplaceCommand = args[1] === "marketplace" ? args[2] : undefined;
+      if (marketplaceCommand === "list")
+        return { ...ok, stdout: JSON.stringify(registered ? [registered] : []) };
+      if (marketplaceCommand === "remove") {
         registered = null;
         return ok;
       }
-      if (sub === "add") {
+      if (marketplaceCommand === "add") {
         if (registered && registered.repo !== "macintacos/caret") {
           return { ok: false, detail: REFUSAL, stdout: "" };
         }
@@ -485,8 +486,8 @@ function marketplaceMachine(
 
 const REMOVE = ["plugin", "marketplace", "remove", "caret"];
 const ADD = ["plugin", "marketplace", "add", "macintacos/caret"];
-const indexOfCall = (calls: string[][], c: string[]) =>
-  calls.findIndex((x) => JSON.stringify(x) === JSON.stringify(c));
+const indexOfCall = (calls: string[][], wanted: string[]) =>
+  calls.findIndex((call) => JSON.stringify(call) === JSON.stringify(wanted));
 
 test("a machine last installed --from-local hands the caret marketplace back first", async () => {
   const { runner, calls } = marketplaceMachine(directoryEntry("/dev-mp"));
