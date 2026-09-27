@@ -18,10 +18,11 @@
 // the config read throws when the file exists but cannot be read, and each caller owns
 // that.
 
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
-import { findPluginEntry, splitPluginSpecifier } from "@/adapters/opencode/config-plugin.ts";
+import { splitPluginSpecifier } from "@/adapters/opencode/config-plugin.ts";
+import { readCaretEntry } from "@/adapters/opencode/entries.ts";
 import {
   CARET_PACKAGE,
   existingOpencodeCachePackageDirs,
@@ -156,17 +157,11 @@ export async function readUpgradeVerdict(deps: {
   });
 }
 
-/** Whether OpenCode's config carries a caret `plugin` entry at all — the question doctor
- * asks before paying for the version check, since `upgradeVerdict` reports a missing
- * entry as `fresh`. */
+/** Whether OpenCode's config carries caret's npm-package `plugin` entry at all — the
+ * question doctor asks before paying for the version check, since `upgradeVerdict`
+ * reports a missing entry as `fresh`. */
 export function hasCaretPluginEntry(configFile: string): boolean {
   return readCaretEntry(configFile) !== null;
-}
-
-/** caret's verbatim `plugin` entry in `configFile`, pin and all, or null when the file is
- * absent or lists none. Throws when the file exists but cannot be read. */
-export function readCaretEntry(configFile: string): string | null {
-  return findPluginEntry(readConfigText(configFile), CARET_PACKAGE);
 }
 
 /** What OpenCode cached for `entry`, read from that entry's own cache dir and never a
@@ -176,11 +171,6 @@ export function readEntryCachedVersion(
   cacheDir: (specifier: string) => string = opencodeCachePackageDir,
 ): string | null {
   return entry === null ? null : readCachedCaretVersion(cacheDir(entry));
-}
-
-/** The config file's text, or null when it is absent. */
-export function readConfigText(path: string): string | null {
-  return existsSync(path) ? readFileSync(path, "utf-8") : null;
 }
 
 /** caret's version in one OpenCode cache dir (`packages/<specifier>/`): the `version`

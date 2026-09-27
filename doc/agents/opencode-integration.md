@@ -280,7 +280,7 @@ so it wants the live check § Verified vs. follow-up already schedules.
   (it selects the targets — the chooser or detection — and dispatches), beside the target
   registry, the chooser, the terminal reporter, and one module per target runner.
   `paths.ts` is the single source of truth both the probe (reader) and the writer resolve
-  through.
+  through, and `entries.ts` the single answer to which `plugin` entries are caret's.
 
 ## Distribution choice (amended by EXC-794)
 
@@ -355,6 +355,11 @@ And a directory can exist with nothing installed after an interrupted install �
 own installed-check is `existsSafe(join(dir, "node_modules", name))`, not the directory
 itself — so the probe treats a resolved version, never directory presence, as proof of
 install.
+
+The probe recognises a `--from-local` checkout entry the way install does (`caretEntries`)
+and reads its version through the cache symlink § The local form describes. doctor's
+`opencode-caret-version` check does not: `readCaretEntry` matches the package form only,
+since npm's version says nothing about a checkout.
 
 ## Runtime resolution + update check (EXC-794)
 

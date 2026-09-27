@@ -2,10 +2,12 @@
 // read-only snapshot of caret's OpenCode install. caret installs as a `plugin` array
 // entry (@macintacos/caret) that OpenCode installs into its own cache, one
 // `packages/<specifier>/` dir per array entry with the installed version recorded in
-// that dir's `node_modules/@macintacos/caret/package.json`. Mirrors claude/codex
-// install.ts's degrade-to-"unknown" discipline — every field degrades rather than throwing, so
-// doctor always renders. Reads only caret's own cache dirs and the user's plugin
-// array — never any other config key.
+// that dir's `node_modules/@macintacos/caret/package.json`; a `--from-local` `file:`
+// entry pointing at a caret checkout is caret's entry too, its version read through
+// OpenCode's cache symlink to the checkout. Mirrors claude/codex install.ts's
+// degrade-to-"unknown" discipline — every field degrades rather than throwing, so doctor
+// always renders. Reads only caret's own cache dirs, the user's plugin array, and whether
+// each `file:` entry's path holds caret's plugin — never any other config key.
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -14,11 +16,16 @@ import { parse as parseJsonc } from "jsonc-parser";
 
 import type { InstallProbe } from "@/adapters/adapter.ts";
 import {
+  caretEntries,
+  isCaretCheckout,
+  readLoadedCaretEntry,
+} from "@/adapters/opencode/entries.ts";
+import {
   CONFIG_FILENAMES,
   opencodeConfigDir,
   resolveConfigFile,
 } from "@/adapters/opencode/paths.ts";
-import { readCaretEntry, readEntryCachedVersion } from "@/adapters/opencode/upgrade.ts";
+import { readEntryCachedVersion } from "@/adapters/opencode/upgrade.ts";
 import { parseVersionTriple } from "@/lib/semver.ts";
 
 /** Best-effort read of caret's OpenCode install state. Every miss degrades to
@@ -28,11 +35,11 @@ export function readOpencodeInstallState(): InstallProbe {
   if (!existsSync(dir)) {
     return { pluginVersion: "unknown", pluginEnabled: "unknown", hookInUserSettings: "unknown" };
   }
-  // First existing config file only, not readCaretInPluginArray's all-files scan, so
-  // pluginVersion agrees with the opencode-caret-version check.
+  // First existing config file only, not readCaretInPluginArray's all-files scan, so for a
+  // package entry pluginVersion agrees with the opencode-caret-version check.
   let entry: string | null;
   try {
-    entry = readCaretEntry(resolveConfigFile(dir));
+    entry = readLoadedCaretEntry(resolveConfigFile(dir));
   } catch {
     return {
       pluginVersion: "unknown",
@@ -53,30 +60,26 @@ export function readOpencodeInstallState(): InstallProbe {
   };
 }
 
-/** Whether caret is listed in any OpenCode config file's `plugin` array. Scans every
- * candidate config file (so an entry in one isn't masked by a caret-less earlier
- * file), parsing JSONC so a commented config still reads. false when at least one
- * config parses but none list caret; "unknown" only when none is readable. */
+/** Whether any OpenCode config file's `plugin` array lists an entry `caretEntries`
+ * counts as caret's. Scans every candidate config file (so an entry in one isn't masked
+ * by a caret-less earlier file), parsing JSONC so a commented config still reads. false
+ * when at least one config parses but none list caret; "unknown" only when none is
+ * readable. */
 function readCaretInPluginArray(dir: string): boolean | "unknown" {
   let sawConfig = false;
   for (const name of CONFIG_FILENAMES) {
     const path = join(dir, name);
     if (!existsSync(path)) continue;
-    let cfg: { plugin?: unknown } | undefined;
+    let text: string;
     try {
-      cfg = parseJsonc(readFileSync(path, "utf-8")) as { plugin?: unknown } | undefined;
+      text = readFileSync(path, "utf-8");
     } catch {
-      continue; // unreadable/unparseable — try the next candidate
+      continue; // unreadable — try the next candidate
     }
+    const cfg: unknown = parseJsonc(text);
     if (cfg === undefined || cfg === null) continue;
     sawConfig = true;
-    const arr = cfg.plugin;
-    // Loose "caret" substring on purpose (a diagnostics probe, not the exact writer
-    // match): also surfaces a dev/local caret entry (a `bun link` path or a pinned
-    // `@macintacos/caret@x`), so doctor reports "configured" for those too.
-    if (Array.isArray(arr) && arr.some((e) => typeof e === "string" && e.includes("caret"))) {
-      return true;
-    }
+    if (caretEntries(text, isCaretCheckout).length > 0) return true;
   }
   return sawConfig ? false : "unknown";
 }
