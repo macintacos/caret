@@ -66,11 +66,10 @@ read_record() {
 # release, so 0.15.0-rc.1 would beat 0.15.0. caret publishes no prereleases.
 highest() { sort -t. -k1,1n -k2,2n -k3,3n | tail -1 | cut -f2-; }
 
-# A root is runnable when bin/caret can exec and what it dispatches to has a UI:
-# bin/caret-native embeds one at compile time; the bundle serves ui/dist beside the
-# root, so a half-installed one would answer every UI request with ENOENT. A
-# non-executable bin/caret would exec-fail at 126 and the supervisor would respawn
-# into it forever. Mirrored by isLauncherPinned (src/daemon/lifecycle.ts).
+# bin/caret-native embeds its UI at compile time; the bundle serves ui/dist, so a
+# half-installed one would answer every UI request with ENOENT. A non-executable
+# bin/caret would exec-fail at 126 and the supervisor would respawn into it forever.
+# Keep in sync with isLauncherPinned (src/daemon/lifecycle.ts).
 root_runnable() {
   [ -x "$1/bin/caret" ] || return 1
   [ -x "$1/bin/caret-native" ] || [ -f "$1/ui/dist/index.html" ]
