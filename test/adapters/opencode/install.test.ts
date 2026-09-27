@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -50,6 +50,25 @@ async function configWithCaret(entry = "@macintacos/caret"): Promise<void> {
   await mkdir(dir, { recursive: true });
   await writeFile(join(dir, "opencode.json"), JSON.stringify({ plugin: [entry] }));
   process.env.OPENCODE_CONFIG_DIR = dir;
+}
+
+/** A `--from-local` checkout: the caret package.json plus the file `isCaretCheckout` probes. */
+async function checkout(version: string): Promise<string> {
+  const dir = join(tmp, "checkout");
+  await mkdir(join(dir, "opencode"), { recursive: true });
+  await writeFile(
+    join(dir, "package.json"),
+    JSON.stringify({ name: "@macintacos/caret", version }),
+  );
+  await writeFile(join(dir, "opencode", "caret.plugin.ts"), "");
+  return dir;
+}
+
+/** OpenCode's cache for a `file:` entry: the package symlinked into the specifier's dir. */
+async function linkCheckoutCache(spec: string, dir: string): Promise<void> {
+  const scope = join(cachePkg(spec), "node_modules", "@macintacos");
+  await mkdir(scope, { recursive: true });
+  await symlink(dir, join(scope, "caret"));
 }
 
 test("everything is unknown when the config dir is absent", () => {
@@ -164,4 +183,11 @@ test("an unreadable config reports the install as unknown, never throwing", asyn
     pluginEnabled: "unknown",
     hookInUserSettings: true,
   });
+});
+
+test("a --from-local checkout entry reports the checkout's version, enabled", async () => {
+  const dir = await checkout("9.9.9");
+  await configWithCaret(`file:${dir}`);
+  await linkCheckoutCache(`file:${dir}`, dir);
+  expect(readOpencodeInstallState()).toMatchObject({ pluginVersion: "9.9.9", pluginEnabled: true });
 });
