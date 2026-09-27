@@ -53,9 +53,16 @@ export interface FinalizeResult {
   title: string;
   taggedSha: string;
   releaseUrl: string | null;
-  /** Whether this run published the package to npm (false on dry runs and when
-   * the version was already on the registry). */
-  npmPublished: boolean;
+  /** Whether the registry served this version when finalize checked. */
+  npmLive: boolean;
+  dryRun: boolean;
+}
+
+export interface PublishResult {
+  phase: "publish";
+  version: string;
+  tag: string;
+  releaseUrl: string | null;
   dryRun: boolean;
 }
 

@@ -1,5 +1,5 @@
 // Barrel for the release pipeline's orchestration: baseline / compute / prepare /
-// finalize, the resume state machine that makes every step safe to re-run after a
+// finalize / publish, the resume state machine that makes every step safe to re-run after a
 // partial failure, the injected collaborators (Deps/FsOps/Io), the shared guards
 // (GuardError), and the result/context shapes. The implementations live one per
 // file under ./steps/; cli.ts and the steps test import them through here. The
@@ -17,6 +17,7 @@ export {
   gatherContext,
   MANIFESTS,
   type PrepareResult,
+  type PublishResult,
   type ReleaseContext,
   readSyncedVersion,
 } from "@/tasks/release/steps/context.ts";
@@ -31,3 +32,4 @@ export {
   syncedVersion,
 } from "@/tasks/release/steps/guards.ts";
 export { prepare } from "@/tasks/release/steps/prepare.ts";
+export { publish } from "@/tasks/release/steps/publish.ts";

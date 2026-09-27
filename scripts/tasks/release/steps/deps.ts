@@ -26,4 +26,5 @@ export interface Deps {
   rumdl: RumdlOps;
   fs: FsOps;
   io: Io;
+  sleep(ms: number): Promise<void>;
 }

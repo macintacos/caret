@@ -1,5 +1,5 @@
 // The release pipeline as a subcommand group of the caret tasks CLI. Mounted by
-// scripts/tasks/cli.ts as `caret-tasks release compute|baseline|prepare|finalize`;
+// scripts/tasks/cli.ts as `caret-tasks release compute|baseline|prepare|finalize|publish`;
 // the `.mise/tasks/release` forwarder execs `scripts/tasks/cli.ts release "$@"`.
 //
 // Unlike the sibling tasks, the release group prints exactly one JSON object on
@@ -28,6 +28,7 @@ import {
   finalize,
   GuardError,
   prepare,
+  publish,
 } from "@/tasks/release/steps.ts";
 import { isBumpLevel } from "@/tasks/release/version.ts";
 
@@ -46,6 +47,7 @@ function realDeps(): Deps {
       exists: (path) => Bun.file(path).exists(),
     },
     io: { log: (m) => process.stderr.write(`${m}\n`) },
+    sleep: (ms) => Bun.sleep(ms),
   };
 }
 
@@ -105,7 +107,7 @@ function requireBump(bump: string): "patch" | "minor" | "major" {
 export function buildReleaseCommand(deps: Deps = realDeps()): Command {
   const program = createProgram(
     "release",
-    "caret release pipeline: baseline | compute | prepare | finalize",
+    "caret release pipeline: baseline | compute | prepare | finalize | publish",
   ).configureOutput({
     writeOut: (s) => process.stderr.write(s),
     writeErr: (s) => process.stderr.write(s),
@@ -144,7 +146,7 @@ export function buildReleaseCommand(deps: Deps = realDeps()): Command {
 
   program
     .command("finalize")
-    .description("phase 2: tag merged trunk and publish the GitHub Release")
+    .description("phase 2: tag merged trunk and create the draft GitHub Release")
     .option("--dry-run", "preview without mutating")
     .option("--yes", "confirm the mutation")
     .option("--notes-file <path>", "markdown file holding the GitHub Release body")
@@ -156,6 +158,16 @@ export function buildReleaseCommand(deps: Deps = realDeps()): Command {
           notesFile: opts.notesFile,
         }),
       );
+    });
+
+  program
+    .command("publish")
+    .description("publish the draft GitHub Release once npm serves its version")
+    .option("--dry-run", "preview without mutating")
+    .option("--yes", "confirm the mutation")
+    .action(async (opts) => {
+      requireGo("publish", opts);
+      await emitStep(() => publish(deps, { dryRun: opts.dryRun ?? false }));
     });
 
   return program;

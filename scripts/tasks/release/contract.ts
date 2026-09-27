@@ -24,6 +24,8 @@ export type ErrorCode =
   | "PR_CLOSED"
   | "ALREADY_MERGED"
   | "NOT_MERGED"
+  | "NO_RELEASE"
+  | "NOT_LIVE"
   | "INTERNAL";
 
 /** One commit in the range since the last release, with parsed metadata. */

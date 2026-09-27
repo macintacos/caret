@@ -27,10 +27,13 @@ export interface GitHubOps {
   /** Every PR for a head branch, across all states; callers filter on `PrState`. */
   prList(opts: { head: string }): Promise<PullRequestSummary[]>;
   /** The release for a tag, or null if none exists. */
-  releaseView(tag: string): Promise<{ url: string } | null>;
+  releaseView(tag: string): Promise<{ url: string; isDraft: boolean } | null>;
+  /** Create the release as a draft; `releasePublish` makes it public. */
   releaseCreate(opts: { tag: string; title: string; notes: string }): Promise<{ url: string }>;
   /** Replace the notes body of an existing release (leaves the title alone). */
   releaseEdit(opts: { tag: string; notes: string }): Promise<void>;
+  /** Publish a draft release; returns its (post-publish) URL. */
+  releasePublish(tag: string): Promise<string>;
 }
 
 /** PR number from a `.../pull/<n>` URL, or 0 if it can't be parsed. */
@@ -73,20 +76,28 @@ export function createGitHub(): GitHubOps {
     },
 
     async releaseView(tag) {
-      const r = await $`gh release view ${tag} --json url`.nothrow().quiet();
+      const r = await $`gh release view ${tag} --json url,isDraft`.nothrow().quiet();
       if (r.exitCode !== 0) return null;
-      return JSON.parse(r.text().trim()) as { url: string };
+      return JSON.parse(r.text().trim()) as { url: string; isDraft: boolean };
     },
 
     async releaseCreate({ tag, title, notes }) {
       const url = (
-        await $`gh release create ${tag} --title ${title} --notes ${notes}`.text()
+        await $`gh release create ${tag} --draft --title ${title} --notes ${notes}`.text()
       ).trim();
       return { url };
     },
 
     async releaseEdit({ tag, notes }) {
       await $`gh release edit ${tag} --notes ${notes}`.quiet();
+    },
+
+    async releasePublish(tag) {
+      await $`gh release edit ${tag} --draft=false`.quiet();
+      // A draft's URL is an untagged-… placeholder; re-read for the public one.
+      const view = await this.releaseView(tag);
+      if (view === null) throw new Error(`Release ${tag} vanished after publishing.`);
+      return view.url;
     },
   };
 }

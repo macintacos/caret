@@ -1,6 +1,7 @@
-// finalize (phase 2): tag trunk's merged HEAD and publish the GitHub Release.
-// It derives the version from trunk's three manifests and proves the bump
-// actually merged before publishing anything, and is resume-aware throughout —
+// finalize (phase 2): tag trunk's merged HEAD and create the GitHub Release as a
+// draft; the tag push drives CI's npm publish, and `publish` un-drafts the
+// Release once npm serves the version. It derives the version from trunk's three
+// manifests and proves the bump actually merged before creating anything, and is resume-aware throughout —
 // reusing an existing release, never moving an existing tag, and completing a
 // run that died partway. The release body is prose only the agent can write, so
 // it arrives as `--notes-file`, reflowed to single-line paragraphs so it renders
@@ -69,7 +70,7 @@ async function resolveTrunkRelease(deps: Deps, defaultBranch: string): Promise<T
   // except when this release's own tag already points at the very commit we are
   // about to tag. That only happens when an earlier run already cleared this
   // check and tagged trunk, so we are resuming it (the classic case: the tag and
-  // the Release landed, the npm publish failed). Without the carve-out every
+  // the Release landed, then the run died). Without the carve-out every
   // post-tag resume would abort as NOT_MERGED.
   if (taggedSha !== trunkSha && !isNewer(version, versionFromTag(latestTag))) {
     throw new GuardError(
@@ -146,9 +147,7 @@ export async function finalize(
   const { trunkSha, version, tag, title } = await resolveTrunkRelease(deps, defaultBranch);
 
   // Resolve the GitHub release: reuse an existing one, preview it in a dry run,
-  // or tag + create it. An existing release still falls through to the npm
-  // publish below, so a re-run after a release-created-but-npm-publish-failed
-  // partial failure still completes.
+  // or tag + create it.
   const existing = await deps.github.releaseView(tag);
   let releaseUrl: string | null;
   if (existing !== null) {
@@ -185,21 +184,7 @@ export async function finalize(
     releaseUrl = release.url;
   }
 
-  // Publish the run-from-source bundle to npm so the marketplace's npm source
-  // (`/plugin marketplace add macintacos/caret`) resolves this version (EXC-643).
-  // Resume-aware: skip if already on the registry (npm rejects republishing a
-  // version). A dry run previews without side effects, like the release dry run
-  // above — it does not build or pack.
-  let npmPublished = false;
-  if (await deps.npm.isVersionPublished(version)) {
-    deps.io.log(`npm package ${tag} is already published; skipping publish.`);
-  } else if (opts.dryRun) {
-    deps.io.log(`Would build the bundle and npm publish ${version}.`);
-  } else {
-    await deps.npm.publish();
-    deps.io.log(`Published ${version} to npm.`);
-    npmPublished = true;
-  }
+  const npmLive = await deps.npm.isVersionPublished(version);
 
   return {
     phase: "finalize",
@@ -208,7 +193,7 @@ export async function finalize(
     title,
     taggedSha: trunkSha,
     releaseUrl,
-    npmPublished,
+    npmLive,
     dryRun: opts.dryRun,
   };
 }

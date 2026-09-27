@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Cut a caret release: baseline|compute|prepare|finalize (drive via /release-caret)"
+#MISE description="Cut a caret release: baseline|compute|prepare|finalize|publish (drive via /release-caret)"
 #MISE raw_args=true
 # Fresh-clone guard (scripts/bootstrap.sh); `|| exit 1` is its caller contract.
 # shellcheck source=/dev/null

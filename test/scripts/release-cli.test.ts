@@ -173,6 +173,25 @@ describe("release group error discipline (in-process, injected deps)", () => {
     expect(releases.get("v0.1.0")?.notes).toContain("Ships the widget.");
   });
 
+  test("publish refuses to run without --yes or --dry-run", async () => {
+    const { deps, calls } = makeReleaseHarness();
+    const { stdout, exitCode } = await runReleaseInProcess(deps, ["publish"]);
+    expect(exitCode).toBe(1);
+    expect(JSON.parse(stdout).message).toContain("--yes");
+    expect(calls).toEqual([]);
+  });
+
+  test("publish's NOT_LIVE rejection reaches stdout as a typed JSON error", async () => {
+    const { deps } = makeReleaseHarness({
+      latestTag: "v0.1.0",
+      releases: { "v0.1.0": { url: "https://example.test/v0.1.0", isDraft: true } },
+    });
+    const { stdout, exitCode, threw } = await runReleaseInProcess(deps, ["publish", "--yes"]);
+    expect(threw).toBeUndefined();
+    expect(exitCode).toBe(1);
+    expect(JSON.parse(stdout).errorCode).toBe("NOT_LIVE");
+  });
+
   test("an unexpected step error becomes an INTERNAL JSON error on stdout, stack to stderr", async () => {
     const { deps } = makeReleaseHarness();
     // A non-GuardError thrown mid-step: exercised via a collaborator compute calls.
