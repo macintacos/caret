@@ -20,6 +20,6 @@ test("the stage job keeps its id as its display name", () => {
 });
 
 test("the stage job annotates the stage id under the title finalize reads", () => {
-  const runs = workflow.jobs[STAGE_JOB]?.steps.map((s) => s.run ?? "") ?? [];
-  expect(runs.some((r) => r.includes(`title=${STAGE_ID_ANNOTATION}::`))).toBe(true);
+  const runs = workflow.jobs[STAGE_JOB]?.steps.map((step) => step.run ?? "") ?? [];
+  expect(runs.some((script) => script.includes(`title=${STAGE_ID_ANNOTATION}::`))).toBe(true);
 });

@@ -233,7 +233,7 @@ export function makeReleaseHarness(opts: HarnessOptions = {}): ReleaseHarness {
   const releases = new Map<string, { url: string; notes?: string; isDraft?: boolean }>(
     Object.entries(opts.releases ?? {}),
   );
-  const runQueues = new Map(Object.entries(opts.runs ?? {}).map(([sha, q]) => [sha, [...q]]));
+  const runQueues = new Map(Object.entries(opts.runs ?? {}).map(([sha, runs]) => [sha, [...runs]]));
   const github: GitHubOps = {
     async available() {
       return opts.available ?? true;
@@ -254,8 +254,8 @@ export function makeReleaseHarness(opts: HarnessOptions = {}): ReleaseHarness {
       return prs;
     },
     async releaseView(tag) {
-      const r = releases.get(tag);
-      return r === undefined ? null : { url: r.url, isDraft: r.isDraft ?? false };
+      const release = releases.get(tag);
+      return release === undefined ? null : { url: release.url, isDraft: release.isDraft ?? false };
     },
     async releaseCreate({ tag, notes }) {
       calls.push(`releaseCreate:${tag}`);

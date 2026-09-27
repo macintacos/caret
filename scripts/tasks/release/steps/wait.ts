@@ -12,7 +12,7 @@ export async function waitFor<T>(
   probe: () => Promise<{ done: boolean; value: T }>,
 ): Promise<{ done: boolean; value: T }> {
   let last = await probe();
-  for (let i = 1; i < opts.attempts && !last.done; i++) {
+  for (let attempt = 1; attempt < opts.attempts && !last.done; attempt++) {
     await opts.sleep(opts.intervalMs);
     last = await probe();
   }

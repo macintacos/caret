@@ -140,8 +140,8 @@ async function followPublishRun(
   version: string,
 ): Promise<NonNullable<FinalizeResult["approval"]>> {
   const { value: run } = await waitFor({ ...RELEASE_POLL, sleep: deps.sleep }, async () => {
-    const run = await deps.github.publishRun(taggedSha);
-    return { done: run?.status === "completed", value: run };
+    const latest = await deps.github.publishRun(taggedSha);
+    return { done: latest?.status === "completed", value: latest };
   });
   if (run === null) {
     throw new GuardError("CI_NO_RUN", `No publish run found for ${taggedSha}. ${CUT_NEXT_PATCH}`);
