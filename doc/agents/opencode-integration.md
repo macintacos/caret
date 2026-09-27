@@ -333,21 +333,24 @@ cannot go stale and npm's published version says nothing about it.
 
 OpenCode keys that cache by the **verbatim specifier string** from the `plugin` array, one
 directory per entry under `packages/` — `<cache>/opencode/packages/<specifier>/`, honoring
-`XDG_CACHE_HOME` with the same precedence caret's own helper uses. There is no
-`node_modules` segment at that level. The resolved version lives in that directory's
-top-level shim manifest under `dependencies[<package name>]`, and it is an exact version
-rather than a range, so one file read answers "which caret is installed" with no
-`node_modules` walk.
+`XDG_CACHE_HOME` with the same precedence caret's own helper uses. That directory holds a
+top-level shim manifest whose `dependencies[<package name>]` records the **requested**
+spec, and the installed package under `node_modules/<package name>/`. The requested spec
+is exact under OpenCode 1.18.x's empty save prefix but not guaranteed to be, so
+`readCachedCaretVersion` reads the installed `node_modules/@macintacos/caret/package.json`
+`version` first and falls back to the shim value only when nothing is installed. That
+fallback must parse as `X.Y.Z`; a range reads as unknown, never guessed.
 
 Two consequences the probe (`readOpencodeInstallState`) is built around. Because the key
 is the raw string, a bare `@macintacos/caret` and a pinned `@macintacos/caret@latest` are
-two sibling directories that can coexist — so `existingOpencodeCachePackageDirs`
-(`src/adapters/opencode/paths.ts`) *lists* the parent instead of probing one path, and the
-version reported is the first candidate that resolves (bare first, since that is what
-`caret install` writes). And a directory can exist with no manifest entry at all after an
-interrupted install — OpenCode's own installed-check is
-`existsSafe(join(dir, "node_modules", name))`, not the directory itself — so the probe
-treats a resolved version, never directory presence, as proof of install.
+two sibling directories that can coexist — so version reads use **only** the directory
+named by the configured entry's verbatim specifier (`opencodeCachePackageDir`), with no
+sibling fallback. `existingOpencodeCachePackageDirs` (`src/adapters/opencode/paths.ts`)
+*lists* the parent only for the stale-cache clear, which removes every caret directory.
+And a directory can exist with nothing installed after an interrupted install — OpenCode's
+own installed-check is `existsSafe(join(dir, "node_modules", name))`, not the directory
+itself, and the installed-manifest read matches it — so the probe treats a resolved
+version, never directory presence, as proof of install.
 
 ## Runtime resolution + update check (EXC-794)
 
