@@ -28,7 +28,7 @@ afterEach(async () => {
 
 /** The deps every case shares. The upgrade check is wired OFFLINE by default — no suite
  * here may reach npm or read the real OpenCode cache: reads resolve under the temp tree
- * `cacheDir(spec, version)` writes into, and a case that exercises the clear overrides
+ * `cacheDir(spec, requested)` writes into, and a case that exercises the clear overrides
  * `published`/`cacheDirs` with its own fixture. */
 function deps(overrides: InstallOpencodeDeps = {}): InstallOpencodeDeps {
   return {
@@ -51,12 +51,12 @@ const plugins = () => JSON.parse(readFileSync(configJson(), "utf-8")).plugin;
 /** A cache dir shaped like OpenCode's: one directory per verbatim specifier, holding the
  * shim manifest that records caret's requested spec and, when `installed` is given, the
  * installed caret's own manifest. Under the temp dir, never the real cache. */
-function cacheDir(specifier: string, version: string, installed?: string): string {
+function cacheDir(specifier: string, requested: string, installed?: string): string {
   const d = join(dir, "cache", specifier);
   mkdirSync(d, { recursive: true });
   writeFileSync(
     join(d, "package.json"),
-    JSON.stringify({ dependencies: { [CARET_PACKAGE]: version } }),
+    JSON.stringify({ dependencies: { [CARET_PACKAGE]: requested } }),
   );
   if (installed !== undefined) {
     const pkg = join(d, "node_modules", CARET_PACKAGE);
