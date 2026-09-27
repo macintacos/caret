@@ -28,10 +28,8 @@ export function readOpencodeInstallState(): InstallProbe {
   if (!existsSync(dir)) {
     return { pluginVersion: "unknown", pluginEnabled: "unknown", hookInUserSettings: "unknown" };
   }
-  // The entry is read through the first existing config file, as install and doctor's
-  // version check read it — not readCaretInPluginArray's all-files scan — so
-  // pluginVersion agrees with the opencode-caret-version check. An unreadable config
-  // leaves the install state unknown.
+  // First existing config file only, not readCaretInPluginArray's all-files scan, so
+  // pluginVersion agrees with the opencode-caret-version check.
   let entry: string | null;
   try {
     entry = readCaretEntry(resolveConfigFile(dir));
@@ -43,8 +41,7 @@ export function readOpencodeInstallState(): InstallProbe {
     };
   }
   const cached = readEntryCachedVersion(entry);
-  // A range shim or a miss both read as "unknown": only a value that parses as `X.Y.Z`
-  // is reported.
+  // A range shim reads as "unknown", same as a miss.
   const version = cached !== null && parseVersionTriple(cached) !== null ? cached : "unknown";
   return {
     pluginVersion: version,
