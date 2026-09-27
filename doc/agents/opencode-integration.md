@@ -338,8 +338,10 @@ top-level shim manifest whose `dependencies[<package name>]` records the **reque
 spec, and the installed package under `node_modules/<package name>/`. The requested spec
 is exact under OpenCode 1.18.x's empty save prefix but not guaranteed to be, so
 `readCachedCaretVersion` reads the installed `node_modules/@macintacos/caret/package.json`
-`version` first and falls back to the shim value only when nothing is installed. That
-fallback must parse as `X.Y.Z`; a range reads as unknown, never guessed.
+`version` first and falls back to the shim value when the installed manifest yields no
+version: under that empty save prefix the requested spec is the exact version OpenCode
+resolved, so it still names the installed caret. That fallback must parse as `X.Y.Z`; a
+range reads as unknown, never guessed.
 
 Two consequences the probe (`readOpencodeInstallState`) is built around. Because the key
 is the raw string, a bare `@macintacos/caret` and a pinned `@macintacos/caret@latest` are
@@ -349,8 +351,8 @@ sibling fallback. `existingOpencodeCachePackageDirs` (`src/adapters/opencode/pat
 *lists* the parent only for the stale-cache clear, which removes every caret directory.
 And a directory can exist with nothing installed after an interrupted install — OpenCode's
 own installed-check is `existsSafe(join(dir, "node_modules", name))`, not the directory
-itself, and the installed-manifest read matches it — so the probe treats a resolved
-version, never directory presence, as proof of install.
+itself — so the probe treats a resolved version, never directory presence, as proof of
+install.
 
 ## Runtime resolution + update check (EXC-794)
 

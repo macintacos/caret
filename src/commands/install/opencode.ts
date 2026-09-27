@@ -64,7 +64,9 @@ export interface InstallOpencodeDeps {
   packaging?: OpencodePackaging;
   ui?: InstallUI;
   published?: () => Promise<string | null>;
+  /** Resolves the cache dir a plugin entry's version is read from. */
   cacheDir?: (specifier: string) => string;
+  /** Every caret cache dir the stale-cache clear removes. */
   cacheDirs?: () => string[];
   clearCache?: (dirs: readonly string[]) => string[];
   confirm?: (verdict: StaleVerdict) => Promise<boolean | null>;

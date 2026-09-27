@@ -154,3 +154,14 @@ test("a caret entry in any config file is found (scans all; parses jsonc comment
   process.env.OPENCODE_CONFIG_DIR = dir;
   expect(readOpencodeInstallState().hookInUserSettings).toBe(true);
 });
+
+test("an unreadable config reports the install as unknown, never throwing", async () => {
+  await configWithCaret();
+  // resolveConfigFile prefers opencode.jsonc, so a directory there makes the read EISDIR.
+  await mkdir(join(configDir(), "opencode.jsonc"));
+  expect(readOpencodeInstallState()).toEqual({
+    pluginVersion: "unknown",
+    pluginEnabled: "unknown",
+    hookInUserSettings: true,
+  });
+});

@@ -215,37 +215,40 @@ function configWith(entries: string[]): string {
   return path;
 }
 
+/** The verdict for a config carrying `entries`, against a cache under `tmp`. */
+function verdictFor(entries: string[], published: string) {
+  return readUpgradeVerdict({
+    configFile: configWith(entries),
+    cacheDir: (s) => join(tmp, s),
+    published: async () => published,
+  });
+}
+
 test("a pinned config entry is compared against the published version", async () => {
-  expect(
-    await readUpgradeVerdict({
-      configFile: configWith([`${PKG}@0.8.0`]),
-      cacheDir: (s) => join(tmp, s),
-      published: async () => "0.9.0",
-    }),
-  ).toEqual({ kind: "stale-pin", entry: `${PKG}@0.8.0`, pinned: "0.8.0", published: "0.9.0" });
+  expect(await verdictFor([`${PKG}@0.8.0`], "0.9.0")).toEqual({
+    kind: "stale-pin",
+    entry: `${PKG}@0.8.0`,
+    pinned: "0.8.0",
+    published: "0.9.0",
+  });
 });
 
 test("a bare config entry is compared against what OpenCode cached", async () => {
   cacheDir(PKG, shim("0.8.0"));
-  expect(
-    await readUpgradeVerdict({
-      configFile: configWith([PKG]),
-      cacheDir: (s) => join(tmp, s),
-      published: async () => "0.9.0",
-    }),
-  ).toEqual({ kind: "stale-cache", cached: "0.8.0", published: "0.9.0" });
+  expect(await verdictFor([PKG], "0.9.0")).toEqual({
+    kind: "stale-cache",
+    cached: "0.8.0",
+    published: "0.9.0",
+  });
 });
 
 test("a range shim with an installed caret behind npm is a stale cache", async () => {
-  const configFile = configWith([PKG]);
   installed(cacheDir(PKG, shim("^1.1.0")), "1.1.3");
-  expect(
-    await readUpgradeVerdict({
-      configFile,
-      cacheDir: (s) => join(tmp, s),
-      published: async () => "1.2.0",
-    }),
-  ).toEqual({ kind: "stale-cache", cached: "1.1.3", published: "1.2.0" });
+  expect(await verdictFor([PKG], "1.2.0")).toEqual({
+    kind: "stale-cache",
+    cached: "1.1.3",
+    published: "1.2.0",
+  });
 });
 
 test("an absent config file reads as no entry at all", async () => {
@@ -261,33 +264,17 @@ test("an absent config file reads as no entry at all", async () => {
 test("a pinned entry reads its own cache dir, not the bare one", async () => {
   cacheDir(PKG, shim("0.8.1"));
   cacheDir(`${PKG}@latest`, shim("0.2.0"));
-  expect(
-    await readUpgradeVerdict({
-      configFile: configWith([`${PKG}@latest`]),
-      cacheDir: (s) => join(tmp, s),
-      published: async () => "0.8.1",
-    }),
-  ).toEqual(STALE_CACHE);
+  expect(await verdictFor([`${PKG}@latest`], "0.8.1")).toEqual(STALE_CACHE);
 });
 
 test("an entry whose own cache dir is absent is fresh, whatever its siblings hold", async () => {
   cacheDir(PKG, shim("0.2.0"));
-  expect(
-    await readUpgradeVerdict({
-      configFile: configWith([`${PKG}@latest`]),
-      cacheDir: (s) => join(tmp, s),
-      published: async () => "0.8.1",
-    }),
-  ).toEqual({ kind: "fresh" });
+  expect(await verdictFor([`${PKG}@latest`], "0.8.1")).toEqual({ kind: "fresh" });
 });
 
 test("a range shim with nothing installed is unknown, naming the range", async () => {
   cacheDir(PKG, shim("^1.1.0"));
-  const v = await readUpgradeVerdict({
-    configFile: configWith([PKG]),
-    cacheDir: (s) => join(tmp, s),
-    published: async () => "1.2.0",
-  });
+  const v = await verdictFor([PKG], "1.2.0");
   expect(v.kind).toBe("unknown");
   expect(v.kind === "unknown" && v.reason).toContain("^1.1.0");
 });

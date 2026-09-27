@@ -39,7 +39,7 @@ test("caret's cache dirs are the bare dir and its pinned siblings, never a same-
     mkdirSync(join(packages(), "@macintacos", name), { recursive: true });
   }
   withEnv({ XDG_CACHE_HOME: tmp }, () => {
-    expect(existingOpencodeCachePackageDirs()).toEqual(
+    expect(existingOpencodeCachePackageDirs().sort()).toEqual(
       ["caret", "caret@0.7.3", "caret@latest"].map((n) => join(packages(), "@macintacos", n)),
     );
   });
