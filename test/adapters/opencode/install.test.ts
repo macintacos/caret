@@ -189,7 +189,11 @@ test("a --from-local checkout entry reports the checkout's version, enabled", as
   const dir = await checkout("9.9.9");
   await configWithCaret(`file:${dir}`);
   await linkCheckoutCache(`file:${dir}`, dir);
-  expect(readOpencodeInstallState()).toMatchObject({ pluginVersion: "9.9.9", pluginEnabled: true });
+  expect(readOpencodeInstallState()).toEqual({
+    pluginVersion: "9.9.9",
+    pluginEnabled: true,
+    hookInUserSettings: true,
+  });
 });
 
 test("a file: entry that is not a caret checkout is not caret's install", async () => {
@@ -198,8 +202,9 @@ test("a file: entry that is not a caret checkout is not caret's install", async 
   await rm(join(dir, "opencode", "caret.plugin.ts"));
   await configWithCaret(`file:${dir}`);
   await linkCheckoutCache(`file:${dir}`, dir);
-  expect(readOpencodeInstallState()).toMatchObject({
+  expect(readOpencodeInstallState()).toEqual({
     pluginVersion: "unknown",
     pluginEnabled: false,
+    hookInUserSettings: false,
   });
 });

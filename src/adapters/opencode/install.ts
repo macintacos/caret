@@ -15,7 +15,11 @@ import { join } from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
 
 import type { InstallProbe } from "@/adapters/adapter.ts";
-import { readLoadedCaretEntry } from "@/adapters/opencode/entries.ts";
+import {
+  caretEntries,
+  isCaretCheckout,
+  readLoadedCaretEntry,
+} from "@/adapters/opencode/entries.ts";
 import {
   CONFIG_FILENAMES,
   opencodeConfigDir,
@@ -56,30 +60,26 @@ export function readOpencodeInstallState(): InstallProbe {
   };
 }
 
-/** Whether caret is listed in any OpenCode config file's `plugin` array. Scans every
- * candidate config file (so an entry in one isn't masked by a caret-less earlier
- * file), parsing JSONC so a commented config still reads. false when at least one
- * config parses but none list caret; "unknown" only when none is readable. */
+/** Whether any OpenCode config file's `plugin` array lists an entry `caretEntries`
+ * counts as caret's. Scans every candidate config file (so an entry in one isn't masked
+ * by a caret-less earlier file), parsing JSONC so a commented config still reads. false
+ * when at least one config parses but none list caret; "unknown" only when none is
+ * readable. */
 function readCaretInPluginArray(dir: string): boolean | "unknown" {
   let sawConfig = false;
   for (const name of CONFIG_FILENAMES) {
     const path = join(dir, name);
     if (!existsSync(path)) continue;
-    let cfg: { plugin?: unknown } | undefined;
+    let text: string;
     try {
-      cfg = parseJsonc(readFileSync(path, "utf-8")) as { plugin?: unknown } | undefined;
+      text = readFileSync(path, "utf-8");
     } catch {
-      continue; // unreadable/unparseable — try the next candidate
+      continue; // unreadable — try the next candidate
     }
+    const cfg: unknown = parseJsonc(text);
     if (cfg === undefined || cfg === null) continue;
     sawConfig = true;
-    const arr = cfg.plugin;
-    // Loose "caret" substring on purpose (a diagnostics probe, not the exact writer
-    // match): also surfaces a dev/local caret entry (a `bun link` path or a pinned
-    // `@macintacos/caret@x`), so doctor reports "configured" for those too.
-    if (Array.isArray(arr) && arr.some((e) => typeof e === "string" && e.includes("caret"))) {
-      return true;
-    }
+    if (caretEntries(text, isCaretCheckout).length > 0) return true;
   }
   return sawConfig ? false : "unknown";
 }
