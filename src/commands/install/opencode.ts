@@ -64,6 +64,9 @@ export interface InstallOpencodeDeps {
   packaging?: OpencodePackaging;
   ui?: InstallUI;
   published?: () => Promise<string | null>;
+  /** Resolves the cache dir a plugin entry's version is read from. */
+  cacheDir?: (specifier: string) => string;
+  /** Every caret cache dir the stale-cache clear removes. */
   cacheDirs?: () => string[];
   clearCache?: (dirs: readonly string[]) => string[];
   confirm?: (verdict: StaleVerdict) => Promise<boolean | null>;
@@ -249,7 +252,7 @@ function previewLine(verdict: UpgradeVerdict): string {
 
 /** This run's upgrade check: the adapter's read, with the test seams threaded in. */
 async function readVerdict(configFile: string, deps: InstallOpencodeDeps): Promise<UpgradeVerdict> {
-  return readUpgradeVerdict({ configFile, cacheDirs: deps.cacheDirs, published: deps.published });
+  return readUpgradeVerdict({ configFile, cacheDir: deps.cacheDir, published: deps.published });
 }
 
 /** Report the upgrade check, then act on it. Only a stale verdict has anything to do,

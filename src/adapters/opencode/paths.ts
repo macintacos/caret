@@ -120,9 +120,9 @@ export const LEGACY_COMMAND_DIRNAME = "command";
  * may hold a file for a command since dropped, and matching the live set would strand
  * exactly those.
  *
- * Entry types ARE filtered here, unlike in `existingOpencodeCachePackageDirs`: this list
- * is handed to `rmSync`, where a `caret:`-named DIRECTORY throws rather than merely
- * failing a read downstream, and a `caret:demo.md.bak` is not a command OpenCode loads.
+ * Entry types ARE filtered here: `removeFiles` deletes each path with a non-recursive
+ * `rmSync`, so a `caret:`-named DIRECTORY would throw, and a `caret:demo.md.bak` is not
+ * a command OpenCode loads.
  * `!isDirectory()` rather than `isFile()` keeps a symlinked command file sweepable. */
 export function existingLegacyInstallFiles(configDir: string): string[] {
   const plugins = LEGACY_PLUGIN_DIRNAMES.map((d) => join(configDir, d, LEGACY_PLUGIN_FILENAME));
@@ -148,24 +148,22 @@ function opencodeCachePackagesDir(): string {
   return join(xdg || join(homedir(), ".cache"), "opencode", "packages");
 }
 
-/** The cache dir for the BARE `pkg` specifier — what `caret install`'s OpenCode
- * array entry produces, and the prefix every pinned variant extends. */
-export function opencodeCachePackageDir(pkg: string = CARET_PACKAGE): string {
-  return join(opencodeCachePackagesDir(), pkg);
+/** The cache dir for the plugin entry `specifier`, verbatim, pin and all; defaults to
+ * the bare package `caret install` writes. */
+export function opencodeCachePackageDir(specifier: string = CARET_PACKAGE): string {
+  return join(opencodeCachePackagesDir(), specifier);
 }
 
-/** Every cache dir on disk for `pkg`: the bare specifier dir first, then any pinned
- * `<pkg>@<version>` sibling, ordered lexicographically by name — NOT by version, since
- * the caller takes the first candidate that resolves. OpenCode names each dir after the
- * VERBATIM specifier, and a pin's version segment is arbitrary (`@0.7.3`, `@latest`), so
- * listing is the only way to find one. Empty when nothing is listable. */
+/** Every cache dir on disk for `pkg` — the bare specifier dir and each pinned
+ * `<pkg>@<version>` sibling — which the stale-cache clear removes. OpenCode names each
+ * dir after the VERBATIM specifier, and a pin's version segment is arbitrary (`@0.7.3`,
+ * `@latest`), so listing is the only way to find one. Empty when nothing is listable. */
 export function existingOpencodeCachePackageDirs(pkg: string = CARET_PACKAGE): string[] {
   const bare = opencodeCachePackageDir(pkg);
   const parent = dirname(bare);
   const leaf = basename(bare);
-  // Entry types are deliberately not filtered: a symlinked cache dir reports as a
-  // symlink rather than a directory, and a non-directory named like a candidate just
-  // fails its manifest read downstream.
+  // Entry types are deliberately not filtered: the clear removes each with
+  // `rmSync({ recursive, force })`, which takes a symlinked cache dir or a stray file alike.
   let names: string[];
   try {
     names = readdirSync(parent);

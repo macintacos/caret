@@ -40,8 +40,8 @@ afterEach(async () => {
   await rm(tmp, { recursive: true, force: true });
 });
 
-/** A cache dir holding the shim manifest OpenCode's reify writes: the resolved version
- * under the package NAME, with no range prefix. */
+/** A cache dir holding the shim manifest OpenCode's reify writes: the requested spec
+ * under the package NAME, which may be an exact version or a range. */
 function cacheDir(specifier: string, manifest: unknown): string {
   const dir = join(tmp, specifier);
   mkdirSync(dir, { recursive: true });
@@ -49,6 +49,13 @@ function cacheDir(specifier: string, manifest: unknown): string {
   return dir;
 }
 const shim = (version: string) => ({ dependencies: { [PKG]: version } });
+
+/** The caret package OpenCode actually installed under a cache dir. */
+function installed(dir: string, version: string): void {
+  const pkgDir = join(dir, "node_modules", PKG);
+  mkdirSync(pkgDir, { recursive: true });
+  writeFileSync(join(pkgDir, "package.json"), JSON.stringify({ name: PKG, version }));
+}
 
 test("no plugin entry is a fresh install, not a stale one", () => {
   expect(upgradeVerdict({ entry: null, cached: null, published: "0.8.1" })).toEqual({
@@ -145,28 +152,44 @@ test("an unparseable cached version is unknown, not silently current", () => {
 
 // --- the effects: reading the cache, clearing it ---------------------------------
 
-test("the cached version comes from the first candidate whose shim manifest names caret", () => {
-  const stale = cacheDir(`${PKG}@latest`, shim("0.2.0"));
-  const bare = cacheDir(PKG, shim("0.8.1"));
-  expect(readCachedCaretVersion([bare, stale])).toBe("0.8.1");
-  expect(readCachedCaretVersion([stale, bare])).toBe("0.2.0");
+test("the installed caret's version wins over a range in the shim", () => {
+  const dir = cacheDir(PKG, shim("^1.1.0"));
+  installed(dir, "1.1.3");
+  expect(readCachedCaretVersion(dir)).toBe("1.1.3");
 });
 
-test("a cache dir with no manifest, no caret entry, or unparseable JSON reads as null", () => {
+test("the installed caret's version wins over a differing exact shim", () => {
+  const dir = cacheDir(PKG, shim("0.8.1"));
+  installed(dir, "0.9.0");
+  expect(readCachedCaretVersion(dir)).toBe("0.9.0");
+});
+
+test("with nothing installed, an exact shim version is returned", () => {
+  expect(readCachedCaretVersion(cacheDir(PKG, shim("0.8.1")))).toBe("0.8.1");
+});
+
+test("with nothing installed, a range shim is returned verbatim", () => {
+  expect(readCachedCaretVersion(cacheDir(PKG, shim("^1.1.0")))).toBe("^1.1.0");
+});
+
+test("an installed manifest without a version falls back to the shim", () => {
+  const dir = cacheDir(PKG, shim("0.8.1"));
+  const pkgDir = join(dir, "node_modules", PKG);
+  mkdirSync(pkgDir, { recursive: true });
+  writeFileSync(join(pkgDir, "package.json"), JSON.stringify({ name: PKG }));
+  expect(readCachedCaretVersion(dir)).toBe("0.8.1");
+});
+
+test("an empty dir, a non-caret shim, or unparseable JSON reads as null", () => {
   const empty = join(tmp, "empty");
   mkdirSync(empty, { recursive: true });
   const other = cacheDir("other", { dependencies: { "opencode-wakatime": "1.0.0" } });
   const broken = join(tmp, "broken");
   mkdirSync(broken, { recursive: true });
   writeFileSync(join(broken, "package.json"), "{ not json");
-  expect(readCachedCaretVersion([empty, other, broken])).toBeNull();
-  expect(readCachedCaretVersion([])).toBeNull();
-});
-
-test("an interrupted install — a manifest whose caret entry is missing — falls through", () => {
-  const partial = cacheDir(PKG, { name: "opencode-shim" });
-  const pinned = cacheDir(`${PKG}@0.7.3`, shim("0.7.3"));
-  expect(readCachedCaretVersion([partial, pinned])).toBe("0.7.3");
+  expect(readCachedCaretVersion(empty)).toBeNull();
+  expect(readCachedCaretVersion(other)).toBeNull();
+  expect(readCachedCaretVersion(broken)).toBeNull();
 });
 
 test("clearing removes every cache dir that existed and reports exactly those", () => {
@@ -192,34 +215,68 @@ function configWith(entries: string[]): string {
   return path;
 }
 
+/** The verdict for a config carrying `entries`, against a cache under `tmp`. */
+function verdictFor(entries: string[], published: string) {
+  return readUpgradeVerdict({
+    configFile: configWith(entries),
+    cacheDir: (s) => join(tmp, s),
+    published: async () => published,
+  });
+}
+
 test("a pinned config entry is compared against the published version", async () => {
-  expect(
-    await readUpgradeVerdict({
-      configFile: configWith([`${PKG}@0.8.0`]),
-      cacheDirs: () => [],
-      published: async () => "0.9.0",
-    }),
-  ).toEqual({ kind: "stale-pin", entry: `${PKG}@0.8.0`, pinned: "0.8.0", published: "0.9.0" });
+  expect(await verdictFor([`${PKG}@0.8.0`], "0.9.0")).toEqual({
+    kind: "stale-pin",
+    entry: `${PKG}@0.8.0`,
+    pinned: "0.8.0",
+    published: "0.9.0",
+  });
 });
 
 test("a bare config entry is compared against what OpenCode cached", async () => {
-  expect(
-    await readUpgradeVerdict({
-      configFile: configWith([PKG]),
-      cacheDirs: () => [cacheDir(PKG, shim("0.8.0"))],
-      published: async () => "0.9.0",
-    }),
-  ).toEqual({ kind: "stale-cache", cached: "0.8.0", published: "0.9.0" });
+  cacheDir(PKG, shim("0.8.0"));
+  expect(await verdictFor([PKG], "0.9.0")).toEqual({
+    kind: "stale-cache",
+    cached: "0.8.0",
+    published: "0.9.0",
+  });
+});
+
+test("a range shim with an installed caret behind npm is a stale cache", async () => {
+  installed(cacheDir(PKG, shim("^1.1.0")), "1.1.3");
+  expect(await verdictFor([PKG], "1.2.0")).toEqual({
+    kind: "stale-cache",
+    cached: "1.1.3",
+    published: "1.2.0",
+  });
 });
 
 test("an absent config file reads as no entry at all", async () => {
   expect(
     await readUpgradeVerdict({
       configFile: join(tmp, "no-such-config.json"),
-      cacheDirs: () => [],
+      cacheDir: (s) => join(tmp, s),
       published: async () => "0.9.0",
     }),
   ).toEqual({ kind: "fresh" });
+});
+
+test("a pinned entry reads its own cache dir, not the bare one", async () => {
+  cacheDir(PKG, shim("0.8.1"));
+  cacheDir(`${PKG}@latest`, shim("0.2.0"));
+  expect(await verdictFor([`${PKG}@latest`], "0.8.1")).toEqual(STALE_CACHE);
+});
+
+test("an entry whose own cache dir is absent is fresh, whatever its siblings hold", async () => {
+  cacheDir(PKG, shim("0.2.0"));
+  expect(await verdictFor([`${PKG}@latest`], "0.8.1")).toEqual({ kind: "fresh" });
+});
+
+test("a range shim with nothing installed is unknown, naming the range", async () => {
+  cacheDir(PKG, shim("^1.1.0"));
+  const v = await verdictFor([PKG], "1.2.0");
+  expect(v.kind).toBe("unknown");
+  expect(v.kind === "unknown" && v.reason).toContain("^1.1.0");
 });
 
 // ---- hasCaretPluginEntry: the question doctor asks before paying for the check ----

@@ -1,9 +1,9 @@
 // OpenCode's install probe for the doctor command: a best-effort, strictly
 // read-only snapshot of caret's OpenCode install. caret installs as a `plugin` array
 // entry (@macintacos/caret) that OpenCode installs into its own cache, one
-// `packages/<specifier>/` dir per array entry with the resolved version recorded in
-// that dir's top-level shim manifest. Mirrors claude/codex install.ts's
-// degrade-to-"unknown" discipline — every field degrades rather than throwing, so
+// `packages/<specifier>/` dir per array entry with the installed version recorded in
+// that dir's `node_modules/@macintacos/caret/package.json`. Mirrors claude/codex
+// install.ts's degrade-to-"unknown" discipline — every field degrades rather than throwing, so
 // doctor always renders. Reads only caret's own cache dirs and the user's plugin
 // array — never any other config key.
 
@@ -15,10 +15,11 @@ import { parse as parseJsonc } from "jsonc-parser";
 import type { InstallProbe } from "@/adapters/adapter.ts";
 import {
   CONFIG_FILENAMES,
-  existingOpencodeCachePackageDirs,
   opencodeConfigDir,
+  resolveConfigFile,
 } from "@/adapters/opencode/paths.ts";
-import { readCachedCaretVersion } from "@/adapters/opencode/upgrade.ts";
+import { readCaretEntry, readEntryCachedVersion } from "@/adapters/opencode/upgrade.ts";
+import { parseVersionTriple } from "@/lib/semver.ts";
 
 /** Best-effort read of caret's OpenCode install state. Every miss degrades to
  * "unknown". */
@@ -27,9 +28,21 @@ export function readOpencodeInstallState(): InstallProbe {
   if (!existsSync(dir)) {
     return { pluginVersion: "unknown", pluginEnabled: "unknown", hookInUserSettings: "unknown" };
   }
-  // The probe's vocabulary is "unknown", the upgrade module's is null; the boundary is
-  // this one coercion.
-  const version = readCachedCaretVersion(existingOpencodeCachePackageDirs()) ?? "unknown";
+  // First existing config file only, not readCaretInPluginArray's all-files scan, so
+  // pluginVersion agrees with the opencode-caret-version check.
+  let entry: string | null;
+  try {
+    entry = readCaretEntry(resolveConfigFile(dir));
+  } catch {
+    return {
+      pluginVersion: "unknown",
+      pluginEnabled: "unknown",
+      hookInUserSettings: readCaretInPluginArray(dir),
+    };
+  }
+  const cached = readEntryCachedVersion(entry);
+  // A range shim reads as "unknown", same as a miss.
+  const version = cached !== null && parseVersionTriple(cached) !== null ? cached : "unknown";
   return {
     pluginVersion: version,
     // A `packages/<specifier>/` dir survives an interrupted install, so presence alone
