@@ -39,9 +39,10 @@ setup() {
 # A fake caret install at $1 declaring version $2. Its bin/caret echoes a tag and
 # the PATH it inherited, so an assertion names which root was exec'd and proves
 # the launcher's one load-bearing line — bun's dir prepended for a supervisor
-# whose PATH is bare.
+# whose PATH is bare. It carries a UI build, so the root is complete.
 seed_caret() {
-  mkdir -p "$1/bin"
+  mkdir -p "$1/bin" "$1/ui/dist"
+  printf '<!doctype html>\n' >"$1/ui/dist/index.html"
   printf '{\n  "version": "%s"\n}\n' "$2" >"$1/package.json"
   cat >"$1/bin/caret" <<CARET
 #!$BASH_BIN
@@ -190,6 +191,52 @@ launcher_supervised() { CARET_SUPERVISED=1 launcher "$@"; }
   seed_caret "$home/.claude/plugins/cache/caret/caret/0.14.0" 0.14.0
   chmod -x "$home/.claude/plugins/cache/caret/caret/0.14.0/bin/caret"
   run -78 launcher
+}
+
+@test "a root with no UI build loses to a complete lower version" {
+  stub_bun
+  seed_caret "$home/.claude/plugins/cache/caret/caret/0.14.0" 0.14.0
+  local partial="$home/.cache/opencode/packages/@macintacos/caret@latest/node_modules/@macintacos/caret"
+  seed_caret "$partial" 0.15.0
+  rm "$partial/ui/dist/index.html"
+  run -0 launcher
+  [[ "$output" == *"CARET 0.14.0"* ]]
+}
+
+@test "a pin with no UI build falls through to semver-max" {
+  stub_bun
+  seed_caret "$home/.claude/plugins/cache/caret/caret/0.14.0" 0.14.0
+  seed_caret "$home/checkout" 0.1.0
+  rm "$home/checkout/ui/dist/index.html"
+  printf '%s\n' "$home/checkout" >"$home/.local/state/caret/launcher/pinned-root"
+  run -0 launcher
+  [[ "$output" == *"CARET 0.14.0"* ]]
+}
+
+@test "a pin with a compiled binary but no ui/dist stays pinned" {
+  stub_bun
+  seed_caret "$home/.claude/plugins/cache/caret/caret/0.14.0" 0.14.0
+  seed_caret "$home/checkout" 0.1.0
+  rm "$home/checkout/ui/dist/index.html"
+  cp "$home/checkout/bin/caret" "$home/checkout/bin/caret-native"
+  printf '%s\n' "$home/checkout" >"$home/.local/state/caret/launcher/pinned-root"
+  run -0 launcher
+  [[ "$output" == *"CARET 0.1.0"* ]]
+}
+
+# Mirrors the no-runnable-bin/caret case above.
+@test "only UI-less roots exit 78 without evicting or re-probing" {
+  stub_bun
+  stub_service
+  printf 'dev.excessive.caret\n' >"$home/.local/state/caret/launcher/service"
+  local partial="$home/.claude/plugins/cache/caret/caret/0.14.0"
+  seed_caret "$partial" 0.14.0
+  rm "$partial/ui/dist/index.html"
+  local start=$SECONDS
+  run -78 launcher
+  [[ "$output" == *"$partial"* ]]
+  [ -e "$home/.local/state/caret/launcher" ]
+  [ $((SECONDS - start)) -lt 5 ]
 }
 
 @test "no caret anywhere evicts the launcher, its records, and its service unit" {

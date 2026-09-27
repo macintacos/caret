@@ -66,15 +66,21 @@ read_record() {
 # release, so 0.15.0-rc.1 would beat 0.15.0. caret publishes no prereleases.
 highest() { sort -t. -k1,1n -k2,2n -k3,3n | tail -1 | cut -f2-; }
 
-# A candidate is a caret when it ships an executable bin/caret — the one file
-# every install method carries, tested the way it is used, since a non-executable
-# one would exec-fail at 126 and the supervisor would respawn into it forever.
+# bin/caret-native embeds its UI at compile time; the bundle serves ui/dist, so a
+# half-installed one would answer every UI request with ENOENT. A non-executable
+# bin/caret would exec-fail at 126 and the supervisor would respawn into it forever.
+# Keep in sync with isLauncherPinned (src/daemon/lifecycle.ts).
+root_runnable() {
+  [ -x "$1/bin/caret" ] || return 1
+  [ -x "$1/bin/caret-native" ] || [ -f "$1/ui/dist/index.html" ]
+}
+
 # Version comes from package.json, never the directory name: OpenCode names its
 # dir after the verbatim `plugin` specifier. The key is anchored so a minified
 # manifest yields nothing rather than a later key's value — a miss falls into the
 # branch that names the directory, a wrong version picks the wrong caret.
 candidate_version() {
-  [ -x "$1/bin/caret" ] || return 1
+  root_runnable "$1" || return 1
   sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$1/package.json" 2>/dev/null | head -1
 }
 
@@ -99,7 +105,7 @@ candidates() {
 resolve_root() {
   local pin
   pin="$(read_record "$records/pinned-root" || true)"
-  if [ -n "$pin" ] && [ -x "$pin/bin/caret" ]; then
+  if [ -n "$pin" ] && root_runnable "$pin"; then
     printf '%s' "$pin"
     return 0
   fi
@@ -176,7 +182,7 @@ evict() {
 # Only under a supervisor: a hand-run launcher keeps its diagnostics on the terminal.
 if [ "${CARET_SUPERVISED:-}" = 1 ]; then open_daemon_log; fi
 
-# Only a total miss re-probes. A populated version dir with no runnable bin/caret
+# Only a total miss re-probes. A populated version dir with no runnable caret
 # is far more likely a bad install than an extraction caught mid-flight, and that
 # path is recoverable with `caret install`; an empty cache is the one whose branch
 # deletes things, so it is the one worth waiting on.
@@ -190,7 +196,7 @@ done
 if [ -z "$root" ]; then
   found="$(candidate_dirs)"
   if [ -z "$found" ]; then evict || true; fi
-  printf 'caret-launcher: no runnable bin/caret under any of:\n%s\n' \
+  printf 'caret-launcher: no runnable caret (an executable bin/caret and a UI build) under any of:\n%s\n' \
     "${found:-(no install directories at all)}" >&2
   printf 'caret-launcher: run: caret install — to restore the service.\n' >&2
   stop_agent

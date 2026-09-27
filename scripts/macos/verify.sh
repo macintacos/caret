@@ -28,7 +28,9 @@ failed=0
 # launcher's stop_agent for the terminal-exit section below; evict() cannot fire beside it,
 # since its branch needs candidate_dirs empty and the version directory here populates it.
 caret_root="$home/.claude/plugins/cache/caret/caret/0.1.0"
-mkdir -p "$caret_root/bin" "$home/bin" "$home/.local/state/caret/launcher"
+mkdir -p "$caret_root/bin" "$caret_root/ui/dist" "$home/bin" "$home/.local/state/caret/launcher"
+# root_runnable needs the UI build beside bin/caret.
+: >"$caret_root/ui/dist/index.html"
 : >"$home/spawns"
 # Multi-line, because candidate_version() anchors its sed at line start.
 printf '{\n  "version": "0.1.0"\n}\n' >"$caret_root/package.json"

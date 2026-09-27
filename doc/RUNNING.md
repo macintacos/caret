@@ -311,7 +311,9 @@ Every unit runs `$XDG_STATE_HOME/caret/bin/caret daemon`. That file is
 `bin/caret-launcher`, which chooses what to run each time it starts:
 
 - **caret** — the version a `--from-local` build pinned, else the newest one installed
-  across Claude Code's plugin cache and OpenCode's package cache.
+  across Claude Code's plugin cache and OpenCode's package cache. A caret missing its
+  executable `bin/caret`, or any UI build (`ui/dist`, or the one a compiled
+  `bin/caret-native` embeds), is skipped.
 - **bun** — the one recorded at install, else the first found in `~/.bun/bin`,
   `/opt/homebrew/bin`, `/usr/local/bin`, mise's shims and installs, then `~/.asdf/shims`.
 
