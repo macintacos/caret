@@ -370,8 +370,8 @@ registers none where there isn't one.
 Alongside the agents, `--uninstall` removes the service's unit file, the launcher, and the
 records the launcher reads, and caret's own copy under `~/.local/state/caret/roots/`,
 keeping your reviews. The launcher removes the same things itself when it finds no caret
-anywhere, caret's own copy included, after looking twice more, five seconds apart. When
-caret is installed but can't run, it stops the service instead (see
+anywhere (its own copy counts), after looking twice more, five seconds apart. When caret
+is installed but can't run, it stops the service instead (see
 [When the daemon exits](#when-the-daemon-exits)). `caret install` brings back either.
 
 ## Logging & Debugging

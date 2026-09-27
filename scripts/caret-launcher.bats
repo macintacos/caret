@@ -67,6 +67,17 @@ stub_service() {
   done
 }
 
+# An installed service: the stubs, bin/, the `service` record, and its unit file,
+# whose path lands in $unit.
+seed_service() {
+  stub_service
+  mkdir -p "$home/.local/state/caret/bin"
+  printf 'dev.excessive.caret\n' >"$home/.local/state/caret/launcher/service"
+  unit="$(unit_path dev.excessive.caret)"
+  mkdir -p "$(dirname "$unit")"
+  touch "$unit"
+}
+
 # BSD and GNU stat disagree on the flag. GNU first, because its `-f` prints file
 # system status on stdout rather than failing cleanly, which would poison the
 # capture; BSD rejects `-c` outright.
@@ -240,13 +251,7 @@ launcher_supervised() { CARET_SUPERVISED=1 launcher "$@"; }
 }
 
 @test "no caret anywhere evicts the launcher, its records, and its service unit" {
-  stub_service
-  mkdir -p "$home/.local/state/caret/bin"
-  printf 'dev.excessive.caret\n' >"$home/.local/state/caret/launcher/service"
-  local unit
-  unit="$(unit_path dev.excessive.caret)"
-  mkdir -p "$(dirname "$unit")"
-  touch "$unit"
+  seed_service
   mkdir -p "$home/.local/state/caret/roots"
   run -0 launcher
   [ ! -e "$unit" ]
@@ -285,13 +290,7 @@ launcher_supervised() { CARET_SUPERVISED=1 launcher "$@"; }
 
 @test "an owned root alone is run, not evicted" {
   stub_bun
-  stub_service
-  mkdir -p "$home/.local/state/caret/bin"
-  printf 'dev.excessive.caret\n' >"$home/.local/state/caret/launcher/service"
-  local unit
-  unit="$(unit_path dev.excessive.caret)"
-  mkdir -p "$(dirname "$unit")"
-  touch "$unit"
+  seed_service
   seed_caret "$home/.local/state/caret/roots/1.1.0" 1.1.0
   run -0 launcher
   [[ "$output" == *"CARET 1.1.0"* ]]
@@ -300,13 +299,7 @@ launcher_supervised() { CARET_SUPERVISED=1 launcher "$@"; }
 }
 
 @test "a dot-prefixed dir under the owned roots is never a candidate" {
-  stub_service
-  mkdir -p "$home/.local/state/caret/bin"
-  printf 'dev.excessive.caret\n' >"$home/.local/state/caret/launcher/service"
-  local unit
-  unit="$(unit_path dev.excessive.caret)"
-  mkdir -p "$(dirname "$unit")"
-  touch "$unit"
+  seed_service
   seed_caret "$home/.local/state/caret/roots/.1.1.0.123.tmp" 1.1.0
   run -0 launcher
   [ ! -e "$unit" ]

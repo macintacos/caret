@@ -4,10 +4,11 @@
 // nowhere, so an install nobody could ask leaves the machine as it found it.
 // `--uninstall` stays its own entry point because it removes caret from every agent too.
 //
-// Two facts are only reliably available here. `serviceEnvironment(process.env)` captures
+// Three facts are only reliably available here. `serviceEnvironment(process.env)` captures
 // the shell's world-defining variables, which a supervisor-started daemon inherits none
-// of; and installLauncher records the `bun` this install is running under when there is
-// one — a compiled install records nothing and the launcher searches.
+// of; installLauncher records the `bun` this install is running under when there is
+// one — a compiled install records nothing and the launcher searches; and the installing
+// root, which bunx deletes on exit, is still there for installLauncher to copy.
 
 import {
   type LauncherDeps,
@@ -43,8 +44,10 @@ export interface ServiceStepDeps {
    * daemon holds the port. */
   watch?: ServiceWatch;
   /** What the launcher will start, answered the way bin/caret-launcher answers it — wired
-   * by src/cli.ts. Absent, the step names no root: the real one reads Claude's and
-   * OpenCode's caches under the real HOME, which no test should. */
+   * by src/cli.ts. A root is named in a cycling install's announcement; `null` means
+   * nothing is runnable, so the step warns and skips the restart; absent (or throwing),
+   * the step carries on naming no root. The real one reads Claude's and OpenCode's
+   * caches under the real HOME, which no test should. */
   launcherRoot?: () => LauncherRoot | null;
 }
 
@@ -272,19 +275,19 @@ export async function reconcileService(
     // A draining daemon keeps answering until it lets the port go, so remember which
     // instance the restart replaces.
     const replaced = cycles && watch ? (await watch.health(baseUrl))?.instanceId : undefined;
-    if (cycles) {
-      await manager.restart();
-      pruneOwnedRoots();
-    }
-
+    if (cycles) await manager.restart();
     // ponytail: a no-cycle install over an older daemon waits the full window before
     // warning; stop at the first answer when nothing cycled if that ever bites.
-    if (watch && !(await settleService(baseUrl, watch, replaced, cycles, ui))) return;
+    const settled = !watch || (await settleService(baseUrl, watch, replaced, cycles, ui));
+    // After the settle, the daemon the restart replaced no longer serves from its root.
+    if (cycles) pruneOwnedRoots();
+    if (!settled) return;
 
     // One short line per fact: clack draws its gutter only on explicit breaks.
     const announcement = [
       `The review UI now stays up at ${reviewUrl}`,
-      next && `It starts caret ${next.version} from ${next.root}.`,
+      // Only a cycle makes the prediction the serving caret; "ready" alone doesn't.
+      cycles && next && `It starts caret ${next.version} from ${next.root}.`,
       `It's listed in ${visibleIn}.`,
       `To turn it off, run \`caret install\` and answer "I'll run it myself".`,
       visibleToggleCaveat,
@@ -293,12 +296,13 @@ export async function reconcileService(
   });
 }
 
-/** The seam's prediction, or undefined when there is none or it throws: a bug in it must
- * never cost the restart. */
+/** The seam's prediction: a root, `null` when nothing is runnable (skip the restart), or
+ * undefined when there is no prediction — no seam, or it threw. */
 function predictLauncherRoot(deps: ServiceStepDeps): LauncherRoot | null | undefined {
   try {
     return deps.launcherRoot?.();
   } catch {
+    // A bug in the prediction must never cost the restart.
     return undefined;
   }
 }

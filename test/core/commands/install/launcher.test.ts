@@ -1,10 +1,11 @@
 // The launcher installer's contract: the shipped script lands executable at the stable
 // path a service unit names, and the `bun` it should prefer is recorded where the script
-// looks for it. The source is a fixture, so none of this needs a resolvable caret root.
+// looks for it. The suite also covers the owned copy of the published caret — staging and
+// pruning it — and the candidate list and pick that mirror the launcher's own. Sources are
+// fixtures, so none of this needs a resolvable caret root.
 
 import { expect, test } from "bun:test";
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -21,10 +22,11 @@ import { manifest, rootAt, runnableRoot } from "@test/support/caret-root.ts";
 import { setupTempStateDir, withEnv } from "@test/support/env.ts";
 import {
   installLauncher,
-  isSourceCheckout,
+  type LauncherCandidate,
   launcherCandidateDirs,
   pickLauncherRoot,
   pruneOwnedRoots,
+  publishedRoot,
   uninstallLauncher,
 } from "@/commands/install/launcher.ts";
 import {
@@ -37,6 +39,7 @@ import {
   stateDir,
 } from "@/config/paths.ts";
 import { isRunnableRoot } from "@/daemon/lifecycle.ts";
+import { VERSION } from "@/lib/build-id.ts";
 
 const xdgStateHome = setupTempStateDir("caret-launcher-");
 
@@ -168,35 +171,26 @@ test("the default source names a script this repo actually ships", () => {
 
 /** A published caret's package root: the npm `files` set, plus a node_modules the copy
  * must leave behind. */
-function packageRoot(opts: { ui?: boolean } = {}): { root: string; version: string } {
-  const root = mkdtempSync(join(tmpdir(), "caret-pkg-"));
-  writeFileSync(
-    join(root, "package.json"),
-    JSON.stringify({ version: "1.1.0", files: ["dist/", "ui/dist/", "bin/caret"] }, null, 2),
+function packageRoot(opts: { ui?: boolean; files?: string[] } = {}): {
+  root: string;
+  version: string;
+} {
+  const files = opts.files ?? ["dist/", "ui/dist/", "bin/caret"];
+  const root = runnableRoot(
+    mkdtempSync(join(tmpdir(), "caret-pkg-")),
+    JSON.stringify({ version: "1.1.0", files }, null, 2),
   );
-  mkdirSync(join(root, "bin"));
-  writeFileSync(join(root, "bin", "caret"), SCRIPT);
-  chmodSync(join(root, "bin", "caret"), 0o755);
   mkdirSync(join(root, "dist"));
   writeFileSync(join(root, "dist", "cli.js"), "");
-  if (opts.ui !== false) {
-    mkdirSync(join(root, "ui", "dist"), { recursive: true });
-    writeFileSync(join(root, "ui", "dist", "index.html"), "");
-  }
+  if (opts.ui === false) rmSync(join(root, "ui"), { recursive: true });
   mkdirSync(join(root, "node_modules", "y"), { recursive: true });
   return { root, version: "1.1.0" };
 }
 
 /** An owned root the launcher would run, or with `runnable: false` one it would skip. */
 function seedOwnedRoot(version: string, runnable = true): string {
-  const dir = join(ownedRootsDir(), version);
-  mkdirSync(join(dir, "bin"), { recursive: true });
-  writeFileSync(join(dir, "bin", "caret"), SCRIPT);
-  chmodSync(join(dir, "bin", "caret"), 0o755);
-  if (runnable) {
-    mkdirSync(join(dir, "ui", "dist"), { recursive: true });
-    writeFileSync(join(dir, "ui", "dist", "index.html"), "");
-  }
+  const dir = runnableRoot(join(ownedRootsDir(), version), manifest(version));
+  if (!runnable) rmSync(join(dir, "ui"), { recursive: true });
   return dir;
 }
 
@@ -259,6 +253,12 @@ test("a source the launcher could not run stages nothing", () => {
   expect(existsSync(ownedRootsDir())).toBe(false);
 });
 
+test("a copy its files set leaves unrunnable is never staged, and leaves nothing behind", () => {
+  installLauncher({ source: shippedScript, ownedRoot: () => packageRoot({ files: ["bin/"] }) });
+
+  expect(existsSync(ownedRootsDir()) ? readdirSync(ownedRootsDir()) : []).toEqual([]);
+});
+
 test("pruning keeps only the highest runnable owned root", () => {
   seedOwnedRoot("1.0.2");
   seedOwnedRoot("1.1.0");
@@ -270,20 +270,38 @@ test("pruning keeps only the highest runnable owned root", () => {
   expect(readdirSync(ownedRootsDir())).toEqual(["1.1.0"]);
 });
 
+test("pruning keeps the root the launcher picks, not the one its dir name ranks highest", () => {
+  seedOwnedRoot("0.15.0");
+  seedOwnedRoot("0.15.0-rc.1");
+  const picked = pickLauncherRoot(
+    null,
+    ["0.15.0", "0.15.0-rc.1"].map((v) => mine(join(ownedRootsDir(), v))),
+  );
+
+  pruneOwnedRoots();
+
+  expect(readdirSync(ownedRootsDir())).toEqual(["0.15.0-rc.1"]);
+  expect(picked?.root).toBe(join(ownedRootsDir(), "0.15.0-rc.1"));
+});
+
 test("pruning with no owned roots is not an error", () => {
   expect(() => pruneOwnedRoots()).not.toThrow();
 });
 
-test("a root carrying src/cli.ts is a checkout, never a published caret", () => {
+test("only a bundle run from a published tarball has a root to keep", () => {
   const { root } = packageRoot();
-  mkdirSync(join(root, "src"));
-  writeFileSync(join(root, "src", "cli.ts"), "");
+  const checkout = packageRoot().root;
+  mkdirSync(join(checkout, "src"));
+  writeFileSync(join(checkout, "src", "cli.ts"), "");
 
-  expect(isSourceCheckout(root)).toBe(true);
+  expect(publishedRoot("bundle", () => root)).toEqual({ root, version: VERSION });
+  expect(publishedRoot("bundle", () => checkout)).toBeUndefined();
+  expect(publishedRoot("dev", () => root)).toBeUndefined();
+  expect(publishedRoot("binary", () => root)).toBeUndefined();
 });
 
-const agent = (dir: string) => ({ dir, owned: false });
-const mine = (dir: string) => ({ dir, owned: true });
+const agent = (dir: string): LauncherCandidate => ({ dir, owned: false });
+const mine = (dir: string): LauncherCandidate => ({ dir, owned: true });
 
 test("an owned root newer than every agent's is the one the launcher starts", () => {
   const ownedRoot = rootAt("1.1.0");
@@ -301,9 +319,12 @@ test("an agent's root newer than the owned one is the one the launcher starts", 
 });
 
 test("an agent's root wins a version tie with the owned root", () => {
-  const claude = rootAt("1.1.0");
+  // The agent's path sorts first, so only the rank can make it win.
+  const base = mkdtempSync(join(tmpdir(), "caret-tie-"));
+  const claude = runnableRoot(join(base, "a", "1.1.0"), manifest("1.1.0"));
+  const ownedRoot = runnableRoot(join(base, "z", "1.1.0"), manifest("1.1.0"));
 
-  expect(pickLauncherRoot(null, [agent(claude), mine(rootAt("1.1.0"))])?.root).toBe(claude);
+  expect(pickLauncherRoot(null, [agent(claude), mine(ownedRoot)])?.root).toBe(claude);
 });
 
 test("a runnable pin beats a higher candidate, and a non-runnable pin falls through", () => {

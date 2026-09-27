@@ -11,15 +11,10 @@ import { manifest, rootAt, runnableRoot } from "@test/support/caret-root.ts";
 import { withEnv } from "@test/support/env.ts";
 import { fakeServiceTarget } from "@test/support/service-manager.ts";
 import { installExitCode, runInstallSubcommand } from "@/commands/install/index.ts";
-import {
-  installLauncher,
-  launcherCandidateDirs,
-  pickLauncherRoot,
-} from "@/commands/install/launcher.ts";
+import { installLauncher, prodLauncherRoot } from "@/commands/install/launcher.ts";
 import { INSTALL_TARGET_IDS, type InstallTarget } from "@/commands/install/targets.ts";
 import { recordingUI, silentUI } from "@/commands/install/ui.ts";
 import { ownedRootsDir } from "@/config/paths.ts";
-import { readPinnedRoot } from "@/daemon/lifecycle.ts";
 import { RUMDL_VERSION } from "@/plan/rumdl.ts";
 
 /** Keep a test off the real rumdl download: without this seam the command falls through
@@ -560,7 +555,6 @@ test("--refresh leaves the service a root at the installing caret that outlives 
   const installing = rootAt("1.1.0");
   const launcherSource = join(dir, "caret-launcher");
   await Bun.write(launcherSource, "#!/usr/bin/env bash\n");
-  const predict = () => pickLauncherRoot(readPinnedRoot(), launcherCandidateDirs());
   const env = {
     XDG_STATE_HOME: dir,
     CARET_CONFIG_FILE: join(dir, "config.toml"),
@@ -585,7 +579,7 @@ test("--refresh leaves the service a root at the installing caret that outlives 
             bunPath: "/opt/bun/bin/bun",
             ownedRoot: () => ({ root: installing, version: "1.1.0" }),
           }),
-        launcherRoot: predict,
+        launcherRoot: prodLauncherRoot,
       },
     ).then(() => ({ calls: service.calls, transcript: ui.events.join("\n") }));
   };
@@ -599,6 +593,6 @@ test("--refresh leaves the service a root at the installing caret that outlives 
     await rm(installing, { recursive: true, force: true });
     await install(false);
     expect(existsSync(join(ownedRootsDir(), "1.1.0"))).toBe(true);
-    expect(predict()?.version).toBe("1.1.0");
+    expect(prodLauncherRoot()?.version).toBe("1.1.0");
   });
 });

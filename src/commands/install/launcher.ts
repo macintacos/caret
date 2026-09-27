@@ -2,7 +2,9 @@
 // one absolute executable that never moves, so caret owns a copy of bin/caret-launcher at
 // $XDG_STATE_HOME/caret/bin/caret and leaves the version resolution to it, at exec time
 // (EXC-1160). The install's service step is the caller: the launcher lands before the unit
-// that names it, and goes with it on `--uninstall`.
+// that names it, and goes with it on `--uninstall`. It also keeps caret install's own copy
+// of the published caret under ownedRootsDir(), and mirrors the launcher's choice of root
+// so the install can name it.
 
 import {
   chmodSync,
@@ -10,6 +12,7 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
   renameSync,
@@ -17,7 +20,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import { z } from "zod";
 
@@ -33,13 +36,13 @@ import {
   launcherServiceFile,
   ownedRootsDir,
 } from "@/config/paths.ts";
-import { isRunnableRoot } from "@/daemon/lifecycle.ts";
+import { isRunnableRoot, readPinnedRoot } from "@/daemon/lifecycle.ts";
 import { buildKind, VERSION } from "@/lib/build-id.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
-import { isNewer } from "@/lib/semver.ts";
+import type { BuildKind } from "@/lib/types.ts";
 
-/** What to record, plus the injection seams for tests: the `bun` to record and the
- * shipped script to copy, so the whole function runs against a temp state dir without a
+/** What to record, plus the injection seams for tests: the `bun` to record, the shipped
+ * script to copy, and the published caret to keep a copy of, so the whole function runs against a temp state dir without a
  * resolvable caret root. `source` is a thunk because resolveCaretRoot() throws, which a
  * default argument would raise from inside this call rather than where the root actually
  * could not be found. */
@@ -55,71 +58,86 @@ export interface LauncherDeps {
   source?: () => string;
   /** The published caret this install runs as, to keep a copy of under ownedRootsDir():
    * bunx runs it from a temp install that is gone once this process exits. Undefined for
-   * anything but an npm bundle — a dev run, a checkout's dist, a compiled binary. */
+   * anything but an npm bundle — a dev run, a checkout's dist, a compiled binary. Absent,
+   * the install resolves it itself. */
   ownedRoot?: () => LauncherRoot | undefined;
 }
 
-const PackageFiles = z.object({ files: z.array(z.string()).default([]) });
+const PackageFiles = z.object({ files: z.array(z.string()) });
 
-/** A caret root and the version its package.json declares. */
+/** A caret root and its version. */
 export interface LauncherRoot {
   root: string;
   version: string;
 }
 
-/** Whether `root` is a caret checkout: the npm package ships no `src/`. */
-export function isSourceCheckout(root: string): boolean {
-  return existsSync(join(root, "src", "cli.ts"));
-}
-
-function publishedRoot(): LauncherRoot | undefined {
-  if (buildKind() !== "bundle") return undefined;
-  const root = resolveCaretRoot();
-  return isSourceCheckout(root) ? undefined : { root, version: VERSION };
+/** The published caret this process runs as: an npm bundle, never a checkout's dist (the
+ * npm package ships no `src/`). */
+export function publishedRoot(
+  kind: BuildKind = buildKind(),
+  root: () => string = resolveCaretRoot,
+): LauncherRoot | undefined {
+  if (kind !== "bundle") return undefined;
+  const dir = root();
+  return existsSync(join(dir, "src", "cli.ts")) ? undefined : { root: dir, version: VERSION };
 }
 
 /** Copy what npm publishes of `from.root` to ownedRootsDir()/<version>, unless a runnable
- * copy is already there. */
-export function stageOwnedRoot(from: LauncherRoot): void {
+ * copy is already there. The copy lands runnable or not at all. */
+function stageOwnedRoot(from: LauncherRoot): void {
   if (!isRunnableRoot(from.root)) return;
   const dest = join(ownedRootsDir(), from.version);
   if (isRunnableRoot(dest)) return;
+  const parsed = PackageFiles.safeParse(readJsonFileSync(join(from.root, "package.json")));
+  if (!parsed.success) return;
   ensureStateDir(ownedRootsDir());
-  const { files } = PackageFiles.parse(readJsonFileSync(join(from.root, "package.json")));
   // Dot-prefixed so the launcher's glob never offers a half-copied root.
-  const tmp = join(ownedRootsDir(), `.${from.version}.${process.pid}.tmp`);
-  for (const entry of [...files, "package.json"]) {
-    const src = join(from.root, entry);
-    if (!existsSync(src)) continue;
-    const target = join(tmp, entry);
-    mkdirSync(dirname(target), { recursive: true });
-    cpSync(src, target, { recursive: true });
+  const tmp = mkdtempSync(join(ownedRootsDir(), `.${from.version}.`));
+  try {
+    for (const entry of [...parsed.data.files, "package.json"]) {
+      const src = join(from.root, entry);
+      if (!existsSync(src)) continue;
+      const target = join(tmp, entry);
+      mkdirSync(dirname(target), { recursive: true });
+      cpSync(src, target, { recursive: true });
+    }
+    if (!isRunnableRoot(tmp)) return;
+    rmSync(dest, { recursive: true, force: true });
+    renameSync(tmp, dest);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
   }
-  rmSync(dest, { recursive: true, force: true });
-  renameSync(tmp, dest);
 }
 
-/** Remove every owned root but the highest runnable one. Call it only right after the
- * service cycles: a bundle daemon reads `ui/dist` per request, so pruning under a live one
- * can delete the root it serves from. Best-effort — a leftover costs only disk. */
+/** Remove every owned root but the one the launcher would pick among them. Call it only
+ * once the cycled service has settled: a bundle daemon reads `ui/dist` per request, so
+ * pruning under a live or draining one can delete the root it serves from. Best-effort. */
 export function pruneOwnedRoots(): void {
+  let entries: string[];
   try {
-    const entries = readdirSync(ownedRootsDir());
-    const keep = entries
-      .filter((e) => !e.startsWith(".") && isRunnableRoot(join(ownedRootsDir(), e)))
-      .reduce<string | undefined>(
-        (best, e) => (best === undefined || isNewer(e, best) ? e : best),
-        undefined,
-      );
-    for (const e of entries) {
-      if (e !== keep) rmSync(join(ownedRootsDir(), e), { recursive: true, force: true });
+    entries = readdirSync(ownedRootsDir());
+  } catch {
+    return; // nothing staged
+  }
+  const keep = pickLauncherRoot(
+    null,
+    listDirs(ownedRootsDir()).map((dir) => ({ dir, owned: true })),
+  )?.root;
+  for (const e of entries) {
+    const path = join(ownedRootsDir(), e);
+    if (path === keep) continue;
+    try {
+      rmSync(path, { recursive: true, force: true });
+    } catch {
+      // A leftover copy costs only disk; the service already cycled.
     }
-  } catch {}
+  }
 }
 
 /** Install the shipped launcher to the path a service unit names, and record what it reads:
  * the `bun` to prefer, the unit, and the pinned root — removing a pin when none is given,
- * and reporting whether it did. */
+ * and reporting whether it did — and keeps a copy of the published caret it runs as. A
+ * pinned install stages nothing: the pin wins over every candidate. */
 export function installLauncher(deps: LauncherDeps = {}): { unpinned: boolean } {
   const source = (deps.source ?? (() => join(resolveCaretRoot(), "bin", "caret-launcher")))();
   if (deps.pinnedRoot === undefined) {
@@ -192,17 +210,26 @@ function isDir(path: string): boolean {
   }
 }
 
-/** Every dir the launcher offers as a candidate, in its glob order, each marked when it
- * is caret's own copy. Keep in sync with candidate_dirs() in bin/caret-launcher. */
-export function launcherCandidateDirs(): { dir: string; owned: boolean }[] {
-  const opencodeRoots = dirname(opencodeCachePackageDir());
-  const opencode = listDirs(opencodeRoots)
-    .filter((d) => d.slice(opencodeRoots.length + 1).startsWith("caret"))
+/** A dir the launcher offers, marked when it is caret's own copy. */
+export interface LauncherCandidate {
+  dir: string;
+  owned: boolean;
+}
+
+/** Every dir the launcher offers as a candidate, in its glob order. Keep in sync with
+ * candidate_dirs() in bin/caret-launcher. */
+export function launcherCandidateDirs(): LauncherCandidate[] {
+  const opencode = listDirs(dirname(opencodeCachePackageDir()))
+    .filter((d) => basename(d).startsWith("caret"))
     .map((d) => join(d, "node_modules", "@macintacos", "caret"))
     .filter(isDir);
-  return [...listDirs(join(claudeConfigDir(), "plugins", "cache", "caret", "caret")), ...opencode]
-    .map((dir) => ({ dir, owned: false }))
-    .concat(listDirs(ownedRootsDir()).map((dir) => ({ dir, owned: true })));
+  return [
+    ...[
+      ...listDirs(join(claudeConfigDir(), "plugins", "cache", "caret", "caret")),
+      ...opencode,
+    ].map((dir) => ({ dir, owned: false })),
+    ...listDirs(ownedRootsDir()).map((dir) => ({ dir, owned: true })),
+  ];
 }
 
 /** The first `"version"` value on a line of its own, as candidate_version()'s anchored sed
@@ -221,7 +248,7 @@ function manifestVersion(root: string): string | undefined {
  * resolve_root()/candidates()/highest() in bin/caret-launcher. */
 export function pickLauncherRoot(
   pin: string | null,
-  candidates: Iterable<{ dir: string; owned: boolean }>,
+  candidates: Iterable<LauncherCandidate>,
 ): LauncherRoot | null {
   if (pin !== null && isRunnableRoot(pin)) {
     return { root: pin, version: manifestVersion(pin) || "unknown" };
@@ -237,6 +264,8 @@ export function pickLauncherRoot(
       .map((f) => Number.parseInt(f, 10) || 0);
     lines.push({ line: `${version}\t${owned ? 0 : 1}\t${dir}`, key, root: { root: dir, version } });
   }
+  // `line` reproduces highest()'s whole-line tiebreak, which ranks an agent's root (1) over
+  // an owned copy (0).
   // ponytail: the tiebreak compares code units where bash's sort follows the unit's locale,
   // so a same-version tie between two agent roots may name a different dir than it runs.
   lines.sort((a, b) => {
@@ -247,4 +276,9 @@ export function pickLauncherRoot(
     return a.line < b.line ? -1 : a.line > b.line ? 1 : 0;
   });
   return lines.at(-1)?.root ?? null;
+}
+
+/** The root the launcher would exec next, as this machine stands now. */
+export function prodLauncherRoot(): LauncherRoot | null {
+  return pickLauncherRoot(readPinnedRoot(), launcherCandidateDirs());
 }
