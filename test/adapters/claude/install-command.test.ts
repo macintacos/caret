@@ -42,6 +42,19 @@ async function runLocalWithUi(runner: ClaudeRunner): Promise<ReturnType<typeof r
   return ui;
 }
 
+/** Run a published install against `runner` with a recording UI, pointing the
+ * dev-marketplace probe at `localTarget`'s marketplace dir. */
+async function runPublishedWithUi(
+  runner: ClaudeRunner,
+): Promise<{ ok: boolean; ui: ReturnType<typeof recordingUI> }> {
+  const ui = recordingUI();
+  const ok = await runInstallClaudeTarget(
+    { uninstall: false, dryRun: false },
+    { claude: runner, ui, devMarketplaceDir: () => localTarget.marketplaceDir },
+  );
+  return { ok, ui };
+}
+
 /** A `claude plugin list --json` payload reporting `version` for caret, alongside another
  * plugin so the lookup has to pick caret's entry out rather than take the first. */
 function listing(version: string): string {
@@ -67,7 +80,8 @@ function versioned(listings: string[]): { runner: ClaudeRunner; calls: string[][
 
 // Unconditional, not a fallback: on a machine whose marketplace is already registered
 // the marketplace-update step no-ops, and without this refresh the install reads stale
-// metadata.
+// metadata. The first `marketplace list` probes for caret's dev marketplace; the second
+// settles the registration line.
 const SUCCESSFUL_INSTALL_CALLS: string[][] = [
   ["plugin", "marketplace", "list", "--json"],
   ["plugin", "marketplace", "add", "macintacos/caret"],
@@ -85,7 +99,7 @@ test("install refreshes the marketplace, installs and enables, then updates the 
   const ui = recordingUI();
   await runInstallClaudeTarget({ uninstall: false, dryRun: false }, { claude: runner, ui });
   expect(calls).toEqual(SUCCESSFUL_INSTALL_CALLS);
-  // An empty (unreadable) marketplace list hands nothing back and keeps today's line.
+  // An empty (unreadable) marketplace list hands nothing back and settles as registered.
   expect(ui.events).toContain("settled:Registered the caret marketplace (macintacos/caret)");
 });
 
@@ -235,7 +249,8 @@ test("a missing claude CLI stops after the first step (guidance, not a crash)", 
   const { runner, calls } = recorder({ ok: false, missing: true, detail: "ENOENT", stdout: "" });
   const ui = recordingUI();
   await runInstallClaudeTarget({ uninstall: false, dryRun: false }, { claude: runner, ui });
-  // Bails on the first (marketplace add) step rather than pressing on to install.
+  // The dev-marketplace probe runs before any step; it bails on the first step's
+  // marketplace add rather than pressing on to install.
   expect(calls).toEqual([
     ["plugin", "marketplace", "list", "--json"],
     ["plugin", "marketplace", "add", "macintacos/caret"],
@@ -475,11 +490,7 @@ const indexOfCall = (calls: string[][], c: string[]) =>
 
 test("a machine last installed --from-local hands the caret marketplace back first", async () => {
   const { runner, calls } = marketplaceMachine(directoryEntry("/dev-mp"));
-  const ui = recordingUI();
-  const ok = await runInstallClaudeTarget(
-    { uninstall: false, dryRun: false },
-    { claude: runner, ui, devMarketplaceDir: () => "/dev-mp" },
-  );
+  const { ok, ui } = await runPublishedWithUi(runner);
   expect(ok).toBe(true);
   expect(indexOfCall(calls, REMOVE)).toBeGreaterThanOrEqual(0);
   expect(indexOfCall(calls, REMOVE)).toBeLessThan(indexOfCall(calls, ADD));
@@ -490,11 +501,7 @@ test("a machine last installed --from-local hands the caret marketplace back fir
 
 test("a foreign caret marketplace warns and the install continues", async () => {
   const { runner, calls } = marketplaceMachine(directoryEntry("/elsewhere"));
-  const ui = recordingUI();
-  const ok = await runInstallClaudeTarget(
-    { uninstall: false, dryRun: false },
-    { claude: runner, ui, devMarketplaceDir: () => "/dev-mp" },
-  );
+  const { ok, ui } = await runPublishedWithUi(runner);
   expect(ok).toBe(true);
   expect(indexOfCall(calls, REMOVE)).toBe(-1);
   expect(ui.events).not.toContain("settled:Registered the caret marketplace (macintacos/caret)");
@@ -507,11 +514,7 @@ test("a foreign caret marketplace warns and the install continues", async () => 
 
 test("an offline add after the hand-back names both ways back", async () => {
   const { runner } = marketplaceMachine(directoryEntry("/dev-mp"), { online: false });
-  const ui = recordingUI();
-  const ok = await runInstallClaudeTarget(
-    { uninstall: false, dryRun: false },
-    { claude: runner, ui, devMarketplaceDir: () => "/dev-mp" },
-  );
+  const { ok, ui } = await runPublishedWithUi(runner);
   expect(ok).toBe(false);
   const warning = ui.events.find((e) => e.startsWith("warn:")) ?? "";
   expect(warning).toContain("getaddrinfo ENOTFOUND github.com");

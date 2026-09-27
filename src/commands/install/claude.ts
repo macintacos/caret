@@ -3,7 +3,8 @@
 // enable the plugin, then update it so re-running the installer after a caret upgrade
 // also upgrades caret-in-Claude-Code. When Claude's `caret` marketplace is still caret's
 // own dev marketplace, it is removed first, since Claude refuses to re-add a name whose
-// declared source differs. `--uninstall` removes it.
+// declared source differs. `--uninstall` removes the plugin and leaves the marketplace
+// registered.
 // With `--from-local` the same CLI installs the LOCAL build instead: the marketplace
 // source becomes the generated dev marketplace (see local.ts) rather than the public
 // one, and the update phase is skipped — that path reinstalls the dev build directly,
@@ -82,8 +83,11 @@ function parsePluginVersion(stdout: string, id: string): string | null {
  * `claude plugin marketplace list --json` payload: an array of
  * `{ name, source, repo | path | url, installLocation, … }`. */
 type CaretMarketplace =
+  // `location` is the `repo`, `path` or `url`, per `source` (github, directory or git).
   | { kind: "registered"; source: string; location: string }
   | { kind: "absent" }
+  // Also an entry with no string `source`/`location`, and the empty stdout of a missing
+  // or old `claude`.
   | { kind: "unreadable" };
 
 function readCaretMarketplace(stdout: string): CaretMarketplace {
@@ -105,17 +109,24 @@ function readCaretMarketplace(stdout: string): CaretMarketplace {
   }
 }
 
-const isPublished = (m: CaretMarketplace) =>
-  m.kind === "unreadable" ||
-  (m.kind === "registered" && m.source === "github" && m.location === MARKETPLACE_SOURCE);
+/** Claude's `caret` marketplace is the published GitHub source. */
+function isPublished(m: CaretMarketplace): boolean {
+  return m.kind === "registered" && m.source === "github" && m.location === MARKETPLACE_SOURCE;
+}
 
-/** Phase 1's warning, from the add's result and the post-add read. */
+/** Whether the registration phase settles as registered. An unreadable list counts: the
+ * read is advisory, and a `claude` that can't answer it must not raise a false alarm. */
+function settledAsRegistered(m: CaretMarketplace): boolean {
+  return m.kind === "unreadable" || isPublished(m);
+}
+
+/** The registration phase's warning, from the add's result and the post-add read. */
 function registrationWarning(
   add: CommandResults[number] | undefined,
   after: CaretMarketplace,
   handBack: boolean,
 ): string | null {
-  if (isPublished(after)) return null;
+  if (settledAsRegistered(after)) return null;
   const why = add?.ok === false ? ` (${add.detail})` : "";
   if (after.kind === "registered") {
     return `Claude Code's caret marketplace is ${after.location}, not ${MARKETPLACE_SOURCE}${why}, so the plugin update below reads from it. Run \`claude plugin marketplace remove caret\` and re-run \`caret install\`, or point \`extraKnownMarketplaces.caret\` at ${MARKETPLACE_SOURCE} where your Claude settings are managed.`;
@@ -181,7 +192,8 @@ function phases({
   uninstall: boolean;
   local: LocalInstall | undefined;
   writeDev: (repoDir: string, outDir: string) => void;
-  /** Whether Claude's `caret` marketplace is caret's own dev one, to remove first. */
+  /** Whether to plan the dev marketplace's removal: probed on a real run, always planned
+   * (and marked conditional) in a dry-run preview. */
   handBack: boolean;
 }): Phase[] {
   if (uninstall) {
@@ -262,14 +274,15 @@ function phases({
       label: "Registering the caret marketplace",
       done: ([, , listed]) => {
         const after = readCaretMarketplace(listed?.stdout ?? "");
-        if (isPublished(after)) return `Registered the caret marketplace (${MARKETPLACE_SOURCE})`;
+        if (settledAsRegistered(after))
+          return `Registered the caret marketplace (${MARKETPLACE_SOURCE})`;
         return after.kind === "registered"
           ? `Claude Code's caret marketplace is ${after.location}, not ${MARKETPLACE_SOURCE}`
           : "Could not register the caret marketplace";
       },
       warn: ([add, , listed]) =>
         registrationWarning(add, readCaretMarketplace(listed?.stdout ?? ""), handBack),
-      // Both best-effort, and the update is unconditional rather than a fallback: the add
+      // All best-effort, and the update is unconditional rather than a fallback: the add
       // no-ops on a machine where the marketplace is already registered, so without a
       // refresh every command below would run against the metadata Claude already had.
       commands: [
@@ -346,6 +359,7 @@ export async function runInstallClaudeTarget(
     claude?: ClaudeRunner;
     ui?: InstallUI;
     writeDevMarketplace?: (repoDir: string, outDir: string) => void;
+    /** Where `--from-local` writes its marketplace; a `caret` registration there is handed back. */
     devMarketplaceDir?: () => string;
   } = {},
 ): Promise<boolean> {

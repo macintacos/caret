@@ -415,10 +415,6 @@ pin until an install after it is back on — and `--uninstall` removes the pin. 
 pin holds, a review never cycles the daemon, so a rebuild reaches the login item only
 through `--install`.
 
-`--install` also leaves Claude Code's `caret` marketplace registered, and declared in its
-user settings, as the dev marketplace. A plain `caret install` removes it
-(`claude plugin marketplace remove caret`) before adding the published one.
-
 Re-running `--install` reuses the agent already registered rather than re-registering it,
 so macOS stops posting its "Background Items Added" notice on every rebuild; the new build
 is picked up by the service cycle `--install` performs. If you would rather your machine
@@ -427,6 +423,10 @@ not carry a login item, answer the install prompt with **I'll run it myself**, t
 
 After a `/reload-plugins` (or a Claude Code restart), `/caret:*` resolves to your local
 build.
+
+`--install` also leaves Claude Code's `caret` marketplace registered, and declared in its
+user settings, as the dev marketplace. A plain `caret install` removes it
+(`claude plugin marketplace remove caret`) before adding the published one.
 
 Because it mutates your Claude plugin state and daemon, `--install` is for local
 development only, never CI. `bin/caret install --from-local --dry-run` previews the
