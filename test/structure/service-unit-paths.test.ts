@@ -12,6 +12,7 @@ import {
   launcherPinnedRootFile,
   launcherRecordDir,
   launcherServiceFile,
+  ownedRootsDir,
 } from "@/config/paths.ts";
 
 const LAUNCHER = readFileSync(join(import.meta.dir, "..", "..", "bin", "caret-launcher"), "utf8");
@@ -33,8 +34,14 @@ test("bin/caret-launcher reads the pinned-root record the install writes", () =>
 });
 
 test("bin/caret-launcher's self-eviction removes what uninstallLauncher removes", () => {
-  // Both delete the launcher and its records; evict() spells those two directories in
-  // bash, uninstallLauncher() derives them from paths.ts.
+  // Both delete the launcher, its records and the owned roots; evict() spells those
+  // directories in bash, uninstallLauncher() derives them from paths.ts.
   expect(LAUNCHER).toContain(`\${state:?}/${basename(dirname(launcherPath()))}`);
   expect(LAUNCHER).toContain(`\${state:?}/${basename(launcherRecordDir())}`);
+  expect(LAUNCHER).toContain(`\${state:?}/${basename(ownedRootsDir())}`);
+});
+
+test("bin/caret-launcher scans the owned roots caret install stages", () => {
+  expect(LAUNCHER).toContain(`owned_roots="$state/${basename(ownedRootsDir())}"`);
+  expect(LAUNCHER).toContain('"$owned_roots"/*');
 });

@@ -28,6 +28,7 @@ state="${XDG_STATE_HOME:-$HOME/.local/state}/caret"
 records="$state/launcher"
 claude_roots="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache/caret/caret"
 opencode_roots="${XDG_CACHE_HOME:-$HOME/.cache}/opencode/packages/@macintacos"
+owned_roots="$state/roots"
 
 # The units name no log destination, so nothing opens this before caret does:
 # openDaemonStderr's 0700/0600 guarantee (src/daemon/lifecycle.ts) happens here for a
@@ -84,21 +85,27 @@ candidate_version() {
   sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$1/package.json" 2>/dev/null | head -1
 }
 
-# Every dir either cache offers, runnable caret or not — the difference between
-# a broken install (terminal) and an empty cache (eviction). The OpenCode entry
-# is a two-line npm project, not a caret root; the root is one level down.
+# Every dir either agent's cache or caret's own copies offer, runnable caret or
+# not — the difference between a broken install (terminal) and an empty cache
+# (eviction). The OpenCode entry is a two-line npm project, not a caret root; the
+# root is one level down. `*` skips dot-prefixed dirs, so a half-copied owned root
+# is never a candidate.
 candidate_dirs() {
   local dir
-  for dir in "$claude_roots"/* "$opencode_roots"/caret*/node_modules/@macintacos/caret; do
+  for dir in "$claude_roots"/* "$opencode_roots"/caret*/node_modules/@macintacos/caret \
+    "$owned_roots"/*; do
     if [ -d "$dir" ]; then printf '%s\n' "$dir"; fi
   done
 }
 
+# `<version><TAB><rank><TAB><dir>`: rank 0 for caret's own copy, 1 for an agent's.
 candidates() {
-  local dir version
+  local dir version rank
   candidate_dirs | while read -r dir; do
     version="$(candidate_version "$dir" || true)"
-    if [ -n "$version" ]; then printf '%s\t%s\n' "$version" "$dir"; fi
+    rank=1
+    case "$dir" in "$owned_roots"/*) rank=0 ;; esac
+    if [ -n "$version" ]; then printf '%s\t%s\t%s\n' "$version" "$rank" "$dir"; fi
   done
 }
 
@@ -109,7 +116,9 @@ resolve_root() {
     printf '%s' "$pin"
     return 0
   fi
-  candidates | highest
+  # The rank sorts an agent's root above an owned copy of the same version: a hook
+  # reuses a supervised daemon only when its build matches.
+  candidates | highest | cut -f2-
 }
 
 # The newest mise-managed bun, for a machine whose mise shims are not on the
@@ -175,7 +184,7 @@ evict() {
   printf 'caret-launcher: no caret installed anywhere; removing %s and %s.\n' \
     "$unit" "$state/bin" >&2
   rm -f "$unit"
-  rm -rf "${state:?}/bin" "${state:?}/launcher"
+  rm -rf "${state:?}/bin" "${state:?}/launcher" "${state:?}/roots"
   exit 0
 }
 

@@ -14,6 +14,7 @@ import {
   launcherPinnedRootFile,
   launcherRecordDir,
   launcherServiceFile,
+  ownedRootsDir,
   stateDir,
 } from "@/config/paths.ts";
 
@@ -117,19 +118,21 @@ test("an install with no pin to remove, or naming one, reports nothing unpinned"
   ).toBe(false);
 });
 
-test("uninstallLauncher removes the launcher and its records, leaving the state dir", () => {
+test("uninstallLauncher removes the launcher, its records and the owned roots, leaving the state dir", () => {
   installLauncher({
     bunPath: "/opt/bun/bin/bun",
     serviceLabel: "caret.service",
     pinnedRoot: "/checkout",
     source: shippedScript,
   });
+  mkdirSync(join(ownedRootsDir(), "1.1.0"), { recursive: true });
 
   uninstallLauncher();
 
   expect(existsSync(launcherPath())).toBe(false);
   expect(existsSync(launcherPinnedRootFile())).toBe(false);
   expect(existsSync(launcherRecordDir())).toBe(false);
+  expect(existsSync(ownedRootsDir())).toBe(false);
   expect(existsSync(stateDir())).toBe(true);
 });
 
