@@ -11,6 +11,7 @@
 
 import {
   type LauncherDeps,
+  type LauncherRoot,
   pruneOwnedRoots,
   installLauncher as realInstallLauncher,
   uninstallLauncher,
@@ -41,6 +42,10 @@ export interface ServiceStepDeps {
    * nothing is probed and the install announces as-is: a test must not read whatever real
    * daemon holds the port. */
   watch?: ServiceWatch;
+  /** What the launcher will start, answered the way bin/caret-launcher answers it — wired
+   * by src/cli.ts. Absent, the step names no root: the real one reads Claude's and
+   * OpenCode's caches under the real HOME, which no test should. */
+  launcherRoot?: () => LauncherRoot | null;
 }
 
 /** The installing caret's version and the probes that read what the port serves. */
@@ -251,6 +256,14 @@ export async function reconcileService(
       environment: serviceEnvironment(process.env),
       terminalExitStatus: SERVICE_TERMINAL_EXIT_STATUS,
     });
+    const next = predictLauncherRoot(deps);
+    if (next === null) {
+      // Cycling into nothing only makes the launcher exit or evict the service.
+      ui.warn(
+        "No runnable caret was found for the caret service to start — run `caret install` again once an agent has installed caret.",
+      );
+      return;
+    }
     // install() is a no-op on an unchanged unit, so a new build or pin serves only once the
     // supervisor cycles. `--from-local` cycles even onto the same pin: hooks never cycle a
     // pinned daemon. Unpinning cycles because hooks attach to a checkout newer than them.
@@ -271,12 +284,23 @@ export async function reconcileService(
     // One short line per fact: clack draws its gutter only on explicit breaks.
     const announcement = [
       `The review UI now stays up at ${reviewUrl}`,
+      next && `It starts caret ${next.version} from ${next.root}.`,
       `It's listed in ${visibleIn}.`,
       `To turn it off, run \`caret install\` and answer "I'll run it myself".`,
       visibleToggleCaveat,
     ];
     ui.info(announcement.filter(Boolean).join("\n"));
   });
+}
+
+/** The seam's prediction, or undefined when there is none or it throws: a bug in it must
+ * never cost the restart. */
+function predictLauncherRoot(deps: ServiceStepDeps): LauncherRoot | null | undefined {
+  try {
+    return deps.launcherRoot?.();
+  } catch {
+    return undefined;
+  }
 }
 
 /** Leave the review UI to the user: take down whatever service a previous install

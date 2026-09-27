@@ -13,6 +13,7 @@ import { fakeServiceTarget } from "@test/support/service-manager.ts";
 import type { LauncherDeps } from "@/commands/install/launcher.ts";
 import {
   reconcileService,
+  type ServiceStepDeps,
   type ServiceWatch,
   uninstallService,
 } from "@/commands/install/service.ts";
@@ -616,4 +617,46 @@ test("an install that does not cycle keeps every owned root a live daemon may se
 
   expect(existsSync(join(ownedRootsDir(), "1.0.2"))).toBe(true);
   expect(existsSync(join(ownedRootsDir(), "1.1.0"))).toBe(true);
+});
+
+/** Reconcile a refresh while `launcherRoot` predicts what the launcher starts. */
+async function reconcilePredicted(launcherRoot: ServiceStepDeps["launcherRoot"]) {
+  const watch = scriptedWatch([
+    null,
+    { service: "caret", version: "1.1.0", instanceId: "b", supervised: true },
+  ]);
+  const service = fakeServiceTarget({ status: { installed: true, running: true } });
+  const ui = recordingUI();
+  await reconcileService(
+    { ...RECONCILE, refresh: true },
+    { service: service.target, installLauncher: stubLauncher, watch, launcherRoot },
+    ui,
+  );
+  return { calls: service.calls, events: ui.events, watch };
+}
+
+test("the announcement names the caret the launcher starts and where it lives", async () => {
+  const { events } = await reconcilePredicted(() => ({ root: "/r/1.1.0", version: "1.1.0" }));
+
+  const announcement = events.find((e) => e.includes(VANITY_HOST));
+  expect(announcement).toContain("1.1.0");
+  expect(announcement).toContain("/r/1.1.0");
+});
+
+test("with no runnable caret for the launcher, the install warns and cycles nothing", async () => {
+  const { calls, events, watch } = await reconcilePredicted(() => null);
+
+  expect(warning(events)).toBeDefined();
+  expect(announced(events)).toBe(false);
+  expect(watch.probes).toBe(0);
+  expect(calls).not.toContain("restart");
+});
+
+test("a prediction that throws never costs the restart", async () => {
+  const { calls, events } = await reconcilePredicted(() => {
+    throw new Error("boom");
+  });
+
+  expect(calls).toContain("restart");
+  expect(warning(events)).toBeUndefined();
 });

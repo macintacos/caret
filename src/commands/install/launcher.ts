@@ -11,15 +11,19 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
+  readFileSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { z } from "zod";
 
+import { claudeConfigDir } from "@/adapters/claude/paths.ts";
 import { resolveCaretRoot } from "@/adapters/opencode/packaging.ts";
+import { opencodeCachePackageDir } from "@/adapters/opencode/paths.ts";
 import {
   ensureStateDir,
   launcherBunFile,
@@ -52,12 +56,13 @@ export interface LauncherDeps {
   /** The published caret this install runs as, to keep a copy of under ownedRootsDir():
    * bunx runs it from a temp install that is gone once this process exits. Undefined for
    * anything but an npm bundle — a dev run, a checkout's dist, a compiled binary. */
-  ownedRoot?: () => OwnedRoot | undefined;
+  ownedRoot?: () => LauncherRoot | undefined;
 }
 
 const PackageFiles = z.object({ files: z.array(z.string()).default([]) });
 
-interface OwnedRoot {
+/** A caret root and the version its package.json declares. */
+export interface LauncherRoot {
   root: string;
   version: string;
 }
@@ -67,7 +72,7 @@ export function isSourceCheckout(root: string): boolean {
   return existsSync(join(root, "src", "cli.ts"));
 }
 
-function publishedRoot(): OwnedRoot | undefined {
+function publishedRoot(): LauncherRoot | undefined {
   if (buildKind() !== "bundle") return undefined;
   const root = resolveCaretRoot();
   return isSourceCheckout(root) ? undefined : { root, version: VERSION };
@@ -75,7 +80,7 @@ function publishedRoot(): OwnedRoot | undefined {
 
 /** Copy what npm publishes of `from.root` to ownedRootsDir()/<version>, unless a runnable
  * copy is already there. */
-export function stageOwnedRoot(from: OwnedRoot): void {
+export function stageOwnedRoot(from: LauncherRoot): void {
   if (!isRunnableRoot(from.root)) return;
   const dest = join(ownedRootsDir(), from.version);
   if (isRunnableRoot(dest)) return;
@@ -161,4 +166,85 @@ export function uninstallLauncher(): void {
   rmSync(dirname(launcherPath()), { recursive: true, force: true });
   rmSync(launcherRecordDir(), { recursive: true, force: true });
   rmSync(ownedRootsDir(), { recursive: true, force: true });
+}
+
+/** What bash's `"$dir"/*` offers that `[ -d ]` accepts: non-dot entries resolving to a
+ * directory, symlinks followed. None when `dir` cannot be listed. */
+function listDirs(dir: string): string[] {
+  let names: string[];
+  try {
+    names = readdirSync(dir);
+  } catch {
+    return [];
+  }
+  return names
+    .filter((n) => !n.startsWith("."))
+    .sort()
+    .map((n) => join(dir, n))
+    .filter(isDir);
+}
+
+function isDir(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/** Every dir the launcher offers as a candidate, in its glob order, each marked when it
+ * is caret's own copy. Keep in sync with candidate_dirs() in bin/caret-launcher. */
+export function launcherCandidateDirs(): { dir: string; owned: boolean }[] {
+  const opencodeRoots = dirname(opencodeCachePackageDir());
+  const opencode = listDirs(opencodeRoots)
+    .filter((d) => d.slice(opencodeRoots.length + 1).startsWith("caret"))
+    .map((d) => join(d, "node_modules", "@macintacos", "caret"))
+    .filter(isDir);
+  return [...listDirs(join(claudeConfigDir(), "plugins", "cache", "caret", "caret")), ...opencode]
+    .map((dir) => ({ dir, owned: false }))
+    .concat(listDirs(ownedRootsDir()).map((dir) => ({ dir, owned: true })));
+}
+
+/** The first `"version"` value on a line of its own, as candidate_version()'s anchored sed
+ * reads it: undefined for a minified manifest or an unreadable one. */
+function manifestVersion(root: string): string | undefined {
+  try {
+    const text = readFileSync(join(root, "package.json"), "utf8");
+    return text.match(/^[^\S\n]*"version"[^\S\n]*:[^\S\n]*"([^"\n]*)"/m)?.[1];
+  } catch {
+    return undefined;
+  }
+}
+
+/** The root the launcher execs at its next start: a runnable pin, else the highest
+ * runnable candidate, an agent's root winning a version tie. Keep in sync with
+ * resolve_root()/candidates()/highest() in bin/caret-launcher. */
+export function pickLauncherRoot(
+  pin: string | null,
+  candidates: Iterable<{ dir: string; owned: boolean }>,
+): LauncherRoot | null {
+  if (pin !== null && isRunnableRoot(pin)) {
+    return { root: pin, version: manifestVersion(pin) || "unknown" };
+  }
+  const lines: { line: string; key: number[]; root: LauncherRoot }[] = [];
+  for (const { dir, owned } of candidates) {
+    if (!isRunnableRoot(dir)) continue;
+    const version = manifestVersion(dir);
+    if (!version) continue;
+    const key = version
+      .split(".")
+      .slice(0, 3)
+      .map((f) => Number.parseInt(f, 10) || 0);
+    lines.push({ line: `${version}\t${owned ? 0 : 1}\t${dir}`, key, root: { root: dir, version } });
+  }
+  // ponytail: the tiebreak compares code units where bash's sort follows the unit's locale,
+  // so a same-version tie between two agent roots may name a different dir than it runs.
+  lines.sort((a, b) => {
+    for (let i = 0; i < 3; i++) {
+      const d = (a.key[i] ?? 0) - (b.key[i] ?? 0);
+      if (d !== 0) return d;
+    }
+    return a.line < b.line ? -1 : a.line > b.line ? 1 : 0;
+  });
+  return lines.at(-1)?.root ?? null;
 }

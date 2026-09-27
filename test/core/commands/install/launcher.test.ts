@@ -17,10 +17,13 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { setupTempStateDir } from "@test/support/env.ts";
+import { manifest, rootAt, runnableRoot } from "@test/support/caret-root.ts";
+import { setupTempStateDir, withEnv } from "@test/support/env.ts";
 import {
   installLauncher,
   isSourceCheckout,
+  launcherCandidateDirs,
+  pickLauncherRoot,
   pruneOwnedRoots,
   uninstallLauncher,
 } from "@/commands/install/launcher.ts";
@@ -277,4 +280,101 @@ test("a root carrying src/cli.ts is a checkout, never a published caret", () => 
   writeFileSync(join(root, "src", "cli.ts"), "");
 
   expect(isSourceCheckout(root)).toBe(true);
+});
+
+const agent = (dir: string) => ({ dir, owned: false });
+const mine = (dir: string) => ({ dir, owned: true });
+
+test("an owned root newer than every agent's is the one the launcher starts", () => {
+  const ownedRoot = rootAt("1.1.0");
+
+  expect(pickLauncherRoot(null, [agent(rootAt("1.0.2")), mine(ownedRoot)])).toEqual({
+    root: ownedRoot,
+    version: "1.1.0",
+  });
+});
+
+test("an agent's root newer than the owned one is the one the launcher starts", () => {
+  const claude = rootAt("1.2.0");
+
+  expect(pickLauncherRoot(null, [agent(claude), mine(rootAt("1.1.0"))])?.root).toBe(claude);
+});
+
+test("an agent's root wins a version tie with the owned root", () => {
+  const claude = rootAt("1.1.0");
+
+  expect(pickLauncherRoot(null, [agent(claude), mine(rootAt("1.1.0"))])?.root).toBe(claude);
+});
+
+test("a runnable pin beats a higher candidate, and a non-runnable pin falls through", () => {
+  const pin = rootAt("1.0.0");
+  const higher = rootAt("1.2.0");
+
+  expect(pickLauncherRoot(pin, [agent(higher)])).toEqual({ root: pin, version: "1.0.0" });
+  expect(pickLauncherRoot("/no/such/root", [agent(higher)])?.root).toBe(higher);
+});
+
+test("a root with no UI is never picked", () => {
+  const uiless = rootAt("1.2.0");
+  rmSync(join(uiless, "ui"), { recursive: true });
+  const other = rootAt("1.0.0");
+
+  expect(pickLauncherRoot(null, [agent(uiless), agent(other)])?.root).toBe(other);
+});
+
+test("a manifest the launcher's anchored read misses yields no candidate", () => {
+  const minified = mkdtempSync(join(tmpdir(), "caret-root-min-"));
+  runnableRoot(minified, JSON.stringify({ name: "x", version: "9.0.0" }));
+  const empty = mkdtempSync(join(tmpdir(), "caret-root-empty-"));
+  runnableRoot(empty, '{\n  "version": "",\n  "x": { "version": "9.0.0" }\n}\n');
+
+  expect(pickLauncherRoot(null, [agent(minified), agent(empty)])).toBeNull();
+});
+
+test("nothing runnable leaves the launcher nothing to start", () => {
+  expect(pickLauncherRoot(null, [agent("/no/such/root")])).toBeNull();
+});
+
+test("a runnable root with no package.json yields no candidate", () => {
+  const bare = runnableRoot(mkdtempSync(join(tmpdir(), "caret-root-bare-")), undefined);
+
+  expect(pickLauncherRoot(null, [agent(bare)])).toBeNull();
+});
+
+test("the candidates are every agent's caret dir and caret's own copies", () => {
+  const claudeDir = mkdtempSync(join(tmpdir(), "caret-claude-"));
+  const cacheDir = mkdtempSync(join(tmpdir(), "caret-cache-"));
+  const claudeRoots = join(claudeDir, "plugins", "cache", "caret", "caret");
+  mkdirSync(join(claudeRoots, "1.0.2"), { recursive: true });
+  mkdirSync(join(claudeRoots, ".hidden"), { recursive: true });
+  const opencode = join(
+    cacheDir,
+    "opencode/packages/@macintacos/caret@1.0.2/node_modules/@macintacos/caret",
+  );
+  mkdirSync(opencode, { recursive: true });
+  const ownedRoot = seedOwnedRoot("1.1.0");
+  mkdirSync(join(ownedRootsDir(), ".1.2.0.9.tmp"));
+
+  const dirs = withEnv({ CLAUDE_CONFIG_DIR: claudeDir, XDG_CACHE_HOME: cacheDir }, () =>
+    launcherCandidateDirs(),
+  );
+
+  expect(dirs).toEqual([
+    { dir: join(claudeRoots, "1.0.2"), owned: false },
+    { dir: opencode, owned: false },
+    { dir: ownedRoot, owned: true },
+  ]);
+});
+
+test("an OpenCode-only machine still offers the owned root", () => {
+  const ownedRoot = runnableRoot(join(ownedRootsDir(), "1.1.0"), manifest("1.1.0"));
+  const env = {
+    CLAUDE_CONFIG_DIR: mkdtempSync(join(tmpdir(), "caret-claude-")),
+    XDG_CACHE_HOME: mkdtempSync(join(tmpdir(), "caret-cache-")),
+  };
+
+  const dirs = withEnv(env, () => launcherCandidateDirs());
+
+  expect(dirs).toEqual([{ dir: ownedRoot, owned: true }]);
+  expect(pickLauncherRoot(null, dirs)).toEqual({ root: ownedRoot, version: "1.1.0" });
 });
