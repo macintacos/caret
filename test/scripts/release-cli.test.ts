@@ -156,6 +156,18 @@ describe("release group error discipline (in-process, injected deps)", () => {
     const NOTES_FILE = "/tmp/caret-release-notes.md";
     const { deps, releases } = makeReleaseHarness({
       refs: { "origin/trunk": "mergedsha" },
+      runs: {
+        mergedsha: [
+          {
+            id: 7,
+            url: "https://example.test/7",
+            status: "completed",
+            conclusion: "success",
+            headSha: "mergedsha",
+          },
+        ],
+      },
+      stageIds: { "7": "stage-42" },
       files: { [NOTES_FILE]: "Ships the widget.\n" },
       filesAtRef: {
         "origin/trunk:package.json": '{ "version": "0.1.0" }',

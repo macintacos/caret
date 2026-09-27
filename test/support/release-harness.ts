@@ -4,7 +4,7 @@
 // Every mutating call is recorded into `calls` so a test can assert exactly what
 // would (or would not) run.
 import type { GitOps, RawCommit } from "@/tasks/release/git.ts";
-import type { GitHubOps, PullRequestSummary } from "@/tasks/release/github.ts";
+import type { GitHubOps, PublishRun, PullRequestSummary } from "@/tasks/release/github.ts";
 import type { NpmOps } from "@/tasks/release/npm.ts";
 import type { RumdlOps } from "@/tasks/release/rumdl.ts";
 import type { Deps, FsOps } from "@/tasks/release/steps.ts";
@@ -42,6 +42,10 @@ export interface GitHubOptions {
   prs?: PullRequestSummary[];
   releases?: Record<string, { url: string; notes?: string; isDraft?: boolean }>;
   available?: boolean;
+  /** Publish-run states per commit sha: each `publishRun` read pops the next, the last repeats. */
+  runs?: Record<string, PublishRun[]>;
+  /** The stage-id annotation per run id. */
+  stageIds?: Record<string, string>;
 }
 
 /** Controls for the npm fake — which versions are already on the registry. */
@@ -228,6 +232,7 @@ export function makeReleaseHarness(opts: HarnessOptions = {}): ReleaseHarness {
   const releases = new Map<string, { url: string; notes?: string; isDraft?: boolean }>(
     Object.entries(opts.releases ?? {}),
   );
+  const runQueues = new Map(Object.entries(opts.runs ?? {}).map(([sha, q]) => [sha, [...q]]));
   const github: GitHubOps = {
     async available() {
       return opts.available ?? true;
@@ -268,6 +273,16 @@ export function makeReleaseHarness(opts: HarnessOptions = {}): ReleaseHarness {
       const url = existing?.url ?? "";
       releases.set(tag, { ...existing, url, isDraft: false });
       return url;
+    },
+    async publishRun(sha) {
+      calls.push(`publishRun:${sha}`);
+      const queue = runQueues.get(sha);
+      if (queue === undefined || queue.length === 0) return null;
+      return (queue.length > 1 ? queue.shift() : queue[0]) ?? null;
+    },
+    async stageId(runId) {
+      calls.push(`stageId:${runId}`);
+      return opts.stageIds?.[String(runId)] ?? null;
     },
   };
 

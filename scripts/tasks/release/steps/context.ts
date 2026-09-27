@@ -55,6 +55,8 @@ export interface FinalizeResult {
   releaseUrl: string | null;
   /** Whether the registry served this version when finalize checked. */
   npmLive: boolean;
+  /** What the operator approves with npm 2FA; null when live or in a dry run. */
+  approval: { stageId: string; runUrl: string; builtSha: string } | null;
   dryRun: boolean;
 }
 

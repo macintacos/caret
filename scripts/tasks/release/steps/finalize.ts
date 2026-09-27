@@ -20,6 +20,7 @@ import {
   GuardError,
   syncedVersion,
 } from "@/tasks/release/steps/guards.ts";
+import { waitFor } from "@/tasks/release/steps/wait.ts";
 import { isNewer, tagName, versionFromTag } from "@/tasks/release/version.ts";
 
 /** The finalized release derived from `origin/<defaultBranch>`: the merged HEAD to
@@ -126,6 +127,43 @@ async function ensureTag(deps: Deps, tag: string, trunkSha: string, title: strin
   await deps.git.pushTag(tag);
 }
 
+const CI_POLL = { attempts: 30, intervalMs: 15_000 };
+
+/** The non-transient way out when the tag's run can't produce a stage. */
+const CUT_NEXT_PATCH =
+  "A rerun replays the workflow at the tag and a tag never re-triggers, so for a real defect delete the draft Release and cut the next patch, or publish manually per the Releasing doc.";
+
+/** Follow the tag's publish run to its staged version's id. */
+async function followPublishRun(
+  deps: Deps,
+  taggedSha: string,
+): Promise<NonNullable<FinalizeResult["approval"]>> {
+  const { value: run } = await waitFor({ ...CI_POLL, sleep: deps.sleep }, async () => {
+    const run = await deps.github.publishRun(taggedSha);
+    return { done: run?.status === "completed", value: run };
+  });
+  if (run === null) {
+    throw new GuardError("CI_NO_RUN", `No publish run found for ${taggedSha}. ${CUT_NEXT_PATCH}`);
+  }
+  if (run.status !== "completed") {
+    throw new GuardError(
+      "CI_TIMEOUT",
+      `Publish run ${run.url} has not completed; re-run finalize to keep following it.`,
+    );
+  }
+  if (run.conclusion !== "success") {
+    throw new GuardError(
+      "CI_FAILED",
+      `Publish run ${run.url} concluded ${run.conclusion}. For a transient failure: gh run rerun ${run.id} --failed. ${CUT_NEXT_PATCH}`,
+    );
+  }
+  const stageId = await deps.github.stageId(run.id);
+  if (stageId === null) {
+    throw new GuardError("STAGE_ID_MISSING", `Publish run ${run.url} carries no stage id.`);
+  }
+  return { stageId, runUrl: run.url, builtSha: run.headSha };
+}
+
 /** Phase 2: tag trunk's merged HEAD and publish the GitHub Release. */
 export async function finalize(
   deps: Deps,
@@ -185,6 +223,12 @@ export async function finalize(
   }
 
   const npmLive = await deps.npm.isVersionPublished(version);
+  let approval: FinalizeResult["approval"] = null;
+  if (opts.dryRun) {
+    if (!npmLive) deps.io.log(`Would follow the publish run for ${trunkSha}.`);
+  } else if (!npmLive) {
+    approval = await followPublishRun(deps, trunkSha);
+  }
 
   return {
     phase: "finalize",
@@ -194,6 +238,7 @@ export async function finalize(
     taggedSha: trunkSha,
     releaseUrl,
     npmLive,
+    approval,
     dryRun: opts.dryRun,
   };
 }

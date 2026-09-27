@@ -5,6 +5,21 @@
 
 import { $ } from "bun";
 
+// The publish workflow's contract; release-workflow.test.ts pins each against the file.
+export const PUBLISH_WORKFLOW = "publish.yml";
+/** No `name:` override: `gh run view --json jobs` reports the display name. */
+export const STAGE_JOB = "stage";
+export const STAGE_ID_ANNOTATION = "npm-stage-id";
+
+/** A publish workflow run as `gh run list` reports it. */
+export interface PublishRun {
+  id: number;
+  url: string;
+  status: string;
+  conclusion: string | null;
+  headSha: string;
+}
+
 /** The PR states gh reports, uppercase end to end. */
 export type PrState = "OPEN" | "CLOSED" | "MERGED";
 
@@ -34,6 +49,10 @@ export interface GitHubOps {
   releaseEdit(opts: { tag: string; notes: string }): Promise<void>;
   /** Publish a draft release; returns its (post-publish) URL. */
   releasePublish(tag: string): Promise<string>;
+  /** The latest push-triggered publish run for a commit, or null if none exists. */
+  publishRun(sha: string): Promise<PublishRun | null>;
+  /** The stage id the run's stage job annotated, or null if it has none. */
+  stageId(runId: number): Promise<string | null>;
 }
 
 /** PR number from a `.../pull/<n>` URL, or 0 if it can't be parsed. */
@@ -98,6 +117,26 @@ export function createGitHub(): GitHubOps {
       const view = await this.releaseView(tag);
       if (view === null) throw new Error(`Release ${tag} vanished after publishing.`);
       return view.url;
+    },
+
+    async publishRun(sha) {
+      const out =
+        await $`gh run list --workflow ${PUBLISH_WORKFLOW} --commit ${sha} --event push --json databaseId,url,status,conclusion,headSha --limit 1`.text();
+      const [run] = JSON.parse(out) as (Omit<PublishRun, "id"> & { databaseId: number })[];
+      if (run === undefined) return null;
+      const { databaseId, ...rest } = run;
+      return { id: databaseId, ...rest };
+    },
+
+    async stageId(runId) {
+      const jobId = (
+        await $`gh run view ${runId} --json jobs --jq ${`.jobs[] | select(.name=="${STAGE_JOB}") | .databaseId`}`.text()
+      ).trim();
+      if (jobId === "") return null;
+      const id = (
+        await $`gh api ${`repos/{owner}/{repo}/check-runs/${jobId}/annotations`} --jq ${`.[] | select(.title=="${STAGE_ID_ANNOTATION}") | .message`}`.text()
+      ).trim();
+      return id === "" ? null : id;
     },
   };
 }

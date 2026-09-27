@@ -12,7 +12,7 @@ import {
   pkg,
 } from "@test/support/release-harness.ts";
 import type { ErrorCode } from "@/tasks/release/contract.ts";
-import type { PrState } from "@/tasks/release/github.ts";
+import type { PrState, PublishRun } from "@/tasks/release/github.ts";
 import {
   baseline,
   compute,
@@ -22,14 +22,15 @@ import {
   publish,
 } from "@/tasks/release/steps.ts";
 
-async function expectGuard(p: Promise<unknown>, code: ErrorCode) {
+async function expectGuard(p: Promise<unknown>, code: ErrorCode): Promise<GuardError> {
   try {
     await p;
-    throw new Error(`expected GuardError ${code}, but it resolved`);
   } catch (e) {
     if (!(e instanceof GuardError)) throw e;
     expect(e.code).toBe(code);
+    return e;
   }
+  throw new Error(`expected GuardError ${code}, but it resolved`);
 }
 
 // --- compute ---------------------------------------------------------------
@@ -253,10 +254,22 @@ test("prepare rejects PR_CLOSED when the release PR was closed unmerged", async 
 
 // --- finalize --------------------------------------------------------------
 
+const RUN_URL = "https://github.com/macintacos/caret/actions/runs/7";
+const run = (status: string, conclusion: string | null = null): PublishRun => ({
+  id: 7,
+  url: RUN_URL,
+  status,
+  conclusion,
+  headSha: "mergedsha",
+});
+const GREEN_RUN = run("completed", "success");
+
 // Trunk's three manifests at 0.1.0, ahead of the harness's default v0.0.1 tag —
-// i.e. the bump PR merged. That gap is the merged-check.
+// i.e. the bump PR merged — and the tag's publish run staged as "stage-42".
 const FINALIZE_OPTS: HarnessOptions = {
   refs: { "origin/trunk": "mergedsha" },
+  runs: { mergedsha: [GREEN_RUN] },
+  stageIds: { "7": "stage-42" },
   filesAtRef: {
     "origin/trunk:package.json": pkg("0.1.0"),
     "origin/trunk:.claude-plugin/plugin.json": pkg("0.1.0"),
@@ -441,6 +454,83 @@ test("finalize reuses an existing GitHub release", async () => {
   const r = await finalize(deps, { dryRun: false });
   expect(calls).not.toContain("releaseCreate:v0.1.0");
   expect(r.releaseUrl).toBe("https://github.com/macintacos/caret/releases/tag/v0.1.0");
+});
+
+// --- finalize: following the publish run ------------------------------------
+
+test("finalize rejects CI_FAILED naming the run when the publish run failed", async () => {
+  const { deps, calls } = makeReleaseHarness({
+    ...releaseAlreadyPublished(),
+    runs: { mergedsha: [run("completed", "failure")] },
+  });
+  const err = await expectGuard(finalize(deps, { dryRun: false }), "CI_FAILED");
+  expect(err.message).toContain(RUN_URL);
+  expect(calls.some((c) => c.startsWith("createTag:"))).toBe(false);
+  expect(calls).not.toContain("releaseCreate:v0.1.0");
+});
+
+test("finalize rejects CI_NO_RUN when no publish run appears within the bound", async () => {
+  const { deps, calls } = makeReleaseHarness({ ...FINALIZE_OPTS, runs: {} });
+  await expectGuard(finalize(deps, { dryRun: false }), "CI_NO_RUN");
+  expect(calls.filter((c) => c.startsWith("publishRun:"))).toHaveLength(30);
+});
+
+test("finalize rejects CI_TIMEOUT naming the run when it is still running at the bound", async () => {
+  const { deps } = makeReleaseHarness({
+    ...FINALIZE_OPTS,
+    runs: { mergedsha: [run("in_progress")] },
+  });
+  const err = await expectGuard(finalize(deps, { dryRun: false }), "CI_TIMEOUT");
+  expect(err.message).toContain(RUN_URL);
+});
+
+test("finalize waits for the publish run and hands back its stage id", async () => {
+  const { deps } = makeReleaseHarness({
+    ...FINALIZE_OPTS,
+    runs: { mergedsha: [run("queued"), run("in_progress"), GREEN_RUN] },
+  });
+  const r = await finalize(deps, { dryRun: false });
+  expect(r.npmLive).toBe(false);
+  expect(r.approval).toEqual({ stageId: "stage-42", runUrl: RUN_URL, builtSha: r.taggedSha });
+});
+
+test("finalize resumes a staged-but-unapproved release to the same approval", async () => {
+  const { deps, calls } = makeReleaseHarness(
+    releaseAlreadyPublished({
+      "v0.1.0": { url: "https://github.com/macintacos/caret/releases/tag/v0.1.0", isDraft: true },
+    }),
+  );
+  const r = await finalize(deps, { dryRun: false });
+  expect(r.approval).toEqual({ stageId: "stage-42", runUrl: RUN_URL, builtSha: "mergedsha" });
+  expect(calls.some((c) => c.startsWith("createTag:"))).toBe(false);
+  expect(calls).not.toContain("releaseCreate:v0.1.0");
+});
+
+test("finalize skips the publish run once the version is live", async () => {
+  const { deps, calls } = makeReleaseHarness({
+    ...releaseAlreadyPublished({
+      "v0.1.0": { url: "https://github.com/macintacos/caret/releases/tag/v0.1.0", isDraft: true },
+    }),
+    npmPublishedVersions: ["0.1.0"],
+  });
+  const r = await finalize(deps, { dryRun: false });
+  expect(r.npmLive).toBe(true);
+  expect(r.approval).toBeNull();
+  expect(calls.some((c) => c.startsWith("publishRun:"))).toBe(false);
+});
+
+test("finalize rejects STAGE_ID_MISSING when a green run carries no stage id", async () => {
+  const { deps } = makeReleaseHarness({ ...FINALIZE_OPTS, stageIds: {} });
+  const err = await expectGuard(finalize(deps, { dryRun: false }), "STAGE_ID_MISSING");
+  expect(err.message).toContain(RUN_URL);
+});
+
+test("finalize dry run previews the commit it would follow without asking gh", async () => {
+  const { deps, calls, logs } = makeReleaseHarness(FINALIZE_OPTS);
+  const r = await finalize(deps, { dryRun: true });
+  expect(r.approval).toBeNull();
+  expect(calls.some((c) => c.startsWith("publishRun:") || c.startsWith("stageId:"))).toBe(false);
+  expect(logs.some((m) => m.includes("mergedsha") && m.includes("publish run"))).toBe(true);
 });
 
 // --- finalize: title ---------------------------------------------------------
