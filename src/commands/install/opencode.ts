@@ -12,15 +12,13 @@
 // OpenCode resolves an array entry once and caches it forever — re-adding the entry, all
 // a re-run would otherwise do, never moves anyone off the version they installed on.
 
-import { existsSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
 import {
   addPluginToConfigText,
-  pluginEntries,
   removePluginFromConfigText,
   setPluginVersionInConfigText,
-  splitPluginSpecifier,
 } from "@/adapters/opencode/config-plugin.ts";
 import {
   type DeployFile,
@@ -36,13 +34,14 @@ import {
   existingOpencodeCachePackageDirs,
   isLocalPluginSpecifier,
   localPluginSpecifier,
-  localSpecifierPath,
   namespacedCommandFilename,
   opencodeConfigDir,
   resolveConfigFile,
 } from "@/adapters/opencode/paths.ts";
 import {
+  caretEntries,
   clearCachedCaret,
+  isCaretCheckout,
   readConfigText,
   readUpgradeVerdict,
   type StaleVerdict,
@@ -72,24 +71,6 @@ export interface InstallOpencodeDeps {
   confirm?: (verdict: StaleVerdict) => Promise<boolean | null>;
   isInteractive?: () => boolean;
   isCheckout?: (dir: string) => boolean;
-}
-
-/** Whether `dir` is a caret checkout, by the one file OpenCode would have to load out of
- * it. The same probe `resolveCaretRoot` uses, so "is this a caret?" has one answer. */
-function isCaretCheckout(dir: string): boolean {
-  return existsSync(join(dir, "opencode", "caret.plugin.ts"));
-}
-
-/** The `plugin` array entries that are caret's: the npm package under any pin, plus any
- * local specifier whose path is a caret checkout. A `file:` entry pointing elsewhere
- * belongs to another tool and is left alone. */
-function caretEntries(text: string | null, isCheckout: (dir: string) => boolean): string[] {
-  return pluginEntries(text).filter((entry) => {
-    const path = localSpecifierPath(entry);
-    return path === undefined
-      ? splitPluginSpecifier(entry).pkg === CARET_PACKAGE
-      : isCheckout(path);
-  });
 }
 
 /** Whether an existing caret entry is the same FORM as the one being written, and so may

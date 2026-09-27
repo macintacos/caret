@@ -2,7 +2,8 @@
 // read-only snapshot of caret's OpenCode install. caret installs as a `plugin` array
 // entry (@macintacos/caret) that OpenCode installs into its own cache, one
 // `packages/<specifier>/` dir per array entry with the installed version recorded in
-// that dir's `node_modules/@macintacos/caret/package.json`. Mirrors claude/codex
+// that dir's `node_modules/@macintacos/caret/package.json`; a `--from-local` `file:` entry
+// for a caret checkout counts too, read through OpenCode's symlink to the checkout. Mirrors claude/codex
 // install.ts's degrade-to-"unknown" discipline — every field degrades rather than throwing, so
 // doctor always renders. Reads only caret's own cache dirs and the user's plugin
 // array — never any other config key.
@@ -18,7 +19,12 @@ import {
   opencodeConfigDir,
   resolveConfigFile,
 } from "@/adapters/opencode/paths.ts";
-import { readCaretEntry, readEntryCachedVersion } from "@/adapters/opencode/upgrade.ts";
+import {
+  caretEntries,
+  isCaretCheckout,
+  readConfigText,
+  readEntryCachedVersion,
+} from "@/adapters/opencode/upgrade.ts";
 import { parseVersionTriple } from "@/lib/semver.ts";
 
 /** Best-effort read of caret's OpenCode install state. Every miss degrades to
@@ -32,7 +38,7 @@ export function readOpencodeInstallState(): InstallProbe {
   // pluginVersion agrees with the opencode-caret-version check.
   let entry: string | null;
   try {
-    entry = readCaretEntry(resolveConfigFile(dir));
+    entry = caretEntries(readConfigText(resolveConfigFile(dir)), isCaretCheckout)[0] ?? null;
   } catch {
     return {
       pluginVersion: "unknown",

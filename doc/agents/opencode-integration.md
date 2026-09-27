@@ -356,6 +356,10 @@ own installed-check is `existsSafe(join(dir, "node_modules", name))`, not the di
 itself — so the probe treats a resolved version, never directory presence, as proof of
 install.
 
+The probe recognises a `--from-local` checkout entry (`file:<checkout>`) the way install
+does, and that entry's cache dir holds `node_modules/@macintacos/caret` as a symlink to
+the checkout, so the version it reads is the checkout's.
+
 ## Runtime resolution + update check (EXC-794)
 
 The array install has no marker-substitution step, so the plugin resolves what it needs at
