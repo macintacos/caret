@@ -217,6 +217,105 @@ test("with no lock, lockAndPort still reports portServesCaret", async () => {
   expect(report.lockAndPort).toEqual({ lockExists: false, portServesCaret: true });
 });
 
+// ---- service supervisor + npm version ----
+
+const LAUNCHD_BOOTED_OUT = { installed: false, running: false, disabled: false, keepsAlive: false };
+const SYSTEMD_DISABLED = { installed: true, running: false, disabled: true, keepsAlive: false };
+const SYSTEMD_FAILED = { installed: true, running: false, disabled: false, keepsAlive: false };
+
+test("with no recorded service the supervisor is never asked and serviceKeptAlive is absent", async () => {
+  let asked = false;
+  const report = await collectReport(
+    doctorDeps({
+      serviceInstalled: () => false,
+      serviceStatus: async () => {
+        asked = true;
+        return LAUNCHD_BOOTED_OUT;
+      },
+    }),
+  );
+  expect(asked).toBe(false);
+  expect("serviceKeptAlive" in report.daemon).toBe(false);
+});
+
+test("a recorded service whose job is not kept alive reads serviceKeptAlive:false on either platform", async () => {
+  for (const status of [LAUNCHD_BOOTED_OUT, SYSTEMD_DISABLED, SYSTEMD_FAILED]) {
+    const report = await collectReport(
+      doctorDeps({ serviceInstalled: () => true, serviceStatus: async () => status }),
+    );
+    expect(report.daemon).toMatchObject({ serviceKeptAlive: false });
+  }
+});
+
+test("a supervisor query that throws leaves the daemon section intact without serviceKeptAlive", async () => {
+  const report = await collectReport(
+    doctorDeps({
+      serviceInstalled: () => true,
+      serviceStatus: () => {
+        throw new Error("unsupported platform");
+      },
+    }),
+  );
+  expect(report.daemon).toMatchObject({
+    reachable: true,
+    serviceInstalled: true,
+    serviceStatusError: "unsupported platform",
+  });
+  expect("serviceKeptAlive" in report.daemon).toBe(false);
+});
+
+test("a host that cannot run the service leaves serviceKeptAlive absent", async () => {
+  const report = await collectReport(
+    doctorDeps({
+      serviceInstalled: () => true,
+      serviceStatus: async () => ({ ...LAUNCHD_BOOTED_OUT, unsupported: "no supervisor" }),
+    }),
+  );
+  expect(report.daemon).toMatchObject({ serviceStatusError: "no supervisor" });
+  expect("serviceKeptAlive" in report.daemon).toBe(false);
+});
+
+test("a recorded service the supervisor keeps alive reads serviceKeptAlive:true", async () => {
+  const report = await collectReport(
+    doctorDeps({
+      serviceInstalled: () => true,
+      serviceStatus: async () => ({
+        installed: true,
+        running: true,
+        disabled: false,
+        keepsAlive: true,
+      }),
+    }),
+  );
+  expect(report.daemon).toMatchObject({ serviceKeptAlive: true });
+  expect("serviceStatusError" in report.daemon).toBe(false);
+});
+
+test("a published caret daemon carries npm's latest version", async () => {
+  const report = await collectReport(doctorDeps({ publishedVersion: async () => "2.0.0" }));
+  expect(report.daemon).toMatchObject({ daemonVersion: "1.2.3", npmLatest: "2.0.0" });
+});
+
+test("a dev daemon, a non-caret squatter, or no daemon never reads npm", async () => {
+  for (const health of [
+    async () => ({ service: "caret", version: "1.2.3", isDev: true }),
+    async () => ({ service: "other", version: "9.9.9" }),
+    async () => null,
+  ]) {
+    let read = false;
+    await collectReport(
+      doctorDeps({
+        health,
+        publishedVersion: async () => {
+          read = true;
+          return "2.0.0";
+        },
+      }),
+    );
+    expect(read).toBe(false);
+  }
+});
+
 // A booting daemon has no lock yet, so the marker is reported whether or not one exists.
 test("a boot marker reports its pid and age beside a missing lock", async () => {
   const report = await collectReport(

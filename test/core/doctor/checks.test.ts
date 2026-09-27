@@ -1,7 +1,14 @@
 import { expect, test } from "bun:test";
 
 import { runChecks } from "@/doctor/checks.ts";
-import type { Check, LogStats, Report } from "@/doctor/report.ts";
+import {
+  type Check,
+  type DaemonSection,
+  isSectionError,
+  type LogStats,
+  type Report,
+  type SectionError,
+} from "@/doctor/report.ts";
 
 function log(path: string, errors = 0, lastErrorAt?: string): LogStats {
   return { path, exists: true, size: 10, errors, warns: 0, lastErrorAt };
@@ -20,7 +27,13 @@ function report(over: Partial<Report> = {}): Report {
     system: { platform: "darwin", os: "macos", arch: "arm64" },
     install: { kind: "prod", binaryPath: "/bin/caret", bunVersion: "0.0.0" },
     settings: {},
-    daemon: { reachable: true, serviceInstalled: true, service: "caret" },
+    daemon: {
+      reachable: true,
+      serviceInstalled: true,
+      service: "caret",
+      daemonVersion: "1.2.3",
+      npmLatest: "1.2.3",
+    },
     lockAndPort: {
       lockExists: true,
       portServesCaret: true,
@@ -66,6 +79,7 @@ test("a healthy install passes every check", () => {
   expect(checks.map((c) => c.status)).toEqual(checks.map(() => "pass"));
   expect(checks.map((c) => c.id)).toEqual([
     "daemon-reachable",
+    "daemon-version",
     "daemon-lock",
     "agent-install",
     "log-errors",
@@ -98,6 +112,73 @@ test("a degraded daemon section yields unknown, claiming nothing about the daemo
   const undecided = check(checks, "daemon-reachable");
   expect(undecided.status).toBe("unknown");
   expect(undecided.detail).toBe("");
+});
+
+test("a recorded service whose job is not loaded fails daemon-reachable even while a daemon answers", () => {
+  const checks = runChecks(
+    report({
+      daemon: {
+        reachable: true,
+        serviceInstalled: true,
+        service: "caret",
+        serviceKeptAlive: false,
+      },
+    }),
+  );
+  const failed = check(checks, "daemon-reachable");
+  expect(failed.status).toBe("fail");
+  expect(failed.detail).toContain("not loaded");
+});
+
+// ---- daemon-version ----
+
+function versionCheck(daemon: Partial<DaemonSection> | SectionError): Check {
+  const base = {
+    reachable: true,
+    serviceInstalled: true,
+    service: "caret",
+    daemonVersion: "1.2.3",
+  };
+  const merged = isSectionError(daemon) ? daemon : { ...base, ...daemon };
+  return check(runChecks(report({ daemon: merged })), "daemon-version");
+}
+
+test("a daemon older than npm's latest fails daemon-version with the refresh remedy", () => {
+  const failed = versionCheck({ npmLatest: "1.3.0" });
+  expect(failed.status).toBe("fail");
+  expect(failed.detail).toContain("1.2.3");
+  expect(failed.detail).toContain("1.3.0");
+  expect(failed.status === "fail" && failed.remedy).toContain("caret install --refresh");
+});
+
+test("a daemon at or ahead of npm's latest passes daemon-version and names its version", () => {
+  for (const npmLatest of ["1.2.3", "1.2.0"]) {
+    const passed = versionCheck({ npmLatest });
+    expect(passed.status).toBe("pass");
+    expect(passed.detail).toContain("1.2.3");
+  }
+});
+
+test("an unreadable npm leaves daemon-version unknown", () => {
+  expect(versionCheck({ npmLatest: null }).status).toBe("unknown");
+});
+
+test("a development daemon passes daemon-version without comparing", () => {
+  expect(versionCheck({ isDev: true, npmLatest: "9.9.9" }).status).toBe("pass");
+});
+
+test("no caret daemon running passes daemon-version", () => {
+  expect(versionCheck({ reachable: false, service: undefined }).status).toBe("pass");
+});
+
+test("a caret daemon that reports no version passes daemon-version and says so", () => {
+  const passed = versionCheck({ daemonVersion: undefined });
+  expect(passed.status).toBe("pass");
+  expect(passed.detail).toBe("the running caret did not report a version");
+});
+
+test("a degraded daemon section leaves daemon-version unknown", () => {
+  expect(versionCheck({ error: "probe boom" }).status).toBe("unknown");
 });
 
 // ---- daemon-lock ----
@@ -321,7 +402,7 @@ test("a fully degraded report decides nothing rather than passing every check", 
     logs: { error: "x" },
   });
   const checks = runChecks(degraded);
-  expect(checks).toHaveLength(4);
+  expect(checks).toHaveLength(5);
   expect(checks.map((c) => c.status)).toEqual(checks.map(() => "unknown"));
   for (const c of checks) {
     expect(c.detail).toBe("");

@@ -21,6 +21,13 @@ export function doctorDeps(over: Partial<DoctorDeps> = {}): DoctorDeps {
     baseUrl: "http://localhost:42718",
     health: async () => ({ service: "caret", version: "1.2.3", build: "abc", commit: "def" }),
     serviceInstalled: () => false,
+    serviceStatus: async () => ({
+      installed: true,
+      running: true,
+      disabled: false,
+      keepsAlive: true,
+    }),
+    publishedVersion: async () => "1.2.3",
     readLock: () => ({ pid: 111, port: 42718, build: "abc", version: "1.2.3", startedAt: 9 }),
     readBootMarker: () => null,
     isPidAlive: () => true,

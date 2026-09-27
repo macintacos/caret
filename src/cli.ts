@@ -18,6 +18,7 @@ import { fatalDeny } from "@/adapters/index.ts";
 import { runDaemon } from "@/commands/daemon.ts";
 import { runDoctorSubcommand } from "@/commands/doctor.ts";
 import { installExitCode, runInstallSubcommand } from "@/commands/install/index.ts";
+import { prodServiceWatch } from "@/commands/install/service.ts";
 import { runPrewarm } from "@/commands/prewarm.ts";
 import { runReconcileSubcommand } from "@/commands/reconcile.ts";
 import { runRedactSubcommand } from "@/commands/redact.ts";
@@ -123,7 +124,7 @@ function buildProgram(): Command {
           refresh: opts.refresh ?? false,
           fromLocal: opts.fromLocal ?? false,
         },
-        { service: prodService },
+        { service: prodService, watch: prodServiceWatch() },
       );
       // The command reports every problem itself; this is the only place one becomes an
       // exit code.
