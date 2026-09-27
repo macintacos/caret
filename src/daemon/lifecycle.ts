@@ -623,18 +623,31 @@ export const SUPERVISOR_WINDOW_MS = Array.from({ length: PROD_MAX_ATTEMPTS }, (_
   backoffFloorMs(attempt),
 ).reduce((sum, ms) => sum + ms, 0);
 
-/** Whether the launcher execs a pinned root: the pin record's newline-terminated first line
- * names a checkout whose `bin/caret` is executable and that has a UI — a compiled
- * `bin/caret-native` or `ui/dist`. Keep in sync with `root_runnable()` (the pin half of
- * `resolve_root()`) in bin/caret-launcher, whose `read` rejects a last line with no
- * newline. */
+/** Whether the launcher execs a pinned root. */
 function isLauncherPinned(): boolean {
+  const pin = readPinnedRoot();
+  return pin !== null && isRunnableRoot(pin);
+}
+
+/** The root a `--from-local` install pinned the launcher to, or null when there is none
+ * or the record cannot be read. Only a newline-terminated first line counts: the
+ * launcher's `read` rejects a last line with no newline. */
+export function readPinnedRoot(): string | null {
   try {
     const text = readFileSync(launcherPinnedRootFile(), "utf8");
     const nl = text.indexOf("\n");
-    if (nl < 0) return false;
-    const root = text.slice(0, nl).trim();
-    if (!root) return false;
+    if (nl < 0) return null;
+    return text.slice(0, nl).trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether the launcher would exec `root`: its `bin/caret` is executable and it has a UI
+ * — a compiled `bin/caret-native` or `ui/dist`. Keep in sync with `root_runnable()` in
+ * bin/caret-launcher. */
+export function isRunnableRoot(root: string): boolean {
+  try {
     accessSync(join(root, "bin", "caret"), constants.X_OK);
     try {
       accessSync(join(root, "bin", "caret-native"), constants.X_OK);

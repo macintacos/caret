@@ -56,6 +56,12 @@ export function launcherRecordDir(): string {
   return `${stateDir()}/launcher`;
 }
 
+/** Copies of the published caret `caret install` ran as, one dir per version, which the
+ * launcher scans beside the agents' caches. */
+export function ownedRootsDir(): string {
+  return `${stateDir()}/roots`;
+}
+
 /** Absolute `bun`, recorded at service-install time. */
 export function launcherBunFile(): string {
   return `${launcherRecordDir()}/bun-path`;

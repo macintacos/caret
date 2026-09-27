@@ -156,8 +156,8 @@ export async function runInstallSubcommand(
   }
 
   await rumdlStep(opts, deps, ui);
-  // After the target runners, so `--refresh`'s restart cycles a supervisor that resolves
-  // the plugin cache those runners just updated.
+  // After the target runners, so --refresh's restart, and the root the step names, see the
+  // agent caches those runners just updated.
   if (opts.uninstall) await uninstallService({ dryRun: opts.dryRun }, deps, ui);
   else
     await reconcileService(

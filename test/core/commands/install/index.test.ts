@@ -2,15 +2,19 @@
 // agents otherwise) and dispatch to the injected target runners.
 
 import { expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { manifest, rootAt, runnableRoot } from "@test/support/caret-root.ts";
 import { withEnv } from "@test/support/env.ts";
 import { fakeServiceTarget } from "@test/support/service-manager.ts";
 import { installExitCode, runInstallSubcommand } from "@/commands/install/index.ts";
+import { installLauncher, prodLauncherRoot } from "@/commands/install/launcher.ts";
 import { INSTALL_TARGET_IDS, type InstallTarget } from "@/commands/install/targets.ts";
 import { recordingUI, silentUI } from "@/commands/install/ui.ts";
+import { ownedRootsDir } from "@/config/paths.ts";
 import { RUMDL_VERSION } from "@/plan/rumdl.ts";
 
 /** Keep a test off the real rumdl download: without this seam the command falls through
@@ -542,4 +546,53 @@ test("--dry-run previews the detected agents instead of prompting", async () => 
   );
   expect(chooser.wasPrompted()).toBe(false);
   expect(calls).toEqual(["opencode"]);
+});
+
+test("--refresh leaves the service a root at the installing caret that outlives the install", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-install-index-"));
+  const claudeDir = await mkdtemp(join(tmpdir(), "caret-install-claude-"));
+  runnableRoot(join(claudeDir, "plugins/cache/caret/caret/1.0.2"), manifest("1.0.2"));
+  const installing = rootAt("1.1.0");
+  const launcherSource = join(stateHome, "caret-launcher");
+  await Bun.write(launcherSource, "#!/usr/bin/env bash\n");
+  const env = {
+    XDG_STATE_HOME: stateHome,
+    CARET_CONFIG_FILE: join(stateHome, "config.toml"),
+    CLAUDE_CONFIG_DIR: claudeDir,
+    XDG_CACHE_HOME: await mkdtemp(join(tmpdir(), "caret-install-cache-")),
+  };
+  const install = (refresh: boolean) => {
+    const service = fakeServiceTarget({ status: { installed: true } });
+    const ui = recordingUI();
+    return runInstallSubcommand(
+      { ...PLAIN_INSTALL, refresh },
+      {
+        ...CLAUDE_ONLY,
+        ...recordingRunners([]),
+        ui,
+        ensureRumdl: noRumdl,
+        service: service.target,
+        installLauncher: (d) =>
+          installLauncher({
+            ...d,
+            source: () => launcherSource,
+            bunPath: "/opt/bun/bin/bun",
+            ownedRoot: () => ({ root: installing, version: "1.1.0" }),
+          }),
+        launcherRoot: prodLauncherRoot,
+      },
+    ).then(() => ({ calls: service.calls, transcript: ui.events.join("\n") }));
+  };
+
+  await withEnv(env, async () => {
+    const { calls, transcript } = await install(true);
+    expect(transcript).toContain("1.1.0");
+    expect(transcript).not.toContain("1.0.2");
+    expect(calls).toContain("restart");
+
+    await rm(installing, { recursive: true, force: true });
+    await install(false);
+    expect(existsSync(join(ownedRootsDir(), "1.1.0"))).toBe(true);
+    expect(prodLauncherRoot()?.version).toBe("1.1.0");
+  });
 });

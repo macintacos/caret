@@ -67,6 +67,17 @@ stub_service() {
   done
 }
 
+# An installed service: the stubs, bin/, the `service` record, and its unit file,
+# whose path lands in $unit.
+seed_service() {
+  stub_service
+  mkdir -p "$home/.local/state/caret/bin"
+  printf 'dev.excessive.caret\n' >"$home/.local/state/caret/launcher/service"
+  unit="$(unit_path dev.excessive.caret)"
+  mkdir -p "$(dirname "$unit")"
+  touch "$unit"
+}
+
 # BSD and GNU stat disagree on the flag. GNU first, because its `-f` prints file
 # system status on stdout rather than failing cleanly, which would poison the
 # capture; BSD rejects `-c` outright.
@@ -240,13 +251,56 @@ launcher_supervised() { CARET_SUPERVISED=1 launcher "$@"; }
 }
 
 @test "no caret anywhere evicts the launcher, its records, and its service unit" {
-  stub_service
-  mkdir -p "$home/.local/state/caret/bin"
-  printf 'dev.excessive.caret\n' >"$home/.local/state/caret/launcher/service"
-  local unit
-  unit="$(unit_path dev.excessive.caret)"
-  mkdir -p "$(dirname "$unit")"
-  touch "$unit"
+  seed_service
+  mkdir -p "$home/.local/state/caret/roots"
+  run -0 launcher
+  [ ! -e "$unit" ]
+  [ ! -e "$home/.local/state/caret/bin" ]
+  [ ! -e "$home/.local/state/caret/launcher" ]
+  [ ! -e "$home/.local/state/caret/roots" ]
+}
+
+@test "an owned root beats a stale Claude root once OpenCode's cache is empty" {
+  stub_bun
+  seed_caret "$home/.claude/plugins/cache/caret/caret/1.0.2" 1.0.2
+  seed_caret "$home/.local/state/caret/roots/1.1.0" 1.1.0
+  run -0 launcher
+  [[ "$output" == *"CARET 1.1.0"* ]]
+}
+
+@test "an owned root older than an agent's root loses" {
+  stub_bun
+  seed_caret "$home/.claude/plugins/cache/caret/caret/1.2.0" 1.2.0
+  seed_caret "$home/.local/state/caret/roots/1.1.0" 1.1.0
+  run -0 launcher
+  [[ "$output" == *"CARET 1.2.0"* ]]
+}
+
+# A hook reuses a supervised daemon only on a matching build, so a same-version owned
+# copy winning would cycle the service on every review from that agent.
+@test "an owned root loses a version tie to an agent's root" {
+  stub_bun
+  local claude="$home/.claude/plugins/cache/caret/caret/1.1.0"
+  seed_caret "$claude" 1.1.0
+  seed_caret "$home/.local/state/caret/roots/1.1.0" 1.1.0
+  printf '#!%s\necho "CARET claude-1.1.0"\n' "$BASH_BIN" >"$claude/bin/caret"
+  run -0 launcher
+  [[ "$output" == *"CARET claude-1.1.0"* ]]
+}
+
+@test "an owned root alone is run, not evicted" {
+  stub_bun
+  seed_service
+  seed_caret "$home/.local/state/caret/roots/1.1.0" 1.1.0
+  run -0 launcher
+  [[ "$output" == *"CARET 1.1.0"* ]]
+  [ -e "$unit" ]
+  [ -e "$home/.local/state/caret/bin" ]
+}
+
+@test "a dot-prefixed dir under the owned roots is never a candidate" {
+  seed_service
+  seed_caret "$home/.local/state/caret/roots/.1.1.0.123.tmp" 1.1.0
   run -0 launcher
   [ ! -e "$unit" ]
   [ ! -e "$home/.local/state/caret/bin" ]

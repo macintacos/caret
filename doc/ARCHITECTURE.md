@@ -62,8 +62,9 @@ What starts a daemon decides how long it stays up. There are three ways:
 The service never names a caret build. Its unit runs the launcher, `bin/caret-launcher`,
 copied to `$XDG_STATE_HOME/caret/bin/caret`, which picks caret each time it starts: the
 checkout a `--from-local` install pinned, else the highest-versioned caret across the
-Claude Code plugin cache and the OpenCode package cache. Nothing in the unit depends on
-the version, so restarting the service is the upgrade.
+Claude Code plugin cache, the OpenCode package cache, and caret's own copies under
+`$XDG_STATE_HOME/caret/roots/` (an agent's root wins a tie). Nothing in the unit depends
+on the version, so restarting the service is the upgrade.
 
 Every review and prewarm hook first makes sure a current daemon holds the port
 (`ensureDaemon`, `src/daemon/lifecycle.ts`):
@@ -295,9 +296,12 @@ re-resolves on next start **or**, for a stale pinned entry, bumps the pin in the
 place — a bump deliberately leaves the cache alone, since the new specifier gets its own
 cache dir. A plain `caret install` runs the same check and asks first at a terminal; off
 one, with no flag, it names the gap and the command that would close it and changes
-nothing. Restart OpenCode afterward. Pinning `"@macintacos/caret@<version>"` in the array
-and bumping it yourself is the other way to control which version loads. Clearing the
-cache by hand is:
+nothing. Restart OpenCode afterward. Until then the caret service does not fall back to an
+older root: a published `caret install` keeps a copy of itself under
+`~/.local/state/caret/roots/<version>/`, which the service's launcher scans as a third
+place (see [the service's launcher](#the-daemons-lifecycle)). Pinning
+`"@macintacos/caret@<version>"` in the array and bumping it yourself is the other way to
+control which version loads. Clearing the cache by hand is:
 
 ```sh
 rm -rf ~/.cache/opencode/packages/@macintacos/caret*

@@ -5,21 +5,23 @@
 
 import { expect, test } from "bun:test";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 
+import { manifest, runnableRoot } from "@test/support/caret-root.ts";
 import { setupTempConfigFile, setupTempStateDir } from "@test/support/env.ts";
 import { expectCleanExitCode } from "@test/support/exit-code.ts";
 import { fakeServiceTarget } from "@test/support/service-manager.ts";
 import type { LauncherDeps } from "@/commands/install/launcher.ts";
 import {
   reconcileService,
+  type ServiceStepDeps,
   type ServiceWatch,
   uninstallService,
 } from "@/commands/install/service.ts";
 import { recordingUI } from "@/commands/install/ui.ts";
 import { SURFACES } from "@/commands/service-target.ts";
 import { VANITY_HOST } from "@/config/constants.ts";
-import { launcherPath, launcherRecordDir } from "@/config/paths.ts";
+import { launcherPath, launcherRecordDir, ownedRootsDir } from "@/config/paths.ts";
 import type { HealthIdentity } from "@/lib/types.ts";
 
 // Each test starts from a config nobody has written, so an absent key means default.
@@ -575,4 +577,115 @@ test("a plain install over an older daemon says to refresh it", async () => {
   expect(watch.probes).toBe(60);
   expect(warning(events)).toContain("0.9.0");
   expect(warning(events)).toContain("caret install --refresh");
+});
+
+/** Two runnable owned roots, as a newer install leaves beside an older one. */
+function seedOwnedRoots(): void {
+  for (const v of ["1.0.2", "1.1.0"]) runnableRoot(join(ownedRootsDir(), v), manifest(v));
+}
+
+test("a cycling install prunes the owned roots the restarted service no longer runs", async () => {
+  seedOwnedRoots();
+  const service = fakeServiceTarget({ status: { installed: true, running: true } });
+
+  await reconcileService(
+    { ...RECONCILE, refresh: true },
+    { service: service.target, installLauncher: stubLauncher },
+    recordingUI(),
+  );
+
+  expect(service.calls).toContain("restart");
+  expect(existsSync(join(ownedRootsDir(), "1.0.2"))).toBe(false);
+  expect(existsSync(join(ownedRootsDir(), "1.1.0"))).toBe(true);
+});
+
+test("a cycling install whose service never answers still prunes", async () => {
+  seedOwnedRoots();
+  const service = fakeServiceTarget({ status: { installed: true, running: true } });
+
+  await reconcileService(
+    { ...RECONCILE, refresh: true },
+    { service: service.target, installLauncher: stubLauncher, watch: scriptedWatch([null]) },
+    recordingUI(),
+  );
+
+  expect(existsSync(join(ownedRootsDir(), "1.0.2"))).toBe(false);
+  expect(existsSync(join(ownedRootsDir(), "1.1.0"))).toBe(true);
+});
+
+test("an install that does not cycle keeps every owned root a live daemon may serve from", async () => {
+  seedOwnedRoots();
+  const service = fakeServiceTarget({ status: { installed: true, running: true } });
+
+  await reconcileService(
+    RECONCILE,
+    { service: service.target, installLauncher: stubLauncher },
+    recordingUI(),
+  );
+
+  expect(existsSync(join(ownedRootsDir(), "1.0.2"))).toBe(true);
+  expect(existsSync(join(ownedRootsDir(), "1.1.0"))).toBe(true);
+});
+
+/** Reconcile a refresh while `launcherRoot` predicts what the launcher starts. */
+async function reconcilePredicted(launcherRoot: ServiceStepDeps["launcherRoot"]) {
+  const watch = scriptedWatch([
+    null,
+    { service: "caret", version: "1.1.0", instanceId: "b", supervised: true },
+  ]);
+  const service = fakeServiceTarget({ status: { installed: true, running: true } });
+  const ui = recordingUI();
+  await reconcileService(
+    { ...RECONCILE, refresh: true },
+    { service: service.target, installLauncher: stubLauncher, watch, launcherRoot },
+    ui,
+  );
+  return { calls: service.calls, events: ui.events, watch };
+}
+
+test("the announcement names the caret the launcher starts and where it lives", async () => {
+  const { events } = await reconcilePredicted(() => ({ root: "/r/1.1.0", version: "1.1.0" }));
+
+  const announcement = events.find((e) => e.includes(VANITY_HOST));
+  expect(announcement).toContain("1.1.0");
+  expect(announcement).toContain("/r/1.1.0");
+});
+
+test("an install that does not cycle announces without naming a root", async () => {
+  const service = fakeServiceTarget({ status: { installed: true, running: true } });
+  const ui = recordingUI();
+  await reconcileService(
+    RECONCILE,
+    {
+      service: service.target,
+      installLauncher: stubLauncher,
+      watch: scriptedWatch([
+        { service: "caret", version: "1.1.0", instanceId: "a", supervised: true },
+      ]),
+      launcherRoot: () => ({ root: "/r/1.1.0", version: "1.1.0" }),
+    },
+    ui,
+  );
+
+  const announcement = ui.events.find((e) => e.includes(VANITY_HOST));
+  expect(announcement).toBeDefined();
+  expect(announcement).not.toContain("/r/1.1.0");
+});
+
+test("with no runnable caret for the launcher, the install warns and cycles nothing", async () => {
+  const { calls, events, watch } = await reconcilePredicted(() => null);
+
+  expect(warning(events)).toBeDefined();
+  expect(announced(events)).toBe(false);
+  expect(watch.probes).toBe(0);
+  expect(calls).not.toContain("restart");
+});
+
+test("a prediction that throws never costs the restart", async () => {
+  const { calls, events } = await reconcilePredicted(() => {
+    throw new Error("boom");
+  });
+
+  expect(calls).toContain("restart");
+  expect(warning(events)).toBeUndefined();
 });

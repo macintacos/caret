@@ -158,10 +158,12 @@ How long a daemon stays up, and who may replace it.
   `src/daemon/` imports no platform manager.
 - **A unit names the launcher, never a versioned caret path, and carries no
   version-dependent field.** `install()` is a no-op on a byte-identical unit, so
-  `restart()` is the upgrade. Keep in sync: `isLauncherPinned` ↔ `root_runnable()` (the
-  pin half of `resolve_root()`) in `bin/caret-launcher`; `SERVICE_TERMINAL_EXIT_STATUS` ↔
-  its `exit 78`; `WORLD_VARS` ↔ the variables the launcher reads, which
-  `test/structure/service-world-vars.test.ts` enforces.
+  `restart()` is the upgrade. Keep in sync: `isRunnableRoot` ↔ `root_runnable()` in
+  `bin/caret-launcher`; `SERVICE_TERMINAL_EXIT_STATUS` ↔ its `exit 78`; `WORLD_VARS` ↔ the
+  variables the launcher reads, which `test/structure/service-world-vars.test.ts`
+  enforces. `launcherCandidateDirs` ↔ `candidate_dirs()`, and `pickLauncherRoot` ↔
+  `resolve_root()`/`candidates()`/`highest()`, including the rank that lets an agent's
+  root win a version tie with an owned copy. `ownedRootsDir()` ↔ `owned_roots`.
 - **A hook cycles the service rather than retiring its daemon**, which would only race the
   supervisor's restart. The gate is `/api/health`'s `supervised` plus the hook's state dir
   holding the service record (`launcherServiceFile()`); without the record there is no
