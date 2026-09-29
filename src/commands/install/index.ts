@@ -1,13 +1,14 @@
 // The `caret install` command: install caret into one or more coding agents. Each target
-// owns its own mechanism (OpenCode: a `plugin` array entry + command files; Claude Code:
-// the `claude` plugin CLI). caret detects the agents on this machine and asks — on a TTY
-// through the chooser, otherwise by installing into everything it detected (Claude Code
-// when it detected nothing), so CI never hangs on a prompt. The same TTY is then asked
-// whether caret keeps the review UI running; without one, the service is left as found.
-// Every install ends by acquiring the rumdl plan formatter: it is part of a working
-// caret, not a step anyone can skip or forget. `--uninstall` is machine-wide — it removes
-// caret from every agent in the registry, since the residency it tears down alongside
-// them is one service for the whole machine. Neither it nor `--dry-run` acquires rumdl.
+// owns its own mechanism (OpenCode: a `plugins`/`plugin` entry + command files; Claude
+// Code: the `claude` plugin CLI). caret detects the agents on this machine and asks — on
+// a TTY through the chooser, otherwise by installing into everything it detected (Claude
+// Code when it detected nothing), so CI never hangs on a prompt. The same TTY is then
+// asked whether caret keeps the review UI running; without one, the service is left as
+// found. Every install ends by acquiring the rumdl plan formatter: it is part of a
+// working caret, not a step anyone can skip or forget. `--uninstall` is machine-wide — it
+// removes caret from every agent in the registry, since the residency it tears down
+// alongside them is one service for the whole machine. Neither it nor `--dry-run`
+// acquires rumdl.
 
 import { runInstallClaudeTarget } from "@/commands/install/claude.ts";
 import {

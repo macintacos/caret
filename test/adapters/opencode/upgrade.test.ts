@@ -13,11 +13,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { withEnv } from "@test/support/env.ts";
+import { readCaretEntry } from "@/adapters/opencode/entries.ts";
+import type { VersionTriple } from "@/adapters/opencode/host.ts";
 import { existingOpencodeCachePackageDirs } from "@/adapters/opencode/paths.ts";
 import {
   caretCacheDir,
   clearCachedCaret,
-  hasCaretPluginEntry,
   readCachedCaretVersion,
   readUpgradeVerdict,
   type UpgradeVerdict,
@@ -282,23 +283,23 @@ test("a range shim with nothing installed is unknown, naming the range", async (
   expect(v.kind === "unknown" && v.reason).toContain("^1.1.0");
 });
 
-// ---- hasCaretPluginEntry: the question doctor asks before paying for the check ----
+// ---- readCaretEntry: the package-form entry the version check reads ----
 
 test("a config naming caret has an entry; one naming another plugin does not", () => {
-  expect(hasCaretPluginEntry(configWith([`${PKG}@0.8.0`]))).toBe(true);
-  expect(hasCaretPluginEntry(configWith([PKG]))).toBe(true);
-  expect(hasCaretPluginEntry(configWith(["opencode-wakatime"]))).toBe(false);
+  expect(readCaretEntry(configWith([`${PKG}@0.8.0`])) !== null).toBe(true);
+  expect(readCaretEntry(configWith([PKG])) !== null).toBe(true);
+  expect(readCaretEntry(configWith(["opencode-wakatime"])) !== null).toBe(false);
 });
 
 test("a --from-local checkout entry is not the package entry the version check reads", () => {
   const checkoutDir = join(tmp, "checkout");
   mkdirSync(join(checkoutDir, "opencode"), { recursive: true });
   writeFileSync(join(checkoutDir, "opencode", "caret.plugin.ts"), "");
-  expect(hasCaretPluginEntry(configWith([`file:${checkoutDir}`]))).toBe(false);
+  expect(readCaretEntry(configWith([`file:${checkoutDir}`])) !== null).toBe(false);
 });
 
 test("an absent config file carries no entry", () => {
-  expect(hasCaretPluginEntry(join(tmp, "no-such-config.json"))).toBe(false);
+  expect(readCaretEntry(join(tmp, "no-such-config.json")) !== null).toBe(false);
 });
 
 // ---- the verdict's line, and the check doctor renders it as ----
@@ -365,11 +366,11 @@ function v1Package(specifier: string, version: string): void {
   installed(join(tmp, "opencode", "packages", specifier), version);
 }
 
-function v2Verdict(entry: string, key: "plugin" | "plugins", hostMajor?: number) {
+function v2Verdict(entry: string, key: "plugin" | "plugins", host?: VersionTriple) {
   const path = join(tmp, "opencode.json");
   writeFileSync(path, JSON.stringify({ [key]: [entry] }));
   return withEnv({ XDG_CACHE_HOME: tmp }, () =>
-    readUpgradeVerdict({ configFile: path, hostMajor, published: async () => "0.9.0" }),
+    readUpgradeVerdict({ configFile: path, host, published: async () => "0.9.0" }),
   );
 }
 
@@ -394,14 +395,14 @@ test("an unparseable plugins pin reads its own v2 dir", async () => {
 test("a plugins entry resolves its v2 generation dir", () => {
   const gen = v2Generation(`${PKG}@0.8.1`, "1", "0.8.1");
   withEnv({ XDG_CACHE_HOME: tmp }, () => {
-    expect(caretCacheDir({ key: "plugins", spec: `${PKG}@0.8.1` })).toBe(gen);
+    expect(caretCacheDir({ key: "plugins", index: 0, spec: `${PKG}@0.8.1` })).toBe(gen);
   });
 });
 
 test("a plugin entry reads v2's layout on a v2 host and v1's otherwise", async () => {
   v2Generation(`${PKG}@latest`, "1", "0.8.0");
   v1Package(PKG, "0.2.0");
-  expect(await v2Verdict(PKG, "plugin", 2)).toMatchObject({ cached: "0.8.0" });
+  expect(await v2Verdict(PKG, "plugin", [2, 0, 18])).toMatchObject({ cached: "0.8.0" });
   expect(await v2Verdict(PKG, "plugin")).toMatchObject({ cached: "0.2.0" });
 });
 
@@ -413,7 +414,7 @@ test("a v2 cache dir with no generation reads as nothing cached", async () => {
 test("a plugins entry counts as caret's package entry", () => {
   const path = join(tmp, "opencode.json");
   writeFileSync(path, JSON.stringify({ plugins: [{ package: PKG }] }));
-  expect(hasCaretPluginEntry(path)).toBe(true);
+  expect(readCaretEntry(path) !== null).toBe(true);
 });
 
 test("clearing removes a whole v2 npm dir, every generation with it", () => {

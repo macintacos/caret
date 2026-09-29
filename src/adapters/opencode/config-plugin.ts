@@ -3,8 +3,9 @@
 // `{ package, options }` object. `caret install` adds caret's entry and `--uninstall`
 // removes it. Edits run through jsonc-parser's modify/applyEdits so a user's other plugin
 // entries, other config keys, and comments all survive — hand-rolled JSON string munging
-// would corrupt a jsonc config. Pure text-in/text-out, so it is unit-testable without
-// touching disk.
+// would corrupt a jsonc config — except deleting an emptied `plugins` key, which cuts
+// the property's parse-tree range, since jsonc-parser's removal swallows a preceding
+// comment. Pure text-in/text-out, so it is unit-testable without touching disk.
 
 import {
   applyEdits,
@@ -21,8 +22,11 @@ import { isLocalPluginSpecifier } from "@/adapters/opencode/paths.ts";
 
 const FORMATTING = { insertSpaces: true, tabSize: 2 } as const;
 
-/** The config key a plugin list lives under: v1's `plugin`, v2's `plugins`. */
-export type PluginKey = "plugin" | "plugins";
+/** The config keys a plugin list lives under — v1's `plugin`, v2's `plugins` — in load
+ * order: v2 concatenates legacy `plugin` ahead of `plugins`. */
+export const PLUGIN_KEYS = ["plugin", "plugins"] as const;
+
+export type PluginKey = (typeof PLUGIN_KEYS)[number];
 
 /** The current `key` array as a plain array (empty when absent/not an array). */
 function pluginArray(text: string, key: PluginKey): unknown[] {
@@ -32,10 +36,17 @@ function pluginArray(text: string, key: PluginKey): unknown[] {
 }
 
 /** An item's specifier: the string itself, or a `{ package }` object's package. */
-export function itemSpec(item: unknown): string | null {
+function itemSpec(item: unknown): string | null {
   if (typeof item === "string") return item;
-  const pkg = (item as { package?: unknown } | null)?.package;
-  return typeof item === "object" && typeof pkg === "string" ? pkg : null;
+  if (
+    typeof item === "object" &&
+    item !== null &&
+    "package" in item &&
+    typeof item.package === "string"
+  ) {
+    return item.package;
+  }
+  return null;
 }
 
 /** A plugin specifier split into its package name and its pinned version (null when
@@ -63,7 +74,7 @@ function packageName(spec: string): string {
   return splitPluginSpecifier(spec).pkg;
 }
 
-/** Whether a `plugin` array entry names `pkg` — matching a version-pinned entry
+/** Whether a plugin-list item (a string or a `{ package }` object) names `pkg` — matching a version-pinned entry
  * (`<pkg>@x.y.z`) as well as the bare name, so caret is recognized as present
  * regardless of how the user pinned it. */
 function entryNames(entry: unknown, pkg: string): boolean {
@@ -71,16 +82,16 @@ function entryNames(entry: unknown, pkg: string): boolean {
   return spec !== null && packageName(spec) === packageName(pkg);
 }
 
-/** Add `pkg` to the config's `plugin` array, returning the new config text. Appends
+/** Add `pkg` to the config's `key` array, returning the new config text. Appends
  * to an existing array (idempotent — an already-present entry returns the text
  * unchanged, INCLUDING a version-pinned `<pkg>@x.y.z` entry, so a user's pin is kept
- * and never duplicated), and sets a fresh `["<pkg>"]` array when `plugin` is absent OR
+ * and never duplicated), and sets a fresh `["<pkg>"]` array when `key` is absent OR
  * present but not an array (a malformed config — replacing it is safer than
  * array-inserting into a non-array, which jsonc-parser throws on). */
 export function addPluginToConfigText(
   existing: string | null,
   pkg: string,
-  key: PluginKey = "plugin",
+  key: PluginKey,
 ): string {
   const text = existing ?? "{}\n";
   const current = (parse(text) as Record<string, unknown> | undefined)?.[key];
@@ -97,47 +108,22 @@ export function addPluginToConfigText(
   return applyEdits(text, edits);
 }
 
-/** The VERBATIM `plugin` array entry naming `pkg` — pin and all — or null when the
- * config is absent, has no `plugin` array, or lists no entry for `pkg`. The raw string
- * is what callers need: it is both the key OpenCode caches under and the thing a version
- * rewrite replaces. */
-export function findPluginEntry(
-  existing: string | null,
-  pkg: string,
-  key: PluginKey = "plugin",
-): string | null {
-  if (existing === null) return null;
-  return itemSpec(pluginArray(existing, key).find((e) => entryNames(e, pkg)));
-}
-
 /** Every raw item's specifier in the `key` array, null for an unrecognisable item, so
  * index `i` is the array's own index. */
 export function pluginItemSpecs(existing: string, key: PluginKey): (string | null)[] {
   return pluginArray(existing, key).map(itemSpec);
 }
 
-/** Every item's specifier in the config's `key` array, in order. Which of them are
- * caret's is the caller's call: recognizing a local entry means asking the filesystem
- * whether the path is a caret checkout, and this module never touches disk. */
-export function pluginEntries(existing: string | null, key: PluginKey = "plugin"): string[] {
-  return existing === null
-    ? []
-    : pluginArray(existing, key)
-        .map(itemSpec)
-        .filter((e) => e !== null);
-}
-
-/** Pin `pkg`'s entry in the `key` array (default `plugin`) to `version`, returning the new config text —
+/** Pin `pkg`'s entry in the `key` array to `version`, returning the new config text —
  * rewriting an existing pin rather than appending beside it. Returns the text unchanged
  * when no entry names `pkg`. Replaces the one array element — or an object item's
- * `package` — in place, which keeps sibling entries, other keys, and
- * comments intact — unlike the whole-array replacement `removePluginFromConfigText`
- * needs for its trailing-comma bug. */
+ * `package` — in place, which keeps sibling entries, other keys, and comments intact,
+ * unlike the whole-array replacement `rewritePluginArray` does. */
 export function setPluginVersionInConfigText(
   existing: string,
-  target: { pkg: string; version: string; key?: PluginKey },
+  target: { pkg: string; version: string; key: PluginKey },
 ): string {
-  const { pkg, version, key = "plugin" } = target;
+  const { pkg, version, key } = target;
   const arr = pluginArray(existing, key);
   const i = arr.findIndex((e) => entryNames(e, pkg));
   if (i === -1) return existing;
@@ -172,24 +158,20 @@ export function rewritePluginArray(
 function commaAfter(text: string, from: number): number | null {
   const scanner = createScanner(text, true);
   scanner.setPosition(from);
-  // SyntaxKind is an ambient const enum, unreadable under verbatimModuleSyntax.
-  do scanner.scan();
-  while (
-    text.startsWith("//", scanner.getTokenOffset()) ||
-    text.startsWith("/*", scanner.getTokenOffset())
-  );
+  scanner.scan();
   return text[scanner.getTokenOffset()] === "," ? scanner.getTokenOffset() : null;
 }
 
-/** Widen [start, end) to its whole line when nothing else sits on that line. */
+/** Widen [start, end) to its whole line, `\n` or `\r\n`, when nothing else sits on it. */
 function wholeLine(text: string, start: number, end: number): Edit {
   let s = start;
   let e = end;
   while (s > 0 && (text[s - 1] === " " || text[s - 1] === "\t")) s--;
   while (e < text.length && (text[e] === " " || text[e] === "\t")) e++;
-  const alone = (s === 0 || text[s - 1] === "\n") && (e === text.length || text[e] === "\n");
+  const eol = text.startsWith("\r\n", e) ? 2 : text[e] === "\n" ? 1 : 0;
+  const alone = (s === 0 || text[s - 1] === "\n") && (e === text.length || eol > 0);
   return alone
-    ? { offset: s, length: Math.min(e + 1, text.length) - s, content: "" }
+    ? { offset: s, length: e + eol - s, content: "" }
     : { offset: start, length: end - start, content: "" };
 }
 
@@ -203,7 +185,7 @@ function deleteProperty(text: string, key: string): string {
   const i = siblings.indexOf(prop);
   const end = prop.offset + prop.length;
   const edits: Edit[] = [];
-  const after = i < siblings.length - 1 ? commaAfter(text, end) : null;
+  const after = commaAfter(text, end);
   if (after !== null && text.slice(end, after).trim() === "") {
     edits.push(wholeLine(text, prop.offset, after + 1));
   } else {
@@ -213,16 +195,4 @@ function deleteProperty(text: string, key: string): string {
     if (comma !== null) edits.push({ offset: comma, length: 1, content: "" });
   }
   return applyEdits(text, edits);
-}
-
-/** Remove `pkg` from the config's `key` array (default `plugin`), returning the new
- * config text. Removes a version-pinned `<pkg>@x.y.z` entry as well as the bare name
- * (symmetric with add's idempotency). Returns the text unchanged when no entry names
- * `pkg`. */
-export function removePluginFromConfigText(
-  existing: string,
-  pkg: string,
-  key: PluginKey = "plugin",
-): string {
-  return rewritePluginArray(existing, key, (e) => !entryNames(e, pkg));
 }

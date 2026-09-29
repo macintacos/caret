@@ -3,23 +3,19 @@
 // scrubs the result — a deliberate inversion of the raw-by-default logging posture
 // (EXC-399), since the artifact exists to be pasted into bug reports.
 //
-// The OpenCode version check reaches the report from the adapter rather than from
-// src/doctor/checks.ts, which is core and imports no adapter: it is the one check that
-// needs an adapter's vocabulary, so composition asks for it and the core layer just
-// appends what it is handed.
+// The OpenCode checks (`opencode-host`, `opencode-caret-version`) reach the report from
+// the adapter rather than from src/doctor/checks.ts, which is core and imports no
+// adapter: they are the checks that need an adapter's vocabulary, so composition asks for
+// them and the core layer just appends what it is handed.
 
 import { existsSync } from "node:fs";
 import { release } from "node:os";
 
 import { selectAdapter } from "@/adapters/index.ts";
-import { caretEntries, isCaretCheckout, readConfigText } from "@/adapters/opencode/entries.ts";
-import { hostCheck, readOpencodeVersion } from "@/adapters/opencode/host.ts";
+import { readOpencodeChecks } from "@/adapters/opencode/checks.ts";
+import { readOpencodeVersion } from "@/adapters/opencode/host.ts";
 import { opencodeConfigDir, resolveConfigFile } from "@/adapters/opencode/paths.ts";
-import {
-  hasCaretPluginEntry,
-  readUpgradeVerdict,
-  upgradeCheck,
-} from "@/adapters/opencode/upgrade.ts";
+import { upgradeCheck } from "@/adapters/opencode/upgrade.ts";
 import { isTerminal } from "@/commands/install/ui.ts";
 import { prodService } from "@/commands/service-target.ts";
 import {
@@ -108,21 +104,15 @@ function prodDoctorDeps(s: Settings): DoctorDeps {
   };
 }
 
-/** The adapter checks doctor appends to the core ones, or nothing when OpenCode's config
- * carries no caret entry — a Claude-only user then pays no spawn or network call.
- * `opencode-host` checks the OpenCode on `PATH` loads caret from the key it sits in.
- * `opencode-caret-version` is OpenCode's version verdict, skipped for a `file:` entry: it
- * re-resolves to its checkout on every start, so npm's version says nothing about it. */
+/** The adapter checks doctor appends to the core ones: OpenCode's two, or nothing when
+ * its config carries no caret entry. An unreadable config reports the version check as
+ * unknown. */
 async function readAdapterChecks(): Promise<Check[]> {
   try {
-    const config = resolveConfigFile(opencodeConfigDir());
-    const entries = caretEntries(readConfigText(config), isCaretCheckout);
-    if (entries.length === 0) return [];
-    const version = readOpencodeVersion();
-    const host = hostCheck(version, [...new Set(entries.map((e) => e.key))]);
-    if (!hasCaretPluginEntry(config)) return [host];
-    const hostMajor = version?.[0];
-    return [host, upgradeCheck(await readUpgradeVerdict({ configFile: config, hostMajor }))];
+    return await readOpencodeChecks({
+      configFile: resolveConfigFile(opencodeConfigDir()),
+      opencodeVersion: readOpencodeVersion,
+    });
   } catch (e) {
     return [upgradeCheck({ kind: "unknown", reason: errorMessage(e) })];
   }

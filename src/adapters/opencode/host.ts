@@ -7,18 +7,22 @@ import type { Check } from "@/doctor/report.ts";
 import { isNewer, parseVersionTriple } from "@/lib/semver.ts";
 
 /** Covers a cold v1 start (npm's node wrapper took 1.6 s) with margin. */
-export const OPENCODE_VERSION_TIMEOUT_MS = 5_000;
+const OPENCODE_VERSION_TIMEOUT_MS = 5_000;
+
+/** An OpenCode version as `[major, minor, patch]`. */
+export type VersionTriple = readonly [number, number, number];
 
 /** "opencode v2.0.18" (v2) or a bare "1.14.17" (v1); null for anything else. */
-export function parseOpencodeVersion(stdout: string): [number, number, number] | null {
+export function parseOpencodeVersion(stdout: string): VersionTriple | null {
   return parseVersionTriple(stdout.trim().replace(/^opencode /, ""));
 }
 
 /** Runs `<bin> --version`; null when bin is null, the exit is non-zero, the output does
- * not parse, or the bound kills it. Never throws. */
+ * not parse, or the bound kills it. Leaving `bin` out means the first `opencode` on
+ * `PATH`; an explicit `null` means there is none. Never throws. */
 export function readOpencodeVersion(
   opts: { bin?: string | null; timeoutMs?: number } = {},
-): [number, number, number] | null {
+): VersionTriple | null {
   const bin = opts.bin === undefined ? Bun.which("opencode") : opts.bin;
   if (bin === null) return null;
   try {
@@ -35,8 +39,15 @@ export function readOpencodeVersion(
   }
 }
 
-export function pluginKeyFor(version: readonly [number, number, number] | null): PluginKey {
-  return version !== null && version[0] >= 2 ? "plugins" : "plugin";
+/** Whether `version` is OpenCode v2 or later; an unreadable version is not. */
+export function isV2Host(version: VersionTriple | null): boolean {
+  return version !== null && version[0] >= 2;
+}
+
+/** The key caret writes on this host: `plugins` on v2, else `plugin`, which every
+ * OpenCode loads, so an unreadable version is safe. */
+export function pluginKeyFor(version: VersionTriple | null): PluginKey {
+  return isV2Host(version) ? "plugins" : "plugin";
 }
 
 /** v1.3.4 is the first loader that accepts the plugin's object default. */
@@ -44,10 +55,7 @@ const V1_FLOOR = "1.3.4";
 
 /** doctor's `opencode-host` check: whether the OpenCode on `PATH` loads caret from the keys
  * caret's entries sit in. Every fault joins into one fail, each with its remedy. */
-export function hostCheck(
-  version: readonly [number, number, number] | null,
-  keys: readonly PluginKey[],
-): Check {
+export function hostCheck(version: VersionTriple | null, keys: readonly PluginKey[]): Check {
   const base = { id: "opencode-host", title: "OpenCode host" };
   if (version === null) {
     return { ...base, status: "unknown", detail: "", reason: "couldn't read `opencode --version`" };
@@ -55,7 +63,7 @@ export function hostCheck(
   const v = version.join(".");
   const faults: string[] = [];
   const remedies: string[] = [];
-  if (version[0] < 2 && isNewer(V1_FLOOR, v)) {
+  if (!isV2Host(version) && isNewer(V1_FLOOR, v)) {
     faults.push(`OpenCode ${v} is older than ${V1_FLOOR}, the first that loads caret`);
     remedies.push(`upgrade OpenCode to ${V1_FLOOR} or later`);
   }

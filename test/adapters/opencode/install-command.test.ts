@@ -4,14 +4,19 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
+import { parse as parseJsonc } from "jsonc-parser";
+
+import { withEnv } from "@test/support/env.ts";
 import { expectCleanExitCode } from "@test/support/exit-code.ts";
+import type { VersionTriple } from "@/adapters/opencode/host.ts";
 import type { OpencodePackaging } from "@/adapters/opencode/packaging.ts";
 import { CARET_PACKAGE } from "@/adapters/opencode/paths.ts";
 import { type InstallOpencodeDeps, runInstallOpencodeTarget } from "@/commands/install/opencode.ts";
 import { type InstallUI, recordingUI } from "@/commands/install/ui.ts";
 
 // Stub packaging so the target never resolves the real caret root. Only the command
-// files, bin path, and demo template matter (caret itself installs as a `plugin` array entry).
+// files, bin path, and demo template matter (caret itself installs as a
+// `plugin`/`plugins` entry).
 const PACKAGING: OpencodePackaging = {
   binPath: "/opt/caret/bin/caret",
   demoTemplate: "# Demo plan",
@@ -613,8 +618,10 @@ test("--dry-run names the legacy files in its preview and removes none of them",
 
 // --- the key the host loads: v2's `plugins`, v1's `plugin` -------------------------
 
-const V2 = { opencodeVersion: () => [2, 0, 18] as [number, number, number] };
-const V1 = { opencodeVersion: () => [1, 18, 29] as [number, number, number] };
+const V2_VERSION: VersionTriple = [2, 0, 18];
+const V1_VERSION: VersionTriple = [1, 18, 29];
+const V2 = { opencodeVersion: () => V2_VERSION };
+const V1 = { opencodeVersion: () => V1_VERSION };
 const config = () => JSON.parse(readFileSync(configJson(), "utf-8"));
 
 async function installOn(overrides: InstallOpencodeDeps, local?: string): Promise<void> {
@@ -651,14 +658,20 @@ test("on v2, a caret plugin entry moves to plugins, keeping comments and other e
   await installOn(V2);
   const text = readFileSync(configJson(), "utf-8");
   expect(text).toContain("// mine");
-  const { parse } = await import("jsonc-parser");
-  expect(parse(text)).toEqual({ plugin: ["wakatime"], plugins: ["other", CARET_PACKAGE] });
+  expect(parseJsonc(text)).toEqual({ plugin: ["wakatime"], plugins: ["other", CARET_PACKAGE] });
 });
 
 test("on v2, a pin survives the move to plugins", async () => {
   writeFileSync(configJson(), JSON.stringify({ plugin: [`${CARET_PACKAGE}@0.8.1`] }));
   await installOn(V2);
   expect(config()).toEqual({ plugin: [], plugins: [`${CARET_PACKAGE}@0.8.1`] });
+});
+
+test("a move says which key caret left and names the pin it carried", async () => {
+  writeFileSync(configJson(), JSON.stringify({ plugin: [`${CARET_PACKAGE}@0.8.1`] }));
+  const said = await transcript(V2);
+  expect(said).toContain("(moved from plugin)");
+  expect(said).toContain(`Added ${CARET_PACKAGE}@0.8.1 to opencode.json`);
 });
 
 test("on v2, duplicate caret plugins entries collapse to the pinned one", async () => {
@@ -748,8 +761,22 @@ test("--refresh bumps a stale plugins pin in plugins", async () => {
 
 test("moving caret out of plugins on a v1 host keeps the config's comments", async () => {
   writeFileSync(configJson(), `{\n  // mine\n  "plugins": ["${CARET_PACKAGE}"]\n}\n`);
-  await install();
+  await installOn(V1);
   const out = readFileSync(configJson(), "utf-8");
   expect(out).toContain("// mine");
   expect(JSON.parse(out.replace(/^\s*\/\/.*$/gm, ""))).toEqual({ plugin: [CARET_PACKAGE] });
+});
+
+test("a v2 dry run reads a plugin entry's version from v2's cache layout", async () => {
+  writeFileSync(configJson(), JSON.stringify({ plugin: [CARET_PACKAGE] }));
+  const gen = join(dir, "xdg-cache", "opencode", "npm", `${CARET_PACKAGE}@latest`, "1");
+  mkdirSync(join(gen, "node_modules", CARET_PACKAGE), { recursive: true });
+  writeFileSync(
+    join(gen, "node_modules", CARET_PACKAGE, "package.json"),
+    JSON.stringify({ version: "0.8.0" }),
+  );
+  const said = await withEnv({ XDG_CACHE_HOME: join(dir, "xdg-cache") }, () =>
+    transcript({ ...V2, cacheDir: undefined, published: async () => "0.9.0" }, { dryRun: true }),
+  );
+  expect(said).toContain("OpenCode's cached caret is 0.8.0");
 });

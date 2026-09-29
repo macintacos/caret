@@ -22,12 +22,12 @@ service that keeps the review UI up (see
 The process probe behind `caret doctor` (`src/doctor/report.ts`) shells out to the
 BSD-flavored `ps -axo pid=,comm=` everywhere.
 
-The OpenCode versions caret supports are listed in
-[the OpenCode adapter](ARCHITECTURE.md#the-opencode-adapter).
-
 > [!NOTE]
 > If the browser doesn't open, or doctor shows no processes, on Linux or Windows: the
 > review URL caret prints to stderr is the fallback.
+
+The OpenCode versions caret supports are listed in
+[the OpenCode adapter](ARCHITECTURE.md#the-opencode-adapter).
 
 ## Config file
 

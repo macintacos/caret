@@ -15,9 +15,9 @@ is the full catalog behind it.
 > it never touches, reads, or overwrites your installed caret. Reach for it by default.
 >
 > **`mise run build --install` overwrites your installed build.** It rewrites Claude Code
-> plugin state, points OpenCode's `plugin` array at the checkout, and takes over the
-> daemon. Reach for it only when you need to exercise the real installed integration — not
-> to look at a UI change.
+> plugin state, writes the checkout into OpenCode's plugin key (`plugins` on v2, `plugin`
+> on v1), and takes over the daemon. Reach for it only when you need to exercise the real
+> installed integration — not to look at a UI change.
 
 ## Build from source
 
@@ -397,8 +397,9 @@ which:
    artifact is an error telling you to run `mise run build`.
 2. Registers a local dev marketplace whose plugin source symlinks to the checkout, and
    reinstalls the caret plugin through Claude Code's native plugin system.
-3. Installs into OpenCode by pointing its `plugin` array at the checkout
-   (`file:<checkout>`, which OpenCode symlinks — so later rebuilds need no reinstall).
+3. Installs into OpenCode by writing the checkout into its plugin key (`plugins` on v2,
+   `plugin` on v1) (`file:<checkout>`, which OpenCode symlinks — so later rebuilds need no
+   reinstall).
 4. Acquires rumdl, then hands the daemon to the just-built binary. Where caret is
    resident, it pins the service's launcher to this checkout and cycles the service onto
    it. Where there is no service to cycle — you chose to run caret yourself, the host is

@@ -326,7 +326,7 @@ and on v2, which keys a bare entry as `@latest` and keeps older install generati
 the live one:
 
 ```sh
-rm -rf ~/.cache/opencode/npm/@macintacos/caret*
+rm -rf ~/.cache/opencode/npm/@macintacos/caret@*
 ```
 
 > [!NOTE]

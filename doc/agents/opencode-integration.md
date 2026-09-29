@@ -11,10 +11,10 @@ reasoning is not lost.
 caret's Claude (and modelled Codex) adapters share a command-hook shape: the agent runs
 `caret review`, pipes a hook payload on stdin, and reads a decision JSON on stdout (see
 `architecture-rules.md` § the adapter axis). OpenCode does **not** fit that mold. It loads
-an **in-process JS/TS plugin** — an npm package in the config's `plugin` array (how caret
-installs; see § Distribution choice) or a module file under `{plugin,plugins}/` in a
-config dir — that registers tools and mutates config inside OpenCode's own Bun runtime.
-There is no per-event command hook to hang `caret review` off.
+an **in-process JS/TS plugin** — an npm package in the config's plugin list — `plugin` on
+v1, `plugins` on v2 (how caret installs; see § Distribution choice) or a module file under
+`{plugin,plugins}/` in a config dir — that registers tools and mutates config inside
+OpenCode's own Bun runtime. There is no per-event command hook to hang `caret review` off.
 
 Crucially, **OpenCode has no `ExitPlanMode` equivalent to intercept.** It ships a stable
 Plan agent and an experimental, CLI-only `plan_exit` tool, but neither is a robust,
@@ -352,21 +352,8 @@ rather than read because under `bunx` the install-time root is a temp dir.
   (comment-preserving, via `jsonc-parser` in `config-plugin.ts`) as either
   `@macintacos/caret` or, under `--from-local`, `file:<checkout>` (§ The local form) and
   deploys the `/caret:*` command **files**, which v2's command discovery reads from the
-  same `commands/` dir; `--uninstall` reverses both. The key follows the host: install
-  runs `opencode --version` on the first `opencode` on `PATH` (`host.ts`, a
-  `Bun.spawnSync` bounded at 5 s — synchronous because an async spawn's timeout kills only
-  the direct child, and npm v1's node wrapper leaves a grandchild holding stdout). Major ≥
-  2 writes `plugins`; v1, a missing binary, a failed or hung run, or unparseable output
-  writes `plugin`, which both hosts load. The write is one `editConfig` transform that
-  keeps exactly one caret entry across both keys — the first pinned one in load order
-  (`plugin` before `plugins`), else the first — carries its spec verbatim so a pin
-  survives, and drops every other caret item. That move is load-bearing: v2 concatenates a
-  leftover `plugin` array ahead of `plugins`, and two caret entries fail with
-  `Duplicate plugin ID: caret`. A removal that empties `plugins` deletes the key, because
-  v1 below 1.18.16 rejects any `plugins` key, `[]` included; an emptied `plugin: []`
-  stays. caret writes a bare string item, as v2's own `opencode plugin add` does, and
-  every reader also accepts a `{ "package": … }` object item. Uninstall never probes: it
-  removes caret from both keys. Both arms also sweep what the file-deploy era left in the
+  same `commands/` dir; `--uninstall` reverses both. The key it writes follows the host (§
+  Which key install writes). Both arms also sweep what the file-deploy era left in the
   config dir: caret's `caret.ts` in either plugin dir OpenCode scans (`plugins/`, and the
   singular `plugin/` it keeps as a back-compat alias) and any `caret:`-namespaced file in
   the singular `command/`. That is not tidiness — OpenCode loads a plugin out of either
@@ -442,10 +429,10 @@ or an absolute path would reach v2's local-directory loader, which ignores `pack
 `exports`. `package.json` `main` is what makes OpenCode accept a directory as a plugin
 ("server target"); a bare `exports["."]` is rejected.
 
-Caret owns **exactly one** array entry, so install rewrites across forms: `--from-local`
-drops a package entry, a published install drops a checkout entry, and `--uninstall`
-removes either. Both present would load two caret plugins, each registering the review
-tool. A `file:` entry pointing somewhere that is not a caret checkout (no
+Caret owns **exactly one** entry across both keys, so install rewrites across forms:
+`--from-local` drops a package entry, a published install drops a checkout entry, and
+`--uninstall` removes either. Both present would load two caret plugins, each registering
+the review tool. A `file:` entry pointing somewhere that is not a caret checkout (no
 `opencode/caret.plugin.ts`) belongs to another plugin and is left alone. A version **pin**
 is not a different form — `@macintacos/caret@0.8.1` is the user's pin and survives a
 re-install.
@@ -454,9 +441,31 @@ The upgrade check is skipped in local mode, and now for a load-bearing reason ra
 convenience: a checkout entry re-resolves to that checkout on every OpenCode start, so it
 cannot go stale and npm's published version says nothing about it.
 
+### Which key install writes
+
+Install runs `opencode --version` on the first `opencode` on `PATH` (`host.ts`, a
+`Bun.spawnSync` bounded at 5 s — synchronous because an async spawn's timeout kills only
+the direct child, and npm v1's node wrapper leaves a grandchild holding stdout). Major ≥ 2
+writes `plugins`; v1, a missing binary, a failed or hung run, or unparseable output writes
+`plugin`, which both hosts load. Uninstall never probes: it removes caret from both keys.
+
+The write is one `editConfig` transform that keeps exactly one caret entry across both
+keys — the first pinned one in load order (`plugin` before `plugins`), else the first —
+carries its spec verbatim so a pin survives, and drops every other caret item. That move
+is load-bearing: v2 concatenates a leftover `plugin` array ahead of `plugins`, and two
+caret entries fail with `Duplicate plugin ID: caret`. A removal that empties `plugins`
+deletes the key, because v1 below 1.18.16 rejects any `plugins` key, `[]` included; an
+emptied `plugin: []` stays. caret writes a bare string item, as v2's own
+`opencode plugin add` does, and every reader also accepts a `{ "package": … }` object
+item.
+
+caret rewrites a changed plugin array whole, because jsonc-parser's element deletion
+mishandles a trailing element's comma, so a comment inside that array is lost. Comments
+outside the arrays survive, including those around a deleted `plugins` key.
+
 ### The cache layout, and what the probe may conclude from it
 
-v1 and v2 lay the cache out differently. v1 is described first; v2 follows.
+v1 and v2 lay the cache out differently.
 
 v1 keys that cache by the **verbatim specifier string** from the `plugin` array, one
 directory per entry under `packages/` — `<cache>/opencode/packages/<specifier>/`, honoring
@@ -486,28 +495,29 @@ install.
 `@latest` — so on v2 a bare and an `@latest` entry share one dir — and the live generation
 is the numerically largest all-digit child (`liveGenerationDir`). Older generations
 persist, so the stale-cache clear deletes the whole `npm/@macintacos/caret@<spec>/`, not
-one generation. `readCachedCaretVersion` needs no change: the installed manifest sits at
-`node_modules/@macintacos/caret/package.json` under both a v1 package dir and a v2
+one generation. `readCachedCaretVersion` reads both layouts alike: the installed manifest
+sits at `node_modules/@macintacos/caret/package.json` under both a v1 package dir and a v2
 generation dir. `existingOpencodeCachePackageDirs` lists both layouts, and the clear
 removes every caret dir in either.
 
 Which layout an entry reads from (`caretCacheDir` in `upgrade.ts`): a `plugins` entry is
 always v2's, since v1 never installs it; a `plugin` entry is v2's when the caller knows
-the host is v2 (install, doctor), else v1's. The probe never spawns `opencode`, so it goes
-by the key alone. After install the key matches the host and the two rules agree; they
-disagree only for a `plugin` entry on a v2 host, which `opencode-host` fails on.
+the host is v2 (doctor, install's dry run), else v1's. The probe never spawns `opencode`,
+so it goes by the key alone. After install the key matches the host and the two rules
+agree; they disagree only for a `plugin` entry on a v2 host, which `opencode-host` fails
+on.
 
 The probe recognises a `--from-local` checkout entry the way install does (`caretEntries`)
 and reads its version through the cache symlink § The local form describes. doctor's
 `opencode-caret-version` check does not: `readCaretEntry` matches the package form only,
-since npm's version says nothing about a checkout. It gains the host version only to pick
+since npm's version says nothing about a checkout. It takes the host version only to pick
 the cache layout.
 
-doctor's `opencode-host` check (`hostCheck` in `host.ts`, composed in `readAdapterChecks`)
-runs whenever caret has an entry in either key, the `file:` form included. It fails for a
-v1 below 1.3.4 (the dual export's floor, § The export surface), for caret in `plugins` on
-a v1 — naming that v1 below 1.18.16 refuses to start with that key, and v1.18.16 onward
-ignores it — and for caret in `plugin` on a v2. Each remedy is `caret install`. It reports
+doctor's `opencode-host` check (`hostCheck` in `host.ts`, composed in `readOpencodeChecks`
+in `checks.ts`) runs whenever caret has an entry in either key, the `file:` form included.
+It fails for a v1 below 1.3.4 (the dual export's floor, § The export surface), for caret
+in `plugins` on a v1, which v1 never loads (before 1.18.16 it refuses to start with the
+key), and for caret in `plugin` on a v2. Each remedy is `caret install`. It reports
 `unknown` when the version cannot be read.
 
 ## Runtime resolution + update check (EXC-794)
@@ -574,7 +584,7 @@ v1 hosts too.
 plugin, which v2 resolves as `<pkg>/tui` from the same `plugin`/`plugins` entry and loads
 only as a default `{ id, setup }` with a non-empty `id`. v2's host resolves `<pkg>/tui`
 through the package's `exports` itself; § Distribution choice rules out subpaths only for
-the `plugin` array specifier. Its `setup` runs the update check and listens for tool
+the `plugin`/`plugins` specifier. Its `setup` runs the update check and listens for tool
 events: `session.tool.progress` carrying the `caretUrl` metadata key shows the review-link
 toast, and `session.tool.success` (`caretDecision`) or `session.tool.failed` for that call
 supersedes it with the decision toast. Those events carry the call id, not the tool name,
@@ -617,7 +627,10 @@ registration (`codemode: false`, JSON Schema input), steer and prewarm gating,
 evaluate-then-refuse on `path`, the subagent refusal and its fail-open, the `context`-hook
 tool removal and its fail-open, the plan-agent allow and its agent-and-session skip, the
 TUI half's toasts and update check, abort on both hosts, and v1↔v2 parity of the refusal
-texts.
+texts. For the plugin key they cover the host probe's 5 s bound (a grandchild holding
+stdout included), key selection and the one-transform move, deleting `plugins` without
+losing comments (a trailing comma and CRLF included), v2 cache reads and clears, and
+doctor's `opencode-host` and `opencode-caret-version` checks and their gating.
 
 **Confirmed against a live OpenCode 1.18.11 with `@opencode-ai/plugin` 1.18.17 — EXC-1085,
 the array install's LOCAL form, which is what ties the run to that plugin version: a
@@ -705,7 +718,7 @@ v1.18.15 and v1.18.29 from npm):
   (`Unrecognized key: plugins`); install moved caret to `plugin` and deleted the key, and
   `debug config` then exited 0. On 1.18.29 install writes `plugin` and the packed tarball
   loads.
-- **Uninstall** removed caret from both keys (a string and a `{ "package" }` object) kept
+- **Uninstall** removed caret from both keys (a string and a `{ "package" }` object), kept
   non-caret entries and the comment, and removed the command files.
 - **doctor.** `opencode-host` failed for caret in `plugin` on v2 and in `plugins` on
   1.18.15, and passed after install moved each.
@@ -724,6 +737,9 @@ v1.18.15 and v1.18.29 from npm):
 - A `file:<tarball>` caret entry is not recognised as caret's (only the package and a
   checkout are), so install adds a second entry beside it. `caret install` never writes
   one.
+- When install empties the target key and re-adds it, the key moves to the end of the
+  object, and a comment above it stays behind.
+- `opencode/caret.plugin.ts`'s header still says caret loads from the `plugin` array.
 
 ## Sources
 

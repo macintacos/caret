@@ -1,21 +1,21 @@
 // Shared OpenCode config-dir + packaging-path resolution for caret's OpenCode
-// integration. caret installs into OpenCode as a first-class `plugin` array entry
-// (@macintacos/caret) plus its command files; the install writer
+// integration. caret installs into OpenCode as an entry in its plugin list (`plugin` on
+// v1, `plugins` on v2) — @macintacos/caret — plus its command files; the install writer
 // (commands/install/opencode.ts) and the doctor probe (install.ts) resolve WHERE
 // those live through this single module, so the reader and the writer can never
 // disagree about a path. It also resolves what the file-deploy era left in that config
-// dir, which install and uninstall sweep.
+// dir, which install and uninstall sweep, and both hosts' plugin cache layouts.
 
 import { type Dirent, existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 
-/** caret's npm package — the entry users add to OpenCode's `plugin` array. Its
+/** caret's npm package — the entry users add to OpenCode's plugin list. Its
  * package entrypoint (package.json `exports`) IS the OpenCode plugin, so a bare
  * specifier loads it; OpenCode installs it and its deps into its own cache. */
 export const CARET_PACKAGE = "@macintacos/caret";
 
-/** The `plugin` array entry `--from-local` writes: npm's `file:` protocol pointed at a
+/** The plugin-list entry `--from-local` writes: npm's `file:` protocol pointed at a
  * caret checkout. OpenCode hands the specifier to its package installer and SYMLINKS the
  * target into its cache, so the plugin module it loads is the checkout's own file — its
  * `import.meta.url` sits in the checkout, and the `../bin/caret` the plugin resolves is
@@ -26,7 +26,7 @@ export function localPluginSpecifier(repoDir: string): string {
   return `file:${repoDir}`;
 }
 
-/** Whether a `plugin` array entry is a local-path specifier rather than a package name.
+/** Whether a plugin-list entry is a local-path specifier rather than a package name.
  * Only `file:` is produced by caret; the check is deliberately narrow, so an unfamiliar
  * entry is left alone rather than guessed at. */
 export function isLocalPluginSpecifier(spec: string): boolean {
@@ -70,7 +70,7 @@ export function opencodeConfigDir(): string {
   return join(xdg || join(homedir(), ".config"), "opencode");
 }
 
-/** The config file caret edits to add/remove its `plugin` array entry: the first
+/** The config file caret edits to add/remove its plugin-list entry: the first
  * existing candidate (jsonc preferred), else `opencode.json` to create when the dir
  * has no config yet. */
 export function resolveConfigFile(configDir: string): string {
@@ -142,7 +142,7 @@ export function existingLegacyInstallFiles(configDir: string): string[] {
 
 /** OpenCode's cache root: XDG_CACHE_HOME, else ~/.cache — the same precedence OpenCode
  * itself uses to resolve the dir. */
-export function opencodeCacheRoot(): string {
+function opencodeCacheRoot(): string {
   const xdg = process.env.XDG_CACHE_HOME?.trim();
   return join(xdg || join(homedir(), ".cache"), "opencode");
 }
@@ -185,7 +185,8 @@ export function liveGenerationDir(dir: string): string | null {
     generations.reduce((a, b) => (Number(b) > Number(a) ? b : a)),
   );
 }
-/** The cache dir for the plugin entry `specifier`, verbatim, pin and all; defaults to
+
+/** v1's `packages/` cache dir for the `plugin` entry `specifier`, verbatim, pin and all; defaults to
  * the bare package `caret install` writes. */
 export function opencodeCachePackageDir(specifier: string = CARET_PACKAGE): string {
   return join(opencodeCachePackagesDir(), specifier);

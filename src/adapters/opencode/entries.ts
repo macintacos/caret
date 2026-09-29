@@ -1,16 +1,18 @@
-// Which of OpenCode's plugin entries — v1's `plugin` array or v2's `plugins` — are caret's, for install's writer, doctor's
-// probe, and the upgrade check. There are two answers, and they differ on purpose:
-// `caretEntries` counts what OpenCode loads — the npm package under any pin, or a
-// `--from-local` `file:` entry for a caret checkout — while `readCaretEntry` counts the
-// package form only, because npm's version says nothing about a checkout.
+// Which of OpenCode's plugin entries — v1's `plugin` array or v2's `plugins` — are
+// caret's, for install's writer, doctor's probe, and the upgrade check. There are two
+// answers, and they differ on purpose: `caretEntries` counts what OpenCode loads — the
+// npm package under any pin, or a `--from-local` `file:` entry for a caret checkout —
+// while `caretPackageEntry` counts the package form only, because npm's version says
+// nothing about a checkout.
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
-  findPluginEntry,
+  PLUGIN_KEYS,
   type PluginKey,
-  pluginEntries,
+  pluginItemSpecs,
+  rewritePluginArray,
   splitPluginSpecifier,
 } from "@/adapters/opencode/config-plugin.ts";
 import { CARET_PACKAGE, localSpecifierPath } from "@/adapters/opencode/paths.ts";
@@ -21,13 +23,13 @@ export function isCaretCheckout(dir: string): boolean {
   return existsSync(join(dir, "opencode", "caret.plugin.ts"));
 }
 
-/** One caret entry: the key it sits under and its verbatim specifier. */
+/** One caret entry: the key it sits under, its position in that key's raw array, and
+ * its verbatim specifier. */
 export interface CaretEntry {
   key: PluginKey;
+  index: number;
   spec: string;
 }
-
-const KEYS: readonly PluginKey[] = ["plugin", "plugins"];
 
 /** The entries that are caret's: the npm package under any pin, plus any local specifier
  * whose path is a caret checkout. A `file:` entry pointing anywhere else is another
@@ -38,29 +40,39 @@ export function caretEntries(
   text: string | null,
   isCheckout: (dir: string) => boolean,
 ): CaretEntry[] {
-  return KEYS.flatMap((key) =>
-    pluginEntries(text, key)
-      .filter((spec) => isCaretSpec(spec, isCheckout))
-      .map((spec) => ({ key, spec })),
+  if (text === null) return [];
+  return PLUGIN_KEYS.flatMap((key) =>
+    pluginItemSpecs(text, key).flatMap((spec, index) =>
+      spec !== null && isCaretSpec(spec, isCheckout) ? [{ key, index, spec }] : [],
+    ),
   );
 }
 
-/** Whether one specifier is caret's, by `caretEntries`' rule. */
-export function isCaretSpec(spec: string, isCheckout: (dir: string) => boolean): boolean {
+function isCaretSpec(spec: string, isCheckout: (dir: string) => boolean): boolean {
   const path = localSpecifierPath(spec);
   return path === undefined ? splitPluginSpecifier(spec).pkg === CARET_PACKAGE : isCheckout(path);
 }
 
-/** caret's verbatim npm-package entry in `configFile`, pin and all, `plugin` before
- * `plugins`, or null when the file is absent or lists none. Throws when the file exists
- * but cannot be read. */
+/** Remove `drop` — entries read from `text` — returning the new config text. Each key's
+ * array is rewritten exactly once, so the indices read from `text` stay valid across
+ * both keys. */
+export function dropEntries(text: string, drop: readonly CaretEntry[]): string {
+  return PLUGIN_KEYS.reduce((acc, key) => {
+    const gone = new Set(drop.filter((e) => e.key === key).map((e) => e.index));
+    return gone.size === 0 ? acc : rewritePluginArray(acc, key, (_, i) => !gone.has(i));
+  }, text);
+}
+
+/** caret's verbatim npm-package entry in `text`, pin and all, `plugin` before `plugins`,
+ * or null when the text is null or lists none. */
+export function caretPackageEntry(text: string | null): CaretEntry | null {
+  return caretEntries(text, () => false)[0] ?? null;
+}
+
+/** `caretPackageEntry` over `configFile`. Throws when the file exists but cannot be
+ * read. */
 export function readCaretEntry(configFile: string): CaretEntry | null {
-  const text = readConfigText(configFile);
-  for (const key of KEYS) {
-    const spec = findPluginEntry(text, CARET_PACKAGE, key);
-    if (spec !== null) return { key, spec };
-  }
-  return null;
+  return caretPackageEntry(readConfigText(configFile));
 }
 
 /** The caret entry OpenCode loads from `configFile`: the package or a `--from-local`

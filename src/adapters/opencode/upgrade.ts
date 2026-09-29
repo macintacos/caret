@@ -1,15 +1,14 @@
 // Whether the caret that OpenCode runs is behind the published one, and the effects
-// needed to answer that. OpenCode installs a plugin entry into its cache on first
-// install (v1's `packages/<specifier>/`, v2's `npm/<name>@<spec>/<generation>/`) and
-// never re-resolves it, so a
-// bare entry stays frozen at install-day's version — `caret install` is a no-op on the
-// array entry and therefore on the running version. This module is what lets install
-// say so: a pure verdict over (entry, cached, published), plus the cache reads and the
-// cache clear the install target performs on it. Describing that verdict lives here too
-// — install's settled line and doctor's check are the same description of one adapter
-// fact, so neither surface can word a version gap the other would word differently. The
-// published version itself, and the semver comparison the verdict turns on, are shared
-// with the daemon's own update check and live in `@/lib/upstream.ts` and
+// needed to answer that. OpenCode installs a plugin entry into its cache on first install
+// (v1's `packages/<specifier>/`, v2's `npm/<name>@<spec>/<generation>/`) and never
+// re-resolves it, so a bare entry stays frozen at install-day's version — `caret install`
+// is a no-op on the array entry and therefore on the running version. This module is what
+// lets install say so: a pure verdict over (entry, cached, published), plus the cache
+// reads and the cache clear the install target performs on it. Describing that verdict
+// lives here too — install's settled line and doctor's check are the same description of
+// one adapter fact, so neither surface can word a version gap the other would word
+// differently. The published version itself, and the semver comparison the verdict turns
+// on, are shared with the daemon's own update check and live in `@/lib/upstream.ts` and
 // `@/lib/semver.ts`.
 //
 // The two staleness kinds are unfrozen differently. A bare (or unparseable) specifier is
@@ -24,6 +23,7 @@ import { join } from "node:path";
 
 import { splitPluginSpecifier } from "@/adapters/opencode/config-plugin.ts";
 import { type CaretEntry, readCaretEntry } from "@/adapters/opencode/entries.ts";
+import { isV2Host, type VersionTriple } from "@/adapters/opencode/host.ts";
 import {
   CARET_PACKAGE,
   existingOpencodeCachePackageDirs,
@@ -62,7 +62,7 @@ export type StaleVerdict = Extract<UpgradeVerdict, { kind: "stale-cache" | "stal
  * unparseable pin (`@latest`, a `bun link` path) is frozen exactly the way a bare
  * specifier is, so it takes the cache branch and is unfrozen the same way. */
 export function upgradeVerdict(input: {
-  /** The verbatim `plugin` array entry naming caret, or null when there is none. */
+  /** caret's verbatim spec, from either key, or null when there is none. */
   entry: string | null;
   /** What OpenCode cached for that entry — its installed version, else the spec its shim
    * requested (a range reads as unknown) — or null when nothing is cached. */
@@ -151,13 +151,13 @@ export function upgradeCheck(verdict: UpgradeVerdict): Check {
  * gap the other would describe differently. */
 export async function readUpgradeVerdict(deps: {
   configFile: string;
-  /** The OpenCode major version, when known; a `plugin` entry on 2+ is in v2's cache. */
-  hostMajor?: number;
+  /** The OpenCode version, when known; a `plugin` entry on v2 is in v2's cache. */
+  host?: VersionTriple | null;
   cacheDir?: (entry: CaretEntry) => string | null;
   published?: () => Promise<string | null>;
 }): Promise<UpgradeVerdict> {
   const entry = readCaretEntry(deps.configFile);
-  const cacheDir = deps.cacheDir ?? ((e: CaretEntry) => caretCacheDir(e, deps.hostMajor));
+  const cacheDir = deps.cacheDir ?? ((e: CaretEntry) => caretCacheDir(e, deps.host));
   return upgradeVerdict({
     entry: entry?.spec ?? null,
     cached: readEntryCachedVersion(entry, cacheDir),
@@ -165,19 +165,14 @@ export async function readUpgradeVerdict(deps: {
   });
 }
 
-/** Whether OpenCode's config carries caret's npm-package entry, in either key, at all — the
- * question doctor asks before paying for the version check, since `upgradeVerdict`
- * reports a missing entry as `fresh`. */
-export function hasCaretPluginEntry(configFile: string): boolean {
-  return readCaretEntry(configFile) !== null;
-}
-
 /** The cache dir OpenCode installed `entry` into, or null when v2 has no generation
  * for it yet. A `plugins` entry is always in v2's layout, since v1 never installs it; a
- * `plugin` entry is in v2's layout only when the caller knows the host is v2
- * (`hostMajor`), else in v1's. */
-export function caretCacheDir(entry: CaretEntry, hostMajor?: number): string | null {
-  if (entry.key === "plugin" && (hostMajor ?? 0) < 2) return opencodeCachePackageDir(entry.spec);
+ * `plugin` entry is in v2's layout only when the caller knows the host is v2 (`host`),
+ * else in v1's. */
+export function caretCacheDir(entry: CaretEntry, host?: VersionTriple | null): string | null {
+  if (entry.key === "plugin" && !isV2Host(host ?? null)) {
+    return opencodeCachePackageDir(entry.spec);
+  }
   if (isLocalPluginSpecifier(entry.spec)) {
     return liveGenerationDir(opencodeNpmLocalCacheDir(entry.spec));
   }
@@ -196,12 +191,12 @@ export function readEntryCachedVersion(
 }
 
 /** caret's version in one OpenCode cache dir (v1's `packages/<specifier>/` or a v2
- * generation dir): the `version`
- * of the installed `node_modules/@macintacos/caret/package.json`, else the shim
- * manifest's requested spec under `dependencies` verbatim — possibly a range, which
- * callers treat as unknown — else null when neither manifest names caret. The shim's
- * spec still names the installed caret because OpenCode 1.18.x saves with an empty
- * prefix, so it is the exact version it resolved. */
+ * generation dir): the `version` of the installed
+ * `node_modules/@macintacos/caret/package.json`, else the shim manifest's requested spec
+ * under `dependencies` verbatim — possibly a range, which callers treat as unknown — else
+ * null when neither manifest names caret. The shim fallback is v1's: OpenCode 1.18.x
+ * saves with an empty prefix, so its spec is the exact version it resolved. Whether a v2
+ * generation dir's shim does the same is unverified. */
 export function readCachedCaretVersion(dir: string): string | null {
   const installed = readJsonFileSync(join(dir, "node_modules", CARET_PACKAGE, "package.json")) as {
     version?: unknown;
