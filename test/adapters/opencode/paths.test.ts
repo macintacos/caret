@@ -7,7 +7,10 @@ import { join } from "node:path";
 import { withEnv } from "@test/support/env.ts";
 import {
   existingOpencodeCachePackageDirs,
+  liveGenerationDir,
   opencodeCachePackageDir,
+  opencodeNpmCacheDir,
+  opencodeNpmLocalCacheDir,
 } from "@/adapters/opencode/paths.ts";
 
 let tmp: string;
@@ -19,6 +22,7 @@ afterEach(async () => {
 });
 
 const packages = () => join(tmp, "opencode", "packages");
+const npm = () => join(tmp, "opencode", "npm");
 
 test("a plugin entry maps to its cache dir verbatim, pin and all", () => {
   withEnv({ XDG_CACHE_HOME: tmp }, () => {
@@ -41,6 +45,53 @@ test("caret's cache dirs are the bare dir and its pinned siblings, never a same-
   withEnv({ XDG_CACHE_HOME: tmp }, () => {
     expect(existingOpencodeCachePackageDirs().sort()).toEqual(
       ["caret", "caret@0.7.3", "caret@latest"].map((n) => join(packages(), "@macintacos", n)),
+    );
+  });
+});
+
+test("v2's npm cache dir is <pkg>@<version>, a bare entry keyed @latest", () => {
+  withEnv({ XDG_CACHE_HOME: tmp }, () => {
+    expect(opencodeNpmCacheDir("@macintacos/caret", null)).toBe(
+      join(npm(), "@macintacos/caret@latest"),
+    );
+    expect(opencodeNpmCacheDir("@macintacos/caret", "0.8.1")).toBe(
+      join(npm(), "@macintacos/caret@0.8.1"),
+    );
+  });
+});
+
+test("v2 keys a file: entry verbatim under npm/", () => {
+  withEnv({ XDG_CACHE_HOME: tmp }, () => {
+    expect(opencodeNpmLocalCacheDir("file:/Users/j/caret")).toBe(
+      join(npm(), "file:/Users/j/caret"),
+    );
+  });
+});
+
+test("the live generation is the numerically largest all-digit child", () => {
+  for (const name of ["2", "10", "9", "tmp", "3a"])
+    mkdirSync(join(tmp, "g", name), { recursive: true });
+  expect(liveGenerationDir(join(tmp, "g"))).toBe(join(tmp, "g", "10"));
+});
+
+test("a dir with no generation, or no dir at all, has no live generation", () => {
+  mkdirSync(join(tmp, "g", "tmp"), { recursive: true });
+  expect(liveGenerationDir(join(tmp, "g"))).toBeNull();
+  expect(liveGenerationDir(join(tmp, "absent"))).toBeNull();
+});
+
+test("caret's cache dirs cover v2's npm layout beside v1's packages layout", () => {
+  mkdirSync(join(packages(), "@macintacos", "caret"), { recursive: true });
+  for (const name of ["caret@latest", "caret@0.8.1", "caret-tools@latest"]) {
+    mkdirSync(join(npm(), "@macintacos", name), { recursive: true });
+  }
+  withEnv({ XDG_CACHE_HOME: tmp }, () => {
+    expect(existingOpencodeCachePackageDirs().sort()).toEqual(
+      [
+        join(npm(), "@macintacos", "caret@0.8.1"),
+        join(npm(), "@macintacos", "caret@latest"),
+        join(packages(), "@macintacos", "caret"),
+      ].sort(),
     );
   });
 });

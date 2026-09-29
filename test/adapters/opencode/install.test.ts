@@ -208,3 +208,21 @@ test("a file: entry that is not a caret checkout is not caret's install", async 
     hookInUserSettings: false,
   });
 });
+
+test("a plugins entry reports the version installed in v2's live generation", async () => {
+  const dir = configDir();
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, "opencode.json"), JSON.stringify({ plugins: ["@macintacos/caret"] }));
+  process.env.OPENCODE_CONFIG_DIR = dir;
+  const pkg = join(tmp, "cache", "opencode", "npm", "@macintacos/caret@latest", "4");
+  await mkdir(join(pkg, "node_modules", "@macintacos", "caret"), { recursive: true });
+  await writeFile(
+    join(pkg, "node_modules", "@macintacos", "caret", "package.json"),
+    JSON.stringify({ version: "0.8.1" }),
+  );
+  expect(readOpencodeInstallState()).toEqual({
+    pluginVersion: "0.8.1",
+    pluginEnabled: true,
+    hookInUserSettings: true,
+  });
+});

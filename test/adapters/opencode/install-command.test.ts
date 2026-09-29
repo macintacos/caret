@@ -35,7 +35,7 @@ function deps(overrides: InstallOpencodeDeps = {}): InstallOpencodeDeps {
     configDir: dir,
     packaging: PACKAGING,
     published: async () => null,
-    cacheDir: (s) => join(dir, "cache", s),
+    cacheDir: (e) => join(dir, "cache", e.spec),
     cacheDirs: () => [],
     ...overrides,
   };
@@ -343,7 +343,7 @@ test("uninstall skips the check: no network call, no cache read, nothing cleared
       },
       cacheDir: (s) => {
         calls.push("cacheDir");
-        return join(dir, "cache", s);
+        return join(dir, "cache", s.spec);
       },
       cacheDirs: () => {
         calls.push("cacheDirs");
@@ -433,6 +433,28 @@ test("uninstall removes a checkout entry, not just the npm package", async () =>
   seedPlugins(["someone-else", `file:${repo}`]);
   await install(true);
   expect(plugins()).toEqual(["someone-else"]);
+});
+
+test("uninstall clears caret from both plugin and plugins, keeping comments and other entries", async () => {
+  const repo = checkout("repo");
+  writeFileSync(
+    configJson(),
+    [
+      "{",
+      "  // mine",
+      `  "plugin": ["someone-else", "${CARET_PACKAGE}@0.7.3"],`,
+      `  "plugins": ["other", { "package": "${CARET_PACKAGE}" }, "file:${repo}"]`,
+      "}",
+      "",
+    ].join("\n"),
+  );
+  await install(true);
+  const out = readFileSync(configJson(), "utf-8");
+  expect(out).toContain("// mine");
+  expect(JSON.parse(out.replace(/^\s*\/\/.*$/gm, ""))).toEqual({
+    plugin: ["someone-else"],
+    plugins: ["other"],
+  });
 });
 
 // A checkout entry resolves to that checkout on every OpenCode start, so it cannot be

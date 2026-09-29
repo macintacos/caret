@@ -140,26 +140,71 @@ export function existingLegacyInstallFiles(configDir: string): string[] {
   return [...plugins, ...commands].filter((p) => existsSync(p));
 }
 
-/** OpenCode's plugin cache root: where OpenCode installs each `plugin` array entry,
- * one directory per RAW specifier string. Respects XDG_CACHE_HOME, else ~/.cache —
- * the same precedence OpenCode itself uses to resolve the dir. */
-function opencodeCachePackagesDir(): string {
+/** OpenCode's cache root: XDG_CACHE_HOME, else ~/.cache — the same precedence OpenCode
+ * itself uses to resolve the dir. */
+export function opencodeCacheRoot(): string {
   const xdg = process.env.XDG_CACHE_HOME?.trim();
-  return join(xdg || join(homedir(), ".cache"), "opencode", "packages");
+  return join(xdg || join(homedir(), ".cache"), "opencode");
 }
 
+/** OpenCode v1's plugin cache: one directory per RAW `plugin` specifier string. */
+function opencodeCachePackagesDir(): string {
+  return join(opencodeCacheRoot(), "packages");
+}
+
+/** OpenCode v2's plugin cache: `npm/<name>@<spec>/<generation>/`, where every older
+ * generation persists beside the live one. */
+function opencodeNpmDir(): string {
+  return join(opencodeCacheRoot(), "npm");
+}
+
+/** v2's cache dir for an npm entry: `<pkg>@<version>`, a bare entry keyed `@latest`.
+ * Holds generations, not the install itself — see `liveGenerationDir`. */
+export function opencodeNpmCacheDir(pkg: string, version: string | null): string {
+  return join(opencodeNpmDir(), `${pkg}@${version ?? "latest"}`);
+}
+
+/** v2's cache dir for a `file:` entry, which v2's npm installer keys verbatim. */
+export function opencodeNpmLocalCacheDir(spec: string): string {
+  return join(opencodeNpmDir(), spec);
+}
+
+/** The generation v2 loads under one of its cache dirs: the numerically largest
+ * all-digit child, or null when there is none (or no dir). */
+export function liveGenerationDir(dir: string): string | null {
+  let names: string[];
+  try {
+    names = readdirSync(dir);
+  } catch {
+    return null;
+  }
+  const generations = names.filter((n) => /^\d+$/.test(n));
+  if (generations.length === 0) return null;
+  return join(
+    dir,
+    generations.reduce((a, b) => (Number(b) > Number(a) ? b : a)),
+  );
+}
 /** The cache dir for the plugin entry `specifier`, verbatim, pin and all; defaults to
  * the bare package `caret install` writes. */
 export function opencodeCachePackageDir(specifier: string = CARET_PACKAGE): string {
   return join(opencodeCachePackagesDir(), specifier);
 }
 
-/** Every cache dir on disk for `pkg` — the bare specifier dir and each pinned
- * `<pkg>@<version>` sibling — which the stale-cache clear removes. OpenCode names each
- * dir after the VERBATIM specifier, and a pin's version segment is arbitrary (`@0.7.3`,
- * `@latest`), so listing is the only way to find one. Empty when nothing is listable. */
+/** Every cache dir on disk for `pkg`, which the stale-cache clear removes: in v1's
+ * layout the bare specifier dir and each pinned `<pkg>@<version>` sibling, in v2's each
+ * whole `npm/<pkg>@<spec>/` with all its generations. OpenCode names each dir after the
+ * specifier, and a pin's version segment is arbitrary (`@0.7.3`, `@latest`), so listing
+ * is the only way to find one. Empty when nothing is listable. */
 export function existingOpencodeCachePackageDirs(pkg: string = CARET_PACKAGE): string[] {
-  const bare = opencodeCachePackageDir(pkg);
+  return [
+    ...listCacheDirs(opencodeCachePackageDir(pkg)),
+    ...listCacheDirs(join(opencodeNpmDir(), pkg)),
+  ];
+}
+
+/** `bare` itself when it exists, then each `<bare>@*` sibling. */
+function listCacheDirs(bare: string): string[] {
   const parent = dirname(bare);
   const leaf = basename(bare);
   // Entry types are deliberately not filtered: the clear removes each with

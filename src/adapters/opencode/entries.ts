@@ -1,4 +1,4 @@
-// Which of OpenCode's `plugin` array entries are caret's, for install's writer, doctor's
+// Which of OpenCode's plugin entries — v1's `plugin` array or v2's `plugins` — are caret's, for install's writer, doctor's
 // probe, and the upgrade check. There are two answers, and they differ on purpose:
 // `caretEntries` counts what OpenCode loads — the npm package under any pin, or a
 // `--from-local` `file:` entry for a caret checkout — while `readCaretEntry` counts the
@@ -9,6 +9,7 @@ import { join } from "node:path";
 
 import {
   findPluginEntry,
+  type PluginKey,
   pluginEntries,
   splitPluginSpecifier,
 } from "@/adapters/opencode/config-plugin.ts";
@@ -20,28 +21,51 @@ export function isCaretCheckout(dir: string): boolean {
   return existsSync(join(dir, "opencode", "caret.plugin.ts"));
 }
 
-/** The `plugin` array entries that are caret's, in array order: the npm package under any
- * pin, plus any local specifier whose path is a caret checkout. A `file:` entry pointing
- * anywhere else is another tool's. */
-export function caretEntries(text: string | null, isCheckout: (dir: string) => boolean): string[] {
-  return pluginEntries(text).filter((entry) => {
-    const path = localSpecifierPath(entry);
-    return path === undefined
-      ? splitPluginSpecifier(entry).pkg === CARET_PACKAGE
-      : isCheckout(path);
-  });
+/** One caret entry: the key it sits under and its verbatim specifier. */
+export interface CaretEntry {
+  key: PluginKey;
+  spec: string;
 }
 
-/** caret's verbatim npm-package entry in `configFile`, pin and all, or null when the file
- * is absent or lists none. Throws when the file exists but cannot be read. */
-export function readCaretEntry(configFile: string): string | null {
-  return findPluginEntry(readConfigText(configFile), CARET_PACKAGE);
+const KEYS: readonly PluginKey[] = ["plugin", "plugins"];
+
+/** The entries that are caret's: the npm package under any pin, plus any local specifier
+ * whose path is a caret checkout. A `file:` entry pointing anywhere else is another
+ * tool's. `plugin` hits come first, then `plugins`, each in array order — the order both
+ * hosts load (v2 concatenates legacy `plugin` ahead of `plugins`; v1 never loads
+ * `plugins`). */
+export function caretEntries(
+  text: string | null,
+  isCheckout: (dir: string) => boolean,
+): CaretEntry[] {
+  return KEYS.flatMap((key) =>
+    pluginEntries(text, key)
+      .filter((spec) => {
+        const path = localSpecifierPath(spec);
+        return path === undefined
+          ? splitPluginSpecifier(spec).pkg === CARET_PACKAGE
+          : isCheckout(path);
+      })
+      .map((spec) => ({ key, spec })),
+  );
+}
+
+/** caret's verbatim npm-package entry in `configFile`, pin and all, `plugin` before
+ * `plugins`, or null when the file is absent or lists none. Throws when the file exists
+ * but cannot be read. */
+export function readCaretEntry(configFile: string): CaretEntry | null {
+  const text = readConfigText(configFile);
+  for (const key of KEYS) {
+    const spec = findPluginEntry(text, CARET_PACKAGE, key);
+    if (spec !== null) return { key, spec };
+  }
+  return null;
 }
 
 /** The caret entry OpenCode loads from `configFile`: the package or a `--from-local`
- * checkout, the first when it lists both (OpenCode loads both). Throws like
+ * checkout, the first in load order when it lists several. Throws like
  * `readCaretEntry`. */
-export function readLoadedCaretEntry(configFile: string): string | null {
+export function readLoadedCaretEntry(configFile: string): CaretEntry | null {
   return caretEntries(readConfigText(configFile), isCaretCheckout)[0] ?? null;
 }
 

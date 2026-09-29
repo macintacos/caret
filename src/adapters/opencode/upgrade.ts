@@ -1,6 +1,7 @@
 // Whether the caret that OpenCode runs is behind the published one, and the effects
-// needed to answer that. OpenCode installs a `plugin` array entry into
-// `packages/<specifier>/node_modules/` on first install and never re-resolves it, so a
+// needed to answer that. OpenCode installs a plugin entry into its cache on first
+// install (v1's `packages/<specifier>/`, v2's `npm/<name>@<spec>/<generation>/`) and
+// never re-resolves it, so a
 // bare entry stays frozen at install-day's version — `caret install` is a no-op on the
 // array entry and therefore on the running version. This module is what lets install
 // say so: a pure verdict over (entry, cached, published), plus the cache reads and the
@@ -22,11 +23,15 @@ import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 import { splitPluginSpecifier } from "@/adapters/opencode/config-plugin.ts";
-import { readCaretEntry } from "@/adapters/opencode/entries.ts";
+import { type CaretEntry, readCaretEntry } from "@/adapters/opencode/entries.ts";
 import {
   CARET_PACKAGE,
   existingOpencodeCachePackageDirs,
+  isLocalPluginSpecifier,
+  liveGenerationDir,
   opencodeCachePackageDir,
+  opencodeNpmCacheDir,
+  opencodeNpmLocalCacheDir,
 } from "@/adapters/opencode/paths.ts";
 import type { Check } from "@/doctor/report.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
@@ -146,34 +151,52 @@ export function upgradeCheck(verdict: UpgradeVerdict): Check {
  * gap the other would describe differently. */
 export async function readUpgradeVerdict(deps: {
   configFile: string;
-  cacheDir?: (specifier: string) => string;
+  /** The OpenCode major version, when known; a `plugin` entry on 2+ is in v2's cache. */
+  hostMajor?: number;
+  cacheDir?: (entry: CaretEntry) => string | null;
   published?: () => Promise<string | null>;
 }): Promise<UpgradeVerdict> {
   const entry = readCaretEntry(deps.configFile);
+  const cacheDir = deps.cacheDir ?? ((e: CaretEntry) => caretCacheDir(e, deps.hostMajor));
   return upgradeVerdict({
-    entry,
-    cached: readEntryCachedVersion(entry, deps.cacheDir),
+    entry: entry?.spec ?? null,
+    cached: readEntryCachedVersion(entry, cacheDir),
     published: await (deps.published ?? publishedCaretVersion)(),
   });
 }
 
-/** Whether OpenCode's config carries caret's npm-package `plugin` entry at all — the
+/** Whether OpenCode's config carries caret's npm-package entry, in either key, at all — the
  * question doctor asks before paying for the version check, since `upgradeVerdict`
  * reports a missing entry as `fresh`. */
 export function hasCaretPluginEntry(configFile: string): boolean {
   return readCaretEntry(configFile) !== null;
 }
 
-/** What OpenCode cached for `entry`, read from that entry's own cache dir and never a
- * sibling's; null when there is no entry. */
-export function readEntryCachedVersion(
-  entry: string | null,
-  cacheDir: (specifier: string) => string = opencodeCachePackageDir,
-): string | null {
-  return entry === null ? null : readCachedCaretVersion(cacheDir(entry));
+/** The cache dir OpenCode installed `entry` into, or null when v2 has no generation
+ * for it yet. A `plugins` entry is always in v2's layout, since v1 never installs it; a
+ * `plugin` entry is in v2's layout only when the caller knows the host is v2
+ * (`hostMajor`), else in v1's. */
+export function caretCacheDir(entry: CaretEntry, hostMajor?: number): string | null {
+  if (entry.key === "plugin" && (hostMajor ?? 0) < 2) return opencodeCachePackageDir(entry.spec);
+  if (isLocalPluginSpecifier(entry.spec)) {
+    return liveGenerationDir(opencodeNpmLocalCacheDir(entry.spec));
+  }
+  const { pkg, version } = splitPluginSpecifier(entry.spec);
+  return liveGenerationDir(opencodeNpmCacheDir(pkg, version));
 }
 
-/** caret's version in one OpenCode cache dir (`packages/<specifier>/`): the `version`
+/** What OpenCode cached for `entry`, read from that entry's own cache dir and never a
+ * sibling's; null when there is no entry or no dir. */
+export function readEntryCachedVersion(
+  entry: CaretEntry | null,
+  cacheDir: (entry: CaretEntry) => string | null = caretCacheDir,
+): string | null {
+  const dir = entry === null ? null : cacheDir(entry);
+  return dir === null ? null : readCachedCaretVersion(dir);
+}
+
+/** caret's version in one OpenCode cache dir (v1's `packages/<specifier>/` or a v2
+ * generation dir): the `version`
  * of the installed `node_modules/@macintacos/caret/package.json`, else the shim
  * manifest's requested spec under `dependencies` verbatim — possibly a range, which
  * callers treat as unknown — else null when neither manifest names caret. The shim's

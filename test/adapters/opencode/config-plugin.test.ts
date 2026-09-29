@@ -10,6 +10,7 @@ import {
   findPluginEntry,
   pluginEntries,
   removePluginFromConfigText,
+  rewritePluginArray,
   setPluginVersionInConfigText,
   splitPluginSpecifier,
 } from "@/adapters/opencode/config-plugin.ts";
@@ -122,7 +123,7 @@ test("find returns null with no plugin key, no matching entry, or no config at a
 
 test("set pins a bare entry, leaving other entries and keys alone", () => {
   const src = JSON.stringify({ theme: "dark", plugin: ["opencode-wakatime", PKG] }, null, 2);
-  const out = setPluginVersionInConfigText(src, PKG, "0.8.1");
+  const out = setPluginVersionInConfigText(src, { pkg: PKG, version: "0.8.1" });
   expect(JSON.parse(out)).toEqual({
     theme: "dark",
     plugin: ["opencode-wakatime", `${PKG}@0.8.1`],
@@ -131,14 +132,14 @@ test("set pins a bare entry, leaving other entries and keys alone", () => {
 
 test("set rewrites an existing pin rather than appending a second one", () => {
   const src = JSON.stringify({ plugin: [`${PKG}@0.7.3`] }, null, 2);
-  expect(JSON.parse(setPluginVersionInConfigText(src, PKG, "0.8.1")).plugin).toEqual([
-    `${PKG}@0.8.1`,
-  ]);
+  expect(
+    JSON.parse(setPluginVersionInConfigText(src, { pkg: PKG, version: "0.8.1" })).plugin,
+  ).toEqual([`${PKG}@0.8.1`]);
 });
 
 test("set is a no-op when no entry names the package", () => {
   const src = JSON.stringify({ plugin: ["opencode-wakatime"] }, null, 2);
-  expect(setPluginVersionInConfigText(src, PKG, "0.8.1")).toBe(src);
+  expect(setPluginVersionInConfigText(src, { pkg: PKG, version: "0.8.1" })).toBe(src);
 });
 
 test("set preserves comments and sibling keys in a jsonc config", () => {
@@ -150,7 +151,7 @@ test("set preserves comments and sibling keys in a jsonc config", () => {
     "}",
     "",
   ].join("\n");
-  const out = setPluginVersionInConfigText(src, PKG, "0.8.1");
+  const out = setPluginVersionInConfigText(src, { pkg: PKG, version: "0.8.1" });
   expect(out).toContain("// my opencode config");
   expect(JSON.parse(stripComments(out))).toEqual({
     theme: "dark",
@@ -175,6 +176,85 @@ test("pluginEntries lists the array's string entries and ignores the rest", () =
 
 test("pluginEntries reads an absent config as no entries", () => {
   expect(pluginEntries(null)).toEqual([]);
+});
+
+// --- v2's `plugins` key: string and `{ package, options }` items ------------------
+
+const MIXED = [
+  "{",
+  "  // my opencode config",
+  '  "plugin": ["opencode-wakatime"],',
+  `  "plugins": ["opencode-foo", { "package": "${PKG}@0.7.3", "options": { "x": 1 } }]`,
+  "}",
+  "",
+].join("\n");
+
+test("add on plugins appends a bare string and leaves plugin untouched", () => {
+  const src = JSON.stringify({ plugin: ["opencode-wakatime"], plugins: ["opencode-foo"] });
+  expect(JSON.parse(addPluginToConfigText(src, PKG, "plugins"))).toEqual({
+    plugin: ["opencode-wakatime"],
+    plugins: ["opencode-foo", PKG],
+  });
+});
+
+test("add on plugins is a no-op over a pinned object item", () => {
+  expect(addPluginToConfigText(MIXED, PKG, "plugins")).toBe(MIXED);
+});
+
+test("add on plugin ignores a caret item that sits in plugins", () => {
+  const out = addPluginToConfigText(MIXED, PKG);
+  expect(JSON.parse(stripComments(out)).plugin).toEqual(["opencode-wakatime", PKG]);
+  expect(JSON.parse(stripComments(out)).plugins).toEqual(JSON.parse(stripComments(MIXED)).plugins);
+});
+
+test("find on plugins reads an object item's package verbatim", () => {
+  expect(findPluginEntry(MIXED, PKG, "plugins")).toBe(`${PKG}@0.7.3`);
+  expect(findPluginEntry(MIXED, PKG)).toBeNull();
+});
+
+test("pluginEntries on plugins lists string items and object packages in order", () => {
+  expect(pluginEntries(MIXED, "plugins")).toEqual(["opencode-foo", `${PKG}@0.7.3`]);
+});
+
+test("set on plugins bumps an object item's package, keeping its options and comments", () => {
+  const out = setPluginVersionInConfigText(MIXED, { pkg: PKG, version: "0.8.1", key: "plugins" });
+  expect(out).toContain("// my opencode config");
+  expect(JSON.parse(stripComments(out))).toEqual({
+    plugin: ["opencode-wakatime"],
+    plugins: ["opencode-foo", { package: `${PKG}@0.8.1`, options: { x: 1 } }],
+  });
+});
+
+test("remove on plugins drops an object item, keeping comments and plugin", () => {
+  const out = removePluginFromConfigText(MIXED, PKG, "plugins");
+  expect(out).toContain("// my opencode config");
+  expect(JSON.parse(stripComments(out))).toEqual({
+    plugin: ["opencode-wakatime"],
+    plugins: ["opencode-foo"],
+  });
+});
+
+test("remove on plugin leaves a caret item in plugins alone", () => {
+  const src = JSON.stringify({ plugin: [PKG], plugins: [PKG] });
+  expect(JSON.parse(removePluginFromConfigText(src, PKG))).toEqual({ plugin: [], plugins: [PKG] });
+});
+
+// v1 up to 1.18.15 refuses to start on any `plugins` key, an empty one included.
+test("removing the last plugins item deletes the key; the last plugin item leaves []", () => {
+  const src = JSON.stringify({ theme: "dark", plugin: [PKG], plugins: [PKG] });
+  const noPlugins = removePluginFromConfigText(src, PKG, "plugins");
+  expect(JSON.parse(noPlugins)).toEqual({ theme: "dark", plugin: [PKG] });
+  expect(JSON.parse(removePluginFromConfigText(noPlugins, PKG))).toEqual({
+    theme: "dark",
+    plugin: [],
+  });
+});
+
+test("rewritePluginArray keeps exactly the items the predicate keeps", () => {
+  const src = JSON.stringify({ plugins: ["a", "b", { package: "c" }] });
+  const out = rewritePluginArray(src, "plugins", (item) => item !== "b");
+  expect(JSON.parse(out)).toEqual({ plugins: ["a", { package: "c" }] });
+  expect(rewritePluginArray(src, "plugins", () => true)).toBe(src);
 });
 
 // Minimal comment stripper so a jsonc body can be JSON.parsed for structural checks.

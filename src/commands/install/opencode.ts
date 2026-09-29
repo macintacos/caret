@@ -26,7 +26,12 @@ import {
   removeFiles,
   renderPlugin,
 } from "@/adapters/opencode/deploy.ts";
-import { caretEntries, isCaretCheckout, readConfigText } from "@/adapters/opencode/entries.ts";
+import {
+  type CaretEntry,
+  caretEntries,
+  isCaretCheckout,
+  readConfigText,
+} from "@/adapters/opencode/entries.ts";
 import { loadOpencodePackaging, type OpencodePackaging } from "@/adapters/opencode/packaging.ts";
 import {
   CARET_PACKAGE,
@@ -62,7 +67,7 @@ export interface InstallOpencodeDeps {
   ui?: InstallUI;
   published?: () => Promise<string | null>;
   /** Resolves the cache dir a plugin entry's version is read from. */
-  cacheDir?: (specifier: string) => string;
+  cacheDir?: (entry: CaretEntry) => string | null;
   /** Every caret cache dir the stale-cache clear removes. */
   cacheDirs?: () => string[];
   clearCache?: (dirs: readonly string[]) => string[];
@@ -93,8 +98,8 @@ function setCaretPluginEntry(
 ): string {
   if (text === null) return addPluginToConfigText(null, specifier);
   const pruned = caretEntries(text, isCheckout)
-    .filter((entry) => !sameEntryForm(entry, specifier))
-    .reduce((acc, entry) => removePluginFromConfigText(acc, entry), text);
+    .filter((entry) => entry.key === "plugin" && !sameEntryForm(entry.spec, specifier))
+    .reduce((acc, entry) => removePluginFromConfigText(acc, entry.spec), text);
   return addPluginToConfigText(pruned, specifier);
 }
 
@@ -150,7 +155,7 @@ export async function runInstallOpencodeTarget(
           text === null
             ? null
             : caretEntries(text, isCheckout).reduce(
-                (acc, entry) => removePluginFromConfigText(acc, entry),
+                (acc, entry) => removePluginFromConfigText(acc, entry.spec, entry.key),
                 text,
               ),
         ),
@@ -283,7 +288,9 @@ async function upgradeStep(
     `Bumping ${CARET_PACKAGE} to ${verdict.published}`,
     async () =>
       editConfig(configFile, (text) =>
-        text === null ? null : setPluginVersionInConfigText(text, CARET_PACKAGE, verdict.published),
+        text === null
+          ? null
+          : setPluginVersionInConfigText(text, { pkg: CARET_PACKAGE, version: verdict.published }),
       ),
     (changed) =>
       changed.length > 0
