@@ -96,3 +96,13 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## OpenCode
+
+[opencode/permission.ts](opencode/permission.ts) copies OpenCode's wildcard matcher,
+permission evaluator, and file-access resource forming from
+[`anomalyco/opencode` at `v2.0.18`](https://github.com/anomalyco/opencode/tree/v2.0.18):
+`packages/core/src/util/wildcard.ts`, `packages/core/src/permission.ts`, and
+`packages/core/src/file-access.ts`. OpenCode is Copyright (c) 2025 opencode and licensed
+under the MIT license; the copied file carries the full notice, since this file does not
+ship in the npm package.
