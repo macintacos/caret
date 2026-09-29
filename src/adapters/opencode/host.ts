@@ -3,7 +3,8 @@
 // unreadable version falls back to `plugin`, which every OpenCode loads.
 
 import type { PluginKey } from "@/adapters/opencode/config-plugin.ts";
-import { parseVersionTriple } from "@/lib/semver.ts";
+import type { Check } from "@/doctor/report.ts";
+import { isNewer, parseVersionTriple } from "@/lib/semver.ts";
 
 /** Covers a cold v1 start (npm's node wrapper took 1.6 s) with margin. */
 export const OPENCODE_VERSION_TIMEOUT_MS = 5_000;
@@ -36,4 +37,44 @@ export function readOpencodeVersion(
 
 export function pluginKeyFor(version: readonly [number, number, number] | null): PluginKey {
   return version !== null && version[0] >= 2 ? "plugins" : "plugin";
+}
+
+/** v1.3.4 is the first loader that accepts the plugin's object default. */
+const V1_FLOOR = "1.3.4";
+
+/** doctor's `opencode-host` check: whether the OpenCode on `PATH` loads caret from the keys
+ * caret's entries sit in. Every fault joins into one fail, each with its remedy. */
+export function hostCheck(
+  version: readonly [number, number, number] | null,
+  keys: readonly PluginKey[],
+): Check {
+  const base = { id: "opencode-host", title: "OpenCode host" };
+  if (version === null) {
+    return { ...base, status: "unknown", detail: "", reason: "couldn't read `opencode --version`" };
+  }
+  const v = version.join(".");
+  const faults: string[] = [];
+  const remedies: string[] = [];
+  if (version[0] < 2 && isNewer(V1_FLOOR, v)) {
+    faults.push(`OpenCode ${v} is older than ${V1_FLOOR}, the first that loads caret`);
+    remedies.push(`upgrade OpenCode to ${V1_FLOOR} or later`);
+  }
+  const wrongKey = keys.find((k) => k !== pluginKeyFor(version));
+  if (wrongKey === "plugins") {
+    faults.push(
+      `caret is in \`plugins\`, which OpenCode ${v} ignores; v1 before 1.18.16 will not start with it`,
+    );
+    remedies.push("run `caret install`");
+  } else if (wrongKey === "plugin") {
+    faults.push(`caret is in the legacy \`plugin\` key on OpenCode ${v}`);
+    remedies.push("run `caret install`");
+  }
+  if (faults.length === 0) {
+    return {
+      ...base,
+      status: "pass",
+      detail: `OpenCode ${v} loads caret from \`${keys.join("`, `")}\``,
+    };
+  }
+  return { ...base, status: "fail", detail: faults.join("; "), remedy: remedies.join("; ") };
 }

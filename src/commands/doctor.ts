@@ -12,6 +12,8 @@ import { existsSync } from "node:fs";
 import { release } from "node:os";
 
 import { selectAdapter } from "@/adapters/index.ts";
+import { caretEntries, isCaretCheckout, readConfigText } from "@/adapters/opencode/entries.ts";
+import { hostCheck, readOpencodeVersion } from "@/adapters/opencode/host.ts";
 import { opencodeConfigDir, resolveConfigFile } from "@/adapters/opencode/paths.ts";
 import {
   hasCaretPluginEntry,
@@ -106,16 +108,21 @@ function prodDoctorDeps(s: Settings): DoctorDeps {
   };
 }
 
-/** The adapter checks doctor appends to the core ones: OpenCode's version verdict, or
- * nothing when OpenCode's config carries no caret package entry — a Claude-only user
- * then pays no network call and gets no meaningless verdict. A `file:` entry is skipped
- * by the same test: it re-resolves to its checkout on every start, so npm's version says
- * nothing about it. */
+/** The adapter checks doctor appends to the core ones, or nothing when OpenCode's config
+ * carries no caret entry — a Claude-only user then pays no spawn or network call.
+ * `opencode-host` checks the OpenCode on `PATH` loads caret from the key it sits in.
+ * `opencode-caret-version` is OpenCode's version verdict, skipped for a `file:` entry: it
+ * re-resolves to its checkout on every start, so npm's version says nothing about it. */
 async function readAdapterChecks(): Promise<Check[]> {
   try {
     const config = resolveConfigFile(opencodeConfigDir());
-    if (!hasCaretPluginEntry(config)) return [];
-    return [upgradeCheck(await readUpgradeVerdict({ configFile: config }))];
+    const entries = caretEntries(readConfigText(config), isCaretCheckout);
+    if (entries.length === 0) return [];
+    const version = readOpencodeVersion();
+    const host = hostCheck(version, [...new Set(entries.map((e) => e.key))]);
+    if (!hasCaretPluginEntry(config)) return [host];
+    const hostMajor = version?.[0];
+    return [host, upgradeCheck(await readUpgradeVerdict({ configFile: config, hostMajor }))];
   } catch (e) {
     return [upgradeCheck({ kind: "unknown", reason: errorMessage(e) })];
   }
